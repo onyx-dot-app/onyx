@@ -218,7 +218,7 @@ func TestSealAndMarkVerified(t *testing.T) {
 		t.Fatal(err)
 	}
 	memSum, _ := FileSHA256(filepath.Join(d, MemFile))
-	if m.Files[MemFile] != memSum || m.RootfsSHA256 != rootSum || m.SnapshotSHA256 != SnapshotHash(m.KeySHA256, m.Files) {
+	if m.Files[MemFile] != memSum || m.RootfsSHA256 != rootSum || m.SnapshotSHA256 != SnapshotHash(LayoutVersion, m.KeySHA256, m.Files) {
 		t.Fatalf("sealed %+v", m)
 	}
 	s := &Store{Dir: dir}
@@ -245,18 +245,18 @@ func TestSnapshotHashOrderAndCoverage(t *testing.T) {
 	for _, f := range Files {
 		files[f] = strings.Repeat("a", 64)
 	}
-	base := SnapshotHash("k", files)
+	base := SnapshotHash(LayoutVersion, "k", files)
 	for _, f := range Files {
 		c := map[string]string{}
 		for k, v := range files {
 			c[k] = v
 		}
 		c[f] = strings.Repeat("b", 64)
-		if SnapshotHash("k", c) == base {
+		if SnapshotHash(LayoutVersion, "k", c) == base {
 			t.Errorf("snapshot hash does not cover %s", f)
 		}
 	}
-	if SnapshotHash("other key", files) == base {
+	if SnapshotHash(LayoutVersion, "other key", files) == base {
 		t.Error("snapshot hash does not cover the key")
 	}
 }
@@ -356,7 +356,7 @@ func TestVerifyCacheDoesNotCoverANewManifest(t *testing.T) {
 		m.Files[k] = v
 	}
 	m.Files[MemFile] = strings.Repeat("e", 64)
-	m.SnapshotSHA256 = SnapshotHash(m.KeySHA256, m.Files)
+	m.SnapshotSHA256 = SnapshotHash(m.Schema, m.KeySHA256, m.Files)
 	if err := WriteManifest(tpl.Dir, m); err != nil {
 		t.Fatal(err)
 	}
@@ -366,5 +366,59 @@ func TestVerifyCacheDoesNotCoverANewManifest(t *testing.T) {
 	}
 	if err := s.Verify(other); apierr.ReasonOf(err) != pb.ErrorReason_TEMPLATE_INCOMPATIBLE || !strings.Contains(err.Error(), MemFile) {
 		t.Fatalf("verify of a changed manifest: %v", err)
+	}
+}
+
+// Layout 2 templates (no managed slot B) still load, verify and restore. The
+// layout 2 snapshot hash is the one that the layout 2 agent wrote.
+func TestLayout2StillRestores(t *testing.T) {
+	files := map[string]string{}
+	for _, f := range FilesFor(2) {
+		files[f] = strings.Repeat("a", 64)
+	}
+	if got := SnapshotHash(2, "k", files); got != "49823fc19879179bd4251cc5d836357557aa7010e308cb18dbb057852d40b288" {
+		t.Fatalf("layout 2 snapshot hash changed: %s", got)
+	}
+	dir := t.TempDir()
+	if _, err := WriteFakeLayout(dir, "old", testKey, 2); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := WriteFake(dir, "new", testKey); err != nil {
+		t.Fatal(err)
+	}
+	s := &Store{Dir: dir}
+	for name, want := range map[string]int{"old": 1, "new": 2} {
+		tpl, err := s.Get(name)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if err := tpl.CheckNode(testNode); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if err := s.Verify(tpl); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if err := tpl.CheckUnchanged(); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if got := tpl.ManagedSlots(); got != want {
+			t.Errorf("%s: %d managed slots, want %d", name, got, want)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, "old", ManagedBFile)); err == nil {
+		t.Error("a layout 2 template has a slot B file")
+	}
+	if d := DrivesFor(LayoutVersion); d[len(d)-1].ID != ManagedBDriveID || len(d) != 6 {
+		t.Errorf("slot B must be the last drive (vdf): %+v", d)
+	}
+	for i, d := range DrivesFor(2) {
+		if DrivesFor(LayoutVersion)[i] != d {
+			t.Errorf("drive %d moved: %+v", i, DrivesFor(LayoutVersion)[i])
+		}
+	}
+	k := testKey
+	k.LayoutVersion = 1
+	if err := k.CheckNode(testNode); apierr.ReasonOf(err) != pb.ErrorReason_TEMPLATE_INCOMPATIBLE {
+		t.Errorf("layout 1: %v", err)
 	}
 }

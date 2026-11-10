@@ -8,6 +8,7 @@
 //	managed.ext4   empty read-only managed drive (drive "managed", /dev/vdc)
 //	upload-a.ext4  read-only upload slot A      (drive "upload_a", /dev/vdd)
 //	upload-b.ext4  read-only upload slot B      (drive "upload_b", /dev/vde)
+//	managed-b.ext4 read-only managed slot B     (drive "managed_b", /dev/vdf; layout 3)
 //	vmstate        snapshot state
 //	mem            snapshot memory
 //
@@ -40,10 +41,15 @@ import (
 	pb "github.com/onyx-dot-app/onyx/microvm/proto/hostagent/v1"
 )
 
-// LayoutVersion is the version of the template layout: the file names, the
-// drive slots and their order. A change makes every older template
-// incompatible.
-const LayoutVersion = 2
+// LayoutVersion is the version of the template layout that the agent
+// builds: the file names, the drive slots and their order. Layout 3 adds
+// managed slot B (the spare for a managed drive swap) as the last drive, so
+// the guest devices of the older slots do not move. The agent still restores
+// layout 2 templates; their VMs cannot swap the managed drive.
+const LayoutVersion = 3
+
+// OldestLayout is the oldest layout that the agent restores.
+const OldestLayout = 2
 
 // File names in a template directory and in each VM chroot.
 const (
@@ -53,6 +59,7 @@ const (
 	ManagedFile  = "managed.ext4"
 	UploadAFile  = "upload-a.ext4"
 	UploadBFile  = "upload-b.ext4"
+	ManagedBFile = "managed-b.ext4"
 	VMStateFile  = "vmstate"
 	MemFile      = "mem"
 )
@@ -64,8 +71,10 @@ const (
 	ManagedDriveID = "managed"
 	UploadADriveID = "upload_a"
 	UploadBDriveID = "upload_b"
-	VsockUDS       = "/v.sock"
-	GuestCID       = 3
+	// ManagedBDriveID is managed slot B. Slot A is ManagedDriveID.
+	ManagedBDriveID = "managed_b"
+	VsockUDS        = "/v.sock"
+	GuestCID        = 3
 )
 
 // Drive is one drive slot of the template.
@@ -75,18 +84,52 @@ type Drive struct {
 	ReadOnly bool
 }
 
-// Drives are the drive slots in guest order (vda, vdb, ...). The guest finds
-// its drives by this order.
-var Drives = []Drive{
-	{RootfsDriveID, RootfsFile, true},
-	{ScratchDriveID, ScratchFile, false},
-	{ManagedDriveID, ManagedFile, true},
-	{UploadADriveID, UploadAFile, true},
-	{UploadBDriveID, UploadBFile, true},
+// layoutDrives are the drive slots of each layout in guest order (vda, vdb,
+// ...). The guest finds its drives by this order.
+var layoutDrives = map[int][]Drive{
+	2: {
+		{RootfsDriveID, RootfsFile, true},
+		{ScratchDriveID, ScratchFile, false},
+		{ManagedDriveID, ManagedFile, true},
+		{UploadADriveID, UploadAFile, true},
+		{UploadBDriveID, UploadBFile, true},
+	},
+	3: {
+		{RootfsDriveID, RootfsFile, true},
+		{ScratchDriveID, ScratchFile, false},
+		{ManagedDriveID, ManagedFile, true},
+		{UploadADriveID, UploadAFile, true},
+		{UploadBDriveID, UploadBFile, true},
+		{ManagedBDriveID, ManagedBFile, true},
+	},
 }
 
-// Files are the data files of a template, in manifest order.
-var Files = []string{RootfsFile, ScratchFile, ManagedFile, UploadAFile, UploadBFile, VMStateFile, MemFile}
+// DrivesFor returns the drive slots of a layout, or nil for a layout that
+// the agent does not restore.
+func DrivesFor(layout int) []Drive { return layoutDrives[layout] }
+
+// FilesFor returns the data files of a layout, in manifest order: the drive
+// files, then vmstate and mem.
+func FilesFor(layout int) []string {
+	ds := layoutDrives[layout]
+	if ds == nil {
+		return nil
+	}
+	out := make([]string, 0, len(ds)+2)
+	for _, d := range ds {
+		out = append(out, d.File)
+	}
+	return append(out, VMStateFile, MemFile)
+}
+
+// SupportedLayout reports whether the agent restores templates of layout v.
+func SupportedLayout(v int) bool { return layoutDrives[v] != nil }
+
+// Drives are the drive slots of the layout that the agent builds.
+var Drives = DrivesFor(LayoutVersion)
+
+// Files are the data files of the layout that the agent builds.
+var Files = FilesFor(LayoutVersion)
 
 // snapshotFiles are the files that the snapshot hash covers first. A
 // mismatched memory and vmstate pair, or another root drive, breaks a
@@ -148,8 +191,8 @@ func (k Key) CheckNode(n NodeKey) error {
 			bad = append(bad, fmt.Sprintf("%s %q (node %q)", what, tpl, node))
 		}
 	}
-	if k.LayoutVersion != LayoutVersion {
-		bad = append(bad, fmt.Sprintf("layout version %d (agent %d)", k.LayoutVersion, LayoutVersion))
+	if !SupportedLayout(k.LayoutVersion) {
+		bad = append(bad, fmt.Sprintf("layout version %d (agent %d to %d)", k.LayoutVersion, OldestLayout, LayoutVersion))
 	}
 	add("firecracker", k.FirecrackerVersion, n.FirecrackerVersion)
 	add("cpu model", k.CPUModel, n.CPUModel)
@@ -181,12 +224,12 @@ type Manifest struct {
 }
 
 // SnapshotHash hashes the file hashes: first vmstate, mem and rootfs, then
-// the other files in Files order, with the key hash.
-func SnapshotHash(keySHA string, files map[string]string) string {
+// the other files of the layout in manifest order, with the key hash.
+func SnapshotHash(layout int, keySHA string, files map[string]string) string {
 	h := sha256.New()
 	_, _ = fmt.Fprintf(h, "key %s\n", keySHA)
 	seen := map[string]bool{}
-	for _, f := range append(append([]string{}, snapshotFiles...), Files...) {
+	for _, f := range append(append([]string{}, snapshotFiles...), FilesFor(layout)...) {
 		if seen[f] {
 			continue
 		}
@@ -198,9 +241,10 @@ func SnapshotHash(keySHA string, files map[string]string) string {
 
 // check verifies the manifest's own hashes and fields.
 func (m *Manifest) check(version string) error {
-	if m.Schema != LayoutVersion {
-		return fmt.Errorf("manifest schema %d, the agent reads %d", m.Schema, LayoutVersion)
+	if !SupportedLayout(m.Schema) || m.LayoutVersion != m.Schema {
+		return fmt.Errorf("manifest schema %d (layout %d), the agent reads %d to %d", m.Schema, m.LayoutVersion, OldestLayout, LayoutVersion)
 	}
+	files := FilesFor(m.Schema)
 	if m.Version != version {
 		return fmt.Errorf("manifest has version %q", m.Version)
 	}
@@ -210,15 +254,15 @@ func (m *Manifest) check(version string) error {
 	if m.KeySHA256 != m.Hash() {
 		return errors.New("manifest key_sha256 does not match its key")
 	}
-	for _, f := range Files {
+	for _, f := range files {
 		if len(m.Files[f]) != sha256.Size*2 {
 			return fmt.Errorf("manifest has no SHA256 for %s", f)
 		}
 	}
-	if len(m.Files) != len(Files) {
-		return fmt.Errorf("manifest lists %d files, want %d", len(m.Files), len(Files))
+	if len(m.Files) != len(files) {
+		return fmt.Errorf("manifest lists %d files, want %d", len(m.Files), len(files))
 	}
-	if m.SnapshotSHA256 != SnapshotHash(m.KeySHA256, m.Files) {
+	if m.SnapshotSHA256 != SnapshotHash(m.Schema, m.KeySHA256, m.Files) {
 		return errors.New("manifest snapshot_sha256 does not match its file hashes")
 	}
 	if m.Files[RootfsFile] != m.RootfsSHA256 {
@@ -238,13 +282,27 @@ type Template struct {
 // Path returns the path of a file in the template directory.
 func (t *Template) Path(name string) string { return filepath.Join(t.Dir, name) }
 
+// FileList returns the data files of the template's layout.
+func (t *Template) FileList() []string { return FilesFor(t.LayoutVersion) }
+
+// ManagedSlots returns the number of managed drive slots: 2 from layout 3
+// on (a VM can swap its managed drive), else 1.
+func (t *Template) ManagedSlots() int {
+	for _, d := range DrivesFor(t.LayoutVersion) {
+		if d.ID == ManagedBDriveID {
+			return 2
+		}
+	}
+	return 1
+}
+
 // CheckUnchanged fails if a file changed since Store.Verify hashed it. Call
 // it after the files are copied, so the copies are the verified content.
 func (t *Template) CheckUnchanged() error {
 	if t.prints == nil {
 		return apierr.New(pb.ErrorReason_INTERNAL, "template %q was not verified", t.Version)
 	}
-	for _, f := range Files {
+	for _, f := range t.FileList() {
 		got, err := statPrint(t.Path(f))
 		if err != nil || got != t.prints[f] {
 			return apierr.New(pb.ErrorReason_TEMPLATE_INCOMPATIBLE,
@@ -301,7 +359,7 @@ func (s *Store) Get(version string) (*Template, error) {
 	if err := m.check(version); err != nil {
 		return nil, apierr.New(pb.ErrorReason_TEMPLATE_INCOMPATIBLE, "template %q: %v", version, err)
 	}
-	for _, f := range Files {
+	for _, f := range FilesFor(m.Schema) {
 		st, err := os.Lstat(filepath.Join(dir, f))
 		if err != nil {
 			return nil, apierr.New(pb.ErrorReason_TEMPLATE_MISSING, "template %q has no %s: %v", version, f, err)
@@ -322,8 +380,9 @@ func (s *Store) Verify(t *Template) error {
 	lock.Lock()
 	defer lock.Unlock()
 
+	files := t.FileList()
 	prints := map[string]fingerprint{}
-	for _, f := range Files {
+	for _, f := range files {
 		p, err := statPrint(t.Path(f))
 		if err != nil {
 			return apierr.New(pb.ErrorReason_TEMPLATE_MISSING, "template %q %s: %v", t.Version, f, err)
@@ -337,11 +396,11 @@ func (s *Store) Verify(t *Template) error {
 		t.prints = prints
 		return nil
 	}
-	sums, err := HashFiles(t.Dir, Files)
+	sums, err := HashFiles(t.Dir, files)
 	if err != nil {
 		return fmt.Errorf("hash template %q: %w", t.Version, err)
 	}
-	for _, f := range Files {
+	for _, f := range files {
 		if sums[f] != t.Files[f] {
 			s.forget(t.Version)
 			return apierr.New(pb.ErrorReason_TEMPLATE_INCOMPATIBLE,
@@ -349,7 +408,7 @@ func (s *Store) Verify(t *Template) error {
 		}
 	}
 	// A file that changed during the hash is not verified.
-	for _, f := range Files {
+	for _, f := range files {
 		p, err := statPrint(t.Path(f))
 		if err != nil || p != prints[f] {
 			s.forget(t.Version)
@@ -544,10 +603,19 @@ type Prints map[string]fingerprint
 // Key set by the caller) with Schema, KeySHA256, Files and SnapshotSHA256
 // filled in. known holds SHA256 sums the caller already has (it may be nil).
 // It returns the manifest and the file fingerprints from before the hash,
-// for MarkVerified.
+// for MarkVerified. The layout is m.LayoutVersion, or LayoutVersion if it is
+// zero.
 func Seal(dir string, m Manifest, known map[string]string) (Manifest, Prints, error) {
+	layout := m.LayoutVersion
+	if layout == 0 {
+		layout = LayoutVersion
+	}
+	files := FilesFor(layout)
+	if files == nil {
+		return m, nil, fmt.Errorf("layout %d is not supported", layout)
+	}
 	prints := Prints{}
-	for _, f := range Files {
+	for _, f := range files {
 		p, err := statPrint(filepath.Join(dir, f))
 		if err != nil {
 			return m, nil, err
@@ -555,7 +623,7 @@ func Seal(dir string, m Manifest, known map[string]string) (Manifest, Prints, er
 		prints[f] = p
 	}
 	var todo []string
-	for _, f := range Files {
+	for _, f := range files {
 		if known[f] == "" {
 			todo = append(todo, f)
 		}
@@ -564,17 +632,17 @@ func Seal(dir string, m Manifest, known map[string]string) (Manifest, Prints, er
 	if err != nil {
 		return m, nil, err
 	}
-	for _, f := range Files {
+	for _, f := range files {
 		if known[f] != "" {
 			sums[f] = known[f]
 		}
 	}
-	m.Schema = LayoutVersion
-	m.LayoutVersion = LayoutVersion
+	m.Schema = layout
+	m.LayoutVersion = layout
 	m.RootfsSHA256 = sums[RootfsFile]
 	m.KeySHA256 = m.Hash()
 	m.Files = sums
-	m.SnapshotSHA256 = SnapshotHash(m.KeySHA256, sums)
+	m.SnapshotSHA256 = SnapshotHash(layout, m.KeySHA256, sums)
 	return m, prints, WriteManifest(dir, m)
 }
 
@@ -582,7 +650,7 @@ func Seal(dir string, m Manifest, known map[string]string) (Manifest, Prints, er
 // if their fingerprints did not change since then (a directory rename keeps
 // them). Then Verify does not hash them again.
 func (s *Store) MarkVerified(t *Template, prints Prints) error {
-	for _, f := range Files {
+	for _, f := range t.FileList() {
 		p, err := statPrint(t.Path(f))
 		if err != nil {
 			return err

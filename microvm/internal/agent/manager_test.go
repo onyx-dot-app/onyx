@@ -48,6 +48,8 @@ type fakeLauncher struct {
 	specs    []LaunchSpec
 	fail     error
 	gate     chan struct{}
+	// wrap, if set, wraps each new process (managed drive tests).
+	wrap func(*fakeProc) Process
 }
 
 func (f *fakeLauncher) Launch(ctx context.Context, s LaunchSpec) (Process, error) {
@@ -70,6 +72,9 @@ func (f *fakeLauncher) Launch(ctx context.Context, s LaunchSpec) (Process, error
 		f.procs = map[string]*fakeProc{}
 	}
 	f.procs[s.ID] = p
+	if f.wrap != nil {
+		return f.wrap(p), nil
+	}
 	return p, nil
 }
 

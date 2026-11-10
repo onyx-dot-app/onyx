@@ -46,6 +46,8 @@ type Config struct {
 	StateFile string
 	// BaseEnv is the env of every command, before the Init and command env.
 	BaseEnv map[string]string
+	// Managed configures ManagedStatus and MountManaged. Nil: they fail.
+	Managed *ManagedConfig
 	Log     *slog.Logger
 }
 
@@ -74,9 +76,10 @@ type Server struct {
 	m       *execs.Manager
 	started time.Time
 
-	initMu sync.Mutex // one Init at a time
-	mu     sync.Mutex
-	state  initState
+	initMu    sync.Mutex // one Init at a time
+	managedMu sync.Mutex // one managed drive change at a time
+	mu        sync.Mutex
+	state     initState
 }
 
 // NewServer returns a Server. It loads the Init state from cfg.StateFile.

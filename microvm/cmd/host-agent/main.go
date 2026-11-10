@@ -30,6 +30,7 @@ import (
 	"github.com/onyx-dot-app/onyx/microvm/internal/hostinfo"
 	"github.com/onyx-dot-app/onyx/microvm/internal/jailer"
 	"github.com/onyx-dot-app/onyx/microvm/internal/journal"
+	"github.com/onyx-dot-app/onyx/microvm/internal/managed"
 	"github.com/onyx-dot-app/onyx/microvm/internal/relay"
 	"github.com/onyx-dot-app/onyx/microvm/internal/scratch"
 	"github.com/onyx-dot-app/onyx/microvm/internal/server"
@@ -77,6 +78,12 @@ type flags struct {
 	tplScratchGiB uint
 	tplKeep       int
 	tplTimeout    time.Duration
+	managedKeep   int
+	managedZipMiB int64
+	managedMaxMiB int64
+	managedFiles  int
+	managedBuilds int
+	swapTimeout   time.Duration
 }
 
 func main() {
@@ -114,6 +121,12 @@ func main() {
 	flag.UintVar(&f.tplScratchGiB, "template-scratch-gib", 1, "scratch disk of the built template in GiB (Create can grow it)")
 	flag.IntVar(&f.tplKeep, "template-keep", 2, "templates to keep; older ones are removed unless a VM uses them")
 	flag.DurationVar(&f.tplTimeout, "template-build-timeout", 5*time.Minute, "limit for one template build")
+	flag.IntVar(&f.managedKeep, "managed-keep", 3, "managed images to keep; older ones are removed unless a VM has them behind a slot")
+	flag.Int64Var(&f.managedZipMiB, "managed-max-zip-mib", managed.DefaultLimits.MaxZipBytes>>20, "largest managed bundle zip")
+	flag.Int64Var(&f.managedMaxMiB, "managed-max-mib", managed.DefaultLimits.MaxBytes>>20, "most file content of a managed bundle after unzip (the tmpfs stage size)")
+	flag.IntVar(&f.managedFiles, "managed-max-files", managed.DefaultLimits.MaxEntries, "most files and directories in a managed bundle")
+	flag.IntVar(&f.managedBuilds, "managed-max-builds", 1, "most managed bundle uploads that receive and build at once")
+	flag.DurationVar(&f.swapTimeout, "managed-swap-timeout", 30*time.Second, "limit for the managed drive swap of one VM")
 	flag.Parse()
 
 	log := slog.New(slog.NewJSONHandler(os.Stderr, nil))
@@ -225,7 +238,16 @@ func run(f flags, log *slog.Logger) error {
 	if err := builder.CleanStaging(); err != nil {
 		return err
 	}
-	svc := &server.Service{M: m, DialPorts: ports, DaemonPort: uint32(f.daemonPort), MaxDialsPerVM: f.dialMax, Keys: pt}
+	mstore := &managed.Store{
+		Dir: filepath.Join(f.dataDir, "managed"), Stager: managed.TmpfsStager{}, Log: log,
+		Limits:    managed.Limits{MaxZipBytes: f.managedZipMiB << 20, MaxBytes: f.managedMaxMiB << 20, MaxEntries: f.managedFiles},
+		MaxBuilds: f.managedBuilds,
+	}
+	if err := mstore.CleanStaging(managed.Unmount); err != nil {
+		return err
+	}
+	m.UseManagedGuest(server.DaemonManaged{Port: uint32(f.daemonPort)}, f.swapTimeout)
+	svc := &server.Service{M: m, DialPorts: ports, DaemonPort: uint32(f.daemonPort), MaxDialsPerVM: f.dialMax, Keys: pt, Managed: &server.ManagedImages{Store: mstore, Keep: f.managedKeep}, Log: log}
 	if f.rootfsDir != "" {
 		svc.Builder = func(ctx context.Context) (tplbuild.Result, error) {
 			rf, err := tplbuild.LoadRootfs(f.rootfsDir)
@@ -361,7 +383,7 @@ func preflight(f flags, lay jailer.Layout) error {
 	if _, err := os.Stat("/sys/fs/cgroup/cgroup.controllers"); err != nil {
 		return fmt.Errorf("cgroup v2 is not mounted at /sys/fs/cgroup: %w", err)
 	}
-	for _, d := range []string{"templates", "jail", "bin", "kernel", "run", "journal"} {
+	for _, d := range []string{"templates", "jail", "bin", "kernel", "run", "journal", "managed"} {
 		if err := os.MkdirAll(filepath.Join(f.dataDir, d), 0o700); err != nil {
 			return err
 		}
@@ -391,6 +413,10 @@ func checkRanges(f flags) error {
 		f.tplScratchGiB == 0 || f.tplScratchGiB > f.maxScratchGiB || f.tplKeep < 1 {
 		return fmt.Errorf("bad template shape --template-vcpus %d --template-mem-mib %d --template-scratch-gib %d --template-keep %d",
 			f.tplVCPUs, f.tplMemMiB, f.tplScratchGiB, f.tplKeep)
+	}
+	if f.managedKeep < 1 || f.managedZipMiB < 1 || f.managedMaxMiB < 1 || f.managedFiles < 1 || f.managedBuilds < 1 || f.swapTimeout <= 0 {
+		return fmt.Errorf("bad managed limits --managed-keep %d --managed-max-zip-mib %d --managed-max-mib %d --managed-max-files %d --managed-max-builds %d --managed-swap-timeout %v",
+			f.managedKeep, f.managedZipMiB, f.managedMaxMiB, f.managedFiles, f.managedBuilds, f.swapTimeout)
 	}
 	if f.maxScratchGiB > math.MaxUint32 {
 		return fmt.Errorf("--max-scratch-gib %d is too large", f.maxScratchGiB)

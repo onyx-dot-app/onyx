@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
@@ -46,6 +47,17 @@ type Service struct {
 
 	dialMu sync.Mutex
 	dials  map[string]int
+	// Managed holds the managed drive images (ENG-4614). Nil: the managed
+	// calls fail with MANAGED_SWAP_UNSUPPORTED.
+	Managed *ManagedImages
+	Log     *slog.Logger
+}
+
+func (s *Service) log() *slog.Logger {
+	if s.Log != nil {
+		return s.Log
+	}
+	return slog.Default()
 }
 
 // Create implements pb.HostAgentServer.
@@ -128,6 +140,15 @@ func (s *Service) NodeInfo(context.Context, *pb.NodeInfoRequest) (*pb.NodeInfoRe
 	for _, t := range n.Templates {
 		out.Templates = append(out.Templates, toTemplateInfo(t, n.Versions.NodeKey()))
 	}
+	if s.Managed != nil && s.Managed.Store != nil {
+		imgs, err := s.Managed.Store.List()
+		if err != nil {
+			return nil, toStatus(err)
+		}
+		for _, img := range imgs {
+			out.ManagedImages = append(out.ManagedImages, s.imageInfo(img))
+		}
+	}
 	return out, nil
 }
 
@@ -152,6 +173,7 @@ func toTemplateInfo(t *template.Template, node template.NodeKey) *pb.TemplateInf
 		GuestKernel: t.GuestKernel, FirecrackerVersion: t.FirecrackerVersion,
 		ImageRef: t.ImageRef, ImageDigest: t.ImageDigest, RootfsSha256: t.RootfsSHA256, KeySha256: t.KeySHA256,
 		CaFingerprint: t.CAFingerprint, BuiltAt: timestamppb.New(t.BuiltAt), Compatible: t.CheckNode(node) == nil,
+		ManagedSlots: uint32(t.ManagedSlots()),
 	}
 }
 
@@ -167,6 +189,9 @@ func toVM(vm agent.VM) *pb.VM {
 		SandboxId: vm.SandboxID, Attempt: vm.Attempt, Generation: vm.Generation, Template: vm.Template,
 		Vcpus: vm.VCPUs, MemMib: vm.MemMiB, ScratchGib: vm.ScratchGiB, State: vm.State, TenantId: vm.TenantID,
 		Pid: int32(vm.PID), Uid: vm.UID, StartedAt: timestamppb.New(vm.StartedAt),
+		Managed: &pb.ManagedState{
+			Slots: uint32(vm.Managed.Slots), Active: vm.Managed.Active, SlotAImage: vm.Managed.A, SlotBImage: vm.Managed.B,
+		},
 	}
 }
 

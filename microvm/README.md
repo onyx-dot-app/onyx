@@ -23,6 +23,8 @@ Nothing deploys the agent yet. The Helm DaemonSet (ENG-4583) adds it behind `SAN
 | `List()` | Every VM that the agent knows about, with its state (`STARTING`, `RUNNING`, `EXITED`). |
 | `NodeInfo()` | Total and free memory, free disk, VM count, templates on disk (with their key and `compatible`), CPU model, Firecracker, host kernel and guest kernel versions. |
 | `BuildTemplate()` | Builds the node's template from `--rootfs-dir` if no valid one for its key is there, then removes old templates (see Templates). |
+| `PutManagedImage(stream: header{sha256, size_bytes}, data...)` | Uploads a managed bundle (a zip) and builds its read-only ext4 image on the node (see Managed drive). |
+| `SwapManaged(image_id, targets[{sandbox_id, attempt, generation, sandboxd_key}])` | Puts a managed image into running VMs, one VM at a time, without a restart (see Managed drive). One result per target. |
 | `CloseConnections(sandbox_id, attempt, generation)` | Closes the VM's egress relay connections (see Egress relay). |
 | `Dial(sandbox_id, guest_port, generation)` | Byte stream to a guest vsock port (see below). |
 | `craft.sandboxd.v1.Sandboxd/*` | Any guest daemon call, forwarded to the VM named by `x-sandbox-id` (see Guest daemon pass-through). |
@@ -119,7 +121,7 @@ process. VMs and their programs keep running; callers retry.
 2. The chroot `<data-dir>/jail/firecracker/<sandbox_id>/root/` gets a reflink copy of each template file,
    never a hard link: `snapshot/create` truncates its target in place, so a link would let one VM destroy
    the template. The read-only files (`rootfs.ext4`, `managed.ext4`, `upload-a.ext4`, `upload-b.ext4`,
-   `vmstate`, `mem`) are root-owned, mode 0644. `scratch.ext4` is extended to `scratch_gib` and owned by
+   `managed-b.ext4`, `vmstate`, `mem`) are root-owned, mode 0644. `scratch.ext4` is extended to `scratch_gib` and owned by
    the VM UID. After the copy, the agent checks that no template file changed since its hash check.
 3. The agent runs
    `nsenter -t 1 -m -- systemd-run --scope --slice=fcvms.slice --unit=fcvm-<sandbox_id> -- jailer ... --new-pid-ns`.
@@ -153,6 +155,10 @@ temporary file, which is synced and renamed over the record; then the directory 
 | `starting` | before the launch | Create never returned: remove the VM (if any) and the record. If the record keeps the stopped attempt that the start replaced, it becomes that tombstone again |
 | `running` | after the launch, before Create returns | Adopt if the PID is still our Firecracker (same start time, comm, VM scope, `--id`) and `GET /` reports `Running`. Gone: `EXITED`. Same process but no API answer: adopt and log an error |
 | `stopped` | after Stop | Tombstone (24 h): a repeat Stop succeeds, an old attempt gets `STALE_ATTEMPT` |
+
+A `running` record also has `managed`: the number of managed slots, the active slot (`a` or `b`), the
+image behind each slot, and `pending` while a swap runs (see Managed drive). A record without `managed`
+(written before ENG-4614) means one slot.
 
 - A Firecracker process or chroot in the agent's layout with no record is an orphan. The agent kills it.
 - If a record cannot be read, the agent logs it and leaves that VM alone. If the process scan fails, the
@@ -224,7 +230,9 @@ A VM has no network card. Its egress goes guest → vsock port 3128 → the agen
 - `--artifacts-dir` has `firecracker` and `jailer` v1.17.0 and the guest kernel `vmlinux` (the
   `onyxdotapp/craft-fc-artifacts` layout). The agent checks the binaries' SHA256 against `internal/binaries`
   and copies them to `<data-dir>/bin/<version>/`.
-- `mkfs.ext4` (e2fsprogs) in the agent's container, for the template's empty drives.
+- `mkfs.ext4` (e2fsprogs) in the agent's container, for the template's empty drives and the managed
+  images (`mkfs.ext4 -d`). The agent image (ENG-4607) must install e2fsprogs.
+- Privileged enough to mount a tmpfs in its own mount namespace (the managed bundle stage).
 
 ### Templates
 
@@ -237,6 +245,7 @@ A template is `<data-dir>/templates/<version>/`. The agent builds it on the node
 | `scratch.ext4` | `scratch` (`/dev/vdb`) | empty ext4, `--template-scratch-gib`; never mounted in the template |
 | `managed.ext4` | `managed` (`/dev/vdc`, read-only) | empty ext4 (8 MiB); the managed drive slot |
 | `upload-a.ext4`, `upload-b.ext4` | `upload_a`, `upload_b` (`/dev/vdd`, `/dev/vde`, read-only) | 1 MiB placeholders for the later upload bundles; never mounted |
+| `managed-b.ext4` | `managed_b` (`/dev/vdf`, read-only; layout 3) | 1 MiB placeholder: managed slot B, the spare for a swap; never mounted in the template |
 | `vmstate`, `mem` | | full snapshot |
 | `manifest.json` | | see below |
 
@@ -265,21 +274,22 @@ The design for deployments (not built yet, see the open points in `plans/craft-f
 At start-up (after recovery, while the API serves) and on `BuildTemplate`, the agent:
 
 1. Reads `--rootfs-dir`. It checks that the root drive expects the drives `rootfs`, `scratch` (writable)
-   and `managed` (read-only) in this order, and that its CA fits `--egress-ca`.
+   and `managed` (read-only) in this order, that its `managed_slots` (if any) are `a=/dev/vdc` and
+   `b=/dev/vdf`, and that its CA fits `--egress-ca`.
 2. Computes the key and the template name: `<image tag>-<first 12 hex of the key hash>`, for example
    `v5.1.0-3fa91c0e7d22`. If a valid template with this name is there, it stops (and runs GC).
 3. Copies the root drive into a staging directory (`<templates>/.build-<name>`) and checks its SHA256
-   against the root drive manifest. It makes the empty scratch and managed drives (`mkfs.ext4`) and the
-   upload slots.
+   against the root drive manifest. It makes the empty scratch and managed drives (`mkfs.ext4`), the
+   upload slots and managed slot B.
 4. Boots a VM in a jailer chroot (ID `tpl-<key hash[:12]>`, a UID from the pool) with the guest kernel,
    the boot args of the root drive manifest plus `craft.scratch=defer` (init does not mount scratch or
-   managed), the five drives in the order above and the vsock (guest CID 3, `/v.sock`).
+   managed), the six drives in the order above and the vsock (guest CID 3, `/v.sock`).
 5. Waits until the guest daemon answers `Health` on vsock `--daemon-port`, pauses the VM and takes a full
    snapshot. It moves `vmstate` and `mem` into the staging directory and stops the VM.
 6. Hashes the files, writes `manifest.json` and renames the staging directory to its name.
 7. GC: keeps the `--template-keep` (default 2) newest templates and every template that a VM on the node
-   uses (also starting and exited VMs). It removes the others, also templates with a manifest of an older
-   layout. A staging directory left by an agent that stopped during a build is removed at start-up.
+   uses (also starting and exited VMs). It removes the others, also templates with a manifest that the
+   agent cannot read. A staging directory left by an agent that stopped during a build is removed at start-up.
 
 One build runs at a time; a `BuildTemplate` call during a build waits for it. A template that fails its
 check is built again, unless a VM uses it.
@@ -290,7 +300,7 @@ is `<artifacts-dir>/vmlinux`; the agent copies it to `<data-dir>/kernel/vmlinux-
 
 #### Manifest and checks
 
-`manifest.json` (schema = layout version 2):
+`manifest.json` (schema = layout version, 3 for new builds):
 
 - `key`: `image_ref`, `image_digest`, `rootfs_sha256`, `rootfs_manifest_sha256`, `guest_kernel` (release),
   `guest_kernel_sha256`, `firecracker_version`, `cpu_model`, `host_kernel`, `ca_fingerprint`,
@@ -312,7 +322,81 @@ Before every restore, Create checks:
    checks compare the fingerprints and hash again only if one changed. A changed file is
    `TEMPLATE_INCOMPATIBLE`.
 
+Layouts: the agent builds layout 3 (six drives, managed slot B last, so the older drives keep their guest
+devices) and still restores layout 2 templates (five drives). A VM of a layout 2 template cannot swap its
+managed drive (`MANAGED_SWAP_UNSUPPORTED`). `TemplateInfo.managed_slots` says which one a template is.
+
 `internal/kvmtest/helpers_test.go` (`buildTemplate`) uses the same pipeline for the older KVM tests.
+
+### Managed drive (ENG-4614)
+
+`/workspace/managed` in each VM is a read-only ext4 drive with the managed files (the skills). The agent
+changes it in running VMs, with no restart. Firecracker cannot add a drive after boot, so every VM has two
+managed slots: A (drive `managed`, `/dev/vdc`, the image's `MANAGED_DEV`) and B (drive `managed_b`,
+`/dev/vdf`, `MANAGED_DEV_B`, the last drive). At Create, slot A has the template's empty placeholder and
+attach mounts it; slot B is never mounted by attach.
+
+**Images.** `PutManagedImage` streams a zip (first message: SHA256 and size; then data, at most 4 MiB per
+message). The image ID is the zip's SHA256. The agent:
+
+1. writes the zip to `<data-dir>/managed/.upload-*` and checks its size and SHA256
+   (`MANAGED_BUNDLE_INVALID`);
+2. unpacks it into a tmpfs of its own (`--managed-max-mib` plus room for directories), so the files stay
+   in memory. Only plain relative paths, regular files and directories are allowed: an absolute or `..`
+   path, a symlink, device, FIFO or socket, a duplicate name or a file and directory with one name fails
+   the whole bundle. Content is counted as it is read (`--managed-max-mib`, `--managed-max-files`), so a
+   zip bomb stops at the limit. Files become root-owned 0644 (0755 with an execute bit), directories
+   0755;
+3. runs `mkfs.ext4 -d` (4 KiB blocks, no journal, no reserved blocks, root owner, label `managed`) into
+   `<data-dir>/managed/<id>.ext4`, with an ext4 UUID derived from the ID. The size is an estimate with
+   room; a full file system gets two more tries at twice the size;
+4. writes `<id>.json` (ext4 SHA256, size, UUID, file count). A repeat upload of the same zip returns the
+   image without reading the data.
+
+At most `--managed-max-builds` (default 1) uploads do steps 1 to 4 at once on a node; the others wait
+before they read their data. So the disk and tmpfs use of uploads together stays within one bundle limit
+per build.
+
+GC (after each upload and swap) keeps the `--managed-keep` (default 3) newest images, every image that
+a VM has behind a slot, and the image of a swap that runs. It does not touch an image while its upload
+runs. Each VM chroot has its own reflink copy, so GC never changes a running VM.
+
+**Swap.** `SwapManaged` takes an image ID and the target VMs, each with its attempt, generation and
+`sandboxd_key` (the agent does not keep the key, so the caller sends it). It swaps one VM at a time, in
+order; one failure does not stop the others. For each VM:
+
+1. Daemon `ManagedStatus` (vsock, with the key): which slot is on `/workspace/managed`, and whether each
+   slot device is in use. The guest is the truth, so a swap that an agent restart cut short is seen here.
+   If the active slot already has the image's UUID, the call only fixes the journal (`changed` false).
+2. The idle slot is the other one. If the guest still uses it (a detached mount from the last swap with
+   open files), the VM gets `MANAGED_SLOT_BUSY` and nothing changes. If the busy slot already has the
+   image's UUID, a swap stopped after its guest mount: the agent skips step 3, and `MountManaged`
+   detaches the old top mount.
+3. The journal records the pending swap. The agent puts a reflink copy of the image at
+   `/managed.ext4` or `/managed-b.ext4` in the chroot and calls Firecracker `PATCH /drives/<id>`.
+4. Daemon `MountManaged(slot, size, uuid)`: wait until the device has the new size (Firecracker sends a
+   virtio config change), drop the guest's cached blocks (`BLKFLSBUF`), check the ext4 UUID, mount the
+   device `ro,noload,nodev,nosuid,noexec` with private propagation beneath the current mount
+   (`fsmount` + `move_mount(MOVE_MOUNT_BENEATH)`, Linux 6.5+), then detach the old top mount
+   (`umount2(MNT_DETACH)`). Open files on the old drive keep working until they close.
+5. The journal records the new active slot and image.
+
+The result per VM has `active`, `changed`, `ms` and `previous_in_use` (a guest process still has a file
+open on the old drive; the next swap of this VM gets `MANAGED_SLOT_BUSY` until it closes). Stop and
+Create of a sandbox wait for its swap; other calls (the pass-through) go on during a swap.
+
+Firecracker v1.17 `PATCH /drives` with `path_on_host` works after boot and after a snapshot restore. It
+opens the new file with the drive's read-only flag, sets the new capacity and sends a config change
+interrupt (`devices/virtio/block/virtio/device.rs`, `update_disk_image`). Its documented contract is that
+the guest does not mount or read the device during the change: the idle slot check (an exclusive open of
+the device fails with `EBUSY` while any mount holds it) gives that.
+
+Flags: `--managed-keep` (3), `--managed-max-zip-mib` (256), `--managed-max-mib` (512),
+`--managed-max-files` (50000), `--managed-max-builds` (1), `--managed-swap-timeout` (30 s per VM).
+
+Errors: `MANAGED_IMAGE_MISSING`, `MANAGED_BUNDLE_INVALID`, `MANAGED_SWAP_UNSUPPORTED` (layout 2 template,
+or a daemon without `MountManaged`), `MANAGED_SLOT_BUSY`, `MANAGED_MOUNT_FAILED` (the old drive stays
+mounted), `GUEST_KEY_REJECTED` (wrong `sandboxd_key`), `GUEST_UNREACHABLE`.
 
 ## Generated code
 
@@ -371,6 +455,9 @@ KVM_IMG_DIR=/opt/craft-fc-test/img3 ./hostagent-kvm.test -test.v -test.run TestP
 # build-rootfs.sh output (KVM_TB_ROOTFS) with --egress-ca (KVM_TB_CA); 20 restores with Init + Run, a
 # tampered and a mismatched template, GC, agent restart.
 KVM_TB_ROOTFS=/opt/tb/rootfs-out KVM_TB_CA=/opt/tb/ca/ca.crt ./hostagent-kvm.test -test.v -test.run TestTemplateBuildKVM
+# Managed drive swap (ENG-4614): same inputs; KVM_VMS running VMs, a reader in each VM holding files on the
+# managed drive, swaps of every VM, guest checks (content, old reader, noexec, no rw remount, no restart).
+KVM_TB_ROOTFS=/opt/tb/rootfs-out KVM_TB_CA=/opt/tb/ca/ca.crt ./hostagent-kvm.test -test.v -test.run TestManagedSwapKVM
 ```
 
 The KVM tests take the template version from the build (`KVM_TEMPLATE` is no longer used).

@@ -26,6 +26,8 @@ const (
 	HostAgent_CloseConnections_FullMethodName = "/craft.hostagent.v1.HostAgent/CloseConnections"
 	HostAgent_Dial_FullMethodName             = "/craft.hostagent.v1.HostAgent/Dial"
 	HostAgent_BuildTemplate_FullMethodName    = "/craft.hostagent.v1.HostAgent/BuildTemplate"
+	HostAgent_PutManagedImage_FullMethodName  = "/craft.hostagent.v1.HostAgent/PutManagedImage"
+	HostAgent_SwapManaged_FullMethodName      = "/craft.hostagent.v1.HostAgent/SwapManaged"
 )
 
 // HostAgentClient is the client API for HostAgent service.
@@ -72,6 +74,20 @@ type HostAgentClient interface {
 	// ones that VMs use). The agent also does this at start-up. A call during
 	// a build waits for it.
 	BuildTemplate(ctx context.Context, in *BuildTemplateRequest, opts ...grpc.CallOption) (*BuildTemplateResponse, error)
+	// PutManagedImage uploads a managed bundle (a zip of the tree to show on
+	// /workspace/managed) and builds its read-only ext4 image on this node.
+	// The first message is the header, the later ones carry the zip bytes. A
+	// bundle whose image is already on the node is not built again. The image
+	// ID is the SHA256 of the zip.
+	PutManagedImage(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[PutManagedImageRequest, PutManagedImageResponse], error)
+	// SwapManaged puts a managed image into running VMs without a restart,
+	// one VM at a time: the agent puts the image behind the VM's idle slot
+	// (Firecracker PATCH /drives), the guest daemon mounts it beneath the
+	// current /workspace/managed mount and detaches the old mount lazily
+	// (open files on it keep working until they close), and the agent records
+	// the active slot in the journal. A failure of one VM does not stop the
+	// others; each target has its own result.
+	SwapManaged(ctx context.Context, in *SwapManagedRequest, opts ...grpc.CallOption) (*SwapManagedResponse, error)
 }
 
 type hostAgentClient struct {
@@ -155,6 +171,29 @@ func (c *hostAgentClient) BuildTemplate(ctx context.Context, in *BuildTemplateRe
 	return out, nil
 }
 
+func (c *hostAgentClient) PutManagedImage(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[PutManagedImageRequest, PutManagedImageResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &HostAgent_ServiceDesc.Streams[1], HostAgent_PutManagedImage_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[PutManagedImageRequest, PutManagedImageResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type HostAgent_PutManagedImageClient = grpc.ClientStreamingClient[PutManagedImageRequest, PutManagedImageResponse]
+
+func (c *hostAgentClient) SwapManaged(ctx context.Context, in *SwapManagedRequest, opts ...grpc.CallOption) (*SwapManagedResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SwapManagedResponse)
+	err := c.cc.Invoke(ctx, HostAgent_SwapManaged_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // HostAgentServer is the server API for HostAgent service.
 // All implementations must embed UnimplementedHostAgentServer
 // for forward compatibility.
@@ -199,6 +238,20 @@ type HostAgentServer interface {
 	// ones that VMs use). The agent also does this at start-up. A call during
 	// a build waits for it.
 	BuildTemplate(context.Context, *BuildTemplateRequest) (*BuildTemplateResponse, error)
+	// PutManagedImage uploads a managed bundle (a zip of the tree to show on
+	// /workspace/managed) and builds its read-only ext4 image on this node.
+	// The first message is the header, the later ones carry the zip bytes. A
+	// bundle whose image is already on the node is not built again. The image
+	// ID is the SHA256 of the zip.
+	PutManagedImage(grpc.ClientStreamingServer[PutManagedImageRequest, PutManagedImageResponse]) error
+	// SwapManaged puts a managed image into running VMs without a restart,
+	// one VM at a time: the agent puts the image behind the VM's idle slot
+	// (Firecracker PATCH /drives), the guest daemon mounts it beneath the
+	// current /workspace/managed mount and detaches the old mount lazily
+	// (open files on it keep working until they close), and the agent records
+	// the active slot in the journal. A failure of one VM does not stop the
+	// others; each target has its own result.
+	SwapManaged(context.Context, *SwapManagedRequest) (*SwapManagedResponse, error)
 	mustEmbedUnimplementedHostAgentServer()
 }
 
@@ -229,6 +282,12 @@ func (UnimplementedHostAgentServer) Dial(grpc.BidiStreamingServer[DialFrame, Dia
 }
 func (UnimplementedHostAgentServer) BuildTemplate(context.Context, *BuildTemplateRequest) (*BuildTemplateResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method BuildTemplate not implemented")
+}
+func (UnimplementedHostAgentServer) PutManagedImage(grpc.ClientStreamingServer[PutManagedImageRequest, PutManagedImageResponse]) error {
+	return status.Error(codes.Unimplemented, "method PutManagedImage not implemented")
+}
+func (UnimplementedHostAgentServer) SwapManaged(context.Context, *SwapManagedRequest) (*SwapManagedResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SwapManaged not implemented")
 }
 func (UnimplementedHostAgentServer) mustEmbedUnimplementedHostAgentServer() {}
 func (UnimplementedHostAgentServer) testEmbeddedByValue()                   {}
@@ -366,6 +425,31 @@ func _HostAgent_BuildTemplate_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HostAgent_PutManagedImage_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(HostAgentServer).PutManagedImage(&grpc.GenericServerStream[PutManagedImageRequest, PutManagedImageResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type HostAgent_PutManagedImageServer = grpc.ClientStreamingServer[PutManagedImageRequest, PutManagedImageResponse]
+
+func _HostAgent_SwapManaged_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SwapManagedRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HostAgentServer).SwapManaged(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HostAgent_SwapManaged_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HostAgentServer).SwapManaged(ctx, req.(*SwapManagedRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // HostAgent_ServiceDesc is the grpc.ServiceDesc for HostAgent service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -397,12 +481,21 @@ var HostAgent_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "BuildTemplate",
 			Handler:    _HostAgent_BuildTemplate_Handler,
 		},
+		{
+			MethodName: "SwapManaged",
+			Handler:    _HostAgent_SwapManaged_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "Dial",
 			Handler:       _HostAgent_Dial_Handler,
 			ServerStreams: true,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "PutManagedImage",
+			Handler:       _HostAgent_PutManagedImage_Handler,
 			ClientStreams: true,
 		},
 	},

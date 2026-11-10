@@ -64,8 +64,8 @@ func (p *Proc) API() *operations.Client {
 // Launch restores a VM from its template. It implements agent.Launcher.
 func (l *Launcher) Launch(ctx context.Context, s agent.LaunchSpec) (agent.Process, error) {
 	t := s.Template
-	files := make([]FileSource, 0, len(template.Files))
-	for _, f := range template.Files {
+	files := make([]FileSource, 0, len(t.FileList()))
+	for _, f := range t.FileList() {
 		fs := FileSource{Name: f, Src: t.Path(f)}
 		if f == template.ScratchFile {
 			fs.VMOwned, fs.Size = true, s.ScratchBytes
@@ -324,4 +324,25 @@ func readPID(path string) (int, error) {
 		return 0, fmt.Errorf("bad jailer pid file %q", strings.TrimSpace(string(raw)))
 	}
 	return pid, nil
+}
+
+// ReplaceDrive implements agent.DriveReplacer. It puts a reflink copy of src
+// (root-owned, mode 0644) at /<file> in the chroot and makes Firecracker
+// open it for drive driveID (PATCH /drives). Firecracker reads the new size
+// and tells the guest. The guest must not use the drive meanwhile.
+func (p *Proc) ReplaceDrive(ctx context.Context, driveID, file, src string) error {
+	if file == "" || strings.ContainsAny(file, "/\x00") || strings.HasPrefix(file, ".") {
+		return fmt.Errorf("bad drive file name %q", file)
+	}
+	root := p.l.Cmd.Layout.RootDir(p.ID)
+	tmp := filepath.Join(root, "."+file+".new")
+	_ = os.Remove(tmp)
+	if err := scratch.Clone(src, tmp, 0o644, 0, 0); err != nil {
+		return fmt.Errorf("copy %s: %w", file, err)
+	}
+	if err := os.Rename(tmp, filepath.Join(root, file)); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return RefreshDrive(ctx, p.API(), driveID, "/"+file)
 }

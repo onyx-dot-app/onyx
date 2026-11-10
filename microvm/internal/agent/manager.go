@@ -119,6 +119,7 @@ type VM struct {
 	UID        uint32
 	StartedAt  time.Time
 	TenantID   string
+	Managed    ManagedState
 }
 
 // Egress connects the VMs to the egress relay. The real one is
@@ -140,6 +141,9 @@ type entry struct {
 	// busy is closed when the current Create, Stop or exit cleanup ends.
 	// It is nil when no operation runs.
 	busy chan struct{}
+	// swap is closed when the current managed drive swap ends. Create and
+	// Stop wait for it; the VM stays usable during a swap.
+	swap chan struct{}
 	// createErr is set when Create failed; the entry is then removed.
 	createErr error
 	// cleanupErr is set when the cleanup of an exited VM failed. Stop
@@ -184,6 +188,9 @@ type Manager struct {
 	// building maps the jailer IDs of template build VMs (BuildSlot) to
 	// their guest memory in MiB.
 	building map[string]uint32
+
+	managedGuest ManagedGuest
+	swapTimeout  time.Duration
 }
 
 // NewManager returns a Manager with an empty VM table.
@@ -234,7 +241,7 @@ func (m *Manager) record(e *entry, state journal.State, info ProcInfo) journal.R
 		PID: info.PID, PIDStart: info.PIDStart, UID: e.vm.UID,
 		Chroot: info.Chroot, APISock: info.APISock, VsockUDS: info.VsockUDS,
 		Template: e.vm.Template, VCPUs: e.vm.VCPUs, MemMiB: e.vm.MemMiB, ScratchGiB: e.vm.ScratchGiB,
-		StartedAt: e.vm.StartedAt, TenantID: e.vm.TenantID,
+		StartedAt: e.vm.StartedAt, TenantID: e.vm.TenantID, Managed: e.vm.Managed.record(),
 	}
 }
 
@@ -294,6 +301,14 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (VM, bool, erro
 	for {
 		m.mu.Lock()
 		e := m.vms[req.SandboxID]
+		if e != nil && e.busy == nil && e.swap != nil {
+			swap := e.swap
+			m.mu.Unlock()
+			if err := waitFor(ctx, swap); err != nil {
+				return VM{}, false, err
+			}
+			continue
+		}
 		if e != nil && e.busy != nil {
 			busy := e.busy
 			m.mu.Unlock()
@@ -366,6 +381,7 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (VM, bool, erro
 			SandboxID: req.SandboxID, Attempt: req.Attempt, Generation: m.nextGeneration(),
 			Template: tpl.Version, VCPUs: req.VCPUs, MemMiB: req.MemMiB, ScratchGiB: req.ScratchGiB,
 			State: pb.VMState_VM_STATE_STARTING, UID: uid, StartedAt: m.now(), TenantID: req.TenantID,
+			Managed: ManagedState{Slots: tpl.ManagedSlots(), Active: pb.ManagedSlot_MANAGED_SLOT_A},
 		},
 		busy: make(chan struct{}),
 	}
@@ -523,10 +539,13 @@ func (m *Manager) Stop(ctx context.Context, sandboxID string, attempt, generatio
 			}
 			return StopResult{}, apierr.New(pb.ErrorReason_SANDBOX_NOT_FOUND, "sandbox %s has no VM on this node", sandboxID)
 		}
-		if e.busy != nil {
-			busy := e.busy
+		if e.busy != nil || e.swap != nil {
+			wait := e.busy
+			if wait == nil {
+				wait = e.swap
+			}
 			m.mu.Unlock()
-			if err := waitFor(ctx, busy); err != nil {
+			if err := waitFor(ctx, wait); err != nil {
 				return StopResult{}, err
 			}
 			continue

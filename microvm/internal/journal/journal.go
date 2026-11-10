@@ -57,6 +57,31 @@ type Record struct {
 	// Prev is the stopped attempt that a starting record replaces. A crash
 	// during the start must not forget it.
 	Prev *Tombstone `json:"prev,omitempty"`
+	// Managed is the VM's managed drive slots. Nil in records from before
+	// ENG-4614: one slot.
+	Managed *Managed `json:"managed,omitempty"`
+}
+
+// Managed is the state of a VM's managed drive slots (ENG-4614).
+type Managed struct {
+	// Slots is 2 for a VM that can swap its managed drive, else 1.
+	Slots int `json:"slots"`
+	// Active is the slot on /workspace/managed: "a" or "b".
+	Active string `json:"active"`
+	// A and B are the managed image IDs behind the slots. Empty: the
+	// template's placeholder.
+	A string `json:"a,omitempty"`
+	B string `json:"b,omitempty"`
+	// Pending is set while a swap runs: the agent put (or is putting)
+	// image Pending.Image behind slot Pending.Slot. A restarted agent asks
+	// the guest which slot is mounted.
+	Pending *PendingSwap `json:"pending,omitempty"`
+}
+
+// PendingSwap is a swap that has not finished.
+type PendingSwap struct {
+	Slot  string `json:"slot"`
+	Image string `json:"image"`
 }
 
 // Tombstone is a stopped attempt.

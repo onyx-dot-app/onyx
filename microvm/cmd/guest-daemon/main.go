@@ -21,6 +21,7 @@ import (
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/execs"
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/sysops"
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/vsock"
+	pb "github.com/onyx-dot-app/onyx/microvm/proto/sandboxd/v1"
 )
 
 // version is set with -ldflags "-X main.version=...".
@@ -40,6 +41,9 @@ func main() {
 	outBudget := flag.Int64("output-budget", 256<<20, "output bytes kept by all executions; over it, ended ones lose their output first")
 	maxRunning := flag.Int("max-running", 64, "most running executions")
 	logLevel := flag.String("log-level", "info", "debug, info, warn or error")
+	managedMnt := flag.String("managed-mount", "/workspace/managed", "mount point of the managed drive; empty turns MountManaged off")
+	managedA := flag.String("managed-dev-a", "/dev/vdc", "managed slot A device (the image's MANAGED_DEV)")
+	managedB := flag.String("managed-dev-b", "/dev/vdf", "managed slot B device (the image's MANAGED_DEV_B)")
 	flag.Parse()
 
 	var lvl slog.Level
@@ -62,7 +66,14 @@ func main() {
 	if pf := *relayPIDFile; pf != "" {
 		sys.ResetRelay = func() (bool, error) { return sysops.SignalPIDFile(pf) }
 	}
-	if err := run(log, sys, *port, *listen, *cgroupRoot, *stateFile, *growMounts, execs.Config{
+	var managed *guestd.ManagedConfig
+	if *managedMnt != "" {
+		managed = &guestd.ManagedConfig{
+			MountPoint: *managedMnt, Ops: sysops.Managed{},
+			Devices: map[pb.ManagedSlot]string{pb.ManagedSlot_MANAGED_SLOT_A: *managedA, pb.ManagedSlot_MANAGED_SLOT_B: *managedB},
+		}
+	}
+	if err := run(log, sys, managed, *port, *listen, *cgroupRoot, *stateFile, *growMounts, execs.Config{
 		DefaultDeadline: *defDeadline, MaxDeadline: *maxDeadline, OutputBytes: *outBytes, OutputBudget: *outBudget, MaxRunning: *maxRunning, Log: log,
 	}); err != nil {
 		log.Error("guest-daemon failed", "err", err)
@@ -70,7 +81,7 @@ func main() {
 	}
 }
 
-func run(log *slog.Logger, sys guestd.System, port uint, listen, cgroupRoot, stateFile, growMounts string, ecfg execs.Config) error {
+func run(log *slog.Logger, sys guestd.System, managed *guestd.ManagedConfig, port uint, listen, cgroupRoot, stateFile, growMounts string, ecfg execs.Config) error {
 	if cgroupRoot != "" {
 		if err := sysops.EnsureCgroup2(filepath.Dir(cgroupRoot)); err != nil {
 			return fmt.Errorf("mount cgroup2: %w", err)
@@ -103,7 +114,9 @@ func run(log *slog.Logger, sys guestd.System, port uint, listen, cgroupRoot, sta
 			base[k] = v
 		}
 	}
-	srv, err := guestd.NewServer(guestd.Config{Version: version, GrowMounts: mounts, StateFile: stateFile, BaseEnv: base, Log: log}, sys, m)
+	srv, err := guestd.NewServer(guestd.Config{
+		Version: version, GrowMounts: mounts, StateFile: stateFile, BaseEnv: base, Managed: managed, Log: log,
+	}, sys, m)
 	if err != nil {
 		return err
 	}
