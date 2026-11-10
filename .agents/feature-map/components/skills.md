@@ -878,6 +878,16 @@ still propagate unexpected storage errors.
     a Retired badge, read-only Versions and confirmed deletion. The existing Skill endpoint
     rechecks owner/global authority. Pending deletion blocks dismissal; failures
     keep the confirmation. Success refreshes detail, source counts and Skills.
+26. `group-skills-api` **Group pages list rows, not every Skill grant.**
+    `ee/onyx/db/user_group_skill.py:list_user_group_skills` returns one row per
+    company marketplace share and per direct Skill share for one group. Company
+    followers appear only under their marketplace; detached company Skills and
+    personal marketplace Skills are direct rows. Retired Skills, personal
+    marketplace shares, other groups and provider data stay out. Reads refresh
+    the actor without the membership lock and require token-capped `MANAGE_SKILLS`.
+    Global holders can target any group; scoped holders can target managed groups.
+    `can_edit` reflects resource scope and is false for built-in rows. This layer
+    provides the list only; installation-setting writes follow separately.
 
 
 ---

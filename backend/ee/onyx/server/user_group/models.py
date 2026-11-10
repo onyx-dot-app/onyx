@@ -1,10 +1,15 @@
+from enum import Enum
 from typing import NamedTuple
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
 from onyx.auth.permissions import Permission
-from onyx.db.enums import ConnectorManageRole
+from onyx.db.enums import (
+    ConnectorManageRole,
+    SkillInstallationPolicy,
+    SkillSharePermission,
+)
 from onyx.db.models import UserGroup as UserGroupModel
 from onyx.server.documents.models import (
     ConnectorCredentialPairDescriptor,
@@ -213,3 +218,47 @@ class BulkSetPermissionsRequest(BaseModel):
 
 class UserGroupDataAccessCCPairs(BaseModel):
     cc_pair_ids: list[int]
+
+
+class GroupSkillSource(str, Enum):
+    UPLOADED = "UPLOADED"
+    BUILT_IN = "BUILT_IN"
+    PERSONAL_MARKETPLACE = "PERSONAL_MARKETPLACE"
+    # A company marketplace skill with its own access, detached from the defaults.
+    COMPANY_MARKETPLACE = "COMPANY_MARKETPLACE"
+
+
+class GroupMarketplaceSetting(BaseModel):
+    """A company marketplace shared with the group. Its following skills use it."""
+
+    marketplace_id: UUID
+    name: str
+    permission: SkillSharePermission
+    company_installation_policy: SkillInstallationPolicy
+    # None inherits company_installation_policy.
+    group_installation_policy: SkillInstallationPolicy | None
+    effective_installation_policy: SkillInstallationPolicy
+    following_skill_count: int
+    can_edit: bool
+
+
+class GroupSkillSetting(BaseModel):
+    """A Skill shared with the group outside its company marketplace defaults."""
+
+    skill_id: UUID
+    name: str
+    description: str
+    source: GroupSkillSource
+    marketplace_id: UUID | None
+    marketplace_name: str | None
+    permission: SkillSharePermission
+    company_installation_policy: SkillInstallationPolicy
+    # None inherits company_installation_policy.
+    group_installation_policy: SkillInstallationPolicy | None
+    effective_installation_policy: SkillInstallationPolicy
+    can_edit: bool
+
+
+class UserGroupSkills(BaseModel):
+    marketplaces: list[GroupMarketplaceSetting]
+    skills: list[GroupSkillSetting]

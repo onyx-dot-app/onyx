@@ -32,6 +32,9 @@ from ee.onyx.db.user_group import (
     update_user_group,
 )
 from ee.onyx.db.user_group import delete_user_group as db_delete_user_group
+from ee.onyx.db.user_group_skill import (
+    list_user_group_skills,
+)
 from ee.onyx.server.user_group.models import (
     AddUsersToUserGroupRequest,
     BulkSetPermissionsRequest,
@@ -47,6 +50,7 @@ from ee.onyx.server.user_group.models import (
     UserGroupIncognitoUpdate,
     UserGroupMemberCounts,
     UserGroupRename,
+    UserGroupSkills,
     UserGroupUpdate,
 )
 from onyx.auth.permission_projection import user_group_permissions
@@ -65,6 +69,7 @@ from onyx.auth.scoped_permissions import (
     get_scoped_groups,
     get_visible_user_group_ids,
     manages_group,
+    within_scope,
 )
 from onyx.background.celery.tasks.beat_schedule import BEAT_EXPIRES_DEFAULT
 from onyx.background.celery.versioned_apps.client import app as client_app
@@ -79,6 +84,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import ConnectorManageRole, Permission, PermissionAuthority
 from onyx.db.models import User
 from onyx.db.persona import fetch_persona_by_id_for_user, get_personas_by_ids
+from onyx.db.resource_access import fetch_resource_access_user
 from onyx.db.user_group import (
     assert_group_config_is_editable,
     assert_group_permissions_editable,
@@ -829,3 +835,27 @@ def set_group_manager(
             "is_manager": request.is_manager,
         },
     )
+
+
+@router.get("/admin/user-group/{user_group_id}/skills")
+def get_user_group_skills(
+    user_group_id: int,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_SKILLS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> UserGroupSkills:
+    """List the group's company marketplace settings and direct Skill settings."""
+    user = fetch_resource_access_user(user.id, db_session)
+    if not within_scope(
+        user,
+        db_session,
+        permission=Permission.MANAGE_SKILLS,
+        current_group_ids=[user_group_id],
+        requested_group_ids=[],
+        is_non_public=True,
+    ):
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User group not found")
+    if fetch_user_group(db_session, user_group_id) is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User group not found")
+    return list_user_group_skills(user_group_id, user, db_session)

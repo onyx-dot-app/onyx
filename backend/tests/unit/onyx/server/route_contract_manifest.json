@@ -290,6 +290,7 @@
   "GET /manage/admin/user-group": "read:user_groups +scope",
   "GET /manage/admin/user-group/{user_group_id}": "read:user_groups +scope",
   "GET /manage/admin/user-group/{user_group_id}/permissions": "manage:user_groups",
+  "GET /manage/admin/user-group/{user_group_id}/skills": "manage:skills +scope",
   "GET /manage/admin/valid-domains": "admin",
   "GET /manage/connector": "read:connectors",
   "GET /manage/connector-group-restrictions": "manage:connectors +scope",

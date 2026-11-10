@@ -1,0 +1,22 @@
+---
+title: "Get User Group Skills"
+openapi: "GET /manage/admin/user-group/{user_group_id}/skills"
+---
+
+import BusinessEditionInfo from "/snippets/business-edition-info.mdx";
+
+<BusinessEditionInfo />
+
+<Info>
+  **Required permission:** Manage Skills (`manage:skills`). A group manager can read only groups they manage.
+</Info>
+
+The response lists one row for each company marketplace that the group can use,
+and one row for each Skill shared directly with the group.
+A company marketplace Skill that follows its marketplace access appears only in its marketplace row.
+A company marketplace Skill with its own access, and a personal marketplace Skill, appear as Skill rows.
+Retired Skills do not appear.
+
+A `null` `group_installation_policy` means that the group uses `company_installation_policy`.
+`effective_installation_policy` is the setting that applies to the group.
+`can_edit` shows whether the caller and token can change the row. Onyx checks each change again.

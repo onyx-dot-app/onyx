@@ -609,6 +609,7 @@
                   "developers/api_reference/user_groups/add_users",
                   "developers/api_reference/user_groups/update_group_agents",
                   "developers/api_reference/user_groups/update_group_document_sets",
+                  "developers/api_reference/user_groups/get_user_group_skills",
                   "developers/api_reference/user_groups/set_group_manager"
                 ]
               },
