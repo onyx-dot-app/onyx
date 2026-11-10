@@ -3,6 +3,7 @@
 from uuid import uuid4
 
 import pytest
+from fastapi import Request
 from scripts.check_skill_version_cutover import check_cutover
 from sqlalchemy.orm import Session
 
@@ -46,7 +47,11 @@ def test_readers_ignore_legacy_bundle_and_validity(
     session: Session, user: User
 ) -> None:
     response = api.create_custom_skill(
-        upload(bundle("current-reader")), True, user, session
+        upload(bundle("current-reader")),
+        True,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
     )
     skill = session.get(Skill, response.id)
     assert skill is not None
@@ -70,7 +75,11 @@ def test_current_invalid_blocks_runtime_even_when_legacy_valid(
     session: Session, user: User
 ) -> None:
     response = api.create_custom_skill(
-        upload(bundle("invalid-reader")), True, user, session
+        upload(bundle("invalid-reader")),
+        True,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
     )
     skill = session.get(Skill, response.id)
     assert skill is not None
@@ -90,7 +99,11 @@ def test_pointerless_skill_never_falls_back_to_legacy(
     session: Session, user: User
 ) -> None:
     response = api.create_custom_skill(
-        upload(bundle("pointerless-reader")), True, user, session
+        upload(bundle("pointerless-reader")),
+        True,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
     )
     skill = session.get(Skill, response.id)
     assert skill is not None
@@ -110,7 +123,11 @@ def test_backfilled_equal_ids_and_builtin_outer_join(
     session: Session, user: User
 ) -> None:
     response = api.create_custom_skill(
-        upload(bundle("backfilled-reader")), True, user, session
+        upload(bundle("backfilled-reader")),
+        True,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
     )
     skill = session.get(Skill, response.id)
     assert skill is not None
@@ -140,7 +157,11 @@ def test_missing_current_bundle_never_uses_legacy(
     session: Session, user: User, missing: str
 ) -> None:
     response = api.create_custom_skill(
-        upload(bundle("missing-reader")), True, user, session
+        upload(bundle("missing-reader")),
+        True,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
     )
     skill = session.get(Skill, response.id)
     assert skill is not None and skill.current_version is not None
@@ -162,7 +183,11 @@ def test_lazy_validity_updates_version_and_ignores_replaced_version(
     session: Session, user: User
 ) -> None:
     response = api.create_custom_skill(
-        upload(bundle("lazy-reader")), True, user, session
+        upload(bundle("lazy-reader")),
+        True,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
     )
     skill = session.get(Skill, response.id)
     assert skill is not None and skill.current_version is not None
@@ -175,7 +200,11 @@ def test_lazy_validity_updates_version_and_ignores_replaced_version(
     assert old.is_valid is True
     # Replacement publishes a different version; the late validation result is stale.
     api.replace_current_user_skill_bundle(
-        skill.id, upload(bundle(skill.name, "New body")), user, session
+        skill.id,
+        upload(bundle(skill.name, "New body")),
+        user,
+        session,
+        http_request=Request({"type": "http"}),
     )
     assert skill.current_version is not None and skill.current_version.id != old.id
     current = skill.current_version
@@ -191,7 +220,11 @@ def test_completed_repair_does_not_authorize_cutover(
     tenant: str, session: Session, user: User
 ) -> None:
     response = api.create_custom_skill(
-        upload(bundle("cutover-reader")), False, user, session
+        upload(bundle("cutover-reader")),
+        False,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
     )
     skill = session.get(Skill, response.id)
     assert skill is not None

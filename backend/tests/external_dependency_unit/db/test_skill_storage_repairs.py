@@ -46,7 +46,13 @@ def test_identical_upload_repairs_missing_large_object(
     store = postgres_file_store.PostgresBackedFileStore()
     with patch("onyx.file_store.file_store._DEFAULT_FILE_STORE", store):
         content = bundle("missing-large-object")
-        created = api.create_custom_skill(upload(content), False, user, session)
+        created = api.create_custom_skill(
+            upload(content),
+            False,
+            user,
+            session,
+            http_request=Request({"type": "http"}),
+        )
         skill = session.get(Skill, created.id)
         assert skill is not None
         old_file_id = skill.bundle_file_id
@@ -60,7 +66,13 @@ def test_identical_upload_repairs_missing_large_object(
         with pytest.raises(FileNotFoundError):
             store.read_file(old_file_id, db_session=session)
         assert session.scalar(select(1)) == 1
-        api.replace_current_user_skill_bundle(skill.id, upload(content), user, session)
+        api.replace_current_user_skill_bundle(
+            skill.id,
+            upload(content),
+            user,
+            session,
+            http_request=Request({"type": "http"}),
+        )
         session.refresh(skill)
         assert skill.bundle_file_id != old_file_id
         assert skill.bundle_file_id is not None
@@ -98,10 +110,18 @@ def test_existing_large_object_errors_propagate(
 
 def test_delete_cleans_versions_only_after_commit(session: Session, user: User) -> None:
     created = api.create_custom_skill(
-        upload(bundle("delete-history")), False, user, session
+        upload(bundle("delete-history")),
+        False,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
     )
     api.replace_current_user_skill_bundle(
-        created.id, upload(bundle("delete-history", "Second")), user, session
+        created.id,
+        upload(bundle("delete-history", "Second")),
+        user,
+        session,
+        http_request=Request({"type": "http"}),
     )
     skill = session.get(Skill, created.id)
     assert skill is not None
@@ -123,7 +143,11 @@ def test_delete_cleans_versions_only_after_commit(session: Session, user: User) 
 @pytest.mark.parametrize("failure", ["stored", "file", "total", "exact"])
 def test_metadata_byte_limits(session: Session, user: User, failure: str) -> None:
     created = api.create_custom_skill(
-        upload(bundle("bounded-history")), False, user, session
+        upload(bundle("bounded-history")),
+        False,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
     )
     output = io.BytesIO()
     with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
@@ -156,7 +180,11 @@ def test_metadata_byte_limits(session: Session, user: User, failure: str) -> Non
 
 def test_metadata_preserves_legacy_file_count(session: Session, user: User) -> None:
     created = api.create_custom_skill(
-        upload(bundle("legacy-file-count")), False, user, session
+        upload(bundle("legacy-file-count")),
+        False,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
     )
     output = io.BytesIO()
     with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
@@ -211,7 +239,11 @@ def test_physical_history_absence_clears_link_without_payload_reads(
         assert session.get(FileRecord, old_file) is not None
         assert session.get(FileRecord, current_file) is not None
         api.replace_current_user_skill_bundle(
-            skill.id, upload(bundle(skill.name, "Version 2")), user, session
+            skill.id,
+            upload(bundle(skill.name, "Version 2")),
+            user,
+            session,
+            http_request=Request({"type": "http"}),
         )
         session.refresh(skill)
         assert skill.bundle_file_id != current_file

@@ -216,6 +216,21 @@ def fetch_skill_version(
     return version
 
 
+def assert_skill_version_bundle_unchanged(
+    skill: Skill,
+    version_id: UUID,
+    bundle_file_id: str | None,
+    db_session: Session,
+) -> None:
+    """Recheck the restore source after the caller locks its Skill."""
+    version = fetch_skill_version(skill, version_id, db_session)
+    db_session.refresh(version)
+    if version.bundle_file_id != bundle_file_id:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT, "Version files changed. Retry this request."
+        )
+
+
 def repair_skill_version(skill: Skill, db_session: Session) -> SkillVersion:
     """Legacy columns remain authoritative until all readers use versions."""
     adapter = SkillVersionAdapter(skill)

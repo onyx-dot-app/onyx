@@ -94,6 +94,7 @@ def test_fetch_direct_shared_skill_is_not_personal(
         private_skill.id,
         user=user,
         db_session=db_session,
+        http_request=Request({"type": "http"}),
     )
 
     assert response.source == "custom"
@@ -119,6 +120,7 @@ def test_fetch_associated_skill_reports_current_user_dependency_readiness(
         skill.id,
         user=user,
         db_session=db_session,
+        http_request=Request({"type": "http"}),
     )
 
     assert disconnected.external_app is not None
@@ -139,6 +141,7 @@ def test_fetch_associated_skill_reports_current_user_dependency_readiness(
         skill.id,
         user=user,
         db_session=db_session,
+        http_request=Request({"type": "http"}),
     )
 
     assert connected.external_app is not None
@@ -151,6 +154,7 @@ def test_fetch_associated_skill_reports_current_user_dependency_readiness(
         SkillEnableRequest(enabled=True),
         user=user,
         db_session=db_session,
+        http_request=Request({"type": "http"}),
     )
     assert selected.enabled is True
     assert selected.external_app is not None
@@ -162,6 +166,7 @@ def test_fetch_associated_skill_reports_current_user_dependency_readiness(
         skill.id,
         user=user,
         db_session=db_session,
+        http_request=Request({"type": "http"}),
     )
     assert unavailable.enabled is True
     assert unavailable.can_toggle is True
@@ -220,6 +225,7 @@ def test_preference_commit_succeeds_when_sandbox_push_fails(
         SkillEnableRequest(enabled=True),
         user=user,
         db_session=db_session,
+        http_request=Request({"type": "http"}),
     )
 
     preference = db_session.get(
@@ -249,6 +255,7 @@ def test_create_reserved_name_rejects_from_bundle_metadata(
             bundle=_upload("unrelated-filename.zip", bundle),
             user=user,
             db_session=db_session,
+            http_request=Request({"type": "http"}),
         )
 
     assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
@@ -268,6 +275,7 @@ def test_editor_create_rejects_whitespace_only_fields(
             instructions_markdown="\n",
             user=user,
             db_session=db_session,
+            http_request=Request({"type": "http"}),
         )
 
     assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
@@ -306,6 +314,7 @@ def test_replace_bundle_authorizes_before_reading_bundle(
             bundle=_upload("replace-test.zip"),
             user=shared_user,
             db_session=db_session,
+            http_request=Request({"type": "http"}),
         )
 
     assert exc_info.value.error_code == OnyxErrorCode.NOT_FOUND
@@ -342,6 +351,7 @@ def test_upload_files_authorizes_before_reading_upload(
             upload=_upload("notes.md"),
             user=shared_user,
             db_session=db_session,
+            http_request=Request({"type": "http"}),
         )
 
     assert exc_info.value.error_code == OnyxErrorCode.NOT_FOUND
@@ -378,6 +388,7 @@ def test_remove_file_authorizes_before_reading_bundle(
             path="references/context.md",
             user=shared_user,
             db_session=db_session,
+            http_request=Request({"type": "http"}),
         )
 
     assert exc_info.value.error_code == OnyxErrorCode.NOT_FOUND
@@ -407,6 +418,7 @@ def test_remove_file_rejects_empty_path_before_reading_bundle(
             path="",
             user=owner,
             db_session=db_session,
+            http_request=Request({"type": "http"}),
         )
 
     assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
@@ -510,11 +522,15 @@ def test_editor_creation_saves_sharing_with_skill(
         sharing=json.dumps(sharing),
         user=owner,
         db_session=db_session,
+        http_request=Request({"type": "http"}),
     )
     assert response.public_permission is None
     assert [share.user.id for share in response.user_shares] == [invited.id]
     visible = fetch_skill_for_current_user(
-        response.id, user=invited, db_session=db_session
+        response.id,
+        user=invited,
+        db_session=db_session,
+        http_request=Request({"type": "http"}),
     )
     assert visible.enabled is is_admin
     assert visible.can_toggle is not is_admin
@@ -533,6 +549,7 @@ def test_editor_creation_rejects_non_admin_installation_policy(
             sharing='{"installation_policy":"REQUIRED"}',
             user=owner,
             db_session=db_session,
+            http_request=Request({"type": "http"}),
         )
     assert error.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
 
@@ -602,6 +619,7 @@ def test_required_creation_preserves_same_name_personal_preference(
         sharing='{"installation_policy":"REQUIRED"}',
         user=owner,
         db_session=db_session,
+        http_request=Request({"type": "http"}),
     )
     assert response.enabled
     assert db_session.get(UserSkillPreference, (owner.id, response.id)) is None
@@ -668,6 +686,7 @@ def test_creation_response_includes_saved_group_shares(
         ),
         user=admin,
         db_session=db_session,
+        http_request=Request({"type": "http"}),
     )
     assert [share.group_id for share in response.group_shares] == [group.id]
     assert not response.is_personal
