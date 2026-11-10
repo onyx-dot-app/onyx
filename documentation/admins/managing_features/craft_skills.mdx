@@ -230,6 +230,12 @@ each Skill succeeds or fails separately.
 
 A Skill version that has no recorded size counts as 100 MiB and 500 files until Onyx measures it.
 
+`GET /api/skills/limit/me` returns your own total.
+Users with the manage-skills permission can call `GET /api/skills/limit/users` to list the users who are past the limit,
+with each user's total. Each row also gives `last_delivery_omitted_skill_count`,
+the number of Skills that Craft left out of the user's last delivered session.
+The value is `null` when Onyx has no record of a delivery. This value can be different from the current total.
+
 A sync lists a blocked Skill in the marketplace `blocked_entries` with the reason `skill limit`.
 The marketplace `skill_limit_blocks` gives the failed limit and the number of users for each blocked entry.
 Every later sync tries the blocked Skill again, also when the repository has not changed.

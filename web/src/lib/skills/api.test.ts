@@ -6,7 +6,10 @@ import {
   createCustomSkillFromEditor,
   isSkillNameConflict,
   resetSkillMarketplaceAccess,
+  setSkillEnabled,
+  SkillRequestError,
 } from "@/lib/skills/api";
+import { skillLimitViolationOf } from "@/lib/skills/limits";
 
 describe("skills API", () => {
   const fetchMock = jest.fn();
@@ -173,7 +176,9 @@ describe("skills API", () => {
 
     expect(result).toEqual({
       succeeded,
-      failed: [{ skill_id: "skill-500", detail: "Connection lost" }],
+      failed: [
+        { skill_id: "skill-500", detail: "Connection lost", skill_limit: null },
+      ],
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock).toHaveBeenLastCalledWith("/api/skills/bulk", {
@@ -184,6 +189,137 @@ describe("skills API", () => {
         skill_ids: ["skill-500"],
         sharing: { public_permission: "VIEWER" },
       }),
+    });
+  });
+
+  describe("Skill limit refusals", () => {
+    const usage = {
+      bytes: 520 * 1024 * 1024,
+      files: 40,
+      unknown_skill_count: 0,
+      charged_bytes: 520 * 1024 * 1024,
+      charged_files: 40,
+      max_bytes: 500 * 1024 * 1024,
+      max_files: 5000,
+    };
+    function refusal(body: unknown, status = 413) {
+      fetchMock.mockResolvedValueOnce(
+        new Response(JSON.stringify(body), { status })
+      );
+      return setSkillEnabled("skill-id", true).then(
+        () => {
+          throw new Error("expected a refusal");
+        },
+        (error: unknown) => error
+      );
+    }
+
+    it("keeps the requester's usage and the server detail", async () => {
+      const error = await refusal({
+        error_code: "PAYLOAD_TOO_LARGE",
+        detail: "This would put your skills at 520.0 MB",
+        skill_limit: { failed_limit: "bytes", affected_user_count: 1, usage },
+      });
+      expect(error).toBeInstanceOf(SkillRequestError);
+      expect((error as Error).message).toBe(
+        "This would put your skills at 520.0 MB"
+      );
+      expect(skillLimitViolationOf(error)).toEqual({
+        failed_limit: "bytes",
+        affected_user_count: 1,
+        usage,
+      });
+    });
+
+    it("keeps the affected-user count when only others go over", async () => {
+      const error = await refusal({
+        error_code: "PAYLOAD_TOO_LARGE",
+        detail: "This change would put 3 users past the limit.",
+        skill_limit: {
+          failed_limit: "files",
+          affected_user_count: 3,
+          usage: null,
+        },
+      });
+      expect(skillLimitViolationOf(error)).toEqual({
+        failed_limit: "files",
+        affected_user_count: 3,
+        usage: null,
+      });
+    });
+
+    it("treats malformed limit data and plain 413s as ordinary errors", async () => {
+      const malformed = await refusal({
+        error_code: "PAYLOAD_TOO_LARGE",
+        detail: "Too large",
+        skill_limit: { failed_limit: "folders", affected_user_count: 1 },
+      });
+      expect(skillLimitViolationOf(malformed)).toBeNull();
+      expect((malformed as Error).message).toBe("Too large");
+
+      const plain = await refusal({
+        error_code: "PAYLOAD_TOO_LARGE",
+        detail: "Upload is too large",
+      });
+      expect(skillLimitViolationOf(plain)).toBeNull();
+      expect((plain as Error).message).toBe("Upload is too large");
+
+      const otherStatus = await refusal(
+        {
+          error_code: "PAYLOAD_TOO_LARGE",
+          detail: "Bad",
+          skill_limit: { failed_limit: "bytes", affected_user_count: 1, usage },
+        },
+        400
+      );
+      expect(skillLimitViolationOf(otherStatus)).toBeNull();
+    });
+
+    it("keeps per-item limits from bulk failures and falls back to detail", async () => {
+      fetchMock.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            succeeded: ["a"],
+            failed: [
+              {
+                skill_id: "b",
+                detail: "Over the limit",
+                skill_limit: {
+                  failed_limit: "bytes",
+                  affected_user_count: 2,
+                  usage: null,
+                },
+              },
+              { skill_id: "c", detail: "Not allowed", skill_limit: null },
+              { skill_id: "d", detail: "Gone" },
+              {
+                skill_id: "e",
+                detail: "Odd",
+                skill_limit: { failed_limit: "bytes" },
+              },
+            ],
+          })
+        )
+      );
+      const result = await bulkUpdateSkills({
+        action: "enable",
+        skill_ids: ["a", "b", "c", "d", "e"],
+      });
+      expect(result.succeeded).toEqual(["a"]);
+      expect(result.failed).toEqual([
+        {
+          skill_id: "b",
+          detail: "Over the limit",
+          skill_limit: {
+            failed_limit: "bytes",
+            affected_user_count: 2,
+            usage: null,
+          },
+        },
+        { skill_id: "c", detail: "Not allowed", skill_limit: null },
+        { skill_id: "d", detail: "Gone", skill_limit: null },
+        { skill_id: "e", detail: "Odd", skill_limit: null },
+      ]);
     });
   });
 });

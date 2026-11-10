@@ -1,7 +1,12 @@
 import * as yup from "yup";
-import { FetchError } from "@/lib/fetcher";
 import { skillVersionSchema } from "@/lib/skills/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { FetchError, type ErrorResponseBody } from "@/lib/fetcher";
+import {
+  parseSkillLimitViolation,
+  skillLimitViolationOf,
+  type SkillLimitViolation,
+} from "@/lib/skills/limits";
 /**
  * Thin client wrappers around the skills API.
  *
@@ -20,12 +25,27 @@ import type {
   SkillInstallationPolicy,
 } from "@/lib/skills/types";
 
+/** A failed Skills request. `message` is the server detail; `info` keeps the
+ * whole body, such as the structured Skill limit of a 413. */
+export class SkillRequestError extends FetchError {
+  constructor(
+    message: string,
+    status: number,
+    info: ErrorResponseBody | null,
+    readonly errorCode: string | undefined
+  ) {
+    super(message, status, info);
+  }
+}
+
 async function handle<T>(res: Response): Promise<T> {
   if (!res.ok) {
     let errorCode: string | undefined;
     let detail = `Request failed (${res.status})`;
+    let info: ErrorResponseBody | null = null;
     try {
       const body = await res.json();
+      if (typeof body === "object" && body !== null) info = body;
       if (typeof body?.error_code === "string") errorCode = body.error_code;
       if (typeof body?.detail === "string") detail = body.detail;
       else if (Array.isArray(body?.detail) && body.detail[0]?.msg) {
@@ -34,10 +54,7 @@ async function handle<T>(res: Response): Promise<T> {
     } catch {
       // Use the generic status message.
     }
-    throw Object.assign(
-      new FetchError(detail, res.status, { detail, error_code: errorCode }),
-      { errorCode }
-    );
+    throw new SkillRequestError(detail, res.status, info, errorCode);
   }
   if (res.status === 204) {
     return undefined as T;
@@ -68,9 +85,21 @@ export type BulkSkillRequest = {
   | { action: "enable" | "disable" | "delete" }
 );
 
+export interface BulkSkillFailure {
+  skill_id: string;
+  detail: string;
+  /** Set when the Skill limit refused this item. */
+  skill_limit?: SkillLimitViolation | null;
+}
+
 export interface BulkSkillResult {
   succeeded: string[];
-  failed: { skill_id: string; detail: string }[];
+  failed: BulkSkillFailure[];
+}
+
+interface BulkSkillResponse {
+  succeeded: string[];
+  failed: { skill_id: string; detail: string; skill_limit?: unknown }[];
 }
 
 export async function bulkUpdateSkills(
@@ -81,7 +110,7 @@ export async function bulkUpdateSkills(
   for (let offset = 0; offset < request.skill_ids.length; offset += batchSize) {
     const skill_ids = request.skill_ids.slice(offset, offset + batchSize);
     try {
-      const batch = await handle<BulkSkillResult>(
+      const batch = await handle<BulkSkillResponse>(
         await fetch("/api/skills/bulk", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -89,11 +118,18 @@ export async function bulkUpdateSkills(
         })
       );
       result.succeeded.push(...batch.succeeded);
-      result.failed.push(...batch.failed);
+      result.failed.push(
+        ...batch.failed.map(({ skill_id, detail, skill_limit }) => ({
+          skill_id,
+          detail,
+          skill_limit: parseSkillLimitViolation(skill_limit),
+        }))
+      );
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
+      const skill_limit = skillLimitViolationOf(error);
       result.failed.push(
-        ...skill_ids.map((skill_id) => ({ skill_id, detail }))
+        ...skill_ids.map((skill_id) => ({ skill_id, detail, skill_limit }))
       );
     }
   }

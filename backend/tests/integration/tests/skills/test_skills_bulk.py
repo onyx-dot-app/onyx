@@ -1,3 +1,5 @@
+import io
+import zipfile
 from uuid import UUID, uuid4
 
 import pytest
@@ -11,6 +13,7 @@ from onyx.server.features.skill.models import (
     SkillResponse,
     SkillUserShareRequest,
 )
+from onyx.skills.limits import SkillLimit, SkillUsageSummary
 from tests.integration.common_utils.constants import ADMIN_USER_NAME, API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.skill import (
@@ -158,6 +161,80 @@ def test_bulk_failure_after_write_rolls_back_only_that_skill(
     assert untouched.public_permission is None
     assert untouched.installation_policy == "AVAILABLE"
     assert untouched.group_shares == []
+
+
+def test_bulk_limit_failure_after_write_rolls_back_only_that_skill(
+    admin_user: DATestUser,
+) -> None:
+    created: list[SkillResponse] = []
+
+    def usage() -> SkillUsageSummary:
+        response = client.get(
+            f"{API_SERVER_URL}/skills/limit/me", headers=admin_user.headers
+        )
+        response.raise_for_status()
+        return SkillUsageSummary.model_validate(response.json())
+
+    def create(file_count: int, *, auto_enable: bool) -> SkillResponse:
+        name = f"bulk-limit-{uuid4().hex[:8]}"
+        bundle = io.BytesIO(build_minimal_bundle(name))
+        with zipfile.ZipFile(bundle, "a") as archive:
+            for index in range(file_count - 1):
+                archive.writestr(f"refs/{index}.txt", b"x")
+        skill = SkillManager.create_custom(
+            admin_user,
+            name=name,
+            bundle_bytes=bundle.getvalue(),
+            auto_enable=auto_enable,
+        )
+        created.append(skill)
+        return skill
+
+    try:
+        current = usage()
+        remaining = current.max_files - 1 - current.charged_files
+        assert remaining > 0
+        while remaining:
+            count = min(500, remaining)
+            create(count, auto_enable=True)
+            remaining -= count
+        assert usage().charged_files == current.max_files - 1
+        conflicting = create(2, auto_enable=False)
+        clean = create(1, auto_enable=False)
+
+        response = client.post(
+            f"{API_SERVER_URL}/skills/bulk",
+            headers=admin_user.headers,
+            json={
+                "skill_ids": [str(conflicting.id), str(clean.id)],
+                "action": "share",
+                "sharing": {
+                    "public_permission": "VIEWER",
+                    "installation_policy": "DEFAULT",
+                },
+            },
+        )
+        response.raise_for_status()
+        result = SkillBulkResponse.model_validate(response.json())
+        assert result.succeeded == [clean.id]
+        assert [failure.skill_id for failure in result.failed] == [conflicting.id]
+        violation = result.failed[0].skill_limit
+        assert violation is not None
+        assert violation.failed_limit == SkillLimit.FILES
+        assert violation.usage is not None
+        # Bulk writes run in UUID order, so the accepted item can run first.
+        expected_files = current.max_files + 1 + int(clean.id < conflicting.id)
+        assert violation.usage.charged_files == expected_files
+        rolled_back = SkillManager.get_for_user(conflicting.id, admin_user)
+        assert rolled_back.public_permission is None
+        assert rolled_back.installation_policy == "AVAILABLE"
+        applied = SkillManager.get_for_user(clean.id, admin_user)
+        assert applied.public_permission == "VIEWER"
+        assert applied.installation_policy == "DEFAULT"
+        assert usage().charged_files == current.max_files
+    finally:
+        for skill in reversed(created):
+            SkillManager.delete_custom(skill, admin_user)
 
 
 def test_bulk_toggle_changes_only_current_users_preferences(
