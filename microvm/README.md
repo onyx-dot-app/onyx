@@ -63,7 +63,8 @@ with `--listen`, on an mTLS TCP listener for the api_server (D2):
 - The agent does not start if `--listen` has no TLS files, or if TLS flags are set without `--listen`.
 - `--advertise-address`: the `host:port` that the api_server dials for this listener. The agent sends it
   as `agent_address` with the node key registration (below). Default: `$POD_IP` with the `--listen`
-  port, or the `--listen` host if it is a specific address. If there is no address, the registration has
+  port (IPv6 in brackets), or the `--listen` host if it is a specific address. The host must be an IP
+  address or a DNS name of letters, digits, `.` and `-`; the api_server accepts the same hosts. If there is no address, the registration has
   no `agent_address` and the api_server cannot place VMs on the node. The agent does not start if
   `--advertise-address` is set without `--listen`.
 - Both listeners serve the same API.
@@ -212,7 +213,8 @@ A VM has no network card. Its egress goes guest → vsock port 3128 → the agen
   with `PUT <--api-server-url>/microvm/node/signing-key` and
   `Authorization: Bearer $SANDBOX_NODE_REGISTRATION_SECRET`. It registers again every 20 min (the cache
   TTL is 1 h) and retries every 10 s after a failure. The body is `node_id`, `key_id`, `public_key` and,
-  with an `--advertise-address`, `agent_address`. The api_server keeps the address as long as the key.
+  with an advertise address, `agent_address`. The api_server keeps the address as long as the key. A
+  registration without `agent_address` clears the address the node registered before.
 - `CloseConnections(sandbox_id, attempt, generation)` closes every relay connection of the VM (T5 in
   `results/prebuild.md`); new connections still work. Stop and VM exit also close them. After an agent
   restart, the agent attaches the relay to each adopted VM again.

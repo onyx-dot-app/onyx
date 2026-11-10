@@ -19,6 +19,7 @@ from onyx.cache.interface import CacheBackend
 from onyx.db.models import Sandbox
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.microvm import registry
 from onyx.microvm.registry import (
     RegisteredNode,
     SandboxPlacement,
@@ -26,6 +27,7 @@ from onyx.microvm.registry import (
     get_node_signing_key,
     get_registered_node,
     list_registered_nodes,
+    set_node_agent_address,
     set_sandbox_placement,
 )
 from onyx.sandbox_proxy.addons.gate import GateAddon
@@ -392,9 +394,46 @@ def test_registration_records_agent_address() -> None:
                 )
             )
         assert get_registered_node(cache, node_id) == node
+
+        # An agent restarted without an address does not keep the old one.
+        _register(node_id, f"{node_id}-1", private_key)
+        assert get_registered_node(cache, node_id) is None
+        assert node_id not in {n.node_id for n in list_registered_nodes(cache)}
     finally:
         _cleanup_node(node_id, [f"{node_id}-1"])
         _cleanup_node(other_id, [f"{other_id}-1"])
+
+
+def test_list_keeps_node_that_registers_during_prune(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A list that saw the address expire does not drop a fresh registration."""
+    cache = get_shared_cache_backend()
+    node_id = f"node-{uuid4().hex[:12]}"
+    real_get = registry.get_registered_node
+
+    def get_then_reregister(
+        shared_cache: CacheBackend, member: str
+    ) -> RegisteredNode | None:
+        node = real_get(shared_cache, member)
+        if member == node_id and node is None:
+            set_node_agent_address(
+                shared_cache, node_id=node_id, address="10.0.3.8:7443"
+            )
+        return node
+
+    try:
+        set_node_agent_address(cache, node_id=node_id, address="10.0.3.7:7443")
+        cache.delete(f"sandbox_fc:node_address:{node_id}")
+        monkeypatch.setattr(registry, "get_registered_node", get_then_reregister)
+
+        assert node_id not in {n.node_id for n in list_registered_nodes(cache)}
+        monkeypatch.undo()
+        assert RegisteredNode(node_id=node_id, address="10.0.3.8:7443") in (
+            list_registered_nodes(cache)
+        )
+    finally:
+        _cleanup_node(node_id, [])
 
 
 @pytest.mark.parametrize(
@@ -403,10 +442,14 @@ def test_registration_records_agent_address() -> None:
         ("10.0.3.7:7443", True),
         ("[fd00::7]:7443", True),
         ("agent-0.onyx.svc:7443", True),
+        ("10.0.3.7:65535", True),
         ("10.0.3.7", False),
         ("fd00::7:7443", False),
         ("http://10.0.3.7:7443/", False),
         (":7443", False),
+        ("10.0.3.7:0", False),
+        ("10.0.3.7:65536", False),
+        ("agent_0.local:7443", False),
     ],
 )
 def test_registration_validates_agent_address(address: str, valid: bool) -> None:

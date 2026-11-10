@@ -149,8 +149,8 @@ def test_agent_pod_spec() -> None:
     assert "--relay-max-conns=256" in args
     assert "--dial-max-streams=64" in args
     assert not [a for a in args if a.startswith("--client-allowed-sans")]
-    # The agent registers its pod IP, so the api_server can dial it.
-    assert "--advertise-address=$(POD_IP):7443" in args
+    # The agent joins $POD_IP and the listen port itself (it brackets IPv6).
+    assert not [a for a in args if a.startswith("--advertise-address")]
     assert env["POD_IP"]["valueFrom"]["fieldRef"]["fieldPath"] == "status.podIP"
     assert "--egress-proxy=onyx-sandbox-proxy.onyx.svc.cluster.local:8080" in args
     assert any(a.startswith("--api-server-url=http") for a in args)

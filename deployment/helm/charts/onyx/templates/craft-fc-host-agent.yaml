@@ -245,7 +245,10 @@ spec:
             {{- with $agent.clientAllowedSans }}
             - --client-allowed-sans={{ . }}
             {{- end }}
-            - --advertise-address={{ $agent.advertiseAddress | default (printf "$(POD_IP):%v" $port) }}
+            {{- /* Unset: the agent joins $POD_IP and the --listen port (brackets IPv6). */}}
+            {{- with $agent.advertiseAddress }}
+            - {{ printf "--advertise-address=%s" . | quote }}
+            {{- end }}
             - --egress-proxy={{ include "onyx.sandboxProxyHost" . }}:{{ include "onyx.sandboxProxyPort" . }}
             - --api-server-url={{ $agent.apiServerUrl | default (include "onyx.sandboxApiUrl" .) }}
             {{- if $watchDrain }}

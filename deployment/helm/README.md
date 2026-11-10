@@ -237,8 +237,8 @@ With `firecracker`, the chart:
 - adds a headless Service for the agent port (7443);
 - lets only the agent clients (api_server, heavy and scheduled-tasks workers)
   reach the agent port, and lets the agent pods reach the sandbox-proxy port;
-- starts the agent with `--advertise-address=$(POD_IP):7443`, so the agent
-  registers its pod IP with its node key.
+- gives the agent `POD_IP`, so the agent registers `<pod IP>:7443` with its
+  node key (`craft.hostAgent.advertiseAddress` overrides it).
 
 The agent needs a TLS Secret in the agent namespace. It holds the agent
 certificate (`tls.crt`, `tls.key`) and the CA of the api_server client

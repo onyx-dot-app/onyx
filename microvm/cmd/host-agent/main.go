@@ -17,6 +17,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
@@ -501,6 +502,9 @@ func checkListen(f flags) error {
 	return nil
 }
 
+// dnsHost matches the DNS names the api_server accepts in agent_address.
+var dnsHost = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.-]*$`)
+
 // advertiseAddress is the host:port of --listen that the api_server dials:
 // --advertise-address, else $POD_IP with the --listen port, else a specific
 // --listen host. Empty if there is no TCP listener or no usable host.
@@ -513,8 +517,8 @@ func advertiseAddress(f flags, podIP string) (string, error) {
 	}
 	if f.advertise != "" {
 		host, port, err := net.SplitHostPort(f.advertise)
-		if err != nil || host == "" {
-			return "", fmt.Errorf("--advertise-address %q must be host:port", f.advertise)
+		if err != nil || (net.ParseIP(host) == nil && !dnsHost.MatchString(host)) {
+			return "", fmt.Errorf("--advertise-address %q must be host:port with a DNS name or IP address", f.advertise)
 		}
 		if n, err := strconv.ParseUint(port, 10, 16); err != nil || n == 0 {
 			return "", fmt.Errorf("--advertise-address %q has a bad port", f.advertise)

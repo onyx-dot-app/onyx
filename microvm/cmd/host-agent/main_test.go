@@ -111,6 +111,7 @@ func TestAdvertiseAddress(t *testing.T) {
 		"pod IP":             {flags{listen: ":7443"}, "10.0.3.7", "10.0.3.7:7443"},
 		"pod IPv6":           {flags{listen: ":7443"}, "fd00::7", "[fd00::7]:7443"},
 		"explicit wins":      {flags{listen: ":7443", advertise: "agent.local:9000"}, "10.0.3.7", "agent.local:9000"},
+		"explicit IPv6":      {flags{listen: ":7443", advertise: "[fd00::7]:7443"}, "", "[fd00::7]:7443"},
 		"specific listen":    {flags{listen: "10.0.0.5:7443"}, "", "10.0.0.5:7443"},
 		"wildcard, no IP":    {flags{listen: ":7443"}, "", ""},
 		"unspecified, no IP": {flags{listen: "0.0.0.0:7443"}, "", ""},
@@ -128,6 +129,9 @@ func TestAdvertiseAddress(t *testing.T) {
 		"no port":                  {flags{listen: ":7443", advertise: "10.0.3.7"}, ""},
 		"no host":                  {flags{listen: ":7443", advertise: ":7443"}, ""},
 		"bad port":                 {flags{listen: ":7443", advertise: "a:99999"}, ""},
+		"unbracketed IPv6":         {flags{listen: ":7443", advertise: "fd00::7:7443"}, ""},
+		"host the API rejects":     {flags{listen: ":7443", advertise: "agent_0.local:7443"}, ""},
+		"IPv6 zone":                {flags{listen: ":7443", advertise: "[fe80::1%eth0]:7443"}, ""},
 		"bad pod IP":               {flags{listen: ":7443"}, "not-an-ip"},
 	} {
 		if got, err := advertiseAddress(c.f, c.podIP); err == nil {
