@@ -264,6 +264,23 @@ If every Skill fits, the field is null.
     If the skill depends on a model or deployment feature, ask an admin to configure that dependency.
   </Accordion>
 
+  <Accordion title="Craft says that some skills did not load">
+    All skills in a Craft session must fit in 900 MB and 10,000 files. When they do not fit,
+    Craft leaves out whole skills and shows an error at the start of the session.
+    The session also allows at most 10,000 folders. Each file path can use at most 4,021 UTF-8 bytes.
+    Each file or folder name can use at most 255 UTF-8 bytes.
+    A skill that exceeds a folder or path limit is also left out. The error identifies that limit.
+    The error lists each skill that did not load and its size. Craft keeps built-in skills first, then Required skills,
+    then skills that you turned on, then skills installed by default.
+    Select **Manage skills** and turn off the skills that you do not need, or make a skill smaller.
+    Then start a new session or reload the session. Select **Dismiss** to close the error.
+    A dismissed error stays closed until the omitted skills or limits change, or all skills fit again.
+    Leaving the session hides the error. An undismissed error returns when you reopen that session.
+    If skills changed during the session, reload them before Craft shows the new omissions.
+
+    <img className="rounded-image" src="/assets/overview/core_features/skill_runtime_notice.webp" alt="Craft identifies a Skill with a path that is too long and offers Manage skills and Dismiss"/>
+  </Accordion>
+
   <Accordion title="My Skill will not upload">
     Keep one Skill in each ZIP. You can upload several ZIP files together.
     Put `SKILL.md` at the top level of the folder. In a ZIP,
