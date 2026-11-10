@@ -5646,14 +5646,6 @@ class Skill(Base):
     )
 
     __table_args__ = (
-        Index(
-            "uq_skill_automatic_name",
-            "name",
-            unique=True,
-            postgresql_where=text(
-                "installation_policy <> 'AVAILABLE' AND retired_at IS NULL"
-            ),
-        ),
         CheckConstraint(
             "marketplace_id IS NULL OR marketplace_entry_key IS NOT NULL",
             name="ck_skill_marketplace_entry_key",

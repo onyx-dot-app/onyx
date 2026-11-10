@@ -120,7 +120,7 @@ def test_api_rejects_not_available(
 
 
 @pytest.mark.usefixtures("tenant_context")
-def test_database_setter_rejects_not_available_before_name_index(
+def test_database_setter_rejects_not_available_but_allows_duplicate_automatic_names(
     db_session: Session,
 ) -> None:
     try:
@@ -136,11 +136,10 @@ def test_database_setter_rejects_not_available_before_name_index(
         assert rejected.value.error_code == OnyxErrorCode.INVALID_INPUT
         db_session.refresh(duplicate)
         assert duplicate.installation_policy == SkillInstallationPolicy.AVAILABLE
-        with pytest.raises(OnyxError) as conflict:
-            set_skill_installation_policy(
-                duplicate, SkillInstallationPolicy.REQUIRED, db_session
-            )
-        assert conflict.value.error_code == OnyxErrorCode.SKILL_NAME_CONFLICT
+        set_skill_installation_policy(
+            duplicate, SkillInstallationPolicy.REQUIRED, db_session
+        )
+        assert duplicate.installation_policy == SkillInstallationPolicy.REQUIRED
     finally:
         db_session.rollback()
 

@@ -274,12 +274,22 @@ Users with global manage-skills permission set how a shared Skill is installed f
 | --- | --- |
 | **Available to install** | Users can install or uninstall the Skill at any time. |
 | **Installed by default** | Onyx installs it automatically. Users can disable or uninstall it. |
-| **Required** | Onyx installs it automatically. Users cannot disable or uninstall it. Deleting it requires global manage-skills permission. |
+| **Required** | Onyx selects it automatically. Users cannot turn it off directly. Name conflicts still follow library priority below. Deleting it requires global manage-skills permission. |
 
 The policy follows the current audience; changing who can access the Skill does not reset it.
 Bulk sharing preserves existing grants and group install settings that the request omits. In the sharing API,
 an omitted group `installation_policy` preserves its value; explicit `null` clears the override.
 Retired Skills reject changes other than deletion.
+
+A new custom Skill cannot use a live Skill's name in the same library: the company library or one user's library.
+Upload a new version to update an existing Skill. Its name must stay the same.
+Different libraries can use the same name. A sync blocks a conflicting new entry and keeps existing content.
+
+When enabled Skills share a name, Onyx loads one. A company Skill takes precedence over your own Skill,
+and your own Skill takes precedence over a Skill shared by another user. The oldest Skill wins a tie. Disabled Skills,
+invalid bundles, and Skills with disconnected apps do not hide a usable Skill.
+This order also applies to Required Skills and saved choices. A company Default can hide your explicitly enabled Skill.
+Your own enabled Skill can hide a Required Skill shared by another user. The saved choices remain in place.
 
 ## Maintain a Skill
 
@@ -507,6 +517,32 @@ It returns the Skill and its sharing details.
 Reset removes individual user shares and restores the marketplace's company visibility, group access,
 and installation settings. Later marketplace access changes apply to the Skill again.
 Reset preserves content and version history. Personal marketplace Skills and retired Skills cannot use this endpoint.
+
+## Before reverting automatic name resolution
+
+Deployment operators must check for duplicate names before downgrading past migration `54013115725e`.
+That downgrade restores a unique index on live Skills whose installation policy is not **Available to install**.
+The current runtime allows those Skills to share a name across libraries. The older index does not.
+
+Back up the database. Run this read-only query to find names that would prevent the downgrade:
+
+```sql
+SELECT name, array_agg(id ORDER BY id) AS skill_ids
+FROM skill
+WHERE installation_policy <> 'AVAILABLE' AND retired_at IS NULL
+GROUP BY name
+HAVING count(*) > 1
+ORDER BY name;
+```
+
+For each result, decide which Skill can keep its current installation policy. In **Admin Panel → Skills**,
+set the others to **Available to install** before the downgrade. Record those choices.
+Do not change customer policies automatically or delete Skills to make the migration pass.
+If several same-name Skills must keep another policy, do not downgrade past this revision.
+
+Stop API servers, workers, and other writers before the final check and migration. Run the query again.
+Continue only when it returns no rows. Keep writers stopped until the downgrade finishes.
+This check does not replace other release-specific downgrade steps.
 
 ## Troubleshooting
 

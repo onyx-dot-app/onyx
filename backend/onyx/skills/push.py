@@ -14,8 +14,6 @@ from onyx.db.skill import (
     list_runtime_skills_for_user,
     persist_skill_validity,
 )
-from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import OnyxError
 from onyx.file_processing.zip_index import ZipIndex
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.db.sandbox import (
@@ -195,19 +193,14 @@ def _assemble_fileset(
     """
     skills = list(skills)
     seen_names: set[str] = set()
-    for skill in skills:
-        if skill.name in seen_names:
-            raise OnyxError(
-                OnyxErrorCode.INTERNAL_ERROR,
-                f"Multiple enabled skills are named '{skill.name}'.",
-            )
-        seen_names.add(skill.name)
-
     files: FileSet = {}
     validity_updates: list[SkillValidityUpdate] = []
     file_store = get_default_file_store()
 
     for skill in skills:
+        if skill.name in seen_names:
+            continue
+        seen_names.add(skill.name)
         if skill.built_in_skill_id is None:
             version = skill.current_version
             if version is None or version.is_valid is False:

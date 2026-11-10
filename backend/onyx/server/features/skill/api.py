@@ -16,6 +16,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import (
     AccountType,
     Permission,
+    SkillSharePermission,
 )
 from onyx.db.external_app import (
     associate_custom_skill_with_external_app__no_commit,
@@ -43,6 +44,7 @@ from onyx.db.skill import (
     share_skill__no_commit,
     transfer_skill_ownership,
 )
+from onyx.db.skill_library import lock_skill_library_names
 from onyx.db.skill_mutation import assert_skill_content_editable, assert_skill_mutable
 from onyx.db.skill_version import (
     SkillContentSnapshot,
@@ -165,6 +167,13 @@ def _import_skill_bundles(
                 continue
             staged.append((source, ingested))
         user = lock_resource_access_user(user.id, db_session)
+        lock_skill_library_names(
+            None
+            if change is not None and change.public_permission is not None
+            else user.id,
+            [ingested.canonical_name for _, ingested in staged],
+            db_session,
+        )
         for source, ingested in staged:
             try:
                 skill, enabled, item_affected = create_skill_from_bundle__no_commit(
@@ -778,7 +787,18 @@ def create_custom_skill_from_editor(
                 OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
                 "Only administrators can create a skill for an external app.",
             )
-        skill = create_skill_from_ingested_bundle(ingested, user.id, db_session)
+        skill = create_skill_from_ingested_bundle(
+            ingested,
+            user.id,
+            db_session,
+            intended_public_permission=(
+                SkillSharePermission.VIEWER
+                if external_app_id is not None
+                else share_request.public_permission
+                if share_request is not None
+                else None
+            ),
+        )
         if external_app_id is not None:
             associate_custom_skill_with_external_app__no_commit(
                 db_session,

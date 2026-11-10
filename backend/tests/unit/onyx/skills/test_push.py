@@ -11,8 +11,6 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.models import Skill, SkillVersion, User
-from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
 from onyx.skills import push
 
@@ -61,14 +59,17 @@ def test_skill_runtime_hash_covers_files_and_connectable_apps() -> None:
     ) != push.compute_skill_runtime_hash(files, "different apps")
 
 
-def test_assemble_rejects_duplicate_names() -> None:
+def test_assemble_keeps_first_resolved_name(monkeypatch: pytest.MonkeyPatch) -> None:
     user = cast(User, SimpleNamespace())
     skills = [_skill(is_valid=True), _skill(is_valid=True)]
 
-    with pytest.raises(OnyxError) as exc_info:
-        push._assemble_fileset(skills, user, MagicMock(spec=Session))
-
-    assert exc_info.value.error_code == OnyxErrorCode.INTERNAL_ERROR
+    file_store = MagicMock(spec=FileStore)
+    file_store.read_file.return_value = io.BytesIO(_bundle("canonical-name"))
+    monkeypatch.setattr(push, "get_default_file_store", lambda: file_store)
+    monkeypatch.setattr(push, "persist_skill_validity", MagicMock())
+    files = push._assemble_fileset(skills, user, MagicMock(spec=Session))
+    assert "canonical-name/SKILL.md" in files
+    assert file_store.read_file.call_count == 1
 
 
 def test_assemble_classifies_and_hydrates_valid_unclassified_skill(

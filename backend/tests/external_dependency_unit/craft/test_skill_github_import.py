@@ -51,7 +51,7 @@ def _delete_bundles(db_session: Session, name: str) -> list[Skill]:
     return rows
 
 
-def test_import_creates_conflicting_skills_disabled_without_blocking_others(
+def test_import_refuses_existing_library_name_without_blocking_others(
     db_session: Session,
     standard_user: User,
     initialize_file_store: None,  # noqa: ARG001
@@ -132,13 +132,19 @@ def test_import_creates_conflicting_skills_disabled_without_blocking_others(
     )
 
     imported_by_name = {result.skill.name: result for result in response.imported}
-    assert imported_by_name[conflict_name].skill.enabled is False
-    assert "already enabled" in (imported_by_name[conflict_name].disabled_reason or "")
+    assert set(imported_by_name) == {unique_name}
     assert imported_by_name[unique_name].skill.enabled is True
     assert imported_by_name[unique_name].disabled_reason is None
-    assert [(item.name, item.reason) for item in response.not_imported] == [
-        ("pptx", "A built-in Onyx skill already uses this name.")
-    ]
+    assert {item.name: item.reason for item in response.not_imported} == {
+        "pptx": "A built-in Onyx skill already uses this name.",
+        conflict_name: (
+            f"A live skill named '{conflict_name}' already exists in this library. "
+            "Upload a new version instead."
+        ),
+    }
+    assert db_session.scalars(
+        select(Skill.id).where(Skill.name == conflict_name)
+    ).all() == [existing.id]
     assert pushed_user_ids == [{standard_user.id}]
 
     created_ids = [result.skill.id for result in response.imported]
@@ -166,7 +172,7 @@ def test_import_creates_conflicting_skills_disabled_without_blocking_others(
             )
 
 
-def test_import_enables_only_first_new_skill_with_each_name(
+def test_import_creates_only_first_new_skill_with_each_library_name(
     db_session: Session,
     standard_user: User,
     initialize_file_store: None,  # noqa: ARG001
@@ -219,9 +225,17 @@ def test_import_enables_only_first_new_skill_with_each_name(
         http_request=Request({"type": "http"}),
     )
 
-    assert [result.skill.enabled for result in response.imported] == [True, False]
-    assert response.imported[1].disabled_reason is not None
-    assert response.not_imported == []
+    assert [result.skill.enabled for result in response.imported] == [True]
+    assert response.imported[0].disabled_reason is None
+    assert [(item.path, item.reason) for item in response.not_imported] == [
+        (
+            f"second/{name}",
+            f"A live skill named '{name}' already exists in this library. Upload a new version instead.",
+        )
+    ]
+    assert db_session.scalars(select(Skill.id).where(Skill.name == name)).all() == [
+        response.imported[0].skill.id
+    ]
 
     file_store = get_default_file_store()
     for result in response.imported:
