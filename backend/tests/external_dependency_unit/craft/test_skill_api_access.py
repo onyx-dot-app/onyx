@@ -18,7 +18,7 @@ from onyx.db.enums import (
     SkillInstallationPolicy,
     SkillSharePermission,
 )
-from onyx.db.models import User, UserSkillPreference
+from onyx.db.models import Skill, User, UserSkillPreference
 from onyx.db.skill import (
     set_skill_enabled_for_user,
     set_skill_installation_policy,
@@ -43,8 +43,10 @@ from onyx.server.features.skill.api import (
 from onyx.server.features.skill.models import (
     SkillEnableRequest,
     SkillPatchRequest,
+    SkillResponse,
     SkillShareRequest,
 )
+from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.bundle import SKILL_MD_NAME, build_single_file_bundle, build_skill_md
 from tests.external_dependency_unit.craft.db_helpers import (
     add_user_to_group,
@@ -629,6 +631,22 @@ def test_sharing_policy_is_unchanged_when_missing_and_default_when_null() -> Non
         .installation_policy
         is None
     )
+
+
+def test_built_in_skill_response_reports_available_policy(
+    db_session: Session,
+) -> None:
+    built_in_skill_id, definition = next(iter(BUILT_IN_SKILLS.items()))
+    skill = Skill(
+        id=uuid4(),
+        name=built_in_skill_id,
+        description="A built-in skill",
+        built_in_skill_id=built_in_skill_id,
+    )
+    response = SkillResponse.from_builtin(
+        skill, definition, db_session, enabled=True, can_toggle=True
+    )
+    assert response.installation_policy == SkillInstallationPolicy.AVAILABLE
 
 
 def test_creation_response_includes_saved_group_shares(

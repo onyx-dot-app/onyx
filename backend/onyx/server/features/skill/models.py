@@ -52,8 +52,7 @@ class SkillResponse(BaseModel):
 
     enabled: bool
     can_toggle: bool
-    # Missing: unchanged. Null: the marketplace default.
-    installation_policy: SkillInstallationPolicy | None = None
+    installation_policy: SkillInstallationPolicy = SkillInstallationPolicy.AVAILABLE
     author_user_id: UUID | None = None
     author_email: str | None = None
     owner: MinimalUserSnapshot | None = None
