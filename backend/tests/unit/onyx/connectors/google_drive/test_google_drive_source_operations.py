@@ -414,3 +414,68 @@ def test_a_gateway_with_no_limiter_calls_google_directly() -> None:
         assert gateway.get_file(user_email="a@co.com", file_id="f", fields="id") == {
             "id": "f"
         }
+
+
+_DOCS_PER_USER_BODY = (
+    b'{"error": {"code": 429, "status": "RESOURCE_EXHAUSTED", "details": [{'
+    b'"@type": "type.googleapis.com/google.rpc.ErrorInfo", '
+    b'"reason": "RATE_LIMIT_EXCEEDED", "metadata": {'
+    b'"quota_limit": "ReadRequestsPerMinutePerUser", '
+    b'"quota_metric": "docs.googleapis.com/read_requests"}}]}}'
+)
+_DOCS_PER_PROJECT_BODY = _DOCS_PER_USER_BODY.replace(
+    b"ReadRequestsPerMinutePerUser", b"ReadRequestsPerMinutePerProject"
+)
+
+
+@pytest.mark.parametrize(
+    ("body", "user_scope"),
+    [(_DOCS_PER_USER_BODY, True), (_DOCS_PER_PROJECT_BODY, False), (b"{}", False)],
+)
+def test_a_429_that_names_a_per_user_quota_cuts_only_that_user(
+    body: bytes, user_scope: bool
+) -> None:
+    """A 429 has no userRateLimitExceeded reason. The quota metadata says if
+    the limit is the user's or the project's."""
+    gateway, limiter = _limited_gateway()
+    with (
+        mock.patch.object(GoogleDriveSourceOperations, "_drive"),
+        mock.patch.object(
+            source_operations, "_download", side_effect=_http_error(429, body)
+        ),
+        pytest.raises(GoogleDriveHttpError),
+    ):
+        gateway.download_file(user_email="a@co.com", file_id="f", size_threshold=10)
+
+    assert limiter.reported == [("drive", "a@co.com", user_scope)]
+
+
+def test_a_batch_read_spends_one_read_for_each_file() -> None:
+    gateway, limiter = _limited_gateway()
+    with mock.patch.object(GoogleDriveSourceOperations, "_drive"):
+        gateway.batch_get_files(
+            user_email="a@co.com",
+            file_ids_by_key={"k1": "f1", "k2": "f2", "k3": "f3"},
+            fields="id",
+        )
+
+    assert limiter.spent == [("drive", 15, "a@co.com")]
+
+
+def test_drive_and_member_listings_spend_list_units() -> None:
+    gateway, limiter = _limited_gateway()
+    drive = mock.MagicMock()
+    drive.drives.return_value.list.return_value.execute.return_value = {
+        "drives": [{"id": "d1"}]
+    }
+    drive.drives.return_value.get.return_value.execute.return_value = {"name": "D"}
+
+    with mock.patch.object(GoogleDriveSourceOperations, "_drive", return_value=drive):
+        assert list(
+            gateway.list_drives(user_email="a@co.com", use_domain_admin_access=False)
+        ) == ["d1"]
+        assert (
+            gateway.get_shared_drive_name(user_email="a@co.com", drive_id="d1") == "D"
+        )
+
+    assert limiter.spent == [("drive", 100, "a@co.com"), ("drive", 5, "a@co.com")]
