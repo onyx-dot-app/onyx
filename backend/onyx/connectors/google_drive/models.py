@@ -265,6 +265,16 @@ class DriveListingState(BaseModel):
     # because that user cannot see the parent. A later copy with the parent,
     # or a read after the listing, yields the folder again with it.
     parentless_folder_emails: dict[str, str] = {}
+    # Folder id -> (name, parent id), for the folders the listing yielded.
+    # A stub's folder path comes from it. Its size follows the folders.
+    folder_names: dict[str, tuple[str, str | None]] = {}
+    # Shared drive id -> name, and user -> My Drive root id: the roots of a
+    # folder path. Read once for each drive and user.
+    drive_names: dict[str, str] = {}
+    my_drive_root_ids: dict[str, str] = {}
+    # Shared drive id -> its direct user members in the domain. Any of them
+    # can read a file of the drive.
+    drive_member_emails: dict[str, list[str]] = {}
 
     @property
     def is_done(self) -> bool:
