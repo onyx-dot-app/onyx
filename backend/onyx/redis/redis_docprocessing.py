@@ -1,3 +1,4 @@
+from enum import Enum
 from typing import cast
 
 from onyx.redis.redis_pool import get_redis_client
@@ -53,8 +54,15 @@ end
 """
 
 
+class BatchStage(str, Enum):
+    """A batch stage with its own pending / in-flight counters."""
+
+    DOCCONVERSION = "docconversion"
+    DOCPROCESSING = "docprocessing"
+
+
 class RedisDocprocessing:
-    """Manages per-attempt docprocessing batch counters in Redis.
+    """Manages per-attempt batch counters of one stage in Redis.
 
     Two counters track batches as they move through the lifecycle:
       pending   - dispatched to queue, not yet picked up by a worker
@@ -63,21 +71,22 @@ class RedisDocprocessing:
     Together they let the monitor distinguish worker crashes (in_flight > 0)
     from queue backlogs (in_flight = 0, pending > 0) when the heartbeat stops.
 
-    Counter keys are namespaced by IndexAttempt.id.
+    Counter keys are namespaced by stage and IndexAttempt.id.
     """
 
-    PENDING_PREFIX = "docprocessing_pending"
-    IN_FLIGHT_PREFIX = "docprocessing_in_flight"
-
     def __init__(
-        self, index_attempt_id: int, r: TenantRedisClient | None = None
+        self,
+        index_attempt_id: int,
+        r: TenantRedisClient | None = None,
+        stage: BatchStage = BatchStage.DOCPROCESSING,
     ) -> None:
         """`r` defaults to the current tenant's client."""
         self.index_attempt_id = index_attempt_id
         self.redis = r if r is not None else get_redis_client()
+        self.stage = stage
 
-        self.pending_key: str = f"{self.PENDING_PREFIX}_{index_attempt_id}"
-        self.in_flight_key: str = f"{self.IN_FLIGHT_PREFIX}_{index_attempt_id}"
+        self.pending_key: str = _pending_key(stage, index_attempt_id)
+        self.in_flight_key: str = _in_flight_key(stage, index_attempt_id)
 
     def incr_pending(self) -> None:
         val = self.redis.incr(self.pending_key)
@@ -102,4 +111,23 @@ class RedisDocprocessing:
         return max(0, int(cast(bytes, self.redis.get(self.in_flight_key)) or 0))
 
     def cleanup(self) -> None:
-        self.redis.delete(self.pending_key, self.in_flight_key)
+        """Deletes the counters of every stage: callers clean up when the
+        attempt ends."""
+        self.redis.delete(
+            *(
+                key
+                for stage in BatchStage
+                for key in (
+                    _pending_key(stage, self.index_attempt_id),
+                    _in_flight_key(stage, self.index_attempt_id),
+                )
+            )
+        )
+
+
+def _pending_key(stage: BatchStage, index_attempt_id: int) -> str:
+    return f"{stage.value}_pending_{index_attempt_id}"
+
+
+def _in_flight_key(stage: BatchStage, index_attempt_id: int) -> str:
+    return f"{stage.value}_in_flight_{index_attempt_id}"
