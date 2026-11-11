@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import io
-import os
 import stat
 import sys
 import zipfile
@@ -32,12 +31,8 @@ from onyx.skills.models import CustomSkillBundleContents, SkillBundleFile
 
 _MIB: Final[int] = 1024 * 1024
 
-DEFAULT_PER_FILE_MAX_BYTES: Final[int] = int(
-    os.environ.get("SKILL_BUNDLE_PER_FILE_MAX_BYTES") or 25 * _MIB
-)
-DEFAULT_TOTAL_MAX_BYTES: Final[int] = int(
-    os.environ.get("SKILL_BUNDLE_TOTAL_MAX_BYTES") or 100 * _MIB
-)
+DEFAULT_PER_FILE_MAX_BYTES: Final[int] = 25 * _MIB
+DEFAULT_TOTAL_MAX_BYTES: Final[int] = 100 * _MIB
 DEFAULT_ZIP_MAX_BYTES: Final[int] = 25 * _MIB
 DEFAULT_MAX_FILE_COUNT: Final[int] = 500
 # A ZIP file list for 500 files fits 1 MiB. Saved bundles had no file limit.
