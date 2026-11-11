@@ -16,9 +16,12 @@ returns its `bundle_file_id` so the caller can drop the blob from the file
 store immediately.
 
 Each custom skill is also a plugin of kind skill with the same id
-(`onyx.db.plugin`). Creates and bundle changes write both: the plugin rows
-and the legacy skill row, which old readers still use. A bundle change adds a
-plugin version and never deletes the previous bundle.
+(`onyx.db.plugin`). Every write goes to both: the plugin rows and the legacy
+skill rows, which old readers still use. A bundle change adds a plugin version
+and never deletes the previous bundle. Access writes (shares, publishing, the
+install setting, user choices, transfer) call one `onyx.db.plugin` helper for
+each legacy write. Publishing is one-way, and there is no organization-wide
+edit.
 
 Mutation helpers do not commit unless their docstring explicitly says otherwise.
 Callers normally control the transaction boundary so multi-step operations can
@@ -51,8 +54,6 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
     Permission,
     PermissionAuthority,
-    PluginInstallationPolicy,
-    PluginKind,
     SandboxStatus,
     SkillInstallationPolicy,
     SkillSharePermission,
@@ -75,12 +76,17 @@ from onyx.db.models import (
 )
 from onyx.db.plugin import (
     add_plugin_version__no_commit,
-    create_plugin__no_commit,
+    create_skill_plugin__no_commit,
     delete_plugin__no_commit,
-    get_or_create_account_uploads__no_commit,
-    get_or_create_organization_library__no_commit,
-    lock_plugin,
+    lock_skill_plugin__no_commit,
     persist_plugin_version_validity__no_commit,
+    publish_plugin__no_commit,
+    replace_plugin_group_shares__no_commit,
+    replace_plugin_user_shares__no_commit,
+    set_plugin_installation_policy__no_commit,
+    set_plugin_preferences__no_commit,
+    set_plugin_user_share__no_commit,
+    transfer_plugin__no_commit,
 )
 from onyx.db.scoped_permissions import (
     scoped_group_ids_subquery,
@@ -92,11 +98,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.ingest import IngestedBundle
-from onyx.skills.models import (
-    PluginFileEntry,
-    PluginSkillContent,
-    PluginVersionContent,
-)
+from onyx.skills.models import PluginFileEntry
 
 
 class SkillManagementPolicy(str, Enum):
@@ -473,73 +475,12 @@ def enable_new_skill_if_name_available__no_commit(
         .on_conflict_do_nothing()
         .returning(UserSkillPreference.user_id)
     )
-    return inserted_user_id is not None
-
-
-def _create_plugin_for_skill__no_commit(
-    skill: Skill,
-    content: PluginVersionContent,
-    user: User | None,
-    db_session: Session,
-) -> PluginVersion:
-    """Add the plugin of a custom skill with ``content`` as version 1. A public
-    or author-less skill goes to the Organization library, published; others
-    go to the author's "My uploads". Same placement as the plugin backfill."""
-    author_user_id = skill.author_user_id
-    publish = skill.public_permission is not None or author_user_id is None
-    if skill.public_permission is not None or author_user_id is None:
-        marketplace_id = get_or_create_organization_library__no_commit(db_session)
-    else:
-        marketplace_id = get_or_create_account_uploads__no_commit(
-            author_user_id, db_session
-        )
-    plugin = create_plugin__no_commit(
-        plugin_id=skill.id,
-        name=skill.name,
-        kind=PluginKind.SKILL,
-        marketplace_id=marketplace_id,
-        author_user_id=skill.author_user_id,
-        installation_policy=(
-            None
-            if skill.installation_policy == SkillInstallationPolicy.AVAILABLE
-            else PluginInstallationPolicy(skill.installation_policy.value)
-        ),
-        publish=publish,
-        content=content,
-        created_by=user,
-        db_session=db_session,
-    )
-    version = db_session.get(PluginVersion, plugin.current_version_id)
-    if version is None:
-        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "Plugin version was not saved.")
-    return version
-
-
-def _legacy_version_content(skill: Skill) -> PluginVersionContent:
-    """Version 1 of a plugin made from a legacy skill row, as the plugin
-    backfill makes it: the row's bundle, with no file list or SKILL.md text."""
-    if skill.bundle_file_id is None:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"Skill '{skill.name}' has no bundle.",
-        )
-    return PluginVersionContent(
-        bundle_file_id=skill.bundle_file_id,
-        bundle_sha256=skill.bundle_sha256,
-        is_valid=skill.is_valid,
-        file_manifest=None,
-        unpacked_size_bytes=None,
-        file_count=None,
-        skills=[
-            PluginSkillContent(
-                path="",
-                name=skill.name,
-                description=skill.description,
-                skill_md=None,
-                frontmatter=None,
-            )
-        ],
-    )
+    if inserted_user_id is None:
+        return False
+    if skill.is_custom:
+        plugin = lock_skill_plugin__no_commit(skill, db_session)
+        set_plugin_preferences__no_commit(user_id, [plugin.id], True, db_session)
+    return True
 
 
 def create_custom_skill__no_commit(
@@ -552,8 +493,8 @@ def create_custom_skill__no_commit(
 ) -> tuple[Skill, set[UUID]]:
     """Create a custom skill: the legacy skill row, then its plugin, version 1
     and plugin_skill row with the same id, in the caller's transaction. The
-    plugin is placed after the access change, so a public skill starts in the
-    Organization library. Returns the skill and the users the access change
+    plugin starts in the author's "My uploads"; an app link or a public access
+    change then publishes it. Returns the skill and the users the access change
     affects."""
     skill = add_new_skill__no_commit(
         Skill(
@@ -566,6 +507,7 @@ def create_custom_skill__no_commit(
         ),
         db_session,
     )
+    create_skill_plugin__no_commit(skill, ingested.content, user, db_session)
     if external_app_id is not None:
         associate_custom_skill_with_external_app__no_commit(
             db_session,
@@ -575,7 +517,6 @@ def create_custom_skill__no_commit(
     affected: set[UUID] = set()
     if change is not None:
         affected = share_skill__no_commit(skill, change, user, db_session)
-    _create_plugin_for_skill__no_commit(skill, ingested.content, user, db_session)
     return skill, affected
 
 
@@ -612,17 +553,9 @@ def replace_skill_bundle(
             f"Skill '{skill.name}' has no bundle to replace.",
         )
 
-    plugin = lock_plugin(skill.id, db_session)
-    if plugin is None:
-        # The skill has no plugin yet: an older server made it, or a user
-        # delete removed a stale copy. Copy the legacy row as version 1 first,
-        # so the change below is version 2, as for every other skill.
-        _create_plugin_for_skill__no_commit(
-            skill, _legacy_version_content(skill), skill.author, db_session
-        )
-        plugin = lock_plugin(skill.id, db_session)
-        if plugin is None:
-            raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "Plugin was not saved.")
+    # A skill with no plugin gets one copied from its legacy row first, so the
+    # change below is version 2, as for every other skill.
+    plugin = lock_skill_plugin__no_commit(skill, db_session)
     version = add_plugin_version__no_commit(
         plugin=plugin,
         content=ingested.content,
@@ -650,6 +583,13 @@ def set_skill_public_permission(
     public_permission: SkillSharePermission | None,
     db_session: Session,
 ) -> None:
+    """Publish a custom skill to the organization (VIEWER), or keep it
+    private (None). Every route that changes organization access calls this.
+
+    Publishing moves the plugin to the Organization library, and a name clash
+    there is refused with CONFLICT. Publishing is one-way: a published skill
+    cannot become private. Organization-wide EDITOR is refused; editors are
+    named users and groups."""
     is_associated = db_session.scalar(
         select(
             exists().where(
@@ -663,13 +603,28 @@ def set_skill_public_permission(
             "Skills associated with an external app must remain visible to the "
             "organization with viewer access.",
         )
-    if public_permission is None and skill.is_custom and skill.author_user_id is None:
+    if not skill.is_custom:
+        skill.public_permission = public_permission
+        db_session.flush()
+        return
+    if public_permission == SkillSharePermission.EDITOR:
         raise OnyxError(
-            OnyxErrorCode.CONFLICT,
-            "Assign an owner before making this skill private.",
+            OnyxErrorCode.INVALID_INPUT,
+            "The organization cannot get edit access to a skill. Share it with "
+            "users or groups as editors instead.",
         )
+    if public_permission is None:
+        if skill.public_permission is not None:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "This skill is published to the organization. Publishing cannot "
+                "be undone, so the skill cannot be made private.",
+            )
+        return
+    plugin = lock_skill_plugin__no_commit(skill, db_session)
     skill.public_permission = public_permission
     db_session.flush()
+    publish_plugin__no_commit(plugin.id, "raise", db_session)
 
 
 def skill_user_states(
@@ -743,6 +698,7 @@ def set_skill_enabled_for_user(
             "This skill cannot be enabled or disabled.",
         )
 
+    conflicts: list[UUID] = []
     if enabled:
         required = db_session.scalar(
             select(Skill.id).where(
@@ -756,40 +712,47 @@ def set_skill_enabled_for_user(
                 OnyxErrorCode.SKILL_NAME_CONFLICT,
                 "A required skill already uses this name.",
             )
-        conflicts = db_session.scalars(
-            select(Skill.id).where(
-                Skill.name == skill.name,
-                Skill.id != skill.id,
-                _is_enabled_for_user(user),
-            )
-        ).all()
-        if conflicts:
-            if not replace_conflict:
-                raise OnyxError(
-                    OnyxErrorCode.SKILL_NAME_CONFLICT,
-                    f"Another skill named '{skill.name}' is already enabled.",
-                )
-            db_session.execute(
-                insert(UserSkillPreference)
-                .values(
-                    [
-                        {
-                            "user_id": user.id,
-                            "skill_id": conflict,
-                            "name": skill.name,
-                            "enabled": False,
-                        }
-                        for conflict in conflicts
-                    ]
-                )
-                .on_conflict_do_update(
-                    index_elements=[
-                        UserSkillPreference.user_id,
-                        UserSkillPreference.skill_id,
-                    ],
-                    set_={"enabled": False},
+        conflicts = list(
+            db_session.scalars(
+                select(Skill.id).where(
+                    Skill.name == skill.name,
+                    Skill.id != skill.id,
+                    _is_enabled_for_user(user),
                 )
             )
+        )
+        if conflicts and not replace_conflict:
+            raise OnyxError(
+                OnyxErrorCode.SKILL_NAME_CONFLICT,
+                f"Another skill named '{skill.name}' is already enabled.",
+            )
+    lock_skill_plugin__no_commit(skill, db_session)
+    conflict_plugin_ids = _lock_custom_skill_plugins(conflicts, db_session)
+    if conflicts:
+        db_session.execute(
+            insert(UserSkillPreference)
+            .values(
+                [
+                    {
+                        "user_id": user.id,
+                        "skill_id": conflict,
+                        "name": skill.name,
+                        "enabled": False,
+                    }
+                    for conflict in conflicts
+                ]
+            )
+            .on_conflict_do_update(
+                index_elements=[
+                    UserSkillPreference.user_id,
+                    UserSkillPreference.skill_id,
+                ],
+                set_={"enabled": False},
+            )
+        )
+        set_plugin_preferences__no_commit(
+            user.id, conflict_plugin_ids, False, db_session
+        )
     db_session.execute(
         insert(UserSkillPreference)
         .values(user_id=user.id, skill_id=skill.id, name=skill.name, enabled=enabled)
@@ -798,7 +761,24 @@ def set_skill_enabled_for_user(
             set_={"enabled": enabled},
         )
     )
+    set_plugin_preferences__no_commit(user.id, [skill.id], enabled, db_session)
     return skill
+
+
+def _lock_custom_skill_plugins(
+    skill_ids: Iterable[UUID], db_session: Session
+) -> list[UUID]:
+    """Lock the plugins of the custom skills among ``skill_ids``, in id order,
+    and return their ids. Built-in skills have no plugin."""
+    ids = set(skill_ids)
+    if not ids:
+        return []
+    skills = db_session.scalars(
+        select(Skill)
+        .where(Skill.id.in_(ids), Skill.built_in_skill_id.is_(None))
+        .order_by(Skill.id)
+    ).all()
+    return [lock_skill_plugin__no_commit(skill, db_session).id for skill in skills]
 
 
 def set_skill_installation_policy(
@@ -811,6 +791,9 @@ def set_skill_installation_policy(
             OnyxErrorCode.INVALID_INPUT,
             "Installation policies apply only to custom skills.",
         )
+    plugin = (
+        lock_skill_plugin__no_commit(skill, db_session) if skill.is_custom else None
+    )
     try:
         with db_session.begin_nested():
             skill.installation_policy = policy
@@ -822,6 +805,8 @@ def set_skill_installation_policy(
             OnyxErrorCode.SKILL_NAME_CONFLICT,
             "Another automatically installed skill already uses this name.",
         ) from exc
+    if plugin is not None:
+        set_plugin_installation_policy__no_commit(plugin.id, policy, db_session)
 
 
 def _flush_shares(db_session: Session, fk_violation_detail: str) -> None:
@@ -840,6 +825,11 @@ def replace_skill_shares(
     user_shares: Mapping[UUID, SkillSharePermission] | None = None,
     group_shares: Mapping[int, SkillSharePermission] | None = None,
 ) -> None:
+    plugin_id = (
+        lock_skill_plugin__no_commit(skill, db_session).id
+        if skill.is_custom and (user_shares is not None or group_shares is not None)
+        else None
+    )
     if user_shares is not None:
         db_session.execute(delete(Skill__User).where(Skill__User.skill_id == skill.id))
         for user_id, permission in user_shares.items():
@@ -848,6 +838,8 @@ def replace_skill_shares(
             )
         _flush_shares(db_session, "One or more user share targets do not exist.")
         db_session.expire(skill, ["user_shares"])
+        if plugin_id is not None:
+            replace_plugin_user_shares__no_commit(plugin_id, user_shares, db_session)
 
     if group_shares is not None:
         assert_not_shared_with_default_group(db_session, list(group_shares))
@@ -864,6 +856,8 @@ def replace_skill_shares(
             )
         _flush_shares(db_session, "One or more group share targets do not exist.")
         db_session.expire(skill, ["group_shares"])
+        if plugin_id is not None:
+            replace_plugin_group_shares__no_commit(plugin_id, group_shares, db_session)
 
 
 def transfer_skill_ownership(
@@ -872,6 +866,9 @@ def transfer_skill_ownership(
     new_owner_user_id: UUID,
     db_session: Session,
 ) -> None:
+    """Make another user the owner. The previous owner keeps EDITOR. A private
+    skill moves to the new owner's "My uploads", and a name clash there is
+    refused with CONFLICT. A published skill stays published."""
     if not skill.is_custom:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
@@ -882,6 +879,7 @@ def transfer_skill_ownership(
     if new_owner_user_id == previous_owner_user_id:
         return
 
+    plugin = lock_skill_plugin__no_commit(skill, db_session)
     try:
         skill.author_user_id = new_owner_user_id
         db_session.execute(
@@ -916,6 +914,15 @@ def transfer_skill_ownership(
                 "New owner user does not exist.",
             ) from e
         raise
+    transfer_plugin__no_commit(plugin.id, new_owner_user_id, db_session)
+    set_plugin_user_share__no_commit(plugin.id, new_owner_user_id, None, db_session)
+    if previous_owner_user_id is not None:
+        set_plugin_user_share__no_commit(
+            plugin.id,
+            previous_owner_user_id,
+            SkillSharePermission.EDITOR,
+            db_session,
+        )
 
 
 def delete_skill(skill: Skill, db_session: Session) -> str | None:
@@ -1078,8 +1085,16 @@ def share_skill__no_commit(
 def delete_skill_for_user__no_commit(
     skill: Skill, user: User, db_session: Session
 ) -> tuple[set[UUID], str | None]:
-    """Delete a skill the user may edit. Returns the affected users and the
-    bundle file id for caller cleanup."""
+    """Delete a skill the user may edit. Only a user with organization-wide
+    MANAGE_SKILLS can delete a published skill. Returns the affected users and
+    the bundle file id for caller cleanup."""
+    if skill.public_permission is not None and not has_global_permission(
+        user, Permission.MANAGE_SKILLS
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "This skill is published to the organization. Only an admin can delete it.",
+        )
     if (
         skill.installation_policy == SkillInstallationPolicy.REQUIRED
         and not has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS)

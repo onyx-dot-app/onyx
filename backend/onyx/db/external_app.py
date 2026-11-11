@@ -27,6 +27,12 @@ from onyx.db.models import (
     User,
     UserSkillPreference,
 )
+from onyx.db.plugin import (
+    delete_plugin_preferences__no_commit,
+    lock_skill_plugin__no_commit,
+    publish_plugin__no_commit,
+    set_plugin_installation_policy__no_commit,
+)
 from onyx.db.utils import UNSET, UnsetType, is_set
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -403,7 +409,9 @@ def associate_custom_skill_with_external_app__no_commit(
     external_app_id: int,
     skill_id: UUID,
 ) -> Skill:
-    """Associate a custom skill with an app and require org-wide visibility.
+    """Associate a custom skill with an app and publish it to the organization
+    (VIEWER). A name clash in the Organization library is refused with
+    CONFLICT.
 
     The skill row is locked so concurrent association attempts serialize.
     Existing user preferences and explicit editor grants are preserved.
@@ -462,9 +470,11 @@ def associate_custom_skill_with_external_app__no_commit(
             (f"App '{app.name}' already has an associated skill named '{skill.name}'."),
         )
 
+    plugin = lock_skill_plugin__no_commit(skill, db_session)
     skill.public_permission = SkillSharePermission.VIEWER
     db_session.add(ExternalApp__Skill(external_app_id=app.id, skill_id=skill.id))
     db_session.flush()
+    publish_plugin__no_commit(plugin.id, "raise", db_session)
     return skill
 
 
@@ -476,9 +486,10 @@ def replace_custom_skill_associations__no_commit(
 ) -> list[Skill]:
     """Replace an app's custom-skill associations and return affected skills.
 
-    Built-in provider associations are preserved. New associations promote the
-    skill to organization-wide viewer access; removed skills keep their current
-    visibility and content.
+    Built-in provider associations are preserved. Each associated skill is
+    published to the organization (VIEWER); a name clash in the Organization
+    library is refused with CONFLICT. Removed skills stay published, because
+    publishing is one-way.
     """
     requested_ids = list(skill_ids)
     target_ids = set(requested_ids)
@@ -574,6 +585,10 @@ def replace_custom_skill_associations__no_commit(
             )
         )
 
+    # target_skills is in id order, so the plugins lock in id order.
+    plugin_ids = [
+        lock_skill_plugin__no_commit(skill, db_session).id for skill in target_skills
+    ]
     for skill in target_skills:
         skill.public_permission = SkillSharePermission.VIEWER
         if skill.id not in current_ids:
@@ -582,6 +597,8 @@ def replace_custom_skill_associations__no_commit(
             )
 
     db_session.flush()
+    for plugin_id in plugin_ids:
+        publish_plugin__no_commit(plugin_id, "raise", db_session)
     return current_custom_skills + [
         skill for skill in target_skills if skill.id not in current_ids
     ]
@@ -702,16 +719,26 @@ def delete_external_app(
         )
 
     skills = get_skills_for_external_app(db_session, app.id)
-    custom_skill_ids = [skill.id for skill in skills if skill.is_custom]
-    for skill in skills:
-        if skill.is_custom:
-            skill.installation_policy = SkillInstallationPolicy.AVAILABLE
+    custom_skills = _lock_custom_skills(
+        db_session, [skill.id for skill in skills if skill.is_custom]
+    )
+    custom_skill_ids = [skill.id for skill in custom_skills]
+    plugin_ids = [
+        lock_skill_plugin__no_commit(skill, db_session).id for skill in custom_skills
+    ]
+    for skill in custom_skills:
+        skill.installation_policy = SkillInstallationPolicy.AVAILABLE
     if custom_skill_ids:
         db_session.execute(
             delete(UserSkillPreference).where(
                 UserSkillPreference.skill_id.in_(custom_skill_ids)
             )
         )
+    for plugin_id in plugin_ids:
+        set_plugin_installation_policy__no_commit(
+            plugin_id, SkillInstallationPolicy.AVAILABLE, db_session
+        )
+    delete_plugin_preferences__no_commit(plugin_ids, db_session)
 
     db_session.delete(app)
     for skill in skills:
@@ -802,6 +829,18 @@ def disconnect_external_app_for_user(
             ExternalAppUserCredential.user_id == user_id,
         )
     )
+    associated_skills = _lock_custom_skills(
+        db_session,
+        db_session.scalars(
+            select(ExternalApp__Skill.skill_id).where(
+                ExternalApp__Skill.external_app_id == external_app_id
+            )
+        ),
+    )
+    plugin_ids = [
+        lock_skill_plugin__no_commit(skill, db_session).id
+        for skill in associated_skills
+    ]
     associated_skill_ids = select(ExternalApp__Skill.skill_id).where(
         ExternalApp__Skill.external_app_id == external_app_id
     )
@@ -812,4 +851,23 @@ def disconnect_external_app_for_user(
             UserSkillPreference.enabled.is_(True),
         )
     )
+    delete_plugin_preferences__no_commit(
+        plugin_ids, db_session, user_id=user_id, enabled_only=True
+    )
     db_session.flush()
+
+
+def _lock_custom_skills(db_session: Session, skill_ids: Iterable[UUID]) -> list[Skill]:
+    """Lock the custom skill rows among ``skill_ids`` in id order, before their
+    plugin rows."""
+    ids = set(skill_ids)
+    if not ids:
+        return []
+    return list(
+        db_session.scalars(
+            select(Skill)
+            .where(Skill.id.in_(ids), Skill.built_in_skill_id.is_(None))
+            .order_by(Skill.id)
+            .with_for_update()
+        )
+    )
