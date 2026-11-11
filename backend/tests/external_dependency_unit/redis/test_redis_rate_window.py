@@ -12,12 +12,14 @@ from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
 
 import pytest
+from redis.exceptions import ConnectionError as RedisConnectionError
 
 from onyx.background.indexing import source_api_limiter
 from onyx.background.indexing.source_api_limiter import (
     RedisSourceApiLimiter,
     SourceApiBudget,
 )
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import ConnectorStopSignal
 from onyx.redis import redis_rate_window
 from onyx.redis.redis_pool import get_redis_client
@@ -236,3 +238,66 @@ def test_a_call_goes_on_after_the_longest_wait(
     started = time.monotonic()
     limiter.acquire(_API, 100)
     assert 0.3 <= time.monotonic() - started < 3
+
+
+def test_the_factory_builds_the_drive_limiter_and_wires_the_stop_signal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Through `build_source_api_limiter`, as `instantiate_connector` calls
+    it: off by default, on for Google Drive only, with the budgets from the
+    configuration and the caller's stop signal."""
+    credential_id = int(uuid4().int % 1_000_000_000)
+    assert (
+        source_api_limiter.build_source_api_limiter(
+            DocumentSource.GOOGLE_DRIVE, credential_id
+        )
+        is None
+    )
+
+    monkeypatch.setattr(source_api_limiter, "ENABLE_SOURCE_API_LIMITER", True)
+    monkeypatch.setattr(source_api_limiter, "GOOGLE_DRIVE_QUOTA_PER_PROJECT", 300)
+    assert source_api_limiter.build_source_api_limiter(DocumentSource.SLACK, 1) is None
+    stop = False
+    limiter = source_api_limiter.build_source_api_limiter(
+        DocumentSource.GOOGLE_DRIVE, credential_id, should_stop=lambda: stop
+    )
+    assert isinstance(limiter, RedisSourceApiLimiter)
+    try:
+        # Three list pages fill the project budget of 300 units.
+        for _ in range(3):
+            limiter.acquire("drive", 100, "a@x.com")
+        assert limiter.try_acquire("drive", 100, "b@x.com") > 0
+        # The Docs API has its own budget.
+        assert limiter.try_acquire("docs", 1, "a@x.com") == 0
+
+        stop = True
+        with pytest.raises(ConnectorStopSignal):
+            limiter.acquire("drive", 100, "b@x.com")
+    finally:
+        for api in ("drive", "docs"):
+            for user in ("a@x.com", "b@x.com"):
+                for window in (
+                    limiter.credential_window(api),
+                    limiter.user_window(api, user),
+                ):
+                    if window is not None:
+                        limiter._windows.delete(window)
+
+
+def test_an_unreachable_redis_logs_one_warning_and_does_not_limit(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    class _DownRedis:
+        def eval(self, *_args: object, **_kwargs: object) -> int:
+            raise RedisConnectionError("down")
+
+    monkeypatch.setattr(redis_rate_window, "_last_unreachable_warning", 0.0)
+    down = RedisRateWindows(_DownRedis())  # ty: ignore[invalid-argument-type]
+    window = RateWindow(key="w", limit=1, period_seconds=10)
+
+    with caplog.at_level("WARNING"):
+        assert [down.try_acquire([window]) for _ in range(5)] == [0] * 5
+        assert down.cut(window) == 1.0
+
+    warnings = [r for r in caplog.records if "cannot reach Redis" in r.getMessage()]
+    assert len(warnings) == 1

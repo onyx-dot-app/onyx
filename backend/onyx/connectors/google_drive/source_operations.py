@@ -346,9 +346,33 @@ def attach_source_api_limiter(
 
 
 def _is_user_rate_limit(error: GoogleDriveHttpError) -> bool:
-    """Google answers a per-user limit with 403 userRateLimitExceeded and a
-    project limit with 429 or rateLimitExceeded."""
-    return "userRateLimitExceeded" in error.reasons
+    """Whether Google limited the user, and not the whole project.
+
+    Drive names a per-user limit with the reason userRateLimitExceeded. The
+    Docs API, and sometimes Drive, answer 429 with a general reason and name
+    the quota in the error's metadata: a per-user quota has a limit name
+    that ends in PerUser, for example ReadRequestsPerMinutePerUser."""
+    if "userRateLimitExceeded" in error.reasons:
+        return True
+    return any("peruser" in name.lower() for name in _quota_limit_names(error.body))
+
+
+def _quota_limit_names(body: str | None) -> list[str]:
+    """The `quota_limit` values in the details of a Google error body."""
+    if not body:
+        return []
+    try:
+        parsed = json.loads(body)
+    except ValueError:
+        return []
+    error = parsed.get("error") if isinstance(parsed, dict) else None
+    details = error.get("details") if isinstance(error, dict) else None
+    names: list[str] = []
+    for detail in details if isinstance(details, list) else []:
+        metadata = detail.get("metadata") if isinstance(detail, dict) else None
+        if isinstance(metadata, dict) and isinstance(metadata.get("quota_limit"), str):
+            names.append(metadata["quota_limit"])
+    return names
 
 
 class _LimitedRequest:
@@ -702,7 +726,9 @@ class GoogleDriveSourceOperations(SourceOperations):
                     fields=_TARGET_PROBE_FIELDS,
                 )
             )
-            return execute_access_probe(request)
+            return execute_access_probe(
+                self._limited(request, DRIVE_READ_UNITS, user_email)
+            )
         except RefreshError:
             return None
 
@@ -741,7 +767,8 @@ class GoogleDriveSourceOperations(SourceOperations):
             batch = cast(
                 BatchHttpRequest, service.new_batch_http_request(callback=callback)
             )
-            for key in keys[start : start + _MAX_BATCH_SIZE]:
+            batch_keys = keys[start : start + _MAX_BATCH_SIZE]
+            for key in batch_keys:
                 batch.add(
                     service.files().get(
                         fileId=file_ids_by_key[key],
@@ -750,7 +777,10 @@ class GoogleDriveSourceOperations(SourceOperations):
                     ),
                     request_id=key,
                 )
-            batch.execute()
+            # A batch counts as one read for each file in it.
+            self._limited(
+                batch, DRIVE_READ_UNITS * len(batch_keys), user_email
+            ).execute()
         return result
 
     @source_operation(
@@ -767,7 +797,9 @@ class GoogleDriveSourceOperations(SourceOperations):
         """Ids of the shared drives the user can see. With domain admin access,
         every shared drive of the domain."""
         for drive in execute_paginated_retrieval(
-            retrieval_function=self._drive(user_email).drives().list,
+            retrieval_function=self._limited_list(
+                self._drive(user_email).drives().list, user_email
+            ),
             list_key="drives",
             useDomainAdminAccess=use_domain_admin_access,
             fields="drives(id),nextPageToken",
@@ -784,7 +816,9 @@ class GoogleDriveSourceOperations(SourceOperations):
     ) -> Iterator[GoogleSharedDrive]:
         """The shared drives ``list_drives`` lists, with their names."""
         for drive in execute_paginated_retrieval(
-            retrieval_function=self._drive(user_email).drives().list,
+            retrieval_function=self._limited_list(
+                self._drive(user_email).drives().list, user_email
+            ),
             list_key="drives",
             useDomainAdminAccess=use_domain_admin_access,
             fields="drives(id, name),nextPageToken",
@@ -801,12 +835,11 @@ class GoogleDriveSourceOperations(SourceOperations):
         """The name of a shared drive (files.get calls every drive root
         'Drive'), or None when the user cannot see the drive."""
         try:
-            drive = (
-                self._drive(user_email)
-                .drives()
-                .get(driveId=drive_id, fields="name")
-                .execute()
-            )
+            drive = self._limited(
+                self._drive(user_email).drives().get(driveId=drive_id, fields="name"),
+                DRIVE_READ_UNITS,
+                user_email,
+            ).execute()
         except HttpError as e:
             if e.resp.status in (403, 404):
                 logger.debug("Cannot access drive %s: %s", drive_id, e)
@@ -878,9 +911,10 @@ class GoogleDriveSourceOperations(SourceOperations):
         primary admin. With domain admin access this works for drives the admin
         is not a member of; it answers 404 for a drive of another domain."""
         yield from execute_paginated_retrieval(
-            retrieval_function=self._drive(self._auth().primary_admin_email)
-            .permissions()
-            .list,
+            retrieval_function=self._limited_list(
+                self._drive(self._auth().primary_admin_email).permissions().list,
+                self._auth().primary_admin_email,
+            ),
             list_key="permissions",
             fileId=drive_id,
             useDomainAdminAccess=use_domain_admin_access,
@@ -1123,7 +1157,9 @@ class GoogleDriveSourceOperations(SourceOperations):
         """Every folder the user can see, with its published permissions. By
         default a 403 or 404 ends the listing without an error."""
         yield from execute_paginated_retrieval(
-            retrieval_function=self._drive(user_email).files().list,
+            retrieval_function=self._limited_list(
+                self._drive(user_email).files().list, user_email
+            ),
             list_key="files",
             continue_on_404_or_403=continue_on_404_or_403,
             corpora=DriveCorpus.ALL_DRIVES.value,
