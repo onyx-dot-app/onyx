@@ -486,6 +486,9 @@ message NodeInfoResponse {
   // CAPACITY_VM_SLOTS when the node runs this many VMs, template build VMs
   // and processes in doubt.
   uint32 max_vms = 14;
+  // What --max-vms counts: vm_count plus template build VMs and processes
+  // in doubt.
+  uint32 vm_slots_used = 15;
 }
 
 message DrainStatus {

@@ -96,7 +96,7 @@ func TestMaxVMsKVM(t *testing.T) {
 	if len(l.GetVms()) != limit || running != limit {
 		t.Fatalf("list: %d VMs (%d running), want %d running", len(l.GetVms()), running, limit)
 	}
-	if ni, err := c.NodeInfo(ctx, &pb.NodeInfoRequest{}); err != nil || int(ni.GetVmCount()) != limit {
+	if ni, err := c.NodeInfo(ctx, &pb.NodeInfoRequest{}); err != nil || int(ni.GetVmCount()) != limit || int(ni.GetVmSlotsUsed()) != limit {
 		t.Fatalf("NodeInfo vm_count: %v %v", ni, err)
 	}
 

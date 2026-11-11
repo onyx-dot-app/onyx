@@ -584,7 +584,7 @@ fail with `CAPACITY_VM_SLOTS` (metadata `vm_count`, `max_vms`), and placement tr
 Create of a VM on the node is never refused. On nested virtualization (m8i.4xlarge), more than 64 VMs of
 2 vCPU make random running VMs exit with `KVM_EXIT_FAIL_ENTRY`, while memory and CPU are far from their
 limits. The Helm chart sets 60 (`craft.hostAgent.maxVms`); raise it or set 0 on bare metal. `NodeInfo`
-returns `max_vms`, and placement skips a node whose `vm_count` is at its cap.
+returns `max_vms` and `vm_slots_used` (what the cap counts), and placement skips a node at its cap.
 
 **Drain.** The node drains while the manual flag is set (`SetDrain`, kept in `<data-dir>/drain.json`
 across restarts) or while its Node has a taint from `--drain-taints` (default

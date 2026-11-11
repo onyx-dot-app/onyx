@@ -1987,7 +1987,10 @@ type NodeInfoResponse struct {
 	// The VM cap (--max-vms); 0 is no cap. Create refuses with
 	// CAPACITY_VM_SLOTS when the node runs this many VMs, template build VMs
 	// and processes in doubt.
-	MaxVms        uint32 `protobuf:"varint,14,opt,name=max_vms,json=maxVms,proto3" json:"max_vms,omitempty"`
+	MaxVms uint32 `protobuf:"varint,14,opt,name=max_vms,json=maxVms,proto3" json:"max_vms,omitempty"`
+	// What --max-vms counts: vm_count plus template build VMs and processes
+	// in doubt.
+	VmSlotsUsed   uint32 `protobuf:"varint,15,opt,name=vm_slots_used,json=vmSlotsUsed,proto3" json:"vm_slots_used,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2116,6 +2119,13 @@ func (x *NodeInfoResponse) GetDrain() *DrainStatus {
 func (x *NodeInfoResponse) GetMaxVms() uint32 {
 	if x != nil {
 		return x.MaxVms
+	}
+	return 0
+}
+
+func (x *NodeInfoResponse) GetVmSlotsUsed() uint32 {
+	if x != nil {
+		return x.VmSlotsUsed
 	}
 	return 0
 }
@@ -3344,7 +3354,7 @@ const file_hostagent_v1_hostagent_proto_rawDesc = "" +
 	"\x05roots\x18\x04 \x03(\tR\x05roots\x12\x1d\n" +
 	"\n" +
 	"restore_ms\x18\x05 \x01(\x04R\trestoreMs\"\x11\n" +
-	"\x0fNodeInfoRequest\"\xe4\x04\n" +
+	"\x0fNodeInfoRequest\"\x88\x05\n" +
 	"\x10NodeInfoResponse\x12\"\n" +
 	"\rmem_total_mib\x18\x01 \x01(\x04R\vmemTotalMib\x12*\n" +
 	"\x11mem_available_mib\x18\x02 \x01(\x04R\x0fmemAvailableMib\x12\x19\n" +
@@ -3361,7 +3371,8 @@ const file_hostagent_v1_hostagent_proto_rawDesc = "" +
 	"\x0fmem_reserve_mib\x18\v \x01(\x04R\rmemReserveMib\x12(\n" +
 	"\x10mem_starting_mib\x18\f \x01(\x04R\x0ememStartingMib\x125\n" +
 	"\x05drain\x18\r \x01(\v2\x1f.craft.hostagent.v1.DrainStatusR\x05drain\x12\x17\n" +
-	"\amax_vms\x18\x0e \x01(\rR\x06maxVms\"\xc6\x01\n" +
+	"\amax_vms\x18\x0e \x01(\rR\x06maxVms\x12\"\n" +
+	"\rvm_slots_used\x18\x0f \x01(\rR\vvmSlotsUsed\"\xc6\x01\n" +
 	"\vDrainStatus\x124\n" +
 	"\x05state\x18\x01 \x01(\x0e2\x1e.craft.hostagent.v1.DrainStateR\x05state\x12\x16\n" +
 	"\x06manual\x18\x02 \x01(\bR\x06manual\x12\x16\n" +
