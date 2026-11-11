@@ -12,14 +12,17 @@ import pytest
 from onyx.connectors.google_drive import parallel_listing
 from onyx.connectors.google_drive.file_retrieval import owner_email
 from onyx.connectors.google_drive.models import (
+    GoogleDriveCheckpoint,
     GoogleDriveFileType,
     ListingPartitionKind,
     ListingShard,
 )
 from onyx.connectors.google_drive.parallel_listing import drive_document_type
+from onyx.connectors.models import SlimDocumentStub
 from onyx.utils import threadpool_concurrency
 from tests.external_dependency_unit.connectors.google_drive.conftest import MockDrive
 from tests.external_dependency_unit.connectors.google_drive.test_checkpointed_slim_listing import (
+    _file_id,
     _Listing,
     list_with_resume,
 )
@@ -303,3 +306,99 @@ def test_a_split_refused_by_the_shard_cap_runs_on_a_later_page(
     _assert_full_corpus(listing, expected)
     assert cap_refused, "no split was refused by the shard cap"
     assert split_after_refusal, "no shard split after the cap refused it"
+
+
+@pytest.mark.usefixtures("small_pages")
+def test_a_split_on_a_later_page_emits_each_file_once(
+    own_mock_drive: MockDrive, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Many files share one modifiedTime, as files made in a burst do. A shard
+    that splits on a later page starts its sub-ranges at that time. The files
+    it already kept at that time must not come a second time."""
+    own_mock_drive.set_corpus(_SHARDED_CORPUS)
+    # Two bursts. The range after the first burst has files, so a shard in
+    # the first burst has a reason to split.
+    for _ in range(2):
+        own_mock_drive.client.post(
+            "/_mock/corpus/touch", json={"count": 1500}
+        ).raise_for_status()
+        time.sleep(2.5)
+    expected = own_mock_drive.content_file_ids()
+
+    late_splits_with_skips = 0
+    try_split = parallel_listing.ParallelDriveLister._try_split
+
+    def split_only_inside_the_burst(
+        self: parallel_listing.ParallelDriveLister,
+        shard: ListingShard,
+        files: list[GoogleDriveFileType],
+    ) -> object:
+        """Stands in for the shard cap: refuses each split until the shard is
+        on a later page whose files all have the burst's time."""
+        nonlocal late_splits_with_skips
+        times = {file.get("modifiedTime") for file in files}
+        in_burst = len(times) == 1 and bool(shard.frontier_ids)
+        if shard.page_token is None or not in_burst:
+            if shard.skip_ids:
+                # A sub-range of a split that this test let through.
+                return try_split(self, shard, files)
+            return parallel_listing._SplitRefusal.SHARD_CAP
+        result = try_split(self, shard, files)
+        if isinstance(result, list) and result:
+            with self._lock:
+                first_child = self._state.shards.get(result[0])
+                if first_child is not None and first_child.skip_ids:
+                    late_splits_with_skips += 1
+        return result
+
+    monkeypatch.setattr(
+        parallel_listing.ParallelDriveLister, "_try_split", split_only_inside_the_burst
+    )
+    listing = list_with_resume(own_mock_drive.build_connector())
+
+    assert late_splits_with_skips > 0, "no later-page split met files it had kept"
+    _assert_full_corpus(listing, expected)
+
+
+@pytest.mark.usefixtures("small_pages")
+def test_a_new_window_start_lists_every_file_again(
+    own_mock_drive: MockDrive, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A checkpoint from a listing with another window start is of no use.
+    The new listing must also drop the old one's dedup claims, or it drops
+    the files that the old one claimed."""
+    monkeypatch.setattr(parallel_listing, "CALL_BUDGET_FILES", 2500)
+    own_mock_drive.set_corpus(_SHARDED_CORPUS)
+    expected = own_mock_drive.content_file_ids()
+    connector = own_mock_drive.build_connector()
+    end = time.time()
+
+    def one_call(
+        start: float, checkpoint: GoogleDriveCheckpoint
+    ) -> tuple[list[str], GoogleDriveCheckpoint]:
+        generator = connector.retrieve_slim_docs_from_checkpoint(start, end, checkpoint)
+        ids: list[str] = []
+        while True:
+            try:
+                item = next(generator)
+            except StopIteration as stop:
+                return ids, connector.validate_checkpoint_json(
+                    stop.value.model_dump_json()
+                )
+            if isinstance(item, SlimDocumentStub):
+                ids.append(_file_id(item.id))
+
+    _, checkpoint = one_call(0, connector.build_dummy_checkpoint())
+    assert checkpoint.has_more
+    # Stands in for the claims of the old listing: files that it reached by a
+    # path with no exact partition.
+    checkpoint.retrieved_drive_file_ids = set(expected)
+
+    # The window start moves by one second: all files are still in the window.
+    listed: list[str] = []
+    while checkpoint.has_more:
+        ids, checkpoint = one_call(1, checkpoint)
+        listed.extend(ids)
+
+    assert len(listed) == len(set(listed))
+    assert set(listed) == expected

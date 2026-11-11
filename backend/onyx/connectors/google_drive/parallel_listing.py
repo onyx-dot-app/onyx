@@ -90,6 +90,9 @@ SPLIT_MAX_WAYS = 64
 MIN_SHARD_MS = 1000
 # Do not split past this many open shards. It bounds the checkpoint.
 MAX_OPEN_SHARDS = 2 * ADAPTIVE_MAX_WORKERS
+# Ids a shard keeps at its newest modifiedTime. Past this, the shard does not
+# split on a later page. It bounds the checkpoint.
+MAX_FRONTIER_IDS = 2000
 # One call lists for about this long, or this many files, and then drains.
 CALL_BUDGET_SECONDS = 60.0
 CALL_BUDGET_FILES = 50_000
@@ -232,6 +235,35 @@ def plan_split(
     bounds.extend(page_min + width * i for i in range(1, ways))
     bounds.append(shard.t1)
     return [(t0, t1) for t0, t1 in zip(bounds, bounds[1:], strict=False) if t0 < t1]
+
+
+def _move_frontier(shard: ListingShard, files: list[GoogleDriveFileType]) -> None:
+    """Records the page that the shard kept: the newest modifiedTime so far
+    and the ids at that time. A later page needs them to split."""
+    listed = [
+        (ms, file_id)
+        for file in files
+        if (ms := _modified_ms(file)) is not None
+        and isinstance(file_id := file.get("id"), str)
+    ]
+    if not listed or not shard.in_order:
+        return
+    page_min = min(ms for ms, _ in listed)
+    page_max = max(ms for ms, _ in listed)
+    if shard.frontier_ms is not None and page_min < shard.frontier_ms:
+        # Drive did not keep the order of the pages.
+        shard.in_order = False
+        shard.frontier_ids = []
+        return
+    if shard.frontier_ms is None or page_max > shard.frontier_ms:
+        shard.frontier_ms = page_max
+        shard.frontier_ids = []
+    shard.frontier_ids.extend(
+        file_id for ms, file_id in listed if ms == shard.frontier_ms
+    )
+    if len(shard.frontier_ids) > MAX_FRONTIER_IDS:
+        shard.in_order = False
+        shard.frontier_ids = []
 
 
 class _SplitRefusal(Enum):
@@ -452,6 +484,7 @@ class ParallelDriveLister:
         t0: int,
         t1: int,
         newest_ms: int | None,
+        skip_ids: list[str] | None = None,
     ) -> int:
         """The caller holds the lock."""
         state = self._state
@@ -465,6 +498,7 @@ class ParallelDriveLister:
             t1=t1,
             newest_ms=newest_ms,
             exact=exact,
+            skip_ids=skip_ids or [],
         )
         return shard_id
 
@@ -494,6 +528,11 @@ class ParallelDriveLister:
             # A shard refused only for lack of room tries again next page.
             keep_can_split = children is _SplitRefusal.SHARD_CAP
 
+        if shard.skip_ids:
+            # The shard this range came from already listed these files.
+            skip = set(shard.skip_ids)
+            files = [file for file in files if file.get("id") not in skip]
+
         # A shortcut costs one files.get, so resolve outside the lock.
         resolved: list[GoogleDriveFileType] = []
         for file in files:
@@ -518,6 +557,7 @@ class ParallelDriveLister:
                 return []
             live.page_token = next_token
             live.can_split = keep_can_split
+            _move_frontier(live, files)
         return [self._page_task(shard.id)]
 
     def _resolve_shortcut(
@@ -642,9 +682,22 @@ class ParallelDriveLister:
         page_times = [ms for file in files if (ms := _modified_ms(file)) is not None]
         if len(page_times) < 2:
             return _SplitRefusal.DENSITY
+        skip_ids = shard.skip_ids
         if shard.page_token is not None:
-            # Earlier pages listed the files older than this page.
-            shard = shard.model_copy(update={"t0": max(shard.t0, min(page_times))})
+            # Earlier pages listed the files older than this page, if every
+            # page so far came in modifiedTime order. The sub-ranges start at
+            # this page's oldest file. Files that the earlier pages kept at
+            # that same time are listed again, so the first sub-range skips
+            # them.
+            boundary = min(page_times)
+            if (
+                not shard.in_order
+                or shard.frontier_ms is None
+                or boundary < shard.frontier_ms
+            ):
+                return _SplitRefusal.DENSITY
+            skip_ids = shard.frontier_ids if boundary == shard.frontier_ms else []
+            shard = shard.model_copy(update={"t0": max(shard.t0, boundary)})
         if shard.t1 - shard.t0 < 2 * MIN_SHARD_MS:
             return _SplitRefusal.DENSITY
         with self._lock:
@@ -671,9 +724,16 @@ class ParallelDriveLister:
             del state.shards[shard.id]
             children = [
                 self._add_shard(
-                    shard.partition, shard.principal, shard.exact, t0, t1, newest_ms
+                    shard.partition,
+                    shard.principal,
+                    shard.exact,
+                    t0,
+                    t1,
+                    newest_ms,
+                    # Only the first sub-range starts at the shard's start.
+                    skip_ids if index == 0 else None,
                 )
-                for t0, t1 in ranges
+                for index, (t0, t1) in enumerate(ranges)
             ]
         logger.debug(
             "Split %s %s [%s, %s) into %s shards",
