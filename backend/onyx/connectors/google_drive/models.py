@@ -315,6 +315,9 @@ class ListingShard(BaseModel):
     in_order: bool = True
     # Ids at the start of the range that an earlier shard already listed.
     skip_ids: list[str] = []
+    # Lists only the files of this owner. Set on a shared-with-user shard
+    # that lists again the files of an owner whose My Drive partition failed.
+    owner_filter: str | None = None
 
 
 class DriveListingState(BaseModel):

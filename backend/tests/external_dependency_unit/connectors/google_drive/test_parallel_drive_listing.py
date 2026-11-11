@@ -5,6 +5,7 @@ pages come back in any order, when calls fail at random, and when Drive
 answers with a burst of 429s. It must not make many more list calls than a
 serial listing."""
 
+import threading
 import time
 
 import pytest
@@ -18,6 +19,7 @@ from onyx.connectors.google_drive.models import (
     ListingShard,
 )
 from onyx.connectors.google_drive.parallel_listing import drive_document_type
+from onyx.connectors.google_drive.source_operations import GoogleDriveRefreshError
 from onyx.connectors.models import SlimDocumentStub
 from onyx.utils import threadpool_concurrency
 from tests.external_dependency_unit.connectors.google_drive.conftest import MockDrive
@@ -402,3 +404,66 @@ def test_a_new_window_start_lists_every_file_again(
 
     assert len(listed) == len(set(listed))
     assert set(listed) == expected
+
+
+def test_files_shared_by_an_owner_whose_my_drive_fails_are_still_listed(
+    own_mock_drive: MockDrive, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A shared-with-user listing drops a file whose owner's My Drive
+    partition began, because that partition lists it. If that partition then
+    fails, the file must still come from a shared-with-user listing."""
+    own_mock_drive.set_corpus(_SHARDED_CORPUS)
+
+    lock = threading.Lock()
+    victim: list[str] = []
+    last_shared_with_fetch = [0.0]
+    owners_by_shared_file: dict[str, str] = {}
+    fetch_page = parallel_listing.ParallelDriveLister._fetch_page
+
+    def failing_fetch_page(
+        self: parallel_listing.ParallelDriveLister, shard: ListingShard
+    ) -> tuple[list[GoogleDriveFileType], str | None]:
+        kind = shard.partition.kind
+        if kind is ListingPartitionKind.MY_DRIVE:
+            with lock:
+                if not victim:
+                    victim.append(shard.partition.key.lower())
+                is_victim = victim[0] == shard.partition.key.lower()
+            if is_victim:
+                # Fail after the shared-with-user listings read their pages.
+                deadline = time.monotonic() + 30
+                while time.monotonic() < deadline:
+                    with lock:
+                        last = last_shared_with_fetch[0]
+                    if last and time.monotonic() - last > 1.0:
+                        break
+                    time.sleep(0.05)
+                raise GoogleDriveRefreshError("the user can no longer be impersonated")
+        files, next_token = fetch_page(self, shard)
+        if kind is ListingPartitionKind.SHARED_WITH_USER:
+            with lock:
+                last_shared_with_fetch[0] = time.monotonic()
+                for file in files:
+                    owner = owner_email(file)
+                    if owner and not file.get("driveId"):
+                        owners_by_shared_file[file["id"]] = owner
+        return files, next_token
+
+    monkeypatch.setattr(
+        parallel_listing.ParallelDriveLister, "_fetch_page", failing_fetch_page
+    )
+    listing = list_with_resume(own_mock_drive.build_connector())
+
+    assert victim, "no My Drive partition ran"
+    expected = own_mock_drive.content_file_ids()
+    shared_by_victim = {
+        file_id
+        for file_id, owner in owners_by_shared_file.items()
+        if owner == victim[0] and file_id in expected
+    }
+    assert shared_by_victim, "the corpus has no file that the failed owner shared"
+    missing = shared_by_victim - set(listing.file_ids)
+    assert not missing, (
+        f"{len(missing)} of {len(shared_by_victim)} files that the failed owner "
+        "shared were not listed"
+    )

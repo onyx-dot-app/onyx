@@ -485,6 +485,7 @@ class ParallelDriveLister:
         t1: int,
         newest_ms: int | None,
         skip_ids: list[str] | None = None,
+        owner_filter: str | None = None,
     ) -> int:
         """The caller holds the lock."""
         state = self._state
@@ -499,6 +500,7 @@ class ParallelDriveLister:
             newest_ms=newest_ms,
             exact=exact,
             skip_ids=skip_ids or [],
+            owner_filter=owner_filter,
         )
         return shard_id
 
@@ -621,6 +623,9 @@ class ParallelDriveLister:
         elif shard.partition.kind is ListingPartitionKind.SHARED_WITH_USER:
             # The user's My Drive partition lists the user's own files.
             query += " and not 'me' in owners"
+            if shard.owner_filter is not None:
+                owner = shard.owner_filter.replace("\\", "\\\\").replace("'", "\\'")
+                query += f" and '{owner}' in owners"
         field = GoogleFields.MODIFIED_TIME.value
         return f"{query} and {field} >= '{_iso(t0)}' and {field} < '{_iso(t1)}'"
 
@@ -667,6 +672,9 @@ class ParallelDriveLister:
         # A shortcut to a file of this partition: the listing has the file.
         if via_shortcut and own:
             return False
+        # A shortcut target can be emitted twice, here and by its own exact
+        # partition. Accepted: a drop here can lose a file that only a changed
+        # shortcut reaches in an incremental run.
         exact = shard.exact and own and not via_shortcut
         if not exact and covered_elsewhere:
             return False
@@ -732,6 +740,7 @@ class ParallelDriveLister:
                     newest_ms,
                     # Only the first sub-range starts at the shard's start.
                     skip_ids if index == 0 else None,
+                    shard.owner_filter,
                 )
                 for index, (t0, t1) in enumerate(ranges)
             ]
@@ -806,7 +815,27 @@ class ParallelDriveLister:
             elif partition.kind is ListingPartitionKind.MY_DRIVE:
                 # Files of this owner are no longer covered, so a shared-with
                 # listing that starts later keeps them.
-                state.listed_owners.discard(partition.key.lower())
+                owner = partition.key.lower()
+                state.listed_owners.discard(owner)
+                # A shared-with listing that began dropped this owner's files.
+                # It lists them again, and only them.
+                relist = [
+                    self._add_shard(
+                        started_partition,
+                        principal,
+                        exact,
+                        state.window_t0,
+                        state.window_t1,
+                        newest_ms=None,
+                        owner_filter=owner,
+                    )
+                    for started_partition, principal, exact in state.started_partitions
+                    if started_partition.kind is ListingPartitionKind.SHARED_WITH_USER
+                    and started_partition.key.lower() != owner
+                ]
+                return [
+                    self._page_task(shard_id) for shard_id in relist
+                ] + self._plan_tasks()
             return self._plan_tasks()
 
 
