@@ -758,6 +758,7 @@ class _KickoffResult:
     skipped_active: int = 0
     skipped_not_found: int = 0
     skipped_not_indexable: int = 0
+    skipped_waiting_for_swap: int = 0
     failed_to_create: int = 0
 
     @property
@@ -767,6 +768,7 @@ class _KickoffResult:
             + self.skipped_active
             + self.skipped_not_found
             + self.skipped_not_indexable
+            + self.skipped_waiting_for_swap
             + self.failed_to_create
         )
 
@@ -1003,10 +1005,11 @@ def _kickoff_indexing_tasks(
             )
             and port_reindex_in_progress(db_session)
         ):
-            task_logger.info(
+            task_logger.debug(
                 f"_kickoff_indexing_tasks - Full run waits for the reindex swap: "
                 f"cc_pair={cc_pair.id}"
             )
+            result.skipped_waiting_for_swap += 1
             continue
 
         reindex = False
@@ -1468,6 +1471,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
         f"skipped_active={primary_result.skipped_active} "
         f"skipped_not_found={primary_result.skipped_not_found} "
         f"skipped_not_indexable={primary_result.skipped_not_indexable} "
+        f"skipped_waiting_for_swap={primary_result.skipped_waiting_for_swap} "
         f"failed={primary_result.failed_to_create}]"
         + (
             f" secondary=[evaluated={secondary_result.evaluated} "
