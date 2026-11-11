@@ -112,6 +112,16 @@ class RetrievedDriveFile(BaseModel):
 class DriveListingPayload(ListingPayload):
     # The user whose listing returned the file. This user can read it.
     retriever_email: str
+    # The file fields from the listing. With them, conversion does not
+    # fetch the file's metadata again. None for stubs stored before this
+    # field existed.
+    drive_file: dict[str, Any] | None = None
+    # Users who can read the file, in addition to `retriever_email`.
+    # Conversion spreads its reads over them.
+    reader_emails: list[str] = Field(default_factory=list)
+    # Folder names from the root to the file's parent, as the listing user
+    # sees them. None: conversion builds the path itself.
+    folder_path: list[str] | None = None
 
 
 class ListingPartitionKind(str, Enum):

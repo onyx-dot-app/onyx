@@ -10,7 +10,10 @@ from onyx.connectors.models import (
     ConnectorCheckpoint,
     ConnectorFailure,
     Document,
+    DocumentFailure,
     HierarchyNode,
+    ListingPayload,
+    ResolveTarget,
     SlimDocument,
 )
 from onyx.file_store.staging import RawFileCallback
@@ -399,6 +402,33 @@ class Resolver(BaseConnector):
         May also yield HierarchyNode objects for ancestor folders of resolved documents.
         """
         raise NotImplementedError
+
+    # The `ListingPayload` subclass the connector's listing writes, so a
+    # stored stub batch loads with its fields. None: the connector has none.
+    listing_payload_type: ClassVar[type[ListingPayload] | None] = None
+
+    def resolve_targets(
+        self,
+        targets: list[ResolveTarget],
+        include_permissions: bool = False,
+    ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
+        """Yields the documents for the targets. The default turns each
+        target into a failure and calls `reindex`, so it ignores the listing
+        payload. A connector overrides it to convert from the payload with
+        no more source calls than it needs."""
+        yield from self.reindex(
+            [
+                ConnectorFailure(
+                    failed_document=DocumentFailure(
+                        document_id=target.document_id,
+                        document_link=target.document_link,
+                    ),
+                    failure_message="Conversion target",
+                )
+                for target in targets
+            ],
+            include_permissions,
+        )
 
 
 class HierarchyConnector(BaseConnector):

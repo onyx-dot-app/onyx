@@ -4,6 +4,7 @@ import json
 import os
 import sys
 import time
+import zlib
 from collections import deque
 from collections.abc import Callable, Collection, Generator, Iterable, Iterator
 from contextlib import closing
@@ -29,6 +30,7 @@ from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
 from onyx.connectors.google_drive.doc_conversion import (
     _FALLBACK_BINARY_WEB_VIEW_LINK_TEMPLATE,
     _FALLBACK_WEB_VIEW_LINK_TEMPLATES,
+    MAX_RETRIEVER_EMAILS,
     WEB_VIEW_LINK_KEY,
     PermissionSyncContext,
     build_slim_document,
@@ -53,6 +55,7 @@ from onyx.connectors.google_drive.file_retrieval import (
     owner_email,
 )
 from onyx.connectors.google_drive.models import (
+    DriveListingPayload,
     DriveListingState,
     GoogleDriveCheckpoint,
     GoogleDriveFileType,
@@ -108,6 +111,7 @@ from onyx.connectors.models import (
     DocumentFailure,
     EntityFailure,
     HierarchyNode,
+    ResolveTarget,
     SlimDocument,
 )
 from onyx.db.enums import HierarchyNodeType
@@ -240,6 +244,21 @@ def _take[T](pending: dict[str, T], count: int) -> dict[str, T]:
     for key in list(itertools.islice(pending, count)):
         taken[key] = pending.pop(key)
     return taken
+
+
+def _rotated_readers(
+    drive_file: GoogleDriveFileType, payload: DriveListingPayload
+) -> list[str]:
+    """The users who can read the file, starting at a place set by a hash of
+    the file id. This spreads reads over the users with no shared state. The
+    listing user stays in the list, so it is the fallback on 403/404."""
+    readers = list(dict.fromkeys([*payload.reader_emails, payload.retriever_email]))
+    start = zlib.crc32(str(drive_file.get("id", "")).encode()) % len(readers)
+    rotated = readers[start:] + readers[:start]
+    # Conversion tries at most MAX_RETRIEVER_EMAILS users. Keep the listing
+    # user (and a slot for the admin) inside that limit.
+    head = [r for r in rotated if r != payload.retriever_email]
+    return head[: MAX_RETRIEVER_EMAILS - 2] + [payload.retriever_email]
 
 
 def _get_parent_id_from_file(drive_file: GoogleDriveFileType) -> str | None:
@@ -402,6 +421,7 @@ class GoogleDriveConnector(
     Resolver,
 ):
     slim_listing_honors_indexing_start = True
+    listing_payload_type = DriveListingPayload
 
     def __init__(
         self,
@@ -1134,32 +1154,104 @@ class GoogleDriveConnector(
         """
         Converts a single retrieved file to a document.
         """
+        return self._convert_drive_file(
+            retrieved_file.drive_file,
+            [retrieved_file.user_email, self.primary_admin_email]
+            + get_file_owners(retrieved_file.drive_file, self.primary_admin_email),
+            permission_sync_context,
+        )
+
+    def _convert_drive_file(
+        self,
+        drive_file: GoogleDriveFileType,
+        retriever_emails: list[str],
+        permission_sync_context: PermissionSyncContext | None,
+        folder_path: list[str] | None = None,
+    ) -> Document | ConnectorFailure | None:
         try:
             return convert_drive_item_to_document(
                 self.ops,
                 self.allow_images,
                 self.size_threshold,
                 permission_sync_context,
-                [retrieved_file.user_email, self.primary_admin_email]
-                + get_file_owners(retrieved_file.drive_file, self.primary_admin_email),
-                retrieved_file.drive_file,
+                retriever_emails,
+                drive_file,
                 self.raw_file_callback,
+                folder_path,
             )
         except Exception as e:
             logger.exception(
                 "Error extracting document: %s from Google Drive",
-                retrieved_file.drive_file.get("name"),
+                drive_file.get("name"),
             )
             return ConnectorFailure(
                 failed_entity=EntityFailure(
-                    entity_id=retrieved_file.drive_file.get("id", "unknown"),
+                    entity_id=drive_file.get("id", "unknown"),
                 ),
                 failure_message=(
-                    f"Error extracting document: "
-                    f"{retrieved_file.drive_file.get('name')}"
+                    f"Error extracting document: {drive_file.get('name')}"
                 ),
                 exception=e,
             )
+
+    def resolve_targets(
+        self,
+        targets: list[ResolveTarget],
+        include_permissions: bool = False,
+    ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
+        """Converts each target from the file fields its listing stored, with
+        no metadata fetch and no ancestor walk. A target without them goes
+        through `reindex`."""
+        if self._ops is None or self._primary_admin_email is None:
+            raise RuntimeError(
+                "Credentials missing, should not call this method before calling load_credentials"
+            )
+        # Permission sync and the link-only filter read the file's
+        # permissions. A listing without them cannot stand in for the fetch.
+        need_permissions = include_permissions or self.exclude_domain_link_only
+        listed: list[tuple[GoogleDriveFileType, list[str], list[str] | None]] = []
+        unlisted: list[ResolveTarget] = []
+        for target in targets:
+            payload = target.listing_payload
+            if (
+                isinstance(payload, DriveListingPayload)
+                and payload.drive_file
+                and (not need_permissions or "permissionIds" in payload.drive_file)
+            ):
+                drive_file = cast(GoogleDriveFileType, payload.drive_file)
+                readers = _rotated_readers(drive_file, payload)
+                if self.primary_admin_email not in readers:
+                    readers.append(self.primary_admin_email)
+                listed.append((drive_file, readers, payload.folder_path))
+            else:
+                unlisted.append(target)
+        if unlisted:
+            yield from super().resolve_targets(unlisted, include_permissions)
+
+        permission_sync_context = (
+            PermissionSyncContext(
+                primary_admin_email=self.primary_admin_email,
+                google_domain=self.google_domain,
+            )
+            if include_permissions
+            else None
+        )
+        results = cast(
+            list[Document | ConnectorFailure | None],
+            run_functions_tuples_in_parallel(
+                [
+                    (
+                        self._convert_drive_file,
+                        (drive_file, readers, permission_sync_context, folder_path),
+                    )
+                    for drive_file, readers, folder_path in listed
+                ],
+                max_workers=DRIVE_CONVERSION_WORKERS,
+            ),
+        )
+        for result in results:
+            if result is not None:
+                yield result
 
     def _load_from_checkpoint(
         self,
