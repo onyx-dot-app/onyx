@@ -57,8 +57,17 @@ func TestCommandSessionDirAndUnscopedPaths(t *testing.T) {
 	if r := collect(t, s); r.stdout != "/\n" {
 		t.Errorf("no session: %q", r.stdout)
 	}
-	if _, err := c.Start(ctx, &pb.StartRequest{Command: &pb.Command{Argv: []string{"pwd"}, SessionId: "../x"}}); reason(err) != "INVALID_ARGUMENT" {
-		t.Errorf("bad session id: %v", err)
+	for _, cwd := range []string{"", "/tmp"} {
+		if _, err := c.Start(ctx, &pb.StartRequest{Command: &pb.Command{Argv: []string{"pwd"}, Cwd: cwd, SessionId: "../x"}}); reason(err) != "INVALID_ARGUMENT" {
+			t.Errorf("bad session id, cwd %q: %v", cwd, err)
+		}
+	}
+	// A session with an absolute cwd still gets its directory.
+	if _, err := c.Start(ctx, &pb.StartRequest{Command: &pb.Command{Argv: []string{"pwd"}, Cwd: elsewhere, SessionId: "s-abs"}}); err != nil {
+		t.Fatal(err)
+	}
+	if fi, err := os.Stat(filepath.Join(sessions, "s-abs")); err != nil || !fi.IsDir() {
+		t.Errorf("session dir with an absolute cwd: %v", err)
 	}
 }
 

@@ -111,6 +111,7 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
                 scratch_gib=4,
                 guest_kernel="6.18.25",
                 firecracker_version="v1.17.0",
+                managed_mounts=["skills", "user-uploads", "spaces"],
             )
         ]
         self.vms: dict[str, hostagent_pb2.VM] = {}
@@ -142,7 +143,8 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         self.upload_headers: list[dict[str, str]] = []
         # Managed images by ID (the bundle zip) and each VM's active slot.
         self.managed_images: dict[str, bytes] = {}
-        self.managed_active: dict[str, int] = {}
+        # Active slot by (sandbox, mount).
+        self.managed_active: dict[tuple[str, str], int] = {}
         # SwapManagedRequest.mount of each swapped VM, in order.
         self.swap_mounts: list[str] = []
         self._ids = itertools.count(1)
@@ -322,7 +324,8 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         for execution in self.executions.pop(sandbox_id, {}).values():
             execution.vm_gone = True
         self.ended.notify_all()
-        self.managed_active.pop(sandbox_id, None)
+        for slot_key in [k for k in self.managed_active if k[0] == sandbox_id]:
+            del self.managed_active[slot_key]
         for key in [k for k in self.files if k[0] == sandbox_id]:
             del self.files[key]
 
@@ -542,13 +545,13 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
                         )
                     )
                     continue
+                slot_key = (t.sandbox_id, request.mount or "skills")
                 active = (
                     hostagent_pb2.MANAGED_SLOT_A
-                    if self.managed_active.get(t.sandbox_id)
-                    == hostagent_pb2.MANAGED_SLOT_B
+                    if self.managed_active.get(slot_key) == hostagent_pb2.MANAGED_SLOT_B
                     else hostagent_pb2.MANAGED_SLOT_B
                 )
-                self.managed_active[t.sandbox_id] = active
+                self.managed_active[slot_key] = active
                 self.swap_mounts.append(request.mount)
                 results.append(
                     hostagent_pb2.SwapResult(

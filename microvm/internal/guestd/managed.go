@@ -102,10 +102,10 @@ func ParseManagedMounts(s string) ([]ManagedMount, error) {
 				return nil, fmt.Errorf("managed mount %q: %q is not absolute", item, p)
 			}
 		}
-		if seen[name] || seen[parts[0]] || seen[parts[1]] || seen[parts[2]] {
-			return nil, fmt.Errorf("managed mount %q: a name, mount point or device is used twice", item)
-		}
 		for _, k := range []string{name, parts[0], parts[1], parts[2]} {
+			if seen[k] {
+				return nil, fmt.Errorf("managed mount %q: a name, mount point or device is used twice", item)
+			}
 			seen[k] = true
 		}
 		out = append(out, ManagedMount{Name: name, MountPoint: parts[0], Devices: slotDevs(parts[1], parts[2])})

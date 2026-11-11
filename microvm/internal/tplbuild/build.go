@@ -353,6 +353,9 @@ func (b *Builder) build(ctx context.Context, r *Rootfs, key template.Key, name s
 		}
 	}
 	m := template.Manifest{Version: name, Key: key, BuiltAt: b.now().UTC()}
+	for _, mm := range r.Manifest.Guest.ManagedMounts {
+		m.GuestMounts = append(m.GuestMounts, mm.Name)
+	}
 	m.BuildMS = b.now().Sub(t0).Milliseconds()
 	m, prints, err := template.Seal(stage, m, map[string]string{template.RootfsFile: rootSum})
 	if err != nil {

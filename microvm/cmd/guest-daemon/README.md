@@ -94,7 +94,8 @@ agent, every call also carries `x-sandbox-id`.
 | `Interact` | Writes to (or closes) the stdin of a command started with `stdin: true`. |
 | `Cancel` | With no signal (or `SIGKILL`): kills the command's cgroup and returns the result (`CANCELED`, or `EXITED` if the command exited first). With `SIGINT` or `SIGTERM`: sends the signal to the process group of the main process and returns at once (`signaled`); the command can handle it. If it dies of that signal, its result is `CANCELED`. Not an error. |
 | `Inspect`, `List` | Execution records (state, PID, times, byte counts, result), `List` filtered by labels. |
-| `ReadFile`, `WriteFile`, `UploadFile`, `ListFiles`, `DeleteFile`, `ZipFiles` | Session files, or any VM path with no session ID (see Files). |
+| `ReadFile`, `WriteFile`, `ListFiles`, `DeleteFile`, `ZipFiles` | Session files, or any VM path with no session ID (see Files). |
+| `UploadFile` | A free name in a session directory (`attachments/` by default). Always needs a session ID. |
 | `CaptureSession`, `RestoreSession` | Session saves as tar + zstd (see Session saves). |
 | `BrowserStart`, `BrowserStop` | Reserved for the browser. `UNIMPLEMENTED`. |
 | `ManagedStatus(mount)` | The slot on the mount point (by the mount's device number) and, per slot, the device, size, ext4 UUID (read with `O_DIRECT`) and whether it is in use (an exclusive open fails with `EBUSY` while a mount holds it, also a detached one with open files). The node agent calls it. |

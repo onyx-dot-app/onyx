@@ -97,6 +97,9 @@ class TemplateInfo(BaseModel):
     scratch_gib: int
     guest_kernel: str
     firecracker_version: str
+    # Managed mounts the template's VMs can swap. Empty from an agent that
+    # predates named mounts (it swaps only skills).
+    managed_mounts: list[str] = Field(default_factory=list)
 
 
 class NodeInfo(BaseModel):

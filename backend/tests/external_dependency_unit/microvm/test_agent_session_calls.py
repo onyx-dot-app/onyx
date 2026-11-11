@@ -218,6 +218,17 @@ def test_put_managed_image_then_swap(node: Node) -> None:
         image_id=put.image.image_id, targets=[node.vm], mount="spaces"
     )
     assert spaces.ok
+    # Each mount has its own slots: the first spaces swap goes to B.
+    assert spaces.active is ManagedSlot.B
+    assert node.agent.swap_mounts == ["skills", "spaces"]
+
+    # A template without the mount (or an older agent): not sent.
+    node.agent.templates[0].ClearField("managed_mounts")
+    [refused] = node.host.swap_managed(
+        image_id=put.image.image_id, targets=[node.vm], mount="spaces"
+    )
+    assert not refused.ok
+    assert refused.reason is HostAgentErrorReason.MANAGED_SWAP_UNSUPPORTED
     assert node.agent.swap_mounts == ["skills", "spaces"]
 
 

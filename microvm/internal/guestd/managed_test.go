@@ -413,7 +413,7 @@ func TestParseManagedMounts(t *testing.T) {
 	}
 	for _, bad := range []string{
 		"skills=/mnt/skills:/dev/vdc", "Skills=/mnt/skills:/dev/vdc:/dev/vdf", "skills=mnt:/dev/vdc:/dev/vdf",
-		"a=/mnt/a:/dev/vdc:/dev/vdf,b=/mnt/b:/dev/vdc:/dev/vdg", "a=/mnt/a:/dev/vdc:/dev/vdf,a=/mnt/b:/dev/vdg:/dev/vdh",
+		"a=/mnt/a:/dev/vdc:/dev/vdf,b=/mnt/b:/dev/vdc:/dev/vdg", "a=/mnt/a:/dev/vdc:/dev/vdc", "a=/mnt/a:/dev/vdc:/dev/vdf,a=/mnt/b:/dev/vdg:/dev/vdh",
 	} {
 		if _, err := ParseManagedMounts(bad); err == nil {
 			t.Errorf("%q: no error", bad)

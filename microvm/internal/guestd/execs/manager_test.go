@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -259,7 +261,7 @@ func TestSignalProcessGroup(t *testing.T) {
 			t.Fatal("no ready")
 		}
 	}
-	time.Sleep(50 * time.Millisecond) // let sh start sleep
+	waitChild(t, e.PID, "sleep")
 	if _, ended, err := m.Signal(e.ID, syscall.SIGINT); err != nil || ended {
 		t.Fatalf("signal: %v %v", ended, err)
 	}
@@ -306,5 +308,39 @@ func TestCapKeepsRecordsWhenStartFails(t *testing.T) {
 	}
 	if len(m.List(nil)) != 2 {
 		t.Fatalf("a failed start dropped a record: %d left", len(m.List(nil)))
+	}
+}
+
+// waitChild waits until pid has a child process named name.
+func waitChild(t *testing.T, pid int, name string) {
+	t.Helper()
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+		if exec.Command("pgrep", "-P", strconv.Itoa(pid), "-x", name).Run() == nil {
+			return
+		}
+	}
+	t.Fatalf("no %s child of %d", name, pid)
+}
+
+// The first soft signal decides the completion, also when a second one
+// follows before the exit is read.
+func TestFirstSoftSignalDecidesCompletion(t *testing.T) {
+	m, err := NewManager(Config{Isolator: ProcessGroups{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(m.Shutdown)
+	e, err := m.Start(Spec{Argv: []string{"sleep", "30"}, Env: []string{"PATH=/usr/bin:/bin"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, sig := range []syscall.Signal{syscall.SIGINT, syscall.SIGTERM} {
+		if _, _, err := m.Signal(e.ID, sig); err != nil {
+			t.Fatal(err)
+		}
+	}
+	<-e.Done()
+	if res, _ := e.Ended(); res.Completion != Canceled || res.Signal != int(syscall.SIGINT) {
+		t.Fatalf("result %+v", res)
 	}
 }

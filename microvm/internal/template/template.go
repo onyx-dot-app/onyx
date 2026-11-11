@@ -38,6 +38,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -344,9 +345,12 @@ type Manifest struct {
 	Files map[string]string `json:"files"`
 	// SnapshotSHA256 is the hash over (vmstate, mem, rootfs) and then the
 	// other drive files (SnapshotHash).
-	SnapshotSHA256 string    `json:"snapshot_sha256"`
-	BuiltAt        time.Time `json:"built_at"`
-	BuildMS        int64     `json:"build_ms"`
+	SnapshotSHA256 string `json:"snapshot_sha256"`
+	// GuestMounts are the managed mounts that the root drive's guest daemon
+	// serves (rootfs manifest managed_mounts). Empty: skills only.
+	GuestMounts []string  `json:"guest_mounts,omitempty"`
+	BuiltAt     time.Time `json:"built_at"`
+	BuildMS     int64     `json:"build_ms"`
 }
 
 // SnapshotHash hashes the file hashes: first vmstate, mem and rootfs, then
@@ -422,8 +426,18 @@ func (t *Template) ManagedSlots() int {
 	return 1
 }
 
-// ManagedMounts returns the managed mounts that the template's VMs can swap.
-func (t *Template) ManagedMounts() []string { return SwapMounts(t.LayoutVersion) }
+// ManagedMounts returns the managed mounts that the template's VMs can swap:
+// the layout must have their drives, and the guest daemon must serve them
+// (skills always).
+func (t *Template) ManagedMounts() []string {
+	var out []string
+	for _, m := range SwapMounts(t.LayoutVersion) {
+		if m == SkillsMount || slices.Contains(t.GuestMounts, m) {
+			out = append(out, m)
+		}
+	}
+	return out
+}
 
 // HasBalloon reports whether the template's VMs have the balloon device.
 func (t *Template) HasBalloon() bool { return BalloonFor(t.LayoutVersion) != nil }

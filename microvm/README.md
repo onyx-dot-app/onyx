@@ -596,8 +596,10 @@ with no restart. Firecracker cannot add a drive after boot, so every mount has t
 
 New drives go after the old ones, so older guest devices do not move. At Create, slot A of each mount
 has the template's empty ext4 placeholder and attach mounts it; slot B is never mounted by attach. A VM
-of an older layout has only the mounts of its layout (`TemplateInfo.managed_mounts`); attach puts an
-empty read-only tmpfs on the others. An image is not tied to a mount: `SwapManaged` names the mount
+has only the mounts of its layout that its root drive's guest daemon serves (rootfs manifest
+`managed_mounts`, kept in the template manifest as `guest_mounts`; `TemplateInfo.managed_mounts`); attach
+puts an empty read-only tmpfs on a mount with no drive. A swap of another mount fails with
+`MANAGED_SWAP_UNSUPPORTED`. An image is not tied to a mount: `SwapManaged` names the mount
 (`mount`, default `skills`).
 
 **Images.** `PutManagedImage` streams a zip (first message: SHA256 and size; then data, at most 4 MiB per

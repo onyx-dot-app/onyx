@@ -322,12 +322,15 @@ func (s *Server) spec(c *pb.Command) (execs.Spec, error) {
 // below it. Any absolute cwd is allowed: commands are not confined to the
 // session.
 func (s *Server) commandDir(sessionID, cwd string) (string, error) {
-	if sessionID == "" || filepath.IsAbs(cwd) {
+	if sessionID == "" {
 		return cwd, nil
 	}
 	dir, err := s.files.SessionDir(sessionID)
 	if err != nil {
 		return "", fileError(err)
+	}
+	if filepath.IsAbs(cwd) {
+		return cwd, nil
 	}
 	return filepath.Join(dir, cwd), nil
 }

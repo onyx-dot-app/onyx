@@ -509,6 +509,15 @@ func TestLayout5ManagedMounts(t *testing.T) {
 	if _, ok := MountDrivesOf("other"); ok {
 		t.Error("unknown mount found")
 	}
+	// A root drive whose daemon serves only skills (an older build).
+	old := &Template{Manifest: Manifest{Key: Key{LayoutVersion: 5}}}
+	if got := old.ManagedMounts(); !slices.Equal(got, []string{SkillsMount}) {
+		t.Errorf("older guest: %v", got)
+	}
+	some := &Template{Manifest: Manifest{Key: Key{LayoutVersion: 5}, GuestMounts: []string{"spaces"}}}
+	if got := some.ManagedMounts(); !slices.Equal(got, []string{SkillsMount, "spaces"}) {
+		t.Errorf("guest with spaces: %v", got)
+	}
 
 	dir := t.TempDir()
 	if _, err := WriteFake(dir, "l5", testKey); err != nil {

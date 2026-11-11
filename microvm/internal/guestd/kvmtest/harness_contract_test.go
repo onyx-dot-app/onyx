@@ -153,7 +153,9 @@ cd /etc && pwd`}, SessionId: "s1"})
 		}
 		id := st.GetStarted().GetExecutionId()
 		waitStdout(ctx, t, c, key, id, "ready")
-		time.Sleep(200 * time.Millisecond)
+		// SIGINT must reach the child: wait until bash runs sleep.
+		waitFor(ctx, t, c, key, fmt.Sprintf(`for s in /proc/[0-9]*/stat; do set -- $(cat $s 2>/dev/null); [ "$4" = %d ] && [ "$2" = "(sleep)" ] && echo up; done | head -1`,
+			st.GetStarted().GetPid()), "up")
 		cr, err := c.Cancel(kctx, &pb.CancelRequest{ExecutionId: id, Signal: pb.CancelSignal_CANCEL_SIGNAL_SIGINT})
 		if err != nil || !cr.GetSignaled() || cr.GetResult() != nil {
 			t.Fatalf("cancel: %v %v", cr, err)

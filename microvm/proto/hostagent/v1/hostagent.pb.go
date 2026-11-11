@@ -2307,7 +2307,9 @@ type TemplateInfo struct {
 	// memory to the node.
 	Balloon bool `protobuf:"varint,15,opt,name=balloon,proto3" json:"balloon,omitempty"`
 	// Managed mounts that the template's VMs can swap: "skills" from layout
-	// 3, also "user-uploads" and "spaces" from layout 5.
+	// 3, also "user-uploads" and "spaces" from layout 5 when the root drive's
+	// guest daemon serves them (rootfs manifest managed_mounts). Empty from
+	// an agent that predates named mounts: send it no other mount.
 	ManagedMounts []string `protobuf:"bytes,16,rep,name=managed_mounts,json=managedMounts,proto3" json:"managed_mounts,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
