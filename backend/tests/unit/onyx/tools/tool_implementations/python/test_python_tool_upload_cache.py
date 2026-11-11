@@ -6,8 +6,11 @@ on every agent loop iteration.
 """
 
 import json
+import logging
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
+
+import pytest
 
 from onyx.agents.tools import ToolInvocation
 from onyx.llm.cancellation import CancellationSignal
@@ -547,3 +550,43 @@ def test_staging_notice_combines_drops_and_upload_failures() -> None:
     assert "x.csv" in notice
 
     assert _build_staging_notice(0, 5, []) is None
+
+
+@patch(f"{TOOL_MODULE}.CODE_INTERPRETER_BASE_URL", "http://fake:8000")
+def test_logs_omit_code_filenames_and_error_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    code_marker = "code_marker_9c1e"
+    file_marker = "file_marker_4b2d.csv"
+    error_marker = "error_marker_77aa"
+    tool = _make_tool()
+    client = MagicMock()
+    client.upload_file.return_value = None  # upload fails -> staging notice
+    client.execute_streaming.side_effect = RuntimeError(error_marker)
+
+    ctx = MagicMock()
+    ctx.__enter__ = MagicMock(return_value=client)
+    ctx.__exit__ = MagicMock(return_value=False)
+
+    with (
+        caplog.at_level(logging.DEBUG, logger="onyx.utils.logger"),
+        patch(f"{TOOL_MODULE}.CodeInterpreterClient", return_value=ctx),
+    ):
+        result = tool.run(
+            invocation=ToolInvocation(
+                call_id="test",
+                arguments={"code": f"print('{code_marker}')"},
+                cancellation=CancellationSignal(),
+                update=lambda _progress: None,
+            ),
+            context=ToolContext(
+                chat_files=[ChatFile(filename=file_marker, content=b"data")]
+            ),
+        )
+
+    assert isinstance(result, ToolResult)
+    assert result.is_error
+    assert caplog.records
+    logged = caplog.text
+    for marker in (code_marker, file_marker, error_marker):
+        assert marker not in logged

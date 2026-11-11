@@ -168,8 +168,8 @@ def _select_files_for_staging(
         for idx, content in zip(batch, contents, strict=True):
             if content is None:
                 logger.warning(
-                    "Failed to read file for Python execution: %s",
-                    chat_files[idx].filename,
+                    "Failed to read file for Python execution: file_id=%s",
+                    chat_files[idx].file_id,
                 )
                 read_failures.append(chat_files[idx].filename)
                 continue
@@ -335,7 +335,8 @@ class PythonTool(Tool):
             for plan, ci_file_id in zip(misses, upload_results, strict=True):
                 if ci_file_id is None:
                     logger.warning(
-                        "Failed to upload file for Python execution: %s", plan.file_name
+                        "Failed to upload file for Python execution: %d bytes",
+                        len(plan.content),
                     )
                     continue
                 self._uploaded_file_cache[plan.cache_key] = ci_file_id
@@ -348,7 +349,6 @@ class PythonTool(Tool):
                 failed_uploads.append(plan.file_name)
                 continue
             files_to_stage.append({"path": plan.file_name, "file_id": ci_file_id})
-            logger.info("Staged file for Python execution: %s", plan.file_name)
         return files_to_stage, failed_uploads
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
@@ -386,10 +386,20 @@ class PythonTool(Tool):
                 selection.read_failures + upload_failures,
             )
             if staging_notice:
-                logger.warning(staging_notice)
+                logger.warning(
+                    "Python execution staging incomplete: staged=%d dropped=%d failed=%d",
+                    len(files_to_stage),
+                    selection.dropped_by_caps,
+                    len(selection.read_failures) + len(upload_failures),
+                )
 
             try:
-                logger.debug("Executing code: %s", code)
+                logger.debug(
+                    "Executing code: %d chars, %d lines, %d staged files",
+                    len(code),
+                    code.count("\n") + 1,
+                    len(files_to_stage),
+                )
 
                 # Execute code with streaming (falls back to batch if unavailable)
                 stdout_parts: list[str] = []
@@ -482,8 +492,8 @@ class PythonTool(Tool):
                     except Exception as e:
                         logger.error(
                             "Failed to handle generated file %s: %s",
-                            workspace_file.path,
-                            e,
+                            workspace_file.file_id,
+                            type(e).__name__,
                         )
 
                 # Cleanup Code Interpreter files (generated files)
@@ -524,7 +534,7 @@ class PythonTool(Tool):
                 )
 
             except Exception as e:
-                logger.error("Python execution failed: %s", e)
+                logger.error("Python execution failed: %s", type(e).__name__)
                 error_msg = str(e)
 
                 # Return error result
