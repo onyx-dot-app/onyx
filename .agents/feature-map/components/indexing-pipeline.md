@@ -334,6 +334,13 @@ the error type on purpose in auth code.
   `COMPLETED_WITH_ERRORS` (`indexing/persistent_indexing.py`). Without it, the
   task fails and the next attempt reissues the batch. Connector generator
   exceptions in docfetching fail the attempt either way.
+- **A document can point at a STUB parent.** When a document's parent node is
+  not stored yet, the document gets a STUB hierarchy node
+  (`redis/redis_hierarchy.py:resolve_parent_node_ids`), and the parent fills
+  it when it arrives. When an attempt finishes with success,
+  `backend/onyx/db/hierarchy.py:remove_unfilled_stub_hierarchy_nodes_for_cc_pair` moves
+  what is under a STUB that is still not filled to the source root and removes
+  the STUB. A failed or canceled attempt keeps its STUBs.
 - **The embedding rate limit blocks instead of failing.** The limit is one
   sliding window per tenant in Redis
   (`natural_language_processing/embedding_rate_limit.py`). A full window or a
