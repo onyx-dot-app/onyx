@@ -40,7 +40,6 @@ from sqlalchemy import (
     ColumnElement,
     Select,
     and_,
-    delete,
     exists,
     func,
     or_,
@@ -1192,7 +1191,7 @@ def bulk_share_skills__no_commit(
                     db_session,
                 )
         except OnyxError as exc:
-            failed |= {skill_id: exc.detail for skill_id in candidates}
+            failed |= dict.fromkeys(candidates, exc.detail)
         else:
             failed |= {
                 skill_id: exc.detail for skill_id, exc in result.failures.items()

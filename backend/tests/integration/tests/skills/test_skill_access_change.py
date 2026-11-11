@@ -141,15 +141,16 @@ def _assert_rows_match(*skill_ids: UUID) -> None:
 
 def _promote_to_manager(user_id: str, group_id: int) -> None:
     with get_session_with_current_tenant() as db_session:
-        result = db_session.execute(
+        promoted = db_session.scalars(
             update(User__UserGroup)
             .where(
                 User__UserGroup.user_id == UUID(user_id),
                 User__UserGroup.user_group_id == group_id,
             )
             .values(is_manager=True)
-        )
-        assert result.rowcount == 1
+            .returning(User__UserGroup.user_id)
+        ).all()
+        assert len(promoted) == 1
         recompute_user_permissions__no_commit(UUID(user_id), db_session)
         db_session.commit()
 
@@ -234,7 +235,9 @@ def test_group_manager_is_refused_outside_their_groups(
 ) -> None:
     manager, managed, other = manager_env
     skills = [
-        SkillManager.create_custom(manager, name=_name("scoped"), group_ids=[managed.id])
+        SkillManager.create_custom(
+            manager, name=_name("scoped"), group_ids=[managed.id]
+        )
         for _ in range(2)
     ]
     outside = {"group_shares": [{"group_id": other.id, "permission": "VIEWER"}]}
@@ -312,7 +315,9 @@ def test_admin_changes_the_company_install_setting(admin_user: DATestUser) -> No
     bulk = SkillManager.create_custom(admin_user, name=_name("company-bulk"))
 
     # A value sets it.
-    _share(admin_user, single.id, {"installation_policy": "REQUIRED"}).raise_for_status()
+    _share(
+        admin_user, single.id, {"installation_policy": "REQUIRED"}
+    ).raise_for_status()
     result = _bulk_share(admin_user, [bulk.id], {"installation_policy": "DEFAULT"})
     assert result["failed"] == []
     assert _company_settings(single.id) == ("REQUIRED", "REQUIRED")

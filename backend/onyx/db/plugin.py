@@ -1022,7 +1022,9 @@ def _new_group_rows(
     return rows
 
 
-def _group_shares(rows: Mapping[int, PluginGroupRow]) -> dict[int, SkillSharePermission]:
+def _group_shares(
+    rows: Mapping[int, PluginGroupRow],
+) -> dict[int, SkillSharePermission]:
     return {
         group_id: row.permission
         for group_id, row in rows.items()
@@ -1044,8 +1046,7 @@ def _check_access_change(
     ):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "Only an organization-wide skill manager can change the install "
-            "setting.",
+            "Only an organization-wide skill manager can change the install setting.",
         )
     if change.group_grants is None:
         return
@@ -1231,8 +1232,7 @@ def _apply_to_plugin__no_commit(
         ):
             raise OnyxError(
                 OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-                "You do not have permission to change organization-wide skill "
-                "access.",
+                "You do not have permission to change organization-wide skill access.",
             )
         if skill is not None and skill.public_permission is None:
             skill.public_permission = SkillSharePermission.VIEWER
