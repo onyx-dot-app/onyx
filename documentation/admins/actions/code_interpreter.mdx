@@ -30,35 +30,29 @@ Onyx copies these files into the working directory of each code run:
   [knowledge](/admins/agents/overview) or in the chat's Project.
 
 Onyx copies the original file, not its extracted text. The code can open a Word, PowerPoint, or Excel template,
-change it, and return the changed copy to the user. The sandbox includes `python-docx`, `python-pptx`,
-and `openpyxl` for this.
+change it, and return the changed copy to the user.
 
 Onyx does not copy other Agent and Project file types, for example PDF and plain text files.
-The model reads the text of these files in the prompt or through search.
 
 The `CODE_INTERPRETER_MAX_STAGED_FILES` and `CODE_INTERPRETER_MAX_STAGED_BYTES` limits apply to all of these files
-together. If a code run has more files than the limits allow, Onyx first copies the files that the code names.
-Onyx always copies at least one file, even if that file is larger than `CODE_INTERPRETER_MAX_STAGED_BYTES`.
-The model gets a notice that names the files that Onyx did not copy.
+together.
 
 ## Availability
 
 Code Interpreter is available on all editions. Onyx Cloud has it ready to use.
 
 Self-hosted deployments run the code in a separate `code-interpreter` container that ships with the standard Docker
-Compose and Helm deployments, including the Onyx Lite overlays. The Onyx API server never runs the code itself.
-To use a Code Interpreter service you run yourself, point `CODE_INTERPRETER_BASE_URL` at it.
+Compose and Helm deployments, including the Onyx Lite overlays. To use a Code Interpreter service you run yourself,
+point `CODE_INTERPRETER_BASE_URL` at it.
 
 ## Connect or disconnect the Code Interpreter
 
 Open **Admin Panel → Code Interpreter**. The card shows the connection status of the Code Interpreter service.
-The status refreshes every 30 seconds.
 
 <img className="rounded-image" src="/assets/admins/actions/code_interpreter.webp" alt="Code Interpreter page in the Onyx Admin Panel"/>
 
 Click **Disconnect** to turn Code Interpreter off for the whole deployment.
-Onyx removes the action from every chat without changing any Agent configuration. Running sessions stop.
-No data is removed from the runtime.
+Onyx removes the action from every chat without changing any Agent configuration.
 
 ## Enable Code Interpreter for Agents
 

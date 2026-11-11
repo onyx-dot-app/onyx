@@ -105,9 +105,8 @@ Confirming the consent dialog does the following in one step:
   Standard answers and SCIM tokens are deactivated. Custom branding and chat retention are reset.
 - **The license is removed** from the deployment.
 
-No indexed data is deleted, and chats, agents, connectors and users stay as they are. If the request fails part way,
-nothing is lost: the license is removed last,
-so the deployment stays licensed and running the downgrade again finishes the job.
+No indexed data is deleted, and chats, agents, connectors and users stay as they are. If the downgrade fails part way,
+the deployment stays licensed. Run the downgrade again to finish it.
 
 To return to a paid plan later, [subscribe](/admins/billing/subscribing) or upload a license file again.
 Connector permissions and user groups are not restored by that. Set them up again after the license is active.

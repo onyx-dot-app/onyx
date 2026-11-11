@@ -4,8 +4,7 @@ description: "Connect external tools so Craft can retrieve live context and take
 icon: "plug"
 ---
 
-Craft Apps give Craft controlled access to the tools where your work already happens.
-A Craft App is a catalog of API endpoints for one application, such as Slack. After you connect your account,
+Craft Apps give Craft controlled access to the tools where your work already happens. After you connect your account,
 Craft can read live information and, when allowed, create or update content as you.
 
 Craft acts only on content that your account can access. For example,
@@ -34,8 +33,7 @@ These sources serve different purposes in a Craft session:
 
 ## Available apps
 
-Craft Apps are available in all editions. The Plugins page shows only the apps your organization has enabled.
-Onyx includes built-in support for:
+The Plugins page shows only the apps your organization has enabled. Onyx includes built-in support for:
 
 | App                 | Example uses                                                                                        |
 | ------------------- | --------------------------------------------------------------------------------------------------- |
@@ -126,7 +124,7 @@ Before approving, confirm:
 
 <Warning>
   Prefer **Approve once** for sends, deletes, customer-facing changes, calendar changes,
-  and other consequential actions. If an approval expires before you respond, the request fails closed and does not run.
+  and other consequential actions. If an approval expires before you respond, the request does not run.
 </Warning>
 
 If your admin lets users manage approval settings,
@@ -147,8 +145,7 @@ If a run reaches an action that needs approval, the run stops and waits for you.
 Open **Plugins**, click the app, and click **Disconnect**.
 
 <Info>
-  Raw app credentials never enter Craft's sandbox workspace.
-  The sandbox proxy injects them only into approved outbound requests. For the full trust and network model,
+  Raw app credentials never enter Craft's sandbox workspace. For the full trust and network model,
   see [Craft Architecture](/security/architecture/craft).
 </Info>
 

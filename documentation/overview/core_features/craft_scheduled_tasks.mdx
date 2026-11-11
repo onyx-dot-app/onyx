@@ -24,8 +24,7 @@ Use Scheduled Tasks for work that has a predictable cadence and a clear definiti
 
 ## What each run can access
 
-Scheduled Tasks are available in all editions. They run as the person who created them.
-Each run uses that person's current:
+Scheduled Tasks run as the person who created them. Each run uses that person's current:
 
 - Onyx permissions and company knowledge access.
 - Connected Apps, MCP plugins, and external-account permissions.
@@ -132,17 +131,16 @@ If your admin turned off **Let users manage approval settings** for an App, the 
 
 Open a task to see its plugins, approval settings, and **Run history**.
 
-Select a run after it creates a session to inspect its messages, files, previews, and artifacts.
-Queued runs do not have a session yet, and skipped runs never create one, so those rows cannot be opened.
+Select a run to inspect its messages, files, previews, and artifacts.
 
 | Status                | Meaning                                                                                                                 |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| **Queued**            | Waiting for a worker to start the run.                                                                                  |
+| **Queued**            | Waiting to start.                                                                                                       |
 | **Running**           | Craft is actively working in the generated session.                                                                     |
 | **Succeeded**         | Craft completed the run normally.                                                                                       |
 | **Failed**            | The run hit an error or exceeded its execution window. Open its session when available to investigate.                  |
 | **Skipped**           | The run did not start, usually because a previous run was still queued or running, or Craft was disabled for the owner. |
-| **Awaiting approval** | The run reached an App action that required approval. It will not resume automatically.                                 |
+| **Awaiting approval** | The run reached an App action that required approval.                                                                    |
 
 Watch for Onyx notifications when a run fails or reaches **Awaiting approval**.
 Failed and approval-blocked runs are not retried automatically.

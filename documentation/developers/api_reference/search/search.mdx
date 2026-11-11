@@ -9,9 +9,8 @@ openapi: "POST /search"
 </Info>
 
 <Note>
-  This is the endpoint to reach for when you want Onyx's search results in your own application.
-  It runs the same retrieval pipeline as the Search action in chat and returns ranked document sections,
-  without spending an LLM call on writing an answer.
+  Use this endpoint to get Onyx search results in your own application.
+  It runs the same search as the Search action in chat and returns ranked document sections, with no generated answer.
   The endpoint behind the Onyx Search UI is [Handle Send Search
   Message](/developers/api_reference/search/handle_send_search_message), which exposes keyword expansion,
   LLM document selection and streaming instead.

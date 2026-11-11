@@ -51,7 +51,6 @@ The URL can return either format:
 - **JWKS**: a JSON document with a `keys` array. Onyx picks the key whose `kid` matches the token header, then falls back to `x5t`. If the set has one key, Onyx uses it.
 - **PEM**: a single RSA public key in PEM format.
 
-Onyx caches the key material and fetches it again when a token arrives with an unknown key.
 You can rotate keys without a restart.
 
 ## Token Requirements

@@ -227,7 +227,6 @@ JWT passthrough works on self-hosted Onyx only. It does not work on Onyx Cloud.
   </Step>
 </Steps>
 
-The widget calls `tokenProvider` again for each retry, so a token that expires during a retry is replaced.
 The widget does not retry a `401` response.
 
 The widget stores the conversation in the browser tab and links it to the token subject (the `sub` claim).

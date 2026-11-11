@@ -83,20 +83,6 @@ The message names the missing scope.
 
 <img className="rounded-image" src="/assets/admins/connectors/hubspot/HubSpotChecks.webp" alt="Connector Checks card with every HubSpot check passed"/>
 
-| Check | Needs |
-| ----- | ----- |
-| Access token is valid | A private app access token that HubSpot accepts |
-| Tickets can be read | `tickets`, when Tickets are selected |
-| Companies can be read | `crm.objects.companies.read`, when Companies are selected |
-| Deals can be read | `crm.objects.deals.read`, when Deals are selected |
-| Contacts can be read | `crm.objects.contacts.read`, when Contacts are selected |
-| Associated records can be listed | The read scope of the linked type. Not required: indexing skips links it cannot read. |
-| Notes can be read | The read scope of the indexed type. Not required: indexing skips notes it cannot read. |
-| Users can be listed | `settings.users.read`. Runs only with **Sync with HubSpot**. |
-| Record viewers can be read | Access to HubSpot's permitted-users API. Runs only with **Sync with HubSpot**. |
-
-An empty portal passes every check, since there is no record to probe.
-
 ## Sync with HubSpot
 
 With **Sync with HubSpot**, Onyx asks HubSpot which users may view each record and grants access to those users.

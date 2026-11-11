@@ -14,9 +14,8 @@ any chat model in Onyx can invoke the action.
 Image models come from the LLM providers you have already connected. Onyx does not ask for an API key again.
 The Image Generation page lists each connected provider that has image models, and the models it serves.
 
-**Available Models** has two tabs. The **Recommended** tab opens by default.
-It shows the image models in the Onyx model catalog that the vendor has not retired, for example GPT Image,
-Gemini image (Nano Banana), Imagen, and the Bedrock image models. Open the **All** tab to see every model on a provider,
+**Available Models** has a **Recommended** tab and an **All** tab.
+Open the **All** tab to see every model on a provider,
 for example a new model or a model name that a gateway such as LiteLLM Proxy or OpenRouter defines.
 
 <Note>
@@ -61,12 +60,11 @@ Image generation does not appear in chat until a default model is set, even if a
 
 - **Default Chat**: Go to **Admin Panel > Chat Preferences > Actions & Tools** and turn on **Image Generation**.
 - **Custom Agents**: In the [Agent editor](/admins/agents/overview), open **Actions** and turn on
-  **Image Generation**. The toggle stays disabled until an admin connects a model.
+  **Image Generation**.
 
 ## Using Image Generation
 
-When a user asks for an image, the Agent calls the default image model with a prompt it writes from the request.
-Generated images belong to the chat session that created them.
+When a user asks for an image, the Agent creates it with the default image model.
 
 To edit an image, the user attaches it to the message (or refers to an image generated earlier in the chat)
 and describes the change. The OpenAI and Azure OpenAI models accept up to 16 reference images;

@@ -27,8 +27,8 @@ A hook point is a defined stage in Onyx's pipeline where custom logic can be inj
 - **What** response it expects back
 - A default timeout and fail strategy
 
-Hook points are intentional — once a hook point is added, Onyx commits to maintaining its payload structure,
-response format, and behavior — meaning it won't change in a breaking way without a proper deprecation process.
+Onyx does not make breaking changes to a hook point's payload, response format,
+or behavior without a deprecation process.
 
 ### Hooks
 
@@ -71,7 +71,7 @@ Once connected, you can:
 
 ## Hook Health
 
-Onyx monitors your endpoint after the hook is registered and connected, displays its current health status.
+Each connected hook shows the health status of its endpoint.
 
 | Status | Meaning |
 |---|---|
@@ -96,9 +96,6 @@ Click the status to open **Most Recent Errors** and the full error log for the p
 The Document Ingestion hook point lets you intercept every document before it enters the Onyx indexing pipeline.
 Your endpoint receives the fully-formed document and can filter it out, rewrite its content,
 or pass it through unchanged.
-
-It runs immediately after Onyx's internal validation and before the indexing pipeline begins — no partial writes have
-occurred yet.
 
 | Setting | Value |
 |---|---|
@@ -251,14 +248,6 @@ A successful response from your endpoint must return HTTP `200` and a JSON body:
   </Accordion>
 </AccordionGroup>
 
-### Authentication
-
-If you configured an API key when registering the hook, Onyx includes it in every request:
-
-```
-Authorization: Bearer <your-api-key>
-```
-
 ### Lambda Example
 
 You can use an [AWS Lambda function](https://docs.aws.amazon.com/lambda/latest/dg/getting-started.html)
@@ -377,13 +366,9 @@ the material should not appear in results since file connector documents are bei
 The Document Push hook point fires after each document is successfully indexed.
 Use it to push indexed content to an external destination such as a wiki, data warehouse, or audit log.
 
-Unlike Document Ingestion (which runs before indexing and can modify or drop documents),
-this hook fires **after** the document has been written to the index.
-
 <Note>
-  Document Push only fires for **public connectors** in **single-tenant** deployments,
-  and only during **incremental syncs** — it does not fire during an initial index or a full re-index from the
-  beginning.
+  Document Push only fires for **public connectors**, and only during **incremental syncs**.
+  It does not fire during an initial index or a full re-index from the beginning.
 </Note>
 
 | Setting | Value |
@@ -440,14 +425,6 @@ Onyx sends a `POST` request to your endpoint once per successfully indexed docum
 
 The response body is **not used** — any `2xx` status code is treated as success.
 Your endpoint can return an empty body or any JSON object.
-
-### Authentication
-
-If you configured an API key when registering the hook, Onyx includes it in every request:
-
-```
-Authorization: Bearer <your-api-key>
-```
 
 ### Lambda Example
 
@@ -506,7 +483,7 @@ The Query Processing hook point lets you intercept every user query before it en
 Your endpoint receives the raw query and the user's identity, and can rewrite the query, reject it entirely,
 or pass it through unchanged.
 
-It runs immediately after the user submits a message, before anything is saved to the database or sent to the LLM.
+It runs when the user submits a message, before Onyx saves the message or sends it to the LLM.
 
 | Setting | Value |
 |---|---|
@@ -569,14 +546,6 @@ A successful response from your endpoint must return HTTP `200` and a JSON body:
     ```
   </Accordion>
 </AccordionGroup>
-
-### Authentication
-
-If you configured an API key when registering the hook, Onyx includes it in every request:
-
-```
-Authorization: Bearer <your-api-key>
-```
 
 ### Lambda Example
 
@@ -677,7 +646,4 @@ If your use case requires a pipeline injection point that doesn't exist yet, ope
 - **What your endpoint would return** — how should Onyx change its behavior based on your response?
 - **Use cases** — what problem does this solve? Are other customers likely to need the same point?
 
-The Onyx team reviews proposals and implements hook points that have broad applicability. Once a hook point is added,
-Onyx commits to maintaining its payload structure, response format,
-and behavior — meaning it won't change in a breaking way without a proper deprecation process.
-Because of this long-term commitment, each proposal is evaluated carefully before being added.
+The Onyx team reviews proposals and adds hook points that have broad applicability.

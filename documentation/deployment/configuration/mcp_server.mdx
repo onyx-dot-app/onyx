@@ -59,7 +59,6 @@ docker compose -f docker-compose.prod.yml up -d --force-recreate mcp_server ngin
 
 If you changed `WEB_DOMAIN`, recreate the affected API, web,
 and MCP services as part of your deployment update so they use the new value.
-The included nginx startup configuration loads the MCP routing rules when `MCP_SERVER_ENABLED=true`.
 
 ### Kubernetes with Helm
 
@@ -86,12 +85,7 @@ If you use a custom ingress or proxy, provide equivalent routing as described be
 
 Deploy matching Onyx versions for the API, web, MCP, and background services.
 Apply the normal database migrations for the release and restart the affected services.
-OAuth grants and tokens use database records introduced by the feature; updating only the MCP container is insufficient.
-Self-hosted installations with a custom `POSTGRES_DEFAULT_SCHEMA` store OAuth client registrations in that schema.
-The release migration moves earlier registrations out of `public` and keeps their client IDs.
-
-Keep the background workers and scheduled tasks running for expired-grant cleanup.
-Expired credentials stop working at their expiration time even if cleanup has not yet removed their database records.
+Updating only the MCP container is not sufficient.
 
 ## Configure public routing
 
@@ -219,7 +213,6 @@ Refresh tokens rotate: save each newly returned refresh token and discard the pr
 Reusing a consumed refresh token revokes the grant, so concurrent refresh attempts can require the user to reconnect.
 Serialize refresh operations for a connection.
 
-Onyx deletes expired grants and their tokens daily.
 Clients can revoke tokens through the advertised revocation endpoint.
 Users can review and revoke OAuth connections in Onyx. A revoked grant stops authorizing requests;
 the client must obtain a new user authorization to reconnect.

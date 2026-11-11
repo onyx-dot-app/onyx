@@ -15,11 +15,8 @@ It indexes only the content that service user can read, so that user's access de
 | ----------- | -------------------------------------------------------------------------------------------------------------------------- |
 | Content     | One document per LumApps content item. Onyx indexes its title and body text and keeps a link back to LumApps.           |
 | Live only   | Only content LumApps reports as live is indexed. Archived and unpublished content is skipped.                           |
-| Metadata    | Metadata values are resolved to their labels, so a tag reads as its name rather than its internal id.                    |
 | Language    | Content and metadata labels are read in one language. See **Language** below.                                           |
-| Permissions | Not available. **Sync with LumApps** (permission sync) is not offered, so **Document Access** can only be **Everyone in Your Organization** or **Specific Groups**. |
-
-Indexing is checkpointed, so a large intranet is covered across several attempts rather than one long run.
+| Permissions | Not available. **Sync with LumApps** (permission sync) is not offered. |
 
 <Warning>
   The access type applies to everything the service user can read.
@@ -81,17 +78,6 @@ You need:
   content is indexed in the language you choose here. To index a second language,
   add a second connector with a different **Language**.
 </Note>
-
-## Limits
-
-| Limit                | Value | Notes                                                                                   |
-| -------------------- | ----- | ------------------------------------------------------------------------------------------- |
-| LumApps API call     | 60s   |                                                                                          |
-| Retries per request  | 5     | Backed off up to 60s between attempts, honouring a `Retry-After` header when LumApps sends one. |
-| Items per request    | 100   | The LumApps maximum. Onyx never asks for more.                                            |
-
-The access token is short-lived and Onyx mints a new one a minute before the old one expires,
-so no token rotation is needed on your side. The connector downloads no files, so it has no file-size cap.
 
 ## Troubleshooting
 

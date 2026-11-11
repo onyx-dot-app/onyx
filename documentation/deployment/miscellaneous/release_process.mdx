@@ -34,7 +34,7 @@ https://cloud.onyx.app/api/versions
 This endpoint returns the current latest stable and beta versions available on Docker Hub.
 
 <Tip>
-  If you don't specify a version when deploying Onyx, you will get the latest nightly builds.
+  If you do not set a version, Onyx uses the `latest` tag. It points to the latest stable release.
 </Tip>
 
 ## Versioning Scheme
@@ -63,10 +63,6 @@ major.minor.hotfix-beta.betahotfix
   - **Minor version** - Incremented on new features, bugfixes, and backwards-compatible changes
   - **Hotfix version** - Incremented only when backporting bugfixes to releases
 </Note>
-
-### Docker Files and Helm Charts
-
-Changes to Docker files and Helm charts increment the version numbers in their respective files.
 
 ## Release Schedule
 

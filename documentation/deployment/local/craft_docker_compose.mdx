@@ -118,10 +118,7 @@ services:
 ```
 
 `SSL_CERT_FILE` configures OAuth HTTP requests.
-`SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA` configures forwarded HTTPS traffic.
-The proxy falls back to `SSL_CERT_FILE` when its upstream CA setting is unset or blank.
-The explicit upstream CA setting takes precedence.
-Set both as shown for compatibility with releases without this fallback.
+`SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA` configures forwarded HTTPS traffic. Set both as shown.
 Setting `REQUESTS_CA_BUNDLE` alone does not configure forwarded HTTPS traffic.
 
 Place your bundle at `certs/upstream-ca-bundle.crt`, then recreate the proxy:

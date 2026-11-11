@@ -296,10 +296,8 @@ https://*.example.com/*
   Expose only a deliberately secured, publicly routable HTTPS endpoint if Craft must call a custom service.
 </Warning>
 
-Avoid overlapping URL patterns between Apps. When more than one App claims the same URL,
-the lowest-ID App—usually the earliest created—is selected first.
-A disabled App can still claim the match before credential availability is checked,
-so do not rely on enablement to disambiguate overlapping patterns.
+Do not use overlapping URL patterns in two Apps. Craft uses only one App for a URL,
+and a disabled App can still match it. Turning off one App does not resolve the overlap.
 
 ### Configure credentials
 
@@ -314,9 +312,7 @@ Add a value under **Organization credentials** when every user should use the sa
 Leave a placeholder without an organization value when each user should enter their own value when they connect the app.
 You can also leave the header pattern empty for a public API that requires no credential.
 
-Raw organization and user credentials are encrypted in Onyx-controlled storage.
-They are not copied into the custom bundle or sandbox workspace. After a request passes its gate,
-the sandbox proxy injects the rendered headers on the way out.
+Onyx encrypts organization and user credentials. They are never copied into the sandbox.
 
 <Warning>
   A custom App has no action catalog. Every request that matches its URL patterns requires approval.

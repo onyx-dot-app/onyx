@@ -16,7 +16,6 @@ Setup](/admins/connectors/official/microsoft-365/setup).
 | ---- | -------- |
 | Users | Index every eligible user, or list specific user principal names or primary email addresses. Disabled users and guests are skipped. |
 | Files | Each supported file becomes one document. Folders become the hierarchy shown in Onyx. |
-| Refreshes | The first run walks each drive. Later runs use Microsoft Graph delta updates to read only changes. |
 | Deletions | Pruning removes files and folders that no longer exist or are no longer in scope. |
 | Permissions | Optional, on paid plans. Each file keeps its owner, direct user access, group access, and sharing-link access. |
 
@@ -60,8 +59,7 @@ Both client secret and certificate credentials support indexing and permission s
 
   <Step title="Set an indexing start date">
     Under **Schedule**, set **Index Documents After** unless you need every file.
-    Onyx indexes files created or changed on or after that date.
-    See [Advanced Configuration](/admins/connectors/overview#advanced-configuration).
+    Onyx indexes files created or changed on or after that date. See [Schedule](/admins/connectors/overview#schedule).
   </Step>
 
   <Step title="Connect and verify">
@@ -112,16 +110,14 @@ sites](/admins/connectors/official/microsoft-365/setup#limiting-the-app-to-speci
 | Limit | Value | Notes |
 | ----- | ----- | ----- |
 | File size | 20 MB | Onyx skips larger files. Self-hosted deployments can change this with `SHAREPOINT_CONNECTOR_SIZE_THRESHOLD`, in bytes. |
-| Empty or unsupported files | Skipped | Onyx keeps only file types that its file processor supports. |
+| Empty or unsupported files | Skipped | Onyx skips files it cannot read text from. |
 | Scope | Personal drives | Use the [SharePoint connector](/admins/connectors/official/microsoft-365/sharepoint) for team sites and site pages. |
 
 ## SharePoint overlap
 
-A personal OneDrive is backed by a SharePoint personal site. If both connectors index the same file,
-Onyx keeps one document with both source types when Microsoft Graph returns the same drive item ID.
-
-Avoid listing personal-site URLs in a new SharePoint connector unless you need this overlap.
-Microsoft can assign different item IDs to copies in different drives, and Onyx indexes those copies separately.
+A personal OneDrive is backed by a SharePoint personal site.
+Avoid listing personal-site URLs in a new SharePoint connector that overlaps a OneDrive connector.
+Onyx can index the same file twice.
 
 ## Troubleshooting
 

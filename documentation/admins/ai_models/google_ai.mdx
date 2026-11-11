@@ -17,14 +17,14 @@ grant access to the API server and every worker that makes embedding requests.
 
 Onyx supports two authentication methods for Google Vertex AI:
 
-- **Service Account JSON** — upload a downloaded service account key file. This works with Onyx deployed
+- **Service Account JSON**: upload a downloaded service account key file. This works with Onyx deployed
   inside or outside Google Cloud and is the default flow covered in the guide below.
-- **Workload Identity (GKE)** — authenticate using your GKE cluster's ambient credentials, with no key file
+- **Workload Identity (GKE)**: authenticate using your GKE cluster's ambient credentials, with no key file
   to generate or store. See [Workload Identity (GKE)](#workload-identity-gke) below.
 
 <Warning>
   A standalone Vertex AI API key (sometimes called a Vertex Express Mode key) is **not** supported.
-  Onyx's Vertex AI provider only accepts a Service Account JSON credential or Workload Identity — see the [FAQ](#faq)
+  Onyx's Vertex AI provider only accepts a Service Account JSON credential or Workload Identity. See the [FAQ](#faq)
   below for details and an alternative.
 </Warning>
 
@@ -259,16 +259,12 @@ and no key file is ever created or stored.
     <img className="rounded-image" src="/assets/admins/ai_models/vertex_auth_method_dropdown.webp" alt="Authentication Method dropdown with Workload Identity (GKE) selected and highlighted"/>
 
     Enter the **GCP Project ID** where Vertex AI is enabled.
-    This is required because Application Default Credentials cannot reliably infer the target project under service
-    account impersonation.
 
     Set **Google Cloud Region Name** to a [location supported by your
     models](https://cloud.google.com/vertex-ai/generative-ai/docs/learn/locations). The default is `global`;
     this is independent of your GKE cluster's location.
 
     <img className="rounded-image" src="/assets/admins/ai_models/vertex_workload_identity_selected.webp" alt="Workload Identity (GKE) selected, showing the ambient-credentials notice and GCP Project ID field"/>
-
-    No credentials file is needed.
   </Step>
 
   <StandardAiModelConfigs />
@@ -307,9 +303,9 @@ it is outside the scope of this GKE walkthrough.
 
 ### Can I use a Vertex AI API key instead of a service account?
 
-No. Today,
+No.
 Onyx's Vertex AI provider supports only **Service Account JSON** or **Workload Identity (GKE)** as authentication
-methods — a standalone Vertex AI API key (Vertex Express Mode) is not accepted.
+methods. Onyx does not accept a standalone Vertex AI API key (Vertex Express Mode).
 
 If you just want to authenticate with a plain API key,
 you can instead add a **Custom Models** provider with **Provider** set to `gemini`.

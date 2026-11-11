@@ -37,7 +37,8 @@ it wins and the hook is not consulted. Push failures on this path go to the serv
 ### What gets pushed
 
 Either way, every document a **public** connector successfully indexes is pushed to the wiki.
-The push is fire-and-forget: a failure is logged on the Onyx side and never blocks or fails indexing.
+Documents from private and permission-synced connectors are not pushed. The push is fire-and-forget:
+a failure is logged on the Onyx side and never blocks or fails indexing.
 It also doesn't fire during a connector's initial from-the-beginning run — only on the incremental updates after it,
 which is what keeps the wiki current without replaying your whole corpus.
 Document push works on single-tenant deployments only.
@@ -60,28 +61,15 @@ Below the connection details, the same admin page carries the wiki-side knobs fo
 
 ## How incoming documents are handled
 
-Pushed content is matched against existing pages and merged in — that's what makes the wiki a living source of truth
-rather than an archive of everything your connectors have ever seen.
-
-Two controls govern it:
+Two controls govern how ingestion edits pages:
 
 - **Update policies.** A page or folder with [Update](/agent-wiki/using/update_policies) switched off is never
   rewritten by ingestion. This is how you protect records that shouldn't change after the fact.
 - **Page instructions.** Free-text guidance the updater honors when it does edit — *"keep entries terse"*, *"never
   touch the SLA table"*.
 
-The pipeline doesn't have to run on the default model. You can select a model just for ingestion here,
-from the pool enabled under [Language Models](/agent-wiki/admin/language_models)
-— and since ingestion is high-volume background work, a cheaper model (e.g. Luna)
-than your daily-usage default is usually the right choice.
-
-<Warning>
-  **Push organization-public sources only.** Wiki ingestion is not permission-aware yet:
-  content from a permission-synced or private Onyx connector would land in the wiki without carrying its access
-  restrictions along.
-  Keep those connectors out of wiki ingestion until that changes — permission-aware ingestion is on the roadmap and
-  coming soon.
-</Warning>
+You can also select a separate model for ingestion on this page.
+See [A cheaper model for ingestion](/agent-wiki/admin/language_models#a-cheaper-model-for-ingestion).
 
 ## Related
 

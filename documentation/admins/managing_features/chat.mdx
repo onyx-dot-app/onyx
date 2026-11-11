@@ -23,7 +23,6 @@ The page is available in all editions.
   Users can override this in their personal settings.
 - **Search Mode**: A quick document search view across your organization.
   It is available on Business and higher plans and on Onyx Cloud.
-  The switch is disabled until you add at least one [connector](/admins/connectors/overview).
 - **Auto-Detect Search Filters**: Applies source and time filters that Onyx infers from the query,
   for example "in Slack" or "last quarter".
 
@@ -31,21 +30,12 @@ The page is available in all editions.
 
 ## Search Settings
 
-**Search Decision Model** sets the model that picks the retrieved documents for an answer.
-The same model decides how much of each document's surrounding text to add. The list shows your decision models first,
-then your language models.
+**Search Decision Model** sets the model that picks the retrieved documents for an answer and decides how much
+surrounding text to add. Choose a decision model, a language model, or **Chat Default** (the default chat model).
+A fast, low-cost language model reduces search cost but can affect answer quality.
 
-| Choice | How internal search picks documents |
-| --- | --- |
-| A decision model | The decision model ranks all candidate documents in one request and keeps the best ones. |
-| A language model | The language model reads the candidates and selects the documents. A fast, low-cost model reduces search cost but can affect answer quality. |
-| **Chat Default** | The default chat model selects the documents. |
-
-A model that can work as both is listed in each section. Pick it under **Decision Models** to use the decision model,
-or under its provider to use it as a language model. To add a decision model, open **Admin Panel → Decision Models**.
+To add a decision model, open **Admin Panel → Decision Models**.
 The selection on that page and **Search Decision Model** are the same setting.
-
-If a decision model request fails, search uses the chat's language model to pick the documents for that search.
 
 ## Team Information
 

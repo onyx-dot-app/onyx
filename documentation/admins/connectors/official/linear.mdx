@@ -80,21 +80,9 @@ LINEAR_CLIENT_SECRET=
 
 ### Connection checks
 
-Each check reads from Linear with the connected account, so a failure points at that account's access.
-
-| Check                                    | Passes when                                                     | Fails when                                                                                 |
-| ---------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| Linear accepts the credential            | Linear answers for the account                                  | The API key is wrong or revoked, or the OAuth token has expired                            |
-| Configured teams are visible             | Every team key you entered exists for the account               | A key is misspelled, or the team is private and the account is not in it                   |
-| Configured projects are visible          | Every project name or URL you entered exists for the account    | A name or URL is wrong, or the project's team is private                                   |
-| Issues are readable                      | One page of issues returns                                      | The account cannot read issues                                                             |
-| The connected user is a workspace member | The account is a workspace member                               | The account is a guest, which only sees the teams it was added to                          |
-| Issue teams and sharing are readable     | One page of issues returns with its team and sharing fields     | The account cannot read team or sharing fields                                             |
-| Workspace users are listable in full     | Linear lists as many users as the workspace reports             | The listing is refused or cut short                                                        |
-| Team memberships are readable            | The first team's memberships return                             | The account cannot read memberships                                                        |
-
-The first four checks run for every connector. The rest run only with **Sync with Linear**,
-and run again before each scheduled permission sync,
+Onyx checks the connected account against Linear before it creates the connector. A failed check names what to fix.
+The checks for workspace membership, team membership, issue sharing,
+and the user list run only with **Sync with Linear**. They run again before each scheduled permission sync,
 so an account that later becomes a guest stops the sync instead of hiding issues.
 
 ## Sync with Linear

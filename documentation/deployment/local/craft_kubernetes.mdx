@@ -22,23 +22,6 @@ when the sandbox backend is not `kubernetes`, or when sandbox push authenticatio
   create a labeled and tainted sandbox node group when you set `enable_craft = true`.
 </Tip>
 
-## Trust private CA certificates
-
-For MCP servers or OAuth endpoints that use a private CA, enable `customCACerts` in your Helm values:
-
-```yaml values.yaml
-customCACerts:
-  enabled: true
-  configMapName: private-ca-certs
-```
-
-Create the ConfigMap in the Onyx release namespace. Use PEM certificates with keys that end in `.crt`.
-You can use `secretName` instead of `configMapName`. Set only one.
-
-The proxy combines these certificates with its public CA bundle in an init container.
-The proxy uses that bundle for forwarded HTTPS traffic and OAuth token refresh.
-The proxy remains non-root with a read-only root filesystem. Restart the proxy pods after you update the certificates.
-
 ## Prepare sandbox nodes
 
 By default, sandbox pods select nodes with this label:
@@ -198,7 +181,7 @@ kubectl -n onyx-sandboxes get pods -l app.kubernetes.io/component=sandbox
 Sandbox pods can send traffic only to DNS and the sandbox proxy. The proxy handles external requests, App policies,
 and credential injection.
 
-Most clusters work with the chart defaults. Two cluster layouts require additional values:
+Most clusters work with the chart defaults. These cluster layouts need more values:
 
 | Cluster layout | Configuration |
 | --- | --- |
@@ -210,6 +193,22 @@ Most clusters work with the chart defaults. Two cluster layouts require addition
   Keep the sandbox egress NetworkPolicies enabled. They restrict sandbox pods to the proxy and DNS,
   and block link-local cloud metadata access from the proxy path.
 </Warning>
+
+## Trust private CA certificates
+
+For MCP servers or OAuth endpoints that use a private CA, enable `customCACerts` in your Helm values:
+
+```yaml values.yaml
+customCACerts:
+  enabled: true
+  configMapName: private-ca-certs
+```
+
+Create the ConfigMap in the Onyx release namespace. Use PEM certificates with keys that end in `.crt`.
+You can use `secretName` instead of `configMapName`. Set only one.
+
+The proxy uses these certificates and its public CA bundle for forwarded HTTPS traffic and OAuth token refresh.
+Restart the proxy pods after you update the certificates.
 
 ## Troubleshooting
 

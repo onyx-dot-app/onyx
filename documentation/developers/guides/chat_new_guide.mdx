@@ -22,7 +22,7 @@ You can receive a streaming response or one complete response.
 | Parameter | Description |
 |-----------|-------------|
 | `message` | The user message to send to the Agent. |
-| `llm_override` | Pass an object to override the default LLM settings for this request. If `None`, you will get the default Onyx behavior. <br/><br/>You can pass or exclude any of the following fields: <br/>• `model_configuration_id` – the exact model configuration to use. Preferred over the name-based fields, since provider display names are not unique <br/>• `model_provider` <br/>• `model_version` – must match a model configured on the resolved provider. If it does not, the request is rejected with `INVALID_INPUT`: an HTTP `400` when `stream=false`, or an error packet with `"error_code": "INVALID_INPUT"` when streaming (the default). If no provider resolves, or you cannot use that provider, Onyx uses the default LLM instead. Onyx does not check `model_version` when you pass `model_configuration_id` <br/>• `temperature` <br/>• `display_name` – label shown for the model in the UI; falls back to `model_version` <br/><br/>If you pass an invalid configuration (e.g., specifying `claude-sonnet-4.5` when the default `model_provider` is OpenAI), your request will fail. |
+| `llm_override` | Pass an object to override the default LLM settings for this request. If `None`, you will get the default Onyx behavior. <br/><br/>You can pass or exclude any of the following fields: <br/>• `model_configuration_id` – the exact model configuration to use. Preferred over the name-based fields, since provider display names are not unique <br/>• `model_provider` <br/>• `model_version` – must match a model configured on the resolved provider. If it does not, the request is rejected with `INVALID_INPUT`: an HTTP `400` when `stream=false`, or an error packet with `"error_code": "INVALID_INPUT"` when streaming (the default). If no provider resolves, or you cannot use that provider, Onyx uses the default LLM instead. Onyx does not check `model_version` when you pass `model_configuration_id` <br/>• `temperature` <br/>• `display_name` – label shown for the model in the UI; falls back to `model_version` |
 | `llm_overrides` | Two or three `llm_override` objects to run in parallel (multi-model mode), one per model. <br/><br/>**Requires `stream=true`.** Sending more than one entry with `stream=false` fails with `400 {"error_code": "INVALID_INPUT"}`. A list with a single entry is ignored — use `llm_override` for an ordinary single-model request. |
 | `allowed_tool_ids` | Each Agent has a set of Actions (built-in tools, MCP Actions, and OpenAPI Actions from **Admin Panel** > **Plugins**) that it can invoke. Use this parameter to narrow that set for this request. List the Actions and their IDs with the [GET /tool](/developers/api_reference/actions/list_tools) endpoint. Pass an empty list to disable all Actions. Omit the field or pass `null` to allow every Action configured for the Agent. |
 | `preferred_tool_id` | Prefer one Action when it helps answer this request. The Agent can use other Actions or answer without an Action. The preference lasts for this request only. |
@@ -40,10 +40,9 @@ You can receive a streaming response or one complete response.
 
 <Note>
   `forced_tool_id` is no longer supported. Requests with a non-null value receive a validation error.
-  Use `preferred_tool_id` for an optional preference. Action invocation is not guaranteed.
+  Use `preferred_tool_id` for an optional preference.
   Selecting an Action does not grant permission to use it or bypass approval.
   Deep Research does not accept an Action preference. An unavailable Action produces an error.
-  Slack also uses a search preference; it does not guarantee a search on every request.
 </Note>
 
 ## Response Format
@@ -109,6 +108,9 @@ class StreamingType(Enum):
 
     BASH_TOOL_START = "bash_tool_start"
     BASH_TOOL_DELTA = "bash_tool_delta"
+
+    CODE_MODE_START = "code_mode_start"
+    CODE_MODE_DELTA = "code_mode_delta"
 ```
 
 ### Non-streaming Response
