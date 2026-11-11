@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission, has_permission
@@ -15,6 +17,7 @@ from onyx.db.models import Skill, User
 from onyx.db.persona_sharing import (
     get_user_group_ids_for_user,
 )
+from onyx.db.plugin import get_current_version_ids
 from onyx.db.scoped_permissions import fetch_managed_group_ids
 from onyx.db.skill import SkillUserState, skill_user_states
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -113,6 +116,7 @@ def skill_response_for_user(
     user_group_ids: set[int] | None = None,
     managed_user_group_ids: set[int] | None = None,
     include_share_details: bool = False,
+    current_version_ids: dict[UUID, UUID] | None = None,
 ) -> SkillResponse:
     if state is None:
         state = skill_user_states(user, [skill.id], db_session)[skill.id]
@@ -136,6 +140,8 @@ def skill_response_for_user(
         and has_permission(user, Permission.MANAGE_SKILLS) is PermissionAuthority.SCOPED
     ):
         managed_user_group_ids = fetch_managed_group_ids(user, db_session)
+    if current_version_ids is None:
+        current_version_ids = get_current_version_ids([skill.id], db_session)
     return SkillResponse.from_custom(
         skill,
         enabled=state.enabled,
@@ -148,6 +154,7 @@ def skill_response_for_user(
         ),
         include_share_details=include_share_details,
         external_app=_dependency_response(state.external_app_dependency),
+        current_version_id=current_version_ids.get(skill.id),
     )
 
 
@@ -165,6 +172,9 @@ def skills_list_response_for_user(
         else set()
     )
     states = skill_user_states(user, (skill.id for skill in rows), db_session)
+    current_version_ids = get_current_version_ids(
+        (skill.id for skill in rows if skill.is_custom), db_session
+    )
     for skill in rows:
         if (
             skill.built_in_skill_id is not None
@@ -184,6 +194,7 @@ def skills_list_response_for_user(
             state=states[skill.id],
             user_group_ids=user_group_ids,
             managed_user_group_ids=managed_user_group_ids,
+            current_version_ids=current_version_ids,
         )
         (customs if skill.is_custom else builtins).append(response)
 

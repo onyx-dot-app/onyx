@@ -63,6 +63,9 @@ class SkillResponse(BaseModel):
     is_personal: bool = False
     user_permission: SkillAccessLevel | None = None
     external_app: SkillExternalAppDependencyResponse | None = None
+    # Newest plugin version of a custom skill. Edits send it back as
+    # base_version_id. None for built-ins.
+    current_version_id: UUID | None = None
 
     @classmethod
     def from_builtin(
@@ -97,6 +100,7 @@ class SkillResponse(BaseModel):
         user_permission: SkillAccessLevel | None = None,
         include_share_details: bool = False,
         external_app: SkillExternalAppDependencyResponse | None = None,
+        current_version_id: UUID | None = None,
     ) -> "SkillResponse":
         user_shares = [
             SkillUserShare(
@@ -146,6 +150,7 @@ class SkillResponse(BaseModel):
             and not group_shares,
             user_permission=user_permission,
             external_app=external_app,
+            current_version_id=current_version_id,
         )
 
 
@@ -283,6 +288,9 @@ class SkillPatchRequest(BaseModel):
     description: str | None = None
     instructions_markdown: str | None = None
     public_permission: SkillSharePermission | None = None
+    # The plugin version the edit starts from. When it is not the newest
+    # version, a details update is refused with 409. Omit to skip the check.
+    base_version_id: UUID | None = None
 
     @model_validator(mode="before")
     @classmethod

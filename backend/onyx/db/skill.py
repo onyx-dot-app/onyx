@@ -11,17 +11,21 @@ Runtime selection is deliberately separate from authorization. It applies
 visibility without an admin bypass, user enablement for custom skills, app
 readiness for associated skills, validity, and built-in availability.
 
-Delete is a hard delete — `delete_skill` removes the row and returns its
-`bundle_file_id` so the caller can drop the blob from the file store
-immediately (skills sync via S3-backed bundles, so blob retention isn't
-needed).
+Delete is a hard delete — `delete_skill` removes the row and its plugin and
+returns its `bundle_file_id` so the caller can drop the blob from the file
+store immediately.
+
+Each custom skill is also a plugin of kind skill with the same id
+(`onyx.db.plugin`). Creates and bundle changes write both: the plugin rows
+and the legacy skill row, which old readers still use. A bundle change adds a
+plugin version and never deletes the previous bundle.
 
 Mutation helpers do not commit unless their docstring explicitly says otherwise.
 Callers normally control the transaction boundary so multi-step operations can
 roll back atomically.
 """
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from enum import Enum
 from typing import Literal
@@ -47,16 +51,20 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
     Permission,
     PermissionAuthority,
+    PluginInstallationPolicy,
+    PluginKind,
     SandboxStatus,
     SkillInstallationPolicy,
     SkillSharePermission,
 )
 from onyx.db.external_app import (
     SkillExternalAppDependencyState,
+    associate_custom_skill_with_external_app__no_commit,
     get_skill_external_app_dependencies,
 )
 from onyx.db.models import (
     ExternalApp__Skill,
+    PluginVersion,
     Sandbox,
     Skill,
     Skill__User,
@@ -64,6 +72,15 @@ from onyx.db.models import (
     User,
     User__UserGroup,
     UserSkillPreference,
+)
+from onyx.db.plugin import (
+    add_plugin_version__no_commit,
+    create_plugin__no_commit,
+    delete_plugin__no_commit,
+    get_or_create_account_uploads__no_commit,
+    get_or_create_organization_library__no_commit,
+    lock_plugin,
+    persist_plugin_version_validity__no_commit,
 )
 from onyx.db.scoped_permissions import (
     scoped_group_ids_subquery,
@@ -75,6 +92,11 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.ingest import IngestedBundle
+from onyx.skills.models import (
+    PluginFileEntry,
+    PluginSkillContent,
+    PluginVersionContent,
+)
 
 
 class SkillManagementPolicy(str, Enum):
@@ -454,18 +476,125 @@ def enable_new_skill_if_name_available__no_commit(
     return inserted_user_id is not None
 
 
+def _create_plugin_for_skill__no_commit(
+    skill: Skill,
+    content: PluginVersionContent,
+    user: User | None,
+    db_session: Session,
+) -> PluginVersion:
+    """Add the plugin of a custom skill with ``content`` as version 1. A public
+    or author-less skill goes to the Organization library, published; others
+    go to the author's "My uploads". Same placement as the plugin backfill."""
+    author_user_id = skill.author_user_id
+    publish = skill.public_permission is not None or author_user_id is None
+    if skill.public_permission is not None or author_user_id is None:
+        marketplace_id = get_or_create_organization_library__no_commit(db_session)
+    else:
+        marketplace_id = get_or_create_account_uploads__no_commit(
+            author_user_id, db_session
+        )
+    plugin = create_plugin__no_commit(
+        plugin_id=skill.id,
+        name=skill.name,
+        kind=PluginKind.SKILL,
+        marketplace_id=marketplace_id,
+        author_user_id=skill.author_user_id,
+        installation_policy=(
+            None
+            if skill.installation_policy == SkillInstallationPolicy.AVAILABLE
+            else PluginInstallationPolicy(skill.installation_policy.value)
+        ),
+        publish=publish,
+        content=content,
+        created_by=user,
+        db_session=db_session,
+    )
+    version = db_session.get(PluginVersion, plugin.current_version_id)
+    if version is None:
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "Plugin version was not saved.")
+    return version
+
+
+def _legacy_version_content(skill: Skill) -> PluginVersionContent:
+    """Version 1 of a plugin made from a legacy skill row, as the plugin
+    backfill makes it: the row's bundle, with no file list or SKILL.md text."""
+    if skill.bundle_file_id is None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Skill '{skill.name}' has no bundle.",
+        )
+    return PluginVersionContent(
+        bundle_file_id=skill.bundle_file_id,
+        bundle_sha256=skill.bundle_sha256,
+        is_valid=skill.is_valid,
+        file_manifest=None,
+        unpacked_size_bytes=None,
+        file_count=None,
+        skills=[
+            PluginSkillContent(
+                path="",
+                name=skill.name,
+                description=skill.description,
+                skill_md=None,
+                frontmatter=None,
+            )
+        ],
+    )
+
+
+def create_custom_skill__no_commit(
+    ingested: IngestedBundle,
+    user: User,
+    db_session: Session,
+    *,
+    change: "SkillSharingChange | None" = None,
+    external_app_id: int | None = None,
+) -> tuple[Skill, set[UUID]]:
+    """Create a custom skill: the legacy skill row, then its plugin, version 1
+    and plugin_skill row with the same id, in the caller's transaction. The
+    plugin is placed after the access change, so a public skill starts in the
+    Organization library. Returns the skill and the users the access change
+    affects."""
+    skill = add_new_skill__no_commit(
+        Skill(
+            name=ingested.canonical_name,
+            description=ingested.description,
+            bundle_file_id=ingested.bundle_file_id,
+            bundle_sha256=ingested.bundle_sha256,
+            is_valid=True,
+            author_user_id=user.id,
+        ),
+        db_session,
+    )
+    if external_app_id is not None:
+        associate_custom_skill_with_external_app__no_commit(
+            db_session,
+            external_app_id=external_app_id,
+            skill_id=skill.id,
+        )
+    affected: set[UUID] = set()
+    if change is not None:
+        affected = share_skill__no_commit(skill, change, user, db_session)
+    _create_plugin_for_skill__no_commit(skill, ingested.content, user, db_session)
+    return skill, affected
+
+
 def replace_skill_bundle(
     *,
     skill: Skill,
-    new_bundle_file_id: str,
-    new_bundle_sha256: str,
-    new_description: str,
+    ingested: IngestedBundle,
+    base_version_id: UUID | None,
+    user: User,
+    skip_if_unchanged: bool,
     db_session: Session,
-) -> str:
-    """Swap a skill's bundle blob and refresh its description.
+    previous_manifest: Callable[[], list[PluginFileEntry]] | None = None,
+) -> PluginVersion | None:
+    """Add a plugin version with the new bundle and keep the legacy skill row
+    current. The caller holds the skill row lock (``lock_for_update``).
 
-    Returns the old bundle file id so the caller can delete the old blob from
-    FileStore after the transaction commits.
+    Returns None, and changes nothing, when ``skip_if_unchanged`` is set and
+    the files did not change; the caller then deletes the new blob. The
+    previous bundle stays: older versions still point at it.
 
     Rejects built-in rows — they have no bundle.
     """
@@ -483,13 +612,36 @@ def replace_skill_bundle(
             f"Skill '{skill.name}' has no bundle to replace.",
         )
 
-    old_bundle_file_id = skill.bundle_file_id
-    skill.bundle_file_id = new_bundle_file_id
-    skill.bundle_sha256 = new_bundle_sha256
-    skill.description = new_description
+    plugin = lock_plugin(skill.id, db_session)
+    if plugin is None:
+        # The skill has no plugin yet: an older server made it, or a user
+        # delete removed a stale copy. Copy the legacy row as version 1 first,
+        # so the change below is version 2, as for every other skill.
+        _create_plugin_for_skill__no_commit(
+            skill, _legacy_version_content(skill), skill.author, db_session
+        )
+        plugin = lock_plugin(skill.id, db_session)
+        if plugin is None:
+            raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "Plugin was not saved.")
+    version = add_plugin_version__no_commit(
+        plugin=plugin,
+        content=ingested.content,
+        base_version_id=base_version_id,
+        created_by=user,
+        skip_if_unchanged=skip_if_unchanged,
+        previous_manifest=previous_manifest,
+        db_session=db_session,
+    )
+    if version is None:
+        return None
+
+    skill.bundle_file_id = ingested.bundle_file_id
+    skill.bundle_sha256 = ingested.bundle_sha256
+    skill.name = ingested.canonical_name
+    skill.description = ingested.description
     skill.is_valid = True
     db_session.flush()
-    return old_bundle_file_id
+    return version
 
 
 def set_skill_public_permission(
@@ -767,8 +919,11 @@ def transfer_skill_ownership(
 
 
 def delete_skill(skill: Skill, db_session: Session) -> str | None:
-    """Hard-delete a skill and return its `bundle_file_id` for caller cleanup."""
+    """Hard-delete a skill and its plugin, and return its current
+    `bundle_file_id` for caller cleanup."""
     bundle_file_id = skill.bundle_file_id
+    if skill.is_custom:
+        delete_plugin__no_commit(skill.id, db_session)
     db_session.delete(skill)
     db_session.flush()
     return bundle_file_id
@@ -796,6 +951,12 @@ def persist_skill_validity(
                     Skill.is_valid.is_(None),
                 )
                 .values(is_valid=validity_update.is_valid)
+            )
+            persist_plugin_version_validity__no_commit(
+                plugin_id=validity_update.skill_id,
+                bundle_file_id=validity_update.bundle_file_id,
+                is_valid=validity_update.is_valid,
+                db_session=db_session,
             )
         db_session.commit()
 
@@ -942,20 +1103,9 @@ def create_skill_from_bundle__no_commit(
     conflict or a rejected access change rolls back this skill only. Returns
     the skill, whether it was enabled for the user, and the affected users."""
     with db_session.begin_nested():
-        skill = add_new_skill__no_commit(
-            Skill(
-                name=ingested.canonical_name,
-                description=ingested.description,
-                bundle_file_id=ingested.bundle_file_id,
-                bundle_sha256=ingested.bundle_sha256,
-                is_valid=True,
-                author_user_id=user.id,
-            ),
-            db_session,
+        skill, affected = create_custom_skill__no_commit(
+            ingested, user, db_session, change=change
         )
-        affected: set[UUID] = set()
-        if change is not None:
-            affected = share_skill__no_commit(skill, change, user, db_session)
         enabled = auto_enable and enable_new_skill_if_name_available__no_commit(
             skill, user.id, db_session
         )

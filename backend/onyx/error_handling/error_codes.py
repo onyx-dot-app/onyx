@@ -88,6 +88,9 @@ class OnyxErrorCode(Enum):
     # A connector edit plan whose pair changed after it was computed. The client
     # computes a new plan.
     EDIT_PLAN_STALE = ("EDIT_PLAN_STALE", 409)
+    # An edit that started from a plugin version older than the newest one.
+    # The client loads the newest version and makes the change again.
+    PLUGIN_VERSION_STALE = ("PLUGIN_VERSION_STALE", 409)
 
     # --------------------------------------------------------------------------
     # Rate Limiting / Quotas (429 / 402)
