@@ -296,8 +296,9 @@ The library preview of an external-app skill calls the same renderer
     limits, so repeated merges cannot pass them. A full-replacement upload in the
     editor does not read the current bundle. One limit applies to every new
     version, edits included: `skills/bundle.py:check_skill_md_size` refuses a
-    SKILL.md over `SKILL_MD_MAX_BYTES` (256 KiB), because each version stores
-    the text. `skills/ingest.py:ingest_skill_bundle` and the GitHub preview call
+    SKILL.md over `SKILL_MD_MAX_BYTES` (256 KiB) or with a NUL character
+    (400), because each version stores the text in a Postgres text column.
+    `skills/ingest.py:ingest_skill_bundle` and the GitHub preview call
     it. Only direct uploads return 413. Batch uploads report
     `not_imported` and GitHub previews mark the Skill unavailable.
 18. `bundle-file-list-memory` **ZIP metadata memory has a fixed bound.**
@@ -353,7 +354,10 @@ The library preview of an external-app skill calls the same renderer
     whose file list equals the current version's adds no version, and the
     route deletes the new blob. A bundle upload always adds one. An edit
     request may carry `base_version_id`; if it is not the current version,
-    the edit gets 409 `PLUGIN_VERSION_STALE`. Routes no longer delete the
+    the edit gets 409 `PLUGIN_VERSION_STALE`. Skill responses return as
+    `current_version_id` the version that holds the bundle they show
+    (`db/plugin.py:get_version_ids_for_bundles`), so the editor's base always
+    matches its fields. Routes no longer delete the
     previous bundle, because older versions still point at it; a skill delete
     removes only the current bundle, so earlier blobs stay until a cleanup
     task exists. Each new version stores `plugin_skill.skill_md`

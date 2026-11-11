@@ -510,11 +510,36 @@ craft_sandbox_node_disk_throughput = 500
 With `"firecracker"`, the `eks` module:
 
 - turns on nested virtualization in the launch template (non-metal types only);
-- adds the label `onyx.app/kvm=true`;
+- adds the label `onyx.app/kvm=true` and the taint `onyx.app/kvm=true:NoSchedule`;
 - sets `vm.max_map_count` to `1048576` with a cloud-init script that runs
   before nodeadm (AL2023 ships `524288`);
 - keeps the group on-demand. A spot reclaim stops every microVM on the node;
 - keeps IMDSv2 with hop limit 1.
+
+Kubelet does not count microVM memory, so only the Firecracker host agent and
+the preflight check tolerate the `onyx.app/kvm` taint. Pod sandboxes and the
+sandbox image prepuller do not run on these nodes. To keep pod sandboxes, add a
+small pod sandbox group next to the Firecracker group:
+
+```hcl
+enable_craft_pod_sandbox_node_group = true
+craft_pod_sandbox_node_instance_types = ["m8i.xlarge"] # default
+craft_pod_sandbox_node_min_size       = 1              # default
+craft_pod_sandbox_node_max_size       = 2              # default
+```
+
+This group has the label `onyx.app/workload=sandbox` and the taint
+`workload=sandbox:NoSchedule`, but no `onyx.app/kvm` label or taint. It uses
+`craft_sandbox_node_disk_size_gb` with baseline gp3 (3000 IOPS, 125 MiB/s).
+EKS updates the taints of an existing node group in place; it does not replace
+the nodes. `NoSchedule` does not evict running pods, and the new pod group does
+not move them. Pod sandboxes and the prepuller pod that already run on a
+Firecracker node stay there until they stop. Let those sandboxes finish, delete
+the prepuller pod on that node, and check that no such pod is left:
+
+```bash
+kubectl get pods -n onyx-sandboxes -o wide --field-selector spec.nodeName=<firecracker node>
+```
 
 The default, `"pod"`, leaves the group as it is. A change to
 `craft_sandbox_runtime` makes a new launch template version (user data, and

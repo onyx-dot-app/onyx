@@ -30,7 +30,7 @@ func code(r pb.ErrorReason) codes.Code {
 		return codes.NotFound
 	case pb.ErrorReason_FILE_EXISTS:
 		return codes.AlreadyExists
-	case pb.ErrorReason_TOO_MANY_EXECUTIONS, pb.ErrorReason_LIMIT_EXCEEDED:
+	case pb.ErrorReason_TOO_MANY_EXECUTIONS, pb.ErrorReason_LIMIT_EXCEEDED, pb.ErrorReason_EXECUTION_CAP_REACHED:
 		return codes.ResourceExhausted
 	default:
 		return codes.Internal
@@ -56,6 +56,8 @@ func execError(err error) error {
 		return apiError(pb.ErrorReason_INVALID_ARGUMENT, "%v", err)
 	case errors.Is(err, execs.ErrTooMany):
 		return apiError(pb.ErrorReason_TOO_MANY_EXECUTIONS, "%v", err)
+	case errors.Is(err, execs.ErrCapReached):
+		return apiError(pb.ErrorReason_EXECUTION_CAP_REACHED, "%v", err)
 	case errors.Is(err, execs.ErrStdinNotOpen):
 		return apiError(pb.ErrorReason_STDIN_NOT_OPEN, "%v", err)
 	case errors.Is(err, execs.ErrEnded):

@@ -67,6 +67,7 @@ type Metrics struct {
 	tplBuilds       *prometheus.CounterVec
 	tplBuildSeconds *prometheus.HistogramVec
 	tplReady        prometheus.Gauge
+	imageGCRemoved  *prometheus.CounterVec
 }
 
 // transferMethods move a session over the network or disk; they get the
@@ -165,10 +166,15 @@ func New(src Source) (*Metrics, error) {
 			Namespace: namespace, Name: "template_ready",
 			Help: "1 if the last template build from --rootfs-dir gave a usable template, else 0.",
 		}),
+		imageGCRemoved: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: namespace, Name: "image_gc_removed_total",
+			Help: "Images that the image GC removed after they were unused for --image-gc-grace. kind: managed, template.",
+		}, []string{"kind"}),
 	}
 	cs := []prometheus.Collector{
 		m.createSeconds, m.admissions, m.rpcs, m.rpcSeconds, m.passthrough, m.relayConns, m.guestLog, m.guestDropped,
 		m.transferSeconds, m.nodeReports, m.nodeReportLast, m.keyRegs, m.keyRegLast, m.tplBuilds, m.tplBuildSeconds, m.tplReady,
+		m.imageGCRemoved,
 		newStateCollector(src),
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
@@ -282,6 +288,14 @@ func (m *Metrics) TemplateBuild(d time.Duration, result string) {
 	m.tplBuilds.WithLabelValues(result).Inc()
 	m.tplBuildSeconds.WithLabelValues(result).Observe(d.Seconds())
 	m.tplReady.Set(boolFloat(result != TemplateFailed))
+}
+
+// ImageGCRemoved counts one image that the image GC removed.
+func (m *Metrics) ImageGCRemoved(kind string) {
+	if m == nil {
+		return
+	}
+	m.imageGCRemoved.WithLabelValues(kind).Inc()
 }
 
 // ObservePassthrough records one guest daemon call.

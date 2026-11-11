@@ -96,15 +96,16 @@ type HostAgentClient interface {
 	// a build waits for it.
 	BuildTemplate(ctx context.Context, in *BuildTemplateRequest, opts ...grpc.CallOption) (*BuildTemplateResponse, error)
 	// PutManagedImage uploads a managed bundle (a zip of the tree to show on
-	// /workspace/managed) and builds its read-only ext4 image on this node.
+	// a managed mount) and builds its read-only ext4 image on this node.
 	// The first message is the header, the later ones carry the zip bytes. A
 	// bundle whose image is already on the node is not built again. The image
-	// ID is the SHA256 of the zip.
+	// ID is the SHA256 of the zip. An image is not tied to a mount: one image
+	// can go on any mount (SwapManaged names the mount).
 	PutManagedImage(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[PutManagedImageRequest, PutManagedImageResponse], error)
-	// SwapManaged puts a managed image into running VMs without a restart,
-	// one VM at a time: the agent puts the image behind the VM's idle slot
-	// (Firecracker PATCH /drives), the guest daemon mounts it beneath the
-	// current /workspace/managed mount and detaches the old mount lazily
+	// SwapManaged puts a managed image on one mount of running VMs without a
+	// restart, one VM at a time: the agent puts the image behind the mount's
+	// idle slot (Firecracker PATCH /drives), the guest daemon mounts it beneath
+	// the current mount and detaches the old mount lazily
 	// (open files on it keep working until they close), and the agent records
 	// the active slot in the journal. A failure of one VM does not stop the
 	// others; each target has its own result.
@@ -330,15 +331,16 @@ type HostAgentServer interface {
 	// a build waits for it.
 	BuildTemplate(context.Context, *BuildTemplateRequest) (*BuildTemplateResponse, error)
 	// PutManagedImage uploads a managed bundle (a zip of the tree to show on
-	// /workspace/managed) and builds its read-only ext4 image on this node.
+	// a managed mount) and builds its read-only ext4 image on this node.
 	// The first message is the header, the later ones carry the zip bytes. A
 	// bundle whose image is already on the node is not built again. The image
-	// ID is the SHA256 of the zip.
+	// ID is the SHA256 of the zip. An image is not tied to a mount: one image
+	// can go on any mount (SwapManaged names the mount).
 	PutManagedImage(grpc.ClientStreamingServer[PutManagedImageRequest, PutManagedImageResponse]) error
-	// SwapManaged puts a managed image into running VMs without a restart,
-	// one VM at a time: the agent puts the image behind the VM's idle slot
-	// (Firecracker PATCH /drives), the guest daemon mounts it beneath the
-	// current /workspace/managed mount and detaches the old mount lazily
+	// SwapManaged puts a managed image on one mount of running VMs without a
+	// restart, one VM at a time: the agent puts the image behind the mount's
+	// idle slot (Firecracker PATCH /drives), the guest daemon mounts it beneath
+	// the current mount and detaches the old mount lazily
 	// (open files on it keep working until they close), and the agent records
 	// the active slot in the journal. A failure of one VM does not stop the
 	// others; each target has its own result.

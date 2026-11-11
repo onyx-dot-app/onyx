@@ -95,8 +95,10 @@ per-model error puts `model_index` in `StreamingError.details`. The resume
 endpoint adds a sixth kind,
 `backend/onyx/server/query_and_chat/streaming_models.py:StreamCursor`, after each batch. It
 is never buffered. When the send route itself fails
-(`server/query_and_chat/chat_backend.py:handle_send_chat_message`), it writes a
-bare `{"error": ...}` object with no newline, which is not a `StreamingError`.
+(`server/query_and_chat/chat_backend.py:handle_send_chat_message`), it writes
+one `StreamingError` line from `chat/errors.py:unhandled_stream_error`. Only an
+`OnyxError` detail reaches the client. Other exceptions get a generic message
+with code `INTERNAL_ERROR`, and the full exception goes to the server log.
 A request that fails before `start_chat_turn` gets one `StreamingError` and no
 ID lines.
 

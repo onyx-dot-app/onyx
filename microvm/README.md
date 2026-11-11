@@ -252,6 +252,14 @@ A VM has no network card. Its egress goes guest → vsock port 3128 → the agen
   TTL is 1 h) and retries every 10 s after a failure. The body is `node_id`, `key_id`, `public_key` and,
   with an advertise address, `agent_address`. The api_server keeps the address as long as the key. A
   registration without `agent_address` clears the address the node registered before.
+- When the agent stops (SIGTERM) on a node with a drain taint (`--watch-node-drain`; it reads the node
+  once more first), it ends the node's registration with `POST <--api-server-url>/microvm/node/deregister`
+  (body `node_id`, a token like the state report's with `aud` `onyx-api-server-node-deregister`), so
+  placement and the node list drop the node at once. The api_server ends it only while the node's
+  address came from the registration of that key, so a later agent on the node keeps its registration;
+  a repeat is a no-op. The keys
+  expire on their own. Without a drain taint, or if the call fails (5 s limit), the registration expires
+  after its TTL (1 h).
 - `CloseConnections(sandbox_id, attempt, generation)` closes every relay connection of the VM (T5 in
   `results/prebuild.md`); new connections still work. Stop and VM exit also close them. After an agent
   restart, the agent attaches the relay to each adopted VM again.
@@ -293,7 +301,8 @@ Placement does not depend on reports: it asks the agent with `List`.
   more Health), is stopped after the grace period.
 - The api_server records the time of each accepted report. A node counts as dead when its registration
   expired, or when it reported before but not within `SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS` (default
-  60 s, three intervals; `0` turns this off). Wake then starts the next attempt on a live node.
+  180 s, nine intervals and more than the 2 min report backoff; `0` turns this off). Wake then starts the
+  next attempt on a live node.
 
 ### Sandbox state model
 
@@ -371,6 +380,7 @@ Postgres cache backend. The chart's bundled Redis uses `allkeys-lru`.
   | `craft_fc_host_agent_template_builds_total` | counter | `result`: built, existing, failed |
   | `craft_fc_host_agent_template_build_duration_seconds` | histogram | `result` |
   | `craft_fc_host_agent_template_ready` | gauge | |
+  | `craft_fc_host_agent_image_gc_removed_total` | counter | `kind`: managed, template |
 
   `vm_memory_private_bytes` is the sum of `Anonymous` in `/proc/<pid>/smaps_rollup` of the Firecracker
   processes: the guest pages that each VM wrote (copy-on-write) plus the VMM's own heap. Guest pages
@@ -410,7 +420,8 @@ Postgres cache backend. The chart's bundled Redis uses `allkeys-lru`.
 - **Audit.** One `rpc` line (`kind=audit`) on stderr for every HostAgent call and every daemon
   pass-through call: `method`, `passthrough`, `caller` (the URI and DNS SANs of the verified client
   certificate, or `unix` for the root-only socket), `sandbox_id`, `tenant_id` (from the request or the VM
-  table), `attempt` and `generation` when the request has them, `result` (gRPC code), `reason`
+  table; for `UploadCapture` and `DiscardCapture` from the VM of the spooled capture), `attempt` and
+  `generation` when the request or the capture has them, `result` (gRPC code), `reason`
   (ErrorReason) and `ms`. A gRPC interceptor writes it. It never reads request or response bodies past
   the IDs, and never logs metadata, so `sandboxd_key` and `x-sandboxd-key` never reach the log.
 
@@ -462,15 +473,16 @@ At start-up (after recovery, while the API serves) and on `BuildTemplate`, the a
 
 1. Reads `--rootfs-dir`. It checks that the root drive expects the drives `rootfs`, `scratch` (writable)
    and `managed` (read-only) in this order, that its `managed_slots` (if any) are `a=/dev/vdc` and
-   `b=/dev/vdf`, and that its CA (if it has one) fits the deployment CA.
+   `b=/dev/vdf`, that each of its `managed_mounts` (if any) is a mount the agent knows on the agent's
+   devices, and that its CA (if it has one) fits the deployment CA.
 2. Computes the key and the template name: `<image tag>-<first 12 hex of the key hash>`, for example
    `v5.1.0-3fa91c0e7d22`. If a valid template with this name is there, it stops (and runs GC).
 3. Copies the root drive into a staging directory (`<templates>/.build-<name>`) and checks its SHA256
-   against the root drive manifest. It makes the empty scratch and managed drives (`mkfs.ext4`), the
-   upload slots and managed slot B.
+   against the root drive manifest. It makes the empty scratch drive and slot A of each managed mount
+   (`mkfs.ext4`), and sparse files for the upload slots and each slot B.
 4. Boots a VM in a jailer chroot (ID `tpl-<key hash[:12]>`, a UID from the pool) with the guest kernel,
    the boot args of the root drive manifest plus `craft.scratch=defer` (init does not mount scratch or
-   managed), the six drives in the order above and the vsock (guest CID 3, `/v.sock`).
+   managed), the ten drives of the layout in order and the vsock (guest CID 3, `/v.sock`).
 5. Waits until the guest daemon answers `Health` on vsock `--daemon-port`, pauses the VM and takes a full
    snapshot. It moves `vmstate` and `mem` into the staging directory and stops the VM.
 6. Hashes the files, writes `manifest.json` and renames the staging directory to its name.
@@ -481,13 +493,21 @@ At start-up (after recovery, while the API serves) and on `BuildTemplate`, the a
 One build runs at a time; a `BuildTemplate` call during a build waits for it. A template that fails its
 check is built again, unless a VM uses it.
 
+Image GC: every `--image-gc-interval` (default 15 min, `0` turns it off) the agent also removes each
+template that is not the current one (the last build from `--rootfs-dir`) and that no VM used for
+`--image-gc-grace` (default 6 h). It does the same for managed images (see Managed drive). The grace
+counts from the last pass that saw the image in use, or from the first pass after the agent started.
+A pinned template or image, or one that a VM took since, stays. Each removal is logged
+(`image GC removed unused images`) and counted in `image_gc_removed_total`. Without `--rootfs-dir`
+templates are not swept.
+
 Flags: `--rootfs-dir`, `--egress-ca` or `--egress-ca-configmap`, `--template-vcpus` (2), `--template-mem-mib` (4096),
 `--template-scratch-gib` (1), `--template-keep` (2), `--template-build-timeout` (5 min). The guest kernel
 is `<artifacts-dir>/vmlinux`; the agent copies it to `<data-dir>/kernel/vmlinux-<sha256[:16]>`.
 
 #### Manifest and checks
 
-`manifest.json` (schema = layout version, 4 for new builds):
+`manifest.json` (schema = layout version, 5 for new builds):
 
 - `key`: `image_ref`, `image_digest`, `rootfs_sha256`, `rootfs_manifest_sha256`, `guest_kernel` (release),
   `guest_kernel_sha256`, `firecracker_version`, `cpu_model`, `host_kernel`, `ca_fingerprint`,
@@ -509,8 +529,10 @@ Before every restore, Create checks:
    checks compare the fingerprints and hash again only if one changed. A changed file is
    `TEMPLATE_INCOMPATIBLE`.
 
-Layouts: the agent builds layout 4 and still restores layouts 2 and 3.
+Layouts: the agent builds layout 5 and still restores layouts 2 to 4.
 
+- Layout 5: the drives of layout 4, plus slots A and B of the `user-uploads` and `spaces` managed mounts
+  (`/dev/vdg` to `/dev/vdj`, see Managed drive). `TemplateInfo.managed_mounts` lists all three mounts.
 - Layout 4: the drives of layout 3, plus the balloon device (see Memory, admission and drain).
   Firecracker accepts a balloon only before boot, and a restore keeps it, so the template VM has it.
   `TemplateInfo.balloon` is true.
@@ -581,11 +603,23 @@ manual flag (`SetDrain`) before a planned drain to close this gap.
 
 ### Managed drive
 
-`/workspace/managed` in each VM is a read-only ext4 drive with the managed files (the skills). The agent
-changes it in running VMs, with no restart. Firecracker cannot add a drive after boot, so every VM has two
-managed slots: A (drive `managed`, `/dev/vdc`, the image's `MANAGED_DEV`) and B (drive `managed_b`,
-`/dev/vdf`, `MANAGED_DEV_B`, the last drive). At Create, slot A has the template's empty placeholder and
-attach mounts it; slot B is never mounted by attach.
+Each VM has three managed mounts, each a read-only, noexec ext4 drive: `skills` (`/mnt/skills`),
+`user-uploads` (`/mnt/user-uploads`) and `spaces` (`/mnt/spaces`). The agent changes them in running VMs,
+with no restart. Firecracker cannot add a drive after boot, so every mount has two slots:
+
+| Mount | Slot A | Slot B | Layout |
+|---|---|---|---|
+| `skills` | drive `managed`, `/dev/vdc` | drive `managed_b`, `/dev/vdf` | 3 and later |
+| `user-uploads` | `user_uploads_a`, `/dev/vdg` | `user_uploads_b`, `/dev/vdh` | 5 and later |
+| `spaces` | `spaces_a`, `/dev/vdi` | `spaces_b`, `/dev/vdj` | 5 and later |
+
+New drives go after the old ones, so older guest devices do not move. At Create, slot A of each mount
+has the template's empty ext4 placeholder and attach mounts it; slot B is never mounted by attach. A VM
+has only the mounts of its layout that its root drive's guest daemon serves (rootfs manifest
+`managed_mounts`, kept in the template manifest as `guest_mounts`; `TemplateInfo.managed_mounts`); attach
+puts an empty read-only tmpfs on a mount with no drive. A swap of another mount fails with
+`MANAGED_SWAP_UNSUPPORTED`. An image is not tied to a mount: `SwapManaged` names the mount
+(`mount`, default `skills`).
 
 **Images.** `PutManagedImage` streams a zip (first message: SHA256 and size; then data, at most 4 MiB per
 message). The image ID is the zip's SHA256. The agent:
@@ -610,22 +644,27 @@ per build.
 
 GC (after each upload and swap) keeps the `--managed-keep` (default 3) newest images, every image that
 a VM has behind a slot, and the image of a swap that runs. It does not touch an image while its upload
-runs. Each VM chroot has its own reflink copy, so GC never changes a running VM.
+runs. Each VM chroot has its own reflink copy, so GC never changes a running VM. The image GC (see
+Templates) also removes an image that no VM has had behind a slot for `--image-gc-grace`, also one of
+the newest; a later `SwapManaged` of it gets `MANAGED_IMAGE_MISSING` and the caller uploads it again.
 
 **Swap.** `SwapManaged` takes an image ID and the target VMs, each with its attempt, generation and
 `sandboxd_key` (the agent does not keep the key, so the caller sends it). It swaps one VM at a time, in
 order; one failure does not stop the others. For each VM:
 
-1. Daemon `ManagedStatus` (vsock, with the key): which slot is on `/workspace/managed`, and whether each
+1. Daemon `ManagedStatus(mount)` (vsock, with the key): which slot is on the mount point, and whether each
    slot device is in use. The guest is the truth, so a swap that an agent restart cut short is seen here.
    If the active slot already has the image's UUID, the call only fixes the journal (`changed` false).
+   A daemon that answers for another mount (an older root drive knows only `skills`) fails the VM with
+   `MANAGED_SWAP_UNSUPPORTED`.
 2. The idle slot is the other one. If the guest still uses it (a detached mount from the last swap with
    open files), the VM gets `MANAGED_SLOT_BUSY` and nothing changes. If the busy slot already has the
    image's UUID, a swap stopped after its guest mount: the agent skips step 3, and `MountManaged`
    detaches the old top mount.
-3. The journal records the pending swap. The agent puts a reflink copy of the image at
-   `/managed.ext4` or `/managed-b.ext4` in the chroot and calls Firecracker `PATCH /drives/<id>`.
-4. Daemon `MountManaged(slot, size, uuid)`: wait until the device has the new size (Firecracker sends a
+3. The journal records the pending swap. The agent puts a reflink copy of the image at the slot's file
+   (for example `/managed-b.ext4` or `/spaces-a.ext4`) in the chroot and calls Firecracker
+   `PATCH /drives/<id>`.
+4. Daemon `MountManaged(mount, slot, size, uuid)`: wait until the device has the new size (Firecracker sends a
    virtio config change), drop the guest's cached blocks (`BLKFLSBUF`), check the ext4 UUID, mount the
    device `ro,noload,nodev,nosuid,noexec` with private propagation beneath the current mount
    (`fsmount` + `move_mount(MOVE_MOUNT_BENEATH)`, Linux 6.5+), then detach the old top mount

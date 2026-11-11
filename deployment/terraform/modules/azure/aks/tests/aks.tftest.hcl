@@ -147,6 +147,11 @@ run "the_sandbox_pool_runs_pods_by_default" {
     condition     = azurerm_kubernetes_cluster_node_pool.this["sandbox"].os_sku == "Ubuntu"
     error_message = "The pod runtime keeps the AKS default Ubuntu image, also after a switch back from Firecracker."
   }
+
+  assert {
+    condition     = azurerm_kubernetes_cluster_node_pool.this["sandbox"].node_taints == tolist(["workload=sandbox:NoSchedule"])
+    error_message = "Pod-runtime sandbox pools carry only the workload taint, so pod sandboxes still land there."
+  }
 }
 
 run "firecracker_pins_the_tested_image_and_labels_the_pool" {
@@ -170,6 +175,11 @@ run "firecracker_pins_the_tested_image_and_labels_the_pool" {
   assert {
     condition     = azurerm_kubernetes_cluster_node_pool.this["sandbox"].node_labels["onyx.app/workload"] == "sandbox"
     error_message = "The chart's sandbox pods still select the pool by its workload label."
+  }
+
+  assert {
+    condition     = azurerm_kubernetes_cluster_node_pool.this["sandbox"].node_taints == tolist(["workload=sandbox:NoSchedule", "onyx.app/kvm=true:NoSchedule"])
+    error_message = "Firecracker pools must add the onyx.app/kvm taint, so pod sandboxes and the prepuller stay off."
   }
 }
 

@@ -19,6 +19,7 @@ import (
 	"github.com/onyx-dot-app/onyx/microvm/internal/apierr"
 	"github.com/onyx-dot-app/onyx/microvm/internal/fcvm"
 	"github.com/onyx-dot-app/onyx/microvm/internal/managed"
+	"github.com/onyx-dot-app/onyx/microvm/internal/template"
 	pb "github.com/onyx-dot-app/onyx/microvm/proto/hostagent/v1"
 	sbpb "github.com/onyx-dot-app/onyx/microvm/proto/sandboxd/v1"
 )
@@ -66,12 +67,7 @@ func guestErr(err error) error {
 	if !ok {
 		return err
 	}
-	reason := ""
-	for _, d := range st.Details() {
-		if info, isInfo := d.(*errdetails.ErrorInfo); isInfo {
-			reason = info.GetReason()
-		}
-	}
+	reason := guestReason(err)
 	msg := "guest daemon: " + st.Message()
 	switch {
 	case st.Code() == codes.Unimplemented:
@@ -93,6 +89,29 @@ func guestErr(err error) error {
 	}
 }
 
+// guestReason is the ErrorInfo reason of a guest daemon status, or "".
+func guestReason(err error) string {
+	st, ok := status.FromError(err)
+	if !ok || err == nil {
+		return ""
+	}
+	for _, d := range st.Details() {
+		if info, isInfo := d.(*errdetails.ErrorInfo); isInfo {
+			return info.GetReason()
+		}
+	}
+	return ""
+}
+
+// checkMountEcho refuses a ManagedStatus answer for another mount. A daemon
+// from before named mounts leaves the mount empty and answers for skills.
+func checkMountEcho(got, want string) error {
+	if got == want || (got == "" && want == template.SkillsMount) {
+		return nil
+	}
+	return apierr.New(pb.ErrorReason_MANAGED_SWAP_UNSUPPORTED, "the guest daemon answered for managed mount %q, not %q", got, want)
+}
+
 var toAgentSlot = map[sbpb.ManagedSlot]pb.ManagedSlot{
 	sbpb.ManagedSlot_MANAGED_SLOT_A: pb.ManagedSlot_MANAGED_SLOT_A,
 	sbpb.ManagedSlot_MANAGED_SLOT_B: pb.ManagedSlot_MANAGED_SLOT_B,
@@ -107,12 +126,21 @@ func toGuestSlot(s pb.ManagedSlot) sbpb.ManagedSlot {
 	return sbpb.ManagedSlot_MANAGED_SLOT_UNSPECIFIED
 }
 
-// Status implements agent.ManagedGuest.
-func (d DaemonManaged) Status(ctx context.Context, t agent.GuestTarget, key string) (agent.GuestManaged, error) {
+// Status implements agent.ManagedGuest. A daemon from before named mounts
+// ignores the mount field and answers for its only mount (skills), with an
+// empty mount name; for another mount that answer is refused.
+func (d DaemonManaged) Status(ctx context.Context, t agent.GuestTarget, key, mount string) (agent.GuestManaged, error) {
 	out := agent.GuestManaged{Slots: map[pb.ManagedSlot]agent.GuestSlot{}}
 	err := d.call(ctx, t, key, func(ctx context.Context, c sbpb.SandboxdClient) error {
-		r, err := c.ManagedStatus(ctx, &sbpb.ManagedStatusRequest{})
+		r, err := c.ManagedStatus(ctx, &sbpb.ManagedStatusRequest{Mount: mount})
+		if guestReason(err) == sbpb.ErrorReason_INVALID_ARGUMENT.String() {
+			// The only argument is the mount: the daemon does not have it.
+			return apierr.New(pb.ErrorReason_MANAGED_SWAP_UNSUPPORTED, "guest daemon: %s", status.Convert(err).Message())
+		}
 		if err != nil {
+			return err
+		}
+		if err := checkMountEcho(r.GetMount(), mount); err != nil {
 			return err
 		}
 		out.Active = toAgentSlot[r.GetActive()]
@@ -125,10 +153,10 @@ func (d DaemonManaged) Status(ctx context.Context, t agent.GuestTarget, key stri
 }
 
 // Mount implements agent.ManagedGuest.
-func (d DaemonManaged) Mount(ctx context.Context, t agent.GuestTarget, key string, slot pb.ManagedSlot, size uint64, uuid string) (agent.GuestMount, error) {
+func (d DaemonManaged) Mount(ctx context.Context, t agent.GuestTarget, key, mount string, slot pb.ManagedSlot, size uint64, uuid string) (agent.GuestMount, error) {
 	var out agent.GuestMount
 	err := d.call(ctx, t, key, func(ctx context.Context, c sbpb.SandboxdClient) error {
-		r, err := c.MountManaged(ctx, &sbpb.MountManagedRequest{Slot: toGuestSlot(slot), SizeBytes: size, FsUuid: uuid})
+		r, err := c.MountManaged(ctx, &sbpb.MountManagedRequest{Slot: toGuestSlot(slot), SizeBytes: size, FsUuid: uuid, Mount: mount})
 		if err != nil {
 			return err
 		}
@@ -218,7 +246,11 @@ func (s *Service) PutManagedImage(stream pb.HostAgent_PutManagedImageServer) err
 func (s *Service) imageInfo(img managed.Image) *pb.ManagedImageInfo {
 	n := 0
 	for _, vm := range s.M.List() {
-		if vm.Managed.A == img.ID || vm.Managed.B == img.ID {
+		has := vm.Managed.A == img.ID || vm.Managed.B == img.ID
+		for _, st := range vm.Mounts {
+			has = has || st.A == img.ID || st.B == img.ID
+		}
+		if has {
 			n++
 		}
 	}
@@ -261,7 +293,14 @@ func (s *Service) SwapManaged(ctx context.Context, r *pb.SwapManagedRequest) (*p
 		}
 		return nil, toStatus(err)
 	}
-	results := s.M.SwapManaged(ctx, agent.ManagedImage{ID: img.ID, Path: img.Path, Size: uint64(img.Size), UUID: img.UUID}, targets)
+	mount := r.GetMount()
+	if mount == "" {
+		mount = template.SkillsMount
+	}
+	if _, ok := template.MountDrivesOf(mount); !ok {
+		return nil, toStatus(apierr.New(pb.ErrorReason_INVALID_ARGUMENT, "unknown managed mount %q", mount))
+	}
+	results := s.M.SwapManaged(ctx, mount, agent.ManagedImage{ID: img.ID, Path: img.Path, Size: uint64(img.Size), UUID: img.UUID}, targets)
 	out := &pb.SwapManagedResponse{}
 	for _, res := range results {
 		sr := &pb.SwapResult{

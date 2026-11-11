@@ -1,12 +1,12 @@
 {{/*
-Craft Firecracker host agent (ENG-4583). Rendered only with
+Craft Firecracker host agent. Rendered only with
 craft.sandboxRuntime=firecracker. Render tests in
 backend/tests/external_dependency_unit/craft_helm/test_craft_fc_host_agent.py.
 Agent flags and node requirements: microvm/README.md.
 
 - One agent pod per Firecracker sandbox node: the sandbox node selector plus
   onyx.app/kvm=true (Terraform craft_sandbox_runtime=firecracker), the sandbox
-  tolerations, and no RuntimeClass.
+  tolerations plus the onyx.app/kvm taint, and no RuntimeClass.
 - Own namespace with Pod Security "privileged": the agent needs privileged,
   hostPID (it starts VMs in the host mount namespace and checks their PIDs)
   and /dev/kvm. User sandboxes never run in this namespace.
@@ -31,7 +31,7 @@ Agent flags and node requirements: microvm/README.md.
 - Drain (craft.hostAgent.drainWatch): the agent reads its own Node with a
   ServiceAccount that may only "get" nodes, and refuses new VMs while the
   Node has a drain taint. Off: no ServiceAccount token in the pod.
-- Root drive (craft.hostAgent.rootfs, ENG-4648): with an image tag, an init
+- Root drive (craft.hostAgent.rootfs): with an image tag, an init
   container copies the drive of onyxdotapp/craft-fc-artifacts:rootfs-<version>
   into <dataDir>/rootfs (skipped when it is current), and the agent builds
   its template from it (--rootfs-dir). The drive has no egress CA.
@@ -98,7 +98,7 @@ Agent flags and node requirements: microvm/README.md.
 {{- $caConfigMap := $egressCA.configMapName | default (.Values.configMap.SANDBOX_PROXY_CA_CONFIGMAP | default "sandbox-proxy-ca-bundle") }}
 {{- $caKey := $egressCA.key | default "ca.crt" }}
 {{- $serviceAccount := or $watchDrain $readCA }}
-{{- $tolerations := $agent.tolerations | default (index $sandboxPod "tolerations") | default (list (dict "key" "workload" "operator" "Equal" "value" "sandbox" "effect" "NoSchedule")) }}
+{{- $tolerations := include "onyx.craftKvmNodeTolerations" (dict "ctx" . "tolerations" $agent.tolerations) | fromYamlArray }}
 {{- $metrics := $agent.metrics | default dict }}
 {{- $metricsPort := $metrics.port | default 9464 }}
 {{- $metricsAuthMode := include "onyx.craftHostAgentMetricsAuth" . }}

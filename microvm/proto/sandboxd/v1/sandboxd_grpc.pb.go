@@ -99,10 +99,14 @@ type SandboxdClient interface {
 	// Interact writes to the stdin of a running command (started with
 	// stdin = true), or closes it.
 	Interact(ctx context.Context, in *InteractRequest, opts ...grpc.CallOption) (*InteractResponse, error)
-	// Cancel kills every process of the execution (its cgroup) and returns
-	// the result, with completion CANCELED. Cancel of an ended execution
-	// returns its result. If the main process exited before the kill, the
-	// result is EXITED with its exit code.
+	// Cancel stops an execution. With no signal (or SIGKILL) it kills every
+	// process of the execution (its cgroup) and returns the result, with
+	// completion CANCELED. With SIGINT or SIGTERM it sends that signal to the
+	// process group of the main process (as Ctrl-C in a terminal does) and
+	// returns at once, with signaled set; the command may handle the signal
+	// and keep running. Use Stream or Inspect for its result. Cancel of an
+	// ended execution returns its result. If the main process exited before
+	// the kill, the result is EXITED with its exit code.
 	Cancel(ctx context.Context, in *CancelRequest, opts ...grpc.CallOption) (*CancelResponse, error)
 	// Inspect returns one execution record.
 	Inspect(ctx context.Context, in *InspectRequest, opts ...grpc.CallOption) (*InspectResponse, error)
@@ -146,17 +150,17 @@ type SandboxdClient interface {
 	// Reserved for the browser. They return UNIMPLEMENTED.
 	BrowserStart(ctx context.Context, in *BrowserStartRequest, opts ...grpc.CallOption) (*BrowserStartResponse, error)
 	BrowserStop(ctx context.Context, in *BrowserStopRequest, opts ...grpc.CallOption) (*BrowserStopResponse, error)
-	// ManagedStatus returns the slot that is mounted on /workspace/managed and
+	// ManagedStatus returns the slot that is mounted on the mount point and
 	// the state of each slot device.
 	ManagedStatus(ctx context.Context, in *ManagedStatusRequest, opts ...grpc.CallOption) (*ManagedStatusResponse, error)
-	// MountManaged makes a slot the drive on /workspace/managed. It waits
+	// MountManaged makes a slot the drive on the mount point. It waits
 	// until the device has size_bytes (Firecracker tells the guest the new
 	// size after the host changed the drive), drops the guest's cached blocks
 	// of the device, checks the ext4 UUID, mounts the device read-only
 	// (ro,noload,nodev,nosuid,noexec, private) beneath the current mount
 	// (MOVE_MOUNT_BENEATH) and detaches the old top mount (MNT_DETACH). Open
 	// files on the old drive keep working until they close. If the slot is
-	// already on /workspace/managed with this UUID, it does nothing.
+	// already on the mount point with this UUID, it does nothing.
 	MountManaged(ctx context.Context, in *MountManagedRequest, opts ...grpc.CallOption) (*MountManagedResponse, error)
 }
 
@@ -498,10 +502,14 @@ type SandboxdServer interface {
 	// Interact writes to the stdin of a running command (started with
 	// stdin = true), or closes it.
 	Interact(context.Context, *InteractRequest) (*InteractResponse, error)
-	// Cancel kills every process of the execution (its cgroup) and returns
-	// the result, with completion CANCELED. Cancel of an ended execution
-	// returns its result. If the main process exited before the kill, the
-	// result is EXITED with its exit code.
+	// Cancel stops an execution. With no signal (or SIGKILL) it kills every
+	// process of the execution (its cgroup) and returns the result, with
+	// completion CANCELED. With SIGINT or SIGTERM it sends that signal to the
+	// process group of the main process (as Ctrl-C in a terminal does) and
+	// returns at once, with signaled set; the command may handle the signal
+	// and keep running. Use Stream or Inspect for its result. Cancel of an
+	// ended execution returns its result. If the main process exited before
+	// the kill, the result is EXITED with its exit code.
 	Cancel(context.Context, *CancelRequest) (*CancelResponse, error)
 	// Inspect returns one execution record.
 	Inspect(context.Context, *InspectRequest) (*InspectResponse, error)
@@ -545,17 +553,17 @@ type SandboxdServer interface {
 	// Reserved for the browser. They return UNIMPLEMENTED.
 	BrowserStart(context.Context, *BrowserStartRequest) (*BrowserStartResponse, error)
 	BrowserStop(context.Context, *BrowserStopRequest) (*BrowserStopResponse, error)
-	// ManagedStatus returns the slot that is mounted on /workspace/managed and
+	// ManagedStatus returns the slot that is mounted on the mount point and
 	// the state of each slot device.
 	ManagedStatus(context.Context, *ManagedStatusRequest) (*ManagedStatusResponse, error)
-	// MountManaged makes a slot the drive on /workspace/managed. It waits
+	// MountManaged makes a slot the drive on the mount point. It waits
 	// until the device has size_bytes (Firecracker tells the guest the new
 	// size after the host changed the drive), drops the guest's cached blocks
 	// of the device, checks the ext4 UUID, mounts the device read-only
 	// (ro,noload,nodev,nosuid,noexec, private) beneath the current mount
 	// (MOVE_MOUNT_BENEATH) and detaches the old top mount (MNT_DETACH). Open
 	// files on the old drive keep working until they close. If the slot is
-	// already on /workspace/managed with this UUID, it does nothing.
+	// already on the mount point with this UUID, it does nothing.
 	MountManaged(context.Context, *MountManagedRequest) (*MountManagedResponse, error)
 	mustEmbedUnimplementedSandboxdServer()
 }

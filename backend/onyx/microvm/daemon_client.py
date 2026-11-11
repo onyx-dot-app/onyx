@@ -31,6 +31,7 @@ from onyx.microvm.configs import SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS
 from onyx.microvm.generated.sandboxd.v1 import sandboxd_pb2, sandboxd_pb2_grpc
 from onyx.microvm.models import (
     CancelResult,
+    CancelSignal,
     DaemonHealth,
     DaemonInitResult,
     ExecCommand,
@@ -88,6 +89,7 @@ class SandboxDaemonErrorReason(str, Enum):
     FILE_EXISTS = "FILE_EXISTS"
     LIMIT_EXCEEDED = "LIMIT_EXCEEDED"
     ARCHIVE_INVALID = "ARCHIVE_INVALID"
+    EXECUTION_CAP_REACHED = "EXECUTION_CAP_REACHED"
 
 
 # The daemon will not accept this VM's key: nothing can use the VM.
@@ -154,6 +156,12 @@ _OUTPUT_STREAMS: dict[int, OutputStream] = {
     sandboxd_pb2.STDERR: OutputStream.STDERR,
 }
 
+_CANCEL_SIGNALS: dict[CancelSignal, sandboxd_pb2.CancelSignal] = {
+    CancelSignal.SIGKILL: sandboxd_pb2.CANCEL_SIGNAL_SIGKILL,
+    CancelSignal.SIGINT: sandboxd_pb2.CANCEL_SIGNAL_SIGINT,
+    CancelSignal.SIGTERM: sandboxd_pb2.CANCEL_SIGNAL_SIGTERM,
+}
+
 _COMPLETIONS: dict[int, ExecCompletion] = {
     sandboxd_pb2.EXITED: ExecCompletion.EXITED,
     sandboxd_pb2.SIGNALED: ExecCompletion.SIGNALED,
@@ -181,6 +189,7 @@ def _command_proto(command: ExecCommand) -> sandboxd_pb2.Command:
         env=command.env,
         stdin=command.stdin,
         labels=command.labels,
+        session_id=command.session_id,
     )
     if command.deadline_seconds is not None:
         proto.deadline.FromNanoseconds(int(command.deadline_seconds * 1e9))
@@ -438,18 +447,27 @@ class SandboxDaemonClient:
             raise sandbox_daemon_error(e) from e
         return r.written
 
-    def cancel(self, execution_id: str) -> CancelResult:
-        """Kill the execution's cgroup. The result is CANCELED, or the
-        execution's own result if it had already ended."""
+    def cancel(
+        self, execution_id: str, signal: CancelSignal = CancelSignal.SIGKILL
+    ) -> CancelResult:
+        """SIGKILL: kill the execution's cgroup; the result is CANCELED.
+        SIGINT/SIGTERM (Ctrl-C): signal the main process's group and return
+        without a result. An ended execution returns its own result."""
         try:
             r: sandboxd_pb2.CancelResponse = self._stub.Cancel(
-                sandboxd_pb2.CancelRequest(execution_id=execution_id),
+                sandboxd_pb2.CancelRequest(
+                    execution_id=execution_id, signal=_CANCEL_SIGNALS[signal]
+                ),
                 metadata=self._authed(),
                 timeout=SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS,
             )
         except grpc.RpcError as e:
             raise sandbox_daemon_error(e) from e
-        return CancelResult(result=_result(r.result), already_ended=r.already_ended)
+        return CancelResult(
+            result=_result(r.result) if r.HasField("result") else None,
+            already_ended=r.already_ended,
+            signaled=r.signaled,
+        )
 
     def inspect(self, execution_id: str) -> ExecutionRecord:
         try:
@@ -476,7 +494,8 @@ class SandboxDaemonClient:
             raise sandbox_daemon_error(e) from e
         return [_execution(x) for x in r.executions]
 
-    # Files. Paths are relative to /workspace/sessions/<session_id>/.
+    # Files. Paths are relative to /home/onyx/workspaces/<session_id>/; with
+    # session_id="" they are absolute VM paths (not upload or saves).
 
     def read_file(
         self, *, session_id: str, path: str, offset: int = 0, length: int = 0

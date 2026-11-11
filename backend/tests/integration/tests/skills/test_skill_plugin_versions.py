@@ -18,8 +18,16 @@ from sqlalchemy import select
 
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.db.enums import MarketplaceKind
-from onyx.db.models import Marketplace, Plugin, PluginSkill, PluginVersion, Skill
+from onyx.db.models import (
+    Marketplace,
+    Plugin,
+    PluginSkill,
+    PluginVersion,
+    Skill,
+    User,
+)
 from onyx.db.plugin import get_plugin_version_kind
+from onyx.server.features.skill.response_helpers import skill_response_for_user
 from onyx.skills.bundle import SKILL_MD_MAX_BYTES
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -481,6 +489,24 @@ def test_stale_base_version_gets_409(user: DATestUser) -> None:
     _assert_legacy_matches_current(state)
 
 
+def test_response_version_id_matches_the_files_it_shows(user: DATestUser) -> None:
+    name = f"snapshot-{uuid4().hex[:8]}"
+    skill = _upload(user, _bundle({"SKILL.md": _skill_md(name, "v1")}), name=name)
+    first_version = skill["current_version_id"]
+
+    with get_session_with_current_tenant() as db_session:
+        # A response that loaded the skill row before another save commits
+        # shows version 1, so it must return version 1 as the edit base.
+        loaded = db_session.get(Skill, UUID(skill["id"]))
+        db_user = db_session.get(User, UUID(user.id))
+        assert loaded is not None and db_user is not None
+        _patch(user, skill["id"], {"description": "v2"}).raise_for_status()
+        response = skill_response_for_user(loaded, db_user, db_session)
+
+    assert str(response.current_version_id) == first_version
+    assert _state(skill["id"]).current.number == 2
+
+
 def test_save_on_published_plugin_moves_both_pointers(user: DATestUser) -> None:
     name = f"published-{uuid4().hex[:8]}"
     created = _create_from_editor(user, name, public=True)
@@ -542,6 +568,25 @@ def test_skill_md_over_limit_is_refused(user: DATestUser) -> None:
         _patch(user, skill["id"], {"instructions_markdown": large_body})
     )
     _assert_skill_md_refused(_replace(user, skill["id"], large_bundle))
+    assert [v.number for v in _state(skill["id"]).versions] == [1]
+
+
+def test_skill_md_with_nul_is_refused(user: DATestUser) -> None:
+    name = f"nul-{uuid4().hex[:8]}"
+    nul_bundle = _bundle({"SKILL.md": _skill_md(name, "Nul", "Before\x00after.")})
+
+    upload = client.post(
+        f"{API_SERVER_URL}/skills/custom",
+        files={"bundle": (f"{name}.zip", io.BytesIO(nul_bundle), "application/zip")},
+        headers=_multipart_headers(user),
+    )
+    assert upload.status_code == 400, upload.text
+    assert "NUL character" in upload.json()["detail"]
+
+    skill = _upload(user, _bundle({"SKILL.md": _skill_md(name, "Clean")}), name=name)
+    replace = _replace(user, skill["id"], nul_bundle)
+    assert replace.status_code == 400, replace.text
+    assert "NUL character" in replace.json()["detail"]
     assert [v.number for v in _state(skill["id"]).versions] == [1]
 
 

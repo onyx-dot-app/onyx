@@ -6,6 +6,12 @@ locals {
     { "onyx.app/workload" = "sandbox" },
     local.sandbox_firecracker ? { "onyx.app/kvm" = "true" } : {},
   )
+  # Kubelet does not count microVM memory, so a Firecracker pool also carries
+  # the onyx.app/kvm taint. Only the host agent and preflight tolerate it.
+  sandbox_node_taints = concat(
+    [{ key = "workload", value = "sandbox", effect = "NO_SCHEDULE" }],
+    local.sandbox_firecracker ? [{ key = "onyx.app/kvm", value = "true", effect = "NO_SCHEDULE" }] : [],
+  )
 
   # GKE adds this taint to a GPU pool itself, but only when a non-GPU pool
   # already exists. On a fresh apply the pools are built in parallel, so the
@@ -33,7 +39,7 @@ locals {
       disk_size_gb   = var.sandbox_node_disk_size_gb
       disk_type      = "pd-balanced"
       labels         = local.sandbox_node_labels
-      taints         = [{ key = "workload", value = "sandbox", effect = "NO_SCHEDULE" }]
+      taints         = local.sandbox_node_taints
       node_locations = []
     }
   } : {}
