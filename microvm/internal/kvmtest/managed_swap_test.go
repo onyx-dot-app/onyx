@@ -129,8 +129,8 @@ func TestManagedSwapKVM(t *testing.T) {
 	}
 	tpl := br.GetTemplate()
 	t.Logf("template %s managed_slots=%d built=%v build_ms=%d", tpl.GetVersion(), tpl.GetManagedSlots(), br.GetBuilt(), br.GetBuildMs())
-	if tpl.GetManagedSlots() != 2 {
-		t.Fatalf("template has %d managed slots", tpl.GetManagedSlots())
+	if tpl.GetManagedSlots() != 2 || strings.Join(tpl.GetManagedMounts(), ",") != "skills,user-uploads,spaces" {
+		t.Fatalf("template has %d managed slots, mounts %v", tpl.GetManagedSlots(), tpl.GetManagedMounts())
 	}
 
 	// n running VMs, each with Init.
@@ -402,6 +402,31 @@ echo files=$(ls /mnt/skills/lib | wc -l)
 	if r, err := run(0, "cat /mnt/skills/hello/SKILL.md"); err != nil || r.stdout != "skills v2\n" {
 		t.Fatalf("after restart swap: %q %v", r.stdout, err)
 	}
+	// 10. The user-uploads and spaces mounts swap the same way, each on its
+	// own slots; skills does not change.
+	for _, sw := range []struct{ mount, image, want, dev string }{
+		{"user-uploads", imgs["v1"].id, "skills v1", "/dev/vdh"}, {"spaces", imgs["v3"].id, "skills v3", "/dev/vdj"},
+	} {
+		r, err := ha.SwapManaged(ctx, &pb.SwapManagedRequest{ImageId: sw.image, Targets: targets(0), Mount: sw.mount})
+		if err != nil || !r.GetResults()[0].GetOk() || r.GetResults()[0].GetActive() != pb.ManagedSlot_MANAGED_SLOT_B {
+			t.Fatalf("swap %s: %v %v", sw.mount, r, err)
+		}
+		out, err := run(0, fmt.Sprintf("cat /mnt/%s/hello/SKILL.md; grep ' /mnt/%s ' /proc/self/mountinfo | awk '{print $(NF-1)}'; cat /mnt/skills/hello/SKILL.md", sw.mount, sw.mount))
+		if err != nil || out.stdout != sw.want+"\n"+sw.dev+"\nskills v2\n" {
+			t.Fatalf("after %s swap: %q %v", sw.mount, out.stdout, err)
+		}
+	}
+	l, err = ha.List(ctx, &pb.ListRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, vm := range l.GetVms() {
+		if vm.GetSandboxId() == ids[0] && (vm.GetManagedMounts()["spaces"].GetSlotBImage() != imgs["v3"].id ||
+			vm.GetManagedMounts()["user-uploads"].GetActive() != pb.ManagedSlot_MANAGED_SLOT_B) {
+			t.Errorf("mounts after swaps: %v", vm.GetManagedMounts())
+		}
+	}
+
 	ni, err := ha.NodeInfo(ctx, &pb.NodeInfoRequest{})
 	if err == nil {
 		for _, mi := range ni.GetManagedImages() {

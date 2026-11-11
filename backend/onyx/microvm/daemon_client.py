@@ -156,7 +156,7 @@ _OUTPUT_STREAMS: dict[int, OutputStream] = {
     sandboxd_pb2.STDERR: OutputStream.STDERR,
 }
 
-_CANCEL_SIGNALS: dict[CancelSignal, int] = {
+_CANCEL_SIGNALS: dict[CancelSignal, sandboxd_pb2.CancelSignal] = {
     CancelSignal.SIGKILL: sandboxd_pb2.CANCEL_SIGNAL_SIGKILL,
     CancelSignal.SIGINT: sandboxd_pb2.CANCEL_SIGNAL_SIGINT,
     CancelSignal.SIGTERM: sandboxd_pb2.CANCEL_SIGNAL_SIGTERM,
