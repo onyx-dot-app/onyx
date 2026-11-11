@@ -174,7 +174,7 @@ func TestManagedImageAPI(t *testing.T) {
 		slog.New(slog.NewTextHandler(io.Discard, nil)))
 	store := &managed.Store{Dir: t.TempDir(), Limits: managed.DefaultLimits, Mkfs: fakeMkfs}
 	svc := &Service{M: m, Managed: &ManagedImages{Store: store, Keep: 2}}
-	sock := filepath.Join("/tmp", "mi-"+filepath.Base(t.TempDir())+".sock")
+	sock := shortSock(t, "mi")
 	ln, err := ListenUnix(sock)
 	if err != nil {
 		t.Fatal(err)
