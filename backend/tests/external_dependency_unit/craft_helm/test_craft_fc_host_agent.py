@@ -158,6 +158,7 @@ def test_agent_pod_spec() -> None:
     assert "--dial-ports=3010" in args
     assert "--relay-max-conns=256" in args
     assert "--dial-max-streams=64" in args
+    assert "--max-vms=60" in args
     assert not [a for a in args if a.startswith("--client-allowed-sans")]
     # The agent joins $POD_IP and the listen port itself (it brackets IPv6).
     assert not [a for a in args if a.startswith("--advertise-address")]
@@ -419,6 +420,16 @@ def test_agent_overrides() -> None:
     assert "--dial-max-streams=8" in args
     assert "--client-allowed-sans=spiffe://onyx/api-server" in args
     assert "--advertise-address=agent.example:7443" in args
+
+
+@pytest.mark.parametrize("max_vms", ["0", "120"])
+def test_max_vms_override_keeps_zero(max_vms: str) -> None:
+    docs = _render([*_FIRECRACKER, "--set", f"craft.hostAgent.maxVms={max_vms}"])
+    args = _by_kind(docs, "DaemonSet")["spec"]["template"]["spec"]["containers"][0][
+        "args"
+    ]
+
+    assert f"--max-vms={max_vms}" in args
 
 
 def test_headless_service_targets_agent_pods() -> None:

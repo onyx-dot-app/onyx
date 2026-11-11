@@ -317,6 +317,7 @@ spec:
             - --dial-ports={{ $agent.dialPorts | default "3010" }}
             - --relay-max-conns={{ $agent.relayMaxConns | default 256 | int64 }}
             - --dial-max-streams={{ $agent.dialMaxStreams | default 64 | int64 }}
+            - --max-vms={{ (hasKey $agent "maxVms" | ternary $agent.maxVms 60) | int64 }}
             {{- with $agent.clientAllowedSans }}
             - --client-allowed-sans={{ . }}
             {{- end }}

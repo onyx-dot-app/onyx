@@ -143,7 +143,8 @@ enum ErrorReason {
   CAPACITY_MEMORY = 7;
   // The node data disk does not have enough free space.
   CAPACITY_DISK = 8;
-  // The node has no free VM slot (jailer UID).
+  // The node has no free VM slot: it runs --max-vms VMs, or it has no free
+  // jailer UID.
   CAPACITY_VM_SLOTS = 9;
   // The sandbox has a VM with a different attempt on this node.
   ATTEMPT_CONFLICT = 10;
@@ -481,6 +482,10 @@ message NodeInfoResponse {
   // mem_available_mib yet, so Create counts it.
   uint64 mem_starting_mib = 12;
   DrainStatus drain = 13;
+  // The VM cap (--max-vms); 0 is no cap. Create refuses with
+  // CAPACITY_VM_SLOTS when the node runs this many VMs, template build VMs
+  // and processes in doubt.
+  uint32 max_vms = 14;
 }
 
 message DrainStatus {

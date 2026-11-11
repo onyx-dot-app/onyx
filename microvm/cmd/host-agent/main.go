@@ -63,6 +63,7 @@ type flags struct {
 	uidBase        uint
 	uidCount       uint
 	minFreeMemMiB  uint64
+	maxVMs         int
 	minFreeDiskGB  uint64
 	maxScratchGiB  uint
 	startTimeout   time.Duration
@@ -125,6 +126,7 @@ func main() {
 	flag.Uint64Var(&f.minFreeMemMiB, "min-free-mem-mib", 2048, "memory reserve: Create needs MemAvailable >= mem_mib + this")
 	flag.Uint64Var(&f.minFreeDiskGB, "min-free-disk-gib", 10, "Create needs this much free space on the data disk")
 	flag.UintVar(&f.maxScratchGiB, "max-scratch-gib", 100, "largest scratch disk")
+	flag.IntVar(&f.maxVMs, "max-vms", 0, "most VMs on the node, template build VMs included; Create refuses over it with CAPACITY_VM_SLOTS (0 = no cap)")
 	flag.DurationVar(&f.startTimeout, "start-timeout", 30*time.Second, "limit for one VM start")
 	flag.DurationVar(&f.stopTimeout, "stop-timeout", 30*time.Second, "limit for one VM stop")
 	flag.StringVar(&f.logLevel, "firecracker-log-level", "Warning", "Firecracker log level")
@@ -251,6 +253,7 @@ func run(f flags, log *slog.Logger) error {
 		MinFreeMemMiB:    f.minFreeMemMiB,
 		MinFreeDiskBytes: f.minFreeDiskGB * uint64(scratch.GiB),
 		MaxScratchGiB:    uint32(f.maxScratchGiB),
+		MaxVMs:           f.maxVMs,
 		StartTimeout:     f.startTimeout,
 		StopTimeout:      f.stopTimeout,
 		TombstoneTTL:     24 * time.Hour,
@@ -766,6 +769,9 @@ func checkRanges(f flags) error {
 	if f.uidBase == 0 || f.uidCount == 0 || uint64(f.uidBase)+uint64(f.uidCount) > math.MaxUint32 {
 		return fmt.Errorf("--uid-base %d and --uid-count %d must be more than 0 and end at or below %d",
 			f.uidBase, f.uidCount, uint64(math.MaxUint32))
+	}
+	if f.maxVMs < 0 {
+		return fmt.Errorf("--max-vms %d must be 0 (no cap) or more", f.maxVMs)
 	}
 	if f.tplVCPUs == 0 || f.tplVCPUs > 32 || f.tplMemMiB < 128 || f.tplMemMiB > math.MaxUint32 ||
 		f.tplScratchGiB == 0 || f.tplScratchGiB > f.maxScratchGiB || f.tplKeep < 1 {

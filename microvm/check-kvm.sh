@@ -10,7 +10,7 @@
 #
 # smoke: TestCoreKVM, TestDialKVM, TestRestartKVM (kit root drive only).
 # full:  smoke, then the egress, pass-through, template, managed drive,
-#        memory and root drive delivery tests. It needs KVM_PYTHON: a Python
+#        memory, root drive delivery and VM cap tests. It needs KVM_PYTHON: a Python
 #        with backend/requirements/default.txt (the egress proxy harness).
 #
 # Optional env: KVM_VMS (default 4), BASE_IMAGE_REGISTRY (a Docker Hub
@@ -53,7 +53,7 @@ fi
 tests="TestCoreKVM TestDialKVM TestRestartKVM"
 if [ "${lane}" = full ]; then
   tests="${tests} TestEgressKVM TestPassthroughKVM TestSavesKVM TestTemplateBuildKVM TestManagedSwapKVM"
-  tests="${tests} TestMemAdmissionKVM TestMemOOMKVM TestRootfsDeliveryKVM"
+  tests="${tests} TestMemAdmissionKVM TestMemOOMKVM TestRootfsDeliveryKVM TestMaxVMsKVM"
 fi
 if [ -n "${KVM_ONLY:-}" ]; then
   selected=""

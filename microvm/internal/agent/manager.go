@@ -101,6 +101,9 @@ type Config struct {
 	// MinFreeDiskBytes: Create needs this much free space on the data disk.
 	MinFreeDiskBytes uint64
 	MaxScratchGiB    uint32
+	// MaxVMs caps the Firecracker processes of the node: VMs that are not
+	// exited, template build VMs and processes in doubt. 0 is no cap.
+	MaxVMs int
 	// StartTimeout bounds one VM start (jailer, restore).
 	StartTimeout time.Duration
 	// StopTimeout bounds one VM stop.
@@ -366,9 +369,13 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (VM, bool, erro
 			m.mu.Unlock()
 			return VM{}, false, err
 		}
-		// Refuse early, before the template hash check. The check under
-		// the lock below is the one that counts.
+		// Refuse early, before the template hash check. The checks under
+		// the lock below are the ones that count.
 		if err := m.drainErrLocked(); err != nil {
+			m.mu.Unlock()
+			return VM{}, false, err
+		}
+		if err := m.admitSlotLocked(); err != nil {
 			m.mu.Unlock()
 			return VM{}, false, err
 		}
@@ -398,6 +405,10 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (VM, bool, erro
 	// Drain and memory are checked under the lock, so two Creates never
 	// count the same free memory.
 	if err := m.drainErrLocked(); err != nil {
+		m.mu.Unlock()
+		return VM{}, false, err
+	}
+	if err := m.admitSlotLocked(); err != nil {
 		m.mu.Unlock()
 		return VM{}, false, err
 	}
@@ -573,6 +584,32 @@ func (m *Manager) admitMemoryLocked(memMiB uint32) error {
 	}
 	m.log.Warn("create refused: memory", "mem_available_mib", avail, "mem_needed_mib", need,
 		"mem_starting_mib", starting, "mem_reserve_mib", m.cfg.MinFreeMemMiB)
+	return e
+}
+
+// MaxVMs is the VM cap; 0 is no cap.
+func (m *Manager) MaxVMs() int { return m.cfg.MaxVMs }
+
+// vmSlotsUsedLocked counts the Firecracker processes that MaxVMs caps.
+func (m *Manager) vmSlotsUsedLocked() int {
+	return m.liveVMsLocked() + len(m.building) + len(m.doubt)
+}
+
+// admitSlotLocked refuses a new VM when the node runs MaxVMs. On nested
+// virtualization the L0 hypervisor fails random running VMs above a fixed
+// count (KVM_EXIT_FAIL_ENTRY), long before memory runs out.
+func (m *Manager) admitSlotLocked() error {
+	if m.cfg.MaxVMs <= 0 {
+		return nil
+	}
+	used := m.vmSlotsUsedLocked()
+	if used < m.cfg.MaxVMs {
+		return nil
+	}
+	e := apierr.New(pb.ErrorReason_CAPACITY_VM_SLOTS,
+		"node runs %d VMs (starting, running, template builds and processes in doubt); --max-vms is %d", used, m.cfg.MaxVMs)
+	e.Metadata = map[string]string{"vm_count": fmt.Sprint(used), "max_vms": fmt.Sprint(m.cfg.MaxVMs)}
+	m.log.Warn("create refused: VM slots", "vm_count", used, "max_vms", m.cfg.MaxVMs)
 	return e
 }
 
@@ -870,6 +907,9 @@ func (m *Manager) BuildSlot(id string, memMiB uint32) (uint32, func(left bool), 
 	if err := m.drainErrLocked(); err != nil {
 		return 0, nil, err
 	}
+	if err := m.admitSlotLocked(); err != nil {
+		return 0, nil, err
+	}
 	if err := m.admitMemoryLocked(memMiB); err != nil {
 		return 0, nil, err
 	}
@@ -905,6 +945,8 @@ type NodeInfo struct {
 	MemReserveMiB  uint64
 	MemStartingMiB uint64
 	Drain          DrainStatus
+	// MaxVMs is the VM cap (--max-vms); 0 is no cap.
+	MaxVMs int
 }
 
 // NodeInfo returns the node capacity, versions and templates.
@@ -931,6 +973,7 @@ func (m *Manager) NodeInfo() (NodeInfo, error) {
 		MemTotalMiB: total, MemAvailableMiB: avail, DiskFreeMiB: free >> 20,
 		VMCount: n, Templates: tpls, Versions: m.versions,
 		MemReserveMiB: m.cfg.MinFreeMemMiB, MemStartingMiB: starting, Drain: drain,
+		MaxVMs: m.cfg.MaxVMs,
 	}, nil
 }
 
