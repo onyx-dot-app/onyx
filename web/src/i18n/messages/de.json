@@ -1525,6 +1525,9 @@
         },
         "federatedSlack": {
           "description": "Slack zur Abfragezeit durchsuchen"
+        },
+        "shortcut": {
+          "description": "Shortcut Epics, Stories und Aufgaben"
         }
       }
     },

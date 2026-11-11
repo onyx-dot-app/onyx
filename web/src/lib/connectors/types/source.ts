@@ -71,6 +71,7 @@ export enum ValidSources {
   AzureDatalake = "azure_datalake",
   Canvas = "canvas",
   Zoom = "zoom",
+  Shortcut = "shortcut",
 
   // Craft-specific sources
   CraftFile = "craft_file",
@@ -107,6 +108,7 @@ export const validAutoSyncSources = [
   ValidSources.Hubspot,
   ValidSources.YouTrack,
   ValidSources.AzureDatalake,
+  ValidSources.Shortcut,
 ] as const;
 
 // Create a type from the array elements
