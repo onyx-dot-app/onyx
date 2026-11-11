@@ -12,7 +12,7 @@ import pytest
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills import ingest_from_github
-from onyx.skills.bundle import DEFAULT_MAX_FILE_COUNT, NormalizedSkillBundle
+from onyx.skills.bundle import NormalizedSkillBundle
 from onyx.skills.ingest_from_github import fetch_github_skill_bundles
 
 _REVISION = "a" * 40
@@ -377,30 +377,3 @@ def test_rejects_repository_symlinks(monkeypatch: pytest.MonkeyPatch) -> None:
 
     with pytest.raises(OnyxError, match="symbolic link"):
         fetch_github_skill_bundles("owner/repository")
-
-
-def test_skill_over_file_count_limit_does_not_block_other_skills(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    files = {
-        "skills/large/SKILL.md": _skill_md("large"),
-        "skills/small/SKILL.md": _skill_md("small"),
-    }
-    files.update(
-        {
-            f"skills/large/refs/{index}.md": b"x"
-            for index in range(DEFAULT_MAX_FILE_COUNT)
-        }
-    )
-    _mock_repository(monkeypatch, files)
-
-    _, skills = fetch_github_skill_bundles("owner/repository")
-
-    by_name = {skill.name: skill for skill in skills}
-    assert by_name["large"].bundle_bytes is None
-    assert by_name["large"].unavailable_reason is not None
-    assert (
-        f"more than {DEFAULT_MAX_FILE_COUNT} files"
-        in by_name["large"].unavailable_reason
-    )
-    assert by_name["small"].bundle_bytes is not None

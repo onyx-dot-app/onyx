@@ -73,7 +73,6 @@ ENV_HELPER_FUNCS = {
     "lock_timeout_from_env": "int",
     "_fc_env_int": "int",
     "_fc_env_float": "float",
-    "positive_int_from_env": "int",
 }
 
 # Deployment files to cross-reference.

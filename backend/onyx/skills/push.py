@@ -144,16 +144,6 @@ def _add_bundle_bytes(files: FileSet, skill: Skill, bundle_bytes: bytes) -> None
         )
 
 
-def _resolved_file_size(path: str, content: bytes) -> int:
-    name, _, relative = path.partition("/")
-    if relative != SKILL_MD_NAME:
-        return len(content)
-    placeholder = CLAUDE_SKILL_DIR_PLACEHOLDER.encode()
-    return len(content) + content.count(placeholder) * (
-        len(f"{SKILLS_MOUNT_PATH}/{name}".encode()) - len(placeholder)
-    )
-
-
 def _resolve_skill_dirs(files: FileSet, skill_names: Iterable[str]) -> None:
     """Point ``${CLAUDE_SKILL_DIR}`` in each root ``SKILL.md`` at the skill's
     sandbox folder. Only the sent copy changes, not the stored bundle."""
@@ -165,7 +155,10 @@ def _resolve_skill_dirs(files: FileSet, skill_names: Iterable[str]) -> None:
         content = files.get(path)
         if content is None or placeholder not in content:
             continue
-        resolved_size = _resolved_file_size(path, content)
+        skill_dir = f"{SKILLS_MOUNT_PATH}/{name}"
+        resolved_size = len(content) + content.count(placeholder) * (
+            len(skill_dir.encode()) - len(placeholder)
+        )
         resolved_total = total - len(content) + resolved_size
         if resolved_size > file_limit or resolved_total > MAX_BUNDLE_BYTES:
             logger.warning(
@@ -178,7 +171,7 @@ def _resolve_skill_dirs(files: FileSet, skill_names: Iterable[str]) -> None:
             continue
         total = resolved_total
         files[path] = resolve_skill_dir_placeholder(
-            content.decode("utf-8"), f"{SKILLS_MOUNT_PATH}/{name}"
+            content.decode("utf-8"), skill_dir
         ).encode("utf-8")
 
 

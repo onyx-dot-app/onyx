@@ -346,7 +346,6 @@ covers new files that match it.
 | `web/src/app/admin/discord-bot/` | discord-bot |
 | `web/src/views/admin/SpendingLimitsPage/`, `web/src/lib/spendingLimits/`, `web/src/app/ee/admin/spending-limits/` | rate-and-usage-limits |
 | `web/src/app/admin/billing/`, `web/src/lib/billing/`, `web/src/components/GatedContentWrapper.tsx`, `web/src/sections/modals/DowngradeToCommunityModal.tsx`, `web/src/components/errorPages/AccessRestrictedPage.tsx`, `web/src/providers/ProductGatingWrapper.tsx`, `web/src/hooks/useLicense.ts`, `web/src/hooks/useBillingInformation.ts`, `web/src/hooks/useCloudSubscription.ts` | billing |
-| `web/src/securityHeaders.ts` | editions-and-gating |
 | `web/src/proxy.ts`, `web/src/app/ee/layout.tsx`, `web/src/app/ee/EEFeatureRedirect.tsx` | editions-and-gating |
 | `web/src/app/admin/hooks/`, `web/src/ee/views/admin/HooksPage/`, `web/src/ee/hooks/` | hooks |
 | `web/src/app/ee/admin/standard-answer/`, `web/src/components/standardAnswers/` | standard-answers |

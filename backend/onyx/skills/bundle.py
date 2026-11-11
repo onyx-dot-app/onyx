@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import os
 import stat
 import sys
 import zipfile
@@ -13,7 +14,6 @@ from copy import copy
 from dataclasses import dataclass
 from typing import IO, Final, Literal
 
-from onyx.configs.constants import positive_int_from_env
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.built_in import BUILT_IN_SKILLS
@@ -27,50 +27,14 @@ from onyx.skills.models import CustomSkillBundleContents, SkillBundleFile
 
 _MIB: Final[int] = 1024 * 1024
 
-
-def stored_zip_allowance(total_max_bytes: int, max_file_count: int) -> int:
-    """The largest stored ZIP that a bundle within the file limits can need.
-
-    Bundles stored before the ZIP size limit existed can hold up to the
-    uncompressed total limit of incompressible files plus ZIP framing."""
-    return (
-        max(100 * _MIB, total_max_bytes)
-        + total_max_bytes // 128
-        + max_file_count * 4 * 1024
-    )
-
-
-_PER_FILE_SETTING = positive_int_from_env("SKILL_BUNDLE_PER_FILE_MAX_BYTES", 25 * _MIB)
-_TOTAL_SETTING = positive_int_from_env("SKILL_BUNDLE_TOTAL_MAX_BYTES", 100 * _MIB)
-_FILE_COUNT_SETTING = positive_int_from_env("SKILL_BUNDLE_MAX_FILE_COUNT", 500)
-_STORED_ZIP_SETTING = positive_int_from_env(
-    "SKILL_BUNDLE_STORED_ZIP_MAX_BYTES",
-    stored_zip_allowance(_TOTAL_SETTING or 0, _FILE_COUNT_SETTING or 0),
+DEFAULT_PER_FILE_MAX_BYTES: Final[int] = int(
+    os.environ.get("SKILL_BUNDLE_PER_FILE_MAX_BYTES") or 25 * _MIB
 )
-_ZIP_SETTING = positive_int_from_env("SKILL_BUNDLE_ZIP_MAX_BYTES", 25 * _MIB)
-_INVALID_SETTINGS: Final[tuple[str, ...]] = tuple(
-    name
-    for name, value in (
-        ("SKILL_BUNDLE_PER_FILE_MAX_BYTES", _PER_FILE_SETTING),
-        ("SKILL_BUNDLE_TOTAL_MAX_BYTES", _TOTAL_SETTING),
-        ("SKILL_BUNDLE_MAX_FILE_COUNT", _FILE_COUNT_SETTING),
-        ("SKILL_BUNDLE_STORED_ZIP_MAX_BYTES", _STORED_ZIP_SETTING),
-        ("SKILL_BUNDLE_ZIP_MAX_BYTES", _ZIP_SETTING),
-    )
-    if value is None
+DEFAULT_TOTAL_MAX_BYTES: Final[int] = int(
+    os.environ.get("SKILL_BUNDLE_TOTAL_MAX_BYTES") or 100 * _MIB
 )
-# Invalid settings disable custom bundles; a zero limit also fails closed.
-SKILL_BUNDLE_SETTINGS_ERROR: Final[str | None] = (
-    "Custom skill bundles are disabled because "
-    f"{', '.join(_INVALID_SETTINGS)} must be a positive integer."
-    if _INVALID_SETTINGS
-    else None
-)
-DEFAULT_PER_FILE_MAX_BYTES: Final[int] = _PER_FILE_SETTING or 0
-DEFAULT_TOTAL_MAX_BYTES: Final[int] = _TOTAL_SETTING or 0
-DEFAULT_STORED_ZIP_MAX_BYTES: Final[int] = _STORED_ZIP_SETTING or 0
-DEFAULT_ZIP_MAX_BYTES: Final[int] = min(_ZIP_SETTING or 0, DEFAULT_STORED_ZIP_MAX_BYTES)
-DEFAULT_MAX_FILE_COUNT: Final[int] = _FILE_COUNT_SETTING or 0
+DEFAULT_ZIP_MAX_BYTES: Final[int] = 25 * _MIB
+DEFAULT_MAX_FILE_COUNT: Final[int] = 500
 
 SkillBundleLimit = Literal["zip_bytes", "file_count", "file_bytes", "total_bytes"]
 
@@ -88,11 +52,6 @@ _IGNORED_BUNDLE_FILE_NAMES: Final[frozenset[str]] = frozenset(
 class NormalizedSkillBundle:
     content: bytes
     source_directory: str | None
-
-
-def assert_skill_bundle_settings_valid() -> None:
-    if SKILL_BUNDLE_SETTINGS_ERROR is not None:
-        raise OnyxError(OnyxErrorCode.SERVICE_UNAVAILABLE, SKILL_BUNDLE_SETTINGS_ERROR)
 
 
 def _bundle_limit_error(
@@ -120,7 +79,6 @@ def read_bundle_file(
     max_bytes: int | None = None,
 ) -> bytes:
     """Read a bundle stream without buffering an arbitrarily large body."""
-    assert_skill_bundle_settings_valid()
     is_raw_file = filename is not None and not filename.lower().endswith(".zip")
     if max_bytes is None:
         max_bytes = DEFAULT_PER_FILE_MAX_BYTES if is_raw_file else DEFAULT_ZIP_MAX_BYTES
@@ -132,13 +90,6 @@ def read_bundle_file(
             )
         raise _zip_too_large_error(max_bytes)
     return data
-
-
-def check_stored_zip_size(size: int | None, max_bytes: int) -> None:
-    """Reject a stored ZIP from object metadata before downloading it."""
-    assert_skill_bundle_settings_valid()
-    if size is not None and size > max_bytes:
-        raise _zip_too_large_error(max_bytes)
 
 
 def _check_bundle_file_count(count: int, max_file_count: int | None) -> None:
@@ -256,7 +207,6 @@ def rewrite_custom_bundle_skill_md(
     through unchanged. The resulting archive is structurally normalized before
     it is returned to callers for storage.
     """
-    assert_skill_bundle_settings_valid()
     if canonical_name in BUILT_IN_SKILLS:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
@@ -504,7 +454,6 @@ def normalize_custom_bundle(
     413. ``None`` skips the zip size or file count check; reads of bundles
     stored before those limits existed use it.
     """
-    assert_skill_bundle_settings_valid()
     if zip_max_bytes is not None and len(zip_bytes) > zip_max_bytes:
         raise _zip_too_large_error(zip_max_bytes)
     try:
@@ -644,7 +593,6 @@ def update_custom_bundle_files(
     A callable for ``existing_zip_bytes`` is read only when the existing bundle
     is needed, so a full replacement does not depend on it.
     """
-    assert_skill_bundle_settings_valid()
     is_upload = upload_bytes is not None
     if is_upload == (remove_path is not None):
         raise OnyxError(
