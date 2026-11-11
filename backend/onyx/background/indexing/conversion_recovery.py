@@ -65,11 +65,18 @@ def _stage_has_tasks(
     expired in the queue leaves its pending count behind, so a pending count
     is checked against the attempt's tasks in the queue and the unacked hash.
     Tasks of other attempts do not count: a worker that was killed leaves its
-    tasks unacked until the visibility timeout, hours later."""
+    tasks unacked until the visibility timeout, hours later.
+
+    A killed worker also leaves the in-flight count raised. A running
+    conversion task keeps a live entry, so that stage checks the entries in
+    place of the count."""
     counters = RedisDocprocessing(
         index_attempt_id, get_redis_client(tenant_id=tenant_id), stage
     )
-    if counters.in_flight() > 0:
+    if stage == BatchStage.DOCCONVERSION:
+        if counters.has_live_task():
+            return True
+    elif counters.in_flight() > 0:
         return True
     if counters.pending() == 0:
         return False
@@ -83,8 +90,8 @@ def _stage_has_tasks(
 
 def _task_is_queued(task_id: str, broker: Redis) -> bool:
     """True when the task waits in a queue or a worker holds it unacked. A
-    task that runs after an ack on receipt is in neither place: the in-flight
-    counter covers a conversion task that runs."""
+    task that runs after an ack on receipt is in neither place: the live entry
+    covers a conversion task that runs."""
     for queue in (
         OnyxCeleryQueues.DOCCONVERSION,
         OnyxCeleryQueues.CONNECTOR_DOC_FETCHING,
@@ -113,6 +120,12 @@ def restart_conversion_chain(
     count is corrected for a task that stopped before it counted. A document
     batch in the store with no docprocessing task was never sent on: send it.
     Then dispatch the stub batches that were never sent."""
+    # No conversion task runs, so the in-flight count is from killed workers.
+    RedisDocprocessing(
+        index_attempt_id,
+        get_redis_client(tenant_id=tenant_id),
+        BatchStage.DOCCONVERSION,
+    ).reset_in_flight()
     with get_session_with_current_tenant() as db_session:
         attempt = get_index_attempt(db_session, index_attempt_id)
         if attempt is None:

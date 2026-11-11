@@ -7,6 +7,8 @@ from onyx.background.celery.tasks.docprocessing.heartbeat import (
 from onyx.background.indexing.run_docconversion import convert_stub_batch
 from onyx.background.indexing.run_docfetching import mark_attempt_failed_unless_terminal
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.redis.redis_docprocessing import BatchStage, RedisDocprocessing
+from onyx.redis.redis_pool import get_redis_client
 from shared_configs.contextvars import (
     CURRENT_TENANT_ID_CONTEXTVAR,
     INDEX_ATTEMPT_INFO_CONTEXTVAR,
@@ -34,7 +36,21 @@ def docconversion_task(
     """Converts one stub batch of an index attempt: fetches and parses its
     listed documents, stores them as a document batch, and sends that batch
     to docprocessing. Then it sends the next stub batches of the attempt."""
-    heartbeat_thread, stop_event = start_heartbeat(index_attempt_id)
+    task_id = self.request.id
+    counters = RedisDocprocessing(
+        index_attempt_id,
+        get_redis_client(tenant_id=tenant_id),
+        BatchStage.DOCCONVERSION,
+    )
+
+    def refresh_live_entry() -> None:
+        # The prerun signal adds the entry and the postrun signal removes it.
+        if task_id is not None:
+            counters.mark_task_live(task_id)
+
+    heartbeat_thread, stop_event = start_heartbeat(
+        index_attempt_id, on_beat=refresh_live_entry
+    )
     token = INDEX_ATTEMPT_INFO_CONTEXTVAR.set((cc_pair_id, index_attempt_id))
     try:
         if tenant_id:
@@ -47,7 +63,7 @@ def docconversion_task(
             batch_num=batch_num,
             enqueue_time_ms=enqueue_time_ms,
             is_backfill=is_backfill,
-            task_id=self.request.id,
+            task_id=task_id,
         )
     except Exception as e:
         # Nothing sends the batch again after a failure that repeats, so the
