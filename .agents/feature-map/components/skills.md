@@ -65,7 +65,7 @@ When it fails:
 ## Scope
 
 This component owns the skill row, its shares, installation policy and user
-preferences; the plugin tables ([[#plugin-tables-unused]]); bundle parsing and validation; built-in skill definitions;
+preferences; the plugin tables ([[#plugin-tables]]); bundle parsing and validation; built-in skill definitions;
 per-user rendering of templates; GitHub import; the push of a user's skill
 files into a sandbox; and the skills library UI.
 
@@ -150,7 +150,7 @@ The library preview of an external-app skill calls the same renderer
    never go stale.
 2. `affected-users-before-change` **Compute affected users before the
    change.** `db/skill.py:affected_user_ids_for_skill` finds users with a running sandbox
-   who can see the skill. It ignores preferences on purpose, so that a delete
+   who can see the skill, by the plugin visibility rule in one query. It ignores preferences on purpose, so that a delete
    or a disable still pushes to the users who had the skill. The delete route
    reads the audience before it deletes. The share, transfer and edit routes
    push to the union of the audience before and after. A new mutation must do
@@ -159,9 +159,20 @@ The library preview of an external-app skill calls the same renderer
    predicates.** Reads use `db/skill.py:skill_visible_to_user`. Edits use
    `db/skill.py:_is_editable_by_user`, through
    `db/skill.py:_skill_select_for_management_policy`. A
-   query on `Skill` without them skips sharing.
+   query on `Skill` without them skips sharing. For a custom skill both read
+   the plugin tables through the one copy of the rule in
+   `db/plugin_access.py` (`plugin_visible_to_user`,
+   `plugin_editable_by_user`, `installation_rank_for_user`,
+   `version_user_runs`). There is no organization-wide edit: a legacy
+   organization `EDITOR` row gives view access only. A `plugin__user_group`
+   row with no permission holds only a group install setting and grants
+   nothing. Built-in skills have no plugin and keep their skill rows.
 4. `enablement-not-preference-row` **Never infer enablement from a preference
-   row.** Use `db/skill.py:_is_enabled_for_user`. Disable writes `enabled=False`; it does
+   row.** Use `db/skill.py:_is_enabled_for_user`. It reads
+   `user_plugin_preference` and the install setting that applies to the user
+   (`db/plugin_access.py:installation_rank_for_user`: the plugin's setting or
+   its marketplace default, the most open non-default group setting, and at
+   least available with a share). Disable writes `enabled=False`; it does
    not delete the row. A required policy overrides an opt-out without deleting
    it, so the opt-out returns when the policy goes back to default.
 5. `name-uniqueness-in-db` **Name uniqueness is in the database.** The partial
@@ -230,7 +241,8 @@ The library preview of an external-app skill calls the same renderer
     `db/skill.py:_assert_group_share_within_scope` treats any change to the
     group set or levels as a `MANAGE_SKILLS` action within scope
     ([[authorization]]). Without it, an owner could push a skill into any
-    group manager's scope. It compares against the stored shares, and the
+    group manager's scope. It compares against the stored plugin group shares
+    (rows with a permission), and the
     privacy check uses the stored visibility and the request, so a
     public-to-private change in the same request cannot get past it. A
     `public_permission` change needs the author or global `MANAGE_SKILLS`
@@ -314,8 +326,8 @@ The library preview of an external-app skill calls the same renderer
     reads the files. It also checks the resolved SKILL.md size then, so a
     Skill that `skill-dir-placeholder` would drop never counts against later
     Skills.
-19. `plugin-tables-unused` **App code writes the plugin tables but does not
-    read them yet.** Migration `cdec9dd9ca3d` adds `plugin_marketplace`,
+19. `plugin-tables` **Access reads come from the plugin tables;
+    the skill rows are still written.** Migration `cdec9dd9ca3d` adds `plugin_marketplace`,
     `plugin`, `plugin_version`, `plugin_skill`, `plugin__user`,
     `plugin__user_group` and `user_plugin_preference` (`db/models.py:Plugin`
     and its neighbours), and fills them from each custom skill. Built-in
@@ -328,18 +340,22 @@ The library preview of an external-app skill calls the same renderer
     `name`); the backfill seeds it with the name and description of the
     legacy row. No column stores the kind (skill or plugin):
     `db/plugin.py:plugin_version_kind` reads it from the layout of each
-    version. Creates, bundle changes and
-    deletes write the plugin rows ([[#bundle-change-adds-version]]). A user
-    delete removes the plugins in that user's "My uploads"
-    (`db/plugin.py:delete_user_upload_plugins__no_commit`), because a stale
-    copy there would block the delete. So a live skill can have no plugin
-    row; the next write makes one from the legacy rows first
-    (`db/plugin.py:lock_skill_plugin__no_commit`), with its shares and
-    choices. Shares, publishing, install settings, choices and transfers also
-    write the plugin rows. Migrations `88184258ae59` and `4ea385d01d75` re-sync
-    every plugin from the skill rows once; each copies
-    `backfill_plugins_from_skills` instead of importing it. Every read still
-    uses the skill rows.
+    version. Creates, bundle changes, deletes, shares, publishing, install
+    settings, choices and transfers write the plugin rows and the skill rows
+    ([[#bundle-change-adds-version]]). Visibility, edit, enablement, the
+    runtime list, affected users, the scoped-manager checks, the skill
+    responses (`db/plugin_access.py:load_plugin_access`), the community
+    downgrade and the user-delete guard read the plugin rows. The list and
+    runtime names and descriptions come from the frontmatter of the version
+    the user runs. A custom skill with no plugin is hidden from everyone but
+    an admin; an admin write makes its plugin from the legacy rows first
+    (`db/plugin.py:lock_skill_plugin__no_commit`). A user delete is refused
+    while the user's "My uploads" holds a plugin
+    (`db/users.py:delete_user_from_db__no_commit`); published plugins stay
+    with no author. Migrations `88184258ae59`, `4ea385d01d75` and
+    `55bf66dd54dd` re-sync every plugin from the skill rows; each copies
+    `backfill_plugins_from_skills` instead of importing it. The sandbox push
+    still reads the bundle from the skill row.
 20. `bundle-change-adds-version` **A file change adds a plugin version and
     keeps the old bundle.** Each create and each change to a custom skill's
     files goes through `db/skill.py:create_custom_skill__no_commit` or
