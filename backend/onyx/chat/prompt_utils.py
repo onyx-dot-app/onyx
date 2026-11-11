@@ -697,10 +697,11 @@ def _create_file_tool_metadata_message(
     copy; the python tool is handed the files themselves, so prompt truncation
     does not take them away from it.
 
-    The python tier applies only when every listed file actually reached
+    The python tier lists only files that actually reached
     ``chat_files_for_tools`` (see ``FileToolMetadata.staged_for_tools``) —
     summary-truncated files are listed for the LLM but never staged, so naming
-    python for them would send the model after bytes it does not have. The
+    python for them would send the model after bytes it does not have. Other
+    files in the same notice go under the no-reader header. The
     notice also stops short of promising a path, because PythonTool normalizes
     and de-duplicates filenames at staging time and applies its own count and
     byte caps.
@@ -723,31 +724,44 @@ def _create_file_tool_metadata_message(
         )
         return _finalize_file_metadata_message(lines, token_counter)
 
+    def _entries(metas: list[FileToolMetadata]) -> list[str]:
+        return [
+            f'- filename="{meta.filename}" (~{meta.approx_char_count:,} chars)'
+            for meta in metas
+        ]
+
     if SearchTool.NAME in offered:
         lines = [
             "These files are attached but too large to include in full. Their "
             "contents are indexed — use internal search to find the relevant "
-            "passages. Do not guess them or search the web for them:"
+            "passages. Do not guess them or search the web for them:",
+            *_entries(file_metadata),
         ]
-    elif PythonTool.NAME in offered and all(
-        meta.staged_for_tools for meta in file_metadata
-    ):
-        lines = [
+        return _finalize_file_metadata_message(lines, token_counter)
+
+    python_offered = PythonTool.NAME in offered
+    staged = [
+        meta for meta in file_metadata if python_offered and meta.staged_for_tools
+    ]
+    unreadable = [
+        meta for meta in file_metadata if not (python_offered and meta.staged_for_tools)
+    ]
+    lines = []
+    if staged:
+        lines.append(
             "These files are attached but too large to include in full. The "
             "python tool receives them — read them there, listing the working "
             "directory if a name does not resolve. Do not guess their contents "
             "or search the web for them:"
-        ]
-    else:
-        lines = [
+        )
+        lines.extend(_entries(staged))
+    if unreadable:
+        lines.append(
             "These files are attached but too large to include in full, and no "
             "tool here can read them. Do not guess their contents or search the "
             "web for them — say they are too large to read in this conversation:"
-        ]
-    lines.extend(
-        f'- filename="{meta.filename}" (~{meta.approx_char_count:,} chars)'
-        for meta in file_metadata
-    )
+        )
+        lines.extend(_entries(unreadable))
     return _finalize_file_metadata_message(lines, token_counter)
 
 

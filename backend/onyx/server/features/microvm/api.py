@@ -9,7 +9,8 @@ the api_server finds the node for placement and lifecycle calls.
 
 The agent also pushes its VM state (VMs and recently ended VMs) to
 `SANDBOX_NODE_STATE_REPORT_PATH`, signed with its registered key; the
-api_server reconciles that node on each report.
+api_server reconciles that node on each report. An agent that stops on a
+draining node ends its registration at `SANDBOX_NODE_DEREGISTER_PATH`.
 """
 
 import base64
@@ -33,14 +34,17 @@ from onyx.microvm.models import (
     NodeStateReportResult,
 )
 from onyx.microvm.node_report import (
+    NODE_DEREGISTER_AUDIENCE,
     NodeNotRegisteredError,
     NodeReportAuthError,
     reconcile_node_report,
     verify_node_report_token,
+    verify_node_token,
 )
 from onyx.microvm.registry import (
     NodeSigningKeyConflictError,
     clear_node_agent_address,
+    deregister_node,
     register_node_signing_key,
     set_node_agent_address,
 )
@@ -132,6 +136,7 @@ def register_sandbox_node_signing_key(
             get_shared_cache_backend(),
             node_id=registration.node_id,
             address=registration.agent_address,
+            key_id=registration.key_id,
         )
     else:
         # A stale address may point at a previous agent pod.
@@ -153,14 +158,16 @@ _node_report_signing_keys = CachedNodeSigningKeyLookup(get_shared_cache_backend)
 _node_report_agents = MtlsHostAgentClientFactory()
 
 
-async def _read_report_body(request: Request) -> bytes:
+async def _read_body(request: Request, max_bytes: int) -> bytes:
     declared = request.headers.get("Content-Length", "")
-    if declared.isdigit() and int(declared) > NODE_REPORT_MAX_BODY_BYTES:
-        raise OnyxError(OnyxErrorCode.PAYLOAD_TOO_LARGE, "node report is too large")
+    if declared.isdigit() and int(declared) > max_bytes:
+        raise OnyxError(OnyxErrorCode.PAYLOAD_TOO_LARGE, "request body is too large")
     body = bytearray()
     async for chunk in request.stream():
-        if len(body) + len(chunk) > NODE_REPORT_MAX_BODY_BYTES:
-            raise OnyxError(OnyxErrorCode.PAYLOAD_TOO_LARGE, "node report is too large")
+        if len(body) + len(chunk) > max_bytes:
+            raise OnyxError(
+                OnyxErrorCode.PAYLOAD_TOO_LARGE, "request body is too large"
+            )
         body.extend(chunk)
     return bytes(body)
 
@@ -212,5 +219,69 @@ async def report_sandbox_node_state(request: Request) -> NodeStateReportResult:
     if not auth_header.startswith(BEARER_PREFIX):
         raise OnyxError(OnyxErrorCode.UNAUTHENTICATED)
     token = auth_header[len(BEARER_PREFIX) :].strip()
-    body = await _read_report_body(request)
+    body = await _read_body(request, NODE_REPORT_MAX_BODY_BYTES)
     return await run_in_threadpool(_verify_and_reconcile, token, body)
+
+
+SANDBOX_NODE_DEREGISTER_PATH = "/microvm/node/deregister"
+_DEREGISTER_MAX_BODY_BYTES = 4096
+
+
+class SandboxNodeDeregistration(BaseModel):
+    node_id: str = Field(min_length=1, max_length=253, pattern=_IDENTIFIER_PATTERN)
+
+
+class SandboxNodeDeregistrationResult(BaseModel):
+    # False when the node had no registration, or a later agent registered.
+    deregistered: bool
+
+
+def _verify_and_deregister(token: str, body: bytes) -> SandboxNodeDeregistrationResult:
+    shared_cache = get_shared_cache_backend()
+    try:
+        signing_key = verify_node_token(
+            token,
+            body,
+            audience=NODE_DEREGISTER_AUDIENCE,
+            signing_keys=_node_report_signing_keys,
+            shared_cache=shared_cache,
+        )
+    except NodeReportAuthError as e:
+        logger.warning("sandbox_fc_node_deregister_rejected reason=%s", e)
+        raise OnyxError(OnyxErrorCode.UNAUTHENTICATED)
+    try:
+        request = SandboxNodeDeregistration.model_validate_json(body)
+    except ValidationError:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "malformed deregistration")
+    if request.node_id != signing_key.node_id:
+        logger.warning(
+            "sandbox_fc_node_deregister_rejected reason=body_node token_node=%s body_node=%s",
+            signing_key.node_id,
+            request.node_id,
+        )
+        raise OnyxError(OnyxErrorCode.UNAUTHENTICATED)
+    deregistered = deregister_node(
+        shared_cache, node_id=request.node_id, key_id=signing_key.key_id
+    )
+    logger.info(
+        "sandbox_fc_node_deregistered node=%s key_id=%s deregistered=%s",
+        request.node_id,
+        signing_key.key_id,
+        deregistered,
+    )
+    return SandboxNodeDeregistrationResult(deregistered=deregistered)
+
+
+@router.post(SANDBOX_NODE_DEREGISTER_PATH)
+async def deregister_sandbox_node(request: Request) -> SandboxNodeDeregistrationResult:
+    """End a node's registration when its agent stops on a draining node.
+
+    Auth: a JWT signed by the node's registered key, like a state report,
+    with its own audience. Idempotent.
+    """
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith(BEARER_PREFIX):
+        raise OnyxError(OnyxErrorCode.UNAUTHENTICATED)
+    token = auth_header[len(BEARER_PREFIX) :].strip()
+    body = await _read_body(request, _DEREGISTER_MAX_BODY_BYTES)
+    return await run_in_threadpool(_verify_and_deregister, token, body)

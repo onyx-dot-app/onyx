@@ -125,9 +125,15 @@ assert guest["egress"]["ca_install"] == "runtime"
 assert guest["drives"] == [
     {"drive_id": "rootfs", "guest_dev": "/dev/vda", "is_root_device": True, "is_read_only": True},
     {"drive_id": "scratch", "guest_dev": "/dev/vdb", "is_read_only": False, "fs": "ext4", "mount": "/mnt/scratch"},
-    {"drive_id": "managed", "guest_dev": "/dev/vdc", "is_read_only": True, "fs": "ext4", "mount": "/workspace/managed"},
+    {"drive_id": "managed", "guest_dev": "/dev/vdc", "is_read_only": True, "fs": "ext4", "mount": "/mnt/skills"},
 ]
 assert guest["managed_slots"] == {"a": "/dev/vdc", "b": "/dev/vdf"}
+assert guest["managed_mounts"] == [
+    {"name": "skills", "mount": "/mnt/skills", "a": "/dev/vdc", "b": "/dev/vdf"},
+    {"name": "user-uploads", "mount": "/mnt/user-uploads", "a": "/dev/vdg", "b": "/dev/vdh"},
+    {"name": "spaces", "mount": "/mnt/spaces", "a": "/dev/vdi", "b": "/dev/vdj"},
+]
+assert guest["sessions_root"] == "/home/onyx/workspaces"
 print("Rootfs integration check passed:", source["pinned"], digest.hexdigest())
 PY
 

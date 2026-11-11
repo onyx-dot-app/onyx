@@ -402,3 +402,49 @@ func TestRunObservesEachResult(t *testing.T) {
 		t.Fatalf("second result %v", got[1])
 	}
 }
+
+func TestDeregisterSendsASignedRequest(t *testing.T) {
+	s := newSigner(t)
+	var got map[string]any
+	var path, body string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		path, body = r.URL.Path, string(raw)
+		_, got = verify(t, s, strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
+		_, _ = w.Write([]byte(`{"deregistered": true}`))
+	}))
+	defer srv.Close()
+
+	ok, err := Deregister(context.Background(), nil, srv.URL+"/", s)
+	if err != nil || !ok {
+		t.Fatalf("Deregister = %v, %v", ok, err)
+	}
+	sum := sha256.Sum256([]byte(body))
+	if path != DeregisterPath || body != `{"node_id":"node-a"}` {
+		t.Fatalf("request %s %s", path, body)
+	}
+	if got["aud"] != DeregisterAudience || got["aud"] == Audience || got["node"] != "node-a" ||
+		got["body_sha256"] != hex.EncodeToString(sum[:]) {
+		t.Fatalf("claims %v", got)
+	}
+}
+
+func TestDeregisterReportsFalseAndHTTPErrors(t *testing.T) {
+	s := newSigner(t)
+	status := http.StatusOK
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(`{"deregistered": false}`))
+	}))
+	defer srv.Close()
+
+	if ok, err := Deregister(context.Background(), nil, srv.URL, s); err != nil || ok {
+		t.Fatalf("Deregister = %v, %v", ok, err)
+	}
+	status = http.StatusUnauthorized
+	_, err := Deregister(context.Background(), nil, srv.URL, s)
+	var he *relay.HTTPStatusError
+	if !errors.As(err, &he) || he.Status != http.StatusUnauthorized {
+		t.Fatalf("err = %v", err)
+	}
+}

@@ -170,7 +170,11 @@ The refusal message and `ErrorInfo.metadata` give the numbers (`mem_available_mi
   api_server does not know (see "Purge data").
 - `CAPACITY_DISK`: look for large spools in `<data-dir>/captures` and old templates in
   `<data-dir>/templates` (`kubectl exec` into the agent pod; the data dir is
-  `craft.hostAgent.dataDir`, default `/var/lib/craft-fc`).
+  `craft.hostAgent.dataDir`, default `/var/lib/craft-fc`). The image GC removes unused managed
+  images and old templates after `--image-gc-grace` (6 h). The grace counts from the first pass that
+  sees an image unused (every `--image-gc-interval`, 15 min), and starts again after an agent restart.
+  `--image-gc-interval=0` turns the GC off, and templates are swept only after a template build from
+  `--rootfs-dir`. Look for `image GC` in the agent log.
 - `EGRESS_CA_UNAVAILABLE`: check the ConfigMap
   `kubectl $K -n <SANDBOX_NAMESPACE> get configmap <SANDBOX_PROXY_CA_CONFIGMAP>` and the agent
   Role `<DS>-egress-ca-read`.
