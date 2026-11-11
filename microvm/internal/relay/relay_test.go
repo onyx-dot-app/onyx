@@ -818,3 +818,49 @@ func TestRegistrarRegisteredClosesAfterFirstSuccess(t *testing.T) {
 		t.Fatal("Registered returned another channel")
 	}
 }
+
+func TestRegistrarRunObservesEachResult(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if calls.Add(1) == 1 {
+			http.Error(w, "bad secret", http.StatusUnauthorized)
+		}
+	}))
+	defer srv.Close()
+	_, key, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	results := make(chan error, 8)
+	g := &Registrar{
+		BaseURL: srv.URL, Secret: "s", Signer: NewSigner("node-a", "node-a-1", key),
+		Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Interval: time.Millisecond, Retry: time.Millisecond,
+		Observe: func(err error) {
+			// Never block Run: only the first results are checked.
+			select {
+			case results <- err:
+			default:
+			}
+		},
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan struct{})
+	go func() { g.Run(ctx); close(done) }()
+	var first, second error
+	for i, dst := range []*error{&first, &second} {
+		select {
+		case *dst = <-results:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("result %d did not arrive", i+1)
+		}
+	}
+	cancel()
+	<-done
+	var h *HTTPStatusError
+	if !errors.As(first, &h) || h.HTTPStatus() != http.StatusUnauthorized || !strings.Contains(first.Error(), "HTTP 401: bad secret") {
+		t.Fatalf("first result %v", first)
+	}
+	if second != nil {
+		t.Fatalf("second result %v", second)
+	}
+}

@@ -116,6 +116,8 @@ type Reporter struct {
 	MaxBackoff time.Duration
 	// Now is the token clock. Default time.Now.
 	Now func() time.Time
+	// Observe, if set, gets the result of each report of Run.
+	Observe func(err error)
 }
 
 // Body returns the JSON report of vms and ended, or an error if it is over
@@ -204,8 +206,7 @@ func (r *Reporter) Send(ctx context.Context) error {
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode/100 != 2 {
-		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return fmt.Errorf("node state report: HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(msg)))
+		return relay.NewHTTPStatusError("node state report", resp)
 	}
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
 	return nil
@@ -254,10 +255,14 @@ func (r *Reporter) Run(ctx context.Context) {
 			return
 		case <-timer.C:
 		}
-		if err := r.send(ctx); err != nil {
-			if ctx.Err() != nil {
-				return
-			}
+		err := r.send(ctx)
+		if ctx.Err() != nil {
+			return
+		}
+		if r.Observe != nil {
+			r.Observe(err)
+		}
+		if err != nil {
 			failures++
 			r.Log.Error("node state report failed", "node_id", r.Signer.NodeID, "failures", failures, "err", err)
 		} else {
