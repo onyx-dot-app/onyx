@@ -362,7 +362,7 @@ func (m *Manager) wait(e *Execution, readers [2]*os.File, deadline time.Duration
 	switch {
 	case res.Signal != 0 && reason == killCancel:
 		res.Completion = Canceled
-	case res.Signal != 0 && reason == killExited && res.Signal == int(e.softSignal.Load()):
+	case res.Signal > 0 && res.Signal < 32 && reason == killExited && e.softSignals.Load()&(1<<uint(res.Signal)) != 0:
 		res.Completion = Canceled
 	case res.Signal != 0 && reason == killDeadline:
 		res.Completion = DeadlineExceeded

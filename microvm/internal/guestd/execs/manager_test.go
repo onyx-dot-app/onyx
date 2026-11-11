@@ -344,3 +344,39 @@ func TestFirstSoftSignalDecidesCompletion(t *testing.T) {
 		t.Fatalf("result %+v", res)
 	}
 }
+
+// A command that handles SIGINT and then dies of a later SIGTERM is CANCELED.
+func TestLaterSoftSignalDecidesCompletion(t *testing.T) {
+	m, err := NewManager(Config{Isolator: ProcessGroups{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(m.Shutdown)
+	e, err := m.Start(Spec{Argv: []string{"sh", "-c", `trap 'echo got-int' INT; echo ready; while :; do sleep 0.05; done`},
+		Env: []string{"PATH=/usr/bin:/bin"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitOutput(t, e, "ready")
+	if _, _, err := m.Signal(e.ID, syscall.SIGINT); err != nil {
+		t.Fatal(err)
+	}
+	waitOutput(t, e, "got-int")
+	if _, _, err := m.Signal(e.ID, syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	<-e.Done()
+	if res, _ := e.Ended(); res.Completion != Canceled || res.Signal != int(syscall.SIGTERM) {
+		t.Fatalf("result %+v", res)
+	}
+}
+
+func waitOutput(t *testing.T, e *Execution, want string) {
+	t.Helper()
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+		if data, _, _ := e.Read(Stdout, 0, 4096); strings.Contains(string(data), want) {
+			return
+		}
+	}
+	t.Fatalf("no %q in the output", want)
+}

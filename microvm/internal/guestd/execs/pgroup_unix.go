@@ -45,7 +45,8 @@ func signalGroup(pgid int, sig syscall.Signal) error {
 		return nil
 	}
 	err := syscall.Kill(-pgid, sig)
-	if errors.Is(err, syscall.ESRCH) {
+	// macOS reports EPERM for a group that has only zombies left.
+	if errors.Is(err, syscall.ESRCH) || errors.Is(err, syscall.EPERM) {
 		return nil
 	}
 	return err

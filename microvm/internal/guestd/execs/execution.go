@@ -99,8 +99,9 @@ type Execution struct {
 	cmd      *exec.Cmd
 	group    Group
 	reason   atomic.Int32
-	// softSignal is the first SIGINT or SIGTERM that Signal sent.
-	softSignal atomic.Int32
+	// softSignals has bit 1<<sig set for each SIGINT or SIGTERM that Signal
+	// sent.
+	softSignals atomic.Uint32
 	// lastUsed is the UnixNano of the start or of the last Get.
 	lastUsed atomic.Int64
 	done     chan struct{}
@@ -222,7 +223,7 @@ func (e *Execution) signal(sig syscall.Signal) error {
 	if e.reason.Load() == killExited {
 		return nil
 	}
-	e.softSignal.CompareAndSwap(0, int32(sig))
+	e.softSignals.Or(1 << uint(sig))
 	return e.group.Signal(sig)
 }
 
