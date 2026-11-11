@@ -241,6 +241,7 @@ class HostAgentClient:
         scratch_gib: int,
         tenant_id: str,
         sandboxd_key: SecretStr,
+        timeout: float | None = None,
     ) -> CreateResult:
         """Start (or return) the VM of (sandbox_id, attempt) and install
         `sandboxd_key` in its guest daemon.
@@ -248,6 +249,7 @@ class HostAgentClient:
         Raises GuestUnreachableError when the daemon did not take the key in
         time (retry with the same attempt and key) and GuestKeyRejectedError
         when it refused the key (stop the VM, create a new attempt).
+        `timeout` defaults to `SANDBOX_FC_AGENT_CREATE_TIMEOUT_SECONDS`.
         """
         request = hostagent_pb2.CreateRequest(
             sandbox_id=sandbox_id,
@@ -261,7 +263,12 @@ class HostAgentClient:
         )
         try:
             response: hostagent_pb2.CreateResponse = self._stub.Create(
-                request, timeout=SANDBOX_FC_AGENT_CREATE_TIMEOUT_SECONDS
+                request,
+                timeout=(
+                    SANDBOX_FC_AGENT_CREATE_TIMEOUT_SECONDS
+                    if timeout is None
+                    else timeout
+                ),
             )
         except grpc.RpcError as e:
             raise _error_from_rpc(e) from e

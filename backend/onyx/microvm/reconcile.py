@@ -20,7 +20,9 @@ Per reported VM:
   record write, or a Create whose key install timed out, leaves this state.
   Adoptions run after the orphan stops, so a guest that does not answer
   cannot hold up cleanup. A pending key install waits `_ADOPT_RETRY_SECONDS`
-  before the next try, so other adoptions get a turn.
+  before the next try, so other adoptions get a turn. The key install calls
+  end by the pass deadline; a cut call ends the pass, and the next pass
+  tries again at once.
 - The reservation names it but its key is lost, the guest rejects the key,
   or the guest did not answer for `_ADOPT_GIVE_UP_SECONDS`: nothing can use
   it. It is an orphan after the grace period below.
@@ -41,6 +43,7 @@ from enum import Enum
 from functools import partial
 from uuid import UUID
 
+import grpc
 from pydantic import BaseModel, ConfigDict, SecretStr
 
 from onyx.cache.factory import get_cache_backend
@@ -53,6 +56,8 @@ from onyx.microvm.agent_client import (
     HostAgentErrorReason,
 )
 from onyx.microvm.configs import (
+    SANDBOX_FC_AGENT_CREATE_TIMEOUT_SECONDS,
+    SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS,
     SANDBOX_FC_ORPHAN_GRACE_SECONDS,
     SANDBOX_FC_ORPHAN_STOPS_PER_REPORT,
 )
@@ -98,6 +103,8 @@ _ADOPT_WAIT_PREFIX = "sandbox_fc:adopt_wait:"
 _ADOPT_RETRY_SECONDS = 60
 _ADOPT_GIVE_UP_SECONDS = 600
 _ADOPT_WAIT_TTL_SECONDS = 3600
+# A key install call needs at least this much of the pass deadline.
+_MIN_CALL_SECONDS = 1.0
 
 
 class _Verdict(str, Enum):
@@ -176,6 +183,10 @@ class _PassEnded(Exception):
         self.cause = cause
 
 
+class _OutOfTime(Exception):
+    """The pass deadline cut a key install call."""
+
+
 class _Pass:
     def __init__(
         self,
@@ -187,6 +198,7 @@ class _Pass:
         now: int,
         report: ReconcileReport,
         check_lease: Callable[[], None] | None,
+        deadline: float | None,
     ) -> None:
         self.shared_cache = shared_cache
         self.client_factory = client_factory
@@ -196,6 +208,7 @@ class _Pass:
         self.now = now
         self.report = report
         self.check_lease = check_lease
+        self.deadline = deadline
         self.stops: list[_OrphanStop] = []
         self.adoptions: list[_Adoption] = []
         self._stops_left = SANDBOX_FC_ORPHAN_STOPS_PER_REPORT
@@ -207,6 +220,16 @@ class _Pass:
                 self.check_lease()
             except Exception as e:
                 raise _PassEnded(e) from e
+
+    def call_timeout(self, default: float) -> float:
+        """`default`, cut to the time left before the pass deadline. Raises
+        `_OutOfTime` when too little time is left."""
+        if self.deadline is None:
+            return default
+        left = self.deadline - time.monotonic()
+        if left < _MIN_CALL_SECONDS:
+            raise _OutOfTime()
+        return min(default, left)
 
     def step(self, what: str, run: Callable[[], None]) -> None:
         """Check the lease, then run one step. A failed step is logged and
@@ -365,6 +388,16 @@ class _Pass:
         except ValueError:
             return None
 
+    def mark_adopt_wait(self, vm: AgentVm, *, retry_now: bool) -> None:
+        wait = self.adopt_wait(vm)
+        first = self.now if wait is None else wait[0]
+        last = self.now
+        if retry_now:
+            last = 0 if wait is None else wait[1]
+        self.shared_cache.set(
+            self._adopt_wait_key(vm), f"{first}:{last}", ex=_ADOPT_WAIT_TTL_SECONDS
+        )
+
     def adopt(self, adoption: _Adoption) -> None:
         """Write the record of a VM that its reservation names, once its
         guest daemon holds the attempt's key."""
@@ -374,17 +407,16 @@ class _Pass:
             # A placement in progress writes the record itself.
             if lock is None:
                 return
-            installed = self.install_key(vm, adoption.key)
+            try:
+                installed = self.install_key(vm, adoption.key)
+            except _OutOfTime as e:
+                # The next pass tries again at once; the give-up time counts.
+                self.mark_adopt_wait(vm, retry_now=True)
+                raise _PassEnded(TimeoutError("node report deadline exceeded")) from e
             if installed is None:
                 # Keep the VM and the reservation: a later report or a wake
                 # tries again.
-                wait = self.adopt_wait(vm)
-                first = self.now if wait is None else wait[0]
-                self.shared_cache.set(
-                    self._adopt_wait_key(vm),
-                    f"{first}:{self.now}",
-                    ex=_ADOPT_WAIT_TTL_SECONDS,
-                )
+                self.mark_adopt_wait(vm, retry_now=False)
                 return
             if not installed:
                 # The guest holds another key: nothing can use the VM.
@@ -420,12 +452,18 @@ class _Pass:
         """Make sure the guest daemon holds `key`. Health (no key) shows that
         the guest answers. A repeat Create of the same attempt returns the
         same VM and installs the key, or is rejected when the guest holds
-        another key. None when the outcome is not known yet."""
+        another key. None when the outcome is not known yet. Each call ends
+        by the pass deadline; `_OutOfTime` when the deadline cut it."""
         client = self.client_factory.client(self.node.address)
+        cut = False
         try:
+            timeout = self.call_timeout(SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS)
+            cut = timeout < SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS
             SandboxDaemonClient(
                 client.channel, sandbox_id=vm.sandbox_id, sandboxd_key=key
-            ).health()
+            ).health(timeout=timeout)
+            timeout = self.call_timeout(SANDBOX_FC_AGENT_CREATE_TIMEOUT_SECONDS)
+            cut = timeout < SANDBOX_FC_AGENT_CREATE_TIMEOUT_SECONDS
             result = client.create(
                 sandbox_id=vm.sandbox_id,
                 attempt=vm.attempt,
@@ -435,10 +473,13 @@ class _Pass:
                 scratch_gib=vm.scratch_gib,
                 tenant_id=vm.tenant_id,
                 sandboxd_key=key,
+                timeout=timeout,
             )
         except GuestKeyRejectedError:
             return False
         except (HostAgentError, SandboxDaemonError) as e:
+            if cut and e.code is grpc.StatusCode.DEADLINE_EXCEEDED:
+                raise _OutOfTime() from e
             logger.warning(
                 "sandbox_fc_reconcile_adopt_key_pending node=%s sandbox=%s attempt=%d error=%s",
                 self.node.node_id,
@@ -643,9 +684,12 @@ def reconcile_node(
     ended: list[ReportedEndedVm] | None = None,
     now: int | None = None,
     check_lease: Callable[[], None] | None = None,
+    deadline: float | None = None,
 ) -> ReconcileReport:
     """One reconcile pass over the state that `node` reported. `check_lease`
-    runs before each step and raises to end the pass.
+    runs before each step and raises to end the pass. `deadline`
+    (`time.monotonic()`) bounds the key install calls of adoptions; a call
+    that the deadline cuts ends the pass with `TimeoutError`.
     `HostAgentConfigError` also ends the pass and is raised. Any other error
     ends only its step."""
     report = ReconcileReport()
@@ -658,6 +702,7 @@ def reconcile_node(
         int(time.time()) if now is None else now,
         report,
         check_lease,
+        deadline,
     )
     try:
         run.run(vms, ended or [])

@@ -526,6 +526,51 @@ def test_pending_key_install_does_not_hold_up_orphan_stops(
     assert node.agent.create_calls == 0
 
 
+def test_key_install_ends_by_the_pass_deadline(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
+) -> None:
+    node_id = _node("deadline")
+    node = add_node(node_id)
+    sandbox_id = new_sandbox_id()
+    reserve_sandbox(
+        tenant_cache,
+        sandbox_id,
+        SandboxReservation(attempt=1, node_id=node_id, owner="timed-out"),
+        replaces=None,
+    )
+    set_sandbox_daemon_key(tenant_cache, sandbox_id, attempt=1, key=new_sandboxd_key())
+    vm = _vm(node, sandbox_id)
+    # Slower than the time left in the pass, faster than the Create timeout.
+    node.agent.create_delay_seconds = 4.0
+    registered = _registered(shared_cache, node_id)
+
+    started = time.monotonic()
+    with pytest.raises(TimeoutError):
+        reconcile_node(
+            shared_cache,
+            client_factory,
+            NoCheckpointSupport(),
+            UnknownActivity(),
+            node=registered,
+            vms=client_factory.client(registered.address).list_vms(),
+            now=NOW,
+            deadline=started + 2.0,
+        )
+
+    assert time.monotonic() - started < 3.5
+    assert get_sandbox_placement(tenant_cache, sandbox_id) is None
+    assert get_sandbox_reservation(tenant_cache, sandbox_id) is not None
+    # The next pass tries again without the retry wait.
+    node.agent.create_delay_seconds = 0.0
+    assert _report(shared_cache, client_factory, node_id).adopted == [str(sandbox_id)]
+    record = get_sandbox_placement(tenant_cache, sandbox_id)
+    assert record is not None and record.names(node_id, 1, vm.generation)
+
+
 def test_stale_write_never_replaces_a_newer_record(
     tenant_cache: CacheBackend, new_sandbox_id: NewSandboxId
 ) -> None:

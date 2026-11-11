@@ -192,11 +192,17 @@ func TestConnectionCap(t *testing.T) {
 	c1, c2 := dial(t, addr), dial(t, addr)
 	roundTrip(t, c1, []byte("1"))
 	roundTrip(t, c2, []byte("2"))
-	c3 := dial(t, addr)
-	_ = c3.SetReadDeadline(time.Now().Add(5 * time.Second))
-	_, _ = c3.Write([]byte("3"))
-	if _, err := c3.Read(make([]byte, 1)); err == nil {
-		t.Fatal("third connection above the cap was served")
+	// The relay resets a client above the cap at once. The RST can arrive
+	// before connect returns, so the dial itself may fail.
+	if c3, err := net.Dial("tcp", addr); err == nil {
+		defer func() { _ = c3.Close() }()
+		_ = c3.SetReadDeadline(time.Now().Add(5 * time.Second))
+		_, _ = c3.Write([]byte("3"))
+		if _, err := c3.Read(make([]byte, 1)); err == nil {
+			t.Fatal("third connection above the cap was served")
+		}
+	} else if !errors.Is(err, syscall.ECONNRESET) {
+		t.Fatalf("third dial: %v", err)
 	}
 	_ = c1.Close()
 	waitLive(t, r, 1)
