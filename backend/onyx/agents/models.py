@@ -69,6 +69,18 @@ class RunFailure(BaseModel):
     llm_error: LLMErrorInfo | None = None
 
 
+class InputSource(str, Enum):
+    HUMAN = "human"
+    AGENT = "agent"
+    AGENT_RESULT = "agent_result"
+
+
+class MessageDelivery(str, Enum):
+    SEND = "send"
+    QUEUE = "queue"
+    INTERRUPT = "interrupt"
+
+
 class ContextBudget(BaseModel):
     input_limit: int = Field(gt=0)
     trigger: int = Field(gt=0)

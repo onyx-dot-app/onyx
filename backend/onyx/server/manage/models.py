@@ -3,7 +3,15 @@ from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 
 from onyx.auth.permissions import SCOPED_MANAGER_PERMISSIONS_EXPANDED
 from onyx.context.search.models import CCPairAccessMode, SavedSearchSettings
@@ -26,6 +34,9 @@ from onyx.llm.models import ReasoningEffort
 from onyx.onyxbot.slack.config import VALID_SLACK_FILTERS
 from onyx.server.features.persona.models import FullPersonaSnapshot, PersonaSnapshot
 from onyx.server.models import FullUserSnapshot, InvitedUserSnapshot
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 if TYPE_CHECKING:
     pass
@@ -99,6 +110,29 @@ class UserSpecificAssistantPreference(BaseModel):
 UserSpecificAssistantPreferences = dict[int, UserSpecificAssistantPreference]
 
 
+class UserUIPreferences(BaseModel):
+    paste_as_tile: bool = False
+    interrupt_on_send: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_object(cls, value: JsonValue) -> JsonValue:
+        if isinstance(value, dict):
+            return value
+        logger.warning("Invalid stored UI preferences; using defaults")
+        return {}
+
+    @field_validator("paste_as_tile", "interrupt_on_send", mode="before")
+    @classmethod
+    def validate_boolean(cls, value: JsonValue, info: ValidationInfo) -> bool:
+        if isinstance(value, bool):
+            return value
+        logger.warning(
+            "Invalid stored UI preference %s; using default", info.field_name
+        )
+        return False
+
+
 class UserPreferences(BaseModel):
     chosen_assistants: list[int] | None = None
     hidden_assistants: list[int] = []
@@ -121,6 +155,7 @@ class UserPreferences(BaseModel):
 
     # Input preferences
     paste_as_tile: bool | None = None
+    interrupt_on_send: bool = False
 
     # Voice preferences
     voice_auto_send: bool | None = None
@@ -203,6 +238,7 @@ class UserInfo(BaseModel):
         memories: list[MemoryItem] | None = None,
         effective_permissions: list[str] | None = None,
     ) -> "UserInfo":
+        ui_preferences = UserUIPreferences.model_validate(user.ui_preferences)
         return cls(
             id=str(user.id),
             email=user.email,
@@ -229,7 +265,8 @@ class UserInfo(BaseModel):
                     language=user.language,
                     chat_background=user.chat_background,
                     default_app_mode=user.default_app_mode,
-                    paste_as_tile=user.paste_as_tile,
+                    paste_as_tile=ui_preferences.paste_as_tile,
+                    interrupt_on_send=ui_preferences.interrupt_on_send,
                     voice_auto_send=user.voice_auto_send,
                     voice_auto_playback=user.voice_auto_playback,
                     voice_playback_speed=user.voice_playback_speed,

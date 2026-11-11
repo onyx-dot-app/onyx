@@ -150,6 +150,11 @@ retention treat the root and its descendants as one conversation
 question, response and empty child session
 (`db/chat_response.py:abort_response_start__no_commit`).
 
+**Input rows.** `ChatInput` stores text addressed to a chat session. A row without
+`response_item_id` is pending; an accepted row links to its generation and position.
+Its source distinguishes human instructions, agent instructions and agent results.
+The check constraints reject partial acceptance links and invalid delivery modes.
+
 **Tool calls.** On a runtime response, `parent_chat_message_id` always names
 the owning response ([[#turn-number-is-step-index]]), and
 `parent_tool_call_id` adds optional display nesting under the tool that

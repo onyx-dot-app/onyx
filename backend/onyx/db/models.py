@@ -32,6 +32,7 @@ from sqlalchemy import (
     event,
     func,
     inspect,
+    select,
     text,
     true,
     update,
@@ -46,6 +47,7 @@ from sqlalchemy.orm import (
     DeclarativeBase,
     Mapped,
     Mapper,
+    column_property,
     mapped_column,
     relationship,
     validates,
@@ -54,7 +56,13 @@ from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.types import LargeBinary, TypeDecorator
 from typing_extensions import TypedDict  # noreorder
 
-from onyx.agents.models import ExecutionStatus, RunFailure, RunStatus
+from onyx.agents.models import (
+    ExecutionStatus,
+    InputSource,
+    MessageDelivery,
+    RunFailure,
+    RunStatus,
+)
 from onyx.auth.schemas import UserRole
 from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.configs.constants import (
@@ -162,6 +170,7 @@ from onyx.tools.models import (
 )
 from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
+from onyx.tools.tool_implementations.subagents.models import ChatConfiguration
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
 from onyx.utils.encryption import decrypt_bytes_to_string, encrypt_string_to_bytes
 from onyx.utils.headers import HeaderItemDict
@@ -521,8 +530,12 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     # organized in typical structured fashion
     # formatted as `displayName__provider__modelName`
 
-    # Input preferences
-    paste_as_tile: Mapped[bool] = mapped_column(Boolean, default=False)
+    ui_preferences: Mapped[JsonValue] = mapped_column(
+        postgresql.JSONB(),
+        nullable=False,
+        default=dict,
+        server_default=text("'{}'::jsonb"),
+    )
 
     # Voice preferences
     voice_auto_send: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -3476,8 +3489,13 @@ class ChatSession(Base):
         ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=True, index=True
     )
     agent_name: Mapped[str | None] = mapped_column(String, nullable=True)
-    restoration_config: Mapped[ResearchConfiguration | None] = mapped_column(
-        PydanticType(ResearchConfiguration, sanitize_strings=True), nullable=True
+    restoration_config: Mapped[ResearchConfiguration | ChatConfiguration | None] = (
+        mapped_column(
+            PydanticType(
+                ResearchConfiguration | ChatConfiguration, sanitize_strings=True
+            ),
+            nullable=True,
+        )
     )
     user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("user.id", ondelete="CASCADE"), nullable=True
@@ -3601,6 +3619,9 @@ class ChatMessage(Base):
             values_callable=lambda values: [v.value for v in values],
         ),
         nullable=True,
+    )
+    response_inputs_closed: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
     )
     response_failure: Mapped[RunFailure | None] = mapped_column(
         PydanticType(RunFailure, sanitize_strings=True), nullable=True
@@ -3773,6 +3794,15 @@ class ChatResponseItem(Base):
     message: Mapped[AssistantMessage] = mapped_column(
         PydanticType(AssistantMessage, sanitize_strings=True, none_as_null=True),
     )
+    inputs: Mapped[list["ChatInput"]] = relationship(
+        "ChatInput",
+        back_populates="response_item",
+        order_by="ChatInput.position",
+        foreign_keys="ChatInput.response_item_id",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        lazy="selectin",
+    )
     generation_status: Mapped[ExecutionStatus] = mapped_column(
         Enum(
             ExecutionStatus,
@@ -3790,6 +3820,91 @@ class ChatResponseItem(Base):
         "ChatMessage",
         back_populates="response_items",
         foreign_keys=[chat_message_id],
+    )
+
+
+class ChatInput(Base):
+    """Submitted messages and additional inputs accepted by a model generation."""
+
+    __tablename__ = "chat_input"
+    __table_args__ = (
+        CheckConstraint(
+            "(response_item_id IS NULL AND position IS NULL) OR "
+            "(response_item_id IS NOT NULL AND position IS NOT NULL AND position >= 0)",
+            name="ck_chat_input_acceptance",
+        ),
+        CheckConstraint(
+            "response_item_id IS NOT NULL OR "
+            "(delivery IS NOT NULL AND ((source = 'human' AND invoking_tool_call_id IS NULL AND max_steps IS NULL) OR "
+            "(source = 'agent' AND invoking_tool_call_id IS NOT NULL AND max_steps IS NOT NULL AND max_steps > 0)))",
+            name="ck_chat_input_pending",
+        ),
+        CheckConstraint(
+            "source IN ('human', 'agent', 'agent_result')",
+            name="ck_chat_input_source",
+        ),
+        CheckConstraint(
+            "delivery IS NULL OR delivery IN ('send', 'queue') OR "
+            "(delivery = 'interrupt' AND source = 'human')",
+            name="ck_chat_input_delivery",
+        ),
+        Index("uq_chat_input_position", "response_item_id", "position", unique=True),
+        Index("uq_chat_input_message", "response_item_id", "message_id", unique=True),
+        Index(
+            "ix_chat_input_pending",
+            "recipient_session_id",
+            "id",
+            postgresql_where=text("response_item_id IS NULL"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    recipient_session_id: Mapped[UUID] = mapped_column(
+        ForeignKey("chat_session.id", ondelete="CASCADE")
+    )
+    message_id: Mapped[str] = mapped_column(String)
+    source: Mapped[InputSource] = mapped_column(
+        Enum(
+            InputSource,
+            native_enum=False,
+            values_callable=lambda values: [v.value for v in values],
+        )
+    )
+    invoking_tool_call_id: Mapped[int | None] = mapped_column(
+        ForeignKey("tool_call.id", ondelete="CASCADE"), nullable=True
+    )
+    source_response_id: Mapped[int | None] = mapped_column(
+        ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=True
+    )
+    source_agent_id: Mapped[UUID | None] = column_property(
+        select(ChatMessage.chat_session_id)
+        .where(ChatMessage.id == source_response_id)
+        .correlate_except(ChatMessage)
+        .scalar_subquery()
+    )
+    target_response_id: Mapped[int | None] = mapped_column(
+        ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=True
+    )
+    delivery: Mapped[MessageDelivery | None] = mapped_column(
+        Enum(
+            MessageDelivery,
+            native_enum=False,
+            values_callable=lambda values: [v.value for v in values],
+        ),
+        nullable=True,
+    )
+    content: Mapped[str] = mapped_column(Text)
+    max_steps: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    total_timeout_s: Mapped[float | None] = mapped_column(Float, nullable=True)
+    response_item_id: Mapped[str | None] = mapped_column(
+        ForeignKey("chat_response_item.id", ondelete="CASCADE"), nullable=True
+    )
+    position: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    response_item: Mapped["ChatResponseItem | None"] = relationship(
+        "ChatResponseItem", back_populates="inputs", foreign_keys=[response_item_id]
+    )
+    invoking_tool_call: Mapped["ToolCall | None"] = relationship(
+        "ToolCall", foreign_keys=[invoking_tool_call_id], lazy="joined"
     )
 
 

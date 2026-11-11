@@ -72,6 +72,13 @@ It does not own:
 
 ## Architecture
 
+**UI preferences.** `User.ui_preferences` stores small interface choices as JSONB.
+`server/manage/models.py:UserUIPreferences` validates paste collapsing and send
+behavior. Invalid fields fall back independently; malformed containers use defaults.
+Warnings identify fields without logging stored values. The next preference save
+locks the user's row, preserves valid settings, and writes a validated object.
+The API retains flat `paste_as_tile` and `interrupt_on_send` response fields.
+
 **From setting to prompt.** `db/memory.py:get_memories` builds one
 `UserMemoryContext` per turn, called from
 `chat/process_message.py:prepare_chat_turn` ([[core-chat-loop]]). Nothing is
