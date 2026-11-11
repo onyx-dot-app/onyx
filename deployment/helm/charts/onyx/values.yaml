@@ -390,11 +390,21 @@ monitoring:
       # -- Set to true to deploy Grafana dashboard ConfigMaps for the Onyx indexing pipeline.
       # Requires kube-prometheus-stack (or equivalent) with the Grafana sidecar enabled and watching this namespace.
       # The sidecar must be configured with label selector: grafana_dashboard=1
+      # With craft.sandboxRuntime=firecracker and craft.hostAgent.metrics.enabled,
+      # it also deploys the Craft Firecracker host agent dashboard.
       enabled: false
   serviceMonitors:
     # -- Set to true to deploy ServiceMonitor resources for API server and Celery worker metrics endpoints.
     # Requires the Prometheus Operator CRDs (included in kube-prometheus-stack).
     # Use `labels` to match your Prometheus CR's serviceMonitorSelector (e.g. release: onyx-monitoring).
+    enabled: false
+    labels: {}
+  prometheusRules:
+    # -- Set to true to deploy PrometheusRule resources (alert rules).
+    # Requires the Prometheus Operator CRDs (included in kube-prometheus-stack).
+    # Today this has only the Craft Firecracker host agent rules, which also need
+    # craft.sandboxRuntime=firecracker and craft.hostAgent.metrics.enabled.
+    # Use `labels` to match your Prometheus CR's ruleSelector (e.g. release: onyx-monitoring).
     enabled: false
     labels: {}
 
@@ -2158,6 +2168,22 @@ craft:
       # Operator pods (app.kubernetes.io/name=prometheus) in the release
       # namespace. Set it if Prometheus runs in another namespace.
       networkPolicyFrom: []
+    # Alert rules (monitoring.prometheusRules.enabled). The thresholds are
+    # proposed defaults; tune them per deployment. Runbooks: microvm/RUNBOOKS.md.
+    alerts:
+      runbookUrl: https://github.com/onyx-dot-app/onyx/blob/main/microvm/RUNBOOKS.md
+      # Labels added to every rule (for example team or routing labels).
+      extraLabels: {}
+      # Failed Creates (start failed after admission) / admitted Creates, 15 m.
+      createFailureRatio: 0.2
+      # Capacity refusals per node and reason in 15 m.
+      admissionRefusals: 10
+      # Failed CaptureSession, UploadCapture or RestoreSession calls per node in 30 m.
+      sessionTransferFailures: 3
+      # Failed egress relay connections (over_cap, upstream_failed) / all, 10 m.
+      relayErrorRatio: 0.1
+      # MemAvailable / MemTotal of the node.
+      memoryAvailableRatio: 0.1
 
 # -- Sandbox Pod scheduling (rendered into the sandbox-pod PodTemplate).
 # Image/resources/ports come from the configMap.SANDBOX_* keys.
