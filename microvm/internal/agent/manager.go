@@ -328,6 +328,7 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (VM, bool, erro
 			if e.vm.Attempt == req.Attempt {
 				vm := e.vm
 				m.mu.Unlock()
+				markAdmitted(ctx)
 				return vm, false, nil
 			}
 			if e.vm.State != pb.VMState_VM_STATE_EXITED || req.Attempt < e.vm.Attempt {
@@ -396,6 +397,7 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (VM, bool, erro
 		m.mu.Unlock()
 		return VM{}, false, apierr.New(pb.ErrorReason_CAPACITY_VM_SLOTS, "no free jailer UID on this node")
 	}
+	markAdmitted(ctx)
 	e := &entry{
 		vm: VM{
 			SandboxID: req.SandboxID, Attempt: req.Attempt, Generation: m.nextGeneration(),

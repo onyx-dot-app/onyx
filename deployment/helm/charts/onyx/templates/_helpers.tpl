@@ -305,6 +305,85 @@ true
 {{- end }}
 
 {{/*
+Craft Firecracker host agent /metrics auth, the same rules as the api_server
+/metrics: "disabled" with configMap.DISABLE_METRICS_AUTH=true, "token" with
+auth.metricsAuth.enabled, else "locked" (every scrape gets 401).
+*/}}
+{{- define "onyx.craftHostAgentMetricsAuth" -}}
+{{- $metricsAuth := (.Values.auth | default dict).metricsAuth | default dict -}}
+{{- if eq (lower (toString ((.Values.configMap | default dict).DISABLE_METRICS_AUTH | default ""))) "true" -}}
+disabled
+{{- else if dig "enabled" false $metricsAuth -}}
+token
+{{- else -}}
+locked
+{{- end -}}
+{{- end }}
+
+{{/*
+mTLS client of the Craft Firecracker host agents, for the pods that call them:
+api_server, and the heavy (VM reconcile) and scheduled-tasks workers. Empty
+unless craft.sandboxRuntime=firecracker. Env names: backend/onyx/microvm/configs.py.
+*/}}
+{{- define "onyx.craftFcAgentClient.secretName" -}}
+{{- if eq (include "onyx.craftSandboxRuntime" .) "firecracker" -}}
+{{- $name := dig "hostAgent" "client" "existingSecret" "" (.Values.craft | default dict) -}}
+{{- if not $name -}}
+{{- fail "craft.hostAgent.client.existingSecret is required with craft.sandboxRuntime=firecracker" -}}
+{{- end -}}
+{{- $name -}}
+{{- end -}}
+{{- end }}
+
+{{- define "onyx.craftFcAgentClient.env" -}}
+{{- if include "onyx.craftFcAgentClient.secretName" . -}}
+- name: SANDBOX_FC_AGENT_CLIENT_CERT_PATH
+  value: /etc/onyx/craft-fc-agent-client/tls.crt
+- name: SANDBOX_FC_AGENT_CLIENT_KEY_PATH
+  value: /etc/onyx/craft-fc-agent-client/tls.key
+- name: SANDBOX_FC_AGENT_CA_PATH
+  value: /etc/onyx/craft-fc-agent-client/ca.crt
+{{- with dig "hostAgent" "client" "tlsServerName" "" (.Values.craft | default dict) }}
+- name: SANDBOX_FC_AGENT_TLS_SERVER_NAME
+  value: {{ . | quote }}
+{{- end }}
+{{- end -}}
+{{- end }}
+
+{{/* YAML lists, for concat with the pod's own volumeMounts and volumes. */}}
+{{- define "onyx.craftFcAgentClient.volumeMounts" -}}
+{{- if include "onyx.craftFcAgentClient.secretName" . -}}
+- name: craft-fc-agent-client
+  mountPath: /etc/onyx/craft-fc-agent-client
+  readOnly: true
+{{- end -}}
+{{- end }}
+
+{{- define "onyx.craftFcAgentClient.volumes" -}}
+{{- with include "onyx.craftFcAgentClient.secretName" . -}}
+- name: craft-fc-agent-client
+  secret:
+    secretName: {{ . }}
+    defaultMode: 0440
+{{- end -}}
+{{- end }}
+
+{{/*
+Key of the metrics token in auth.metricsAuth's Secret; the agent namespace
+copy uses the same key.
+*/}}
+{{- define "onyx.craftHostAgentMetricsKey" -}}
+{{- default "METRICS_AUTH_TOKEN" (dig "secretKeys" "METRICS_AUTH_TOKEN" "" ((.Values.auth | default dict).metricsAuth | default dict)) -}}
+{{- end }}
+
+{{/*
+Secret with the metrics token in the agent namespace (Secrets are namespaced).
+*/}}
+{{- define "onyx.craftHostAgentMetricsSecret" -}}
+{{- (dig "hostAgent" "metrics" "authExistingSecret" "" (.Values.craft | default dict)) | default (printf "%s-metrics-auth" (include "onyx.resourceName" (list . "craft-fc-host-agent"))) -}}
+{{- end }}
+
+{{/*
 Sandbox container image and pull policy. Shared by the sandbox-pod PodTemplate
 and the image-prepull DaemonSet: the prepull only pins layers the sandbox pods
 actually use if both resolve to the identical reference, and a drift here is

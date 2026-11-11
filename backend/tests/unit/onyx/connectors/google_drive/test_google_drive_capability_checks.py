@@ -588,6 +588,20 @@ def test_content_read_exports_a_native_file_and_downloads_an_upload() -> None:
     assert ops.download_file.call_args.kwargs["file_id"] == "small"
 
 
+def test_content_read_does_not_download_a_google_form() -> None:
+    ops = _ops()
+    ops.list_files.side_effect = _listing(
+        _file("form", "application/vnd.google-apps.form", size=1), _file("small")
+    )
+
+    result = _run("google_drive_content_read", ops)
+
+    assert result.status == CapabilityCheckStatus.PASSED
+    ops.download_file.assert_called_once()
+    assert ops.download_file.call_args.kwargs["file_id"] == "small"
+    ops.export_file.assert_not_called()
+
+
 def test_content_read_passes_on_a_file_over_the_probe_size() -> None:
     ops = _ops()
     ops.list_files.side_effect = _listing(_file("doc", GDriveMimeType.DOC.value))

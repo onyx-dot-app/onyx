@@ -547,8 +547,15 @@ func TestRegistrar(t *testing.T) {
 		t.Fatal(err)
 	}
 	pub, _ := base64.StdEncoding.DecodeString(got.PublicKey)
-	if got.NodeID != "node-a" || got.KeyID != "node-a-1" || !bytes.Equal(pub, s.PublicKey()) {
+	if got.NodeID != "node-a" || got.KeyID != "node-a-1" || !bytes.Equal(pub, s.PublicKey()) || got.AgentAddress != "" {
 		t.Fatalf("registration %+v", got)
+	}
+	g.AgentAddress = "10.0.3.7:7443"
+	if err := g.Register(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if got.AgentAddress != "10.0.3.7:7443" {
+		t.Fatalf("agent address %+v", got)
 	}
 	g.Secret = "wrong"
 	if err := g.Register(t.Context()); err == nil || !strings.Contains(err.Error(), "401") {

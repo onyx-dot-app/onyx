@@ -4,6 +4,7 @@
 #
 # - host-agent runs (--help).
 # - nsenter is on PATH.
+# - mkfs.ext4 is on PATH and supports -d (managed drive images, ENG-4614).
 # - /opt/craft-fc passes deployment/craft-fc/check-artifacts.sh.
 # - firecracker and jailer match the SHA256 pins that the agent checks at start
 #   (internal/binaries/binaries.go), so the agent does not refuse them.
@@ -34,6 +35,13 @@ if run nsenter --version >/dev/null; then
   pass "nsenter"
 else
   fail "nsenter is not on PATH"
+fi
+
+# Builds a small image from a directory, as the managed drive build does.
+if run sh -c 'mkdir -p /tmp/d && echo ok >/tmp/d/f && mkfs.ext4 -q -F -d /tmp/d /tmp/i.ext4 4M' >/dev/null; then
+  pass "mkfs.ext4 -d"
+else
+  fail "mkfs.ext4 -d does not work (e2fsprogs)"
 fi
 
 export_dir="$(mktemp -d)"

@@ -235,13 +235,26 @@ With `firecracker`, the chart:
 - puts the agent in its own namespace (`craft.hostAgent.namespace`) with Pod
   Security `privileged`;
 - adds a headless Service for the agent port (7443);
-- lets only api_server pods reach the agent port, and lets the agent pods reach
-  the sandbox-proxy port.
+- lets only the agent clients (api_server, heavy and scheduled-tasks workers)
+  reach the agent port, and lets the agent pods reach the sandbox-proxy port;
+- gives the agent `POD_IP`, so the agent registers `<pod IP>:7443` with its
+  node key (`craft.hostAgent.advertiseAddress` overrides it).
 
 The agent needs a TLS Secret in the agent namespace. It holds the agent
 certificate (`tls.crt`, `tls.key`) and the CA of the api_server client
 certificates (`ca.crt`). The chart does not make certificates. Until the Secret
 exists, the agent pods stay in `ContainerCreating`.
+
+The agent clients need a second Secret, in the release namespace
+(`craft.hostAgent.client.existingSecret`). It holds the client certificate
+(`tls.crt`, `tls.key`, signed by the CA in the agent `ca.crt`) and the CA of the
+agent certificates (`ca.crt`). The chart mounts it in the api_server, heavy and
+scheduled-tasks pods and sets `SANDBOX_FC_AGENT_CLIENT_CERT_PATH`,
+`SANDBOX_FC_AGENT_CLIENT_KEY_PATH` and `SANDBOX_FC_AGENT_CA_PATH`. The clients
+dial agent pod IPs. If the agent certificates do not carry the pod IPs, set
+`craft.hostAgent.client.tlsServerName` (`SANDBOX_FC_AGENT_TLS_SERVER_NAME`) to
+a DNS name in the agent certificate. To accept only some client certificates,
+set `craft.hostAgent.clientAllowedSans`.
 
 ```yaml
 craft:
@@ -251,6 +264,9 @@ craft:
       tag: "<host agent version>"
     tls:
       existingSecret: craft-fc-host-agent-tls
+    client:
+      existingSecret: craft-fc-agent-client-tls
+      tlsServerName: craft-fc-host-agent
 auth:
   sandboxNodeRegistration:
     enabled: true
@@ -277,6 +293,23 @@ must be on XFS with reflink. The preflight above checks
 data dir on a node (`stat -f -c %T <dataDir>` must print `xfs`, and
 `xfs_info` must show `reflink=1`). The agent also checks reflink support at
 start-up and does not start without it.
+
+To scrape the agent metrics, set `craft.hostAgent.metrics.enabled: true`
+(port `craft.hostAgent.metrics.port`, default 9464). With
+`monitoring.serviceMonitors.enabled: true`, the chart also makes a
+ServiceMonitor in the agent namespace. Auth follows the API server `/metrics`:
+with `auth.metricsAuth.enabled`, the agent requires the same bearer token and
+the ServiceMonitor sends it. The chart copies `auth.metricsAuth.values` into
+the agent namespace, because Secrets are namespaced. If `auth.metricsAuth`
+uses `existingSecret`, create a Secret with the same key in the agent
+namespace and set `craft.hostAgent.metrics.authExistingSecret`. With
+`configMap.DISABLE_METRICS_AUTH: "true"` the agent has no auth. With neither,
+every scrape gets 401. The NetworkPolicy lets only Prometheus Operator pods
+(`app.kubernetes.io/name: prometheus`) in the release namespace reach the
+port. If Prometheus runs in another namespace, set
+`craft.hostAgent.metrics.networkPolicyFrom`. The agent writes each VM's serial console and Firecracker log to its
+stdout as JSON lines (`kind=guest_log`), and an audit line for every API call
+to stderr (`kind=audit`), so the cluster log pipeline collects both.
 
 ## Using an external Redis
 

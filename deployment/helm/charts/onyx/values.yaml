@@ -2062,11 +2062,19 @@ craft:
     uidCount: 65536
     # mTLS listener for the api_server.
     listenPort: 7443
-    # Guest vsock ports that Dial allows (guest daemon, app preview).
-    dialPorts: "52,3010"
+    # Guest vsock ports that Dial allows (app preview). The agent always refuses the daemon port.
+    dialPorts: "3010"
     # Most open egress relay connections per VM; the agent closes new ones
     # over the cap.
     relayMaxConns: 256
+    # Most open Dial streams per VM; more fail with DIAL_LIMIT.
+    dialMaxStreams: 64
+    # Comma-separated DNS or URI SANs; the client certificate must have one.
+    # Empty = any certificate that tls ca.crt signed.
+    clientAllowedSans: ""
+    # host:port the agent clients dial, sent with the node key registration.
+    # Empty = the pod IP and listenPort.
+    advertiseAddress: ""
     # Empty = the in-cluster api_server URL (the sandbox callback URL).
     apiServerUrl: ""
     tls:
@@ -2074,6 +2082,15 @@ craft:
       # agent certificate) and ca.crt (the CA of the api_server client
       # certificates). The chart does not make certificates.
       existingSecret: ""
+    # The agent clients: api_server, and the heavy and scheduled-tasks workers.
+    client:
+      # Required. A Secret in the release namespace with tls.crt and tls.key
+      # (the client certificate, signed by the CA in tls ca.crt) and ca.crt
+      # (the CA of the agent certificates).
+      existingSecret: ""
+      # Name to verify in the agent certificate. The clients dial pod IPs, so
+      # set this unless the agent certificates carry the pod IPs.
+      tlsServerName: ""
     # Secret in the agent namespace with the registration key: the key name
     # in auth.sandboxNodeRegistration.secretKeys.SANDBOX_NODE_REGISTRATION_SECRET
     # (default sandbox_node_registration_secret). Empty = the chart copies
@@ -2101,6 +2118,23 @@ craft:
       pollInterval: 10s
     # Extra host-agent flags, for example ["--max-scratch-gib=200"].
     extraArgs: []
+    # Prometheus metrics on a plain HTTP port (--metrics-listen). With
+    # monitoring.serviceMonitors.enabled the chart also makes a ServiceMonitor
+    # in the agent namespace. Auth is the api_server /metrics auth: the
+    # auth.metricsAuth token, or none with configMap.DISABLE_METRICS_AUTH=true.
+    # With neither, every scrape gets 401.
+    metrics:
+      enabled: false
+      port: 9464
+      # Secret in the agent namespace with the auth.metricsAuth token, under
+      # the key in auth.metricsAuth.secretKeys.METRICS_AUTH_TOKEN. Empty = the
+      # chart copies auth.metricsAuth.values into the agent namespace.
+      # Required when auth.metricsAuth uses existingSecret.
+      authExistingSecret: ""
+      # NetworkPolicy sources for the metrics port. Empty = Prometheus
+      # Operator pods (app.kubernetes.io/name=prometheus) in the release
+      # namespace. Set it if Prometheus runs in another namespace.
+      networkPolicyFrom: []
 
 # -- Sandbox Pod scheduling (rendered into the sandbox-pod PodTemplate).
 # Image/resources/ports come from the configMap.SANDBOX_* keys.

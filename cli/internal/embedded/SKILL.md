@@ -73,6 +73,9 @@ onyx-cli search "Q3 roadmap" "hiring plan" "incident postmortem template"
 # Filter by source
 onyx-cli search --source slack,google_drive "auth migration status"
 
+# Limit to document sets (list names with `onyx-cli document-sets`)
+onyx-cli search --document-set "Engineering Wiki" "on-call runbook"
+
 # Recent results only
 onyx-cli search --days 30 "recent production incidents"
 
@@ -90,6 +93,7 @@ onyx-cli search --no-query-expansion "exact error message text"
 | Flag                    | Type   | Description                                                      |
 | ----------------------- | ------ | ---------------------------------------------------------------- |
 | `--source`              | string | Filter by source type (comma-separated: slack,google_drive)      |
+| `--document-set`        | string | Filter by document set name. Repeat the flag for more than one set; commas are part of the name. Replaces the default agent's knowledge scope; cannot be combined with `--agent-id` or `--agent-name` |
 | `--days`                | int    | Only return results from the last N days                         |
 | `--agent-id`            | int    | Agent ID for scoped search (inherits filters, document sets)     |
 | `--agent-name`          | string | Agent name for scoped search (exact or unique substring)         |
@@ -134,6 +138,15 @@ onyx-cli agents --json
 ```
 
 Prints a table of agent IDs, names, and descriptions. Use `--json` for structured JSON output. Use agent IDs with `--agent-id`, or names with `--agent-name`, on `ask`, `search`, and `chat`.
+
+### List document sets
+
+```bash
+onyx-cli document-sets
+onyx-cli document-sets --json
+```
+
+Prints the document sets the current user can search: ID, name, and description. Use `--json` for structured JSON output (`[{id, name, description}, ...]`). Pass the names to `onyx-cli search --document-set`. A name the user cannot access makes the search fail instead of returning unfiltered results.
 
 ### Validate configuration
 

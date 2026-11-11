@@ -97,13 +97,16 @@ spec:
                    Without it the sidecar client raises before sending and no snapshots are
                    created. Pairs with the heavy-worker rule in network-policy-sandbox-push. */}}
             {{- include "onyx.envSecretsRestricted" . | nindent 12}}
+            {{- with include "onyx.craftFcAgentClient.env" . }}
+            {{- . | nindent 12 }}
+            {{- end }}
             {{- with include "onyx.customCACerts.env" . }}
             {{- . | nindent 12 }}
             {{- end }}
             {{- with .Values.celery_worker_heavy.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
-          {{- with include "onyx.volumeMountsWithCA" (dict "ctx" . "volumeMounts" .Values.celery_worker_heavy.volumeMounts) }}
+          {{- with include "onyx.volumeMountsWithCA" (dict "ctx" . "volumeMounts" (concat (.Values.celery_worker_heavy.volumeMounts | default list) (include "onyx.craftFcAgentClient.volumeMounts" . | fromYamlArray))) }}
           {{- . | nindent 10 }}
           {{- end }}
           startupProbe:
@@ -128,7 +131,7 @@ spec:
                     python onyx/background/celery/celery_k8s_probe.py
                     --probe liveness
                     --filename /tmp/onyx_k8s_heavy_liveness.txt
-      {{- with include "onyx.volumesWithCA" (dict "ctx" . "volumes" .Values.celery_worker_heavy.volumes) }}
+      {{- with include "onyx.volumesWithCA" (dict "ctx" . "volumes" (concat (.Values.celery_worker_heavy.volumes | default list) (include "onyx.craftFcAgentClient.volumes" . | fromYamlArray))) }}
       {{- . | nindent 6 }}
       {{- end }}
 {{- end }}
