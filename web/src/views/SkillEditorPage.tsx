@@ -290,12 +290,20 @@ export default function SkillEditorPage({
         instructions_markdown: instructionsMarkdown,
         base_version_id: baseVersionId,
       });
-      const nextSkill: SkillEditableDetail = {
+      // Another save can commit before the server builds its response, so
+      // load the fields and their version together.
+      let fresh: SkillEditableDetail | undefined;
+      try {
+        fresh = await refreshSkill();
+      } catch (refreshError) {
+        console.error("Failed to reload skill after save", refreshError);
+      }
+      const nextSkill: SkillEditableDetail = fresh ?? {
         ...skill,
         ...updated,
         instructions_markdown: instructionsMarkdown.trim(),
       };
-      await refreshSkill(nextSkill, { revalidate: false });
+      if (!fresh) await refreshSkill(nextSkill, { revalidate: false });
       syncEditableFields(nextSkill);
       await refreshSkillList();
       toast.success(t("editor.toasts.saved", { name: updated.name }));
@@ -415,7 +423,9 @@ export default function SkillEditorPage({
     try {
       const updated = await removeUserSkillFile(skill.id, path, baseVersionId);
       await refreshSkill(updated, { revalidate: false });
-      setBaseVersionId(updated.current_version_id);
+      // Removal is blocked while the fields are dirty, so take the fields
+      // with the version the server returned.
+      syncEditableFields(updated);
       await refreshSkillList();
       toast.success(t("editor.toasts.fileRemoved", { path }));
     } catch (err) {
