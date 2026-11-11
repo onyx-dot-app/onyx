@@ -40,6 +40,14 @@ def is_spreadsheet_mime_type(mime_type: str | None) -> bool:
     )
 
 
+def is_code_interpreter_staged_mime_type(mime_type: str | None) -> bool:
+    return (
+        mime_type is not None
+        and _normalize_mime_type(mime_type)
+        in OnyxMimeTypes.CODE_INTERPRETER_STAGED_MIME_TYPES
+    )
+
+
 def _truncate_csv_at_row_boundary(csv_text: str, max_chars: int) -> str:
     """Cut CSV text to at most max_chars, ending on a row boundary. Single
     forward pass tracking quote parity: a newline only counts as a row boundary
