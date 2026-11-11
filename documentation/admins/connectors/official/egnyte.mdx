@@ -19,8 +19,8 @@ You can change **Refresh Every** on the connector. On each check, the connector 
 then downloads only the changed files.
 
 <Note>
-  Egnyte limits each access token to 2 API calls per second and 1,000 calls per day by default.
-  The connector uses one call per folder and one call per changed file on each check. For a large domain,
+  Egnyte limits each access token to 2 API calls per second and 1,000 calls per day by default. On each check,
+  the connector uses one call for every 200 entries in each folder and one call per changed file. For a large domain,
   ask Egnyte to raise the limits, or index one folder and set a longer **Refresh Every**.
 </Note>
 
@@ -81,8 +81,8 @@ The access token needs these Egnyte scopes:
 
 ## Sync with Egnyte
 
-With **Sync with Egnyte**, an Onyx user can see an Egnyte file when Egnyte gives that user **Viewer**, **Editor**,
-**Full**, or **Owner** access to the file's folder:
+With **Sync with Egnyte**, an Onyx user can see an Egnyte file when Egnyte gives that user **Viewer Only**, **Viewer**,
+**Editor**, **Full**, or **Owner** access to the file's folder:
 
 - Onyx reads each folder's effective permissions, including inherited ones.
 - Onyx maps Egnyte custom groups and the default groups, such as **All Power Users**, to Onyx.
@@ -102,7 +102,8 @@ and `Egnyte.group` scopes.
 Permissions are attached during the first indexing attempt. After that,
 Onyx refreshes document permissions and Egnyte group membership every 6 hours.
 Set `EGNYTE_PERMISSION_DOC_SYNC_FREQUENCY` and `EGNYTE_PERMISSION_GROUP_SYNC_FREQUENCY` (seconds) to change them.
-Each document permission refresh uses one API call per folder, and each group refresh uses one call per custom group.
+Each document permission refresh uses one API call for every 200 entries in each folder.
+Each group refresh uses one call per custom group, plus one call for every 100 users and every 100 groups.
 
 <Warning>
   Review the access type before connecting.

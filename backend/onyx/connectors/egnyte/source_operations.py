@@ -244,16 +244,22 @@ class EgnyteSourceOperations(SourceOperations):
             ),
         )
 
-    def _list_directory(self, path: str) -> list[dict[str, Any]]:
-        """Every resource of a SCIM listing, which pages by 1-based startIndex."""
+    def _list_directory(self, path: str, limit: int | None) -> list[dict[str, Any]]:
+        """The resources of a SCIM listing, which pages by 1-based startIndex.
+        Every one, or at most ``limit`` from one call."""
         resources: list[dict[str, Any]] = []
         for _ in range(_MAX_DIRECTORY_PAGES):
             body: dict[str, Any] = self._get(
                 path,
-                {"startIndex": len(resources) + 1, "count": _DIRECTORY_PAGE_SIZE},
+                {
+                    "startIndex": len(resources) + 1,
+                    "count": min(limit or _DIRECTORY_PAGE_SIZE, _DIRECTORY_PAGE_SIZE),
+                },
             ).json()
             page: list[dict[str, Any]] = body.get("resources", [])
             resources.extend(page)
+            if limit is not None:
+                return resources[:limit]
             if not page or len(resources) >= int(body.get("totalResults", 0)):
                 return resources
         raise RuntimeError(
@@ -298,11 +304,12 @@ class EgnyteSourceOperations(SourceOperations):
         ),
         consumes=OperationConsumes.CREDENTIAL,
     )
-    def list_users(self) -> list[EgnyteUser]:
-        """Every user of the domain. Needs an administrator's token."""
+    def list_users(self, *, limit: int | None = None) -> list[EgnyteUser]:
+        """Every user of the domain, or the first ``limit`` with one call.
+        Needs an administrator's token."""
         return [
             EgnyteUser.model_validate(user)
-            for user in self._list_directory(_V2_USERS_PATH)
+            for user in self._list_directory(_V2_USERS_PATH, limit)
         ]
 
     @source_operation(
@@ -312,11 +319,12 @@ class EgnyteSourceOperations(SourceOperations):
         ),
         consumes=OperationConsumes.CREDENTIAL,
     )
-    def list_groups(self) -> list[EgnyteGroupRef]:
-        """Every custom group. The default groups are not listed."""
+    def list_groups(self, *, limit: int | None = None) -> list[EgnyteGroupRef]:
+        """Every custom group, or the first ``limit`` with one call. The
+        default groups are not listed."""
         return [
             EgnyteGroupRef.model_validate(group)
-            for group in self._list_directory(_V2_GROUPS_PATH)
+            for group in self._list_directory(_V2_GROUPS_PATH, limit)
         ]
 
     @source_operation(

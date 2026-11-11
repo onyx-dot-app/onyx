@@ -30,6 +30,9 @@ _REMEDIATION: str = (
 # Egnyte refuses to list the permissions of "/" and "/Private", so a check of
 # the whole domain reads those of "/Shared".
 _PERMISSIONS_PROBE_FALLBACK: str = "/Shared"
+# These checks also run before every permission-synced indexing attempt, so
+# each one makes a single small call against the daily quota.
+_PROBE_LIMIT: int = 1
 
 
 class _AdministratorCheck(CapabilityCheck[EgnyteConnectorConfig]):
@@ -72,8 +75,14 @@ class _DirectoryCheck(CapabilityCheck[EgnyteConnectorConfig]):
 
     def run(self, context: CapabilityCheckContext) -> None:
         gateway: EgnyteSourceOperations = gateway_from_context(context)
-        probe(gateway.list_users, "Onyx could not list the Egnyte users.")
-        probe(gateway.list_groups, "Onyx could not list the Egnyte groups.")
+        probe(
+            lambda: gateway.list_users(limit=_PROBE_LIMIT),
+            "Onyx could not list the Egnyte users.",
+        )
+        probe(
+            lambda: gateway.list_groups(limit=_PROBE_LIMIT),
+            "Onyx could not list the Egnyte groups.",
+        )
 
 
 class _FolderPermissionsCheck(CapabilityCheck[EgnyteConnectorConfig]):
@@ -118,7 +127,8 @@ class _GroupMembersCheck(CapabilityCheck[EgnyteConnectorConfig]):
     def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
         gateway: EgnyteSourceOperations = gateway_from_context(context)
         groups: list[EgnyteGroupRef] = probe(
-            gateway.list_groups, "Onyx could not list the Egnyte groups."
+            lambda: gateway.list_groups(limit=_PROBE_LIMIT),
+            "Onyx could not list the Egnyte groups.",
         )
         if not groups:
             return CheckOutput(

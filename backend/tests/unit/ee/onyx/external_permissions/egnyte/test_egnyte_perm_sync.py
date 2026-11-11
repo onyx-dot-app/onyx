@@ -82,6 +82,12 @@ def test_readers_are_viewer_and_higher_plus_administrators() -> None:
     assert not access.is_public
 
 
+def test_viewer_only_reads_the_folder() -> None:
+    access = folder_access(_DOMAIN, _grants(users={"bo": "Viewer Only"}), _DIRECTORY)
+
+    assert access.external_user_emails == {"bo@acme.com"}
+
+
 def test_a_user_none_does_not_remove_a_group_grant() -> None:
     access = folder_access(
         _DOMAIN,

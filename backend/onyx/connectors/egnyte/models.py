@@ -31,7 +31,7 @@ class EgnyteFolder(BaseModel):
 class EgnytePermissionGrant(BaseModel):
     # A username, or a group's display name.
     subject: str
-    # None, Viewer, Editor, Full or Owner.
+    # None, Viewer Only, Viewer, Editor, Full or Owner.
     permission: str
 
 

@@ -152,3 +152,22 @@ def test_download_reads_only_the_start_when_bounded() -> None:
         content = _gateway().download_file(file_path="/Shared/big.txt", max_bytes=100)
 
     assert content.getvalue() == b"x" * 100
+
+
+def test_bounded_user_listing_makes_one_small_call() -> None:
+    user = {
+        "userName": "ana",
+        "email": "ana@acme.com",
+        "userType": "standard",
+        "active": True,
+    }
+    get = MagicMock(
+        return_value=_response(200, {"totalResults": 500, "resources": [user]})
+    )
+
+    with patch.object(requests.Session, "get", get):
+        users = _gateway().list_users(limit=1)
+
+    assert [u.user_name for u in users] == ["ana"]
+    assert get.call_count == 1
+    assert get.call_args.kwargs["params"]["count"] == 1

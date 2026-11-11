@@ -4,7 +4,7 @@ Egnyte sets permissions on folders only, and a file has the permissions of its
 folder. A folder listing with ``perms=true`` returns the folder's effective
 grants, inherited ones included, so no inheritance is computed here. Egnyte
 has no deny: a user's None does not remove what a group grants. A folder's
-readers are therefore every user and group with Viewer or higher.
+readers are therefore every user and group with Viewer Only or higher.
 
 Administrators can read every folder, private ones included, so every folder
 names the administrators group. Default groups ("All Power Users") appear in
@@ -29,7 +29,11 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-READ_PERMISSIONS: frozenset[str] = frozenset({"Viewer", "Editor", "Full", "Owner"})
+# Viewer Only users preview files in Egnyte without downloading them, so they
+# read the content too.
+READ_PERMISSIONS: frozenset[str] = frozenset(
+    {"Viewer Only", "Viewer", "Editor", "Full", "Owner"}
+)
 ADMINISTRATORS_GROUP_NAME: str = "All Administrators"
 DEFAULT_GROUP_USER_TYPES: dict[str, frozenset[EgnyteUserType]] = {
     ADMINISTRATORS_GROUP_NAME: frozenset({EgnyteUserType.ADMIN}),
