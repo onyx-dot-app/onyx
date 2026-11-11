@@ -289,8 +289,10 @@ Their control functions, such as `think_tool`, `generate_report` and
    `chat/execution.py:ChatTurnExecution._run_response` find tools by name, so
    two tools with one name make one unreachable. OpenAI and Bedrock accept only
    `[a-zA-Z0-9_-]`. Tools that take user-supplied names, such as MCP and OpenAPI
-   tools, use `tools/tool_name.py:normalize_external_tool_name`. MCP names include the
-   server name and database ID; OpenAPI names include the tool database ID.
+   tools, use `tools/tool_name.py:normalize_external_tool_name`. MCP names are
+   `mcp__<server id>__<server name>__<tool>`; OpenAPI names are
+   `custom__<tool id>__<operation>`. The ID comes first, so a user-chosen name
+   cannot make two tools collide.
    Names fit 64 characters; sanitation and truncation add a stable hash.
    Execution retains the original upstream name.
 11. `replay-by-class-name` **Replay finds a tool by its name or its class

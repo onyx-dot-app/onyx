@@ -38,11 +38,13 @@ test("custom tool output and answer survive a history reload", async ({
     );
     sessionId = await api.createChatSession("Tool history", agentId);
     const callId = `call-${nonce}`;
+    // Matches `CustomTool.name` in the backend.
+    const toolName = `custom__${toolId}__${operation}`;
     await addMockLlmConversation({
       name: nonce,
       conditions: { prompt_contains: [nonce] },
       replies: [
-        { tool_calls: [{ id: callId, name: operation, arguments: {} }] },
+        { tool_calls: [{ id: callId, name: toolName, arguments: {} }] },
         {
           text: "The health check returned ok.",
           conditions: { has_results_for: [callId] },
@@ -54,11 +56,11 @@ test("custom tool output and answer survive a history reload", async ({
     await chatPage.inputBar.send();
     await chatPage.expectCompleteAnswers(1);
     await chatPage.expectAnswerParagraph("The health check returned ok.");
-    await chatPage.expectCustomToolResult(operation, '"status": "ok"');
+    await chatPage.expectCustomToolResult(toolName, '"status": "ok"');
     await chatPage.reload();
     await chatPage.expectCompleteAnswers(1);
     await chatPage.expectAnswerParagraph("The health check returned ok.");
-    await chatPage.expectCustomToolResult(operation, '"status": "ok"');
+    await chatPage.expectCustomToolResult(toolName, '"status": "ok"');
   } finally {
     if (sessionId) await api.deleteChatSession(sessionId);
     if (agentId !== undefined) await adminApi.deleteAgent(agentId);

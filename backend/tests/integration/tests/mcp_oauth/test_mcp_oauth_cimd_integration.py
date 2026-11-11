@@ -283,18 +283,19 @@ def test_mcp_oauth_cimd_only_flow(
             force_reauthentication=True,
         )
 
+        callable_name = f"mcp__{server_id}__{MCP_SERVER_NAME}__{MCP_TOOL_NAME}"
         mock_llm.conversation(
             "chat",
             Reply(
                 tool_calls=[
                     ToolCall(
                         id=MCP_TOOL_CALL_ID,
-                        name=MCP_TOOL_NAME,
+                        name=callable_name,
                         arguments={"name": "integration-test"},
                     )
                 ],
                 conditions=RequestConditions(
-                    offers=[MCP_TOOL_NAME],
+                    offers=[callable_name],
                     tool_choice="auto",
                 ),
             ),
@@ -315,7 +316,7 @@ def test_mcp_oauth_cimd_only_flow(
         )
         assert chat_response.error is None
         assert any(
-            tool_call.tool_name == MCP_TOOL_NAME
+            tool_call.tool_name == callable_name
             and tool_call.tool_args == {"name": "integration-test"}
             for tool_call in chat_response.tool_call_debug
         )
