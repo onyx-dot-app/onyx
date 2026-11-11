@@ -55,6 +55,7 @@ Cut a sentence only if it is one of these:
 - (e) multi-tenant or test-only material that customers cannot use.
 
 In a feature PR, check the whole page and match its detail. Edit the sentence that the change makes wrong.
+Add the contract, behavior, or error recovery that rules 2 to 5 require, even if the page has none yet.
 Do not add a parallel note. Put a new section where its importance puts it among its siblings.
 
 ### Ground every claim in source truth

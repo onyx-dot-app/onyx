@@ -101,8 +101,10 @@ reviews:
         product, edition, or plan name (Onyx Cloud, Enterprise
         Edition) unless the code shows the old name is wrong. Flag
         added text that does not serve the page's reader and task,
-        that is more detailed than the rest of the page, or that sits
-        away from the point of need, and a new section placed above
+        that is more detailed than the rest of the page (except
+        contract, behavior, or error-recovery content that the
+        section's type needs), or that sits away from the point of
+        need, and a new section placed above
         more important sections. Flag a new image that shows a cropped
         control or uses a different framing from the other images on
         the page. Name the sentences to cut or restore.
