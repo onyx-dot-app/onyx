@@ -38,6 +38,8 @@ The model reads the text of these files in the prompt or through search.
 
 The `CODE_INTERPRETER_MAX_STAGED_FILES` and `CODE_INTERPRETER_MAX_STAGED_BYTES` limits apply to all of these files
 together. If a code run has more files than the limits allow, Onyx first copies the files that the code names.
+Onyx always copies at least one file, even if that file is larger than `CODE_INTERPRETER_MAX_STAGED_BYTES`.
+The model gets a notice that names the files that Onyx did not copy.
 
 ## Availability
 

@@ -72,6 +72,7 @@ PYTHON_TOOL_GUIDANCE = """
 Use the `run_python` tool to execute Python code in an isolated sandbox. The tool will respond with the output of the execution or time out after 60.0 seconds.
 Any files uploaded to the chat will be automatically be available in the execution environment's current directory. \
 Word (.docx), PowerPoint (.pptx), Excel (.xlsx, .xlsm), and CSV files attached to the agent or project are also available there under their file names (list the directory if a name does not resolve). \
+File count and size limits apply to each run; the result's staging notice names any files that were not staged. \
 The current directory in the file system can be used to save and persist user files. Files written to the current directory will be returned with a `file_link`. \
 Use this to give the user a way to download the file OR to display generated images.
 Internet access for this session is disabled. Do not make external web requests or API calls as they will fail.
