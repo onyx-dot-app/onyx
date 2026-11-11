@@ -109,7 +109,7 @@ const (
 	// --egress-ca-configmap) but cannot read a valid CA from it. No VM
 	// starts. Retry later; sandbox-proxy writes the CA at its first start.
 	ErrorReason_EGRESS_CA_UNAVAILABLE ErrorReason = 29
-	// Session saves (ENG-4572).
+	// Session saves.
 	// UploadCapture: no spooled capture with this ID (never made, uploaded,
 	// discarded or expired). Capture again.
 	ErrorReason_CAPTURE_NOT_FOUND ErrorReason = 32

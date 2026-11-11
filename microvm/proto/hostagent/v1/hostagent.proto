@@ -40,7 +40,7 @@ service HostAgent {
   // pooled client connections in the guest fail fast and reconnect.
   rpc CloseConnections(CloseConnectionsRequest) returns (CloseConnectionsResponse);
 
-  // Session saves (ENG-4572). The node moves the bytes between the VM and
+  // Session saves. The node moves the bytes between the VM and
   // object storage with presigned URLs from the api_server, so the guest
   // never sees a URL or a credential. Each call names the VM instance
   // (sandbox_id, attempt, generation, as Stop) and sends the VM's guest
@@ -203,7 +203,7 @@ enum ErrorReason {
   // starts. Retry later; sandbox-proxy writes the CA at its first start.
   EGRESS_CA_UNAVAILABLE = 29;
 
-  // Session saves (ENG-4572).
+  // Session saves.
   // UploadCapture: no spooled capture with this ID (never made, uploaded,
   // discarded or expired). Capture again.
   CAPTURE_NOT_FOUND = 32;
@@ -352,7 +352,7 @@ message CloseConnectionsResponse {
   uint32 closed = 1;
 }
 
-// Session saves (ENG-4572).
+// Session saves.
 
 // A presigned request from the api_server (FileStore presign_upload or
 // presign_download). The agent sends exactly these headers.

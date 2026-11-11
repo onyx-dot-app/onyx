@@ -118,7 +118,7 @@ messages, so a new daemon call needs no agent change (`internal/server/passthrou
 
 ### Session saves
 
-The agent moves session archives (ENG-4572) between the guest daemon and object storage. The api_server
+The agent moves session archives between the guest daemon and object storage. The api_server
 signs each request for one object and one method (FileStore `presign_upload` / `presign_download`). The
 agent sends it with exactly the signed headers. It has no storage credentials, and the guest never sees
 a URL (`internal/server/saves.go`, `internal/transfer`).
@@ -637,7 +637,7 @@ KVM_TB_ROOTFS=/opt/tb/rootfs-out KVM_TB_CA=/opt/tb/ca/ca.crt ./hostagent-kvm.tes
 # --daemon-cmd "/craft-fc/bin/guest-daemon --reclaim-idle=1m"; balloon on restores, reclaim on KVM_VMS
 # idle VMs, scope limits and a guest memory hog, fill the node to CAPACITY_MEMORY, manual drain.
 KVM_TB_ROOTFS=/opt/tb/rootfs-out KVM_TB_CA=/opt/tb/ca/ca.crt ./hostagent-kvm.test -test.v -test.run TestMemAdmissionKVM
-# Files and session saves through the agent over mTLS (ENG-4572): file calls through the pass-through,
+# Files and session saves through the agent over mTLS: file calls through the pass-through,
 # capture → presigned PUT → restore into a fresh VM, with a test S3 bucket (KVM_S3_BUCKET; AWS
 # credentials on the host sign the URLs, the agent never sees them). Results: results/daemon-files.md.
 KVM_IMG_DIR=/opt/craft-fc-test/img3 KVM_S3_BUCKET=<bucket> ./hostagent-kvm.test -test.v -test.run TestSavesKVM

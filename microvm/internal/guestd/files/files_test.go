@@ -33,6 +33,10 @@ func newStore(t *testing.T, cfg Config) (*Store, string) {
 		t.Fatal(err)
 	}
 	cfg.SessionsRoot = filepath.Join(dir, "sessions")
+	if cfg.CaptureRoots == nil {
+		// Two roots, to test the swap and rollback of more than one.
+		cfg.CaptureRoots = []string{"work", "attachments"}
+	}
 	s, err := New(cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -71,31 +75,31 @@ func read(t *testing.T, s *Store, p string, off, n int64) ([]byte, Info, error) 
 
 func TestReadBoundsAndRanges(t *testing.T) {
 	s, base := newStore(t, Config{MaxFileBytes: 10})
-	put(t, base, "outputs/a.txt", "0123456789")
-	put(t, base, "outputs/big.txt", "0123456789X")
+	put(t, base, "work/a.txt", "0123456789")
+	put(t, base, "work/big.txt", "0123456789X")
 
-	got, info, err := read(t, s, "outputs/a.txt", 0, 0)
-	if err != nil || string(got) != "0123456789" || info.Size != 10 || info.Path != "outputs/a.txt" {
+	got, info, err := read(t, s, "work/a.txt", 0, 0)
+	if err != nil || string(got) != "0123456789" || info.Size != 10 || info.Path != "work/a.txt" {
 		t.Fatalf("read = %q %+v %v", got, info, err)
 	}
-	got, _, err = read(t, s, "/outputs/a.txt", 3, 4)
+	got, _, err = read(t, s, "/work/a.txt", 3, 4)
 	if err != nil || string(got) != "3456" {
 		t.Fatalf("range = %q %v", got, err)
 	}
-	if _, _, err := read(t, s, "outputs/big.txt", 0, 0); !errors.Is(err, ErrLimit) {
+	if _, _, err := read(t, s, "work/big.txt", 0, 0); !errors.Is(err, ErrLimit) {
 		t.Fatalf("over the limit: %v", err)
 	}
 	// A range of a big file is fine.
-	if got, _, err := read(t, s, "outputs/big.txt", 5, 6); err != nil || string(got) != "56789X" {
+	if got, _, err := read(t, s, "work/big.txt", 5, 6); err != nil || string(got) != "56789X" {
 		t.Fatalf("range of big = %q %v", got, err)
 	}
-	if _, _, err := read(t, s, "outputs", 0, 0); !errors.Is(err, ErrInvalid) {
+	if _, _, err := read(t, s, "work", 0, 0); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("directory: %v", err)
 	}
-	if _, _, err := read(t, s, "outputs/missing", 0, 0); !errors.Is(err, ErrNotFound) {
+	if _, _, err := read(t, s, "work/missing", 0, 0); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("missing: %v", err)
 	}
-	if _, _, err := read(t, s, "outputs/a.txt", 11, 0); !errors.Is(err, ErrInvalid) {
+	if _, _, err := read(t, s, "work/a.txt", 11, 0); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("offset past end: %v", err)
 	}
 }
@@ -104,23 +108,23 @@ func TestPathEscapes(t *testing.T) {
 	s, base := newStore(t, Config{})
 	outside := filepath.Join(filepath.Dir(filepath.Dir(base)), "secret")
 	put(t, filepath.Dir(outside), "secret", "top secret")
-	if err := os.MkdirAll(filepath.Join(base, "outputs"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(base, "work"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Symlink(outside, filepath.Join(base, "outputs", "link")); err != nil {
+	if err := os.Symlink(outside, filepath.Join(base, "work", "link")); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Symlink(filepath.Dir(outside), filepath.Join(base, "outputs", "dirlink")); err != nil {
+	if err := os.Symlink(filepath.Dir(outside), filepath.Join(base, "work", "dirlink")); err != nil {
 		t.Fatal(err)
 	}
-	for _, p := range []string{"../secret", "outputs/../../secret", "outputs/link", "outputs/dirlink/secret"} {
+	for _, p := range []string{"../secret", "work/../../secret", "work/link", "work/dirlink/secret"} {
 		if _, _, err := read(t, s, p, 0, 0); err == nil {
 			t.Errorf("read %q: no error", p)
 		}
 	}
 	ctx := context.Background()
 	// Write through a link that leaves the session fails.
-	_, _, err := s.Write(ctx, sid, WriteSpec{Path: "outputs/dirlink/new", Size: 1}, strings.NewReader("x"))
+	_, _, err := s.Write(ctx, sid, WriteSpec{Path: "work/dirlink/new", Size: 1}, strings.NewReader("x"))
 	if err == nil {
 		t.Fatal("write through an escaping link worked")
 	}
@@ -128,13 +132,13 @@ func TestPathEscapes(t *testing.T) {
 		t.Fatal("file written outside the session")
 	}
 	// Delete of the link removes the link, not the target.
-	if ok, err := s.Delete(sid, "outputs/link", false); !ok || err != nil {
+	if ok, err := s.Delete(sid, "work/link", false); !ok || err != nil {
 		t.Fatalf("delete link = %v %v", ok, err)
 	}
 	if _, err := os.Stat(outside); err != nil {
 		t.Fatal("link target was removed")
 	}
-	if _, _, err := s.List(ctx, sid, ListSpec{Path: "outputs/dirlink"}); err == nil {
+	if _, _, err := s.List(ctx, sid, ListSpec{Path: "work/dirlink"}); err == nil {
 		t.Fatal("list through an escaping link worked")
 	}
 	for _, bad := range []string{"", "..", ".hidden", "a/b"} {
@@ -179,22 +183,22 @@ func TestWrite(t *testing.T) {
 	s, base := newStore(t, Config{MaxFileBytes: 100})
 	ctx := context.Background()
 	data := "hello"
-	info, got, err := s.Write(ctx, sid, WriteSpec{Path: "outputs/x/a.txt", Size: 5, SHA256: sum([]byte(data)), MakeParents: true, Mode: 0o4755},
+	info, got, err := s.Write(ctx, sid, WriteSpec{Path: "work/x/a.txt", Size: 5, SHA256: sum([]byte(data)), MakeParents: true, Mode: 0o4755},
 		strings.NewReader(data))
 	if err != nil || got != sum([]byte(data)) || info.Size != 5 || info.Mode != 0o755 {
 		t.Fatalf("write = %+v %s %v", info, got, err)
 	}
-	if b, _ := os.ReadFile(filepath.Join(base, "outputs/x/a.txt")); string(b) != data {
+	if b, _ := os.ReadFile(filepath.Join(base, "work/x/a.txt")); string(b) != data {
 		t.Fatalf("content %q", b)
 	}
 	// Without overwrite an existing file stays.
-	if _, _, err := s.Write(ctx, sid, WriteSpec{Path: "outputs/x/a.txt", Size: 3}, strings.NewReader("new")); !errors.Is(err, ErrExists) {
+	if _, _, err := s.Write(ctx, sid, WriteSpec{Path: "work/x/a.txt", Size: 3}, strings.NewReader("new")); !errors.Is(err, ErrExists) {
 		t.Fatalf("no overwrite: %v", err)
 	}
-	if _, _, err := s.Write(ctx, sid, WriteSpec{Path: "outputs/x/a.txt", Size: 3, Overwrite: true}, strings.NewReader("new")); err != nil {
+	if _, _, err := s.Write(ctx, sid, WriteSpec{Path: "work/x/a.txt", Size: 3, Overwrite: true}, strings.NewReader("new")); err != nil {
 		t.Fatal(err)
 	}
-	if b, _ := os.ReadFile(filepath.Join(base, "outputs/x/a.txt")); string(b) != "new" {
+	if b, _ := os.ReadFile(filepath.Join(base, "work/x/a.txt")); string(b) != "new" {
 		t.Fatalf("content after overwrite %q", b)
 	}
 	// Short data, long data, a wrong hash and an over-limit size change nothing.
@@ -203,22 +207,22 @@ func TestWrite(t *testing.T) {
 		data string
 		want error
 	}{
-		{WriteSpec{Path: "outputs/x/a.txt", Size: 10, Overwrite: true}, "short", ErrInvalid},
-		{WriteSpec{Path: "outputs/x/a.txt", Size: 2, Overwrite: true}, "toolong", ErrInvalid},
-		{WriteSpec{Path: "outputs/x/a.txt", Size: 3, Overwrite: true, SHA256: sum([]byte("abc"))}, "xyz", ErrInvalid},
-		{WriteSpec{Path: "outputs/x/a.txt", Size: 101, Overwrite: true}, strings.Repeat("a", 101), ErrLimit},
-		{WriteSpec{Path: "outputs/missing/a.txt", Size: 1}, "a", ErrNotFound},
-		{WriteSpec{Path: "outputs/x", Size: 1, Overwrite: true}, "a", ErrInvalid},
+		{WriteSpec{Path: "work/x/a.txt", Size: 10, Overwrite: true}, "short", ErrInvalid},
+		{WriteSpec{Path: "work/x/a.txt", Size: 2, Overwrite: true}, "toolong", ErrInvalid},
+		{WriteSpec{Path: "work/x/a.txt", Size: 3, Overwrite: true, SHA256: sum([]byte("abc"))}, "xyz", ErrInvalid},
+		{WriteSpec{Path: "work/x/a.txt", Size: 101, Overwrite: true}, strings.Repeat("a", 101), ErrLimit},
+		{WriteSpec{Path: "work/missing/a.txt", Size: 1}, "a", ErrNotFound},
+		{WriteSpec{Path: "work/x", Size: 1, Overwrite: true}, "a", ErrInvalid},
 	}
 	for i, c := range cases {
 		if _, _, err := s.Write(ctx, sid, c.spec, strings.NewReader(c.data)); !errors.Is(err, c.want) {
 			t.Errorf("case %d: %v, want %v", i, err, c.want)
 		}
 	}
-	if b, _ := os.ReadFile(filepath.Join(base, "outputs/x/a.txt")); string(b) != "new" {
+	if b, _ := os.ReadFile(filepath.Join(base, "work/x/a.txt")); string(b) != "new" {
 		t.Fatalf("content changed by a failed write: %q", b)
 	}
-	ents, _ := os.ReadDir(filepath.Join(base, "outputs/x"))
+	ents, _ := os.ReadDir(filepath.Join(base, "work/x"))
 	if len(ents) != 1 {
 		t.Fatalf("temp files left: %v", ents)
 	}
@@ -256,15 +260,15 @@ func TestUploadNames(t *testing.T) {
 func TestListAndDelete(t *testing.T) {
 	s, base := newStore(t, Config{})
 	ctx := context.Background()
-	put(t, base, "outputs/b.txt", "b")
-	put(t, base, "outputs/A.txt", "a")
-	put(t, base, "outputs/sub/c.txt", "c")
-	put(t, base, "outputs/node_modules/x/y.js", "y")
-	put(t, base, "outputs/.hidden", "h")
-	if err := os.Symlink("b.txt", filepath.Join(base, "outputs", "ln")); err != nil {
+	put(t, base, "work/b.txt", "b")
+	put(t, base, "work/A.txt", "a")
+	put(t, base, "work/sub/c.txt", "c")
+	put(t, base, "work/node_modules/x/y.js", "y")
+	put(t, base, "work/.hidden", "h")
+	if err := os.Symlink("b.txt", filepath.Join(base, "work", "ln")); err != nil {
 		t.Fatal(err)
 	}
-	ents, trunc, err := s.List(ctx, sid, ListSpec{Path: "outputs"})
+	ents, trunc, err := s.List(ctx, sid, ListSpec{Path: "work"})
 	if err != nil || trunc {
 		t.Fatal(err, trunc)
 	}
@@ -278,7 +282,7 @@ func TestListAndDelete(t *testing.T) {
 	if ents[5].Type != TypeSymlink || ents[5].LinkTarget != "b.txt" {
 		t.Fatalf("link entry %+v", ents[5])
 	}
-	ents, _, err = s.List(ctx, sid, ListSpec{Path: "outputs", Recursive: true, Exclude: []string{"node_modules"}, SkipHidden: true})
+	ents, _, err = s.List(ctx, sid, ListSpec{Path: "work", Recursive: true, Exclude: []string{"node_modules"}, SkipHidden: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -286,26 +290,26 @@ func TestListAndDelete(t *testing.T) {
 	for _, e := range ents {
 		paths = append(paths, e.Path)
 	}
-	if strings.Join(paths, ",") != "outputs/sub,outputs/A.txt,outputs/b.txt,outputs/ln,outputs/sub/c.txt" {
+	if strings.Join(paths, ",") != "work/sub,work/A.txt,work/b.txt,work/ln,work/sub/c.txt" {
 		t.Fatalf("recursive = %v", paths)
 	}
-	_, trunc, _ = s.List(ctx, sid, ListSpec{Path: "outputs", MaxEntries: 2})
+	_, trunc, _ = s.List(ctx, sid, ListSpec{Path: "work", MaxEntries: 2})
 	if !trunc {
 		t.Fatal("not truncated at max_entries")
 	}
-	if _, _, err := s.List(ctx, sid, ListSpec{Path: "outputs/b.txt"}); !errors.Is(err, ErrInvalid) {
+	if _, _, err := s.List(ctx, sid, ListSpec{Path: "work/b.txt"}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("list a file: %v", err)
 	}
 	if _, _, err := s.List(ctx, sid, ListSpec{Path: "nope"}); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("list missing: %v", err)
 	}
-	if _, err := s.Delete(sid, "outputs/sub", false); !errors.Is(err, ErrInvalid) {
+	if _, err := s.Delete(sid, "work/sub", false); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("delete dir without recursive: %v", err)
 	}
-	if ok, err := s.Delete(sid, "outputs/sub", true); !ok || err != nil {
+	if ok, err := s.Delete(sid, "work/sub", true); !ok || err != nil {
 		t.Fatal(ok, err)
 	}
-	if ok, err := s.Delete(sid, "outputs/sub", true); ok || err != nil {
+	if ok, err := s.Delete(sid, "work/sub", true); ok || err != nil {
 		t.Fatalf("second delete = %v %v", ok, err)
 	}
 	if _, err := s.Delete(sid, "", true); !errors.Is(err, ErrInvalid) {
@@ -316,12 +320,12 @@ func TestListAndDelete(t *testing.T) {
 func TestListLargeDirectory(t *testing.T) {
 	s, base := newStore(t, Config{})
 	for _, n := range []string{"e", "d", "c", "b", "a"} {
-		put(t, base, "outputs/"+n+".txt", n)
+		put(t, base, "work/"+n+".txt", n)
 	}
 	orig := listScanCap
 	t.Cleanup(func() { listScanCap = orig })
 	listScanCap = 3
-	ents, trunc, err := s.List(context.Background(), sid, ListSpec{Path: "outputs", MaxEntries: 10})
+	ents, trunc, err := s.List(context.Background(), sid, ListSpec{Path: "work", MaxEntries: 10})
 	if err != nil || !trunc {
 		t.Fatalf("err %v truncated %v", err, trunc)
 	}
@@ -332,8 +336,8 @@ func TestListLargeDirectory(t *testing.T) {
 
 func TestReadDirFIFO(t *testing.T) {
 	_, base := newStore(t, Config{})
-	put(t, base, "outputs/a.txt", "a")
-	if err := syscall.Mkfifo(filepath.Join(base, "outputs", "pipe"), 0o600); err != nil {
+	put(t, base, "work/a.txt", "a")
+	if err := syscall.Mkfifo(filepath.Join(base, "work", "pipe"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	root, err := os.OpenRoot(base)
@@ -343,7 +347,7 @@ func TestReadDirFIFO(t *testing.T) {
 	t.Cleanup(func() { _ = root.Close() })
 	done := make(chan error, 1)
 	go func() {
-		_, err := readDir(root, "outputs/pipe", 10)
+		_, err := readDir(root, "work/pipe", 10)
 		done <- err
 	}()
 	select {
@@ -359,14 +363,14 @@ func TestReadDirFIFO(t *testing.T) {
 func TestZip(t *testing.T) {
 	s, base := newStore(t, Config{MaxZipBytes: 20})
 	ctx := context.Background()
-	put(t, base, "outputs/web/a.txt", "aaaa")
-	put(t, base, "outputs/web/src/b.txt", "bbbb")
-	put(t, base, "outputs/web/node_modules/c.txt", "cccc")
-	if err := os.Symlink("/etc/passwd", filepath.Join(base, "outputs/web/pw")); err != nil {
+	put(t, base, "work/web/a.txt", "aaaa")
+	put(t, base, "work/web/src/b.txt", "bbbb")
+	put(t, base, "work/web/node_modules/c.txt", "cccc")
+	if err := os.Symlink("/etc/passwd", filepath.Join(base, "work/web/pw")); err != nil {
 		t.Fatal(err)
 	}
 	var buf bytes.Buffer
-	zs, err := s.Zip(ctx, sid, ZipSpec{Path: "outputs/web", Exclude: []string{"node_modules"}}, &buf)
+	zs, err := s.Zip(ctx, sid, ZipSpec{Path: "work/web", Exclude: []string{"node_modules"}}, &buf)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -385,29 +389,28 @@ func TestZip(t *testing.T) {
 	if strings.Join(names, ",") != "a.txt,src/b.txt" {
 		t.Fatalf("zip names %v", names)
 	}
-	put(t, base, "outputs/web/big.txt", strings.Repeat("z", 20))
+	put(t, base, "work/web/big.txt", strings.Repeat("z", 20))
 	buf.Reset()
-	if _, err := s.Zip(ctx, sid, ZipSpec{Path: "outputs/web"}, &buf); !errors.Is(err, ErrLimit) || buf.Len() != 0 {
+	if _, err := s.Zip(ctx, sid, ZipSpec{Path: "work/web"}, &buf); !errors.Is(err, ErrLimit) || buf.Len() != 0 {
 		t.Fatalf("zip over the limit: %v, %d bytes written", err, buf.Len())
 	}
 }
 
 func buildSession(t *testing.T, base string) {
 	t.Helper()
-	put(t, base, "outputs/report.md", "# report")
-	put(t, base, "outputs/web/package.json", "{}")
-	put(t, base, "outputs/web/node_modules/react/index.js", "dep")
-	put(t, base, "outputs/web/.next/cache/x", "build")
-	put(t, base, "outputs/data/__pycache__/m.pyc", "pyc")
-	put(t, base, "outputs/myenv/pyvenv.cfg", "home = /usr")
-	put(t, base, "outputs/myenv/lib/site.py", "venv")
-	put(t, base, "outputs/.nextjs-port", "3010")
+	put(t, base, "work/report.md", "# report")
+	put(t, base, "work/web/package.json", "{}")
+	put(t, base, "work/web/node_modules/react/index.js", "dep")
+	put(t, base, "work/web/.next/cache/x", "build")
+	put(t, base, "work/data/__pycache__/m.pyc", "pyc")
+	put(t, base, "work/myenv/pyvenv.cfg", "home = /usr")
+	put(t, base, "work/myenv/lib/site.py", "venv")
 	put(t, base, "attachments/in.pdf", "pdf")
 	put(t, base, "AGENTS.md", "not saved")
-	if err := os.Symlink("/etc/passwd", filepath.Join(base, "outputs", "pw")); err != nil {
+	if err := os.Symlink("/etc/passwd", filepath.Join(base, "work", "pw")); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Chmod(filepath.Join(base, "outputs/report.md"), 0o600); err != nil {
+	if err := os.Chmod(filepath.Join(base, "work/report.md"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -451,19 +454,19 @@ func TestCaptureExcludes(t *testing.T) {
 	buildSession(t, base)
 	archive, cs := capture(t, s, CaptureSpec{SessionID: sid})
 	names := tarNames(t, archive)
-	want := []string{"outputs/", "outputs/data/", "outputs/web/", "outputs/web/package.json", "outputs/report.md",
+	want := []string{"work/", "work/data/", "work/web/", "work/web/package.json", "work/report.md",
 		"attachments/", "attachments/in.pdf"}
 	if strings.Join(names, ",") != strings.Join(want, ",") {
 		t.Fatalf("archive = %v\nwant %v", names, want)
 	}
-	// node_modules, .next, __pycache__, the venv, .nextjs-port; the symlink.
-	if cs.Files != 3 || cs.Excluded != 5 || cs.Skipped != 1 || strings.Join(cs.Roots, ",") != "outputs,attachments" {
+	// node_modules, .next, __pycache__, the venv; the symlink.
+	if cs.Files != 3 || cs.Excluded != 4 || cs.Skipped != 1 || strings.Join(cs.Roots, ",") != "work,attachments" {
 		t.Fatalf("summary %+v", cs)
 	}
 	// A request exclude list replaces the default one.
-	archive, _ = capture(t, s, CaptureSpec{SessionID: sid, Roots: []string{"outputs"}, Exclude: []string{"web"}})
+	archive, _ = capture(t, s, CaptureSpec{SessionID: sid, Roots: []string{"work"}, Exclude: []string{"web"}})
 	for _, n := range tarNames(t, archive) {
-		if strings.HasPrefix(n, "outputs/web") || strings.HasPrefix(n, "attachments") || strings.Contains(n, "myenv/lib") {
+		if strings.HasPrefix(n, "work/web") || strings.HasPrefix(n, "attachments") || strings.Contains(n, "myenv/lib") {
 			t.Fatalf("unexpected member %s", n)
 		}
 	}
@@ -472,10 +475,28 @@ func TestCaptureExcludes(t *testing.T) {
 	}
 }
 
+func TestDefaultCaptureRoots(t *testing.T) {
+	sessions := filepath.Join(t.TempDir(), "sessions")
+	s, err := New(Config{SessionsRoot: sessions})
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := filepath.Join(sessions, sid)
+	put(t, base, "attachments/in.pdf", "pdf")
+	put(t, base, "outputs/report.md", "not saved")
+	archive, cs := capture(t, s, CaptureSpec{SessionID: sid})
+	if got := strings.Join(tarNames(t, archive), ","); got != "attachments/,attachments/in.pdf" {
+		t.Fatalf("archive = %s", got)
+	}
+	if strings.Join(cs.Roots, ",") != "attachments" {
+		t.Fatalf("roots %v", cs.Roots)
+	}
+}
+
 func TestCaptureLimits(t *testing.T) {
 	s, base := newStore(t, Config{Limits: Limits{StoredBytes: 1 << 20, ExpandedBytes: 1000, Entries: 10}})
-	put(t, base, "outputs/a", strings.Repeat("a", 600))
-	put(t, base, "outputs/b", strings.Repeat("b", 600))
+	put(t, base, "work/a", strings.Repeat("a", 600))
+	put(t, base, "work/b", strings.Repeat("b", 600))
 	ctx := context.Background()
 	if _, err := s.Capture(ctx, CaptureSpec{SessionID: sid}, io.Discard); !errors.Is(err, ErrLimit) {
 		t.Fatalf("expanded limit: %v", err)
@@ -483,16 +504,16 @@ func TestCaptureLimits(t *testing.T) {
 	if _, err := s.Capture(ctx, CaptureSpec{SessionID: sid, Limits: Limits{ExpandedBytes: 2000}}, io.Discard); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("raise over the daemon limit: %v", err)
 	}
-	if err := os.Remove(filepath.Join(base, "outputs/b")); err != nil {
+	if err := os.Remove(filepath.Join(base, "work/b")); err != nil {
 		t.Fatal(err)
 	}
 	for i := range 12 {
-		put(t, base, "outputs/d/"+string(rune('a'+i)), "")
+		put(t, base, "work/d/"+string(rune('a'+i)), "")
 	}
 	if _, err := s.Capture(ctx, CaptureSpec{SessionID: sid}, io.Discard); !errors.Is(err, ErrLimit) {
 		t.Fatalf("entry limit: %v", err)
 	}
-	if err := os.RemoveAll(filepath.Join(base, "outputs/d")); err != nil {
+	if err := os.RemoveAll(filepath.Join(base, "work/d")); err != nil {
 		t.Fatal(err)
 	}
 	// Random data does not compress: the stored limit stops it.
@@ -500,7 +521,7 @@ func TestCaptureLimits(t *testing.T) {
 	for i := range rnd {
 		rnd[i] = byte(i*7919 + i*i)
 	}
-	put(t, base, "outputs/a", string(rnd))
+	put(t, base, "work/a", string(rnd))
 	if _, err := s.Capture(ctx, CaptureSpec{SessionID: sid, Limits: Limits{StoredBytes: 100}}, io.Discard); !errors.Is(err, ErrLimit) {
 		t.Fatalf("stored limit: %v", err)
 	}
@@ -527,23 +548,23 @@ func TestCaptureRestoreRoundTrip(t *testing.T) {
 
 	other := "a6f1b1a2-0000-4000-8000-000000000001"
 	// An old file in the target root is replaced; other files stay.
-	put(t, filepath.Join(filepath.Dir(base), other), "outputs/stale.txt", "old")
+	put(t, filepath.Join(filepath.Dir(base), other), "work/stale.txt", "old")
 	put(t, filepath.Join(filepath.Dir(base), other), "keep.txt", "keep")
 	rs, err := restore(s, other, archive, RestoreSpec{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rs.Files != cs.Files || rs.ExpandedBytes != cs.ExpandedBytes || strings.Join(rs.Roots, ",") != "outputs,attachments" {
+	if rs.Files != cs.Files || rs.ExpandedBytes != cs.ExpandedBytes || strings.Join(rs.Roots, ",") != "work,attachments" {
 		t.Fatalf("restore %+v vs capture %+v", rs, cs)
 	}
 	ob := filepath.Join(filepath.Dir(base), other)
-	if b, _ := os.ReadFile(filepath.Join(ob, "outputs/report.md")); string(b) != "# report" {
+	if b, _ := os.ReadFile(filepath.Join(ob, "work/report.md")); string(b) != "# report" {
 		t.Fatalf("report = %q", b)
 	}
-	if fi, _ := os.Stat(filepath.Join(ob, "outputs/report.md")); fi.Mode().Perm() != 0o600 {
+	if fi, _ := os.Stat(filepath.Join(ob, "work/report.md")); fi.Mode().Perm() != 0o600 {
 		t.Fatalf("mode %v", fi.Mode())
 	}
-	for _, gone := range []string{"outputs/stale.txt", "outputs/web/node_modules", "outputs/pw"} {
+	for _, gone := range []string{"work/stale.txt", "work/web/node_modules", "work/pw"} {
 		if _, err := os.Lstat(filepath.Join(ob, gone)); err == nil {
 			t.Errorf("%s exists after restore", gone)
 		}
@@ -570,7 +591,7 @@ func TestRestoreRejectsMismatch(t *testing.T) {
 	archive, _ := capture(t, s, CaptureSpec{SessionID: sid})
 	other := "a6f1b1a2-0000-4000-8000-000000000002"
 	ob := filepath.Join(filepath.Dir(base), other)
-	put(t, ob, "outputs/old.txt", "old")
+	put(t, ob, "work/old.txt", "old")
 	bad := append([]byte(nil), archive...)
 	bad[len(bad)/2] ^= 0xff
 	for name, spec := range map[string]RestoreSpec{
@@ -588,7 +609,7 @@ func TestRestoreRejectsMismatch(t *testing.T) {
 	if _, err := restore(s, other, archive, RestoreSpec{Limits: Limits{StoredBytes: 10}}); !errors.Is(err, ErrLimit) {
 		t.Errorf("stored limit: %v", err)
 	}
-	if b, _ := os.ReadFile(filepath.Join(ob, "outputs/old.txt")); string(b) != "old" {
+	if b, _ := os.ReadFile(filepath.Join(ob, "work/old.txt")); string(b) != "old" {
 		t.Fatal("a failed restore changed the session")
 	}
 }
@@ -638,20 +659,20 @@ func TestRestoreSafety(t *testing.T) {
 		ms   []member
 		want error
 	}{
-		"dotdot":         {[]member{dir("outputs/"), reg("outputs/../../victim", "x")}, ErrArchive},
+		"dotdot":         {[]member{dir("work/"), reg("work/../../victim", "x")}, ErrArchive},
 		"absolute":       {[]member{reg("/tmp/victim", "x")}, ErrArchive},
-		"unclean":        {[]member{reg("outputs//a", "x")}, ErrArchive},
+		"unclean":        {[]member{reg("work//a", "x")}, ErrArchive},
 		"other root":     {[]member{reg("etc/passwd", "x")}, ErrArchive},
-		"root is a file": {[]member{reg("outputs", "x")}, ErrArchive},
-		"symlink":        {[]member{dir("outputs/"), {h: tar.Header{Typeflag: tar.TypeSymlink, Name: "outputs/l", Linkname: victim}}}, ErrArchive},
-		"hardlink":       {[]member{dir("outputs/"), {h: tar.Header{Typeflag: tar.TypeLink, Name: "outputs/l", Linkname: "outputs/a"}}}, ErrArchive},
-		"char device":    {[]member{dir("outputs/"), {h: tar.Header{Typeflag: tar.TypeChar, Name: "outputs/null", Devmajor: 1, Devminor: 3}}}, ErrArchive},
-		"block device":   {[]member{dir("outputs/"), {h: tar.Header{Typeflag: tar.TypeBlock, Name: "outputs/sda", Devmajor: 8}}}, ErrArchive},
-		"fifo":           {[]member{dir("outputs/"), {h: tar.Header{Typeflag: tar.TypeFifo, Name: "outputs/f"}}}, ErrArchive},
-		"duplicate":      {[]member{reg("outputs/a", "1"), reg("outputs/a", "2")}, ErrArchive},
-		"size bomb":      {[]member{reg("outputs/a", strings.Repeat("a", 600)), reg("outputs/b", strings.Repeat("b", 600))}, ErrLimit},
-		"entry bomb": {[]member{dir("outputs/"), reg("outputs/1", ""), reg("outputs/2", ""), reg("outputs/3", ""),
-			reg("outputs/4", ""), reg("outputs/5", "")}, ErrLimit},
+		"root is a file": {[]member{reg("work", "x")}, ErrArchive},
+		"symlink":        {[]member{dir("work/"), {h: tar.Header{Typeflag: tar.TypeSymlink, Name: "work/l", Linkname: victim}}}, ErrArchive},
+		"hardlink":       {[]member{dir("work/"), {h: tar.Header{Typeflag: tar.TypeLink, Name: "work/l", Linkname: "work/a"}}}, ErrArchive},
+		"char device":    {[]member{dir("work/"), {h: tar.Header{Typeflag: tar.TypeChar, Name: "work/null", Devmajor: 1, Devminor: 3}}}, ErrArchive},
+		"block device":   {[]member{dir("work/"), {h: tar.Header{Typeflag: tar.TypeBlock, Name: "work/sda", Devmajor: 8}}}, ErrArchive},
+		"fifo":           {[]member{dir("work/"), {h: tar.Header{Typeflag: tar.TypeFifo, Name: "work/f"}}}, ErrArchive},
+		"duplicate":      {[]member{reg("work/a", "1"), reg("work/a", "2")}, ErrArchive},
+		"size bomb":      {[]member{reg("work/a", strings.Repeat("a", 600)), reg("work/b", strings.Repeat("b", 600))}, ErrLimit},
+		"entry bomb": {[]member{dir("work/"), reg("work/1", ""), reg("work/2", ""), reg("work/3", ""),
+			reg("work/4", ""), reg("work/5", "")}, ErrLimit},
 	}
 	other := "a6f1b1a2-0000-4000-8000-000000000003"
 	for name, c := range cases {
@@ -672,11 +693,11 @@ func TestRestoreSafety(t *testing.T) {
 		t.Fatalf("garbage: %v", err)
 	}
 	// Setuid bits are dropped.
-	ok := makeArchive(t, []member{{h: tar.Header{Typeflag: tar.TypeReg, Name: "outputs/s", Mode: 0o4755}, data: "x"}})
+	ok := makeArchive(t, []member{{h: tar.Header{Typeflag: tar.TypeReg, Name: "work/s", Mode: 0o4755}, data: "x"}})
 	if _, err := restore(s, other, ok, RestoreSpec{}); err != nil {
 		t.Fatal(err)
 	}
-	fi, err := os.Stat(filepath.Join(filepath.Dir(base), other, "outputs/s"))
+	fi, err := os.Stat(filepath.Join(filepath.Dir(base), other, "work/s"))
 	if err != nil || fi.Mode()&os.ModeSetuid != 0 || fi.Mode().Perm() != 0o755 {
 		t.Fatalf("mode %v %v", fi.Mode(), err)
 	}
@@ -687,7 +708,7 @@ func TestRestoreZstdWindowBomb(t *testing.T) {
 	var buf bytes.Buffer
 	zw, _ := zstd.NewWriter(&buf, zstd.WithWindowSize(256<<20), zstd.WithEncoderLevel(zstd.SpeedFastest))
 	tw := tar.NewWriter(zw)
-	_ = tw.WriteHeader(&tar.Header{Typeflag: tar.TypeReg, Name: "outputs/a", Size: 1, Mode: 0o644})
+	_ = tw.WriteHeader(&tar.Header{Typeflag: tar.TypeReg, Name: "work/a", Size: 1, Mode: 0o644})
 	_, _ = tw.Write([]byte("a"))
 	_ = tw.Close()
 	_ = zw.Close()
@@ -701,28 +722,28 @@ func TestRestoreZstdWindowBomb(t *testing.T) {
 
 func TestRestoreCreatesSession(t *testing.T) {
 	s, base := newStore(t, Config{})
-	put(t, base, "outputs/a.txt", "a")
+	put(t, base, "work/a.txt", "a")
 	archive, _ := capture(t, s, CaptureSpec{SessionID: sid})
 	fresh := "a6f1b1a2-0000-4000-8000-000000000005"
 	if _, err := restore(s, fresh, archive, RestoreSpec{}); err != nil {
 		t.Fatal(err)
 	}
-	if b, _ := os.ReadFile(filepath.Join(filepath.Dir(base), fresh, "outputs/a.txt")); string(b) != "a" {
+	if b, _ := os.ReadFile(filepath.Join(filepath.Dir(base), fresh, "work/a.txt")); string(b) != "a" {
 		t.Fatalf("content %q", b)
 	}
 }
 
 func TestRestoreRollsBackEveryRoot(t *testing.T) {
 	s, base := newStore(t, Config{})
-	put(t, base, "outputs/a.txt", "new a")
+	put(t, base, "work/a.txt", "new a")
 	put(t, base, "attachments/b.txt", "new b")
 	archive, _ := capture(t, s, CaptureSpec{SessionID: sid})
 	other := "a6f1b1a2-0000-4000-8000-000000000006"
 	ob := filepath.Join(filepath.Dir(base), other)
-	put(t, ob, "outputs/a.txt", "old a")
+	put(t, ob, "work/a.txt", "old a")
 	put(t, ob, "attachments/b.txt", "old b")
 
-	// outputs swaps, then attachments fails to move into place.
+	// work swaps, then attachments fails to move into place.
 	orig := rename
 	t.Cleanup(func() { rename = orig })
 	rename = func(root *os.Root, from, to string) error {
@@ -734,7 +755,7 @@ func TestRestoreRollsBackEveryRoot(t *testing.T) {
 	if _, err := restore(s, other, archive, RestoreSpec{}); err == nil {
 		t.Fatal("restore did not fail")
 	}
-	for rel, want := range map[string]string{"outputs/a.txt": "old a", "attachments/b.txt": "old b"} {
+	for rel, want := range map[string]string{"work/a.txt": "old a", "attachments/b.txt": "old b"} {
 		if b, err := os.ReadFile(filepath.Join(ob, rel)); err != nil || string(b) != want {
 			t.Errorf("%s = %q %v, want %q", rel, b, err, want)
 		}
@@ -749,17 +770,17 @@ func TestRestoreRollsBackEveryRoot(t *testing.T) {
 
 func TestRestoreRecoversInterruptedSwap(t *testing.T) {
 	s, base := newStore(t, Config{})
-	// The daemon stopped after it moved outputs to the trash and before it
+	// The daemon stopped after it moved work to the trash and before it
 	// moved the new tree in.
-	put(t, base, oldPrefix+"x/outputs/a.txt", "old a")
-	put(t, base, stagingPrefix+"y/outputs/a.txt", "new a")
+	put(t, base, oldPrefix+"x/work/a.txt", "old a")
+	put(t, base, stagingPrefix+"y/work/a.txt", "new a")
 	put(t, base, "attachments/b.txt", "b")
 	put(t, base, oldPrefix+"x/attachments/b.txt", "older b")
 	if _, err := restore(s, sid, []byte("not zstd at all"), RestoreSpec{}); !errors.Is(err, ErrArchive) {
 		t.Fatalf("garbage: %v", err)
 	}
-	if b, err := os.ReadFile(filepath.Join(base, "outputs/a.txt")); err != nil || string(b) != "old a" {
-		t.Fatalf("outputs/a.txt = %q %v", b, err)
+	if b, err := os.ReadFile(filepath.Join(base, "work/a.txt")); err != nil || string(b) != "old a" {
+		t.Fatalf("work/a.txt = %q %v", b, err)
 	}
 	// A root that is in place is not replaced by its trash copy.
 	if b, _ := os.ReadFile(filepath.Join(base, "attachments/b.txt")); string(b) != "b" {
@@ -776,7 +797,7 @@ func TestRestoreRecoversInterruptedSwap(t *testing.T) {
 func TestRestoreKeepsTrashWhenRecoveryFails(t *testing.T) {
 	s, base := newStore(t, Config{})
 	trash := oldPrefix + "x"
-	put(t, base, trash+"/outputs/a.txt", "old a")
+	put(t, base, trash+"/work/a.txt", "old a")
 	orig := rename
 	t.Cleanup(func() { rename = orig })
 	rename = func(root *os.Root, from, to string) error {
@@ -785,7 +806,7 @@ func TestRestoreKeepsTrashWhenRecoveryFails(t *testing.T) {
 		}
 		return orig(root, from, to)
 	}
-	// A valid archive without outputs fails: success would leave outputs
+	// A valid archive without work fails: success would leave work
 	// only in the trash.
 	other := "a6f1b1a2-0000-4000-8000-000000000009"
 	put(t, filepath.Join(filepath.Dir(base), other), "attachments/b.txt", "b")
@@ -793,7 +814,7 @@ func TestRestoreKeepsTrashWhenRecoveryFails(t *testing.T) {
 	if _, err := restore(s, sid, archive, RestoreSpec{}); err == nil || errors.Is(err, ErrArchive) {
 		t.Fatalf("restore with an unrecovered root: %v", err)
 	}
-	if b, err := os.ReadFile(filepath.Join(base, trash, "outputs/a.txt")); err != nil || string(b) != "old a" {
+	if b, err := os.ReadFile(filepath.Join(base, trash, "work/a.txt")); err != nil || string(b) != "old a" {
 		t.Fatalf("trash copy = %q %v", b, err)
 	}
 	if _, err := os.Stat(filepath.Join(base, "attachments")); !errors.Is(err, fs.ErrNotExist) {
@@ -801,8 +822,8 @@ func TestRestoreKeepsTrashWhenRecoveryFails(t *testing.T) {
 	}
 	rename = orig
 	_, _ = restore(s, sid, []byte("not zstd at all"), RestoreSpec{})
-	if b, err := os.ReadFile(filepath.Join(base, "outputs/a.txt")); err != nil || string(b) != "old a" {
-		t.Fatalf("outputs/a.txt = %q %v", b, err)
+	if b, err := os.ReadFile(filepath.Join(base, "work/a.txt")); err != nil || string(b) != "old a" {
+		t.Fatalf("work/a.txt = %q %v", b, err)
 	}
 	if _, err := os.Stat(filepath.Join(base, trash)); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("trash not removed: %v", err)
@@ -812,7 +833,7 @@ func TestRestoreKeepsTrashWhenRecoveryFails(t *testing.T) {
 func TestCaptureRecoversInterruptedSwap(t *testing.T) {
 	s, base := newStore(t, Config{})
 	trash := oldPrefix + "x"
-	put(t, base, trash+"/outputs/a.txt", "old a")
+	put(t, base, trash+"/work/a.txt", "old a")
 	orig := rename
 	t.Cleanup(func() { rename = orig })
 	rename = func(root *os.Root, from, to string) error {
@@ -830,8 +851,8 @@ func TestCaptureRecoversInterruptedSwap(t *testing.T) {
 	if _, err := restore(s, other, archive, RestoreSpec{}); err != nil {
 		t.Fatal(err)
 	}
-	if b, err := os.ReadFile(filepath.Join(filepath.Dir(base), other, "outputs/a.txt")); err != nil || string(b) != "old a" {
-		t.Fatalf("outputs/a.txt = %q %v", b, err)
+	if b, err := os.ReadFile(filepath.Join(filepath.Dir(base), other, "work/a.txt")); err != nil || string(b) != "old a" {
+		t.Fatalf("work/a.txt = %q %v", b, err)
 	}
 	if _, err := os.Stat(filepath.Join(base, trash)); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("trash not removed: %v", err)
@@ -843,7 +864,7 @@ func TestRestoreTailBomb(t *testing.T) {
 	var buf bytes.Buffer
 	zw, _ := zstd.NewWriter(&buf)
 	tw := tar.NewWriter(zw)
-	_ = tw.WriteHeader(&tar.Header{Typeflag: tar.TypeReg, Name: "outputs/a", Size: 1, Mode: 0o644})
+	_ = tw.WriteHeader(&tar.Header{Typeflag: tar.TypeReg, Name: "work/a", Size: 1, Mode: 0o644})
 	_, _ = tw.Write([]byte("a"))
 	_ = tw.Close()
 	// A small archive whose stream goes on long after the tar end.
@@ -863,13 +884,13 @@ func TestRestoreUnusualNames(t *testing.T) {
 	s, base := newStore(t, Config{})
 	ctx := context.Background()
 	// A backslash is a normal character on Linux: write, save and restore.
-	if _, _, err := s.Write(ctx, sid, WriteSpec{Path: `outputs/a\b.txt`, Size: 1, MakeParents: true},
+	if _, _, err := s.Write(ctx, sid, WriteSpec{Path: `work/a\b.txt`, Size: 1, MakeParents: true},
 		strings.NewReader("x")); err != nil {
 		t.Fatal(err)
 	}
 	// A name that is not UTF-8 is left out of the save, so the save still
 	// restores. Some file systems (APFS) refuse such names.
-	badName := filepath.Join(base, "outputs", "bad\xff.txt")
+	badName := filepath.Join(base, "work", "bad\xff.txt")
 	madeBad := os.WriteFile(badName, []byte("y"), 0o644) == nil
 	archive, cs := capture(t, s, CaptureSpec{SessionID: sid})
 	if madeBad && cs.Skipped != 1 {
@@ -879,22 +900,22 @@ func TestRestoreUnusualNames(t *testing.T) {
 	if _, err := restore(s, other, archive, RestoreSpec{}); err != nil {
 		t.Fatal(err)
 	}
-	if b, err := os.ReadFile(filepath.Join(filepath.Dir(base), other, `outputs/a\b.txt`)); err != nil || string(b) != "x" {
+	if b, err := os.ReadFile(filepath.Join(filepath.Dir(base), other, `work/a\b.txt`)); err != nil || string(b) != "x" {
 		t.Fatalf("backslash file = %q %v", b, err)
 	}
 }
 
 func TestFIFOsDoNotBlock(t *testing.T) {
 	s, base := newStore(t, Config{})
-	put(t, base, "outputs/a.txt", "a")
-	fifo := filepath.Join(base, "outputs", "pipe")
+	put(t, base, "work/a.txt", "a")
+	fifo := filepath.Join(base, "work", "pipe")
 	if err := syscall.Mkfifo(fifo, 0o644); err != nil {
 		t.Skipf("mkfifo: %v", err)
 	}
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		if _, _, err := read(t, s, "outputs/pipe", 0, 0); !errors.Is(err, ErrInvalid) {
+		if _, _, err := read(t, s, "work/pipe", 0, 0); !errors.Is(err, ErrInvalid) {
 			t.Errorf("read fifo: %v", err)
 		}
 		root, err := os.OpenRoot(base)
@@ -905,13 +926,13 @@ func TestFIFOsDoNotBlock(t *testing.T) {
 		defer func() { _ = root.Close() }()
 		// Capture and Zip open through openRegular, so a file that became
 		// a FIFO after the walk is refused, not waited on.
-		if _, _, err := openRegular(root, "outputs/pipe", syscall.O_NOFOLLOW); !errors.Is(err, errNotRegular) {
+		if _, _, err := openRegular(root, "work/pipe", syscall.O_NOFOLLOW); !errors.Is(err, errNotRegular) {
 			t.Errorf("openRegular fifo: %v", err)
 		}
 		if _, cs := capture(t, s, CaptureSpec{SessionID: sid}); cs.Skipped != 1 || cs.Files != 1 {
 			t.Errorf("capture %+v", cs)
 		}
-		if zs, err := s.Zip(context.Background(), sid, ZipSpec{Path: "outputs"}, io.Discard); err != nil || zs.Files != 1 {
+		if zs, err := s.Zip(context.Background(), sid, ZipSpec{Path: "work"}, io.Discard); err != nil || zs.Files != 1 {
 			t.Errorf("zip %+v %v", zs, err)
 		}
 	}()
@@ -925,24 +946,24 @@ func TestFIFOsDoNotBlock(t *testing.T) {
 func TestReadDirCap(t *testing.T) {
 	_, base := newStore(t, Config{})
 	for i := range 30 {
-		put(t, base, fmt.Sprintf("outputs/f%02d", i), "")
+		put(t, base, fmt.Sprintf("work/f%02d", i), "")
 	}
 	root, err := os.OpenRoot(base)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = root.Close() }()
-	if _, err := readDir(root, "outputs", 10); !errors.Is(err, errDirTooBig) || !errors.Is(err, ErrLimit) {
+	if _, err := readDir(root, "work", 10); !errors.Is(err, errDirTooBig) || !errors.Is(err, ErrLimit) {
 		t.Fatalf("over the cap: %v", err)
 	}
-	ents, err := readDir(root, "outputs", 30)
+	ents, err := readDir(root, "work", 30)
 	if err != nil || len(ents) != 30 || ents[0].Name() != "f00" || ents[29].Name() != "f29" {
 		t.Fatalf("at the cap: %d entries, %v", len(ents), err)
 	}
 	// Capture fails on a directory over the entry limit.
 	s, base2 := newStore(t, Config{Limits: Limits{Entries: 10}})
 	for i := range 30 {
-		put(t, base2, fmt.Sprintf("outputs/f%02d", i), "")
+		put(t, base2, fmt.Sprintf("work/f%02d", i), "")
 	}
 	if _, err := s.Capture(context.Background(), CaptureSpec{SessionID: sid}, io.Discard); !errors.Is(err, ErrLimit) {
 		t.Fatalf("capture: %v", err)

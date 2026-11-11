@@ -157,14 +157,14 @@ func (s *savesEnv) restore(ctx context.Context, v *savesVM, session, key string,
 // the session's capture roots, and the file count.
 // It leaves out what a capture leaves out (node_modules, .venv, .next).
 const manifestScript = `cd /workspace/sessions/%s && P='( -name node_modules -o -name .venv -o -name .next ) -prune -o' && \
-  find outputs attachments $P -type f -printf '%%m %%p\n' | LC_ALL=C sort > /tmp/m.list && \
-  (cat /tmp/m.list; find outputs attachments $P -type f -print0 | LC_ALL=C sort -z | xargs -0 cat) | sha256sum | cut -c1-16; wc -l < /tmp/m.list`
+  find attachments $P -type f -printf '%%m %%p\n' | LC_ALL=C sort > /tmp/m.list && \
+  (cat /tmp/m.list; find attachments $P -type f -print0 | LC_ALL=C sort -z | xargs -0 cat) | sha256sum | cut -c1-16; wc -l < /tmp/m.list`
 
 // costScript times guest-only steps with a cold page cache: tar | zstd -3
 // to a file on the scratch disk, zstd -d of that file, a local extract, and
 // a 1 GiB write with fdatasync.
 const costScript = `cd /workspace/sessions/%s; t() { sync; echo 3 > /proc/sys/vm/drop_caches; s=$(date +%%s%%N); eval "$1" >/dev/null; echo "$2=$(( ($(date +%%s%%N)-s)/1000000 ))ms"; }
-t 'tar cf - outputs attachments | zstd -3 -T0 -q -c > /mnt/scratch/a.zst' tar_zstd3_to_disk
+t 'tar cf - attachments | zstd -3 -T0 -q -c > /mnt/scratch/a.zst' tar_zstd3_to_disk
 t 'zstd -d -q -c /mnt/scratch/a.zst' zstd_decode
 t 'mkdir -p /mnt/scratch/x && zstd -d -q -c /mnt/scratch/a.zst | tar x -C /mnt/scratch/x && sync' local_extract_sync
 t 'dd if=/dev/zero of=/mnt/scratch/dd bs=1M count=1024 conv=fdatasync status=none' dd_1gib_fdatasync
@@ -179,13 +179,13 @@ def w(p, b):
     os.makedirs(os.path.dirname(p), exist_ok=True)
     open(p, "wb").write(b)
 for i in range(150):  # 300 MiB of text docs
-    w(f"{s}/outputs/docs/report_{i:03}.md", base64.b64encode(os.urandom(1536 * 1024))[: 2 << 20])
+    w(f"{s}/attachments/docs/report_{i:03}.md", base64.b64encode(os.urandom(1536 * 1024))[: 2 << 20])
 for i in range(50):   # 200 MiB of CSV
-    w(f"{s}/outputs/data/table_{i:02}.csv", "".join(f"{r},{r*7%1000},{r*13%997},name_{r%5000}\n" for r in range(i * 100000, i * 100000 + 140000)).encode()[: 4 << 20])
+    w(f"{s}/attachments/data/table_{i:02}.csv", "".join(f"{r},{r*7%1000},{r*13%997},name_{r%5000}\n" for r in range(i * 100000, i * 100000 + 140000)).encode()[: 4 << 20])
 for i in range(120):  # 480 MiB of images
-    w(f"{s}/outputs/images/img_{i:03}.png", os.urandom(4 << 20))
+    w(f"{s}/attachments/images/img_{i:03}.png", os.urandom(4 << 20))
 for i in range(5000): # 20 MiB of small source files
-    w(f"{s}/outputs/web/src/c{i//100}/f{i}.tsx", f"export const v{i} = {i};\n".encode() * 160)
+    w(f"{s}/attachments/web/src/c{i//100}/f{i}.tsx", f"export const v{i} = {i};\n".encode() * 160)
 for i in range(30):   # 30 MiB of attachments
     w(f"{s}/attachments/upload_{i}.pdf", os.urandom(1 << 20))
 print("GEN_DONE")
@@ -200,23 +200,23 @@ def w(p, b):
     open(p, "wb").write(b)
 txt = lambda n: base64.b64encode(os.urandom(n * 3 // 4 + 3))[:n]
 for i in range(40000):  # ~730 MiB node_modules in 40k files
-    w(f"{s}/outputs/web/node_modules/pkg{i//200}/lib/m{i}.js", txt(19 * 1024))
+    w(f"{s}/attachments/web/node_modules/pkg{i//200}/lib/m{i}.js", txt(19 * 1024))
 for i in range(5000):   # ~170 MiB venv
-    w(f"{s}/outputs/.venv/lib/python3.11/site-packages/p{i//50}/m{i}.py", txt(35 * 1024))
-w(f"{s}/outputs/.venv/pyvenv.cfg", b"home = /usr/bin\n")
+    w(f"{s}/attachments/.venv/lib/python3.11/site-packages/p{i//50}/m{i}.py", txt(35 * 1024))
+w(f"{s}/attachments/.venv/pyvenv.cfg", b"home = /usr/bin\n")
 for i in range(400):    # ~40 MiB .next
-    w(f"{s}/outputs/web/.next/cache/c{i}", txt(100 * 1024))
+    w(f"{s}/attachments/web/.next/cache/c{i}", txt(100 * 1024))
 for i in range(300):    # 48 MiB docs
-    w(f"{s}/outputs/docs/d{i}.md", txt(160 * 1024))
+    w(f"{s}/attachments/docs/d{i}.md", txt(160 * 1024))
 for i in range(39):     # 39 MiB images
-    w(f"{s}/outputs/images/i{i}.jpg", os.urandom(1 << 20))
+    w(f"{s}/attachments/images/i{i}.jpg", os.urandom(1 << 20))
 for i in range(800):    # app source
-    w(f"{s}/outputs/web/src/f{i}.tsx", txt(4 * 1024))
+    w(f"{s}/attachments/web/src/f{i}.tsx", txt(4 * 1024))
 w(f"{s}/attachments/brief.pdf", os.urandom(2 << 20))
 print("GEN_DONE")
 `
 
-// TestSavesKVM runs the ENG-4572 file calls and session saves through the
+// TestSavesKVM runs the file calls and session saves through the
 // node agent over mTLS with a real S3 bucket (presigned URLs).
 func TestSavesKVM(t *testing.T) {
 	e := loadEnv()
@@ -328,7 +328,7 @@ func TestSavesKVM(t *testing.T) {
 				if got != src {
 					t.Errorf("restored manifest %q, source %q", got, src)
 				}
-				if left := s.run(b, "ls -A /workspace/sessions/"+variant.session+"/outputs/web 2>/dev/null | tr '\\n' ' '"); strings.Contains(left, "node_modules") || strings.Contains(left, ".next") {
+				if left := s.run(b, "ls -A /workspace/sessions/"+variant.session+"/attachments/web 2>/dev/null | tr '\\n' ' '"); strings.Contains(left, "node_modules") || strings.Contains(left, ".next") {
 					t.Errorf("dependencies restored: %s", left)
 				}
 				s.stop(ctx, b)
@@ -352,7 +352,7 @@ func fileCallsKVM(t *testing.T, ctx context.Context, s *savesEnv, a *savesVM, se
 		t.Fatal(err)
 	}
 	_ = ws.Send(&sdpb.WriteFileRequest{Part: &sdpb.WriteFileRequest_Header{Header: &sdpb.WriteFileHeader{
-		SessionId: session, Path: "outputs/blob.bin", Size: int64(len(data)), Sha256: hex.EncodeToString(sum[:]), MakeParents: true}}})
+		SessionId: session, Path: "attachments/blob.bin", Size: int64(len(data)), Sha256: hex.EncodeToString(sum[:]), MakeParents: true}}})
 	for off := 0; off < len(data); off += 1 << 20 {
 		if err := ws.Send(&sdpb.WriteFileRequest{Part: &sdpb.WriteFileRequest_Data{Data: data[off : off+1<<20]}}); err != nil {
 			t.Fatal(err)
@@ -363,7 +363,7 @@ func fileCallsKVM(t *testing.T, ctx context.Context, s *savesEnv, a *savesVM, se
 	}
 	wd := time.Since(t0)
 	t0 = time.Now()
-	rs, err := s.sd.ReadFile(a.ctx, &sdpb.ReadFileRequest{SessionId: session, Path: "outputs/blob.bin"})
+	rs, err := s.sd.ReadFile(a.ctx, &sdpb.ReadFileRequest{SessionId: session, Path: "attachments/blob.bin"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -407,8 +407,8 @@ func fileCallsKVM(t *testing.T, ctx context.Context, s *savesEnv, a *savesVM, se
 		t.Errorf("upload names %v", names)
 	}
 
-	s.run(a, "mkdir -p /workspace/sessions/"+session+"/outputs/web/src && cd /workspace/sessions/"+session+
-		"/outputs/web/src && for i in $(seq 1 2000); do echo \"export const a$i = $i;\" > f$i.ts; done; ln -sf /etc/shadow leak; echo ok")
+	s.run(a, "mkdir -p /workspace/sessions/"+session+"/attachments/web/src && cd /workspace/sessions/"+session+
+		"/attachments/web/src && for i in $(seq 1 2000); do echo \"export const a$i = $i;\" > f$i.ts; done; ln -sf /etc/shadow leak; echo ok")
 	t0 = time.Now()
 	lr, err := s.sd.ListFiles(a.ctx, &sdpb.ListFilesRequest{SessionId: session, Recursive: true, MaxEntries: 100000})
 	if err != nil {
@@ -416,7 +416,7 @@ func fileCallsKVM(t *testing.T, ctx context.Context, s *savesEnv, a *savesVM, se
 	}
 	t.Logf("BENCH list_recursive_ms=%d entries=%d truncated=%v", time.Since(t0).Milliseconds(), len(lr.GetEntries()), lr.GetTruncated())
 	t0 = time.Now()
-	zs, err := s.sd.ZipFiles(a.ctx, &sdpb.ZipFilesRequest{SessionId: session, Path: "outputs/web"})
+	zs, err := s.sd.ZipFiles(a.ctx, &sdpb.ZipFilesRequest{SessionId: session, Path: "attachments/web"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -441,14 +441,14 @@ func fileCallsKVM(t *testing.T, ctx context.Context, s *savesEnv, a *savesVM, se
 		t.Errorf("zip summary %v", zsum)
 	}
 	// Escapes fail in the guest too.
-	rs, _ = s.sd.ReadFile(a.ctx, &sdpb.ReadFileRequest{SessionId: session, Path: "outputs/web/src/leak"})
+	rs, _ = s.sd.ReadFile(a.ctx, &sdpb.ReadFileRequest{SessionId: session, Path: "attachments/web/src/leak"})
 	if _, err := rs.Recv(); err == nil {
 		t.Error("read through a link to /etc/shadow worked")
 	}
 	if _, err := s.sd.ListFiles(a.ctx, &sdpb.ListFilesRequest{SessionId: session, Path: "../../etc"}); err == nil {
 		t.Error("list of ../../etc worked")
 	}
-	if dr, err := s.sd.DeleteFile(a.ctx, &sdpb.DeleteFileRequest{SessionId: session, Path: "outputs", Recursive: true}); err != nil || !dr.GetDeleted() {
+	if dr, err := s.sd.DeleteFile(a.ctx, &sdpb.DeleteFileRequest{SessionId: session, Path: "attachments", Recursive: true}); err != nil || !dr.GetDeleted() {
 		t.Fatalf("delete: %v %v", dr, err)
 	}
 	if out := s.run(a, "test -f /etc/shadow && echo present"); out != "present" {
@@ -471,10 +471,10 @@ func evilArchive(t *testing.T) []byte {
 		}
 		_, _ = io.WriteString(tw, data)
 	}
-	add(&tar.Header{Typeflag: tar.TypeDir, Name: "outputs/"}, "")
-	add(&tar.Header{Typeflag: tar.TypeReg, Name: "outputs/fine.txt"}, "fine")
-	add(&tar.Header{Typeflag: tar.TypeSymlink, Name: "outputs/etc", Linkname: "/etc"}, "")
-	add(&tar.Header{Typeflag: tar.TypeReg, Name: "outputs/etc/pwned"}, "x")
+	add(&tar.Header{Typeflag: tar.TypeDir, Name: "attachments/"}, "")
+	add(&tar.Header{Typeflag: tar.TypeReg, Name: "attachments/fine.txt"}, "fine")
+	add(&tar.Header{Typeflag: tar.TypeSymlink, Name: "attachments/etc", Linkname: "/etc"}, "")
+	add(&tar.Header{Typeflag: tar.TypeReg, Name: "attachments/etc/pwned"}, "x")
 	_ = tw.Close()
 	_ = zw.Close()
 	return buf.Bytes()
@@ -483,7 +483,7 @@ func evilArchive(t *testing.T) []byte {
 func restoreSafetyKVM(t *testing.T, ctx context.Context, s *savesEnv, session string) {
 	b, _ := s.newVM(ctx, session)
 	defer s.stop(ctx, b)
-	s.run(b, "mkdir -p /workspace/sessions/"+session+"/outputs && echo keep > /workspace/sessions/"+session+"/outputs/marker")
+	s.run(b, "mkdir -p /workspace/sessions/"+session+"/attachments && echo keep > /workspace/sessions/"+session+"/attachments/marker")
 	evil := evilArchive(t)
 	sum := sha256.Sum256(evil)
 	sha := hex.EncodeToString(sum[:])
@@ -516,7 +516,7 @@ func restoreSafetyKVM(t *testing.T, ctx context.Context, s *savesEnv, session st
 	if apierr.FromStatus(err) != pb.ErrorReason_ARCHIVE_MISMATCH {
 		t.Errorf("wrong sha: %v", err)
 	}
-	if out := s.run(b, "cat /workspace/sessions/"+session+"/outputs/marker; ls /etc/pwned 2>&1 | head -1; ls -A /workspace/sessions/"+session); !strings.HasPrefix(out, "keep") ||
+	if out := s.run(b, "cat /workspace/sessions/"+session+"/attachments/marker; ls /etc/pwned 2>&1 | head -1; ls -A /workspace/sessions/"+session); !strings.HasPrefix(out, "keep") ||
 		!strings.Contains(out, "No such file") || strings.Contains(out, ".craft-") {
 		t.Errorf("guest after refused restores: %q", out)
 	}

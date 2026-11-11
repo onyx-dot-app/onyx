@@ -126,10 +126,10 @@ Commands:
   and removes the cgroups. If that fails, the daemon does not start (init starts it again).
 - Execution IDs come from `crypto/rand`: userspace PRNG state is the same in every clone of a snapshot.
 
-Files (ENG-4572, `internal/guestd/files`):
+Files (`internal/guestd/files`):
 
 - Every path is relative to `/workspace/sessions/<session_id>/` (`--sessions-root`). Leading `/` are
-  dropped, so `/outputs/a.txt` is `outputs/a.txt`. The daemon opens that directory as an `os.Root`. A
+  dropped, so `/attachments/a.pdf` is `attachments/a.pdf`. The daemon opens that directory as an `os.Root`. A
   path with a `..` part, a NUL byte or bad UTF-8, a path over 4096 bytes, a name over 255 bytes, or a
   symlink that leaves the directory fails with `INVALID_ARGUMENT`. Only `ReadFile`, `ListFiles` and
   `ZipFiles` follow a top-level session link into `--read-link-roots` (default `/workspace/managed`,
@@ -151,7 +151,7 @@ Files (ENG-4572, `internal/guestd/files`):
 
 Session saves:
 
-- `CaptureSession` archives the capture roots `--capture-dirs` (default `outputs,attachments`) of the
+- `CaptureSession` archives the capture roots `--capture-dirs` (default `attachments`) of the
   session as PAX tar + zstd (`--capture-zstd-level`, default `fastest`: in a 2 vCPU VM it encodes at
   ~2 GB/s against ~220 MB/s for `default`, and the T2 archive was not larger), and leaves out `--capture-exclude` names at any depth
   (`node_modules`, `.venv`, `venv`, `__pycache__`, `.next`, caches, ...) and every directory with

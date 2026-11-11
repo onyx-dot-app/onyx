@@ -1,5 +1,5 @@
 // Package files serves the file calls and the session saves of the guest
-// daemon (ENG-4572). Every path is relative to the session directory
+// daemon. Every path is relative to the session directory
 // <SessionsRoot>/<session_id>, which is opened as an os.Root: a path that
 // leaves it (with "..", an absolute path or a symlink) fails.
 package files
@@ -48,17 +48,15 @@ const (
 	writePrefix   = ".craft-write-"
 )
 
-// DefaultCaptureRoots are the session directories that a save holds: the
-// pod runtime snapshot roots.
-var DefaultCaptureRoots = []string{"outputs", "attachments"}
+// DefaultCaptureRoots are the session directories that a save holds.
+var DefaultCaptureRoots = []string{"attachments"}
 
 // DefaultCaptureExclude are names that a save leaves out at any depth:
 // dependencies, build output and caches. A directory with pyvenv.cfg is
 // always left out too.
 var DefaultCaptureExclude = []string{
 	"node_modules", ".venv", "venv", "__pycache__", ".next", ".cache", ".npm", ".pnpm-store", ".yarn", ".bun",
-	".pytest_cache", ".mypy_cache", ".ruff_cache", ".turbo", ".parcel-cache", ".document-thumbnails",
-	".nextjs-port", "nextjs.pid",
+	".pytest_cache", ".mypy_cache", ".ruff_cache", ".turbo", ".parcel-cache",
 }
 
 // Limits bound one capture or restore. 0 means the default.

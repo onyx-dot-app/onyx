@@ -1,5 +1,5 @@
 // Package transfer runs the presigned object storage requests of the node
-// agent (ENG-4572). The api_server signs each request for one object and
+// agent. The api_server signs each request for one object and
 // one method; the agent sends it with exactly the signed headers and holds
 // no storage credentials.
 package transfer

@@ -130,7 +130,7 @@ type SandboxdClient interface {
 	// status; drop the bytes received so far.
 	ZipFiles(ctx context.Context, in *ZipFilesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ZipFilesResponse], error)
 	// CaptureSession streams a tar + zstd archive of the session's capture
-	// roots (default outputs and attachments), without the excluded names
+	// roots (default attachments), without the excluded names
 	// (dependencies and caches), symlinks and special files. The last message
 	// is the summary, with the SHA-256 of the stream. The node agent calls it
 	// (HostAgent CaptureSession) and spools the stream for a presigned upload.
@@ -529,7 +529,7 @@ type SandboxdServer interface {
 	// status; drop the bytes received so far.
 	ZipFiles(*ZipFilesRequest, grpc.ServerStreamingServer[ZipFilesResponse]) error
 	// CaptureSession streams a tar + zstd archive of the session's capture
-	// roots (default outputs and attachments), without the excluded names
+	// roots (default attachments), without the excluded names
 	// (dependencies and caches), symlinks and special files. The last message
 	// is the summary, with the SHA-256 of the stream. The node agent calls it
 	// (HostAgent CaptureSession) and spools the stream for a presigned upload.

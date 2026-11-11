@@ -78,7 +78,7 @@ service Sandboxd {
   // List returns every execution record, optionally filtered by labels.
   rpc List(ListRequest) returns (ListResponse);
 
-  // Files and session saves (ENG-4572). Every path is relative to the
+  // Files and session saves. Every path is relative to the
   // session directory /workspace/sessions/<session_id>/. A path with "..",
   // an absolute path, or a symlink that leaves the session directory fails
   // with INVALID_ARGUMENT. Only ReadFile, ListFiles and ZipFiles can follow
@@ -113,7 +113,7 @@ service Sandboxd {
   rpc ZipFiles(ZipFilesRequest) returns (stream ZipFilesResponse);
 
   // CaptureSession streams a tar + zstd archive of the session's capture
-  // roots (default outputs and attachments), without the excluded names
+  // roots (default attachments), without the excluded names
   // (dependencies and caches), symlinks and special files. The last message
   // is the summary, with the SHA-256 of the stream. The node agent calls it
   // (HostAgent CaptureSession) and spools the stream for a presigned upload.
@@ -189,7 +189,7 @@ enum ErrorReason {
   // MountManaged: the mount failed. The old drive stays mounted.
   MANAGED_MOUNT_FAILED = 15;
 
-  // Files and session saves (ENG-4572).
+  // Files and session saves.
   // The path, or a parent directory of it, does not exist.
   FILE_NOT_FOUND = 16;
   // WriteFile without overwrite: the path exists.
@@ -447,7 +447,7 @@ message ListResponse {
   repeated Execution executions = 1;
 }
 
-// Files and session saves (ENG-4572).
+// Files and session saves.
 
 enum FileType {
   FILE_TYPE_UNSPECIFIED = 0;
@@ -626,7 +626,7 @@ message ArchiveLimits {
 message CaptureSessionRequest {
   string session_id = 1;
   // Capture roots: names of directories in the session directory. Empty
-  // means the daemon's --capture-dirs (outputs, attachments).
+  // means the daemon's --capture-dirs (attachments).
   repeated string roots = 2;
   // Names skipped at any depth. Empty means the daemon's --capture-exclude
   // (node_modules, .venv, caches, ...). A directory with pyvenv.cfg is
@@ -688,7 +688,7 @@ message RestoreSessionResponse {
   repeated string roots = 4;
 }
 
-// ENG-4573 placeholders.
+// Browser placeholders.
 message BrowserStartRequest {}
 message BrowserStartResponse {}
 message BrowserStopRequest {}

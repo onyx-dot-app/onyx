@@ -57,7 +57,7 @@ This component owns:
   The API server will reach a VM's guest daemon through the node agent: the
   agent forwards each `Sandboxd` call, routed by the `x-sandbox-id` metadata,
   over mTLS and then vsock, without decoding it. Session saves in this
-  runtime hold only `outputs/` and `attachments/` without dependencies
+  runtime hold only `attachments/`, without dependencies
   (tar + zstd). The node agent moves the archive to and from object storage
   with presigned URLs from the API server.
 

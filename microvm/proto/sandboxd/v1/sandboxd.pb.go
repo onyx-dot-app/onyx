@@ -61,7 +61,7 @@ const (
 	ErrorReason_MANAGED_DEVICE_MISMATCH ErrorReason = 14
 	// MountManaged: the mount failed. The old drive stays mounted.
 	ErrorReason_MANAGED_MOUNT_FAILED ErrorReason = 15
-	// Files and session saves (ENG-4572).
+	// Files and session saves.
 	// The path, or a parent directory of it, does not exist.
 	ErrorReason_FILE_NOT_FOUND ErrorReason = 16
 	// WriteFile without overwrite: the path exists.
@@ -3364,7 +3364,7 @@ type CaptureSessionRequest struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	SessionId string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	// Capture roots: names of directories in the session directory. Empty
-	// means the daemon's --capture-dirs (outputs, attachments).
+	// means the daemon's --capture-dirs (attachments).
 	Roots []string `protobuf:"bytes,2,rep,name=roots,proto3" json:"roots,omitempty"`
 	// Names skipped at any depth. Empty means the daemon's --capture-exclude
 	// (node_modules, .venv, caches, ...). A directory with pyvenv.cfg is
@@ -3861,7 +3861,7 @@ func (x *RestoreSessionResponse) GetRoots() []string {
 	return nil
 }
 
-// ENG-4573 placeholders.
+// Browser placeholders.
 type BrowserStartRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields

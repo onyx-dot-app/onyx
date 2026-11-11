@@ -147,8 +147,8 @@ func TestSaveCaptureUploadRestore(t *testing.T) {
 	e := newSaveEnv(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	e.put(t, saveSession, "outputs/report.md", "# report")
-	e.put(t, saveSession, "outputs/web/node_modules/x.js", "dep")
+	e.put(t, saveSession, "attachments/report.md", "# report")
+	e.put(t, saveSession, "attachments/web/node_modules/x.js", "dep")
 	e.put(t, saveSession, "attachments/a.pdf", strings.Repeat("pdf", 1000))
 	c := e.client()
 
@@ -195,20 +195,20 @@ func TestSaveCaptureUploadRestore(t *testing.T) {
 	}
 
 	// Restore into another session; an old file in a root is replaced.
-	e.put(t, saveSession2, "outputs/stale", "old")
+	e.put(t, saveSession2, "attachments/stale", "old")
 	rr, err := c.RestoreSession(ctx, e.restoreReq(saveSession2, "s1", cr.GetSizeBytes(), cr.GetSha256()))
 	if err != nil || rr.GetFiles() != 2 {
 		t.Fatalf("restore = %v %v", rr, err)
 	}
-	if b, _ := os.ReadFile(filepath.Join(e.sessions, saveSession2, "outputs/report.md")); string(b) != "# report" {
+	if b, _ := os.ReadFile(filepath.Join(e.sessions, saveSession2, "attachments/report.md")); string(b) != "# report" {
 		t.Fatalf("restored report %q", b)
 	}
-	if _, err := os.Stat(filepath.Join(e.sessions, saveSession2, "outputs/stale")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(e.sessions, saveSession2, "attachments/stale")); !os.IsNotExist(err) {
 		t.Fatal("stale file kept")
 	}
 
 	// A wrong expected hash or size changes nothing.
-	e.put(t, saveSession2, "outputs/marker", "keep")
+	e.put(t, saveSession2, "attachments/marker", "keep")
 	other := strings.Repeat("0", 64)
 	_, err = c.RestoreSession(ctx, e.restoreReq(saveSession2, "s1", cr.GetSizeBytes(), other))
 	if _, r := errInfo(err); r != "ARCHIVE_MISMATCH" {
@@ -218,7 +218,7 @@ func TestSaveCaptureUploadRestore(t *testing.T) {
 	if _, r := errInfo(err); r != "ARCHIVE_MISMATCH" {
 		t.Fatalf("wrong size: %v", err)
 	}
-	if b, _ := os.ReadFile(filepath.Join(e.sessions, saveSession2, "outputs/marker")); string(b) != "keep" {
+	if b, _ := os.ReadFile(filepath.Join(e.sessions, saveSession2, "attachments/marker")); string(b) != "keep" {
 		t.Fatal("a refused restore changed the session")
 	}
 	_, err = c.RestoreSession(ctx, e.restoreReq(saveSession2, "missing", cr.GetSizeBytes(), cr.GetSha256()))
@@ -231,7 +231,7 @@ func TestSaveErrors(t *testing.T) {
 	e := newSaveEnv(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	e.put(t, saveSession, "outputs/a", strings.Repeat("a", 4096))
+	e.put(t, saveSession, "attachments/a", strings.Repeat("a", 4096))
 	c := e.client()
 
 	req := e.captureReq(saveSession)
@@ -347,7 +347,7 @@ func TestSaveBigArchive(t *testing.T) {
 		x ^= x << 17
 		data[i] = byte(x)
 	}
-	e.put(t, saveSession, "outputs/blob", string(data))
+	e.put(t, saveSession, "attachments/blob", string(data))
 	c := e.client()
 	cr, err := c.CaptureSession(ctx, e.captureReq(saveSession))
 	if err != nil {
@@ -360,7 +360,7 @@ func TestSaveBigArchive(t *testing.T) {
 	if _, err := c.RestoreSession(ctx, e.restoreReq(saveSession2, "big", cr.GetSizeBytes(), cr.GetSha256())); err != nil {
 		t.Fatal(err)
 	}
-	b, _ := os.ReadFile(filepath.Join(e.sessions, saveSession2, "outputs/blob"))
+	b, _ := os.ReadFile(filepath.Join(e.sessions, saveSession2, "attachments/blob"))
 	if !bytes.Equal(b, data) {
 		t.Fatal("restored blob differs")
 	}

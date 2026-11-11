@@ -47,7 +47,7 @@ var (
 	sha256RE    = regexp.MustCompile(`^[0-9a-f]{64}$`)
 )
 
-// Saves runs the session save calls (ENG-4572): it spools daemon captures
+// Saves runs the session save calls: it spools daemon captures
 // on the node and moves archives with presigned URLs.
 type Saves struct {
 	M  *agent.Manager

@@ -54,7 +54,7 @@ func TestFileCallsGRPC(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := ws.Send(&pb.WriteFileRequest{Part: &pb.WriteFileRequest_Header{Header: &pb.WriteFileHeader{
-		SessionId: fileSession, Path: "outputs/data.bin", Size: int64(len(data)), Sha256: hexSum(data), MakeParents: true,
+		SessionId: fileSession, Path: "attachments/written/data.bin", Size: int64(len(data)), Sha256: hexSum(data), MakeParents: true,
 	}}}); err != nil {
 		t.Fatal(err)
 	}
@@ -64,11 +64,11 @@ func TestFileCallsGRPC(t *testing.T) {
 		}
 	}
 	wr, err := ws.CloseAndRecv()
-	if err != nil || wr.GetSha256() != hexSum(data) || wr.GetInfo().GetPath() != "outputs/data.bin" {
+	if err != nil || wr.GetSha256() != hexSum(data) || wr.GetInfo().GetPath() != "attachments/written/data.bin" {
 		t.Fatalf("write = %v %v", wr, err)
 	}
 
-	rs, err := c.ReadFile(ctx, &pb.ReadFileRequest{SessionId: fileSession, Path: "outputs/data.bin"})
+	rs, err := c.ReadFile(ctx, &pb.ReadFileRequest{SessionId: fileSession, Path: "attachments/written/data.bin"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,7 @@ func TestFileCallsGRPC(t *testing.T) {
 	}
 	big, _ := c.WriteFile(ctx)
 	_ = big.Send(&pb.WriteFileRequest{Part: &pb.WriteFileRequest_Header{Header: &pb.WriteFileHeader{
-		SessionId: fileSession, Path: "outputs/big", Size: 5 << 20,
+		SessionId: fileSession, Path: "attachments/big", Size: 5 << 20,
 	}}})
 	if _, err := big.CloseAndRecv(); reason(err) != "LIMIT_EXCEEDED" || status.Code(err) != codes.ResourceExhausted {
 		t.Fatalf("write over limit: %v", err)
@@ -133,7 +133,7 @@ func TestFileCallsGRPC(t *testing.T) {
 		t.Fatalf("list = %v %v", lr, err)
 	}
 
-	zs, err := c.ZipFiles(ctx, &pb.ZipFilesRequest{SessionId: fileSession, Path: "outputs"})
+	zs, err := c.ZipFiles(ctx, &pb.ZipFilesRequest{SessionId: fileSession, Path: "attachments/written"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,7 +194,7 @@ func TestFileCallsGRPC(t *testing.T) {
 	if err != nil || res.GetFiles() != 2 {
 		t.Fatalf("restore = %v %v", res, err)
 	}
-	if b, _ := os.ReadFile(filepath.Join(sessions, other, "outputs/data.bin")); !bytes.Equal(b, data) {
+	if b, _ := os.ReadFile(filepath.Join(sessions, other, "attachments/written/data.bin")); !bytes.Equal(b, data) {
 		t.Fatal("restored data differs")
 	}
 
@@ -222,7 +222,7 @@ func TestFileCallsGRPC(t *testing.T) {
 func TestListFilesResponseSizeCap(t *testing.T) {
 	c, sessions := fileHarness(t)
 	ctx := keyed(context.Background())
-	dir := filepath.Join(sessions, fileSession, "outputs")
+	dir := filepath.Join(sessions, fileSession, "attachments")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -236,7 +236,7 @@ func TestListFilesResponseSizeCap(t *testing.T) {
 	t.Cleanup(func() { listMaxBytes = orig })
 	listMaxBytes = 4 << 10
 
-	lr, err := c.ListFiles(ctx, &pb.ListFilesRequest{SessionId: fileSession, Path: "outputs"})
+	lr, err := c.ListFiles(ctx, &pb.ListFilesRequest{SessionId: fileSession, Path: "attachments"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,7 +251,7 @@ func TestListFilesResponseSizeCap(t *testing.T) {
 func TestListFilesSkipsInvalidUTF8(t *testing.T) {
 	c, sessions := fileHarness(t)
 	ctx := keyed(context.Background())
-	dir := filepath.Join(sessions, fileSession, "outputs")
+	dir := filepath.Join(sessions, fileSession, "attachments")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -266,7 +266,7 @@ func TestListFilesSkipsInvalidUTF8(t *testing.T) {
 		t.Logf("no non-UTF-8 name on this filesystem: %v", err)
 	}
 
-	lr, err := c.ListFiles(ctx, &pb.ListFilesRequest{SessionId: fileSession, Path: "outputs"})
+	lr, err := c.ListFiles(ctx, &pb.ListFilesRequest{SessionId: fileSession, Path: "attachments"})
 	if err != nil {
 		t.Fatal(err)
 	}
