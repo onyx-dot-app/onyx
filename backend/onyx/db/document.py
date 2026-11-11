@@ -1179,6 +1179,43 @@ def get_last_modified_for_documents(
     return dict(db_session.execute(stmt).tuples().all())
 
 
+def _get_onedrive_permission_owned_doc_ids(
+    db_session: Session, doc_ids: list[str]
+) -> set[str]:
+    """IDs of documents whose permissions an indexed, perm-synced OneDrive pair owns.
+
+    Kept as a separate query: a correlated subquery in the ON CONFLICT SET clause
+    renders its FROM tables without the tenant schema and does not correlate.
+
+    Not serialized with OneDrive marking its relationship indexed, so an overlapping
+    SharePoint write can land on a OneDrive-owned row. OneDrive's next permission
+    sync takes ownership back.
+    """
+    stmt = (
+        select(DocumentByConnectorCredentialPair.id)
+        .join(
+            Connector,
+            Connector.id == DocumentByConnectorCredentialPair.connector_id,
+        )
+        .join(
+            ConnectorCredentialPair,
+            and_(
+                ConnectorCredentialPair.connector_id
+                == DocumentByConnectorCredentialPair.connector_id,
+                ConnectorCredentialPair.credential_id
+                == DocumentByConnectorCredentialPair.credential_id,
+            ),
+        )
+        .where(
+            DocumentByConnectorCredentialPair.id.in_(doc_ids),
+            DocumentByConnectorCredentialPair.has_been_indexed.is_(True),
+            Connector.source == DocumentSource.ONEDRIVE,
+            ConnectorCredentialPair.access_type.in_(AccessType.perm_synced_types()),
+        )
+    )
+    return set(db_session.scalars(stmt))
+
+
 def upsert_documents(
     db_session: Session,
     document_metadata_batch: list[DocumentMetadata],
@@ -1253,30 +1290,6 @@ def upsert_documents(
         "file_id": insert_stmt.excluded.file_id,
     }
     if includes_permissions:
-        preserve_onedrive_permissions = exists(
-            select(DocumentByConnectorCredentialPair.id)
-            .join(
-                Connector,
-                Connector.id == DocumentByConnectorCredentialPair.connector_id,
-            )
-            .join(
-                ConnectorCredentialPair,
-                and_(
-                    ConnectorCredentialPair.connector_id
-                    == DocumentByConnectorCredentialPair.connector_id,
-                    ConnectorCredentialPair.credential_id
-                    == DocumentByConnectorCredentialPair.credential_id,
-                ),
-            )
-            .where(
-                DocumentByConnectorCredentialPair.id == DbDocument.id,
-                DocumentByConnectorCredentialPair.has_been_indexed.is_(True),
-                Connector.source == DocumentSource.ONEDRIVE,
-                ConnectorCredentialPair.access_type.in_(AccessType.perm_synced_types()),
-            )
-            .correlate(DbDocument)
-        )
-
         # Use COALESCE to preserve existing permissions when new values are NULL.
         # This prevents subsequent indexing runs (which don't fetch permissions)
         # from overwriting permissions set by permission sync jobs.
@@ -1292,7 +1305,15 @@ def upsert_documents(
             insert_stmt.excluded.is_public,
             DbDocument.is_public,
         )
-        if source == DocumentSource.SHAREPOINT:
+        onedrive_owned_doc_ids = (
+            _get_onedrive_permission_owned_doc_ids(
+                db_session, list(seen_documents.keys())
+            )
+            if source == DocumentSource.SHAREPOINT
+            else set()
+        )
+        if onedrive_owned_doc_ids:
+            preserve_onedrive_permissions = DbDocument.id.in_(onedrive_owned_doc_ids)
             external_user_emails = case(
                 (preserve_onedrive_permissions, DbDocument.external_user_emails),
                 else_=external_user_emails,
