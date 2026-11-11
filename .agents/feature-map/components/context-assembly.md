@@ -98,6 +98,12 @@ compaction candidate. The list on each model call:
 [image-drop notice]         USER reminder, only when an image cap dropped images
 ```
 
+`llm/multi_llm.py:LitellmLLM._prepare_request` joins the leading SYSTEM
+messages into one unless the cache adapter's
+`caches_leading_system_messages_separately` is true (only the Anthropic
+adapter). Some chat templates, such as Qwen's on vLLM, reject a second system
+message with a 400.
+
 The notices and reminders change between steps, so they stay after the stable
 prefix. Prompt assembly marks the stable part as cacheable
 (`chat/prompt_formatting.py:prepare_model_messages`), and provider-side prefix

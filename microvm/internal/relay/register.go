@@ -27,8 +27,11 @@ type Registrar struct {
 	// Secret is SANDBOX_NODE_REGISTRATION_SECRET.
 	Secret string
 	Signer *Signer
-	Client *http.Client
-	Log    *slog.Logger
+	// AgentAddress is the host:port of the agent's mTLS listener that the
+	// api_server dials. Empty: not sent.
+	AgentAddress string
+	Client       *http.Client
+	Log          *slog.Logger
 	// Interval between successful registrations. Default KeyTTL/3.
 	Interval time.Duration
 	// Retry is the wait after a failure. Default 10 s.
@@ -36,16 +39,18 @@ type Registrar struct {
 }
 
 type registration struct {
-	NodeID    string `json:"node_id"`
-	KeyID     string `json:"key_id"`
-	PublicKey string `json:"public_key"`
+	NodeID       string `json:"node_id"`
+	KeyID        string `json:"key_id"`
+	PublicKey    string `json:"public_key"`
+	AgentAddress string `json:"agent_address,omitempty"`
 }
 
 // Register sends one registration.
 func (g *Registrar) Register(ctx context.Context) error {
 	body, err := json.Marshal(registration{
 		NodeID: g.Signer.NodeID, KeyID: g.Signer.KeyID,
-		PublicKey: base64.StdEncoding.EncodeToString(g.Signer.PublicKey()),
+		PublicKey:    base64.StdEncoding.EncodeToString(g.Signer.PublicKey()),
+		AgentAddress: g.AgentAddress,
 	})
 	if err != nil {
 		return err
@@ -87,7 +92,7 @@ func (g *Registrar) Run(ctx context.Context) {
 			wait = retry
 			g.Log.Error("node signing key registration failed", "key_id", g.Signer.KeyID, "err", err)
 		} else {
-			g.Log.Info("node signing key registered", "node_id", g.Signer.NodeID, "key_id", g.Signer.KeyID)
+			g.Log.Info("node signing key registered", "node_id", g.Signer.NodeID, "key_id", g.Signer.KeyID, "agent_address", g.AgentAddress)
 		}
 		select {
 		case <-ctx.Done():

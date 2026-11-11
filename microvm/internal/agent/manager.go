@@ -67,17 +67,32 @@ type HostStats interface {
 	DiskFreeBytes() (uint64, error)
 }
 
-// Versions are the static versions of the node, for NodeInfo.
+// Versions are the static versions of the node, for NodeInfo and the
+// template key check.
 type Versions struct {
 	Firecracker string
 	HostKernel  string
 	CPUModel    string
 	Agent       string
+	// GuestKernel is the release of the node's guest kernel (vmlinux).
+	GuestKernel       string
+	GuestKernelSHA256 string
+	// EgressCAFingerprint is the deployment's egress CA. Empty: not checked.
+	EgressCAFingerprint string
+}
+
+// NodeKey is the part of a template key that this node decides.
+func (v Versions) NodeKey() template.NodeKey {
+	return template.NodeKey{
+		FirecrackerVersion: v.Firecracker, CPUModel: v.CPUModel, HostKernel: v.HostKernel,
+		GuestKernelSHA256: v.GuestKernelSHA256, CAFingerprint: v.EgressCAFingerprint,
+	}
 }
 
 // Config holds the node limits.
 type Config struct {
-	// MinFreeMemMiB: Create needs MemAvailable >= mem_mib + MinFreeMemMiB.
+	// MinFreeMemMiB is the memory reserve: Create needs MemAvailable >=
+	// (guest memory of the starting VMs) + mem_mib + MinFreeMemMiB.
 	MinFreeMemMiB uint64
 	// MinFreeDiskBytes: Create needs this much free space on the data disk.
 	MinFreeDiskBytes uint64
@@ -105,6 +120,7 @@ type VM struct {
 	UID        uint32
 	StartedAt  time.Time
 	TenantID   string
+	Managed    ManagedState
 }
 
 // Egress connects the VMs to the egress relay. The real one is
@@ -126,6 +142,9 @@ type entry struct {
 	// busy is closed when the current Create, Stop or exit cleanup ends.
 	// It is nil when no operation runs.
 	busy chan struct{}
+	// swap is closed when the current managed drive swap ends. Create and
+	// Stop wait for it; the VM stays usable during a swap.
+	swap chan struct{}
 	// createErr is set when Create failed; the entry is then removed.
 	createErr error
 	// cleanupErr is set when the cleanup of an exited VM failed. Stop
@@ -167,6 +186,15 @@ type Manager struct {
 	// known, so Create waits for a scan that works.
 	doubt    map[string]*doubt
 	needScan bool
+	// building maps the jailer IDs of template build VMs (BuildSlot) to
+	// their guest memory in MiB.
+	building map[string]uint32
+
+	managedGuest ManagedGuest
+	swapTimeout  time.Duration
+
+	// drain is the drain state (drain.go), under mu.
+	drain drainState
 }
 
 // NewManager returns a Manager with an empty VM table.
@@ -176,6 +204,7 @@ func NewManager(cfg Config, templates *template.Store, launcher Launcher, stats 
 		cfg: cfg, templates: templates, launcher: launcher, stats: stats, uids: uids,
 		versions: versions, log: log, now: time.Now,
 		vms: map[string]*entry{}, tombs: map[string]tombstone{}, doubt: map[string]*doubt{},
+		building: map[string]uint32{},
 	}
 }
 
@@ -216,7 +245,7 @@ func (m *Manager) record(e *entry, state journal.State, info ProcInfo) journal.R
 		PID: info.PID, PIDStart: info.PIDStart, UID: e.vm.UID,
 		Chroot: info.Chroot, APISock: info.APISock, VsockUDS: info.VsockUDS,
 		Template: e.vm.Template, VCPUs: e.vm.VCPUs, MemMiB: e.vm.MemMiB, ScratchGiB: e.vm.ScratchGiB,
-		StartedAt: e.vm.StartedAt, TenantID: e.vm.TenantID,
+		StartedAt: e.vm.StartedAt, TenantID: e.vm.TenantID, Managed: e.vm.Managed.record(),
 	}
 }
 
@@ -276,6 +305,14 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (VM, bool, erro
 	for {
 		m.mu.Lock()
 		e := m.vms[req.SandboxID]
+		if e != nil && e.busy == nil && e.swap != nil {
+			swap := e.swap
+			m.mu.Unlock()
+			if err := waitFor(ctx, swap); err != nil {
+				return VM{}, false, err
+			}
+			continue
+		}
 		if e != nil && e.busy != nil {
 			busy := e.busy
 			m.mu.Unlock()
@@ -291,6 +328,7 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (VM, bool, erro
 			if e.vm.Attempt == req.Attempt {
 				vm := e.vm
 				m.mu.Unlock()
+				markAdmitted(ctx)
 				return vm, false, nil
 			}
 			if e.vm.State != pb.VMState_VM_STATE_EXITED || req.Attempt < e.vm.Attempt {
@@ -315,10 +353,19 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (VM, bool, erro
 			m.mu.Unlock()
 			return VM{}, false, err
 		}
+		// Refuse early, before the template hash check. The check under
+		// the lock below is the one that counts.
+		if err := m.drainErrLocked(); err != nil {
+			m.mu.Unlock()
+			return VM{}, false, err
+		}
 		m.mu.Unlock()
 		break
 	}
 
+	// The pin keeps template GC away until the VM is in the table.
+	unpin := m.templates.Pin(req.Template)
+	defer unpin()
 	tpl, err := m.admit(req)
 	if err != nil {
 		return VM{}, false, err
@@ -335,16 +382,28 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (VM, bool, erro
 		m.mu.Unlock()
 		return VM{}, false, err
 	}
+	// Drain and memory are checked under the lock, so two Creates never
+	// count the same free memory.
+	if err := m.drainErrLocked(); err != nil {
+		m.mu.Unlock()
+		return VM{}, false, err
+	}
+	if err := m.admitMemoryLocked(req.MemMiB); err != nil {
+		m.mu.Unlock()
+		return VM{}, false, err
+	}
 	uid, ok := m.uids.Get()
 	if !ok {
 		m.mu.Unlock()
 		return VM{}, false, apierr.New(pb.ErrorReason_CAPACITY_VM_SLOTS, "no free jailer UID on this node")
 	}
+	markAdmitted(ctx)
 	e := &entry{
 		vm: VM{
 			SandboxID: req.SandboxID, Attempt: req.Attempt, Generation: m.nextGeneration(),
 			Template: tpl.Version, VCPUs: req.VCPUs, MemMiB: req.MemMiB, ScratchGiB: req.ScratchGiB,
 			State: pb.VMState_VM_STATE_STARTING, UID: uid, StartedAt: m.now(), TenantID: req.TenantID,
+			Managed: ManagedState{Slots: tpl.ManagedSlots(), Active: pb.ManagedSlot_MANAGED_SLOT_A},
 		},
 		busy: make(chan struct{}),
 	}
@@ -435,15 +494,20 @@ func (m *Manager) staleLocked(req CreateRequest) error {
 	return nil
 }
 
-// admit checks the template, the shape, the scratch size and the node capacity.
+// admit checks the template, the shape, the scratch size and the node
+// capacity. Firecracker checks nothing about a snapshot on load, so the
+// template key must fit this node and its files must match their hashes.
 func (m *Manager) admit(req CreateRequest) (*template.Template, error) {
 	tpl, err := m.templates.Get(req.Template)
 	if err != nil {
 		return nil, err
 	}
-	if tpl.FirecrackerVersion != m.versions.Firecracker {
-		return nil, apierr.New(pb.ErrorReason_TEMPLATE_INCOMPATIBLE,
-			"template %q was built with Firecracker %s, this node runs %s", tpl.Version, tpl.FirecrackerVersion, m.versions.Firecracker)
+	if err := tpl.CheckNode(m.versions.NodeKey()); err != nil {
+		return nil, err
+	}
+	if err := m.templates.Verify(tpl); err != nil {
+		m.log.Error("template failed its hash check", "template", tpl.Version, "err", err)
+		return nil, err
 	}
 	if req.VCPUs != tpl.VCPUs || req.MemMiB != tpl.MemMiB {
 		return nil, apierr.New(pb.ErrorReason_TEMPLATE_SHAPE_MISMATCH,
@@ -451,14 +515,6 @@ func (m *Manager) admit(req CreateRequest) (*template.Template, error) {
 	}
 	if err := scratch.CheckSize(req.ScratchGiB, tpl.ScratchGiB, m.cfg.MaxScratchGiB); err != nil {
 		return nil, err
-	}
-	_, avail, err := m.stats.MemInfo()
-	if err != nil {
-		return nil, fmt.Errorf("read memory info: %w", err)
-	}
-	if avail < uint64(req.MemMiB)+m.cfg.MinFreeMemMiB {
-		return nil, apierr.New(pb.ErrorReason_CAPACITY_MEMORY,
-			"node has %d MiB available, the VM needs %d MiB plus a %d MiB reserve", avail, req.MemMiB, m.cfg.MinFreeMemMiB)
 	}
 	free, err := m.stats.DiskFreeBytes()
 	if err != nil {
@@ -469,6 +525,63 @@ func (m *Manager) admit(req CreateRequest) (*template.Template, error) {
 			"data disk has %d MiB free, the node keeps %d MiB free", free>>20, m.cfg.MinFreeDiskBytes>>20)
 	}
 	return tpl, nil
+}
+
+// admitMemoryLocked admits a VM of memMiB on measured memory: the node's
+// MemAvailable must hold the guest memory of the VMs that are starting
+// (their pages are not in use yet), the full guest memory of the new VM and
+// the reserve. The balloon's free page reporting (layout 4) returns the
+// memory that guests free, so MemAvailable is the real use, not the sum of
+// guest sizes.
+func (m *Manager) admitMemoryLocked(memMiB uint32) error {
+	total, avail, err := m.stats.MemInfo()
+	if err != nil {
+		return fmt.Errorf("read memory info: %w", err)
+	}
+	starting := m.startingMiBLocked()
+	need := starting + uint64(memMiB) + m.cfg.MinFreeMemMiB
+	if avail >= need {
+		return nil
+	}
+	e := apierr.New(pb.ErrorReason_CAPACITY_MEMORY,
+		"node has %d MiB available of %d MiB; it needs %d MiB: %d MiB for the VM, %d MiB for %d starting VMs and a %d MiB reserve",
+		avail, total, need, memMiB, starting, m.startingCountLocked(), m.cfg.MinFreeMemMiB)
+	e.Metadata = map[string]string{
+		"mem_total_mib":     fmt.Sprint(total),
+		"mem_available_mib": fmt.Sprint(avail),
+		"mem_needed_mib":    fmt.Sprint(need),
+		"vm_mem_mib":        fmt.Sprint(memMiB),
+		"mem_starting_mib":  fmt.Sprint(starting),
+		"mem_reserve_mib":   fmt.Sprint(m.cfg.MinFreeMemMiB),
+	}
+	m.log.Warn("create refused: memory", "mem_available_mib", avail, "mem_needed_mib", need,
+		"mem_starting_mib", starting, "mem_reserve_mib", m.cfg.MinFreeMemMiB)
+	return e
+}
+
+// startingMiBLocked is the guest memory of the VMs that are starting and of
+// the template build VMs.
+func (m *Manager) startingMiBLocked() uint64 {
+	var n uint64
+	for _, mib := range m.building {
+		n += uint64(mib)
+	}
+	for _, e := range m.vms {
+		if e.vm.State == pb.VMState_VM_STATE_STARTING {
+			n += uint64(e.vm.MemMiB)
+		}
+	}
+	return n
+}
+
+func (m *Manager) startingCountLocked() int {
+	n := len(m.building)
+	for _, e := range m.vms {
+		if e.vm.State == pb.VMState_VM_STATE_STARTING {
+			n++
+		}
+	}
+	return n
 }
 
 // StopResult is the output of Stop.
@@ -497,10 +610,13 @@ func (m *Manager) Stop(ctx context.Context, sandboxID string, attempt, generatio
 			}
 			return StopResult{}, apierr.New(pb.ErrorReason_SANDBOX_NOT_FOUND, "sandbox %s has no VM on this node", sandboxID)
 		}
-		if e.busy != nil {
-			busy := e.busy
+		if e.busy != nil || e.swap != nil {
+			wait := e.busy
+			if wait == nil {
+				wait = e.swap
+			}
 			m.mu.Unlock()
-			if err := waitFor(ctx, busy); err != nil {
+			if err := waitFor(ctx, wait); err != nil {
 				return StopResult{}, err
 			}
 			continue
@@ -702,6 +818,61 @@ func (m *Manager) List() []VM {
 	return out
 }
 
+// Versions returns the node versions.
+func (m *Manager) Versions() Versions { return m.versions }
+
+// TemplatesInUse returns the templates of every VM in the table, also
+// starting and exited ones. Template GC keeps them.
+func (m *Manager) TemplatesInUse() map[string]bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := map[string]bool{}
+	for _, e := range m.vms {
+		out[e.vm.Template] = true
+	}
+	return out
+}
+
+// BuildSlot gives a template build VM with jailer ID id and memMiB of guest
+// memory a jailer UID. It refuses the build on a draining node and admits
+// it on memory as Create does, and the build counts as a starting VM until
+// done. The process scan does not count the VM as untracked while it runs. Call done when the VM is gone; done(true) puts the VM in doubt
+// with its UID, for a VM that may still run, and a later scan frees the UID
+// once it is gone.
+func (m *Manager) BuildSlot(id string, memMiB uint32) (uint32, func(left bool), error) {
+	if err := m.checkDoubt(context.Background(), id, true); err != nil {
+		return 0, nil, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.building[id]; ok || m.vms[id] != nil || m.doubt[id] != nil {
+		return 0, nil, apierr.New(pb.ErrorReason_INTERNAL, "build VM %s already runs", id)
+	}
+	if err := m.drainErrLocked(); err != nil {
+		return 0, nil, err
+	}
+	if err := m.admitMemoryLocked(memMiB); err != nil {
+		return 0, nil, err
+	}
+	uid, ok := m.uids.Get()
+	if !ok {
+		return 0, nil, apierr.New(pb.ErrorReason_CAPACITY_VM_SLOTS, "no free jailer UID for the template build")
+	}
+	m.building[id] = memMiB
+	done := func(left bool) {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		delete(m.building, id)
+		if left {
+			m.log.Error("template build VM may still run; it is in doubt with its UID", "id", id, "uid", uid)
+			m.doubt[id] = &doubt{reason: "a template build VM may still run", uids: []uint32{uid}}
+			return
+		}
+		m.uids.Put(uid)
+	}
+	return uid, done, nil
+}
+
 // NodeInfo is the output of NodeInfo.
 type NodeInfo struct {
 	MemTotalMiB     uint64
@@ -710,6 +881,11 @@ type NodeInfo struct {
 	VMCount         int
 	Templates       []*template.Template
 	Versions        Versions
+	// MemReserveMiB is the memory reserve; MemStartingMiB is the guest
+	// memory of the starting VMs (see admitMemoryLocked).
+	MemReserveMiB  uint64
+	MemStartingMiB uint64
+	Drain          DrainStatus
 }
 
 // NodeInfo returns the node capacity, versions and templates.
@@ -726,17 +902,16 @@ func (m *Manager) NodeInfo() (NodeInfo, error) {
 	if err != nil {
 		return NodeInfo{}, err
 	}
+	m.rescanForDrain()
 	m.mu.Lock()
-	n := 0
-	for _, e := range m.vms {
-		if e.vm.State != pb.VMState_VM_STATE_EXITED {
-			n++
-		}
-	}
+	n := m.liveVMsLocked()
+	starting := m.startingMiBLocked()
+	drain := m.drainStatusLocked()
 	m.mu.Unlock()
 	return NodeInfo{
 		MemTotalMiB: total, MemAvailableMiB: avail, DiskFreeMiB: free >> 20,
 		VMCount: n, Templates: tpls, Versions: m.versions,
+		MemReserveMiB: m.cfg.MinFreeMemMiB, MemStartingMiB: starting, Drain: drain,
 	}, nil
 }
 

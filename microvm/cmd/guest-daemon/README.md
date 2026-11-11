@@ -25,6 +25,7 @@ Code: `cmd/guest-daemon/` (main), `internal/guestd/` (API, Init, auth), `interna
 | Supervisor | `craft-init` (PID 1) starts the daemon and restarts it when it exits. The daemon is not PID 1. |
 | cgroup v2 | Mounted at `/sys/fs/cgroup` by init. The daemon mounts it if it is missing, and makes `/sys/fs/cgroup/guestd/`. |
 | Drives | Init runs `/craft-fc/lib/attach` (scratch on `/mnt/scratch`, overlays, read-only managed drive). It does nothing if init already attached them. |
+| Managed slots | Slot A `/dev/vdc` (`MANAGED_DEV`, mounted by attach) and slot B `/dev/vdf` (`MANAGED_DEV_B`, never mounted by attach) on `/workspace/managed`. `MountManaged` changes the drive there (ENG-4614). Needs a guest kernel with `MOVE_MOUNT_BENEATH` (6.5+). |
 | Egress relay | Init sends SIGHUP to the PID in `/run/craft-fc/egress-relay.pid`. |
 | Scratch disk | ext4 on `/mnt/scratch`. Init grows it to the device size, and fails if the device is still smaller than `scratch_bytes` after about 1 s. |
 | Init state | `/run/craft-fc/guest-daemon-init.json` (mode 0600, tmpfs). A restarted daemon keeps its key, env and session list. |
@@ -34,7 +35,8 @@ Flags (defaults in brackets): `--port` (52), `--attach-cmd` (`/craft-fc/lib/atta
 `--relay-pidfile` (`/run/craft-fc/egress-relay.pid`; empty to skip), `--cgroup-root`
 (`/sys/fs/cgroup/guestd`), `--state-file`, `--grow-fs` (`/mnt/scratch`), `--default-deadline` (30m),
 `--max-deadline` (24h), `--output-bytes` (4 MiB per stream), `--output-budget` (256 MiB for all
-executions), `--max-running` (64), `--listen`
+executions), `--max-running` (64), `--managed-mount` (`/workspace/managed`; empty turns the managed calls
+off), `--managed-dev-a` (`/dev/vdc`), `--managed-dev-b` (`/dev/vdf`), `--listen`
 (`unix:<path>` instead of vsock, for tests; mode 0600), `--log-level`. The daemon has no TCP listener:
 the API is plaintext with a bearer key, so it is served only on vsock, through the node agent. The
 container fallback (TCP with mTLS) is not in v1.
@@ -85,6 +87,13 @@ agent, every call also carries `x-sandbox-id`.
 | `Inspect`, `List` | Execution records (state, PID, times, byte counts, result), `List` filtered by labels. |
 | Files, `CaptureSession`, `RestoreSession` | Reserved for ENG-4572. `UNIMPLEMENTED`. |
 | `BrowserStart`, `BrowserStop` | Reserved for ENG-4573. `UNIMPLEMENTED`. |
+| `ManagedStatus` | The slot on `/workspace/managed` (by the mount's device number) and, per slot, the device, size, ext4 UUID (read with `O_DIRECT`) and whether it is in use (an exclusive open fails with `EBUSY` while a mount holds it, also a detached one with open files). The node agent calls it. |
+| `MountManaged(slot, size_bytes, fs_uuid)` | Makes the slot the drive on `/workspace/managed`, in this order: refuse a slot in use (`MANAGED_SLOT_BUSY`); wait up to 5 s for the device size (Firecracker's config change after `PATCH /drives`); `BLKFLSBUF`; check the ext4 UUID (`MANAGED_DEVICE_MISMATCH`); `fsopen`/`fsmount` (`ro`, `noload`; `nodev`, `nosuid`, `noexec`, private) and `move_mount(MOVE_MOUNT_BENEATH)` beneath the current mount; `umount2(MNT_DETACH)` of the old top mount. Open files on the old drive keep working. The same slot with the same UUID is a no-op (`changed` false). A slot in use that is mounted beneath the top mount with the requested UUID is a swap that stopped before its detach: the call detaches the old top mount and finishes it. The node agent calls it during `SwapManaged`. |
+
+Why the mount goes beneath: a mount covered by another mount cannot be reached by path, and a lazy
+unmount of it (also through `/proc/self/fd/<n>`) removes the top mount instead (tested on #17241).
+`MOVE_MOUNT_BENEATH` puts the new drive under the old one; the old top mount then detaches by path, and
+the new drive shows at once.
 
 Commands:
 
@@ -111,6 +120,20 @@ Commands:
 
 Errors are gRPC statuses with one `google.rpc.ErrorInfo`: domain `sandboxd.craft.onyx.app`, reason an
 `ErrorReason` name (`KEY_NOT_SET`, `NOT_INITIALIZED`, `UNAUTHENTICATED`, `EXECUTION_NOT_FOUND`, ...).
+
+### Memory (ENG-4569)
+
+The VM has the Firecracker balloon with free page reporting (template layout 4, module README).
+
+- `--page-reporting-order` (default 0): the daemon writes it to
+  `/sys/module/page_reporting/parameters/page_reporting_order` at start. A boot parameter has no effect:
+  the kernel sets the order when the balloon driver registers. Order 0 reports every free page. `-1`
+  leaves the kernel default (9). Without the balloon or the kernel knob, the daemon logs a warning.
+- `--reclaim-idle` (default 5m, 0 = off, else at least 1m): after this long with no daemon call open or
+  ended (Health does not count; refused calls do not count), the daemon writes 3 to
+  `/proc/sys/vm/drop_caches` and 1 to `/proc/sys/vm/compact_memory`, once per idle period. Free page
+  reporting then gives the pages to the node. Programs that run with no daemon call (a dev server) do not
+  count as activity; a reclaim costs them only page cache misses.
 
 ## Egress relay
 

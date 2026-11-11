@@ -6,22 +6,42 @@ placement in the tenant cache, both with TTLs their writers refresh.
   `NODE_SIGNING_KEY_TTL_SECONDS`, so a dead node's keys expire on their own.
 - Placement: the Firecracker lifecycle writes it at VM start, refreshes it on
   heartbeat and clears it at stop.
+- Agent addresses: the registration carries the agent's mTLS listener, so the
+  api_server knows how to reach every node that registered a live key.
 """
 
 import base64
 import json
+from collections.abc import Iterator
+from contextlib import contextmanager
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
 from onyx.cache.interface import TTL_NO_EXPIRY, CacheBackend, CacheLockAcquisitionError
+from onyx.microvm.models import RegisteredNode
 
 NODE_SIGNING_KEY_TTL_SECONDS = 3600
 _KEY_PREFIX = "sandbox_fc:signing_key:"
 _NODE_KIDS_PREFIX = "sandbox_fc:node_kids:"
 _NODE_LOCK_PREFIX = "sandbox_fc:node_lock:"
 _PLACEMENT_PREFIX = "sandbox_fc:placement:"
+_NODE_ADDRESS_PREFIX = "sandbox_fc:node_address:"
+_NODES_KEY = "sandbox_fc:nodes"
+_MAX_NODES = 10_000
 _LOCK_WAIT_SECONDS = 10.0
+
+
+@contextmanager
+def _node_lock(shared_cache: CacheBackend, node_id: str) -> Iterator[None]:
+    """Serialize writes to one node's keys, address and set membership."""
+    lock = shared_cache.lock(_NODE_LOCK_PREFIX + node_id, timeout=_LOCK_WAIT_SECONDS)
+    if not lock.acquire(blocking_timeout=_LOCK_WAIT_SECONDS):
+        raise CacheLockAcquisitionError(node_id)
+    try:
+        yield
+    finally:
+        lock.release()
 
 
 class NodeSigningKeyConflictError(Exception):
@@ -131,3 +151,54 @@ def get_sandbox_placement(
         return None
     record = json.loads(raw)
     return SandboxPlacement(node_id=record["node"], generation=record["gen"])
+
+
+def set_node_agent_address(
+    shared_cache: CacheBackend, *, node_id: str, address: str
+) -> None:
+    """Record the agent listener of a node. Expires with the node's keys."""
+    with _node_lock(shared_cache, node_id):
+        shared_cache.set(
+            _NODE_ADDRESS_PREFIX + node_id, address, ex=NODE_SIGNING_KEY_TTL_SECONDS
+        )
+        shared_cache.set_add(_NODES_KEY, node_id)
+
+
+def clear_node_agent_address(shared_cache: CacheBackend, *, node_id: str) -> None:
+    """Forget the agent listener of a node that registered without one."""
+    with _node_lock(shared_cache, node_id):
+        shared_cache.delete(_NODE_ADDRESS_PREFIX + node_id)
+        shared_cache.set_remove(_NODES_KEY, node_id)
+
+
+def get_registered_node(
+    shared_cache: CacheBackend, node_id: str
+) -> RegisteredNode | None:
+    raw = shared_cache.get(_NODE_ADDRESS_PREFIX + node_id)
+    if raw is None:
+        return None
+    return RegisteredNode(node_id=node_id, address=raw.decode())
+
+
+def list_registered_nodes(shared_cache: CacheBackend) -> list[RegisteredNode]:
+    """Nodes whose agent registered within the key TTL, sorted by id."""
+    nodes: list[RegisteredNode] = []
+    for member in shared_cache.set_members(_NODES_KEY, limit=_MAX_NODES):
+        node_id = member.decode()
+        node = get_registered_node(shared_cache, node_id)
+        if node is None:
+            _prune_node(shared_cache, node_id)
+            continue
+        nodes.append(node)
+    return sorted(nodes, key=lambda n: n.node_id)
+
+
+def _prune_node(shared_cache: CacheBackend, node_id: str) -> None:
+    """Drop an expired node from the set, unless it registered again meanwhile."""
+    try:
+        with _node_lock(shared_cache, node_id):
+            if not shared_cache.exists(_NODE_ADDRESS_PREFIX + node_id):
+                shared_cache.set_remove(_NODES_KEY, node_id)
+    except CacheLockAcquisitionError:
+        # A registration holds the lock; the next list prunes if still expired.
+        pass

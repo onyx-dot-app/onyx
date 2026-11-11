@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.9.34
+version: 0.9.37
 appVersion: latest
 annotations:
   category: Productivity
@@ -21,8 +21,11 @@ annotations:
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
     - kind: added
-      description: Add craft.sandboxRuntime and the opt-in Craft Firecracker
-        host agent DaemonSet (off by default; the runtime is not usable yet).
+      description: Craft Firecracker host agent (off by default) registers its
+        pod IP, exposes craft.hostAgent.dialMaxStreams, clientAllowedSans and
+        advertiseAddress, and the api_server, heavy and scheduled-tasks pods
+        get the agent mTLS client certificate from
+        craft.hostAgent.client.existingSecret.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it

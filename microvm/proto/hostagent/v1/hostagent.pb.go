@@ -34,7 +34,9 @@ const (
 	// vcpus or mem_mib differ from the template. A snapshot restore keeps the
 	// template's shape.
 	ErrorReason_TEMPLATE_SHAPE_MISMATCH ErrorReason = 3
-	// The template was built with a different Firecracker version.
+	// The template does not fit this node (layout version, Firecracker
+	// version, CPU model, host kernel, guest kernel or egress CA), or a
+	// template file does not match the SHA256 in its manifest.
 	ErrorReason_TEMPLATE_INCOMPATIBLE ErrorReason = 4
 	// scratch_gib is smaller than the template's scratch disk. The scratch
 	// disk can only grow.
@@ -83,6 +85,26 @@ const (
 	// already has a different key. Do not use the VM: Stop it and create a
 	// new attempt.
 	ErrorReason_GUEST_KEY_REJECTED ErrorReason = 22
+	// PutManagedImage or SwapManaged: no managed image with this ID on the node.
+	ErrorReason_MANAGED_IMAGE_MISSING ErrorReason = 23
+	// PutManagedImage: the bundle is not a safe zip (an absolute or ".." path,
+	// a link or device, a duplicate name) or is over a size limit, or its
+	// bytes do not match the header.
+	ErrorReason_MANAGED_BUNDLE_INVALID ErrorReason = 24
+	// SwapManaged: the VM cannot swap its managed drive. Its template has no
+	// managed slot B (layout 2), or its guest daemon has no MountManaged.
+	ErrorReason_MANAGED_SWAP_UNSUPPORTED ErrorReason = 25
+	// SwapManaged: a process in the guest still has a file open on the
+	// managed drive of the idle slot (the drive before the last swap). Retry
+	// after it closes the file.
+	ErrorReason_MANAGED_SLOT_BUSY ErrorReason = 26
+	// SwapManaged: the guest daemon could not mount the new drive. The old
+	// drive stays mounted.
+	ErrorReason_MANAGED_MOUNT_FAILED ErrorReason = 27
+	// Create, BuildTemplate: the node is draining (the manual drain flag or a
+	// node drain taint). Create the VM on another node. A repeat Create of a
+	// VM that already runs here still returns it.
+	ErrorReason_NODE_DRAINING ErrorReason = 28
 )
 
 // Enum value maps for ErrorReason.
@@ -111,6 +133,12 @@ var (
 		20: "DIAL_LIMIT",
 		21: "METHOD_NOT_ALLOWED",
 		22: "GUEST_KEY_REJECTED",
+		23: "MANAGED_IMAGE_MISSING",
+		24: "MANAGED_BUNDLE_INVALID",
+		25: "MANAGED_SWAP_UNSUPPORTED",
+		26: "MANAGED_SLOT_BUSY",
+		27: "MANAGED_MOUNT_FAILED",
+		28: "NODE_DRAINING",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED": 0,
@@ -136,6 +164,12 @@ var (
 		"DIAL_LIMIT":               20,
 		"METHOD_NOT_ALLOWED":       21,
 		"GUEST_KEY_REJECTED":       22,
+		"MANAGED_IMAGE_MISSING":    23,
+		"MANAGED_BUNDLE_INVALID":   24,
+		"MANAGED_SWAP_UNSUPPORTED": 25,
+		"MANAGED_SLOT_BUSY":        26,
+		"MANAGED_MOUNT_FAILED":     27,
+		"NODE_DRAINING":            28,
 	}
 )
 
@@ -164,6 +198,116 @@ func (x ErrorReason) Number() protoreflect.EnumNumber {
 // Deprecated: Use ErrorReason.Descriptor instead.
 func (ErrorReason) EnumDescriptor() ([]byte, []int) {
 	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{0}
+}
+
+// Drain state of the node (NodeInfo, SetDrain).
+type DrainState int32
+
+const (
+	DrainState_DRAIN_STATE_UNSPECIFIED DrainState = 0
+	// The node admits new VMs.
+	DrainState_DRAIN_STATE_ACTIVE DrainState = 1
+	// The node refuses new VMs and still has VMs that are starting or running,
+	// Firecracker processes in doubt or template build VMs, or no process scan
+	// that worked.
+	DrainState_DRAIN_STATE_DRAINING DrainState = 2
+	// The node refuses new VMs and runs no Firecracker process.
+	DrainState_DRAIN_STATE_DRAINED DrainState = 3
+)
+
+// Enum value maps for DrainState.
+var (
+	DrainState_name = map[int32]string{
+		0: "DRAIN_STATE_UNSPECIFIED",
+		1: "DRAIN_STATE_ACTIVE",
+		2: "DRAIN_STATE_DRAINING",
+		3: "DRAIN_STATE_DRAINED",
+	}
+	DrainState_value = map[string]int32{
+		"DRAIN_STATE_UNSPECIFIED": 0,
+		"DRAIN_STATE_ACTIVE":      1,
+		"DRAIN_STATE_DRAINING":    2,
+		"DRAIN_STATE_DRAINED":     3,
+	}
+)
+
+func (x DrainState) Enum() *DrainState {
+	p := new(DrainState)
+	*p = x
+	return p
+}
+
+func (x DrainState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (DrainState) Descriptor() protoreflect.EnumDescriptor {
+	return file_hostagent_v1_hostagent_proto_enumTypes[1].Descriptor()
+}
+
+func (DrainState) Type() protoreflect.EnumType {
+	return &file_hostagent_v1_hostagent_proto_enumTypes[1]
+}
+
+func (x DrainState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use DrainState.Descriptor instead.
+func (DrainState) EnumDescriptor() ([]byte, []int) {
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{1}
+}
+
+// A managed drive slot of a VM.
+type ManagedSlot int32
+
+const (
+	ManagedSlot_MANAGED_SLOT_UNSPECIFIED ManagedSlot = 0
+	// Drive "managed", guest /dev/vdc.
+	ManagedSlot_MANAGED_SLOT_A ManagedSlot = 1
+	// Drive "managed_b", guest /dev/vdf (layout 3 and later).
+	ManagedSlot_MANAGED_SLOT_B ManagedSlot = 2
+)
+
+// Enum value maps for ManagedSlot.
+var (
+	ManagedSlot_name = map[int32]string{
+		0: "MANAGED_SLOT_UNSPECIFIED",
+		1: "MANAGED_SLOT_A",
+		2: "MANAGED_SLOT_B",
+	}
+	ManagedSlot_value = map[string]int32{
+		"MANAGED_SLOT_UNSPECIFIED": 0,
+		"MANAGED_SLOT_A":           1,
+		"MANAGED_SLOT_B":           2,
+	}
+)
+
+func (x ManagedSlot) Enum() *ManagedSlot {
+	p := new(ManagedSlot)
+	*p = x
+	return p
+}
+
+func (x ManagedSlot) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ManagedSlot) Descriptor() protoreflect.EnumDescriptor {
+	return file_hostagent_v1_hostagent_proto_enumTypes[2].Descriptor()
+}
+
+func (ManagedSlot) Type() protoreflect.EnumType {
+	return &file_hostagent_v1_hostagent_proto_enumTypes[2]
+}
+
+func (x ManagedSlot) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ManagedSlot.Descriptor instead.
+func (ManagedSlot) EnumDescriptor() ([]byte, []int) {
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{2}
 }
 
 type VMState int32
@@ -206,11 +350,11 @@ func (x VMState) String() string {
 }
 
 func (VMState) Descriptor() protoreflect.EnumDescriptor {
-	return file_hostagent_v1_hostagent_proto_enumTypes[1].Descriptor()
+	return file_hostagent_v1_hostagent_proto_enumTypes[3].Descriptor()
 }
 
 func (VMState) Type() protoreflect.EnumType {
-	return &file_hostagent_v1_hostagent_proto_enumTypes[1]
+	return &file_hostagent_v1_hostagent_proto_enumTypes[3]
 }
 
 func (x VMState) Number() protoreflect.EnumNumber {
@@ -219,7 +363,7 @@ func (x VMState) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use VMState.Descriptor instead.
 func (VMState) EnumDescriptor() ([]byte, []int) {
-	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{1}
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{3}
 }
 
 type CreateRequest struct {
@@ -591,6 +735,7 @@ type VM struct {
 	Uid           uint32                 `protobuf:"varint,10,opt,name=uid,proto3" json:"uid,omitempty"`
 	StartedAt     *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
 	TenantId      string                 `protobuf:"bytes,12,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	Managed       *ManagedState          `protobuf:"bytes,13,opt,name=managed,proto3" json:"managed,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -709,6 +854,85 @@ func (x *VM) GetTenantId() string {
 	return ""
 }
 
+func (x *VM) GetManaged() *ManagedState {
+	if x != nil {
+		return x.Managed
+	}
+	return nil
+}
+
+// The managed drive slots of a VM, as the journal records them.
+type ManagedState struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 2 for a VM that can swap its managed drive (layout 3 and later), else 1.
+	Slots uint32 `protobuf:"varint,1,opt,name=slots,proto3" json:"slots,omitempty"`
+	// The slot on /workspace/managed after the last swap.
+	Active ManagedSlot `protobuf:"varint,2,opt,name=active,proto3,enum=craft.hostagent.v1.ManagedSlot" json:"active,omitempty"`
+	// Managed image ID behind each slot. Empty: the template's placeholder.
+	SlotAImage    string `protobuf:"bytes,3,opt,name=slot_a_image,json=slotAImage,proto3" json:"slot_a_image,omitempty"`
+	SlotBImage    string `protobuf:"bytes,4,opt,name=slot_b_image,json=slotBImage,proto3" json:"slot_b_image,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ManagedState) Reset() {
+	*x = ManagedState{}
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ManagedState) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ManagedState) ProtoMessage() {}
+
+func (x *ManagedState) ProtoReflect() protoreflect.Message {
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ManagedState.ProtoReflect.Descriptor instead.
+func (*ManagedState) Descriptor() ([]byte, []int) {
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *ManagedState) GetSlots() uint32 {
+	if x != nil {
+		return x.Slots
+	}
+	return 0
+}
+
+func (x *ManagedState) GetActive() ManagedSlot {
+	if x != nil {
+		return x.Active
+	}
+	return ManagedSlot_MANAGED_SLOT_UNSPECIFIED
+}
+
+func (x *ManagedState) GetSlotAImage() string {
+	if x != nil {
+		return x.SlotAImage
+	}
+	return ""
+}
+
+func (x *ManagedState) GetSlotBImage() string {
+	if x != nil {
+		return x.SlotBImage
+	}
+	return ""
+}
+
 type CloseConnectionsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SandboxId     string                 `protobuf:"bytes,1,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
@@ -720,7 +944,7 @@ type CloseConnectionsRequest struct {
 
 func (x *CloseConnectionsRequest) Reset() {
 	*x = CloseConnectionsRequest{}
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[7]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -732,7 +956,7 @@ func (x *CloseConnectionsRequest) String() string {
 func (*CloseConnectionsRequest) ProtoMessage() {}
 
 func (x *CloseConnectionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[7]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -745,7 +969,7 @@ func (x *CloseConnectionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloseConnectionsRequest.ProtoReflect.Descriptor instead.
 func (*CloseConnectionsRequest) Descriptor() ([]byte, []int) {
-	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{7}
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *CloseConnectionsRequest) GetSandboxId() string {
@@ -785,7 +1009,7 @@ type DialFrame struct {
 
 func (x *DialFrame) Reset() {
 	*x = DialFrame{}
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[8]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -797,7 +1021,7 @@ func (x *DialFrame) String() string {
 func (*DialFrame) ProtoMessage() {}
 
 func (x *DialFrame) ProtoReflect() protoreflect.Message {
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[8]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -810,7 +1034,7 @@ func (x *DialFrame) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DialFrame.ProtoReflect.Descriptor instead.
 func (*DialFrame) Descriptor() ([]byte, []int) {
-	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{8}
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *DialFrame) GetSandboxId() string {
@@ -851,7 +1075,7 @@ type CloseConnectionsResponse struct {
 
 func (x *CloseConnectionsResponse) Reset() {
 	*x = CloseConnectionsResponse{}
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[9]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -863,7 +1087,7 @@ func (x *CloseConnectionsResponse) String() string {
 func (*CloseConnectionsResponse) ProtoMessage() {}
 
 func (x *CloseConnectionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[9]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -876,7 +1100,7 @@ func (x *CloseConnectionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloseConnectionsResponse.ProtoReflect.Descriptor instead.
 func (*CloseConnectionsResponse) Descriptor() ([]byte, []int) {
-	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{9}
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *CloseConnectionsResponse) GetClosed() uint32 {
@@ -894,7 +1118,7 @@ type NodeInfoRequest struct {
 
 func (x *NodeInfoRequest) Reset() {
 	*x = NodeInfoRequest{}
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[10]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -906,7 +1130,7 @@ func (x *NodeInfoRequest) String() string {
 func (*NodeInfoRequest) ProtoMessage() {}
 
 func (x *NodeInfoRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[10]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -919,7 +1143,7 @@ func (x *NodeInfoRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NodeInfoRequest.ProtoReflect.Descriptor instead.
 func (*NodeInfoRequest) Descriptor() ([]byte, []int) {
-	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{10}
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{11}
 }
 
 type NodeInfoResponse struct {
@@ -933,16 +1157,25 @@ type NodeInfoResponse struct {
 	// For example "v1.17.0".
 	FirecrackerVersion string `protobuf:"bytes,6,opt,name=firecracker_version,json=firecrackerVersion,proto3" json:"firecracker_version,omitempty"`
 	// Host kernel release.
-	HostKernel    string `protobuf:"bytes,7,opt,name=host_kernel,json=hostKernel,proto3" json:"host_kernel,omitempty"`
-	AgentVersion  string `protobuf:"bytes,8,opt,name=agent_version,json=agentVersion,proto3" json:"agent_version,omitempty"`
-	DiskFreeMib   uint64 `protobuf:"varint,9,opt,name=disk_free_mib,json=diskFreeMib,proto3" json:"disk_free_mib,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	HostKernel    string              `protobuf:"bytes,7,opt,name=host_kernel,json=hostKernel,proto3" json:"host_kernel,omitempty"`
+	AgentVersion  string              `protobuf:"bytes,8,opt,name=agent_version,json=agentVersion,proto3" json:"agent_version,omitempty"`
+	DiskFreeMib   uint64              `protobuf:"varint,9,opt,name=disk_free_mib,json=diskFreeMib,proto3" json:"disk_free_mib,omitempty"`
+	ManagedImages []*ManagedImageInfo `protobuf:"bytes,10,rep,name=managed_images,json=managedImages,proto3" json:"managed_images,omitempty"`
+	// Memory admission and drain (ENG-4569). Create needs
+	// mem_available_mib >= mem_starting_mib + mem_mib + mem_reserve_mib.
+	// The memory reserve (--min-free-mem-mib).
+	MemReserveMib uint64 `protobuf:"varint,11,opt,name=mem_reserve_mib,json=memReserveMib,proto3" json:"mem_reserve_mib,omitempty"`
+	// Guest memory of the VMs that are starting. Their memory is not in
+	// mem_available_mib yet, so Create counts it.
+	MemStartingMib uint64       `protobuf:"varint,12,opt,name=mem_starting_mib,json=memStartingMib,proto3" json:"mem_starting_mib,omitempty"`
+	Drain          *DrainStatus `protobuf:"bytes,13,opt,name=drain,proto3" json:"drain,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *NodeInfoResponse) Reset() {
 	*x = NodeInfoResponse{}
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[11]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -954,7 +1187,7 @@ func (x *NodeInfoResponse) String() string {
 func (*NodeInfoResponse) ProtoMessage() {}
 
 func (x *NodeInfoResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[11]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -967,7 +1200,7 @@ func (x *NodeInfoResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NodeInfoResponse.ProtoReflect.Descriptor instead.
 func (*NodeInfoResponse) Descriptor() ([]byte, []int) {
-	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{11}
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *NodeInfoResponse) GetMemTotalMib() uint64 {
@@ -1033,6 +1266,205 @@ func (x *NodeInfoResponse) GetDiskFreeMib() uint64 {
 	return 0
 }
 
+func (x *NodeInfoResponse) GetManagedImages() []*ManagedImageInfo {
+	if x != nil {
+		return x.ManagedImages
+	}
+	return nil
+}
+
+func (x *NodeInfoResponse) GetMemReserveMib() uint64 {
+	if x != nil {
+		return x.MemReserveMib
+	}
+	return 0
+}
+
+func (x *NodeInfoResponse) GetMemStartingMib() uint64 {
+	if x != nil {
+		return x.MemStartingMib
+	}
+	return 0
+}
+
+func (x *NodeInfoResponse) GetDrain() *DrainStatus {
+	if x != nil {
+		return x.Drain
+	}
+	return nil
+}
+
+type DrainStatus struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	State DrainState             `protobuf:"varint,1,opt,name=state,proto3,enum=craft.hostagent.v1.DrainState" json:"state,omitempty"`
+	// True when the manual drain flag (SetDrain) is set.
+	Manual bool `protobuf:"varint,2,opt,name=manual,proto3" json:"manual,omitempty"`
+	// The drain taints on the node, as "key=value:effect" (value may be
+	// empty), from the last node read.
+	Taints []string `protobuf:"bytes,3,rep,name=taints,proto3" json:"taints,omitempty"`
+	// When the node started to drain. Not set while it is active.
+	Since *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=since,proto3" json:"since,omitempty"`
+	// The error of the last node read, if it failed. The agent then keeps
+	// the taints of the last read that worked.
+	WatchError    string `protobuf:"bytes,5,opt,name=watch_error,json=watchError,proto3" json:"watch_error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DrainStatus) Reset() {
+	*x = DrainStatus{}
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DrainStatus) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DrainStatus) ProtoMessage() {}
+
+func (x *DrainStatus) ProtoReflect() protoreflect.Message {
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DrainStatus.ProtoReflect.Descriptor instead.
+func (*DrainStatus) Descriptor() ([]byte, []int) {
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *DrainStatus) GetState() DrainState {
+	if x != nil {
+		return x.State
+	}
+	return DrainState_DRAIN_STATE_UNSPECIFIED
+}
+
+func (x *DrainStatus) GetManual() bool {
+	if x != nil {
+		return x.Manual
+	}
+	return false
+}
+
+func (x *DrainStatus) GetTaints() []string {
+	if x != nil {
+		return x.Taints
+	}
+	return nil
+}
+
+func (x *DrainStatus) GetSince() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Since
+	}
+	return nil
+}
+
+func (x *DrainStatus) GetWatchError() string {
+	if x != nil {
+		return x.WatchError
+	}
+	return ""
+}
+
+type SetDrainRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// True sets the manual drain flag, false clears it.
+	Drain         bool `protobuf:"varint,1,opt,name=drain,proto3" json:"drain,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetDrainRequest) Reset() {
+	*x = SetDrainRequest{}
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetDrainRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetDrainRequest) ProtoMessage() {}
+
+func (x *SetDrainRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetDrainRequest.ProtoReflect.Descriptor instead.
+func (*SetDrainRequest) Descriptor() ([]byte, []int) {
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *SetDrainRequest) GetDrain() bool {
+	if x != nil {
+		return x.Drain
+	}
+	return false
+}
+
+type SetDrainResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Drain         *DrainStatus           `protobuf:"bytes,1,opt,name=drain,proto3" json:"drain,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetDrainResponse) Reset() {
+	*x = SetDrainResponse{}
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetDrainResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetDrainResponse) ProtoMessage() {}
+
+func (x *SetDrainResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetDrainResponse.ProtoReflect.Descriptor instead.
+func (*SetDrainResponse) Descriptor() ([]byte, []int) {
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *SetDrainResponse) GetDrain() *DrainStatus {
+	if x != nil {
+		return x.Drain
+	}
+	return nil
+}
+
 type TemplateInfo struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	Version    string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
@@ -1042,13 +1474,31 @@ type TemplateInfo struct {
 	// Guest kernel release.
 	GuestKernel        string `protobuf:"bytes,5,opt,name=guest_kernel,json=guestKernel,proto3" json:"guest_kernel,omitempty"`
 	FirecrackerVersion string `protobuf:"bytes,6,opt,name=firecracker_version,json=firecrackerVersion,proto3" json:"firecracker_version,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Source image of the root drive, for example "onyxdotapp/sandbox:v5.1.0".
+	ImageRef     string `protobuf:"bytes,7,opt,name=image_ref,json=imageRef,proto3" json:"image_ref,omitempty"`
+	ImageDigest  string `protobuf:"bytes,8,opt,name=image_digest,json=imageDigest,proto3" json:"image_digest,omitempty"`
+	RootfsSha256 string `protobuf:"bytes,9,opt,name=rootfs_sha256,json=rootfsSha256,proto3" json:"rootfs_sha256,omitempty"`
+	// SHA256 of the template key (manifest.json "key").
+	KeySha256     string                 `protobuf:"bytes,10,opt,name=key_sha256,json=keySha256,proto3" json:"key_sha256,omitempty"`
+	CaFingerprint string                 `protobuf:"bytes,11,opt,name=ca_fingerprint,json=caFingerprint,proto3" json:"ca_fingerprint,omitempty"`
+	BuiltAt       *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=built_at,json=builtAt,proto3" json:"built_at,omitempty"`
+	// True when the template key fits this node. Create refuses the others
+	// with TEMPLATE_INCOMPATIBLE.
+	Compatible bool `protobuf:"varint,13,opt,name=compatible,proto3" json:"compatible,omitempty"`
+	// Managed drive slots of the template's VMs: 2 (layout 3 and later, the VMs can
+	// swap the managed drive) or 1.
+	ManagedSlots uint32 `protobuf:"varint,14,opt,name=managed_slots,json=managedSlots,proto3" json:"managed_slots,omitempty"`
+	// True when the template VMs have the balloon device with free page
+	// reporting (layout 4 and later, ENG-4569): the guest returns free
+	// memory to the node.
+	Balloon       bool `protobuf:"varint,15,opt,name=balloon,proto3" json:"balloon,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *TemplateInfo) Reset() {
 	*x = TemplateInfo{}
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[12]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1060,7 +1510,7 @@ func (x *TemplateInfo) String() string {
 func (*TemplateInfo) ProtoMessage() {}
 
 func (x *TemplateInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[12]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1073,7 +1523,7 @@ func (x *TemplateInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TemplateInfo.ProtoReflect.Descriptor instead.
 func (*TemplateInfo) Descriptor() ([]byte, []int) {
-	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{12}
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *TemplateInfo) GetVersion() string {
@@ -1118,6 +1568,769 @@ func (x *TemplateInfo) GetFirecrackerVersion() string {
 	return ""
 }
 
+func (x *TemplateInfo) GetImageRef() string {
+	if x != nil {
+		return x.ImageRef
+	}
+	return ""
+}
+
+func (x *TemplateInfo) GetImageDigest() string {
+	if x != nil {
+		return x.ImageDigest
+	}
+	return ""
+}
+
+func (x *TemplateInfo) GetRootfsSha256() string {
+	if x != nil {
+		return x.RootfsSha256
+	}
+	return ""
+}
+
+func (x *TemplateInfo) GetKeySha256() string {
+	if x != nil {
+		return x.KeySha256
+	}
+	return ""
+}
+
+func (x *TemplateInfo) GetCaFingerprint() string {
+	if x != nil {
+		return x.CaFingerprint
+	}
+	return ""
+}
+
+func (x *TemplateInfo) GetBuiltAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.BuiltAt
+	}
+	return nil
+}
+
+func (x *TemplateInfo) GetCompatible() bool {
+	if x != nil {
+		return x.Compatible
+	}
+	return false
+}
+
+func (x *TemplateInfo) GetManagedSlots() uint32 {
+	if x != nil {
+		return x.ManagedSlots
+	}
+	return 0
+}
+
+func (x *TemplateInfo) GetBalloon() bool {
+	if x != nil {
+		return x.Balloon
+	}
+	return false
+}
+
+type BuildTemplateRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BuildTemplateRequest) Reset() {
+	*x = BuildTemplateRequest{}
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BuildTemplateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BuildTemplateRequest) ProtoMessage() {}
+
+func (x *BuildTemplateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BuildTemplateRequest.ProtoReflect.Descriptor instead.
+func (*BuildTemplateRequest) Descriptor() ([]byte, []int) {
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{17}
+}
+
+type BuildTemplateResponse struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Template *TemplateInfo          `protobuf:"bytes,1,opt,name=template,proto3" json:"template,omitempty"`
+	// False when a valid template for the key was already on the node.
+	Built bool `protobuf:"varint,2,opt,name=built,proto3" json:"built,omitempty"`
+	// Build time; 0 when built is false.
+	BuildMs uint64 `protobuf:"varint,3,opt,name=build_ms,json=buildMs,proto3" json:"build_ms,omitempty"`
+	// Templates that the garbage collection removed.
+	Removed       []string `protobuf:"bytes,4,rep,name=removed,proto3" json:"removed,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BuildTemplateResponse) Reset() {
+	*x = BuildTemplateResponse{}
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BuildTemplateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BuildTemplateResponse) ProtoMessage() {}
+
+func (x *BuildTemplateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BuildTemplateResponse.ProtoReflect.Descriptor instead.
+func (*BuildTemplateResponse) Descriptor() ([]byte, []int) {
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *BuildTemplateResponse) GetTemplate() *TemplateInfo {
+	if x != nil {
+		return x.Template
+	}
+	return nil
+}
+
+func (x *BuildTemplateResponse) GetBuilt() bool {
+	if x != nil {
+		return x.Built
+	}
+	return false
+}
+
+func (x *BuildTemplateResponse) GetBuildMs() uint64 {
+	if x != nil {
+		return x.BuildMs
+	}
+	return 0
+}
+
+func (x *BuildTemplateResponse) GetRemoved() []string {
+	if x != nil {
+		return x.Removed
+	}
+	return nil
+}
+
+type PutManagedImageRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Part:
+	//
+	//	*PutManagedImageRequest_Header
+	//	*PutManagedImageRequest_Data
+	Part          isPutManagedImageRequest_Part `protobuf_oneof:"part"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PutManagedImageRequest) Reset() {
+	*x = PutManagedImageRequest{}
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PutManagedImageRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PutManagedImageRequest) ProtoMessage() {}
+
+func (x *PutManagedImageRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PutManagedImageRequest.ProtoReflect.Descriptor instead.
+func (*PutManagedImageRequest) Descriptor() ([]byte, []int) {
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *PutManagedImageRequest) GetPart() isPutManagedImageRequest_Part {
+	if x != nil {
+		return x.Part
+	}
+	return nil
+}
+
+func (x *PutManagedImageRequest) GetHeader() *ManagedBundleHeader {
+	if x != nil {
+		if x, ok := x.Part.(*PutManagedImageRequest_Header); ok {
+			return x.Header
+		}
+	}
+	return nil
+}
+
+func (x *PutManagedImageRequest) GetData() []byte {
+	if x != nil {
+		if x, ok := x.Part.(*PutManagedImageRequest_Data); ok {
+			return x.Data
+		}
+	}
+	return nil
+}
+
+type isPutManagedImageRequest_Part interface {
+	isPutManagedImageRequest_Part()
+}
+
+type PutManagedImageRequest_Header struct {
+	// The first message.
+	Header *ManagedBundleHeader `protobuf:"bytes,1,opt,name=header,proto3,oneof"`
+}
+
+type PutManagedImageRequest_Data struct {
+	// Every later message: the next bytes of the zip (at most 4 MiB each).
+	Data []byte `protobuf:"bytes,2,opt,name=data,proto3,oneof"`
+}
+
+func (*PutManagedImageRequest_Header) isPutManagedImageRequest_Part() {}
+
+func (*PutManagedImageRequest_Data) isPutManagedImageRequest_Part() {}
+
+type ManagedBundleHeader struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// SHA256 of the whole zip, 64 lowercase hex characters. It is the image ID.
+	Sha256 string `protobuf:"bytes,1,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	// Size of the zip in bytes.
+	SizeBytes     uint64 `protobuf:"varint,2,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ManagedBundleHeader) Reset() {
+	*x = ManagedBundleHeader{}
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ManagedBundleHeader) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ManagedBundleHeader) ProtoMessage() {}
+
+func (x *ManagedBundleHeader) ProtoReflect() protoreflect.Message {
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ManagedBundleHeader.ProtoReflect.Descriptor instead.
+func (*ManagedBundleHeader) Descriptor() ([]byte, []int) {
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *ManagedBundleHeader) GetSha256() string {
+	if x != nil {
+		return x.Sha256
+	}
+	return ""
+}
+
+func (x *ManagedBundleHeader) GetSizeBytes() uint64 {
+	if x != nil {
+		return x.SizeBytes
+	}
+	return 0
+}
+
+type PutManagedImageResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Image *ManagedImageInfo      `protobuf:"bytes,1,opt,name=image,proto3" json:"image,omitempty"`
+	// False when the image was already on the node.
+	Built bool `protobuf:"varint,2,opt,name=built,proto3" json:"built,omitempty"`
+	// Unzip + mkfs time; 0 when built is false.
+	BuildMs uint64 `protobuf:"varint,3,opt,name=build_ms,json=buildMs,proto3" json:"build_ms,omitempty"`
+	// Images that the garbage collection removed.
+	Removed       []string `protobuf:"bytes,4,rep,name=removed,proto3" json:"removed,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PutManagedImageResponse) Reset() {
+	*x = PutManagedImageResponse{}
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PutManagedImageResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PutManagedImageResponse) ProtoMessage() {}
+
+func (x *PutManagedImageResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PutManagedImageResponse.ProtoReflect.Descriptor instead.
+func (*PutManagedImageResponse) Descriptor() ([]byte, []int) {
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *PutManagedImageResponse) GetImage() *ManagedImageInfo {
+	if x != nil {
+		return x.Image
+	}
+	return nil
+}
+
+func (x *PutManagedImageResponse) GetBuilt() bool {
+	if x != nil {
+		return x.Built
+	}
+	return false
+}
+
+func (x *PutManagedImageResponse) GetBuildMs() uint64 {
+	if x != nil {
+		return x.BuildMs
+	}
+	return 0
+}
+
+func (x *PutManagedImageResponse) GetRemoved() []string {
+	if x != nil {
+		return x.Removed
+	}
+	return nil
+}
+
+type ManagedImageInfo struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// SHA256 of the bundle zip.
+	ImageId string `protobuf:"bytes,1,opt,name=image_id,json=imageId,proto3" json:"image_id,omitempty"`
+	// SHA256 and size of the ext4 image file.
+	ImageSha256 string `protobuf:"bytes,2,opt,name=image_sha256,json=imageSha256,proto3" json:"image_sha256,omitempty"`
+	SizeBytes   uint64 `protobuf:"varint,3,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	// ext4 UUID. The agent derives it from the image ID; the guest daemon
+	// checks it before it mounts the drive.
+	FsUuid string `protobuf:"bytes,4,opt,name=fs_uuid,json=fsUuid,proto3" json:"fs_uuid,omitempty"`
+	// Regular files and their total size in the bundle.
+	Files        uint32                 `protobuf:"varint,5,opt,name=files,proto3" json:"files,omitempty"`
+	ContentBytes uint64                 `protobuf:"varint,6,opt,name=content_bytes,json=contentBytes,proto3" json:"content_bytes,omitempty"`
+	BuiltAt      *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=built_at,json=builtAt,proto3" json:"built_at,omitempty"`
+	// VMs on this node that have the image behind a slot.
+	Vms           uint32 `protobuf:"varint,8,opt,name=vms,proto3" json:"vms,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ManagedImageInfo) Reset() {
+	*x = ManagedImageInfo{}
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ManagedImageInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ManagedImageInfo) ProtoMessage() {}
+
+func (x *ManagedImageInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ManagedImageInfo.ProtoReflect.Descriptor instead.
+func (*ManagedImageInfo) Descriptor() ([]byte, []int) {
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *ManagedImageInfo) GetImageId() string {
+	if x != nil {
+		return x.ImageId
+	}
+	return ""
+}
+
+func (x *ManagedImageInfo) GetImageSha256() string {
+	if x != nil {
+		return x.ImageSha256
+	}
+	return ""
+}
+
+func (x *ManagedImageInfo) GetSizeBytes() uint64 {
+	if x != nil {
+		return x.SizeBytes
+	}
+	return 0
+}
+
+func (x *ManagedImageInfo) GetFsUuid() string {
+	if x != nil {
+		return x.FsUuid
+	}
+	return ""
+}
+
+func (x *ManagedImageInfo) GetFiles() uint32 {
+	if x != nil {
+		return x.Files
+	}
+	return 0
+}
+
+func (x *ManagedImageInfo) GetContentBytes() uint64 {
+	if x != nil {
+		return x.ContentBytes
+	}
+	return 0
+}
+
+func (x *ManagedImageInfo) GetBuiltAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.BuiltAt
+	}
+	return nil
+}
+
+func (x *ManagedImageInfo) GetVms() uint32 {
+	if x != nil {
+		return x.Vms
+	}
+	return 0
+}
+
+type SwapManagedRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// A managed image on this node (PutManagedImage).
+	ImageId string `protobuf:"bytes,1,opt,name=image_id,json=imageId,proto3" json:"image_id,omitempty"`
+	// The VMs, swapped one at a time in this order. At most 1000, no
+	// sandbox twice.
+	Targets       []*SwapTarget `protobuf:"bytes,2,rep,name=targets,proto3" json:"targets,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SwapManagedRequest) Reset() {
+	*x = SwapManagedRequest{}
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SwapManagedRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SwapManagedRequest) ProtoMessage() {}
+
+func (x *SwapManagedRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SwapManagedRequest.ProtoReflect.Descriptor instead.
+func (*SwapManagedRequest) Descriptor() ([]byte, []int) {
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *SwapManagedRequest) GetImageId() string {
+	if x != nil {
+		return x.ImageId
+	}
+	return ""
+}
+
+func (x *SwapManagedRequest) GetTargets() []*SwapTarget {
+	if x != nil {
+		return x.Targets
+	}
+	return nil
+}
+
+type SwapTarget struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	SandboxId  string                 `protobuf:"bytes,1,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
+	Attempt    uint64                 `protobuf:"varint,2,opt,name=attempt,proto3" json:"attempt,omitempty"`
+	Generation uint64                 `protobuf:"varint,3,opt,name=generation,proto3" json:"generation,omitempty"`
+	// The VM's guest daemon key (CreateRequest.sandboxd_key). The agent does
+	// not keep it, so the caller sends it again. The agent calls the guest
+	// daemon (ManagedStatus, MountManaged) with it.
+	SandboxdKey   string `protobuf:"bytes,4,opt,name=sandboxd_key,json=sandboxdKey,proto3" json:"sandboxd_key,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SwapTarget) Reset() {
+	*x = SwapTarget{}
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SwapTarget) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SwapTarget) ProtoMessage() {}
+
+func (x *SwapTarget) ProtoReflect() protoreflect.Message {
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SwapTarget.ProtoReflect.Descriptor instead.
+func (*SwapTarget) Descriptor() ([]byte, []int) {
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *SwapTarget) GetSandboxId() string {
+	if x != nil {
+		return x.SandboxId
+	}
+	return ""
+}
+
+func (x *SwapTarget) GetAttempt() uint64 {
+	if x != nil {
+		return x.Attempt
+	}
+	return 0
+}
+
+func (x *SwapTarget) GetGeneration() uint64 {
+	if x != nil {
+		return x.Generation
+	}
+	return 0
+}
+
+func (x *SwapTarget) GetSandboxdKey() string {
+	if x != nil {
+		return x.SandboxdKey
+	}
+	return ""
+}
+
+type SwapManagedResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// One result per target, in request order.
+	Results       []*SwapResult `protobuf:"bytes,1,rep,name=results,proto3" json:"results,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SwapManagedResponse) Reset() {
+	*x = SwapManagedResponse{}
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SwapManagedResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SwapManagedResponse) ProtoMessage() {}
+
+func (x *SwapManagedResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SwapManagedResponse.ProtoReflect.Descriptor instead.
+func (*SwapManagedResponse) Descriptor() ([]byte, []int) {
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *SwapManagedResponse) GetResults() []*SwapResult {
+	if x != nil {
+		return x.Results
+	}
+	return nil
+}
+
+type SwapResult struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	SandboxId string                 `protobuf:"bytes,1,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
+	Ok        bool                   `protobuf:"varint,2,opt,name=ok,proto3" json:"ok,omitempty"`
+	// Set when ok is false: the error reason and message.
+	Reason  ErrorReason `protobuf:"varint,3,opt,name=reason,proto3,enum=craft.hostagent.v1.ErrorReason" json:"reason,omitempty"`
+	Message string      `protobuf:"bytes,4,opt,name=message,proto3" json:"message,omitempty"`
+	// The slot on /workspace/managed after the call.
+	Active ManagedSlot `protobuf:"varint,5,opt,name=active,proto3,enum=craft.hostagent.v1.ManagedSlot" json:"active,omitempty"`
+	// False when the image was already the active one.
+	Changed bool `protobuf:"varint,6,opt,name=changed,proto3" json:"changed,omitempty"`
+	// Time for this VM, in milliseconds.
+	Ms uint64 `protobuf:"varint,7,opt,name=ms,proto3" json:"ms,omitempty"`
+	// True when a guest process still has a file open on the old drive. The
+	// old drive stays readable for it; the next swap of this VM gets
+	// MANAGED_SLOT_BUSY until the file is closed.
+	PreviousInUse bool `protobuf:"varint,8,opt,name=previous_in_use,json=previousInUse,proto3" json:"previous_in_use,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SwapResult) Reset() {
+	*x = SwapResult{}
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SwapResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SwapResult) ProtoMessage() {}
+
+func (x *SwapResult) ProtoReflect() protoreflect.Message {
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SwapResult.ProtoReflect.Descriptor instead.
+func (*SwapResult) Descriptor() ([]byte, []int) {
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *SwapResult) GetSandboxId() string {
+	if x != nil {
+		return x.SandboxId
+	}
+	return ""
+}
+
+func (x *SwapResult) GetOk() bool {
+	if x != nil {
+		return x.Ok
+	}
+	return false
+}
+
+func (x *SwapResult) GetReason() ErrorReason {
+	if x != nil {
+		return x.Reason
+	}
+	return ErrorReason_ERROR_REASON_UNSPECIFIED
+}
+
+func (x *SwapResult) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *SwapResult) GetActive() ManagedSlot {
+	if x != nil {
+		return x.Active
+	}
+	return ManagedSlot_MANAGED_SLOT_UNSPECIFIED
+}
+
+func (x *SwapResult) GetChanged() bool {
+	if x != nil {
+		return x.Changed
+	}
+	return false
+}
+
+func (x *SwapResult) GetMs() uint64 {
+	if x != nil {
+		return x.Ms
+	}
+	return 0
+}
+
+func (x *SwapResult) GetPreviousInUse() bool {
+	if x != nil {
+		return x.PreviousInUse
+	}
+	return false
+}
+
 var File_hostagent_v1_hostagent_proto protoreflect.FileDescriptor
 
 const file_hostagent_v1_hostagent_proto_rawDesc = "" +
@@ -1148,7 +2361,7 @@ const file_hostagent_v1_hostagent_proto_rawDesc = "" +
 	"\x0falready_stopped\x18\x01 \x01(\bR\x0ealreadyStopped\"\r\n" +
 	"\vListRequest\"8\n" +
 	"\fListResponse\x12(\n" +
-	"\x03vms\x18\x01 \x03(\v2\x16.craft.hostagent.v1.VMR\x03vms\"\xf8\x02\n" +
+	"\x03vms\x18\x01 \x03(\v2\x16.craft.hostagent.v1.VMR\x03vms\"\xb4\x03\n" +
 	"\x02VM\x12\x1d\n" +
 	"\n" +
 	"sandbox_id\x18\x01 \x01(\tR\tsandboxId\x12\x18\n" +
@@ -1167,7 +2380,15 @@ const file_hostagent_v1_hostagent_proto_rawDesc = "" +
 	" \x01(\rR\x03uid\x129\n" +
 	"\n" +
 	"started_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\x12\x1b\n" +
-	"\ttenant_id\x18\f \x01(\tR\btenantId\"r\n" +
+	"\ttenant_id\x18\f \x01(\tR\btenantId\x12:\n" +
+	"\amanaged\x18\r \x01(\v2 .craft.hostagent.v1.ManagedStateR\amanaged\"\xa1\x01\n" +
+	"\fManagedState\x12\x14\n" +
+	"\x05slots\x18\x01 \x01(\rR\x05slots\x127\n" +
+	"\x06active\x18\x02 \x01(\x0e2\x1f.craft.hostagent.v1.ManagedSlotR\x06active\x12 \n" +
+	"\fslot_a_image\x18\x03 \x01(\tR\n" +
+	"slotAImage\x12 \n" +
+	"\fslot_b_image\x18\x04 \x01(\tR\n" +
+	"slotBImage\"r\n" +
 	"\x17CloseConnectionsRequest\x12\x1d\n" +
 	"\n" +
 	"sandbox_id\x18\x01 \x01(\tR\tsandboxId\x12\x18\n" +
@@ -1186,7 +2407,7 @@ const file_hostagent_v1_hostagent_proto_rawDesc = "" +
 	"generation\"2\n" +
 	"\x18CloseConnectionsResponse\x12\x16\n" +
 	"\x06closed\x18\x01 \x01(\rR\x06closed\"\x11\n" +
-	"\x0fNodeInfoRequest\"\xf5\x02\n" +
+	"\x0fNodeInfoRequest\"\xcb\x04\n" +
 	"\x10NodeInfoResponse\x12\"\n" +
 	"\rmem_total_mib\x18\x01 \x01(\x04R\vmemTotalMib\x12*\n" +
 	"\x11mem_available_mib\x18\x02 \x01(\x04R\x0fmemAvailableMib\x12\x19\n" +
@@ -1197,7 +2418,23 @@ const file_hostagent_v1_hostagent_proto_rawDesc = "" +
 	"\vhost_kernel\x18\a \x01(\tR\n" +
 	"hostKernel\x12#\n" +
 	"\ragent_version\x18\b \x01(\tR\fagentVersion\x12\"\n" +
-	"\rdisk_free_mib\x18\t \x01(\x04R\vdiskFreeMib\"\xcc\x01\n" +
+	"\rdisk_free_mib\x18\t \x01(\x04R\vdiskFreeMib\x12K\n" +
+	"\x0emanaged_images\x18\n" +
+	" \x03(\v2$.craft.hostagent.v1.ManagedImageInfoR\rmanagedImages\x12&\n" +
+	"\x0fmem_reserve_mib\x18\v \x01(\x04R\rmemReserveMib\x12(\n" +
+	"\x10mem_starting_mib\x18\f \x01(\x04R\x0ememStartingMib\x125\n" +
+	"\x05drain\x18\r \x01(\v2\x1f.craft.hostagent.v1.DrainStatusR\x05drain\"\xc6\x01\n" +
+	"\vDrainStatus\x124\n" +
+	"\x05state\x18\x01 \x01(\x0e2\x1e.craft.hostagent.v1.DrainStateR\x05state\x12\x16\n" +
+	"\x06manual\x18\x02 \x01(\bR\x06manual\x12\x16\n" +
+	"\x06taints\x18\x03 \x03(\tR\x06taints\x120\n" +
+	"\x05since\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x05since\x12\x1f\n" +
+	"\vwatch_error\x18\x05 \x01(\tR\n" +
+	"watchError\"'\n" +
+	"\x0fSetDrainRequest\x12\x14\n" +
+	"\x05drain\x18\x01 \x01(\bR\x05drain\"I\n" +
+	"\x10SetDrainResponse\x125\n" +
+	"\x05drain\x18\x01 \x01(\v2\x1f.craft.hostagent.v1.DrainStatusR\x05drain\"\x8d\x04\n" +
 	"\fTemplateInfo\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x14\n" +
 	"\x05vcpus\x18\x02 \x01(\rR\x05vcpus\x12\x17\n" +
@@ -1205,7 +2442,74 @@ const file_hostagent_v1_hostagent_proto_rawDesc = "" +
 	"\vscratch_gib\x18\x04 \x01(\rR\n" +
 	"scratchGib\x12!\n" +
 	"\fguest_kernel\x18\x05 \x01(\tR\vguestKernel\x12/\n" +
-	"\x13firecracker_version\x18\x06 \x01(\tR\x12firecrackerVersion*\x88\x04\n" +
+	"\x13firecracker_version\x18\x06 \x01(\tR\x12firecrackerVersion\x12\x1b\n" +
+	"\timage_ref\x18\a \x01(\tR\bimageRef\x12!\n" +
+	"\fimage_digest\x18\b \x01(\tR\vimageDigest\x12#\n" +
+	"\rrootfs_sha256\x18\t \x01(\tR\frootfsSha256\x12\x1d\n" +
+	"\n" +
+	"key_sha256\x18\n" +
+	" \x01(\tR\tkeySha256\x12%\n" +
+	"\x0eca_fingerprint\x18\v \x01(\tR\rcaFingerprint\x125\n" +
+	"\bbuilt_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\abuiltAt\x12\x1e\n" +
+	"\n" +
+	"compatible\x18\r \x01(\bR\n" +
+	"compatible\x12#\n" +
+	"\rmanaged_slots\x18\x0e \x01(\rR\fmanagedSlots\x12\x18\n" +
+	"\aballoon\x18\x0f \x01(\bR\aballoon\"\x16\n" +
+	"\x14BuildTemplateRequest\"\xa0\x01\n" +
+	"\x15BuildTemplateResponse\x12<\n" +
+	"\btemplate\x18\x01 \x01(\v2 .craft.hostagent.v1.TemplateInfoR\btemplate\x12\x14\n" +
+	"\x05built\x18\x02 \x01(\bR\x05built\x12\x19\n" +
+	"\bbuild_ms\x18\x03 \x01(\x04R\abuildMs\x12\x18\n" +
+	"\aremoved\x18\x04 \x03(\tR\aremoved\"y\n" +
+	"\x16PutManagedImageRequest\x12A\n" +
+	"\x06header\x18\x01 \x01(\v2'.craft.hostagent.v1.ManagedBundleHeaderH\x00R\x06header\x12\x14\n" +
+	"\x04data\x18\x02 \x01(\fH\x00R\x04dataB\x06\n" +
+	"\x04part\"L\n" +
+	"\x13ManagedBundleHeader\x12\x16\n" +
+	"\x06sha256\x18\x01 \x01(\tR\x06sha256\x12\x1d\n" +
+	"\n" +
+	"size_bytes\x18\x02 \x01(\x04R\tsizeBytes\"\xa0\x01\n" +
+	"\x17PutManagedImageResponse\x12:\n" +
+	"\x05image\x18\x01 \x01(\v2$.craft.hostagent.v1.ManagedImageInfoR\x05image\x12\x14\n" +
+	"\x05built\x18\x02 \x01(\bR\x05built\x12\x19\n" +
+	"\bbuild_ms\x18\x03 \x01(\x04R\abuildMs\x12\x18\n" +
+	"\aremoved\x18\x04 \x03(\tR\aremoved\"\x8c\x02\n" +
+	"\x10ManagedImageInfo\x12\x19\n" +
+	"\bimage_id\x18\x01 \x01(\tR\aimageId\x12!\n" +
+	"\fimage_sha256\x18\x02 \x01(\tR\vimageSha256\x12\x1d\n" +
+	"\n" +
+	"size_bytes\x18\x03 \x01(\x04R\tsizeBytes\x12\x17\n" +
+	"\afs_uuid\x18\x04 \x01(\tR\x06fsUuid\x12\x14\n" +
+	"\x05files\x18\x05 \x01(\rR\x05files\x12#\n" +
+	"\rcontent_bytes\x18\x06 \x01(\x04R\fcontentBytes\x125\n" +
+	"\bbuilt_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\abuiltAt\x12\x10\n" +
+	"\x03vms\x18\b \x01(\rR\x03vms\"i\n" +
+	"\x12SwapManagedRequest\x12\x19\n" +
+	"\bimage_id\x18\x01 \x01(\tR\aimageId\x128\n" +
+	"\atargets\x18\x02 \x03(\v2\x1e.craft.hostagent.v1.SwapTargetR\atargets\"\x88\x01\n" +
+	"\n" +
+	"SwapTarget\x12\x1d\n" +
+	"\n" +
+	"sandbox_id\x18\x01 \x01(\tR\tsandboxId\x12\x18\n" +
+	"\aattempt\x18\x02 \x01(\x04R\aattempt\x12\x1e\n" +
+	"\n" +
+	"generation\x18\x03 \x01(\x04R\n" +
+	"generation\x12!\n" +
+	"\fsandboxd_key\x18\x04 \x01(\tR\vsandboxdKey\"O\n" +
+	"\x13SwapManagedResponse\x128\n" +
+	"\aresults\x18\x01 \x03(\v2\x1e.craft.hostagent.v1.SwapResultR\aresults\"\x99\x02\n" +
+	"\n" +
+	"SwapResult\x12\x1d\n" +
+	"\n" +
+	"sandbox_id\x18\x01 \x01(\tR\tsandboxId\x12\x0e\n" +
+	"\x02ok\x18\x02 \x01(\bR\x02ok\x127\n" +
+	"\x06reason\x18\x03 \x01(\x0e2\x1f.craft.hostagent.v1.ErrorReasonR\x06reason\x12\x18\n" +
+	"\amessage\x18\x04 \x01(\tR\amessage\x127\n" +
+	"\x06active\x18\x05 \x01(\x0e2\x1f.craft.hostagent.v1.ManagedSlotR\x06active\x12\x18\n" +
+	"\achanged\x18\x06 \x01(\bR\achanged\x12\x0e\n" +
+	"\x02ms\x18\a \x01(\x04R\x02ms\x12&\n" +
+	"\x0fprevious_in_use\x18\b \x01(\bR\rpreviousInUse*\xa1\x05\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10INVALID_ARGUMENT\x10\x01\x12\x14\n" +
@@ -1232,19 +2536,39 @@ const file_hostagent_v1_hostagent_proto_rawDesc = "" +
 	"\n" +
 	"DIAL_LIMIT\x10\x14\x12\x16\n" +
 	"\x12METHOD_NOT_ALLOWED\x10\x15\x12\x16\n" +
-	"\x12GUEST_KEY_REJECTED\x10\x16*e\n" +
+	"\x12GUEST_KEY_REJECTED\x10\x16\x12\x19\n" +
+	"\x15MANAGED_IMAGE_MISSING\x10\x17\x12\x1a\n" +
+	"\x16MANAGED_BUNDLE_INVALID\x10\x18\x12\x1c\n" +
+	"\x18MANAGED_SWAP_UNSUPPORTED\x10\x19\x12\x15\n" +
+	"\x11MANAGED_SLOT_BUSY\x10\x1a\x12\x18\n" +
+	"\x14MANAGED_MOUNT_FAILED\x10\x1b\x12\x11\n" +
+	"\rNODE_DRAINING\x10\x1c*t\n" +
+	"\n" +
+	"DrainState\x12\x1b\n" +
+	"\x17DRAIN_STATE_UNSPECIFIED\x10\x00\x12\x16\n" +
+	"\x12DRAIN_STATE_ACTIVE\x10\x01\x12\x18\n" +
+	"\x14DRAIN_STATE_DRAINING\x10\x02\x12\x17\n" +
+	"\x13DRAIN_STATE_DRAINED\x10\x03*S\n" +
+	"\vManagedSlot\x12\x1c\n" +
+	"\x18MANAGED_SLOT_UNSPECIFIED\x10\x00\x12\x12\n" +
+	"\x0eMANAGED_SLOT_A\x10\x01\x12\x12\n" +
+	"\x0eMANAGED_SLOT_B\x10\x02*e\n" +
 	"\aVMState\x12\x18\n" +
 	"\x14VM_STATE_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11VM_STATE_STARTING\x10\x01\x12\x14\n" +
 	"\x10VM_STATE_RUNNING\x10\x02\x12\x13\n" +
-	"\x0fVM_STATE_EXITED\x10\x032\x82\x04\n" +
+	"\x0fVM_STATE_EXITED\x10\x032\x8d\a\n" +
 	"\tHostAgent\x12O\n" +
 	"\x06Create\x12!.craft.hostagent.v1.CreateRequest\x1a\".craft.hostagent.v1.CreateResponse\x12I\n" +
 	"\x04Stop\x12\x1f.craft.hostagent.v1.StopRequest\x1a .craft.hostagent.v1.StopResponse\x12I\n" +
 	"\x04List\x12\x1f.craft.hostagent.v1.ListRequest\x1a .craft.hostagent.v1.ListResponse\x12U\n" +
 	"\bNodeInfo\x12#.craft.hostagent.v1.NodeInfoRequest\x1a$.craft.hostagent.v1.NodeInfoResponse\x12m\n" +
 	"\x10CloseConnections\x12+.craft.hostagent.v1.CloseConnectionsRequest\x1a,.craft.hostagent.v1.CloseConnectionsResponse\x12H\n" +
-	"\x04Dial\x12\x1d.craft.hostagent.v1.DialFrame\x1a\x1d.craft.hostagent.v1.DialFrame(\x010\x01BEZCgithub.com/onyx-dot-app/onyx/microvm/proto/hostagent/v1;hostagentv1b\x06proto3"
+	"\x04Dial\x12\x1d.craft.hostagent.v1.DialFrame\x1a\x1d.craft.hostagent.v1.DialFrame(\x010\x01\x12d\n" +
+	"\rBuildTemplate\x12(.craft.hostagent.v1.BuildTemplateRequest\x1a).craft.hostagent.v1.BuildTemplateResponse\x12l\n" +
+	"\x0fPutManagedImage\x12*.craft.hostagent.v1.PutManagedImageRequest\x1a+.craft.hostagent.v1.PutManagedImageResponse(\x01\x12^\n" +
+	"\vSwapManaged\x12&.craft.hostagent.v1.SwapManagedRequest\x1a'.craft.hostagent.v1.SwapManagedResponse\x12U\n" +
+	"\bSetDrain\x12#.craft.hostagent.v1.SetDrainRequest\x1a$.craft.hostagent.v1.SetDrainResponseBEZCgithub.com/onyx-dot-app/onyx/microvm/proto/hostagent/v1;hostagentv1b\x06proto3"
 
 var (
 	file_hostagent_v1_hostagent_proto_rawDescOnce sync.Once
@@ -1258,49 +2582,89 @@ func file_hostagent_v1_hostagent_proto_rawDescGZIP() []byte {
 	return file_hostagent_v1_hostagent_proto_rawDescData
 }
 
-var file_hostagent_v1_hostagent_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_hostagent_v1_hostagent_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_hostagent_v1_hostagent_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_hostagent_v1_hostagent_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
 var file_hostagent_v1_hostagent_proto_goTypes = []any{
 	(ErrorReason)(0),                 // 0: craft.hostagent.v1.ErrorReason
-	(VMState)(0),                     // 1: craft.hostagent.v1.VMState
-	(*CreateRequest)(nil),            // 2: craft.hostagent.v1.CreateRequest
-	(*CreateResponse)(nil),           // 3: craft.hostagent.v1.CreateResponse
-	(*StopRequest)(nil),              // 4: craft.hostagent.v1.StopRequest
-	(*StopResponse)(nil),             // 5: craft.hostagent.v1.StopResponse
-	(*ListRequest)(nil),              // 6: craft.hostagent.v1.ListRequest
-	(*ListResponse)(nil),             // 7: craft.hostagent.v1.ListResponse
-	(*VM)(nil),                       // 8: craft.hostagent.v1.VM
-	(*CloseConnectionsRequest)(nil),  // 9: craft.hostagent.v1.CloseConnectionsRequest
-	(*DialFrame)(nil),                // 10: craft.hostagent.v1.DialFrame
-	(*CloseConnectionsResponse)(nil), // 11: craft.hostagent.v1.CloseConnectionsResponse
-	(*NodeInfoRequest)(nil),          // 12: craft.hostagent.v1.NodeInfoRequest
-	(*NodeInfoResponse)(nil),         // 13: craft.hostagent.v1.NodeInfoResponse
-	(*TemplateInfo)(nil),             // 14: craft.hostagent.v1.TemplateInfo
-	(*timestamppb.Timestamp)(nil),    // 15: google.protobuf.Timestamp
+	(DrainState)(0),                  // 1: craft.hostagent.v1.DrainState
+	(ManagedSlot)(0),                 // 2: craft.hostagent.v1.ManagedSlot
+	(VMState)(0),                     // 3: craft.hostagent.v1.VMState
+	(*CreateRequest)(nil),            // 4: craft.hostagent.v1.CreateRequest
+	(*CreateResponse)(nil),           // 5: craft.hostagent.v1.CreateResponse
+	(*StopRequest)(nil),              // 6: craft.hostagent.v1.StopRequest
+	(*StopResponse)(nil),             // 7: craft.hostagent.v1.StopResponse
+	(*ListRequest)(nil),              // 8: craft.hostagent.v1.ListRequest
+	(*ListResponse)(nil),             // 9: craft.hostagent.v1.ListResponse
+	(*VM)(nil),                       // 10: craft.hostagent.v1.VM
+	(*ManagedState)(nil),             // 11: craft.hostagent.v1.ManagedState
+	(*CloseConnectionsRequest)(nil),  // 12: craft.hostagent.v1.CloseConnectionsRequest
+	(*DialFrame)(nil),                // 13: craft.hostagent.v1.DialFrame
+	(*CloseConnectionsResponse)(nil), // 14: craft.hostagent.v1.CloseConnectionsResponse
+	(*NodeInfoRequest)(nil),          // 15: craft.hostagent.v1.NodeInfoRequest
+	(*NodeInfoResponse)(nil),         // 16: craft.hostagent.v1.NodeInfoResponse
+	(*DrainStatus)(nil),              // 17: craft.hostagent.v1.DrainStatus
+	(*SetDrainRequest)(nil),          // 18: craft.hostagent.v1.SetDrainRequest
+	(*SetDrainResponse)(nil),         // 19: craft.hostagent.v1.SetDrainResponse
+	(*TemplateInfo)(nil),             // 20: craft.hostagent.v1.TemplateInfo
+	(*BuildTemplateRequest)(nil),     // 21: craft.hostagent.v1.BuildTemplateRequest
+	(*BuildTemplateResponse)(nil),    // 22: craft.hostagent.v1.BuildTemplateResponse
+	(*PutManagedImageRequest)(nil),   // 23: craft.hostagent.v1.PutManagedImageRequest
+	(*ManagedBundleHeader)(nil),      // 24: craft.hostagent.v1.ManagedBundleHeader
+	(*PutManagedImageResponse)(nil),  // 25: craft.hostagent.v1.PutManagedImageResponse
+	(*ManagedImageInfo)(nil),         // 26: craft.hostagent.v1.ManagedImageInfo
+	(*SwapManagedRequest)(nil),       // 27: craft.hostagent.v1.SwapManagedRequest
+	(*SwapTarget)(nil),               // 28: craft.hostagent.v1.SwapTarget
+	(*SwapManagedResponse)(nil),      // 29: craft.hostagent.v1.SwapManagedResponse
+	(*SwapResult)(nil),               // 30: craft.hostagent.v1.SwapResult
+	(*timestamppb.Timestamp)(nil),    // 31: google.protobuf.Timestamp
 }
 var file_hostagent_v1_hostagent_proto_depIdxs = []int32{
-	8,  // 0: craft.hostagent.v1.CreateResponse.vm:type_name -> craft.hostagent.v1.VM
-	8,  // 1: craft.hostagent.v1.ListResponse.vms:type_name -> craft.hostagent.v1.VM
-	1,  // 2: craft.hostagent.v1.VM.state:type_name -> craft.hostagent.v1.VMState
-	15, // 3: craft.hostagent.v1.VM.started_at:type_name -> google.protobuf.Timestamp
-	14, // 4: craft.hostagent.v1.NodeInfoResponse.templates:type_name -> craft.hostagent.v1.TemplateInfo
-	2,  // 5: craft.hostagent.v1.HostAgent.Create:input_type -> craft.hostagent.v1.CreateRequest
-	4,  // 6: craft.hostagent.v1.HostAgent.Stop:input_type -> craft.hostagent.v1.StopRequest
-	6,  // 7: craft.hostagent.v1.HostAgent.List:input_type -> craft.hostagent.v1.ListRequest
-	12, // 8: craft.hostagent.v1.HostAgent.NodeInfo:input_type -> craft.hostagent.v1.NodeInfoRequest
-	9,  // 9: craft.hostagent.v1.HostAgent.CloseConnections:input_type -> craft.hostagent.v1.CloseConnectionsRequest
-	10, // 10: craft.hostagent.v1.HostAgent.Dial:input_type -> craft.hostagent.v1.DialFrame
-	3,  // 11: craft.hostagent.v1.HostAgent.Create:output_type -> craft.hostagent.v1.CreateResponse
-	5,  // 12: craft.hostagent.v1.HostAgent.Stop:output_type -> craft.hostagent.v1.StopResponse
-	7,  // 13: craft.hostagent.v1.HostAgent.List:output_type -> craft.hostagent.v1.ListResponse
-	13, // 14: craft.hostagent.v1.HostAgent.NodeInfo:output_type -> craft.hostagent.v1.NodeInfoResponse
-	11, // 15: craft.hostagent.v1.HostAgent.CloseConnections:output_type -> craft.hostagent.v1.CloseConnectionsResponse
-	10, // 16: craft.hostagent.v1.HostAgent.Dial:output_type -> craft.hostagent.v1.DialFrame
-	11, // [11:17] is the sub-list for method output_type
-	5,  // [5:11] is the sub-list for method input_type
-	5,  // [5:5] is the sub-list for extension type_name
-	5,  // [5:5] is the sub-list for extension extendee
-	0,  // [0:5] is the sub-list for field type_name
+	10, // 0: craft.hostagent.v1.CreateResponse.vm:type_name -> craft.hostagent.v1.VM
+	10, // 1: craft.hostagent.v1.ListResponse.vms:type_name -> craft.hostagent.v1.VM
+	3,  // 2: craft.hostagent.v1.VM.state:type_name -> craft.hostagent.v1.VMState
+	31, // 3: craft.hostagent.v1.VM.started_at:type_name -> google.protobuf.Timestamp
+	11, // 4: craft.hostagent.v1.VM.managed:type_name -> craft.hostagent.v1.ManagedState
+	2,  // 5: craft.hostagent.v1.ManagedState.active:type_name -> craft.hostagent.v1.ManagedSlot
+	20, // 6: craft.hostagent.v1.NodeInfoResponse.templates:type_name -> craft.hostagent.v1.TemplateInfo
+	26, // 7: craft.hostagent.v1.NodeInfoResponse.managed_images:type_name -> craft.hostagent.v1.ManagedImageInfo
+	17, // 8: craft.hostagent.v1.NodeInfoResponse.drain:type_name -> craft.hostagent.v1.DrainStatus
+	1,  // 9: craft.hostagent.v1.DrainStatus.state:type_name -> craft.hostagent.v1.DrainState
+	31, // 10: craft.hostagent.v1.DrainStatus.since:type_name -> google.protobuf.Timestamp
+	17, // 11: craft.hostagent.v1.SetDrainResponse.drain:type_name -> craft.hostagent.v1.DrainStatus
+	31, // 12: craft.hostagent.v1.TemplateInfo.built_at:type_name -> google.protobuf.Timestamp
+	20, // 13: craft.hostagent.v1.BuildTemplateResponse.template:type_name -> craft.hostagent.v1.TemplateInfo
+	24, // 14: craft.hostagent.v1.PutManagedImageRequest.header:type_name -> craft.hostagent.v1.ManagedBundleHeader
+	26, // 15: craft.hostagent.v1.PutManagedImageResponse.image:type_name -> craft.hostagent.v1.ManagedImageInfo
+	31, // 16: craft.hostagent.v1.ManagedImageInfo.built_at:type_name -> google.protobuf.Timestamp
+	28, // 17: craft.hostagent.v1.SwapManagedRequest.targets:type_name -> craft.hostagent.v1.SwapTarget
+	30, // 18: craft.hostagent.v1.SwapManagedResponse.results:type_name -> craft.hostagent.v1.SwapResult
+	0,  // 19: craft.hostagent.v1.SwapResult.reason:type_name -> craft.hostagent.v1.ErrorReason
+	2,  // 20: craft.hostagent.v1.SwapResult.active:type_name -> craft.hostagent.v1.ManagedSlot
+	4,  // 21: craft.hostagent.v1.HostAgent.Create:input_type -> craft.hostagent.v1.CreateRequest
+	6,  // 22: craft.hostagent.v1.HostAgent.Stop:input_type -> craft.hostagent.v1.StopRequest
+	8,  // 23: craft.hostagent.v1.HostAgent.List:input_type -> craft.hostagent.v1.ListRequest
+	15, // 24: craft.hostagent.v1.HostAgent.NodeInfo:input_type -> craft.hostagent.v1.NodeInfoRequest
+	12, // 25: craft.hostagent.v1.HostAgent.CloseConnections:input_type -> craft.hostagent.v1.CloseConnectionsRequest
+	13, // 26: craft.hostagent.v1.HostAgent.Dial:input_type -> craft.hostagent.v1.DialFrame
+	21, // 27: craft.hostagent.v1.HostAgent.BuildTemplate:input_type -> craft.hostagent.v1.BuildTemplateRequest
+	23, // 28: craft.hostagent.v1.HostAgent.PutManagedImage:input_type -> craft.hostagent.v1.PutManagedImageRequest
+	27, // 29: craft.hostagent.v1.HostAgent.SwapManaged:input_type -> craft.hostagent.v1.SwapManagedRequest
+	18, // 30: craft.hostagent.v1.HostAgent.SetDrain:input_type -> craft.hostagent.v1.SetDrainRequest
+	5,  // 31: craft.hostagent.v1.HostAgent.Create:output_type -> craft.hostagent.v1.CreateResponse
+	7,  // 32: craft.hostagent.v1.HostAgent.Stop:output_type -> craft.hostagent.v1.StopResponse
+	9,  // 33: craft.hostagent.v1.HostAgent.List:output_type -> craft.hostagent.v1.ListResponse
+	16, // 34: craft.hostagent.v1.HostAgent.NodeInfo:output_type -> craft.hostagent.v1.NodeInfoResponse
+	14, // 35: craft.hostagent.v1.HostAgent.CloseConnections:output_type -> craft.hostagent.v1.CloseConnectionsResponse
+	13, // 36: craft.hostagent.v1.HostAgent.Dial:output_type -> craft.hostagent.v1.DialFrame
+	22, // 37: craft.hostagent.v1.HostAgent.BuildTemplate:output_type -> craft.hostagent.v1.BuildTemplateResponse
+	25, // 38: craft.hostagent.v1.HostAgent.PutManagedImage:output_type -> craft.hostagent.v1.PutManagedImageResponse
+	29, // 39: craft.hostagent.v1.HostAgent.SwapManaged:output_type -> craft.hostagent.v1.SwapManagedResponse
+	19, // 40: craft.hostagent.v1.HostAgent.SetDrain:output_type -> craft.hostagent.v1.SetDrainResponse
+	31, // [31:41] is the sub-list for method output_type
+	21, // [21:31] is the sub-list for method input_type
+	21, // [21:21] is the sub-list for extension type_name
+	21, // [21:21] is the sub-list for extension extendee
+	0,  // [0:21] is the sub-list for field type_name
 }
 
 func init() { file_hostagent_v1_hostagent_proto_init() }
@@ -1308,13 +2672,17 @@ func file_hostagent_v1_hostagent_proto_init() {
 	if File_hostagent_v1_hostagent_proto != nil {
 		return
 	}
+	file_hostagent_v1_hostagent_proto_msgTypes[19].OneofWrappers = []any{
+		(*PutManagedImageRequest_Header)(nil),
+		(*PutManagedImageRequest_Data)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_hostagent_v1_hostagent_proto_rawDesc), len(file_hostagent_v1_hostagent_proto_rawDesc)),
-			NumEnums:      2,
-			NumMessages:   13,
+			NumEnums:      4,
+			NumMessages:   27,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -47,6 +48,8 @@ type fakeLauncher struct {
 	specs    []LaunchSpec
 	fail     error
 	gate     chan struct{}
+	// wrap, if set, wraps each new process (managed drive tests).
+	wrap func(*fakeProc) Process
 }
 
 func (f *fakeLauncher) Launch(ctx context.Context, s LaunchSpec) (Process, error) {
@@ -69,6 +72,9 @@ func (f *fakeLauncher) Launch(ctx context.Context, s LaunchSpec) (Process, error
 		f.procs = map[string]*fakeProc{}
 	}
 	f.procs[s.ID] = p
+	if f.wrap != nil {
+		return f.wrap(p), nil
+	}
 	return p, nil
 }
 
@@ -81,18 +87,26 @@ func (f *fakeLauncher) count() int {
 type fakeStats struct {
 	availMiB uint64
 	freeDisk uint64
-	// onMem runs once, inside the next admission check.
+	// onDisk runs once, inside the next admission check (the disk check
+	// runs before the Manager takes its lock).
+	onDisk func()
+	// onMem runs inside each memory read (under the Manager lock).
 	onMem func()
 }
 
 func (s *fakeStats) MemInfo() (uint64, uint64, error) {
-	if h := s.onMem; h != nil {
-		s.onMem = nil
-		h()
+	if s.onMem != nil {
+		s.onMem()
 	}
 	return 64 << 10, s.availMiB, nil
 }
-func (s *fakeStats) DiskFreeBytes() (uint64, error) { return s.freeDisk, nil }
+func (s *fakeStats) DiskFreeBytes() (uint64, error) {
+	if h := s.onDisk; h != nil {
+		s.onDisk = nil
+		h()
+	}
+	return s.freeDisk, nil
+}
 
 const (
 	sb1 = "11111111-1111-4111-8111-111111111111"
@@ -109,17 +123,8 @@ type fixture struct {
 func newFixture(t *testing.T, uidCount uint32) *fixture {
 	t.Helper()
 	dir := t.TempDir()
-	tdir := filepath.Join(dir, "tpl-1")
-	if err := os.MkdirAll(tdir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	for _, f := range []string{template.RootfsFile, template.ScratchFile, template.VMStateFile, template.MemFile} {
-		if err := os.WriteFile(filepath.Join(tdir, f), []byte("x"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := template.WriteManifest(tdir, template.Manifest{
-		Version: "tpl-1", VCPUs: 2, MemMiB: 4096, ScratchGiB: 1, GuestKernel: "6.18.25", FirecrackerVersion: "v1.17.0",
+	if _, err := template.WriteFake(dir, "tpl-1", template.Key{
+		VCPUs: 2, MemMiB: 4096, ScratchGiB: 1, GuestKernel: "6.18.25", FirecrackerVersion: "v1.17.0",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -304,6 +309,123 @@ func TestTemplateFirecrackerVersion(t *testing.T) {
 	wantReason(t, err, pb.ErrorReason_TEMPLATE_INCOMPATIBLE)
 }
 
+// Firecracker checks nothing on a snapshot load, so Create refuses a template
+// whose key does not fit the node, or whose files changed, before it launches.
+func TestTemplateCheckedBeforeEveryRestore(t *testing.T) {
+	ctx := context.Background()
+	for name, change := range map[string]func(f *fixture){
+		"cpu model":    func(f *fixture) { f.m.versions.CPUModel = "Other CPU" },
+		"host kernel":  func(f *fixture) { f.m.versions.HostKernel = "6.19.0" },
+		"guest kernel": func(f *fixture) { f.m.versions.GuestKernelSHA256 = strings.Repeat("a", 64) },
+		"egress CA":    func(f *fixture) { f.m.versions.EgressCAFingerprint = strings.Repeat("b", 64) },
+		"tampered mem": func(f *fixture) {
+			p := filepath.Join(f.m.templates.Dir, "tpl-1", template.MemFile)
+			if err := os.WriteFile(p, []byte("not the snapshot"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newFixture(t, 10)
+			// A first Create caches the verified file state.
+			if _, _, err := f.m.Create(ctx, req(sb1, 1)); err != nil {
+				t.Fatal(err)
+			}
+			change(f)
+			_, _, err := f.m.Create(ctx, req(sb2, 1))
+			wantReason(t, err, pb.ErrorReason_TEMPLATE_INCOMPATIBLE)
+			if f.l.count() != 1 {
+				t.Fatalf("launches %d, want 1 (the refused Create must not launch)", f.l.count())
+			}
+		})
+	}
+}
+
+func TestBuildSlotChecksMemory(t *testing.T) {
+	f := newFixture(t, 10)
+	f.m.cfg.MinFreeMemMiB = 512
+	f.stats.availMiB = 4096 + 511
+	_, _, err := f.m.BuildSlot("tpl-abc", 4096)
+	wantReason(t, err, pb.ErrorReason_CAPACITY_MEMORY)
+	f.stats.availMiB = 4096 + 512
+	_, done, err := f.m.BuildSlot("tpl-abc", 4096)
+	if err != nil {
+		t.Fatal(err)
+	}
+	done(false)
+}
+
+func TestTemplatesInUseAndBuildSlot(t *testing.T) {
+	f := newFixture(t, 2)
+	ctx := context.Background()
+	if _, _, err := f.m.Create(ctx, req(sb1, 1)); err != nil {
+		t.Fatal(err)
+	}
+	if in := f.m.TemplatesInUse(); !in["tpl-1"] || len(in) != 1 {
+		t.Fatalf("in use %v", in)
+	}
+	uid, done, err := f.m.BuildSlot("tpl-abc", 1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := f.m.BuildSlot("tpl-abc", 1024); err == nil {
+		t.Fatal("second build slot for the same id")
+	}
+	// The pool has 2 UIDs: one VM and one build.
+	_, _, err = f.m.Create(ctx, req(sb2, 1))
+	wantReason(t, err, pb.ErrorReason_CAPACITY_VM_SLOTS)
+	done(false)
+	if !f.uids.Reserve(uid) {
+		t.Fatalf("build UID %d was not freed", uid)
+	}
+	f.uids.Put(uid)
+	_, done2, err := f.m.BuildSlot("tpl-def", 1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	done2(true) // the build VM may still run: its UID stays reserved
+	_, _, err = f.m.Create(ctx, req(sb2, 1))
+	wantReason(t, err, pb.ErrorReason_CAPACITY_VM_SLOTS)
+	// The build VM is in doubt until a scan finds no process for it.
+	table := &fakeTable{cands: []Candidate{{ID: "tpl-def", PID: 700, UID: uid}}}
+	f.m.adopter = table
+	_, _, err = f.m.BuildSlot("tpl-def", 1024)
+	wantReason(t, err, pb.ErrorReason_SANDBOX_IN_DOUBT)
+	table.set(nil, nil)
+	_, done3, err := f.m.BuildSlot("tpl-def", 1024)
+	if err != nil {
+		t.Fatalf("build slot after the doubt cleared: %v", err)
+	}
+	done3(false)
+	if got := table.removedIDs(); len(got) != 1 || got[0] != "tpl-def" {
+		t.Fatalf("removed %v, want the build VM chroot", got)
+	}
+	if _, _, err := f.m.Create(ctx, req(sb2, 1)); err != nil {
+		t.Fatalf("create after the build UID was freed: %v", err)
+	}
+}
+
+func TestCreatePinsItsTemplateAgainstGC(t *testing.T) {
+	f := newFixture(t, 2)
+	var removed []string
+	var gcErr error
+	// GC runs while Create is in admission, before its VM is in the table.
+	f.stats.onDisk = func() {
+		removed, gcErr = f.m.templates.GC(0, f.m.TemplatesInUse)
+	}
+	if _, _, err := f.m.Create(context.Background(), req(sb1, 1)); err != nil {
+		t.Fatal(err)
+	}
+	if gcErr != nil || len(removed) != 0 {
+		t.Fatalf("GC during admission removed %v %v", removed, gcErr)
+	}
+	// After Create the VM is in the table, so GC still keeps the template.
+	removed, gcErr = f.m.templates.GC(0, f.m.TemplatesInUse)
+	if gcErr != nil || len(removed) != 0 {
+		t.Fatalf("GC after create removed %v %v", removed, gcErr)
+	}
+}
+
 func TestLaunchFailureReleasesSlot(t *testing.T) {
 	f := newFixture(t, 1)
 	ctx := context.Background()
@@ -333,7 +455,7 @@ func TestCreateRechecksStoppedAttemptAfterAdmission(t *testing.T) {
 	f := newFixture(t, 10)
 	ctx := context.Background()
 	// While attempt 1 is in admission, attempt 2 starts and stops.
-	f.stats.onMem = func() {
+	f.stats.onDisk = func() {
 		vm, _, err := f.m.Create(ctx, req(sb1, 2))
 		if err != nil {
 			t.Error(err)

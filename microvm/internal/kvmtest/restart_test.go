@@ -92,7 +92,7 @@ func alive(pid int32) bool {
 func TestRestartKVM(t *testing.T) {
 	e := loadEnv()
 	cmd := newCommand(t, e)
-	buildTemplate(t, e, cmd)
+	buildTemplate(t, &e, cmd)
 	for _, n := range []string{"ha1", "ha2"} {
 		_ = exec.Command("docker", "rm", "-f", n).Run()
 	}

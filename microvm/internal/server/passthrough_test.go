@@ -74,6 +74,11 @@ type fakeVM struct {
 
 func startFakeVM(t *testing.T) *fakeVM {
 	t.Helper()
+	return startFakeVMWith(t, guestd.Config{Version: "test"})
+}
+
+func startFakeVMWith(t *testing.T, cfg guestd.Config) *fakeVM {
+	t.Helper()
 	sock := filepath.Join("/tmp", "pt-"+filepath.Base(t.TempDir())+".sock")
 	ln, err := net.Listen("unix", sock)
 	if err != nil {
@@ -89,7 +94,7 @@ func startFakeVM(t *testing.T) *fakeVM {
 		AddEntropy: func([]byte) (bool, error) { return true, nil },
 		GrowFS:     func(string, uint64) (uint64, uint64, error) { return 0, 0, nil },
 	}
-	d, err := guestd.NewServer(guestd.Config{Version: "test"}, nop, m)
+	d, err := guestd.NewServer(cfg, nop, m)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,9 +149,14 @@ type mapLauncher struct {
 	uds   map[string]string
 	mu    sync.Mutex
 	procs map[string]*guestProc
+	// fail, if set, fails every launch.
+	fail error
 }
 
 func (l *mapLauncher) Launch(_ context.Context, s agent.LaunchSpec) (agent.Process, error) {
+	if l.fail != nil {
+		return nil, l.fail
+	}
 	p := &guestProc{uds: l.uds[s.ID], done: make(chan struct{})}
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -165,16 +175,7 @@ func (l *mapLauncher) exit(id string) {
 func newPTAgent(t *testing.T, mtls bool, uds map[string]string) *ptAgent {
 	t.Helper()
 	dir := t.TempDir()
-	tdir := filepath.Join(dir, "tpl", "t1")
-	if err := os.MkdirAll(tdir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	for _, f := range []string{template.RootfsFile, template.ScratchFile, template.VMStateFile, template.MemFile} {
-		if err := os.WriteFile(filepath.Join(tdir, f), nil, 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := template.WriteManifest(tdir, template.Manifest{Version: "t1", VCPUs: 2, MemMiB: 4096, ScratchGiB: 1, FirecrackerVersion: "v1.17.0"}); err != nil {
+	if _, err := template.WriteFake(filepath.Join(dir, "tpl"), "t1", template.Key{VCPUs: 2, MemMiB: 4096, ScratchGiB: 1, FirecrackerVersion: "v1.17.0"}); err != nil {
 		t.Fatal(err)
 	}
 	uids, _ := jailer.NewUIDPool(1000, 10)

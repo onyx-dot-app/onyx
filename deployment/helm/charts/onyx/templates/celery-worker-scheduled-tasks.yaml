@@ -91,13 +91,16 @@ spec:
           env:
             {{- include "onyx.envSecrets" . | nindent 12}}
             {{- include "onyx.envSecretsRestricted" . | nindent 12}}
+            {{- with include "onyx.craftFcAgentClient.env" . }}
+            {{- . | nindent 12 }}
+            {{- end }}
             {{- with include "onyx.customCACerts.env" . }}
             {{- . | nindent 12 }}
             {{- end }}
             {{- with .Values.celery_worker_scheduled_tasks.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
-          {{- with include "onyx.volumeMountsWithCA" (dict "ctx" . "volumeMounts" .Values.celery_worker_scheduled_tasks.volumeMounts) }}
+          {{- with include "onyx.volumeMountsWithCA" (dict "ctx" . "volumeMounts" (concat (.Values.celery_worker_scheduled_tasks.volumeMounts | default list) (include "onyx.craftFcAgentClient.volumeMounts" . | fromYamlArray))) }}
           {{- . | nindent 10 }}
           {{- end }}
           startupProbe:
@@ -122,7 +125,7 @@ spec:
                     python onyx/background/celery/celery_k8s_probe.py
                     --probe liveness
                     --filename /tmp/onyx_k8s_scheduledtasks_liveness.txt
-      {{- with include "onyx.volumesWithCA" (dict "ctx" . "volumes" .Values.celery_worker_scheduled_tasks.volumes) }}
+      {{- with include "onyx.volumesWithCA" (dict "ctx" . "volumes" (concat (.Values.celery_worker_scheduled_tasks.volumes | default list) (include "onyx.craftFcAgentClient.volumes" . | fromYamlArray))) }}
       {{- . | nindent 6 }}
       {{- end }}
 {{- end }}
