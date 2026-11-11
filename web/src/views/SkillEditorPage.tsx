@@ -149,11 +149,15 @@ export default function SkillEditorPage({
   // newest saved one. The user must reload before the next edit.
   const [isVersionStale, setIsVersionStale] = useState(false);
   const [isReloadingStale, setIsReloadingStale] = useState(false);
+  // The version the form fields show. A background refresh can load a newer
+  // version into `skill` without touching the fields, so edits send this id.
+  const [baseVersionId, setBaseVersionId] = useState<string | null>(null);
 
   const syncEditableFields = useCallback((nextSkill: SkillEditableDetail) => {
     setName(nextSkill.name);
     setDescription(nextSkill.description);
     setInstructionsMarkdown(nextSkill.instructions_markdown);
+    setBaseVersionId(nextSkill.current_version_id);
   }, []);
 
   useEffect(() => {
@@ -284,7 +288,7 @@ export default function SkillEditorPage({
       const updated = await patchUserSkill(skill.id, {
         description,
         instructions_markdown: instructionsMarkdown,
-        base_version_id: skill.current_version_id,
+        base_version_id: baseVersionId,
       });
       const nextSkill: SkillEditableDetail = {
         ...skill,
@@ -362,7 +366,7 @@ export default function SkillEditorPage({
       const updated = await uploadUserSkillFiles(
         skill.id,
         upload.file,
-        skill.current_version_id
+        baseVersionId
       );
       await refreshSkill(updated, { revalidate: false });
       syncEditableFields(updated);
@@ -409,12 +413,9 @@ export default function SkillEditorPage({
     if (!skill || !canManageSkill || removingFilePath !== null) return;
     setRemovingFilePath(path);
     try {
-      const updated = await removeUserSkillFile(
-        skill.id,
-        path,
-        skill.current_version_id
-      );
+      const updated = await removeUserSkillFile(skill.id, path, baseVersionId);
       await refreshSkill(updated, { revalidate: false });
+      setBaseVersionId(updated.current_version_id);
       await refreshSkillList();
       toast.success(t("editor.toasts.fileRemoved", { path }));
     } catch (err) {

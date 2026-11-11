@@ -410,6 +410,46 @@ describe("SkillEditorPage", () => {
     ).toHaveValue("Saved by someone else");
   });
 
+  it("keeps the base version of the form after a background refresh", async () => {
+    const user = setupUser();
+    const skill = existingSkill();
+    mockUseSWR.mockReturnValue({
+      data: skill,
+      error: undefined,
+      isLoading: false,
+      mutate: mockRefreshSkill,
+    });
+    mockPatchUserSkill.mockResolvedValue(skill);
+
+    const { rerender } = render(<SkillEditorPage skillId={skill.id} />);
+    // A focus refresh loads a version saved by someone else. The form still
+    // shows version 1.
+    mockUseSWR.mockReturnValue({
+      data: {
+        ...skill,
+        description: "Saved by someone else",
+        current_version_id: "version-2",
+      },
+      error: undefined,
+      isLoading: false,
+      mutate: mockRefreshSkill,
+    });
+    rerender(<SkillEditorPage skillId={skill.id} />);
+
+    const description = screen.getByPlaceholderText(
+      "What does this skill help with?"
+    );
+    await user.clear(description);
+    await user.type(description, "My edit");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(mockPatchUserSkill).toHaveBeenCalledWith(skill.id, {
+      description: "My edit",
+      instructions_markdown: skill.instructions_markdown,
+      base_version_id: "version-1",
+    });
+  });
+
   it("confirms before leaving an existing skill with unsaved changes", async () => {
     const user = setupUser();
     const skill = existingSkill();
