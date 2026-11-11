@@ -25,6 +25,7 @@ from onyx.db.skill import (
     SkillManagementPolicy,
     SkillSharingChange,
     affected_user_ids_for_skill,
+    bulk_share_skills__no_commit,
     bulk_update_skill__no_commit,
     create_custom_skill__no_commit,
     create_skill_from_bundle__no_commit,
@@ -291,27 +292,33 @@ def bulk_update_skills(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillBulkResponse:
-    change = (
-        request.sharing.to_change()
-        if isinstance(request, SkillBulkShareRequest)
-        else None
-    )
     succeeded: list[UUID] = []
     failed: list[SkillBulkFailure] = []
     affected: set[UUID] = set()
     deleted_file_ids: list[str] = []
-    for skill_id in sorted(set(request.skill_ids)):
-        try:
-            item_affected, deleted_file_id = bulk_update_skill__no_commit(
-                skill_id, request.action, change, user, db_session
-            )
-        except OnyxError as exc:
-            failed.append(SkillBulkFailure(skill_id=skill_id, detail=exc.detail))
-            continue
-        succeeded.append(skill_id)
-        affected |= item_affected
-        if deleted_file_id is not None:
-            deleted_file_ids.append(deleted_file_id)
+    if isinstance(request, SkillBulkShareRequest):
+        shared = bulk_share_skills__no_commit(
+            request.skill_ids, request.sharing.to_change(), user, db_session
+        )
+        succeeded = shared.succeeded
+        failed = [
+            SkillBulkFailure(skill_id=skill_id, detail=detail)
+            for skill_id, detail in shared.failed
+        ]
+        affected = shared.affected_user_ids
+    else:
+        for skill_id in sorted(set(request.skill_ids)):
+            try:
+                item_affected, deleted_file_id = bulk_update_skill__no_commit(
+                    skill_id, request.action, user, db_session
+                )
+            except OnyxError as exc:
+                failed.append(SkillBulkFailure(skill_id=skill_id, detail=exc.detail))
+                continue
+            succeeded.append(skill_id)
+            affected |= item_affected
+            if deleted_file_id is not None:
+                deleted_file_ids.append(deleted_file_id)
     db_session.commit()
     push_skills_for_users(affected, db_session)
     db_session.commit()

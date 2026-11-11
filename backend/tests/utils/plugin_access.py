@@ -101,8 +101,9 @@ def plugin_access_mismatches(
             "group shares",
             "SELECT skill_id, user_group_id, permission FROM skill__user_group "
             "WHERE skill_id = ANY(:ids)",
+            # A row with no permission holds only a group install setting.
             "SELECT plugin_id, user_group_id, permission FROM plugin__user_group "
-            "WHERE plugin_id = ANY(:ids)",
+            "WHERE plugin_id = ANY(:ids) AND permission IS NOT NULL",
         ),
         (
             "choices",

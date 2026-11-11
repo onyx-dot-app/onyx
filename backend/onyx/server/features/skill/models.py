@@ -15,6 +15,7 @@ from onyx.db.enums import (
 from onyx.db.models import Skill
 from onyx.db.plugin_access import PluginAccess
 from onyx.db.skill import SkillSharingChange
+from onyx.db.utils import UNSET
 from onyx.server.models import MinimalUserSnapshot
 from onyx.skills.built_in import BuiltInSkillDefinition
 from onyx.skills.models import GITHUB_SKILL_MAX_COUNT, SkillBundleFile
@@ -51,7 +52,8 @@ class SkillResponse(BaseModel):
 
     enabled: bool
     can_toggle: bool
-    installation_policy: SkillInstallationPolicy = SkillInstallationPolicy.AVAILABLE
+    # Missing: unchanged. Null: the marketplace default.
+    installation_policy: SkillInstallationPolicy | None = None
     author_user_id: UUID | None = None
     author_email: str | None = None
     owner: MinimalUserSnapshot | None = None
@@ -350,7 +352,8 @@ class SkillGroupShareRequest(BaseModel):
 class SkillShareRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    installation_policy: SkillInstallationPolicy = SkillInstallationPolicy.AVAILABLE
+    # Missing: unchanged. Null: the marketplace default.
+    installation_policy: SkillInstallationPolicy | None = None
 
     user_shares: list[SkillUserShareRequest] | None = None
     group_shares: list[SkillGroupShareRequest] | None = None
@@ -363,7 +366,7 @@ class SkillShareRequest(BaseModel):
             installation_policy=(
                 self.installation_policy
                 if "installation_policy" in self.model_fields_set
-                else None
+                else UNSET
             ),
             user_shares=(
                 {share.user_id: share.permission for share in self.user_shares}

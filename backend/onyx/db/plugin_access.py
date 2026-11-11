@@ -36,12 +36,13 @@ from sqlalchemy import (
     or_,
     select,
 )
-from sqlalchemy.orm import InstrumentedAttribute, Session
+from sqlalchemy.orm import InstrumentedAttribute, Session, aliased
 from sqlalchemy.sql.elements import KeyedColumnElement
 
 from onyx.db.enums import (
     MarketplaceKind,
     PluginInstallationPolicy,
+    SandboxStatus,
     SkillInstallationPolicy,
     SkillSharePermission,
 )
@@ -51,6 +52,7 @@ from onyx.db.models import (
     Plugin__User,
     Plugin__UserGroup,
     PluginSkill,
+    Sandbox,
     User,
     User__UserGroup,
     UserGroup,
@@ -168,6 +170,36 @@ def plugin_visible_to_user(
             _setting_rank_for_user(plugin, marketplace, user_id)
             > policy_rank(PluginInstallationPolicy.NOT_AVAILABLE),
         ),
+    )
+
+
+def affected_user_ids_for_plugins(
+    plugin_ids: Iterable[UUID], db_session: Session
+) -> set[UUID]:
+    """Users with a running sandbox who can see at least one of the plugins, in
+    one query. Ignores user choices, so a change that removes access still
+    reaches the users who had it."""
+    ids = sorted(set(plugin_ids))
+    if not ids:
+        return set()
+    plugin: type[Plugin] = aliased(Plugin)
+    marketplace: type[Marketplace] = aliased(Marketplace)
+    visible = (
+        select(plugin.id)
+        .join(marketplace, marketplace.id == plugin.marketplace_id)
+        .where(
+            plugin.id.in_(ids),
+            plugin_visible_to_user(plugin, marketplace, Sandbox.user_id),
+        )
+        .correlate_except(plugin, marketplace)
+        .exists()
+    )
+    return set(
+        db_session.scalars(
+            select(Sandbox.user_id).where(
+                Sandbox.status == SandboxStatus.RUNNING, visible
+            )
+        )
     )
 
 
