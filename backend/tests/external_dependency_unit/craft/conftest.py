@@ -40,6 +40,7 @@ from onyx.db.models import (
     User,
     UserGroup,
 )
+from onyx.db.skill_version import repair_skill_version
 from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.constants import LlmProviderNames
 from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
@@ -334,6 +335,8 @@ def seeded_skill(
             author_user_id=author_user_id,
         )
         db_session.add(skill)
+        db_session.flush()
+        repair_skill_version(skill, db_session)
         db_session.commit()
         db_session.refresh(skill)
 

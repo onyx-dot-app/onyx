@@ -152,6 +152,7 @@ Stored ZIP reads have a separate allowance, set by `SKILL_BUNDLE_STORED_ZIP_MAX_
 the allowance is the larger of 100 MiB and the expanded-total limit, plus space for ZIP overhead.
 Keep this allowance large enough for your existing bundles when you lower upload limits.
 If you previously allowed ZIPs above this default, set this allowance before upgrading.
+A saved bundle above this allowance returns a 413 read-limit error. Raise the allowance to read it.
 Onyx applies the limits when you save the Skill again.
 
 Self-hosted operators can change the limits with `SKILL_BUNDLE_ZIP_MAX_BYTES`, `SKILL_BUNDLE_MAX_FILE_COUNT`,
@@ -279,6 +280,24 @@ Every custom Skill has one owner. The owner can transfer it to another active st
 If ownership becomes vacant because the owner is inactive, an Admin can open the Skill and transfer it.
 
 Do not transfer ownership to bots, service accounts, limited accounts, or inactive users.
+
+### Check Skill versions after an upgrade
+
+Onyx keeps a version of each custom Skill. After you upgrade to a release with Skill versions,
+confirm that every custom Skill has a current version. With Docker Compose, run:
+
+```bash
+docker compose exec api_server python scripts/check_skill_version_cutover.py --tenant-id public
+```
+
+On Kubernetes, run the same `python` command in an API server pod.
+
+The command prints `PASS` when every Skill has a current version. If it prints `BLOCKED` and a list of Skill IDs,
+wait for the repair job, which runs every five minutes, and run the command again.
+A Skill whose saved bundle exceeds a size limit stays blocked until you raise that limit.
+
+During a rolling upgrade, a pod can still run the previous release. If a user edits a Skill on that pod,
+the Skill can show its previous content for a few minutes, until the repair job runs.
 
 ## Troubleshooting
 

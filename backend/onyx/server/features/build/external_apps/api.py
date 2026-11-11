@@ -117,7 +117,7 @@ def _to_admin_response(
             ExternalAppAssociatedSkill(
                 id=skill.id,
                 name=skill.name,
-                is_valid=skill.is_valid,
+                is_valid=skill.current_is_valid,
             )
             for skill in sorted(
                 (skill for skill in app.associated_skills if skill.is_custom),

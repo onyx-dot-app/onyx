@@ -5466,6 +5466,20 @@ class Skill(Base):
         PGUUID(as_uuid=True), nullable=True
     )
 
+    current_version: Mapped[SkillVersion | None] = relationship(
+        SkillVersion,
+        primaryjoin="Skill.current_version_id == SkillVersion.id",
+        foreign_keys=[current_version_id],
+        viewonly=True,
+        lazy="joined",
+    )
+
+    @property
+    def current_is_valid(self) -> bool | None:
+        if not self.is_custom:
+            return True
+        return self.current_version.is_valid if self.current_version else False
+
     author_user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("user.id", ondelete="SET NULL"),

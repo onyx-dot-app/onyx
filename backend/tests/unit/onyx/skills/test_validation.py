@@ -3,15 +3,13 @@ from __future__ import annotations
 import io
 import os
 import zipfile
-from types import SimpleNamespace
-from typing import cast
 from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
 
 from onyx.db.file_record import FileRecordNotFoundError
-from onyx.db.models import Skill
+from onyx.db.models import Skill, SkillVersion
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
 from onyx.skills import bundle, validation
@@ -63,13 +61,13 @@ def test_stored_read_still_enforces_its_own_limit(
 
 
 def _skill(name: str = "canonical-name") -> Skill:
-    return cast(
-        Skill,
-        SimpleNamespace(
-            id=uuid4(),
-            name=name,
-            bundle_file_id="bundle-id",
-        ),
+    version = SkillVersion(id=uuid4(), bundle_file_id="bundle-id", is_valid=None)
+    return Skill(
+        id=uuid4(),
+        name=name,
+        built_in_skill_id=None,
+        current_version_id=version.id,
+        current_version=version,
     )
 
 
