@@ -75,7 +75,7 @@ from onyx.document_index.opensearch.search import (
     get_normalization_pipeline_name_and_config,
     get_zscore_normalization_pipeline_name_and_config,
 )
-from onyx.indexing.models import DocMetadataAwareIndexChunk, Document
+from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.redis.lock_context import redis_shared_lock
 from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
@@ -528,8 +528,11 @@ class OpenSearchDocumentIndex(DocumentIndex):
     ) -> list[DocumentInsertionRecord]:
         """Indexes an iterable of document chunks into the document index.
 
-        Groups chunks by document ID and for each document, deletes existing
-        chunks and indexes the new chunks in bulk.
+        Groups up to MAX_CHUNKS_PER_DOC_BATCH chunks. For each group, one
+        delete_by_query removes the existing chunks of the group's documents
+        that this call has not deleted yet. Then one bulk call writes the
+        group's chunks. A typical batch thus costs two round trips, not two
+        per document.
 
         NOTE: It is assumed that chunks for a given document are not spread out
         over multiple index() calls.
@@ -562,61 +565,65 @@ class OpenSearchDocumentIndex(DocumentIndex):
 
         document_indexing_results: list[DocumentInsertionRecord] = []
         deleted_doc_ids: set[str] = set()
-        # Buffer chunks per document as they arrive from the iterable.
-        # When the document ID changes flush the buffered chunks.
-        current_doc_id: str | None = None
-        current_chunks: list[DocMetadataAwareIndexChunk] = []
 
-        def _flush_chunks(doc_chunks: list[DocMetadataAwareIndexChunk]) -> None:
-            assert len(doc_chunks) > 0, "doc_chunks is empty"
+        def _flush_chunks(group: list[DocMetadataAwareIndexChunk]) -> None:
+            assert len(group) > 0, "group is empty"
 
-            # Create a batch of OpenSearch-formatted chunks for bulk insertion.
-            # Since we are doing this in batches, an error occurring midway
-            # can result in a state where chunks are deleted and not all the
-            # new chunks have been indexed.
+            # An error midway can leave a doc with its chunks deleted and not
+            # all of its new chunks indexed.
             chunk_batch: list[DocumentChunk] = [
-                _convert_onyx_chunk_to_opensearch_document(chunk)
-                for chunk in doc_chunks
+                _convert_onyx_chunk_to_opensearch_document(chunk) for chunk in group
             ]
-            onyx_document: Document = doc_chunks[0].source_document
-            # First delete the doc's chunks from the index. This is so that
-            # there are no dangling chunks in the index, in the event that the
-            # new document's content contains fewer chunks than the previous
-            # content.
-            # TODO(andrei): This can possibly be made more efficient by checking
-            # if the chunk count has actually decreased. This assumes that
-            # overlapping chunks are perfectly overwritten. If we can't
-            # guarantee that then we need the code as-is.
-            if onyx_document.id not in deleted_doc_ids:
-                num_chunks_deleted = self.delete(
-                    onyx_document.id, onyx_document.chunk_count
+            # Delete all old chunks first so that no chunks dangle when a doc
+            # now has fewer chunks. This also clears legacy chunks.
+            docs_to_delete: list[str] = list(
+                dict.fromkeys(
+                    chunk.source_document.id
+                    for chunk in group
+                    if chunk.source_document.id not in deleted_doc_ids
                 )
-                deleted_doc_ids.add(onyx_document.id)
-                # If we see that chunks were deleted we assume the doc already
-                # existed. We record the result before bulk_index_documents
-                # runs. If indexing raises, this entire result list is discarded
-                # by the caller's retry logic, so early recording is safe.
-                document_indexing_results.append(
-                    DocumentInsertionRecord(
-                        document_id=onyx_document.id,
-                        already_existed=num_chunks_deleted > 0,
+            )
+            if docs_to_delete:
+                num_chunks_deleted = self._client.delete_by_query(
+                    DocumentQuery.delete_from_document_ids_query(
+                        document_ids=docs_to_delete,
+                        tenant_state=self._tenant_state,
                     )
                 )
-            # Now index. This will raise if a chunk of the same ID exists, which
-            # we do not expect because we should have deleted all chunks.
+                deleted_doc_ids.update(docs_to_delete)
+                # One delete cannot report a count per doc. A single doc gets
+                # the exact answer; with several, a doc existed if Postgres
+                # had chunks for it.
+                for doc_id in docs_to_delete:
+                    if num_chunks_deleted == 0:
+                        already_existed = False
+                    elif len(docs_to_delete) == 1:
+                        already_existed = True
+                    else:
+                        counts = indexing_metadata.doc_id_to_chunk_cnt_diff.get(doc_id)
+                        already_existed = (
+                            counts is not None and counts.old_chunk_cnt > 0
+                        )
+                    # If indexing raises, the caller's retry logic discards
+                    # this result list, so early recording is safe.
+                    document_indexing_results.append(
+                        DocumentInsertionRecord(
+                            document_id=doc_id,
+                            already_existed=already_existed,
+                        )
+                    )
+            # This raises if a chunk of the same ID exists, which we do not
+            # expect because we deleted all chunks.
             try:
                 self._client.bulk_index_documents(
                     documents=chunk_batch,
                     tenant_state=self._tenant_state,
                 )
             except BulkIndexError as e:
-                # There are several reasons why this might be raised, but the
-                # most likely one is if the deletion has not had enough time to
-                # propagate throughout the index, in which case this would be
-                # raised with some form of "version_conflict_engine_exception
-                # version conflict, document already exists" messaging.
-                # Refresh the index and try one more time. We do not refresh
-                # after every delete because this may become expensive.
+                # Most likely the deletion has not propagated through the index
+                # yet ("version_conflict_engine_exception ... document already
+                # exists"). Refresh the index and try one more time. We do not
+                # refresh after every delete because this may become expensive.
                 logger.warning(
                     "Failed to bulk index documents: %s. Refreshing index and trying again.",
                     e,
@@ -625,26 +632,20 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 self._client.bulk_index_documents(
                     documents=chunk_batch,
                     tenant_state=self._tenant_state,
-                    # At this point we know for sure some docs from this batch
-                    # may exist, so we don't want to fail in that case.
+                    # Some chunks of this group may exist now, so do not fail
+                    # in that case.
                     update_if_exists=True,
                 )
 
+        current_group: list[DocMetadataAwareIndexChunk] = []
         for chunk in chunks:
-            doc_id = chunk.source_document.id
-            if doc_id != current_doc_id:
-                if current_chunks:
-                    _flush_chunks(current_chunks)
-                current_doc_id = doc_id
-                current_chunks = [chunk]
-            elif len(current_chunks) >= MAX_CHUNKS_PER_DOC_BATCH:
-                _flush_chunks(current_chunks)
-                current_chunks = [chunk]
-            else:
-                current_chunks.append(chunk)
+            current_group.append(chunk)
+            if len(current_group) >= MAX_CHUNKS_PER_DOC_BATCH:
+                _flush_chunks(current_group)
+                current_group = []
 
-        if current_chunks:
-            _flush_chunks(current_chunks)
+        if current_group:
+            _flush_chunks(current_group)
 
         return document_indexing_results
 
