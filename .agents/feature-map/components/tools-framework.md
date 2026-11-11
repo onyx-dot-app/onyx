@@ -171,7 +171,7 @@ its own code cells.
 An agent can list, message, or interrupt its descendants on the selected branch,
 including children whose parent has finished. It cannot control siblings or ancestors.
 `send_message` reaches the next model step or starts an idle child with fresh limits.
-`queue_message` waits for normal completion. `interrupt_agent` cancels the current
+`send_message(delivery="queue")` waits for normal completion. `interrupt_agent` cancels the current
 run and preserves the conversation for later messages.
 Results reach the requesting agent automatically before its next model call.
 A subagent suspends before completing until its delegated results are available.

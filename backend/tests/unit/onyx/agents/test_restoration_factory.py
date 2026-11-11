@@ -329,7 +329,6 @@ def test_restored_chat_keeps_the_saved_code_mode(
         "list_agents",
         "interrupt_agent",
         "send_message",
-        "queue_message",
     ]
     assert choice == ToolChoiceOptions.AUTO
     assert f"selected these operations for this request: {preferred}." in request_text

@@ -1577,7 +1577,6 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
         )
         for info in later_owner.discovery():
             later_view.register(info)
-        later_owner.poll_control()
         assert not later_owner.has_owned_work
         spawn_leaf.set()
         if nested:
@@ -1615,8 +1614,12 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
             later_calls.append(
                 ToolCall(
                     id="queue",
-                    name="queue_message",
-                    arguments={"agent_id": child.agent_id, "message": "Continue later"},
+                    name="send_message",
+                    arguments={
+                        "agent_id": child.agent_id,
+                        "message": "Continue later",
+                        "delivery": "queue",
+                    },
                 )
             )
             later_calls.append(
@@ -1636,8 +1639,14 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
             if call is None:
                 return AssistantMessage(content=[TextContent(text="Checked")])
             if call.id == "interrupt":
-                observer = store(
-                    (branch[0], later_response.id), visible_response_ids=[branch[1]]
+                observer = ChatRunStore(
+                    tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+                    chat_session_id=branch[0],
+                    response_id=later_response.id,
+                    visible_response_ids=[branch[1]],
+                    cache=get_cache_backend(
+                        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+                    ),
                 )
                 observer.bind(
                     later_coordinator,
@@ -1711,12 +1720,7 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
         if action == "cancel":
             loaded_child = later_view.lookup_agent(child.agent_id, str(branch[0]))
             assert loaded_child is not None and loaded_child.queue_paused
-            assert [item.message for item in loaded_child.pending_messages] == [
-                "Continue later"
-            ]
-            assert [item.delivery for item in loaded_child.pending_messages] == [
-                MessageDelivery.QUEUE
-            ]
+            assert loaded_child.pending_message_count == 1
         received = [
             message
             for step in later.snapshot().steps
@@ -1778,7 +1782,7 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
 
 @pytest.mark.parametrize(
     ("delivery", "child_is_running"),
-    [("send_message", False), ("queue_message", False), ("send_message", True)],
+    [("send", False), ("queue", False), ("send", True)],
 )
 def test_later_turn_sends_to_chat_child_through_another_coordinator(
     branch: tuple[UUID, int],
@@ -1922,15 +1926,16 @@ def test_later_turn_sends_to_chat_child_through_another_coordinator(
                 for message in request.messages
                 if isinstance(message, ToolResultMessage)
             }
-            if delivery not in result_names:
+            if "send_message" not in result_names:
                 return AssistantMessage(
                     content=[
                         ToolCall(
                             id="send",
-                            name=delivery,
+                            name="send_message",
                             arguments={
                                 "agent_id": child.agent_id,
                                 "message": "follow up",
+                                "delivery": delivery,
                             },
                         )
                     ]
@@ -2012,14 +2017,16 @@ def test_later_turn_sends_to_chat_child_through_another_coordinator(
             assert saved.previous_run_id == child.run_id
             assert saved.input_messages[0].text == "follow up"
         latest = later_directory.lookup_agent(child.agent_id, str(branch[0]))
-        assert latest is not None and not latest.pending_messages
+        assert latest is not None and latest.pending_message_count == 0
     finally:
         release_child.set()
         assert later_coordinator.close(timeout=10)
         assert first_coordinator.close(timeout=10)
 
 
-@pytest.mark.parametrize("failure", ["owner_publication", "interrupted_reservation", "bind", "worker"])
+@pytest.mark.parametrize(
+    "failure", ["owner_publication", "interrupted_reservation", "bind", "worker"]
+)
 def test_queued_reservation_failure_is_durable_and_explicit_send_recovers(
     branch: tuple[UUID, int],
     user_message: UserMessage,

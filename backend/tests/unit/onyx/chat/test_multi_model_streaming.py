@@ -3717,7 +3717,6 @@ def test_chat_turn_excludes_delegation_tools_in_incognito(
                 "list_agents",
                 "interrupt_agent",
                 "send_message",
-                "queue_message",
             }
         )
     assert seen_tools == [expected]
