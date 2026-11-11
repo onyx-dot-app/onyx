@@ -489,3 +489,37 @@ def test_complete_history_uses_no_payload_reads_during_retries(
     session.expire_all()
     assert oldest.unpacked_size_bytes is not None
     assert skill_version_repair_batch(session, None, drift_only=True) == []
+
+
+def test_failed_current_read_keeps_history_repair(session: Session, user: User) -> None:
+    skill = skill_with_versions(session, user, 3)
+    current, _, oldest = versions(skill, session)
+    current_file_id = current.bundle_file_id
+    assert current_file_id is not None
+    for version in (current, oldest):
+        version.unpacked_size_bytes = version.file_count = None
+    session.commit()
+    store = get_default_file_store()
+    original_read = store.read_file
+    reads: list[str] = []
+
+    def read(
+        file_id: str,
+        mode: str | None = None,
+        use_tempfile: bool = False,
+        *,
+        max_bytes: int | None = None,
+    ) -> IO[bytes]:
+        reads.append(file_id)
+        if file_id == current_file_id:
+            raise ClientError({"Error": {"Code": "AccessDenied"}}, "GetObject")
+        return original_read(file_id, mode, use_tempfile, max_bytes=max_bytes)
+
+    with patch.object(store, "read_file", read):
+        repair_skill_version_metadata(skill, session, store)
+    session.commit()
+
+    assert reads.count(current_file_id) == 1
+    session.expire_all()
+    assert current.unpacked_size_bytes is None
+    assert oldest.unpacked_size_bytes is not None

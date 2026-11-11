@@ -263,3 +263,24 @@ def test_bulk_uneditable_partial_failure(session: Session) -> None:
     grant = session.get(Skill__UserGroup, (live.id, group_id))
     assert grant is not None and grant.permission == SkillSharePermission.EDITOR
     assert session.get(Skill__UserGroup, (hidden.id, group_id)) is None
+
+
+def test_share_uses_actor_permissions_read_after_the_lock(session: Session) -> None:
+    user, group_id = manager(session, global_access=True)
+    skill = make_skill(session, author_user_id=user.id)
+    # The request authenticated before the permission removal committed.
+    session.expunge(user)
+    revoked = session.scalars(
+        select(PermissionGrant).where(PermissionGrant.group_id == group_id)
+    ).one()
+    session.delete(revoked)
+    session.flush()
+    recompute_user_permissions__no_commit(user.id, session)
+    assert has_global_permission(user, Permission.MANAGE_SKILLS)
+    with client_for(user, session) as client:
+        result = client.patch(
+            f"/skills/custom/{skill.id}/share", json={"public_permission": "VIEWER"}
+        )
+    assert result.status_code == 403, result.text
+    session.refresh(skill)
+    assert skill.public_permission is None

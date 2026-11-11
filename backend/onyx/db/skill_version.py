@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from time import monotonic
 from uuid import UUID
@@ -60,6 +61,84 @@ class _OrphanCursor(BaseModel):
 
 def _lock_skill(skill: Skill, db_session: Session) -> None:
     db_session.refresh(skill, with_for_update={"of": Skill})
+
+
+@dataclass(frozen=True)
+class SkillContentSnapshot:
+    skill_id: UUID
+    current_version_id: UUID | None
+    current_bundle_file_id: str | None
+    current_bundle_sha256: str | None
+    bundle_file_id: str | None
+    bundle_sha256: str | None
+    name: str
+    description: str
+
+
+def skill_content_snapshot(skill: Skill) -> SkillContentSnapshot:
+    current = skill.current_version
+    return SkillContentSnapshot(
+        skill.id,
+        skill.current_version_id,
+        current.bundle_file_id if current else None,
+        current.bundle_sha256 if current else None,
+        skill.bundle_file_id,
+        skill.bundle_sha256,
+        skill.name,
+        skill.description,
+    )
+
+
+def _observed_copy(version: SkillVersion) -> SkillVersion:
+    # A transient copy prevents reads and autoflush from writing observed rows.
+    # skill_md stays unloaded: repair only reads it back after filling it.
+    return SkillVersion(
+        id=version.id,
+        bundle_file_id=version.bundle_file_id,
+        bundle_sha256=version.bundle_sha256,
+        unpacked_size_bytes=version.unpacked_size_bytes,
+        file_count=version.file_count,
+        name=version.name,
+        frontmatter=version.frontmatter,
+        metadata_unrepairable=version.metadata_unrepairable,
+    )
+
+
+def _prepare_metadata(version: SkillVersion, file_store: FileStore) -> SkillVersion:
+    """A partial repair still carries what it filled, such as sizes."""
+    observed = _observed_copy(version)
+    repair_version_metadata(observed, file_store, limits=STORED_BUNDLE_LIMITS)
+    return observed
+
+
+def _legacy_version(skill: Skill) -> SkillVersion:
+    current = skill.current_version
+    if current is not None and (current.bundle_file_id, current.bundle_sha256) == (
+        skill.bundle_file_id,
+        skill.bundle_sha256,
+    ):
+        return current
+    return SkillVersion(
+        bundle_file_id=skill.bundle_file_id, bundle_sha256=skill.bundle_sha256
+    )
+
+
+def _apply_metadata(version: SkillVersion, repaired: SkillVersion) -> None:
+    """Copy what a repair of an observed copy filled in."""
+    if repaired.unpacked_size_bytes is not None and repaired.file_count is not None:
+        fill_version_metadata(
+            version,
+            BundleMetadata(
+                unpacked_size_bytes=repaired.unpacked_size_bytes,
+                file_count=repaired.file_count,
+            ),
+        )
+    # The copy starts without skill_md; it is set only when repair read SKILL.md.
+    if "skill_md" in vars(repaired):
+        version.name = repaired.name
+        version.frontmatter = repaired.frontmatter
+        version.skill_md = repaired.skill_md
+    version.metadata_unrepairable = bool(repaired.metadata_unrepairable)
 
 
 def current_skill_version(skill: Skill, db_session: Session) -> SkillVersion | None:
@@ -295,12 +374,14 @@ def list_skill_versions(
 
 
 def fetch_skill_version(
-    skill: Skill, version_id: UUID, db_session: Session
+    skill: Skill, version_id: UUID, db_session: Session, *, refresh: bool = False
 ) -> SkillVersion:
-    """Resolve a version only within the caller's authorized skill."""
-    version = db_session.scalar(
-        skill_versions(skill).where(SkillVersion.id == version_id)
-    )
+    """Resolve a version only within the caller's authorized skill.
+    refresh reloads a row that the session already holds."""
+    query = skill_versions(skill).where(SkillVersion.id == version_id)
+    if refresh:
+        query = query.execution_options(populate_existing=True)
+    version = db_session.scalar(query)
     if version is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill version not found")
     return version
@@ -341,6 +422,7 @@ def save_skill_version(
 ) -> list[str]:
     """Returns the pruned bundle files to delete after commit."""
     _lock_skill(skill, db_session)
+    db_session.refresh(skill, ["current_version"])
     if not initial:
         repair_skill_version(skill, db_session)
     write_skill_version(
@@ -554,13 +636,10 @@ def repair_skill_version_metadata(
     *,
     deadline: float | None = None,
 ) -> list[str]:
-    """Stops between historical versions at the deadline and saves where it
-    stopped. The next pass on this skill starts with the older versions and
-    then wraps around, so a slow or failing version cannot block the others.
-    Versions left without metadata stay in the drift query, so a later pass
-    repairs them."""
-    current = repair_skill_version(skill, db_session)
-    repair_version_metadata(current, file_store, limits=STORED_BUNDLE_LIMITS)
+    """Reads bundles before taking the Skill lock, then applies the results only
+    to versions whose bundle did not change. Reads the current version first,
+    then history from where the last pass stopped, and stops at the deadline.
+    Versions left without metadata stay in the drift query for a later pass."""
     kv_store = get_kv_store()
     resume_key = _REPAIR_RESUME_KEY_PREFIX + str(skill.id)
     try:
@@ -569,30 +648,77 @@ def repair_skill_version_metadata(
         )
     except (KvKeyNotFoundError, ValueError):
         resume_below = None
-    history = list(
-        db_session.scalars(skill_versions(skill).where(SkillVersion.id != current.id))
-    )
-    if resume_below is not None:
-        history = [v for v in history if v.version_number < resume_below] + [
-            v for v in history if v.version_number >= resume_below
-        ]
     stopped_at: int | None = None
-    for version in history:
-        try:
-            with db_session.begin_nested():
-                repair_version_metadata(
-                    version,
-                    file_store,
-                    limits=STORED_BUNDLE_LIMITS,
-                    clear_missing_bundle=True,
+    with db_session.no_autoflush:
+        db_session.refresh(skill)
+        observation = skill_content_snapshot(skill)
+        versions = list(db_session.scalars(skill_versions(skill)))
+        current_id = observation.current_version_id
+        history = [v for v in versions if v.id != current_id]
+        if resume_below is not None:
+            history = [v for v in history if v.version_number < resume_below] + [
+                v for v in history if v.version_number >= resume_below
+            ]
+        ordered = [v for v in versions if v.id == current_id] + history
+        prepared: dict[UUID, tuple[str | None, str | None, SkillVersion]] = {}
+        for version in ordered:
+            observed = _observed_copy(version)
+            try:
+                with db_session.begin_nested():
+                    repair_version_metadata(
+                        observed,
+                        file_store,
+                        limits=STORED_BUNDLE_LIMITS,
+                        clear_missing_bundle=version.id != current_id,
+                    )
+            except Exception:
+                logger.exception(
+                    "Skill version metadata repair failed for %s", version.id
                 )
-        except Exception:
-            logger.exception(
-                "Historical skill metadata repair failed for %s", version.id
-            )
-        if deadline is not None and monotonic() >= deadline:
-            stopped_at = version.version_number
-            break
+            else:
+                prepared[version.id] = (
+                    version.bundle_file_id,
+                    version.bundle_sha256,
+                    observed,
+                )
+            if (
+                version.id != current_id
+                and deadline is not None
+                and monotonic() >= deadline
+            ):
+                stopped_at = version.version_number
+                break
+        legacy = _legacy_version(skill)
+        legacy_metadata: SkillVersion | None
+        if legacy.id is not None and legacy.id == current_id:
+            # The loop already tried this bundle and logged a failure, so a
+            # failed current read does not discard the history it prepared.
+            current_prepared = prepared.get(legacy.id)
+            legacy_metadata = current_prepared[2] if current_prepared else None
+        else:
+            legacy_metadata = _prepare_metadata(legacy, file_store)
+    _lock_skill(skill, db_session)
+    db_session.refresh(skill, ["current_version"])
+    if observation != skill_content_snapshot(skill):
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT, "Skill content changed. Retry metadata repair."
+        )
+    current = repair_skill_version(skill, db_session)
+    for version in db_session.scalars(
+        skill_versions(skill).execution_options(populate_existing=True)
+    ):
+        observed = prepared.get(version.id)
+        if (
+            observed is not None
+            and (version.bundle_file_id, version.bundle_sha256) == observed[:2]
+        ):
+            repaired = observed[2]
+            if repaired.bundle_file_id is None:
+                version.bundle_file_id = None
+            else:
+                _apply_metadata(version, repaired)
+    if current.bundle_file_id is not None and legacy_metadata is not None:
+        _apply_metadata(current, legacy_metadata)
     if stopped_at is not None:
         kv_store.store(resume_key, stopped_at)
     elif resume_below is not None:

@@ -5,7 +5,7 @@ import zipfile
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
-from typing import Never
+from typing import IO, Never
 from uuid import UUID, uuid4
 
 import pytest
@@ -30,7 +30,16 @@ from onyx.cache.interface import CacheLock, CacheLockLostError
 from onyx.configs.constants import FileOrigin, OnyxRedisLocks
 from onyx.db import skill_version
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.models import Base, FileRecord, Skill, SkillVersion, User
+from onyx.db.enums import GrantSource, Permission
+from onyx.db.models import (
+    Base,
+    FileRecord,
+    PermissionGrant,
+    Skill,
+    SkillVersion,
+    User,
+    UserGroup,
+)
 from onyx.db.skill import (
     SkillValidityUpdate,
     create_skill_from_bundle__no_commit,
@@ -43,6 +52,7 @@ from onyx.db.skill_version import (
     delete_unreferenced_skill_bundles,
     read_version_bundle,
     repair_skill_version,
+    repair_skill_version_metadata,
     repair_version_metadata,
     save_skill_version,
     skill_version_repair_batch,
@@ -140,7 +150,18 @@ def session(tenant: str) -> Generator[Session, None, None]:
 
 @pytest.fixture
 def user(session: Session) -> User:
-    user = make_user(session)
+    basic = UserGroup(name="Basic", is_default=True)
+    session.add(basic)
+    session.flush()
+    session.add(
+        PermissionGrant(
+            group_id=basic.id,
+            permission=Permission.BASIC_ACCESS,
+            grant_source=GrantSource.SYSTEM,
+        )
+    )
+    session.flush()
+    user = make_user(session, standard_account=True)
     session.commit()
     return user
 
@@ -397,7 +418,10 @@ def test_failed_replacement_preserves_pointer(session: Session, user: User) -> N
             bundle(name, "Rejected"), "skill.zip", store
         ) as ingested:
             replace_skill_bundle(
-                skill=skill, ingested=ingested, creator_id=uuid4(), db_session=session
+                skill=skill,
+                ingested=ingested,
+                creator_id=uuid4(),
+                db_session=session,
             )
     session.commit()
     assert versions(skill, session) == [original]
@@ -434,6 +458,120 @@ def test_concurrent_replacements(tenant: str, session: Session, user: User) -> N
     skill = session.get(Skill, skill_id)
     assert skill is not None
     assert [version.version_number for version in versions(skill, session)] == [3, 2, 1]
+
+
+def test_metadata_repair_reads_all_versions_before_locking(
+    session: Session, user: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    skill = skill_with_versions(session, user, 3)
+    for version in versions(skill, session):
+        version.unpacked_size_bytes = None
+        version.file_count = None
+    session.commit()
+    store = get_default_file_store()
+    original_read = store.read_file
+    reads: list[str] = []
+
+    def read(file_id: str, *, max_bytes: int | None = None) -> IO[bytes]:
+        with get_session_with_current_tenant() as writer:
+            assert (
+                writer.scalar(
+                    select(Skill.id)
+                    .where(Skill.id == skill.id)
+                    .with_for_update(nowait=True)
+                )
+                == skill.id
+            )
+        reads.append(file_id)
+        return original_read(file_id, max_bytes=max_bytes)
+
+    monkeypatch.setattr(store, "read_file", read)
+    repair_skill_version_metadata(skill, session, store)
+    session.commit()
+    assert set(reads) == {
+        version.bundle_file_id for version in versions(skill, session)
+    }
+    assert all(
+        version.unpacked_size_bytes is not None for version in versions(skill, session)
+    )
+
+
+def test_metadata_repair_discards_observation_after_history_unlinked(
+    session: Session, user: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    skill = skill_with_versions(session, user, 2)
+    current, historical = versions(skill, session)
+    historical.unpacked_size_bytes = None
+    historical.file_count = None
+    session.commit()
+    historical_id = historical.id
+    old_file_id = historical.bundle_file_id
+    current_id = current.id
+    store = get_default_file_store()
+    original_read = store.read_file
+
+    def read(file_id: str, *, max_bytes: int | None = None) -> IO[bytes]:
+        source = original_read(file_id, max_bytes=max_bytes)
+        if file_id == old_file_id:
+            with get_session_with_current_tenant() as writer:
+                writer.execute(
+                    select(Skill.id)
+                    .where(Skill.id == skill.id)
+                    .with_for_update(nowait=True)
+                )
+                writer.execute(
+                    update(SkillVersion)
+                    .where(SkillVersion.id == historical_id)
+                    .values(bundle_file_id=None)
+                )
+                writer.commit()
+        return source
+
+    monkeypatch.setattr(store, "read_file", read)
+    assert repair_skill_version_metadata(skill, session, store) == []
+    session.commit()
+    session.refresh(historical)
+    assert historical.bundle_file_id is None
+    assert historical.unpacked_size_bytes is None
+    assert historical.file_count is None
+    assert skill.current_version_id == current_id
+
+
+def test_metadata_repair_retries_changed_legacy_bundle(
+    session: Session, user: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    skill = skill_with_versions(session, user, 1)
+    original = versions(skill, session)[0]
+    original.unpacked_size_bytes = None
+    session.commit()
+    store = get_default_file_store()
+    original_read = store.read_file
+    with ingested_skill_bundle(
+        bundle(skill.name, "New legacy"), "legacy.zip", store
+    ) as legacy:
+
+        def read(file_id: str, *, max_bytes: int | None = None) -> IO[bytes]:
+            with get_session_with_current_tenant() as writer:
+                writer.execute(
+                    update(Skill)
+                    .where(Skill.id == skill.id)
+                    .values(
+                        bundle_file_id=legacy.bundle_file_id,
+                        bundle_sha256=legacy.bundle_sha256,
+                    )
+                )
+                writer.commit()
+            return original_read(file_id, max_bytes=max_bytes)
+
+        monkeypatch.setattr(store, "read_file", read)
+        with pytest.raises(OnyxError, match="Skill content changed"):
+            repair_skill_version_metadata(skill, session, store)
+        session.rollback()
+        session.refresh(skill)
+        session.refresh(original)
+        assert skill.bundle_file_id == legacy.bundle_file_id
+        assert skill.current_version_id == original.id
+        assert original.unpacked_size_bytes is None
 
 
 @pytest.mark.parametrize("compression", [0, 99])
@@ -773,7 +911,10 @@ def test_rolled_back_prune_keeps_files(session: Session, user: User) -> None:
         bundle(skill.name, "Rolled back"), "skill.zip", get_default_file_store()
     ) as ingested:
         stale = replace_skill_bundle(
-            skill=skill, ingested=ingested, creator_id=user.id, db_session=session
+            skill=skill,
+            ingested=ingested,
+            creator_id=user.id,
+            db_session=session,
         )
         session.rollback()
     assert stale and set(stale) < before
@@ -1054,6 +1195,46 @@ def test_late_insert_below_cursor(tenant: str, session: Session, user: User) -> 
     session.commit()
     repair_skill_versions.run(tenant_id=tenant)
     assert len(versions(late, session)) == 1
+    assert skill_version_repair_batch(session, None, drift_only=True) == []
+
+
+def test_repair_refreshes_later_batch_skill_after_completed_edit(
+    tenant: str, session: Session, user: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    first = legacy_skill(session, user, 1)
+    later = legacy_skill(session, user, 2)
+    repair = repair_tasks.repair_skill_version_metadata
+
+    def edit_before_repair(
+        skill: Skill,
+        db_session: Session,
+        file_store: FileStore,
+        *,
+        deadline: float | None = None,
+    ) -> list[str]:
+        if skill.id == first.id:
+            with get_session_with_current_tenant() as writer:
+                actor = writer.get(User, user.id)
+                assert actor is not None
+                api.replace_current_user_skill_bundle(
+                    later.id,
+                    upload(bundle(later.name, "Edited before repair")),
+                    actor,
+                    writer,
+                )
+        return repair(skill, db_session, file_store, deadline=deadline)
+
+    monkeypatch.setattr(
+        repair_tasks, "repair_skill_version_metadata", edit_before_repair
+    )
+    repair_skill_versions.run(tenant_id=tenant)
+    assert get_kv_store().load(PROGRESS_KEY) == str(later.id)
+    session.expire_all()
+    history = versions(later, session)
+    assert len(history) == 2
+    assert all(version.unpacked_size_bytes is not None for version in history)
+    assert later.current_version is not None
+    assert later.current_version.version_number == 2
     assert skill_version_repair_batch(session, None, drift_only=True) == []
 
 

@@ -21,7 +21,11 @@ from onyx.db.models import (
     User,
     UserGroup,
 )
-from onyx.db.skill_version import VERSION_FILES_NOT_KEPT, repair_skill_version
+from onyx.db.skill_version import (
+    VERSION_FILES_NOT_KEPT,
+    delete_orphan_skill_bundles,
+    repair_skill_version,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
@@ -30,7 +34,11 @@ from onyx.skills import ingest
 from onyx.skills.bundle import DEFAULT_PER_FILE_MAX_BYTES, build_skill_md
 from onyx.skills.ingest import save_skill_bundle_bytes
 from tests.external_dependency_unit.craft.db_helpers import make_user
-from tests.external_dependency_unit.db.test_skill_version_writes import bundle, upload
+from tests.external_dependency_unit.db.test_skill_version_writes import (
+    bundle,
+    make_old,
+    upload,
+)
 from tests.external_dependency_unit.db.test_skill_version_writes import (
     session as session,
 )
@@ -88,8 +96,9 @@ def test_unreadable_history_refuses_preview_and_restore(
     )
 
 
-def test_failed_restore_commit_cleans_only_staged_blob(
-    session: Session, user: User, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize("committed", [False, True])
+def test_failed_restore_commit_defers_cleanup(
+    session: Session, user: User, monkeypatch: pytest.MonkeyPatch, committed: bool
 ) -> None:
     skill = api.create_custom_skill(
         upload(bundle("restore-rollback")), False, user, session
@@ -100,17 +109,38 @@ def test_failed_restore_commit_cleans_only_staged_blob(
     )
     before_history = api.list_custom_skill_versions(skill.id, user, session)
     before_files = set(session.scalars(select(FileRecord.file_id)))
+    commit = session.commit
 
     def fail_commit() -> Never:
-        session.rollback()
+        if committed:
+            commit()
+        else:
+            session.rollback()
         raise RuntimeError("commit rejected")
 
     with monkeypatch.context() as patch:
         patch.setattr(session, "commit", fail_commit)
         with pytest.raises(RuntimeError, match="commit rejected"):
             api.restore_custom_skill_version(skill.id, original.id, user, session)
-    assert api.list_custom_skill_versions(skill.id, user, session) == before_history
-    assert set(session.scalars(select(FileRecord.file_id))) == before_files
+    history = api.list_custom_skill_versions(skill.id, user, session)
+    assert len(history) == len(before_history) + int(committed)
+    if not committed:
+        assert history == before_history
+    after_files = set(session.scalars(select(FileRecord.file_id)))
+    assert before_files <= after_files
+    staged = after_files - before_files
+    assert len(staged) == 1
+    assert delete_orphan_skill_bundles() == 0
+    make_old(staged, session)
+    assert delete_orphan_skill_bundles() == (0 if committed else 1)
+    assert set(session.scalars(select(FileRecord.file_id))) == (
+        after_files if committed else before_files
+    )
+    assert api.fetch_custom_skill_for_edit(
+        skill.id, user, session
+    ).instructions_markdown == (
+        "First instructions" if committed else "Current instructions"
+    )
     assert (
         api.preview_custom_skill_version(
             skill.id, original.id, user, session

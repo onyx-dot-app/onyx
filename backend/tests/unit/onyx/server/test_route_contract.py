@@ -354,7 +354,7 @@ def test_skill_history_requires_edit_access(app: FastAPI, route: str) -> None:
             handler(**kwargs)
     assert fetch.call_args.kwargs["policy"] == SkillManagementPolicy.EDIT
     if route.endswith("/restore"):
-        assert fetch.call_args.kwargs["lock_for_update"] is True
+        assert fetch.call_args.kwargs.get("lock_for_update", False) is False
 
 
 def test_gate2_helpers_exist() -> None:

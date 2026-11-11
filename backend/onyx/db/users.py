@@ -691,7 +691,11 @@ def fetch_users_by_ids(db_session: Session, user_ids: list[UUID]) -> list[User]:
 
 
 def fetch_user_by_id(
-    db_session: Session, user_id: UUID, for_update: bool = False
+    db_session: Session,
+    user_id: UUID,
+    for_update: bool = False,
+    *,
+    refresh: bool = False,
 ) -> User | None:
     """``for_update`` adds ``SELECT ... FOR UPDATE``, serializing concurrent
     transactions that use the user row as a reservation boundary (e.g. Craft
@@ -699,6 +703,8 @@ def fetch_user_by_id(
     query = db_session.query(User).filter(
         User.id == user_id  # ty: ignore[invalid-argument-type]
     )
+    if refresh:
+        query = query.populate_existing()
     if for_update:
         # oauth_accounts is lazy="joined"; Postgres forbids FOR UPDATE on the
         # nullable side of an outer join, so defer it when locking.
