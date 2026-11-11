@@ -143,6 +143,16 @@ run "firecracker_nested_plan" {
     )
     error_message = "Sandbox disk IOPS and throughput must follow the variables."
   }
+
+  assert {
+    condition = (
+      length(local.craft_sandbox_node_groups.sandbox.cloudinit_pre_nodeadm) == 1 &&
+      local.craft_sandbox_node_groups.sandbox.cloudinit_pre_nodeadm[0].content_type == "text/x-shellscript" &&
+      strcontains(local.craft_sandbox_node_groups.sandbox.cloudinit_pre_nodeadm[0].content, "sysctl -w vm.max_map_count=1048576") &&
+      strcontains(local.craft_sandbox_node_groups.sandbox.cloudinit_pre_nodeadm[0].content, "vm.max_map_count = 1048576")
+    )
+    error_message = "Firecracker sandbox nodes must set and persist vm.max_map_count 1048576 (AL2023 ships 524288)."
+  }
 }
 
 run "firecracker_metal_plan" {
@@ -162,6 +172,11 @@ run "firecracker_metal_plan" {
   assert {
     condition     = local.craft_sandbox_node_groups.sandbox.labels["onyx.app/kvm"] == "true"
     error_message = "Metal Firecracker sandbox nodes must have the onyx.app/kvm=true label."
+  }
+
+  assert {
+    condition     = strcontains(local.craft_sandbox_node_groups.sandbox.cloudinit_pre_nodeadm[0].content, "vm.max_map_count=1048576")
+    error_message = "Metal Firecracker sandbox nodes must also set vm.max_map_count 1048576."
   }
 }
 
@@ -220,6 +235,11 @@ run "pod_runtime_accepts_any_type" {
   variables {
     enable_craft                      = true
     craft_sandbox_node_instance_types = ["m7a.2xlarge"]
+  }
+
+  assert {
+    condition     = !contains(keys(local.craft_sandbox_node_groups.sandbox), "cloudinit_pre_nodeadm")
+    error_message = "The pod runtime must not add user data, so its nodes do not roll."
   }
 }
 
