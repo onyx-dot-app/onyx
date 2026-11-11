@@ -179,7 +179,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(up{namespace=~\"$namespace\", node=~\"$node\", job=~\".*craft-fc-host-agent\"})",
+          "expr": "sum(up{namespace=~\"$namespace\", node=~\"$node\", job=\"__CRAFT_FC_HOST_AGENT_JOB__\"})",
           "refId": "A"
         }
       ]
@@ -241,7 +241,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "count(up{namespace=~\"$namespace\", node=~\"$node\", job=~\".*craft-fc-host-agent\"} == 0) or vector(0)",
+          "expr": "count(up{namespace=~\"$namespace\", node=~\"$node\", job=\"__CRAFT_FC_HOST_AGENT_JOB__\"} == 0) or vector(0)",
           "refId": "A"
         }
       ]
@@ -1186,7 +1186,7 @@
       "type": "timeseries",
       "id": 21,
       "title": "Relay connections by result",
-      "description": "accepted, over_cap (VM over --relay-max-conns, closed at once), upstream_failed (sandbox-proxy did not answer). Alert: CraftFcRelayErrors.",
+      "description": "accepted, over_cap (VM over --relay-max-conns, closed at once), upstream_failed (an accepted connection that sandbox-proxy did not answer). Alert: CraftFcRelayErrors.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -1249,7 +1249,7 @@
       "type": "timeseries",
       "id": 22,
       "title": "Relay error ratio",
-      "description": "",
+      "description": "Failed connections / all VM connections. A connection counts once as accepted or over_cap; an accepted one can also count as upstream_failed.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -1302,7 +1302,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum by (node) (rate(craft_fc_host_agent_relay_connections_total{namespace=~\"$namespace\", node=~\"$node\", result=~\"over_cap|upstream_failed\"}[$__rate_interval])) / sum by (node) (rate(craft_fc_host_agent_relay_connections_total{namespace=~\"$namespace\", node=~\"$node\"}[$__rate_interval]))",
+          "expr": "sum by (node) (rate(craft_fc_host_agent_relay_connections_total{namespace=~\"$namespace\", node=~\"$node\", result=~\"over_cap|upstream_failed\"}[$__rate_interval])) / sum by (node) (rate(craft_fc_host_agent_relay_connections_total{namespace=~\"$namespace\", node=~\"$node\", result=~\"accepted|over_cap\"}[$__rate_interval]))",
           "legendFormat": "{{node}}",
           "refId": "A"
         }
@@ -1935,7 +1935,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum by (node) (process_resident_memory_bytes{namespace=~\"$namespace\", node=~\"$node\", job=~\".*craft-fc-host-agent\"})",
+          "expr": "sum by (node) (process_resident_memory_bytes{namespace=~\"$namespace\", node=~\"$node\", job=\"__CRAFT_FC_HOST_AGENT_JOB__\"})",
           "legendFormat": "{{node}}",
           "refId": "A"
         }
@@ -1998,7 +1998,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum by (node) (rate(process_cpu_seconds_total{namespace=~\"$namespace\", node=~\"$node\", job=~\".*craft-fc-host-agent\"}[$__rate_interval]))",
+          "expr": "sum by (node) (rate(process_cpu_seconds_total{namespace=~\"$namespace\", node=~\"$node\", job=\"__CRAFT_FC_HOST_AGENT_JOB__\"}[$__rate_interval]))",
           "legendFormat": "{{node}}",
           "refId": "A"
         }
@@ -2061,7 +2061,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum by (node) (go_goroutines{namespace=~\"$namespace\", node=~\"$node\", job=~\".*craft-fc-host-agent\"})",
+          "expr": "sum by (node) (go_goroutines{namespace=~\"$namespace\", node=~\"$node\", job=\"__CRAFT_FC_HOST_AGENT_JOB__\"})",
           "legendFormat": "goroutines {{node}}",
           "refId": "A"
         },
@@ -2070,7 +2070,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum by (node) (process_open_fds{namespace=~\"$namespace\", node=~\"$node\", job=~\".*craft-fc-host-agent\"})",
+          "expr": "sum by (node) (process_open_fds{namespace=~\"$namespace\", node=~\"$node\", job=\"__CRAFT_FC_HOST_AGENT_JOB__\"})",
           "legendFormat": "open fds {{node}}",
           "refId": "B"
         }

@@ -138,6 +138,30 @@ def test_rules_follow_namespace_and_thresholds() -> None:
     )
 
 
+def test_rules_keep_zero_thresholds() -> None:
+    rules = _by_alert(
+        _rules(
+            [
+                *_METRICS_ON,
+                *_RULES_ON,
+                "--set",
+                "craft.hostAgent.alerts.createFailureRatio=0",
+                "--set",
+                "craft.hostAgent.alerts.relayErrorRatio=0",
+            ]
+        )
+    )
+    assert ") > 0\n" in rules["CraftFcCreateFailures"]["expr"]
+    assert ") > 0\n" in rules["CraftFcRelayErrors"]["expr"]
+
+
+def test_relay_ratio_counts_each_connection_once() -> None:
+    expr = _by_alert(_rules([*_METRICS_ON, *_RULES_ON]))["CraftFcRelayErrors"]["expr"]
+    # An accepted connection whose proxy dial fails is also upstream_failed.
+    denominator = expr.split("/ sum by", 1)[1].split("\n", 1)[0]
+    assert 'result=~"accepted|over_cap"' in denominator
+
+
 def test_rules_use_only_agent_metrics() -> None:
     rules = _rules([*_METRICS_ON, *_RULES_ON])
     used = _used_metric_names(" ".join(r["expr"] for r in rules))
@@ -167,3 +191,22 @@ def test_dashboard_renders_and_uses_only_agent_metrics() -> None:
             assert 'node=~"$node"' in expr
     ids = [p["id"] for p in dashboard["panels"]]
     assert len(ids) == len(set(ids))
+
+
+def test_dashboard_job_is_the_agent_service_name() -> None:
+    # A long name is truncated with a hash, so no suffix match works.
+    long_name = "x" * 60
+    dashboard = _dashboard(
+        [*_METRICS_ON, *_DASHBOARDS_ON, "--set-string", f"fullnameOverride={long_name}"]
+    )
+    assert dashboard is not None
+    text = json.dumps(dashboard)
+    assert "__CRAFT_FC_HOST_AGENT_JOB__" not in text
+    jobs = set(re.findall(r'job=\\"([^\\"]+)\\"', text))
+    assert len(jobs) == 1
+    (job,) = jobs
+    assert job.startswith("x" * 50) and len(job) == 63
+    rules = _rules(
+        [*_METRICS_ON, *_RULES_ON, "--set-string", f"fullnameOverride={long_name}"]
+    )
+    assert f'job="{job}"' in rules[0]["expr"]

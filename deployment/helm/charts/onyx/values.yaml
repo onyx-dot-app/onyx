@@ -2180,7 +2180,8 @@ craft:
       admissionRefusals: 10
       # Failed CaptureSession, UploadCapture or RestoreSession calls per node in 30 m.
       sessionTransferFailures: 3
-      # Failed egress relay connections (over_cap, upstream_failed) / all, 10 m.
+      # Failed egress relay connections (over_cap, upstream_failed) / VM
+      # connections (accepted, over_cap), 10 m.
       relayErrorRatio: 0.1
       # MemAvailable / MemTotal of the node.
       memoryAvailableRatio: 0.1

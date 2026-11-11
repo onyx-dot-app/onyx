@@ -65,7 +65,7 @@ spec:
             (
               sum by (namespace, node) (increase(craft_fc_host_agent_create_duration_seconds_count{ {{- $sel -}}, result="failed"}[15m]))
                 / sum by (namespace, node) (increase(craft_fc_host_agent_create_duration_seconds_count{ {{- $sel -}}, result=~"created|failed"}[15m]))
-            ) > {{ $alerts.createFailureRatio | default 0.2 }}
+            ) > {{ dig "createFailureRatio" 0.2 $alerts }}
             and
             sum by (namespace, node) (increase(craft_fc_host_agent_create_duration_seconds_count{ {{- $sel -}}, result="failed"}[15m])) >= 3
           for: 10m
@@ -84,7 +84,7 @@ spec:
           # template reasons are in CraftFcTemplateUnusable.
           expr: |
             sum by (namespace, node, reason) (increase(craft_fc_host_agent_admissions_total{ {{- $sel -}}, result="refused", reason=~"CAPACITY_MEMORY|CAPACITY_DISK|CAPACITY_VM_SLOTS|EGRESS_CA_UNAVAILABLE|SANDBOX_IN_DOUBT"}[15m]))
-              >= {{ $alerts.admissionRefusals | default 10 }}
+              >= {{ dig "admissionRefusals" 10 $alerts }}
           for: 15m
           labels:
             severity: warning
@@ -100,7 +100,7 @@ spec:
           # Canceled = the caller gave up; not an agent failure.
           expr: |
             sum by (namespace, node, method) (increase(craft_fc_host_agent_rpc_requests_total{ {{- $sel -}}, method=~"CaptureSession|UploadCapture|RestoreSession", code!~"OK|Canceled"}[30m]))
-              >= {{ $alerts.sessionTransferFailures | default 3 }}
+              >= {{ dig "sessionTransferFailures" 3 $alerts }}
           for: 5m
           labels:
             severity: warning
@@ -113,11 +113,13 @@ spec:
             runbook_url: {{ printf "%s#craftfcsessiontransferfailures" $runbook }}
 
         - alert: CraftFcRelayErrors
+          # Each connection counts once as accepted or over_cap; an accepted
+          # one also counts as upstream_failed when the proxy dial fails.
           expr: |
             (
               sum by (namespace, node) (increase(craft_fc_host_agent_relay_connections_total{ {{- $sel -}}, result=~"over_cap|upstream_failed"}[10m]))
-                / sum by (namespace, node) (increase(craft_fc_host_agent_relay_connections_total{ {{- $sel -}}}[10m]))
-            ) > {{ $alerts.relayErrorRatio | default 0.1 }}
+                / sum by (namespace, node) (increase(craft_fc_host_agent_relay_connections_total{ {{- $sel -}}, result=~"accepted|over_cap"}[10m]))
+            ) > {{ dig "relayErrorRatio" 0.1 $alerts }}
             and
             sum by (namespace, node) (increase(craft_fc_host_agent_relay_connections_total{ {{- $sel -}}, result=~"over_cap|upstream_failed"}[10m])) >= 10
           for: 10m
@@ -135,7 +137,7 @@ spec:
           expr: |
             craft_fc_host_agent_node_memory_available_bytes{ {{- $sel -}}}
               / craft_fc_host_agent_node_memory_total_bytes{ {{- $sel -}}}
-              < {{ $alerts.memoryAvailableRatio | default 0.1 }}
+              < {{ dig "memoryAvailableRatio" 0.1 $alerts }}
           for: 15m
           labels:
             severity: warning

@@ -65,6 +65,7 @@ metadata:
     grafana_folder: "Onyx"
 data:
   onyx-craft-fc-host-agent.json: |
-    {{- .Files.Get "dashboards/craft-fc-host-agent.json" | nindent 4 }}
+    {{- /* The scrape job is the agent Service name, which can be truncated. */}}
+    {{- .Files.Get "dashboards/craft-fc-host-agent.json" | replace "__CRAFT_FC_HOST_AGENT_JOB__" (include "onyx.resourceName" (list . "craft-fc-host-agent")) | nindent 4 }}
 {{- end }}
 {{- end }}
