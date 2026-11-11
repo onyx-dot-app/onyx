@@ -78,13 +78,54 @@ service Sandboxd {
   // List returns every execution record, optionally filtered by labels.
   rpc List(ListRequest) returns (ListResponse);
 
-  // Reserved for ENG-4572 (files, session capture/restore). They return
-  // UNIMPLEMENTED; the messages get their fields with that issue.
-  rpc ReadFile(ReadFileRequest) returns (stream DataChunk);
+  // Files and session saves. Every path is relative to the
+  // session directory /workspace/sessions/<session_id>/. A path with "..",
+  // an absolute path, or a symlink that leaves the session directory fails
+  // with INVALID_ARGUMENT. Only ReadFile, ListFiles and ZipFiles can follow
+  // a top-level link of the session (for example user_library) into a
+  // read-only root of the daemon (--read-link-roots).
+
+  // ReadFile streams a regular file: the first message has its info, then
+  // data chunks of at most 64 KiB.
+  rpc ReadFile(ReadFileRequest) returns (stream ReadFileResponse);
+
+  // WriteFile writes a file. The first message is the header, the later
+  // ones carry the bytes. The daemon writes a temporary file in the same
+  // directory and renames it over the path only when size (and sha256, if
+  // set) match. On any error the path does not change.
   rpc WriteFile(stream WriteFileRequest) returns (WriteFileResponse);
+
+  // UploadFile stores an ad-hoc upload in the session's attachments
+  // directory under a free name ("a.pdf", then "a_1.pdf", ...). Same
+  // message order and checks as WriteFile.
+  rpc UploadFile(stream UploadFileRequest) returns (UploadFileResponse);
+
+  // ListFiles lists one directory, or a tree with recursive.
   rpc ListFiles(ListFilesRequest) returns (ListFilesResponse);
+
+  // DeleteFile removes a file or a link (never its target), or a directory
+  // with recursive. A missing path is not an error (deleted is false).
   rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse);
-  rpc CaptureSession(CaptureSessionRequest) returns (stream DataChunk);
+
+  // ZipFiles streams a deflate zip of the regular files under a directory.
+  // The last message is the summary. A limit error ends the stream with a
+  // status; drop the bytes received so far.
+  rpc ZipFiles(ZipFilesRequest) returns (stream ZipFilesResponse);
+
+  // CaptureSession streams a tar + zstd archive of the session's capture
+  // roots (default attachments), without the excluded names
+  // (dependencies and caches), symlinks and special files. The last message
+  // is the summary, with the SHA-256 of the stream. The node agent calls it
+  // (HostAgent CaptureSession) and spools the stream for a presigned upload.
+  rpc CaptureSession(CaptureSessionRequest) returns (stream CaptureSessionResponse);
+
+  // RestoreSession extracts an archive from CaptureSession into the
+  // session. The first message is the header, the later ones carry the
+  // bytes. The daemon extracts into a staging directory, checks size and
+  // SHA-256 of the stream, and only then replaces each capture root that
+  // the archive has. Links, devices, FIFOs, unsafe names and archives over
+  // a limit fail with ARCHIVE_INVALID or LIMIT_EXCEEDED, and change
+  // nothing. A capture and a restore of one session never run at once.
   rpc RestoreSession(stream RestoreSessionRequest) returns (RestoreSessionResponse);
 
   // Reserved for ENG-4573 (browser). They return UNIMPLEMENTED.
@@ -147,6 +188,17 @@ enum ErrorReason {
   MANAGED_DEVICE_MISMATCH = 14;
   // MountManaged: the mount failed. The old drive stays mounted.
   MANAGED_MOUNT_FAILED = 15;
+
+  // Files and session saves.
+  // The path, or a parent directory of it, does not exist.
+  FILE_NOT_FOUND = 16;
+  // WriteFile without overwrite: the path exists.
+  FILE_EXISTS = 17;
+  // A size, file count or entry limit was reached.
+  LIMIT_EXCEEDED = 18;
+  // RestoreSession: the archive is not a valid capture (bad zstd or tar, an
+  // unsafe member, or size or SHA-256 differ from the header).
+  ARCHIVE_INVALID = 19;
 }
 
 message HealthRequest {}
@@ -395,20 +447,248 @@ message ListResponse {
   repeated Execution executions = 1;
 }
 
-// ENG-4572 / ENG-4573 placeholders.
-message DataChunk {
-  bytes data = 1;
+// Files and session saves.
+
+enum FileType {
+  FILE_TYPE_UNSPECIFIED = 0;
+  FILE_TYPE_REGULAR = 1;
+  FILE_TYPE_DIRECTORY = 2;
+  FILE_TYPE_SYMLINK = 3;
+  // A device, FIFO or socket.
+  FILE_TYPE_OTHER = 4;
 }
-message ReadFileRequest {}
-message WriteFileRequest {}
-message WriteFileResponse {}
-message ListFilesRequest {}
-message ListFilesResponse {}
-message DeleteFileRequest {}
-message DeleteFileResponse {}
-message CaptureSessionRequest {}
-message RestoreSessionRequest {}
-message RestoreSessionResponse {}
+
+message FileInfo {
+  // Session-relative path, "/"-separated.
+  string path = 1;
+  string name = 2;
+  FileType type = 3;
+  // Bytes, for a regular file or a link (the length of its target).
+  int64 size = 4;
+  // Permission bits (mode & 0777).
+  uint32 mode = 5;
+  google.protobuf.Timestamp modified_at = 6;
+  // FILE_TYPE_SYMLINK only: the link target as stored. ListFiles replaces
+  // bytes that are not valid UTF-8 with U+FFFD.
+  string link_target = 7;
+}
+
+message ReadFileRequest {
+  string session_id = 1;
+  string path = 2;
+  // First byte to send.
+  int64 offset = 3;
+  // Bytes to send from offset. 0 sends to the end of the file. The bytes
+  // sent can be at most the daemon's --max-file-bytes.
+  int64 length = 4;
+}
+
+message ReadFileResponse {
+  oneof part {
+    // The first message.
+    FileInfo info = 1;
+    // Later messages, in order from offset.
+    bytes data = 2;
+  }
+}
+
+message WriteFileHeader {
+  string session_id = 1;
+  string path = 2;
+  // Exact number of bytes that follow. At most --max-file-bytes.
+  int64 size = 3;
+  // Optional hex SHA-256 of the bytes. Checked before the rename.
+  string sha256 = 4;
+  // Permission bits (& 0777). 0 means 0644.
+  uint32 mode = 5;
+  // Replace an existing file. Without it, an existing path fails with
+  // FILE_EXISTS.
+  bool overwrite = 6;
+  // Create missing parent directories (mode 0755).
+  bool make_parents = 7;
+}
+
+message WriteFileRequest {
+  oneof part {
+    // The first message.
+    WriteFileHeader header = 1;
+    // Later messages: the next bytes (at most 1 MiB each; the daemon accepts messages up to 4 MiB).
+    bytes data = 2;
+  }
+}
+
+message WriteFileResponse {
+  FileInfo info = 1;
+  // Hex SHA-256 of the bytes written.
+  string sha256 = 2;
+}
+
+message UploadFileHeader {
+  string session_id = 1;
+  // File name only (no "/"). The daemon replaces characters that are not
+  // safe in a name with "_".
+  string file_name = 2;
+  // Exact number of bytes that follow. At most --max-file-bytes.
+  int64 size = 3;
+  // Optional hex SHA-256 of the bytes.
+  string sha256 = 4;
+  // Session-relative directory. Default "attachments".
+  string directory = 5;
+}
+
+message UploadFileRequest {
+  oneof part {
+    UploadFileHeader header = 1;
+    bytes data = 2;
+  }
+}
+
+message UploadFileResponse {
+  // The stored file; info.path is for example "attachments/report_1.pdf".
+  FileInfo info = 1;
+  string sha256 = 2;
+}
+
+message ListFilesRequest {
+  string session_id = 1;
+  // Directory. Empty means the session directory.
+  string path = 2;
+  // List the whole tree, not only the directory.
+  bool recursive = 3;
+  // Recursive only. 0 means 64.
+  uint32 max_depth = 4;
+  // Entries with these names are not listed, and not entered.
+  repeated string exclude_names = 5;
+  // Skip names that start with ".".
+  bool skip_hidden = 6;
+  // 0 means 10,000. At most 100,000.
+  uint32 max_entries = 7;
+}
+
+message ListFilesResponse {
+  // Directories first, then by name (case-insensitive), per directory.
+  // Entries whose name is not valid UTF-8 are left out.
+  repeated FileInfo entries = 1;
+  // True if max_entries, max_depth or the response size limit (12 MiB)
+  // cut the listing.
+  bool truncated = 2;
+}
+
+message DeleteFileRequest {
+  string session_id = 1;
+  string path = 2;
+  // Allow removing a directory and everything below it.
+  bool recursive = 3;
+}
+
+message DeleteFileResponse {
+  // False if the path did not exist.
+  bool deleted = 1;
+}
+
+message ZipFilesRequest {
+  string session_id = 1;
+  // Directory to zip. Names in the zip are relative to it.
+  string path = 2;
+  repeated string exclude_names = 3;
+  bool skip_hidden = 4;
+}
+
+message ZipSummary {
+  uint32 files = 1;
+  // Bytes of the files before compression.
+  int64 input_bytes = 2;
+  // Bytes of the zip.
+  int64 zip_bytes = 3;
+  // Links, special files and unreadable entries that were left out.
+  uint32 skipped = 4;
+}
+
+message ZipFilesResponse {
+  oneof part {
+    bytes data = 1;
+    // The last message.
+    ZipSummary summary = 2;
+  }
+}
+
+// Limits of one capture or restore. 0 means the daemon default. A value
+// over the daemon's own limit fails with INVALID_ARGUMENT.
+message ArchiveLimits {
+  // Archive (zstd) bytes. Default 1 GiB.
+  int64 max_stored_bytes = 1;
+  // Total bytes of the files. Default 4 GiB.
+  int64 max_expanded_bytes = 2;
+  // Files and directories. Default 500,000.
+  int64 max_entries = 3;
+}
+
+message CaptureSessionRequest {
+  string session_id = 1;
+  // Capture roots: names of directories in the session directory. Empty
+  // means the daemon's --capture-dirs (attachments).
+  repeated string roots = 2;
+  // Names skipped at any depth. Empty means the daemon's --capture-exclude
+  // (node_modules, .venv, caches, ...). A directory with pyvenv.cfg is
+  // always skipped.
+  repeated string exclude_names = 3;
+  ArchiveLimits limits = 4;
+}
+
+message CaptureSummary {
+  // Archive bytes and their hex SHA-256 (what the node agent uploads).
+  int64 stored_bytes = 1;
+  string sha256 = 2;
+  int64 files = 3;
+  int64 directories = 4;
+  // Total bytes of the files.
+  int64 expanded_bytes = 5;
+  // Entries left out by exclude_names or as a venv.
+  int64 excluded = 6;
+  // Symlinks, special files and entries that could not be read.
+  int64 skipped = 7;
+  // Files that shrank during the capture. Their tail is zero-filled.
+  int64 changed = 8;
+  // Capture roots that exist and are in the archive.
+  repeated string roots = 9;
+}
+
+message CaptureSessionResponse {
+  oneof part {
+    bytes data = 1;
+    // The last message.
+    CaptureSummary summary = 2;
+  }
+}
+
+message RestoreSessionHeader {
+  string session_id = 1;
+  // Exact archive size and hex SHA-256 (from the capture).
+  int64 size_bytes = 2;
+  string sha256 = 3;
+  // Names the archive may hold. Empty means --capture-dirs.
+  repeated string roots = 4;
+  ArchiveLimits limits = 5;
+}
+
+message RestoreSessionRequest {
+  oneof part {
+    // The first message.
+    RestoreSessionHeader header = 1;
+    // Later messages: the archive bytes (at most 1 MiB each; the daemon accepts messages up to 4 MiB).
+    bytes data = 2;
+  }
+}
+
+message RestoreSessionResponse {
+  int64 files = 1;
+  int64 directories = 2;
+  int64 expanded_bytes = 3;
+  // Capture roots that the restore replaced.
+  repeated string roots = 4;
+}
+
+// Browser placeholders.
 message BrowserStartRequest {}
 message BrowserStartResponse {}
 message BrowserStopRequest {}

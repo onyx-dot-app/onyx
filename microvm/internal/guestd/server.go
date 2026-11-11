@@ -18,6 +18,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/execs"
+	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/files"
 	pb "github.com/onyx-dot-app/onyx/microvm/proto/sandboxd/v1"
 )
 
@@ -53,7 +54,10 @@ type Config struct {
 	Managed *ManagedConfig
 	// Reclaimer drops the guest page cache when the VM is idle. Nil: off.
 	Reclaimer *Reclaimer
-	Log       *slog.Logger
+	// Files serves the file calls and session saves. Nil means a store
+	// with the defaults (files.Config{}).
+	Files *files.Store
+	Log   *slog.Logger
 }
 
 // DefaultBaseEnv is the command env before Init adds to it.
@@ -81,6 +85,7 @@ type Server struct {
 	cfg     Config
 	sys     System
 	m       *execs.Manager
+	files   *files.Store
 	started time.Time
 
 	initMu    sync.Mutex // one Init at a time
@@ -97,7 +102,14 @@ func NewServer(cfg Config, sys System, m *execs.Manager) (*Server, error) {
 	if cfg.BaseEnv == nil {
 		cfg.BaseEnv = DefaultBaseEnv
 	}
-	s := &Server{cfg: cfg, sys: sys, m: m, started: time.Now()}
+	if cfg.Files == nil {
+		fs, err := files.New(files.Config{})
+		if err != nil {
+			return nil, err
+		}
+		cfg.Files = fs
+	}
+	s := &Server{cfg: cfg, sys: sys, m: m, files: cfg.Files, started: time.Now()}
 	if cfg.StateFile != "" {
 		raw, err := os.ReadFile(cfg.StateFile)
 		switch {
