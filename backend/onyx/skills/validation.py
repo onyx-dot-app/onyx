@@ -14,8 +14,8 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.bundle import (
-    DEFAULT_TOTAL_MAX_BYTES,
     SKILL_MD_NAME,
+    STORED_ZIP_MAX_BYTES,
     NormalizedSkillBundle,
     normalize_stored_bundle,
     read_bundle_file,
@@ -33,7 +33,7 @@ class SkillValidationResult:
 
 def read_stored_bundle_bytes(bundle_file_id: str, file_store: FileStore) -> bytes:
     with closing(file_store.read_file(bundle_file_id)) as bundle_stream:
-        return read_bundle_file(bundle_stream, max_bytes=DEFAULT_TOTAL_MAX_BYTES)
+        return read_bundle_file(bundle_stream, max_bytes=STORED_ZIP_MAX_BYTES)
 
 
 def load_stored_custom_skill_bundle(

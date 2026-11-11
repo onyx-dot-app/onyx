@@ -93,13 +93,13 @@ def test_bundle_over_lowered_total_limit_stays_unclassified(
     stored = _valid_stored_bundle()
     file_store = MagicMock(spec=FileStore)
     file_store.read_file.return_value = io.BytesIO(stored)
-    monkeypatch.setattr(validation, "DEFAULT_TOTAL_MAX_BYTES", len(stored) - 1)
+    monkeypatch.setattr(validation, "STORED_ZIP_MAX_BYTES", len(stored) - 1)
 
     result = validate_stored_custom_skill(_skill(), file_store)
 
     assert result.is_valid is None
     assert result.normalized_bundle is None
 
-    monkeypatch.setattr(validation, "DEFAULT_TOTAL_MAX_BYTES", len(stored))
+    monkeypatch.setattr(validation, "STORED_ZIP_MAX_BYTES", len(stored))
     file_store.read_file.return_value = io.BytesIO(stored)
     assert validate_stored_custom_skill(_skill(), file_store).is_valid is True

@@ -263,8 +263,10 @@ The library preview of an external-app skill calls the same renderer
     `skills/bundle.py` limits are constants, not env vars: 25 MiB per file and
     100 MiB expanded for every bundle, plus a 25 MiB ZIP and 500 files for new
     uploads. Stored reads
-    (`skills/validation.py:read_stored_bundle_bytes`) stop at the expanded-total
-    limit and skip the ZIP-size
+    (`skills/validation.py:read_stored_bundle_bytes`) stop at
+    `STORED_ZIP_MAX_BYTES` (the expanded-total limit), and an edit that would
+    save a larger ZIP is refused, so every saved bundle loads again. They skip
+    the ZIP-size
     and file-count limits. `skills/validation.py:validate_stored_custom_skill`
     returns `is_valid=None` for `PAYLOAD_TOO_LARGE`, so the push skips the Skill
     without saving it invalid. Edits that cannot add files (a SKILL.md rewrite, a
