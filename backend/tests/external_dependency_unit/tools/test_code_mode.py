@@ -74,11 +74,6 @@ from tests.external_dependency_unit.mock_image_provider import (
     use_mock_image_generation_provider,
 )
 
-PROGRAM = (
-    "import asyncio\n"
-    "a, b = await asyncio.gather(acme__hello(name='alpha'), acme__hello(name='beta'))\n"
-    "print(a['result'] + ' | ' + b['result'])\n"
-)
 PRINTED = "Hello, alpha! | Hello, beta!"
 
 
@@ -178,7 +173,7 @@ def mcp_server_url() -> Generator[str, None, None]:
     sock.close()
 
 
-# Programs call its tools as `<server>__<tool>`.
+# Code mode includes the server ID in each MCP function namespace.
 MCP_SERVER = "acme"
 
 
@@ -188,7 +183,7 @@ def _persona_with_mcp_tool(
     server_url: str,
     tool_names: Sequence[str] = ("hello",),
     output_schema: dict[str, JsonValue] | None = None,
-) -> Persona:
+) -> tuple[Persona, str]:
     mcp_server = create_mcp_server__no_commit(
         owner_email=user.email,
         name=MCP_SERVER,
@@ -240,7 +235,7 @@ def _persona_with_mcp_tool(
     db_session.add_all([*tools, persona])
     db_session.commit()
     db_session.refresh(persona)
-    return persona
+    return persona, f"mcp__{MCP_SERVER}_{mcp_server.id}"
 
 
 def _code_mode_packets(packets: Sequence[object]) -> list[Packet]:
@@ -255,13 +250,13 @@ def _code_mode_packets(packets: Sequence[object]) -> list[Packet]:
     ]
 
 
-def _assert_code_mode_block(packets: Sequence[object]) -> None:
+def _assert_code_mode_block(packets: Sequence[object], program: str) -> None:
     block = _code_mode_packets(packets)
     starts = [p for p in block if isinstance(p.obj, CodeModeStart)]
     assert len(starts) == 1
     start = starts[0]
     assert isinstance(start.obj, CodeModeStart)
-    assert start.obj.code == PROGRAM
+    assert start.obj.code == program
     assert start.placement.sub_turn_index is None
 
     nested = [p for p in block if isinstance(p.obj, (CustomToolStart, CustomToolDelta))]
@@ -323,17 +318,22 @@ def test_code_mode_program_calls_mcp_tool_in_parallel(
     mcp_server_url: str,
 ) -> None:
     user = make_test_user("code_mode_user")
-    persona = _persona_with_mcp_tool(db_session, user, mcp_server_url)
+    persona, namespace = _persona_with_mcp_tool(db_session, user, mcp_server_url)
     chat_session = create_chat_session_from_request(
         chat_session_request=ChatSessionCreationRequest(persona_id=persona.id),
         user=user,
         db_session=db_session,
     )
-    llm = ChatLLM([code_step("code", PROGRAM), Delta(content="Both greetings worked.")])
+    program = (
+        "import asyncio\n"
+        f"a, b = await asyncio.gather({namespace}__hello(name='alpha'), {namespace}__hello(name='beta'))\n"
+        "print(a['result'] + ' | ' + b['result'])\n"
+    )
+    llm = ChatLLM([code_step("code", program), Delta(content="Both greetings worked.")])
     parts = send(chat_session.id, user, llm, "Greet alpha and beta.")
 
     assert final_answer(parts) == "Both greetings worked."
-    _assert_code_mode_block(parts)
+    _assert_code_mode_block(parts, program)
 
     # The second model step receives the program output as the tool result.
     assert len(llm.requests) == 2
@@ -343,7 +343,7 @@ def test_code_mode_program_calls_mcp_tool_in_parallel(
         session_id=chat_session.id, user=user, db_session=db_session
     )
     assert len(chat_detail.packets) == 1
-    _assert_code_mode_block(chat_detail.packets[0])
+    _assert_code_mode_block(chat_detail.packets[0], program)
 
 
 @pytest.mark.parametrize("temporary", [False, True])
@@ -354,7 +354,7 @@ def test_stored_values_reach_a_program_in_a_later_turn(
     temporary: bool,
 ) -> None:
     user = make_test_user(f"code_mode_store_user_{temporary}")
-    persona = _persona_with_mcp_tool(db_session, user, mcp_server_url)
+    persona, namespace = _persona_with_mcp_tool(db_session, user, mcp_server_url)
     chat_session = create_chat_session_from_request(
         chat_session_request=ChatSessionCreationRequest(persona_id=persona.id),
         user=user,
@@ -370,7 +370,7 @@ def test_stored_values_reach_a_program_in_a_later_turn(
             [
                 code_step(
                     "store",
-                    "greeting = await acme__hello(name='alpha')\n"
+                    f"greeting = await {namespace}__hello(name='alpha')\n"
                     "store('greeting', {'text': greeting['result']})\n"
                     "store('unused', None)\n"
                     "raise ValueError('after storing')\n",
@@ -428,7 +428,7 @@ def test_stop_keeps_the_calls_a_program_made(
     signals: ServerSignals,
 ) -> None:
     user = make_test_user("code_mode_stop_user")
-    persona = _persona_with_mcp_tool(
+    persona, namespace = _persona_with_mcp_tool(
         db_session, user, mcp_server_url, tool_names=("hello", "slow")
     )
     chat_session = create_chat_session_from_request(
@@ -440,7 +440,7 @@ def test_stop_keeps_the_calls_a_program_made(
         [
             code_step(
                 "code",
-                "a = await acme__hello(name='alpha')\nb = await acme__slow(name='beta')\nprint(b)\n",
+                f"a = await {namespace}__hello(name='alpha')\nb = await {namespace}__slow(name='beta')\nprint(b)\n",
             )
         ]
     )
@@ -488,7 +488,7 @@ def test_stop_keeps_the_calls_a_program_made(
         "Alpha was greeted."
     )
     text = last_tool_text(follow_up, "code")
-    assert "[0] acme__hello: ok\n[1] acme__slow: unfinished" in text
+    assert f"[0] {namespace}__hello: ok\n[1] {namespace}__slow: unfinished" in text
     assert "may have had effects" in text
 
 
@@ -498,7 +498,7 @@ def test_stop_during_computation_saves_the_cancelled_program(
     mcp_server_url: str,
 ) -> None:
     user = make_test_user("code_mode_busy_stop_user")
-    persona = _persona_with_mcp_tool(db_session, user, mcp_server_url)
+    persona, namespace = _persona_with_mcp_tool(db_session, user, mcp_server_url)
     chat_session = create_chat_session_from_request(
         chat_session_request=ChatSessionCreationRequest(persona_id=persona.id),
         user=user,
@@ -508,7 +508,7 @@ def test_stop_during_computation_saves_the_cancelled_program(
         [
             code_step(
                 "busy",
-                "await acme__hello(name='alpha')\nprint('looping')\nwhile True:\n    pass\n",
+                f"await {namespace}__hello(name='alpha')\nprint('looping')\nwhile True:\n    pass\n",
             )
         ]
     )
@@ -539,7 +539,7 @@ def test_stop_during_computation_saves_the_cancelled_program(
     assert isinstance(details, CodeModeExecutionResult)
     assert details.status == "cancelled"
     assert [(call.function_name, call.state) for call in details.calls] == [
-        ("acme__hello", "ok")
+        (f"{namespace}__hello", "ok")
     ]
 
     # A reload shows the cancelled step.
@@ -650,7 +650,7 @@ def test_wait_code_collects_the_result_of_a_yielded_cell(
     mcp_server_url: str,
 ) -> None:
     user = make_test_user("code_mode_cell_user")
-    persona = _persona_with_mcp_tool(db_session, user, mcp_server_url)
+    persona, namespace = _persona_with_mcp_tool(db_session, user, mcp_server_url)
     chat_session = create_chat_session_from_request(
         chat_session_request=ChatSessionCreationRequest(persona_id=persona.id),
         user=user,
@@ -661,7 +661,7 @@ def test_wait_code_collects_the_result_of_a_yielded_cell(
             code_step(
                 "start",
                 "print('started')\nyield_control()\n"
-                "greeting = await acme__hello(name='alpha')\nprint(greeting['result'])\n"
+                f"greeting = await {namespace}__hello(name='alpha')\nprint(greeting['result'])\n"
                 "store('greeting', greeting)\n",
             ),
             wait_step("wait", 1),
@@ -685,7 +685,7 @@ def test_wait_code_collects_the_result_of_a_yielded_cell(
         (1, 1, "completed"),
     ]
     assert [(call.function_name, call.state) for call in saved[1].calls] == [
-        ("acme__hello", "ok")
+        (f"{namespace}__hello", "ok")
     ]
 
     chat_detail = get_chat_session(
@@ -726,7 +726,7 @@ def test_a_cell_running_at_the_answer_gets_a_closing_record(
     signals: ServerSignals,
 ) -> None:
     user = make_test_user("code_mode_closing_user")
-    persona = _persona_with_mcp_tool(
+    persona, namespace = _persona_with_mcp_tool(
         db_session, user, mcp_server_url, tool_names=("hello", "slow")
     )
     chat_session = create_chat_session_from_request(
@@ -744,8 +744,8 @@ def test_a_cell_running_at_the_answer_gets_a_closing_record(
             code_step(
                 "start",
                 "yield_control()\n"
-                "greeting = await acme__hello(name='alpha')\nprint(greeting['result'])\n"
-                "await acme__slow(name='beta')\n",
+                f"greeting = await {namespace}__hello(name='alpha')\nprint(greeting['result'])\n"
+                f"await {namespace}__slow(name='beta')\n",
             ),
             Delta(content="Answered early."),
         ],
@@ -768,8 +768,8 @@ def test_a_cell_running_at_the_answer_gets_a_closing_record(
         "terminated",
     )
     assert [(call.function_name, call.state) for call in saved.closing.calls] == [
-        ("acme__hello", "ok"),
-        ("acme__slow", "unfinished"),
+        (f"{namespace}__hello", "ok"),
+        (f"{namespace}__slow", "unfinished"),
     ]
     assert saved.closing.stdout == "Hello, alpha!\n"
 
@@ -790,7 +790,7 @@ def test_a_cell_running_at_the_answer_gets_a_closing_record(
     text = last_tool_text(follow_up, "start")
     assert text.endswith(
         "Cell 1 stopped when the response ended.\n\nOutput:\nHello, alpha!\n\n"
-        "Tool calls:\n[0] acme__hello: ok\n[1] acme__slow: unfinished\n"
+        f"Tool calls:\n[0] {namespace}__hello: ok\n[1] {namespace}__slow: unfinished\n"
         "All of these calls may have had effects, also unfinished calls. Check "
         "before you retry."
     )
@@ -802,7 +802,7 @@ def test_stop_during_wait_code_stops_the_cell(
     mcp_server_url: str,
 ) -> None:
     user = make_test_user("code_mode_cell_stop_user")
-    persona = _persona_with_mcp_tool(db_session, user, mcp_server_url)
+    persona, namespace = _persona_with_mcp_tool(db_session, user, mcp_server_url)
     chat_session = create_chat_session_from_request(
         chat_session_request=ChatSessionCreationRequest(persona_id=persona.id),
         user=user,
@@ -812,7 +812,7 @@ def test_stop_during_wait_code_stops_the_cell(
         [
             code_step(
                 "start",
-                "import asyncio\nawait acme__hello(name='alpha')\nprint('a')\n"
+                f"import asyncio\nawait {namespace}__hello(name='alpha')\nprint('a')\n"
                 "yield_control()\nprint('b')\nawait asyncio.sleep(60)\n",
             ),
             wait_step("wait", 1),
@@ -859,7 +859,7 @@ def test_stop_during_wait_code_stops_the_cell(
     )
     assert "Tool calls:" not in last_tool_text(follow_up, "start")
     ended = last_tool_text(follow_up, "wait")
-    assert "Tool calls:\n[0] acme__hello: ok\n" in ended
+    assert f"Tool calls:\n[0] {namespace}__hello: ok\n" in ended
 
 
 def test_an_unobserved_commit_after_a_later_one_keeps_the_live_store(
@@ -869,7 +869,7 @@ def test_an_unobserved_commit_after_a_later_one_keeps_the_live_store(
     signals: ServerSignals,
 ) -> None:
     user = make_test_user("code_mode_commit_order_user")
-    persona = _persona_with_mcp_tool(
+    persona, namespace = _persona_with_mcp_tool(
         db_session, user, mcp_server_url, tool_names=("hello", "slow")
     )
     chat_session = create_chat_session_from_request(
@@ -896,7 +896,7 @@ def test_an_unobserved_commit_after_a_later_one_keeps_the_live_store(
         [
             code_step(
                 "first",
-                "yield_control()\nawait acme__slow(name='a')\nstore('k', 'a')\n",
+                f"yield_control()\nawait {namespace}__slow(name='a')\nstore('k', 'a')\n",
             ),
             code_step("second", "store('k', 'b')\n"),
             code_step("live", "print(load('k'))\n"),
@@ -938,7 +938,7 @@ def test_a_server_reported_tool_error_reaches_the_program_and_the_model(
     mcp_server_url: str,
 ) -> None:
     user = make_test_user("code_mode_tool_error_user")
-    persona = _persona_with_mcp_tool(
+    persona, namespace = _persona_with_mcp_tool(
         db_session, user, mcp_server_url, tool_names=("deny", "hello")
     )
     chat_session = create_chat_session_from_request(
@@ -952,7 +952,7 @@ def test_a_server_reported_tool_error_reaches_the_program_and_the_model(
             code_step(
                 "code",
                 "try:\n"
-                "    await acme__deny(name='onyx')\n"
+                f"    await {namespace}__deny(name='onyx')\n"
                 "except Exception as error:\n"
                 "    print('caught', error)\n",
             ),
@@ -975,14 +975,16 @@ def test_a_server_reported_tool_error_reaches_the_program_and_the_model(
                         id="direct",
                         index=0,
                         function=ResponseFunctionCall(
-                            name="deny", arguments=json.dumps({"name": "onyx"})
+                            name=f"{namespace}__deny",
+                            arguments=json.dumps({"name": "onyx"}),
                         ),
                     ),
                     ChatCompletionDeltaToolCall(
                         id="greet",
                         index=1,
                         function=ResponseFunctionCall(
-                            name="hello", arguments=json.dumps({"name": "onyx"})
+                            name=f"{namespace}__hello",
+                            arguments=json.dumps({"name": "onyx"}),
                         ),
                     ),
                 ]
@@ -1012,7 +1014,7 @@ def test_a_server_reported_tool_error_reaches_the_program_and_the_model(
     assert isinstance(details, CodeModeExecutionResult)
     assert details.status == "completed"
     assert [(call.function_name, call.state) for call in details.calls] == [
-        ("acme__deny", "error")
+        (f"{namespace}__deny", "error")
     ]
     assert direct_call.result is not None and direct_call.result.is_error
 
@@ -1023,7 +1025,7 @@ def test_mcp_media_results_reach_the_model_as_their_text(
     mcp_server_url: str,
 ) -> None:
     user = make_test_user("code_mode_mcp_media_user")
-    persona = _persona_with_mcp_tool(
+    persona, namespace = _persona_with_mcp_tool(
         db_session, user, mcp_server_url, tool_names=("chart",)
     )
     chat_session = create_chat_session_from_request(
@@ -1033,7 +1035,7 @@ def test_mcp_media_results_reach_the_model_as_their_text(
     )
     program = ChatLLM(
         [
-            code_step("code", "print(await acme__chart(name='q2'))\n"),
+            code_step("code", f"print(await {namespace}__chart(name='q2'))\n"),
             Delta(content="Charted."),
         ]
     )
@@ -1052,7 +1054,8 @@ def test_mcp_media_results_reach_the_model_as_their_text(
                         id="direct",
                         index=0,
                         function=ResponseFunctionCall(
-                            name="chart", arguments=json.dumps({"name": "q3"})
+                            name=f"{namespace}__chart",
+                            arguments=json.dumps({"name": "q3"}),
                         ),
                     )
                 ]
@@ -1074,7 +1077,7 @@ def test_a_program_finds_a_deferred_mcp_function_with_tool_search(
     mcp_server_url: str,
 ) -> None:
     user = make_test_user("code_mode_tool_search_user")
-    persona = _persona_with_mcp_tool(db_session, user, mcp_server_url)
+    persona, namespace = _persona_with_mcp_tool(db_session, user, mcp_server_url)
     chat_session = create_chat_session_from_request(
         chat_session_request=ChatSessionCreationRequest(persona_id=persona.id),
         user=user,
@@ -1087,7 +1090,7 @@ def test_a_program_finds_a_deferred_mcp_function_with_tool_search(
                 "[match] = await tool_search('say hi', limit=1)\n"
                 "print(match['name'])\n"
                 "print(match['stub'])\n"
-                "greeting = await acme__hello(name='alpha')\n"
+                f"greeting = await {namespace}__hello(name='alpha')\n"
                 "print(greeting['result'])\n",
             ),
             Delta(content="Found it."),
@@ -1101,13 +1104,13 @@ def test_a_program_finds_a_deferred_mcp_function_with_tool_search(
         for tool in llm.requests[0]["tools"]
         if tool["function"]["name"] == "execute_code"
     ]
-    assert f"the MCP server `{MCP_SERVER}`" in description
-    assert "acme__hello" not in description
+    assert f"the MCP server `{namespace}`" in description
+    assert f"{namespace}__hello" not in description
 
     text = last_tool_text(llm, "find")
-    assert "Output:\nacme__hello\n" in text
+    assert f"Output:\n{namespace}__hello\n" in text
     # The stub types the result from the server's output schema.
-    assert "-> AcmeHelloResult" in text
+    assert f"-> McpAcme{persona.tools[0].mcp_server_id}HelloResult" in text
     assert text.rstrip().endswith("Hello, alpha!")
 
 
@@ -1117,7 +1120,7 @@ def test_a_program_receives_the_structured_result_of_an_mcp_tool(
     mcp_server_url: str,
 ) -> None:
     user = make_test_user("code_mode_mcp_structured_user")
-    persona = _persona_with_mcp_tool(
+    persona, namespace = _persona_with_mcp_tool(
         db_session,
         user,
         mcp_server_url,
@@ -1130,7 +1133,7 @@ def test_a_program_receives_the_structured_result_of_an_mcp_tool(
         db_session=db_session,
     )
     program = (
-        "forecast = await acme__forecast(name='Oslo')\n"
+        f"forecast = await {namespace}__forecast(name='Oslo')\n"
         "print(type(forecast).__name__, forecast['city'], forecast['high'] + 1)\n"
     )
     llm = ChatLLM([code_step("code", program), Delta(content="Forecasted.")])
