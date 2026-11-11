@@ -167,6 +167,32 @@ export class ChatPage {
     ).toHaveCount(1);
   }
 
+  async copyAnswerHtml(): Promise<string> {
+    // Capture the clipboard boundary without depending on the host clipboard.
+    await this.page.evaluate(() => {
+      sessionStorage.removeItem("test:copied-answer");
+      navigator.clipboard.write = async (items) => {
+        const [item] = items;
+        if (!item) throw new Error("Answer was not copied");
+        sessionStorage.setItem(
+          "test:copied-answer",
+          await (await item.getType("text/html")).text()
+        );
+      };
+    });
+    await this.aiMessage().getByTestId("AgentMessage/copy-button").click();
+    let html = "";
+    await expect
+      .poll(async () => {
+        html = await this.page.evaluate(
+          () => sessionStorage.getItem("test:copied-answer") || ""
+        );
+        return html;
+      })
+      .not.toBe("");
+    return html;
+  }
+
   async expectCopyButton(): Promise<void> {
     await expect(
       this.aiMessage().getByTestId("AgentMessage/copy-button")

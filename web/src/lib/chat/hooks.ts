@@ -33,6 +33,7 @@ import { getMessageByMessageId } from "@/app/app/services/messageTree";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { useShallow } from "zustand/react/shallow";
+import { draftKey, updateDraft, useDraft } from "@/hooks/useDraft";
 
 const EMPTY_PENDING_MESSAGES: PendingChatMessage[] = [];
 const PENDING_MESSAGES_POLL_MS = 1000;
@@ -165,6 +166,44 @@ export function usePendingChatMessages(
   const submitting = useRef(false);
   const withdrawing = useRef(new Set<string>());
   const localSubmissions = useRef(new Map<string, PendingChatSubmission>());
+  const submissionStorageKey = draftKey("pending-chat", sessionId ?? "");
+  const { draft: savedSubmissions, loaded: submissionsLoaded } = useDraft<
+    PendingChatMessage[]
+  >({ key: submissionStorageKey });
+  const restoredSubmissionKey = useRef<string | null>(null);
+  useEffect(() => {
+    if (!key || !submissionsLoaded || restoredSubmissionKey.current === key)
+      return;
+    restoredSubmissionKey.current = key;
+    if (!savedSubmissions?.length) return;
+    const recovered = savedSubmissions.filter(
+      (message) => !localSubmissions.current.has(message.id)
+    );
+    if (!recovered.length) return;
+    for (const message of recovered) {
+      // A lost acknowledgement cannot prove whether the server accepted a POST.
+      // Restore the text for editing, but never automatically submit it again.
+      localSubmissions.current.set(message.id, {
+        key,
+        message,
+        request: null,
+        failed: true,
+        finished: Promise.resolve(),
+      });
+    }
+    void mutateCache<PendingChatMessage[]>(
+      key,
+      (messages = []) => [
+        ...messages,
+        ...recovered.filter(
+          (saved) => !messages.some((message) => message.id === saved.id)
+        ),
+      ],
+      { revalidate: false }
+    );
+    toast.error(t("restoredUnconfirmed"));
+  }, [key, submissionsLoaded, savedSubmissions, mutateCache, t]);
+
   const previous = useRef<{
     key: string | null;
     deliveries: Map<string, PendingChatMessage["delivery"]>;
@@ -264,7 +303,12 @@ export function usePendingChatMessages(
     delivery: PendingChatMessage["delivery"],
     targetResponseId: number | null
   ): Promise<boolean> {
-    if (!key || !sessionId || (targetResponseId === null && !abortController))
+    if (
+      !key ||
+      !sessionId ||
+      !submissionsLoaded ||
+      (targetResponseId === null && !abortController)
+    )
       return false;
     const previousSubmission = [...localSubmissions.current.values()].findLast(
       (item) => item.key === key
@@ -279,6 +323,10 @@ export function usePendingChatMessages(
       finished: finished.promise,
     };
     localSubmissions.current.set(id, submission);
+    updateDraft<PendingChatMessage[]>(submissionStorageKey, (messages) => [
+      ...(messages ?? []),
+      submission.message,
+    ]);
     await mutateCache<PendingChatMessage[]>(
       key,
       (messages = []) => [...messages, submission.message],
@@ -342,6 +390,15 @@ export function usePendingChatMessages(
         })
           .then(async (pending) => {
             localSubmissions.current.delete(id);
+            updateDraft<PendingChatMessage[]>(
+              submissionStorageKey,
+              (messages) => {
+                const remaining = (messages ?? []).filter(
+                  (message) => message.id !== id
+                );
+                return remaining.length ? remaining : null;
+              }
+            );
             await rememberPendingMessage(pending, id);
             return pending;
           })
@@ -422,6 +479,12 @@ export function usePendingChatMessages(
       const local = localSubmissions.current.get(id);
       if (local && !local.request) {
         localSubmissions.current.delete(id);
+        updateDraft<PendingChatMessage[]>(submissionStorageKey, (messages) => {
+          const remaining = (messages ?? []).filter(
+            (message) => message.id !== id
+          );
+          return remaining.length ? remaining : null;
+        });
         await mutateCache<PendingChatMessage[]>(
           local.key,
           (messages = []) => messages.filter((item) => item.id !== id),

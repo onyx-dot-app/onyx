@@ -1388,7 +1388,9 @@ def test_builtin_subagent_controls_do_not_shadow_configured_tools(custom: bool) 
             tool_definition={"type": "object", "properties": {}},
         )
     )
-    expected_name = "custom_42_list_agents" if custom else "mcp_remote_list_agents"
+    expected_name = (
+        "custom__42__list_agents" if custom else "mcp__remote_42__list_agents"
+    )
 
     def reply(request: GenerationRequest, _: CancellationSignal) -> AssistantMessage:
         names = [tool.name for tool in request.tools or []]

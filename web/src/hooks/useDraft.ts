@@ -43,6 +43,24 @@ export function saveDraft<T>(key: string, value: T) {
   }
 }
 
+/** Update the latest stored value so late callbacks cannot replace newer drafts. */
+export function updateDraft<T>(
+  key: string,
+  update: (value: T | null) => T | null
+) {
+  const storage = getStorage();
+  if (!storage) return;
+  try {
+    const raw = storage.getItem(key);
+    // SAFETY: Draft values are written and read by the same typed caller.
+    const value = update(raw === null ? null : (JSON.parse(raw) as T));
+    if (value === null) storage.removeItem(key);
+    else storage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Drafts are optional when storage is unavailable.
+  }
+}
+
 function defaultIsEmpty<T>(value: T): boolean {
   if (value == null) return true;
   if (typeof value === "string") return value.trim().length === 0;

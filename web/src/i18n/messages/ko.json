@@ -12603,6 +12603,7 @@
       },
       "pendingMessages": {
         "submitFailed": "메시지를 전송하지 못했습니다. 대기 중인 메시지에서 수정하거나 삭제할 수 있습니다.",
+        "restoredUnconfirmed": "전달 여부를 확인할 수 없는 메시지를 복원했습니다. 다시 보내기 전에 대화를 확인하세요.",
         "withdrawFailed": "대기 중인 메시지를 삭제하지 못했습니다.",
         "loadFailed": "대기 중인 메시지를 불러오지 못했습니다.",
         "alreadyAccepted": "이 메시지는 이미 수락되어 더 이상 대기 중이 아닙니다.",

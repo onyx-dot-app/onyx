@@ -12603,6 +12603,7 @@
       },
       "pendingMessages": {
         "submitFailed": "Could not submit the message. You can edit or remove it from the pending messages.",
+        "restoredUnconfirmed": "We restored messages with unconfirmed delivery. Check the conversation before sending them again.",
         "withdrawFailed": "Could not remove the pending message.",
         "loadFailed": "Could not load pending messages.",
         "alreadyAccepted": "This message was already accepted and is no longer pending.",

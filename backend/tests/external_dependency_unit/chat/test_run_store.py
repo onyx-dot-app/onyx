@@ -11,7 +11,7 @@ from unittest.mock import Mock, patch
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
@@ -81,12 +81,14 @@ from onyx.db.chat_response import (
     write_response_inputs,
 )
 from onyx.db.chat_subagents import (
+    read_agent_completions,
     unread_agent_result_ids,
 )
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_tenant
 from onyx.db.models import (
     ChatInput,
     ChatMessage,
+    ChatMessage__SearchDoc,
     ChatResponseCheckpoint,
     ChatResponseItem,
     ChatSession,
@@ -1744,6 +1746,18 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
         ] == received
         if not cancel_child and not nested:
             metadata = later.snapshot().steps[-1].message.metadata
+            assert isinstance(metadata, ChatMessageMetadata)
+            assert metadata.sources[1].document_id == "child-source"
+            # Legacy children kept their citation documents on the root response.
+            db_session.execute(
+                update(ChatMessage__SearchDoc)
+                .where(ChatMessage__SearchDoc.chat_message_id == int(child.run_id))
+                .values(chat_message_id=branch[1])
+            )
+            db_session.commit()
+            completion = read_agent_completions(db_session, [int(child.run_id)])[0]
+            assert completion.output is not None
+            metadata = completion.output.metadata
             assert isinstance(metadata, ChatMessageMetadata)
             assert metadata.sources[1].document_id == "child-source"
         db_session.expire_all()

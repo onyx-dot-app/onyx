@@ -68,7 +68,6 @@ from onyx.tools.constants import PYTHON_TOOL_NAME
 from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles
 from onyx.tools.interface import Tool
 from onyx.tools.models import ChatFile, ToolContext
-from onyx.tools.tool_constructor import disambiguate_tool_names
 from onyx.tools.tool_implementations.code_mode.code_mode_tool import with_code_mode
 from onyx.tools.tool_implementations.search.models import SearchContext
 from onyx.tools.tool_implementations.search.search_tool import (
@@ -185,7 +184,6 @@ class ChatAgent(Agent, RestorableFeature):
                     QueueMessageTool(max_steps=self.max_steps),
                 ]
             )
-        disambiguate_tool_names(self.application_tools)
         super().__init__(
             llm,
             tools=[tool.bind(self._tool_context) for tool in self.application_tools],

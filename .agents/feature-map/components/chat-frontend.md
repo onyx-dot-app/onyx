@@ -398,8 +398,10 @@ up its own branding.
    remove the preview. An explicit interrupt can preview its promoted message
    after cancellation. History refresh precedes removal of an accepted queued item.
    Before response acknowledgement, submissions appear locally and wait for that
-   response ID before posting. Local edits withdraw the unsent submission; failed
-   submissions remain editable. After posting, editing waits for DELETE to return
+   response ID before posting. Session storage retains unconfirmed submissions
+   separately from the composer draft until POST succeeds or the user removes them.
+   Reload restores them for editing without resubmitting an uncertain request.
+   After posting, editing waits for DELETE to return
    the withdrawn text. A conflict refreshes the list without restoring text that
    was already accepted.
 7. `branch-switch-reaches-server` **A branch switch must reach the server.**

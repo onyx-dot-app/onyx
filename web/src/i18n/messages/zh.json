@@ -12603,6 +12603,7 @@
       },
       "pendingMessages": {
         "submitFailed": "无法提交消息。你可以在待发送消息中编辑或移除它。",
+        "restoredUnconfirmed": "已恢复无法确认是否送达的消息。再次发送前，请先查看对话。",
         "withdrawFailed": "无法移除待处理消息。",
         "loadFailed": "无法加载待处理消息。",
         "alreadyAccepted": "此消息已被接受，不再处于待处理状态。",

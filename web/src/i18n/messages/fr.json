@@ -12590,7 +12590,7 @@
           "tooltip": "Interrompre le travail en cours et envoyer ce message"
         },
         "sendHint": {
-          "label": "envoyer ·"
+          "label": "envoyer maintenant ·"
         }
       },
       "sharedAppInputBar": {
@@ -12603,6 +12603,7 @@
       },
       "pendingMessages": {
         "submitFailed": "Impossible d’envoyer le message. Vous pouvez le modifier ou le supprimer des messages en attente.",
+        "restoredUnconfirmed": "Nous avons restauré des messages dont la réception n’a pas pu être confirmée. Vérifiez la conversation avant de les renvoyer.",
         "withdrawFailed": "Impossible de retirer le message en attente.",
         "loadFailed": "Impossible de charger les messages en attente.",
         "alreadyAccepted": "Ce message a déjà été accepté et n’est plus en attente.",

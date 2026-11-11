@@ -139,7 +139,7 @@ const AgentMessage = React.memo(function AgentMessage({
   }, [mounted]);
   const restoredPacketCount = Math.max(replayPacketCount, mounted.count);
   const t = useTranslations("chat.messages");
-  const finalAnswerRef = useRef<HTMLDivElement>(null);
+  const answerRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   // Process streaming packets: returns data and callbacks
   // Hook handles all state internally, exposes clean API
@@ -481,7 +481,9 @@ const AgentMessage = React.memo(function AgentMessage({
               )}
               {section.displayGroups.length > 0 && (
                 <div
-                  ref={isLastSection ? finalAnswerRef : undefined}
+                  ref={(element) => {
+                    answerRefs.current[sectionIndex] = element;
+                  }}
                   className="flex flex-col gap-3"
                 >
                   {authErrors
@@ -573,7 +575,7 @@ const AgentMessage = React.memo(function AgentMessage({
           getNextMessage={getNextMessage}
           onMessageSelection={onMessageSelection}
           rawPackets={rawPackets}
-          finalAnswerRef={finalAnswerRef}
+          answerRefs={answerRefs}
           currentFeedback={currentFeedback}
           onRegenerate={onRegenerate}
           parentMessage={parentMessage}
