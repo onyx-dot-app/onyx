@@ -25,13 +25,13 @@ def upgrade() -> None:
             server_default=sa.text("'{}'::jsonb"),
         ),
     )
+    # Keep paste_as_tile available for draining API pods that select it.
     op.execute(
         sa.text(
             'UPDATE "user" SET ui_preferences = \'{"paste_as_tile": true}\'::jsonb '
             "WHERE paste_as_tile IS TRUE"
         )
     )
-    op.drop_column("user", "paste_as_tile")
     op.add_column(
         "chat_message",
         sa.Column(
@@ -118,18 +118,22 @@ def upgrade() -> None:
         postgresql_where=sa.text("response_item_id IS NULL"),
     )
 
+    for column in (
+        "recipient_session_id",
+        "invoking_tool_call_id",
+        "source_response_id",
+        "target_response_id",
+    ):
+        op.create_index(f"ix_chat_input_{column}", "chat_input", [column])
+
 
 def downgrade() -> None:
-    op.add_column(
-        "user",
-        sa.Column(
-            "paste_as_tile", sa.Boolean(), nullable=False, server_default=sa.false()
-        ),
-    )
     op.execute(
         sa.text(
-            'UPDATE "user" SET paste_as_tile = true '
-            "WHERE ui_preferences ->> 'paste_as_tile' = 'true'"
+            'UPDATE "user" SET paste_as_tile = '
+            "COALESCE(ui_preferences -> 'paste_as_tile' = 'true'::jsonb, false) "
+            "WHERE paste_as_tile IS DISTINCT FROM "
+            "COALESCE(ui_preferences -> 'paste_as_tile' = 'true'::jsonb, false)"
         )
     )
     op.drop_column("user", "ui_preferences")

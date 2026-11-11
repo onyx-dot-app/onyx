@@ -417,6 +417,7 @@
   "PATCH /build/sessions/{session_id}/public": "basic",
   "PATCH /chat/chat-session/{session_id}": "basic",
   "PATCH /input_prompt/{input_prompt_id}": "basic",
+  "PATCH /interrupt-on-send": "basic",
   "PATCH /manage/admin/activate-user": "admin",
   "PATCH /manage/admin/connector/{connector_id}": "manage:connectors +scope",
   "PATCH /manage/admin/deactivate-user": "admin",

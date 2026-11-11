@@ -170,7 +170,6 @@ from onyx.tools.models import (
 )
 from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
-from onyx.tools.tool_implementations.subagents.models import ChatConfiguration
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
 from onyx.utils.encryption import decrypt_bytes_to_string, encrypt_string_to_bytes
 from onyx.utils.headers import HeaderItemDict
@@ -3489,13 +3488,8 @@ class ChatSession(Base):
         ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=True, index=True
     )
     agent_name: Mapped[str | None] = mapped_column(String, nullable=True)
-    restoration_config: Mapped[ResearchConfiguration | ChatConfiguration | None] = (
-        mapped_column(
-            PydanticType(
-                ResearchConfiguration | ChatConfiguration, sanitize_strings=True
-            ),
-            nullable=True,
-        )
+    restoration_config: Mapped[ResearchConfiguration | None] = mapped_column(
+        PydanticType(ResearchConfiguration, sanitize_strings=True), nullable=True
     )
     user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("user.id", ondelete="CASCADE"), nullable=True
@@ -3860,7 +3854,7 @@ class ChatInput(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     recipient_session_id: Mapped[UUID] = mapped_column(
-        ForeignKey("chat_session.id", ondelete="CASCADE")
+        ForeignKey("chat_session.id", ondelete="CASCADE"), index=True
     )
     message_id: Mapped[str] = mapped_column(String)
     source: Mapped[InputSource] = mapped_column(
@@ -3871,10 +3865,10 @@ class ChatInput(Base):
         )
     )
     invoking_tool_call_id: Mapped[int | None] = mapped_column(
-        ForeignKey("tool_call.id", ondelete="CASCADE"), nullable=True
+        ForeignKey("tool_call.id", ondelete="CASCADE"), nullable=True, index=True
     )
     source_response_id: Mapped[int | None] = mapped_column(
-        ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=True
+        ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=True, index=True
     )
     source_agent_id: Mapped[UUID | None] = column_property(
         select(ChatMessage.chat_session_id)
@@ -3883,7 +3877,7 @@ class ChatInput(Base):
         .scalar_subquery()
     )
     target_response_id: Mapped[int | None] = mapped_column(
-        ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=True
+        ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=True, index=True
     )
     delivery: Mapped[MessageDelivery | None] = mapped_column(
         Enum(
