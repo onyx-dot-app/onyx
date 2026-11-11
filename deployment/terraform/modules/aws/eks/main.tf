@@ -143,7 +143,14 @@ locals {
     }
   } : {}
 
-  craft_sandbox_firecracker = var.craft_sandbox_runtime == "firecracker"
+  craft_sandbox_firecracker       = var.craft_sandbox_runtime == "firecracker"
+  craft_firecracker_max_map_count = 1048576
+  craft_firecracker_sysctl_script = <<-EOT
+    #!/bin/bash
+    set -euo pipefail
+    echo "vm.max_map_count = ${local.craft_firecracker_max_map_count}" > /etc/sysctl.d/99-onyx-firecracker.conf
+    sysctl -w vm.max_map_count=${local.craft_firecracker_max_map_count}
+  EOT
   craft_sandbox_metal = alltrue([
     for t in var.craft_sandbox_node_instance_types : strcontains(t, ".metal")
   ])
@@ -201,6 +208,14 @@ locals {
       # virtualization on the launch template. A spot reclaim kills every
       # microVM on the node, so the group stays on-demand.
       local.craft_sandbox_firecracker ? { capacity_type = "ON_DEMAND" } : {},
+      local.craft_sandbox_firecracker ? {
+        # AL2023 ships vm.max_map_count 524288; the Firecracker host agent
+        # preflight needs 1048576.
+        cloudinit_pre_nodeadm = [{
+          content_type = "text/x-shellscript"
+          content      = local.craft_firecracker_sysctl_script
+        }]
+      } : {},
       local.craft_sandbox_firecracker && !local.craft_sandbox_metal ? {
         cpu_options = { nested_virtualization = "enabled" }
       } : {},

@@ -511,12 +511,14 @@ With `"firecracker"`, the `eks` module:
 
 - turns on nested virtualization in the launch template (non-metal types only);
 - adds the label `onyx.app/kvm=true`;
+- sets `vm.max_map_count` to `1048576` with a cloud-init script that runs
+  before nodeadm (AL2023 ships `524288`);
 - keeps the group on-demand. A spot reclaim stops every microVM on the node;
 - keeps IMDSv2 with hop limit 1.
 
-The default, `"pod"`, leaves the group as it is. On non-metal types, a change
-to `craft_sandbox_runtime` makes a new launch template version, so EKS rolls the
-sandbox nodes. On `.metal` groups, only the label changes, in place.
+The default, `"pod"`, leaves the group as it is. A change to
+`craft_sandbox_runtime` makes a new launch template version (user data, and
+nested virtualization on non-metal types), so EKS rolls the sandbox nodes.
 `craft_sandbox_node_disk_iops` and `_throughput` set the gp3 root
 volume (defaults 3000 and 125). The tested values for Firecracker are 6000 and
 500 MiB/s. The AL2023 root filesystem is XFS with reflink, so no extra disk is
@@ -530,6 +532,7 @@ Node requirements:
 | Metal | Intel `.metal` types, such as `m7i.metal-24xl` | Graviton and AMD `.metal`, `a1.metal`, `mac*.metal` |
 | AMI | AL2023 (module default `AL2023_x86_64_STANDARD`). Use an AMI release with kernel 6.18, the tested host kernel. | — |
 | Capacity | On-demand | Spot |
+| `vm.max_map_count` | `1048576` or more (set by the module) | The AL2023 default `524288` |
 
 The module refuses a blocked type, and a group that mixes `.metal` and
 nested virtualization types. Keep `craft_sandbox_runtime = "pod"` on Graviton,
