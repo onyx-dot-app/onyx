@@ -57,8 +57,8 @@ def _check_deferred_constraints(db_session: Session) -> None:
     db_session.execute(text("SET CONSTRAINTS ALL DEFERRED"))
 
 
-def _account_uploads_id(user_id: UUID) -> UUID:
-    return UUID(hashlib.md5(f"account_uploads:{user_id}".encode()).hexdigest())
+def _user_uploads_id(user_id: UUID) -> UUID:
+    return UUID(hashlib.md5(f"user_uploads:{user_id}".encode()).hexdigest())
 
 
 def _skill_table_shape(db_session: Session) -> tuple[list[Any], list[Any]]:
@@ -151,13 +151,13 @@ def _assert_backfilled(
                 "SELECT kind, name, owner_user_id, default_installation_policy, "
                 "created_at FROM plugin_marketplace WHERE id = :id"
             ),
-            {"id": _account_uploads_id(author_id)},
+            {"id": _user_uploads_id(author_id)},
         ).one()
         oldest = min(
             e.skill.created_at for e in expected if e.skill.author_user_id == author_id
         )
         assert tuple(uploads) == (
-            "account_uploads",
+            "user_uploads",
             "My uploads",
             author.id,
             "AVAILABLE",
@@ -175,7 +175,6 @@ def _assert_backfilled(
         )
         assert plugin["name"] == e.plugin_name, skill.name
         assert plugin["description"] == skill.description
-        assert plugin["kind"] == "skill"
         assert plugin["marketplace_id"] == e.marketplace_id
         assert plugin["author_user_id"] == skill.author_user_id
         assert plugin["installation_policy"] == (
@@ -213,14 +212,19 @@ def _assert_backfilled(
 
         plugin_skills = db_session.execute(
             text(
-                "SELECT id, path, name, skill_md, frontmatter FROM plugin_skill "
+                "SELECT id, path, skill_md, frontmatter FROM plugin_skill "
                 "WHERE plugin_version_id = :id"
             ),
             {"id": skill.id},
         ).all()
         # The skill name never changes, also when the plugin name does.
         assert [tuple(row) for row in plugin_skills] == [
-            (skill.id, "", skill.name, None, None)
+            (
+                skill.id,
+                "",
+                None,
+                {"name": skill.name, "description": skill.description},
+            )
         ]
 
         user_shares = {
@@ -307,8 +311,8 @@ def test_backfill_maps_each_custom_skill_to_one_plugin(
         bob = make_user(db_session, email_prefix="plugin_bob")
         carol = make_user(db_session, email_prefix="plugin_carol")
         group = make_group(db_session)
-        alice_uploads = _account_uploads_id(alice.id)
-        bob_uploads = _account_uploads_id(bob.id)
+        alice_uploads = _user_uploads_id(alice.id)
+        bob_uploads = _user_uploads_id(bob.id)
         library = _ORGANIZATION_LIBRARY_ID
 
         shared = _add_skill(db_session, name=f"notes-{tag}", minutes=10, author=alice)

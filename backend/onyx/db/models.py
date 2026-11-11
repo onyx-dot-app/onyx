@@ -116,7 +116,6 @@ from onyx.db.enums import (
     PermissionSyncStatus,
     PersonaSharePermission,
     PluginInstallationPolicy,
-    PluginKind,
     PortAttemptStatus,
     ProcessingMode,
     ReceiptStatus,
@@ -5526,8 +5525,8 @@ class Marketplace(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "(kind = 'account_uploads') = (owner_user_id IS NOT NULL)",
-            name="ck_plugin_marketplace_owner_iff_account_uploads",
+            "(kind = 'user_uploads') = (owner_user_id IS NOT NULL)",
+            name="ck_plugin_marketplace_owner_iff_user_uploads",
         ),
         Index(
             "uq_plugin_marketplace_organization_library",
@@ -5536,17 +5535,18 @@ class Marketplace(Base):
             postgresql_where=text("kind = 'organization_library'"),
         ),
         Index(
-            "uq_plugin_marketplace_account_uploads_owner",
+            "uq_plugin_marketplace_user_uploads_owner",
             "owner_user_id",
             unique=True,
-            postgresql_where=text("kind = 'account_uploads'"),
+            postgresql_where=text("kind = 'user_uploads'"),
         ),
     )
 
 
 class Plugin(Base):
     """The package with identity: name, access and install settings. A custom
-    skill is a plugin of kind skill; its legacy skill row has the same id.
+    skill is a plugin whose legacy skill row has the same id. Kind (skill or
+    plugin) is not stored: it comes from the layout of each version.
 
     Published means: in the Organization library. published_version_id is only
     the version the organization runs; NULL means current_version_id."""
@@ -5556,17 +5556,9 @@ class Plugin(Base):
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
     )
-    # Label in the marketplace. The skill name of a plugin_skill row can differ.
+    # Label in the marketplace. A plugin_skill frontmatter name can differ.
     name: Mapped[str] = mapped_column(String(64), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
-    kind: Mapped[PluginKind] = mapped_column(
-        Enum(
-            PluginKind,
-            native_enum=False,
-            values_callable=lambda x: [e.value for e in x],
-        ),
-        nullable=False,
-    )
     marketplace_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("plugin_marketplace.id", ondelete="RESTRICT"),
@@ -5687,16 +5679,23 @@ class PluginSkill(Base):
     )
     # Folder in the bundle; empty for a SKILL.md at the root.
     path: Mapped[str] = mapped_column(String, nullable=False, server_default="")
-    name: Mapped[str] = mapped_column(String(64), nullable=False)
     # Raw SKILL.md, the source of truth. NULL when larger than 256 KiB or not yet
     # repaired; readers then open the bundle.
     skill_md: Mapped[str | None] = mapped_column(Text, nullable=True, deferred=True)
-    # Parsed copy of the SKILL.md frontmatter. NULL when JSONB cannot hold it.
-    frontmatter: Mapped[dict[str, Any] | None] = mapped_column(PGJSONB(), nullable=True)
+    # Parsed copy of the SKILL.md frontmatter. Always holds a string name, the
+    # skill name, and a description.
+    frontmatter: Mapped[dict[str, Any]] = mapped_column(PGJSONB(), nullable=False)
 
     __table_args__ = (
-        UniqueConstraint(
-            "plugin_version_id", "name", name="uq_plugin_skill_version_name"
+        CheckConstraint(
+            "coalesce(jsonb_typeof(frontmatter -> 'name'), '') = 'string'",
+            name="ck_plugin_skill_frontmatter_name",
+        ),
+        Index(
+            "uq_plugin_skill_version_name",
+            "plugin_version_id",
+            text("(frontmatter ->> 'name')"),
+            unique=True,
         ),
     )
 

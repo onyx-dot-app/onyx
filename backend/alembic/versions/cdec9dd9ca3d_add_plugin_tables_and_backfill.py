@@ -47,7 +47,7 @@ def _create_tables() -> None:
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column(
             "kind",
-            sa.Enum("account_uploads", "organization_library", native_enum=False),
+            sa.Enum("user_uploads", "organization_library", native_enum=False),
             nullable=False,
         ),
         sa.Column("name", sa.String(), nullable=False),
@@ -65,8 +65,8 @@ def _create_tables() -> None:
         ),
         _created_at_column(),
         sa.CheckConstraint(
-            "(kind = 'account_uploads') = (owner_user_id IS NOT NULL)",
-            name="ck_plugin_marketplace_owner_iff_account_uploads",
+            "(kind = 'user_uploads') = (owner_user_id IS NOT NULL)",
+            name="ck_plugin_marketplace_owner_iff_user_uploads",
         ),
     )
     op.create_index(
@@ -77,11 +77,11 @@ def _create_tables() -> None:
         postgresql_where=sa.text("kind = 'organization_library'"),
     )
     op.create_index(
-        "uq_plugin_marketplace_account_uploads_owner",
+        "uq_plugin_marketplace_user_uploads_owner",
         "plugin_marketplace",
         ["owner_user_id"],
         unique=True,
-        postgresql_where=sa.text("kind = 'account_uploads'"),
+        postgresql_where=sa.text("kind = 'user_uploads'"),
     )
 
     op.create_table(
@@ -89,9 +89,6 @@ def _create_tables() -> None:
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column("name", sa.String(length=64), nullable=False),
         sa.Column("description", sa.Text(), nullable=False),
-        sa.Column(
-            "kind", sa.Enum("skill", "plugin", native_enum=False), nullable=False
-        ),
         sa.Column(
             "marketplace_id",
             postgresql.UUID(as_uuid=True),
@@ -180,12 +177,18 @@ def _create_tables() -> None:
             nullable=False,
         ),
         sa.Column("path", sa.String(), server_default="", nullable=False),
-        sa.Column("name", sa.String(length=64), nullable=False),
         sa.Column("skill_md", sa.Text(), nullable=True),
-        sa.Column("frontmatter", postgresql.JSONB(), nullable=True),
-        sa.UniqueConstraint(
-            "plugin_version_id", "name", name="uq_plugin_skill_version_name"
+        sa.Column("frontmatter", postgresql.JSONB(), nullable=False),
+        sa.CheckConstraint(
+            "coalesce(jsonb_typeof(frontmatter -> 'name'), '') = 'string'",
+            name="ck_plugin_skill_frontmatter_name",
         ),
+    )
+    op.create_index(
+        "uq_plugin_skill_version_name",
+        "plugin_skill",
+        ["plugin_version_id", sa.text("(frontmatter ->> 'name')")],
+        unique=True,
     )
 
     op.create_table(
@@ -281,7 +284,7 @@ _UNSYNCED_CUSTOM_SKILLS = f"""
         CASE
             WHEN s.public_permission IS NOT NULL OR s.author_user_id IS NULL
                 THEN '{ORGANIZATION_LIBRARY_ID}'::uuid
-            ELSE md5('account_uploads:' || s.author_user_id::text)::uuid
+            ELSE md5('user_uploads:' || s.author_user_id::text)::uuid
         END AS marketplace_id,
         NULLIF(s.installation_policy, 'AVAILABLE') AS installation_policy,
         CASE
@@ -307,12 +310,12 @@ _INSERT_ORGANIZATION_LIBRARY = f"""
     ON CONFLICT DO NOTHING
 """
 
-_INSERT_ACCOUNT_UPLOADS = """
+_INSERT_USER_UPLOADS = """
     INSERT INTO plugin_marketplace
         (id, kind, name, owner_user_id, default_installation_policy, created_at)
     SELECT
-        md5('account_uploads:' || s.author_user_id::text)::uuid,
-        'account_uploads',
+        md5('user_uploads:' || s.author_user_id::text)::uuid,
+        'user_uploads',
         'My uploads',
         s.author_user_id,
         'AVAILABLE',
@@ -327,12 +330,12 @@ _INSERT_ACCOUNT_UPLOADS = """
 # the name, unless a plugin there has it already.
 _INSERT_PLUGINS_KEEPING_NAME = f"""
     INSERT INTO plugin (
-        id, name, description, kind, marketplace_id, author_user_id,
+        id, name, description, marketplace_id, author_user_id,
         installation_policy, current_version_id, published_version_id,
         created_at, updated_at
     )
     SELECT
-        id, name, description, 'skill', marketplace_id, author_user_id,
+        id, name, description, marketplace_id, author_user_id,
         installation_policy, id, published_version_id, created_at, updated_at
     FROM (
         SELECT
@@ -348,8 +351,8 @@ _INSERT_PLUGINS_KEEPING_NAME = f"""
 
 # Each other skill takes the first free name <name>-2, <name>-3, ... in its
 # marketplace, counting every plugin there. The base is cut so the name fits
-# in 64 characters. Only plugin.name changes: plugin_skill.name and the legacy
-# skill.name keep the skill name.
+# in 64 characters. Only plugin.name changes: the plugin_skill frontmatter and
+# the legacy skill.name keep the skill name.
 _INSERT_PLUGINS_WITH_FREE_NAME = f"""
     DO $$
     DECLARE
@@ -373,12 +376,12 @@ _INSERT_PLUGINS_WITH_FREE_NAME = f"""
                     || '-' || suffix::text;
             END LOOP;
             INSERT INTO plugin (
-                id, name, description, kind, marketplace_id, author_user_id,
+                id, name, description, marketplace_id, author_user_id,
                 installation_policy, current_version_id, published_version_id,
                 created_at, updated_at
             )
             VALUES (
-                pending.id, candidate, pending.description, 'skill',
+                pending.id, candidate, pending.description,
                 pending.marketplace_id, pending.author_user_id,
                 pending.installation_policy, pending.id,
                 pending.published_version_id, pending.created_at,
@@ -389,8 +392,8 @@ _INSERT_PLUGINS_WITH_FREE_NAME = f"""
     $$
 """
 
-# Version 1 holds the skill's current bundle. The file list, sizes, SKILL.md
-# text and frontmatter stay NULL until the repair task reads the bundle.
+# Version 1 holds the skill's current bundle. The file list, sizes and SKILL.md
+# text stay NULL until the repair task reads the bundle.
 _INSERT_VERSIONS = """
     INSERT INTO plugin_version (
         id, plugin_id, version_number, bundle_file_id, bundle_sha256, is_valid,
@@ -406,9 +409,13 @@ _INSERT_VERSIONS = """
     ON CONFLICT DO NOTHING
 """
 
+# The frontmatter starts with the name and description of the legacy row. The
+# repair task replaces it with the parsed SKILL.md.
 _INSERT_PLUGIN_SKILLS = """
-    INSERT INTO plugin_skill (id, plugin_version_id, path, name)
-    SELECT s.id, s.id, '', s.name
+    INSERT INTO plugin_skill (id, plugin_version_id, path, frontmatter)
+    SELECT
+        s.id, s.id, '',
+        jsonb_build_object('name', s.name, 'description', s.description)
     FROM skill s
     JOIN plugin_version v ON v.id = s.id
     WHERE s.built_in_skill_id IS NULL
@@ -453,7 +460,7 @@ def backfill_plugins_from_skills() -> None:
     Deterministic: ids come from skill ids or fixed literals."""
     for statement in (
         _INSERT_ORGANIZATION_LIBRARY,
-        _INSERT_ACCOUNT_UPLOADS,
+        _INSERT_USER_UPLOADS,
         _INSERT_PLUGINS_KEEPING_NAME,
         _INSERT_PLUGINS_WITH_FREE_NAME,
         _INSERT_VERSIONS,

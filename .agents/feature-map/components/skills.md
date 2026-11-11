@@ -300,10 +300,15 @@ The library preview of an external-app skill calls the same renderer
     Public and author-less skills go to the Organization library, published.
     Other skills go to the author's "My uploads". A duplicate name in one
     marketplace gets the first free `-N` suffix on `plugin.name` only
-    (`db/plugin.py:free_plugin_name` in app code). Creates, bundle changes and
+    (`db/plugin.py:free_plugin_name` in app code). The skill name lives only
+    in `plugin_skill.frontmatter` (NOT NULL, a check requires a string
+    `name`); the backfill seeds it with the name and description of the
+    legacy row. No column stores the kind (skill or plugin):
+    `db/plugin.py:plugin_version_kind` reads it from the layout of each
+    version. Creates, bundle changes and
     deletes write the plugin rows ([[#bundle-change-adds-version]]). A user
     delete removes the plugins in that user's "My uploads"
-    (`db/plugin.py:delete_account_upload_plugins__no_commit`), because a stale
+    (`db/plugin.py:delete_user_upload_plugins__no_commit`), because a stale
     copy there would block the delete. So a live skill can have no plugin
     row; the next file change makes one from the legacy row first. Shares,
     publishing, install settings, choices and transfers write only the skill
