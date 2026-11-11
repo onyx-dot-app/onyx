@@ -304,8 +304,9 @@ def test_reindex_reads_failed_files_by_id_under_their_folders() -> None:
     )
     ops = _resolver_ops(fake)
 
+    # The configured path need not match Egnyte's case.
     items = list(
-        _connector(ops).reindex(
+        _connector(ops, folder_path="/shared").reindex(
             [
                 _failure("egnyte-group:/Shared/Sub/a.txt"),
                 _failure("egnyte-group:/Shared/Sub/b.txt"),
@@ -330,7 +331,7 @@ def test_reindex_reads_failed_files_by_id_under_their_folders() -> None:
     assert ops.list_folder_page.call_count == 2
 
 
-def test_reindex_clears_deleted_files_and_reports_the_rest() -> None:
+def test_reindex_reports_deleted_and_unreadable_files() -> None:
     fake = _FakeEgnyte(
         {
             "/Shared": ["/Shared/bad.txt"],
@@ -353,6 +354,7 @@ def test_reindex_clears_deleted_files_and_reports_the_rest() -> None:
 
     failures = [item for item in items if isinstance(item, ConnectorFailure)]
     assert [f.failed_document.document_id for f in failures if f.failed_document] == [
+        "egnyte-group:/Shared/deleted.txt",
         "egnyte-group:/Other/out.txt",
         "egnyte-group:/Shared/bad.txt",
         "not-egnyte",
