@@ -26,7 +26,7 @@ from onyx.microvm.daemon_client import (
     SandboxDaemonError,
     SandboxDaemonErrorReason,
     SandboxDaemonKeyNotSetError,
-    _error_from_rpc,
+    sandbox_daemon_error,
 )
 from onyx.microvm.generated.sandboxd.v1 import sandboxd_pb2, sandboxd_pb2_grpc
 from onyx.microvm.lifecycle import (
@@ -293,7 +293,7 @@ def test_daemon_errors_are_typed(
             sandboxd_pb2.SetKeyRequest(key="k" * 64),
             metadata=((SANDBOX_ID_HEADER, str(sandbox_id)),),
         )
-    assert isinstance(_error_from_rpc(rpc_exc.value), MethodNotAllowedError)
+    assert isinstance(sandbox_daemon_error(rpc_exc.value), MethodNotAllowedError)
 
     node.agent.vms.pop(str(sandbox_id))
     with pytest.raises(VmNotRunningError):

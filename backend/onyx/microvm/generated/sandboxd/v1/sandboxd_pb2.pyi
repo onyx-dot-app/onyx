@@ -1,5 +1,5 @@
-# Generated from microvm/proto/sandboxd/v1/sandboxd.proto (blob d542f324c527fa7ea17250f06af41d5223ab36a0)
-# at commit 84f60fa93c by backend/onyx/microvm/generated/regenerate.sh. Do not edit.
+# Generated from microvm/proto/sandboxd/v1/sandboxd.proto (blob 05b77c21b5786b5d7c763d64270edc129568e5f5)
+# at commit 461ea1e701 by backend/onyx/microvm/generated/regenerate.sh. Do not edit.
 import datetime
 
 from google.protobuf import duration_pb2 as _duration_pb2
@@ -31,6 +31,10 @@ class ErrorReason(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     MANAGED_SLOT_BUSY: _ClassVar[ErrorReason]
     MANAGED_DEVICE_MISMATCH: _ClassVar[ErrorReason]
     MANAGED_MOUNT_FAILED: _ClassVar[ErrorReason]
+    FILE_NOT_FOUND: _ClassVar[ErrorReason]
+    FILE_EXISTS: _ClassVar[ErrorReason]
+    LIMIT_EXCEEDED: _ClassVar[ErrorReason]
+    ARCHIVE_INVALID: _ClassVar[ErrorReason]
 
 class OutputStream(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -51,6 +55,14 @@ class ExecState(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     EXEC_STATE_UNSPECIFIED: _ClassVar[ExecState]
     RUNNING: _ClassVar[ExecState]
     ENDED: _ClassVar[ExecState]
+
+class FileType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    FILE_TYPE_UNSPECIFIED: _ClassVar[FileType]
+    FILE_TYPE_REGULAR: _ClassVar[FileType]
+    FILE_TYPE_DIRECTORY: _ClassVar[FileType]
+    FILE_TYPE_SYMLINK: _ClassVar[FileType]
+    FILE_TYPE_OTHER: _ClassVar[FileType]
 
 class ManagedSlot(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -73,6 +85,10 @@ KEY_ALREADY_SET: ErrorReason
 MANAGED_SLOT_BUSY: ErrorReason
 MANAGED_DEVICE_MISMATCH: ErrorReason
 MANAGED_MOUNT_FAILED: ErrorReason
+FILE_NOT_FOUND: ErrorReason
+FILE_EXISTS: ErrorReason
+LIMIT_EXCEEDED: ErrorReason
+ARCHIVE_INVALID: ErrorReason
 OUTPUT_STREAM_UNSPECIFIED: OutputStream
 STDOUT: OutputStream
 STDERR: OutputStream
@@ -84,6 +100,11 @@ DEADLINE_EXCEEDED: Completion
 EXEC_STATE_UNSPECIFIED: ExecState
 RUNNING: ExecState
 ENDED: ExecState
+FILE_TYPE_UNSPECIFIED: FileType
+FILE_TYPE_REGULAR: FileType
+FILE_TYPE_DIRECTORY: FileType
+FILE_TYPE_SYMLINK: FileType
+FILE_TYPE_OTHER: FileType
 MANAGED_SLOT_UNSPECIFIED: ManagedSlot
 MANAGED_SLOT_A: ManagedSlot
 MANAGED_SLOT_B: ManagedSlot
@@ -115,10 +136,12 @@ class HealthResponse(_message.Message):
     def __init__(self, initialized: bool = ..., version: _Optional[str] = ..., guest_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., generation: _Optional[int] = ..., sandbox_id: _Optional[str] = ..., running_executions: _Optional[int] = ..., initialized_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., uptime: _Optional[_Union[datetime.timedelta, _duration_pb2.Duration, _Mapping]] = ..., key_set: bool = ...) -> None: ...
 
 class SetKeyRequest(_message.Message):
-    __slots__ = ("key",)
+    __slots__ = ("key", "egress_ca_pem")
     KEY_FIELD_NUMBER: _ClassVar[int]
+    EGRESS_CA_PEM_FIELD_NUMBER: _ClassVar[int]
     key: str
-    def __init__(self, key: _Optional[str] = ...) -> None: ...
+    egress_ca_pem: bytes
+    def __init__(self, key: _Optional[str] = ..., egress_ca_pem: _Optional[bytes] = ...) -> None: ...
 
 class SetKeyResponse(_message.Message):
     __slots__ = ("already_set",)
@@ -152,20 +175,22 @@ class InitRequest(_message.Message):
     def __init__(self, host_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., entropy: _Optional[bytes] = ..., env: _Optional[_Mapping[str, str]] = ..., session_ids: _Optional[_Iterable[str]] = ..., generation: _Optional[int] = ..., sandbox_id: _Optional[str] = ..., scratch_bytes: _Optional[int] = ...) -> None: ...
 
 class InitResponse(_message.Message):
-    __slots__ = ("clock_step", "entropy_credited", "grown", "version", "attached", "relay_reset")
+    __slots__ = ("clock_step", "entropy_credited", "grown", "version", "attached", "relay_reset", "egress_ca_installed")
     CLOCK_STEP_FIELD_NUMBER: _ClassVar[int]
     ENTROPY_CREDITED_FIELD_NUMBER: _ClassVar[int]
     GROWN_FIELD_NUMBER: _ClassVar[int]
     VERSION_FIELD_NUMBER: _ClassVar[int]
     ATTACHED_FIELD_NUMBER: _ClassVar[int]
     RELAY_RESET_FIELD_NUMBER: _ClassVar[int]
+    EGRESS_CA_INSTALLED_FIELD_NUMBER: _ClassVar[int]
     clock_step: _duration_pb2.Duration
     entropy_credited: bool
     grown: _containers.RepeatedCompositeFieldContainer[GrownFS]
     version: str
     attached: bool
     relay_reset: bool
-    def __init__(self, clock_step: _Optional[_Union[datetime.timedelta, _duration_pb2.Duration, _Mapping]] = ..., entropy_credited: bool = ..., grown: _Optional[_Iterable[_Union[GrownFS, _Mapping]]] = ..., version: _Optional[str] = ..., attached: bool = ..., relay_reset: bool = ...) -> None: ...
+    egress_ca_installed: bool
+    def __init__(self, clock_step: _Optional[_Union[datetime.timedelta, _duration_pb2.Duration, _Mapping]] = ..., entropy_credited: bool = ..., grown: _Optional[_Iterable[_Union[GrownFS, _Mapping]]] = ..., version: _Optional[str] = ..., attached: bool = ..., relay_reset: bool = ..., egress_ca_installed: bool = ...) -> None: ...
 
 class GrownFS(_message.Message):
     __slots__ = ("mount_point", "old_bytes", "new_bytes")
@@ -386,51 +411,267 @@ class ListResponse(_message.Message):
     executions: _containers.RepeatedCompositeFieldContainer[Execution]
     def __init__(self, executions: _Optional[_Iterable[_Union[Execution, _Mapping]]] = ...) -> None: ...
 
-class DataChunk(_message.Message):
-    __slots__ = ("data",)
-    DATA_FIELD_NUMBER: _ClassVar[int]
-    data: bytes
-    def __init__(self, data: _Optional[bytes] = ...) -> None: ...
+class FileInfo(_message.Message):
+    __slots__ = ("path", "name", "type", "size", "mode", "modified_at", "link_target")
+    PATH_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    TYPE_FIELD_NUMBER: _ClassVar[int]
+    SIZE_FIELD_NUMBER: _ClassVar[int]
+    MODE_FIELD_NUMBER: _ClassVar[int]
+    MODIFIED_AT_FIELD_NUMBER: _ClassVar[int]
+    LINK_TARGET_FIELD_NUMBER: _ClassVar[int]
+    path: str
+    name: str
+    type: FileType
+    size: int
+    mode: int
+    modified_at: _timestamp_pb2.Timestamp
+    link_target: str
+    def __init__(self, path: _Optional[str] = ..., name: _Optional[str] = ..., type: _Optional[_Union[FileType, str]] = ..., size: _Optional[int] = ..., mode: _Optional[int] = ..., modified_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., link_target: _Optional[str] = ...) -> None: ...
 
 class ReadFileRequest(_message.Message):
-    __slots__ = ()
-    def __init__(self) -> None: ...
+    __slots__ = ("session_id", "path", "offset", "length")
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
+    PATH_FIELD_NUMBER: _ClassVar[int]
+    OFFSET_FIELD_NUMBER: _ClassVar[int]
+    LENGTH_FIELD_NUMBER: _ClassVar[int]
+    session_id: str
+    path: str
+    offset: int
+    length: int
+    def __init__(self, session_id: _Optional[str] = ..., path: _Optional[str] = ..., offset: _Optional[int] = ..., length: _Optional[int] = ...) -> None: ...
+
+class ReadFileResponse(_message.Message):
+    __slots__ = ("info", "data")
+    INFO_FIELD_NUMBER: _ClassVar[int]
+    DATA_FIELD_NUMBER: _ClassVar[int]
+    info: FileInfo
+    data: bytes
+    def __init__(self, info: _Optional[_Union[FileInfo, _Mapping]] = ..., data: _Optional[bytes] = ...) -> None: ...
+
+class WriteFileHeader(_message.Message):
+    __slots__ = ("session_id", "path", "size", "sha256", "mode", "overwrite", "make_parents")
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
+    PATH_FIELD_NUMBER: _ClassVar[int]
+    SIZE_FIELD_NUMBER: _ClassVar[int]
+    SHA256_FIELD_NUMBER: _ClassVar[int]
+    MODE_FIELD_NUMBER: _ClassVar[int]
+    OVERWRITE_FIELD_NUMBER: _ClassVar[int]
+    MAKE_PARENTS_FIELD_NUMBER: _ClassVar[int]
+    session_id: str
+    path: str
+    size: int
+    sha256: str
+    mode: int
+    overwrite: bool
+    make_parents: bool
+    def __init__(self, session_id: _Optional[str] = ..., path: _Optional[str] = ..., size: _Optional[int] = ..., sha256: _Optional[str] = ..., mode: _Optional[int] = ..., overwrite: bool = ..., make_parents: bool = ...) -> None: ...
 
 class WriteFileRequest(_message.Message):
-    __slots__ = ()
-    def __init__(self) -> None: ...
+    __slots__ = ("header", "data")
+    HEADER_FIELD_NUMBER: _ClassVar[int]
+    DATA_FIELD_NUMBER: _ClassVar[int]
+    header: WriteFileHeader
+    data: bytes
+    def __init__(self, header: _Optional[_Union[WriteFileHeader, _Mapping]] = ..., data: _Optional[bytes] = ...) -> None: ...
 
 class WriteFileResponse(_message.Message):
-    __slots__ = ()
-    def __init__(self) -> None: ...
+    __slots__ = ("info", "sha256")
+    INFO_FIELD_NUMBER: _ClassVar[int]
+    SHA256_FIELD_NUMBER: _ClassVar[int]
+    info: FileInfo
+    sha256: str
+    def __init__(self, info: _Optional[_Union[FileInfo, _Mapping]] = ..., sha256: _Optional[str] = ...) -> None: ...
+
+class UploadFileHeader(_message.Message):
+    __slots__ = ("session_id", "file_name", "size", "sha256", "directory")
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
+    FILE_NAME_FIELD_NUMBER: _ClassVar[int]
+    SIZE_FIELD_NUMBER: _ClassVar[int]
+    SHA256_FIELD_NUMBER: _ClassVar[int]
+    DIRECTORY_FIELD_NUMBER: _ClassVar[int]
+    session_id: str
+    file_name: str
+    size: int
+    sha256: str
+    directory: str
+    def __init__(self, session_id: _Optional[str] = ..., file_name: _Optional[str] = ..., size: _Optional[int] = ..., sha256: _Optional[str] = ..., directory: _Optional[str] = ...) -> None: ...
+
+class UploadFileRequest(_message.Message):
+    __slots__ = ("header", "data")
+    HEADER_FIELD_NUMBER: _ClassVar[int]
+    DATA_FIELD_NUMBER: _ClassVar[int]
+    header: UploadFileHeader
+    data: bytes
+    def __init__(self, header: _Optional[_Union[UploadFileHeader, _Mapping]] = ..., data: _Optional[bytes] = ...) -> None: ...
+
+class UploadFileResponse(_message.Message):
+    __slots__ = ("info", "sha256")
+    INFO_FIELD_NUMBER: _ClassVar[int]
+    SHA256_FIELD_NUMBER: _ClassVar[int]
+    info: FileInfo
+    sha256: str
+    def __init__(self, info: _Optional[_Union[FileInfo, _Mapping]] = ..., sha256: _Optional[str] = ...) -> None: ...
 
 class ListFilesRequest(_message.Message):
-    __slots__ = ()
-    def __init__(self) -> None: ...
+    __slots__ = ("session_id", "path", "recursive", "max_depth", "exclude_names", "skip_hidden", "max_entries")
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
+    PATH_FIELD_NUMBER: _ClassVar[int]
+    RECURSIVE_FIELD_NUMBER: _ClassVar[int]
+    MAX_DEPTH_FIELD_NUMBER: _ClassVar[int]
+    EXCLUDE_NAMES_FIELD_NUMBER: _ClassVar[int]
+    SKIP_HIDDEN_FIELD_NUMBER: _ClassVar[int]
+    MAX_ENTRIES_FIELD_NUMBER: _ClassVar[int]
+    session_id: str
+    path: str
+    recursive: bool
+    max_depth: int
+    exclude_names: _containers.RepeatedScalarFieldContainer[str]
+    skip_hidden: bool
+    max_entries: int
+    def __init__(self, session_id: _Optional[str] = ..., path: _Optional[str] = ..., recursive: bool = ..., max_depth: _Optional[int] = ..., exclude_names: _Optional[_Iterable[str]] = ..., skip_hidden: bool = ..., max_entries: _Optional[int] = ...) -> None: ...
 
 class ListFilesResponse(_message.Message):
-    __slots__ = ()
-    def __init__(self) -> None: ...
+    __slots__ = ("entries", "truncated")
+    ENTRIES_FIELD_NUMBER: _ClassVar[int]
+    TRUNCATED_FIELD_NUMBER: _ClassVar[int]
+    entries: _containers.RepeatedCompositeFieldContainer[FileInfo]
+    truncated: bool
+    def __init__(self, entries: _Optional[_Iterable[_Union[FileInfo, _Mapping]]] = ..., truncated: bool = ...) -> None: ...
 
 class DeleteFileRequest(_message.Message):
-    __slots__ = ()
-    def __init__(self) -> None: ...
+    __slots__ = ("session_id", "path", "recursive")
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
+    PATH_FIELD_NUMBER: _ClassVar[int]
+    RECURSIVE_FIELD_NUMBER: _ClassVar[int]
+    session_id: str
+    path: str
+    recursive: bool
+    def __init__(self, session_id: _Optional[str] = ..., path: _Optional[str] = ..., recursive: bool = ...) -> None: ...
 
 class DeleteFileResponse(_message.Message):
-    __slots__ = ()
-    def __init__(self) -> None: ...
+    __slots__ = ("deleted",)
+    DELETED_FIELD_NUMBER: _ClassVar[int]
+    deleted: bool
+    def __init__(self, deleted: bool = ...) -> None: ...
+
+class ZipFilesRequest(_message.Message):
+    __slots__ = ("session_id", "path", "exclude_names", "skip_hidden")
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
+    PATH_FIELD_NUMBER: _ClassVar[int]
+    EXCLUDE_NAMES_FIELD_NUMBER: _ClassVar[int]
+    SKIP_HIDDEN_FIELD_NUMBER: _ClassVar[int]
+    session_id: str
+    path: str
+    exclude_names: _containers.RepeatedScalarFieldContainer[str]
+    skip_hidden: bool
+    def __init__(self, session_id: _Optional[str] = ..., path: _Optional[str] = ..., exclude_names: _Optional[_Iterable[str]] = ..., skip_hidden: bool = ...) -> None: ...
+
+class ZipSummary(_message.Message):
+    __slots__ = ("files", "input_bytes", "zip_bytes", "skipped")
+    FILES_FIELD_NUMBER: _ClassVar[int]
+    INPUT_BYTES_FIELD_NUMBER: _ClassVar[int]
+    ZIP_BYTES_FIELD_NUMBER: _ClassVar[int]
+    SKIPPED_FIELD_NUMBER: _ClassVar[int]
+    files: int
+    input_bytes: int
+    zip_bytes: int
+    skipped: int
+    def __init__(self, files: _Optional[int] = ..., input_bytes: _Optional[int] = ..., zip_bytes: _Optional[int] = ..., skipped: _Optional[int] = ...) -> None: ...
+
+class ZipFilesResponse(_message.Message):
+    __slots__ = ("data", "summary")
+    DATA_FIELD_NUMBER: _ClassVar[int]
+    SUMMARY_FIELD_NUMBER: _ClassVar[int]
+    data: bytes
+    summary: ZipSummary
+    def __init__(self, data: _Optional[bytes] = ..., summary: _Optional[_Union[ZipSummary, _Mapping]] = ...) -> None: ...
+
+class ArchiveLimits(_message.Message):
+    __slots__ = ("max_stored_bytes", "max_expanded_bytes", "max_entries")
+    MAX_STORED_BYTES_FIELD_NUMBER: _ClassVar[int]
+    MAX_EXPANDED_BYTES_FIELD_NUMBER: _ClassVar[int]
+    MAX_ENTRIES_FIELD_NUMBER: _ClassVar[int]
+    max_stored_bytes: int
+    max_expanded_bytes: int
+    max_entries: int
+    def __init__(self, max_stored_bytes: _Optional[int] = ..., max_expanded_bytes: _Optional[int] = ..., max_entries: _Optional[int] = ...) -> None: ...
 
 class CaptureSessionRequest(_message.Message):
-    __slots__ = ()
-    def __init__(self) -> None: ...
+    __slots__ = ("session_id", "roots", "exclude_names", "limits")
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
+    ROOTS_FIELD_NUMBER: _ClassVar[int]
+    EXCLUDE_NAMES_FIELD_NUMBER: _ClassVar[int]
+    LIMITS_FIELD_NUMBER: _ClassVar[int]
+    session_id: str
+    roots: _containers.RepeatedScalarFieldContainer[str]
+    exclude_names: _containers.RepeatedScalarFieldContainer[str]
+    limits: ArchiveLimits
+    def __init__(self, session_id: _Optional[str] = ..., roots: _Optional[_Iterable[str]] = ..., exclude_names: _Optional[_Iterable[str]] = ..., limits: _Optional[_Union[ArchiveLimits, _Mapping]] = ...) -> None: ...
+
+class CaptureSummary(_message.Message):
+    __slots__ = ("stored_bytes", "sha256", "files", "directories", "expanded_bytes", "excluded", "skipped", "changed", "roots")
+    STORED_BYTES_FIELD_NUMBER: _ClassVar[int]
+    SHA256_FIELD_NUMBER: _ClassVar[int]
+    FILES_FIELD_NUMBER: _ClassVar[int]
+    DIRECTORIES_FIELD_NUMBER: _ClassVar[int]
+    EXPANDED_BYTES_FIELD_NUMBER: _ClassVar[int]
+    EXCLUDED_FIELD_NUMBER: _ClassVar[int]
+    SKIPPED_FIELD_NUMBER: _ClassVar[int]
+    CHANGED_FIELD_NUMBER: _ClassVar[int]
+    ROOTS_FIELD_NUMBER: _ClassVar[int]
+    stored_bytes: int
+    sha256: str
+    files: int
+    directories: int
+    expanded_bytes: int
+    excluded: int
+    skipped: int
+    changed: int
+    roots: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, stored_bytes: _Optional[int] = ..., sha256: _Optional[str] = ..., files: _Optional[int] = ..., directories: _Optional[int] = ..., expanded_bytes: _Optional[int] = ..., excluded: _Optional[int] = ..., skipped: _Optional[int] = ..., changed: _Optional[int] = ..., roots: _Optional[_Iterable[str]] = ...) -> None: ...
+
+class CaptureSessionResponse(_message.Message):
+    __slots__ = ("data", "summary")
+    DATA_FIELD_NUMBER: _ClassVar[int]
+    SUMMARY_FIELD_NUMBER: _ClassVar[int]
+    data: bytes
+    summary: CaptureSummary
+    def __init__(self, data: _Optional[bytes] = ..., summary: _Optional[_Union[CaptureSummary, _Mapping]] = ...) -> None: ...
+
+class RestoreSessionHeader(_message.Message):
+    __slots__ = ("session_id", "size_bytes", "sha256", "roots", "limits")
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
+    SIZE_BYTES_FIELD_NUMBER: _ClassVar[int]
+    SHA256_FIELD_NUMBER: _ClassVar[int]
+    ROOTS_FIELD_NUMBER: _ClassVar[int]
+    LIMITS_FIELD_NUMBER: _ClassVar[int]
+    session_id: str
+    size_bytes: int
+    sha256: str
+    roots: _containers.RepeatedScalarFieldContainer[str]
+    limits: ArchiveLimits
+    def __init__(self, session_id: _Optional[str] = ..., size_bytes: _Optional[int] = ..., sha256: _Optional[str] = ..., roots: _Optional[_Iterable[str]] = ..., limits: _Optional[_Union[ArchiveLimits, _Mapping]] = ...) -> None: ...
 
 class RestoreSessionRequest(_message.Message):
-    __slots__ = ()
-    def __init__(self) -> None: ...
+    __slots__ = ("header", "data")
+    HEADER_FIELD_NUMBER: _ClassVar[int]
+    DATA_FIELD_NUMBER: _ClassVar[int]
+    header: RestoreSessionHeader
+    data: bytes
+    def __init__(self, header: _Optional[_Union[RestoreSessionHeader, _Mapping]] = ..., data: _Optional[bytes] = ...) -> None: ...
 
 class RestoreSessionResponse(_message.Message):
-    __slots__ = ()
-    def __init__(self) -> None: ...
+    __slots__ = ("files", "directories", "expanded_bytes", "roots")
+    FILES_FIELD_NUMBER: _ClassVar[int]
+    DIRECTORIES_FIELD_NUMBER: _ClassVar[int]
+    EXPANDED_BYTES_FIELD_NUMBER: _ClassVar[int]
+    ROOTS_FIELD_NUMBER: _ClassVar[int]
+    files: int
+    directories: int
+    expanded_bytes: int
+    roots: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, files: _Optional[int] = ..., directories: _Optional[int] = ..., expanded_bytes: _Optional[int] = ..., roots: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class BrowserStartRequest(_message.Message):
     __slots__ = ()

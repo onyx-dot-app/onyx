@@ -11,17 +11,44 @@ Errors: a daemon error is a `SandboxDaemonError` (domain
 running, the daemon is unreachable) is a `HostAgentError`.
 """
 
+import hashlib
 import secrets
+from collections.abc import Generator, Iterator
 from datetime import datetime, timezone
 from enum import Enum
+from typing import Protocol, TypeVar
 
 import grpc
 from pydantic import SecretStr
 
-from onyx.microvm.agent_client import HostAgentError, error_info, host_agent_error
+from onyx.microvm.agent_client import (
+    HostAgentError,
+    error_info,
+    host_agent_error,
+    proto_time,
+)
 from onyx.microvm.configs import SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS
 from onyx.microvm.generated.sandboxd.v1 import sandboxd_pb2, sandboxd_pb2_grpc
-from onyx.microvm.models import DaemonHealth, DaemonInitResult
+from onyx.microvm.models import (
+    CancelResult,
+    DaemonHealth,
+    DaemonInitResult,
+    ExecCommand,
+    ExecCompletion,
+    ExecEvent,
+    ExecGap,
+    ExecOutput,
+    ExecResult,
+    ExecStarted,
+    ExecState,
+    ExecutionRecord,
+    FileEntry,
+    FileListing,
+    FileType,
+    OutputStream,
+    WrittenFile,
+    ZipSummary,
+)
 
 SANDBOXD_ERROR_DOMAIN = "sandboxd.craft.onyx.app"
 SANDBOX_ID_HEADER = "x-sandbox-id"
@@ -29,6 +56,14 @@ SANDBOXD_KEY_HEADER = "x-sandboxd-key"
 # Init attaches drives and grows the scratch file system.
 _INIT_TIMEOUT_SECONDS = max(SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS, 60.0)
 _ENTROPY_BYTES = 64
+# The daemon's default command deadline when Command.deadline is not set.
+_DEFAULT_EXEC_DEADLINE_SECONDS = 30 * 60.0
+# Run and Stream end with the result; the gRPC deadline only bounds a lost stream.
+_STREAM_MARGIN_SECONDS = 60.0
+# File transfers and zips of up to the daemon's --max-file-bytes (1 GiB).
+_TRANSFER_TIMEOUT_SECONDS = max(SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS, 600.0)
+# WriteFile/UploadFile data messages (the daemon accepts up to 4 MiB).
+_WRITE_CHUNK_BYTES = 1 << 20
 
 
 class SandboxDaemonErrorReason(str, Enum):
@@ -46,6 +81,13 @@ class SandboxDaemonErrorReason(str, Enum):
     INTERNAL = "INTERNAL"
     KEY_NOT_SET = "KEY_NOT_SET"
     KEY_ALREADY_SET = "KEY_ALREADY_SET"
+    MANAGED_SLOT_BUSY = "MANAGED_SLOT_BUSY"
+    MANAGED_DEVICE_MISMATCH = "MANAGED_DEVICE_MISMATCH"
+    MANAGED_MOUNT_FAILED = "MANAGED_MOUNT_FAILED"
+    FILE_NOT_FOUND = "FILE_NOT_FOUND"
+    FILE_EXISTS = "FILE_EXISTS"
+    LIMIT_EXCEEDED = "LIMIT_EXCEEDED"
+    ARCHIVE_INVALID = "ARCHIVE_INVALID"
 
 
 # The daemon will not accept this VM's key: nothing can use the VM.
@@ -77,7 +119,16 @@ class SandboxDaemonKeyNotSetError(SandboxDaemonError):
     """The agent did not install a key: the VM is unusable."""
 
 
-def _error_from_rpc(err: grpc.RpcError) -> SandboxDaemonError | HostAgentError:
+def _protocol_error(message: str) -> SandboxDaemonError:
+    """The daemon answered out of the proto's message order."""
+    return SandboxDaemonError(
+        grpc.StatusCode.INTERNAL, message, SandboxDaemonErrorReason.INTERNAL
+    )
+
+
+def sandbox_daemon_error(err: grpc.RpcError) -> SandboxDaemonError | HostAgentError:
+    """The typed error of a failed daemon call. Host agent session saves use it
+    too: they pass guest daemon errors through."""
     info = error_info(err)
     if (
         info is None
@@ -96,6 +147,131 @@ def _error_from_rpc(err: grpc.RpcError) -> SandboxDaemonError | HostAgentError:
         else SandboxDaemonError
     )
     return cls(err.code(), err.details() or "", reason)
+
+
+_OUTPUT_STREAMS: dict[int, OutputStream] = {
+    sandboxd_pb2.STDOUT: OutputStream.STDOUT,
+    sandboxd_pb2.STDERR: OutputStream.STDERR,
+}
+
+_COMPLETIONS: dict[int, ExecCompletion] = {
+    sandboxd_pb2.EXITED: ExecCompletion.EXITED,
+    sandboxd_pb2.SIGNALED: ExecCompletion.SIGNALED,
+    sandboxd_pb2.CANCELED: ExecCompletion.CANCELED,
+    sandboxd_pb2.DEADLINE_EXCEEDED: ExecCompletion.DEADLINE_EXCEEDED,
+}
+
+_EXEC_STATES: dict[int, ExecState] = {
+    sandboxd_pb2.RUNNING: ExecState.RUNNING,
+    sandboxd_pb2.ENDED: ExecState.ENDED,
+}
+
+_FILE_TYPES: dict[int, FileType] = {
+    sandboxd_pb2.FILE_TYPE_REGULAR: FileType.REGULAR,
+    sandboxd_pb2.FILE_TYPE_DIRECTORY: FileType.DIRECTORY,
+    sandboxd_pb2.FILE_TYPE_SYMLINK: FileType.SYMLINK,
+    sandboxd_pb2.FILE_TYPE_OTHER: FileType.OTHER,
+}
+
+
+def _command_proto(command: ExecCommand) -> sandboxd_pb2.Command:
+    proto = sandboxd_pb2.Command(
+        argv=command.argv,
+        cwd=command.cwd,
+        env=command.env,
+        stdin=command.stdin,
+        labels=command.labels,
+    )
+    if command.deadline_seconds is not None:
+        proto.deadline.FromNanoseconds(int(command.deadline_seconds * 1e9))
+    return proto
+
+
+def _started(msg: sandboxd_pb2.ExecStarted) -> ExecStarted:
+    return ExecStarted(
+        execution_id=msg.execution_id,
+        pid=msg.pid,
+        started_at=proto_time(msg, "started_at"),
+        deadline_at=proto_time(msg, "deadline_at"),
+    )
+
+
+def _result(msg: sandboxd_pb2.ExecResult) -> ExecResult:
+    return ExecResult(
+        completion=_COMPLETIONS.get(msg.completion, ExecCompletion.UNSPECIFIED),
+        exit_code=msg.exit_code,
+        signal=msg.signal,
+        finished_at=proto_time(msg, "finished_at"),
+        stdout_bytes=msg.stdout_bytes,
+        stderr_bytes=msg.stderr_bytes,
+    )
+
+
+def _exec_event(msg: sandboxd_pb2.ExecEvent) -> ExecEvent | None:
+    kind = msg.WhichOneof("event")
+    if kind == "started":
+        return _started(msg.started)
+    if kind == "output":
+        stream = _OUTPUT_STREAMS.get(msg.output.stream)
+        if stream is None:
+            return None
+        return ExecOutput(stream=stream, offset=msg.output.offset, data=msg.output.data)
+    if kind == "gap":
+        stream = _OUTPUT_STREAMS.get(msg.gap.stream)
+        if stream is None:
+            return None
+        # "from" is a Python keyword.
+        start = getattr(msg.gap, "from")  # ods: ignore[getattr]
+        return ExecGap(stream=stream, start=start, end=msg.gap.to)
+    if kind == "result":
+        return _result(msg.result)
+    return None
+
+
+def _execution(msg: sandboxd_pb2.Execution) -> ExecutionRecord:
+    return ExecutionRecord(
+        execution_id=msg.execution_id,
+        state=_EXEC_STATES.get(msg.state, ExecState.UNSPECIFIED),
+        argv=list(msg.argv),
+        labels=dict(msg.labels),
+        pid=msg.pid,
+        started_at=proto_time(msg, "started_at"),
+        deadline_at=proto_time(msg, "deadline_at"),
+        stdout_bytes=msg.stdout_bytes,
+        stderr_bytes=msg.stderr_bytes,
+        result=_result(msg.result) if msg.HasField("result") else None,
+    )
+
+
+def _file_entry(msg: sandboxd_pb2.FileInfo) -> FileEntry:
+    return FileEntry(
+        path=msg.path,
+        name=msg.name,
+        type=_FILE_TYPES.get(msg.type, FileType.UNSPECIFIED),
+        size=msg.size,
+        mode=msg.mode,
+        modified_at=proto_time(msg, "modified_at"),
+        link_target=msg.link_target,
+    )
+
+
+def _chunks(data: bytes) -> Iterator[bytes]:
+    for start in range(0, len(data), _WRITE_CHUNK_BYTES):
+        yield data[start : start + _WRITE_CHUNK_BYTES]
+
+
+_Msg_co = TypeVar("_Msg_co", covariant=True)
+
+
+class _ResponseStream(Protocol[_Msg_co]):
+    """A server-streaming gRPC call: an iterator of messages that can be
+    cancelled. Dropping it also cancels the call."""
+
+    def __iter__(self) -> Iterator[_Msg_co]: ...
+
+    def __next__(self) -> _Msg_co: ...
+
+    def cancel(self) -> bool: ...
 
 
 class SandboxDaemonClient:
@@ -128,7 +304,7 @@ class SandboxDaemonClient:
                 ),
             )
         except grpc.RpcError as e:
-            raise _error_from_rpc(e) from e
+            raise sandbox_daemon_error(e) from e
         return DaemonHealth(
             initialized=r.initialized,
             key_set=r.key_set,
@@ -164,7 +340,7 @@ class SandboxDaemonClient:
                 request, metadata=self._authed(), timeout=_INIT_TIMEOUT_SECONDS
             )
         except grpc.RpcError as e:
-            raise _error_from_rpc(e) from e
+            raise sandbox_daemon_error(e) from e
         return DaemonInitResult(
             version=r.version,
             clock_step_seconds=r.clock_step.ToTimedelta().total_seconds(),
@@ -172,3 +348,319 @@ class SandboxDaemonClient:
             attached=r.attached,
             relay_reset=r.relay_reset,
         )
+
+    # Exec. A command that ends in any way is an ExecResult, not an error.
+
+    def _exec_events(
+        self, call: _ResponseStream[sandboxd_pb2.ExecEvent]
+    ) -> Generator[ExecEvent, None, None]:
+        try:
+            for msg in call:
+                event = _exec_event(msg)
+                if event is None:
+                    continue
+                yield event
+                if isinstance(event, ExecResult):
+                    return
+        except grpc.RpcError as e:
+            raise sandbox_daemon_error(e) from e
+        finally:
+            call.cancel()
+        raise _protocol_error("the exec stream ended without a result")
+
+    def run(self, command: ExecCommand) -> Generator[ExecEvent, None, None]:
+        """Run a command and stream its events: ExecStarted, output and gaps,
+        then the ExecResult.
+
+        The command starts when the iterator is first read. If the stream
+        breaks or the iterator is closed, the command keeps running: resume
+        with `stream()` and the execution ID of the first event. Errors (for
+        example START_FAILED) raise from the iterator.
+        """
+        deadline = command.deadline_seconds or _DEFAULT_EXEC_DEADLINE_SECONDS
+        call: _ResponseStream[sandboxd_pb2.ExecEvent] = self._stub.Run(
+            sandboxd_pb2.RunRequest(command=_command_proto(command)),
+            metadata=self._authed(),
+            timeout=deadline + _STREAM_MARGIN_SECONDS,
+        )
+        yield from self._exec_events(call)
+
+    def start(self, command: ExecCommand) -> ExecStarted:
+        """Start a command in the background."""
+        try:
+            r: sandboxd_pb2.StartResponse = self._stub.Start(
+                sandboxd_pb2.StartRequest(command=_command_proto(command)),
+                metadata=self._authed(),
+                timeout=SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS,
+            )
+        except grpc.RpcError as e:
+            raise sandbox_daemon_error(e) from e
+        return _started(r.started)
+
+    def stream(
+        self,
+        execution_id: str,
+        *,
+        stdout_offset: int = 0,
+        stderr_offset: int = 0,
+        timeout_seconds: float = _DEFAULT_EXEC_DEADLINE_SECONDS
+        + _STREAM_MARGIN_SECONDS,
+    ) -> Generator[ExecEvent, None, None]:
+        """Stream an execution's output from the offsets, then its result.
+        Works while it runs and after it ended. A gap event marks bytes the
+        daemon no longer keeps. The call starts when the iterator is first
+        read."""
+        call: _ResponseStream[sandboxd_pb2.ExecEvent] = self._stub.Stream(
+            sandboxd_pb2.StreamRequest(
+                execution_id=execution_id,
+                stdout_offset=stdout_offset,
+                stderr_offset=stderr_offset,
+            ),
+            metadata=self._authed(),
+            timeout=timeout_seconds,
+        )
+        yield from self._exec_events(call)
+
+    def interact(
+        self, execution_id: str, *, data: bytes = b"", close_stdin: bool = False
+    ) -> int:
+        """Write to the stdin of a command started with stdin=True. Returns
+        the bytes written. STDIN_NOT_OPEN / EXECUTION_ENDED raise."""
+        try:
+            r: sandboxd_pb2.InteractResponse = self._stub.Interact(
+                sandboxd_pb2.InteractRequest(
+                    execution_id=execution_id, data=data, close_stdin=close_stdin
+                ),
+                metadata=self._authed(),
+                timeout=SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS,
+            )
+        except grpc.RpcError as e:
+            raise sandbox_daemon_error(e) from e
+        return r.written
+
+    def cancel(self, execution_id: str) -> CancelResult:
+        """Kill the execution's cgroup. The result is CANCELED, or the
+        execution's own result if it had already ended."""
+        try:
+            r: sandboxd_pb2.CancelResponse = self._stub.Cancel(
+                sandboxd_pb2.CancelRequest(execution_id=execution_id),
+                metadata=self._authed(),
+                timeout=SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS,
+            )
+        except grpc.RpcError as e:
+            raise sandbox_daemon_error(e) from e
+        return CancelResult(result=_result(r.result), already_ended=r.already_ended)
+
+    def inspect(self, execution_id: str) -> ExecutionRecord:
+        try:
+            r: sandboxd_pb2.InspectResponse = self._stub.Inspect(
+                sandboxd_pb2.InspectRequest(execution_id=execution_id),
+                metadata=self._authed(),
+                timeout=SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS,
+            )
+        except grpc.RpcError as e:
+            raise sandbox_daemon_error(e) from e
+        return _execution(r.execution)
+
+    def list_executions(
+        self, labels: dict[str, str] | None = None
+    ) -> list[ExecutionRecord]:
+        """Every execution record that has all `labels`."""
+        try:
+            r: sandboxd_pb2.ListResponse = self._stub.List(
+                sandboxd_pb2.ListRequest(labels=labels or {}),
+                metadata=self._authed(),
+                timeout=SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS,
+            )
+        except grpc.RpcError as e:
+            raise sandbox_daemon_error(e) from e
+        return [_execution(x) for x in r.executions]
+
+    # Files. Paths are relative to /workspace/sessions/<session_id>/.
+
+    def read_file(
+        self, *, session_id: str, path: str, offset: int = 0, length: int = 0
+    ) -> tuple[FileEntry, Iterator[bytes]]:
+        """The file's info and its bytes from `offset` (length 0 = to the
+        end), in chunks of at most 64 KiB. FILE_NOT_FOUND raises here.
+        Closing or dropping the chunk iterator cancels the stream."""
+        call: _ResponseStream[sandboxd_pb2.ReadFileResponse] = self._stub.ReadFile(
+            sandboxd_pb2.ReadFileRequest(
+                session_id=session_id, path=path, offset=offset, length=length
+            ),
+            metadata=self._authed(),
+            timeout=_TRANSFER_TIMEOUT_SECONDS,
+        )
+        try:
+            first: sandboxd_pb2.ReadFileResponse = next(call)
+        except grpc.RpcError as e:
+            call.cancel()
+            raise sandbox_daemon_error(e) from e
+        except StopIteration:
+            raise _protocol_error("ReadFile ended without the file info") from None
+        if first.WhichOneof("part") != "info":
+            call.cancel()
+            raise _protocol_error("ReadFile did not start with the file info")
+        return _file_entry(first.info), self._read_chunks(call)
+
+    def _read_chunks(
+        self, call: _ResponseStream[sandboxd_pb2.ReadFileResponse]
+    ) -> Iterator[bytes]:
+        try:
+            for msg in call:
+                if msg.WhichOneof("part") == "data":
+                    yield msg.data
+        except grpc.RpcError as e:
+            raise sandbox_daemon_error(e) from e
+        finally:
+            call.cancel()
+
+    def write_file(
+        self,
+        *,
+        session_id: str,
+        path: str,
+        data: bytes,
+        mode: int = 0,
+        overwrite: bool = True,
+        make_parents: bool = True,
+    ) -> WrittenFile:
+        """Atomic write: the daemon renames the file into place only when the
+        size and SHA-256 match. Without overwrite, FILE_EXISTS raises."""
+        header = sandboxd_pb2.WriteFileHeader(
+            session_id=session_id,
+            path=path,
+            size=len(data),
+            sha256=hashlib.sha256(data).hexdigest(),
+            mode=mode,
+            overwrite=overwrite,
+            make_parents=make_parents,
+        )
+
+        def requests() -> Iterator[sandboxd_pb2.WriteFileRequest]:
+            yield sandboxd_pb2.WriteFileRequest(header=header)
+            for chunk in _chunks(data):
+                yield sandboxd_pb2.WriteFileRequest(data=chunk)
+
+        try:
+            r: sandboxd_pb2.WriteFileResponse = self._stub.WriteFile(
+                requests(), metadata=self._authed(), timeout=_TRANSFER_TIMEOUT_SECONDS
+            )
+        except grpc.RpcError as e:
+            raise sandbox_daemon_error(e) from e
+        return WrittenFile(info=_file_entry(r.info), sha256=r.sha256)
+
+    def upload_file(
+        self, *, session_id: str, file_name: str, data: bytes, directory: str = ""
+    ) -> WrittenFile:
+        """Store an upload under a free name in `directory` (default
+        attachments). `info.path` is the stored path."""
+        header = sandboxd_pb2.UploadFileHeader(
+            session_id=session_id,
+            file_name=file_name,
+            size=len(data),
+            sha256=hashlib.sha256(data).hexdigest(),
+            directory=directory,
+        )
+
+        def requests() -> Iterator[sandboxd_pb2.UploadFileRequest]:
+            yield sandboxd_pb2.UploadFileRequest(header=header)
+            for chunk in _chunks(data):
+                yield sandboxd_pb2.UploadFileRequest(data=chunk)
+
+        try:
+            r: sandboxd_pb2.UploadFileResponse = self._stub.UploadFile(
+                requests(), metadata=self._authed(), timeout=_TRANSFER_TIMEOUT_SECONDS
+            )
+        except grpc.RpcError as e:
+            raise sandbox_daemon_error(e) from e
+        return WrittenFile(info=_file_entry(r.info), sha256=r.sha256)
+
+    def list_files(
+        self,
+        *,
+        session_id: str,
+        path: str = "",
+        recursive: bool = False,
+        max_depth: int = 0,
+        exclude_names: list[str] | None = None,
+        skip_hidden: bool = False,
+        max_entries: int = 0,
+    ) -> FileListing:
+        """One directory (empty path = the session directory), or the tree
+        with recursive. 0 limits mean the daemon defaults."""
+        try:
+            r: sandboxd_pb2.ListFilesResponse = self._stub.ListFiles(
+                sandboxd_pb2.ListFilesRequest(
+                    session_id=session_id,
+                    path=path,
+                    recursive=recursive,
+                    max_depth=max_depth,
+                    exclude_names=exclude_names or [],
+                    skip_hidden=skip_hidden,
+                    max_entries=max_entries,
+                ),
+                metadata=self._authed(),
+                timeout=SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS,
+            )
+        except grpc.RpcError as e:
+            raise sandbox_daemon_error(e) from e
+        return FileListing(
+            entries=[_file_entry(x) for x in r.entries], truncated=r.truncated
+        )
+
+    def delete_file(
+        self, *, session_id: str, path: str, recursive: bool = False
+    ) -> bool:
+        """Remove a file or link, or a directory with recursive. Returns
+        False when the path did not exist."""
+        try:
+            r: sandboxd_pb2.DeleteFileResponse = self._stub.DeleteFile(
+                sandboxd_pb2.DeleteFileRequest(
+                    session_id=session_id, path=path, recursive=recursive
+                ),
+                metadata=self._authed(),
+                timeout=SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS,
+            )
+        except grpc.RpcError as e:
+            raise sandbox_daemon_error(e) from e
+        return r.deleted
+
+    def zip_files(
+        self,
+        *,
+        session_id: str,
+        path: str,
+        exclude_names: list[str] | None = None,
+        skip_hidden: bool = False,
+    ) -> Generator[bytes, None, ZipSummary]:
+        """Yield the bytes of a deflate zip of the regular files under
+        `path`; the generator returns the summary. On an error (for example
+        LIMIT_EXCEEDED) drop the bytes received so far."""
+        call: _ResponseStream[sandboxd_pb2.ZipFilesResponse] = self._stub.ZipFiles(
+            sandboxd_pb2.ZipFilesRequest(
+                session_id=session_id,
+                path=path,
+                exclude_names=exclude_names or [],
+                skip_hidden=skip_hidden,
+            ),
+            metadata=self._authed(),
+            timeout=_TRANSFER_TIMEOUT_SECONDS,
+        )
+        try:
+            for msg in call:
+                part = msg.WhichOneof("part")
+                if part == "data":
+                    yield msg.data
+                elif part == "summary":
+                    return ZipSummary(
+                        files=msg.summary.files,
+                        input_bytes=msg.summary.input_bytes,
+                        zip_bytes=msg.summary.zip_bytes,
+                        skipped=msg.summary.skipped,
+                    )
+        except grpc.RpcError as e:
+            raise sandbox_daemon_error(e) from e
+        finally:
+            call.cancel()
+        raise _protocol_error("ZipFiles ended without a summary")
