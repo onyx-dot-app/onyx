@@ -216,8 +216,8 @@ class TestMCPToolLLMNames:
             "shared",
             "custom__1__shared",
             "custom__2__shared",
-            "mcp__same_name_1__shared",
-            "mcp__same_name_2__shared",
+            "mcp__1__same_name__shared",
+            "mcp__2__same_name__shared",
         ]
         assert [tool.tool_definition().name for tool in tools] == names
         assert all(tool.display_name == "shared" for tool in tools)

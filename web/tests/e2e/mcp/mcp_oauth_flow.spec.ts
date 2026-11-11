@@ -15,7 +15,10 @@ import {
   getMcpOAuthConfig,
   type McpOAuthConfig,
 } from "@tests/e2e/mcp/McpOAuthFlow";
-import { expectMcpToolInvoked } from "@tests/e2e/mcp/mcpToolInvocation";
+import {
+  expectMcpToolInvoked,
+  qualifiedMcpToolName,
+} from "@tests/e2e/mcp/mcpToolInvocation";
 
 // Resolved lazily, not at import. Playwright loads every spec during collection
 // for all projects, so calling getMcpOAuthConfig() at module scope would throw
@@ -122,13 +125,20 @@ async function configureOauthServer(
 /** Confirm the server is present in chat, then prove the tool actually runs. */
 async function verifyToolUsableFromChat(
   page: Page,
-  artifacts: { serverName: string; toolName: string; toolId: number | null }
+  artifacts: { serverId: number; serverName: string; toolName: string }
 ): Promise<void> {
   const plugins = new ChatPluginsPopover(page);
   await plugins.expectConnected(artifacts.serverName);
   await plugins.expectPluginEnabled(artifacts.serverName, true);
   await plugins.close();
-  await expectMcpToolInvoked(page, artifacts.toolName);
+  await expectMcpToolInvoked(
+    page,
+    qualifiedMcpToolName(
+      artifacts.serverId,
+      artifacts.serverName,
+      artifacts.toolName
+    )
+  );
 }
 
 test.describe("MCP OAuth flows", () => {
@@ -305,9 +315,9 @@ test.describe("MCP OAuth flows", () => {
     await page.goto(`/app?agentId=${agentId}`, { waitUntil: "load" });
 
     const artifacts = {
+      serverId,
       serverName,
       toolName: TOOL_NAMES.admin,
-      toolId: adminToolId,
     };
 
     const chatPlugins = new ChatPluginsPopover(page);
@@ -459,7 +469,7 @@ test.describe("MCP OAuth flows", () => {
     await page.context().clearCookies();
     await loginAsWorkerUser(page, testInfo.workerIndex);
 
-    const { agentId, serverName, toolName, toolId } = adminArtifacts!;
+    const { agentId, serverId, serverName, toolName } = adminArtifacts!;
 
     await page.goto(`/app?agentId=${agentId}`, { waitUntil: "load" });
 
@@ -467,6 +477,6 @@ test.describe("MCP OAuth flows", () => {
     const plugins = new ChatPluginsPopover(page);
     await oauthFlow.connectFromChat(plugins, serverName);
 
-    await verifyToolUsableFromChat(page, { serverName, toolName, toolId });
+    await verifyToolUsableFromChat(page, { serverId, serverName, toolName });
   });
 });

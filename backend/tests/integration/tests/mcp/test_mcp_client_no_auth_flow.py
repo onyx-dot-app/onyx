@@ -213,7 +213,7 @@ def test_mcp_json_tool_result_reaches_llm_encoded_once(
         if tool["name"] == "get_ticket"
     )
 
-    callable_name = f"mcp__{server_name}_{server_id}__get_ticket"
+    callable_name = f"mcp__{server_id}__{server_name}__get_ticket"
     mock_llm.conversation(
         "chat",
         Reply(
