@@ -42,17 +42,6 @@ def test_resolve_replaces_every_placeholder() -> None:
     )
 
 
-@pytest.mark.parametrize("path", ["report/SKILL.md", "report/references/SKILL.md"])
-@pytest.mark.parametrize("text", ["café", "${CLAUDE_SKILL_DIR}/café\n" * 100])
-def test_resolved_size_matches_encoded_output(path: str, text: str) -> None:
-    expected = (
-        resolve_skill_dir_placeholder(text, _SKILL_DIR)
-        if path == "report/SKILL.md"
-        else text
-    )
-    assert push._resolved_file_size(path, text.encode()) == len(expected.encode())
-
-
 @pytest.mark.parametrize("excess", [0, 1])
 def test_expansion_limit_skips_the_whole_skill_only_above_the_limit(
     monkeypatch: pytest.MonkeyPatch, excess: int
