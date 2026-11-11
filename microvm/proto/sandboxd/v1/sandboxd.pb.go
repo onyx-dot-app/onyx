@@ -2913,7 +2913,8 @@ type ListFilesResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Directories first, then by name (case-insensitive), per directory.
 	Entries []*FileInfo `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries,omitempty"`
-	// True if max_entries or max_depth cut the listing.
+	// True if max_entries, max_depth or the response size limit (12 MiB)
+	// cut the listing.
 	Truncated     bool `protobuf:"varint,2,opt,name=truncated,proto3" json:"truncated,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

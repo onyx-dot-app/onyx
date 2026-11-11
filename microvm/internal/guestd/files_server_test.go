@@ -6,10 +6,16 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/execs"
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/files"
@@ -90,7 +96,7 @@ func TestFileCallsGRPC(t *testing.T) {
 
 	// Errors carry their reason.
 	_, err = c.ListFiles(ctx, &pb.ListFilesRequest{SessionId: fileSession, Path: "nope"})
-	if reason(err) != "FILE_NOT_FOUND" {
+	if reason(err) != "FILE_NOT_FOUND" || status.Code(err) != codes.NotFound {
 		t.Fatalf("list missing: %v", err)
 	}
 	_, err = c.ListFiles(ctx, &pb.ListFilesRequest{SessionId: fileSession, Path: "../x"})
@@ -101,7 +107,7 @@ func TestFileCallsGRPC(t *testing.T) {
 	_ = big.Send(&pb.WriteFileRequest{Part: &pb.WriteFileRequest_Header{Header: &pb.WriteFileHeader{
 		SessionId: fileSession, Path: "outputs/big", Size: 5 << 20,
 	}}})
-	if _, err := big.CloseAndRecv(); reason(err) != "LIMIT_EXCEEDED" {
+	if _, err := big.CloseAndRecv(); reason(err) != "LIMIT_EXCEEDED" || status.Code(err) != codes.ResourceExhausted {
 		t.Fatalf("write over limit: %v", err)
 	}
 
@@ -210,5 +216,34 @@ func TestFileCallsGRPC(t *testing.T) {
 	// Without the key the file calls fail like every other call.
 	if _, err := c.ListFiles(context.Background(), &pb.ListFilesRequest{SessionId: fileSession}); reason(err) != "UNAUTHENTICATED" {
 		t.Fatalf("no key: %v", err)
+	}
+}
+
+func TestListFilesResponseSizeCap(t *testing.T) {
+	c, sessions := fileHarness(t)
+	ctx := keyed(context.Background())
+	dir := filepath.Join(sessions, fileSession, "outputs")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for i := range 40 {
+		name := fmt.Sprintf("%02d-%s", i, strings.Repeat("n", 200))
+		if err := os.WriteFile(filepath.Join(dir, name), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	orig := listMaxBytes
+	t.Cleanup(func() { listMaxBytes = orig })
+	listMaxBytes = 4 << 10
+
+	lr, err := c.ListFiles(ctx, &pb.ListFilesRequest{SessionId: fileSession, Path: "outputs"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !lr.GetTruncated() || len(lr.GetEntries()) == 0 || len(lr.GetEntries()) >= 40 {
+		t.Fatalf("entries = %d, truncated = %v", len(lr.GetEntries()), lr.GetTruncated())
+	}
+	if n := proto.Size(lr); n > listMaxBytes {
+		t.Fatalf("response of %d bytes, cap %d", n, listMaxBytes)
 	}
 }

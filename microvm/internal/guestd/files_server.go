@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protowire"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/files"
@@ -16,6 +18,10 @@ import (
 
 // streamChunkBytes is the data size of one zip or capture message.
 const streamChunkBytes = 1 << 20
+
+// listMaxBytes caps the encoded size of a ListFiles response. It stays below
+// the node agent pass-through's 16 MiB message limit.
+var listMaxBytes = 12 << 20
 
 // fileError maps a files error to a gRPC status.
 func fileError(err error) error {
@@ -174,8 +180,18 @@ func (s *Server) ListFiles(ctx context.Context, r *pb.ListFilesRequest) (*pb.Lis
 		return nil, fileError(err)
 	}
 	out := &pb.ListFilesResponse{Truncated: truncated, Entries: make([]*pb.FileInfo, 0, len(ents))}
+	size := 0
 	for _, e := range ents {
-		out.Entries = append(out.Entries, toFileInfo(e))
+		fi := toFileInfo(e)
+		// The entry's field tag and length prefix.
+		n := proto.Size(fi)
+		n += 1 + protowire.SizeVarint(uint64(n))
+		if size+n > listMaxBytes {
+			out.Truncated = true
+			break
+		}
+		size += n
+		out.Entries = append(out.Entries, fi)
 	}
 	return out, nil
 }

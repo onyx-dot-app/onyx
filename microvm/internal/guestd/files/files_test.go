@@ -785,9 +785,19 @@ func TestRestoreKeepsTrashWhenRecoveryFails(t *testing.T) {
 		}
 		return orig(root, from, to)
 	}
-	_, _ = restore(s, sid, []byte("not zstd at all"), RestoreSpec{})
+	// A valid archive without outputs fails: success would leave outputs
+	// only in the trash.
+	other := "a6f1b1a2-0000-4000-8000-000000000009"
+	put(t, filepath.Join(filepath.Dir(base), other), "attachments/b.txt", "b")
+	archive, _ := capture(t, s, CaptureSpec{SessionID: other})
+	if _, err := restore(s, sid, archive, RestoreSpec{}); err == nil || errors.Is(err, ErrArchive) {
+		t.Fatalf("restore with an unrecovered root: %v", err)
+	}
 	if b, err := os.ReadFile(filepath.Join(base, trash, "outputs/a.txt")); err != nil || string(b) != "old a" {
 		t.Fatalf("trash copy = %q %v", b, err)
+	}
+	if _, err := os.Stat(filepath.Join(base, "attachments")); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("restore changed the session: %v", err)
 	}
 	rename = orig
 	_, _ = restore(s, sid, []byte("not zstd at all"), RestoreSpec{})

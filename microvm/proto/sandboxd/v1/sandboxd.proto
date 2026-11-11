@@ -567,7 +567,8 @@ message ListFilesRequest {
 message ListFilesResponse {
   // Directories first, then by name (case-insensitive), per directory.
   repeated FileInfo entries = 1;
-  // True if max_entries or max_depth cut the listing.
+  // True if max_entries, max_depth or the response size limit (12 MiB)
+  // cut the listing.
   bool truncated = 2;
 }
 

@@ -92,8 +92,10 @@ func (s *Store) Restore(ctx context.Context, spec RestoreSpec, r io.Reader) (Res
 		return sum, err
 	}
 	defer func() { _ = root.Close() }()
-	// The swap below replaces the roots, so a trash that stays is not fatal.
-	_ = removeLeftovers(root)
+	// A root that stays in the trash and is not in the archive would be lost.
+	if err := removeLeftovers(root); err != nil {
+		return sum, fmt.Errorf("recover an interrupted restore: %w", err)
+	}
 
 	staging := randName(stagingPrefix)
 	if err := root.Mkdir(staging, 0o700); err != nil {

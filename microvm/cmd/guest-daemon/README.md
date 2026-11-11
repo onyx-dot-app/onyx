@@ -142,8 +142,8 @@ Files (ENG-4572, `internal/guestd/files`):
   with `FILE_EXISTS`. `UploadFile` is the direct upload call: it stores the file in `attachments/` (or
   `directory`) under a free name (`a.pdf`, `a_1.pdf`, ...), the same rule as the pod runtime.
 - `ListFiles`: directories first, then by name. `recursive` with `max_depth` (64), `exclude_names`,
-  `skip_hidden`, `max_entries` (10,000, at most 100,000); `truncated` when cut. Links are listed, not
-  followed.
+  `skip_hidden`, `max_entries` (10,000, at most 100,000); `truncated` when cut, also when the
+  response would pass 12 MiB. Links are listed, not followed.
 - `DeleteFile` removes a file or a link (never its target); a directory needs `recursive`.
 - `ZipFiles` streams a deflate zip of the regular files under a directory. It checks
   `--max-zip-bytes` (1 GiB) and 100,000 files before it sends the first byte.

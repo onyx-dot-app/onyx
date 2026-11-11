@@ -17,6 +17,9 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/files"
 	pb "github.com/onyx-dot-app/onyx/microvm/proto/hostagent/v1"
 )
@@ -187,7 +190,7 @@ func TestSaveCaptureUploadRestore(t *testing.T) {
 	}
 	_, err = c.UploadCapture(ctx, &pb.UploadCaptureRequest{CaptureId: cr.GetCaptureId(),
 		Request: e.presignPut("s1", cr.GetSizeBytes(), cr.GetSha256())})
-	if _, r := errInfo(err); r != "CAPTURE_NOT_FOUND" {
+	if _, r := errInfo(err); r != "CAPTURE_NOT_FOUND" || status.Code(err) != codes.NotFound {
 		t.Fatalf("second upload: %v", err)
 	}
 
@@ -254,7 +257,8 @@ func TestSaveErrors(t *testing.T) {
 	}
 	// The agent limit.
 	e.a.saves.MaxBytes = 64
-	if _, err := c.CaptureSession(ctx, e.captureReq(saveSession)); func() string { _, r := errInfo(err); return r }() != "CAPTURE_TOO_LARGE" {
+	if _, err := c.CaptureSession(ctx, e.captureReq(saveSession)); func() string { _, r := errInfo(err); return r }() != "CAPTURE_TOO_LARGE" ||
+		status.Code(err) != codes.ResourceExhausted {
 		t.Fatalf("over the agent limit: %v", err)
 	}
 	ents, _ := os.ReadDir(e.a.saves.Dir)
