@@ -63,38 +63,6 @@ func loopback(t *testing.T) (port uint32, accepted <-chan []byte) {
 	return 0, nil
 }
 
-// A connection that the dial returns accepts writes: no expired deadline
-// is left on it, also when the context ends right after the dial.
-func TestDialConnWritable(t *testing.T) {
-	port, accepted := loopback(t)
-	for range 50 {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-		c, err := Dial(ctx, unix.VMADDR_CID_LOCAL, port)
-		cancel()
-		if err != nil {
-			t.Fatal(err)
-		}
-		time.Sleep(time.Millisecond)
-		if _, err := c.Write([]byte("x")); err != nil {
-			t.Fatalf("write after dial: %v", err)
-		}
-		_ = c.Close()
-		if got := <-accepted; string(got) != "x" {
-			t.Fatalf("got %q", got)
-		}
-	}
-}
-
-func TestDialCanceledContext(t *testing.T) {
-	port, _ := loopback(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	if c, err := Dial(ctx, unix.VMADDR_CID_LOCAL, port); err == nil {
-		_ = c.Close()
-		t.Fatal("dial with a canceled context succeeded")
-	}
-}
-
 // Close makes a blocked Accept return net.ErrClosed, so serve loops end.
 func TestListenerCloseEndsAccept(t *testing.T) {
 	var ln net.Listener
@@ -130,5 +98,37 @@ func TestListenerCloseEndsAccept(t *testing.T) {
 	}
 	if _, err := ln.Accept(); !errors.Is(err, net.ErrClosed) {
 		t.Fatalf("accept on a closed listener: %v, want net.ErrClosed", err)
+	}
+}
+
+// A connection that the dial returns accepts writes: no expired deadline
+// is left on it, also when the context ends right after the dial.
+func TestDialConnWritable(t *testing.T) {
+	port, accepted := loopback(t)
+	for range 50 {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		c, err := Dial(ctx, unix.VMADDR_CID_LOCAL, port)
+		cancel()
+		if err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(time.Millisecond)
+		if _, err := c.Write([]byte("x")); err != nil {
+			t.Fatalf("write after dial: %v", err)
+		}
+		_ = c.Close()
+		if got := <-accepted; string(got) != "x" {
+			t.Fatalf("got %q", got)
+		}
+	}
+}
+
+func TestDialCanceledContext(t *testing.T) {
+	port, _ := loopback(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if c, err := Dial(ctx, unix.VMADDR_CID_LOCAL, port); err == nil {
+		_ = c.Close()
+		t.Fatal("dial with a canceled context succeeded")
 	}
 }
