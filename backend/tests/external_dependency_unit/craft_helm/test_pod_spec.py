@@ -526,6 +526,13 @@ def test_proxy_env_is_set_on_sandbox_and_sidecar(pod: client.V1Pod) -> None:
         )
 
 
+def test_node_fetch_uses_proxy_env(pod: client.V1Pod) -> None:
+    """Node's built-in fetch ignores HTTPS_PROXY unless NODE_USE_ENV_PROXY=1."""
+    for container in (_container(pod, "sandbox"), _sidecar(pod)):
+        env = {e.name: e.value for e in container.env}
+        assert env.get("NODE_USE_ENV_PROXY") == "1", container.name
+
+
 def test_snapshot_storage_credentials_are_not_in_pod_env(pod: client.V1Pod) -> None:
     """Snapshots stream to api-server-owned FileStore persistence, so sandbox
     pods do not need bucket names, endpoints, or AWS credentials."""

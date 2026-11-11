@@ -470,6 +470,8 @@ def _proxy_env_vars(
         "http_proxy": proxy_url,
         "NO_PROXY": _NO_PROXY_LIST,
         "no_proxy": _NO_PROXY_LIST,
+        # Node's built-in fetch ignores HTTPS_PROXY without this.
+        "NODE_USE_ENV_PROXY": "1",
         # SDK-specific CA env vars for libs that bypass /etc/ssl/certs.
         "NODE_EXTRA_CA_CERTS": _PROXY_CA_BUNDLE_FILE,
         "REQUESTS_CA_BUNDLE": _PROXY_CA_BUNDLE_FILE,

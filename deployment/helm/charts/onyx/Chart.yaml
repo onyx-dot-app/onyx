@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.9.40
+version: 0.9.41
 appVersion: latest
 annotations:
   category: Productivity
@@ -20,12 +20,9 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: changed
-      description: With craft.sandboxRuntime=firecracker, the Craft host agent
-        and the preflight check tolerate the onyx.app/kvm=true:NoSchedule taint
-        on Firecracker nodes, and the preflight selects only onyx.app/kvm=true
-        nodes. Pod sandboxes and the image prepuller do not tolerate it; the
-        chart refuses sandboxPod.tolerations that would.
+    - kind: fixed
+      description: Craft sandbox pods set NODE_USE_ENV_PROXY=1, so Node's
+        built-in fetch uses the sandbox egress proxy.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it
