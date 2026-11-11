@@ -86,6 +86,7 @@ covers new files that match it.
 | `backend/onyx/access/`, `backend/ee/onyx/access/`, `backend/onyx/db/document_access.py` | access-control |
 | `backend/onyx/db/document_set.py`, `backend/onyx/db/user_group.py`, `backend/onyx/server/features/document_set/`, `backend/ee/onyx/db/document_set.py` | access-control |
 | `backend/ee/onyx/server/user_group/`, `backend/ee/onyx/db/user_group.py` | access-control, authorization |
+| `terraform-provider-onyx/internal/provider/user_group_resource.go`, `terraform-provider-onyx/docs/resources/user_group.md`, `terraform-provider-onyx/examples/resources/onyx_user_group/`, `terraform-provider-onyx/README.md` | authorization |
 | `backend/ee/onyx/external_permissions/`, `backend/onyx/db/permission_sync_attempt.py` | permission-sync |
 | `backend/ee/onyx/external_permissions/post_query_censoring.py` | access-control |
 | `backend/ee/onyx/background/celery/tasks/doc_permission_syncing/`, `backend/ee/onyx/background/celery/tasks/external_group_syncing/`, `backend/ee/onyx/db/external_perm.py`, `backend/ee/onyx/db/document.py` | permission-sync |
@@ -395,6 +396,7 @@ the admin routes and check that each has a row above, run
 | `.github/` | CI. Read the workflow. |
 | `web/src/app/ee/admin/` | A second admin route tree. `web/src/proxy.ts:EE_ROUTES` rewrites the `/admin/...` paths it lists to this tree. Check `EE_ROUTES` before you decide which copy serves an `/admin/...` path. |
 | `web/src/lib/admin-routes.ts`, `web/src/lib/admin-sidebar-utils.ts`, `web/src/lib/adminNavLabels.tsx`, `web/src/app/admin/layout.tsx` | The admin route list, the sidebar that filters it by permission and feature flag, its labels, and the admin shell. A new admin route needs its own row above. |
+| `web/src/lib/types.ts` | Frontend types that many components share, such as `Permission`, which must match `backend/onyx/db/enums.py`. Check the callers. |
 | `web/src/lib/swr-keys.ts` | The SWR cache keys of the whole app. A key belongs to the component that fetches it; invalidate through the key, never a string literal. |
 | `web/src/sections/admin/` | Admin UI that several admin pages share, such as `ProviderCard` (Tracing, Voice, Web Search) and the Lite-mode indexing notice. Read the calling page's component. |
 | `web/src/components/`, `web/src/refresh-components/`, `web/src/layouts/`, `web/lib/opal/`, `web/lib/shared/`, `web/src/hooks/useContainerCenter.ts`, `web/src/hooks/usePaginatedFetch.ts`, `web/src/hooks/useUnsavedChangesGuard.ts` | Shared UI. Read the calling component, and the Opal rules in `web/AGENTS.md`. |
