@@ -14,7 +14,7 @@ from redis import Redis
 
 from onyx.background.celery.celery_redis import (
     celery_find_task,
-    celery_get_queue_length,
+    celery_get_task_kwargs,
     celery_get_unacked_task_ids,
 )
 from onyx.background.indexing.run_docconversion import (
@@ -63,7 +63,9 @@ def _stage_has_tasks(
 ) -> bool:
     """True when a task of the stage can exist for the attempt. A task that
     expired in the queue leaves its pending count behind, so a pending count
-    is checked against the queue."""
+    is checked against the attempt's tasks in the queue and the unacked hash.
+    Tasks of other attempts do not count: a worker that was killed leaves its
+    tasks unacked until the visibility timeout, hours later."""
     counters = RedisDocprocessing(
         index_attempt_id, get_redis_client(tenant_id=tenant_id), stage
     )
@@ -71,9 +73,11 @@ def _stage_has_tasks(
         return True
     if counters.pending() == 0:
         return False
-    queue = _STAGE_QUEUES[stage]
-    return celery_get_queue_length(queue, broker) > 0 or bool(
-        celery_get_unacked_task_ids(queue, broker)
+    # Attempt ids repeat across tenants, so the tenant must match too.
+    return any(
+        kwargs.get("index_attempt_id") == index_attempt_id
+        and kwargs.get("tenant_id") == tenant_id
+        for kwargs in celery_get_task_kwargs(_STAGE_QUEUES[stage], broker)
     )
 
 
