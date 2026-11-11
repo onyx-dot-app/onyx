@@ -1,4 +1,5 @@
 # These are helper objects for tracking the keys we need to write in redis
+import base64
 import json
 import threading
 from typing import Any, cast
@@ -189,6 +190,55 @@ def celery_get_queued_task_ids(queue: str, r: Redis) -> set[str]:
                 task_set.add(task_id)
 
     return task_set
+
+
+def _message_kwargs(message: dict[str, Any]) -> dict[str, Any] | None:
+    """The kwargs of a task message as kombu stores it in Redis: the body is
+    the JSON of (args, kwargs, embed), base64 encoded. None when the body
+    cannot be read."""
+    body = message.get("body")
+    if not isinstance(body, str):
+        return None
+    try:
+        if message.get("properties", {}).get("body_encoding") == "base64":
+            body = base64.b64decode(body).decode("utf-8")
+        decoded = json.loads(body)
+    except (ValueError, UnicodeDecodeError):
+        return None
+    if isinstance(decoded, list) and len(decoded) >= 2 and isinstance(decoded[1], dict):
+        return decoded[1]
+    return None
+
+
+def celery_get_task_kwargs(queue: str, r: Redis) -> list[dict[str, Any]]:
+    """The kwargs of each task that waits in the queue or that a worker holds
+    unacked from it. Priority aware. A message whose body cannot be read is
+    skipped.
+
+    This is a linear search over the queue and the unacked hash, so be careful
+    using it when they can be large."""
+    messages: list[dict[str, Any]] = []
+    for priority in range(len(OnyxCeleryPriority)):
+        queue_name = f"{queue}{CELERY_SEPARATOR}{priority}" if priority > 0 else queue
+        messages.extend(
+            json.loads(task.decode("utf-8"))
+            for task in cast(list[bytes], r.lrange(queue_name, 0, -1))
+        )
+
+    queue_marker = f'"{queue}"'.encode("utf-8")
+    for _, v in r.hscan_iter("unacked"):
+        v_bytes = cast(bytes, v)
+        if queue_marker not in v_bytes:
+            continue
+        entry = json.loads(v_bytes)
+        if entry[2] == queue:
+            messages.append(entry[0])
+
+    return [
+        kwargs
+        for message in messages
+        if (kwargs := _message_kwargs(message)) is not None
+    ]
 
 
 def celery_inspect_get_workers(name_filter: str | None, app: Celery) -> list[str]:
