@@ -8,6 +8,7 @@ attempt only when a restart sends nothing in two runs in a row."""
 
 import base64
 import json
+import time
 from collections.abc import Generator
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -20,6 +21,9 @@ from sqlalchemy.orm import Session
 
 from onyx.background.celery.configs.base import CELERY_SEPARATOR
 from onyx.background.celery.tasks.docprocessing import tasks as docprocessing_tasks
+from onyx.background.celery.tasks.docprocessing.batch_counters import (
+    on_docprocessing_task_prerun,
+)
 from onyx.background.celery.tasks.docprocessing.tasks import (
     validate_active_indexing_attempts,
 )
@@ -39,7 +43,9 @@ from onyx.file_store.document_batch_storage import (
     get_document_batch_storage,
     get_stub_batch_storage,
 )
+from onyx.redis import redis_docprocessing
 from onyx.redis.redis_docprocessing import (
+    LIVE_TASK_TTL_SECONDS,
     BatchStage,
     RedisDocprocessing,
     reset_conversion_recovery_misses,
@@ -136,6 +142,16 @@ class _Run:
             "unacked",
             message["headers"]["id"],
             json.dumps([message, queue, queue]),
+        )
+
+    def start_conversion_task(self, task_id: str) -> None:
+        """A worker took a conversion task of the attempt and runs it."""
+        task = MagicMock()
+        task.name = OnyxCeleryTask.DOCCONVERSION_TASK
+        on_docprocessing_task_prerun(
+            task_id,
+            task,
+            {"index_attempt_id": self.attempt_id, "tenant_id": self.tenant_id},
         )
 
     def watchdog(self) -> None:
@@ -291,15 +307,56 @@ def test_a_sent_batch_with_no_task_is_sent_again(run: _Run) -> None:
 def test_a_live_conversion_task_keeps_the_watchdog_away(run: _Run) -> None:
     run.store_stub_batch(0)
     assert run.claim("a conversion task") == [0]
-    counters = RedisDocprocessing(
+    RedisDocprocessing(
         run.attempt_id, get_redis_client(), BatchStage.DOCCONVERSION
-    )
-    counters.incr_pending()
-    counters.decr_pending_incr_in_flight()
+    ).incr_pending()
+    run.start_conversion_task("a conversion task")
 
     assert run.chain_state() == ConversionChainState.BUSY
 
     assert run.app.send_task.call_count == 0
+
+
+def test_the_watchdog_resends_the_batches_of_a_killed_conversion_worker(
+    run: _Run,
+) -> None:
+    """A worker was killed during two batches. The in-flight count stays
+    raised, but no live entry and no queued task of the attempt exist."""
+    for batch_num in range(3):
+        run.store_stub_batch(batch_num)
+    assert run.claim("a conversion task that was killed") == [0, 1, 2]
+    counters = RedisDocprocessing(
+        run.attempt_id, get_redis_client(), BatchStage.DOCCONVERSION
+    )
+    for _ in range(3):
+        counters.incr_pending()
+        counters.decr_pending_incr_in_flight()
+    # Batch 0 was converted. The worker was killed during batches 1 and 2.
+    run.stubs.delete_batch_by_num(0)
+    IndexingCoordination.record_stub_batch_converted(run.db_session, run.attempt_id)
+    counters.decr_in_flight()
+    assert counters.in_flight() == 2
+
+    run.watchdog()
+
+    assert run.sent_batch_nums(OnyxCeleryTask.DOCCONVERSION_TASK) == [1, 2]
+    row = run.attempt()
+    assert row.status == IndexingStatus.IN_PROGRESS
+    assert row.heartbeat_counter == 6
+    # The count of the killed tasks is dropped.
+    assert counters.in_flight() == 0
+
+
+def test_a_live_entry_that_is_not_refreshed_expires(run: _Run) -> None:
+    run.store_stub_batch(0)
+    assert run.claim("a conversion task") == [0]
+    run.start_conversion_task("a conversion task")
+    later = time.time() + LIVE_TASK_TTL_SECONDS + 1
+
+    with patch.object(redis_docprocessing.time, "time", return_value=later):
+        assert run.chain_state() == ConversionChainState.RECOVERED
+
+    assert run.sent_batch_nums(OnyxCeleryTask.DOCCONVERSION_TASK) == [0]
 
 
 def test_a_pending_count_with_an_empty_queue_does_not_block_a_restart(

@@ -1,11 +1,17 @@
+import time
 from enum import Enum
 from typing import cast
 
+from onyx.configs.constants import INDEXING_WORKER_HEARTBEAT_INTERVAL
 from onyx.redis.tenant_redis_client import TenantRedisClient
 
 # Safety-net TTL against leaked keys if cleanup() fails silently. Long enough
 # that no legitimate sync will hit it; keys are normally deleted by cleanup().
 _COUNTER_TTL_SECONDS = 15 * 24 * 3600  # 15 days
+
+# A running task refreshes its live entry on each heartbeat. The entry of a
+# task whose worker was killed expires after this long.
+LIVE_TASK_TTL_SECONDS = 4 * INDEXING_WORKER_HEARTBEAT_INTERVAL
 
 # Why Lua scripts for decrements:
 #
@@ -70,6 +76,10 @@ class RedisDocprocessing:
     Together they let the monitor distinguish worker crashes (in_flight > 0)
     from queue backlogs (in_flight = 0, pending > 0) when the heartbeat stops.
 
+    A killed worker leaves in_flight raised. A stage whose tasks refresh a
+    live entry (one for each task, with its own expiry) can tell a running
+    task from that leaked count.
+
     Counter keys are namespaced by stage and IndexAttempt.id.
     """
 
@@ -85,6 +95,7 @@ class RedisDocprocessing:
 
         self.pending_key: str = _pending_key(stage, index_attempt_id)
         self.in_flight_key: str = _in_flight_key(stage, index_attempt_id)
+        self.live_tasks_key: str = _live_tasks_key(stage, index_attempt_id)
 
     def incr_pending(self) -> None:
         val = self.redis.incr(self.pending_key)
@@ -102,6 +113,25 @@ class RedisDocprocessing:
     def decr_in_flight(self) -> None:
         self.redis.eval(_DECR_IN_FLIGHT_SCRIPT, keys=[self.in_flight_key])
 
+    def reset_in_flight(self) -> None:
+        """Drops an in-flight count that no running task holds."""
+        self.redis.delete(self.in_flight_key)
+
+    def mark_task_live(self, task_id: str) -> None:
+        """Adds or refreshes the live entry of a running task."""
+        self.redis.zadd(
+            self.live_tasks_key, {task_id: time.time() + LIVE_TASK_TTL_SECONDS}
+        )
+        self.redis.expire(self.live_tasks_key, _COUNTER_TTL_SECONDS)
+
+    def clear_task_live(self, task_id: str) -> None:
+        self.redis.zrem(self.live_tasks_key, task_id)
+
+    def has_live_task(self) -> bool:
+        """True when a task of the stage refreshed its live entry in time."""
+        self.redis.zremrangebyscore(self.live_tasks_key, "-inf", time.time())
+        return self.redis.zcard(self.live_tasks_key) > 0
+
     def pending(self) -> int:
         return max(0, int(cast(bytes, self.redis.get(self.pending_key)) or 0))
 
@@ -118,6 +148,7 @@ class RedisDocprocessing:
                 for key in (
                     _pending_key(stage, self.index_attempt_id),
                     _in_flight_key(stage, self.index_attempt_id),
+                    _live_tasks_key(stage, self.index_attempt_id),
                 )
             )
         )
@@ -129,6 +160,10 @@ def _pending_key(stage: BatchStage, index_attempt_id: int) -> str:
 
 def _in_flight_key(stage: BatchStage, index_attempt_id: int) -> str:
     return f"{stage.value}_in_flight_{index_attempt_id}"
+
+
+def _live_tasks_key(stage: BatchStage, index_attempt_id: int) -> str:
+    return f"{stage.value}_live_tasks_{index_attempt_id}"
 
 
 def _recovery_misses_key(index_attempt_id: int) -> str:
