@@ -11,7 +11,6 @@ from uuid import uuid4
 
 import pytest
 from fastapi import UploadFile
-from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import (
@@ -25,6 +24,7 @@ from onyx.db.skill import (
     set_skill_installation_policy,
     skill_user_states,
 )
+from onyx.db.utils import UNSET
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.skill.api import (
@@ -621,9 +621,14 @@ def test_sharing_without_policy_preserves_existing_policy(
     assert skill.installation_policy == SkillInstallationPolicy.REQUIRED
 
 
-def test_sharing_rejects_explicit_null_policy() -> None:
-    with pytest.raises(ValidationError):
+def test_sharing_policy_is_unchanged_when_missing_and_default_when_null() -> None:
+    assert SkillShareRequest.model_validate({}).to_change().installation_policy is UNSET
+    assert (
         SkillShareRequest.model_validate({"installation_policy": None})
+        .to_change()
+        .installation_policy
+        is None
+    )
 
 
 def test_creation_response_includes_saved_group_shares(
