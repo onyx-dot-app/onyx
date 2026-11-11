@@ -91,7 +91,7 @@ func startFakeVMFiles(t *testing.T, fs *files.Store) *fakeVM {
 
 func startFakeVMWith(t *testing.T, cfg guestd.Config) *fakeVM {
 	t.Helper()
-	sock := filepath.Join("/tmp", "pt-"+filepath.Base(t.TempDir())+".sock")
+	sock := shortSock(t, "pt")
 	ln, err := net.Listen("unix", sock)
 	if err != nil {
 		t.Fatal(err)
@@ -237,7 +237,7 @@ func newPTAgent(t *testing.T, mtls bool, uds map[string]string, opts ...func(*Se
 		target = ln.Addr().String()
 		clientCreds = credentials.NewTLS(clientTLS(t, certs, certs.GoodCert, certs.GoodKey))
 	} else {
-		sock := filepath.Join("/tmp", "ha-"+filepath.Base(t.TempDir())+".sock")
+		sock := shortSock(t, "ha")
 		var err error
 		if ln, err = ListenUnix(sock); err != nil {
 			t.Fatal(err)
@@ -392,7 +392,7 @@ func TestPassthroughOverMTLS(t *testing.T) {
 func TestPassthroughTypedErrors(t *testing.T) {
 	vm := startFakeVM(t)
 	// sandbox2's VM has nothing on port 52: its socket refuses CONNECT.
-	refuse := filepath.Join("/tmp", "pr-"+filepath.Base(t.TempDir())+".sock")
+	refuse := shortSock(t, "pr")
 	rln, err := net.Listen("unix", refuse)
 	if err != nil {
 		t.Fatal(err)
@@ -596,7 +596,7 @@ func TestPassthroughStaleCallKeepsNewerConnection(t *testing.T) {
 func TestCreateInstallsKey(t *testing.T) {
 	vm := startFakeVM(t)
 	// sandbox2's VM has no daemon: its socket refuses CONNECT.
-	refuse := filepath.Join("/tmp", "pk-"+filepath.Base(t.TempDir())+".sock")
+	refuse := shortSock(t, "pk")
 	rln, err := net.Listen("unix", refuse)
 	if err != nil {
 		t.Fatal(err)

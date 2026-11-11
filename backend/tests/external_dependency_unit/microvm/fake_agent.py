@@ -112,6 +112,8 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         self.init_requests: list[tuple[sandboxd_pb2.InitRequest, str]] = []
         # Seconds each Create waits before it runs (to overlap two wakes).
         self.create_delay_seconds = 0.0
+        # Seconds each Stop waits before it runs.
+        self.stop_delay_seconds = 0.0
 
     def add_vm(
         self,
@@ -217,6 +219,8 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
     def Stop(  # noqa: N802
         self, request: hostagent_pb2.StopRequest, context: grpc.ServicerContext
     ) -> hostagent_pb2.StopResponse:
+        if self.stop_delay_seconds:
+            time.sleep(self.stop_delay_seconds)
         with self.lock:
             self.stop_calls.append(
                 (request.sandbox_id, request.attempt, request.generation)

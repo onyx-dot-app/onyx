@@ -329,7 +329,7 @@ func newRelay(t *testing.T, up *upstream, opts ...func(*Relay)) (*Relay, string,
 	for _, o := range opts {
 		o(r)
 	}
-	sock := filepath.Join("/tmp", "relay-"+filepath.Base(t.TempDir())+".sock")
+	sock := shortSock(t, "relay")
 	ln, err := net.Listen("unix", sock)
 	if err != nil {
 		t.Fatal(err)
@@ -672,7 +672,7 @@ func (l *flakyListener) Accept() (net.Conn, error) {
 func TestAcceptErrorsDoNotStopTheRelay(t *testing.T) {
 	up := newUpstream(t)
 	r, _, _ := newRelay(t, up)
-	sock := filepath.Join("/tmp", "relay-flaky-"+filepath.Base(t.TempDir())+".sock")
+	sock := shortSock(t, "relay-flaky")
 	ln, err := net.Listen("unix", sock)
 	if err != nil {
 		t.Fatal(err)

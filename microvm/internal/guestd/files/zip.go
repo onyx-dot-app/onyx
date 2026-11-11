@@ -30,8 +30,9 @@ type zipItem struct {
 }
 
 // Zip writes a deflate zip of the regular files under spec.Path to w. It
-// checks the limits on the file sizes before it writes the first byte.
-// Links and special files are left out.
+// checks the limits before it writes the first byte: the file sizes, and the
+// files plus directories walked. Links, special files and directories deeper
+// than maxDepth are left out.
 func (s *Store) Zip(ctx context.Context, sessionID string, spec ZipSpec, w io.Writer) (ZipSummary, error) {
 	var sum ZipSummary
 	t, err := s.openRead(sessionID, spec.Path)
@@ -49,10 +50,22 @@ func (s *Store) Zip(ctx context.Context, sessionID string, spec ZipSpec, w io.Wr
 	skip := setOf(spec.Exclude)
 	var items []zipItem
 	var total int64
-	var walk func(rel, arc string) error
-	walk = func(rel, arc string) error {
+	entries := 0
+	count := func() error {
+		if entries >= s.cfg.MaxZipEntries {
+			return fmt.Errorf("%w: more than %d files and directories under %s", ErrLimit, s.cfg.MaxZipEntries, spec.Path)
+		}
+		entries++
+		return nil
+	}
+	var walk func(rel, arc string, depth int) error
+	walk = func(rel, arc string, depth int) error {
 		if err := ctx.Err(); err != nil {
 			return err
+		}
+		if depth > maxDepth {
+			sum.Skipped++
+			return nil
 		}
 		ents, err := readDir(t.root, rel, s.cfg.MaxZipEntries)
 		if errors.Is(err, errDirTooBig) {
@@ -81,7 +94,10 @@ func (s *Store) Zip(ctx context.Context, sessionID string, spec ZipSpec, w io.Wr
 			}
 			switch typeOf(info.Mode()) {
 			case TypeDirectory:
-				if err := walk(child, carc); err != nil {
+				if err := count(); err != nil {
+					return err
+				}
+				if err := walk(child, carc, depth+1); err != nil {
 					return err
 				}
 			case TypeRegular:
@@ -89,8 +105,8 @@ func (s *Store) Zip(ctx context.Context, sessionID string, spec ZipSpec, w io.Wr
 				if total > s.cfg.MaxZipBytes {
 					return fmt.Errorf("%w: files under %s are over %d bytes", ErrLimit, spec.Path, s.cfg.MaxZipBytes)
 				}
-				if len(items) >= s.cfg.MaxZipEntries {
-					return fmt.Errorf("%w: more than %d files under %s", ErrLimit, s.cfg.MaxZipEntries, spec.Path)
+				if err := count(); err != nil {
+					return err
 				}
 				items = append(items, zipItem{rel: child, arc: carc, size: info.Size()})
 			default:
@@ -99,7 +115,7 @@ func (s *Store) Zip(ctx context.Context, sessionID string, spec ZipSpec, w io.Wr
 		}
 		return nil
 	}
-	if err := walk(t.rel, ""); err != nil {
+	if err := walk(t.rel, "", 0); err != nil {
 		return sum, err
 	}
 

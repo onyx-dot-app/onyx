@@ -44,7 +44,7 @@ const pingPort = 3020
 // reading (shutdown of its read side) and stays open.
 func fakeGuest(t *testing.T) string {
 	t.Helper()
-	sock := filepath.Join("/tmp", "fg-"+filepath.Base(t.TempDir())+".sock")
+	sock := shortSock(t, "fg")
 	ln, err := net.Listen("unix", sock)
 	if err != nil {
 		t.Fatal(err)

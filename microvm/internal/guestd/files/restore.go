@@ -116,7 +116,7 @@ func (s *Store) Restore(ctx context.Context, spec RestoreSpec, r io.Reader) (Res
 	defer zr.Close()
 	br := &budgetReader{r: zr}
 	x := &extractor{root: st, lim: lim, allowed: setOf(roots), sum: &sum, present: map[string]bool{},
-		buf: make([]byte, 1<<20), budget: br}
+		made: map[string]bool{}, buf: make([]byte, 1<<20), budget: br}
 	if err := x.run(ctx, tar.NewReader(br)); err != nil {
 		return sum, err
 	}
@@ -320,9 +320,54 @@ type extractor struct {
 	allowed map[string]bool
 	sum     *RestoreSummary
 	present map[string]bool
+	// made holds the directories created so far.
+	made    map[string]bool
+	entries int64
 	dirs    []dirMode
 	buf     []byte
 	budget  *budgetReader
+}
+
+// entry counts one member, or one parent directory that a member needs.
+func (x *extractor) entry() error {
+	x.entries++
+	if x.entries > x.lim.Entries {
+		return fmt.Errorf("%w: more than %d entries", ErrLimit, x.lim.Entries)
+	}
+	return nil
+}
+
+// mkdir creates dir if it is missing. The parents of dir must exist.
+func (x *extractor) mkdir(dir string) error {
+	if x.made[dir] {
+		return nil
+	}
+	if err := x.root.Mkdir(dir, 0o700); err != nil && !errors.Is(err, fs.ErrExist) {
+		return archiveErr(err)
+	}
+	if fi, err := x.root.Lstat(dir); err != nil || !fi.IsDir() {
+		return fmt.Errorf("%w: %q is not a directory", ErrArchive, dir)
+	}
+	x.made[dir] = true
+	x.sum.Directories++
+	return nil
+}
+
+// mkdirParents creates the missing parents of name. Each one it creates
+// counts as an entry.
+func (x *extractor) mkdirParents(name string) error {
+	for i := range len(name) {
+		if name[i] != '/' || x.made[name[:i]] {
+			continue
+		}
+		if err := x.entry(); err != nil {
+			return err
+		}
+		if err := x.mkdir(name[:i]); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // allow sets the decoded budget for entries members so far.
@@ -384,25 +429,23 @@ func (x *extractor) run(ctx context.Context, tr *tar.Reader) error {
 			return archiveErr(err)
 		}
 		entries++
-		if entries > x.lim.Entries {
-			return fmt.Errorf("%w: more than %d entries", ErrLimit, x.lim.Entries)
+		if err := x.entry(); err != nil {
+			return err
 		}
 		name, err := x.memberName(h)
 		if err != nil {
 			return err
 		}
+		if err := x.mkdirParents(name); err != nil {
+			return err
+		}
 		mode := fs.FileMode(h.Mode) & fs.ModePerm
 		switch h.Typeflag {
 		case tar.TypeDir:
-			if err := x.root.MkdirAll(name, 0o700); err != nil {
-				return archiveErr(err)
-			}
-			fi, err := x.root.Lstat(name)
-			if err != nil || !fi.IsDir() {
-				return fmt.Errorf("%w: member %q: not a directory", ErrArchive, h.Name)
+			if err := x.mkdir(name); err != nil {
+				return err
 			}
 			x.dirs = append(x.dirs, dirMode{name: name, mode: mode, hdr: h})
-			x.sum.Directories++
 		case tar.TypeReg:
 			if h.Size < 0 {
 				return fmt.Errorf("%w: member %q: negative size", ErrArchive, h.Name)
@@ -425,11 +468,6 @@ func (x *extractor) run(ctx context.Context, tr *tar.Reader) error {
 }
 
 func (x *extractor) file(name string, mode fs.FileMode, h *tar.Header, tr *tar.Reader) error {
-	if d := parentOf(name); d != "." {
-		if err := x.root.MkdirAll(d, 0o700); err != nil {
-			return archiveErr(err)
-		}
-	}
 	f, err := x.root.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		if errors.Is(err, fs.ErrExist) {

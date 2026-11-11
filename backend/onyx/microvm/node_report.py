@@ -153,6 +153,7 @@ def reconcile_node_report(
             ended=report.ended,
             now=now,
             check_lease=lambda: _check_lease(lease, deadline),
+            deadline=deadline,
         )
     except (TimeoutError, CacheLockLostError) as e:
         logger.warning(

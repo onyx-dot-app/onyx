@@ -117,13 +117,15 @@ class SandboxDaemonClient:
             (SANDBOXD_KEY_HEADER, self._key.get_secret_value()),
         )
 
-    def health(self) -> DaemonHealth:
+    def health(self, timeout: float | None = None) -> DaemonHealth:
         """Needs no key."""
         try:
             r: sandboxd_pb2.HealthResponse = self._stub.Health(
                 sandboxd_pb2.HealthRequest(),
                 metadata=self._routing(),
-                timeout=SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS,
+                timeout=(
+                    SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS if timeout is None else timeout
+                ),
             )
         except grpc.RpcError as e:
             raise _error_from_rpc(e) from e

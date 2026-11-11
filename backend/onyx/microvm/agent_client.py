@@ -241,6 +241,7 @@ class HostAgentClient:
         scratch_gib: int,
         tenant_id: str,
         sandboxd_key: SecretStr,
+        timeout: float | None = None,
     ) -> CreateResult:
         """Start (or return) the VM of (sandbox_id, attempt) and install
         `sandboxd_key` in its guest daemon.
@@ -248,6 +249,7 @@ class HostAgentClient:
         Raises GuestUnreachableError when the daemon did not take the key in
         time (retry with the same attempt and key) and GuestKeyRejectedError
         when it refused the key (stop the VM, create a new attempt).
+        `timeout` defaults to `SANDBOX_FC_AGENT_CREATE_TIMEOUT_SECONDS`.
         """
         request = hostagent_pb2.CreateRequest(
             sandbox_id=sandbox_id,
@@ -261,13 +263,25 @@ class HostAgentClient:
         )
         try:
             response: hostagent_pb2.CreateResponse = self._stub.Create(
-                request, timeout=SANDBOX_FC_AGENT_CREATE_TIMEOUT_SECONDS
+                request,
+                timeout=(
+                    SANDBOX_FC_AGENT_CREATE_TIMEOUT_SECONDS
+                    if timeout is None
+                    else timeout
+                ),
             )
         except grpc.RpcError as e:
             raise _error_from_rpc(e) from e
         return CreateResult(vm=_vm_from_proto(response.vm), created=response.created)
 
-    def stop(self, *, sandbox_id: str, attempt: int, generation: int) -> bool:
+    def stop(
+        self,
+        *,
+        sandbox_id: str,
+        attempt: int,
+        generation: int,
+        timeout: float | None = None,
+    ) -> bool:
         """Stop one VM instance. Returns True when it was already stopped."""
         request = hostagent_pb2.StopRequest(
             sandbox_id=sandbox_id, attempt=attempt, generation=generation
@@ -275,7 +289,12 @@ class HostAgentClient:
         try:
             # Stop waits for the VM exit (the agent's --stop-timeout is 30 s).
             response: hostagent_pb2.StopResponse = self._stub.Stop(
-                request, timeout=SANDBOX_FC_AGENT_CREATE_TIMEOUT_SECONDS
+                request,
+                timeout=(
+                    SANDBOX_FC_AGENT_CREATE_TIMEOUT_SECONDS
+                    if timeout is None
+                    else timeout
+                ),
             )
         except grpc.RpcError as e:
             raise _error_from_rpc(e) from e

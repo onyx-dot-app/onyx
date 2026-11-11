@@ -63,6 +63,44 @@ func loopback(t *testing.T) (port uint32, accepted <-chan []byte) {
 	return 0, nil
 }
 
+// Close makes a blocked Accept return net.ErrClosed, so serve loops end.
+func TestListenerCloseEndsAccept(t *testing.T) {
+	var ln net.Listener
+	for p := uint32(40100); p < 40200; p++ {
+		l, err := Listen(p)
+		if noVsock(err) {
+			t.Skipf("no vsock: %v", err)
+		}
+		if err == nil {
+			ln = l
+			break
+		}
+	}
+	if ln == nil {
+		t.Fatal("no free vsock port in 40100-40199")
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, err := ln.Accept()
+		done <- err
+	}()
+	time.Sleep(50 * time.Millisecond)
+	if err := ln.Close(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if !errors.Is(err, net.ErrClosed) {
+			t.Fatalf("accept after close: %v, want net.ErrClosed", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("accept did not return after close")
+	}
+	if _, err := ln.Accept(); !errors.Is(err, net.ErrClosed) {
+		t.Fatalf("accept on a closed listener: %v, want net.ErrClosed", err)
+	}
+}
+
 // A connection that the dial returns accepts writes: no expired deadline
 // is left on it, also when the context ends right after the dial.
 func TestDialConnWritable(t *testing.T) {
