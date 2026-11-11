@@ -18,6 +18,7 @@ from onyx.background.indexing.checkpointing_utils import (
 )
 from onyx.background.indexing.memory_tracer import MemoryTracer
 from onyx.configs.app_configs import (
+    ENABLE_CONVERSION_STAGE,
     INDEX_BATCH_SIZE,
     INDEXING_SIZE_WARNING_THRESHOLD,
     INDEXING_TRACER_INTERVAL,
@@ -45,12 +46,19 @@ from onyx.connectors.exceptions import (
     UnexpectedValidationError,
 )
 from onyx.connectors.factory import instantiate_connector
-from onyx.connectors.interfaces import CheckpointedConnector
+from onyx.connectors.interfaces import (
+    BaseConnector,
+    CheckpointedConnector,
+    CheckpointedSlimConnector,
+    Resolver,
+)
 from onyx.connectors.models import (
+    ConnectorCheckpoint,
     ConnectorFailure,
     ConnectorStopSignal,
     Document,
     HierarchyNode,
+    SlimDocumentStub,
     TextSection,
 )
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
@@ -91,6 +99,7 @@ from onyx.db.search_settings import get_search_settings_by_id
 from onyx.file_store.document_batch_storage import (
     DocumentBatchStorage,
     get_document_batch_storage,
+    get_stub_batch_storage,
 )
 from onyx.file_store.staging import (
     RawFileCallback,
@@ -381,6 +390,76 @@ def _timed_connector_runs(
             yield item
     finally:
         buffer.flush()
+
+
+def connector_uses_conversion_stage(connector: BaseConnector) -> bool:
+    """True when docfetching lists this connector's documents as stubs and the
+    conversion stage fetches them. The connector must list with a checkpoint
+    and convert from its own listing payload."""
+    return (
+        ENABLE_CONVERSION_STAGE
+        and isinstance(connector, CheckpointedSlimConnector)
+        and isinstance(connector, Resolver)
+        and connector.listing_payload_type is not None
+    )
+
+
+_ListerYield = tuple[
+    list[SlimDocumentStub] | None,
+    list[HierarchyNode] | None,
+    ConnectorFailure | None,
+    ConnectorCheckpoint | None,
+]
+
+
+def list_stub_batches(
+    connector: CheckpointedSlimConnector,
+    checkpoint: ConnectorCheckpoint,
+    start: datetime,
+    end: datetime,
+    batch_size: int,
+) -> Generator[_ListerYield, None, None]:
+    """One call of the connector's slim listing, in the shape of
+    ``ConnectorRunner.run``: stub batches, hierarchy node batches and failures,
+    then the next checkpoint. A hierarchy batch goes out before the stub batch
+    that follows it, so a parent is stored before its documents.
+
+    A plain ``SlimDocument`` is a document that the indexing filters drop. The
+    listing yields it for pruning, and indexing does not use it."""
+    listing = connector.retrieve_slim_docs_from_checkpoint(
+        start=start.timestamp(),
+        end=end.timestamp(),
+        checkpoint=checkpoint,
+        include_permissions=False,
+    )
+    stubs: list[SlimDocumentStub] = []
+    nodes: list[HierarchyNode] = []
+    while True:
+        try:
+            item = next(listing)
+        except StopIteration as stop:
+            next_checkpoint: ConnectorCheckpoint = stop.value
+            break
+        if isinstance(item, ConnectorFailure):
+            yield None, None, item, None
+        elif isinstance(item, HierarchyNode):
+            nodes.append(item)
+            if len(nodes) >= batch_size:
+                yield None, nodes, None, None
+                nodes = []
+        elif isinstance(item, SlimDocumentStub):
+            stubs.append(item)
+            if len(stubs) >= batch_size:
+                if nodes:
+                    yield None, nodes, None, None
+                    nodes = []
+                yield stubs, None, None, None
+                stubs = []
+    if nodes:
+        yield None, nodes, None, None
+    if stubs:
+        yield stubs, None, None, None
+    yield None, None, None, next_checkpoint
 
 
 def strip_null_characters(doc_batch: list[Document]) -> list[Document]:
@@ -776,12 +855,27 @@ def connector_document_extraction(
         # OR
         # if this is a backfill, which never resumes. Its batch storage is
         # separate, so the cleanup leaves normal attempts' batches alone.
+        # With the conversion stage, docfetching only lists: it stores stub
+        # batches and the docconversion worker fetches the documents.
+        lister_mode = connector_uses_conversion_stage(connector_runner.connector)
+        lister_task_id = index_attempt.celery_task_id
+        stub_storage = get_stub_batch_storage(
+            cc_pair_id, index_attempt_id, is_backfill=is_backfill
+        )
+        # The listing and the fetch share one checkpoint model, and a
+        # checkpoint of one cannot continue the other.
+        stage_changed_since_last_attempt = (
+            most_recent_attempt is not None
+            and most_recent_attempt.uses_conversion_stage != lister_mode
+        )
+        stub_batches_taken_over = 0
         with time_stage(IndexAttemptStage.CHECKPOINT_LOAD, index_attempt_id):
             if (
                 index_attempt.from_beginning
                 or index_attempt.is_backfill
                 or (most_recent_attempt and most_recent_attempt.status.is_successful())
                 or config_changed_since_last_attempt
+                or stage_changed_since_last_attempt
             ):
                 logger.info(
                     "Cleaning up all old batches for index attempt %s before starting new run",
@@ -823,6 +917,12 @@ def connector_document_extraction(
                         most_recent_attempt.id if most_recent_attempt else None,
                         docprocessing_priority,
                     )
+                    if lister_mode:
+                        # The stub batches that the last attempt listed and
+                        # did not convert get this attempt's next numbers.
+                        stub_batches_taken_over = stub_storage.renumber_old_batches(
+                            last_batch_num
+                        )
                 else:
                     logger.info(
                         "Cleaning up all batches for index attempt %s before starting new run",
@@ -837,6 +937,22 @@ def connector_document_extraction(
             db_session=db_session,
             index_attempt_id=index_attempt_id,
             checkpoint=checkpoint,
+        )
+
+        if lister_mode:
+            IndexingCoordination.start_stub_batches(
+                db_session, index_attempt_id, last_batch_num, stub_batches_taken_over
+            )
+            last_batch_num += stub_batches_taken_over
+
+    if stub_batches_taken_over:
+        _dispatch_stub_batches(
+            app,
+            index_attempt_id=index_attempt_id,
+            cc_pair_id=cc_pair_id,
+            tenant_id=tenant_id,
+            is_backfill=is_backfill,
+            task_id=lister_task_id,
         )
 
     batch_num = last_batch_num  # starts at 0 if no last batch
@@ -861,11 +977,17 @@ def connector_document_extraction(
             )
             for (
                 document_batch,
+                stub_batch,
                 hierarchy_node_batch,
                 failure,
                 next_checkpoint,
-            ) in _timed_connector_runs(
-                connector_runner.run(checkpoint), index_attempt_id
+            ) in _fetch_or_list_runs(
+                connector_runner,
+                checkpoint,
+                window_start,
+                window_end,
+                index_attempt_id,
+                lister_mode,
             ):
                 # Check if connector is disabled mid run and stop if so unless it's the secondary
                 # index being built. We want to populate it even for paused connectors
@@ -953,6 +1075,38 @@ def connector_document_extraction(
                         len_cleaned,
                         index_attempt_id,
                     )
+
+                if stub_batch:
+                    with time_stage(
+                        IndexAttemptStage.DOC_BATCH_STORE, index_attempt_id
+                    ):
+                        stub_storage.store_batch(batch_num, stub_batch)
+                        with get_session_with_current_tenant() as db_session:
+                            IndexingCoordination.record_stub_batch_stored(
+                                db_session, index_attempt_id, batch_num
+                            )
+                    with time_stage(
+                        IndexAttemptStage.DOC_BATCH_ENQUEUE, index_attempt_id
+                    ):
+                        _dispatch_stub_batches(
+                            app,
+                            index_attempt_id=index_attempt_id,
+                            cc_pair_id=cc_pair_id,
+                            tenant_id=tenant_id,
+                            is_backfill=is_backfill,
+                            task_id=lister_task_id,
+                        )
+                    batch_num += 1
+                    total_doc_batches_queued += 1
+                    document_count += len(stub_batch)
+                    memory_tracer.increment_and_maybe_trace()
+                    logger.info(
+                        "Stored stub batch: batch_num=%s stubs=%s attempt=%s",
+                        batch_num,
+                        len(stub_batch),
+                        index_attempt_id,
+                    )
+                    continue
 
                 # below is all document processing task, so if no batch we can just continue
                 if not document_batch:
@@ -1155,6 +1309,64 @@ def connector_document_extraction(
 
     finally:
         memory_tracer.stop()
+
+
+def _fetch_or_list_runs(
+    connector_runner: ConnectorRunner,
+    checkpoint: ConnectorCheckpoint,
+    window_start: datetime,
+    window_end: datetime,
+    index_attempt_id: int,
+    lister_mode: bool,
+) -> Generator[
+    tuple[
+        list[Document] | None,
+        list[SlimDocumentStub] | None,
+        list[HierarchyNode] | None,
+        ConnectorFailure | None,
+        ConnectorCheckpoint | None,
+    ],
+    None,
+    None,
+]:
+    """One connector call. It yields document batches when docfetching
+    fetches, and stub batches when it only lists."""
+    connector = connector_runner.connector
+    if lister_mode and isinstance(connector, CheckpointedSlimConnector):
+        for stubs, nodes, failure, next_checkpoint in _timed_connector_runs(
+            list_stub_batches(
+                connector, checkpoint, window_start, window_end, INDEX_BATCH_SIZE
+            ),
+            index_attempt_id,
+        ):
+            yield None, stubs, nodes, failure, next_checkpoint
+        return
+    for documents, nodes, failure, next_checkpoint in _timed_connector_runs(
+        connector_runner.run(checkpoint), index_attempt_id
+    ):
+        yield documents, None, nodes, failure, next_checkpoint
+
+
+def _dispatch_stub_batches(
+    app: Celery,
+    *,
+    index_attempt_id: int,
+    cc_pair_id: int,
+    tenant_id: str,
+    is_backfill: bool,
+    task_id: str | None,
+) -> None:
+    # Imported here: run_docconversion imports this module.
+    from onyx.background.indexing.run_docconversion import dispatch_stub_batches
+
+    dispatch_stub_batches(
+        app,
+        index_attempt_id=index_attempt_id,
+        cc_pair_id=cc_pair_id,
+        tenant_id=tenant_id,
+        is_backfill=is_backfill,
+        task_id=task_id,
+    )
 
 
 def set_document_parent_node_ids(

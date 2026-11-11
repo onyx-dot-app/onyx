@@ -5,6 +5,7 @@ from onyx.background.celery.tasks.docprocessing.heartbeat import (
     stop_heartbeat,
 )
 from onyx.background.indexing.run_docconversion import convert_stub_batch
+from onyx.background.indexing.run_docfetching import mark_attempt_failed_unless_terminal
 from onyx.configs.constants import OnyxCeleryTask
 from shared_configs.contextvars import (
     CURRENT_TENANT_ID_CONTEXTVAR,
@@ -46,7 +47,13 @@ def docconversion_task(
             batch_num=batch_num,
             enqueue_time_ms=enqueue_time_ms,
             is_backfill=is_backfill,
+            task_id=self.request.id,
         )
+    except Exception as e:
+        # Nothing sends the batch again after a failure that repeats, so the
+        # attempt fails here, as it does when docfetching raises.
+        mark_attempt_failed_unless_terminal(index_attempt_id, e)
+        raise
     finally:
         stop_heartbeat(heartbeat_thread, stop_event)
         INDEX_ATTEMPT_INFO_CONTEXTVAR.reset(token)

@@ -371,6 +371,33 @@ class _StubBatchFiles(FileStoreDocumentBatchStorage):
         for batch_file_name in self.get_all_batches_for_cc_pair():
             self.delete_batch_by_name(batch_file_name)
 
+    def renumber_old_batches(self, first_batch_num: int) -> int:
+        """Moves every stub batch of the cc_pair to this attempt, with new
+        numbers from `first_batch_num` up and no gap. Returns the count."""
+        old_batches: list[tuple[int, int, str]] = []
+        for batch_file_name in self.get_all_batches_for_cc_pair():
+            path_info = self.extract_path_info(batch_file_name)
+            if path_info is None or path_info.cc_pair_id != self.cc_pair_id:
+                logger.warning("Skipping stub batch file %s", batch_file_name)
+                continue
+            old_batches.append(
+                (path_info.index_attempt_id, path_info.batch_num, batch_file_name)
+            )
+        moved = 0
+        for _, _, batch_file_name in sorted(old_batches):
+            new_batch_file_name = self._get_batch_file_name(first_batch_num + moved)
+            if batch_file_name == new_batch_file_name:
+                moved += 1
+                continue
+            # The old attempt's task deleted the batch after it converted it.
+            if not self.file_store.change_file_id(batch_file_name, new_batch_file_name):
+                logger.info(
+                    "Stub batch %s was deleted before its move", batch_file_name
+                )
+                continue
+            moved += 1
+        return moved
+
 
 class StubBatchStorage:
     """Stores the stub batches of an index attempt: listed documents that
@@ -424,6 +451,25 @@ class StubBatchStorage:
         self, batch_names: list[str]
     ) -> list[str]:
         return self._files.update_old_batches_to_new_index_attempt(batch_names)
+
+    def renumber_old_batches(self, first_batch_num: int) -> int:
+        """Takes over the stub batches that earlier attempts of the cc_pair
+        left. They get this attempt's numbers from `first_batch_num` up,
+        with no gap, because a claim hands out a dense range. Returns the
+        count."""
+        return self._files.renumber_old_batches(first_batch_num)
+
+    def stored_batch_nums(self) -> set[int]:
+        """The numbers of this attempt's stub batches that are in the store."""
+        batch_nums: set[int] = set()
+        for batch_file_name in self.get_all_batches_for_cc_pair():
+            path_info = self.extract_path_info(batch_file_name)
+            if (
+                path_info is not None
+                and path_info.index_attempt_id == self._files.index_attempt_id
+            ):
+                batch_nums.add(path_info.batch_num)
+        return batch_nums
 
     def extract_path_info(self, path: str) -> BatchStoragePathInfo | None:
         return self._files.extract_path_info(path)

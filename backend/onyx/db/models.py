@@ -2819,9 +2819,14 @@ class IndexAttempt(Base):
     total_failures_batch_level: Mapped[int] = mapped_column(Integer, default=0)
     total_chunks: Mapped[int] = mapped_column(Integer, default=0)
 
-    # Conversion stage counters. Stub batch numbers are dense from 0:
-    # [0, stored) exist, [0, sent) went to conversion, and `converted` of
-    # them became document batches.
+    # True when docfetching lists stub batches for the conversion stage.
+    uses_conversion_stage: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    # Conversion stage counters. Stub batch numbers are dense from the
+    # attempt's first number (0, or above the batches a resumed attempt took
+    # over): numbers below `stored` exist, numbers below `sent` went to
+    # conversion, and `converted` counts those that became document batches.
     stub_batches_stored: Mapped[int] = mapped_column(
         Integer, default=0, server_default="0"
     )
@@ -2830,6 +2835,13 @@ class IndexAttempt(Base):
     )
     stub_batches_converted: Mapped[int] = mapped_column(
         Integer, default=0, server_default="0"
+    )
+
+    # The last task that sent stub batches to conversion, and when. The
+    # watchdog checks this task before it decides that the chain is broken.
+    last_dispatch_task_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    last_dispatch_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
 
     # Progress tracking for stall detection
