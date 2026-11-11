@@ -248,7 +248,7 @@ cd /etc && pwd`}, SessionId: "s1"})
 			if err != nil || mr.GetActive() != pb.ManagedSlot_MANAGED_SLOT_B || !mr.GetChanged() || mr.GetMount() != m.name {
 				t.Fatalf("%s mount: %v %v", m.name, mr, err)
 			}
-			t.Logf("%s swapped in %d ms (wait %d ms)", m.name, mr.GetWaitMs(), mr.GetWaitMs())
+			t.Logf("%s swapped (size wait %d ms)", m.name, mr.GetWaitMs())
 			want[m.name] = "b-" + m.name
 			check(want) // only this mount changed
 		}
