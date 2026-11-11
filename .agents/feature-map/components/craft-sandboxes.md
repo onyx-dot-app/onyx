@@ -292,6 +292,15 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   `backend/onyx/microvm/models.py:NodeInfo.template` takes an exact version or that node's newest
   compatible template of the tag. Opencode sessions keep
   `get_sandbox_manager` (pod or Docker).
+- Session saves (`.../firecracker/session_saves.py`): the idle evictor
+  (node reports, `get_eviction_policy`, 15 min) saves each session on the
+  VM first, in the background: CaptureSession of the session's top-level
+  directories (without dependencies and caches), presigned upload, file
+  store finalize, commit of the new save in the cache, then deletion of the
+  old archive. A busy sandbox (running command, turn, parked approval) or a
+  failed save keeps the VM. A session's first use on a new VM instance
+  restores its last save, once across pods (cache lock + session-instance
+  record).
 
 ---
 

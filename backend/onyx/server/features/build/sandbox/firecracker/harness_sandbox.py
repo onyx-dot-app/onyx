@@ -2,8 +2,10 @@
 
 One VM per user sandbox, placed on a host agent node. Each call wakes the VM
 if needed (placement + wake in `onyx.microvm`) and runs the guest daemon Init
-only when the daemon is not initialized. Exec sessions live in durable cache
-records (`harness_state`), so any API pod can serve `write_stdin`.
+only when the daemon is not initialized. A session's first use on a VM
+instance restores its last save (`session_saves`). Exec sessions live in
+durable cache records (`harness_state`), so any API pod can serve
+`write_stdin`.
 """
 
 import mimetypes
@@ -34,7 +36,13 @@ from onyx.microvm.daemon_client import (
     SandboxDaemonErrorReason,
 )
 from onyx.microvm.lifecycle import (
+    NoCheckpointSupport,
+    SandboxActivityProbe,
+    SandboxCheckpointer,
     SandboxVmUnusableError,
+    UnknownActivity,
+    VmStopOutcome,
+    evict_idle_sandbox_vm,
     initialize_sandbox_vm,
     sandbox_daemon,
     wake_sandbox_vm,
@@ -48,6 +56,7 @@ from onyx.microvm.models import (
     ExecResult,
     OutputStream,
     PlacedVm,
+    VmInstance,
     VmRequest,
 )
 from onyx.microvm.placement import find_vm
@@ -65,11 +74,23 @@ from onyx.server.features.build.sandbox.exec_output import (
 from onyx.server.features.build.sandbox.firecracker.harness_state import (
     get_exec_session,
     has_marks,
+    last_attempt,
+    mark_session_on_instance,
     put_exec_session,
+    record_attempt,
     remove_exec_session,
+    sessions_on_instance,
     set_mark,
 )
 from onyx.server.features.build.sandbox.firecracker.models import ExecSessionRecord
+from onyx.server.features.build.sandbox.firecracker.session_saves import (
+    BackgroundIdleStop,
+    SessionArchiveStore,
+    SessionSaveCheckpointer,
+    SessionSaveError,
+    restore_session,
+    tenant_scope,
+)
 from onyx.server.features.build.sandbox.harness_base import (
     DEFAULT_MAX_OUTPUT_TOKENS,
     EXEC_DEFAULT_ENV,
@@ -117,6 +138,10 @@ PUBLISH_MAX_BYTES = 100 << 20
 # connections that a command of the first may already use.
 _INIT_LOCK_PREFIX = "sandbox_fc_harness_init:"
 _INIT_LOCK_SECONDS = 30.0
+# A session's restore runs once per VM instance across API pods; it
+# covers a restore at the agent's 15 min transfer deadline.
+_SESSION_SETUP_LOCK_PREFIX = "sandbox_fc:session_setup:"
+_SESSION_SETUP_LOCK_SECONDS = 30 * 60.0
 # Client token on each started command, to find it when Start gets no answer.
 _START_LABEL = "onyx_start_id"
 
@@ -157,17 +182,21 @@ def session_relative_path(ref: HarnessSandboxRef, path: str) -> str:
     return "" if normalized == "." else normalized
 
 
-class FirecrackerHarnessSandbox(HarnessSandbox):
+class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
     def __init__(
         self,
         *,
         template: str,
         client_factory: HostAgentClientFactory | None = None,
+        archive_store: SessionArchiveStore | None = None,
     ) -> None:
         if not template:
             raise ValueError("FirecrackerHarnessSandbox needs a template image tag")
         self._template = template
         self._client_factory = client_factory or MtlsHostAgentClientFactory()
+        # None: no session saves, so the idle evictor keeps every VM.
+        self._archive_store = archive_store
+        self.idle_stop = BackgroundIdleStop(self._stop_if_idle)
 
     # Lifecycle
 
@@ -201,12 +230,19 @@ class FirecrackerHarnessSandbox(HarnessSandbox):
                 )
                 time.sleep(pause)
                 delay = min(delay * 2, 2.0)
+            # A stop deletes the placement record, and an agent never creates
+            # a stopped attempt again: start past the last one.
+            if get_sandbox_placement(tenant_cache, ref.sandbox_id) is None:
+                floor = last_attempt(tenant_cache, ref.sandbox_id) + 1
+                if request.attempt < floor:
+                    request = request.model_copy(update={"attempt": floor})
             try:
                 placed = wake_sandbox_vm(
                     shared_cache, tenant_cache, self._client_factory, request
                 )
                 if not self._initialized(placed):
                     self._initialize(tenant_cache, ref, placed)
+                record_attempt(tenant_cache, ref.sandbox_id, placed.vm.attempt)
                 return placed
             except (
                 OnyxError,
@@ -339,6 +375,89 @@ class FirecrackerHarnessSandbox(HarnessSandbox):
 
     # Exec
 
+    def _session_vm(
+        self, ref: HarnessSandboxRef
+    ) -> tuple[PlacedVm, SandboxDaemonClient]:
+        """The running VM and its daemon, with the session's last save
+        restored once per VM instance. The daemon makes the session
+        directory on first use."""
+        placed = self._place(ref)
+        daemon = sandbox_daemon(self._client_factory, placed)
+        tenant_cache = get_cache_backend(tenant_id=ref.tenant_id)
+        instance = (placed.vm.attempt, placed.vm.generation)
+
+        def set_up() -> bool:
+            return ref.session_id in sessions_on_instance(
+                tenant_cache, ref.sandbox_id, instance
+            )
+
+        if set_up():
+            return placed, daemon
+        with tenant_cache.lock(
+            f"{_SESSION_SETUP_LOCK_PREFIX}{ref.sandbox_id}:{ref.session_id}",
+            timeout=_SESSION_SETUP_LOCK_SECONDS,
+        ):
+            if set_up():
+                return placed, daemon
+            if self._archive_store is not None:
+                try:
+                    with tenant_scope(ref.tenant_id):
+                        restore_session(
+                            tenant_cache,
+                            self._client_factory.client(placed.node.address),
+                            self._archive_store,
+                            VmInstance(
+                                sandbox_id=placed.vm.sandbox_id,
+                                attempt=placed.vm.attempt,
+                                generation=placed.vm.generation,
+                                sandboxd_key=placed.sandboxd_key,
+                            ),
+                            ref.session_id,
+                        )
+                except (HostAgentError, SandboxDaemonError) as e:
+                    raise SessionSaveError(
+                        f"could not restore the saved files of this session: {e}"
+                    ) from e
+            mark_session_on_instance(
+                tenant_cache, ref.sandbox_id, ref.session_id, instance
+            )
+        return placed, daemon
+
+    # Idle stop
+
+    def eviction_policy(self) -> tuple[SandboxCheckpointer, SandboxActivityProbe]:
+        """The node-report idle evictor's save and busy checks."""
+        if self._archive_store is None:
+            return NoCheckpointSupport(), UnknownActivity()
+        return self.idle_stop, self
+
+    def session_checkpointer(self) -> SessionSaveCheckpointer | None:
+        if self._archive_store is None:
+            return None
+        return SessionSaveCheckpointer(self._archive_store, self._client_factory, self)
+
+    def _stop_if_idle(self, tenant_id: str, sandbox_id: UUID) -> VmStopOutcome:
+        """Save every session, then stop the VM, while it is still idle and
+        not busy (a queued stop can run late)."""
+        checkpointer = self.session_checkpointer()
+        if checkpointer is None:
+            return VmStopOutcome.KEPT_NO_CHECKPOINT
+        tenant_cache = get_cache_backend(tenant_id=tenant_id)
+        placement = get_sandbox_placement(tenant_cache, sandbox_id)
+        if placement is None:
+            return VmStopOutcome.NOT_PLACED
+        return evict_idle_sandbox_vm(
+            get_shared_cache_backend(),
+            tenant_cache,
+            self._client_factory,
+            checkpointer,
+            self,
+            tenant_id=tenant_id,
+            sandbox_id=sandbox_id,
+            last_active=placement.last_active,
+            now=int(time.time()),
+        )
+
     def exec_command(
         self,
         ref: HarnessSandboxRef,
@@ -353,8 +472,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox):
         yield_seconds = _clamp_ms(
             yield_time_ms, EXEC_DEFAULT_YIELD_MS, EXEC_MIN_YIELD_MS, EXEC_MAX_YIELD_MS
         )
-        placed = self._place(ref)
-        daemon = sandbox_daemon(self._client_factory, placed)
+        placed, daemon = self._session_vm(ref)
         start_label = {_START_LABEL: secrets.token_hex(16)}
         try:
             # The daemon makes the session directory, the default cwd.
@@ -549,7 +667,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox):
 
     def read_file(self, ref: HarnessSandboxRef, path: str, *, max_bytes: int) -> bytes:
         rel = session_relative_path(ref, path)
-        daemon = sandbox_daemon(self._client_factory, self._place(ref))
+        _, daemon = self._session_vm(ref)
         # Dropping the chunk iterator unread cancels the stream.
         info, chunks = daemon.read_file(
             session_id=str(ref.session_id), path=rel, length=max_bytes + 1
@@ -565,7 +683,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox):
         rel = session_relative_path(ref, path)
         if not rel:
             raise SandboxPathError("cannot write the session directory itself")
-        sandbox_daemon(self._client_factory, self._place(ref)).write_file(
+        self._session_vm(ref)[1].write_file(
             session_id=str(ref.session_id), path=rel, data=data
         )
 

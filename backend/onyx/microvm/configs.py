@@ -92,10 +92,10 @@ SANDBOX_FC_ORPHAN_STOPS_PER_REPORT = _fc_env_int(
     "SANDBOX_FC_ORPHAN_STOPS_PER_REPORT", 8, minimum=1
 )
 # P4: the idle evictor stops a VM after this long without activity in its
-# placement record. The stop needs session saves: until then
-# NoCheckpointSupport keeps every VM.
+# placement record. The stop needs session saves (harness sandboxes); without
+# them NoCheckpointSupport keeps every VM.
 SANDBOX_FC_IDLE_TIMEOUT_SECONDS = _fc_env_int(
-    "SANDBOX_FC_IDLE_TIMEOUT_SECONDS", 1800, minimum=1
+    "SANDBOX_FC_IDLE_TIMEOUT_SECONDS", 900, minimum=1
 )
 # Spreads the scheduled-task runs of one beat tick, so that they do not all
 # start VMs at the same moment.
