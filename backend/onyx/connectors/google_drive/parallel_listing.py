@@ -25,6 +25,7 @@ from collections.abc import Callable, Collection, Generator
 from concurrent.futures import Future
 from concurrent.futures import wait as wait_for_futures
 from datetime import datetime, timezone
+from enum import Enum
 
 from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
 from onyx.connectors.google_drive.file_retrieval import (
@@ -231,6 +232,15 @@ def plan_split(
     bounds.extend(page_min + width * i for i in range(1, ways))
     bounds.append(shard.t1)
     return [(t0, t1) for t0, t1 in zip(bounds, bounds[1:], strict=False) if t0 < t1]
+
+
+class _SplitRefusal(Enum):
+    """Why a shard keeps its page instead of splitting."""
+
+    # The range holds too few pages to split.
+    DENSITY = "density"
+    # The open shard cap leaves no room. A later page can try again.
+    SHARD_CAP = "shard_cap"
 
 
 class ParallelDriveLister:
@@ -476,10 +486,13 @@ class ParallelDriveLister:
     def _list_one_page(self, shard: ListingShard) -> list[AdaptiveTask]:
         files, next_token = self._fetch_page(shard)
 
+        keep_can_split = False
         if next_token is not None and shard.can_split:
             children = self._try_split(shard, files)
-            if children is not None:
+            if isinstance(children, list):
                 return [self._page_task(child_id) for child_id in children]
+            # A shard refused only for lack of room tries again next page.
+            keep_can_split = children is _SplitRefusal.SHARD_CAP
 
         # A shortcut costs one files.get, so resolve outside the lock.
         resolved: list[GoogleDriveFileType] = []
@@ -504,7 +517,7 @@ class ParallelDriveLister:
                 del self._state.shards[shard.id]
                 return []
             live.page_token = next_token
-            live.can_split = False
+            live.can_split = keep_can_split
         return [self._page_task(shard.id)]
 
     def _resolve_shortcut(
@@ -565,6 +578,9 @@ class ParallelDriveLister:
         query = _FILES_QUERY
         if shard.partition.kind is ListingPartitionKind.MY_DRIVE:
             query += " and 'me' in owners"
+        elif shard.partition.kind is ListingPartitionKind.SHARED_WITH_USER:
+            # The user's My Drive partition lists the user's own files.
+            query += " and not 'me' in owners"
         field = GoogleFields.MODIFIED_TIME.value
         return f"{query} and {field} >= '{_iso(t0)}' and {field} < '{_iso(t1)}'"
 
@@ -620,17 +636,20 @@ class ParallelDriveLister:
 
     def _try_split(
         self, shard: ListingShard, files: list[GoogleDriveFileType]
-    ) -> list[int] | None:
+    ) -> list[int] | _SplitRefusal:
         """Splits the shard when its range should hold many pages. Returns the
-        new shard ids, or None when the shard keeps its page."""
-        if shard.t1 - shard.t0 < 2 * MIN_SHARD_MS:
-            return None
-        with self._lock:
-            if len(self._state.shards) >= MAX_OPEN_SHARDS:
-                return None
+        new shard ids, or why the shard keeps its page."""
         page_times = [ms for file in files if (ms := _modified_ms(file)) is not None]
         if len(page_times) < 2:
-            return None
+            return _SplitRefusal.DENSITY
+        if shard.page_token is not None:
+            # Earlier pages listed the files older than this page.
+            shard = shard.model_copy(update={"t0": max(shard.t0, min(page_times))})
+        if shard.t1 - shard.t0 < 2 * MIN_SHARD_MS:
+            return _SplitRefusal.DENSITY
+        with self._lock:
+            if len(self._state.shards) >= MAX_OPEN_SHARDS:
+                return _SplitRefusal.SHARD_CAP
         newest_ms = shard.newest_ms
         newest_page_span_ms: int | None = None
         if newest_ms is None:
@@ -638,17 +657,17 @@ class ParallelDriveLister:
             # the newest file, which overstates the range.
             could_hold, _, _ = _expected_pages(shard, page_times, shard.t1 - 1, None)
             if could_hold < MIN_PAGES_TO_PROBE:
-                return None
+                return _SplitRefusal.DENSITY
             newest_ms, newest_page_span_ms = self._read_newest_page(shard)
         ranges = plan_split(shard, page_times, newest_ms, newest_page_span_ms)
         if not ranges:
-            return None
+            return _SplitRefusal.DENSITY
         with self._lock:
             state = self._state
             if shard.id not in state.shards:
                 return []
             if len(state.shards) + len(ranges) - 1 > MAX_OPEN_SHARDS:
-                return None
+                return _SplitRefusal.SHARD_CAP
             del state.shards[shard.id]
             children = [
                 self._add_shard(

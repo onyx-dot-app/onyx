@@ -10,7 +10,12 @@ import time
 import pytest
 
 from onyx.connectors.google_drive import parallel_listing
-from onyx.connectors.google_drive.models import ListingPartitionKind
+from onyx.connectors.google_drive.file_retrieval import owner_email
+from onyx.connectors.google_drive.models import (
+    GoogleDriveFileType,
+    ListingPartitionKind,
+    ListingShard,
+)
 from onyx.connectors.google_drive.parallel_listing import drive_document_type
 from onyx.utils import threadpool_concurrency
 from tests.external_dependency_unit.connectors.google_drive.conftest import MockDrive
@@ -223,3 +228,78 @@ def test_a_failed_call_stops_its_listing_threads(
     assert error.value is not None
     # The call failed long before the listing was complete.
     assert own_mock_drive.list_calls() < 200
+
+
+def test_shared_with_user_listing_skips_the_users_own_files(
+    own_mock_drive: MockDrive, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The user's My Drive partition lists the user's own files, so the
+    shared-with-user partition must not list them again."""
+    own_mock_drive.set_corpus(_SHARDED_CORPUS)
+    expected = own_mock_drive.content_file_ids()
+
+    shared_with_files = 0
+    own_files: list[str] = []
+    fetch_page = parallel_listing.ParallelDriveLister._fetch_page
+
+    def recording_fetch_page(
+        self: parallel_listing.ParallelDriveLister, shard: ListingShard
+    ) -> tuple[list[GoogleDriveFileType], str | None]:
+        nonlocal shared_with_files
+        files, next_token = fetch_page(self, shard)
+        if shard.partition.kind is ListingPartitionKind.SHARED_WITH_USER:
+            shared_with_files += len(files)
+            own_files.extend(
+                file["id"]
+                for file in files
+                if owner_email(file) == shard.principal.lower()
+            )
+        return files, next_token
+
+    monkeypatch.setattr(
+        parallel_listing.ParallelDriveLister, "_fetch_page", recording_fetch_page
+    )
+    listing = list_with_resume(own_mock_drive.build_connector())
+
+    _assert_full_corpus(listing, expected)
+    assert shared_with_files > 0
+    assert not own_files, f"{len(own_files)} own files in shared-with listings"
+
+
+@pytest.mark.usefixtures("small_pages")
+def test_a_split_refused_by_the_shard_cap_runs_on_a_later_page(
+    own_mock_drive: MockDrive, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A shard that cannot split only because the open shard cap is reached
+    must split on a later page, when other shards have closed."""
+    monkeypatch.setattr(parallel_listing, "MAX_OPEN_SHARDS", 4)
+    own_mock_drive.set_corpus(_SHARDED_CORPUS)
+    expected = own_mock_drive.content_file_ids()
+
+    cap_refused: set[int] = set()
+    split_after_refusal: set[int] = set()
+    try_split = parallel_listing.ParallelDriveLister._try_split
+
+    def recording_try_split(
+        self: parallel_listing.ParallelDriveLister,
+        shard: ListingShard,
+        files: list[GoogleDriveFileType],
+    ) -> object:
+        with self._lock:
+            at_cap = len(self._state.shards) >= parallel_listing.MAX_OPEN_SHARDS
+        result = try_split(self, shard, files)
+        if isinstance(result, list):
+            if shard.id in cap_refused and result:
+                split_after_refusal.add(shard.id)
+        elif at_cap:
+            cap_refused.add(shard.id)
+        return result
+
+    monkeypatch.setattr(
+        parallel_listing.ParallelDriveLister, "_try_split", recording_try_split
+    )
+    listing = list_with_resume(own_mock_drive.build_connector())
+
+    _assert_full_corpus(listing, expected)
+    assert cap_refused, "no split was refused by the shard cap"
+    assert split_after_refusal, "no shard split after the cap refused it"
