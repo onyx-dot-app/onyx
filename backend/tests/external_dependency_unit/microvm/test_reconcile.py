@@ -347,6 +347,49 @@ def test_vm_without_its_daemon_key_is_not_adopted(
     assert node.agent.vms == {}
 
 
+def test_vm_whose_key_is_saved_before_its_stop_is_kept(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    node_id = _node("keysaved")
+    node = add_node(node_id)
+    sandbox_id = new_sandbox_id()
+    reserve_sandbox(
+        tenant_cache,
+        sandbox_id,
+        SandboxReservation(attempt=1, node_id=node_id, owner="waking"),
+        replaces=None,
+    )
+    _vm(node, sandbox_id)
+    assert _report(shared_cache, client_factory, node_id).orphans_marked == []
+    stop_orphan = reconcile._Pass.stop_orphan
+
+    def wake_saves_key_first(
+        self: reconcile._Pass, stop: reconcile._OrphanStop
+    ) -> None:
+        # A wake saves the key between the VM step and the stop.
+        set_sandbox_daemon_key(
+            tenant_cache, sandbox_id, attempt=1, key=new_sandboxd_key()
+        )
+        stop_orphan(self, stop)
+
+    monkeypatch.setattr(reconcile._Pass, "stop_orphan", wake_saves_key_first)
+
+    later = _report(
+        shared_cache,
+        client_factory,
+        node_id,
+        now=NOW + reconcile.SANDBOX_FC_ORPHAN_GRACE_SECONDS,
+    )
+
+    assert later.orphans_marked == [str(sandbox_id)]
+    assert later.orphans_stopped == [] and node.agent.stop_calls == []
+
+
 def test_vm_whose_guest_rejects_the_key_is_stopped_after_the_grace_period(
     shared_cache: CacheBackend,
     tenant_cache: CacheBackend,

@@ -321,7 +321,7 @@ class _Pass:
         if verdict is _Verdict.ADOPT and found is not None:
             key = get_sandbox_daemon_key(tenant_cache, sandbox_id, attempt=vm.attempt)
             if key is None:
-                self.unusable(vm, sandbox_id)
+                self.stop_after_grace(vm, sandbox_id, "key_lost")
             elif not self.adopt_waits(vm):
                 self.adoptions.append(
                     _Adoption(
@@ -342,11 +342,6 @@ class _Pass:
         if self.now - first_seen >= SANDBOX_FC_ORPHAN_GRACE_SECONDS:
             self.report.orphans_marked.append(vm.sandbox_id)
             self.stops.append(_OrphanStop(vm=vm, sandbox_id=sandbox_id, why=why))
-
-    def unusable(self, vm: AgentVm, sandbox_id: UUID) -> None:
-        """The reservation names the VM, but its key is lost or the guest
-        holds another key: nothing can use it."""
-        self.stop_after_grace(vm, sandbox_id, "unusable")
 
     def _adopt_wait_key(self, vm: AgentVm) -> str:
         return (
@@ -381,7 +376,8 @@ class _Pass:
                 )
                 return
             if not installed:
-                self.unusable(vm, sandbox_id)
+                # The guest holds another key: nothing can use the VM.
+                self.stop_after_grace(vm, sandbox_id, "key_rejected")
                 return
             # A newer record won the fence: the next report stops this VM.
             if not record_placement(
@@ -543,6 +539,19 @@ class _Pass:
         if outcome is VmStopOutcome.STOPPED:
             self.report.slept.append(vm.sandbox_id)
 
+    def still_unusable(self, stop: _OrphanStop, tenant_cache: CacheBackend) -> bool:
+        """Under the sandbox lock: the reason that nothing can use a VM that
+        its reservation names still holds. A wake can save the key meanwhile.
+        A guest that rejected the key keeps the key that it holds."""
+        if stop.why == "key_rejected":
+            return True
+        return stop.why == "key_lost" and (
+            get_sandbox_daemon_key(
+                tenant_cache, stop.sandbox_id, attempt=stop.vm.attempt
+            )
+            is None
+        )
+
     def stop_orphan(self, stop: _OrphanStop) -> None:
         vm, sandbox_id = stop.vm, stop.sandbox_id
         tenant_cache = get_cache_backend(tenant_id=vm.tenant_id)
@@ -560,8 +569,9 @@ class _Pass:
                 )
                 if verdict is _Verdict.OWNED:
                     return
-                # Adopt or a placement may use it, unless it is unusable.
-                if verdict is _Verdict.ADOPT and stop.why != "unusable":
+                if verdict is _Verdict.ADOPT and not self.still_unusable(
+                    stop, tenant_cache
+                ):
                     return
             try:
                 self.client_factory.client(self.node.address).stop(
