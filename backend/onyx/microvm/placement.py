@@ -707,11 +707,20 @@ def _release_refused(
     request: VmRequest,
     reservation: _Reservation,
     key_raw: bytes,
+    refusals: list[NodeRefusal],
+    pinned: RegisteredNode | None,
 ) -> None:
-    """Every node refused, so no VM of this attempt runs: delete its key, then
-    the reservation. A placement that took over the reservation stored the
-    key again under its own owner first, so this delete misses it."""
-    clear_sandbox_daemon_key_if(tenant_cache, request.sandbox_id, key_raw)
+    """Every node refused. Delete the attempt's key, then the reservation. A
+    placement that took over the reservation stored the key again under its
+    own owner first, so this delete misses it. The key stays when the pinned
+    node was skipped without a Create: its VM of this attempt may run."""
+    skipped_pinned = pinned is not None and any(
+        r.node_id == pinned.node_id
+        and r.reason == HostAgentErrorReason.TEMPLATE_MISSING.value
+        for r in refusals
+    )
+    if not skipped_pinned:
+        clear_sandbox_daemon_key_if(tenant_cache, request.sandbox_id, key_raw)
     reservation.release(tenant_cache)
 
 
@@ -873,7 +882,9 @@ def place_sandbox_vm(
                 pinned = None
                 continue
             if placed is None:
-                _release_refused(tenant_cache, request, reservation, key_raw)
+                _release_refused(
+                    tenant_cache, request, reservation, key_raw, refusals, pinned
+                )
                 raise capacity_unavailable_error(refusals)
             if not record_placement(
                 shared_cache,

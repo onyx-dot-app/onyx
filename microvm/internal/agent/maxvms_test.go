@@ -92,6 +92,24 @@ func TestMaxVMsCountsEveryFirecrackerProcess(t *testing.T) {
 	}
 }
 
+// A process in doubt that exited frees its slot at the next Create.
+func TestMaxVMsRescansDoubtsAtTheCap(t *testing.T) {
+	f := newFixture(t, 10)
+	f.m.cfg.MaxVMs = 1
+	table := &fakeTable{cands: []Candidate{{ID: "kept", PID: 700, UID: 1000005}}}
+	f.m.adopter = table
+	f.m.mu.Lock()
+	f.m.doubt["kept"] = &doubt{reason: "test"}
+	f.m.mu.Unlock()
+	ctx := context.Background()
+	_, _, err := f.m.Create(ctx, req(sb1, 1))
+	wantReason(t, err, pb.ErrorReason_CAPACITY_VM_SLOTS)
+	table.set(nil, nil)
+	if _, _, err := f.m.Create(ctx, req(sb1, 1)); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestNoCapByDefault(t *testing.T) {
 	f := newFixture(t, 10)
 	ctx := context.Background()

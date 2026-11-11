@@ -172,6 +172,37 @@ def test_refused_placement_deletes_its_daemon_key(
     assert get_sandbox_reservation(tenant_cache, sandbox_id) is None
 
 
+def test_refused_placement_keeps_the_key_when_the_pinned_node_was_skipped(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
+) -> None:
+    # The pinned node may run this attempt's VM (a Create with no known
+    # outcome), but it no longer lists the requested template.
+    pinned_id = _node("pinned")
+    add_node(pinned_id, FakeHostAgent(template="tpl-old"))
+    add_node(_node("full")).agent.refuse_create = HostAgentErrorReason.CAPACITY_MEMORY
+    sandbox_id = new_sandbox_id()
+    reserve_sandbox(
+        tenant_cache,
+        sandbox_id,
+        SandboxReservation(attempt=1, node_id=pinned_id, owner="crashed"),
+        replaces=None,
+    )
+    registry.set_sandbox_daemon_key(
+        tenant_cache, sandbox_id, attempt=1, key=new_sandboxd_key()
+    )
+
+    with pytest.raises(OnyxError):
+        place_sandbox_vm(
+            shared_cache, tenant_cache, client_factory, _request(sandbox_id)
+        )
+
+    assert registry.get_sandbox_daemon_key(tenant_cache, sandbox_id, attempt=1)
+
+
 def test_refused_placement_keeps_the_key_of_a_placement_that_took_over(
     shared_cache: CacheBackend,
     tenant_cache: CacheBackend,
