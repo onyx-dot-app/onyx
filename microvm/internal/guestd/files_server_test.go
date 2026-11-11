@@ -247,3 +247,37 @@ func TestListFilesResponseSizeCap(t *testing.T) {
 		t.Fatalf("response of %d bytes, cap %d", n, listMaxBytes)
 	}
 }
+
+func TestListFilesSkipsInvalidUTF8(t *testing.T) {
+	c, sessions := fileHarness(t)
+	ctx := keyed(context.Background())
+	dir := filepath.Join(sessions, fileSession, "outputs")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "good.txt"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("t\xff", filepath.Join(dir, "link")); err != nil {
+		t.Fatal(err)
+	}
+	// Some filesystems (APFS) refuse names that are not UTF-8.
+	if err := os.WriteFile(filepath.Join(dir, "bad\xff.txt"), nil, 0o644); err != nil {
+		t.Logf("no non-UTF-8 name on this filesystem: %v", err)
+	}
+
+	lr, err := c.ListFiles(ctx, &pb.ListFilesRequest{SessionId: fileSession, Path: "outputs"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, e := range lr.GetEntries() {
+		names = append(names, e.GetName())
+		if e.GetName() == "link" && e.GetLinkTarget() != "t�" {
+			t.Fatalf("link target = %q", e.GetLinkTarget())
+		}
+	}
+	if strings.Join(names, ",") != "good.txt,link" {
+		t.Fatalf("names = %v", names)
+	}
+}

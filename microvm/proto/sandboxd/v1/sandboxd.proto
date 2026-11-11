@@ -468,7 +468,8 @@ message FileInfo {
   // Permission bits (mode & 0777).
   uint32 mode = 5;
   google.protobuf.Timestamp modified_at = 6;
-  // FILE_TYPE_SYMLINK only: the link target as stored.
+  // FILE_TYPE_SYMLINK only: the link target as stored. ListFiles replaces
+  // bytes that are not valid UTF-8 with U+FFFD.
   string link_target = 7;
 }
 
@@ -566,6 +567,7 @@ message ListFilesRequest {
 
 message ListFilesResponse {
   // Directories first, then by name (case-insensitive), per directory.
+  // Entries whose name is not valid UTF-8 are left out.
   repeated FileInfo entries = 1;
   // True if max_entries, max_depth or the response size limit (12 MiB)
   // cut the listing.

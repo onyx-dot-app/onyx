@@ -15,6 +15,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode/utf8"
 )
 
 // Type is the kind of a file.
@@ -447,7 +448,8 @@ func (l *lister) dir(ctx context.Context, rel string, depth int) error {
 			return nil
 		}
 		name := e.Name()
-		if l.skip[name] || (l.spec.SkipHidden && strings.HasPrefix(name, ".")) {
+		// Protobuf strings must be UTF-8; such a name would fail the response.
+		if l.skip[name] || (l.spec.SkipHidden && strings.HasPrefix(name, ".")) || !utf8.ValidString(name) {
 			continue
 		}
 		child := name
@@ -460,7 +462,8 @@ func (l *lister) dir(ctx context.Context, rel string, depth int) error {
 		}
 		info := infoOf(l.t.join(child), fi)
 		if info.Type == TypeSymlink {
-			info.LinkTarget, _ = l.t.root.Readlink(child)
+			target, _ := l.t.root.Readlink(child)
+			info.LinkTarget = strings.ToValidUTF8(target, "\uFFFD")
 		}
 		l.out = append(l.out, info)
 		if info.Type == TypeDirectory {

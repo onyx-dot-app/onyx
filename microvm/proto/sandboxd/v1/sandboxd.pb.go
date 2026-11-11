@@ -2120,7 +2120,8 @@ type FileInfo struct {
 	// Permission bits (mode & 0777).
 	Mode       uint32                 `protobuf:"varint,5,opt,name=mode,proto3" json:"mode,omitempty"`
 	ModifiedAt *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=modified_at,json=modifiedAt,proto3" json:"modified_at,omitempty"`
-	// FILE_TYPE_SYMLINK only: the link target as stored.
+	// FILE_TYPE_SYMLINK only: the link target as stored. ListFiles replaces
+	// bytes that are not valid UTF-8 with U+FFFD.
 	LinkTarget    string `protobuf:"bytes,7,opt,name=link_target,json=linkTarget,proto3" json:"link_target,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2912,6 +2913,7 @@ func (x *ListFilesRequest) GetMaxEntries() uint32 {
 type ListFilesResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Directories first, then by name (case-insensitive), per directory.
+	// Entries whose name is not valid UTF-8 are left out.
 	Entries []*FileInfo `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries,omitempty"`
 	// True if max_entries, max_depth or the response size limit (12 MiB)
 	// cut the listing.
