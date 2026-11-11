@@ -33,7 +33,7 @@ esac
   echo "KVM is required; /dev/kvm is absent" >&2
   exit 1
 }
-for tool in docker go mkfs.xfs mkfs.ext4 e2fsck debugfs openssl python3 file systemctl; do
+for tool in docker go mkfs.xfs mkfs.ext4 e2fsck debugfs openssl python3 file setsid; do
   command -v "${tool}" >/dev/null || {
     echo "${tool} is required" >&2
     exit 1
@@ -216,7 +216,13 @@ for test in ${tests}; do
   mkdir -p "${data}"
   t0=$(date +%s)
   rc=0
-  env "KVM_DATA_DIR=${data}" "${extra[@]}" "${work}/bin/hostagent-kvm.test" -test.v -test.timeout=45m -test.run "^${test}\$" || rc=$?
+  # A process group of its own: a Go test timeout does not run t.Cleanup, so
+  # the group kill also stops the test's host services (the proxy harness).
+  setsid env "KVM_DATA_DIR=${data}" "${extra[@]}" "${work}/bin/hostagent-kvm.test" -test.v -test.timeout=45m \
+    -test.run "^${test}\$" &
+  test_pid=$!
+  wait "${test_pid}" || rc=$?
+  kill -KILL -- "-${test_pid}" 2>/dev/null || true
   echo "RESULT ${test} rc=${rc} seconds=$(($(date +%s) - t0))"
   cleanup_vms
   if [ "${rc}" -ne 0 ]; then
