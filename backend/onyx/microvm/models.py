@@ -7,6 +7,44 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 
+class HostAgentErrorReason(str, Enum):
+    """`ErrorReason` names from hostagent.proto."""
+
+    INVALID_ARGUMENT = "INVALID_ARGUMENT"
+    TEMPLATE_MISSING = "TEMPLATE_MISSING"
+    TEMPLATE_SHAPE_MISMATCH = "TEMPLATE_SHAPE_MISMATCH"
+    TEMPLATE_INCOMPATIBLE = "TEMPLATE_INCOMPATIBLE"
+    SCRATCH_TOO_SMALL = "SCRATCH_TOO_SMALL"
+    SCRATCH_TOO_LARGE = "SCRATCH_TOO_LARGE"
+    CAPACITY_MEMORY = "CAPACITY_MEMORY"
+    CAPACITY_DISK = "CAPACITY_DISK"
+    CAPACITY_VM_SLOTS = "CAPACITY_VM_SLOTS"
+    ATTEMPT_CONFLICT = "ATTEMPT_CONFLICT"
+    STALE_ATTEMPT = "STALE_ATTEMPT"
+    SANDBOX_NOT_FOUND = "SANDBOX_NOT_FOUND"
+    INSTANCE_MISMATCH = "INSTANCE_MISMATCH"
+    VMM_FAILED = "VMM_FAILED"
+    INTERNAL = "INTERNAL"
+    SANDBOX_IN_DOUBT = "SANDBOX_IN_DOUBT"
+    PORT_NOT_ALLOWED = "PORT_NOT_ALLOWED"
+    GUEST_UNREACHABLE = "GUEST_UNREACHABLE"
+    VM_NOT_RUNNING = "VM_NOT_RUNNING"
+    DIAL_LIMIT = "DIAL_LIMIT"
+    METHOD_NOT_ALLOWED = "METHOD_NOT_ALLOWED"
+    GUEST_KEY_REJECTED = "GUEST_KEY_REJECTED"
+    MANAGED_IMAGE_MISSING = "MANAGED_IMAGE_MISSING"
+    MANAGED_BUNDLE_INVALID = "MANAGED_BUNDLE_INVALID"
+    MANAGED_SWAP_UNSUPPORTED = "MANAGED_SWAP_UNSUPPORTED"
+    MANAGED_SLOT_BUSY = "MANAGED_SLOT_BUSY"
+    MANAGED_MOUNT_FAILED = "MANAGED_MOUNT_FAILED"
+    NODE_DRAINING = "NODE_DRAINING"
+    EGRESS_CA_UNAVAILABLE = "EGRESS_CA_UNAVAILABLE"
+    CAPTURE_NOT_FOUND = "CAPTURE_NOT_FOUND"
+    CAPTURE_TOO_LARGE = "CAPTURE_TOO_LARGE"
+    TRANSFER_FAILED = "TRANSFER_FAILED"
+    ARCHIVE_MISMATCH = "ARCHIVE_MISMATCH"
+
+
 class RegisteredNode(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -496,3 +534,21 @@ class ManagedImagePut(BaseModel):
     build_ms: int
     # Images that the garbage collection removed.
     removed: list[str]
+
+
+class ManagedSwapResult(BaseModel):
+    """SwapManaged result of one VM."""
+
+    model_config = ConfigDict(frozen=True)
+
+    sandbox_id: str
+    ok: bool
+    # Set when ok is False.
+    reason: HostAgentErrorReason | None
+    message: str
+    active: ManagedSlot
+    # False when the image was already the active one.
+    changed: bool
+    ms: int
+    # A guest process still has a file open on the old drive.
+    previous_in_use: bool

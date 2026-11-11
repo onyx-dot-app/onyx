@@ -126,9 +126,9 @@ def _protocol_error(message: str) -> SandboxDaemonError:
     )
 
 
-def _error_from_rpc(err: grpc.RpcError) -> SandboxDaemonError | HostAgentError:
-    """Also used for host agent calls whose guest daemon errors pass through
-    (session saves)."""
+def sandbox_daemon_error(err: grpc.RpcError) -> SandboxDaemonError | HostAgentError:
+    """The typed error of a failed daemon call. Host agent session saves use it
+    too: they pass guest daemon errors through."""
     info = error_info(err)
     if (
         info is None
@@ -288,7 +288,7 @@ class SandboxDaemonClient:
                 timeout=SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS,
             )
         except grpc.RpcError as e:
-            raise _error_from_rpc(e) from e
+            raise sandbox_daemon_error(e) from e
         return DaemonHealth(
             initialized=r.initialized,
             key_set=r.key_set,
@@ -324,7 +324,7 @@ class SandboxDaemonClient:
                 request, metadata=self._authed(), timeout=_INIT_TIMEOUT_SECONDS
             )
         except grpc.RpcError as e:
-            raise _error_from_rpc(e) from e
+            raise sandbox_daemon_error(e) from e
         return DaemonInitResult(
             version=r.version,
             clock_step_seconds=r.clock_step.ToTimedelta().total_seconds(),
@@ -347,7 +347,7 @@ class SandboxDaemonClient:
                 if isinstance(event, ExecResult):
                     return
         except grpc.RpcError as e:
-            raise _error_from_rpc(e) from e
+            raise sandbox_daemon_error(e) from e
         finally:
             call.cancel()
         raise _protocol_error("the exec stream ended without a result")
@@ -377,7 +377,7 @@ class SandboxDaemonClient:
                 timeout=SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS,
             )
         except grpc.RpcError as e:
-            raise _error_from_rpc(e) from e
+            raise sandbox_daemon_error(e) from e
         return _started(r.started)
 
     def stream(
@@ -417,7 +417,7 @@ class SandboxDaemonClient:
                 timeout=SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS,
             )
         except grpc.RpcError as e:
-            raise _error_from_rpc(e) from e
+            raise sandbox_daemon_error(e) from e
         return r.written
 
     def cancel(self, execution_id: str) -> CancelResult:
@@ -430,7 +430,7 @@ class SandboxDaemonClient:
                 timeout=SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS,
             )
         except grpc.RpcError as e:
-            raise _error_from_rpc(e) from e
+            raise sandbox_daemon_error(e) from e
         return CancelResult(result=_result(r.result), already_ended=r.already_ended)
 
     def inspect(self, execution_id: str) -> ExecutionRecord:
@@ -441,7 +441,7 @@ class SandboxDaemonClient:
                 timeout=SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS,
             )
         except grpc.RpcError as e:
-            raise _error_from_rpc(e) from e
+            raise sandbox_daemon_error(e) from e
         return _execution(r.execution)
 
     def list_executions(
@@ -455,7 +455,7 @@ class SandboxDaemonClient:
                 timeout=SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS,
             )
         except grpc.RpcError as e:
-            raise _error_from_rpc(e) from e
+            raise sandbox_daemon_error(e) from e
         return [_execution(x) for x in r.executions]
 
     # Files. Paths are relative to /workspace/sessions/<session_id>/.
@@ -476,7 +476,7 @@ class SandboxDaemonClient:
             first: sandboxd_pb2.ReadFileResponse = next(call)
         except grpc.RpcError as e:
             call.cancel()
-            raise _error_from_rpc(e) from e
+            raise sandbox_daemon_error(e) from e
         except StopIteration:
             raise _protocol_error("ReadFile ended without the file info") from None
         if first.WhichOneof("part") != "info":
@@ -490,7 +490,7 @@ class SandboxDaemonClient:
                 if msg.WhichOneof("part") == "data":
                     yield msg.data
         except grpc.RpcError as e:
-            raise _error_from_rpc(e) from e
+            raise sandbox_daemon_error(e) from e
         finally:
             call.cancel()
 
@@ -526,7 +526,7 @@ class SandboxDaemonClient:
                 requests(), metadata=self._authed(), timeout=_TRANSFER_TIMEOUT_SECONDS
             )
         except grpc.RpcError as e:
-            raise _error_from_rpc(e) from e
+            raise sandbox_daemon_error(e) from e
         return WrittenFile(info=_file_entry(r.info), sha256=r.sha256)
 
     def upload_file(
@@ -552,7 +552,7 @@ class SandboxDaemonClient:
                 requests(), metadata=self._authed(), timeout=_TRANSFER_TIMEOUT_SECONDS
             )
         except grpc.RpcError as e:
-            raise _error_from_rpc(e) from e
+            raise sandbox_daemon_error(e) from e
         return WrittenFile(info=_file_entry(r.info), sha256=r.sha256)
 
     def list_files(
@@ -583,7 +583,7 @@ class SandboxDaemonClient:
                 timeout=SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS,
             )
         except grpc.RpcError as e:
-            raise _error_from_rpc(e) from e
+            raise sandbox_daemon_error(e) from e
         return FileListing(
             entries=[_file_entry(x) for x in r.entries], truncated=r.truncated
         )
@@ -602,7 +602,7 @@ class SandboxDaemonClient:
                 timeout=SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS,
             )
         except grpc.RpcError as e:
-            raise _error_from_rpc(e) from e
+            raise sandbox_daemon_error(e) from e
         return r.deleted
 
     def zip_files(
@@ -639,7 +639,7 @@ class SandboxDaemonClient:
                         skipped=msg.summary.skipped,
                     )
         except grpc.RpcError as e:
-            raise _error_from_rpc(e) from e
+            raise sandbox_daemon_error(e) from e
         finally:
             call.cancel()
         raise _protocol_error("ZipFiles ended without a summary")
