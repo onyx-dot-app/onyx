@@ -2482,7 +2482,7 @@ def test_discovery_batches_response_metadata(
 
 
 @pytest.mark.parametrize("child_count", [1, 4])
-def test_coordinator_discovery_batches_pending_messages(
+def test_coordinator_discovery_counts_pending_messages_without_loading_content(
     db_session: Session,
     conversation: ChatSession,
     executed_sql: list[str],
@@ -2552,14 +2552,16 @@ def test_coordinator_discovery_batches_pending_messages(
     assert len(executed_sql) == 4
     assert len(children) == child_count
     assert not any("chat_response_item" in query for query in executed_sql)
+    input_queries = [query for query in executed_sql if "chat_input" in query]
+    assert len(input_queries) == 1
+    assert "count(" in input_queries[0]
+    assert "chat_input.content" not in input_queries[0]
     for child in children:
-        assert len(child.pending_messages) == 1
-        assert child.pending_messages[0].agent_id == child.id
-        assert child.pending_messages[0].message == f"Follow up {child.path}"
+        assert child.pending_message_count == 1
         assert child.queue_paused == (child.status == RunStatus.LIMIT)
         registration = coordinator.registration(child.id)
         assert registration is not None
-        assert not registration.pending_messages
+        assert registration.pending_message_count == 0
         assert not registration.queue_paused
 
 

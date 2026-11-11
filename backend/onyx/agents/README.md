@@ -311,13 +311,9 @@ The runtime suspends the parent while it waits, then calls this function without
 The function receives failed and cancelled snapshots too, so the feature can choose how to report them.
 A successful completion callback marks those child failures as handled.
 
-Spawning returns both an `agent_id` and a `run_id`. Use `agent_id` to start another run on that child.
-Use `run_id` to inspect, wait for, or cancel one execution. Paths are readable labels and may repeat.
-`wait_run` supports synchronous waits; it returns `None` on timeout without cancelling the child.
-Remote reads run on the calling tool thread. Their I/O timeouts bound a blocked read.
-Live and archived failures raise `RunFailed`. Waiting for a cancelled child raises `ChildRunCancelled`.
-Tools can handle that exception; otherwise, it becomes a tool error and the parent can continue.
-Cancelling the parent still interrupts its wait with `AgentCancelled`.
+Spawning returns an `agent_id` for later messages and a `run_id` for that execution.
+Return `ChildRunWait` to wait for results without holding a tool thread.
+Paths are readable labels and may repeat.
 
 Foreground children are the default. The parent waits for their terminal results and cancels them on failure or cancellation.
 Failed child cancellation records an error without skipping sibling cancellation or releasing locally owned work before it drains.
@@ -329,7 +325,7 @@ Stopping that parent stops the wait; use `cancel_run` to stop the child.
 
 `invocation.agents.send_message(agent_id, message=..., max_steps=...)` delivers an instruction before the next model step.
 If the child is idle, it starts a fresh run with the supplied step limit.
-`queue_message` always requests a later run. Normal completion drains the queue; Stop, errors, and step limits pause it.
+`send_message(..., delivery=MessageDelivery.QUEUE)` requests a later run. Normal completion drains the queue; Stop, errors, and step limits pause it.
 An explicit send can start fresh work after a pause. Chat's `interrupt_agent` tool cancels the current run and preserves its conversation.
 Submitted instructions are stored immediately in Chat; pending input is distinct from accepted conversation history.
 

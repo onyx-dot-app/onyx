@@ -69,8 +69,8 @@ from onyx.db.chat_inputs import (
     latest_agent_response,
     latest_agent_responses,
     lock_agent,
-    message_receipt,
     pending_inputs,
+    pending_message_counts,
     queued_request,
     receive_messages,
     reserve_input_response,
@@ -131,8 +131,11 @@ class _MessageChanged(ValueError):
 
 
 class _OwnerLease:
-    def __init__(self, owner: ResponseOwner) -> None:
+    def __init__(
+        self, owner: ResponseOwner, *, preserve_on_start_failure: bool = False
+    ) -> None:
         self.owner = owner
+        self.preserve_on_start_failure = preserve_on_start_failure
         self.lock = threading.Lock()
         self.released = False
         self.refreshed = time.monotonic()
@@ -185,11 +188,7 @@ class ChatRunStore(RunStore, RunOwnership):
         self._leases: dict[int, _OwnerLease] = {}
         self._coordinator: AgentCoordinator | None = None
         self._build_agent: Callable[[ExecutionCheckpoint], Agent] | None = None
-        self._message_reservations: dict[int, int] = {}
-        self._starting_messages: set[str] = set()
-        self._dispatch_lock = threading.Lock()
         self._pending_dispatch = False
-        self._input_revision = 0
         self._next_input_poll = 0.0
         self._completion_step_limit: int | None = None
 
@@ -305,7 +304,6 @@ class ChatRunStore(RunStore, RunOwnership):
                 session.commit()
         with self._lock:
             self._pending_dispatch = True
-            self._input_revision += 1
             self._next_input_poll = 0.0
         return receipt
 
@@ -318,14 +316,9 @@ class ChatRunStore(RunStore, RunOwnership):
         with get_session_with_tenant(tenant_id=self.tenant_id) as session:
             return resolve_delegation_messages(session, int(parent_run_id), delegations)
 
-    def pending_messages(
-        self, agent_id: str | None = None
-    ) -> list[AgentMessageReceipt]:
+    def pending_message_counts(self, agent_id: str | None = None) -> dict[str, int]:
         with get_session_with_tenant(tenant_id=self.tenant_id) as session:
-            return [
-                message_receipt(row)
-                for row in pending_inputs(session, self._input_branch, agent_id)
-            ]
+            return pending_message_counts(session, self._input_branch, agent_id)
 
     def receive_inputs(self, run: Run) -> list[UserMessage]:
         received = run.received_input_ids
@@ -376,19 +369,17 @@ class ChatRunStore(RunStore, RunOwnership):
                 session.commit()
                 return pending
 
-    def dispatch_messages(self) -> None:
+    def _dispatch_messages(self) -> None:
         coordinator = self._coordinator
+        if coordinator is None or coordinator.is_closed:
+            return
         with self._lock:
             if time.monotonic() < self._next_input_poll:
                 return
-            revision = self._input_revision
+            # Consume this notification before scanning so new submissions remain pending.
+            pending = self._pending_dispatch
+            self._pending_dispatch = False
             self._next_input_poll = time.monotonic() + INPUT_POLL_SECONDS
-        if (
-            coordinator is None
-            or coordinator.is_closed
-            or not self._dispatch_lock.acquire(blocking=False)
-        ):
-            return
         try:
             with get_session_with_tenant(tenant_id=self.tenant_id) as session:
                 rows = pending_inputs(session, self._input_branch)
@@ -434,7 +425,7 @@ class ChatRunStore(RunStore, RunOwnership):
                 )
                 with self._lock:
                     self._pending_dispatch = (
-                        self._input_revision != revision
+                        self._pending_dispatch
                         or bool(requests)
                         or any(
                             self._owner_key(latest.id) in owners
@@ -456,13 +447,7 @@ class ChatRunStore(RunStore, RunOwnership):
                     message_id = request.message.id
                     if message_id is None:
                         raise ValueError("Queued input has no identity")
-                    with self._lock:
-                        self._starting_messages.add(message_id)
-                    try:
-                        coordinator.start_message_run(request)
-                    finally:
-                        with self._lock:
-                            self._starting_messages.discard(message_id)
+                    coordinator.start_message_run(request)
                 except _MessageChanged:
                     continue
                 except Exception:
@@ -475,11 +460,11 @@ class ChatRunStore(RunStore, RunOwnership):
             self._dispatch_completions(coordinator, completions, selected)
             coordinator.notify_inputs()
         except (OperationalError, DatabaseTimeoutError):
+            with self._lock:
+                self._pending_dispatch |= pending
             logger.exception(
                 "Could not poll agent messages; retrying on the next control poll"
             )
-        finally:
-            self._dispatch_lock.release()
 
     def _dispatch_completions(
         self,
@@ -688,10 +673,11 @@ class ChatRunStore(RunStore, RunOwnership):
             if len(messages) == 1 and isinstance(messages[0], UserMessage)
             else None
         )
-        with self._lock:
-            queued_start = (
-                instruction is not None and instruction.id in self._starting_messages
-            )
+        queued_start = (
+            instruction is not None
+            and previous_run_id is not None
+            and agent.id != str(self.chat_session_id)
+        )
         completion_start = (
             not messages
             and previous_run_id is not None
@@ -769,7 +755,7 @@ class ChatRunStore(RunStore, RunOwnership):
                         )
                     message_id = reserve_agent_continuation__no_commit(session, latest)
                 owner = ResponseOwner(token=uuid4(), root_message_id=root_id)
-                lease = _OwnerLease(owner)
+                lease = _OwnerLease(owner, preserve_on_start_failure=True)
                 with self._ownership_lock(message_id):
                     try:
                         activate_reserved_message(session, message_id)
@@ -795,7 +781,6 @@ class ChatRunStore(RunStore, RunOwnership):
                             logger.exception("Failed queued response lease will expire")
                         raise
                     with self._lock:
-                        self._message_reservations[message_id] = root_id
                         self._leases[message_id] = lease
             return str(message_id)
         if parent_run_id is None:
@@ -856,15 +841,10 @@ class ChatRunStore(RunStore, RunOwnership):
                 if snapshot.parent_run_id is not None
                 else None
             )
-            message_root_id = self._message_reservations.get(response_id)
         if claimed is None:
-            if (
-                snapshot.parent_run_id is not None
-                and parent is None
-                and message_root_id is None
-            ):
+            if snapshot.parent_run_id is not None and parent is None:
                 raise ValueError("Parent response has no execution ownership")
-            root_message_id = message_root_id or (
+            root_message_id = (
                 parent.owner.root_message_id if parent else self.response_id
             )
             with self._ownership_lock(response_id):
@@ -912,21 +892,15 @@ class ChatRunStore(RunStore, RunOwnership):
         response_id = int(run_id)
         with self._lock:
             lease = self._leases.get(response_id)
-            queued_message = response_id in self._message_reservations
         if lease is None:
             with self._ownership_lock(response_id):
                 if self._owner(response_id) is not None:
                     return
                 with get_session_with_tenant(tenant_id=self.tenant_id) as session:
-                    if queued_message:
-                        fail_reserved_message(session, response_id)
-                    else:
-                        abort_response_start__no_commit(
-                            session, self.response_id, response_id
-                        )
+                    abort_response_start__no_commit(
+                        session, self.response_id, response_id
+                    )
                     session.commit()
-            with self._lock:
-                self._message_reservations.pop(response_id, None)
             return
         with lease.lock:
             lease.released = True
@@ -947,7 +921,7 @@ class ChatRunStore(RunStore, RunOwnership):
                         session.commit()
                 else:
                     with get_session_with_tenant(tenant_id=self.tenant_id) as session:
-                        if queued_message:
+                        if lease.preserve_on_start_failure:
                             fail_reserved_message(session, response_id)
                         else:
                             abort_response_start__no_commit(
@@ -960,7 +934,6 @@ class ChatRunStore(RunStore, RunOwnership):
             with self._lock:
                 self._leases.pop(response_id, None)
                 self._owned.pop(response_id, None)
-                self._message_reservations.pop(response_id, None)
 
     @property
     def has_owned_work(self) -> bool:
@@ -1006,9 +979,7 @@ class ChatRunStore(RunStore, RunOwnership):
         finally:
             with self._lock:
                 self._owned.pop(response_id, None)
-                self._message_reservations.pop(response_id, None)
                 if response_id != self.response_id:
-                    self._input_revision += 1
                     self._pending_dispatch = True
                     self._next_input_poll = 0.0
 
@@ -1021,7 +992,7 @@ class ChatRunStore(RunStore, RunOwnership):
             raise _OwnershipLost("Response ownership was lost")
 
     def poll_control(self) -> None:
-        """Renew ownership and read Stop requests on the caller's control thread."""
+        """Renew leases, read Stop, and dispatch messages on the turn's control thread."""
         with self._lock:
             leases = list(self._leases.items())
         for response_id, lease in leases:
@@ -1070,7 +1041,7 @@ class ChatRunStore(RunStore, RunOwnership):
                 owned = self._owned.get(response_id)
             if owned is not None:
                 owned.run.cancel()
-        self.dispatch_messages()
+        self._dispatch_messages()
 
     def handoff(self, run_id: str) -> None:
         """Save a paused run before releasing ownership for another API pod."""

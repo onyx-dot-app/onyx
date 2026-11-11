@@ -355,7 +355,7 @@ def test_agent_lookup_uses_its_tenant_and_restores_the_callers_context(
     token = CURRENT_TENANT_ID_CONTEXTVAR.set("conversation-tenant")
     try:
         run_store = Mock(spec=ChatRunStore, tenant_id="conversation-tenant")
-        run_store.pending_messages.return_value = []
+        run_store.pending_message_counts.return_value = {}
         directory = ChatAgentDirectory(
             history_store=PostgresChatHistoryStore(
                 message_id=17, chat_session_id=uuid4()

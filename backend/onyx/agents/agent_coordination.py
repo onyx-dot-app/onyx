@@ -31,7 +31,6 @@ from onyx.agents.models import (
     RunAction,
     RunFailure,
     RunFailureKind,
-    RunResult,
     RunState,
     RunStatus,
     StepRecord,
@@ -41,14 +40,11 @@ from onyx.agents.runtime import (
     Run,
     RunFailed,
     RunNotTransferable,
-    result_from_snapshot,
     validate_run_completion,
 )
 from onyx.agents.tools import (
-    DEFAULT_AGENT_WAIT_SECONDS,
     AgentControl,
     AgentLifetime,
-    ChildRunCancelled,
     SpawnResult,
 )
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
@@ -57,6 +53,7 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+COORDINATOR_CLOSE_TIMEOUT_SECONDS = 60.0
 MAX_LOADED_AGENTS = 64
 MAX_CHILD_DEPTH = 8
 REMOTE_POLL_SECONDS = 1.0
@@ -603,13 +600,10 @@ class AgentCoordinator:
         latest = self.active_run(request.agent_id)
         return AgentMessageReceipt(
             id=message_id,
-            agent_id=request.agent_id,
             status=AgentMessageStatus.PENDING
             if pending
             else AgentMessageStatus.ACCEPTED,
             run_id=queued.target_run_id or (latest.id if latest is not None else None),
-            message=request.message.text,
-            delivery=request.delivery,
         )
 
     def start_message_run(self, request: AgentMessageRequest) -> Run | None:
@@ -884,7 +878,7 @@ class AgentCoordinator:
             if existing is not None and existing.parent_id != info.parent_id:
                 raise ValueError("Agent registration changes its parent")
             registered = info.model_copy(
-                update={"pending_messages": [], "queue_paused": False}
+                update={"pending_message_count": 0}
             ).model_copy(deep=True)
             self._state.registrations[info.id] = registered
             self._visible_agents[info.id] = registered
@@ -1000,29 +994,14 @@ class AgentCoordinator:
             info = info.model_copy(
                 update={"status": self.remote_run_status(info.latest_run_id, parent_id)}
             )
-        pending = info.pending_messages
         if self._directory is None:
             with self._state.lock:
-                pending = [
-                    AgentMessageReceipt(
-                        id=message_id,
-                        agent_id=agent_id,
-                        status=AgentMessageStatus.PENDING,
-                        run_id=queued.target_run_id,
-                        message=queued.request.message.text,
-                        delivery=queued.request.delivery,
-                    )
-                    for message_id, queued in self._state.pending_messages.items()
-                    if queued.request.agent_id == agent_id
-                ]
-        return info.model_copy(
-            update={
-                "pending_messages": pending,
-                "queue_paused": bool(pending)
-                and info.status
-                in (RunStatus.CANCELLED, RunStatus.ERROR, RunStatus.LIMIT),
-            },
-        ).model_copy(deep=True)
+                pending_count = sum(
+                    queued.request.agent_id == agent_id
+                    for queued in self._state.pending_messages.values()
+                )
+            info = info.model_copy(update={"pending_message_count": pending_count})
+        return info.model_copy(deep=True)
 
     def bind(self, run: Run) -> "RunCoordination":
         with self._state.lock:
@@ -1072,7 +1051,7 @@ class AgentCoordinator:
             self._visible_run_ids.add(run.id)
         return binding
 
-    def close(self, timeout: float = DEFAULT_AGENT_WAIT_SECONDS) -> bool:
+    def close(self, timeout: float = COORDINATOR_CLOSE_TIMEOUT_SECONDS) -> bool:
         if not 0 <= timeout <= OPERATION_TIMEOUT_SECONDS:
             raise ValueError("Close timeout is outside its allowed bounds")
         with self._state.lock:
@@ -1190,9 +1169,7 @@ class AgentCoordinator:
                 description=description,
                 restoration_config=restoration_config,
             )
-            registered = info.model_copy(
-                update={"pending_messages": [], "queue_paused": False}
-            ).model_copy(deep=True)
+            registered = info.model_copy(deep=True)
             self._state.registrations[agent.id] = registered
             self._visible_agents[agent.id] = registered
             self._state.agents[agent.id] = _LoadedAgent(agent, self._view_id)
@@ -1479,7 +1456,6 @@ class RunCoordination:
                     run.cancel()
                     self.run.track_child_work(run)
                 else:
-                    self._include_predecessors(run)
                     self._attach(run.id)
         if lifetime == AgentLifetime.BACKGROUND and self.run.parent_run_id is not None:
             with self._lock:
@@ -1487,25 +1463,6 @@ class RunCoordination:
                     BackgroundDelegation(agent_id=agent.id, run_id=run.id)
                 )
         return run
-
-    def _include_predecessors(self, run: Run) -> None:
-        """Retain completed background history consumed by this foreground child."""
-        previous_id = run.previous_run_id
-        predecessors: list[Run] = []
-        seen: set[str] = set()
-        while (
-            previous_id and previous_id not in self.children and previous_id not in seen
-        ):
-            seen.add(previous_id)
-            previous = self.coordinator.child_run(previous_id, self.run.agent_id)
-            if previous is None:
-                break
-            if previous.parent_run_id != self.run.id or not previous.status.is_terminal:
-                break
-            predecessors.append(previous)
-            previous_id = previous.previous_run_id
-        for previous in reversed(predecessors):
-            self.children[previous.id] = True
 
     def _attach(self, run_id: str) -> None:
         self.children[run_id] = False
@@ -1765,20 +1722,20 @@ class _ToolControl(AgentControl):
         self.owner.check_tool_active(self.active)
         return self.owner.coordinator.lookup_agent(agent_id, self.owner.run.agent_id)
 
-    def _message(
+    def send_message(
         self,
         agent_id: str,
         *,
         message: str,
-        delivery: Literal[MessageDelivery.SEND, MessageDelivery.QUEUE],
+        delivery: Literal[
+            MessageDelivery.SEND, MessageDelivery.QUEUE
+        ] = MessageDelivery.SEND,
         max_steps: int,
-        total_timeout_s: float | None,
+        total_timeout_s: float | None = None,
     ) -> AgentMessageReceipt:
         self.owner.check_tool_active(self.active)
         if not message.strip():
             raise ValueError("Agent instructions must not be empty")
-        if total_timeout_s is not None and not math.isfinite(total_timeout_s):
-            raise ValueError("Child timeout must be finite")
         recipient = (
             self.owner.coordinator.lookup_agent(agent_id, self.owner.run.agent_id)
             if self.owner.run.parent_run_id is not None
@@ -1813,38 +1770,6 @@ class _ToolControl(AgentControl):
                     )
                 )
         return receipt
-
-    def send_message(
-        self,
-        agent_id: str,
-        *,
-        message: str,
-        max_steps: int,
-        total_timeout_s: float | None = None,
-    ) -> AgentMessageReceipt:
-        return self._message(
-            agent_id,
-            message=message,
-            delivery=MessageDelivery.SEND,
-            max_steps=max_steps,
-            total_timeout_s=total_timeout_s,
-        )
-
-    def queue_message(
-        self,
-        agent_id: str,
-        *,
-        message: str,
-        max_steps: int,
-        total_timeout_s: float | None = None,
-    ) -> AgentMessageReceipt:
-        return self._message(
-            agent_id,
-            message=message,
-            delivery=MessageDelivery.QUEUE,
-            max_steps=max_steps,
-            total_timeout_s=total_timeout_s,
-        )
 
     def spawn_agent(
         self,
@@ -1888,97 +1813,6 @@ class _ToolControl(AgentControl):
             coordinator.unregister_child(agent.id)
             raise
         return SpawnResult(agent_id=agent.id, agent_path=info.path, run_id=run.id)
-
-    def start_run(
-        self,
-        agent_id: str,
-        *,
-        max_steps: int,
-        messages: Sequence[Message],
-        lifetime: AgentLifetime = AgentLifetime.FOREGROUND,
-    ) -> str:
-        self.owner.check_tool_active(self.active)
-        coordinator = self.owner.coordinator
-        agent = coordinator.resolve_child(agent_id, self.owner.run.agent_id)
-        self.owner.check_tool_active(self.active)
-        previous = coordinator.active_run(agent_id)
-        if previous is not None and previous.status.is_terminal:
-            previous.wait_until_reusable(self.owner.run.cancellation_signal)
-        self.owner.check_tool_active(self.active)
-        return self.owner.start_child(
-            agent,
-            messages,
-            max_steps,
-            call_id=self.call_id,
-            message_id=self.message_id,
-            lifetime=lifetime,
-        ).id
-
-    def wait_run(
-        self, run_id: str, *, timeout: float = DEFAULT_AGENT_WAIT_SECONDS
-    ) -> RunResult | None:
-        self.owner.check_tool_active(self.active)
-        if not 0 <= timeout <= OPERATION_TIMEOUT_SECONDS:
-            raise ValueError("Wait timeout is outside its allowed bounds")
-        run = self.owner.coordinator.child_run(run_id, self.owner.run.agent_id)
-        if run is not None:
-            completion = self.owner.coordinator.completion(run_id)
-            try:
-                state = wait_operation(
-                    completion, self.owner.run.cancellation_signal, timeout
-                )
-            except TimeoutError:
-                if completion.done():
-                    completion.result()
-                return None
-            except AgentCancelled as error:
-                self.owner.observe_children([run_id])
-                self.owner.check_tool_active(self.active)
-                raise ChildRunCancelled(f"Child run {run_id} was cancelled") from error
-            except RunFailed:
-                self.owner.observe_children([run_id])
-                raise
-            return self._result_from_child(state)
-        coordinator = self.owner.coordinator
-        latest = coordinator.saved_run(
-            run_id, self.owner.run.agent_id, load_archive=False
-        )
-        if latest is not None and latest.status.is_terminal:
-            return self._result_from_child(latest)
-
-        try:
-            deadline = time.monotonic() + timeout
-            while True:
-                self.owner.run.cancellation_signal.check()
-                if coordinator.remote_run_status(
-                    run_id, self.owner.run.agent_id
-                ).is_terminal:
-                    state = coordinator.read_visible_run(
-                        run_id, self.owner.run.agent_id
-                    )
-                    return self._result_from_child(state)
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    self.owner.check_tool_active(self.active)
-                    return None
-                try:
-                    wait_operation(
-                        Future(),
-                        self.owner.run.cancellation_signal,
-                        min(REMOTE_POLL_SECONDS, remaining),
-                    )
-                except TimeoutError:
-                    continue
-
-        except TimeoutError:
-            return None
-
-    def _result_from_child(self, state: RunState) -> RunResult:
-        self.owner.observe_children([state.run_id])
-        self.owner.check_tool_active(self.active)
-        if state.status == RunStatus.CANCELLED:
-            raise ChildRunCancelled(f"Child run {state.run_id} was cancelled")
-        return result_from_snapshot(state)
 
     def cancel_run(self, run_id: str) -> None:
         self.owner.check_tool_active(self.active)

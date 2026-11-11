@@ -195,10 +195,6 @@ def test_handoff_release_failure_settles_waiters_after_saving() -> None:
         with pytest.raises(RuntimeError) as result_error:
             run.result(0)
         assert result_error.value is failure
-        assert run._reusable.done()
-        with pytest.raises(RuntimeError) as reuse_error:
-            run.wait_until_reusable(CancellationSignal())
-        assert reuse_error.value is failure
     finally:
         assert coordinator.close(3)
 
