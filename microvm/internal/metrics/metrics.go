@@ -342,7 +342,7 @@ func newStateCollector(src Source) *stateCollector {
 		diskFree: d("node_disk_free_bytes", "Free space on the data disk."),
 		memAlloc: d("vm_memory_allocated_bytes", "Guest memory of the VMs that are not exited."),
 		memPrivate: d("vm_memory_private_bytes", "Anonymous memory (smaps_rollup) of the Firecracker processes of the VMs that are not exited: "+
-			"the guest pages each VM wrote, plus the VMM's own heap. Shared template pages are not in it. Balloon free page reporting and the guest's idle reclaim lower it."),
+			"the guest pages each VM wrote, plus the VMM's own heap. Page cache of the snapshot memory files is not in it. Balloon free page reporting and the guest's idle reclaim lower it."),
 		vcpuAlloc:   d("vm_vcpus_allocated", "vCPUs of the VMs that are not exited."),
 		relayOpen:   d("relay_open_connections", "Open egress relay connections."),
 		dialOpen:    d("dial_open_streams", "Open Dial streams."),

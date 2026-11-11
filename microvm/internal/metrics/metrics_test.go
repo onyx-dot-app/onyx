@@ -331,7 +331,7 @@ func TestPrivateMemory(t *testing.T) {
 	}
 	want := func(bytes, failed string) string {
 		return `
-# HELP craft_fc_host_agent_vm_memory_private_bytes Anonymous memory (smaps_rollup) of the Firecracker processes of the VMs that are not exited: the guest pages each VM wrote, plus the VMM's own heap. Shared template pages are not in it. Balloon free page reporting and the guest's idle reclaim lower it.
+# HELP craft_fc_host_agent_vm_memory_private_bytes Anonymous memory (smaps_rollup) of the Firecracker processes of the VMs that are not exited: the guest pages each VM wrote, plus the VMM's own heap. Page cache of the snapshot memory files is not in it. Balloon free page reporting and the guest's idle reclaim lower it.
 # TYPE craft_fc_host_agent_vm_memory_private_bytes gauge
 craft_fc_host_agent_vm_memory_private_bytes ` + bytes + `
 # HELP craft_fc_host_agent_node_stats_errors 1 if the last scrape could not read node memory, disk, or the private memory of a VM.

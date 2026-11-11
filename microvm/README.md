@@ -373,9 +373,9 @@ Postgres cache backend. The chart's bundled Redis uses `allkeys-lru`.
   | `craft_fc_host_agent_template_ready` | gauge | |
 
   `vm_memory_private_bytes` is the sum of `Anonymous` in `/proc/<pid>/smaps_rollup` of the Firecracker
-  processes: the guest pages that each VM wrote (copy-on-write) plus the VMM's own heap. The template
-  pages that the VMs share are file pages: they are not in this sum, and the node holds them once.
-  Balloon free page reporting and the guest daemon's idle reclaim (`--reclaim-idle`) lower the sum, so
+  processes: the guest pages that each VM wrote (copy-on-write) plus the VMM's own heap. Guest pages
+  that a VM only read come from its copy of the snapshot memory file. They are page cache, which the
+  kernel can drop, and they are not in this sum. Balloon free page reporting and the guest daemon's idle reclaim (`--reclaim-idle`) lower the sum, so
   its drop shows the reclaim. Compare it with `vm_memory_allocated_bytes` to see how much of the guest
   memory the VMs wrote. If a read fails (other than for a VM that exits during the scrape), the gauge is left out of that
   scrape and `node_stats_errors{stat="vm_memory"}` is 1. `rpc_duration_seconds` keeps the default buckets (up to 10 s); use
