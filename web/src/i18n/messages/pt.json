@@ -12822,6 +12822,11 @@
           "text": "Geração de imagens interrompida"
         }
       },
+      "markdownTable": {
+        "copyButton": {
+          "label": "Copiar tabela"
+        }
+      },
       "memoizedLink": {
         "questionFallback": {
           "label": "Pergunta"
