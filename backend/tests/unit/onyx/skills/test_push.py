@@ -190,6 +190,54 @@ def test_assemble_normalizes_wrapped_known_valid_skill(
     validate.assert_not_called()
 
 
+def test_assemble_resolves_skill_dir_only_in_root_skill_md(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w") as bundle_zip:
+        bundle_zip.writestr(
+            "SKILL.md",
+            "---\nname: canonical-name\ndescription: d\n---\n"
+            "Run ${CLAUDE_SKILL_DIR}/scripts/x.py\n",
+        )
+        bundle_zip.writestr("scripts/x.py", "print('${CLAUDE_SKILL_DIR}')\n")
+    file_store = MagicMock(spec=FileStore)
+    file_store.read_file.return_value = io.BytesIO(output.getvalue())
+    monkeypatch.setattr(push, "get_default_file_store", lambda: file_store)
+    monkeypatch.setattr(push, "persist_skill_validity", MagicMock())
+
+    files = push._assemble_fileset(
+        [_skill(is_valid=True)], cast(User, SimpleNamespace()), MagicMock(spec=Session)
+    )
+
+    assert files["canonical-name/SKILL.md"].endswith(
+        b"Run /workspace/managed/skills/canonical-name/scripts/x.py\n"
+    )
+    assert files["canonical-name/scripts/x.py"] == b"print('${CLAUDE_SKILL_DIR}')\n"
+
+
+def test_assemble_resolves_skill_dirs_in_name_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Every server must drop the same Skills when expansions exceed a limit.
+    file_store = MagicMock(spec=FileStore)
+    file_store.read_file.side_effect = [
+        io.BytesIO(_bundle(name)) for name in ("zeta", "alpha", "mid")
+    ]
+    monkeypatch.setattr(push, "get_default_file_store", lambda: file_store)
+    monkeypatch.setattr(push, "persist_skill_validity", MagicMock())
+    resolve = MagicMock()
+    monkeypatch.setattr(push, "_resolve_skill_dirs", resolve)
+
+    push._assemble_fileset(
+        [_skill(name=name, is_valid=True) for name in ("zeta", "alpha", "mid")],
+        cast(User, SimpleNamespace()),
+        MagicMock(spec=Session),
+    )
+
+    assert resolve.call_args.args[1] == ["alpha", "mid", "zeta"]
+
+
 def test_assemble_hydrates_when_validity_persistence_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -245,3 +293,103 @@ def test_user_payload_returns_hydrated_files_and_connectable_apps(
         user,
         db_session,
     )
+
+
+def test_assemble_skips_oversized_expansion_and_keeps_other_skills(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w") as bundle_zip:
+        bundle_zip.writestr(
+            "SKILL.md",
+            "---\nname: canonical-name\ndescription: d\n---\n"
+            + "${CLAUDE_SKILL_DIR}/scripts/x.py\n" * 30,
+        )
+        bundle_zip.writestr("scripts/x.py", "print('hello')\n")
+    stored = output.getvalue()
+    file_store = MagicMock(spec=FileStore)
+    file_store.read_file.side_effect = [
+        io.BytesIO(stored),
+        io.BytesIO(_bundle("healthy")),
+    ]
+    validity_updates: list[push.SkillValidityUpdate] = []
+    monkeypatch.setattr(push, "get_default_file_store", lambda: file_store)
+    monkeypatch.setattr(push, "persist_skill_validity", validity_updates.extend)
+    replacement = MagicMock(wraps=push.resolve_skill_dir_placeholder)
+    monkeypatch.setattr(push, "resolve_skill_dir_placeholder", replacement)
+    monkeypatch.setattr(push, "DEFAULT_PER_FILE_MAX_BYTES", 1_100, raising=False)
+    oversized = _skill()
+    healthy = _skill(name="healthy", is_valid=True)
+
+    files = push._assemble_fileset(
+        [oversized, healthy], cast(User, SimpleNamespace()), MagicMock(spec=Session)
+    )
+
+    assert set(files) == {"healthy/SKILL.md", "healthy/scripts/run.py"}
+    assert files["healthy/scripts/run.py"] == b"print('hello')\n"
+    replacement.assert_not_called()
+    assert len(validity_updates) == 1
+    assert validity_updates[0].skill_id == oversized.id
+    assert validity_updates[0].bundle_file_id == "bundle-id"
+    assert validity_updates[0].is_valid is True
+    file_store.save_file.assert_not_called()
+    assert output.getvalue() == stored
+
+
+def test_assemble_skips_skill_that_would_pass_the_sandbox_total(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    file_store = MagicMock(spec=FileStore)
+    file_store.read_file.side_effect = [
+        io.BytesIO(_bundle("first")),
+        io.BytesIO(_bundle("second")),
+    ]
+    monkeypatch.setattr(push, "get_default_file_store", lambda: file_store)
+    monkeypatch.setattr(push, "persist_skill_validity", MagicMock())
+    first = _bundle("first")
+    with zipfile.ZipFile(io.BytesIO(first)) as bundle_zip:
+        first_size = sum(info.file_size for info in bundle_zip.infolist())
+    monkeypatch.setattr(push, "MAX_BUNDLE_BYTES", first_size + 1)
+
+    files = push._assemble_fileset(
+        [_skill(name="first", is_valid=True), _skill(name="second", is_valid=True)],
+        cast(User, SimpleNamespace()),
+        MagicMock(spec=Session),
+    )
+
+    assert set(files) == {"first/SKILL.md", "first/scripts/run.py"}
+
+
+def test_skill_dropped_by_resolution_does_not_crowd_out_later_skills(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w") as bundle_zip:
+        bundle_zip.writestr(
+            "SKILL.md",
+            "---\nname: a-expands\ndescription: d\n---\n"
+            + "${CLAUDE_SKILL_DIR}/x\n" * 30,
+        )
+    expanding = output.getvalue()
+    healthy = _bundle("b-healthy")
+    file_store = MagicMock(spec=FileStore)
+    file_store.read_file.side_effect = [io.BytesIO(expanding), io.BytesIO(healthy)]
+    monkeypatch.setattr(push, "get_default_file_store", lambda: file_store)
+    monkeypatch.setattr(push, "persist_skill_validity", MagicMock())
+    with zipfile.ZipFile(io.BytesIO(expanding)) as bundle_zip:
+        expanding_size = bundle_zip.getinfo("SKILL.md").file_size
+    with zipfile.ZipFile(io.BytesIO(healthy)) as bundle_zip:
+        healthy_size = sum(info.file_size for info in bundle_zip.infolist())
+    monkeypatch.setattr(push, "DEFAULT_PER_FILE_MAX_BYTES", expanding_size + 1)
+    monkeypatch.setattr(push, "MAX_BUNDLE_BYTES", expanding_size + healthy_size - 1)
+
+    files = push._assemble_fileset(
+        [
+            _skill(name="a-expands", is_valid=True),
+            _skill(name="b-healthy", is_valid=True),
+        ],
+        cast(User, SimpleNamespace()),
+        MagicMock(spec=Session),
+    )
+
+    assert set(files) == {"b-healthy/SKILL.md", "b-healthy/scripts/run.py"}

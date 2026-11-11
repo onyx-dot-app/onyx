@@ -50,7 +50,9 @@
 
 When it fails:
 - A bundle with bad frontmatter, an unsafe path, a reserved name, or a
-  `.template` file is rejected with a message.
+  `.template` file is rejected with a message. A direct upload over a size or
+  file count limit is rejected with a 413 that names the limit. Batch uploads
+  list the Skill in `not_imported`, and a GitHub preview marks it unavailable.
 - Turning on a skill whose name another enabled skill uses returns a name
   conflict. The client can retry with `replace_conflict` to switch skills.
 - A required skill rejects a toggle.
@@ -89,7 +91,8 @@ skill mutation (server/features/skill/api.py)   compute affected users BEFORE th
        lock_sandbox_skills_hashes        SELECT ... FOR UPDATE on Sandbox rows
        build_user_skills_payload         per sandbox user
          list_runtime_skills_for_user    db/skill.py: the one runtime gate
-         _assemble_fileset               built-ins from disk, custom from FileStore
+         _assemble_fileset               built-ins from disk, custom from FileStore;
+                                         resolves ${CLAUDE_SKILL_DIR} in each SKILL.md
          build_connectable_apps_list     guidance for unconnected apps
        compute_skill_runtime_hash        once per sandbox; skip sandboxes whose hash matches
        push_to_sandboxes(SKILLS_MOUNT_PATH)
@@ -176,6 +179,11 @@ The library preview of an external-app skill calls the same renderer
    after `skills/validation.py:validate_stored_custom_skill` passes for an
    unclassified row. `db/skill.py:persist_skill_validity` writes only to rows that are still unclassified
    and still point at the same bundle.
+   Writes check four limits in `skills/bundle.py:normalize_custom_bundle`.
+   Count all non-directory archive entries, including ignored files. Check
+   both the incoming and normalized ZIP sizes. Raw uploads use the per-file
+   read cap; ZIP uploads use the ZIP cap.
+   Stored-bundle reads follow `bundle-size-limits`.
 8. `templates-built-in-only` **Only built-ins use templates.**
    `skills/bundle.py:normalize_custom_bundle` and
    `skills/bundle.py:update_custom_bundle_files` reject `.template` files. If
@@ -237,6 +245,52 @@ The library preview of an external-app skill calls the same renderer
     migration that deletes its rows.** `_assemble_fileset` skips, with a
     warning, a `skill` row whose `built_in_skill_id` is not in
     `skills/built_in.py:_REGISTRY`, so the rows otherwise stay.
+15. `skill-dir-placeholder` **Skill paths resolve to the sandbox folder.**
+    `skills/push.py:_resolve_skill_dirs` replaces each `${CLAUDE_SKILL_DIR}` in
+    a skill's root SKILL.md with `/workspace/managed/skills/<name>`. Only the
+    sent bytes change. The stored bundle, its SHA-256 and other files keep the
+    placeholder. Before substitution, the push checks the predicted instruction
+    size against both the configured file limit and the receiver file limit.
+    Expansion must also fit the receiver total, including other Skills. An
+    oversized expansion skips that whole Skill, logs a warning and continues.
+    Files without placeholders keep their previous delivery behavior.
+    The sent bytes feed the runtime hash. OpenCode adds the base
+    folder line and the relative-path rule itself, so the push adds neither.
+    `backend/tests/unit/onyx/skills/test_skill_dir.py` fails when the sandbox
+    `OPENCODE_VERSION` pin changes, so the next pin bump checks that OpenCode
+    still does this.
+17. `bundle-size-limits` **Upload limits do not apply to saved bundles.**
+    `skills/bundle.py` limits are constants, not env vars: 25 MiB per file and
+    100 MiB expanded for every bundle, plus a 25 MiB ZIP and 500 files for new
+    uploads. Stored reads
+    (`skills/validation.py:read_stored_bundle_bytes`) stop at
+    `STORED_ZIP_MAX_BYTES` (the expanded-total limit), and an edit that would
+    save a larger ZIP is refused, so every saved bundle loads again. They skip
+    the ZIP-size
+    and file-count limits. `skills/validation.py:validate_stored_custom_skill`
+    returns `is_valid=None` for `PAYLOAD_TOO_LARGE`, so the push skips the Skill
+    without saving it invalid. Edits that cannot add files (a SKILL.md rewrite, a
+    file removal) and the editor's re-ingest use
+    `skills/bundle.py:normalize_stored_bundle`, so a saved bundle over the ZIP-size
+    or file-count limit stays editable. Merges that add files keep the upload
+    limits, so repeated merges cannot pass them. A full-replacement upload in the
+    editor does not read the current bundle. Only direct uploads return 413. Batch uploads report
+    `not_imported` and GitHub previews mark the Skill unavailable.
+18. `bundle-file-list-memory` **ZIP metadata memory has a fixed bound.**
+    Every Skill ZIP opens through `skills/bundle.py:open_bundle_zip`, which uses
+    `file_processing/zip_limits.py:open_zip_within_directory_limit`. `zipfile`
+    keeps one `ZipInfo` (about 550 bytes) for each file-list record, so a small
+    ZIP with many empty entries can use hundreds of MiB. The opener limits the
+    bytes `zipfile` reads while it opens: 1 MiB of file list for uploads
+    (`ZIP_DIRECTORY_MAX_BYTES`) and 4 MiB for saved bundles
+    (`STORED_ZIP_DIRECTORY_MAX_BYTES`). Over the limit is a 413
+    `zip_metadata_bytes`. `normalize_custom_bundle` finds duplicate and
+    file-versus-folder paths by sorting the paths, not by building every parent
+    path. `skills/push.py:_add_bundle_bytes` skips a Skill whose declared file
+    sizes would take the push over the receiver's `MAX_BUNDLE_BYTES`, before it
+    reads the files. It also checks the resolved SKILL.md size then, so a
+    Skill that `skill-dir-placeholder` would drop never counts against later
+    Skills.
 
 ---
 

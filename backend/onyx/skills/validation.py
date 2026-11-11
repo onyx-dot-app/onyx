@@ -2,19 +2,22 @@
 
 from __future__ import annotations
 
-import io
 import zipfile
+from contextlib import closing
 from dataclasses import dataclass
 
 from onyx.db.file_record import FileRecordNotFoundError
 from onyx.db.models import Skill
+from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.bundle import (
     SKILL_MD_NAME,
+    STORED_ZIP_MAX_BYTES,
     NormalizedSkillBundle,
-    normalize_custom_bundle,
+    normalize_stored_bundle,
+    open_bundle_zip,
     read_bundle_file,
 )
 from onyx.skills.metadata import parse_skill_document
@@ -28,16 +31,17 @@ class SkillValidationResult:
     detail: str | None = None
 
 
+def read_stored_bundle_bytes(bundle_file_id: str, file_store: FileStore) -> bytes:
+    with closing(file_store.read_file(bundle_file_id)) as bundle_stream:
+        return read_bundle_file(bundle_stream, max_bytes=STORED_ZIP_MAX_BYTES)
+
+
 def load_stored_custom_skill_bundle(
     bundle_file_id: str,
     file_store: FileStore,
 ) -> NormalizedSkillBundle:
-    bundle_stream = file_store.read_file(bundle_file_id)
-    try:
-        bundle_bytes = read_bundle_file(bundle_stream)
-    finally:
-        bundle_stream.close()
-    return normalize_custom_bundle(bundle_bytes)
+    bundle_bytes = read_stored_bundle_bytes(bundle_file_id, file_store)
+    return normalize_stored_bundle(bundle_bytes)
 
 
 def _is_missing_file_error(exc: Exception) -> bool:
@@ -92,6 +96,16 @@ def validate_stored_custom_skill(
                 normalized_bundle=None,
                 detail="stored bundle does not exist",
             )
+        # A later release can raise the size limits, so a skill over them stays unclassified.
+        if (
+            isinstance(exc, OnyxError)
+            and exc.error_code == OnyxErrorCode.PAYLOAD_TOO_LARGE
+        ):
+            return SkillValidationResult(
+                is_valid=None,
+                normalized_bundle=None,
+                detail=f"stored bundle is outside the configured limits: {exc.detail}",
+            )
         if isinstance(exc, OnyxError):
             return SkillValidationResult(
                 is_valid=False,
@@ -105,13 +119,22 @@ def validate_stored_custom_skill(
         )
 
     try:
-        with zipfile.ZipFile(io.BytesIO(normalized.content)) as bundle_zip:
+        with open_bundle_zip(normalized.content) as bundle_zip:
             raw_skill_md = bundle_zip.read(SKILL_MD_NAME)
         document = parse_skill_document(
             raw_skill_md,
             directory_name=normalized.source_directory,
         )
     except (OnyxError, KeyError, zipfile.BadZipFile) as exc:
+        if (
+            isinstance(exc, OnyxError)
+            and exc.error_code == OnyxErrorCode.PAYLOAD_TOO_LARGE
+        ):
+            return SkillValidationResult(
+                is_valid=None,
+                normalized_bundle=None,
+                detail=f"stored bundle is outside the configured limits: {exc.detail}",
+            )
         detail = exc.detail if isinstance(exc, OnyxError) else str(exc)
         return SkillValidationResult(
             is_valid=False,
