@@ -43,6 +43,7 @@ Onyx uses Celery for asynchronous task processing. Worker apps live in
 | --- | --- |
 | `primary` | Coordinates core background tasks: connector management/deletion, document-index sync, pruning checks, LLM model updates, user file sync |
 | `docfetching` | Fetches documents from connectors, spawns docprocessing tasks; watchdog for stuck connectors |
+| `docconversion` | Conversion stage: turns stub batches from a listing into document batches, then sends docprocessing tasks |
 | `docprocessing` | Indexing pipeline: upsert docs to Postgres, chunk, embed via model server, write chunks to the document index, update metadata |
 | `light` | Fast lightweight ops: metadata sync, permissions upsert, checkpoint / index-attempt cleanup |
 | `heavy` | Resource-intensive ops: pruning, document permissions sync, external group sync, CSV generation |
