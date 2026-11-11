@@ -245,6 +245,8 @@ def _replace_skill_bundle_from_editor(
         f"{skill.name}.zip",
         file_store,
         expected_name=skill.name,
+        # update_custom_bundle_files applied the limits that fit each edit.
+        upload_limits=False,
     ) as ingested:
         old_file_id = replace_skill_bundle(
             skill=skill,

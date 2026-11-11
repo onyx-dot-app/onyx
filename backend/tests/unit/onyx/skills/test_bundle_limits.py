@@ -24,9 +24,11 @@ from onyx.skills.bundle import (
     SkillBundleLimit,
     normalize_custom_bundle,
     read_bundle_file,
+    rewrite_custom_bundle_skill_md,
     update_custom_bundle_files,
 )
 from onyx.skills.content import read_custom_skill_bundle_bytes
+from onyx.skills.ingest import ingest_skill_bundle
 
 _MIB = 1024 * 1024
 _SKILL_MD = b"---\nname: limits\ndescription: Limit checks\n---\n\n# Instructions\n"
@@ -295,3 +297,67 @@ def test_saved_bundle_file_list_has_its_own_limit() -> None:
     _assert_limit_error(
         caught.value, "zip_metadata_bytes", STORED_ZIP_DIRECTORY_MAX_BYTES
     )
+
+
+def _saved_bundle_over_file_count() -> bytes:
+    return _build_zip(
+        [("SKILL.md", _SKILL_MD)] + [(f"refs/{index}.md", b"x") for index in range(600)]
+    )
+
+
+def test_metadata_edit_keeps_saved_bundle_over_file_count() -> None:
+    edited = rewrite_custom_bundle_skill_md(
+        _saved_bundle_over_file_count(),
+        canonical_name="limits",
+        description="New description",
+        instructions_markdown="# New instructions",
+    )
+
+    with zipfile.ZipFile(io.BytesIO(edited)) as archive:
+        assert len(archive.namelist()) == 601
+        assert b"New description" in archive.read("SKILL.md")
+
+
+def test_removal_can_shrink_saved_bundle_over_file_count() -> None:
+    updated = update_custom_bundle_files(
+        _saved_bundle_over_file_count(), remove_path="refs/0.md"
+    )
+
+    with zipfile.ZipFile(io.BytesIO(updated)) as archive:
+        assert len(archive.namelist()) == 600
+        assert "refs/0.md" not in archive.namelist()
+
+
+def test_adding_a_file_to_saved_bundle_over_file_count_is_refused() -> None:
+    with pytest.raises(OnyxError) as caught:
+        update_custom_bundle_files(
+            _saved_bundle_over_file_count(), b"new", filename="new.md"
+        )
+
+    _assert_limit_error(caught.value, "file_count", 500)
+
+
+def test_editor_ingest_skips_upload_limits_only_when_asked() -> None:
+    saved = _build_zip(
+        [
+            (
+                "SKILL.md",
+                b"---\nname: limits\ndescription: Limit checks\n---\n\nBody\n",
+            )
+        ]
+        + [(f"refs/{index}.md", b"x") for index in range(600)]
+    )
+    file_store = MagicMock(spec=FileStore)
+    file_store.save_file.return_value = "bundle-id"
+
+    with pytest.raises(OnyxError):
+        ingest_skill_bundle(saved, "limits.zip", file_store, expected_name="limits")
+    ingested = ingest_skill_bundle(
+        saved,
+        "limits.zip",
+        file_store,
+        expected_name="limits",
+        upload_limits=False,
+    )
+
+    assert ingested.bundle_file_id == "bundle-id"
