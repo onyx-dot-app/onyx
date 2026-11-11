@@ -6,7 +6,7 @@ import (
 	"strconv"
 )
 
-// Guest memory knobs (ENG-4569). Variables, so tests can point them at
+// Guest memory knobs. Variables, so tests can point them at
 // plain files.
 var (
 	// PageReportingOrderPath is the smallest free block (2^order pages) that

@@ -1,4 +1,4 @@
-"""Render tests for the Craft Firecracker host agent metrics (ENG-4570).
+"""Render tests for the Craft Firecracker host agent metrics.
 
 Metrics are off by default: the agent then renders with no metrics flag,
 port or ServiceMonitor. With craft.hostAgent.metrics.enabled the agent serves

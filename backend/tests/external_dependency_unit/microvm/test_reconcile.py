@@ -1,4 +1,4 @@
-"""Per-node reconcile against Redis and fake host agents (ENG-4576).
+"""Per-node reconcile against Redis and fake host agents.
 
 Each pass gets the state that the node would report: its `List` and its
 ended list. State model: microvm/README.md, "Sandbox state model".
@@ -921,7 +921,7 @@ def test_idle_evictor_decides_but_keeps_the_vm_without_checkpoints(
     )
     _place(shared_cache, tenant_cache, active_id, node_id, generation=active.generation)
 
-    # Until ENG-4580: the decision is made, the VM stays.
+    # Until session saves: the decision is made, the VM stays.
     report = _report(shared_cache, client_factory, node_id)
     assert report.idle == [str(idle_id)] and report.slept == []
     assert node.agent.stop_calls == []

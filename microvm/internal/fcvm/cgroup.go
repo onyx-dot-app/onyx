@@ -19,7 +19,7 @@ import (
 // Kubernetes pod has its own cgroup namespace, so the same VM reads
 // "0::/../../<slice>/fcvm-<id>.scope" there: the number of ".." steps
 // depends on where the pod's cgroup is. In that case the agent confirms the
-// match in the host's cgroup tree (ENG-4610).
+// match in the host's cgroup tree.
 type CgroupView struct {
 	// Private is true when the agent's cgroup namespace is not the host's.
 	Private bool

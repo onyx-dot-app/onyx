@@ -1,4 +1,4 @@
-# Craft Firecracker host agent image, onyxdotapp/craft-fc-host-agent (ENG-4607).
+# Craft Firecracker host agent image, onyxdotapp/craft-fc-host-agent.
 #
 # Build context: this directory (microvm/). linux/amd64 only: the artifacts are x86_64.
 #
@@ -12,7 +12,7 @@
 #                              mount namespace also sets the root and cwd to the host's root)
 #   mkfs.ext4 (e2fsprogs)      `mkfs.ext4 -d` builds the read-only managed (skills) drive images
 #
-# Local build while the artifacts image is not published (ENG-4536), from the repo root:
+# Local build while the artifacts image is not published, from the repo root:
 #   docker buildx build --platform linux/amd64 -f deployment/craft-fc/Dockerfile.artifacts \
 #     --target artifacts --output type=local,dest=/tmp/craft-fc-artifacts deployment/craft-fc
 #   docker buildx build --platform linux/amd64 --build-context artifacts=/tmp/craft-fc-artifacts \
@@ -42,12 +42,12 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} \
 FROM ${BASE_IMAGE_REGISTRY}/library/debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4
 ARG DEBIAN_FRONTEND=noninteractive
 # ca-certificates: the node key registration calls the api_server (--api-server-url).
-# e2fsprogs: mkfs.ext4 -d for the managed drive images (ENG-4614).
+# e2fsprogs: mkfs.ext4 -d for the managed drive images.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates e2fsprogs util-linux \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=artifacts /craft-fc/ /opt/craft-fc/
 COPY --from=builder /out/host-agent /usr/local/bin/host-agent
-# The agent needs root, /dev/kvm, hostPID and the host cgroup tree (Helm DaemonSet, ENG-4583).
+# The agent needs root, /dev/kvm, hostPID and the host cgroup tree (Helm DaemonSet).
 USER root
 ENTRYPOINT ["/usr/local/bin/host-agent"]

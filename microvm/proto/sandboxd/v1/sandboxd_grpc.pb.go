@@ -143,7 +143,7 @@ type SandboxdClient interface {
 	// a limit fail with ARCHIVE_INVALID or LIMIT_EXCEEDED, and change
 	// nothing. A capture and a restore of one session never run at once.
 	RestoreSession(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[RestoreSessionRequest, RestoreSessionResponse], error)
-	// Reserved for ENG-4573 (browser). They return UNIMPLEMENTED.
+	// Reserved for the browser. They return UNIMPLEMENTED.
 	BrowserStart(ctx context.Context, in *BrowserStartRequest, opts ...grpc.CallOption) (*BrowserStartResponse, error)
 	BrowserStop(ctx context.Context, in *BrowserStopRequest, opts ...grpc.CallOption) (*BrowserStopResponse, error)
 	// ManagedStatus returns the slot that is mounted on /workspace/managed and
@@ -542,7 +542,7 @@ type SandboxdServer interface {
 	// a limit fail with ARCHIVE_INVALID or LIMIT_EXCEEDED, and change
 	// nothing. A capture and a restore of one session never run at once.
 	RestoreSession(grpc.ClientStreamingServer[RestoreSessionRequest, RestoreSessionResponse]) error
-	// Reserved for ENG-4573 (browser). They return UNIMPLEMENTED.
+	// Reserved for the browser. They return UNIMPLEMENTED.
 	BrowserStart(context.Context, *BrowserStartRequest) (*BrowserStartResponse, error)
 	BrowserStop(context.Context, *BrowserStopRequest) (*BrowserStopResponse, error)
 	// ManagedStatus returns the slot that is mounted on /workspace/managed and

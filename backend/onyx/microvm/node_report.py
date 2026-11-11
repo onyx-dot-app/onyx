@@ -145,7 +145,7 @@ def reconcile_node_report(
         result = reconcile_node(
             shared_cache,
             client_factory,
-            # Until ENG-4580 and ENG-4575: never stop a VM automatically.
+            # Until session saves and execution reports exist: never stop a VM automatically.
             NoCheckpointSupport(),
             UnknownActivity(),
             node=node,

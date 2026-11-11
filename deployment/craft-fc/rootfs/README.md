@@ -242,7 +242,7 @@ that the guest sees it as read-only.
 
 ### Skills update without a new VM
 
-The guest daemon and the node agent do the update (ENG-4614), not `attach`:
+The guest daemon and the node agent do the update, not `attach`:
 
 1. The host points the idle slot at the new managed image (Firecracker
    `PATCH /drives`).
@@ -332,7 +332,7 @@ a saved disk has a different version. A second run does nothing.
 
 ## Template and restore order
 
-The template build (ENG-4566) must not snapshot a guest with the scratch drive
+The template build must not snapshot a guest with the scratch drive
 mounted. A scratch disk that changes under a mounted file system corrupts it.
 Use this order:
 
@@ -356,7 +356,7 @@ tests and for a VM without a template. When the daemon `Init` then runs
 
 ## Change the daemon
 
-The daemon from ENG-4571 is `/craft-fc/bin/guest-daemon` on vsock port 52. To
+The guest daemon is `/craft-fc/bin/guest-daemon` on vsock port 52. To
 use another program, set `--daemon-cmd`, or edit `DAEMON_CMD` in `init.conf`.
 If the daemon serves the egress proxy itself, set `EGRESS_RELAY_CMD=` (empty). Keep any new command in `/craft-fc` (see the rule above).
 

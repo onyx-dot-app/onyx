@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// Reclaimer frees the guest page cache when the VM is idle (ENG-4569). The
+// Reclaimer frees the guest page cache when the VM is idle. The
 // balloon's free page reporting returns free guest pages to the node, but
 // the page cache is not free: only a drop gives it back. Idle means no
 // daemon call (other than Health) is open and none ended for Idle. One

@@ -82,7 +82,7 @@ Managed skills mount at `/workspace/managed/skills` on a read-only, noexec
 drive; scripts run through interpreters. Publishing the userspace image does
 not change the current pod/Docker image settings.
 
-Rootfs delivery (Firecracker only, ENG-4648): `.github/workflows/craft-fc-rootfs.yml` converts a
+Rootfs delivery (Firecracker only): `.github/workflows/craft-fc-rootfs.yml` converts a
 `craft-runtime` tag with no egress CA and publishes
 `onyxdotapp/craft-fc-artifacts:rootfs-<version>`. The host agent DaemonSet copies
 it into `<dataDir>/rootfs` with an init container (`craft.hostAgent.rootfs`).
@@ -254,7 +254,7 @@ the stored token on each request, so a new token takes effect at once.
   See `microvm/README.md`, "Sandbox state model".
 
 Agents become reachable when their signing-key registration carries
-`agent_address`. No sandbox manager uses this code yet (ENG-4575).
+`agent_address`. No sandbox manager uses this code yet.
 
 ---
 

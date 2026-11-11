@@ -22,7 +22,7 @@ import (
 	"github.com/onyx-dot-app/onyx/microvm/internal/server"
 )
 
-// obsFlags are the metrics, audit and guest log flags (ENG-4570).
+// obsFlags are the metrics, audit and guest log flags.
 type obsFlags struct {
 	metricsListen string
 	metricsToken  string

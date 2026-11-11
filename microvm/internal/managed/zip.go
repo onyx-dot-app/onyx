@@ -1,5 +1,5 @@
-// Package managed builds the read-only managed drive images of a node
-// (ENG-4614): a bundle zip becomes an ext4 image that the agent puts behind
+// Package managed builds the read-only managed drive images of a node:
+// a bundle zip becomes an ext4 image that the agent puts behind
 // a VM's idle managed slot.
 package managed
 

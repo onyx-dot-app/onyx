@@ -1,13 +1,13 @@
 # microvm
 
-Go module that runs Onyx Craft micro-VMs on Firecracker. Linear project P-ENG-224.
+Go module that runs Onyx Craft micro-VMs on Firecracker.
 
 - `cmd/host-agent/`: the host agent. One process per Craft node. It runs the Firecracker VMs.
 - `proto/hostagent/v1/`: the gRPC API of the host agent, with the generated Go code.
 - `internal/`: the agent packages.
 - `cmd/guest-daemon/`: the guest daemon (runs inside each VM; see its README). `cmd/egress-relay/`: the in-guest egress relay.
 
-Nothing deploys the agent yet. The Helm DaemonSet (ENG-4583) adds it behind `SANDBOX_RUNTIME=firecracker`.
+Nothing deploys the agent yet. The Helm DaemonSet adds it behind `SANDBOX_RUNTIME=firecracker`.
 
 ## Host agent
 
@@ -47,8 +47,8 @@ Rules for the Create parameters:
   then grow the file system in `Init` with the `EXT4_IOC_RESIZE_FS` ioctl on the mount point (the online
   grow that `resize2fs` uses; the sandbox image has no e2fsprogs).
 - `generation` is unique on the node and increases with each new VM instance. It starts from the wall
-  clock, so it also increases across agent restarts. It is the host-side boot ID of a VM instance
-  (ENG-4606): every Create that makes a new VM (a snapshot restore) gets a new one. A repeated, idempotent
+  clock, so it also increases across agent restarts. It is the host-side boot ID of a VM instance:
+  every Create that makes a new VM (a snapshot restore) gets a new one. A repeated, idempotent
   Create returns the existing VM and its generation, so it is not a new boot. The guest's own
   `/proc/sys/kernel/random/boot_id` is the same in every clone of a template, so it is not an identity.
   The api_server passes the generation to the daemon's `Init` after each restore.
@@ -56,7 +56,7 @@ Rules for the Create parameters:
 The agent serves the API on a Unix socket (`<data-dir>/run/host-agent.sock`, mode 0600, root only) and,
 with `--listen`, on an mTLS TCP listener for the api_server (D2):
 
-- `--tls-cert`, `--tls-key`: the agent's certificate and key (PEM files; Helm mounts them, ENG-4583).
+- `--tls-cert`, `--tls-key`: the agent's certificate and key (PEM files; Helm mounts them).
 - `--client-ca`: the api_server CA. The listener needs a client certificate that chains to it (TLS 1.3).
   A client with no certificate, or with one from another CA, fails the handshake.
 - `--client-allowed-sans`: optional comma-separated DNS or URI SANs. If set, the client certificate must
@@ -178,7 +178,7 @@ Stop first removes everything that names the VM: its relay listener and identity
 connections and its daemon pass-through connection. Only then does it send SIGKILL through a pidfd,
 wait for the exit, stop the scope and remove the chroot (with the vsock socket), and then free the
 jailer UID. A VM exit and a failed start use the same order. So a reused UID or socket path never
-carries the old identity (ENG-4606). The api_server saves the session before it calls Stop. A VM that exits by itself shows as `EXITED`; its
+carries the old identity. The api_server saves the session before it calls Stop. A VM that exits by itself shows as `EXITED`; its
 files are removed at once.
 
 If a cleanup fails, the VM shows as `EXITED` once its process is gone, and a repeat Stop retries the
@@ -202,7 +202,7 @@ temporary file, which is synced and renamed over the record; then the directory 
 
 A `running` record also has `managed`: the number of managed slots, the active slot (`a` or `b`), the
 image behind each slot, and `pending` while a swap runs (see Managed drive). A record without `managed`
-(written before ENG-4614) means one slot.
+(written before managed drive swaps) means one slot.
 
 - A Firecracker process or chroot in the agent's layout with no record is an orphan. The agent kills it.
 - If a record cannot be read, the agent logs it and leaves that VM alone. If the process scan fails, the
@@ -308,7 +308,7 @@ The agent runs the VMs; the api_server makes sure that each sandbox has at most 
 | Node state push | The agent pushes its list every 20 s (Node state report), because Onyx has no scheduler inside the api_server to poll nodes. |
 | Ended list | The agent lists each exited or stopped VM for `--ended-retention` (10 min). |
 | Orphan stops | The api_server stops a VM of an older attempt at once, and an unknown VM after `SANDBOX_FC_ORPHAN_GRACE_SECONDS` (40 s), at most 8 per report, with no checkpoint. |
-| API-side idle evictor | Idle evictor on the record's last activity (`SANDBOX_FC_IDLE_TIMEOUT_SECONDS`). The stop waits for session saves (ENG-4580). |
+| API-side idle evictor | Idle evictor on the record's last activity (`SANDBOX_FC_IDLE_TIMEOUT_SECONDS`). The stop waits for session saves. |
 | Dead node | Dead node (registration expired, or no report within `SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS`): records stay; wake starts the next attempt on a live node, and the old VM is an orphan if it reports again. |
 
 Keys without a TTL need a Redis eviction policy that never evicts them (`volatile-*` or `noeviction`), or the
@@ -320,7 +320,7 @@ Postgres cache backend. The chart's bundled Redis uses `allkeys-lru`.
 - In a container: privileged and `hostPID`, with cgroup v2 mounted at `/sys/fs/cgroup` (the agent
   checks it). In a private cgroup namespace that mount shows the pod's own tree; the agent reads the
   host tree through `/proc/1/root/sys/fs/cgroup`.
-- The agent works in the host cgroup namespace or in a pod's own one (ENG-4610). It compares its cgroup
+- The agent works in the host cgroup namespace or in a pod's own one. It compares its cgroup
   namespace with the one of PID 1 at start-up. In its own namespace, `/proc/<pid>/cgroup` of a VM reads
   `0::/../../fcvms.slice/fcvm-<id>.scope` (the number of `..` steps depends on the pod's cgroup). The
   agent then accepts a VM scope only if the host's `fcvms.slice/fcvm-<id>.scope/cgroup.procs`, read
@@ -335,12 +335,12 @@ Postgres cache backend. The chart's bundled Redis uses `allkeys-lru`.
   `onyxdotapp/craft-fc-artifacts` layout). The agent checks the binaries' SHA256 against `internal/binaries`
   and copies them to `<data-dir>/bin/<version>/`.
 - `mkfs.ext4` (e2fsprogs) in the agent's container, for the template's empty drives and the managed
-  images (`mkfs.ext4 -d`). The agent image (ENG-4607) must install e2fsprogs.
+  images (`mkfs.ext4 -d`). The agent image must install e2fsprogs.
 - Privileged enough to mount a tmpfs in its own mount namespace (the managed bundle stage).
 
 ### Metrics, guest logs and audit
 
-- **Metrics (ENG-4570).** `--metrics-listen` (for example `:9464`, default off) serves Prometheus
+- **Metrics.** `--metrics-listen` (for example `:9464`, default off) serves Prometheus
   `/metrics` over plain HTTP. Auth is the same as the api_server `/metrics`
   (`backend/onyx/server/metrics/metrics_auth.py`): scrapers send `Authorization: Bearer <token>`, where
   `--metrics-token-file` holds the Onyx `METRICS_AUTH_TOKEN`. The agent reads the file on each scrape,
@@ -416,8 +416,8 @@ Postgres cache backend. The chart's bundled Redis uses `allkeys-lru`.
 
 ### Templates
 
-A template is `<data-dir>/templates/<version>/`. The agent builds it on the node from a root drive
-(ENG-4566). Package `internal/template` reads and checks templates; `internal/tplbuild` builds them.
+A template is `<data-dir>/templates/<version>/`. The agent builds it on the node from a root drive.
+Package `internal/template` reads and checks templates; `internal/tplbuild` builds them.
 
 | File | Drive (guest device) | Content |
 |---|---|---|
@@ -437,7 +437,7 @@ Every file is root-owned, mode 0644, with one link.
 The agent takes the build output as files: `--rootfs-dir` is a directory with `rootfs.ext4` and
 `manifest.json`. Put it on the data dir file system, so the copy into the template is a reflink.
 
-Delivery (ENG-4648, `deployment/craft-fc/rootfs/README.md`):
+Delivery (`deployment/craft-fc/rootfs/README.md`):
 
 - CI converts `onyxdotapp/craft-runtime:<tag>` with no egress CA and publishes the output as
   `onyxdotapp/craft-fc-artifacts:rootfs-<version>` (files only). An init container of the agent DaemonSet
@@ -511,7 +511,7 @@ Before every restore, Create checks:
 
 Layouts: the agent builds layout 4 and still restores layouts 2 and 3.
 
-- Layout 4 (ENG-4569): the drives of layout 3, plus the balloon device (see Memory, admission and drain).
+- Layout 4: the drives of layout 3, plus the balloon device (see Memory, admission and drain).
   Firecracker accepts a balloon only before boot, and a restore keeps it, so the template VM has it.
   `TemplateInfo.balloon` is true.
 - Layout 3: six drives, managed slot B last, so the older drives keep their guest devices. No balloon: its
@@ -521,7 +521,7 @@ Layouts: the agent builds layout 4 and still restores layouts 2 and 3.
 
 `internal/kvmtest/helpers_test.go` (`buildTemplate`) uses the same pipeline for the older KVM tests.
 
-### Memory, admission and drain (ENG-4569)
+### Memory, admission and drain
 
 Results: `plans/craft-sandbox-bench/results/mem.md` (decision test) and `results/mem-admission.md`.
 
@@ -570,7 +570,7 @@ manual flag (`SetDrain`) before a planned drain to close this gap.
   (`FAILED_PRECONDITION`); create the VM on another node. A repeat Create of a VM that runs here still
   returns it. It also refuses a template build that must boot a template VM (`BuildTemplate` and the
   start-up build) with `NODE_DRAINING`; a template that is already on the node is still returned.
-- Running VMs keep running. Automatic evacuation by the api_server is planned (ENG-4580), not built.
+- Running VMs keep running. Automatic evacuation by the api_server is planned, not built.
   Until then, save the data you need, `Stop` each VM from `List`, and wait for `NodeInfo.drain.state`
   `DRAINED` before you take the node down.
 - `NodeInfo.drain`: `state` (`ACTIVE`, `DRAINING` while VMs are starting or running, while the agent
@@ -579,7 +579,7 @@ manual flag (`SetDrain`) before a planned drain to close this gap.
   `NodeInfo` scans the processes again, so a doubt whose process exited clears. Clearing the manual flag does not end a drain that a
   taint causes.
 
-### Managed drive (ENG-4614)
+### Managed drive
 
 `/workspace/managed` in each VM is a read-only ext4 drive with the managed files (the skills). The agent
 changes it in running VMs, with no restart. Firecracker cannot add a drive after boot, so every VM has two
@@ -707,18 +707,18 @@ GOOS=linux GOARCH=amd64 go test -c -tags kvm -o hostagent-kvm.test ./internal/kv
 # a template from the deployment/craft-fc/rootfs root drive (KVM_IMG_DIR) booted with craft.scratch=defer,
 # Init/Run/Start/Stream/Cancel over mTLS, egress through the proxy harness, agent restart, Stop order.
 KVM_IMG_DIR=/opt/craft-fc-test/img3 ./hostagent-kvm.test -test.v -test.run TestPassthroughKVM
-# Template pipeline (ENG-4566): the agent binary (KVM_AGENT_IMAGE needs e2fsprogs) builds from a
+# Template pipeline: the agent binary (KVM_AGENT_IMAGE needs e2fsprogs) builds from a
 # build-rootfs.sh output (KVM_TB_ROOTFS) with --egress-ca (KVM_TB_CA); 20 restores with Init + Run, a
 # tampered and a mismatched template, GC, agent restart.
 KVM_TB_ROOTFS=/opt/tb/rootfs-out KVM_TB_CA=/opt/tb/ca/ca.crt ./hostagent-kvm.test -test.v -test.run TestTemplateBuildKVM
-# Rootfs delivery (ENG-4648): the root drive image (deployment/craft-fc/rootfs/Dockerfile.image, from a
+# Rootfs delivery: the root drive image (deployment/craft-fc/rootfs/Dockerfile.image, from a
 # build without --ca) installs into <data-dir>/rootfs, the agent builds a template, and VMs trust only the
 # --egress-ca of their agent (a MITM proxy as --egress-proxy). A second CA keeps the same template.
 KVM_RD_IMAGE=craft-fc-rootfs:dev KVM_RD_DIR=/opt/rd/work ./hostagent-kvm.test -test.v -test.run TestRootfsDeliveryKVM
-# Managed drive swap (ENG-4614): same inputs; KVM_VMS running VMs, a reader in each VM holding files on the
+# Managed drive swap: same inputs; KVM_VMS running VMs, a reader in each VM holding files on the
 # managed drive, swaps of every VM, guest checks (content, old reader, noexec, no rw remount, no restart).
 KVM_TB_ROOTFS=/opt/tb/rootfs-out KVM_TB_CA=/opt/tb/ca/ca.crt ./hostagent-kvm.test -test.v -test.run TestManagedSwapKVM
-# Memory, admission and drain (ENG-4569): same inputs, root drive built with
+# Memory, admission and drain: same inputs, root drive built with
 # --daemon-cmd "/craft-fc/bin/guest-daemon --reclaim-idle=1m"; balloon on restores, reclaim on KVM_VMS
 # idle VMs, scope limits and a guest memory hog, fill the node to CAPACITY_MEMORY, manual drain.
 KVM_TB_ROOTFS=/opt/tb/rootfs-out KVM_TB_CA=/opt/tb/ca/ca.crt ./hostagent-kvm.test -test.v -test.run TestMemAdmissionKVM

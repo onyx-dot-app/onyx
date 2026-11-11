@@ -51,7 +51,7 @@ import (
 // managed slot B (the spare for a managed drive swap) as the last drive, so
 // the guest devices of the older slots do not move. The agent still restores
 // layout 2 templates; their VMs cannot swap the managed drive. Layout 4
-// adds the balloon device with free page reporting (ENG-4569); VMs of older
+// adds the balloon device with free page reporting; VMs of older
 // layouts never return free memory to the node.
 const LayoutVersion = 4
 

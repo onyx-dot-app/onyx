@@ -1,7 +1,7 @@
 // Package nodewatch reads the agent's own Kubernetes Node and reports its
-// drain taints (ENG-4569). It reads the Node with the pod's service account
+// drain taints. It reads the Node with the pod's service account
 // (RBAC: get on nodes) and needs no Kubernetes client library. The same
-// client reads the egress CA ConfigMap (ENG-4648).
+// client reads the egress CA ConfigMap.
 package nodewatch
 
 import (

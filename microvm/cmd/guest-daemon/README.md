@@ -1,13 +1,13 @@
 # Guest daemon and egress relay
 
 Two static binaries run inside each Craft micro-VM: the guest daemon (`cmd/guest-daemon`) and the egress
-relay (`cmd/egress-relay`). The VM init (`deployment/craft-fc/rootfs/craft-init`, ENG-4574) starts and
+relay (`cmd/egress-relay`). The VM init (`deployment/craft-fc/rootfs/craft-init`) starts and
 restarts both, as separate processes. Both live on the read-only root, outside every writable overlay, so
 root in the guest cannot replace them.
 
 ## Guest daemon
 
-The guest daemon (ENG-4571) serves the `Sandboxd` gRPC API
+The guest daemon serves the `Sandboxd` gRPC API
 (`proto/sandboxd/v1/sandboxd.proto`) on vsock. The api_server reaches it through the node agent: the
 agent forwards daemon calls to the VM by sandbox ID (design: `plans/craft-fc-track-daemon.md`).
 
@@ -15,7 +15,7 @@ Code: `cmd/guest-daemon/` (main), `internal/guestd/` (API, Init, auth), `interna
 (commands), `internal/guestd/sysops/` (clock, entropy, attach, file system grow, cgroup mount),
 `internal/guestd/vsock/` (guest vsock listener and dialer).
 
-### Contract with the VM image (ENG-4574)
+### Contract with the VM image
 
 | Item | Value |
 |---|---|
@@ -25,7 +25,7 @@ Code: `cmd/guest-daemon/` (main), `internal/guestd/` (API, Init, auth), `interna
 | Supervisor | `craft-init` (PID 1) starts the daemon and restarts it when it exits. The daemon is not PID 1. |
 | cgroup v2 | Mounted at `/sys/fs/cgroup` by init. The daemon mounts it if it is missing, and makes `/sys/fs/cgroup/guestd/`. |
 | Drives | Init runs `/craft-fc/lib/attach` (scratch on `/mnt/scratch`, overlays, read-only managed drive). It does nothing if init already attached them. |
-| Managed slots | Slot A `/dev/vdc` (`MANAGED_DEV`, mounted by attach) and slot B `/dev/vdf` (`MANAGED_DEV_B`, never mounted by attach) on `/workspace/managed`. `MountManaged` changes the drive there (ENG-4614). Needs a guest kernel with `MOVE_MOUNT_BENEATH` (6.5+). |
+| Managed slots | Slot A `/dev/vdc` (`MANAGED_DEV`, mounted by attach) and slot B `/dev/vdf` (`MANAGED_DEV_B`, never mounted by attach) on `/workspace/managed`. `MountManaged` changes the drive there. Needs a guest kernel with `MOVE_MOUNT_BENEATH` (6.5+). |
 | Egress relay | Init sends SIGHUP to the PID in `/run/craft-fc/egress-relay.pid`. |
 | Scratch disk | ext4 on `/mnt/scratch`. Init grows it to the device size, and fails if the device is still smaller than `scratch_bytes` after about 1 s. |
 | Init state | `/run/craft-fc/guest-daemon-init.json` (mode 0600, tmpfs). A restarted daemon keeps its key, egress CA, env and session list. |
@@ -94,7 +94,7 @@ agent, every call also carries `x-sandbox-id`.
 | `Inspect`, `List` | Execution records (state, PID, times, byte counts, result), `List` filtered by labels. |
 | `ReadFile`, `WriteFile`, `UploadFile`, `ListFiles`, `DeleteFile`, `ZipFiles` | Session files (see Files). |
 | `CaptureSession`, `RestoreSession` | Session saves as tar + zstd (see Session saves). |
-| `BrowserStart`, `BrowserStop` | Reserved for ENG-4573. `UNIMPLEMENTED`. |
+| `BrowserStart`, `BrowserStop` | Reserved for the browser. `UNIMPLEMENTED`. |
 | `ManagedStatus` | The slot on `/workspace/managed` (by the mount's device number) and, per slot, the device, size, ext4 UUID (read with `O_DIRECT`) and whether it is in use (an exclusive open fails with `EBUSY` while a mount holds it, also a detached one with open files). The node agent calls it. |
 | `MountManaged(slot, size_bytes, fs_uuid)` | Makes the slot the drive on `/workspace/managed`, in this order: refuse a slot in use (`MANAGED_SLOT_BUSY`); wait up to 5 s for the device size (Firecracker's config change after `PATCH /drives`); `BLKFLSBUF`; check the ext4 UUID (`MANAGED_DEVICE_MISMATCH`); `fsopen`/`fsmount` (`ro`, `noload`; `nodev`, `nosuid`, `noexec`, private) and `move_mount(MOVE_MOUNT_BENEATH)` beneath the current mount; `umount2(MNT_DETACH)` of the old top mount. Open files on the old drive keep working. The same slot with the same UUID is a no-op (`changed` false). A slot in use that is mounted beneath the top mount with the requested UUID is a swap that stopped before its detach: the call detaches the old top mount and finishes it. The node agent calls it during `SwapManaged`. |
 
@@ -179,7 +179,7 @@ Session saves:
 Errors are gRPC statuses with one `google.rpc.ErrorInfo`: domain `sandboxd.craft.onyx.app`, reason an
 `ErrorReason` name (`KEY_NOT_SET`, `NOT_INITIALIZED`, `UNAUTHENTICATED`, `EXECUTION_NOT_FOUND`, ...).
 
-### Memory (ENG-4569)
+### Memory
 
 The VM has the Firecracker balloon with free page reporting (template layout 4, module README).
 
@@ -230,7 +230,7 @@ Python stubs (track D) come from the same file, for example
 - Unit: `go test -race ./internal/guestd/... ./internal/egressrelay/...` (process groups on any Unix;
   a Unix socket stands in for vsock). The cgroup tests in `internal/guestd/execs` run only as root on
   Linux with cgroup v2.
-- KVM: build tag `kvm`. They boot Firecracker directly (no node agent) with the ENG-4574 root drive
+- KVM: build tag `kvm`. They boot Firecracker directly (no node agent) with the Craft root drive
   (`build-rootfs.sh --daemon-bin`), and call the daemon over `v.sock` (`CONNECT 52`). The egress relay
   subtest copies the relay into the VM with `Interact` and serves a host echo on `v.sock_3128`. Host
   setup: `plans/craft-sandbox-bench/work-guest-daemon/`.

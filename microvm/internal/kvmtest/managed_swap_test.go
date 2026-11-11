@@ -93,7 +93,7 @@ rel = open('run.sh').read().split()[-1]
 print('again', f.read().decode().strip(), hashlib.sha256(big.read()).hexdigest(), 'cwd-relative', rel, 'getcwd', cwd, flush=True)
 `
 
-// TestManagedSwapKVM checks the managed drive swap (ENG-4614) through the
+// TestManagedSwapKVM checks the managed drive swap through the
 // agent binary: n running VMs from a layout 3 template, a reader in each VM
 // that holds files open on the managed drive, a swap of every VM one at a
 // time, and the guest checks (new content, old reader intact, noexec, no

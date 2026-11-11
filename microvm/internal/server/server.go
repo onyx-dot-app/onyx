@@ -54,7 +54,7 @@ type Service struct {
 
 	dialMu sync.Mutex
 	dials  map[string]int
-	// Managed holds the managed drive images (ENG-4614). Nil: the managed
+	// Managed holds the managed drive images. Nil: the managed
 	// calls fail with MANAGED_SWAP_UNSUPPORTED.
 	Managed *ManagedImages
 	Log     *slog.Logger

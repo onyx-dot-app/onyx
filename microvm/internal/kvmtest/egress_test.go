@@ -188,7 +188,7 @@ func TestEgressKVM(t *testing.T) {
 			_, _ = m.Stop(context.Background(), vm.SandboxID, vm.Attempt, vm.Generation)
 		}
 	}()
-	// Placement for A only (ENG-4576 writes it in production).
+	// Placement for A only (the api_server writes it in production).
 	body, _ := json.Marshal(map[string]any{"sandbox_id": a.SandboxID, "tenant_id": "public", "node_id": nodeID, "generation": a.Generation})
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPut, "http://127.0.0.1:8095/test/placement", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")

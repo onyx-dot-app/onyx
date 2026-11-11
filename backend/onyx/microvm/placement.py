@@ -1,4 +1,4 @@
-"""Placement and admission of Firecracker sandbox VMs (ENG-4577).
+"""Placement and admission of Firecracker sandbox VMs.
 
 Admission (D7): one VM per sandbox, and a sandbox is one per user; per node,
 the agent admits on memory, disk and VM slots. There is no per-tenant cap.

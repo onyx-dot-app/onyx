@@ -84,7 +84,7 @@ service HostAgent {
   // a build waits for it.
   rpc BuildTemplate(BuildTemplateRequest) returns (BuildTemplateResponse);
 
-  // Managed drive (ENG-4614). The managed drive is the read-only ext4 on
+  // Managed drive. The managed drive is the read-only ext4 on
   // /workspace/managed in each VM (the skills). Each VM from a layout 3 or later
   // template has two managed slots: A (/dev/vdc) and B (/dev/vdf).
 
@@ -104,10 +104,10 @@ service HostAgent {
   // others; each target has its own result.
   rpc SwapManaged(SwapManagedRequest) returns (SwapManagedResponse);
 
-  // Drain (ENG-4569). A draining node refuses every Create that would start
+  // Drain. A draining node refuses every Create that would start
   // a new VM and every BuildTemplate that would boot a template VM
   // (NODE_DRAINING). Running VMs keep running; automatic evacuation
-  // by the api_server is planned (ENG-4580), so until then the operator stops
+  // by the api_server is planned, so until then the operator stops
   // each VM and waits for DRAINED. The node drains while the manual drain flag is set
   // or while it has a drain taint (the agent's --watch-node-drain).
 
@@ -466,7 +466,7 @@ message NodeInfoResponse {
   uint64 disk_free_mib = 9;
   repeated ManagedImageInfo managed_images = 10;
 
-  // Memory admission and drain (ENG-4569). Create needs
+  // Memory admission and drain. Create needs
   // mem_available_mib >= mem_starting_mib + mem_mib + mem_reserve_mib.
   // The memory reserve (--min-free-mem-mib).
   uint64 mem_reserve_mib = 11;
@@ -523,7 +523,7 @@ message TemplateInfo {
   uint32 managed_slots = 14;
 
   // True when the template VMs have the balloon device with free page
-  // reporting (layout 4 and later, ENG-4569): the guest returns free
+  // reporting (layout 4 and later): the guest returns free
   // memory to the node.
   bool balloon = 15;
 }
