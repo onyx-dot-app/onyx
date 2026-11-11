@@ -65,7 +65,7 @@ When it fails:
 ## Scope
 
 This component owns the skill row, its shares, installation policy and user
-preferences; bundle parsing and validation; built-in skill definitions;
+preferences; the plugin tables ([[#plugin-tables-unused]]); bundle parsing and validation; built-in skill definitions;
 per-user rendering of templates; GitHub import; the push of a user's skill
 files into a sandbox; and the skills library UI.
 
@@ -291,6 +291,19 @@ The library preview of an external-app skill calls the same renderer
     reads the files. It also checks the resolved SKILL.md size then, so a
     Skill that `skill-dir-placeholder` would drop never counts against later
     Skills.
+19. `plugin-tables-unused` **The plugin tables are a copy that no code reads
+    yet.** Migration `cdec9dd9ca3d` adds `plugin_marketplace`, `plugin`,
+    `plugin_version`, `plugin_skill`, `plugin__user`, `plugin__user_group` and
+    `user_plugin_preference` (`db/models.py:Plugin` and its neighbours), and
+    fills them from each custom skill. Built-in skills get no plugin. A plugin,
+    its version 1 and its `plugin_skill` row take the id of the skill. Public
+    and author-less skills go to the Organization library, published at
+    version 1. Other skills go to the author's "My uploads". A duplicate name
+    in one marketplace gets the first free `-N` suffix on `plugin.name` only.
+    App code does not write the tables, so they go stale after the deploy. Do
+    not read them until the later migrations re-sync them with
+    `backfill_plugins_from_skills`, which skips skills that have a plugin. The
+    skill table and its checks do not change.
 
 ---
 
@@ -387,6 +400,10 @@ The library preview of an external-app skill calls the same renderer
   GitHub import.
 - `backend/tests/external_dependency_unit/craft/` (the `test_skill*` files)
   covers visibility, the fileset, affected users, ownership and push faults.
+- `backend/tests/external_dependency_unit/db/test_plugin_tables_migration.py`
+  covers the plugin backfill, and
+  `backend/tests/external_dependency_unit/db/test_plugin_constraints.py` the
+  database rules of the plugin tables.
 - `backend/tests/integration/tests/skills/` covers the API, bulk actions and
   import sharing. `backend/tests/integration/tests/craft/k8s/` covers a real
   push.
