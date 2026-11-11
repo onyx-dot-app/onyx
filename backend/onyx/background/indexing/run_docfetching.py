@@ -118,7 +118,7 @@ from onyx.redis.redis_hierarchy import (
 )
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.tenant_redis_client import TenantRedisClient
-from onyx.utils.fleet_telemetry import emit_stage_counter
+from onyx.utils.fleet_telemetry import emit_corpus_count, emit_stage_counter
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import (
     sanitize_document_for_postgres,
@@ -1235,6 +1235,18 @@ def connector_document_extraction(
 
         elapsed_time = time.monotonic() - start_time
 
+        if lister_mode:
+            _emit_listing_corpus_count(
+                connector_runner.connector,
+                checkpoint,
+                index_attempt_id=index_attempt_id,
+                cc_pair_id=cc_pair_id,
+                source=db_connector.source,
+                window_start=window_start,
+                window_end=window_end,
+                duration_ms=int(elapsed_time * 1000),
+            )
+
         logger.info(
             "Document extraction completed: attempt=%s batches_queued=%s elapsed=%ss",
             index_attempt_id,
@@ -1346,6 +1358,44 @@ def connector_document_extraction(
 
     finally:
         memory_tracer.stop()
+
+
+def _emit_listing_corpus_count(
+    connector: BaseConnector,
+    checkpoint: ConnectorCheckpoint,
+    *,
+    index_attempt_id: int,
+    cc_pair_id: int,
+    source: DocumentSource,
+    window_start: datetime,
+    window_end: datetime,
+    duration_ms: int,
+) -> None:
+    """Sends the fleet's corpus event when a listing ends, if the connector
+    counts what it lists. Telemetry never fails the attempt."""
+    if not isinstance(connector, CheckpointedSlimConnector):
+        return
+    try:
+        counts = connector.listing_counts(
+            checkpoint  # ty: ignore[invalid-argument-type]
+        )
+        if counts is None:
+            return
+        emit_corpus_count(
+            index_attempt_id,
+            cc_pair_id,
+            source.value,
+            window_start=window_start.timestamp(),
+            window_end=window_end.timestamp(),
+            duration_ms=duration_ms,
+            docs_by_type=counts.docs_by_type,
+            bytes_by_type=counts.bytes_by_type,
+            partial=counts.partial,
+        )
+    except Exception:
+        logger.exception(
+            "Failed to send the corpus count of attempt %s", index_attempt_id
+        )
 
 
 def _fetch_or_list_runs(
