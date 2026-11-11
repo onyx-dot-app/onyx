@@ -90,10 +90,12 @@ service Sandboxd {
   // root of the daemon (--read-link-roots).
   //
   // With no session_id, ReadFile, WriteFile, ListFiles, DeleteFile and
-  // ZipFiles take an absolute path anywhere in the VM, and follow symlinks.
-  // Paths under /proc, /sys, /dev and the daemon's own state
-  // (/run/craft-fc) fail with INVALID_ARGUMENT. UploadFile, CaptureSession
-  // and RestoreSession always need a session_id.
+  // ZipFiles take an absolute path anywhere in the VM, and follow symlinks
+  // (DeleteFile removes a link, not its target). Paths under /proc, /sys,
+  // /dev and the daemon's own state (/run/craft-fc) fail with
+  // INVALID_ARGUMENT: ListFiles and ZipFiles leave them out, and a recursive
+  // DeleteFile of a directory that holds one fails. UploadFile,
+  // CaptureSession and RestoreSession always need a session_id.
 
   // ReadFile streams a regular file: the first message has its info, then
   // data chunks of at most 64 KiB.

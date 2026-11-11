@@ -136,8 +136,10 @@ Commands:
 Files (`internal/guestd/files`):
 
 - With no `session_id`, `ReadFile`, `WriteFile`, `ListFiles`, `DeleteFile` and `ZipFiles` take an
-  absolute path anywhere in the VM and follow symlinks. Paths (and link targets) under `/proc`, `/sys`,
-  `/dev` and `/run/craft-fc` (the daemon's key and state) fail with `INVALID_ARGUMENT`. `UploadFile` and the
+  absolute path anywhere in the VM and follow symlinks (`DeleteFile` removes a link, not its target).
+  Paths (and link targets) under `/proc`, `/sys`, `/dev` and `/run/craft-fc` (the daemon's key and state)
+  fail with `INVALID_ARGUMENT`; `ListFiles` and `ZipFiles` leave them out, and a recursive `DeleteFile` of a
+  directory that holds one fails. `UploadFile` and the
   session saves always need a session.
 - With a session, every path is relative to `/home/onyx/workspaces/<session_id>/` (`--sessions-root`). Leading `/` are
   dropped, so `/attachments/a.pdf` is `attachments/a.pdf`. The daemon opens that directory as an `os.Root`. A

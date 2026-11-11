@@ -273,7 +273,7 @@ func (s *Store) openVMRead(p string) (readTarget, error) {
 		if err != nil {
 			return readTarget{}, fsErr(err)
 		}
-		return readTarget{root: r, rel: ".", absTop: abs}, nil
+		return readTarget{root: r, rel: ".", absTop: abs, vmReal: real, deny: s.checkVMPath}, nil
 	}
 	r, err := os.OpenRoot(filepath.Dir(real))
 	if err != nil {
@@ -282,38 +282,64 @@ func (s *Store) openVMRead(p string) (readTarget, error) {
 	return readTarget{root: r, rel: filepath.Base(real), absTop: abs, absFile: true}, nil
 }
 
-// openVMEntry opens the parent of an absolute path for a write or delete:
-// it returns a root on the resolved parent and the name in it. mkParents
-// makes missing parents first.
-func (s *Store) openVMEntry(p string, mkParents bool) (*os.Root, string, string, error) {
+// vmEntry is a write or delete target of a call with no session: a root on
+// the resolved parent, the name in it, the requested path and the resolved
+// path.
+type vmEntry struct {
+	root            *os.Root
+	name, abs, real string
+}
+
+// openVMEntry opens the parent of an absolute path for a write or delete.
+// mkParents makes missing parents first. followLink resolves a symlink in
+// the last part to its existing target (a write); a delete removes the link.
+func (s *Store) openVMEntry(p string, mkParents, followLink bool) (vmEntry, error) {
 	abs, err := vmPath(p)
 	if err != nil {
-		return nil, "", "", err
+		return vmEntry{}, err
 	}
 	if abs == "/" {
-		return nil, "", "", fmt.Errorf("%w: path is the VM root", ErrInvalid)
+		return vmEntry{}, fmt.Errorf("%w: path is the VM root", ErrInvalid)
 	}
 	if err := s.checkVMPath(abs); err != nil {
-		return nil, "", "", err
+		return vmEntry{}, err
 	}
-	parent, name := path.Dir(abs), path.Base(abs)
+	target := abs
+	if fi, err := os.Lstat(abs); followLink && err == nil && fi.Mode()&fs.ModeSymlink != 0 {
+		if real, err := filepath.EvalSymlinks(abs); err == nil {
+			target = real
+		}
+	}
+	parent, name := path.Dir(target), path.Base(target)
 	if mkParents {
 		if err := s.mkdirVM(parent); err != nil {
-			return nil, "", "", err
+			return vmEntry{}, err
 		}
 	}
 	real, err := s.resolveVM(parent)
 	if err != nil {
-		return nil, "", "", err
+		return vmEntry{}, err
 	}
-	if err := s.checkVMPath(path.Join(real, name)); err != nil {
-		return nil, "", "", err
+	full := path.Join(real, name)
+	if err := s.checkVMPath(full); err != nil {
+		return vmEntry{}, err
 	}
 	r, err := os.OpenRoot(real)
 	if err != nil {
-		return nil, "", "", fsErr(err)
+		return vmEntry{}, fsErr(err)
 	}
-	return r, name, abs, nil
+	return vmEntry{root: r, name: name, abs: abs, real: full}, nil
+}
+
+// checkVMTree refuses a directory that holds a denied path (a recursive
+// delete of it would remove that path).
+func (s *Store) checkVMTree(dir string) error {
+	for _, d := range s.cfg.DeniedVMPaths {
+		if d == dir || dir == "/" || strings.HasPrefix(d, strings.TrimSuffix(dir, "/")+"/") {
+			return fmt.Errorf("%w: %s holds %s, which is not reachable through the file calls", ErrInvalid, dir, d)
+		}
+	}
+	return nil
 }
 
 // mkdirVM makes dir and its missing parents. It checks the deepest existing
@@ -432,12 +458,21 @@ func (s *Store) openSession(id string, create bool) (*os.Root, error) {
 // readTarget is where a read call looks: a root and a path in it. display
 // is the session-relative path of the root's top. absTop is the requested
 // absolute path of a call with no session; absFile means rel is that file.
+// vmReal is the resolved directory of the root; deny refuses denied paths
+// below it in recursive calls.
 type readTarget struct {
 	root    *os.Root
 	rel     string
 	display string
 	absTop  string
 	absFile bool
+	vmReal  string
+	deny    func(string) error
+}
+
+// denied reports whether rel, below the root, is a denied VM path.
+func (t readTarget) denied(rel string) bool {
+	return t.deny != nil && t.deny(path.Join(t.vmReal, rel)) != nil
 }
 
 // openRead opens the session for a read call. A path whose first part is a

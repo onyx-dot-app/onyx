@@ -1,6 +1,7 @@
 package guestd
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -259,6 +260,63 @@ func TestFileCallsWithoutSession(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(state, "made")); !os.IsNotExist(err) {
 		t.Errorf("a directory was made in the state dir: %v", err)
 	}
+	// Recursive calls on a parent of the state dir do not reach it.
+	lr, err = c.ListFiles(ctx, &pb.ListFilesRequest{Path: root, Recursive: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range lr.GetEntries() {
+		if e.GetPath() == state || strings.HasPrefix(e.GetPath(), state+"/") {
+			t.Errorf("list of %s shows %s", root, e.GetPath())
+		}
+	}
+	zs, _ := c.ZipFiles(ctx, &pb.ZipFilesRequest{Path: root})
+	var zipped []byte
+	for {
+		m, err := zs.Recv()
+		if err != nil {
+			break
+		}
+		zipped = append(zipped, m.GetData()...)
+	}
+	if len(zipped) == 0 || bytes.Contains(zipped, []byte("state/key")) {
+		t.Errorf("zip of %s: %d bytes, has state/key: %v", root, len(zipped), bytes.Contains(zipped, []byte("state/key")))
+	}
+	if _, err := c.DeleteFile(ctx, &pb.DeleteFileRequest{Path: root, Recursive: true}); reason(err) != "INVALID_ARGUMENT" {
+		t.Errorf("recursive delete of a parent of the state dir: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(state, "key")); err != nil {
+		t.Errorf("state key removed: %v", err)
+	}
+
+	// A write through a link in the last part replaces the link's target.
+	report, current := filepath.Join(root, "report.txt"), filepath.Join(root, "current")
+	if err := os.WriteFile(report, []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(report, current); err != nil {
+		t.Fatal(err)
+	}
+	ws, _ = c.WriteFile(ctx)
+	_ = ws.Send(&pb.WriteFileRequest{Part: &pb.WriteFileRequest_Header{Header: &pb.WriteFileHeader{Path: current, Size: 3, Overwrite: true}}})
+	_ = ws.Send(&pb.WriteFileRequest{Part: &pb.WriteFileRequest_Data{Data: []byte("new")}})
+	if wr, err := ws.CloseAndRecv(); err != nil || wr.GetInfo().GetPath() != current {
+		t.Fatalf("write through link: %v %v", wr, err)
+	}
+	if b, _ := os.ReadFile(report); string(b) != "new" {
+		t.Errorf("link target has %q", b)
+	}
+	if fi, err := os.Lstat(current); err != nil || fi.Mode()&os.ModeSymlink == 0 {
+		t.Errorf("the link was replaced: %v %v", fi, err)
+	}
+	// A delete removes the link, not its target.
+	if dr, err := c.DeleteFile(ctx, &pb.DeleteFileRequest{Path: current}); err != nil || !dr.GetDeleted() {
+		t.Fatalf("delete link: %v %v", dr, err)
+	}
+	if _, err := os.Stat(report); err != nil {
+		t.Errorf("link target removed: %v", err)
+	}
+
 	// Uploads and saves still need a session.
 	us, _ := c.UploadFile(ctx)
 	_ = us.Send(&pb.UploadFileRequest{Part: &pb.UploadFileRequest_Header{Header: &pb.UploadFileHeader{FileName: "a.txt", Size: 0}}})

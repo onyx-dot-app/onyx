@@ -92,10 +92,13 @@ type Execution struct {
 	StartedAt  time.Time
 	DeadlineAt time.Time
 
-	ready  bool // guarded by Manager.mu: started, visible to Get
-	cmd    *exec.Cmd
-	group  Group
-	reason atomic.Int32
+	ready bool // guarded by Manager.mu: started, visible to Get
+	// evicting is guarded by Manager.mu: a Start drops this ended record once
+	// its own command has started.
+	evicting bool
+	cmd      *exec.Cmd
+	group    Group
+	reason   atomic.Int32
 	// softSignal is the last SIGINT or SIGTERM that Signal sent.
 	softSignal atomic.Int32
 	// lastUsed is the UnixNano of the start or of the last Get.

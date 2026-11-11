@@ -274,3 +274,37 @@ func TestSignalProcessGroup(t *testing.T) {
 		t.Fatalf("output %q result %+v", data, res)
 	}
 }
+
+// A Start that does not start a command keeps every ended record.
+func TestCapKeepsRecordsWhenStartFails(t *testing.T) {
+	m, err := NewManager(Config{Isolator: ProcessGroups{}, MaxTracked: 2, MaxRunning: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(m.Shutdown)
+	env := []string{"PATH=/usr/bin:/bin"}
+	ended, err := m.Start(Spec{Argv: []string{"true"}, Env: env})
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-ended.Done()
+	running, err := m.Start(Spec{Argv: []string{"sleep", "30"}, Env: env})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Start(Spec{Argv: []string{"true"}, Env: env}); !errors.Is(err, ErrTooMany) {
+		t.Fatalf("over MaxRunning: %v", err)
+	}
+	if _, err := m.Get(ended.ID); err != nil {
+		t.Fatalf("ErrTooMany dropped the ended record: %v", err)
+	}
+	if _, _, err := m.Cancel(context.Background(), running.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Start(Spec{Argv: []string{"/no/such/program"}, Env: env}); err == nil {
+		t.Fatal("a missing program started")
+	}
+	if len(m.List(nil)) != 2 {
+		t.Fatalf("a failed start dropped a record: %d left", len(m.List(nil)))
+	}
+}

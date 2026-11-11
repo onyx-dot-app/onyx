@@ -268,7 +268,8 @@ func (s *Store) Write(ctx context.Context, sessionID string, spec WriteSpec, r i
 // report. With no session ID, p is an absolute VM path.
 func (s *Store) openWrite(sessionID, p string, mkParents bool) (*os.Root, string, string, error) {
 	if sessionID == "" {
-		return s.openVMEntry(p, mkParents)
+		e, err := s.openVMEntry(p, mkParents, true)
+		return e.root, e.name, e.abs, err
 	}
 	rel, err := cleanPath(p)
 	if err != nil {
@@ -469,6 +470,9 @@ func (l *lister) dir(ctx context.Context, rel string, depth int) error {
 		if rel != "." {
 			child = rel + "/" + name
 		}
+		if l.t.denied(child) {
+			continue
+		}
 		fi, err := e.Info()
 		if err != nil {
 			continue
@@ -556,10 +560,12 @@ func setOf(names []string) map[string]bool {
 // reports false if the path did not exist.
 func (s *Store) Delete(sessionID, p string, recursive bool) (bool, error) {
 	var root *os.Root
-	var rel string
+	var rel, vmReal string
 	var err error
 	if sessionID == "" {
-		root, rel, _, err = s.openVMEntry(p, false)
+		var e vmEntry
+		e, err = s.openVMEntry(p, false, false)
+		root, rel, vmReal = e.root, e.name, e.real
 	} else {
 		root, rel, err = s.openDelete(sessionID, p)
 	}
@@ -580,6 +586,11 @@ func (s *Store) Delete(sessionID, p string, recursive bool) (bool, error) {
 	if fi.IsDir() {
 		if !recursive {
 			return false, fmt.Errorf("%w: %s is a directory; set recursive", ErrInvalid, rel)
+		}
+		if vmReal != "" {
+			if err := s.checkVMTree(vmReal); err != nil {
+				return false, err
+			}
 		}
 		return true, fsErr(root.RemoveAll(rel))
 	}

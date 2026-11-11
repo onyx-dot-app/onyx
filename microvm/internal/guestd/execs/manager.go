@@ -113,6 +113,9 @@ type Manager struct {
 
 	mu    sync.Mutex
 	execs map[string]*Execution
+	// evicting counts the ended records that a Start in progress drops when
+	// its command has started.
+	evicting int
 	// used is the output memory of all records.
 	used atomic.Int64
 
@@ -175,13 +178,23 @@ func (m *Manager) Start(spec Spec) (*Execution, error) {
 
 	m.mu.Lock()
 	m.gcLocked(time.Now())
-	if len(m.execs) >= m.cfg.MaxTracked && !m.evictLocked() {
+	if running := m.runningLocked(); running >= m.cfg.MaxRunning {
 		m.mu.Unlock()
-		return nil, fmt.Errorf("%w (%d)", ErrCapReached, m.cfg.MaxTracked)
-	}
-	if m.runningLocked() >= m.cfg.MaxRunning {
-		m.mu.Unlock()
+		if running >= m.cfg.MaxTracked {
+			return nil, fmt.Errorf("%w (%d)", ErrCapReached, m.cfg.MaxTracked)
+		}
 		return nil, ErrTooMany
+	}
+	// Over the cap, pick the least recently used ended record. It is dropped
+	// only after the new command starts.
+	var victim *Execution
+	if len(m.execs)-m.evicting >= m.cfg.MaxTracked {
+		if victim = m.lruEndedLocked(); victim == nil {
+			m.mu.Unlock()
+			return nil, fmt.Errorf("%w (%d)", ErrCapReached, m.cfg.MaxTracked)
+		}
+		victim.evicting = true
+		m.evicting++
 	}
 	id := newID()
 	e := &Execution{
@@ -194,7 +207,18 @@ func (m *Manager) Start(spec Spec) (*Execution, error) {
 	m.execs[id] = e
 	m.mu.Unlock()
 
-	if err := m.spawn(e, spec, dir, deadline); err != nil {
+	err := m.spawn(e, spec, dir, deadline)
+	if victim != nil {
+		m.mu.Lock()
+		victim.evicting = false
+		m.evicting--
+		if err == nil && m.execs[victim.ID] == victim {
+			m.cfg.Log.Info("execution cap: dropped the least recently used ended record", "execution_id", victim.ID)
+			m.drop(victim)
+		}
+		m.mu.Unlock()
+	}
+	if err != nil {
 		m.mu.Lock()
 		delete(m.execs, id)
 		m.mu.Unlock()
@@ -478,30 +502,25 @@ func (m *Manager) gcLocked(now time.Time) {
 		e.mu.Lock()
 		done, at := e.ended, e.endedAt
 		e.mu.Unlock()
-		if done && now.Sub(at) > m.cfg.EndedTTL {
+		if done && !e.evicting && now.Sub(at) > m.cfg.EndedTTL {
 			m.drop(e)
 		}
 	}
 }
 
-// evictLocked drops the least recently used ended record. It returns false
-// if every record still runs.
-func (m *Manager) evictLocked() bool {
+// lruEndedLocked returns the least recently used ended record that no other
+// Start drops, or nil.
+func (m *Manager) lruEndedLocked() *Execution {
 	var lru *Execution
 	for _, e := range m.execs {
-		if _, ended := e.Ended(); !ended {
+		if _, ended := e.Ended(); !ended || e.evicting {
 			continue
 		}
 		if lru == nil || e.lastUsed.Load() < lru.lastUsed.Load() {
 			lru = e
 		}
 	}
-	if lru == nil {
-		return false
-	}
-	m.cfg.Log.Info("execution cap: dropped the least recently used ended record", "execution_id", lru.ID)
-	m.drop(lru)
-	return true
+	return lru
 }
 
 // drop removes an ended record. Caller holds m.mu.
