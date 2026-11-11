@@ -300,6 +300,18 @@ true
 {{- $runtime -}}
 {{- end }}
 
+{{/*
+Increase of a counter selector over a window, for alert rules. A labeled
+counter series starts at its first event, and increase() does not count that
+event, so a series that is newer than the window gives its full value.
+Input: (list "<selector>" "<window>").
+*/}}
+{{- define "onyx.craftFcCounterIncrease" -}}
+{{- $x := index . 0 -}}
+{{- $w := index . 1 -}}
+(({{ $x }} unless {{ $x }} offset {{ $w }}) or increase({{ $x }}[{{ $w }}]))
+{{- end }}
+
 {{- define "onyx.craftHostAgentNamespace" -}}
 {{- (dig "hostAgent" "namespace" "" (.Values.craft | default dict)) | default "onyx-sandbox-runtime" -}}
 {{- end }}

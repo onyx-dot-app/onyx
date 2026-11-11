@@ -162,6 +162,14 @@ def test_relay_ratio_counts_each_connection_once() -> None:
     assert 'result=~"accepted|over_cap"' in denominator
 
 
+def test_rules_count_the_first_event_of_a_new_series() -> None:
+    # A labeled counter series starts at 1, and increase() does not count
+    # that event: every increase() also takes the series that are new.
+    for rule in _rules([*_METRICS_ON, *_RULES_ON]):
+        expr = rule["expr"]
+        assert expr.count("increase(") == expr.count(" unless "), rule["alert"]
+
+
 def test_rules_use_only_agent_metrics() -> None:
     rules = _rules([*_METRICS_ON, *_RULES_ON])
     used = _used_metric_names(" ".join(r["expr"] for r in rules))
