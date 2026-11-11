@@ -411,6 +411,7 @@ class HostAgentClient:
             agent_version=r.agent_version,
             disk_free_mib=r.disk_free_mib,
             max_vms=r.max_vms,
+            vm_slots_used=r.vm_slots_used,
         )
 
     def close_connections(

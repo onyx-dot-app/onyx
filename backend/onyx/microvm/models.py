@@ -114,8 +114,9 @@ class NodeInfo(BaseModel):
     host_kernel: str
     agent_version: str
     disk_free_mib: int
-    # The agent's VM cap (--max-vms); 0 is no cap.
+    # The agent's VM cap (--max-vms; 0 is no cap) and what it counts.
     max_vms: int = 0
+    vm_slots_used: int = 0
 
     def template(self, version: str) -> TemplateInfo | None:
         return next((t for t in self.templates if t.version == version), None)

@@ -1,5 +1,5 @@
-# Generated from microvm/proto/hostagent/v1/hostagent.proto (blob 2dbb3e75527400336a217572d58344cbb7fae4f7)
-# at commit 394683c853 by backend/onyx/microvm/generated/regenerate.sh. Do not edit.
+# Generated from microvm/proto/hostagent/v1/hostagent.proto (blob cfd8bbf6c3def47bf70d4606eab935ae2bc6fbf2)
+# at commit 0137953345 by backend/onyx/microvm/generated/regenerate.sh. Do not edit.
 import datetime
 
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
@@ -399,7 +399,7 @@ class NodeInfoRequest(_message.Message):
     def __init__(self) -> None: ...
 
 class NodeInfoResponse(_message.Message):
-    __slots__ = ("mem_total_mib", "mem_available_mib", "vm_count", "templates", "cpu_model", "firecracker_version", "host_kernel", "agent_version", "disk_free_mib", "managed_images", "mem_reserve_mib", "mem_starting_mib", "drain", "max_vms")
+    __slots__ = ("mem_total_mib", "mem_available_mib", "vm_count", "templates", "cpu_model", "firecracker_version", "host_kernel", "agent_version", "disk_free_mib", "managed_images", "mem_reserve_mib", "mem_starting_mib", "drain", "max_vms", "vm_slots_used")
     MEM_TOTAL_MIB_FIELD_NUMBER: _ClassVar[int]
     MEM_AVAILABLE_MIB_FIELD_NUMBER: _ClassVar[int]
     VM_COUNT_FIELD_NUMBER: _ClassVar[int]
@@ -414,6 +414,7 @@ class NodeInfoResponse(_message.Message):
     MEM_STARTING_MIB_FIELD_NUMBER: _ClassVar[int]
     DRAIN_FIELD_NUMBER: _ClassVar[int]
     MAX_VMS_FIELD_NUMBER: _ClassVar[int]
+    VM_SLOTS_USED_FIELD_NUMBER: _ClassVar[int]
     mem_total_mib: int
     mem_available_mib: int
     vm_count: int
@@ -428,7 +429,8 @@ class NodeInfoResponse(_message.Message):
     mem_starting_mib: int
     drain: DrainStatus
     max_vms: int
-    def __init__(self, mem_total_mib: _Optional[int] = ..., mem_available_mib: _Optional[int] = ..., vm_count: _Optional[int] = ..., templates: _Optional[_Iterable[_Union[TemplateInfo, _Mapping]]] = ..., cpu_model: _Optional[str] = ..., firecracker_version: _Optional[str] = ..., host_kernel: _Optional[str] = ..., agent_version: _Optional[str] = ..., disk_free_mib: _Optional[int] = ..., managed_images: _Optional[_Iterable[_Union[ManagedImageInfo, _Mapping]]] = ..., mem_reserve_mib: _Optional[int] = ..., mem_starting_mib: _Optional[int] = ..., drain: _Optional[_Union[DrainStatus, _Mapping]] = ..., max_vms: _Optional[int] = ...) -> None: ...
+    vm_slots_used: int
+    def __init__(self, mem_total_mib: _Optional[int] = ..., mem_available_mib: _Optional[int] = ..., vm_count: _Optional[int] = ..., templates: _Optional[_Iterable[_Union[TemplateInfo, _Mapping]]] = ..., cpu_model: _Optional[str] = ..., firecracker_version: _Optional[str] = ..., host_kernel: _Optional[str] = ..., agent_version: _Optional[str] = ..., disk_free_mib: _Optional[int] = ..., managed_images: _Optional[_Iterable[_Union[ManagedImageInfo, _Mapping]]] = ..., mem_reserve_mib: _Optional[int] = ..., mem_starting_mib: _Optional[int] = ..., drain: _Optional[_Union[DrainStatus, _Mapping]] = ..., max_vms: _Optional[int] = ..., vm_slots_used: _Optional[int] = ...) -> None: ...
 
 class DrainStatus(_message.Message):
     __slots__ = ("state", "manual", "taints", "since", "watch_error")

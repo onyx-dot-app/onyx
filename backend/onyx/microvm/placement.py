@@ -70,7 +70,9 @@ from onyx.microvm.models import (
 from onyx.microvm.registry import (
     SandboxPlacement,
     SandboxReservation,
+    claim_sandbox_daemon_key,
     clear_sandbox_daemon_key,
+    clear_sandbox_daemon_key_if,
     clear_sandbox_placement_if,
     get_live_node,
     get_sandbox_daemon_key,
@@ -80,7 +82,6 @@ from onyx.microvm.registry import (
     list_live_nodes,
     release_sandbox_reservation,
     reserve_sandbox,
-    set_sandbox_daemon_key,
     touch_sandbox_placement,
     unindex_sandbox_placement,
     write_sandbox_placement,
@@ -480,12 +481,12 @@ def _rank(
                     ),
                 )
             )
-        elif info.max_vms and info.vm_count >= info.max_vms:
+        elif info.max_vms and info.vm_slots_used >= info.max_vms:
             refusals.append(
                 NodeRefusal(
                     node_id=node.node_id,
                     reason=HostAgentErrorReason.CAPACITY_VM_SLOTS.value,
-                    detail=f"{info.vm_count} VMs, the node cap is {info.max_vms}",
+                    detail=f"{info.vm_slots_used} VMs, the node cap is {info.max_vms}",
                 )
             )
         else:
@@ -682,30 +683,35 @@ def _place_new(
     return None
 
 
-def _key_for_attempt(tenant_cache: CacheBackend, request: VmRequest) -> SecretStr:
-    """The attempt's stored key, or a new one, stored before Create sends it."""
-    key = get_sandbox_daemon_key(
-        tenant_cache, request.sandbox_id, attempt=request.attempt
+def _key_for_attempt(
+    tenant_cache: CacheBackend, request: VmRequest, reservation: _Reservation
+) -> tuple[SecretStr, bytes]:
+    """The attempt's stored key, or a new one, stored under this placement's
+    reservation owner before Create sends it. Returns the stored value."""
+    claimed = claim_sandbox_daemon_key(
+        tenant_cache,
+        request.sandbox_id,
+        attempt=request.attempt,
+        owner=reservation.current.owner,
+        new_key=new_sandboxd_key(),
     )
-    if key is None:
-        key = new_sandboxd_key()
-        set_sandbox_daemon_key(
-            tenant_cache, request.sandbox_id, attempt=request.attempt, key=key
+    if claimed is None:
+        raise SandboxProvisionContentionError(
+            f"Sandbox {request.sandbox_id} daemon key changed during placement"
         )
-    return key
+    return claimed
 
 
 def _release_refused(
-    tenant_cache: CacheBackend, request: VmRequest, reservation: _Reservation
+    tenant_cache: CacheBackend,
+    request: VmRequest,
+    reservation: _Reservation,
+    key_raw: bytes,
 ) -> None:
     """Every node refused, so no VM of this attempt runs: delete its key, then
-    the reservation. The key stays when another placement took over the
-    reservation, as that placement may send the same key."""
-    found = get_sandbox_reservation(tenant_cache, request.sandbox_id)
-    if found is not None and found[1] == reservation.raw:
-        clear_sandbox_daemon_key(
-            tenant_cache, request.sandbox_id, attempt=request.attempt
-        )
+    the reservation. A placement that took over the reservation stored the
+    key again under its own owner first, so this delete misses it."""
+    clear_sandbox_daemon_key_if(tenant_cache, request.sandbox_id, key_raw)
     reservation.release(tenant_cache)
 
 
@@ -837,7 +843,7 @@ def place_sandbox_vm(
         request = request.model_copy(update={"attempt": reservation.current.attempt})
         refusals: list[NodeRefusal] = []
         for _ in range(_MAX_ATTEMPTS):
-            key = _key_for_attempt(tenant_cache, request)
+            key, key_raw = _key_for_attempt(tenant_cache, request, reservation)
             try:
                 placed = _place_new(
                     tenant_cache,
@@ -867,7 +873,7 @@ def place_sandbox_vm(
                 pinned = None
                 continue
             if placed is None:
-                _release_refused(tenant_cache, request, reservation)
+                _release_refused(tenant_cache, request, reservation, key_raw)
                 raise capacity_unavailable_error(refusals)
             if not record_placement(
                 shared_cache,
