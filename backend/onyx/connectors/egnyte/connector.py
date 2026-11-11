@@ -2,9 +2,12 @@ from collections.abc import Generator
 from datetime import datetime, timezone
 from io import BytesIO
 from typing import Any
+from urllib.parse import quote
 
 from pydantic import Field
 
+from onyx.access.models import ExternalAccess
+from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.app_configs import (
     EGNYTE_CLIENT_ID,
     EGNYTE_CLIENT_SECRET,
@@ -15,7 +18,17 @@ from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_oauth_callback_uri,
 )
-from onyx.connectors.egnyte.models import EgnyteFile, EgnyteFolder, EgnyteFolderPage
+from onyx.connectors.egnyte.access import (
+    EgnyteUnknownGroupError,
+    get_folder_access,
+    load_directory,
+)
+from onyx.connectors.egnyte.models import (
+    EgnyteDirectory,
+    EgnyteFile,
+    EgnyteFolder,
+    EgnyteFolderPage,
+)
 from onyx.connectors.egnyte.source_operations import (
     EgnyteApiError,
     EgnyteSourceOperations,
@@ -27,12 +40,13 @@ from onyx.connectors.exceptions import (
     UnexpectedValidationError,
 )
 from onyx.connectors.interfaces import (
-    CheckpointedConnector,
+    CheckpointedConnectorWithPermSync,
     CheckpointOutput,
     GenerateSlimDocumentOutput,
     OAuthConnector,
     SecondsSinceUnixEpoch,
     SlimConnector,
+    SlimConnectorWithPermSync,
 )
 from onyx.connectors.models import (
     BasicExpertInfo,
@@ -68,6 +82,10 @@ FOLDER_PAGE_SIZE = 200
 # many deletions between two requests without skipping a live entry.
 _PAGE_OVERLAP = FOLDER_PAGE_SIZE // 10
 _SLIM_BATCH_SIZE = 500
+# Egnyte refuses to list the permissions of these folders. They hold only
+# folders, and only administrators read them.
+PATHS_WITHOUT_PERMISSIONS = frozenset({"/", "/Private"})
+OAUTH_SCOPES = "Egnyte.filesystem Egnyte.permission Egnyte.user Egnyte.group"
 
 
 def egnyte_document_id(group_id: str) -> str:
@@ -158,6 +176,19 @@ def _build_document(
     )
 
 
+def _prefixed(access: ExternalAccess) -> ExternalAccess:
+    """Doc sync adds the source prefix to group ids when it stores them.
+    Indexing and hierarchy nodes store access as given, so they carry it."""
+    return ExternalAccess(
+        external_user_emails=access.external_user_emails,
+        external_user_group_ids={
+            build_ext_group_name_for_onyx(group_id, DocumentSource.EGNYTE)
+            for group_id in access.external_user_group_ids
+        },
+        is_public=access.is_public,
+    )
+
+
 def _is_fatal(error: Exception) -> bool:
     """A rejected token, a used-up daily quota or an unreachable Egnyte fails
     every later call too, so it ends the run instead of failing one item. The
@@ -173,10 +204,16 @@ class EgnyteCheckpoint(ConnectorCheckpoint):
     offset: int = 0
     # Entry paths of the page before, so the overlap is not yielded twice.
     previous_page_paths: list[str] = Field(default_factory=list)
+    # The current folder's readers with bare group ids, read with its first
+    # page. None outside permission sync runs.
+    current_access: ExternalAccess | None = None
 
 
 class EgnyteConnector(
-    CheckpointedConnector[EgnyteCheckpoint], SlimConnector, OAuthConnector
+    CheckpointedConnectorWithPermSync[EgnyteCheckpoint],
+    SlimConnector,
+    SlimConnectorWithPermSync,
+    OAuthConnector,
 ):
     supports_manual_credentials = True
     slim_listing_honors_indexing_start = True
@@ -198,6 +235,7 @@ class EgnyteConnector(
         self.folder_path = normalize_folder_path(folder_path)
         self.batch_size = batch_size
         self._ops: EgnyteSourceOperations | None = None
+        self._directory: EgnyteDirectory | None = None
 
     @property
     def ops(self) -> EgnyteSourceOperations:
@@ -227,7 +265,7 @@ class EgnyteConnector(
             f"https://{oauth_kwargs.egnyte_domain}.egnyte.com/puboauth/token"
             f"?client_id={EGNYTE_CLIENT_ID}"
             f"&redirect_uri={callback_uri}"
-            f"&scope=Egnyte.filesystem"
+            f"&scope={quote(OAUTH_SCOPES)}"
             f"&state={state}"
             f"&response_type=code"
         )
@@ -257,7 +295,7 @@ class EgnyteConnector(
             "code": code,
             "grant_type": "authorization_code",
             "redirect_uri": redirect_uri,
-            "scope": "Egnyte.filesystem",
+            "scope": OAUTH_SCOPES,
         }
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
@@ -300,7 +338,28 @@ class EgnyteConnector(
                 ) from e
             raise UnexpectedValidationError(str(e)) from e
 
-    def _folder_node(self, folder: EgnyteFolder) -> HierarchyNode:
+    def _folder_access(self, page: EgnyteFolderPage) -> ExternalAccess | None:
+        if self._directory is None:
+            return None
+        return get_folder_access(self.domain, page.permissions, self._directory)
+
+    def _list_page(
+        self, path: str, offset: int, include_permissions: bool
+    ) -> EgnyteFolderPage:
+        # Permissions come with a folder's first page, and are the same on
+        # every page.
+        if include_permissions and offset == 0:
+            if path not in PATHS_WITHOUT_PERMISSIONS:
+                return self.ops.list_folder_page_with_permissions(
+                    folder_path=path, offset=offset, page_size=FOLDER_PAGE_SIZE
+                )
+        return self.ops.list_folder_page(
+            folder_path=path, offset=offset, page_size=FOLDER_PAGE_SIZE
+        )
+
+    def _folder_node(
+        self, folder: EgnyteFolder, access: ExternalAccess | None
+    ) -> HierarchyNode:
         return HierarchyNode(
             raw_node_id=folder.folder_id,
             # The configured folder is the top of this connector's tree.
@@ -310,20 +369,26 @@ class EgnyteConnector(
             display_name=folder.name or folder.path,
             link=f"{_app_base(self.domain)}/navigate/folder/{folder.folder_id}",
             node_type=HierarchyNodeType.FOLDER,
+            external_access=_prefixed(access) if access is not None else None,
         )
 
     def _convert_file(
-        self, file: EgnyteFile, parent_folder_id: str
+        self,
+        file: EgnyteFile,
+        parent_folder_id: str,
+        access: ExternalAccess | None,
     ) -> Document | ConnectorFailure | None:
         document_id = egnyte_document_id(file.group_id)
         try:
             content = self.ops.download_file(file_path=file.path)
-            return _build_document(
+            document = _build_document(
                 file,
                 _extract_text(file, content),
                 _app_base(self.domain),
                 parent_folder_id,
             )
+            document.external_access = _prefixed(access) if access else None
+            return document
         except Exception as e:
             if _is_fatal(e):
                 raise
@@ -346,6 +411,7 @@ class EgnyteConnector(
         start: SecondsSinceUnixEpoch | None,
         end: SecondsSinceUnixEpoch | None,
         slim: bool,
+        include_permissions: bool,
     ) -> Generator[
         Document | SlimDocument | HierarchyNode | ConnectorFailure,
         None,
@@ -363,13 +429,25 @@ class EgnyteConnector(
             checkpoint.current_path = checkpoint.todo.pop(0)
             checkpoint.offset = 0
             checkpoint.previous_page_paths = []
+            checkpoint.current_access = None
+
+        if include_permissions and self._directory is None:
+            # Outside the per-folder handling: without the directory no folder
+            # can get access, so a failure here ends the run.
+            self._directory = load_directory(self.ops)
 
         path = checkpoint.current_path
         try:
-            page: EgnyteFolderPage = self.ops.list_folder_page(
-                folder_path=path, offset=checkpoint.offset, page_size=FOLDER_PAGE_SIZE
+            page: EgnyteFolderPage = self._list_page(
+                path, checkpoint.offset, include_permissions
             )
-        except (EgnyteApiError, InsufficientPermissionsError) as e:
+            if include_permissions and checkpoint.offset == 0:
+                checkpoint.current_access = self._folder_access(page)
+        except (
+            EgnyteApiError,
+            InsufficientPermissionsError,
+            EgnyteUnknownGroupError,
+        ) as e:
             # A partial slim walk reads as deletions, so only indexing goes on.
             if slim:
                 raise
@@ -382,8 +460,9 @@ class EgnyteConnector(
             checkpoint.has_more = bool(checkpoint.todo)
             return checkpoint
 
+        access = checkpoint.current_access
         if checkpoint.offset == 0:
-            yield self._folder_node(page.folder)
+            yield self._folder_node(page.folder, access)
         previous = set(checkpoint.previous_page_paths)
         checkpoint.todo.extend(
             folder.path for folder in page.folders if folder.path not in previous
@@ -394,12 +473,14 @@ class EgnyteConnector(
             if not is_indexable(file) or not _in_time_window(file, start, end):
                 continue
             if slim:
+                # Bare group ids: doc sync adds the source prefix when it stores them.
                 yield SlimDocument(
                     id=egnyte_document_id(file.group_id),
+                    external_access=access,
                     parent_hierarchy_raw_node_id=page.folder.folder_id,
                 )
                 continue
-            converted = self._convert_file(file, page.folder.folder_id)
+            converted = self._convert_file(file, page.folder.folder_id, access)
             if converted is not None:
                 yield converted
 
@@ -415,13 +496,16 @@ class EgnyteConnector(
         )
         return checkpoint
 
-    def load_from_checkpoint(
+    def _load_from_checkpoint(
         self,
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
         checkpoint: EgnyteCheckpoint,
+        include_permissions: bool,
     ) -> CheckpointOutput[EgnyteCheckpoint]:
-        step = self._walk_step(checkpoint, start, end, slim=False)
+        step = self._walk_step(
+            checkpoint, start, end, slim=False, include_permissions=include_permissions
+        )
         while True:
             try:
                 item = next(step)
@@ -431,17 +515,38 @@ class EgnyteConnector(
                 raise RuntimeError("Unexpected SlimDocument in full document load")
             yield item
 
+    def load_from_checkpoint(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: EgnyteCheckpoint,
+    ) -> CheckpointOutput[EgnyteCheckpoint]:
+        return self._load_from_checkpoint(
+            start, end, checkpoint, include_permissions=False
+        )
+
+    def load_from_checkpoint_with_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: EgnyteCheckpoint,
+    ) -> CheckpointOutput[EgnyteCheckpoint]:
+        return self._load_from_checkpoint(
+            start, end, checkpoint, include_permissions=True
+        )
+
     def build_dummy_checkpoint(self) -> EgnyteCheckpoint:
         return EgnyteCheckpoint(has_more=True)
 
     def validate_checkpoint_json(self, checkpoint_json: str) -> EgnyteCheckpoint:
         return EgnyteCheckpoint.model_validate_json(checkpoint_json)
 
-    def retrieve_all_slim_docs(
+    def _retrieve_all_slim_docs(
         self,
-        start: SecondsSinceUnixEpoch | None = None,
-        end: SecondsSinceUnixEpoch | None = None,
-        callback: IndexingHeartbeatInterface | None = None,
+        start: SecondsSinceUnixEpoch | None,
+        end: SecondsSinceUnixEpoch | None,
+        callback: IndexingHeartbeatInterface | None,
+        include_permissions: bool,
     ) -> GenerateSlimDocumentOutput:
         checkpoint = self.build_dummy_checkpoint()
         batch: list[SlimDocument | HierarchyNode] = []
@@ -449,7 +554,13 @@ class EgnyteConnector(
             # A partial walk reads as deletions, so stopping raises.
             if callback is not None and callback.should_stop():
                 raise RuntimeError("Egnyte slim retrieval: stop signal detected")
-            step = self._walk_step(checkpoint, start, end, slim=True)
+            step = self._walk_step(
+                checkpoint,
+                start,
+                end,
+                slim=True,
+                include_permissions=include_permissions,
+            )
             while True:
                 try:
                     item = next(step)
@@ -466,3 +577,23 @@ class EgnyteConnector(
                 callback.progress("egnyte_slim_retrieval", 1)
         if batch:
             yield batch
+
+    def retrieve_all_slim_docs(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        return self._retrieve_all_slim_docs(
+            start, end, callback, include_permissions=False
+        )
+
+    def retrieve_all_slim_docs_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        return self._retrieve_all_slim_docs(
+            start, end, callback, include_permissions=True
+        )

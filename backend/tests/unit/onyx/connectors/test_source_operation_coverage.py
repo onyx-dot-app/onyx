@@ -30,7 +30,15 @@ from onyx.connectors.confluence.source_operations import (
     ConfluenceRestSpacePermissionsNotAvailableError,
     ConfluenceSpacePermissionsVariant,
 )
-from onyx.connectors.egnyte.models import EgnyteFile, EgnyteFolder, EgnyteFolderPage
+from onyx.connectors.egnyte.models import (
+    EgnyteFile,
+    EgnyteFolder,
+    EgnyteFolderPage,
+    EgnyteGroup,
+    EgnyteGroupRef,
+    EgnyteUserInfo,
+    EgnyteUserType,
+)
 from onyx.connectors.github.models import (
     GitHubGitTree,
     GitHubIssue,
@@ -423,7 +431,16 @@ def _configure_egnyte_spy(spy: MagicMock) -> None:
             )
         ],
     )
+    spy.list_folder_page_with_permissions.return_value = (
+        spy.list_folder_page.return_value
+    )
     spy.download_file.return_value = BytesIO(b"text")
+    spy.get_user_info.return_value = EgnyteUserInfo(
+        username="admin", user_type=EgnyteUserType.ADMIN
+    )
+    spy.list_users.return_value = []
+    spy.list_groups.return_value = [EgnyteGroupRef(id="g1", display_name="Team")]
+    spy.get_group.return_value = EgnyteGroup(id="g1", display_name="Team")
 
 
 # A unit is covered when the checks exercise it under any one configuration:

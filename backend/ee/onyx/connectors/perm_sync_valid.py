@@ -5,6 +5,10 @@ from ee.onyx.external_permissions.azure_datalake.capability_checks import (
     build_azure_datalake_doc_permission_sync_checks,
     build_azure_datalake_group_sync_checks,
 )
+from ee.onyx.external_permissions.egnyte.capability_checks import (
+    build_egnyte_doc_permission_sync_checks,
+    build_egnyte_group_sync_checks,
+)
 from ee.onyx.external_permissions.linear.capability_checks import (
     build_linear_doc_permission_sync_checks,
     build_linear_group_sync_checks,
@@ -27,6 +31,8 @@ from onyx.connectors.capability_checks.models import (
 )
 from onyx.connectors.capability_checks.runner import run_capability_checks
 from onyx.connectors.confluence.connector import ConfluenceConnector
+from onyx.connectors.egnyte.config import EgnyteConnectorConfig
+from onyx.connectors.egnyte.connector import EgnyteConnector
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     InconclusiveValidationError,
@@ -202,6 +208,28 @@ def validate_youtrack_perm_sync(connector: YouTrackConnector) -> None:
         check.run(context)
 
 
+def validate_egnyte_perm_sync(connector: EgnyteConnector) -> None:
+    """Scheduled syncs validate through here, so a token that lost its
+    administrator or a scope fails the sync instead of narrowing access."""
+    context: CapabilityCheckContext = CapabilityCheckContext(
+        source=DocumentSource.EGNYTE,
+        credential_json={},
+        connector=connector,
+        connector_specific_config=EgnyteConnectorConfig(
+            folder_path=connector.folder_path
+        ).model_dump(mode="json"),
+        source_operations=connector.ops,
+    )
+    # Checks mirrored across both capabilities share an id and run once.
+    checks: dict[str, CapabilityCheck] = {
+        check.check_id: check
+        for check in build_egnyte_doc_permission_sync_checks()
+        + build_egnyte_group_sync_checks()
+    }
+    for check in checks.values():
+        check.run(context)
+
+
 def validate_azure_datalake_perm_sync(connector: AzureDataLakeConnector) -> None:
     """Scheduled syncs validate through here, so an app that lost a role or a
     Graph permission fails the sync instead of making files private."""
@@ -270,6 +298,7 @@ _VALIDATOR_BY_CONNECTOR_CLASS: dict[type[BaseConnector], Callable[[Any], None]] 
     AzureDataLakeConnector: validate_azure_datalake_perm_sync,
     BoxConnector: validate_box_perm_sync,
     CanvasConnector: validate_canvas_perm_sync,
+    EgnyteConnector: validate_egnyte_perm_sync,
     ConfluenceConnector: validate_confluence_perm_sync,
     GoogleDriveConnector: validate_drive_perm_sync,
     LinearConnector: validate_linear_perm_sync,
