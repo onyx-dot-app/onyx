@@ -303,13 +303,14 @@ true
 {{/*
 Increase of a counter selector over a window, for alert rules. A labeled
 counter series starts at its first event, and increase() does not count that
-event, so a series that is newer than the window gives its full value.
+event, so a series with no sample in the hour before the window gives its
+full value. The hour keeps a short scrape gap from making an old series new.
 Input: (list "<selector>" "<window>").
 */}}
 {{- define "onyx.craftFcCounterIncrease" -}}
 {{- $x := index . 0 -}}
 {{- $w := index . 1 -}}
-(({{ $x }} unless {{ $x }} offset {{ $w }}) or increase({{ $x }}[{{ $w }}]))
+(({{ $x }} unless present_over_time({{ $x }}[1h] offset {{ $w }})) or increase({{ $x }}[{{ $w }}]))
 {{- end }}
 
 {{- define "onyx.craftHostAgentNamespace" -}}
