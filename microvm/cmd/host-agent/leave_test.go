@@ -69,3 +69,16 @@ func TestLeaveWithoutRegistrarDoesNothing(t *testing.T) {
 		return nil
 	}, nil, nil)
 }
+
+func TestLeaveGivesTheDeregistrationItsOwnTime(t *testing.T) {
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	p := pushers{wg: &sync.WaitGroup{}, deregister: func(ctx context.Context) (bool, error) {
+		if ctx.Err() != nil {
+			t.Error("deregister got an expired context after a slow node read")
+		}
+		return true, nil
+	}}
+	// The node read uses up all of its time.
+	refresh := func(ctx context.Context) { <-ctx.Done() }
+	p.leave(func() []string { return []string{"t"} }, refresh, log)
+}

@@ -136,6 +136,7 @@ def register_sandbox_node_signing_key(
             get_shared_cache_backend(),
             node_id=registration.node_id,
             address=registration.agent_address,
+            key_id=registration.key_id,
         )
     else:
         # A stale address may point at a previous agent pod.

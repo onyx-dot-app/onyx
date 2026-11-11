@@ -337,10 +337,11 @@ func run(f flags, log *slog.Logger) error {
 	}
 	// The template of the last build from --rootfs-dir; the image GC keeps it.
 	var currentTemplate atomic.Pointer[string]
+	// Held over the build and its metrics, so template_ready shows the last
+	// build to finish, and over each template GC removal, so a build's
+	// template is current before the GC can see it unused.
+	var buildMu sync.Mutex
 	if f.rootfsDir != "" {
-		// Held over the build and its metrics, so template_ready shows the
-		// last build to finish.
-		var buildMu sync.Mutex
 		svc.Builder = func(ctx context.Context) (tplbuild.Result, error) {
 			buildMu.Lock()
 			defer buildMu.Unlock()
@@ -354,7 +355,7 @@ func run(f flags, log *slog.Logger) error {
 			return r, err
 		}
 	}
-	if gc := imageGC(f, m, store, mstore, &currentTemplate, obs.metrics, log); gc != nil {
+	if gc := imageGC(f, m, store, mstore, &currentTemplate, &buildMu, obs.metrics, log); gc != nil {
 		go gc.Run(ctx)
 	}
 	if err := obs.start(ctx, svc); err != nil {
@@ -448,7 +449,7 @@ func startupTemplates(svc *server.Service, b *tplbuild.Builder, log *slog.Logger
 // or nil with --image-gc-interval 0. Templates are swept only once a build
 // from --rootfs-dir named the current template.
 func imageGC(f flags, m *agent.Manager, store *template.Store, mstore *managed.Store,
-	current *atomic.Pointer[string], mt *metrics.Metrics, log *slog.Logger) *imagegc.Sweeper {
+	current *atomic.Pointer[string], buildMu sync.Locker, mt *metrics.Metrics, log *slog.Logger) *imagegc.Sweeper {
 	if f.imageGCEvery <= 0 {
 		log.Warn("--image-gc-interval is 0: unused managed images and old templates stay on the node")
 		return nil
@@ -469,14 +470,14 @@ func imageGC(f flags, m *agent.Manager, store *template.Store, mstore *managed.S
 				Keep:   m.ManagedImagesInUse,
 				Remove: func(id string) (bool, error) { return mstore.RemoveUnused(id, m.ManagedImagesInUse) },
 			},
-			templateKind(store, m.TemplatesInUse, current),
+			templateKind(store, m.TemplatesInUse, current, buildMu),
 		},
 	}
 }
 
 // templateKind sweeps the templates other than the current one. It lists
-// nothing until a build named the current template.
-func templateKind(store *template.Store, inUse func() map[string]bool, current *atomic.Pointer[string]) imagegc.Kind {
+// nothing until a build named the current template. Removals hold buildMu.
+func templateKind(store *template.Store, inUse func() map[string]bool, current *atomic.Pointer[string], buildMu sync.Locker) imagegc.Kind {
 	kept := func() map[string]bool {
 		keep := inUse()
 		if c := current.Load(); c != nil {
@@ -497,8 +498,12 @@ func templateKind(store *template.Store, inUse func() map[string]bool, current *
 			}
 			return ids, err
 		},
-		Keep:   kept,
-		Remove: func(id string) (bool, error) { return store.RemoveUnused(id, kept) },
+		Keep: kept,
+		Remove: func(id string) (bool, error) {
+			buildMu.Lock()
+			defer buildMu.Unlock()
+			return store.RemoveUnused(id, kept)
+		},
 	}
 }
 
@@ -602,9 +607,12 @@ func (p pushers) start(ctx context.Context, mt *metrics.Metrics) {
 	}
 }
 
-// deregisterTimeout bounds the deregistration at shutdown, well inside the
-// pod's termination grace period.
-const deregisterTimeout = 5 * time.Second
+// refreshTimeout and deregisterTimeout bound the node read and the
+// deregistration at shutdown, well inside the pod's termination grace period.
+const (
+	refreshTimeout    = 3 * time.Second
+	deregisterTimeout = 5 * time.Second
+)
 
 // leave runs after the stop signal. On a node with drain taints (the node
 // goes away) it ends the node's registration, so placement and the node
@@ -619,16 +627,18 @@ func (p pushers) leave(taints func() []string, refresh func(context.Context), lo
 	// A registration that is still in flight must not come after the
 	// deregistration.
 	p.wg.Wait()
-	ctx, cancel := context.WithTimeout(context.Background(), deregisterTimeout)
-	defer cancel()
 	if refresh != nil {
-		refresh(ctx)
+		rctx, rcancel := context.WithTimeout(context.Background(), refreshTimeout)
+		refresh(rctx)
+		rcancel()
 	}
 	t := taints()
 	if len(t) == 0 {
 		log.Info("agent stops on a node without drain taints; the node stays registered")
 		return
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), deregisterTimeout)
+	defer cancel()
 	ok, err := p.deregister(ctx)
 	if err != nil {
 		log.Error("node deregistration failed; the registration expires on its own", "taints", t, "err", err)

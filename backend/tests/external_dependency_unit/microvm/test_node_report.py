@@ -103,6 +103,12 @@ def node(shared_cache: CacheBackend, add_node: AddNode) -> Generator[Node, None,
         ),
         rotation_overlap_seconds=60,
     )
+    registry.set_node_agent_address(
+        shared_cache,
+        node_id=node_id,
+        address=reported.running.address,
+        key_id=reported.key_id,
+    )
     yield reported
     shared_cache.delete(registry._KEY_PREFIX + reported.key_id)
     shared_cache.delete(registry._NODE_KIDS_PREFIX + node_id)
@@ -581,6 +587,23 @@ def test_deregister_keeps_a_newer_agent_on_the_node(
         public_key=newer.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw),
         rotation_overlap_seconds=60,
     )
+    registry.set_node_agent_address(
+        shared_cache,
+        node_id=node.node_id,
+        address=node.running.address,
+        key_id=f"{node.node_id}-2",
+    )
+    # The old agent refreshes its key after the new one registered: the
+    # address still belongs to the new agent.
+    register_node_signing_key(
+        shared_cache,
+        node_id=node.node_id,
+        key_id=node.key_id,
+        public_key=node.private_key.public_key().public_bytes(
+            Encoding.Raw, PublicFormat.Raw
+        ),
+        rotation_overlap_seconds=60,
+    )
     try:
         response = _deregister(api, node)
         assert response.status_code == 200
@@ -588,3 +611,24 @@ def test_deregister_keeps_a_newer_agent_on_the_node(
         assert registry.get_registered_node(shared_cache, node.node_id) is not None
     finally:
         shared_cache.delete(registry._KEY_PREFIX + f"{node.node_id}-2")
+
+
+def test_deregister_needs_the_address_owner(
+    shared_cache: CacheBackend, node: Node
+) -> None:
+    registry.set_node_agent_address(
+        shared_cache, node_id=node.node_id, address=node.running.address
+    )
+    # An address without an owner (an older api_server wrote it) is not ended.
+    assert not registry.deregister_node(
+        shared_cache, node_id=node.node_id, key_id=node.key_id
+    )
+    registry.set_node_agent_address(
+        shared_cache,
+        node_id=node.node_id,
+        address=node.running.address,
+        key_id=node.key_id,
+    )
+    assert registry.deregister_node(
+        shared_cache, node_id=node.node_id, key_id=node.key_id
+    )

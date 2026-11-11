@@ -255,8 +255,9 @@ A VM has no network card. Its egress goes guest → vsock port 3128 → the agen
 - When the agent stops (SIGTERM) on a node with a drain taint (`--watch-node-drain`; it reads the node
   once more first), it ends the node's registration with `POST <--api-server-url>/microvm/node/deregister`
   (body `node_id`, a token like the state report's with `aud` `onyx-api-server-node-deregister`), so
-  placement and the node list drop the node at once. The api_server ends it only while that key is the
-  node's newest, so a later agent on the node keeps its registration; a repeat is a no-op. The keys
+  placement and the node list drop the node at once. The api_server ends it only while the node's
+  address came from the registration of that key, so a later agent on the node keeps its registration;
+  a repeat is a no-op. The keys
   expire on their own. Without a drain taint, or if the call fails (5 s limit), the registration expires
   after its TTL (1 h).
 - `CloseConnections(sandbox_id, attempt, generation)` closes every relay connection of the VM (T5 in

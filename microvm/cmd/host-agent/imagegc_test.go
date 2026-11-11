@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -28,7 +29,7 @@ func TestTemplateGCKeepsTheCurrentAndUsedTemplates(t *testing.T) {
 	var current atomic.Pointer[string]
 	now := time.Unix(1_800_000_000, 0)
 	s := &imagegc.Sweeper{
-		Kinds: []imagegc.Kind{templateKind(store, func() map[string]bool { return map[string]bool{"used": true} }, &current)},
+		Kinds: []imagegc.Kind{templateKind(store, func() map[string]bool { return map[string]bool{"used": true} }, &current, &sync.Mutex{})},
 		Grace: time.Hour, Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Now: func() time.Time { return now },
 	}

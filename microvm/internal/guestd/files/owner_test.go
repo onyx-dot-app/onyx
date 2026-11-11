@@ -201,3 +201,32 @@ func TestParseOwner(t *testing.T) {
 		}
 	}
 }
+
+func TestAFailedOwnerChangeLeavesNoNewDirectory(t *testing.T) {
+	s, root, log := ownedStore(t)
+	log.fail = true
+	ctx := context.Background()
+	if _, _, err := s.Write(ctx, sid, WriteSpec{Path: "a/f.txt", Size: 1, MakeParents: true}, strings.NewReader("x")); err == nil {
+		t.Fatal("write passed")
+	}
+	if _, err := os.Lstat(root); !os.IsNotExist(err) {
+		t.Fatalf("sessions root left behind: %v", err)
+	}
+	// The retry makes and owns every directory.
+	log.fail = false
+	if _, _, err := s.Write(ctx, sid, WriteSpec{Path: "a/f.txt", Size: 1, MakeParents: true}, strings.NewReader("x")); err != nil {
+		t.Fatal(err)
+	}
+	if got := log.got(); !slices.Equal(got, []string{".", sid, "a", "a/" + writePrefix + "*"}) {
+		t.Fatalf("chown %v", got)
+	}
+
+	// A failure on a parent leaves the session as it was.
+	log.names, log.fail = nil, true
+	if _, _, err := s.Write(ctx, sid, WriteSpec{Path: "b/c/f.txt", Size: 1, MakeParents: true}, strings.NewReader("x")); err == nil {
+		t.Fatal("write passed")
+	}
+	if _, err := os.Lstat(filepath.Join(root, sid, "b")); !os.IsNotExist(err) {
+		t.Fatalf("parent left behind: %v", err)
+	}
+}

@@ -168,7 +168,7 @@ Session saves:
   names, `..`, unclean names, names outside the roots, links, devices, FIFOs, sparse members and
   duplicate files, and stops at the limits (`LIMIT_EXCEEDED`), at a zstd window over 64 MiB and at a
   decoded stream larger than the files plus 16 KiB per member and 64 KiB after the tar end. Modes are
-  `& 0777`; the owner is root. An error before the swap does not change the session. If one root
+  `& 0777`; the owner is `--file-owner` (root when it is empty). An error before the swap does not change the session. If one root
   fails to swap, the daemon tries to move the roots already swapped back. If a rollback rename fails,
   or the daemon stops during the swap, old and new roots can be mixed. The old roots then stay in a
   `.craft-old-*` trash directory, and the next restore or capture puts back each old root that has no

@@ -54,6 +54,8 @@ _NODE_KIDS_PREFIX = "sandbox_fc:node_kids:"
 _NODE_LOCK_PREFIX = "sandbox_fc:node_lock:"
 _PLACEMENT_PREFIX = "sandbox_fc:placement:"
 _NODE_ADDRESS_PREFIX = "sandbox_fc:node_address:"
+# The key id of the registration that wrote the node's address.
+_NODE_ADDRESS_KEY_PREFIX = "sandbox_fc:node_address_key:"
 _NODES_KEY = "sandbox_fc:nodes"
 _NODE_PLACEMENTS_PREFIX = "sandbox_fc:node_placements:"
 _DAEMON_KEY_PREFIX = "sandbox_fc:daemon_key:"
@@ -355,9 +357,14 @@ def clear_sandbox_reservation(tenant_cache: CacheBackend, sandbox_id: UUID) -> N
 
 
 def set_node_agent_address(
-    shared_cache: CacheBackend, *, node_id: str, address: str
+    shared_cache: CacheBackend,
+    *,
+    node_id: str,
+    address: str,
+    key_id: str | None = None,
 ) -> None:
-    """Record the agent listener of a node. Expires with the node's keys."""
+    """Record the agent listener of a node, and the key id of the registration
+    that sent it (`deregister_node` checks it). Expires with the node's keys."""
     with _node_lock(shared_cache, node_id):
         if not shared_cache.exists(_NODE_ADDRESS_PREFIX + node_id):
             # A node that comes back starts without the report time of its
@@ -366,6 +373,14 @@ def set_node_agent_address(
         shared_cache.set(
             _NODE_ADDRESS_PREFIX + node_id, address, ex=NODE_SIGNING_KEY_TTL_SECONDS
         )
+        if key_id is None:
+            shared_cache.delete(_NODE_ADDRESS_KEY_PREFIX + node_id)
+        else:
+            shared_cache.set(
+                _NODE_ADDRESS_KEY_PREFIX + node_id,
+                key_id,
+                ex=NODE_SIGNING_KEY_TTL_SECONDS,
+            )
         shared_cache.set_add(_NODES_KEY, node_id)
 
 
@@ -373,6 +388,7 @@ def clear_node_agent_address(shared_cache: CacheBackend, *, node_id: str) -> Non
     """Forget the agent listener of a node that registered without one."""
     with _node_lock(shared_cache, node_id):
         shared_cache.delete(_NODE_ADDRESS_PREFIX + node_id)
+        shared_cache.delete(_NODE_ADDRESS_KEY_PREFIX + node_id)
         shared_cache.delete(_NODE_LAST_REPORT_PREFIX + node_id)
         shared_cache.set_remove(_NODES_KEY, node_id)
 
@@ -380,18 +396,16 @@ def clear_node_agent_address(shared_cache: CacheBackend, *, node_id: str) -> Non
 def deregister_node(shared_cache: CacheBackend, *, node_id: str, key_id: str) -> bool:
     """End the node's registration now, for an agent that leaves a draining node.
 
-    Only while `key_id` is the node's newest key: a later agent on the same
-    node keeps its registration. The keys expire on their own. Returns False
-    when nothing changed.
+    Only while the node's address came from the registration of `key_id`: a
+    later agent on the same node keeps its registration. The keys expire on
+    their own. Returns False when nothing changed.
     """
     with _node_lock(shared_cache, node_id):
-        kids_raw = shared_cache.get(_NODE_KIDS_PREFIX + node_id)
-        kids: list[str] = json.loads(kids_raw) if kids_raw else []
-        if not kids or kids[-1] != key_id:
-            return False
-        if not shared_cache.exists(_NODE_ADDRESS_PREFIX + node_id):
+        owner = shared_cache.get(_NODE_ADDRESS_KEY_PREFIX + node_id)
+        if owner is None or owner.decode() != key_id:
             return False
         shared_cache.delete(_NODE_ADDRESS_PREFIX + node_id)
+        shared_cache.delete(_NODE_ADDRESS_KEY_PREFIX + node_id)
         shared_cache.delete(_NODE_LAST_REPORT_PREFIX + node_id)
         shared_cache.set_remove(_NODES_KEY, node_id)
         return True

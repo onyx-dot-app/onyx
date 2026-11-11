@@ -212,6 +212,8 @@ func (s *Store) mkdirAll(root *os.Root, dir string) error {
 		err := root.Mkdir(p, 0o755)
 		if err == nil {
 			if err := s.own(root, p); err != nil {
+				// A retry must not find it as an existing directory.
+				_ = root.Remove(p)
 				return err
 			}
 			continue
@@ -339,6 +341,8 @@ func (s *Store) openSession(id string, create bool) (*os.Root, error) {
 	// Only the sessions root itself: parents it needed keep root's owner.
 	if madeRoot {
 		if err := s.own(base, "."); err != nil {
+			_ = base.Close()
+			_ = os.Remove(s.cfg.SessionsRoot)
 			return nil, err
 		}
 	}
@@ -346,7 +350,9 @@ func (s *Store) openSession(id string, create bool) (*os.Root, error) {
 	if errors.Is(err, fs.ErrNotExist) && create {
 		mkErr := base.Mkdir(id, 0o755)
 		if mkErr == nil {
-			mkErr = s.own(base, id)
+			if mkErr = s.own(base, id); mkErr != nil {
+				_ = base.Remove(id)
+			}
 		} else if errors.Is(mkErr, fs.ErrExist) {
 			mkErr = nil
 		}
