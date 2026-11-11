@@ -1,7 +1,13 @@
 "use client";
 
 import "@opal/layouts/toast/styles.css";
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { cn } from "@opal/utils";
 import { Button, MessageCard, Badge, Text } from "@opal/components";
 import { SvgX } from "@opal/icons";
@@ -178,6 +184,55 @@ function ToastCard({
   );
 }
 
+interface Announcement {
+  id: string;
+  text: string;
+}
+
+interface ToastAnnouncerProps {
+  toasts: Toast[];
+  errorAppendix?: string;
+}
+
+/**
+ * Reads each new toast to screen readers. The live regions stay mounted, as a
+ * region that appears together with its text is often not read. Errors
+ * interrupt (`role="alert"`); other levels wait (`role="status"`).
+ */
+function ToastAnnouncer({ toasts, errorAppendix }: ToastAnnouncerProps) {
+  const [polite, setPolite] = useState<Announcement | null>(null);
+  const [assertive, setAssertive] = useState<Announcement | null>(null);
+  const announced = useRef(new Map<string, string>());
+
+  useEffect(() => {
+    const previous = announced.current;
+    const next = new Map<string, string>();
+    for (const t of toasts) {
+      if (t.leaving) continue;
+      const text = [t.message, buildDescription(t, errorAppendix)]
+        .filter(Boolean)
+        .join(". ");
+      next.set(t.id, text);
+      if (previous.get(t.id) === text) continue;
+      const announcement = { id: `${t.id}:${t.createdAt}:${text}`, text };
+      if (t.level === "error") setAssertive(announcement);
+      else setPolite(announcement);
+    }
+    announced.current = next;
+  }, [toasts, errorAppendix]);
+
+  return (
+    <div className="sr-only">
+      <div role="status" aria-live="polite" aria-atomic="true">
+        {polite && <span key={polite.id}>{polite.text}</span>}
+      </div>
+      <div role="alert" aria-live="assertive" aria-atomic="true">
+        {assertive && <span key={assertive.id}>{assertive.text}</span>}
+      </div>
+    </div>
+  );
+}
+
 interface ToastContainerProps {
   errorAppendix?: string;
 }
@@ -232,47 +287,53 @@ function ToastContainer({ errorAppendix }: ToastContainerProps) {
       toast.setAutoDismiss(t.id, EXPANDED_DURATION_MS);
     }
   }, []);
-  if (allToasts.length === 0) return null;
+  const announcer = (
+    <ToastAnnouncer toasts={allToasts} errorAppendix={errorAppendix} />
+  );
+  if (allToasts.length === 0) return announcer;
 
   return (
-    <div
-      data-testid="toast-container"
-      className="opal-toast-viewport fixed inset-x-4 top-2 z-(--z-toast) mx-auto flex max-w-(--toast-width) flex-col items-center"
-    >
-      <div className="opal-toast-stack">
-        {[...allToasts].reverse().map((t, index) => (
-          <ToastCard
-            key={t.id}
-            toast={t}
-            // Layered by place, top highest: piling and rising never change
-            // the order, so a card stays behind the one above it throughout.
-            layer={allToasts.length - index}
-            pileDepth={
-              t.leaving
-                ? t.leavingFromPile
-                  ? DEEP
-                  : undefined
-                : pileDepths.get(t.id)
-            }
-            errorAppendix={errorAppendix}
-            expanded={expandedIds.has(t.id)}
-            onToggle={handleToggle}
-            onClose={handleClose}
-          />
-        ))}
-      </div>
-      {/* A count, not a control: the pile does not expand (see the README's
-          design decisions). */}
-      {pileCount > 0 && (
-        <div className="opal-toast-pile-count">
-          <Badge
-            title={strings.toastMoreCount(pileCount)}
-            color="default"
-            size={6}
-          />
+    <>
+      {announcer}
+      <div
+        data-testid="toast-container"
+        className="opal-toast-viewport fixed inset-x-4 top-2 z-(--z-toast) mx-auto flex max-w-(--toast-width) flex-col items-center"
+      >
+        <div className="opal-toast-stack">
+          {[...allToasts].reverse().map((t, index) => (
+            <ToastCard
+              key={t.id}
+              toast={t}
+              // Layered by place, top highest: piling and rising never change
+              // the order, so a card stays behind the one above it throughout.
+              layer={allToasts.length - index}
+              pileDepth={
+                t.leaving
+                  ? t.leavingFromPile
+                    ? DEEP
+                    : undefined
+                  : pileDepths.get(t.id)
+              }
+              errorAppendix={errorAppendix}
+              expanded={expandedIds.has(t.id)}
+              onToggle={handleToggle}
+              onClose={handleClose}
+            />
+          ))}
         </div>
-      )}
-    </div>
+        {/* A count, not a control: the pile does not expand (see the README's
+          design decisions). */}
+        {pileCount > 0 && (
+          <div className="opal-toast-pile-count">
+            <Badge
+              title={strings.toastMoreCount(pileCount)}
+              color="default"
+              size={6}
+            />
+          </div>
+        )}
+      </div>
+    </>
   );
 }
 
