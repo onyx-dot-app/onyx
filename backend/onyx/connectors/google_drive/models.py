@@ -282,7 +282,10 @@ class ListingPartition(BaseModel):
 
 
 class ListingShardKind(str, Enum):
+    # Files other than folders, in the shard's modifiedTime range.
     FILES = "files"
+    # All folders of the partition. It has no time range and does not split.
+    FOLDERS = "folders"
 
 
 class ListingShard(BaseModel):
@@ -343,6 +346,10 @@ class DriveListingState(BaseModel):
     docs_by_type: dict[DocumentTypeLabel, int] = {}
     # Bytes per type. Only files that Drive lists with a size add to it.
     bytes_by_type: dict[DocumentTypeLabel, int] = {}
+    # Parent folder id -> a user who saw a child of it, for parents that no
+    # folder listing has yielded yet. After the listing, only the ones still
+    # missing are read with files.get. Its size follows the folders.
+    unresolved_parent_emails: dict[str, str] = {}
 
     @property
     def is_done(self) -> bool:

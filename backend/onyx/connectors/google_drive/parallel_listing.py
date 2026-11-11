@@ -44,6 +44,7 @@ from onyx.connectors.google_drive.models import (
     ListingPartition,
     ListingPartitionKind,
     ListingShard,
+    ListingShardKind,
     RetrievedDriveFile,
 )
 from onyx.connectors.google_drive.source_operations import (
@@ -100,6 +101,7 @@ CALL_BUDGET_FILES = 50_000
 _OUTPUT_POLL_SECONDS = 0.1
 
 _FILES_QUERY = f"mimeType != '{DRIVE_FOLDER_TYPE}' and trashed = false"
+_FOLDERS_QUERY = f"mimeType = '{DRIVE_FOLDER_TYPE}' and trashed = false"
 _NEWEST_FIELDS = f"nextPageToken, files({GoogleFields.MODIFIED_TIME.value})"
 
 _GOOGLE_APPS_PREFIX = "application/vnd.google-apps."
@@ -126,7 +128,7 @@ def _is_transient(error: BaseException) -> bool:
 
 # Google's per-minute quotas refill within a minute. These waits add up to
 # about a minute.
-_retry_transient = retry_builder(
+retry_transient = retry_builder(
     tries=7,
     delay=1,
     max_delay=32,
@@ -467,6 +469,16 @@ class ParallelDriveLister:
         whole window. The caller holds the lock."""
         self._finish_planning(partition)
         self._state.started_partitions.append((partition, principal, exact))
+        folder_shard_id = self._add_shard(
+            partition,
+            principal,
+            exact,
+            self._state.window_t0,
+            self._state.window_t1,
+            newest_ms=None,
+            kind=ListingShardKind.FOLDERS,
+        )
+        self._pool.add(self._page_task(folder_shard_id))
         return self._add_shard(
             partition,
             principal,
@@ -485,6 +497,7 @@ class ParallelDriveLister:
         t1: int,
         newest_ms: int | None,
         skip_ids: list[str] | None = None,
+        kind: ListingShardKind = ListingShardKind.FILES,
     ) -> int:
         """The caller holds the lock."""
         state = self._state
@@ -494,11 +507,14 @@ class ParallelDriveLister:
             id=shard_id,
             partition=partition,
             principal=principal,
+            kind=kind,
             t0=t0,
             t1=t1,
             newest_ms=newest_ms,
             exact=exact,
             skip_ids=skip_ids or [],
+            # A folder shard has no time range to cut.
+            can_split=kind is ListingShardKind.FILES,
         )
         return shard_id
 
@@ -533,12 +549,15 @@ class ParallelDriveLister:
             skip = set(shard.skip_ids)
             files = [file for file in files if file.get("id") not in skip]
 
-        # A shortcut costs one files.get, so resolve outside the lock.
-        resolved: list[GoogleDriveFileType] = []
-        for file in files:
-            target = self._resolve_shortcut(shard.principal, file)
-            if target is not None:
-                resolved.append(target)
+        # A shortcut costs one files.get, so resolve outside the lock. A
+        # folder listing has no shortcuts.
+        resolved: list[GoogleDriveFileType] = files
+        if shard.kind is ListingShardKind.FILES:
+            resolved = []
+            for file in files:
+                target = self._resolve_shortcut(shard.principal, file)
+                if target is not None:
+                    resolved.append(target)
 
         with self._lock:
             live = self._state.shards.get(shard.id)
@@ -576,7 +595,7 @@ class ParallelDriveLister:
                     record_pushback()
                 raise
 
-        return _retry_transient(resolve)()
+        return retry_transient(resolve)()
 
     def _fetch_page(
         self, shard: ListingShard
@@ -615,12 +634,15 @@ class ParallelDriveLister:
 
     @staticmethod
     def _query(shard: ListingShard, t0: int, t1: int) -> str:
-        query = _FILES_QUERY
+        folders = shard.kind is ListingShardKind.FOLDERS
+        query = _FOLDERS_QUERY if folders else _FILES_QUERY
         if shard.partition.kind is ListingPartitionKind.MY_DRIVE:
             query += " and 'me' in owners"
         elif shard.partition.kind is ListingPartitionKind.SHARED_WITH_USER:
             # The user's My Drive partition lists the user's own files.
             query += " and not 'me' in owners"
+        if folders:
+            return query
         field = GoogleFields.MODIFIED_TIME.value
         return f"{query} and {field} >= '{_iso(t0)}' and {field} < '{_iso(t1)}'"
 
@@ -647,6 +669,13 @@ class ParallelDriveLister:
         the coverage check and the claim."""
         state = self._state
         kind = shard.partition.kind
+        if shard.kind is ListingShardKind.FOLDERS:
+            # Folders are not documents: no dedup claim. The connector skips
+            # a folder that it already yielded.
+            return kind is not ListingPartitionKind.SHARED_WITH_USER or not (
+                file.get("driveId") in state.listed_drive_ids
+                or owner_email(file) in state.listed_owners
+            )
         via_shortcut = RESOLVED_FROM_SHORTCUT_KEY in file
         file_drive_id = file.get("driveId")
         owner = owner_email(file)

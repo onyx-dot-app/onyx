@@ -6,6 +6,7 @@ answers with a burst of 429s. It must not make many more list calls than a
 serial listing."""
 
 import time
+from typing import Any
 
 import pytest
 
@@ -216,7 +217,7 @@ def test_a_failed_call_stops_its_listing_threads(
     def fail(*_args: object, **_kwargs: object) -> list[object]:
         raise RuntimeError("the folder walk failed")
 
-    monkeypatch.setattr(connector, "_get_new_ancestors_for_files", fail)
+    monkeypatch.setattr(connector, "_listed_folder_nodes", fail)
     generator = connector.retrieve_slim_docs_from_checkpoint(
         0, time.time(), connector.build_dummy_checkpoint()
     )
@@ -402,3 +403,34 @@ def test_a_new_window_start_lists_every_file_again(
 
     assert len(listed) == len(set(listed))
     assert set(listed) == expected
+
+
+def test_folder_listing_replaces_the_per_file_ancestor_walk(
+    own_mock_drive: MockDrive, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Folders come from folder-only listings. After the listing, only the
+    parents that no listing returned are read, each one once."""
+    own_mock_drive.set_corpus(_SHARDED_CORPUS)
+    expected = own_mock_drive.content_file_ids()
+    connector = own_mock_drive.build_connector()
+    reads: list[str] = []
+    read_folder = connector._get_folder_metadata
+
+    def counting_read(folder_id: str, *args: Any, **kwargs: Any) -> Any:
+        reads.append(folder_id)
+        return read_folder(folder_id, *args, **kwargs)
+
+    monkeypatch.setattr(connector, "_get_folder_metadata", counting_read)
+
+    listing = list_with_resume(connector)
+
+    assert listing.failures == []
+    _assert_full_corpus(listing, expected)
+    node_ids = {node.raw_node_id for node in listing.nodes}
+    # Each node is yielded once, and its parent is a yielded node.
+    assert len(node_ids) == len(listing.nodes)
+    for node in listing.nodes:
+        assert node.raw_parent_id is None or node.raw_parent_id in node_ids
+    # Most nodes come from the folder listings, not from files.get.
+    assert len(set(reads)) == len(reads)
+    assert len(reads) < len(node_ids) // 2
