@@ -44,6 +44,7 @@ from onyx.connectors.interfaces import (
     CheckpointOutput,
     GenerateSlimDocumentOutput,
     OAuthConnector,
+    Resolver,
     SecondsSinceUnixEpoch,
     SlimConnector,
     SlimConnectorWithPermSync,
@@ -93,6 +94,14 @@ def egnyte_document_id(group_id: str) -> str:
     return f"{_DOCUMENT_ID_PREFIX}{group_id}"
 
 
+def parse_egnyte_document_id(document_id: str) -> str | None:
+    """The file's group_id, or None for an id the walk does not make."""
+    group_id = document_id.removeprefix(_DOCUMENT_ID_PREFIX)
+    if group_id == document_id or not group_id:
+        return None
+    return group_id
+
+
 def same_path(left: str, right: str) -> bool:
     """Egnyte paths are case-insensitive."""
     return left.lower() == right.lower()
@@ -105,6 +114,10 @@ def lists_permissions(folder_path: str) -> bool:
 def normalize_folder_path(folder_path: str | None) -> str:
     """Egnyte paths start with "/", so "Shared/Docs" names "/Shared/Docs"."""
     return "/" + (folder_path or "").strip("/")
+
+
+def _is_under(path: str, folder_path: str) -> bool:
+    return folder_path == "/" or path.startswith(folder_path + "/")
 
 
 def _app_base(domain: str) -> str:
@@ -200,6 +213,16 @@ def _is_fatal(error: Exception) -> bool:
     return isinstance(error, (CredentialInvalidError, UnexpectedValidationError))
 
 
+def _reindex_failure(
+    document_id: str, message: str, exception: Exception | None = None
+) -> ConnectorFailure:
+    return ConnectorFailure(
+        failed_document=DocumentFailure(document_id=document_id),
+        failure_message=message,
+        exception=exception,
+    )
+
+
 class EgnyteCheckpoint(ConnectorCheckpoint):
     # Folder paths left to walk, breadth first. None until the walk starts.
     todo: list[str] | None = None
@@ -218,6 +241,7 @@ class EgnyteConnector(
     SlimConnector,
     SlimConnectorWithPermSync,
     OAuthConnector,
+    Resolver,
 ):
     supports_manual_credentials = True
     slim_listing_honors_indexing_start = True
@@ -606,3 +630,85 @@ class EgnyteConnector(
         return self._retrieve_all_slim_docs(
             start, end, callback, include_permissions=True
         )
+
+    def _ancestor_paths(self, file_path: str) -> list[str]:
+        """The folders from the configured folder down to the file's own."""
+        parent = file_path.rsplit("/", 1)[0] or "/"
+        paths = [self.folder_path]
+        for name in parent.removeprefix(self.folder_path).strip("/").split("/"):
+            if name:
+                paths.append(f"{paths[-1].rstrip('/')}/{name}")
+        return paths
+
+    def _reindex_document(
+        self,
+        document_id: str,
+        include_permissions: bool,
+        folders: dict[str, tuple[EgnyteFolder, ExternalAccess | None]],
+        yielded_folder_ids: set[str],
+    ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
+        group_id = parse_egnyte_document_id(document_id)
+        if group_id is None:
+            yield _reindex_failure(
+                document_id, f"'{document_id}' is not an Egnyte document id."
+            )
+            return
+        try:
+            file = self.ops.get_file(group_id=group_id)
+        except EgnyteApiError as e:
+            if e.status_code != 404:
+                raise
+            # Deleted: nothing to index, and pruning removes the document.
+            return
+        if not _is_under(file.path, self.folder_path):
+            yield _reindex_failure(
+                document_id,
+                f"Egnyte file {file.path} is outside {self.folder_path}.",
+            )
+            return
+        if not _is_indexable(file):
+            yield _reindex_failure(
+                document_id, f"Egnyte file {file.path} is not a supported type."
+            )
+            return
+
+        chain: list[tuple[EgnyteFolder, ExternalAccess | None]] = []
+        for path in self._ancestor_paths(file.path):
+            if path not in folders:
+                page = self._list_page(path, 0, include_permissions)
+                access = self._folder_access(page) if include_permissions else None
+                folders[path] = (page.folder, access)
+            chain.append(folders[path])
+        for folder, access in chain:
+            if folder.folder_id not in yielded_folder_ids:
+                yielded_folder_ids.add(folder.folder_id)
+                yield self._folder_node(folder, access)
+        parent, parent_access = chain[-1]
+        converted = self._convert_file(file, parent.folder_id, parent_access)
+        if converted is not None:
+            yield converted
+
+    def reindex(
+        self,
+        errors: list[ConnectorFailure],
+        include_permissions: bool = False,
+    ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
+        if include_permissions and self._directory is None:
+            self._directory = load_directory(self.ops)
+        # Folders and their nodes are shared by many failed files.
+        folders: dict[str, tuple[EgnyteFolder, ExternalAccess | None]] = {}
+        yielded_folder_ids: set[str] = set()
+        for failure in errors:
+            if failure.failed_document is None:
+                continue
+            document_id = failure.failed_document.document_id
+            try:
+                yield from self._reindex_document(
+                    document_id, include_permissions, folders, yielded_folder_ids
+                )
+            except Exception as e:
+                if _is_fatal(e):
+                    raise
+                yield _reindex_failure(
+                    document_id, f"Failed to read Egnyte file {document_id}: {e}", e
+                )

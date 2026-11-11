@@ -341,6 +341,16 @@ class EgnyteSourceOperations(SourceOperations):
         capabilities=(CredentialCapability.INDEXING,),
         consumes=OperationConsumes.CREDENTIAL,
     )
+    def get_file(self, *, group_id: str) -> EgnyteFile:
+        """A file's current metadata by its id, wherever it was moved."""
+        return EgnyteFile.model_validate(
+            self._get(f"/v1/fs/ids/file/{quote(group_id)}").json()
+        )
+
+    @source_operation(
+        capabilities=(CredentialCapability.INDEXING,),
+        consumes=OperationConsumes.CREDENTIAL,
+    )
     def download_file(self, *, file_path: str, max_bytes: int | None = None) -> BytesIO:
         """The latest version of a file, streamed into one buffer so a large
         file is held in memory once. With ``max_bytes``, only the start of
