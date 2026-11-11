@@ -10,6 +10,8 @@ the window allows, when the service pushed back. The share then grows back
 in small steps while requests go on.
 """
 
+import threading
+import time
 from collections.abc import Sequence
 
 from pydantic import BaseModel, ConfigDict
@@ -28,6 +30,8 @@ CUT_HOLD_SECONDS = 30.0
 # The share grows by this much each interval after the hold.
 GROW_STEP = 0.05
 GROW_INTERVAL_SECONDS = 10.0
+# While Redis cannot be reached, log one warning in each interval.
+_UNREACHABLE_WARNING_INTERVAL_SECONDS = 60.0
 # The adaptive state outlives an idle window by this long.
 _META_TTL_SECONDS = 600
 
@@ -132,6 +136,24 @@ return math.floor(factor * 1000)
 """
 
 
+_last_unreachable_warning = 0.0
+_unreachable_warning_lock = threading.Lock()
+
+
+def _warn_redis_unreachable(error: RedisError) -> None:
+    """Every call fails while Redis is down, so log at most once in each
+    interval."""
+    global _last_unreachable_warning
+    now = time.monotonic()
+    with _unreachable_warning_lock:
+        if now - _last_unreachable_warning < _UNREACHABLE_WARNING_INTERVAL_SECONDS:
+            return
+        _last_unreachable_warning = now
+    logger.warning(
+        "The rate limiter cannot reach Redis; requests are not limited: %s", error
+    )
+
+
 def _log_key(window: RateWindow) -> str:
     return f"{window.key}:log"
 
@@ -165,11 +187,8 @@ class RedisRateWindows:
             args.extend([window.limit, int(window.period_seconds * 1000)])
         try:
             wait_ms = self._redis.eval(_ACQUIRE_SCRIPT, keys=keys, args=args)
-        except RedisError:
-            logger.warning(
-                "The rate limiter cannot reach Redis; the request is not limited.",
-                exc_info=True,
-            )
+        except RedisError as error:
+            _warn_redis_unreachable(error)
             return 0
         return int(wait_ms) / 1000
 
@@ -186,8 +205,8 @@ class RedisRateWindows:
                     _META_TTL_SECONDS * 1000,
                 ],
             )
-        except RedisError:
-            logger.warning("The rate limiter cannot reach Redis.", exc_info=True)
+        except RedisError as error:
+            _warn_redis_unreachable(error)
             return 1.0
         return int(thousandths) / 1000
 
