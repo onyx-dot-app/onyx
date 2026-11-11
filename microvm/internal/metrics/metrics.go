@@ -2,10 +2,8 @@
 //
 // Gauges that describe the VM table and the node (VM count by state, node
 // memory, allocated memory, open relay connections and Dial streams) are read
-// at scrape time from one pass over the agent's state, as E2B's orchestrator
-// does with OpenTelemetry observable gauges (e2b-dev/infra, Apache-2.0:
-// packages/orchestrator/pkg/server/main.go, the sandbox count and allocated
-// resource callbacks). So the agent keeps no per-VM metric state and needs no
+// at scrape time from one pass over the agent's state (observable gauges with
+// a collect callback). So the agent keeps no per-VM metric state and needs no
 // goroutine per VM. No metric has a sandbox or tenant label: per-VM detail is
 // in the audit and guest log lines.
 package metrics

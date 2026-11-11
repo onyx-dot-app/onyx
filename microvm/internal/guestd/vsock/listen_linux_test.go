@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net"
 	"testing"
 	"time"
 
@@ -91,5 +92,51 @@ func TestDialCanceledContext(t *testing.T) {
 	if c, err := Dial(ctx, unix.VMADDR_CID_LOCAL, port); err == nil {
 		_ = c.Close()
 		t.Fatal("dial with a canceled context succeeded")
+	}
+}
+
+// A socket that polls writable before its connect ends is not connected.
+// A new vsock socket polls writable (state TCP_CLOSE), so the poller can wake
+// Dial before the host answers. The dial must wait, not return a socket whose
+// first read and write fail with ENOTCONN.
+func TestConnectDoneWaitsForPeer(t *testing.T) {
+	sockets := map[string]int{"tcp": unix.AF_INET}
+	if fd, err := unix.Socket(unix.AF_VSOCK, unix.SOCK_STREAM, 0); err == nil {
+		_ = unix.Close(fd)
+		sockets["vsock"] = unix.AF_VSOCK
+	}
+	for name, family := range sockets {
+		fd, err := unix.Socket(family, unix.SOCK_STREAM|unix.SOCK_NONBLOCK, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if family == unix.AF_VSOCK {
+			pfd := []unix.PollFd{{Fd: int32(fd), Events: unix.POLLOUT}}
+			_, _ = unix.Poll(pfd, 0)
+			t.Logf("new vsock socket polls writable: %v", pfd[0].Revents&unix.POLLOUT != 0)
+		}
+		done, err := connectDone(fd)
+		_ = unix.Close(fd)
+		if done || err != nil {
+			t.Errorf("%s socket with no peer: done=%v err=%v, want false, nil", name, done, err)
+		}
+	}
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = ln.Close() }()
+	fd, err := unix.Socket(unix.AF_INET, unix.SOCK_STREAM, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = unix.Close(fd) }()
+	port := ln.Addr().(*net.TCPAddr).Port
+	if err := unix.Connect(fd, &unix.SockaddrInet4{Port: port, Addr: [4]byte{127, 0, 0, 1}}); err != nil {
+		t.Fatal(err)
+	}
+	if done, err := connectDone(fd); !done || err != nil {
+		t.Fatalf("connected socket: done=%v err=%v, want true, nil", done, err)
 	}
 }
