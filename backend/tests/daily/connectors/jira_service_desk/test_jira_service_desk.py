@@ -28,7 +28,7 @@ class TestJiraServiceManagementConnector(unittest.TestCase):
         )
 
     def test_load_credentials_validation(self) -> None:
-        c = JiraServiceManagementConnector()
+        c = JiraServiceManagementConnector(jira_base_url="https://example.atlassian.net")
         with self.assertRaises(ConnectorValidationError):
             c.load_credentials({})
 

@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from typing import Any
 from typing_extensions import override
 
+from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import (
@@ -56,11 +57,11 @@ class JiraServiceManagementConnector(
 
     def __init__(
         self,
-        jira_base_url: str | None = None,
+        jira_base_url: str,
         project_key: str | None = None,
-        batch_size: int = 50,
+        batch_size: int = INDEX_BATCH_SIZE,
     ) -> None:
-        self.jira_base_url = (jira_base_url or "").rstrip("/")
+        self.jira_base_url = jira_base_url.rstrip("/")
         self.project_key = project_key
         self.batch_size = batch_size
         self.client: JiraServiceManagementClient | None = None
@@ -77,7 +78,13 @@ class JiraServiceManagementConnector(
             or credentials.get("api_token")
             or credentials.get("token")
         )
-        base_url = credentials.get("jira_base_url") or self.jira_base_url
+        cred_base_url = credentials.get("jira_base_url")
+        if cred_base_url and self.jira_base_url:
+            if cred_base_url.rstrip("/") != self.jira_base_url.rstrip("/"):
+                raise ConnectorValidationError(
+                    f"Credential base URL {cred_base_url} does not match connector base URL {self.jira_base_url}"
+                )
+        base_url = self.jira_base_url or cred_base_url
 
         if not base_url or not user_email or not api_token:
             raise ConnectorValidationError(
@@ -115,10 +122,15 @@ class JiraServiceManagementConnector(
             f"Description:\n{request.description or 'No description provided.'}"
         )
 
-        dt_updated = (
+        dt_created = (
             _parse_iso_utc(request.created_date)
             if request.created_date
             else datetime.now(timezone.utc)
+        )
+        dt_updated = (
+            _parse_iso_utc(request.updated_date)
+            if request.updated_date
+            else dt_created
         )
 
         return Document(
@@ -131,6 +143,7 @@ class JiraServiceManagementConnector(
                 "service_desk_id": request.service_desk_id or "",
                 "status": request.status or "Unknown",
                 "created_date": request.created_date or "",
+                "updated_date": request.updated_date or "",
             },
             sections=[
                 TextSection(
@@ -139,7 +152,7 @@ class JiraServiceManagementConnector(
                 )
             ],
             doc_updated_at=dt_updated,
-            doc_created_at=dt_updated,
+            doc_created_at=dt_created,
             title=f"[{request.issue_key}] {request.summary}",
         )
 

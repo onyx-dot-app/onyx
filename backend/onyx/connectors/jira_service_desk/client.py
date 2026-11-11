@@ -49,8 +49,8 @@ class JiraServiceManagementClient:
 
         if response.status_code == 429:
             retry_after = parse_retry_after_seconds(response.headers.get("Retry-After"))
-            if retry_after is not None:
-                time.sleep(min(retry_after, _MAX_RETRY_AFTER_SLEEP_SECONDS))
+            sleep_sec = retry_after if retry_after is not None and retry_after > 0 else 5
+            time.sleep(min(sleep_sec, _MAX_RETRY_AFTER_SLEEP_SECONDS))
             response = requests.get(
                 url,
                 headers=headers,
@@ -76,12 +76,23 @@ class JiraServiceManagementClient:
 
     def get_service_desks(self) -> list[JSMServiceDesk]:
         """Fetches all accessible Service Desks or filters by project_key."""
-        data = self._request("/rest/servicedeskapi/servicedesk")
         desks: list[JSMServiceDesk] = []
-        for item in data.get("values", []):
-            desk = JSMServiceDesk.model_validate(item)
-            if not self.project_key or desk.project_key.upper() == self.project_key.upper():
-                desks.append(desk)
+        start = 0
+        limit = 50
+        while True:
+            data = self._request("/rest/servicedeskapi/servicedesk", params={"start": start, "limit": limit})
+            values = data.get("values", [])
+            for item in values:
+                desk = JSMServiceDesk.model_validate(item)
+                if not self.project_key or desk.project_key.upper() == self.project_key.upper():
+                    desks.append(desk)
+            if data.get("isLastPage", True) or not values:
+                break
+            start += len(values)
+
+        if self.project_key and not desks:
+            raise ValueError(f"No Jira Service Desk found matching project key '{self.project_key}'")
+
         return desks
 
     def paginate_customer_requests(
@@ -102,22 +113,26 @@ class JiraServiceManagementClient:
                 params["serviceDeskId"] = service_desk_id
 
             endpoint = "/rest/servicedeskapi/request"
-            try:
-                data = self._request(endpoint, params=params)
-            except Exception:
-                break
+            data = self._request(endpoint, params=params)
 
             values = data.get("values", [])
             if not values:
                 break
 
             for val in values:
+                created_epoch_ms = val.get("createdDate", {}).get("epochMillis")
+                updated_epoch_ms = val.get("updatedDate", {}).get("epochMillis")
+                ref_epoch = (updated_epoch_ms or created_epoch_ms or 0) // 1000
+
+                if start_epoch and ref_epoch < start_epoch:
+                    continue
+
                 req_fields = val.get("requestFieldValues", [])
-                summary = ""
+                summary = val.get("summary") or ""
                 description = ""
                 for f in req_fields:
                     f_id = f.get("fieldId", "")
-                    if f_id == "summary":
+                    if f_id == "summary" and not summary:
                         summary = f.get("value", "")
                     elif f_id == "description":
                         val_content = f.get("value", "")
@@ -126,12 +141,19 @@ class JiraServiceManagementClient:
                         else:
                             description = str(val_content)
 
+                created_iso = val.get("createdDate", {}).get("iso8601", "")
+                updated_iso = (
+                    val.get("updatedDate", {}).get("iso8601")
+                    or created_iso
+                )
+
                 req = JSMCustomerRequest(
                     issueId=str(val.get("issueId")),
                     issueKey=str(val.get("issueKey")),
                     requestTypeId=str(val.get("requestTypeId", "")),
                     serviceDeskId=str(val.get("serviceDeskId", "")),
-                    createdDate=val.get("createdDate", {}).get("iso8601", ""),
+                    createdDate=created_iso,
+                    updatedDate=updated_iso,
                     summary=summary or val.get("issueKey", "JSM Ticket"),
                     description=description,
                     status=val.get("currentStatus", {}).get("status", ""),

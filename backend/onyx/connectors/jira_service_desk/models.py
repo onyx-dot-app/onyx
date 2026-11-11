@@ -23,6 +23,7 @@ class JSMCustomerRequest(BaseModel):
     request_type_id: str | None = Field(default=None, alias="requestTypeId")
     service_desk_id: str | None = Field(default=None, alias="serviceDeskId")
     created_date: str | None = Field(default=None, alias="createdDate")
+    updated_date: str | None = Field(default=None, alias="updatedDate")
     summary: str
     description: str | None = None
     reporter_name: str | None = None
