@@ -492,10 +492,16 @@ def create_custom_skill__no_commit(
     external_app_id: int | None = None,
 ) -> tuple[Skill, set[UUID]]:
     """Create a custom skill: the legacy skill row, then its plugin, version 1
-    and plugin_skill row with the same id, in the caller's transaction. The
-    plugin starts in the author's "My uploads"; an app link or a public access
-    change then publishes it. Returns the skill and the users the access change
-    affects."""
+    and plugin_skill row with the same id, in the caller's transaction. A skill
+    created public (or for an app) starts in the Organization library and takes
+    the next free name there, as main allows two public skills with one name;
+    others start in the author's "My uploads". Returns the skill and the users
+    the access change affects."""
+    created_public = external_app_id is not None or (
+        change is not None
+        and change.set_public_permission
+        and change.public_permission == SkillSharePermission.VIEWER
+    )
     skill = add_new_skill__no_commit(
         Skill(
             name=ingested.canonical_name,
@@ -504,6 +510,7 @@ def create_custom_skill__no_commit(
             bundle_sha256=ingested.bundle_sha256,
             is_valid=True,
             author_user_id=user.id,
+            public_permission=(SkillSharePermission.VIEWER if created_public else None),
         ),
         db_session,
     )

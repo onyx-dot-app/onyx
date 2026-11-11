@@ -30,7 +30,10 @@ from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
-from tests.integration.common_utils.managers.skill import SkillManager
+from tests.integration.common_utils.managers.skill import (
+    SkillManager,
+    build_minimal_bundle,
+)
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestUser
@@ -307,6 +310,36 @@ def test_publish_with_a_used_name_returns_conflict(owner: DATestUser) -> None:
     assert SkillManager.get_for_user(str(second.id), owner).public_permission is None
     assert _plugin(second.id).marketplace_id == user_uploads_id(owner.id)
     _assert_rows_match(first.id, second.id)
+
+
+def test_create_public_with_a_used_name_takes_a_free_name(owner: DATestUser) -> None:
+    other = _user("create_public_other")
+    name = _name("created-public")
+    first = SkillManager.create_custom(other, name=name, auto_enable=False)
+    _publish(other, first)
+
+    headers = dict(owner.headers)
+    headers.pop("Content-Type", None)
+    response = client.post(
+        f"{API_SERVER_URL}/skills/custom/batch",
+        headers=headers,
+        files=[
+            ("bundles", (f"{name}.zip", build_minimal_bundle(name), "application/zip"))
+        ],
+        data={"sharing": '{"public_permission":"VIEWER"}'},
+    )
+    response.raise_for_status()
+    result = response.json()
+    assert result["not_imported"] == []
+    [item] = result["imported"]
+    assert item["skill"]["name"] == name
+    assert item["skill"]["public_permission"] == "VIEWER"
+
+    plugin = _plugin(item["skill"]["id"])
+    assert plugin.marketplace_id == ORGANIZATION_LIBRARY_ID
+    assert plugin.name == f"{name}-2"
+    assert plugin.published_version_id == plugin.current_version_id
+    _assert_rows_match(first.id, item["skill"]["id"])
 
 
 def test_published_skill_cannot_be_made_private(owner: DATestUser) -> None:
