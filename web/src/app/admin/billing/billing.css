@@ -29,26 +29,32 @@
   width: 100%;
 }
 
+/* `interpolate-size` lets `height` animate to and from `auto`. Browsers
+   without it collapse at once. */
 .plan-card-features-container {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  interpolate-size: allow-keywords;
   transition:
-    max-height 0.25s ease-out,
+    height 0.25s ease-out,
+    flex-grow 0.25s ease-out,
     opacity 0.2s ease-out;
   background: var(--background-tint-01);
-  flex: 1;
+  flex: 1 1 auto;
+  height: auto;
 }
 
 .plan-card-features-container[data-hidden="true"] {
-  max-height: 0;
+  height: 0;
   opacity: 0;
-  flex: 0;
+  flex-grow: 0;
 }
 
-.plan-card-features-container[data-hidden="false"] {
-  max-height: none;
-  opacity: 1;
+@media (prefers-reduced-motion: reduce) {
+  .plan-card-features-container {
+    transition: none;
+  }
 }
 
 .plan-card-feature-icon {
