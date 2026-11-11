@@ -154,6 +154,41 @@ export class ChatPage {
     await expect(table.getByRole("row")).toHaveCount(rows);
   }
 
+  /** The answer table is wider than the answer column but stays in the chat area. */
+  async expectAnswerTableBrokenOut(): Promise<void> {
+    const message = this.aiMessage();
+    const card = message.locator(".markdown-table-card");
+    await expect
+      .poll(async () => {
+        const [cardBox, answerBox, scrollBox] = await Promise.all([
+          card.boundingBox(),
+          message.boundingBox(),
+          this.scrollContainer.boundingBox(),
+        ]);
+        if (!cardBox || !answerBox || !scrollBox) return false;
+        return (
+          cardBox.width > answerBox.width &&
+          cardBox.x >= scrollBox.x &&
+          cardBox.x + cardBox.width <= scrollBox.x + scrollBox.width
+        );
+      })
+      .toBe(true);
+  }
+
+  /** Hovers the answer table and clicks its copy button. */
+  async copyAnswerTable(): Promise<void> {
+    const message = this.aiMessage();
+    await message.locator(".markdown-table-card").hover();
+    await message.getByTestId("markdown-table-copy-button").click();
+  }
+
+  /** Needs the clipboard-read permission. */
+  async expectClipboardText(text: string): Promise<void> {
+    await expect
+      .poll(() => this.page.evaluate(() => navigator.clipboard.readText()))
+      .toBe(text);
+  }
+
   async expectAnswerListItem(text: string): Promise<void> {
     await expect(
       this.aiMessage().getByRole("listitem").filter({ hasText: text })

@@ -94,6 +94,18 @@ run "optional_node_groups_and_addons_plan" {
   }
 
   assert {
+    condition = [for t in local.craft_sandbox_node_groups.sandbox.taints : "${t.key}=${t.value}:${t.effect}"] == [
+      "workload=sandbox:NO_SCHEDULE",
+    ]
+    error_message = "Pod-runtime sandbox nodes carry only the workload taint, so pod sandboxes still land there."
+  }
+
+  assert {
+    condition     = length(local.craft_pod_sandbox_node_groups) == 0 && !contains(keys(module.eks.eks_managed_node_groups), "sandbox_pod")
+    error_message = "The extra pod sandbox group is off by default, so other stacks plan no change."
+  }
+
+  assert {
     condition = (
       local.craft_sandbox_node_groups.sandbox.block_device_mappings.xvda.ebs.iops == 3000 &&
       local.craft_sandbox_node_groups.sandbox.block_device_mappings.xvda.ebs.throughput == 125
@@ -124,6 +136,22 @@ run "firecracker_nested_plan" {
       local.craft_sandbox_node_groups.sandbox.labels["onyx.app/workload"] == "sandbox"
     )
     error_message = "Firecracker sandbox nodes must keep the workload label and add onyx.app/kvm=true."
+  }
+
+  assert {
+    condition = [for t in local.craft_sandbox_node_groups.sandbox.taints : "${t.key}=${t.value}:${t.effect}"] == [
+      "workload=sandbox:NO_SCHEDULE",
+      "onyx.app/kvm=true:NO_SCHEDULE",
+    ]
+    error_message = "Firecracker sandbox nodes must add the onyx.app/kvm taint, so pod sandboxes and the prepuller stay off."
+  }
+
+  assert {
+    condition = toset([for t in module.eks.eks_managed_node_groups["sandbox"].node_group_taints : "${t.key}=${t.value}:${t.effect}"]) == toset([
+      "workload=sandbox:NO_SCHEDULE",
+      "onyx.app/kvm=true:NO_SCHEDULE",
+    ])
+    error_message = "Both sandbox taints must reach the managed node group."
   }
 
   assert {
@@ -258,4 +286,70 @@ run "rejects_throughput_above_gp3_ratio" {
     craft_sandbox_node_disk_throughput = 1000
   }
   expect_failures = [var.craft_sandbox_node_disk_throughput]
+}
+
+run "firecracker_with_pod_sandbox_group" {
+  command = plan
+  variables {
+    enable_craft                        = true
+    craft_sandbox_runtime               = "firecracker"
+    craft_sandbox_node_instance_types   = ["m8i.4xlarge"]
+    craft_sandbox_node_disk_iops        = 6000
+    craft_sandbox_node_disk_throughput  = 500
+    enable_craft_pod_sandbox_node_group = true
+  }
+
+  assert {
+    condition = (
+      local.craft_pod_sandbox_node_groups.sandbox_pod.labels == { "onyx.app/workload" = "sandbox" } &&
+      [for t in local.craft_pod_sandbox_node_groups.sandbox_pod.taints : "${t.key}=${t.value}:${t.effect}"] == ["workload=sandbox:NO_SCHEDULE"]
+    )
+    error_message = "The pod sandbox group must match the chart's sandboxPod selector and toleration, with no onyx.app/kvm label or taint."
+  }
+
+  assert {
+    condition = (
+      local.craft_pod_sandbox_node_groups.sandbox_pod.instance_types == tolist(["m8i.xlarge"]) &&
+      local.craft_pod_sandbox_node_groups.sandbox_pod.min_size == 1 &&
+      local.craft_pod_sandbox_node_groups.sandbox_pod.max_size == 2 &&
+      local.craft_pod_sandbox_node_groups.sandbox_pod.desired_size == 1
+    )
+    error_message = "The pod sandbox group defaults to one m8i.xlarge, max 2."
+  }
+
+  assert {
+    condition = (
+      local.craft_pod_sandbox_node_groups.sandbox_pod.metadata_options.http_put_response_hop_limit == 1 &&
+      local.craft_pod_sandbox_node_groups.sandbox_pod.block_device_mappings.xvda.ebs.iops == 3000 &&
+      local.craft_pod_sandbox_node_groups.sandbox_pod.tags["k8s.io/cluster-autoscaler/enabled"] == "true"
+    )
+    error_message = "The pod sandbox group keeps IMDS hop limit 1, baseline gp3 and the autoscaler tags."
+  }
+
+  assert {
+    condition = (
+      !contains(keys(local.craft_pod_sandbox_node_groups.sandbox_pod), "cpu_options") &&
+      !contains(keys(local.craft_pod_sandbox_node_groups.sandbox_pod), "cloudinit_pre_nodeadm")
+    )
+    error_message = "The pod sandbox group gets no nested virtualization and no Firecracker user data."
+  }
+
+  assert {
+    condition     = contains(keys(module.eks.eks_managed_node_groups), "sandbox_pod") && contains(keys(module.eks.eks_managed_node_groups), "sandbox")
+    error_message = "Both sandbox groups must reach the upstream module."
+  }
+
+  assert {
+    condition     = local.craft_sandbox_node_groups.sandbox.labels["onyx.app/kvm"] == "true"
+    error_message = "The Firecracker group keeps its own label next to the pod group."
+  }
+}
+
+run "pod_sandbox_group_needs_firecracker" {
+  command = plan
+  variables {
+    enable_craft                        = true
+    enable_craft_pod_sandbox_node_group = true
+  }
+  expect_failures = [var.enable_craft_pod_sandbox_node_group]
 }

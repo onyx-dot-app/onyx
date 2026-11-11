@@ -104,6 +104,7 @@ PUBLIC_ENDPOINT_SPECS = [
     ("/microvm/node/signing-key", {"PUT"}),
     # Firecracker host agents; the handler checks a JWT from the node's key.
     ("/microvm/node/state", {"POST"}),
+    ("/microvm/node/deregister", {"POST"}),
     # craft webapp proxy — access enforced per-session via sharing_scope in handler
     ("/build/sessions/{session_id}/webapp", {"GET"}),
     ("/build/sessions/{session_id}/webapp/{path:path}", {"GET"}),

@@ -74,6 +74,19 @@ The chat system uses a **Retrieval-Augmented Generation (RAG)** pipeline:
 
 When documents contain conflicting information, the system presents the most relevant and recent information first, and includes citations so users can verify the source material themselves.`;
 
+const WIDE_TABLE_COLUMNS = Array.from(
+  { length: 12 },
+  (_, i) => `Column header number ${i + 1}`
+);
+
+const WIDE_TABLE_AI_RESPONSE = `Here is a wide table:
+
+| ${WIDE_TABLE_COLUMNS.join(" | ")} |
+| ${WIDE_TABLE_COLUMNS.map(() => "---").join(" | ")} |
+| [Onyx](https://onyx.app) | ${WIDE_TABLE_COLUMNS.slice(1)
+  .map((_, i) => `value ${i + 2}`)
+  .join(" | ")} |`;
+
 const MARKDOWN_AI_RESPONSE = `Here's a quick overview with various formatting:
 
 ### Key Features
@@ -255,6 +268,33 @@ for (const theme of THEMES) {
         );
 
         await chat.screenshotContainer(`chat-markdown-code-response-${theme}`);
+      });
+
+      test("wide table grows past the prose column and copies as TSV", async ({
+        page,
+      }) => {
+        await page.setViewportSize({ width: 1800, height: 900 });
+        await page
+          .context()
+          .grantPermissions(["clipboard-read", "clipboard-write"]);
+        await chat.goto();
+        await mockChatEndpoint(page, buildMockStream(WIDE_TABLE_AI_RESPONSE));
+
+        await sendMessage(page, "Show me a wide table");
+        await chat.expectAnswerTable(WIDE_TABLE_COLUMNS, 2);
+
+        await chat.expectAnswerTableBrokenOut();
+
+        await chat.copyAnswerTable();
+        await chat.expectClipboardText(
+          [
+            WIDE_TABLE_COLUMNS.join("\t"),
+            [
+              "Onyx (https://onyx.app)",
+              ...WIDE_TABLE_COLUMNS.slice(1).map((_, i) => `value ${i + 2}`),
+            ].join("\t"),
+          ].join("\n")
+        );
       });
 
       test("AI response with LaTeX math renders correctly", async ({

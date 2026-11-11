@@ -210,7 +210,7 @@ func toTemplateInfo(t *template.Template, node template.NodeKey) *pb.TemplateInf
 		GuestKernel: t.GuestKernel, FirecrackerVersion: t.FirecrackerVersion,
 		ImageRef: t.ImageRef, ImageDigest: t.ImageDigest, RootfsSha256: t.RootfsSHA256, KeySha256: t.KeySHA256,
 		CaFingerprint: t.CAFingerprint, BuiltAt: timestamppb.New(t.BuiltAt), Compatible: t.CheckNode(node) == nil,
-		ManagedSlots: uint32(t.ManagedSlots()), Balloon: t.HasBalloon(),
+		ManagedSlots: uint32(t.ManagedSlots()), Balloon: t.HasBalloon(), ManagedMounts: t.ManagedMounts(),
 	}
 }
 
@@ -226,10 +226,23 @@ func toVM(vm agent.VM) *pb.VM {
 		SandboxId: vm.SandboxID, Attempt: vm.Attempt, Generation: vm.Generation, Template: vm.Template,
 		Vcpus: vm.VCPUs, MemMib: vm.MemMiB, ScratchGib: vm.ScratchGiB, State: vm.State, TenantId: vm.TenantID,
 		Pid: int32(vm.PID), Uid: vm.UID, StartedAt: timestamppb.New(vm.StartedAt),
-		Managed: &pb.ManagedState{
-			Slots: uint32(vm.Managed.Slots), Active: vm.Managed.Active, SlotAImage: vm.Managed.A, SlotBImage: vm.Managed.B,
-		},
+		Managed: toManagedState(vm.Managed), ManagedMounts: toManagedMounts(vm.Mounts),
 	}
+}
+
+func toManagedState(s agent.ManagedState) *pb.ManagedState {
+	return &pb.ManagedState{Slots: uint32(s.Slots), Active: s.Active, SlotAImage: s.A, SlotBImage: s.B}
+}
+
+func toManagedMounts(ms map[string]agent.ManagedState) map[string]*pb.ManagedState {
+	if len(ms) == 0 {
+		return nil
+	}
+	out := make(map[string]*pb.ManagedState, len(ms))
+	for k, v := range ms {
+		out[k] = toManagedState(v)
+	}
+	return out
 }
 
 // ListenUnix listens on a Unix socket that only root can use. It replaces a

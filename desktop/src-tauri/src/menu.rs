@@ -3,10 +3,9 @@ use crate::debug_log::{log_backend_error, MENU_OPEN_DEBUG_LOG_ID, MENU_TOGGLE_DE
 use crate::shortcuts::SummonShortcut;
 use crate::window::{focus_main_window, focused_webview_window, open_chat_window};
 use tauri::image::Image;
-#[cfg(not(target_os = "macos"))]
-use tauri::menu::AboutMetadataBuilder;
 use tauri::menu::{
-    CheckMenuItem, Menu, MenuBuilder, MenuItem, PredefinedMenuItem, SubmenuBuilder, HELP_SUBMENU_ID,
+    AboutMetadataBuilder, CheckMenuItem, Menu, MenuBuilder, MenuItem, PredefinedMenuItem, Submenu,
+    SubmenuBuilder, HELP_SUBMENU_ID, WINDOW_SUBMENU_ID,
 };
 use tauri::tray::{TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, Wry};
@@ -32,6 +31,18 @@ pub const MENU_OPEN_DOCS_ID: &str = "open_docs";
 pub const MENU_RELOAD_ID: &str = "reload_page";
 pub const MENU_GO_BACK_ID: &str = "go_back";
 pub const MENU_GO_FORWARD_ID: &str = "go_forward";
+#[cfg(not(target_os = "macos"))]
+pub const MENU_QUIT_ID: &str = "quit_app";
+// macOS keeps Quit in the app menu that `Menu::default` builds.
+#[cfg(target_os = "windows")]
+const QUIT_LABEL: &str = "Exit Onyx";
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+const QUIT_LABEL: &str = "Quit Onyx";
+const ABOUT_NAME: &str = "Onyx Desktop";
+
+/// The submenu that holds the About item, kept so the item can be rebuilt
+/// when the server URL changes.
+struct AboutMenu(Submenu<Wry>);
 
 /// Handles to the checkable menu items, populated once in `setup_app_menu`.
 /// Toggling reaches for these directly instead of re-walking the whole menu
@@ -61,27 +72,53 @@ fn build_file_menu(app: &AppHandle, menu: &Menu<Wry>) -> tauri::Result<()> {
         true,
         Some("CmdOrCtrl+Comma"),
     )?;
+    // The only Close Window item: `rebuild_window_menu` drops the Window copy.
+    let close_window_item = PredefinedMenuItem::close_window(app, Some("Close Window"))?;
+    // muda does not show a predefined Quit on Linux, so use a plain item.
+    #[cfg(not(target_os = "macos"))]
+    let quit_item = MenuItem::with_id(app, MENU_QUIT_ID, QUIT_LABEL, true, None::<&str>)?;
 
-    if let Some(file_menu) = menu
-        .items()?
-        .into_iter()
-        .filter_map(|item| item.as_submenu().cloned())
-        .find(|submenu| submenu.text().ok().as_deref() == Some("File"))
+    let builder = SubmenuBuilder::new(app, "File")
+        .items(&[&new_chat_item, &new_window_item])
+        .separator()
+        .item(&settings_item)
+        .separator()
+        .item(&close_window_item);
+    #[cfg(not(target_os = "macos"))]
+    let builder = builder.item(&quit_item);
+    let file_menu = builder.build()?;
+
+    // Replace the File menu `Menu::default` builds (it has no File on Linux).
+    let items = menu.items()?;
+    if let Some(idx) = items
+        .iter()
+        .position(|item| item.as_submenu().and_then(|s| s.text().ok()).as_deref() == Some("File"))
     {
-        file_menu.insert_items(&[&new_chat_item, &new_window_item, &settings_item], 0)?;
+        menu.remove_at(idx)?;
+        menu.insert(&file_menu, idx)?;
     } else {
-        let file_menu = SubmenuBuilder::new(app, "File")
-            .items(&[
-                &new_chat_item,
-                &new_window_item,
-                &settings_item,
-                &PredefinedMenuItem::close_window(app, None)?,
-            ])
-            .build()?;
         menu.prepend(&file_menu)?;
     }
 
     Ok(())
+}
+
+/// Keep only Minimize and Maximize in the Window menu. `Menu::default` also
+/// puts Close Window there, which repeats the File menu item.
+fn rebuild_window_menu(app: &AppHandle, menu: &Menu<Wry>) -> tauri::Result<()> {
+    let Some(window_menu) = menu
+        .get(WINDOW_SUBMENU_ID)
+        .and_then(|item| item.as_submenu().cloned())
+    else {
+        return Ok(());
+    };
+    for _ in 0..window_menu.items()?.len() {
+        window_menu.remove_at(0)?;
+    }
+    window_menu.append_items(&[
+        &PredefinedMenuItem::minimize(app, None)?,
+        &PredefinedMenuItem::maximize(app, None)?,
+    ])
 }
 
 /// Reload/Back/Forward as View-menu accelerators. These are the chords the
@@ -218,39 +255,81 @@ fn build_help_menu(app: &AppHandle, menu: &Menu<Wry>) -> tauri::Result<()> {
         None::<&str>,
     )?;
 
-    if let Some(help_menu) = menu
+    let help_menu = if let Some(help_menu) = menu
         .get(HELP_SUBMENU_ID)
         .and_then(|item| item.as_submenu().cloned())
     {
-        // Off macOS, `Menu::default` seeds this Help menu with a predefined
-        // "About" item (at index 0) whose metadata carries no icon, so the
-        // About dialog shows no logo. Rebuild that metadata -- keeping the name,
-        // version, and copyright `Menu::default` set -- with the Onyx icon added.
-        // (On macOS the About item lives in the app menu, not Help.)
-        #[cfg(not(target_os = "macos"))]
-        {
-            let pkg_info = app.package_info();
-            let config = app.config();
-            let about_metadata = AboutMetadataBuilder::new()
-                .name(Some(pkg_info.name.clone()))
-                .version(Some(pkg_info.version.to_string()))
-                .copyright(config.bundle.copyright.clone())
-                .authors(config.bundle.publisher.clone().map(|p| vec![p]))
-                .icon(Image::from_bytes(ABOUT_ICON_BYTES).ok())
-                .build();
-            let about_item = PredefinedMenuItem::about(app, None, Some(about_metadata))?;
-            help_menu.remove_at(0)?;
-            help_menu.insert(&about_item, 0)?;
-        }
-        help_menu.append(&docs_item)?;
+        help_menu
     } else {
-        let help_menu = SubmenuBuilder::with_id(app, HELP_SUBMENU_ID, "Help")
-            .item(&docs_item)
-            .build()?;
+        let help_menu = SubmenuBuilder::with_id(app, HELP_SUBMENU_ID, "Help").build()?;
         menu.append(&help_menu)?;
+        help_menu
+    };
+    help_menu.append(&docs_item)?;
+
+    // `Menu::default` puts About first in the app menu on macOS and first in
+    // Help elsewhere.
+    #[cfg(target_os = "macos")]
+    let about_menu = menu
+        .items()?
+        .into_iter()
+        .find_map(|item| item.as_submenu().cloned());
+    #[cfg(not(target_os = "macos"))]
+    let about_menu = Some(help_menu);
+    if let Some(about_menu) = about_menu {
+        replace_about_item(app, &about_menu)?;
+        app.manage(AboutMenu(about_menu));
     }
 
     Ok(())
+}
+
+/// About shows the Desktop app version (not the server version) and the
+/// configured server URL. It reads only local state, so it cannot hang.
+fn build_about_item(app: &AppHandle) -> tauri::Result<PredefinedMenuItem<Wry>> {
+    let pkg_info = app.package_info();
+    let config = app.config();
+    let server = format!("Server: {}", app.state::<ConfigState>().config().server_url);
+    let builder = AboutMetadataBuilder::new()
+        .name(Some(ABOUT_NAME))
+        .version(Some(pkg_info.version.to_string()))
+        .copyright(config.bundle.copyright.clone())
+        .authors(config.bundle.publisher.clone().map(|p| vec![p]));
+    // The macOS About panel shows `credits`; Windows and Linux show `comments`.
+    #[cfg(target_os = "macos")]
+    let builder = builder.credits(Some(server));
+    // GTK and Windows show no logo unless the metadata carries one.
+    #[cfg(not(target_os = "macos"))]
+    let builder = builder
+        .comments(Some(server))
+        .icon(Image::from_bytes(ABOUT_ICON_BYTES).ok());
+    PredefinedMenuItem::about(
+        app,
+        Some(&format!("About {ABOUT_NAME}")),
+        Some(builder.build()),
+    )
+}
+
+fn replace_about_item(app: &AppHandle, about_menu: &Submenu<Wry>) -> tauri::Result<()> {
+    let item = build_about_item(app)?;
+    let has_about = about_menu
+        .items()?
+        .first()
+        .is_some_and(|first| first.as_predefined_menuitem().is_some());
+    if has_about {
+        about_menu.remove_at(0)?;
+    }
+    about_menu.insert(&item, 0)
+}
+
+/// Rebuild About so it shows the current server URL.
+pub fn refresh_about_item(app: &AppHandle) {
+    let Some(about_menu) = app.try_state::<AboutMenu>() else {
+        return;
+    };
+    if let Err(e) = replace_about_item(app, &about_menu.0) {
+        log_backend_error(app, &format!("Failed to refresh About menu item: {e}"));
+    }
 }
 
 fn build_debug_menu(app: &AppHandle, menu: &Menu<Wry>) -> tauri::Result<()> {
@@ -286,6 +365,7 @@ pub fn setup_app_menu(app: &AppHandle) -> tauri::Result<()> {
     let menu = app.menu().unwrap_or(Menu::default(app)?);
 
     build_file_menu(app, &menu)?;
+    rebuild_window_menu(app, &menu)?;
     build_view_menu(app, &menu)?;
     #[cfg(not(target_os = "macos"))]
     build_window_menu(app, &menu)?;

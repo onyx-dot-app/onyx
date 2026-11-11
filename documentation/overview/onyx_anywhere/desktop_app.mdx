@@ -45,8 +45,10 @@ Features include:
 **For self-hosted users**: Point the app at your Onyx server. If the app cannot reach a server,
 it shows a **Settings** page. Enter your server URL and select **Save & Connect**.
 
-You can also edit the config file. Select **Open Config File** from the app menu (`Cmd+,` on macOS,
-`Ctrl+,` on Windows and Linux), change `server_url`, and restart the app:
+To change the server later, select **File → Settings...** (`Cmd+,` on macOS, `Ctrl+,` on Windows and Linux).
+To go back to Onyx without a change, select **File → New Chat**.
+
+You can also edit the config file. Change `server_url`, then restart the app:
 
 ```json
 {
@@ -79,6 +81,15 @@ Set it to `null` to turn the shortcut off.
 | `Cmd+N` / `Ctrl+N` | New Chat |
 | `Cmd+Shift+N` / `Ctrl+Shift+N` | New Window |
 | `Cmd+R` / `Ctrl+R` | Reload |
-| `Cmd+[` / `Ctrl+[` | Back |
-| `Cmd+]` / `Ctrl+]` | Forward |
-| `Cmd+,` / `Ctrl+,` | Open Config File |
+| `Cmd+[` / `Alt+Left` | Back |
+| `Cmd+]` / `Alt+Right` | Forward |
+| `Cmd+,` / `Ctrl+,` | Settings |
+
+## Menus
+
+- **File** has **New Chat**, **New Window** and **Settings...**. On macOS and Windows it also has
+  **Close Window**.
+- To quit the app, select **File → Exit Onyx** on Windows, **File → Quit Onyx** on Linux, or
+  **Onyx → Quit Onyx** on macOS.
+- **Help → About Onyx Desktop** shows the version of the desktop app and the server URL that the app uses.
+  The version of the Onyx server can be different. On macOS, **About Onyx Desktop** is in the **Onyx** menu.

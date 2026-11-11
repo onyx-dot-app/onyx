@@ -129,8 +129,9 @@ needs the network at boot.
     `NODE_EXTRA_CA_CERTS`, `GIT_SSL_CAINFO` (all set to the bundle);
   - `/etc/profile.d/craft-guest-env.sh` for login shells;
   - `/etc/apt/apt.conf.d/80craft-egress-proxy`.
-- Makes `/workspace/managed` an empty, root-owned mount point, and adds
-  `/mnt/scratch`.
+- Makes the root-owned mount points `/mnt/scratch`, `/mnt/skills`,
+  `/mnt/user-uploads` and `/mnt/spaces`, and `/home/onyx/workspaces` (the
+  session directories), owned by the sandbox user.
 - Writes `/etc/hosts`, `/etc/hostname` and an empty `/etc/resolv.conf`. There is
   no DNS in the VM.
 - Makes an ext4 file system with no journal (the drive is always read-only).
@@ -219,28 +220,39 @@ Attach the drives in this order. The guest finds them by order:
 |---|---|---|---|---|
 | `rootfs` | `/dev/vda` | `true` (root device) | `rootfs.ext4` | `/` |
 | `scratch` | `/dev/vdb` | `false` | Per-VM ext4, made by the host (empty or a saved disk) | `/mnt/scratch` |
-| `managed` | `/dev/vdc` | `true` | Managed slot A: per-VM ext4 with the managed files (skills) | `/workspace/managed` |
+| `managed` | `/dev/vdc` | `true` | Skills slot A: per-VM ext4 with the skills | `/mnt/skills` |
 | `upload_a`, `upload_b` | `/dev/vdd`, `/dev/vde` | `true` | Upload slots of the template layout | not by `attach` |
-| `managed_b` | `/dev/vdf` | `true` | Managed slot B: the spare for a skills update. Always the last drive, so the other device names do not move. Optional: older templates do not have it | not by `attach` |
+| `managed_b` | `/dev/vdf` | `true` | Skills slot B: the spare for a skills update. Optional: older templates do not have it | not by `attach` |
+| `user_uploads_a`, `user_uploads_b` | `/dev/vdg`, `/dev/vdh` | `true` | User uploads slots A and B (layout 5) | slot A on `/mnt/user-uploads` |
+| `spaces_a`, `spaces_b` | `/dev/vdi`, `/dev/vdj` | `true` | Spaces slots A and B (layout 5) | slot A on `/mnt/spaces` |
 
-`init.conf` sets the managed slot devices: `MANAGED_DEV` (slot A, default
-`/dev/vdc`) and `MANAGED_DEV_B` (slot B, default `/dev/vdf`). The manifest
-lists them in `guest.managed_slots`.
+New drives always go after the old ones, so the older device names do not
+move. `init.conf` sets the managed mounts in `MANAGED_MOUNTS`
+(`name:mount point:slot A:slot B`). The manifest lists them in
+`guest.managed_mounts` (and the skills slots in `guest.managed_slots`). The
+guest daemon's `--managed-mounts` has the same list.
+
+Each session has its directory `/home/onyx/workspaces/<session-id>`
+(`guest.sessions_root`). The build makes `/home/onyx` and
+`/home/onyx/workspaces`, owned by the sandbox user.
 
 Kernel boot arguments: `console=ttyS0 reboot=k panic=1 pci=off init=/sbin/craft-init`.
 Add `craft.scratch=defer` for a template boot.
 
-The managed drive is read-only in the device. Root in the guest cannot write it,
-also not with `mount -o remount,rw` or `blockdev --setrw`. `attach` stops (and
-init starts no service) if the guest sees the managed drive as writable. With
-no managed drive, `attach` mounts an empty read-only tmpfs on
-`/workspace/managed`, so the path is never writable.
+The managed drives are read-only in the device. Root in the guest cannot write
+them, also not with `mount -o remount,rw` or `blockdev --setrw`. `attach`
+stops (and init starts no service) if the guest sees a managed drive as
+writable. With no slot A device (an older template), `attach` mounts an empty
+read-only tmpfs on the mount point, so the path is never writable.
 
-`attach` mounts slot A with `ro,noload,nodev,nosuid,noexec` and private mount
-propagation. It never mounts slot B. If slot B is there, `attach` only checks
-that the guest sees it as read-only.
+`attach` mounts slot A of each mount with `ro,noload,nodev,nosuid,noexec` and
+private mount propagation. It never mounts slot B. If slot B is there,
+`attach` only checks that the guest sees it as read-only.
 
-### Skills update without a new VM
+### Managed update without a new VM
+
+Each mount (skills, user uploads, spaces) updates the same way, with its own
+two slots.
 
 The guest daemon and the node agent do the update, not `attach`:
 
@@ -250,7 +262,7 @@ The guest daemon and the node agent do the update, not `attach`:
    under `/run/craft-fc`, and moves a clone of it beneath the current mount
    (`open_tree` with `OPEN_TREE_CLONE`, then `move_mount` with
    `MOVE_MOUNT_BENEATH`, Linux 6.5 or later).
-3. The daemon unmounts the top (old) mount of `/workspace/managed` with
+3. The daemon unmounts the top (old) mount of the mount point with
    `MNT_DETACH`, then the staging mount. New opens see the new files at once.
    Open files of the old mount keep working until they close.
    A plain stacked mount does not work here: after the new mount goes on top,
@@ -260,10 +272,9 @@ The guest daemon and the node agent do the update, not `attach`:
 The daemon makes the new mount private too. Private mounts keep these mount
 and unmount events local. A container check (kernel 7.0) passed this order.
 
-Root in the guest can unmount `/workspace/managed` and then write to the
-directory below it. Those files go to the user's own scratch disk; the
-managed drive does not change. Nothing on the host reads `/workspace/managed`
-from the guest.
+Root in the guest can unmount a managed mount point. `/mnt` is on the
+read-only root, so the directory below it is not writable. The managed drive
+does not change. Nothing on the host reads the managed mounts from the guest.
 
 ## Init
 
@@ -317,9 +328,10 @@ PID files: `/run/craft-fc/guest-daemon.pid` and `/run/craft-fc/egress-relay.pid`
 3. Mounts an overlay on each of `/etc /home /root /opt /srv /usr /var /workspace`.
    The read-only root is the lower layer. The upper layer is
    `/mnt/scratch/overlay/<name>/upper` (for example `overlay/usr/upper`).
-4. Mounts managed slot A read-only and `noexec`, with private propagation, on
-   `/workspace/managed`, or an empty read-only tmpfs if there is no managed
-   drive. Slot B stays unmounted.
+4. Mounts slot A of each managed mount read-only and `noexec`, with private
+   propagation, on `/mnt/skills`, `/mnt/user-uploads` and `/mnt/spaces`, or
+   an empty read-only tmpfs if the template has no such drive. Slot B stays
+   unmounted.
 
 There is no overlay over the whole root. A saved scratch disk holds only the
 changes under these directories, so it can go on top of a shared template. `/usr`
@@ -368,10 +380,10 @@ KVM host (see `../README.md`, "Boot test") and check:
 
 - `/proc/mounts` has the overlays and the read-only managed drive;
 - `apt-get install`, `pip install` and `npm install -g` work as root;
-- writes to `/workspace/managed` fail, also after `mount -o remount,rw`, and
-  a program on it does not run (`noexec`);
-- with slot B attached: it is not mounted, and a stacked mount of slot B plus
-  a lazy unmount of slot A leaves slot B on `/workspace/managed`;
+- writes to `/mnt/skills`, `/mnt/user-uploads` and `/mnt/spaces` fail, also
+  after `mount -o remount,rw`, and a program on them does not run (`noexec`);
+- with slot B attached: it is not mounted, and `MountManaged` of slot B
+  leaves slot B on the mount point;
 - after `kill -9` of the daemon, init starts it again and the guest keeps running;
 - a service that stops during the other service's backoff starts again;
 - a failed `attach` (for example no scratch drive) starts no service;

@@ -466,3 +466,37 @@ func TestMkfsExt4Real(t *testing.T) {
 		t.Fatalf("debugfs stats: %v\n%s", err, out)
 	}
 }
+
+func TestStoreRemoveUnused(t *testing.T) {
+	var calls []string
+	s := &Store{Dir: t.TempDir(), Limits: DefaultLimits, Mkfs: fakeMkfs(&calls)}
+	z := makeZip(t, entry{name: "s/SKILL.md", data: "v1"})
+	id := sum(z)
+	if _, _, err := s.Put(context.Background(), id, int64(len(z)), bytes.NewReader(z)); err != nil {
+		t.Fatal(err)
+	}
+	none := func() map[string]bool { return nil }
+
+	if ok, err := s.RemoveUnused(id, func() map[string]bool { return map[string]bool{id: true} }); ok || err != nil {
+		t.Fatalf("removed an image in use: %v %v", ok, err)
+	}
+	unpin := s.Pin(id)
+	if ok, err := s.RemoveUnused(id, none); ok || err != nil {
+		t.Fatalf("removed a pinned image: %v %v", ok, err)
+	}
+	unpin()
+	unlock, _ := s.tryLockID(id)
+	if ok, _ := s.RemoveUnused(id, none); ok {
+		t.Fatal("removed an image during its Put")
+	}
+	unlock()
+	if ok, err := s.RemoveUnused(id, none); !ok || err != nil || s.Has(id) {
+		t.Fatalf("RemoveUnused = %v %v, has %v", ok, err, s.Has(id))
+	}
+	if ok, err := s.RemoveUnused(id, none); ok || err != nil {
+		t.Fatalf("second remove = %v %v", ok, err)
+	}
+	if _, err := s.RemoveUnused("../x", none); err == nil {
+		t.Fatal("accepted a bad id")
+	}
+}

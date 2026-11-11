@@ -4,6 +4,7 @@ Everything is off by default. With firecracker on, the agent must land on the
 Firecracker sandbox nodes with the host access it needs, and its pods may reach
 sandbox-proxy. A wrong render here fails only at runtime on a KVM node."""
 
+import json
 from typing import Any
 
 import pytest
@@ -18,6 +19,15 @@ _TEMPLATE = "templates/craft-fc-host-agent.yaml"
 _CONFIGMAP_TEMPLATE = "templates/configmap.yaml"
 _PROXY_POLICY_TEMPLATE = "templates/sandbox-proxy/networkpolicy.yaml"
 _PODTEMPLATE_TEMPLATE = "templates/sandbox-podtemplate.yaml"
+_PREPULLER_TEMPLATE = "templates/sandbox-image-prepuller.yaml"
+_PREFLIGHT_TEMPLATE = "templates/craft-fc-preflight.yaml"
+# Terraform puts this taint on Firecracker nodes; kubelet does not count VM memory.
+_KVM_TOLERATION = {
+    "key": "onyx.app/kvm",
+    "operator": "Equal",
+    "value": "true",
+    "effect": "NoSchedule",
+}
 # The pods that call the agents get the mTLS client certificate.
 _CLIENT_TEMPLATES = [
     "templates/api-deployment.yaml",
@@ -109,7 +119,7 @@ def test_agent_pod_spec() -> None:
     # The sandbox nodes that Terraform marked for Firecracker, never the
     # sandbox RuntimeClass.
     assert spec["nodeSelector"] == {**sandbox["nodeSelector"], "onyx.app/kvm": "true"}
-    assert spec["tolerations"] == sandbox["tolerations"]
+    assert spec["tolerations"] == [*sandbox["tolerations"], _KVM_TOLERATION]
     assert "runtimeClassName" not in spec
     assert spec["hostPID"] is True
     # The drain watch reads the Node: the token of the agent's own account.
@@ -606,3 +616,110 @@ def test_pod_runtime_has_no_agent_client(template: str) -> None:
 
     assert not {n for n in env_names if n.startswith("SANDBOX_FC_AGENT_")}
     assert "craft-fc-agent-client" not in {v["name"] for v in spec.get("volumes", [])}
+
+
+def _daemonset_spec(extra_args: list[str], template: str) -> dict[str, Any]:
+    return _by_kind(_render(extra_args, template), "DaemonSet")["spec"]["template"][
+        "spec"
+    ]
+
+
+def test_only_agent_and_preflight_tolerate_the_kvm_taint() -> None:
+    args = [*_FIRECRACKER, "--set", "craft.firecrackerPreflight.enabled=true"]
+    agent = _daemonset_spec(args, _TEMPLATE)
+    preflight = _daemonset_spec(args, _PREFLIGHT_TEMPLATE)
+    prepuller = _daemonset_spec(args, _PREPULLER_TEMPLATE)
+    sandbox = _render(args, _PODTEMPLATE_TEMPLATE)[0]["template"]["spec"]
+
+    assert _KVM_TOLERATION in agent["tolerations"]
+    assert _KVM_TOLERATION in preflight["tolerations"]
+    # The preflight checks only the Firecracker nodes, not a pod sandbox group.
+    assert preflight["nodeSelector"] == {
+        "onyx.app/workload": "sandbox",
+        "onyx.app/kvm": "true",
+    }
+    for spec in (sandbox, prepuller):
+        assert spec["tolerations"] == [
+            {
+                "key": "workload",
+                "operator": "Equal",
+                "value": "sandbox",
+                "effect": "NoSchedule",
+            }
+        ]
+        assert "onyx.app/kvm" not in spec["nodeSelector"]
+
+
+def test_agent_kvm_toleration_is_not_doubled() -> None:
+    args = [
+        *_FIRECRACKER,
+        "--set-json",
+        f"craft.hostAgent.tolerations=[{json.dumps(_KVM_TOLERATION)}]",
+    ]
+    assert _daemonset_spec(args, _TEMPLATE)["tolerations"] == [_KVM_TOLERATION]
+    # An explicit agent list still gets the KVM toleration.
+    custom = {"key": "dedicated", "operator": "Equal", "value": "fc"}
+    custom_args = [
+        *_FIRECRACKER,
+        "--set-json",
+        f"craft.hostAgent.tolerations=[{json.dumps(custom)}]",
+    ]
+    assert _daemonset_spec(custom_args, _TEMPLATE)["tolerations"] == [
+        custom,
+        _KVM_TOLERATION,
+    ]
+    # A KVM-key toleration with another effect does not cover NoSchedule.
+    no_execute = {"key": "onyx.app/kvm", "operator": "Exists", "effect": "NoExecute"}
+    no_execute_args = [
+        *_FIRECRACKER,
+        "--set-json",
+        f"craft.hostAgent.tolerations=[{json.dumps(no_execute)}]",
+    ]
+    assert _daemonset_spec(no_execute_args, _TEMPLATE)["tolerations"] == [
+        no_execute,
+        _KVM_TOLERATION,
+    ]
+    preflight_args = [
+        *_FIRECRACKER,
+        "--set",
+        "craft.firecrackerPreflight.enabled=true",
+        "--set-json",
+        'sandboxPod.tolerations=[{"key":"workload","operator":"Exists"}]',
+    ]
+    assert _daemonset_spec(preflight_args, _PREFLIGHT_TEMPLATE)["tolerations"] == [
+        {"key": "workload", "operator": "Exists"},
+        _KVM_TOLERATION,
+    ]
+
+
+@pytest.mark.parametrize(
+    "toleration",
+    [
+        {"operator": "Exists"},
+        {"operator": "Exists", "effect": "NoSchedule"},
+        {"key": "onyx.app/kvm", "operator": "Exists"},
+    ],
+)
+def test_sandbox_pods_may_not_tolerate_the_kvm_taint(
+    toleration: dict[str, str],
+) -> None:
+    tolerations = json.dumps([toleration])
+    result = render_chart(
+        [
+            *_FIRECRACKER,
+            "--set-json",
+            f"sandboxPod.tolerations={tolerations}",
+            "--show-only",
+            _PODTEMPLATE_TEMPLATE,
+        ]
+    )
+    assert result.returncode != 0
+    assert "must not tolerate the onyx.app/kvm taint" in result.stderr
+
+
+def test_pod_runtime_keeps_sandbox_tolerations_as_set() -> None:
+    sandbox = _render(
+        ["--set-json", 'sandboxPod.tolerations=[{"operator":"Exists"}]'],
+        _PODTEMPLATE_TEMPLATE,
+    )[0]["template"]["spec"]
+    assert sandbox["tolerations"] == [{"operator": "Exists"}]

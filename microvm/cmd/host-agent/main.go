@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -31,6 +32,7 @@ import (
 	"github.com/onyx-dot-app/onyx/microvm/internal/egressca"
 	"github.com/onyx-dot-app/onyx/microvm/internal/fcvm"
 	"github.com/onyx-dot-app/onyx/microvm/internal/hostinfo"
+	"github.com/onyx-dot-app/onyx/microvm/internal/imagegc"
 	"github.com/onyx-dot-app/onyx/microvm/internal/jailer"
 	"github.com/onyx-dot-app/onyx/microvm/internal/journal"
 	"github.com/onyx-dot-app/onyx/microvm/internal/managed"
@@ -106,6 +108,8 @@ type flags struct {
 	transferHTTP   bool
 	transferPar    int
 	transferPart   int64
+	imageGCEvery   time.Duration
+	imageGCGrace   time.Duration
 }
 
 func main() {
@@ -164,6 +168,8 @@ func main() {
 	flag.BoolVar(&f.transferHTTP, "transfer-allow-http", false, "allow plain http presigned URLs (test object stores only)")
 	flag.IntVar(&f.transferPar, "transfer-parallel", 8, "range GETs at once for a session restore download (1: one plain GET)")
 	flag.Int64Var(&f.transferPart, "transfer-part-bytes", 8<<20, "bytes per range GET; a restore holds up to --transfer-parallel of them in memory")
+	flag.DurationVar(&f.imageGCEvery, "image-gc-interval", 15*time.Minute, "how often the image GC removes managed images and old templates that no VM used for --image-gc-grace (0 = off)")
+	flag.DurationVar(&f.imageGCGrace, "image-gc-grace", 6*time.Hour, "how long a managed image, or a template that is not the current one, stays on the node after no VM uses it")
 	flag.Parse()
 
 	log := slog.New(slog.NewJSONHandler(os.Stderr, nil))
@@ -278,7 +284,8 @@ func run(f flags, log *slog.Logger) error {
 		return err
 	}
 	push.start(ctx, obs.metrics)
-	if err := startDrainWatch(ctx, f, m, log); err != nil {
+	drainWatch, err := startDrainWatch(ctx, f, m, log)
+	if err != nil {
 		return err
 	}
 	t0 := time.Now()
@@ -328,18 +335,28 @@ func run(f flags, log *slog.Logger) error {
 	} else {
 		log.Warn("no --egress-ca or --egress-ca-configmap: VMs trust only a CA built into the root drive")
 	}
+	// The template of the last build from --rootfs-dir; the image GC keeps it.
+	var currentTemplate atomic.Pointer[string]
+	// Held over the build and its metrics, so template_ready shows the last
+	// build to finish, and over each template GC removal, so a build's
+	// template is current before the GC can see it unused.
+	var buildMu sync.Mutex
 	if f.rootfsDir != "" {
-		// Held over the build and its metrics, so template_ready shows the
-		// last build to finish.
-		var buildMu sync.Mutex
 		svc.Builder = func(ctx context.Context) (tplbuild.Result, error) {
 			buildMu.Lock()
 			defer buildMu.Unlock()
 			t0 := time.Now()
 			r, err := buildTemplate(ctx, builder, f.rootfsDir)
 			obs.metrics.TemplateBuild(time.Since(t0), templateResult(r, err))
+			if r.Template != nil {
+				v := r.Template.Version
+				currentTemplate.Store(&v)
+			}
 			return r, err
 		}
+	}
+	if gc := imageGC(f, m, store, mstore, &currentTemplate, &buildMu, obs.metrics, log); gc != nil {
+		go gc.Run(ctx)
 	}
 	if err := obs.start(ctx, svc); err != nil {
 		return err
@@ -367,6 +384,11 @@ func run(f flags, log *slog.Logger) error {
 	}
 	go func() {
 		<-ctx.Done()
+		var refresh func(context.Context)
+		if drainWatch != nil {
+			refresh = drainWatch.Once
+		}
+		push.leave(m.DrainTaints, refresh, log)
 		// VMs keep running: they are in the host slice, not in this process.
 		for _, s := range servers {
 			s.GracefulStop()
@@ -423,6 +445,68 @@ func startupTemplates(svc *server.Service, b *tplbuild.Builder, log *slog.Logger
 	log.Info("template ready", "template", r.Template.Version, "built", r.Built, "build_ms", r.BuildMS, "removed", r.Removed)
 }
 
+// imageGC returns the sweeper of unused managed images and old templates,
+// or nil with --image-gc-interval 0. Templates are swept only once a build
+// from --rootfs-dir named the current template.
+func imageGC(f flags, m *agent.Manager, store *template.Store, mstore *managed.Store,
+	current *atomic.Pointer[string], buildMu sync.Locker, mt *metrics.Metrics, log *slog.Logger) *imagegc.Sweeper {
+	if f.imageGCEvery <= 0 {
+		log.Warn("--image-gc-interval is 0: unused managed images and old templates stay on the node")
+		return nil
+	}
+	return &imagegc.Sweeper{
+		Grace: f.imageGCGrace, Interval: f.imageGCEvery, Log: log, Removed: mt.ImageGCRemoved,
+		Kinds: []imagegc.Kind{
+			{
+				Name: "managed",
+				List: func() ([]string, error) {
+					imgs, err := mstore.List()
+					ids := make([]string, 0, len(imgs))
+					for _, img := range imgs {
+						ids = append(ids, img.ID)
+					}
+					return ids, err
+				},
+				Keep:   m.ManagedImagesInUse,
+				Remove: func(id string) (bool, error) { return mstore.RemoveUnused(id, m.ManagedImagesInUse) },
+			},
+			templateKind(store, m.TemplatesInUse, current, buildMu),
+		},
+	}
+}
+
+// templateKind sweeps the templates other than the current one. It lists
+// nothing until a build named the current template. Removals hold buildMu.
+func templateKind(store *template.Store, inUse func() map[string]bool, current *atomic.Pointer[string], buildMu sync.Locker) imagegc.Kind {
+	kept := func() map[string]bool {
+		keep := inUse()
+		if c := current.Load(); c != nil {
+			keep[*c] = true
+		}
+		return keep
+	}
+	return imagegc.Kind{
+		Name: "template",
+		List: func() ([]string, error) {
+			if current.Load() == nil {
+				return nil, nil
+			}
+			ts, err := store.List()
+			ids := make([]string, 0, len(ts))
+			for _, t := range ts {
+				ids = append(ids, t.Version)
+			}
+			return ids, err
+		},
+		Keep: kept,
+		Remove: func(id string) (bool, error) {
+			buildMu.Lock()
+			defer buildMu.Unlock()
+			return store.RemoveUnused(id, kept)
+		},
+	}
+}
+
 // egressCACacheTTL is how long Create reuses a CA read. A rotated CA reaches
 // new VMs after at most this long.
 const egressCACacheTTL = 30 * time.Second
@@ -476,26 +560,26 @@ func parsePorts(s string) ([]uint32, error) {
 // drains the node while it has a drain taint. The first read
 // runs before the API serves, so a restarted agent on a cordoned node
 // never admits a VM.
-func startDrainWatch(ctx context.Context, f flags, m *agent.Manager, log *slog.Logger) error {
+func startDrainWatch(ctx context.Context, f flags, m *agent.Manager, log *slog.Logger) (*nodewatch.Watcher, error) {
 	if !f.watchDrain {
-		return nil
+		return nil, nil
 	}
 	keys := splitList(f.drainTaints)
 	if len(keys) == 0 {
-		return errors.New("--watch-node-drain needs --drain-taints")
+		return nil, errors.New("--watch-node-drain needs --drain-taints")
 	}
 	if f.drainPoll < time.Second {
-		return fmt.Errorf("--drain-poll-interval %v must be at least 1s", f.drainPoll)
+		return nil, fmt.Errorf("--drain-poll-interval %v must be at least 1s", f.drainPoll)
 	}
 	src, err := nodewatch.NewInCluster(f.nodeID)
 	if err != nil {
-		return fmt.Errorf("--watch-node-drain: %w", err)
+		return nil, fmt.Errorf("--watch-node-drain: %w", err)
 	}
 	w := &nodewatch.Watcher{Source: src, Keys: keys, Interval: f.drainPoll, Timeout: 10 * time.Second, Apply: m.SetNodeDrain}
 	w.Once(ctx)
 	go w.Run(ctx)
 	log.Info("watching the node for drain taints", "node", f.nodeID, "taints", keys, "interval", f.drainPoll)
-	return nil
+	return w, nil
 }
 
 // pushers are the key registration and node state report loops. They
@@ -503,17 +587,64 @@ func startDrainWatch(ctx context.Context, f flags, m *agent.Manager, log *slog.L
 type pushers struct {
 	reg *relay.Registrar
 	rep *nodereport.Reporter
+	// deregister ends the node's registration; nil without a registrar.
+	deregister func(context.Context) (bool, error)
+	wg         *sync.WaitGroup
 }
 
 func (p pushers) start(ctx context.Context, mt *metrics.Metrics) {
+	wg := p.wg
+	if wg == nil {
+		wg = &sync.WaitGroup{}
+	}
 	if p.reg != nil {
 		p.reg.Observe = mt.KeyRegistration
-		go p.reg.Run(ctx)
+		wg.Go(func() { p.reg.Run(ctx) })
 	}
 	if p.rep != nil {
 		p.rep.Observe = mt.NodeReport
-		go p.rep.Run(ctx)
+		wg.Go(func() { p.rep.Run(ctx) })
 	}
+}
+
+// refreshTimeout and deregisterTimeout bound the node read and the
+// deregistration at shutdown, well inside the pod's termination grace period.
+const (
+	refreshTimeout    = 3 * time.Second
+	deregisterTimeout = 5 * time.Second
+)
+
+// leave runs after the stop signal. On a node with drain taints (the node
+// goes away) it ends the node's registration, so placement and the node
+// list drop the node at once. Else, or if the call fails, the registration
+// expires after relay.KeyTTL.
+// refresh, if set, reads the node again first: the taint can be newer than
+// the last poll.
+func (p pushers) leave(taints func() []string, refresh func(context.Context), log *slog.Logger) {
+	if p.deregister == nil {
+		return
+	}
+	// A registration that is still in flight must not come after the
+	// deregistration.
+	p.wg.Wait()
+	if refresh != nil {
+		rctx, rcancel := context.WithTimeout(context.Background(), refreshTimeout)
+		refresh(rctx)
+		rcancel()
+	}
+	t := taints()
+	if len(t) == 0 {
+		log.Info("agent stops on a node without drain taints; the node stays registered")
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), deregisterTimeout)
+	defer cancel()
+	ok, err := p.deregister(ctx)
+	if err != nil {
+		log.Error("node deregistration failed; the registration expires on its own", "taints", t, "err", err)
+		return
+	}
+	log.Info("node deregistered", "taints", t, "deregistered", ok)
 }
 
 // setupEgress makes a fresh node signing key and attaches the relay to the
@@ -554,16 +685,20 @@ func setupEgress(f flags, m *agent.Manager, log *slog.Logger) (pushers, error) {
 		log.Warn("no --advertise-address and no $POD_IP: the registration has no agent address, so the api_server cannot place VMs here")
 	}
 	g := &relay.Registrar{BaseURL: f.apiServerURL, Secret: secret, Signer: signer, AgentAddress: f.advertise, Log: log}
+	p := pushers{reg: g, wg: &sync.WaitGroup{}, deregister: func(ctx context.Context) (bool, error) {
+		return nodereport.Deregister(ctx, nil, f.apiServerURL, signer)
+	}}
 	if f.stateReport <= 0 {
 		log.Warn("--state-report-interval is 0: the api_server does not reconcile this node's VMs")
-		return pushers{reg: g}, nil
+		return p, nil
 	}
 	r := &nodereport.Reporter{
 		BaseURL: f.apiServerURL, Signer: signer, List: func() []nodereport.VM { return reportVMs(m.List()) },
 		Ended: func() []nodereport.EndedVM { return reportEnded(m.Ended()) },
 		Ready: g.Registered(), Log: log, Interval: f.stateReport,
 	}
-	return pushers{reg: g, rep: r}, nil
+	p.rep = r
+	return p, nil
 }
 
 // reportVMs converts the Manager's List for the node state report.
@@ -644,6 +779,10 @@ func checkRanges(f flags) error {
 	if f.transferPar < 1 || f.transferPar > 64 || f.transferPart < 1<<20 || f.transferPart > 256<<20 {
 		return fmt.Errorf("bad transfer settings --transfer-parallel %d (1 to 64) --transfer-part-bytes %d (1 MiB to 256 MiB)",
 			f.transferPar, f.transferPart)
+	}
+	if f.imageGCEvery < 0 || (f.imageGCEvery > 0 && (f.imageGCEvery < time.Minute || f.imageGCGrace < 10*time.Minute)) {
+		return fmt.Errorf("--image-gc-interval %v must be 0 or at least 1m, and --image-gc-grace %v at least 10m",
+			f.imageGCEvery, f.imageGCGrace)
 	}
 	if f.memOverhead < 16 || f.memOverhead > 4096 {
 		return fmt.Errorf("--vm-mem-overhead-mib %d must be 16 to 4096", f.memOverhead)
