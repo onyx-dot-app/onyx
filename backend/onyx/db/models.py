@@ -104,6 +104,7 @@ from onyx.db.enums import (
     IndexModelStatus,
     IndexReclaimStatus,
     LLMModelFlowType,
+    MarketplaceKind,
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
     MCPOAuthProviderMode,
@@ -114,6 +115,8 @@ from onyx.db.enums import (
     Permission,
     PermissionSyncStatus,
     PersonaSharePermission,
+    PluginInstallationPolicy,
+    PluginKind,
     PortAttemptStatus,
     ProcessingMode,
     ReceiptStatus,
@@ -5485,6 +5488,294 @@ class Skill(Base):
     @property
     def is_custom(self) -> bool:
         return self.built_in_skill_id is None
+
+
+class Marketplace(Base):
+    """Where a plugin comes from: a user's "My uploads" or the tenant's
+    Organization library. A marketplace grants no access."""
+
+    __tablename__ = "plugin_marketplace"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    kind: Mapped[MarketplaceKind] = mapped_column(
+        Enum(
+            MarketplaceKind,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    owner_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    # A plugin with no installation_policy follows this value.
+    default_installation_policy: Mapped[PluginInstallationPolicy] = mapped_column(
+        Enum(PluginInstallationPolicy, native_enum=False),
+        nullable=False,
+        default=PluginInstallationPolicy.AVAILABLE,
+        server_default=PluginInstallationPolicy.AVAILABLE.value,
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "(kind = 'account_uploads') = (owner_user_id IS NOT NULL)",
+            name="ck_plugin_marketplace_owner_iff_account_uploads",
+        ),
+        Index(
+            "uq_plugin_marketplace_organization_library",
+            "kind",
+            unique=True,
+            postgresql_where=text("kind = 'organization_library'"),
+        ),
+        Index(
+            "uq_plugin_marketplace_account_uploads_owner",
+            "owner_user_id",
+            unique=True,
+            postgresql_where=text("kind = 'account_uploads'"),
+        ),
+    )
+
+
+class Plugin(Base):
+    """The package with identity: name, access and install settings. A custom
+    skill is a plugin of kind skill; its legacy skill row has the same id.
+
+    Published means: in the Organization library. published_version_id is only
+    the version the organization runs; NULL means current_version_id."""
+
+    __tablename__ = "plugin"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    # Label in the marketplace. The skill name of a plugin_skill row can differ.
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    kind: Mapped[PluginKind] = mapped_column(
+        Enum(
+            PluginKind,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=False,
+    )
+    marketplace_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("plugin_marketplace.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    author_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    # NULL means: use the marketplace default and follow later changes to it.
+    installation_policy: Mapped[PluginInstallationPolicy | None] = mapped_column(
+        Enum(PluginInstallationPolicy, native_enum=False),
+        nullable=True,
+    )
+    # Both pointers are deferred composite FKs to a version of this plugin, so
+    # one transaction inserts a plugin and its first version.
+    current_version_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    published_version_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    marketplace: Mapped[Marketplace] = relationship("Marketplace")
+
+    __table_args__ = (
+        UniqueConstraint("marketplace_id", "name", name="uq_plugin_marketplace_name"),
+        CheckConstraint(
+            "published_version_id IS NOT NULL OR author_user_id IS NOT NULL",
+            name="ck_private_plugin_has_owner",
+        ),
+        ForeignKeyConstraint(
+            ["current_version_id", "id"],
+            ["plugin_version.id", "plugin_version.plugin_id"],
+            name="fk_plugin_current_version",
+            use_alter=True,
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        ForeignKeyConstraint(
+            ["published_version_id", "id"],
+            ["plugin_version.id", "plugin_version.plugin_id"],
+            name="fk_plugin_published_version",
+            use_alter=True,
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+    )
+
+
+class PluginVersion(Base):
+    """One immutable copy of a plugin's files."""
+
+    __tablename__ = "plugin_version"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    plugin_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("plugin.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    # NULL after pruning.
+    bundle_file_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    bundle_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    is_valid: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # One {path, size, sha256} entry per file. NULL until the repair task runs.
+    file_manifest: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        PGJSONB(), nullable=True, deferred=True
+    )
+    unpacked_size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    file_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    # Snapshot, so authorship survives a user delete.
+    created_by_email: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "plugin_id", "version_number", name="uq_plugin_version_plugin_number"
+        ),
+        # Target of the plugin's composite version pointers.
+        UniqueConstraint("id", "plugin_id", name="uq_plugin_version_id_plugin"),
+    )
+
+
+class PluginSkill(Base):
+    """One skill in one plugin version."""
+
+    __tablename__ = "plugin_skill"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    plugin_version_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("plugin_version.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # Folder in the bundle; empty for a SKILL.md at the root.
+    path: Mapped[str] = mapped_column(String, nullable=False, server_default="")
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
+    # Raw SKILL.md, the source of truth. NULL when larger than 256 KiB or not yet
+    # repaired; readers then open the bundle.
+    skill_md: Mapped[str | None] = mapped_column(Text, nullable=True, deferred=True)
+    # Parsed copy of the SKILL.md frontmatter. NULL when JSONB cannot hold it.
+    frontmatter: Mapped[dict[str, Any] | None] = mapped_column(PGJSONB(), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "plugin_version_id", "name", name="uq_plugin_skill_version_name"
+        ),
+    )
+
+
+class Plugin__User(Base):
+    __tablename__ = "plugin__user"
+
+    plugin_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("plugin.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    permission: Mapped[SkillSharePermission] = mapped_column(
+        Enum(SkillSharePermission, native_enum=False),
+        nullable=False,
+        default=SkillSharePermission.VIEWER,
+        server_default=SkillSharePermission.VIEWER.value,
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (Index("ix_plugin__user_user_id", "user_id"),)
+
+
+class Plugin__UserGroup(Base):
+    __tablename__ = "plugin__user_group"
+
+    plugin_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("plugin.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    user_group_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("user_group.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    # NULL: the row holds only a group install setting and grants no access.
+    permission: Mapped[SkillSharePermission | None] = mapped_column(
+        Enum(SkillSharePermission, native_enum=False),
+        nullable=True,
+    )
+    # NULL: no group override.
+    installation_policy: Mapped[PluginInstallationPolicy | None] = mapped_column(
+        Enum(PluginInstallationPolicy, native_enum=False),
+        nullable=True,
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (Index("ix_plugin__user_group_user_group_id", "user_group_id"),)
+
+
+class UserPluginPreference(Base):
+    __tablename__ = "user_plugin_preference"
+
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
+    plugin_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("plugin.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
+    # Last time the user turned the plugin on. NULL for backfilled rows.
+    enabled_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    __table_args__ = (Index("ix_user_plugin_preference_plugin_id", "plugin_id"),)
 
 
 """
