@@ -133,7 +133,7 @@ from onyx.file_store.document_batch_storage import (
 )
 from onyx.file_store.staging import cleanup_staged_files_for_attempt
 from onyx.redis.redis_connector import RedisConnector
-from onyx.redis.redis_docprocessing import RedisDocprocessing
+from onyx.redis.redis_docprocessing import BatchStage, RedisDocprocessing
 from onyx.redis.redis_pool import (
     SCAN_ITER_COUNT_DEFAULT,
     get_redis_client,
@@ -294,9 +294,12 @@ def validate_active_indexing_attempts(
                 pending = 0
                 try:
                     r = get_redis_client()
-                    rd = RedisDocprocessing(fresh_attempt.id, r)
-                    in_flight = rd.in_flight()
-                    pending = rd.pending()
+                    # Conversion and docprocessing batches both count: a
+                    # batch in either stage is work the attempt still has.
+                    for stage in BatchStage:
+                        rd = RedisDocprocessing(fresh_attempt.id, r, stage)
+                        in_flight += rd.in_flight()
+                        pending += rd.pending()
                 except Exception:
                     task_logger.exception(
                         f"Failed to read batch counters for attempt {fresh_attempt.id}, "

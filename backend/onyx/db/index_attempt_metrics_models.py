@@ -10,7 +10,7 @@ stage timing aggregates) without creating a circular import.
 
 The ordering of `IndexAttemptStage` members is intentional and represents
 the natural temporal order of the pipeline (docfetching first, then
-docprocessing). Both the API ordering and the frontend's stage list rely on
+docconversion, then docprocessing). Both the API ordering and the frontend's stage list rely on
 this ordering, so do not reorder members without updating those consumers.
 """
 
@@ -33,6 +33,14 @@ class IndexAttemptStage(str, PyEnum):
     HIERARCHY_UPSERT = "HIERARCHY_UPSERT"
     DOC_BATCH_STORE = "DOC_BATCH_STORE"
     DOC_BATCH_ENQUEUE = "DOC_BATCH_ENQUEUE"
+
+    # --- Docconversion (one task per stub batch; only with the conversion
+    # stage on) ---
+    CONVERSION_QUEUE_WAIT = "CONVERSION_QUEUE_WAIT"
+    STUB_BATCH_LOAD = "STUB_BATCH_LOAD"
+    CONVERSION = "CONVERSION"
+    CONVERSION_DOC_BATCH_STORE = "CONVERSION_DOC_BATCH_STORE"
+    CONVERSION_DISPATCH = "CONVERSION_DISPATCH"
 
     # --- Docprocessing (one task per batch, many tasks per attempt) ---
     QUEUE_WAIT = "QUEUE_WAIT"
@@ -88,6 +96,11 @@ STAGE_SCOPE: dict[IndexAttemptStage, StageScope] = {
     IndexAttemptStage.HIERARCHY_UPSERT: StageScope.BATCH_LEVEL,
     IndexAttemptStage.DOC_BATCH_STORE: StageScope.BATCH_LEVEL,
     IndexAttemptStage.DOC_BATCH_ENQUEUE: StageScope.BATCH_LEVEL,
+    IndexAttemptStage.CONVERSION_QUEUE_WAIT: StageScope.BATCH_LEVEL,
+    IndexAttemptStage.STUB_BATCH_LOAD: StageScope.BATCH_LEVEL,
+    IndexAttemptStage.CONVERSION: StageScope.BATCH_LEVEL,
+    IndexAttemptStage.CONVERSION_DOC_BATCH_STORE: StageScope.BATCH_LEVEL,
+    IndexAttemptStage.CONVERSION_DISPATCH: StageScope.BATCH_LEVEL,
     IndexAttemptStage.QUEUE_WAIT: StageScope.BATCH_LEVEL,
     IndexAttemptStage.DOCPROCESSING_SETUP: StageScope.BATCH_LEVEL,
     IndexAttemptStage.BATCH_LOAD: StageScope.BATCH_LEVEL,

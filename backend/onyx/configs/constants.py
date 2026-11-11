@@ -737,6 +737,7 @@ class OnyxCeleryTask:
     # New split indexing tasks
     CONNECTOR_DOC_FETCHING_TASK = "connector_doc_fetching_task"
     DOCPROCESSING_TASK = "docprocessing_task"
+    DOCCONVERSION_TASK = "docconversion_task"
 
     CONNECTOR_PRUNING_GENERATOR_TASK = "connector_pruning_generator_task"
     CONNECTOR_HIERARCHY_FETCHING_TASK = "connector_hierarchy_fetching_task"

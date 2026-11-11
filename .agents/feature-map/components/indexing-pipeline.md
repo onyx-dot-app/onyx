@@ -94,7 +94,10 @@ that must run there goes before the exit.
 
 **Two batch stores.** `file_store/document_batch_storage.py:DocumentBatchStorage`
 holds raw batches in the file store; they cross the task boundary and survive a
-crash. `indexing/chunk_batch_store.py:ChunkBatchStore` spills embedded chunks to
+crash. `StubBatchStorage` in the same module holds the stub batches of the
+conversion stage (prefix `isb/`); the document batch cleanup also deletes them.
+`db/indexing_coordination.py:IndexingCoordination.claim_stub_batches` hands out
+stub batch numbers from the `stub_batches_*` counters on the attempt row. `indexing/chunk_batch_store.py:ChunkBatchStore` spills embedded chunks to
 local disk inside one docprocessing task, so a large batch is never in memory.
 
 **Dedup gate.** `indexing/indexing_pipeline.py:get_docs_to_update`
@@ -135,7 +138,8 @@ runs a thread in both phases that increments `IndexAttempt.heartbeat_counter`.
 `background/celery/tasks/docprocessing/tasks.py:validate_active_indexing_attempts`
 fails an attempt whose counter did not move for `HEARTBEAT_TIMEOUT_SECONDS`;
 after fetch ends, it waits instead while batches are only queued
-(`RedisDocprocessing`). It also fails a `NOT_STARTED` attempt older than
+(`RedisDocprocessing`, one counter pair per `BatchStage`: conversion and
+docprocessing). It also fails a `NOT_STARTED` attempt older than
 `NOT_STARTED_SCAN_THRESHOLD_HOURS` whose task Celery does not hold. An admin
 cancel sets `IndexAttempt.cancellation_requested`, which docfetching and the
 monitor poll. The watchdog kills the spawned process when its RSS passes
