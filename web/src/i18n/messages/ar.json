@@ -3107,7 +3107,15 @@
           "close": "إغلاق",
           "count": "({count})"
         },
-        "showing": "عرض <mono>{from}</mono>~<mono>{to}</mono> من <mono>{total}</mono>"
+        "showing": "عرض <mono>{from}</mono>~<mono>{to}</mono> من <mono>{total}</mono>",
+        "progress": {
+          "listed": "مُدرجة",
+          "converted": "محوَّلة",
+          "indexed": "مفهرسة",
+          "listedSoFar": "{count, plural, one {تم إدراج مستند واحد حتى الآن} other {تم إدراج # مستندات حتى الآن}}",
+          "skipped": "{count, plural, one {تم تخطي مستند واحد لم يتغير} other {تم تخطي # مستندات لم تتغير}}",
+          "eta": "يتبقى نحو {duration}"
+        }
       },
       "activity": {
         "search": {
