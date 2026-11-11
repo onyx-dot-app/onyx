@@ -10,6 +10,7 @@ import re
 from typing import Any
 
 from tests.common.paths import find_ancestor_containing
+from tests.external_dependency_unit.craft_helm.rendering import render_chart
 from tests.external_dependency_unit.craft_helm.test_craft_fc_host_agent import (
     _AGENT_NS,
     _FIRECRACKER,
@@ -232,3 +233,17 @@ def test_metrics_job_overrides_rules_and_dashboard() -> None:
     text = json.dumps(dashboard)
     assert set(re.findall(r'job=\\"([^\\"]+)\\"', text)) == {"my-scrape"}
     assert f'daemonset=\\"{_JOB}\\"' in text
+
+
+def test_metrics_job_refuses_quotes() -> None:
+    result = render_chart(
+        [
+            *_METRICS_ON,
+            *_RULES_ON,
+            *_DASHBOARDS_ON,
+            "--set-string",
+            'craft.hostAgent.metrics.job=a"b',
+        ]
+    )
+    assert result.returncode != 0
+    assert "craft.hostAgent.metrics.job may only have" in result.stderr

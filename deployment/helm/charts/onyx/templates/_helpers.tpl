@@ -300,9 +300,14 @@ true
 {{- $runtime -}}
 {{- end }}
 
-{{/* Prometheus job label of the host agent series (alert rules, dashboard). */}}
+{{/* Prometheus job label of the host agent series (alert rules, dashboard).
+The value goes into PromQL and JSON strings unescaped, so only plain characters pass. */}}
 {{- define "onyx.craftHostAgentMetricsJob" -}}
-{{- (dig "hostAgent" "metrics" "job" "" (.Values.craft | default dict)) | default (include "onyx.resourceName" (list . "craft-fc-host-agent")) -}}
+{{- $job := (dig "hostAgent" "metrics" "job" "" (.Values.craft | default dict)) | default (include "onyx.resourceName" (list . "craft-fc-host-agent")) -}}
+{{- if not (regexMatch "^[A-Za-z0-9_.:/-]+$" $job) -}}
+{{- fail "craft.hostAgent.metrics.job may only have letters, digits and _ . : / -" -}}
+{{- end -}}
+{{- $job -}}
 {{- end }}
 
 {{/*
