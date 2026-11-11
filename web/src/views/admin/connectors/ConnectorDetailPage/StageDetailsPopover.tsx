@@ -47,6 +47,12 @@ const STAGE_BUCKET = {
   HIERARCHY_UPSERT: "fetchSource",
   DOC_BATCH_STORE: "batchPreProcessing",
   DOC_BATCH_ENQUEUE: "batchPreProcessing",
+  // The conversion stage reads file content from the source.
+  CONVERSION_QUEUE_WAIT: "fetchSource",
+  STUB_BATCH_LOAD: "fetchSource",
+  CONVERSION: "fetchSource",
+  CONVERSION_DOC_BATCH_STORE: "fetchSource",
+  CONVERSION_DISPATCH: "fetchSource",
   QUEUE_WAIT: "batchPreProcessing",
   DOCPROCESSING_SETUP: "batchPreProcessing",
   BATCH_LOAD: "batchPreProcessing",
