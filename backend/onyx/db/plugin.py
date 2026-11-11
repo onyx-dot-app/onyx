@@ -24,7 +24,7 @@ from collections.abc import Callable, Iterable, Mapping
 from typing import Literal
 from uuid import UUID, uuid4
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -360,6 +360,30 @@ def add_plugin_version__no_commit(
         plugin.description = content.skills[0].description
     db_session.flush()
     return version
+
+
+def get_version_ids_for_bundles(
+    plugin_bundles: Mapping[UUID, str | None], db_session: Session
+) -> dict[UUID, UUID]:
+    """For each plugin id, the newest version that holds the given bundle.
+
+    A response that shows a skill's files from its legacy bundle returns this
+    id as the edit base. The id then always matches the files shown, also when
+    a save commits between the two reads; that save makes the base stale."""
+    pairs = {
+        (plugin_id, bundle_file_id)
+        for plugin_id, bundle_file_id in plugin_bundles.items()
+        if bundle_file_id is not None
+    }
+    if not pairs:
+        return {}
+    rows = db_session.execute(
+        select(PluginVersion.plugin_id, PluginVersion.id)
+        .where(tuple_(PluginVersion.plugin_id, PluginVersion.bundle_file_id).in_(pairs))
+        .order_by(PluginVersion.version_number)
+    ).tuples()
+    # Ordered by version number, so the newest version is written last.
+    return dict(rows.all())
 
 
 def delete_plugin__no_commit(plugin_id: UUID, db_session: Session) -> None:

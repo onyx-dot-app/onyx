@@ -64,8 +64,8 @@ class SkillResponse(BaseModel):
     is_personal: bool = False
     user_permission: SkillAccessLevel | None = None
     external_app: SkillExternalAppDependencyResponse | None = None
-    # Newest plugin version of a custom skill. Edits send it back as
-    # base_version_id. None for built-ins.
+    # The plugin version of a custom skill whose files this response shows.
+    # Edits send it back as base_version_id. None for built-ins.
     current_version_id: UUID | None = None
 
     @classmethod
@@ -102,6 +102,7 @@ class SkillResponse(BaseModel):
         user_permission: SkillAccessLevel | None = None,
         include_share_details: bool = False,
         external_app: SkillExternalAppDependencyResponse | None = None,
+        current_version_id: UUID | None = None,
     ) -> "SkillResponse":
         """Access fields come from the skill's plugin; ``access`` is None only
         for a custom skill with no plugin, which no one but an admin sees."""
@@ -156,9 +157,7 @@ class SkillResponse(BaseModel):
             is_personal=not published and not user_shares and not group_shares,
             user_permission=user_permission,
             external_app=external_app,
-            current_version_id=(
-                access.current_version_id if access is not None else None
-            ),
+            current_version_id=current_version_id,
         )
 
 

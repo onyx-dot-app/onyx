@@ -127,7 +127,11 @@ type VM struct {
 	UID        uint32
 	StartedAt  time.Time
 	TenantID   string
-	Managed    ManagedState
+	// Managed is the skills mount.
+	Managed ManagedState
+	// Mounts are the other managed mounts of the template (layout 5), by
+	// name. Never changed in place: VM copies share the map.
+	Mounts map[string]ManagedState
 }
 
 // Egress connects the VMs to the egress relay. The real one is
@@ -254,7 +258,7 @@ func (m *Manager) record(e *entry, state journal.State, info ProcInfo) journal.R
 		PID: info.PID, PIDStart: info.PIDStart, UID: e.vm.UID,
 		Chroot: info.Chroot, APISock: info.APISock, VsockUDS: info.VsockUDS,
 		Template: e.vm.Template, VCPUs: e.vm.VCPUs, MemMiB: e.vm.MemMiB, ScratchGiB: e.vm.ScratchGiB,
-		StartedAt: e.vm.StartedAt, TenantID: e.vm.TenantID, Managed: e.vm.Managed.record(),
+		StartedAt: e.vm.StartedAt, TenantID: e.vm.TenantID, Managed: e.vm.Managed.record(), Mounts: mountsRecord(e.vm.Mounts),
 	}
 }
 
@@ -413,6 +417,7 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (VM, bool, erro
 			Template: tpl.Version, VCPUs: req.VCPUs, MemMiB: req.MemMiB, ScratchGiB: req.ScratchGiB,
 			State: pb.VMState_VM_STATE_STARTING, UID: uid, StartedAt: m.now(), TenantID: req.TenantID,
 			Managed: ManagedState{Slots: tpl.ManagedSlots(), Active: pb.ManagedSlot_MANAGED_SLOT_A},
+			Mounts:  newMounts(tpl.ManagedMounts()),
 		},
 		busy: make(chan struct{}),
 	}

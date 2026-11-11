@@ -188,7 +188,7 @@ func (m *Manager) adoptLocked(ctx context.Context, a Adopter, r journal.Record, 
 	e := &entry{vm: VM{
 		SandboxID: r.SandboxID, Attempt: r.Attempt, Generation: r.Generation, Template: r.Template,
 		VCPUs: r.VCPUs, MemMiB: r.MemMiB, ScratchGiB: r.ScratchGiB, PID: r.PID, UID: r.UID, StartedAt: r.StartedAt, TenantID: r.TenantID,
-		State: pb.VMState_VM_STATE_RUNNING, Managed: managedFromRecord(r.Managed),
+		State: pb.VMState_VM_STATE_RUNNING, Managed: managedFromRecord(r.Managed), Mounts: mountsFromRecord(r.Mounts),
 	}}
 	proc, err := a.Adopt(ctx, r)
 	switch {

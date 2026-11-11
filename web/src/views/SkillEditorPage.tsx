@@ -154,11 +154,15 @@ export default function SkillEditorPage({
   // newest saved one. The user must reload before the next edit.
   const [isVersionStale, setIsVersionStale] = useState(false);
   const [isReloadingStale, setIsReloadingStale] = useState(false);
+  // The version the form fields show. A background refresh can load a newer
+  // version into `skill` without touching the fields, so edits send this id.
+  const [baseVersionId, setBaseVersionId] = useState<string | null>(null);
 
   const syncEditableFields = useCallback((nextSkill: SkillEditableDetail) => {
     setName(nextSkill.name);
     setDescription(nextSkill.description);
     setInstructionsMarkdown(nextSkill.instructions_markdown);
+    setBaseVersionId(nextSkill.current_version_id);
   }, []);
 
   useEffect(() => {
@@ -289,14 +293,22 @@ export default function SkillEditorPage({
       const updated = await patchUserSkill(skill.id, {
         description,
         instructions_markdown: instructionsMarkdown,
-        base_version_id: skill.current_version_id,
+        base_version_id: baseVersionId,
       });
-      const nextSkill: SkillEditableDetail = {
+      // Another save can commit before the server builds its response, so
+      // load the fields and their version together.
+      let fresh: SkillEditableDetail | undefined;
+      try {
+        fresh = await refreshSkill();
+      } catch (refreshError) {
+        console.error("Failed to reload skill after save", refreshError);
+      }
+      const nextSkill: SkillEditableDetail = fresh ?? {
         ...skill,
         ...updated,
         instructions_markdown: instructionsMarkdown.trim(),
       };
-      await refreshSkill(nextSkill, { revalidate: false });
+      if (!fresh) await refreshSkill(nextSkill, { revalidate: false });
       syncEditableFields(nextSkill);
       await refreshSkillList();
       toast.success(t("editor.toasts.saved", { name: updated.name }));
@@ -367,7 +379,7 @@ export default function SkillEditorPage({
       const updated = await uploadUserSkillFiles(
         skill.id,
         upload.file,
-        skill.current_version_id
+        baseVersionId
       );
       await refreshSkill(updated, { revalidate: false });
       syncEditableFields(updated);
@@ -414,12 +426,11 @@ export default function SkillEditorPage({
     if (!skill || !canManageSkill || removingFilePath !== null) return;
     setRemovingFilePath(path);
     try {
-      const updated = await removeUserSkillFile(
-        skill.id,
-        path,
-        skill.current_version_id
-      );
+      const updated = await removeUserSkillFile(skill.id, path, baseVersionId);
       await refreshSkill(updated, { revalidate: false });
+      // Removal is blocked while the fields are dirty, so take the fields
+      // with the version the server returned.
+      syncEditableFields(updated);
       await refreshSkillList();
       toast.success(t("editor.toasts.fileRemoved", { path }));
     } catch (err) {

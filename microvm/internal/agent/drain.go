@@ -139,6 +139,14 @@ func (m *Manager) Drain() DrainStatus {
 	return m.drainStatusLocked()
 }
 
+// DrainTaints returns the drain taints from the last node read that worked.
+// Unlike Drain it never scans processes.
+func (m *Manager) DrainTaints() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return slices.Clone(m.drain.taints)
+}
+
 func (m *Manager) drainStatusLocked() DrainStatus {
 	s := DrainStatus{
 		State: pb.DrainState_DRAIN_STATE_ACTIVE, Manual: m.drain.manual, Taints: slices.Clone(m.drain.taints),

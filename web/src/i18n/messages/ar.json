@@ -12822,6 +12822,11 @@
           "text": "تم إيقاف توليد الصورة"
         }
       },
+      "markdownTable": {
+        "copyButton": {
+          "label": "نسخ الجدول"
+        }
+      },
       "memoizedLink": {
         "questionFallback": {
           "label": "سؤال"

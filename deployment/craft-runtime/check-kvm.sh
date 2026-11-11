@@ -63,4 +63,4 @@ KVM_RUNTIME_IMAGE=1 KVM_FC_BIN="$artifacts/firecracker" \
   KVM_IMG_DIR="$work/images" KVM_WORK_DIR="$work/vms" KVM_VMS=2 \
   KVM_RELAY_BIN="$work/images/egress-relay" \
   "$work/runtime-kvm.test" -test.v -test.timeout=15m \
-  -test.run '^(TestDaemonKVM|TestRestoreKVM|TestInitKVM|TestRuntimeImageKVM|TestCollectKeepsPartialOutput)$'
+  -test.run '^(TestDaemonKVM|TestRestoreKVM|TestInitKVM|TestRuntimeImageKVM|TestHarnessContractKVM|TestCollectKeepsPartialOutput)$'

@@ -116,7 +116,8 @@ func (s *Store) Restore(ctx context.Context, spec RestoreSpec, r io.Reader) (Res
 	defer zr.Close()
 	br := &budgetReader{r: zr}
 	x := &extractor{root: st, lim: lim, allowed: setOf(roots), sum: &sum, present: map[string]bool{},
-		made: map[string]bool{}, buf: make([]byte, 1<<20), budget: br}
+		made: map[string]bool{}, buf: make([]byte, 1<<20), budget: br,
+		own: func(name string) error { return s.own(st, name) }}
 	if err := x.run(ctx, tar.NewReader(br)); err != nil {
 		return sum, err
 	}
@@ -326,6 +327,8 @@ type extractor struct {
 	dirs    []dirMode
 	buf     []byte
 	budget  *budgetReader
+	// own gives a restored file or directory to the configured owner.
+	own func(name string) error
 }
 
 // entry counts one member, or one parent directory that a member needs.
@@ -347,6 +350,9 @@ func (x *extractor) mkdir(dir string) error {
 	}
 	if fi, err := x.root.Lstat(dir); err != nil || !fi.IsDir() {
 		return fmt.Errorf("%w: %q is not a directory", ErrArchive, dir)
+	}
+	if err := x.own(dir); err != nil {
+		return err
 	}
 	x.made[dir] = true
 	x.sum.Directories++
@@ -487,6 +493,9 @@ func (x *extractor) file(name string, mode fs.FileMode, h *tar.Header, tr *tar.R
 	}
 	if err != nil {
 		return archiveErr(err)
+	}
+	if err := x.own(name); err != nil {
+		return err
 	}
 	_ = x.root.Chtimes(name, h.ModTime, h.ModTime)
 	return nil

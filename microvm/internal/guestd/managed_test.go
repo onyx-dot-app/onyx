@@ -146,8 +146,7 @@ func newManagedKernel() *fakeKernel {
 func managedHarness(t *testing.T, k *fakeKernel) pb.SandboxdClient {
 	t.Helper()
 	h := newHarness(t, execs.Config{}, Config{Managed: &ManagedConfig{
-		MountPoint: "/workspace/managed", Ops: k, SizeWait: 200 * time.Millisecond,
-		Devices: map[pb.ManagedSlot]string{pb.ManagedSlot_MANAGED_SLOT_A: "/dev/vdc", pb.ManagedSlot_MANAGED_SLOT_B: "/dev/vdf"},
+		Ops: k, SizeWait: 200 * time.Millisecond, Mounts: DefaultManagedMounts[:1],
 	}})
 	return h.initialized()
 }
@@ -326,5 +325,98 @@ func TestMountManagedOnEmptyMountPoint(t *testing.T) {
 	}
 	if got := strings.Join(k.ops, ","); got != "wait /dev/vdf 16777216,flush /dev/vdf,mount /dev/vdf beneath=false" {
 		t.Fatal(got)
+	}
+}
+
+// routedKernel sends each call to the fake kernel of its mount point or
+// device, so one test has several managed mounts.
+type routedKernel struct {
+	byMount map[string]*fakeKernel
+}
+
+func (r routedKernel) dev(dev string) *fakeKernel {
+	for _, k := range r.byMount {
+		if _, ok := k.disks[dev]; ok {
+			return k
+		}
+	}
+	return &fakeKernel{disks: map[string]*fakeDisk{}}
+}
+
+func (r routedKernel) Probe(dev string) (DevState, error) { return r.dev(dev).Probe(dev) }
+func (r routedKernel) MountedDev(mp string) (uint64, bool, error) {
+	return r.byMount[mp].MountedDev(mp)
+}
+func (r routedKernel) WaitSize(ctx context.Context, dev string, size uint64) error {
+	return r.dev(dev).WaitSize(ctx, dev, size)
+}
+func (r routedKernel) Flush(dev string) error { return r.dev(dev).Flush(dev) }
+func (r routedKernel) Mount(dev, mp string, beneath bool) error {
+	return r.byMount[mp].Mount(dev, mp, beneath)
+}
+func (r routedKernel) DetachTop(mp string) error { return r.byMount[mp].DetachTop(mp) }
+func (r routedKernel) MountedOn(mp string, rdev uint64) (bool, error) {
+	return r.byMount[mp].MountedOn(mp, rdev)
+}
+
+// Each named mount swaps its own slots; the others do not change.
+func TestMountManagedNamedMounts(t *testing.T) {
+	kernels := map[string]*fakeKernel{}
+	for i, m := range DefaultManagedMounts {
+		a, b := m.Devices[pb.ManagedSlot_MANAGED_SLOT_A], m.Devices[pb.ManagedSlot_MANAGED_SLOT_B]
+		kernels[m.MountPoint] = &fakeKernel{
+			disks: map[string]*fakeDisk{
+				a: {rdev: uint64(0xfc00 + 2*i), size: 8 << 20, hostSize: 8 << 20, uuid: uuidA, refs: 1},
+				b: {rdev: uint64(0xfc01 + 2*i), size: 1 << 20, hostSize: 16 << 20, uuid: uuidB},
+			},
+			stack: []string{a},
+		}
+	}
+	h := newHarness(t, execs.Config{}, Config{Managed: &ManagedConfig{
+		Ops: routedKernel{byMount: kernels}, SizeWait: 200 * time.Millisecond, Mounts: DefaultManagedMounts,
+	}})
+	c := h.initialized()
+	ctx := keyed(context.Background())
+
+	st, err := c.ManagedStatus(ctx, &pb.ManagedStatusRequest{Mount: "spaces"})
+	if err != nil || st.GetMount() != "spaces" || st.GetMountPoint() != "/mnt/spaces" || st.GetSlots()[1].GetDevice() != "/dev/vdj" {
+		t.Fatalf("spaces status: %v %v", st, err)
+	}
+	if st, err := c.ManagedStatus(ctx, &pb.ManagedStatusRequest{}); err != nil || st.GetMount() != "skills" || st.GetMountPoint() != "/mnt/skills" {
+		t.Fatalf("default mount: %v %v", st, err)
+	}
+	r, err := c.MountManaged(ctx, &pb.MountManagedRequest{Mount: "user-uploads", Slot: pb.ManagedSlot_MANAGED_SLOT_B, SizeBytes: 16 << 20, FsUuid: uuidB})
+	if err != nil || r.GetMount() != "user-uploads" || r.GetActive() != pb.ManagedSlot_MANAGED_SLOT_B {
+		t.Fatalf("mount user-uploads: %v %v", r, err)
+	}
+	if got := kernels["/mnt/user-uploads"].stack; len(got) != 1 || got[0] != "/dev/vdh" {
+		t.Fatalf("user-uploads stack %v", got)
+	}
+	for _, mp := range []string{"/mnt/skills", "/mnt/spaces"} {
+		if len(kernels[mp].ops) != 0 || len(kernels[mp].stack) != 1 {
+			t.Errorf("%s changed: ops %v stack %v", mp, kernels[mp].ops, kernels[mp].stack)
+		}
+	}
+	if _, err := c.ManagedStatus(ctx, &pb.ManagedStatusRequest{Mount: "photos"}); reason(err) != "INVALID_ARGUMENT" {
+		t.Fatalf("unknown mount: %v", err)
+	}
+}
+
+func TestParseManagedMounts(t *testing.T) {
+	got, err := ParseManagedMounts(FormatManagedMounts(DefaultManagedMounts))
+	if err != nil || len(got) != 3 || got[2].Name != "spaces" || got[2].MountPoint != "/mnt/spaces" ||
+		got[2].Devices[pb.ManagedSlot_MANAGED_SLOT_B] != "/dev/vdj" {
+		t.Fatalf("round trip: %+v %v", got, err)
+	}
+	if got, err := ParseManagedMounts(""); err != nil || len(got) != 0 {
+		t.Fatalf("empty: %v %v", got, err)
+	}
+	for _, bad := range []string{
+		"skills=/mnt/skills:/dev/vdc", "Skills=/mnt/skills:/dev/vdc:/dev/vdf", "skills=mnt:/dev/vdc:/dev/vdf",
+		"a=/mnt/a:/dev/vdc:/dev/vdf,b=/mnt/b:/dev/vdc:/dev/vdg", "a=/mnt/a:/dev/vdc:/dev/vdc", "a=/mnt/a:/dev/vdc:/dev/vdf,a=/mnt/b:/dev/vdg:/dev/vdh",
+	} {
+		if _, err := ParseManagedMounts(bad); err == nil {
+			t.Errorf("%q: no error", bad)
+		}
 	}
 }

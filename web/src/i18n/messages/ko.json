@@ -12822,6 +12822,11 @@
           "text": "이미지 생성 중지됨"
         }
       },
+      "markdownTable": {
+        "copyButton": {
+          "label": "표 복사"
+        }
+      },
       "memoizedLink": {
         "questionFallback": {
           "label": "질문"

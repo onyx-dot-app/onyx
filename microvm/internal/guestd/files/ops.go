@@ -169,7 +169,7 @@ func (s *Store) checkData(size int64, sum string) (string, error) {
 
 // spool writes exactly size bytes of r to a new temporary file in dir and
 // checks the SHA-256. It returns the temp name and the hex SHA-256.
-func spool(ctx context.Context, root *os.Root, dir string, size int64, want string, mode fs.FileMode, r io.Reader) (string, string, error) {
+func (s *Store) spool(ctx context.Context, root *os.Root, dir string, size int64, want string, mode fs.FileMode, r io.Reader) (string, string, error) {
 	tmp := path.Join(dir, randName(writePrefix))
 	f, err := root.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
@@ -195,6 +195,9 @@ func spool(ctx context.Context, root *os.Root, dir string, size int64, want stri
 		return "", "", fmt.Errorf("%w: sha256 of the data is %s, the header says %s", ErrInvalid, got, want)
 	}
 	if err := f.Chmod(mode); err != nil {
+		return "", "", err
+	}
+	if err := s.own(root, tmp); err != nil {
 		return "", "", err
 	}
 	if err := f.Close(); err != nil {
@@ -223,24 +226,17 @@ func (s *Store) Write(ctx context.Context, sessionID string, spec WriteSpec, r i
 	if err != nil {
 		return Info{}, "", err
 	}
-	rel, err := cleanPath(spec.Path)
-	if err != nil {
-		return Info{}, "", err
-	}
-	if rel == "." {
-		return Info{}, "", fmt.Errorf("%w: path is required", ErrInvalid)
-	}
 	mode := fs.FileMode(spec.Mode) & fs.ModePerm
 	if mode == 0 {
 		mode = 0o644
 	}
-	root, err := s.openSession(sessionID, true)
+	root, rel, shown, err := s.openWrite(sessionID, spec.Path, spec.MakeParents)
 	if err != nil {
 		return Info{}, "", err
 	}
 	defer func() { _ = root.Close() }()
 	dir := parentOf(rel)
-	if err := ensureDir(root, dir, spec.MakeParents); err != nil {
+	if err := s.ensureDir(root, dir, spec.MakeParents); err != nil {
 		return Info{}, "", err
 	}
 	if fi, err := root.Lstat(rel); err == nil {
@@ -251,7 +247,7 @@ func (s *Store) Write(ctx context.Context, sessionID string, spec WriteSpec, r i
 			return Info{}, "", fmt.Errorf("%w: %s is a directory", ErrInvalid, rel)
 		}
 	}
-	tmp, sum, err := spool(ctx, root, dir, spec.Size, want, mode, r)
+	tmp, sum, err := s.spool(ctx, root, dir, spec.Size, want, mode, r)
 	if err != nil {
 		return Info{}, "", err
 	}
@@ -268,7 +264,28 @@ func (s *Store) Write(ctx context.Context, sessionID string, spec WriteSpec, r i
 	if err != nil {
 		return Info{}, "", err
 	}
-	return infoOf(rel, fi), sum, nil
+	return infoOf(shown, fi), sum, nil
+}
+
+// openWrite opens the root of a write and the path in it, and the path to
+// report. With no session ID, p is an absolute VM path.
+func (s *Store) openWrite(sessionID, p string, mkParents bool) (*os.Root, string, string, error) {
+	if sessionID == "" {
+		e, err := s.openVMEntry(p, mkParents, true)
+		return e.root, e.name, e.abs, err
+	}
+	rel, err := cleanPath(p)
+	if err != nil {
+		return nil, "", "", err
+	}
+	if rel == "." {
+		return nil, "", "", fmt.Errorf("%w: path is required", ErrInvalid)
+	}
+	root, err := s.openSession(sessionID, true)
+	if err != nil {
+		return nil, "", "", err
+	}
+	return root, rel, rel, nil
 }
 
 // linkNoReplace moves tmp to name unless name exists.
@@ -279,12 +296,12 @@ func linkNoReplace(root *os.Root, tmp, name string) error {
 	return root.Remove(tmp)
 }
 
-func ensureDir(root *os.Root, dir string, create bool) error {
+func (s *Store) ensureDir(root *os.Root, dir string, create bool) error {
 	if dir == "." {
 		return nil
 	}
 	if create {
-		return fsErr(root.MkdirAll(dir, 0o755))
+		return s.mkdirAll(root, dir)
 	}
 	fi, err := root.Stat(dir)
 	if err != nil {
@@ -340,10 +357,10 @@ func (s *Store) Upload(ctx context.Context, sessionID string, spec UploadSpec, r
 		return Info{}, "", err
 	}
 	defer func() { _ = root.Close() }()
-	if err := ensureDir(root, dir, true); err != nil {
+	if err := s.ensureDir(root, dir, true); err != nil {
 		return Info{}, "", err
 	}
-	tmp, sum, err := spool(ctx, root, dir, spec.Size, want, 0o644, r)
+	tmp, sum, err := s.spool(ctx, root, dir, spec.Size, want, 0o644, r)
 	if err != nil {
 		return Info{}, "", err
 	}
@@ -456,6 +473,9 @@ func (l *lister) dir(ctx context.Context, rel string, depth int) error {
 		if rel != "." {
 			child = rel + "/" + name
 		}
+		if l.t.denied(child) {
+			continue
+		}
 		fi, err := e.Info()
 		if err != nil {
 			continue
@@ -542,14 +562,16 @@ func setOf(names []string) map[string]bool {
 // Delete removes a file or a link, or a directory with recursive. It
 // reports false if the path did not exist.
 func (s *Store) Delete(sessionID, p string, recursive bool) (bool, error) {
-	rel, err := cleanPath(p)
-	if err != nil {
-		return false, err
+	var root *os.Root
+	var rel, vmReal string
+	var err error
+	if sessionID == "" {
+		var e vmEntry
+		e, err = s.openVMEntry(p, false, false)
+		root, rel, vmReal = e.root, e.name, e.real
+	} else {
+		root, rel, err = s.openDelete(sessionID, p)
 	}
-	if rel == "." {
-		return false, fmt.Errorf("%w: cannot delete the session directory", ErrInvalid)
-	}
-	root, err := s.openSession(sessionID, false)
 	if errors.Is(err, ErrNotFound) {
 		return false, nil
 	}
@@ -568,7 +590,24 @@ func (s *Store) Delete(sessionID, p string, recursive bool) (bool, error) {
 		if !recursive {
 			return false, fmt.Errorf("%w: %s is a directory; set recursive", ErrInvalid, rel)
 		}
+		if vmReal != "" {
+			if err := s.checkVMTree(vmReal); err != nil {
+				return false, err
+			}
+		}
 		return true, fsErr(root.RemoveAll(rel))
 	}
 	return true, fsErr(root.Remove(rel))
+}
+
+func (s *Store) openDelete(sessionID, p string) (*os.Root, string, error) {
+	rel, err := cleanPath(p)
+	if err != nil {
+		return nil, "", err
+	}
+	if rel == "." {
+		return nil, "", fmt.Errorf("%w: cannot delete the session directory", ErrInvalid)
+	}
+	root, err := s.openSession(sessionID, false)
+	return root, rel, err
 }
