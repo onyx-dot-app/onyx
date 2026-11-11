@@ -118,14 +118,18 @@ def add_exec_session(
     *,
     max_sessions: int,
     ended_execution_ids: set[str],
-) -> list[ExecSessionRecord]:
-    """Store a new exec session. Drops the records of other VM instances,
-    then evicts down to `max_sessions`. Returns the evicted records of this
-    instance (their commands may still run)."""
+) -> list[ExecSessionRecord] | None:
+    """Store a new exec session. Drops the records of older VM instances,
+    then evicts down to `max_sessions`. Returns the evicted records (their
+    commands may still run), or None when a newer VM instance already has
+    records: the record's VM is gone, and nothing is stored."""
+    fence = (record.attempt, record.generation)
 
     def change(
         state: _ExecSessions,
-    ) -> tuple[_ExecSessions | None, list[ExecSessionRecord]]:
+    ) -> tuple[_ExecSessions | None, list[ExecSessionRecord] | None]:
+        if any((r.attempt, r.generation) > fence for r in state.sessions.values()):
+            return state, None
         sessions = {
             sid: r
             for sid, r in state.sessions.items()

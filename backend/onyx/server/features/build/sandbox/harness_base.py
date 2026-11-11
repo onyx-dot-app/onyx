@@ -116,11 +116,15 @@ ExecEvent = ExecOutputDelta | ExecCommandResult
 
 
 def collect_exec_result(events: Iterator[ExecEvent]) -> ExecCommandResult:
-    """Drain an exec stream and return its result."""
+    """Drain an exec stream and return its result. Reads the stream to its
+    end, so the implementation releases what it holds."""
+    result: ExecCommandResult | None = None
     for event in events:
         if isinstance(event, ExecCommandResult):
-            return event
-    raise RuntimeError("The exec stream ended without a result")
+            result = event
+    if result is None:
+        raise RuntimeError("The exec stream ended without a result")
+    return result
 
 
 class SandboxFile(BaseModel):

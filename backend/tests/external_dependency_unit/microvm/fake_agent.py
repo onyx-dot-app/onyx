@@ -156,6 +156,8 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         self.cancel_calls: list[str] = []
         # Seconds each Create waits before it runs (to overlap two wakes).
         self.create_delay_seconds = 0.0
+        # Seconds each guest daemon Init waits before it runs.
+        self.init_delay_seconds = 0.0
         # Seconds each Stop waits before it runs.
         self.stop_delay_seconds = 0.0
 
@@ -703,6 +705,7 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
     def Init(  # noqa: N802
         self, request: sandboxd_pb2.InitRequest, context: grpc.ServicerContext
     ) -> sandboxd_pb2.InitResponse:
+        time.sleep(self.agent.init_delay_seconds)
         with self.agent.lock:
             sandbox_id, key = self._route(context)
             self._check_key(context, sandbox_id, key)

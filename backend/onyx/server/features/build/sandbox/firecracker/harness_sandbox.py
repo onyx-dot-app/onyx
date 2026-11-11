@@ -125,6 +125,9 @@ _EXEC_LOCK_PREFIX = "sandbox_fc:exec_lock:"
 # A second call on one exec session waits this long for the first one.
 _EXEC_LOCK_WAIT_SECONDS = 30.0
 _EXEC_LOCK_MARGIN_SECONDS = 30.0
+_INIT_LOCK_PREFIX = "sandbox_fc:init_lock:"
+# Covers one daemon Init (attach drives, grow the scratch file system).
+_INIT_LOCK_SECONDS = 90.0
 # Session directories this process remembers as made.
 _PREPARED_MAX = 10_000
 
@@ -160,6 +163,18 @@ class ManagedDriveError(HarnessSandboxError):
 def _clamp_ms(value: int | None, default: int, low: int, high: int) -> float:
     ms = default if value is None else value
     return min(max(ms, low), high) / 1000.0
+
+
+def _interrupted_result(started_at: float) -> ExecCommandResult:
+    return ExecCommandResult(
+        output="",
+        exec_session_id=None,
+        exit_code=None,
+        completion=_COMPLETION_NAMES[ExecCompletion.CANCELED],
+        wall_time_seconds=time.monotonic() - started_at,
+        original_token_count=0,
+        truncated=False,
+    )
 
 
 def _instance(placed: PlacedVm) -> VmInstance:
@@ -262,20 +277,38 @@ class FirecrackerHarnessSandbox(HarnessSandbox):
         placed = wake_sandbox_vm(
             shared_cache, tenant_cache, self._client_factory, request
         )
-        health = sandbox_daemon(self._client_factory, placed).health()
+        daemon = sandbox_daemon(self._client_factory, placed)
+
+        def initialized() -> bool:
+            health = daemon.health()
+            return health.initialized and health.generation == placed.vm.generation
+
         # A VM adopted from a reservation can be up without Init. A repeat
-        # Init resets the guest's egress connections: run it only when needed.
-        if health.initialized and health.generation == placed.vm.generation:
+        # Init resets the guest's egress connections: run it only when
+        # needed, and once across API pods.
+        if initialized():
             return placed
-        initialize_sandbox_vm(
-            shared_cache,
-            tenant_cache,
-            self._client_factory,
-            placed,
-            tenant_id=request.tenant_id,
-            env=self._init_env,
-            session_ids=[],
+        lock = tenant_cache.lock(
+            f"{_INIT_LOCK_PREFIX}{placed.vm.sandbox_id}:{placed.vm.generation}",
+            timeout=_INIT_LOCK_SECONDS,
         )
+        if not lock.acquire(blocking_timeout=_INIT_LOCK_SECONDS):
+            raise CacheLockAcquisitionError(placed.vm.sandbox_id)
+        try:
+            if initialized():
+                return placed
+            initialize_sandbox_vm(
+                shared_cache,
+                tenant_cache,
+                self._client_factory,
+                placed,
+                tenant_id=request.tenant_id,
+                env=self._init_env,
+                session_ids=[],
+            )
+        finally:
+            if lock.owned():
+                lock.release()
         return placed
 
     def _ensure_managed(
@@ -597,13 +630,22 @@ class FirecrackerHarnessSandbox(HarnessSandbox):
             if len(live) >= self._max_exec_sessions
             else set()
         )
-        evicted = add_exec_session(
-            tenant_cache,
-            ref.sandbox_id,
-            record,
-            max_sessions=self._max_exec_sessions,
-            ended_execution_ids=ended,
-        )
+        try:
+            evicted = add_exec_session(
+                tenant_cache,
+                ref.sandbox_id,
+                record,
+                max_sessions=self._max_exec_sessions,
+                ended_execution_ids=ended,
+            )
+        except Exception:
+            # Without a record nobody can reach the command: stop it.
+            self._cancel_evicted(daemon, [record])
+            raise
+        if evicted is None:
+            # The VM was replaced during this call.
+            self._cancel_evicted(daemon, [record])
+            raise ExecSessionEndedError(exec_session_id)
         self._cancel_evicted(
             daemon, [r for r in evicted if r.execution_id not in ended]
         )
@@ -670,30 +712,40 @@ class FirecrackerHarnessSandbox(HarnessSandbox):
             )
             raise ExecSessionEndedError(exec_session_id)
         daemon = self._daemon(placed)
+        # Write and interrupt before the read lock: a long poll by another
+        # call must not hold back a Ctrl-C.
+        text, interrupt, _ = chars.partition(INTERRUPT_CHAR)
+        try:
+            if text:
+                daemon.interact(record.execution_id, data=text.encode())
+            if interrupt:
+                daemon.cancel(record.execution_id)
+        except SandboxDaemonError as e:
+            if e.reason is SandboxDaemonErrorReason.EXECUTION_NOT_FOUND:
+                self._forget(tenant_cache, ref, record)
+                raise ExecSessionEndedError(exec_session_id) from e
+            # An ended command: report its result below.
+            if e.reason is not SandboxDaemonErrorReason.EXECUTION_ENDED:
+                raise
         lock = tenant_cache.lock(
             f"{_EXEC_LOCK_PREFIX}{ref.sandbox_id}:{exec_session_id}",
             timeout=yield_seconds + _EXEC_LOCK_MARGIN_SECONDS,
         )
         if not lock.acquire(blocking_timeout=_EXEC_LOCK_WAIT_SECONDS):
+            if interrupt:
+                # Another call reads the output; the interrupt is done.
+                yield _interrupted_result(started_at)
+                return
             raise CacheLockAcquisitionError(exec_session_id)
         try:
             # Read the offsets again: the call before this one moved them.
             current = get_exec_session(tenant_cache, ref.sandbox_id, exec_session_id)
             if current is None or current.execution_id != record.execution_id:
-                raise ExecSessionNotFoundError(exec_session_id)
-            text, interrupt, _ = chars.partition(INTERRUPT_CHAR)
-            try:
-                if text:
-                    daemon.interact(current.execution_id, data=text.encode())
                 if interrupt:
-                    daemon.cancel(current.execution_id)
-            except SandboxDaemonError as e:
-                if e.reason is SandboxDaemonErrorReason.EXECUTION_NOT_FOUND:
-                    self._forget(tenant_cache, ref, current)
-                    raise ExecSessionEndedError(exec_session_id) from e
-                # An ended command: report its result below.
-                if e.reason is not SandboxDaemonErrorReason.EXECUTION_ENDED:
-                    raise
+                    # Another call already reported the end.
+                    yield _interrupted_result(started_at)
+                    return
+                raise ExecSessionNotFoundError(exec_session_id)
             yield from self._collect(
                 tenant_cache,
                 ref,
@@ -811,7 +863,10 @@ class FirecrackerHarnessSandbox(HarnessSandbox):
         daemon = self._daemon(self._place(ref))
         info, chunks = daemon.read_file(session_id=str(ref.session_id), path=rel)
         if info.size > max_bytes:
-            # Closing the chunk generator cancels the stream.
+            # Start, then close the chunk generator: its cleanup cancels
+            # the stream (an unstarted generator skips it).
+            for _ in chunks:
+                break
             if isinstance(chunks, Generator):
                 chunks.close()
             raise SandboxFileTooLargeError(

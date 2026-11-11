@@ -3,6 +3,7 @@ the Codex exec contract with durable exec sessions, files, artifacts, the
 managed drive and the busy signals."""
 
 import io
+import threading
 import time
 import zipfile
 from collections.abc import Callable, Generator, Iterator
@@ -487,6 +488,10 @@ def test_the_output_buffer_keeps_head_and_tail_bytes() -> None:
     assert split.add(OutputStream.STDERR, "é".encode()[:1]) == ""
     assert split.add(OutputStream.STDERR, "é".encode()[1:]) == "é"
     assert cut_to_tokens("short", 10) == ("short", False)
+    # A character split between the head and the tail stays whole.
+    boundary = ExecOutputBuffer(max_bytes=4)
+    boundary.add(OutputStream.STDOUT, "aé".encode())
+    assert not boundary.truncated and boundary.text() == "aé"
 
 
 # Files
@@ -660,13 +665,16 @@ def test_touch_records_activity_without_starting_a_vm(
     assert touched is not None and touched.last_active > 1
 
 
-def test_the_factory_refuses_without_the_harness_flag() -> None:
-    harness_factory._instance = None
+def test_the_factory_refuses_without_the_harness_flag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(harness_factory, "_instance", None)
+    monkeypatch.setattr(harness_factory, "SANDBOX_FC_HARNESS_ENABLED", False)
     with pytest.raises(harness_factory.HarnessSandboxUnavailableError):
         harness_factory.get_harness_sandbox()
 
 
-def test_collect_exec_result_returns_the_last_event() -> None:
+def test_collect_exec_result_reads_the_stream_to_its_end() -> None:
     result = ExecCommandResult(
         output="x",
         exec_session_id=None,
@@ -676,4 +684,127 @@ def test_collect_exec_result_returns_the_last_event() -> None:
         original_token_count=1,
         truncated=False,
     )
-    assert collect_exec_result(iter([ExecOutputDelta(text="x"), result])) is result
+    finished: list[bool] = []
+
+    def stream() -> Generator[ExecEvent, None, None]:
+        yield ExecOutputDelta(text="x")
+        yield result
+        finished.append(True)
+
+    assert collect_exec_result(stream()) is result
+    assert finished == [True]
+
+
+def test_concurrent_wakes_run_init_once(
+    sandbox: FirecrackerHarnessSandbox,
+    node: RunningFakeAgent,
+    new_ref: NewRef,
+) -> None:
+    ref = new_ref()
+    sandbox.ensure_running(ref)
+    node.agent.daemon_inits.pop(str(ref.sandbox_id))
+    node.agent.init_delay_seconds = 0.3
+
+    errors: list[BaseException] = []
+
+    def wake() -> None:
+        try:
+            sandbox.ensure_running(ref)
+        except BaseException as e:  # noqa: BLE001
+            errors.append(e)
+
+    threads = [threading.Thread(target=wake) for _ in range(3)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert errors == []
+    # One Init at the first wake, one after the lost Init.
+    assert len(node.agent.init_requests) == 2
+
+
+def test_a_failed_registration_stops_the_started_command(
+    monkeypatch: pytest.MonkeyPatch,
+    sandbox: FirecrackerHarnessSandbox,
+    node: RunningFakeAgent,
+    new_ref: NewRef,
+) -> None:
+    ref = new_ref()
+
+    def fail(*_args: object, **_kwargs: object) -> None:
+        raise harness_state.StateContentionError("contention")
+
+    monkeypatch.setattr(harness_sandbox, "add_exec_session", fail)
+    with pytest.raises(harness_state.StateContentionError):
+        _run(sandbox.exec_command(ref, "sleep 60", yield_time_ms=250))
+    [command] = [
+        e
+        for e in node.agent.executions[str(ref.sandbox_id)].values()
+        if e.argv[:2] == ["bash", "-c"]
+    ]
+    assert node.agent.cancel_calls == [command.execution_id]
+
+
+def test_a_record_of_an_older_vm_never_replaces_newer_records(
+    tenant_cache: CacheBackend, new_ref: NewRef
+) -> None:
+    ref = new_ref()
+
+    def record(attempt: int, generation: int) -> harness_state.ExecSessionRecord:
+        return harness_state.ExecSessionRecord(
+            exec_session_id=uuid4().hex[:8],
+            chat_session_id=str(ref.session_id),
+            execution_id=uuid4().hex,
+            attempt=attempt,
+            generation=generation,
+            last_used=time.time(),
+        )
+
+    newer = record(2, 7)
+    assert (
+        harness_state.add_exec_session(
+            tenant_cache,
+            ref.sandbox_id,
+            newer,
+            max_sessions=64,
+            ended_execution_ids=set(),
+        )
+        == []
+    )
+    assert (
+        harness_state.add_exec_session(
+            tenant_cache,
+            ref.sandbox_id,
+            record(1, 5),
+            max_sessions=64,
+            ended_execution_ids=set(),
+        )
+        is None
+    )
+    assert harness_state.list_exec_sessions(tenant_cache, ref.sandbox_id) == [newer]
+
+
+def test_ctrl_c_is_not_held_back_by_a_long_poll(
+    monkeypatch: pytest.MonkeyPatch,
+    tenant_cache: CacheBackend,
+    sandbox: FirecrackerHarnessSandbox,
+    node: RunningFakeAgent,
+    new_ref: NewRef,
+) -> None:
+    monkeypatch.setattr(harness_sandbox, "_EXEC_LOCK_WAIT_SECONDS", 0.2)
+    ref = new_ref()
+    _, result = _run(sandbox.exec_command(ref, "cat", yield_time_ms=250))
+    session = result.exec_session_id
+    assert session is not None
+    # Another call holds the read lock (a long poll).
+    held = tenant_cache.lock(
+        f"{harness_sandbox._EXEC_LOCK_PREFIX}{ref.sandbox_id}:{session}", timeout=30
+    )
+    assert held.acquire(blocking=False)
+    try:
+        _, interrupted = _run(sandbox.write_stdin(ref, session, "\x03"))
+    finally:
+        held.release()
+    assert interrupted.completion == "canceled"
+    assert interrupted.exec_session_id is None
+    assert len(node.agent.cancel_calls) == 1

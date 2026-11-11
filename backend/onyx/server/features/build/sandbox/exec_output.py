@@ -56,13 +56,13 @@ class ExecOutputBuffer:
         return self._dropped > 0
 
     def text(self) -> str:
+        if not self._dropped:
+            # Nothing cut: decode as one, so a character split between the
+            # head and the tail stays whole.
+            return (self._head + self._tail).decode("utf-8", errors="replace")
         head = self._head.decode("utf-8", errors="replace")
-        if not self._tail:
-            return head
         tail = self._tail.decode("utf-8", errors="replace")
-        if self._dropped:
-            return head + _omitted_marker(self._dropped, "bytes") + tail
-        return head + tail
+        return head + _omitted_marker(self._dropped, "bytes") + tail
 
 
 def estimate_tokens(text: str) -> int:
