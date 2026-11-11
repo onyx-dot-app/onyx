@@ -228,8 +228,8 @@ the stored token on each request, so a new token takes effect at once.
   the agent pass-through: Health, Init, exec (run, start, stream by offsets,
   interact, cancel with an optional SIGINT/SIGTERM, inspect, list; at most 64
   tracked executions per VM) and files (read, write, upload, list, delete,
-  zip; session-relative, or absolute VM paths with no session). Every call but Health sends `x-sandboxd-key`. No caller
-  uses exec or files yet.
+  zip; session-relative, or absolute VM paths with no session). Every call but
+  Health sends `x-sandboxd-key`.
 - `backend/onyx/microvm/placement.py`: one VM per sandbox, best of K nodes on
   free memory (a node at its `max_vms` cap is skipped),
   `SANDBOX_CAPACITY_UNAVAILABLE` with the reason. When every node refuses,
@@ -264,7 +264,25 @@ the stored token on each request, so a new token takes effect at once.
   See `microvm/README.md`, "Sandbox state model".
 
 Agents become reachable when their signing-key registration carries
-`agent_address`. No sandbox manager uses this code yet.
+`agent_address`.
+
+Harness sandboxes (the agent harness runs outside the sandbox):
+- `backend/onyx/server/features/build/sandbox/harness_base.py:HarnessSandbox`
+  is the narrow interface the new harness calls: `ensure_running`, the Codex
+  `exec_command` / `write_stdin` contract (yield time, head and tail output
+  caps, "\x03" interrupts), session-directory files, `publish_artifact`, and
+  busy signals (turn and parked-approval marks). Each chat session works in
+  `SESSION_WORKSPACE_ROOT/<session_id>` (`/home/onyx/workspaces`).
+- `.../sandbox/firecracker/harness_sandbox.py:FirecrackerHarnessSandbox`
+  implements it on the microvm code: wake on the first call, Init only when
+  `Health.initialized` is false, managed drive swap once per VM instance.
+  Exec sessions are durable records in the tenant cache
+  (`.../firecracker/harness_state.py`, no TTL, compare-and-set, 64 per
+  sandbox, ended commands evicted first); a record of an older VM instance
+  raises `ExecSessionEndedError`.
+- `.../sandbox/harness_factory.py:get_harness_sandbox` returns it only with
+  `SANDBOX_RUNTIME=firecracker` and `SANDBOX_FC_HARNESS_ENABLED`. Opencode
+  sessions keep `get_sandbox_manager` (pod or Docker).
 
 ---
 

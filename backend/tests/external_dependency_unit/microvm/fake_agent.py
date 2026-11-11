@@ -4,6 +4,7 @@ daemon behind its pass-through."""
 import hashlib
 import io
 import itertools
+import shlex
 import threading
 import time
 import zipfile
@@ -151,6 +152,8 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         # SwapManagedRequest.mount of each swapped VM, in order.
         self.swap_mounts: list[str] = []
         self._ids = itertools.count(1)
+        # Execution IDs of every Cancel.
+        self.cancel_calls: list[str] = []
         # Seconds each Create waits before it runs (to overlap two wakes).
         self.create_delay_seconds = 0.0
         # Seconds each Stop waits before it runs.
@@ -568,13 +571,16 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
 
 @dataclass
 class FakeExecution:
-    """A scripted command: echo, fail <code>, cat (stdin) or sleep."""
+    """A scripted command: echo, fail <code>, cat (echoes stdin), sleep or
+    mkdir. `bash -c <script>` runs the script's words as one of these."""
 
     execution_id: str
     argv: list[str]
     labels: dict[str, str]
     stdin_open: bool
     session_id: str = ""
+    cwd: str = ""
+    env: dict[str, str] = field(default_factory=dict)
     stdout: bytes = b""
     stderr: bytes = b""
     result: sandboxd_pb2.ExecResult | None = None
@@ -721,7 +727,10 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
     ) -> FakeExecution:
         sandbox_id = self._ready(context)
         argv = list(command.argv)
-        if not argv or argv[0] not in ("echo", "fail", "cat", "sleep"):
+        script = argv
+        if argv[:2] == ["bash", "-c"] and len(argv) == 3:
+            script = shlex.split(argv[2])
+        if not script or script[0] not in ("echo", "fail", "cat", "sleep", "mkdir"):
             abort_daemon(context, SandboxDaemonErrorReason.START_FAILED, "no program")
         execution = FakeExecution(
             execution_id=self.agent.next_id("exec"),
@@ -729,8 +738,13 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
             labels=dict(command.labels),
             stdin_open=command.stdin,
             session_id=command.session_id,
+            cwd=command.cwd,
+            env=dict(command.env),
         )
-        if argv[0] == "echo":
+        argv = script
+        if argv[0] == "mkdir":
+            execution.end(sandboxd_pb2.EXITED, 0)
+        elif argv[0] == "echo":
             execution.stdout = (" ".join(argv[1:]) + "\n").encode()
             execution.end(sandboxd_pb2.EXITED, 0)
         elif argv[0] == "fail":
@@ -809,23 +823,34 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
         stdout_offset: int,
         stderr_offset: int,
     ) -> Iterator[sandboxd_pb2.ExecEvent]:
-        """Like the daemon: the stream stays open until the result. A client
+        """Like the daemon: output as it comes, then the result. A client
         that goes away ends the stream, not the command."""
-        with self.agent.lock:
-            while (
-                execution.result is None
-                and not execution.vm_gone
-                and context.is_active()
-            ):
-                self.agent.ended.wait(timeout=0.05)
-            if execution.vm_gone:
-                abort_with_reason(
-                    context, HostAgentErrorReason.VM_NOT_RUNNING, "VM stopped"
-                )
-            if execution.result is None:
+        offsets = [stdout_offset, stderr_offset]
+        while True:
+            with self.agent.lock:
+                while (
+                    execution.result is None
+                    and not execution.vm_gone
+                    and context.is_active()
+                    and len(execution.stdout) <= offsets[0]
+                    and len(execution.stderr) <= offsets[1]
+                ):
+                    self.agent.ended.wait(timeout=0.05)
+                if execution.vm_gone:
+                    abort_with_reason(
+                        context, HostAgentErrorReason.VM_NOT_RUNNING, "VM stopped"
+                    )
+                if not context.is_active():
+                    return
+                events = self._events(execution, offsets[0], offsets[1])
+                offsets = [
+                    max(offsets[0], len(execution.stdout)),
+                    max(offsets[1], len(execution.stderr)),
+                ]
+                done = execution.result is not None
+            yield from events
+            if done:
                 return
-            events = self._events(execution, stdout_offset, stderr_offset)
-        yield from events
 
     def Start(  # noqa: N802
         self, request: sandboxd_pb2.StartRequest, context: grpc.ServicerContext
@@ -859,11 +884,12 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
                     context, SandboxDaemonErrorReason.STDIN_NOT_OPEN, "no stdin"
                 )
             execution.stdin_data += request.data
-            if request.close_stdin:
-                # cat: echo stdin, exit at EOF.
+            if execution.argv[-1:] == ["cat"]:
+                # cat: echo stdin as it comes, exit at EOF.
                 execution.stdout = bytes(execution.stdin_data)
+            if request.close_stdin:
                 execution.end(sandboxd_pb2.EXITED, 0)
-                self.agent.ended.notify_all()
+            self.agent.ended.notify_all()
             return sandboxd_pb2.InteractResponse(written=len(request.data))
 
     def Cancel(  # noqa: N802
@@ -871,6 +897,7 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
     ) -> sandboxd_pb2.CancelResponse:
         with self.agent.lock:
             execution = self._execution(context, request.execution_id)
+            self.agent.cancel_calls.append(request.execution_id)
             already_ended = execution.result is not None
             soft = request.signal in (
                 sandboxd_pb2.CANCEL_SIGNAL_SIGINT,

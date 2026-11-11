@@ -102,3 +102,29 @@ SANDBOX_FC_IDLE_TIMEOUT_SECONDS = _fc_env_int(
 SANDBOX_FC_SCHEDULED_RUN_JITTER_SECONDS = _fc_env_float(
     "SANDBOX_FC_SCHEDULED_RUN_JITTER_SECONDS", 30.0, minimum=0.0
 )
+
+# Harness sandboxes. The new agent harness gets Firecracker sandboxes only
+# when this is on (and SANDBOX_RUNTIME=firecracker). Opencode sessions keep
+# the pod sandbox manager either way.
+SANDBOX_FC_HARNESS_ENABLED = FIRECRACKER_ENABLED and os.environ.get(
+    "SANDBOX_FC_HARNESS_ENABLED", ""
+).strip().lower() in ("1", "true", "yes")
+# Node template version for harness sandbox VMs (TemplateInfo.version).
+SANDBOX_FC_TEMPLATE = os.environ.get("SANDBOX_FC_TEMPLATE", "").strip()
+# Deadline of one exec_command. Background servers need a long one; the
+# guest daemon caps it at 24 h.
+SANDBOX_FC_EXEC_DEADLINE_SECONDS = _fc_env_float(
+    "SANDBOX_FC_EXEC_DEADLINE_SECONDS", 4 * 3600.0, minimum=1.0
+)
+# A turn mark expires after this long without a renewal (begin_turn).
+SANDBOX_FC_TURN_LEASE_SECONDS = _fc_env_int(
+    "SANDBOX_FC_TURN_LEASE_SECONDS", 900, minimum=1
+)
+# A parked approval keeps the sandbox busy for at most this long.
+SANDBOX_FC_APPROVAL_PARK_SECONDS = _fc_env_int(
+    "SANDBOX_FC_APPROVAL_PARK_SECONDS", 24 * 3600, minimum=1
+)
+# Largest session file that publish_artifact copies to the file store.
+SANDBOX_FC_PUBLISH_MAX_BYTES = _fc_env_int(
+    "SANDBOX_FC_PUBLISH_MAX_BYTES", 100 << 20, minimum=1
+)
