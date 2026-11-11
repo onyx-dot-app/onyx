@@ -55,6 +55,8 @@ import { CheckRunCard } from "@/views/admin/connectors/ConnectorDetailPage/Check
 import { StageDetailsCard } from "@/views/admin/connectors/ConnectorDetailPage/StageDetailsPopover";
 import { RunDetailsHint } from "@/views/admin/connectors/ConnectorDetailPage/InlineDetails";
 import { focusDimClass } from "@/views/admin/connectors/ConnectorDetailPage/focusMode";
+import RunProgress from "@/views/admin/connectors/ConnectorDetailPage/RunProgress";
+import { formatRunLength } from "@/views/admin/connectors/ConnectorDetailPage/runLength";
 import LineLayout, {
   LineIconLabel,
   LineTags,
@@ -81,7 +83,7 @@ function runIcon(run: CCPairRun): IconFunctionComponent {
 
 /** The run's results that have a row: checks that apply to the pair. */
 export function shownCheckResults(
-  run: CheckRunSnapshot
+  run: CheckRunSnapshot,
 ): CapabilityCheckResult[] {
   return applicableResults(run.check_results);
 }
@@ -95,7 +97,7 @@ export function hasInlineDetails(run: CCPairRun): boolean {
 /** How many of a check run's shown checks ended in `status`. */
 export function checkCount(
   run: CheckRunSnapshot,
-  status: CapabilityCheckStatus
+  status: CapabilityCheckStatus,
 ): number {
   return shownCheckResults(run).filter((result) => result.status === status)
     .length;
@@ -195,31 +197,6 @@ export function runMinutes(run: CCPairRun): number | null {
   return ms === null ? null : Math.max(0, Math.round(ms / 60_000));
 }
 
-/** A run's length in its two largest units in short form, such as "16 sec", "4 min 12 sec" or "1 hr 5 min". */
-function formatRunLength(
-  format: ReturnType<typeof useFormatter>,
-  ms: number
-): string {
-  const total = Math.max(0, Math.round(ms / 1000));
-  const units = [
-    { unit: "hour", value: Math.floor(total / 3600) },
-    { unit: "minute", value: Math.floor(total / 60) % 60 },
-    { unit: "second", value: total % 60 },
-  ];
-  // From the largest nonzero unit, or seconds for an instant run. A zero trailing unit is dropped, as in "2 min" or "1 hr".
-  const first = units.findIndex((part) => part.value > 0);
-  const from = first === -1 ? units.length - 1 : first;
-  return format.list(
-    units
-      .slice(from, from + 2)
-      .filter((part, index) => index === 0 || part.value > 0)
-      .map(({ unit, value }) =>
-        format.number(value, { style: "unit", unit, unitDisplay: "short" })
-      ),
-    { type: "unit", style: "narrow" }
-  );
-}
-
 /** What a run's rate counts: documents indexed or synced, or memberships synced. `null` for a kind with no rate. */
 function rateCount(run: CCPairRun): number | null {
   switch (run.kind) {
@@ -275,7 +252,7 @@ function liveRate(run: CCPairRun, now: number): number | null {
 function useRateLabel(): (
   run: CCPairRun,
   rate: number,
-  duration?: string
+  duration?: string,
 ) => string {
   const t = useTranslations("admin.connector.runs.detail");
   const format = useFormatter();
@@ -427,7 +404,7 @@ function DocCounts({ attempt }: DocCountsProps) {
   const t = useTranslations("admin.connector.runs");
   const updated = Math.max(
     0,
-    attempt.total_docs_indexed - attempt.new_docs_indexed
+    attempt.total_docs_indexed - attempt.new_docs_indexed,
   );
   return (
     <CountsRow>
@@ -733,7 +710,7 @@ export default function RunRow({
               <div
                 className={cn(
                   !logsShown &&
-                    "opacity-0 transition-opacity focus-within:opacity-100 group-hover/run-line:opacity-100 no-hover:opacity-100"
+                    "opacity-0 transition-opacity focus-within:opacity-100 group-hover/run-line:opacity-100 no-hover:opacity-100",
                 )}
               >
                 {/* Every line has the action, and a run that recorded no trace or message has nothing to open. */}
@@ -750,6 +727,9 @@ export default function RunRow({
             </>
           }
         />
+        {run.kind === "indexing" && active && run.attempt.progress && (
+          <RunProgress progress={run.attempt.progress} />
+        )}
       </Card>
       {open && run.kind === "indexing" && (
         <StageDetailsCard

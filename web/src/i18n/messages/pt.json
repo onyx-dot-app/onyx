@@ -3107,7 +3107,15 @@
           "close": "Fechar",
           "count": "({count})"
         },
-        "showing": "Mostrando <mono>{from}</mono>~<mono>{to}</mono> de <mono>{total}</mono>"
+        "showing": "Mostrando <mono>{from}</mono>~<mono>{to}</mono> de <mono>{total}</mono>",
+        "progress": {
+          "listed": "Listados",
+          "converted": "Convertidos",
+          "indexed": "Indexados",
+          "listedSoFar": "{count, plural, one {# documento listado até agora} other {# documentos listados até agora}}",
+          "skipped": "{count, plural, one {# documento sem alterações ignorado} other {# documentos sem alterações ignorados}}",
+          "eta": "Faltam cerca de {duration}"
+        }
       },
       "activity": {
         "search": {
