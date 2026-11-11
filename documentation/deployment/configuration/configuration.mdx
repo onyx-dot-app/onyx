@@ -10,6 +10,13 @@ icon: "sliders"
   To find out more about configuring the Onyx app, checkout our [Admin docs](/admins/overview)!
 </Warning>
 
+## Web frame protection
+
+By default, Onyx pages and API responses allow framing only from the same origin and browser extensions.
+File responses keep their backend sandbox restrictions as well as this framing policy.
+Set `WEB_FRAME_PROTECTION_ENABLED=false` on the web server to omit the web server's framing restriction.
+Restart the web server after changing this setting. Backend policies can still impose stricter restrictions.
+
 ## Onyx Lite
 
 Onyx Lite is a minimal deployment of Onyx designed for teams that only need the core LLM chat experience without

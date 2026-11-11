@@ -16,6 +16,7 @@ from onyx.skills.bundle import (
     DEFAULT_TOTAL_MAX_BYTES,
     SKILL_MD_NAME,
     TEMPLATE_SUFFIX,
+    assert_skill_bundle_settings_valid,
     normalize_custom_bundle,
 )
 from onyx.skills.metadata import parse_skill_document
@@ -43,6 +44,7 @@ def fetch_github_skill_bundles(
     selected_paths: set[str] | None = None,
 ) -> tuple[GitHubRepository, list[GitHubSkillBundle]]:
     """Fetch one immutable repository revision and discover its skills."""
+    assert_skill_bundle_settings_valid()
     github_source = parse_github_source(source, allow_tree_path=True)
     resolved_source = resolve_github_revision(
         github_source,

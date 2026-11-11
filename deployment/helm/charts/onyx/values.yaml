@@ -1753,6 +1753,11 @@ sandboxPushPolicy:
   allowTelepresenceAmbassador: false
 
 configMap:
+  # Stored skill ZIP read allowance in bytes, independent of the upload limit.
+  # The default is the larger of 100 MiB and SKILL_BUNDLE_TOTAL_MAX_BYTES, plus ZIP overhead.
+  # Keep this at least as large as existing bundles. Upload ZIP limits cannot exceed it.
+  # A SKILL_BUNDLE_* value that is not a positive integer disables custom skill bundles.
+  # SKILL_BUNDLE_STORED_ZIP_MAX_BYTES: "107724800"
   # WARNING: do NOT copy hostname keys from a docker-compose .env into this
   # block. The compose stack uses underscored service names (e.g. `api_server`,
   # `cache`, `inference_model_server`) which are invalid in K8s DNS labels and

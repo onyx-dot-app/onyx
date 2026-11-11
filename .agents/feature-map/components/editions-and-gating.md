@@ -71,6 +71,12 @@ Its neighbours own:
 
 ## Architecture
 
+**Web response framing.** `web/src/securityHeaders.ts:withSecurityHeaders`
+applies the runtime `WEB_FRAME_PROTECTION_ENABLED` setting to page and API responses.
+When a backend supplies CSP, the helper appends a separate framing policy.
+Both policies apply, preserving backend sandbox restrictions and stricter framing rules.
+Setting the flag to `false` omits only the web helper's framing restriction.
+
 **Edition resolution.**
 
 ```
