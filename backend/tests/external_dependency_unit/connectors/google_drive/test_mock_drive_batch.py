@@ -15,6 +15,7 @@ from onyx.connectors.google_drive.file_retrieval import (
     get_files_by_web_view_links_batch,
 )
 from onyx.connectors.google_utils import google_auth, resources
+from onyx.server.documents.models import GoogleServiceAccountKey
 
 _CORPUS = {
     "num_users": 2,
@@ -82,3 +83,9 @@ def test_batch_get_files_by_web_view_link(mock_drive_client: httpx.Client) -> No
     assert result.errors == {}
     assert sorted(result.files) == sorted(links)
     assert {file["id"] for file in result.files.values()} == set(readable)
+
+
+def test_service_account_key_is_accepted(mock_drive_client: httpx.Client) -> None:
+    """The admin panel accepts the mock's key file as a service account key."""
+    key = mock_drive_client.get("/_mock/service-account-key").json()
+    assert GoogleServiceAccountKey.model_validate(key).type == "service_account"
