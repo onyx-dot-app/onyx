@@ -68,6 +68,14 @@ from onyx.utils.postgres_sanitization import sanitize_json_like
 from tests.unit.onyx.agents.fakes import EchoTool, ScriptedLLM, run_agent
 from tests.unit.onyx.tools.code_mode.fakes import search_doc
 
+SUBAGENT_TOOLS = [
+    "spawn_agent",
+    "list_agents",
+    "interrupt_agent",
+    "send_message",
+    "queue_message",
+]
+
 PLACEMENT = Placement(turn_index=1, tab_index=0)
 CODE = "r = await internal_search(queries=['q'])\nprint(r)"
 
@@ -432,7 +440,12 @@ def test_code_mode_names_preferred_tools_without_changing_definitions(
     run_agent(agent, messages=[UserMessage(content="Find")], max_steps=3)
 
     [request] = llm.requests
-    assert _offered(request) == ["send_email", CodeModeTool.NAME, WAIT_CODE_TOOL_NAME]
+    assert _offered(request) == [
+        "send_email",
+        CodeModeTool.NAME,
+        WAIT_CODE_TOOL_NAME,
+        *SUBAGENT_TOOLS,
+    ]
     assert request["tool_choice"] == ToolChoiceOptions.AUTO
     assert f"selected these operations for this request: {operation}." in str(request)
 
@@ -466,7 +479,12 @@ def test_code_mode_keeps_identical_tool_definitions_on_the_final_step() -> None:
 
     first, final = llm.requests
     assert first["tools"] == final["tools"]
-    assert _offered(final) == ["send_email", CodeModeTool.NAME, WAIT_CODE_TOOL_NAME]
+    assert _offered(final) == [
+        "send_email",
+        CodeModeTool.NAME,
+        WAIT_CODE_TOOL_NAME,
+        *SUBAGENT_TOOLS,
+    ]
     assert final["tool_choice"] == ToolChoiceOptions.NONE
 
 
@@ -526,7 +544,11 @@ def test_the_file_notice_names_a_tool_that_runs_inside_programs() -> None:
     run_agent(agent, messages=[UserMessage(content="Summarize")], max_steps=3)
 
     [request] = llm.requests
-    assert _offered(request) == [CodeModeTool.NAME, WAIT_CODE_TOOL_NAME]
+    assert _offered(request) == [
+        CodeModeTool.NAME,
+        WAIT_CODE_TOOL_NAME,
+        *SUBAGENT_TOOLS,
+    ]
     assert "Use the read_file tool" in str(request)
     assert 'file_id="file-1"' in str(request)
 

@@ -22,6 +22,9 @@ import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
 import { StreamStopInfo } from "@/lib/search/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "next";
+import { useSWRConfig } from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import type { PendingChatMessage } from "@/lib/chat/types";
 import {
   getLastSuccessfulMessageId,
   getLatestMessageChain,
@@ -157,6 +160,7 @@ export default function useChatController({
   restoreInputBar,
 }: UseChatControllerProps) {
   const t = useTranslations("chat.app");
+  const { mutate: mutateCache } = useSWRConfig();
   // The chat's search filters ride the tool configuration, resolved against
   // the sources the active agent can reach. An explicit selection resolves
   // only against a complete roster — `settled` allows stale data (a failed
@@ -194,9 +198,6 @@ export default function useChatController({
   // Store actions - these don't cause re-renders
   const updateChatStateAction = useChatSessionStore(
     (state) => state.updateChatState
-  );
-  const setLatestMessageRenderComplete = useChatSessionStore(
-    (state) => state.setLatestMessageRenderComplete
   );
   const updateRegenerationStateAction = useChatSessionStore(
     (state) => state.updateRegenerationState
@@ -405,9 +406,6 @@ export default function useChatController({
       const submissionSessionId = getCurrentSessionId();
       if (submissionSessionId) {
         submissionStore.setAbortController(submissionSessionId, controller);
-        submissionStore.updateSessionData(submissionSessionId, {
-          queuedMessagesPaused: false,
-        });
       }
       // Read at submit time so no caller can capture a stale value.
       const incognito = incognitoEnabledRef.current ?? false;
@@ -675,7 +673,6 @@ export default function useChatController({
       ];
 
       updateChatStateAction(frozenSessionId, "loading");
-      setLatestMessageRenderComplete(frozenSessionId, false);
 
       // find the parent
       const currMessageHistory =
@@ -1376,6 +1373,19 @@ export default function useChatController({
             } else if (Object.hasOwn(packet, "obj")) {
               const typedPacket = packet as Packet;
               const packetObj = typedPacket.obj;
+              if (packetObj.type === "user_message") {
+                void mutateCache<PendingChatMessage[]>(
+                  SWR_KEYS.pendingChatMessages(frozenSessionId),
+                  (messages = []) =>
+                    messages.filter((message) => message.id !== packetObj.id),
+                  { revalidate: false }
+                ).catch((failure: unknown) =>
+                  console.error(
+                    "Could not remove accepted pending message",
+                    failure
+                  )
+                );
+              }
 
               if (isMultiModel) {
                 // Multi-model: route packet by placement.model_index.
@@ -1571,11 +1581,6 @@ export default function useChatController({
         }
       }
 
-      if (saveFailed || !streamSucceeded) {
-        useChatSessionStore
-          .getState()
-          .updateSessionData(frozenSessionId, { queuedMessagesPaused: true });
-      }
       const wasCancelling =
         useChatSessionStore.getState().sessions.get(frozenSessionId)
           ?.chatState === "cancelling";
@@ -1584,7 +1589,6 @@ export default function useChatController({
         controller,
         errorMessage: tReadiness("checkFailed"),
         refreshHistory: !streamSucceeded || saveFailed || wasCancelling,
-        completeRendering: !streamSucceeded || wasCancelling,
       });
 
       // Name the chat now that we have the first AI response (navigation already happened before streaming)
@@ -1612,6 +1616,7 @@ export default function useChatController({
       updateSelectedNodeForDocDisplay,
       currentMessageTree,
       tReadiness,
+      mutateCache,
       // Ensure the configuration the chat was given is what gets sent
       toolConfiguration,
       // Keep tool preference-derived values fresh

@@ -28,6 +28,10 @@ export class InputBar {
   readonly textbox: Locator;
   readonly sendButton: Locator;
   readonly processingFileChips: Locator;
+  readonly queuedMessages: Locator;
+  readonly pendingMessageHint: Locator;
+  readonly subagentActivity: Locator;
+  readonly composerSendNowButton: Locator;
 
   readonly tile: Locator;
   readonly tileRemoveButton: Locator;
@@ -44,6 +48,15 @@ export class InputBar {
     this.textbox = page.locator("#onyx-chat-input-textbox");
     this.sendButton = page.locator("#onyx-chat-input-send-button");
     this.processingFileChips = this.container.getByText("Processing...");
+    this.subagentActivity = page.getByTestId("subagent-activity");
+    this.queuedMessages = page.getByTestId("queued-message-bar");
+    this.pendingMessageHint = this.container.getByTestId(
+      "pending-message-hint"
+    );
+    this.composerSendNowButton = this.container.getByRole("button", {
+      name: "Send now",
+      exact: true,
+    });
 
     this.tile = page.locator("[data-rich-tile]");
     this.tileRemoveButton = page.locator("[data-rich-tile-remove]");
@@ -74,6 +87,60 @@ export class InputBar {
 
   async focus(): Promise<void> {
     await this.textbox.focus();
+  }
+
+  async expectCompactSubagentActivity(): Promise<void> {
+    await poll(() =>
+      this.subagentActivity.evaluate((element) => {
+        const dot = element.firstElementChild;
+        const label = element.lastElementChild;
+        if (!dot || !label) return false;
+        const composer = document.getElementById("onyx-chat-input");
+        if (!composer || !composer.contains(element)) return false;
+        const dotBox = dot.getBoundingClientRect();
+        const labelBox = label.getBoundingClientRect();
+        const lineHeight = Number.parseFloat(
+          getComputedStyle(label).lineHeight
+        );
+        const style = getComputedStyle(element);
+        const padding =
+          Number.parseFloat(style.paddingTop) +
+          Number.parseFloat(style.paddingBottom);
+        return (
+          Math.abs(
+            element.getBoundingClientRect().x +
+              element.getBoundingClientRect().width / 2 -
+              (composer.getBoundingClientRect().x +
+                composer.getBoundingClientRect().width / 2)
+          ) < 1 &&
+          dotBox.right <= labelBox.left &&
+          Math.abs(
+            dotBox.y + dotBox.height / 2 - labelBox.y - labelBox.height / 2
+          ) < 1 &&
+          labelBox.height <= lineHeight &&
+          element.getBoundingClientRect().height <= lineHeight + padding
+        );
+      })
+    ).toBe(true);
+  }
+
+  async expectInlinePendingMessageHint(): Promise<void> {
+    await poll(() =>
+      this.pendingMessageHint.evaluate((element) => {
+        const boxes = Array.from(element.children, (child) =>
+          child.getBoundingClientRect()
+        );
+        const first = boxes[0];
+        return (
+          boxes.length === 5 &&
+          first !== undefined &&
+          boxes.every(
+            (box) =>
+              Math.abs(box.y + box.height / 2 - first.y - first.height / 2) < 1
+          )
+        );
+      })
+    ).toBe(true);
   }
 
   async clear(): Promise<void> {
@@ -171,6 +238,37 @@ export class InputBar {
 
   async send(): Promise<void> {
     await this.page.keyboard.press("Enter");
+  }
+
+  async submitPending(
+    text: string,
+    delivery: "queue" | "send" = "queue"
+  ): Promise<void> {
+    await this.textbox.fill(text);
+    await this.textbox.press(
+      delivery === "queue" ? "ControlOrMeta+Enter" : "Enter"
+    );
+    await expect(this.textbox).toHaveText("");
+  }
+
+  async discardPending(index: number): Promise<void> {
+    await this.queuedMessages.nth(index).click();
+    await this.textbox.press("Delete");
+  }
+
+  async editPending(index: number): Promise<void> {
+    await this.queuedMessages
+      .nth(index)
+      .getByRole("button", { name: "Edit queued message", exact: true })
+      .click();
+  }
+
+  async sendPendingNow(index: number): Promise<void> {
+    const queuedMessage = this.queuedMessages.nth(index);
+    await queuedMessage.click();
+    await queuedMessage
+      .getByRole("button", { name: "Send now", exact: true })
+      .click();
   }
 
   async clickSend(): Promise<void> {

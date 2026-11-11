@@ -345,7 +345,7 @@ export default function MessageToolbar({
 
             {onRegenerate &&
               messageId !== undefined &&
-              parentMessage &&
+              parentMessage?.type === "user" &&
               llmManager && (
                 <div data-testid="AgentMessage/regenerate">
                   <ModelSelector

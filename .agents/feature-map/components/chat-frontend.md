@@ -23,11 +23,22 @@
   The user can stop at any time. The partial answer stays, marked as stopped.
   The input stays busy until the server confirms that the turn is saved. If
   the client cannot confirm it, the send button changes to a manual check,
-  and the typed text stays.
-- **A user types while an answer streams.** The message joins a short queue
-  and sends by itself when the answer has finished drawing on screen and the
-  server is idle. After an error or a failed save, the queue pauses until the
-  user sends again.
+  and the typed text stays. A failed refresh after queue acceptance uses the same
+  recovery action, even when the queue is empty.
+- **A user types while an answer streams.** Enter and the send arrow add text
+  at the next model step by default. The account's Send Behavior setting can
+  make them interrupt instead. Ctrl/Cmd+Enter always queues the next turn.
+  Selecting a pending message exposes Send now; that action interrupts current
+  work before starting the message. Queued text survives reload and browser closure.
+  Editing withdraws the pending message before returning its text to the input;
+  accepted messages cannot be withdrawn. Stop and failed responses pause the queue.
+  Pending submission is text-only and unavailable in incognito. Craft keeps its
+  own queue; only the queue display and keyboard navigation are shared.
+- **Subagents can continue after the answer ends.** A small activity indicator
+  stays visible while background work remains. The input stays usable. Session
+  status polling discovers automatic follow-up responses and uses the normal
+  history refresh and stream-replay path. Internal agent results do not become
+  user message bubbles.
 - **A user edits or regenerates** an earlier message. A switcher then moves
   between the versions, and the rest of the chat follows the chosen one. A
   reload shows the same version.
@@ -105,7 +116,7 @@ AppInputBar -> useChatController.onSubmit           web/src/hooks/useChatControl
   drain loop, one store update per animation frame
     updateSessionMessageTree(frozenSessionId, ...)
   settleChatSession                                 web/src/lib/chat/settleChatSession.ts
-    await ack and reader -> waitForChatSessionIdle -> reload history if asked -> "input"
+    await ack and reader -> waitForChatResponseEnd -> follow next stream or release input
 AgentMessage -> usePacketProcessor -> processPackets   timeline/hooks/packetProcessor.ts
   groups by (turn_index, tab_index); builds citationMap, documentMap, stop state
   tool groups -> timeline steps;  display groups -> answer
@@ -115,17 +126,19 @@ AgentMessage -> usePacketProcessor -> processPackets   timeline/hooks/packetProc
 **The store.** `web/src/app/app/stores/useChatSessionStore.ts` holds a `Map`
 of session data keyed by session id, plus `currentSessionId`. Each session has
 its own message tree, chat state, `AbortController`, `sendAcknowledged` and
-`readerFinished` promises, and message queue. The `AbortController` identifies
+`readerFinished` promises, and display state. `lib/chat/hooks.ts:usePendingChatMessages` reads the server queue
+through SWR; the store has no local queue. The `AbortController` identifies
 the request that owns the session; late work from an older request checks it
 and stops. A stream keeps writing to the session that started it
 (`frozenSessionId`), so a user can switch chats while one streams. Chat states
 beyond `input`, `loading` and `streaming` include `cancelling` (Stop sent),
-`unconfirmed` (the client could not confirm that the server is idle) and
+`unconfirmed` (the client could not confirm execution status or load saved history) and
 `uploading` (attachments upload). `onSubmit` ignores a send unless the state
-is `input`, so the input bar queues a send made during an upload.
+is `input`. Pending messages use a separate endpoint and require a known
+response, no new attachments, and an explicit choice for a multi-model turn.
 Each `setCurrentSession` runs `cleanupOldSessions`, which keeps at most ten
-sessions in memory. It drops only idle ones: not current, in `input`, with no
-queued messages, and known not to be incognito (or still empty). An incognito chat cannot be
+sessions in memory. It drops only idle ones: not current, in `input`, and
+known not to be incognito (or still empty). Pending messages live on the server. An incognito chat cannot be
 rebuilt from the server, so the tab holds its only copy. A dropped chat loads
 from the server again when the user opens it, so state kept only in the store
 does not survive it. Navigation goes through
@@ -144,7 +157,9 @@ loader shows while Next commits the route.
 nodes keyed by `nodeId`, each with `latestChildNodeId`.
 `getLatestMessageChain` walks it to get what the page shows. On load,
 `app/app/services/lib.tsx:processRawChatHistory` builds the tree from the
-session response and its replay packets ([[chat-persistence]]). A saved
+session response and its replay packets ([[chat-persistence]]). Refreshing the
+latest page preserves loaded history that connects to that page. Incognito
+recovery checks execution status and retains local content. A saved
 failure becomes an `error` node with `errorMessage`, `errorCode` and
 `isRetryable` from `error_info`; `message` holds only answer text.
 
@@ -236,15 +251,16 @@ flush, so it does not reuse call or step objects.
 
 **Resume.** `web/src/hooks/useChatSessionController.ts` loads the session.
 When the response has `current_stream`, Stop can target that stream ID at
-once. When the ID is an assistant node, `resumeInFlightRun` calls
+once. When the ID is an assistant node, `lib/chat/settleChatSession.ts:resumeChatSession` calls
 `resumeStream` with the stream ID and the node's `replayCursor` (0 on a fresh
 page). It publishes packets only at each `StreamCursor` line, so the cursor
 and the packets it covers are stored together
 ([[streaming-protocol#buffer-gap-ends-resume]]). It holds the backlog until
 `replay_complete`, and marks it with `restoredPacketCount` so that
 `AgentMessage` shows it without animation. `resumeStream` does not drop
-heartbeats, so `resumeInFlightRun` drops `chat_heartbeat` itself. A resumed
-error packet turns the node into an `error` node and pauses the queue. When
+heartbeats, so `resumeChatSession` drops `chat_heartbeat` itself. A resumed
+error packet turns the node into an `error` node. The backend decides whether
+queued input can run. When
 the reader ends, it settles the session. A multi-model turn, whose stream ID
 is the user message, only settles.
 
@@ -260,17 +276,29 @@ in one of these states, or it stays busy.
 **Settlement.** `web/src/lib/chat/settleChatSession.ts:settleChatSession` is
 the only path back to the `input` state after a send, a Stop or a resume
 ([[#settle-before-input]]). It waits for the send acknowledgement and the
-reader, then polls `/status` once a second, with no time limit, until idle.
+reader, then `lib/chat/sessionReadiness.ts:waitForChatResponseEnd` polls `/status`
+until that response releases ownership. The status includes the current stream
+ID. A queued response can take ownership without making the session idle;
+`refreshChatSession` loads the latest page and reuses `resumeChatSession` to follow it.
 After a resume, a Stop, an error or a failed save it also reloads saved
 history. `preserveFailedMessages` keeps a local error unless the saved row's
 `response_status` is `complete`, `limit` or `cancelled` (text or files when
 the field is absent). After a clean send, the streamed tree stays. Settlement
 never reloads history for an incognito session, in either record mode; on a
 reload or recovery it only adds a stop packet to the last answer if it has
-none. A failed or timed-out (10 s) request, or a session that is busy again
-during the reload, sets `unconfirmed` and pauses the queue. Recovery comes
+none. A failed or timed-out (10 s) readiness request sets `unconfirmed`.
+A newly active stream during reload transfers to the same replay reader. Recovery comes
 from the input bar's manual check or from loading the session again (see
 Resume).
+
+**Pending input.** `lib/chat/hooks.ts:usePendingChatMessages` polls the small
+pending list while messages remain. Focus, reconnect, stream completion, and a
+new response acknowledgement also refresh it. A removed entry triggers
+`refreshChatSession`; a new stream hands off to the shared replay reader.
+Accepted instructions arrive as `user_message` packets between response sections.
+The live reader removes their exact IDs from the pending cache. Saved replay
+emits the same packets from each step's human inputs. Both paths render normal
+user bubbles after earlier output and before the next step's output.
 
 **First-run onboarding.** `AppPage` renders
 `web/src/lib/onboarding/components/OnboardingFlow.tsx`, and
@@ -320,7 +348,7 @@ up its own branding.
    one of the same or greater length keeps the state built from the old
    packets. `app/app/message/messageComponents/AgentMessage.tsx:AgentMessage`
    memoizes on `packetCount`, not on the array. Update both together, as
-   `web/src/hooks/useChatSessionController.ts:resumeInFlightRun` does.
+   `web/src/lib/chat/settleChatSession.ts:resumeChatSession` does.
 2. `packet-type-web-sets` **A new packet type needs more than an enum entry.**
    [[streaming-protocol]] lists the hand-mirrored places, including
    `findRenderer`. The web client keeps more hand-written sets that switch on
@@ -360,27 +388,28 @@ up its own branding.
    before it builds error nodes, so an abort renders no error node. Make the
    same check in any new consumer of the FIFO before it turns `stack.error`
    into UI.
-6. `queue-needs-three-flags` **The queue needs three flags.**
-   `sections/input/AppInputBar.tsx:AppInputBar` sends
-   the next queued message when the chat state is `input`,
-   `latestMessageRenderComplete` is true and `queuedMessagesPaused` is false.
-   It sends on the change into that state, not while in it, so clearing the
-   pause alone sends nothing.
-   `AgentMessage` sets render-complete when its text has drawn, or when a stop
-   arrives with no answer groups to render;
-   `app/app/message/MultiModelResponseView.tsx` sets it when every visible
-   successful panel has completed. Other paths that end a stream without
-   completing rendering must have `settleChatSession` set it
-   (`completeRendering`). If none does, the queue stalls with no error.
-   `onSubmit` clears the pause; errors, failed saves and failed settlement set
-   it.
+6. `server-owns-queue` **Only the backend starts queued turns.**
+   `sections/input/AppInputBar.tsx:AppInputBar` submits text to the pending-message
+   endpoint. It does not wait for rendering or call normal send when a response
+   ends. SWR owns the pending-list cache. Accepted between-step inputs use the
+   same ordered packets for live display and reload. During successful turn
+   handoff, the next queued item previews in history with a loading indicator;
+   it stays in SWR until acceptance. Ordinary Stop, failure, and confirmed idle
+   remove the preview. An explicit interrupt can preview its promoted message
+   after cancellation. History refresh precedes removal of an accepted queued item.
+   Before response acknowledgement, submissions appear locally and wait for that
+   response ID before posting. Local edits withdraw the unsent submission; failed
+   submissions remain editable. After posting, editing waits for DELETE to return
+   the withdrawn text. A conflict refreshes the list without restoring text that
+   was already accepted.
 7. `branch-switch-reaches-server` **A branch switch must reach the server.**
    `web/src/hooks/useChatSessionController.ts:onMessageSelection` updates the
    local tree and calls `app/app/services/lib.tsx:patchMessageToBeLatest`. The
    backend accepts a send only when its parent is on the server's active branch
    ([[chat-persistence#send-parent-on-active-branch]]), and a reload shows the
    server's branch. A UI path that changes `latestChildNodeId` without the PUT
-   breaks both.
+   breaks both. After selection succeeds, refresh session status: an idle
+   branch has no polling timer to discover another branch's active children.
 8. `implicit-pick-revertible` **An implicit model pick must be revertible.** A
    follow-up to an unpicked multi-model turn picks the most visible answer,
    applies it locally and PUTs it. `web/src/hooks/useChatController.ts:onSubmit`
@@ -464,7 +493,7 @@ up its own branding.
   `details.model_index`, and the 429 packet has none. The panels also get no
   stop packet.
 - **Resume covers one model only.** For a multi-model turn, `current_stream`
-  is the user message id, so `resumeInFlightRun` skips it. The page shows no
+  is the user message id, so `resumeChatSession` is not attached. The page shows no
   live output for that turn; settlement loads the answers when the run ends.
 - **A fast send after a branch switch can race.** `patchMessageToBeLatest` is
   not awaited. A send that reaches the server first can fail with "not on the
@@ -527,4 +556,6 @@ up its own branding.
   `web/src/app/app/`.
 - By hand: select an Action preference, edit, switch back, stop mid-answer, and reload.
   Citations resolve, the branch holds, and the partial answer stays. Queue a
-  message during an answer: it sends only after the input returns to idle.
+  message with Ctrl/Cmd+Enter during an answer: the server starts it after completion.
+  Enter adds text at the next model step by default. Select a queued message and
+  choose Send now to interrupt. Reload and verify pending and accepted text.

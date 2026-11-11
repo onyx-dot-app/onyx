@@ -12424,6 +12424,7 @@
     },
     "input": {
       "appInputBar": {
+        "subagentsWorking": "Subagents working",
         "attachFilesButton": {
           "tooltip": "Attach Files"
         },
@@ -12460,6 +12461,17 @@
         "voiceSetupButton": {
           "ariaLabel": "Set up voice",
           "tooltip": "Voice not configured. Set up in admin settings."
+        },
+        "pendingMessages": {
+          "keyboardHint": "Enter to send · Ctrl or Command + Enter to queue",
+          "preparingHint": "Queueing is available once the response starts.",
+          "attachmentsHint": "Send attached files after this response finishes.",
+          "chooseResponseHint": "Choose a response before queueing a message.",
+          "incognitoHint": "Wait for the response to finish in incognito chat.",
+          "sendHint": "Send at the next step of this response",
+          "interruptHint": "Interrupt current work and send this message",
+          "sendLabel": "Send",
+          "queueLabel": "Queue"
         }
       },
       "baseInputBar": {
@@ -12568,6 +12580,17 @@
         },
         "removeHint": {
           "label": "remove"
+        },
+        "editButton": {
+          "tooltip": "Edit queued message",
+          "clearDraftTooltip": "Clear your draft to edit a queued message"
+        },
+        "sendButton": {
+          "label": "Send now",
+          "tooltip": "Interrupt current work and send this message"
+        },
+        "sendHint": {
+          "label": "send now ·"
         }
       },
       "sharedAppInputBar": {
@@ -12577,6 +12600,13 @@
         "startSessionButton": {
           "label": "Start New Session"
         }
+      },
+      "pendingMessages": {
+        "submitFailed": "Could not submit the message. You can edit or remove it from the pending messages.",
+        "withdrawFailed": "Could not remove the pending message.",
+        "loadFailed": "Could not load pending messages.",
+        "alreadyAccepted": "This message was already accepted and is no longer pending.",
+        "interruptFailed": "Could not send this message now. It remains pending."
       }
     },
     "mcpApiKey": {
@@ -16413,6 +16443,12 @@
       "title": "Chats",
       "toasts": {
         "saveFailed": "Failed to save preferences"
+      },
+      "sendBehavior": {
+        "title": "Send Behavior While Working",
+        "description": "Choose what Enter and the send button do while an answer is in progress. Ctrl/Cmd+Enter always queues a follow-up.",
+        "afterStep": "After the current step",
+        "interrupt": "Interrupt current work"
       }
     },
     "connectors": {

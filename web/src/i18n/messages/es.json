@@ -12424,6 +12424,7 @@
     },
     "input": {
       "appInputBar": {
+        "subagentsWorking": "Subagentes trabajando",
         "attachFilesButton": {
           "tooltip": "Adjuntar archivos"
         },
@@ -12460,6 +12461,17 @@
         "voiceSetupButton": {
           "ariaLabel": "Configurar voz",
           "tooltip": "La voz no está configurada. Actívala en la configuración de administración."
+        },
+        "pendingMessages": {
+          "keyboardHint": "Enter para enviar · Ctrl o Command + Enter para poner en cola",
+          "preparingHint": "Puedes poner mensajes en cola cuando comience la respuesta.",
+          "attachmentsHint": "Envía los archivos adjuntos cuando termine esta respuesta.",
+          "chooseResponseHint": "Elige una respuesta antes de poner un mensaje en cola.",
+          "incognitoHint": "Espera a que termine la respuesta en el chat de incógnito.",
+          "sendHint": "Enviar en el siguiente paso de esta respuesta",
+          "interruptHint": "Interrumpir el trabajo actual y enviar este mensaje",
+          "sendLabel": "Enviar",
+          "queueLabel": "En cola"
         }
       },
       "baseInputBar": {
@@ -12568,6 +12580,17 @@
         },
         "removeHint": {
           "label": "quitar"
+        },
+        "editButton": {
+          "tooltip": "Editar mensaje en cola",
+          "clearDraftTooltip": "Borra tu borrador para editar un mensaje en cola"
+        },
+        "sendButton": {
+          "label": "Enviar ahora",
+          "tooltip": "Interrumpir el trabajo actual y enviar este mensaje"
+        },
+        "sendHint": {
+          "label": "enviar ahora ·"
         }
       },
       "sharedAppInputBar": {
@@ -12577,6 +12600,13 @@
         "startSessionButton": {
           "label": "Iniciar nueva sesión"
         }
+      },
+      "pendingMessages": {
+        "submitFailed": "No se pudo enviar el mensaje. Puedes editarlo o eliminarlo de los mensajes pendientes.",
+        "withdrawFailed": "No se pudo eliminar el mensaje pendiente.",
+        "loadFailed": "No se pudieron cargar los mensajes pendientes.",
+        "alreadyAccepted": "Este mensaje ya fue aceptado y ya no está pendiente.",
+        "interruptFailed": "No se pudo enviar este mensaje ahora. Sigue pendiente."
       }
     },
     "mcpApiKey": {
@@ -16413,6 +16443,12 @@
       "title": "Chats",
       "toasts": {
         "saveFailed": "No se pudieron guardar las preferencias"
+      },
+      "sendBehavior": {
+        "title": "Comportamiento de Envío Durante el Trabajo",
+        "description": "Elige qué hacen Enter y el botón de envío durante una respuesta. Ctrl/Cmd+Enter siempre pone el mensaje en cola.",
+        "afterStep": "Después del paso actual",
+        "interrupt": "Interrumpir el trabajo actual"
       }
     },
     "connectors": {

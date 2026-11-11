@@ -3708,7 +3708,18 @@ def test_chat_turn_excludes_delegation_tools_in_incognito(
             _start_chat_turn(setup, user, stream_buffer=MagicMock(truncated=False))
         )
     assert not [packet for packet in packets if isinstance(packet, StreamingError)]
-    expected = {"echo", "coding_agent"} if mode is None else {"echo"}
+    expected = {"echo"}
+    if mode is None:
+        expected.update(
+            {
+                "coding_agent",
+                "spawn_agent",
+                "list_agents",
+                "interrupt_agent",
+                "send_message",
+                "queue_message",
+            }
+        )
     assert seen_tools == [expected]
     assert configuration.tools == [coding_config]
 

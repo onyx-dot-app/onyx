@@ -26,7 +26,8 @@
   the selected response's next model step; `queue` starts a new turn after normal
   completion. `interrupt` cancels current work, then starts a new turn after
   execution and saves drain. Stop, failure, and step limits leave ordinary
-  queued text pending. This API belongs to main Chat; Craft has a separate backend.
+  queued text pending. The main-chat frontend uses this API; Craft has a
+  separate backend.
 - **Stop.** The user presses stop. The input shows that the turn is stopping
   until active model, tool and save work drains. The partial answer stays, with
   "Generation was stopped by the user." after it. A reload shows the same saved
@@ -298,7 +299,7 @@ termination grace period is much shorter, so it ends running turns first
     only a suspended checkpoint (`ChatRunStore.handoff` and `resume`) restores it.
     Saved results can still start a new root response through status polling.
     Pending nested delivery needs a live chat control worker; a crashed worker
-    is not recreated by status polling. Its active-subagent status clears when the
+    is not recreated by status polling. Its activity indicator clears when the
     control presence expires. A later chat turn can dispatch the saved results.
 13. `shared-loop-pieces` **Shared runtime pieces have several callers.** A change
     to `agents/runtime.py`, to `chat/prompt_utils.py:prepare_prompt` or to

@@ -1,8 +1,9 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import { useEffect, useRef } from "react";
 import { Text, Button } from "@opal/components";
-import { SvgTrash } from "@opal/icons";
+import { SvgTrash, SvgEdit, SvgArrowUp } from "@opal/icons";
 import { cn, clickOnKeyDown } from "@opal/utils";
 import { QueuedMessage } from "@/app/app/types";
 
@@ -11,6 +12,10 @@ interface QueuedMessageBarProps {
   highlightedIndex: number | null;
   onDiscard: (index: number) => void;
   onHighlight: (index: number | null) => void;
+  onEdit?: (index: number) => void;
+  onSendNow?: (index: number) => void;
+  disabled?: boolean;
+  canEdit?: boolean;
 }
 
 function QueuedMessageBar({
@@ -18,15 +23,29 @@ function QueuedMessageBar({
   highlightedIndex,
   onDiscard,
   onHighlight,
+  onEdit,
+  onSendNow,
+  disabled = false,
+  canEdit = true,
 }: QueuedMessageBarProps) {
   const t = useTranslations("chat.input");
   const isEmpty = messages.length === 0;
+  const highlightedItemRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    highlightedItemRef.current?.scrollIntoView({
+      block: "nearest",
+      inline: "nearest",
+    });
+  }, [highlightedIndex]);
 
   return (
     <div
       className={cn(
         "transition-all duration-150",
-        isEmpty ? "opacity-0 h-0 overflow-hidden" : "opacity-100"
+        isEmpty
+          ? "opacity-0 h-0 overflow-hidden"
+          : "opacity-100 max-h-[min(16rem,30dvh)] overflow-y-auto overscroll-contain"
       )}
     >
       {!isEmpty && (
@@ -37,6 +56,7 @@ function QueuedMessageBar({
             return (
               <div
                 key={item.id}
+                ref={isHighlighted ? highlightedItemRef : undefined}
                 data-testid="queued-message-bar"
                 className={cn(
                   "bg-background-neutral-02 rounded-12 border px-3 py-1.5 flex items-center gap-2 cursor-pointer",
@@ -45,9 +65,17 @@ function QueuedMessageBar({
                 role="button"
                 tabIndex={0}
                 aria-label={t("queuedMessageBar.item.ariaLabel")}
-                onKeyDown={clickOnKeyDown(() =>
-                  onHighlight(isHighlighted ? null : index)
-                )}
+                onKeyDown={(event) => {
+                  if (event.target !== event.currentTarget) return;
+                  if (isHighlighted && onSendNow && event.key === "Enter") {
+                    event.preventDefault();
+                    if (!disabled) onSendNow(index);
+                    return;
+                  }
+                  clickOnKeyDown(() =>
+                    onHighlight(isHighlighted ? null : index)
+                  )(event);
+                }}
                 onClick={() => onHighlight(isHighlighted ? null : index)}
               >
                 <div
@@ -69,7 +97,11 @@ function QueuedMessageBar({
                       ↵
                     </span>
                     <Text font="secondary-body" color="text-02">
-                      {t("queuedMessageBar.editHint.label")}
+                      {t(
+                        onSendNow
+                          ? "queuedMessageBar.sendHint.label"
+                          : "queuedMessageBar.editHint.label"
+                      )}
                     </Text>
                     <span className="translate-y-[1.5px] text-text-02 text-[0.7rem]">
                       ⌫
@@ -79,8 +111,42 @@ function QueuedMessageBar({
                     </Text>
                   </div>
                 )}
+                {isHighlighted && onSendNow && (
+                  <Button
+                    icon={SvgArrowUp}
+                    prominence="tertiary"
+                    size="xs"
+                    disabled={disabled}
+                    aria-label={t("queuedMessageBar.sendButton.label")}
+                    tooltip={t("queuedMessageBar.sendButton.tooltip")}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onSendNow(index);
+                    }}
+                  />
+                )}
+                {onEdit && (
+                  <Button
+                    icon={SvgEdit}
+                    aria-label={t("queuedMessageBar.editButton.tooltip")}
+                    prominence="tertiary"
+                    size="xs"
+                    disabled={disabled || !canEdit}
+                    tooltip={t(
+                      canEdit
+                        ? "queuedMessageBar.editButton.tooltip"
+                        : "queuedMessageBar.editButton.clearDraftTooltip"
+                    )}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onEdit(index);
+                    }}
+                  />
+                )}
                 <Button
+                  disabled={disabled}
                   icon={SvgTrash}
+                  aria-label={t("queuedMessageBar.discardButton.tooltip")}
                   prominence="tertiary"
                   size="xs"
                   tooltip={t("queuedMessageBar.discardButton.tooltip")}

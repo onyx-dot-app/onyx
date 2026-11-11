@@ -48,7 +48,6 @@ export async function stopChatSession(
     useChatSessionStore.getState().updateSessionData(sessionId, {
       // A failed Stop leaves the accepted stream available for another Stop.
       chatState: typeof streamId === "number" ? "streaming" : "unconfirmed",
-      queuedMessagesPaused: true,
       uncaughtError: errorMessage,
     });
     throw error;

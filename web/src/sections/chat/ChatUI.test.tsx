@@ -5,11 +5,8 @@ import { preserveFailedMessages } from "@/lib/chat/settleChatSession";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import type { BackendMessage, Message } from "@/app/app/types";
 import type { Packet } from "@/app/app/services/streamingModels";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
-jest.mock("@/app/app/message/HumanMessage", () => ({
-  __esModule: true,
-  default: () => null,
-}));
 jest.mock("@/components/chat/DynamicBottomSpacer", () => ({
   __esModule: true,
   default: () => null,
@@ -17,6 +14,8 @@ jest.mock("@/components/chat/DynamicBottomSpacer", () => ({
 jest.mock("@/providers/VoiceModeProvider", () => ({
   useVoiceMode: () => ({
     resetTTS: jest.fn(),
+    streamTTS: jest.fn(),
+    stopTTS: jest.fn(),
     revealedCharCount: 0,
     autoPlayback: false,
     isAudioSyncActive: false,
@@ -164,6 +163,67 @@ beforeEach(() => {
   });
   store.setCurrentSession("session");
 });
+
+test.each([
+  ["complete", "queue", true],
+  ["limit", "queue", false],
+  ["error", "queue", false],
+  ["cancelled", "queue", false],
+  ["cancelled", "interrupt", true],
+  ["complete", "interrupt", true],
+] as const)(
+  "previews eligible pending input after %s (%s)",
+  (status, delivery, previews) => {
+    const store = useChatSessionStore.getState();
+    store.updateSessionData("session", {
+      chatState: "streaming",
+      messageTree: new Map([
+        [1, question],
+        [
+          2,
+          {
+            ...failed,
+            type: "assistant",
+            errorMessage: undefined,
+            packets: [
+              {
+                placement: { turn_index: 0 },
+                obj: { type: "stop", response_status: status },
+              },
+            ],
+          },
+        ],
+      ]),
+    });
+    render(<ChatUI {...props} />, {
+      swrConfig: {
+        fallback: {
+          [SWR_KEYS.pendingChatMessages("session")]: [
+            {
+              id: "other-branch",
+              message: "Instruction for a different response",
+              delivery: "interrupt",
+              target_response_id: 999,
+            },
+            {
+              id: "queued",
+              message: "Next question",
+              delivery,
+              target_response_id: 2,
+            },
+          ],
+        },
+      },
+    });
+    expect(screen.queryByTestId("queued-message-handoff") !== null).toBe(
+      previews
+    );
+    act(() => store.updateChatState("session", "unconfirmed"));
+    expect(
+      screen.queryByTestId("queued-message-handoff")
+    ).not.toBeInTheDocument();
+  }
+);
 
 test.each([true, false])(
   "a single-model failure survives refetch and reload (structured: %s)",
@@ -328,4 +388,148 @@ test("readiness errors do not offer regeneration before input is available", () 
   expect(
     screen.queryByRole("button", { name: /regenerate|retry/i })
   ).not.toBeInTheDocument();
+});
+
+test.each([false, true])(
+  "accepted instructions remain visible after loading a response (multi-model: %s)",
+  async (multiModel) => {
+    const restored = processRawChatHistory(
+      [saved],
+      [
+        [
+          {
+            placement: { turn_index: 0 },
+            obj: {
+              type: "message_start",
+              id: "earlier",
+              final_documents: [],
+              content: "Earlier answer",
+            },
+          },
+          { placement: { turn_index: 0 }, obj: { type: "section_end" } },
+          {
+            placement: { turn_index: 1 },
+            obj: {
+              type: "user_message",
+              id: "instruction",
+              message: "Use the latest report",
+            },
+          },
+          {
+            placement: { turn_index: 2 },
+            obj: {
+              type: "message_start",
+              id: "later",
+              final_documents: [],
+              content: "Later answer",
+            },
+          },
+          { placement: { turn_index: 2 }, obj: { type: "section_end" } },
+          { placement: { turn_index: 0 }, obj: { type: "stop" } },
+        ],
+      ]
+    );
+    restored.set(
+      1,
+      multiModel ? { ...question, childrenNodeIds: [2, 3] } : question
+    );
+    if (multiModel) {
+      restored.set(3, {
+        ...failed,
+        nodeId: 3,
+        messageId: 3,
+        modelDisplayName: "Other model",
+      });
+    }
+    useChatSessionStore
+      .getState()
+      .updateSessionMessageTree("session", restored);
+    const view = render(<ChatUI {...props} />);
+    expect(
+      screen.queryByText("Sent during this response")
+    ).not.toBeInTheDocument();
+    const input = await screen.findByText("Use the latest report");
+    expect(
+      screen.getByText("Earlier answer").compareDocumentPosition(input) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      input.compareDocumentPosition(screen.getByText("Later answer")) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(screen.getAllByText("Use the latest report")).toHaveLength(1);
+    view.unmount();
+    render(<ChatUI {...props} />);
+    expect(screen.getAllByText("Use the latest report")).toHaveLength(1);
+  }
+);
+
+test("accepting an instruction reveals preceding text before its user bubble", () => {
+  const animation = jest
+    .spyOn(window, "requestAnimationFrame")
+    .mockImplementation(() => 1);
+  const packets: Packet[] = [
+    {
+      placement: { turn_index: 0 },
+      obj: {
+        type: "message_start",
+        id: "earlier",
+        content: "",
+        final_documents: [],
+      },
+    },
+  ];
+  const response: Message = {
+    ...failed,
+    type: "assistant",
+    message: "",
+    packets,
+    packetCount: packets.length,
+  };
+  const publish = () =>
+    useChatSessionStore.getState().updateSessionData("session", {
+      chatState: "streaming",
+      messageTree: new Map([
+        [1, question],
+        [2, { ...response, packetCount: packets.length }],
+      ]),
+    });
+  publish();
+  const view = render(<ChatUI {...props} />);
+  try {
+    act(() => {
+      packets.push({
+        placement: { turn_index: 0 },
+        obj: { type: "message_delta", content: "The complete earlier answer" },
+      });
+      packets.push({
+        placement: { turn_index: 0 },
+        obj: { type: "section_end" },
+      });
+      publish();
+    });
+    expect(
+      screen.queryByText("The complete earlier answer")
+    ).not.toBeInTheDocument();
+    act(() => {
+      packets.push({
+        placement: { turn_index: 1 },
+        obj: {
+          type: "user_message",
+          id: "instruction",
+          message: "Use the latest report",
+        },
+      });
+      publish();
+    });
+    const input = screen.getByText("Use the latest report");
+    expect(
+      screen
+        .getByText("The complete earlier answer")
+        .compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  } finally {
+    view.unmount();
+    animation.mockRestore();
+  }
 });

@@ -289,10 +289,16 @@ its background task end ([[#pure-asgi-middleware]]).
     buffer flush and `chat/chat_processing_checker.py:ChatTurnAdmission.release`
     finish. A streamed send in that window gets HTTP 200 with one
     `StreamingError` (`error_code` `CONFLICT`, not retryable) and no ID lines,
-    not an HTTP 409. Every client polls
+    not an HTTP 409. Clients poll
     `server/query_and_chat/chat_backend.py:get_chat_session_processing_status`
-    before it releases input or sends a queued message:
-    `web/src/lib/chat/sessionReadiness.ts:waitForChatSessionIdle`,
+    before releasing input. Web also follows `current_stream` when a queued
+    turn starts, through
+    `web/src/lib/chat/sessionReadiness.ts:waitForChatResponseEnd`.
+    Background children can remain active after the root response becomes
+    idle. `has_active_subagents` controls the activity indicator, not input
+    availability. Web checks `current_stream` and `latest_response_id` to
+    follow automatic replies, including replies that finish between polls.
+    Other clients wait for the session to become idle:
     `mobile/src/chat/sessionReadiness.ts:waitForSessionIdle`,
     `cli/internal/api/client.go:IsChatSessionProcessing` and
     `widget/src/services/api-service.ts`. The CLI and widget stop with an error

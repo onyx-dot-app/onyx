@@ -68,14 +68,23 @@ from onyx.tools.constants import PYTHON_TOOL_NAME
 from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles
 from onyx.tools.interface import Tool
 from onyx.tools.models import ChatFile, ToolContext
+from onyx.tools.tool_constructor import disambiguate_tool_names
 from onyx.tools.tool_implementations.code_mode.code_mode_tool import with_code_mode
 from onyx.tools.tool_implementations.search.models import SearchContext
 from onyx.tools.tool_implementations.search.search_tool import (
     SearchTool,
     update_search_context,
 )
+from onyx.tools.tool_implementations.subagents.subagent_tools import (
+    InterruptAgentTool,
+    ListAgentsTool,
+    QueueMessageTool,
+    SendMessageTool,
+    SpawnAgentTool,
+)
 from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
 from onyx.tracing.flows import LLMFlow
+from shared_configs.contextvars import get_current_incognito_record_mode
 
 
 class ChatAgent(Agent, RestorableFeature):
@@ -165,6 +174,18 @@ class ChatAgent(Agent, RestorableFeature):
         self.persona = persona
         self.base_system_prompt = base_system_prompt
         self.reminders_enabled = reminders_enabled
+
+        if get_current_incognito_record_mode() is None:
+            self.application_tools.extend(
+                [
+                    SpawnAgentTool(self.create_subagent, max_steps=self.max_steps),
+                    ListAgentsTool(),
+                    InterruptAgentTool(),
+                    SendMessageTool(max_steps=self.max_steps),
+                    QueueMessageTool(max_steps=self.max_steps),
+                ]
+            )
+        disambiguate_tool_names(self.application_tools)
         super().__init__(
             llm,
             tools=[tool.bind(self._tool_context) for tool in self.application_tools],
@@ -183,6 +204,29 @@ class ChatAgent(Agent, RestorableFeature):
             after_tool_call=self._finalize_tool,
             on_finish=None if self.code_cells is None else self._finished_cells,
             on_suspend=None if self.code_cells is None else self._suspended_cells,
+        )
+
+    def create_subagent(self) -> "ChatAgent":
+        """Build a child conversation with this chat's current tools and settings."""
+        return ChatAgent(
+            messages=[],
+            is_subagent=True,
+            tools=self.configured_tools,
+            code_mode=self.code_mode,
+            custom_agent_prompt=self.custom_agent_prompt,
+            base_system_prompt=self.base_system_prompt,
+            context_files=self.context_files,
+            persona=self.persona,
+            user_memory_context=self.memory,
+            llm=self.llm,
+            token_counter=self.token_counter,
+            user_identity=self.generation_context.user_identity,
+            chat_files=self.chat_files,
+            reasoning_effort=self.reasoning_effort,
+            include_citations=self.include_citations,
+            all_injected_file_metadata=self.file_metadata,
+            inject_memories_in_prompt=self.inject_memories,
+            reminders_enabled=self.reminders_enabled,
         )
 
     def capture_state(self) -> ChatFeatureState:

@@ -145,7 +145,12 @@ const BaseInputBar = memo(
         messages: queue,
         inputIsEmpty: !message,
         onRemove: (index) => onRemoveQueuedMessage?.(index),
-        onEdit: setMessage,
+        onEdit: (index) => {
+          const queued = queue[index];
+          if (!queued) return;
+          onRemoveQueuedMessage?.(index);
+          setMessage(queued.text);
+        },
       });
 
       useImperativeHandle(ref, () => ({

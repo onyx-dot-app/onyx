@@ -32,8 +32,8 @@ document does not repeat it.
   `ToolInvocation.agents.spawn_agent`. The tool returns a `ChildRunWait` and
   sets `result_from_children` instead of blocking, and the parent run suspends
   until the child ends.
-- **Independent children.** A feature can register controls from
-  `tools/tool_implementations/subagents/subagent_tools.py` to spawn, list, message, and interrupt children. Background children survive
+- **Independent children.** ChatAgent and its children expose controls from
+  `tools/tool_implementations/subagents/subagent_tools.py` to spawn, list, message, and interrupt children. Incognito omits these controls. Children survive
   the root response. A subagent must incorporate work it delegates before completing.
   `WAIT_CHILDREN` releases its execution thread while results are pending and reserves
   the last model step for synthesis. Dependencies belong to the current run, not the

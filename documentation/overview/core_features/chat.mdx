@@ -8,6 +8,36 @@ icon: "comment"
 
 ## Input Bar
 
+### Send While Onyx Responds
+
+Press **Enter** or click the send arrow to add an instruction after the current step.
+Onyx finishes the current generation and running actions before reading your message.
+Your instruction appears in the conversation before the next part of the response.
+
+To save a follow-up for later, press **Ctrl+Enter** on Windows or Linux, or **Cmd+Enter** on macOS.
+Onyx starts queued messages after the current response finishes. The queue survives reloads and browser closure.
+
+Select a pending message and click **Send now** to interrupt current work and send that message first.
+You can also press **Enter** while the message is highlighted.
+Onyx saves the partial response and waits for current execution to stop before starting your message.
+An interruption cannot undo actions that already finished.
+
+Under **Settings → Chats → Send Behavior While Working**, choose what Enter and the send arrow do:
+
+- **After the current step** is the default.
+- **Interrupt current work** stops the current response before sending your message.
+
+**Ctrl/Cmd+Enter** always queues a follow-up, regardless of this setting.
+
+To edit a pending message, clear the input bar and click its edit button.
+Onyx removes the message from the queue and returns its text to the input bar.
+Press **Ctrl/Cmd+Enter** to queue the edited text again. Click the trash button to remove a pending message.
+You cannot edit or remove a message after Onyx accepts it.
+
+Stopping a response, or a response error, pauses the queue. Choose **Send now** on a pending message to continue.
+Pending messages support text only. Send new attachments after the current response finishes. In multi-model chat,
+choose a response before submitting pending messages. Incognito chat does not support pending messages.
+
 ### Attach Files
 
 <img className="rounded-image" src="/assets/overview/core_features/files.webp" alt="Files Input"/>
