@@ -181,22 +181,4 @@ class ExecCommandResult(BaseModel):
         return self.exec_session_id is not None
 
 
-class SandboxFile(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    # Relative to the session directory, "/"-separated.
-    path: str
-    name: str
-    is_directory: bool
-    size: int
-    modified_at: datetime | None
-
-
-class SandboxFileListing(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    entries: list[SandboxFile]
-    truncated: bool
-
-
 ExecEvent: TypeAlias = ExecOutputDelta | ExecCommandResult

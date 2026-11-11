@@ -158,10 +158,6 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         self.cancel_calls: list[str] = []
         # Seconds each Create waits before it runs (to overlap two wakes).
         self.create_delay_seconds = 0.0
-        # Start fails with TOO_MANY_EXECUTIONS at this many running commands.
-        self.max_running: int | None = None
-        # Seconds each guest daemon Init waits before it runs.
-        self.init_delay_seconds = 0.0
         # Seconds each Stop waits before it runs.
         self.stop_delay_seconds = 0.0
 
@@ -711,7 +707,6 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
     def Init(  # noqa: N802
         self, request: sandboxd_pb2.InitRequest, context: grpc.ServicerContext
     ) -> sandboxd_pb2.InitResponse:
-        time.sleep(self.agent.init_delay_seconds)
         with self.agent.lock:
             sandbox_id, key = self._route(context)
             self._check_key(context, sandbox_id, key)
@@ -741,15 +736,6 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
             script = shlex.split(argv[2])
         if not script or script[0] not in ("echo", "fail", "cat", "sleep", "mkdir"):
             abort_daemon(context, SandboxDaemonErrorReason.START_FAILED, "no program")
-        running = sum(
-            1
-            for e in self.agent.executions.get(sandbox_id, {}).values()
-            if e.result is None
-        )
-        if self.agent.max_running is not None and running >= self.agent.max_running:
-            abort_daemon(
-                context, SandboxDaemonErrorReason.TOO_MANY_EXECUTIONS, "too many"
-            )
         execution = FakeExecution(
             execution_id=self.agent.next_id("exec"),
             argv=argv,

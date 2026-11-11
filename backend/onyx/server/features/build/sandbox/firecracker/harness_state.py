@@ -1,254 +1,122 @@
 """Durable harness state of a Firecracker sandbox, in the tenant cache.
 
-- Exec sessions (NO TTL): one JSON map per sandbox, exec session ID → the VM
-  instance (attempt, generation), the guest execution ID, the read offsets
-  and the last use. Any API pod can serve `write_stdin` from it. A record of
-  another VM instance is dead (the processes did not survive): the caller
-  reports "session ended" and the next write drops it.
-- Activity (entries expire): per sandbox, the chat sessions with a turn in
-  progress or a parked approval. The idle stop reads it.
+- Exec sessions (no TTL): one JSON map per sandbox, exec session ID → the VM
+  instance, the guest execution ID, the read offsets and the last use. Any
+  API pod can serve `write_stdin` from it.
+- Activity marks (each expires): the turns in progress and the parked
+  approvals of the sandbox. The idle stop reads them.
 
-Writes are compare-and-set on the stored value, as the placement record in
-`onyx.microvm.registry`. Keys without a TTL need a Redis eviction policy that
-never evicts them (see `onyx.microvm.registry`).
+Writes are compare-and-set on the stored value (parallel tool calls write
+the same map). Keys without a TTL need a Redis eviction policy that never
+evicts them (see `onyx.microvm.registry`).
 """
 
 import time
 from collections.abc import Callable
-from enum import Enum
 from typing import TypeVar
 from uuid import UUID
 
 from pydantic import BaseModel
 
 from onyx.cache.interface import CacheBackend
-from onyx.microvm.registry import get_sandbox_placement
+from onyx.server.features.build.sandbox import harness_base
 from onyx.server.features.build.sandbox.firecracker.models import (
     ExecSessionRecord,
     ExecSessionTable,
     HarnessActivity,
 )
 
-_EXEC_SESSIONS_PREFIX = "sandbox_fc:exec_sessions:"
-_ACTIVITY_PREFIX = "sandbox_fc:harness_activity:"
+EXEC_SESSIONS_PREFIX = "sandbox_fc:exec_sessions:"
+ACTIVITY_PREFIX = "sandbox_fc:harness_activity:"
 _CAS_TRIES = 16
 
-_T = TypeVar("_T")
 _M = TypeVar("_M", bound=BaseModel)
-
-
-class ActivityKind(str, Enum):
-    TURN = "turn"
-    APPROVAL = "approval"
 
 
 class StateContentionError(Exception):
     """Too many concurrent writers for one sandbox record."""
 
 
+def _read(cache: CacheBackend, key: str, model: type[_M]) -> _M:
+    raw = cache.get(key)
+    return model() if raw is None else model.model_validate_json(raw)
+
+
 def _update(
     cache: CacheBackend,
     key: str,
-    parse: Callable[[bytes | None], _M],
-    change: Callable[[_M], tuple[_M | None, _T]],
-) -> _T:
-    """Read, change and compare-and-set one JSON record. `change` returns
-    the new record (None: delete it) and the result to return."""
+    model: type[_M],
+    change: Callable[[_M], _M | None],
+) -> None:
+    """Read, change and compare-and-set one JSON record (None: delete it)."""
     for _ in range(_CAS_TRIES):
         raw = cache.get(key)
-        new, result = change(parse(raw))
+        new = change(model() if raw is None else model.model_validate_json(raw))
         if new is None:
             if raw is None or cache.delete_if_value(key, raw):
-                return result
+                return
             continue
         payload = new.model_dump_json()
         if raw is None:
             if cache.set_if_absent(key, payload):
-                return result
+                return
         elif payload.encode() == raw or cache.replace_if_value(key, raw, payload):
-            return result
+            return
     raise StateContentionError(key)
-
-
-def _parse_sessions(raw: bytes | None) -> ExecSessionTable:
-    return (
-        ExecSessionTable() if raw is None else ExecSessionTable.model_validate_json(raw)
-    )
-
-
-def _sessions_key(sandbox_id: UUID) -> str:
-    return _EXEC_SESSIONS_PREFIX + str(sandbox_id)
-
-
-def eviction_order(
-    sessions: dict[str, ExecSessionRecord], ended_execution_ids: set[str]
-) -> list[str]:
-    """Ended commands first, then running ones; least recently used first."""
-    return sorted(
-        sessions,
-        key=lambda s: (
-            sessions[s].execution_id not in ended_execution_ids,
-            sessions[s].last_used,
-        ),
-    )
-
-
-def add_exec_session(
-    cache: CacheBackend,
-    sandbox_id: UUID,
-    record: ExecSessionRecord,
-    *,
-    max_sessions: int,
-    ended_execution_ids: set[str],
-) -> list[ExecSessionRecord] | None:
-    """Store a new exec session. Drops the records of other VM instances,
-    then evicts down to `max_sessions`. Returns the evicted records (their
-    commands may still run), or None when the placement record no longer
-    names the record's VM: the VM is gone, and nothing is stored."""
-    fence = (record.attempt, record.generation)
-
-    def change(
-        state: ExecSessionTable,
-    ) -> tuple[ExecSessionTable | None, list[ExecSessionRecord] | None]:
-        # The placement record, not attempt order, says which VM is current:
-        # a VM placed after an idle stop can start at a lower attempt.
-        if placed_instance(cache, sandbox_id) != fence:
-            return state, None
-        sessions = {
-            sid: r
-            for sid, r in state.sessions.items()
-            if r.on_instance(record.attempt, record.generation)
-        }
-        evicted: list[ExecSessionRecord] = []
-        for sid in eviction_order(sessions, ended_execution_ids):
-            if len(sessions) < max_sessions:
-                break
-            evicted.append(sessions.pop(sid))
-        sessions[record.exec_session_id] = record
-        return ExecSessionTable(sessions=sessions), evicted
-
-    return _update(cache, _sessions_key(sandbox_id), _parse_sessions, change)
-
-
-def placed_instance(cache: CacheBackend, sandbox_id: UUID) -> tuple[int, int] | None:
-    """(attempt, generation) of the sandbox's placed VM, from its record."""
-    placement = get_sandbox_placement(cache, sandbox_id)
-    return None if placement is None else placement.fence()
 
 
 def get_exec_session(
     cache: CacheBackend, sandbox_id: UUID, exec_session_id: str
 ) -> ExecSessionRecord | None:
-    return _parse_sessions(cache.get(_sessions_key(sandbox_id))).sessions.get(
-        exec_session_id
-    )
+    key = EXEC_SESSIONS_PREFIX + str(sandbox_id)
+    return _read(cache, key, ExecSessionTable).sessions.get(exec_session_id)
 
 
-def list_exec_sessions(
-    cache: CacheBackend, sandbox_id: UUID
-) -> list[ExecSessionRecord]:
-    return list(_parse_sessions(cache.get(_sessions_key(sandbox_id))).sessions.values())
+def put_exec_session(
+    cache: CacheBackend, sandbox_id: UUID, record: ExecSessionRecord
+) -> None:
+    """Store or replace a record. Keeps the most recently used ones."""
 
+    def change(table: ExecSessionTable) -> ExecSessionTable:
+        sessions = {**table.sessions, record.exec_session_id: record}
+        kept = sorted(sessions.values(), key=lambda r: r.last_used)[
+            -harness_base.MAX_EXEC_SESSIONS_PER_SANDBOX :
+        ]
+        return ExecSessionTable(sessions={r.exec_session_id: r for r in kept})
 
-def update_exec_session(
-    cache: CacheBackend,
-    sandbox_id: UUID,
-    exec_session_id: str,
-    *,
-    execution_id: str,
-    stdout_offset: int,
-    stderr_offset: int,
-) -> bool:
-    """Advance the offsets and the last use of a session, while the record
-    still names `execution_id`. Offsets never move back."""
-
-    def change(state: ExecSessionTable) -> tuple[ExecSessionTable | None, bool]:
-        current = state.sessions.get(exec_session_id)
-        if current is None or current.execution_id != execution_id:
-            return state, False
-        sessions = dict(state.sessions)
-        sessions[exec_session_id] = current.model_copy(
-            update={
-                "stdout_offset": max(current.stdout_offset, stdout_offset),
-                "stderr_offset": max(current.stderr_offset, stderr_offset),
-                "last_used": max(current.last_used, time.time()),
-            }
-        )
-        return ExecSessionTable(sessions=sessions), True
-
-    return _update(cache, _sessions_key(sandbox_id), _parse_sessions, change)
+    _update(cache, EXEC_SESSIONS_PREFIX + str(sandbox_id), ExecSessionTable, change)
 
 
 def remove_exec_session(
-    cache: CacheBackend, sandbox_id: UUID, exec_session_id: str, *, execution_id: str
-) -> bool:
-    """Remove a session while the record still names `execution_id`."""
-
-    def change(state: ExecSessionTable) -> tuple[ExecSessionTable | None, bool]:
-        current = state.sessions.get(exec_session_id)
-        if current is None or current.execution_id != execution_id:
-            return state, False
-        sessions = {
-            sid: r for sid, r in state.sessions.items() if sid != exec_session_id
-        }
-        return (ExecSessionTable(sessions=sessions) if sessions else None), True
-
-    return _update(cache, _sessions_key(sandbox_id), _parse_sessions, change)
-
-
-def clear_exec_sessions(cache: CacheBackend, sandbox_id: UUID) -> None:
-    cache.delete(_sessions_key(sandbox_id))
-
-
-def _parse_activity(raw: bytes | None) -> HarnessActivity:
-    return (
-        HarnessActivity() if raw is None else HarnessActivity.model_validate_json(raw)
-    )
-
-
-def _activity_key(sandbox_id: UUID) -> str:
-    return _ACTIVITY_PREFIX + str(sandbox_id)
-
-
-def _live(marks: dict[str, float], now: float) -> dict[str, float]:
-    return {sid: exp for sid, exp in marks.items() if exp > now}
-
-
-def set_activity_mark(
-    cache: CacheBackend,
-    sandbox_id: UUID,
-    session_id: UUID,
-    *,
-    kind: ActivityKind,
-    ttl_seconds: float | None,
+    cache: CacheBackend, sandbox_id: UUID, exec_session_id: str
 ) -> None:
-    """Set (ttl_seconds) or clear (None) one chat session's mark."""
+    def change(table: ExecSessionTable) -> ExecSessionTable | None:
+        sessions = {
+            sid: r for sid, r in table.sessions.items() if sid != exec_session_id
+        }
+        return ExecSessionTable(sessions=sessions) if sessions else None
 
-    def change(state: HarnessActivity) -> tuple[HarnessActivity | None, None]:
+    _update(cache, EXEC_SESSIONS_PREFIX + str(sandbox_id), ExecSessionTable, change)
+
+
+def set_mark(
+    cache: CacheBackend, sandbox_id: UUID, name: str, ttl_seconds: float | None
+) -> None:
+    """Set (ttl_seconds) or clear (None) one activity mark."""
+
+    def change(activity: HarnessActivity) -> HarnessActivity | None:
         now = time.time()
-        turns = _live(state.turns, now)
-        approvals = _live(state.approvals, now)
-        marks = turns if kind is ActivityKind.TURN else approvals
+        marks = {n: exp for n, exp in activity.marks.items() if exp > now}
         if ttl_seconds is None:
-            marks.pop(str(session_id), None)
+            marks.pop(name, None)
         else:
-            marks[str(session_id)] = now + ttl_seconds
-        if not turns and not approvals:
-            return None, None
-        return HarnessActivity(turns=turns, approvals=approvals), None
+            marks[name] = now + ttl_seconds
+        return HarnessActivity(marks=marks) if marks else None
 
-    _update(cache, _activity_key(sandbox_id), _parse_activity, change)
+    _update(cache, ACTIVITY_PREFIX + str(sandbox_id), HarnessActivity, change)
 
 
-def has_activity(cache: CacheBackend, sandbox_id: UUID) -> bool:
-    """True while a turn or a parked approval mark is live."""
-    raw = cache.get(_activity_key(sandbox_id))
-    if raw is None:
-        return False
-    state = _parse_activity(raw)
+def has_marks(cache: CacheBackend, sandbox_id: UUID) -> bool:
+    activity = _read(cache, ACTIVITY_PREFIX + str(sandbox_id), HarnessActivity)
     now = time.time()
-    return bool(_live(state.turns, now) or _live(state.approvals, now))
-
-
-def clear_activity(cache: CacheBackend, sandbox_id: UUID) -> None:
-    cache.delete(_activity_key(sandbox_id))
+    return any(exp > now for exp in activity.marks.values())

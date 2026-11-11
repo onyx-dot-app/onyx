@@ -32,7 +32,6 @@ from onyx.server.features.build.sandbox.models import (
     ExecCommandResult,
     ExecEvent,
     HarnessSandboxRef,
-    SandboxFileListing,
 )
 
 # Parent of each chat session's working directory in the sandbox.
@@ -48,8 +47,8 @@ POLL_MIN_YIELD_MS = 5_000
 POLL_MAX_YIELD_MS = 300_000
 DEFAULT_MAX_OUTPUT_TOKENS = 10_000
 EXEC_CALL_OUTPUT_MAX_BYTES = 1 << 20
-# Most exec sessions per sandbox. Over the cap, the least recently used
-# ended session goes first, then the least recently used running one.
+# Most exec session records per sandbox; the least recently used goes
+# first. The guest daemon caps the running commands.
 MAX_EXEC_SESSIONS_PER_SANDBOX = 64
 
 # The env of every command, so that tools write plain, unpaged UTF-8 text.
@@ -103,7 +102,7 @@ class ExecSessionEndedError(HarnessSandboxError):
 
 
 class SandboxPathError(HarnessSandboxError):
-    """The path is outside the session directory or not valid."""
+    """The path is outside the session directory."""
 
 
 class SandboxFileTooLargeError(HarnessSandboxError):
@@ -115,8 +114,8 @@ class HarnessSandbox(abc.ABC):
 
     @abc.abstractmethod
     def ensure_running(self, ref: HarnessSandboxRef) -> None:
-        """Start the sandbox if needed and return when it is ready (skills
-        mounted, guest initialized). Every other call does this first."""
+        """Start the sandbox if needed and return when the guest is
+        initialized. Every other call does this first."""
 
     @abc.abstractmethod
     def exec_command(
@@ -143,6 +142,11 @@ class HarnessSandbox(abc.ABC):
     ) -> Iterator[ExecEvent]:
         """Write to a running command, or poll it with empty chars."""
 
+    # Files: only what exec_command cannot do well. view_image needs exact
+    # bytes (exec output is text), and apply_patch needs an exact write of
+    # any content (no shell quoting). Listing, moving and deleting go
+    # through exec_command.
+
     @abc.abstractmethod
     def read_file(self, ref: HarnessSandboxRef, path: str, *, max_bytes: int) -> bytes:
         """Raises SandboxFileTooLargeError over max_bytes."""
@@ -150,18 +154,6 @@ class HarnessSandbox(abc.ABC):
     @abc.abstractmethod
     def write_file(self, ref: HarnessSandboxRef, path: str, data: bytes) -> None:
         """Atomic replace; creates parent directories."""
-
-    @abc.abstractmethod
-    def list_files(
-        self, ref: HarnessSandboxRef, path: str = "", *, recursive: bool = False
-    ) -> SandboxFileListing:
-        pass
-
-    @abc.abstractmethod
-    def delete_file(
-        self, ref: HarnessSandboxRef, path: str, *, recursive: bool = False
-    ) -> bool:
-        """False when the path did not exist."""
 
     @abc.abstractmethod
     def publish_artifact(

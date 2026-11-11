@@ -1,16 +1,11 @@
 """FirecrackerHarnessSandbox against Redis and fake host agents: lifecycle,
-the Codex exec contract with durable exec sessions, files, artifacts, the
-managed drive and the busy signals."""
+the Codex exec contract with durable exec sessions, files, artifacts and the
+busy signals."""
 
-import io
-import threading
 import time
-import zipfile
 from collections.abc import Callable, Generator, Iterator
-from typing import Protocol
-from uuid import UUID, uuid4
+from uuid import uuid4
 
-import grpc
 import pytest
 
 from onyx.cache.interface import CacheBackend
@@ -20,14 +15,12 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.microvm import registry
 from onyx.microvm.agent_client import HostAgentErrorReason
 from onyx.microvm.daemon_client import (
-    SandboxDaemonClient,
     SandboxDaemonError,
-    SandboxDaemonErrorReason,
 )
 from onyx.microvm.generated.hostagent.v1 import hostagent_pb2
 from onyx.microvm.models import OutputStream
-from onyx.microvm.registry import get_sandbox_daemon_key, get_sandbox_placement
-from onyx.server.features.build.sandbox import harness_factory
+from onyx.microvm.registry import get_sandbox_placement
+from onyx.server.features.build.sandbox import harness_base, harness_factory
 from onyx.server.features.build.sandbox.exec_output import (
     ExecOutputBuffer,
     cut_to_tokens,
@@ -38,16 +31,10 @@ from onyx.server.features.build.sandbox.firecracker import (
 )
 from onyx.server.features.build.sandbox.firecracker.harness_sandbox import (
     FirecrackerHarnessSandbox,
-    ManagedBundleSource,
     session_relative_path,
-)
-from onyx.server.features.build.sandbox.firecracker.models import (
-    ExecSessionRecord,
-    ExecSessionTable,
 )
 from onyx.server.features.build.sandbox.harness_base import (
     EXEC_DEFAULT_ENV,
-    MAX_EXEC_SESSIONS_PER_SANDBOX,
     ExecSessionEndedError,
     ExecSessionNotFoundError,
     SandboxFileTooLargeError,
@@ -71,17 +58,7 @@ from tests.external_dependency_unit.microvm.fake_agent import (
     RunningFakeAgent,
 )
 
-
-class MakeSandbox(Protocol):
-    def __call__(
-        self,
-        *,
-        managed_bundle: ManagedBundleSource | None = None,
-        max_exec_sessions: int = MAX_EXEC_SESSIONS_PER_SANDBOX,
-        wake_retry_seconds: float = 10.0,
-    ) -> FirecrackerHarnessSandbox: ...
-
-
+MakeSandbox = Callable[[], FirecrackerHarnessSandbox]
 NewRef = Callable[[], HarnessSandboxRef]
 
 
@@ -89,19 +66,9 @@ NewRef = Callable[[], HarnessSandboxRef]
 def make_sandbox(client_factory: InsecureClientFactory) -> MakeSandbox:
     """A sandbox per "API pod": they share only the cache."""
 
-    def make(
-        *,
-        managed_bundle: ManagedBundleSource | None = None,
-        max_exec_sessions: int = MAX_EXEC_SESSIONS_PER_SANDBOX,
-        wake_retry_seconds: float = 10.0,
-    ) -> FirecrackerHarnessSandbox:
+    def make() -> FirecrackerHarnessSandbox:
         return FirecrackerHarnessSandbox(
-            template="tpl-1",
-            client_factory=client_factory,
-            init_env={"CRAFT_TEST": "1"},
-            managed_bundle=managed_bundle,
-            max_exec_sessions=max_exec_sessions,
-            wake_retry_seconds=wake_retry_seconds,
+            template="tpl-1", client_factory=client_factory
         )
 
     return make
@@ -128,9 +95,8 @@ def new_ref(
 
     yield new
     for ref in refs:
-        harness_state.clear_exec_sessions(tenant_cache, ref.sandbox_id)
-        harness_state.clear_activity(tenant_cache, ref.sandbox_id)
-        tenant_cache.delete(harness_sandbox._MANAGED_PREFIX + str(ref.sandbox_id))
+        tenant_cache.delete(harness_state.EXEC_SESSIONS_PREFIX + str(ref.sandbox_id))
+        tenant_cache.delete(harness_state.ACTIVITY_PREFIX + str(ref.sandbox_id))
 
 
 @pytest.fixture
@@ -172,7 +138,7 @@ def test_ensure_running_is_idempotent_with_one_init_per_boot(
     assert len(node.agent.init_requests) == 1
     init, routed_to = node.agent.init_requests[0]
     assert routed_to == str(ref.sandbox_id)
-    assert dict(init.env) == {**EXEC_DEFAULT_ENV, "CRAFT_TEST": "1"}
+    assert dict(init.env) == EXEC_DEFAULT_ENV
     placement = get_sandbox_placement(tenant_cache, ref.sandbox_id)
     assert placement is not None and init.generation == placement.generation
 
@@ -221,12 +187,13 @@ def test_a_full_node_is_retried_with_backoff_then_the_wake_succeeds(
 
 
 def test_a_full_node_fails_the_call_after_the_retry_window(
-    make_sandbox: MakeSandbox,
+    monkeypatch: pytest.MonkeyPatch,
+    sandbox: FirecrackerHarnessSandbox,
     node: RunningFakeAgent,
     new_ref: NewRef,
 ) -> None:
     node.agent.refuse_create = HostAgentErrorReason.CAPACITY_MEMORY
-    sandbox = make_sandbox(wake_retry_seconds=0.6)
+    monkeypatch.setattr(harness_sandbox, "WAKE_RETRY_SECONDS", 0.6)
     started = time.monotonic()
     with pytest.raises(OnyxError) as exc:
         sandbox.ensure_running(new_ref())
@@ -251,80 +218,6 @@ def test_a_replaced_vm_after_a_crash_is_initialized(
     assert node.agent.daemon_inits[str(ref.sandbox_id)] == placement.generation
 
 
-def test_terminate_stops_the_exact_instance_and_clears_records(
-    tenant_cache: CacheBackend,
-    sandbox: FirecrackerHarnessSandbox,
-    node: RunningFakeAgent,
-    new_ref: NewRef,
-) -> None:
-    ref = new_ref()
-    _, running = _run(sandbox.exec_command(ref, "sleep 60", yield_time_ms=250))
-    assert running.exec_session_id is not None
-    sandbox.begin_turn(ref)
-    placement = get_sandbox_placement(tenant_cache, ref.sandbox_id)
-    assert placement is not None
-
-    sandbox.terminate(tenant_id=TENANT_ID, sandbox_id=ref.sandbox_id)
-    assert node.agent.stop_calls == [
-        (str(ref.sandbox_id), placement.attempt, placement.generation)
-    ]
-    assert get_sandbox_placement(tenant_cache, ref.sandbox_id) is None
-    assert (
-        get_sandbox_daemon_key(tenant_cache, ref.sandbox_id, attempt=placement.attempt)
-        is None
-    )
-    assert harness_state.list_exec_sessions(tenant_cache, ref.sandbox_id) == []
-    assert not harness_state.has_activity(tenant_cache, ref.sandbox_id)
-
-    # Nothing placed: a repeat terminate is a no-op.
-    sandbox.terminate(tenant_id=TENANT_ID, sandbox_id=ref.sandbox_id)
-    assert len(node.agent.stop_calls) == 1
-
-
-def test_terminate_on_an_unregistered_node_clears_the_record(
-    shared_cache: CacheBackend,
-    tenant_cache: CacheBackend,
-    sandbox: FirecrackerHarnessSandbox,
-    add_node: AddNode,
-    new_ref: NewRef,
-) -> None:
-    node_id = f"fch-{uuid4().hex[:6]}"
-    running = add_node(node_id)
-    ref = new_ref()
-    sandbox.ensure_running(ref)
-    shared_cache.delete(registry._NODE_ADDRESS_PREFIX + node_id)
-
-    sandbox.terminate(tenant_id=TENANT_ID, sandbox_id=ref.sandbox_id)
-    assert get_sandbox_placement(tenant_cache, ref.sandbox_id) is None
-    assert running.agent.stop_calls == []
-
-
-def test_health_never_starts_a_vm(
-    sandbox: FirecrackerHarnessSandbox,
-    node: RunningFakeAgent,
-    new_ref: NewRef,
-) -> None:
-    ref = new_ref()
-
-    def healthy() -> bool:
-        return sandbox.health(
-            tenant_id=TENANT_ID, sandbox_id=ref.sandbox_id, timeout=2.0
-        )
-
-    assert healthy() is False
-    assert node.agent.create_calls == 0
-
-    sandbox.ensure_running(ref)
-    assert healthy() is True
-
-    node.agent.daemon_inits.pop(str(ref.sandbox_id))
-    assert healthy() is False
-
-    node.agent.vms[str(ref.sandbox_id)].state = hostagent_pb2.VM_STATE_EXITED
-    assert healthy() is False
-    assert node.agent.create_calls == 1
-
-
 # Exec
 
 
@@ -346,15 +239,10 @@ def test_exec_command_returns_the_exit_and_output_of_a_short_command(
     command = next(e for e in executions if e.argv[:2] == ["bash", "-c"])
     assert command.argv == ["bash", "-c", "echo hi there"]
     assert command.cwd == session_workspace(ref.session_id)
-    assert command.env == EXEC_DEFAULT_ENV
-    assert command.labels[harness_sandbox.LABEL_CHAT_SESSION] == str(ref.session_id)
-    # The session directory is made once per VM instance.
     mkdirs = [e for e in executions if e.argv[0] == "mkdir"]
     assert [m.argv for m in mkdirs] == [
         ["mkdir", "-p", session_workspace(ref.session_id)]
     ]
-    _run(sandbox.exec_command(ref, "echo again"))
-    assert len([e for e in executions if e.argv[0] == "mkdir"]) == 1
 
 
 def test_exec_command_reports_a_failed_command_and_relative_workdir(
@@ -390,8 +278,7 @@ def test_a_running_command_gets_an_exec_session_that_another_pod_serves(
     assert result.exit_code is None and result.completion is None
     session = result.exec_session_id
     assert session is not None
-    [record] = harness_state.list_exec_sessions(tenant_cache, ref.sandbox_id)
-    assert record.exec_session_id == session
+    assert harness_state.get_exec_session(tenant_cache, ref.sandbox_id, session)
 
     # Another pod writes stdin and streams the new output.
     deltas, result = _run(pod_b.write_stdin(ref, session, "hello "))
@@ -429,9 +316,7 @@ def test_an_empty_write_polls_until_the_command_ends(
     assert polled.exec_session_id == session and polled.output == ""
 
     # The command ends between polls: the poll returns its exit at once.
-    sandbox._daemon(sandbox._place(ref)).interact(
-        execution_id, data=b"bye", close_stdin=True
-    )
+    sandbox._session_vm(ref)[1].interact(execution_id, data=b"bye", close_stdin=True)
     _, ended = _run(sandbox.write_stdin(ref, session, yield_time_ms=10_000))
     assert ended.exit_code == 0 and ended.output == "bye"
     assert ended.exec_session_id is None
@@ -493,48 +378,6 @@ def test_exec_sessions_end_when_the_vm_restarts(
     assert "Run the command again" in str(exc.value)
     assert harness_state.get_exec_session(tenant_cache, ref.sandbox_id, session) is None
     assert node.agent.create_calls == 2
-
-
-def test_the_session_cap_evicts_ended_commands_first_then_cancels_the_lru(
-    tenant_cache: CacheBackend,
-    make_sandbox: MakeSandbox,
-    node: RunningFakeAgent,
-    new_ref: NewRef,
-) -> None:
-    sandbox = make_sandbox(max_exec_sessions=2)
-    # The guest refuses a third running command: room is made before Start.
-    node.agent.max_running = 2
-    ref = new_ref()
-    first = _run(sandbox.exec_command(ref, "sleep 60", yield_time_ms=250))[1]
-    second = _run(sandbox.exec_command(ref, "sleep 60", yield_time_ms=250))[1]
-    assert first.exec_session_id and second.exec_session_id
-    record = harness_state.get_exec_session(
-        tenant_cache, ref.sandbox_id, second.exec_session_id
-    )
-    assert record is not None
-    # The second command ends with no poll: its record stays, but it is
-    # evicted before the older, running first one.
-    sandbox._daemon(sandbox._place(ref)).cancel(record.execution_id)
-    node.agent.cancel_calls.clear()
-
-    third = _run(sandbox.exec_command(ref, "sleep 60", yield_time_ms=250))[1]
-    ids = {
-        r.exec_session_id
-        for r in harness_state.list_exec_sessions(tenant_cache, ref.sandbox_id)
-    }
-    assert ids == {first.exec_session_id, third.exec_session_id}
-    assert node.agent.cancel_calls == []
-
-    # All running: the least recently used one is evicted and canceled.
-    fourth = _run(sandbox.exec_command(ref, "sleep 60", yield_time_ms=250))[1]
-    ids = {
-        r.exec_session_id
-        for r in harness_state.list_exec_sessions(tenant_cache, ref.sandbox_id)
-    }
-    assert ids == {third.exec_session_id, fourth.exec_session_id}
-    assert len(node.agent.cancel_calls) == 1
-    with pytest.raises(ExecSessionNotFoundError):
-        _run(sandbox.write_stdin(ref, first.exec_session_id))
 
 
 @pytest.mark.usefixtures("node")
@@ -599,17 +442,12 @@ def test_files_round_trip_in_the_session_directory(
     sandbox.write_file(ref, absolute, b"beta")
 
     assert sandbox.read_file(ref, absolute, max_bytes=10) == b"beta"
-    assert sandbox.read_file(ref, "notes/./a.txt", max_bytes=10) == b"alpha"
-    listing = sandbox.list_files(ref, "notes")
-    assert sorted(e.name for e in listing.entries) == ["a.txt", "b.txt"]
-    assert not any(e.is_directory for e in listing.entries)
-
+    assert sandbox.read_file(ref, "notes/./a.txt", max_bytes=5) == b"alpha"
     with pytest.raises(SandboxFileTooLargeError):
         sandbox.read_file(ref, "notes/a.txt", max_bytes=2)
-    assert sandbox.delete_file(ref, "notes/a.txt") is True
-    assert sandbox.delete_file(ref, "notes/a.txt") is False
     # Files of one chat session are not in another's directory.
-    assert sandbox.list_files(_session_ref(ref)).entries == []
+    with pytest.raises(SandboxDaemonError):
+        sandbox.read_file(_session_ref(ref), "notes/a.txt", max_bytes=10)
 
 
 @pytest.mark.parametrize("path", ["/etc/passwd", "../other/x", "a/../../x"])
@@ -636,48 +474,6 @@ def test_publish_artifact_copies_a_session_file_to_the_file_store(
         assert store.read_file(file_id).read() == b"a,b\n1,2\n"
     finally:
         store.delete_file(file_id)
-
-
-# Managed drive
-
-
-def _bundle(text: str) -> bytes:
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w") as zf:
-        zf.writestr("skills/demo/SKILL.md", text)
-    return buf.getvalue()
-
-
-def test_the_managed_drive_is_swapped_in_once_per_vm_instance(
-    make_sandbox: MakeSandbox,
-    node: RunningFakeAgent,
-    new_ref: NewRef,
-) -> None:
-    content = {"text": "v1"}
-    calls: list[UUID] = []
-
-    def bundle(ref: HarnessSandboxRef) -> bytes:
-        calls.append(ref.sandbox_id)
-        return _bundle(content["text"])
-
-    sandbox = make_sandbox(managed_bundle=bundle)
-    ref = new_ref()
-    sandbox.ensure_running(ref)
-    assert len(node.agent.managed_images) == 1
-    assert (
-        node.agent.managed_active[str(ref.sandbox_id)] == hostagent_pb2.MANAGED_SLOT_B
-    )
-
-    sandbox.ensure_running(ref)
-    assert len(calls) == 1
-
-    content["text"] = "v2"
-    sandbox.refresh_managed(ref)
-    assert len(calls) == 2
-    assert len(node.agent.managed_images) == 2
-    assert (
-        node.agent.managed_active[str(ref.sandbox_id)] == hostagent_pb2.MANAGED_SLOT_A
-    )
 
 
 # Activity
@@ -721,16 +517,10 @@ def test_a_turn_mark_expires_without_renewal(
     tenant_cache: CacheBackend, new_ref: NewRef
 ) -> None:
     ref = new_ref()
-    harness_state.set_activity_mark(
-        tenant_cache,
-        ref.sandbox_id,
-        ref.session_id,
-        kind=harness_state.ActivityKind.TURN,
-        ttl_seconds=0.05,
-    )
-    assert harness_state.has_activity(tenant_cache, ref.sandbox_id)
+    harness_state.set_mark(tenant_cache, ref.sandbox_id, "turn:x", 0.05)
+    assert harness_state.has_marks(tenant_cache, ref.sandbox_id)
     time.sleep(0.1)
-    assert not harness_state.has_activity(tenant_cache, ref.sandbox_id)
+    assert not harness_state.has_marks(tenant_cache, ref.sandbox_id)
 
 
 def test_touch_records_activity_without_starting_a_vm(
@@ -756,11 +546,13 @@ def test_touch_records_activity_without_starting_a_vm(
     assert touched is not None and touched.last_active > 1
 
 
-def test_the_factory_refuses_without_the_harness_flag(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize(("firecracker", "template"), [(False, "tpl-1"), (True, "")])
+def test_the_factory_needs_firecracker_and_a_template(
+    monkeypatch: pytest.MonkeyPatch, firecracker: bool, template: str
 ) -> None:
     monkeypatch.setattr(harness_factory, "_instance", None)
-    monkeypatch.setattr(harness_factory, "SANDBOX_FC_HARNESS_ENABLED", False)
+    monkeypatch.setattr(harness_factory, "FIRECRACKER_ENABLED", firecracker)
+    monkeypatch.setattr(harness_factory, "SANDBOX_FC_TEMPLATE", template)
     with pytest.raises(harness_factory.HarnessSandboxUnavailableError):
         harness_factory.get_harness_sandbox()
 
@@ -786,34 +578,6 @@ def test_collect_exec_result_reads_the_stream_to_its_end() -> None:
     assert finished == [True]
 
 
-def test_concurrent_wakes_run_init_once(
-    sandbox: FirecrackerHarnessSandbox,
-    node: RunningFakeAgent,
-    new_ref: NewRef,
-) -> None:
-    ref = new_ref()
-    sandbox.ensure_running(ref)
-    node.agent.daemon_inits.pop(str(ref.sandbox_id))
-    node.agent.init_delay_seconds = 0.3
-
-    errors: list[BaseException] = []
-
-    def wake() -> None:
-        try:
-            sandbox.ensure_running(ref)
-        except BaseException as e:  # noqa: BLE001
-            errors.append(e)
-
-    threads = [threading.Thread(target=wake) for _ in range(3)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
-    assert errors == []
-    # One Init at the first wake, one after the lost Init.
-    assert len(node.agent.init_requests) == 2
-
-
 def test_a_failed_registration_stops_the_started_command(
     monkeypatch: pytest.MonkeyPatch,
     sandbox: FirecrackerHarnessSandbox,
@@ -825,7 +589,7 @@ def test_a_failed_registration_stops_the_started_command(
     def fail(*_args: object, **_kwargs: object) -> None:
         raise harness_state.StateContentionError("contention")
 
-    monkeypatch.setattr(harness_sandbox, "add_exec_session", fail)
+    monkeypatch.setattr(harness_sandbox, "put_exec_session", fail)
     with pytest.raises(harness_state.StateContentionError):
         _run(sandbox.exec_command(ref, "sleep 60", yield_time_ms=250))
     [command] = [
@@ -837,128 +601,37 @@ def test_a_failed_registration_stops_the_started_command(
 
 
 @pytest.mark.usefixtures("node")
-def test_records_follow_the_placed_vm_not_attempt_order(
-    tenant_cache: CacheBackend,
-    sandbox: FirecrackerHarnessSandbox,
-    new_ref: NewRef,
-) -> None:
-    ref = new_ref()
-    sandbox.ensure_running(ref)
-    placement = get_sandbox_placement(tenant_cache, ref.sandbox_id)
-    assert placement is not None
-
-    def record(attempt: int, generation: int) -> ExecSessionRecord:
-        return ExecSessionRecord(
-            exec_session_id=uuid4().hex[:8],
-            chat_session_id=str(ref.session_id),
-            execution_id=uuid4().hex,
-            attempt=attempt,
-            generation=generation,
-            last_used=time.time(),
-        )
-
-    def add(r: ExecSessionRecord) -> list[ExecSessionRecord] | None:
-        return harness_state.add_exec_session(
-            tenant_cache, ref.sandbox_id, r, max_sessions=64, ended_execution_ids=set()
-        )
-
-    # A record of a later attempt left over from a VM that was stopped.
-    assert add(record(placement.attempt + 5, 1)) is None
-    tenant_cache.set(
-        harness_state._EXEC_SESSIONS_PREFIX + str(ref.sandbox_id),
-        ExecSessionTable(
-            sessions={
-                "old": record(placement.attempt + 5, 1).model_copy(
-                    update={"exec_session_id": "old"}
-                )
-            }
-        ).model_dump_json(),
-    )
-    # The placed VM (lower attempt) still gets new records.
-    current = record(placement.attempt, placement.generation)
-    assert add(current) == []
-    assert harness_state.list_exec_sessions(tenant_cache, ref.sandbox_id) == [current]
-    _, result = _run(sandbox.exec_command(ref, "sleep 60", yield_time_ms=250))
-    assert result.exec_session_id is not None
-
-
-def test_ctrl_c_is_not_held_back_by_a_long_poll(
-    monkeypatch: pytest.MonkeyPatch,
-    tenant_cache: CacheBackend,
-    sandbox: FirecrackerHarnessSandbox,
-    node: RunningFakeAgent,
-    new_ref: NewRef,
-) -> None:
-    monkeypatch.setattr(harness_sandbox, "_EXEC_LOCK_WAIT_SECONDS", 0.2)
-    ref = new_ref()
-    _, result = _run(sandbox.exec_command(ref, "cat", yield_time_ms=250))
-    session = result.exec_session_id
-    assert session is not None
-    # Another call holds the read lock (a long poll).
-    held = tenant_cache.lock(
-        f"{harness_sandbox._EXEC_LOCK_PREFIX}{ref.sandbox_id}:{session}", timeout=30
-    )
-    assert held.acquire(blocking=False)
-    try:
-        _, interrupted = _run(sandbox.write_stdin(ref, session, "\x03"))
-    finally:
-        held.release()
-    assert interrupted.completion == "canceled"
-    assert interrupted.exec_session_id is None
-    assert len(node.agent.cancel_calls) == 1
-
-
-@pytest.mark.usefixtures("node")
 def test_ctrl_c_on_an_ended_command_reports_its_exit(
-    monkeypatch: pytest.MonkeyPatch,
     tenant_cache: CacheBackend,
     sandbox: FirecrackerHarnessSandbox,
     new_ref: NewRef,
 ) -> None:
-    monkeypatch.setattr(harness_sandbox, "_EXEC_LOCK_WAIT_SECONDS", 0.2)
     ref = new_ref()
     _, result = _run(sandbox.exec_command(ref, "cat", yield_time_ms=250))
     session = result.exec_session_id
     assert session is not None
     record = harness_state.get_exec_session(tenant_cache, ref.sandbox_id, session)
     assert record is not None
-    sandbox._daemon(sandbox._place(ref)).interact(
+    sandbox._session_vm(ref)[1].interact(
         record.execution_id, data=b"", close_stdin=True
     )
-    held = tenant_cache.lock(
-        f"{harness_sandbox._EXEC_LOCK_PREFIX}{ref.sandbox_id}:{session}", timeout=30
-    )
-    assert held.acquire(blocking=False)
-    try:
-        _, interrupted = _run(sandbox.write_stdin(ref, session, "\x03"))
-    finally:
-        held.release()
+    _, interrupted = _run(sandbox.write_stdin(ref, session, "\x03"))
     assert interrupted.completion == "exited" and interrupted.exit_code == 0
 
 
 @pytest.mark.usefixtures("node")
-def test_a_failed_eviction_cancel_keeps_the_record(
+def test_the_least_recently_used_exec_session_record_goes_over_the_cap(
     monkeypatch: pytest.MonkeyPatch,
-    tenant_cache: CacheBackend,
-    make_sandbox: MakeSandbox,
+    sandbox: FirecrackerHarnessSandbox,
     new_ref: NewRef,
 ) -> None:
-    sandbox = make_sandbox(max_exec_sessions=1)
+    monkeypatch.setattr(harness_base, "MAX_EXEC_SESSIONS_PER_SANDBOX", 2)
     ref = new_ref()
-    _, result = _run(sandbox.exec_command(ref, "sleep 60", yield_time_ms=250))
-    assert result.exec_session_id is not None
-
-    def fail(*_args: object, **_kwargs: object) -> None:
-        raise SandboxDaemonError(
-            grpc.StatusCode.UNAVAILABLE, "down", SandboxDaemonErrorReason.INTERNAL
-        )
-
-    monkeypatch.setattr(SandboxDaemonClient, "cancel", fail)
-    placed = sandbox._place(ref)
-    sandbox._make_room(tenant_cache, sandbox._daemon(placed), placed, ref.sandbox_id)
-    assert (
-        harness_state.get_exec_session(
-            tenant_cache, ref.sandbox_id, result.exec_session_id
-        )
-        is not None
+    first, second, third = (
+        _run(sandbox.exec_command(ref, "cat", yield_time_ms=250))[1].exec_session_id
+        for _ in range(3)
     )
+    assert first and second and third
+    with pytest.raises(ExecSessionNotFoundError):
+        _run(sandbox.write_stdin(ref, first, "x"))
+    assert _run(sandbox.write_stdin(ref, second, "y"))[1].output == "y"

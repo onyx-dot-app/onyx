@@ -371,11 +371,11 @@ class HostAgentClient:
             raise _error_from_rpc(e) from e
         return response.already_stopped
 
-    def list_vms(self, timeout: float | None = None) -> list[AgentVm]:
+    def list_vms(self) -> list[AgentVm]:
         try:
             response: hostagent_pb2.ListResponse = self._stub.List(
                 hostagent_pb2.ListRequest(),
-                timeout=timeout or SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS,
+                timeout=SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS,
             )
         except grpc.RpcError as e:
             raise _error_from_rpc(e) from e
