@@ -590,9 +590,15 @@ func (m *Manager) admitMemoryLocked(memMiB uint32) error {
 // MaxVMs is the VM cap; 0 is no cap.
 func (m *Manager) MaxVMs() int { return m.cfg.MaxVMs }
 
-// vmSlotsUsedLocked counts the Firecracker processes that MaxVMs caps.
+// vmSlotsUsedLocked counts the Firecracker processes that MaxVMs caps. A
+// doubt counts one per jailer UID it holds (each process has its own), and
+// at least one.
 func (m *Manager) vmSlotsUsedLocked() int {
-	return m.liveVMsLocked() + len(m.building) + len(m.doubt)
+	n := m.liveVMsLocked() + len(m.building)
+	for _, d := range m.doubt {
+		n += max(1, len(d.uids))
+	}
+	return n
 }
 
 // admitSlotLocked refuses a new VM when the node runs MaxVMs. On nested

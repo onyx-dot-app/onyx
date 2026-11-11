@@ -72,6 +72,15 @@ func TestMaxVMsCountsEveryFirecrackerProcess(t *testing.T) {
 	f.m.mu.Unlock()
 	_, _, err = f.m.Create(ctx, req(sb3, 1))
 	wantReason(t, err, pb.ErrorReason_CAPACITY_VM_SLOTS)
+	// Two processes of one sandbox in doubt take two slots.
+	if _, err := f.m.Stop(ctx, sb1, 1, f.m.List()[0].Generation); err != nil {
+		t.Fatal(err)
+	}
+	f.m.mu.Lock()
+	f.m.doubt["kept"].uids = []uint32{7, 8}
+	f.m.mu.Unlock()
+	_, _, err = f.m.Create(ctx, req(sb3, 1))
+	wantReason(t, err, pb.ErrorReason_CAPACITY_VM_SLOTS)
 	f.m.mu.Lock()
 	delete(f.m.doubt, "kept")
 	f.m.mu.Unlock()
