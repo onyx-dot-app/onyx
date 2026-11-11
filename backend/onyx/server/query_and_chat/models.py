@@ -191,7 +191,7 @@ class ChatMessageIdentifier(BaseModel):
 class PendingChatMessageRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    message: str = Field(min_length=1)
+    message: str
     delivery: MessageDelivery = Field(
         description=(
             "send adds input at the next step; queue waits for normal completion; "
@@ -201,7 +201,9 @@ class PendingChatMessageRequest(BaseModel):
     target_response_id: int | None = Field(
         default=None,
         gt=0,
-        description="The selected response; omit only for an empty session.",
+        description=(
+            "The response that receives a send. Omit to use the current response."
+        ),
     )
 
     @field_validator("message")
@@ -312,7 +314,11 @@ class CurrentStreamInfo(BaseModel):
 
 class ChatSessionProcessingStatus(BaseModel):
     is_processing: bool
+    # Child agents run on the selected branch, or their results are about to wake the root.
     has_active_subagents: bool = False
+    # Queued input or unread root results can start a turn now; a paused queue cannot.
+    has_startable_input: bool = False
+    # The newest response on the selected branch.
     latest_response_id: int | None = None
     current_stream: CurrentStreamInfo | None = None
 
@@ -334,7 +340,6 @@ class ChatSessionDetailResponse(BaseModel):
     packets: list[list[Packet]]
     # The buffer also retains interrupted work until its cache TTL expires.
     current_stream: CurrentStreamInfo | None = None
-    has_active_subagents: bool = False
     # Readiness is independent of whether a stream can be replayed.
     is_processing: bool = False
     # True for sessions pinned to an incognito record mode, so a reload can

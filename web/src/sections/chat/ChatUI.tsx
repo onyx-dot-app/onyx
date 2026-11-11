@@ -9,11 +9,8 @@ import React, {
 } from "react";
 import { Message } from "@/app/app/types";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/types";
-import HumanMessage, {
-  HumanMessageBubble,
-} from "@/app/app/message/HumanMessage";
-import { AgentTimeline } from "@/app/app/message/messageComponents/timeline/AgentTimeline";
-import { useQueuedMessageHandoff } from "@/lib/chat/useQueuedMessageHandoff";
+import HumanMessage from "@/app/app/message/HumanMessage";
+import AgentResultsDivider from "@/app/app/message/AgentResultsDivider";
 import { ErrorBanner } from "@/app/app/message/Resubmit";
 import { MinimalAgent } from "@/lib/agents/types";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
@@ -31,9 +28,7 @@ import {
   useHasOlderMessages,
   useLoadingError,
   useUncaughtError,
-  useChatSessionStore,
 } from "@/app/app/stores/useChatSessionStore";
-import { Section } from "@opal/layouts";
 import WindowedRow from "@/sections/chat/WindowedRow";
 import OlderMessagesLoader from "@/sections/chat/OlderMessagesLoader";
 import { useOptionalScrollContainer } from "@/sections/chat/ScrollContainerContext";
@@ -126,8 +121,6 @@ const ChatUI = React.memo(
     const error = useUncaughtError();
     const loadError = useLoadingError();
     const chatState = useCurrentChatState();
-    const sessionId = useChatSessionStore((state) => state.currentSessionId);
-    const queuedHandoff = useQueuedMessageHandoff(sessionId);
     // Stable fallbacks to avoid changing prop identities on each render
     const emptyDocs = useMemo<OnyxDocument[]>(() => [], []);
     const emptyChildrenIds = useMemo<number[]>(() => [], []);
@@ -328,6 +321,19 @@ const ChatUI = React.memo(
                   )}
                 </WindowedRow>
               );
+            } else if (message.type === "agent_results") {
+              return (
+                <WindowedRow
+                  id={messageReactComponentKey}
+                  key={messageReactComponentKey}
+                  className={cn("w-full self-center", msgWidth)}
+                  pinned={pinned}
+                  initiallyMounted={initiallyMounted}
+                  heightCache={rowHeightCache}
+                >
+                  <AgentResultsDivider />
+                </WindowedRow>
+              );
             } else if (
               message.type === "assistant" ||
               message.type === "error"
@@ -405,24 +411,6 @@ const ChatUI = React.memo(
             }
             return null;
           })}
-
-          {queuedHandoff && (
-            <Section
-              gap={6}
-              height="fit"
-              alignItems="stretch"
-              className={cn("self-center", msgWidth)}
-              data-testid="queued-message-handoff"
-            >
-              <Section height="fit" alignItems="end">
-                <HumanMessageBubble content={queuedHandoff.message} />
-              </Section>
-              <AgentTimeline
-                turnGroups={[]}
-                chatState={{ agent: activeAgent }}
-              />
-            </Section>
-          )}
 
           {(error || loadError) && (
             <div className={cn("p-4 w-full self-center", msgWidth)}>

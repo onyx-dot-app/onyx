@@ -13,6 +13,7 @@ icon: "comment"
 Press **Enter** or click the send arrow to add an instruction after the current step.
 Onyx finishes the current generation and running actions before reading your message.
 Your instruction appears in the conversation before the next part of the response.
+If the response finishes before Onyx reads your instruction, Onyx queues it as a follow-up.
 
 To save a follow-up for later, press **Ctrl+Enter** on Windows or Linux, or **Cmd+Enter** on macOS.
 Onyx starts queued messages after the current response finishes. The queue survives reloads and browser closure.
@@ -131,7 +132,8 @@ When the Project files do not fit in the model's context window, Onyx searches t
 Start an **Incognito Chat** from the chat header before you send the first message.
 An incognito chat is not saved in your history and is not used to update your memories.
 You can attach text files and images, then ask follow-up questions about them while the session remains active.
-Your admin's data policy still applies. An admin can turn Incognito Chats off at **Admin Panel → Security**.
+Deep Research and the Coding Agent are not available in an incognito chat. Your admin's data policy still applies.
+An admin can turn Incognito Chats off at **Admin Panel → Security**.
 
 ## Memory
 

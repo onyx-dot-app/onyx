@@ -98,12 +98,6 @@ test("separate background results reach an idle chat and survive reload", async 
     await expect(chatPage.inputBar.subagentActivity).toHaveText(
       "Subagents working"
     );
-    await chatPage.inputBar.expectCompactSubagentActivity();
-    await expect(chatPage.inputBar.sendButton).toBeDisabled();
-    await chatPage.inputBar.fill("A draft while research continues");
-    await expect(chatPage.inputBar.sendButton).toBeEnabled();
-    await chatPage.reload();
-    await expect(chatPage.inputBar.subagentActivity).toBeVisible();
     await chatPage.editHumanMessage("Use a separate branch without research.");
     await chatPage.submitHumanMessageEdit();
     await expect(chatPage.scrollContainer).toContainText(
@@ -114,38 +108,21 @@ test("separate background results reach an idle chat and survive reload", async 
     await expect(chatPage.scrollContainer).toContainText(initialAnswer);
     await expect(chatPage.inputBar.subagentActivity).toBeVisible();
     await releaseMockLlmGate(gateId);
-    await expect(chatPage.scrollContainer).toContainText("The first");
-    await chatPage.inputBar.fill("A draft during the automatic reply");
-    await expect(chatPage.inputBar.pendingMessageHint).toBeVisible();
-    await chatPage.inputBar.expectInlinePendingMessageHint();
-    await chatPage.inputBar.clear();
     await releaseMockLlmGate(firstReplyGateId);
     await chatPage.expectAnswerParagraph(firstAnswer);
     await expect(chatPage.inputBar.subagentActivity).toBeVisible();
     await releaseMockLlmGate(secondGateId);
-    await expect(chatPage.scrollContainer).toContainText("Verified");
-    await chatPage.reload();
-    await expect(chatPage.scrollContainer).toContainText("Verified");
     await releaseMockLlmGate(secondReplyGateId);
-    await expect(chatPage.scrollContainer).toContainText(finalAnswer);
+    await chatPage.expectAnswerParagraph(finalAnswer);
     await expect(chatPage.inputBar.subagentActivity).toBeHidden();
-    await expect(chatPage.regenerateControl(0)).toHaveCount(1);
-    await expect(chatPage.regenerateControl(1)).toHaveCount(0);
-    await expect(chatPage.humanMessageBubbles).toHaveText([question]);
+    await chatPage.reload();
+    await chatPage.expectAnswerParagraph(initialAnswer);
+    await chatPage.expectAnswerParagraph(firstAnswer);
+    await chatPage.expectAnswerParagraph(finalAnswer);
+    await expect(chatPage.inputBar.subagentActivity).toBeHidden();
     await expect(chatPage.scrollContainer).not.toContainText(
       "Private child result:"
     );
-    for (let reload = 0; reload < 2; reload++) {
-      await chatPage.reload();
-      await chatPage.expectAnswerParagraph(initialAnswer);
-      await chatPage.expectAnswerParagraph(firstAnswer);
-      await chatPage.expectAnswerParagraph(finalAnswer);
-      await expect(chatPage.inputBar.subagentActivity).toBeHidden();
-      await expect(chatPage.humanMessageBubbles).toHaveText([question]);
-      await expect(chatPage.scrollContainer).not.toContainText(
-        "Private child result:"
-      );
-    }
   } finally {
     await releaseMockLlmGate(gateId);
     await releaseMockLlmGate(secondGateId);

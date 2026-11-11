@@ -14,6 +14,7 @@ from onyx.agents.agent_coordination import (
 from onyx.agents.events import AgentEvent
 from onyx.agents.models import (
     AgentInfo,
+    AgentMessageReceipt,
     ExecutionStatus,
     PreparedStep,
     RunFailureKind,
@@ -42,7 +43,12 @@ from onyx.llm.models import (
     ToolResultMessage,
 )
 from onyx.tracing.flows import LLMFlow
-from tests.unit.onyx.agents.fakes import FakeAgentDirectory, FakeModelClient, run_agent
+from tests.unit.onyx.agents.fakes import (
+    FakeAgentDirectory,
+    FakeModelClient,
+    direct_message_coordinator,
+    run_agent,
+)
 from tests.unit.onyx.agents.test_child_coordination import parent_agent
 
 
@@ -113,16 +119,20 @@ def test_archive_lookup_does_not_restore_an_agent(in_discovery: bool) -> None:
             previous_run_id=archived.run_id,
         )
 
+    receipts: list[AgentMessageReceipt] = []
+
     def inspect(invocation: ToolInvocation) -> ToolResult:
-        discovered = invocation.agents.discover_children()
-        assert [info.latest_run_id for info in discovered] == (
-            ["saved"] if in_discovery else []
-        )
-        saved = coordinator.read_visible_run("saved", parent.id)
-        assert saved is not None and saved.messages[-1].text == "Saved"
+        discovered = [
+            info.latest_run_id
+            for info in invocation.agents.discover_agents()
+            if info.id == "research"
+        ]
+        assert discovered == (["saved"] if in_discovery else [])
         assert resolutions == []
-        restored = coordinator.resolve_child("research", parent.id)
-        assert restored.latest_run_id == "saved"
+        # Addressing the agent restores it to continue its archived run.
+        receipts.append(
+            invocation.agents.send_message("research", message="Continue", max_steps=1)
+        )
         assert resolutions == ["research"]
         return ToolResult(content="Done")
 
@@ -136,8 +146,8 @@ def test_archive_lookup_does_not_restore_an_agent(in_discovery: bool) -> None:
         latest_run_id="saved",
         status=RunStatus.COMPLETE,
     )
-    coordinator = AgentCoordinator(
-        directory=FakeAgentDirectory(
+    coordinator = direct_message_coordinator(
+        FakeAgentDirectory(
             lookup_agent=lambda agent_id, parent_id: (
                 info if agent_id == info.id and parent_id == parent.id else None
             ),
@@ -149,7 +159,15 @@ def test_archive_lookup_does_not_restore_an_agent(in_discovery: bool) -> None:
     )
     if in_discovery:
         coordinator.register(info)
-    run_agent(parent, max_steps=2, coordinator=coordinator)
+    try:
+        run_agent(parent, max_steps=2, coordinator=coordinator)
+        run_id = receipts[0].run_id
+        assert run_id is not None
+        continued = coordinator.completion(run_id).result(3)
+        assert continued.previous_run_id == "saved"
+        assert continued.messages[-1].text == "New"
+    finally:
+        assert coordinator.close(3)
 
 
 def test_cancelled_tool_reserves_agent_until_owned_work_drains() -> None:
@@ -279,7 +297,9 @@ def test_loaded_agent_bound_is_shared_across_parent_runs() -> None:
         ]
         assert len(errors) == 1
         assert "loaded agent limit exceeded" in errors[0].content
-        assert len(coordinator.discover_children(parent.id)) == 1
+        assert (
+            len([info for info in coordinator.discover_agents() if info.parent_id]) == 1
+        )
         assert coordinator.close(timeout=3)
 
     with patch("onyx.agents.agent_coordination.MAX_LOADED_AGENTS", 1):

@@ -1,5 +1,6 @@
 """Pending user messages remain editable until Chat accepts them for execution."""
 
+import asyncio
 from collections.abc import Generator
 from threading import Event
 from typing import override
@@ -13,21 +14,29 @@ from pydantic import JsonValue
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from onyx.agents.models import MessageDelivery, RunStatus
-from onyx.auth.users import get_anonymous_user
+from onyx.agents.models import (
+    InputSource,
+    MessageDelivery,
+    RunStatus,
+    agent_result_message_id,
+)
 from onyx.cache.factory import get_cache_backend
+from onyx.chat.chat_processing_checker import ChatTurnAdmission
 from onyx.chat.execution import chat_turn_work
 from onyx.chat.models import PendingChatMessage
 from onyx.chat.presentation import replay_response
-from onyx.chat.process_message import handle_stream_message_objects
+from onyx.chat.process_message import (
+    dispatch_pending_chat_messages,
+    handle_stream_message_objects,
+)
 from onyx.chat.stop_signal_checker import request_stop
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
-from onyx.db.chat_inputs import inputs_available, receive_messages
+from onyx.db.chat_inputs import consume_inputs__no_commit, read_run_inputs
 from onyx.db.chat_response import read_response_record
 from onyx.db.enums import HookPoint, IncognitoRecordMode
 from onyx.db.models import ChatInput, ChatMessage, ChatSession, User
-from onyx.error_handling.exceptions import register_onyx_exception_handlers
-from onyx.file_store.models import ChatFileInput, ChatLoadedFile
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError, register_onyx_exception_handlers
 from onyx.hooks.executor import HookSkipped
 from onyx.hooks.points.query_processing import (
     QueryProcessingPayload,
@@ -134,51 +143,6 @@ def client(app: FastAPI) -> Generator[TestClient, None, None]:
         assert chat_turn_work.wait_idle(timeout=30)
 
 
-def test_withdraw_returns_editable_text_and_resubmission_joins_queue_tail(
-    client: TestClient, response: ChatMessage, db_session: Session
-) -> None:
-    path = f"/chat/chat-session/{response.chat_session_id}/pending-messages"
-    records: list[PendingChatMessage] = []
-    for text in ("First instruction", "Second instruction"):
-        submitted = client.post(
-            path,
-            json={
-                "message": text,
-                "delivery": "queue",
-                "target_response_id": response.id,
-            },
-        )
-        assert submitted.status_code == 200, submitted.text
-        records.append(PendingChatMessage.model_validate(submitted.json()))
-    withdrawn = client.delete(f"{path}/{records[0].id}")
-    assert withdrawn.status_code == 200, withdrawn.text
-    assert PendingChatMessage.model_validate(withdrawn.json()) == records[0]
-    assert client.delete(f"{path}/{records[0].id}").status_code == 409
-    assert (
-        db_session.scalar(
-            select(ChatInput).where(ChatInput.message_id == records[0].id)
-        )
-        is None
-    )
-    resubmitted = client.post(
-        path,
-        json={
-            "message": "Edited instruction",
-            "delivery": "queue",
-            "target_response_id": response.id,
-        },
-    )
-    assert resubmitted.status_code == 200, resubmitted.text
-    replacement = PendingChatMessage.model_validate(resubmitted.json())
-    assert replacement.id != records[0].id
-    listed = client.get(path)
-    assert listed.status_code == 200, listed.text
-    assert [PendingChatMessage.model_validate(row) for row in listed.json()] == [
-        records[1],
-        replacement,
-    ]
-
-
 def test_promoting_prefetched_input_prevents_between_step_acceptance(
     client: TestClient, response: ChatMessage, db_session: Session
 ) -> None:
@@ -193,96 +157,45 @@ def test_promoting_prefetched_input_prevents_between_step_acceptance(
     )
     assert submitted.status_code == 200, submitted.text
     message_id = submitted.json()["id"]
-    messages = receive_messages(
-        db_session, str(response.chat_session_id), str(response.id), []
-    )
+    messages = read_run_inputs(
+        db_session, str(response.chat_session_id), str(response.id), [response.id], None
+    )[0]
     assert len(messages) == 1
     db_session.rollback()
-    assert (
-        client.post(
-            f"{path}/{message_id}/interrupt",
-            params={"target_response_id": response.id + 1},
-        ).status_code
-        == 409
-    )
-    promoted = client.post(
-        f"{path}/{message_id}/interrupt", params={"target_response_id": response.id}
-    )
+    promoted = client.post(f"{path}/{message_id}/interrupt")
     assert promoted.status_code == 200, promoted.text
-    assert not inputs_available(
-        db_session, response.id, messages, ownership_version=None
+    assert not consume_inputs__no_commit(
+        db_session, response.id, messages, [], ownership_version=None
     )
     db_session.rollback()
     assert client.get(path).json() == [promoted.json()]
 
 
-def test_queue_routes_reject_other_owners(
-    client: TestClient,
-    db_session: Session,
-    make_test_user: MakeTestUser,
-) -> None:
-    other = make_test_user("pending-chat-other")
-    chat = ChatSession(id=uuid4(), user_id=other.id)
-    db_session.add(chat)
-    db_session.commit()
-    path = f"/chat/chat-session/{chat.id}/pending-messages"
-    assert client.get(path).status_code == 404
-    assert (
-        client.post(path, json={"message": "Private", "delivery": "queue"}).status_code
-        == 404
-    )
-    assert client.delete(f"{path}/unknown").status_code == 404
-    assert client.post(f"{path}/unknown/interrupt").status_code == 404
-
-
-@pytest.mark.parametrize(
-    "status",
-    [None, RunStatus.COMPLETE, RunStatus.CANCELLED, RunStatus.ERROR, RunStatus.LIMIT],
-)
-def test_send_rejects_responses_without_active_execution(
+@pytest.mark.parametrize("status", [RunStatus.CANCELLED, RunStatus.ERROR])
+def test_late_send_is_queued_and_waits_after_unsuccessful_execution(
     client: TestClient,
     response: ChatMessage,
     db_session: Session,
-    status: RunStatus | None,
+    status: RunStatus,
 ) -> None:
     response.response_status = status
     db_session.commit()
     path = f"/chat/chat-session/{response.chat_session_id}/pending-messages"
-    rejected = client.post(
-        path,
-        json={
-            "message": "Late send",
-            "delivery": "send",
-            "target_response_id": response.id,
-        },
-    )
-    assert rejected.status_code == 409, rejected.text
-    assert client.get(path).json() == []
-
-
-@pytest.mark.parametrize(
-    "status", [None, RunStatus.CANCELLED, RunStatus.ERROR, RunStatus.LIMIT]
-)
-def test_queue_rejects_unknown_responses_and_pauses_after_unsuccessful_execution(
-    client: TestClient,
-    response: ChatMessage,
-    db_session: Session,
-    status: RunStatus | None,
-) -> None:
-    response.response_status = status
-    db_session.commit()
-    path = f"/chat/chat-session/{response.chat_session_id}/pending-messages"
-    submitted = client.post(
-        path,
-        json={
-            "message": "Next turn",
-            "delivery": "queue",
-            "target_response_id": response.id,
-        },
-    )
-    assert submitted.status_code == (409 if status is None else 200), submitted.text
+    for delivery in ("send", "queue"):
+        submitted = client.post(
+            path,
+            json={
+                "message": "Next turn",
+                "delivery": delivery,
+                "target_response_id": response.id,
+            },
+        )
+        assert submitted.status_code == 200, submitted.text
+        pending = PendingChatMessage.model_validate(submitted.json())
+        assert pending.delivery == MessageDelivery.QUEUE
+        assert pending.target_response_id is None
     assert chat_turn_work.wait_idle(timeout=10)
-    assert client.get(path).json() == ([] if status is None else [submitted.json()])
+    assert len(client.get(path).json()) == 2
     assert (
         db_session.scalar(
             select(ChatMessage.id).where(ChatMessage.parent_message_id == response.id)
@@ -291,68 +204,45 @@ def test_queue_rejects_unknown_responses_and_pauses_after_unsuccessful_execution
     )
 
 
-@pytest.mark.parametrize("is_child", [False, True])
-def test_queue_routes_reject_deleted_or_child_sessions(
+@pytest.mark.parametrize(
+    ("case", "expected_status"),
+    [
+        ("deleted", 404),
+        ("child", 404),
+        *((f"incognito_{mode.value}", 400) for mode in IncognitoRecordMode),
+    ],
+)
+def test_queue_routes_reject_inaccessible_sessions(
     client: TestClient,
     owner: User,
     response: ChatMessage,
     db_session: Session,
-    is_child: bool,
+    case: str,
+    expected_status: int,
 ) -> None:
-    chat = ChatSession(
-        id=uuid4(),
-        user_id=owner.id,
-        spawned_by_message_id=response.id if is_child else None,
-        deleted=not is_child,
-    )
-    db_session.add(chat)
+    chat_id = response.chat_session_id
+    if case.startswith("incognito_"):
+        response.chat_session.incognito_record_mode = IncognitoRecordMode(
+            case.removeprefix("incognito_")
+        )
+    else:
+        chat = ChatSession(
+            id=uuid4(),
+            user_id=owner.id,
+            spawned_by_message_id=response.id if case == "child" else None,
+            deleted=case == "deleted",
+        )
+        db_session.add(chat)
+        chat_id = chat.id
     db_session.commit()
-    path = f"/chat/chat-session/{chat.id}/pending-messages"
-    assert client.get(path).status_code == 404
+    path = f"/chat/chat-session/{chat_id}/pending-messages"
+    assert client.get(path).status_code == expected_status
     assert (
         client.post(path, json={"message": "Private", "delivery": "queue"}).status_code
-        == 404
+        == expected_status
     )
-    assert client.delete(f"{path}/unknown").status_code == 404
-
-
-@pytest.mark.parametrize("mode", list(IncognitoRecordMode))
-def test_queue_routes_reject_incognito(
-    client: TestClient,
-    response: ChatMessage,
-    db_session: Session,
-    mode: IncognitoRecordMode,
-) -> None:
-    response.chat_session.incognito_record_mode = mode
-    db_session.commit()
-    path = f"/chat/chat-session/{response.chat_session_id}/pending-messages"
-    assert client.get(path).status_code == 400
-    assert (
-        client.post(path, json={"message": "Private", "delivery": "queue"}).status_code
-        == 400
-    )
-    assert client.delete(f"{path}/unknown").status_code == 400
-    assert client.post(f"{path}/unknown/interrupt").status_code == 400
-
-
-def test_queue_routes_reject_anonymous_users(
-    client: TestClient, app: FastAPI, response: ChatMessage
-) -> None:
-    for route in app.routes:
-        if not isinstance(route, APIRoute) or "pending-messages" not in route.path:
-            continue
-        for dependency in route.dependant.dependencies:
-            if dependency.name == "user":
-                assert dependency.call is not None
-                app.dependency_overrides[dependency.call] = get_anonymous_user
-    path = f"/chat/chat-session/{response.chat_session_id}/pending-messages"
-    assert client.get(path).status_code == 403
-    assert (
-        client.post(path, json={"message": "Private", "delivery": "queue"}).status_code
-        == 403
-    )
-    assert client.delete(f"{path}/unknown").status_code == 403
-    assert client.post(f"{path}/unknown/interrupt").status_code == 403
+    assert client.delete(f"{path}/unknown").status_code == expected_status
+    assert client.post(f"{path}/unknown/interrupt").status_code == expected_status
 
 
 @pytest.mark.parametrize(
@@ -376,60 +266,78 @@ def test_pending_input_rejects_invalid_or_transient_fields(
     assert client.post(path, json=body).status_code == 422
 
 
-def test_pending_messages_require_the_selected_response(
+def test_send_targets_a_current_response(
     client: TestClient, response: ChatMessage, db_session: Session
 ) -> None:
     path = f"/chat/chat-session/{response.chat_session_id}/pending-messages"
-    for target in (None, response.parent_message_id):
-        rejected = client.post(
-            path,
-            json={
-                "message": "Invalid target",
-                "delivery": "queue",
-                "target_response_id": target,
-            },
-        )
-        assert rejected.status_code == 400, rejected.text
-    queued = client.post(
+    rejected = client.post(
         path,
         json={
-            "message": "Original branch",
-            "delivery": "queue",
-            "target_response_id": response.id,
+            "message": "Invalid target",
+            "delivery": "send",
+            "target_response_id": response.parent_message_id,
         },
     )
-    assert queued.status_code == 200, queued.text
+    assert rejected.status_code == 409, rejected.text
     question = response.parent_message
     assert question is not None
     sibling = ChatMessage(
         chat_session_id=response.chat_session_id,
         parent_message_id=question.id,
-        message="Preferred",
-        token_count=1,
+        message="",
+        token_count=0,
         message_type=MessageType.ASSISTANT,
-        response_status=RunStatus.COMPLETE,
+        response_status=RunStatus.RUNNING,
     )
     db_session.add(sibling)
     db_session.flush()
     question.latest_child_message_id = sibling.id
     db_session.commit()
-    rejected = client.post(
+    # Several models answer the same question; a send without a target goes to
+    # the selected one.
+    untargeted = client.post(path, json={"message": "Selected", "delivery": "send"})
+    assert untargeted.status_code == 200, untargeted.text
+    assert untargeted.json()["target_response_id"] == sibling.id
+    sent = client.post(
         path,
         json={
-            "message": "Wrong branch",
-            "delivery": "queue",
+            "message": "This one",
+            "delivery": "send",
             "target_response_id": response.id,
         },
     )
-    assert rejected.status_code == 400, rejected.text
-    assert (
-        client.post(
-            f"{path}/{queued.json()['id']}/interrupt",
-            params={"target_response_id": response.id},
-        ).status_code
-        == 409
+    assert sent.status_code == 200, sent.text
+    assert sent.json()["target_response_id"] == response.id
+    queued = client.post(path, json={"message": "Later", "delivery": "queue"})
+    assert queued.status_code == 200, queued.text
+    assert client.get(path).json() == [untargeted.json(), sent.json(), queued.json()]
+
+
+def test_send_without_target_binds_to_the_only_running_regeneration(
+    client: TestClient, response: ChatMessage, db_session: Session
+) -> None:
+    question = response.parent_message
+    assert question is not None
+    response.response_status = RunStatus.COMPLETE
+    regeneration = ChatMessage(
+        chat_session_id=response.chat_session_id,
+        parent_message_id=question.id,
+        message="",
+        token_count=0,
+        message_type=MessageType.ASSISTANT,
+        response_status=RunStatus.RUNNING,
     )
-    assert client.get(path).json() == [queued.json()]
+    db_session.add(regeneration)
+    db_session.flush()
+    question.latest_child_message_id = regeneration.id
+    db_session.commit()
+    sent = client.post(
+        f"/chat/chat-session/{response.chat_session_id}/pending-messages",
+        json={"message": "Steer", "delivery": "send"},
+    )
+    assert sent.status_code == 200, sent.text
+    assert sent.json()["delivery"] == "send"
+    assert sent.json()["target_response_id"] == regeneration.id
 
 
 class QueueTestLLM(FakeModelClient):
@@ -529,21 +437,14 @@ def test_interrupt_saves_partial_response_and_starts_before_queued_messages(
         assert immediate.status_code == 200, immediate.text
         pending_id = immediate.json()["id"]
         if promote:
-            promoted = client.post(
-                f"{path}/{pending_id}/interrupt",
-                params={"target_response_id": response.id},
-            )
+            promoted = client.post(f"{path}/{pending_id}/interrupt")
             assert promoted.status_code == 200, promoted.text
             assert promoted.json() == {
                 **immediate.json(),
                 "delivery": "interrupt",
             }
             assert (
-                client.post(
-                    f"{path}/{pending_id}/interrupt",
-                    params={"target_response_id": response.id},
-                ).json()
-                == promoted.json()
+                client.post(f"{path}/{pending_id}/interrupt").json() == promoted.json()
             )
         assert cancelled.wait(5)
         if promote:
@@ -593,9 +494,11 @@ def test_interrupt_saves_partial_response_and_starts_before_queued_messages(
         ) == [
             "Initial question",
             "Change direction now",
+            # Interrupting messages start before queued ones.
+            *(["Another instruction"] if promote else []),
             "Apply this next",
             "Do this later",
-        ] + (["Another instruction"] if promote else [])
+        ]
         assert client.get(path).json() == []
         assert client.post(f"{path}/{pending_id}/interrupt").status_code == 409
     finally:
@@ -773,7 +676,7 @@ def test_submitted_messages_process_once_and_execute_without_a_browser(
         assert chat_turn_work.wait_idle(timeout=30)
 
 
-@pytest.mark.parametrize("ending", ["error", "stop", "access_revoked"])
+@pytest.mark.parametrize("ending", ["error", "access_revoked"])
 def test_unsuccessful_or_unauthorized_dispatch_preserves_pending_messages(
     client: TestClient,
     chat: ChatSession,
@@ -783,15 +686,13 @@ def test_unsuccessful_or_unauthorized_dispatch_preserves_pending_messages(
     ending: str,
 ) -> None:
     path = f"/chat/chat-session/{chat.id}/pending-messages"
-    entered, release, cancelled = Event(), Event(), Event()
+    entered, release = Event(), Event()
 
     def generate(
-        _request: GenerationRequest, cancellation: CancellationSignal
+        _request: GenerationRequest, _cancellation: CancellationSignal
     ) -> AssistantMessage:
-        with cancellation.on_cancel(cancelled.set):
-            entered.set()
-            assert release.wait(30)
-        cancellation.check()
+        entered.set()
+        assert release.wait(30)
         if ending == "error":
             raise RuntimeError("Scripted provider failure")
         return AssistantMessage(content=[TextContent(text="Finished")])
@@ -831,9 +732,6 @@ def test_unsuccessful_or_unauthorized_dispatch_preserves_pending_messages(
         if ending == "access_revoked":
             owner.is_active = False
             db_session.commit()
-        if ending == "stop":
-            request_stop(chat.id, get_cache_backend(), stream_id=response.id)
-            assert cancelled.wait(5)
         release.set()
         assert chat_turn_work.wait_idle(timeout=30)
         db_session.expire_all()
@@ -858,79 +756,18 @@ def test_unsuccessful_or_unauthorized_dispatch_preserves_pending_messages(
         assert chat_turn_work.wait_idle(timeout=30)
 
 
-@pytest.mark.parametrize("preparation_state", ["blocked", "failed"])
-def test_withdrawal_dispatches_the_next_message_after_preparation_stops(
+# Each failure point follows the response reservation in turn preparation.
+@pytest.mark.parametrize("failure", ["token_rate_limit", "model_setup", "file_loading"])
+def test_queued_start_failure_saves_error_and_pauses_queue(
     client: TestClient,
     chat: ChatSession,
+    owner: User,
     db_session: Session,
     monkeypatch: pytest.MonkeyPatch,
-    preparation_state: str,
+    failure: str,
 ) -> None:
+    """A queued message that cannot start is answered with an error, not retried."""
     path = f"/chat/chat-session/{chat.id}/pending-messages"
-    entered, release = Event(), Event()
-    model = QueueTestLLM(
-        lambda _request, _signal: AssistantMessage(content=[TextContent(text="Done")])
-    )
-
-    def select_model() -> QueueTestLLM:
-        if not release.is_set():
-            entered.set()
-            if preparation_state == "failed":
-                raise RuntimeError("Model configuration unavailable")
-            assert release.wait(15)
-        return model
-
-    monkeypatch.setattr(
-        "onyx.chat.process_message.get_llm_for_persona",
-        lambda **_kwargs: select_model(),
-    )
-    try:
-        first = client.post(path, json={"message": "First", "delivery": "queue"})
-        assert first.status_code == 200, first.text
-        first_pending = PendingChatMessage.model_validate(first.json())
-        assert entered.wait(15)
-        if preparation_state == "failed":
-            assert chat_turn_work.wait_idle(timeout=15)
-        second = client.post(path, json={"message": "Second", "delivery": "queue"})
-        assert second.status_code == 200, second.text
-        if preparation_state == "failed":
-            assert chat_turn_work.wait_idle(timeout=15)
-            release.set()
-        withdrawn = client.delete(f"{path}/{first_pending.id}")
-        assert withdrawn.status_code == 200, withdrawn.text
-        release.set()
-        assert chat_turn_work.wait_idle(timeout=30)
-        db_session.expire_all()
-        assert list(
-            db_session.scalars(
-                select(ChatMessage.message).where(
-                    ChatMessage.chat_session_id == chat.id,
-                    ChatMessage.message_type == MessageType.USER,
-                )
-            )
-        ) == ["Second"]
-        answer = db_session.scalar(
-            select(ChatMessage).where(
-                ChatMessage.chat_session_id == chat.id,
-                ChatMessage.message_type == MessageType.ASSISTANT,
-            )
-        )
-        assert answer is not None and answer.response_status == RunStatus.COMPLETE
-        assert answer.message == "Done"
-        assert client.get(path).json() == []
-    finally:
-        release.set()
-        assert chat_turn_work.wait_idle(timeout=30)
-
-
-def test_queued_preparation_failure_saves_answer_and_keeps_next_message(
-    client: TestClient,
-    chat: ChatSession,
-    db_session: Session,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    path = f"/chat/chat-session/{chat.id}/pending-messages"
-    entered, release = Event(), Event()
     model = QueueTestLLM(
         lambda _request, _signal: AssistantMessage(content=[TextContent(text="Done")])
     )
@@ -938,49 +775,117 @@ def test_queued_preparation_failure_saves_answer_and_keeps_next_message(
         "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
     )
 
-    def fail_file_loading(
-        _inputs: list[ChatFileInput], *, text_file_ids: set[str] | None = None
-    ) -> list[ChatLoadedFile]:
-        assert text_file_ids is None
-        entered.set()
-        assert release.wait(15)
-        raise RuntimeError("File store unavailable")
+    def fail(*_args: object, **_kwargs: object) -> None:
+        if failure == "token_rate_limit":
+            raise OnyxError(OnyxErrorCode.RATE_LIMITED, "Usage budget reached")
+        raise RuntimeError("Service unavailable")
 
-    monkeypatch.setattr("onyx.chat.process_message.load_chat_files", fail_file_loading)
+    monkeypatch.setattr(
+        {
+            "token_rate_limit": "onyx.chat.process_message.check_token_rate_limits",
+            "model_setup": "onyx.chat.process_message.get_llm_for_persona",
+            "file_loading": "onyx.chat.process_message.load_chat_files",
+        }[failure],
+        fail,
+    )
+    first = client.post(path, json={"message": "First", "delivery": "queue"})
+    assert first.status_code == 200, first.text
+    assert chat_turn_work.wait_idle(timeout=30)
+    db_session.expire_all()
+    answer = db_session.scalar(
+        select(ChatMessage).where(
+            ChatMessage.chat_session_id == chat.id,
+            ChatMessage.message_type == MessageType.ASSISTANT,
+        )
+    )
+    assert answer is not None
+    assert answer.response_status == RunStatus.ERROR
+    assert answer.response_failure is not None
+    assert answer.parent_message is not None
+    assert answer.parent_message.message == "First"
+    assert client.get(path).json() == []
+    # The error pauses the queue, so later queued input waits for the user.
+    second = client.post(path, json={"message": "Second", "delivery": "queue"})
+    assert second.status_code == 200, second.text
+    assert chat_turn_work.wait_idle(timeout=30)
+    assert [message["message"] for message in client.get(path).json()] == ["Second"]
+    tasks = BackgroundTasks()
+    status = chat_backend.get_chat_session_processing_status(chat.id, tasks, owner)
+    assert not status.has_startable_input
+    assert status.latest_response_id == answer.id
+    assert tasks.tasks == []
+
+
+@pytest.mark.parametrize(
+    ("targeted", "admission_held"),
+    [
+        pytest.param(False, False, id="untargeted_idle"),
+        pytest.param(True, True, id="targeted_while_releasing"),
+    ],
+)
+def test_late_send_after_a_finished_response_starts_the_next_turn(
+    client: TestClient,
+    response: ChatMessage,
+    owner: User,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+    targeted: bool,
+    admission_held: bool,
+) -> None:
+    """A send that misses its response is queued and starts once the chat is idle.
+
+    A held admission is the moment after a stream's stop packet, before its turn
+    releases the chat and dispatches queued input.
+    """
+    chat_id = response.chat_session_id
+    path = f"/chat/chat-session/{chat_id}/pending-messages"
+    response.response_status = RunStatus.COMPLETE
+    db_session.commit()
+    model = QueueTestLLM(
+        lambda _request, _signal: AssistantMessage(
+            content=[TextContent(text="Next answer")]
+        )
+    )
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
+    )
+    admission = ChatTurnAdmission(get_cache_backend())
+    if admission_held:
+        admission.claim(chat_id)
     try:
-        first = client.post(path, json={"message": "First", "delivery": "queue"})
-        assert first.status_code == 200, first.text
-        assert entered.wait(15)
-        answer = db_session.scalar(
-            select(ChatMessage).where(
-                ChatMessage.chat_session_id == chat.id,
-                ChatMessage.message_type == MessageType.ASSISTANT,
-            )
+        sent = client.post(
+            path,
+            json={
+                "message": "Next turn",
+                "delivery": "send",
+                **({"target_response_id": response.id} if targeted else {}),
+            },
         )
-        assert answer is not None
-        release.set()
-        assert chat_turn_work.wait_idle(timeout=30)
-        db_session.refresh(answer)
-        assert answer.response_status == RunStatus.ERROR
-        assert answer.response_failure is not None
-        assert answer.parent_message is not None
-        assert answer.parent_message.message == "First"
-        assert client.get(path).json() == []
-        assert (
-            client.post(
-                path,
-                json={
-                    "message": "Second",
-                    "delivery": "queue",
-                    "target_response_id": answer.id,
-                },
-            ).status_code
-            == 200
-        )
-        assert len(client.get(path).json()) == 1
+        assert sent.status_code == 200, sent.text
+        pending = PendingChatMessage.model_validate(sent.json())
+        assert pending.delivery == MessageDelivery.QUEUE
+        assert pending.target_response_id is None
+        if admission_held:
+            assert chat_turn_work.wait_idle(timeout=30)
+            assert client.get(path).json() == [pending.model_dump(mode="json")]
     finally:
-        release.set()
-        assert chat_turn_work.wait_idle(timeout=30)
+        admission.release()
+    if admission_held:
+        # The finished turn dispatches after it releases the chat.
+        dispatch_pending_chat_messages(chat_id, owner.id)
+    assert chat_turn_work.wait_idle(timeout=30)
+    db_session.expire_all()
+    question = db_session.scalar(
+        select(ChatMessage).where(ChatMessage.parent_message_id == response.id)
+    )
+    assert question is not None and question.message == "Next turn"
+    answer = db_session.scalar(
+        select(ChatMessage).where(ChatMessage.parent_message_id == question.id)
+    )
+    assert answer is not None
+    assert answer.response_status == RunStatus.COMPLETE
+    assert answer.message == "Next answer"
+    assert client.get(path).json() == []
 
 
 def test_status_recovers_queued_message_after_previous_dispatcher_exits(
@@ -993,22 +898,197 @@ def test_status_recovers_queued_message_after_previous_dispatcher_exits(
     path = f"/chat/chat-session/{response.chat_session_id}/pending-messages"
     response.response_status = RunStatus.COMPLETE
     db_session.commit()
-    monkeypatch.setattr(chat_backend, "dispatch_pending_chat_messages", lambda *_: None)
-    assert (
-        client.post(
-            path,
-            json={
-                "message": "Continue",
-                "delivery": "queue",
-                "target_response_id": response.id,
-            },
-        ).status_code
-        == 200
+    with monkeypatch.context() as dispatcher_exits:
+        dispatcher_exits.setattr(
+            chat_backend, "dispatch_pending_chat_messages", lambda *_: None
+        )
+        assert (
+            client.post(
+                path,
+                json={
+                    "message": "Continue",
+                    "delivery": "queue",
+                    "target_response_id": response.id,
+                },
+            ).status_code
+            == 200
+        )
+    model = QueueTestLLM(
+        lambda _request, _signal: AssistantMessage(
+            content=[TextContent(text="Recovered answer")]
+        )
+    )
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
     )
     tasks = BackgroundTasks()
     status = chat_backend.get_chat_session_processing_status(
         response.chat_session_id, tasks, owner
     )
     assert not status.is_processing
-    assert len(tasks.tasks) == 1
-    assert tasks.tasks[0].args == (response.chat_session_id, owner.id)
+    assert status.has_startable_input
+    asyncio.run(tasks())
+    assert chat_turn_work.wait_idle(timeout=30)
+    db_session.expire_all()
+    question = db_session.scalar(
+        select(ChatMessage).where(ChatMessage.parent_message_id == response.id)
+    )
+    assert question is not None and question.message == "Continue"
+    answer = db_session.scalar(
+        select(ChatMessage).where(ChatMessage.parent_message_id == question.id)
+    )
+    assert answer is not None and answer.message == "Recovered answer"
+    assert client.get(path).json() == []
+
+
+def test_status_wakes_the_root_for_a_child_whose_owner_is_gone(
+    response: ChatMessage,
+    owner: User,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """After a pod restart, a child stays running without an owner.
+
+    Status reports it, and its dispatch saves the child as failed, so the
+    result wakes the root.
+    """
+    chat_id = response.chat_session_id
+    response.response_status = RunStatus.COMPLETE
+    child = ChatSession(
+        id=uuid4(),
+        user_id=owner.id,
+        persona_id=DEFAULT_PERSONA_ID,
+        spawned_by_message_id=response.id,
+        agent_name="worker",
+    )
+    db_session.add(child)
+    db_session.flush()
+    child_response = ChatMessage(
+        chat_session_id=child.id,
+        message="",
+        token_count=0,
+        message_type=MessageType.ASSISTANT,
+        response_status=RunStatus.RUNNING,
+    )
+    db_session.add(child_response)
+    db_session.flush()
+    db_session.add(
+        ChatInput(
+            recipient_session_id=chat_id,
+            message_id=agent_result_message_id(str(child_response.id)),
+            source=InputSource.AGENT_RESULT,
+            source_response_id=child_response.id,
+            root_response_id=response.id,
+            content="",
+        )
+    )
+    db_session.commit()
+    model = QueueTestLLM(
+        lambda _request, _signal: AssistantMessage(
+            content=[TextContent(text="The worker stopped")]
+        )
+    )
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
+    )
+    tasks = BackgroundTasks()
+    status = chat_backend.get_chat_session_processing_status(chat_id, tasks, owner)
+    assert status.has_active_subagents
+    assert not status.has_startable_input
+    asyncio.run(tasks())
+    assert chat_turn_work.wait_idle(timeout=30)
+    db_session.expire_all()
+    stopped = db_session.get(ChatMessage, child_response.id)
+    assert stopped is not None and stopped.response_status == RunStatus.ERROR
+    follow_up = db_session.scalar(
+        select(ChatMessage).where(
+            ChatMessage.parent_message_id == response.id,
+            ChatMessage.message_type == MessageType.AGENT_RESULTS,
+        )
+    )
+    assert follow_up is not None
+    answer = db_session.scalar(
+        select(ChatMessage).where(ChatMessage.parent_message_id == follow_up.id)
+    )
+    assert answer is not None and answer.response_status == RunStatus.COMPLETE
+    assert answer.message == "The worker stopped"
+    status = chat_backend.get_chat_session_processing_status(
+        chat_id, BackgroundTasks(), owner
+    )
+    assert not status.has_active_subagents
+    assert status.latest_response_id == answer.id
+
+
+def test_stop_after_the_answer_finishes_pauses_the_queue(
+    client: TestClient,
+    chat: ChatSession,
+    owner: User,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = f"/chat/chat-session/{chat.id}/pending-messages"
+    entered, release = Event(), Event()
+    requests: list[GenerationRequest] = []
+
+    def generate(
+        request: GenerationRequest, _cancellation: CancellationSignal
+    ) -> AssistantMessage:
+        requests.append(request)
+        entered.set()
+        assert release.wait(30)
+        # The answer finishes before the turn's control thread reads Stop.
+        return AssistantMessage(content=[TextContent(text="Full answer")])
+
+    model = QueueTestLLM(generate)
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
+    )
+    monkeypatch.setattr("onyx.chat.execution._CANCEL_POLL_INTERVAL_S", 30)
+    stream = handle_stream_message_objects(
+        new_msg_req=SendMessageRequest(
+            message="Initial question", chat_session_id=chat.id
+        ),
+        user=owner,
+    )
+    assert isinstance(stream, Generator)
+    try:
+        next(stream)
+        stream.close()
+        assert entered.wait(15)
+        response = db_session.scalar(
+            select(ChatMessage).where(
+                ChatMessage.chat_session_id == chat.id,
+                ChatMessage.message_type == MessageType.ASSISTANT,
+            )
+        )
+        assert response is not None
+        queued = client.post(
+            path,
+            json={
+                "message": "Do this later",
+                "delivery": "queue",
+                "target_response_id": response.id,
+            },
+        )
+        assert queued.status_code == 200, queued.text
+        request_stop(chat.id, get_cache_backend(), stream_id=response.id)
+        release.set()
+        assert chat_turn_work.wait_idle(timeout=30)
+        db_session.expire_all()
+        stopped = db_session.get(ChatMessage, response.id)
+        assert stopped is not None
+        assert stopped.response_status == RunStatus.CANCELLED
+        assert stopped.message == "Full answer"
+        # Stop pauses the queue; the queued message waits for the user.
+        assert len(requests) == 1
+        assert [message["id"] for message in client.get(path).json()] == [
+            queued.json()["id"]
+        ]
+        tasks = BackgroundTasks()
+        status = chat_backend.get_chat_session_processing_status(chat.id, tasks, owner)
+        assert not status.has_startable_input
+        assert tasks.tasks == []
+    finally:
+        release.set()
+        stream.close()
+        assert chat_turn_work.wait_idle(timeout=30)

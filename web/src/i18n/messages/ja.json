@@ -122,6 +122,9 @@
       "authenticate": {
         "label": "認証"
       },
+      "codingAgentIncognito": {
+        "tooltip": "シークレットモードではコーディングエージェントを使用できません"
+      },
       "configure": {
         "tooltip": "設定"
       },
@@ -12433,6 +12436,7 @@
         },
         "deepResearchButton": {
           "disabledTooltip": "マルチモデルモードでは Deep Research を使用できません",
+          "incognitoTooltip": "シークレットモードでは Deep Research を使用できません",
           "label": "Deep Research"
         },
         "incognitoNotice": {
@@ -12471,7 +12475,9 @@
           "sendHint": "この応答の次のステップで送信",
           "interruptHint": "現在の処理を中断してこのメッセージを送信",
           "sendLabel": "送信",
-          "queueLabel": "キュー"
+          "queueLabel": "キュー",
+          "interruptKeyboardHint": "Enterで中断 · CtrlまたはCommand + Enterでキューに追加",
+          "interruptLabel": "中断"
         }
       },
       "baseInputBar": {
@@ -12602,8 +12608,7 @@
         }
       },
       "pendingMessages": {
-        "submitFailed": "メッセージを送信できませんでした。保留中のメッセージから編集または削除できます。",
-        "restoredUnconfirmed": "配信を確認できなかったメッセージを復元しました。再送する前に会話を確認してください。",
+        "submitFailed": "メッセージを送信できませんでした。",
         "withdrawFailed": "保留中のメッセージを削除できませんでした。",
         "loadFailed": "保留中のメッセージを読み込めませんでした。",
         "alreadyAccepted": "このメッセージはすでに受け付けられており、保留中ではありません。",
@@ -12703,6 +12708,9 @@
         "timedOut": {
           "text": "応答は制限時間に達したため停止しました。"
         }
+      },
+      "agentResults": {
+        "received": "サブエージェントの結果を受信しました"
       },
       "codeBlock": {
         "copyButton": {

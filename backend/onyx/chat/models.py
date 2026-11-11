@@ -85,6 +85,13 @@ class PendingChatMessage(BaseModel):
     target_response_id: int | None
 
 
+class QueuedChatTurn(BaseModel):
+    """The next root turn: a submitted message, or unread agent results when None."""
+
+    parent_response_id: int | None
+    message: PendingChatMessage | None
+
+
 class PromptMetadata(CompactionMetadata):
     token_count: int | None = None
     image_files: list[ChatLoadedFile] | None = None
@@ -211,11 +218,24 @@ class ResponseAncestry(BaseModel):
     parent_response_id: int | None
 
 
-class ChatBackgroundActivity(BaseModel):
-    latest_response_id: int | None = None
-    running_response_ids: list[int] = Field(default_factory=list)
-    has_pending_root_results: bool = False
-    completion_host_response_ids: list[int] = Field(default_factory=list)
+class AgentResultState(BaseModel):
+    """An unread child result on a branch; it is readable once its response finishes."""
+
+    recipient_id: UUID
+    response_id: int
+    status: RunStatus
+
+
+class AgentInboxWork(BaseModel):
+    """An idle child's next run: a queued message, or its unread results when None."""
+
+    agent_id: str
+    message: UserMessage | None
+    max_steps: int
+    total_timeout_s: float | None
+    parent_run_id: str
+    parent_message_id: str
+    parent_tool_call_id: str
 
 
 class ChatBranch(BaseModel):
@@ -231,7 +251,7 @@ class ResponseLink(BaseModel):
     status: RunStatus
 
 
-class IncognitoResponseReceipt(BaseModel):
+class IncognitoAgentResponse(BaseModel):
     run_id: str | None = None
     checkpoint: CompactionCheckpoint | None = None
     message_ids: list[str] = Field(default_factory=list)
@@ -310,7 +330,7 @@ class IncognitoState(BaseModel):
     messages: list[IncognitoMessage] = Field(default_factory=list)
     file_metadata: dict[str, FileToolMetadata] = Field(default_factory=dict)
     previous_run_id: str | None = None
-    responses: dict[str, IncognitoResponseReceipt] = Field(default_factory=dict)
+    responses: dict[str, IncognitoAgentResponse] = Field(default_factory=dict)
 
 
 class SavedAgentContext(BaseModel):
@@ -334,10 +354,10 @@ class ChatMessageMetadata(BaseModel):
 
 
 class ReceivedAgentInputs(BaseModel):
-    """Received messages and an updated citation map, when their sources changed."""
+    """Received messages and the citation numbers their sources add."""
 
     messages: list[UserMessage]
-    citation_sources: dict[int, SearchDoc] | None = None
+    new_citations: dict[int, SearchDoc]
 
 
 class ToolRecordReference(BaseModel):

@@ -21,6 +21,7 @@ from onyx.agents.models import (
     RunFailureKind,
     RunStatus,
     StepInput,
+    StepRecord,
 )
 from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import AgentTool, ToolInvocation
@@ -29,6 +30,7 @@ from onyx.chat.citation_utils import collapse_citations
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import ChatMessageMetadata
 from onyx.chat.presentation import ResponsePresenter, project_response, replay_response
+from onyx.chat.run_store import agent_result_message
 from onyx.coding_agent.agent import CodingAgent
 from onyx.coding_agent.tool_definitions import BASH_TOOL_NAME, GENERATE_ANSWER_TOOL_NAME
 from onyx.configs.chat_configs import DR_REPORT_LLM_TIMEOUT_S
@@ -85,8 +87,8 @@ from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearch
 from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import (
     EchoTool,
-    FakeAgentDirectory,
     FakeModelClient,
+    FakeRunOwnership,
     ScriptedLLM,
     run_agent,
 )
@@ -562,12 +564,21 @@ def test_research_receives_background_evidence_with_distinct_citations(
             reasoning_effort=ReasoningEffort.LOW,
         )
     )
+    read_ids: set[str] = set()
+
+    def accept(_run: Run, step: StepRecord) -> bool:
+        read_ids.update(message.id or "" for message in step.input_messages)
+        return True
+
     coordinator = AgentCoordinator(
-        directory=FakeAgentDirectory(
-            completed_agents=lambda _parent, received, _limit: (
-                [] if completion.run_id in received else [completion]
-            )
-        )
+        ownership=FakeRunOwnership(
+            receive_inputs=lambda _run: (
+                []
+                if completion.message_id in read_ids
+                else [agent_result_message(completion)]
+            ),
+            accept_inputs=accept,
+        ),
     )
     try:
         result = run_agent(

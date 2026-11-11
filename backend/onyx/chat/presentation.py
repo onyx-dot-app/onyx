@@ -502,10 +502,10 @@ class ResponsePresenter:
 def overall_stop(status: RunStatus, failure: RunFailure | None) -> OverallStop:
     """How a top-level response ended: the one mapping for live, replay and Stop."""
     if status != RunStatus.CANCELLED:
-        return OverallStop(stop_reason="finished", response_status=status)
+        return OverallStop(stop_reason="finished")
     if failure is not None and failure.kind == RunFailureKind.DEADLINE:
-        return OverallStop(stop_reason="timed_out", response_status=status)
-    return OverallStop(stop_reason="user_cancelled", response_status=status)
+        return OverallStop(stop_reason="timed_out")
+    return OverallStop(stop_reason="user_cancelled")
 
 
 def replay_response(

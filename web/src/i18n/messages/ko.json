@@ -122,6 +122,9 @@
       "authenticate": {
         "label": "인증"
       },
+      "codingAgentIncognito": {
+        "tooltip": "시크릿 모드에서는 코딩 에이전트를 사용할 수 없습니다"
+      },
       "configure": {
         "tooltip": "구성"
       },
@@ -12433,6 +12436,7 @@
         },
         "deepResearchButton": {
           "disabledTooltip": "다중 모델 모드에서는 Deep Research를 사용할 수 없습니다",
+          "incognitoTooltip": "시크릿 모드에서는 Deep Research를 사용할 수 없습니다",
           "label": "Deep Research"
         },
         "incognitoNotice": {
@@ -12471,7 +12475,9 @@
           "sendHint": "이 응답의 다음 단계에서 전송",
           "interruptHint": "현재 작업을 중단하고 이 메시지 전송",
           "sendLabel": "전송",
-          "queueLabel": "대기열"
+          "queueLabel": "대기열",
+          "interruptKeyboardHint": "Enter로 중단 · Ctrl 또는 Command + Enter로 대기열에 추가",
+          "interruptLabel": "중단"
         }
       },
       "baseInputBar": {
@@ -12602,8 +12608,7 @@
         }
       },
       "pendingMessages": {
-        "submitFailed": "메시지를 전송하지 못했습니다. 대기 중인 메시지에서 수정하거나 삭제할 수 있습니다.",
-        "restoredUnconfirmed": "전달 여부를 확인할 수 없는 메시지를 복원했습니다. 다시 보내기 전에 대화를 확인하세요.",
+        "submitFailed": "메시지를 전송하지 못했습니다.",
         "withdrawFailed": "대기 중인 메시지를 삭제하지 못했습니다.",
         "loadFailed": "대기 중인 메시지를 불러오지 못했습니다.",
         "alreadyAccepted": "이 메시지는 이미 수락되어 더 이상 대기 중이 아닙니다.",
@@ -12703,6 +12708,9 @@
         "timedOut": {
           "text": "응답이 시간 제한에 도달하여 중지되었습니다."
         }
+      },
+      "agentResults": {
+        "received": "하위 에이전트 결과를 받았습니다"
       },
       "codeBlock": {
         "copyButton": {

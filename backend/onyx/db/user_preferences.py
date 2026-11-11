@@ -18,11 +18,7 @@ from onyx.db.users import (
     user_is_admin,
 )
 from onyx.llm.models import ReasoningEffort
-from onyx.server.manage.models import (
-    MemoryItem,
-    UserSpecificAssistantPreference,
-    UserUIPreferences,
-)
+from onyx.server.manage.models import MemoryItem, UserSpecificAssistantPreference
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -153,29 +149,29 @@ def update_user_shortcut_enabled(
     db_session.commit()
 
 
-def update_user_ui_preferences(
+def update_user_paste_as_tile(
     user_id: UUID,
+    paste_as_tile: bool,
     db_session: Session,
-    *,
-    paste_as_tile: bool | None = None,
-    interrupt_on_send: bool | None = None,
 ) -> None:
-    """Commit only the requested preferences and repair invalid stored values."""
-    # The fastapi-users base types User.id as a UUID instead of a SQLAlchemy column.
-    stored = db_session.scalar(
-        select(User.ui_preferences)
-        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
-        .with_for_update()
-    )
-    preferences = UserUIPreferences.model_validate(stored)
-    if paste_as_tile is not None:
-        preferences.paste_as_tile = paste_as_tile
-    if interrupt_on_send is not None:
-        preferences.interrupt_on_send = interrupt_on_send
+    """Update user's paste-as-tile setting."""
     db_session.execute(
         update(User)
         .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
-        .values(ui_preferences=preferences.model_dump(mode="json"))
+        .values(paste_as_tile=paste_as_tile)
+    )
+    db_session.commit()
+
+
+def update_user_interrupt_on_send(
+    user_id: UUID,
+    interrupt_on_send: bool,
+    db_session: Session,
+) -> None:
+    db_session.execute(
+        update(User)
+        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
+        .values(interrupt_on_send=interrupt_on_send)
     )
     db_session.commit()
 

@@ -9,7 +9,7 @@ import { ReasoningEffortOverride } from "@/lib/languageModels/types";
 export type FeedbackType = "like" | "dislike";
 
 export interface QueuedMessage {
-  id: number | string;
+  id: number;
   text: string;
 }
 
@@ -162,7 +162,8 @@ export interface Message {
   messageId?: number;
   nodeId: number; // Unique identifier for tree structure (can be negative for temp messages)
   message: string;
-  type: "user" | "assistant" | "system" | "error"; // TODO: rename "assistant" to "agent" — https://linear.app/onyx-app/issue/ENG-3766
+  // agent_results is the hidden question node of an automatic follow-up response.
+  type: "user" | "assistant" | "agent_results" | "system" | "error"; // TODO: rename "assistant" to "agent" — https://linear.app/onyx-app/issue/ENG-3766
   retrievalType?: RetrievalType;
   researchType?: ResearchType;
   query?: string | null;
@@ -222,7 +223,6 @@ export interface BackendChatSession {
   // Set while a run is in flight and resumable via the resume-stream endpoint
   current_stream?: { stream_id: number } | null;
   is_processing?: boolean;
-  has_active_subagents?: boolean;
   // True for sessions pinned to an incognito record mode.
   incognito?: boolean;
   // Set on a paged load when the current branch has messages before the page.

@@ -40,3 +40,8 @@ class AgentMessageInput(SubagentSelection):
 
 class ListAgentsInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+    path_prefix: str | None = Field(
+        default=None,
+        description="List only agents whose path starts with this prefix, such as /root/research.",
+    )

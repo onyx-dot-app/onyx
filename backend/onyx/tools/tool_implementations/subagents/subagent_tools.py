@@ -5,12 +5,12 @@ from typing import ClassVar
 
 from pydantic import BaseModel
 
-from onyx.agents.models import AgentMessageStatus, MessageDelivery
+from onyx.agents.models import MessageDelivery
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentLifetime, ToolInvocation
 from onyx.configs.chat_configs import CHAT_EXECUTION_TIMEOUT_S
 from onyx.llm.models import ToolDefinition, ToolResult, UserMessage
-from onyx.tools.constants import SPAWN_AGENT_TOOL_NAME
+from onyx.tools.constants import SEND_MESSAGE_TOOL_NAME, SPAWN_AGENT_TOOL_NAME
 from onyx.tools.interface import Tool, parse_tool_arguments
 from onyx.tools.models import (
     CodeModeExposure,
@@ -46,7 +46,7 @@ class SpawnAgentTool(_SubagentTool):
         "Start an independent agent with the tools configured for this chat. Returns immediately. "
         "Its result arrives automatically before your next model step. A root response "
         "may end while the agent works and receive a follow-up when it finishes. "
-        "Subagents must collect their delegated results before finishing. "
+        "A subagent waits for the agents it starts before finishing. "
         "Give it complete instructions; it cannot see this conversation."
     )
     input_model = SpawnAgentInput
@@ -76,37 +76,49 @@ class ListAgentsTool(_SubagentTool):
     name = "list_agents"
     display_name = "List agents"
     description = (
-        "List agents available on this chat branch, including agents from earlier turns, "
-        "their status, and whether messages are queued."
+        "List the whole agent tree on this chat branch, including the root and agents "
+        "from earlier turns: path, agent_id, parent, and status. "
+        "Your own entry is marked. Pass path_prefix to list one subtree."
     )
     input_model = ListAgentsInput
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-        parse_tool_arguments(ListAgentsInput, invocation.arguments)
-        children = invocation.agents.discover_children()
-        if not children:
-            return ToolResult(content="No agents are available on this chat branch.")
+        request = parse_tool_arguments(ListAgentsInput, invocation.arguments)
+        control = invocation.agents
+        agents = sorted(
+            (
+                agent
+                for agent in control.discover_agents()
+                if request.path_prefix is None
+                or agent.path.startswith(request.path_prefix)
+            ),
+            key=lambda agent: agent.path,
+        )
+        if not agents:
+            return ToolResult(content="No agents match on this chat branch.")
         lines: list[str] = []
-        for child in children:
-            status = child.status.value if child.status is not None else "not started"
-            line = f"{child.path} (agent_id: {child.id}): {status}"
-            if child.pending_message_count:
-                line += f"; {child.pending_message_count} queued messages"
-            if child.queue_paused:
-                line += "; queue paused"
+        for agent in agents:
+            status = agent.status.value if agent.status is not None else "not started"
+            parent = f"parent {agent.parent_id}" if agent.parent_id else "root"
+            line = f"{agent.path} (agent_id: {agent.id}; {parent}): {status}"
+            if agent.id == control.agent_id:
+                line += " [you]"
             lines.append(line)
         return ToolResult(content="\n".join(lines))
 
 
 class SendMessageTool(_SubagentTool):
-    name = "send_message"
+    name = SEND_MESSAGE_TOOL_NAME
     display_name = "Send agent message"
     description = (
-        "Send instructions to an existing agent. A running agent receives them before "
-        "its next model step without resetting its limits. An idle agent starts a new "
-        "run in its existing conversation. Set delivery to queue for a new run after normal "
-        "completion with fresh limits. Stopped, failed, or limited agents keep queued work "
-        "paused until an explicit send. Returns immediately; results arrive separately."
+        "Send instructions to any other agent in this chat's agent tree; use list_agents "
+        "for IDs. A running agent receives them before its next model step without "
+        "resetting its limits. An idle agent starts a new run in its existing "
+        "conversation. Set delivery to queue for a new run after normal completion with "
+        "fresh limits. Stopped, failed, or interrupted agents keep queued work "
+        "paused until an explicit send. The root agent reads messages at its next step "
+        "while it runs; a message never starts a root run. Returns immediately; results "
+        "go to the agent that spawned the recipient."
     )
     input_model = AgentMessageInput
 
@@ -122,11 +134,9 @@ class SendMessageTool(_SubagentTool):
             max_steps=self.max_steps,
             total_timeout_s=CHAT_EXECUTION_TIMEOUT_S,
         )
-        if receipt.status == AgentMessageStatus.ACCEPTED:
-            return ToolResult(content="Message accepted by the agent.")
         return ToolResult(
-            content="Message queued for a new run."
-            if request.delivery == MessageDelivery.QUEUE
+            content="Message queued for the agent's next run."
+            if request.delivery == MessageDelivery.QUEUE or receipt.run_id is None
             else "Message queued for the agent's next model step."
         )
 
@@ -135,20 +145,20 @@ class InterruptAgentTool(_SubagentTool):
     name = "interrupt_agent"
     display_name = "Interrupt agent"
     description = (
-        "Request cancellation of an agent's current run. Use list_agents to confirm "
-        "when it has stopped. Its conversation remains available for later messages."
+        "Request cancellation of one agent's current run. You can interrupt any agent "
+        "in the tree except yourself and the root; agents below it keep running. The "
+        "interrupted run reports no result. Its conversation remains, and its queued "
+        "messages stay paused until an explicit send. Use list_agents to confirm it stopped."
     )
     input_model = SubagentSelection
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
         selection = parse_tool_arguments(SubagentSelection, invocation.arguments)
-        agent = invocation.agents.lookup_agent(selection.agent_id)
+        agent = invocation.agents.interrupt_agent(selection.agent_id)
         if agent is None:
             raise ToolCallException(
-                "Subagent is unavailable on this chat branch.",
-                "Subagent is unavailable on this chat branch. Use list_agents to find available agents.",
+                "Agent cannot be interrupted on this chat branch.",
+                "That agent cannot be interrupted: it is you, the root, or not on this "
+                "chat branch. Use list_agents to find agents.",
             )
-        if agent.latest_run_id is None:
-            raise ValueError("Subagent has no run")
-        invocation.agents.cancel_run(agent.latest_run_id)
         return ToolResult(content=f"Interruption requested for {agent.path}.")

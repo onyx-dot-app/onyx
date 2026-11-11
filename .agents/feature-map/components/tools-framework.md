@@ -160,21 +160,25 @@ made are not undone, so check `invocation.cancellation` before irreversible
 work.
 
 **Default subagent controls.** `ChatAgent` adds the tools in
-`tools/tool_implementations/subagents/subagent_tools.py` to every normal chat,
-including children it creates. Incognito omits them. Chat also excludes the coding
-agent from tool configuration before construction and rejects deep research in
-incognito (`chat/execution.py:create_chat_agent`). These controls have no
-catalog rows or persona switches. ChatAgent supplies a child factory with its
-configured tools and step limit; each child builds its own controls and conversation state.
+`tools/tool_implementations/subagents/subagent_tools.py` when it receives a child factory,
+which every normal chat and child has. Incognito chats have no child agents, so they omit
+these controls. Chat also excludes the coding agent from tool configuration before
+construction and rejects deep research in incognito
+(`chat/execution.py:create_chat_agent`). These controls have no
+catalog rows or persona switches. `chat/agent.py:chat_subagent_factory` builds children
+with `build_chat_agent`, the same builder that restores saved children; it returns no factory in
+incognito. Each child builds its own controls and conversation state.
 The controls stay direct in code mode. Each child inherits code mode but owns
 its own code cells.
-An agent can list, message, or interrupt its descendants on the selected branch,
-including children whose parent has finished. It cannot control siblings or ancestors.
-`send_message` reaches the next model step or starts an idle child with fresh limits.
-`send_message(delivery="queue")` waits for normal completion. `interrupt_agent` cancels the current
-run and preserves the conversation for later messages.
-Results reach the requesting agent automatically before its next model call.
-A subagent suspends before completing until its delegated results are available.
+`list_agents` shows the whole agent tree of the selected branch, including the root and agents
+from earlier turns; it marks the caller and accepts a `path_prefix` filter. An agent can message
+any other agent in the tree. `send_message` reaches the next model step or starts an idle agent
+with fresh limits; a message to the root waits for the root's next run and never starts one.
+`send_message(delivery="queue")` waits for normal completion or the step limit. `interrupt_agent` cancels one
+agent's active run, except the caller's and the root's; agents below it keep running. The
+interrupted run reports no result and starts no follow-up; its conversation remains.
+Results reach the agent's spawner automatically before its next model call.
+A subagent suspends before completing until the results of children it spawned are available.
 The root can finish its response while background children continue.
 An idle agent starts a follow-up response for unread child results. These results
 stay in model history; only the parent's response appears as a chat message.

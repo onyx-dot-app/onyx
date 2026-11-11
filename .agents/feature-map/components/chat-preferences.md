@@ -74,14 +74,9 @@ It does not own:
 
 ## Architecture
 
-**UI preferences.** `User.ui_preferences` stores small interface choices as JSONB.
-`server/manage/models.py:UserUIPreferences` validates paste collapsing and send
-behavior. Invalid fields fall back independently; malformed containers use defaults.
-Warnings identify fields without logging stored values. The next preference save
-locks the user's row, preserves valid settings, and writes a validated object.
-The API retains flat `paste_as_tile` and `interrupt_on_send` response fields.
-The legacy `user.paste_as_tile` column remains for draining readers. New code
-reads and writes only JSONB; preference edits on old pods are not synchronized.
+**UI preferences.** Boolean `User` columns store small interface choices, such
+as `paste_as_tile` and `interrupt_on_send`. Each has its own `PATCH` endpoint in
+`server/manage/users.py` and a flat field in `UserPreferences`.
 
 **From setting to prompt.** `db/memory.py:get_memories` builds one
 `UserMemoryContext` per turn, called from

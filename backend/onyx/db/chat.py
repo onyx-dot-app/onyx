@@ -24,15 +24,10 @@ from sqlalchemy.orm import Session, joinedload, load_only, selectinload
 from sqlalchemy.sql.expression import ColumnElement
 from sqlalchemy.sql.selectable import CTE
 
-from onyx.agents.models import (
-    CompactionCheckpoint,
-    InputSource,
-    MessageDelivery,
-    RunFailureKind,
-    RunStatus,
-)
+from onyx.agents.models import CompactionCheckpoint, RunFailureKind, RunStatus
 from onyx.chat.errors import chat_error
 from onyx.chat.models import (
+    ChatBranch,
     HistoryLink,
     MessageRendering,
     PresentationMode,
@@ -48,7 +43,6 @@ from onyx.db.enums import (
     record_mode_persists_content,
 )
 from onyx.db.models import (
-    ChatInput,
     ChatMessage,
     ChatMessage__SearchDoc,
     ChatSession,
@@ -963,37 +957,6 @@ def reserve_chat_response_ids(
         .first()
     )
     if parent:
-        if (
-            len(reserved) == 1
-            and parent.message_type in (MessageType.USER, MessageType.ASSISTANT)
-            and parent.latest_child_message_id is None
-        ):
-            previous = (
-                parent.parent_message
-                if parent.message_type == MessageType.USER
-                else parent
-            )
-            previous_response_id = (
-                previous.id
-                if previous is not None
-                and previous.message_type == MessageType.ASSISTANT
-                else None
-            )
-            # Pending interrupts target the old response, not its successor.
-            # Advance as queued turns, never onto a regeneration sibling.
-            db_session.execute(
-                update(ChatInput)
-                .where(
-                    ChatInput.recipient_session_id == chat_session_id,
-                    ChatInput.source == InputSource.HUMAN,
-                    ChatInput.response_item_id.is_(None),
-                    ChatInput.target_response_id == previous_response_id,
-                )
-                .values(
-                    target_response_id=reserved[0].id,
-                    delivery=MessageDelivery.QUEUE,
-                )
-            )
         parent.latest_child_message_id = reserved[-1].id
 
     db_session.commit()
@@ -1522,6 +1485,7 @@ def create_chat_history_chain(
             )
 
     current_message: ChatMessage | None = root_message
+    previous_message: ChatMessage | None = None
     while current_message is not None:
         child_msg = current_message.latest_child_message
 
@@ -1533,7 +1497,21 @@ def create_chat_history_chain(
             break
         current_message = child_msg
 
-        mainline_messages.append(current_message)
+        if (
+            current_message.message_type == MessageType.ASSISTANT
+            and previous_message is not None
+            and previous_message.message_type == MessageType.ASSISTANT
+            and mainline_messages
+        ):
+            # Note that 2 user messages in a row is fine since this is often used for
+            # adding custom prompts and reminders
+            raise RuntimeError(
+                "Invalid message chain, cannot have two assistant messages in a row"
+            )
+        else:
+            mainline_messages.append(current_message)
+
+        previous_message = current_message
 
     return mainline_messages
 
@@ -1634,38 +1612,59 @@ def find_summary_for_branch(
     )
 
 
-def get_selected_response(
+def get_selected_branch(
     session: Session, chat_session_id: UUID
-) -> ChatMessage | None:
-    # Follow only IDs; queue checks do not need response content or tool results.
+) -> tuple[ChatMessage | None, ChatBranch]:
+    """Return the selected latest response and the message IDs on its branch."""
     branch = (
-        select(ChatMessage.id, ChatMessage.latest_child_message_id)
+        select(
+            ChatMessage.id,
+            ChatMessage.latest_child_message_id,
+            literal(0).label("depth"),
+        )
         .where(
             ChatMessage.chat_session_id == chat_session_id,
             ChatMessage.parent_message_id.is_(None),
         )
-        .cte("input_branch", recursive=True)
+        .cte("selected_branch", recursive=True)
     )
     branch = branch.union_all(
-        select(ChatMessage.id, ChatMessage.latest_child_message_id)
-        .join(branch, ChatMessage.id == branch.c.latest_child_message_id)
-        .where(ChatMessage.chat_session_id == chat_session_id)
-    )
-    return session.scalar(
-        select(ChatMessage)
-        .where(
-            ChatMessage.id.in_(select(branch.c.id)),
-            ChatMessage.latest_child_message_id.is_(None),
-            ChatMessage.message_type == MessageType.ASSISTANT,
+        select(
+            ChatMessage.id,
+            ChatMessage.latest_child_message_id,
+            branch.c.depth + 1,
         )
-        .options(
-            load_only(
-                ChatMessage.id,
-                ChatMessage.chat_session_id,
-                ChatMessage.response_status,
-                ChatMessage.response_inputs_closed,
+        .join(branch, ChatMessage.id == branch.c.latest_child_message_id)
+        .where(
+            ChatMessage.chat_session_id == chat_session_id,
+            branch.c.depth < MAX_CONVERSATION_MESSAGES,
+        )
+    )
+    message_ids = list(
+        session.scalars(select(branch.c.id).order_by(branch.c.depth.desc()))
+    )
+    # Follow only IDs; queue checks do not need response content or tool results.
+    selected = (
+        session.scalar(
+            select(ChatMessage)
+            .where(
+                ChatMessage.id == message_ids[0],
+                ChatMessage.message_type == MessageType.ASSISTANT,
+            )
+            .options(
+                load_only(
+                    ChatMessage.id,
+                    ChatMessage.chat_session_id,
+                    ChatMessage.parent_message_id,
+                    ChatMessage.response_status,
+                )
             )
         )
+        if message_ids
+        else None
+    )
+    return selected, ChatBranch(
+        chat_session_id=chat_session_id, message_ids=message_ids
     )
 
 
@@ -1784,15 +1783,9 @@ def agent_session_path(db_session: Session, agent: ChatSession) -> str:
 
 
 def response_invocation(response: ChatMessage) -> ToolCall | None:
-    """Find the invocation that owns this response and its automatic continuations."""
-    predecessor = response.parent_message
-    visited: set[int] = set()
-    while predecessor is not None and predecessor.message_type == MessageType.ASSISTANT:
-        if predecessor.id in visited or len(visited) >= MAX_AGENT_HISTORY_RUNS:
-            raise ValueError("Response history is cyclic or too long")
-        visited.add(predecessor.id)
-        predecessor = predecessor.parent_message
-    return predecessor.invoking_tool_call if predecessor is not None else None
+    """The tool call that started a child response; its question records it."""
+    question = response.parent_message
+    return question.invoking_tool_call if question is not None else None
 
 
 def root_response_id(db_session: Session, response: ChatMessage) -> int:

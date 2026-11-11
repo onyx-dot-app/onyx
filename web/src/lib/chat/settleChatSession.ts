@@ -1,10 +1,11 @@
 import type { BackendChatSession, Message } from "@/app/app/types";
-import { processRawChatHistory, resumeStream } from "@/app/app/services/lib";
+import { resumeStream } from "@/app/app/services/lib";
 import {
   getLatestMessageChain,
   getMessageByMessageId,
 } from "@/app/app/services/messageTree";
 import { mergeLatestChatPage } from "@/lib/chat/pagedSession";
+import type { ChatHistoryPage } from "@/lib/chat/types";
 import type { Packet } from "@/app/app/services/streamingModels";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import {
@@ -61,146 +62,134 @@ export function preserveFailedMessages(
   return saved;
 }
 
-/** Reconcile server-started turns without replacing a reader's live output. */
-export async function refreshChatSession(
+/**
+ * Saved history ready to display, with the live response a reader should replay.
+ * A retained replay cursor keeps output this browser already received.
+ */
+export function prepareSavedChat(
+  saved: Map<number, Message>,
+  local: Map<number, Message> | undefined,
+  streamId: number | undefined
+) {
+  const response =
+    streamId === undefined ? undefined : getMessageByMessageId(saved, streamId);
+  if (streamId === undefined || response?.type !== "assistant")
+    return { messageTree: saved, replayStreamId: null };
+  const retained = local && getMessageByMessageId(local, streamId);
+  const messageTree = new Map(saved);
+  messageTree.set(
+    response.nodeId,
+    retained?.replayCursor !== undefined
+      ? {
+          ...retained,
+          nodeId: response.nodeId,
+          parentNodeId: response.parentNodeId,
+          childrenNodeIds: response.childrenNodeIds,
+          latestChildNodeId: response.latestChildNodeId,
+        }
+      : { ...response, message: "", packets: [], packetCount: 0 }
+  );
+  return { messageTree, replayStreamId: streamId };
+}
+
+/**
+ * Merge the latest saved page into local history. Local failed turns stay for
+ * retry, and the sources panel stays on the selected response.
+ */
+function mergeSavedHistory(
+  saved: BackendChatSession,
+  current: ChatHistoryPage & { selectedNodeIdForDocDisplay: number | null }
+): ChatHistoryPage & { selectedNodeIdForDocDisplay: number | null } {
+  const page = mergeLatestChatPage(saved, current);
+  const messageTree = preserveFailedMessages(
+    page.messageTree,
+    current.messageTree
+  );
+  const selected = current.selectedNodeIdForDocDisplay;
+  if (messageTree === current.messageTree)
+    return {
+      messageTree,
+      hasOlderMessages: current.hasOlderMessages,
+      selectedNodeIdForDocDisplay: selected,
+    };
+  const selectedMessageId =
+    selected === null
+      ? undefined
+      : current.messageTree.get(selected)?.messageId;
+  return {
+    messageTree,
+    hasOlderMessages: page.hasOlderMessages,
+    selectedNodeIdForDocDisplay:
+      selectedMessageId === undefined
+        ? null
+        : (messageTree.get(selectedMessageId)?.nodeId ?? null),
+  };
+}
+
+// One refresh per session, so overlapping status checks share it.
+const refreshingSessions = new Map<string, Promise<void>>();
+
+/** Load and follow a turn the server started while this session had no reader. */
+export function refreshChatSession(
   sessionId: string,
   errorMessage: string,
   savedSession?: BackendChatSession
 ): Promise<void> {
-  const session = useChatSessionStore.getState().sessions.get(sessionId);
-  if (!session || session.incognito) return;
-  const {
-    abortController: controller,
-    readerFinished,
-    sendAcknowledged,
-  } = session;
-  const selectedNodeId = getLatestMessageChain(session.messageTree).at(
-    -1
-  )?.nodeId;
-  const ownsRefresh = () => {
-    const current = useChatSessionStore.getState().sessions.get(sessionId);
-    return (
-      current?.abortController === controller &&
-      current.readerFinished === readerFinished &&
-      getLatestMessageChain(current.messageTree).at(-1)?.nodeId ===
-        selectedNodeId
-    );
-  };
-  try {
-    let saved = savedSession ?? (await fetchSettledChatSession(sessionId));
-    if (!ownsRefresh()) return;
-    let streamId: number | null | undefined;
+  const existing = refreshingSessions.get(sessionId);
+  if (existing) return existing;
+  const refresh = (async () => {
+    const session = useChatSessionStore.getState().sessions.get(sessionId);
+    if (!session || session.incognito) return;
+    const controller = session.abortController;
+    // A send that starts during the fetch owns the session.
+    const ownsRefresh = () =>
+      useChatSessionStore.getState().sessions.get(sessionId)
+        ?.abortController === controller;
     try {
-      streamId = await sendAcknowledged;
-    } catch {
-      // A lost acknowledgement can still have a saved response to recover.
-    }
-    if (!ownsRefresh()) return;
-    const nextStreamId = saved.current_stream?.stream_id;
-    if (
-      readerFinished &&
-      streamId === nextStreamId &&
-      nextStreamId !== undefined
-    ) {
-      return;
-    }
-    await readerFinished;
-    if (!ownsRefresh()) return;
-    // The original page can predate the old reader's final packets and save.
-    if (readerFinished && savedSession === undefined) {
-      saved = await fetchSettledChatSession(sessionId);
-      if (!ownsRefresh()) return;
-    }
-    const store = useChatSessionStore.getState();
-    const current = store.sessions.get(sessionId);
-    if (!current) return;
-    const page = mergeLatestChatPage(saved, current);
-    const messages = preserveFailedMessages(
-      page.messageTree,
-      current.messageTree
-    );
-    const currentStreamId = saved.current_stream?.stream_id;
-    const response =
-      currentStreamId === undefined
-        ? undefined
-        : getMessageByMessageId(messages, currentStreamId);
-    if (currentStreamId !== undefined && response?.type === "assistant") {
-      const retained = getMessageByMessageId(
+      const saved = savedSession ?? (await fetchSettledChatSession(sessionId));
+      const store = useChatSessionStore.getState();
+      const current = store.sessions.get(sessionId);
+      if (!current || !ownsRefresh()) return;
+      const merged = mergeSavedHistory(saved, current);
+      const streamId = saved.current_stream?.stream_id;
+      const { messageTree, replayStreamId } = prepareSavedChat(
+        merged.messageTree,
         current.messageTree,
-        currentStreamId
+        streamId
       );
-      messages.set(
-        response.nodeId,
-        retained?.replayCursor !== undefined
-          ? {
-              ...response,
-              ...retained,
-              nodeId: response.nodeId,
-              parentNodeId: response.parentNodeId,
-              childrenNodeIds: response.childrenNodeIds,
-              latestChildNodeId: response.latestChildNodeId,
-            }
-          : { ...response, message: "", packets: [], packetCount: 0 }
-      );
-    }
-    const busy = Boolean(saved.is_processing || saved.current_stream);
-    const selectedMessageId =
-      current.selectedNodeIdForDocDisplay === null
-        ? undefined
-        : current.messageTree.get(current.selectedNodeIdForDocDisplay)
-            ?.messageId;
-    store.updateSessionData(sessionId, {
-      messageTree: messages,
-      hasActiveSubagents: saved.has_active_subagents ?? false,
-      hasOlderMessages:
-        messages === current.messageTree
-          ? current.hasOlderMessages
-          : page.hasOlderMessages,
-      chatState: busy ? "streaming" : "input",
-      sendAcknowledged:
-        currentStreamId === undefined
-          ? undefined
-          : Promise.resolve(currentStreamId),
-      readerFinished: undefined,
-      regenerationState: null,
-      streamingStartTime: busy ? Date.now() : undefined,
-      selectedNodeIdForDocDisplay:
-        selectedMessageId === undefined
-          ? null
-          : (messages.get(selectedMessageId)?.nodeId ?? null),
-      uncaughtError:
-        current.uncaughtError === errorMessage ? null : current.uncaughtError,
-    });
-    if (currentStreamId !== undefined && response?.type === "assistant") {
-      void resumeChatSession({
-        sessionId,
-        streamId: currentStreamId,
-        messageMap: messages,
-        controller,
-        errorMessage,
+      const busy = Boolean(saved.is_processing || saved.current_stream);
+      store.updateSessionData(sessionId, {
+        messageTree,
+        hasOlderMessages: merged.hasOlderMessages,
+        selectedNodeIdForDocDisplay: merged.selectedNodeIdForDocDisplay,
+        chatState: busy ? "streaming" : "input",
+        sendAcknowledged:
+          streamId === undefined ? undefined : Promise.resolve(streamId),
+        readerFinished: undefined,
+        regenerationState: null,
+        streamingStartTime: busy ? Date.now() : undefined,
+        uncaughtError:
+          current.uncaughtError === errorMessage ? null : current.uncaughtError,
       });
-    } else if (busy) {
-      void settleChatSession({
-        sessionId,
-        controller,
-        errorMessage,
-        mode: "recovery",
+      if (busy)
+        void followChatSession({
+          sessionId,
+          controller,
+          errorMessage,
+          streamId: replayStreamId,
+          messageMap: messageTree,
+        });
+    } catch (error) {
+      if (!ownsRefresh()) return;
+      console.error("Could not refresh the chat session", { sessionId, error });
+      useChatSessionStore.getState().updateSessionData(sessionId, {
+        chatState: "unconfirmed",
+        uncaughtError: errorMessage,
       });
     }
-  } catch (error) {
-    if (!ownsRefresh()) return;
-    console.error("Could not refresh pending chat messages", {
-      sessionId,
-      error,
-    });
-    // Let a live reader finish before offering recovery; it still owns Stop.
-    await readerFinished;
-    if (!ownsRefresh()) return;
-    useChatSessionStore.getState().updateSessionData(sessionId, {
-      chatState: "unconfirmed",
-      uncaughtError: errorMessage,
-    });
-  }
+  })().finally(() => refreshingSessions.delete(sessionId));
+  refreshingSessions.set(sessionId, refresh);
+  return refresh;
 }
 
 /** Release input only after the same request has finished execution and storage. */
@@ -263,32 +252,16 @@ export async function settleChatSession({
       if (!current) return;
       // Incognito history can contain only usage metadata. Live content stays local.
       if (settled && !settled.incognito) {
-        const local = current.messageTree;
-        const page = mergeLatestChatPage(settled, current);
-        const messageTree = preserveFailedMessages(page.messageTree, local);
-        const selectedNodeId = current.selectedNodeIdForDocDisplay;
-        const selectedMessageId =
-          selectedNodeId == null
-            ? undefined
-            : local.get(selectedNodeId)?.messageId;
-        const latestType = getLatestMessageChain(messageTree).at(-1)?.type;
+        const merged = mergeSavedHistory(settled, current);
+        const latestType = getLatestMessageChain(merged.messageTree).at(
+          -1
+        )?.type;
         store.updateSessionData(sessionId, {
-          messageTree,
-          hasActiveSubagents: settled.has_active_subagents ?? false,
-          hasOlderMessages:
-            messageTree === local
-              ? current.hasOlderMessages
-              : page.hasOlderMessages,
+          ...merged,
           uncaughtError:
             latestType === "assistant" || latestType === "error"
               ? null
               : current.uncaughtError,
-          selectedNodeIdForDocDisplay:
-            messageTree === local
-              ? (selectedNodeId ?? null)
-              : selectedMessageId === undefined
-                ? null
-                : (messageTree.get(selectedMessageId)?.nodeId ?? null),
         });
       } else {
         // Content-free history cannot close a lost stream. Confirmed idle can.
@@ -335,27 +308,32 @@ export async function settleChatSession({
   }
 }
 
-// A stream has one replay reader even if navigation and queue refresh overlap.
+// A stream has one replay reader even if navigation and refresh overlap.
 const resumingStreams = new Set<number>();
 
-interface ResumeChatSessionOptions {
+interface FollowChatSessionOptions {
   sessionId: string;
   controller: AbortController;
   errorMessage: string;
   mode?: "completion" | "recovery";
-  streamId: number;
+  /** The saved live response to replay; null waits for the server without output. */
+  streamId: number | null;
   messageMap: Map<number, Message>;
 }
 
-/** Attach to output produced without this browser's original send request. */
-export async function resumeChatSession({
+/** Attach to a turn that runs without this browser's original send request. */
+export async function followChatSession({
   sessionId,
   streamId,
   messageMap,
   controller,
   errorMessage,
   mode = "completion",
-}: ResumeChatSessionOptions): Promise<void> {
+}: FollowChatSessionOptions): Promise<void> {
+  if (streamId === null) {
+    await settleChatSession({ sessionId, controller, errorMessage, mode });
+    return;
+  }
   const retained = getMessageByMessageId(messageMap, streamId);
   if (!retained || resumingStreams.has(streamId)) {
     return;

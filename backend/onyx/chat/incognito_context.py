@@ -12,7 +12,6 @@ from pydantic import (
     ValidationError,
 )
 
-from onyx.agents.models import CompactionCheckpoint
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import (
     CacheBackend,
@@ -22,10 +21,11 @@ from onyx.cache.interface import (
 )
 from onyx.chat.chat_processing_checker import ChatTurnAdmission
 from onyx.chat.models import (
+    IncognitoAgentResponse,
     IncognitoMessage,
-    IncognitoResponseReceipt,
     IncognitoState,
     PromptMetadata,
+    ResponseRecord,
     serialize_incognito_message,
 )
 from onyx.chat.stream_buffer import stream_buffer_key_pattern
@@ -405,14 +405,13 @@ def _enqueue_incognito_teardown_retry() -> None:
 
 def save_incognito_response(
     chat_session_id: UUID,
-    run_id: str | None,
+    response: ResponseRecord | None,
     *,
     admission: ChatTurnAdmission,
     message_id: int,
     messages: Sequence[Message],
-    checkpoint: CompactionCheckpoint | None = None,
 ) -> None:
-    """Save temporary messages once; reject retries with different content."""
+    """Save the response replay in one value; reject conflicting retries."""
     messages = [
         message
         if message.id is not None
@@ -423,9 +422,9 @@ def save_incognito_response(
         [serialize_incognito_message(message) for message in messages], sort_keys=True
     ).encode()
     digest = hashlib.sha256(replay)
-    record = IncognitoResponseReceipt(
-        run_id=run_id,
-        checkpoint=checkpoint,
+    record = IncognitoAgentResponse(
+        run_id=response.run_id if response is not None else None,
+        checkpoint=response.checkpoint if response is not None else None,
         message_ids=[message.id for message in messages if message.id is not None],
         replay_digest="",
     )
@@ -446,8 +445,8 @@ def save_incognito_response(
             return None
         context = state
         context.messages.extend(messages)
-        if run_id is not None:
-            context.previous_run_id = run_id
+        if response is not None:
+            context.previous_run_id = response.run_id
         context.responses = {**state.responses, response_key: record}
         return _retained_state(
             context,

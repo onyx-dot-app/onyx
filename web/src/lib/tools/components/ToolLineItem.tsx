@@ -33,6 +33,7 @@ import { getAdminConfigureInfo, getToolTooltip } from "@/lib/tools/utils";
 import { Permission } from "@/lib/types";
 import EnabledCount from "@/lib/tools/components/EnabledCount";
 import { useUser } from "@/providers/UserProvider";
+import { useIncognito } from "@/providers/IncognitoProvider";
 
 // Names the hover group that swaps the source count for the disable button.
 const HOVER_GROUP = "ToolLineItem";
@@ -76,6 +77,7 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
   const { ccPairs } = useCCPairs(vectorDbEnabled);
   const { currentProjectId } = useProjectsContext();
   const { getToolAuthStatus, authenticateTool } = useToolOAuthStatus(agent.id);
+  const { incognitoEnabled } = useIncognito();
 
   const tooltipMessages = useMemo(
     () => ({
@@ -110,7 +112,11 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
     [t]
   );
 
-  const isPreferred = toolConfiguration.preferredToolId === tool.id;
+  // Incognito chats run no child agents.
+  const blockedInIncognito =
+    incognitoEnabled && tool.in_code_tool_id === CODING_AGENT_TOOL_ID;
+  const isPreferred =
+    toolConfiguration.preferredToolId === tool.id && !blockedInIncognito;
   // Switched off for this chat. The row stays interactive: pressing it turns
   // the tool back on and pins it in one gesture.
   const isDisabled = toolConfiguration.disabledToolIds.includes(tool.id);
@@ -290,27 +296,33 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
         titleColor={
           (isUnavailable && isPreferred) || isDisabled ? "text-03" : undefined
         }
-        disabled={needsConnectors || (isUnavailable && !isPreferred)}
+        disabled={
+          needsConnectors ||
+          blockedInIncognito ||
+          (isUnavailable && !isPreferred)
+        }
         tooltip={
-          !isUnavailable
-            ? markdown(
-                t("actionLineItem.preference.tooltip", {
-                  description: escapeMarkdown(
-                    getToolTooltip(
-                      tool,
-                      isConfigured,
-                      canManageActions,
-                      tooltipMessages
-                    )
-                  ),
-                })
-              )
-            : getToolTooltip(
-                tool,
-                isConfigured,
-                canManageActions,
-                tooltipMessages
-              )
+          blockedInIncognito
+            ? t("actionLineItem.codingAgentIncognito.tooltip")
+            : !isUnavailable
+              ? markdown(
+                  t("actionLineItem.preference.tooltip", {
+                    description: escapeMarkdown(
+                      getToolTooltip(
+                        tool,
+                        isConfigured,
+                        canManageActions,
+                        tooltipMessages
+                      )
+                    ),
+                  })
+                )
+              : getToolTooltip(
+                  tool,
+                  isConfigured,
+                  canManageActions,
+                  tooltipMessages
+                )
         }
         onClick={handleClick}
         rightChildren={

@@ -89,60 +89,6 @@ export class InputBar {
     await this.textbox.focus();
   }
 
-  async expectCompactSubagentActivity(): Promise<void> {
-    await poll(() =>
-      this.subagentActivity.evaluate((element) => {
-        const dot = element.firstElementChild;
-        const label = element.lastElementChild;
-        if (!dot || !label) return false;
-        const composer = document.getElementById("onyx-chat-input");
-        if (!composer || !composer.contains(element)) return false;
-        const dotBox = dot.getBoundingClientRect();
-        const labelBox = label.getBoundingClientRect();
-        const lineHeight = Number.parseFloat(
-          getComputedStyle(label).lineHeight
-        );
-        const style = getComputedStyle(element);
-        const padding =
-          Number.parseFloat(style.paddingTop) +
-          Number.parseFloat(style.paddingBottom);
-        return (
-          Math.abs(
-            element.getBoundingClientRect().x +
-              element.getBoundingClientRect().width / 2 -
-              (composer.getBoundingClientRect().x +
-                composer.getBoundingClientRect().width / 2)
-          ) < 1 &&
-          dotBox.right <= labelBox.left &&
-          Math.abs(
-            dotBox.y + dotBox.height / 2 - labelBox.y - labelBox.height / 2
-          ) < 1 &&
-          labelBox.height <= lineHeight &&
-          element.getBoundingClientRect().height <= lineHeight + padding
-        );
-      })
-    ).toBe(true);
-  }
-
-  async expectInlinePendingMessageHint(): Promise<void> {
-    await poll(() =>
-      this.pendingMessageHint.evaluate((element) => {
-        const boxes = Array.from(element.children, (child) =>
-          child.getBoundingClientRect()
-        );
-        const first = boxes[0];
-        return (
-          boxes.length === 5 &&
-          first !== undefined &&
-          boxes.every(
-            (box) =>
-              Math.abs(box.y + box.height / 2 - first.y - first.height / 2) < 1
-          )
-        );
-      })
-    ).toBe(true);
-  }
-
   async clear(): Promise<void> {
     await this.textbox.focus();
     await this.page.keyboard.press("ControlOrMeta+a");
@@ -260,6 +206,10 @@ export class InputBar {
     if (delivery === "queue") await this.queue();
     else await this.send();
     await expect(this.textbox).toHaveText("");
+    // The composer holds new input until the server accepts this one.
+    await expect(
+      this.queuedMessages.getByText(text, { exact: true })
+    ).toBeVisible();
   }
 
   async discardPending(index: number): Promise<void> {
@@ -271,14 +221,6 @@ export class InputBar {
     await this.queuedMessages
       .nth(index)
       .getByRole("button", { name: "Edit queued message", exact: true })
-      .click();
-  }
-
-  async sendPendingNow(index: number): Promise<void> {
-    const queuedMessage = this.queuedMessages.nth(index);
-    await queuedMessage.click();
-    await queuedMessage
-      .getByRole("button", { name: "Send now", exact: true })
       .click();
   }
 
@@ -332,6 +274,12 @@ export class InputBar {
         timeout: 10000,
       });
     }
+  }
+
+  /** An empty composer disables send only while the chat is idle; a running turn shows Stop. */
+  async expectIdle(timeout = POLL_TIMEOUT): Promise<void> {
+    await expect(this.textbox).toHaveAttribute("data-empty", "");
+    await expect(this.sendButton).toBeDisabled({ timeout });
   }
 
   async expectEmpty(): Promise<void> {

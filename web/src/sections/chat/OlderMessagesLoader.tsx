@@ -11,7 +11,7 @@ import {
   useIsLoadingOlderMessages,
 } from "@/app/app/stores/useChatSessionStore";
 import { loadOlderChatMessages } from "@/lib/chat/pagedSession";
-import { overscanMargin } from "@/sections/chat/WindowedRow";
+import { observeNearViewport } from "@/sections/chat/WindowedRow";
 
 export interface OlderMessagesLoaderProps {
   className?: string;
@@ -39,17 +39,12 @@ export default function OlderMessagesLoader({
     const loader = loaderRef.current;
     if (!root || !loader || isLoading) return;
 
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        const sessionId = useChatSessionStore.getState().currentSessionId;
-        if (entry?.isIntersecting && sessionId) {
-          void loadOlderChatMessages(sessionId);
-        }
-      },
-      { root, rootMargin: overscanMargin(root) }
-    );
-    observer.observe(loader);
-    return () => observer.disconnect();
+    return observeNearViewport(root, loader, (near) => {
+      const sessionId = useChatSessionStore.getState().currentSessionId;
+      if (near && sessionId) {
+        void loadOlderChatMessages(sessionId);
+      }
+    });
   }, [scrollContainerRef, isLoading]);
 
   return (

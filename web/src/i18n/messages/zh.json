@@ -122,6 +122,9 @@
       "authenticate": {
         "label": "身份验证"
       },
+      "codingAgentIncognito": {
+        "tooltip": "无痕模式下无法使用编码智能体"
+      },
       "configure": {
         "tooltip": "配置"
       },
@@ -12433,6 +12436,7 @@
         },
         "deepResearchButton": {
           "disabledTooltip": "多模型模式下无法使用深度研究",
+          "incognitoTooltip": "无痕模式下无法使用深度研究",
           "label": "深度研究"
         },
         "incognitoNotice": {
@@ -12471,7 +12475,9 @@
           "sendHint": "在此回复的下一步发送",
           "interruptHint": "中断当前工作并发送此消息",
           "sendLabel": "发送",
-          "queueLabel": "排队"
+          "queueLabel": "排队",
+          "interruptKeyboardHint": "Enter 中断 · Ctrl 或 Command + Enter 加入队列",
+          "interruptLabel": "中断"
         }
       },
       "baseInputBar": {
@@ -12602,8 +12608,7 @@
         }
       },
       "pendingMessages": {
-        "submitFailed": "无法提交消息。你可以在待发送消息中编辑或移除它。",
-        "restoredUnconfirmed": "已恢复无法确认是否送达的消息。再次发送前，请先查看对话。",
+        "submitFailed": "无法提交消息。",
         "withdrawFailed": "无法移除待处理消息。",
         "loadFailed": "无法加载待处理消息。",
         "alreadyAccepted": "此消息已被接受，不再处于待处理状态。",
@@ -12703,6 +12708,9 @@
         "timedOut": {
           "text": "回复已达到时间限制，因此已停止。"
         }
+      },
+      "agentResults": {
+        "received": "已收到子代理结果"
       },
       "codeBlock": {
         "copyButton": {

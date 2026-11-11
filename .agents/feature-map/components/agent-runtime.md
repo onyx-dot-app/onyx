@@ -33,20 +33,31 @@ document does not repeat it.
   sets `result_from_children` instead of blocking, and the parent run suspends
   until the child ends.
 - **Independent children.** ChatAgent and its children expose controls from
-  `tools/tool_implementations/subagents/subagent_tools.py` to spawn, list, message, and interrupt children. Incognito omits these controls. Children survive
-  the root response. A subagent must incorporate work it delegates before completing.
-  `WAIT_CHILDREN` releases its execution thread while results are pending and reserves
+  `tools/tool_implementations/subagents/subagent_tools.py` to spawn, list, message, and interrupt children. Incognito chats have no child agents: they omit these controls,
+  the coding agent tool and deep research. Children survive
+  the root response. A subagent must incorporate the results of children it spawns before
+  completing; `RunOwnership.delegated_runs` lists the unread ones. `WAIT_CHILDREN` releases its execution thread while results are pending and reserves
   the last model step for synthesis. Dependencies belong to the current run, not the
   agent's entire history. Failure and cancellation remain terminal outcomes.
-  Later turns use the branch-scoped directory and run store to access children. The runtime accepts submitted instructions and unread results
-  before a model call. Chat can remap citations through `PreparedStep.input_messages`.
+  Later turns use the branch-scoped directory and run store to access children. Before a model
+  call the runtime reads submitted messages and finished child results through
+  `RunOwnership.receive_inputs`; chat reads both with one query and formats results with
+  `chat/run_store.py:agent_result_message`. `RunOwnership.accept_inputs` marks them read. Results reach only the
+  spawner; any agent in the visible tree can message another, and messages to the root never
+  start a root run. Chat can remap citations through `PreparedStep.input_messages`.
   Accepted inputs retain their identity and source in saved history.
   `MessageStartEvent.input_messages` contains the inputs durably accepted by
   that step; it excludes instructions still queued or withdrawn before acceptance.
-  `send_message` targets the next step or starts an idle child with fresh limits.
-  `send_message(delivery="queue")` waits for normal completion; Stop, failure, and step limits pause
-  queued work. `interrupt_agent` cancels the current run while retaining its conversation.
+  `send_message` stores the instruction through `RunOwnership.submit_message`; it targets the next step or starts
+  an idle child with fresh limits. Messaging requires run ownership.
+  `send_message(delivery="queue")` waits for normal completion or the step limit; Stop and failure
+  pause queued work. `interrupt_agent` cancels one agent's active run, not the runs below it; the run
+  reports no result (`RunOwnership.withdraw_result`), and its conversation remains. The caller
+  and the root cannot be interrupted. `list_agents` shows the whole branch tree and marks the caller.
   Chat starts a follow-up response when an idle parent has unread child results.
+  Queued messages and follow-ups start through one entry,
+  `AgentCoordinator.start_message_run`, which restores the agent through its
+  spawner whoever sent the work.
 - [[tools-framework]]: `tools/interface.py:Tool.bind` turns each chat `Tool`
   into an `AgentTool`.
 - **A backend developer who builds a feature on the runtime.** Start from the
@@ -135,7 +146,7 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
   repeated call ID fails the whole run.
 - `backend/onyx/agents/agent_coordination.py:AgentCoordinator` runs children and
   calls the application's storage and ownership adapters. Explicit discovery
-  refreshes directory metadata so later turns can find newly spawned descendants.
+  refreshes directory metadata so later turns can find newly spawned children.
 - `backend/onyx/agents/execution_records.py:messages_for_model` filters history
   for the model. It drops incomplete tool exchanges, orphaned results, calls
   that repeat an ID in one message (with their results) and thinking that
@@ -145,9 +156,9 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
 
 | Runtime interface | Chat implementation |
 |---|---|
-| `RunStore` | `chat/persistence.py:ChatResponsePersistence` saves the root response at the end and skips child runs. In a session that keeps content, `chat/run_store.py:ChatRunStore` wraps it: it saves the parent's partial record before each child reservation and saves each child when it ends. In a content-free incognito session no adapter saves children. |
-| `RunOwnership` | `ChatRunStore`, with cache leases that the turn's control thread renews. A content-free incognito run keeps local ownership only. |
-| `AgentDirectory` | `chat/subagents.py:ChatAgentDirectory`, limited to descendants on the selected branch. |
+| `RunStore` | `chat/persistence.py:ChatResponsePersistence` saves the root response at the end and skips child runs. In a session that keeps content, `chat/run_store.py:ChatRunStore` wraps it: it saves the parent's partial record before each child reservation and saves each child when it ends. Incognito sessions have no children. |
+| `RunOwnership` | `ChatRunStore`, with cache leases that the turn's control thread renews. It also owns the inbox: received inputs, unread results, withdrawn results and submitted messages. An incognito run has no run ownership. |
+| `AgentDirectory` | `chat/run_store.py:ChatRunStore`. It lists the agent tree of the selected branch and accepts messages for any agent in it; lookup, restore, and run reads go through each agent's spawner. An incognito run has no directory. |
 | Event listener | `chat/presentation.py:ResponsePresenter`. |
 | `RestorableFeature` | `ChatAgent`, `DeepResearchAgent` and `ResearchAgent`. Product calls only `capture_state`, at each suspension. `chat/restoration.py:restore_chat_agent` rebuilds them for `ChatRunStore.resume`. |
 | `AgentTool` | `tools/interface.py:Tool.bind`. |
@@ -157,7 +168,7 @@ coding agent suspend the parent on `ChildRunWait`, and it continues in the same
 process. No product code requests human input through `PendingToolInput` or calls
 `Run.suspend`, `Run.submit`, `ChatRunStore.handoff`, or `ChatRunStore.resume`.
 Only tests do.
-`chat/subagents.py:ChatAgentDirectory.restore_agent` loads a saved child for a
+`chat/run_store.py:ChatRunStore.restore_agent` loads a saved child for a
 new run. `chat/restoration.py:restore_subagent` rebuilds it with the current
 request's tools and settings. Checkpoint resume is separate:
 `chat/execution.py` binds `restore_chat_agent` into `ChatRunStore`, but only
@@ -292,9 +303,9 @@ and ignore thread-pool `submit` calls; expect no runtime matches.
     starts it as a child (`tools/tool_implementations/coding_agent/coding_agent_tool.py`).
     Return `ChildRunWait`, set `result_from_children`, and release held
     resources through `agents.add_completion_cleanup`. The chat adapters then
-    save and own the child for one run, except in content-free incognito. To
+    save and own the child for one run. Incognito chats have no children. To
     rerun it, add a `restoration_config` and a branch in
-    `chat/restoration.py:restore_subagent`. `ChatAgentDirectory` authorizes and
+    `chat/restoration.py:restore_subagent`. `ChatRunStore` authorizes and
     loads saved history; this factory rebuilds Chat and Research children with
     the current request's authorized resources. For suspended execution, add
     a `RestorableFeature` and a branch in `restore_chat_agent`, which rebuilds

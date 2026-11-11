@@ -73,14 +73,15 @@ from onyx.db.user_preferences import (
     update_user_chat_background,
     update_user_default_app_mode,
     update_user_default_model,
+    update_user_interrupt_on_send,
     update_user_language,
+    update_user_paste_as_tile,
     update_user_personalization,
     update_user_reasoning_effort_default,
     update_user_shortcut_enabled,
     update_user_temperature_default,
     update_user_temperature_override_enabled,
     update_user_theme_preference,
-    update_user_ui_preferences,
     update_users_craft_enabled,
 )
 from onyx.db.users import (
@@ -1266,7 +1267,7 @@ def update_user_paste_as_tile_api(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_user_ui_preferences(user.id, db_session, paste_as_tile=paste_as_tile)
+    update_user_paste_as_tile(user.id, paste_as_tile, db_session)
 
 
 @router.patch("/interrupt-on-send")
@@ -1275,7 +1276,7 @@ def update_user_interrupt_on_send_api(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_user_ui_preferences(user.id, db_session, interrupt_on_send=interrupt_on_send)
+    update_user_interrupt_on_send(user.id, interrupt_on_send, db_session)
 
 
 @router.patch("/auto-scroll")

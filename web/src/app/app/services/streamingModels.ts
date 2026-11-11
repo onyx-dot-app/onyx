@@ -1,5 +1,4 @@
 import { OnyxDocument } from "@/lib/search/types";
-import type { Message } from "@/app/app/types";
 
 // Base interface for all streaming objects
 interface BaseObj {
@@ -129,7 +128,6 @@ export enum StopReason {
 export interface Stop extends BaseObj {
   type: "stop";
   stop_reason?: StopReason;
-  response_status?: Message["responseStatus"];
 }
 
 export interface SectionEnd extends BaseObj {

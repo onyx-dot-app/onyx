@@ -1,11 +1,10 @@
-import { act, render, screen, waitFor } from "@tests/setup/test-utils";
+import { act, render, screen, waitFor, within } from "@tests/setup/test-utils";
 import ChatUI, { ChatUIProps } from "@/sections/chat/ChatUI";
 import { processRawChatHistory } from "@/app/app/services/lib";
 import { preserveFailedMessages } from "@/lib/chat/settleChatSession";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import type { BackendMessage, Message } from "@/app/app/types";
 import type { Packet } from "@/app/app/services/streamingModels";
-import { SWR_KEYS } from "@/lib/swr-keys";
 
 jest.mock("@/components/chat/DynamicBottomSpacer", () => ({
   __esModule: true,
@@ -163,67 +162,6 @@ beforeEach(() => {
   });
   store.setCurrentSession("session");
 });
-
-test.each([
-  ["complete", "queue", true],
-  ["limit", "queue", false],
-  ["error", "queue", false],
-  ["cancelled", "queue", false],
-  ["cancelled", "interrupt", true],
-  ["complete", "interrupt", true],
-] as const)(
-  "previews eligible pending input after %s (%s)",
-  (status, delivery, previews) => {
-    const store = useChatSessionStore.getState();
-    store.updateSessionData("session", {
-      chatState: "streaming",
-      messageTree: new Map([
-        [1, question],
-        [
-          2,
-          {
-            ...failed,
-            type: "assistant",
-            errorMessage: undefined,
-            packets: [
-              {
-                placement: { turn_index: 0 },
-                obj: { type: "stop", response_status: status },
-              },
-            ],
-          },
-        ],
-      ]),
-    });
-    render(<ChatUI {...props} />, {
-      swrConfig: {
-        fallback: {
-          [SWR_KEYS.pendingChatMessages("session")]: [
-            {
-              id: "other-branch",
-              message: "Instruction for a different response",
-              delivery: "interrupt",
-              target_response_id: 999,
-            },
-            {
-              id: "queued",
-              message: "Next question",
-              delivery,
-              target_response_id: 2,
-            },
-          ],
-        },
-      },
-    });
-    expect(screen.queryByTestId("queued-message-handoff") !== null).toBe(
-      previews
-    );
-    act(() => store.updateChatState("session", "unconfirmed"));
-    expect(
-      screen.queryByTestId("queued-message-handoff")
-    ).not.toBeInTheDocument();
-  }
-);
 
 test.each([true, false])(
   "a single-model failure survives refetch and reload (structured: %s)",
@@ -532,4 +470,71 @@ test("accepting an instruction reveals preceding text before its user bubble", (
     view.unmount();
     animation.mockRestore();
   }
+});
+
+test("an automatic follow-up renders a divider instead of a user bubble", () => {
+  const answer = (id: string, content: string): Packet[] => [
+    {
+      placement: { turn_index: 0 },
+      obj: { type: "message_start", id, final_documents: [], content },
+    },
+    { placement: { turn_index: 0 }, obj: { type: "section_end" } },
+    { placement: { turn_index: 0 }, obj: { type: "stop" } },
+  ];
+  const response: BackendMessage = {
+    ...saved,
+    error: null,
+    error_info: null,
+  };
+  const tree = processRawChatHistory(
+    [
+      {
+        ...response,
+        message_id: 1,
+        message_type: "user",
+        parent_message: null,
+        latest_child_message: 2,
+        message: "hi",
+      },
+      { ...response, latest_child_message: 3, message: "Earlier answer" },
+      {
+        ...response,
+        message_id: 3,
+        message_type: "agent_results",
+        parent_message: 2,
+        latest_child_message: 4,
+        message: "",
+      },
+      {
+        ...response,
+        message_id: 4,
+        parent_message: 3,
+        message: "Follow-up answer",
+      },
+    ],
+    [
+      answer("earlier", "Earlier answer"),
+      answer("follow-up", "Follow-up answer"),
+    ]
+  );
+  useChatSessionStore.getState().updateSessionMessageTree("session", tree);
+  render(<ChatUI {...props} />);
+
+  const divider = screen.getByText("Subagent results received");
+  expect(screen.getAllByTestId("human-message-bubble")).toHaveLength(1);
+  expect(
+    screen.getByText("Earlier answer").compareDocumentPosition(divider) &
+      Node.DOCUMENT_POSITION_FOLLOWING
+  ).toBeTruthy();
+  expect(
+    divider.compareDocumentPosition(screen.getByText("Follow-up answer")) &
+      Node.DOCUMENT_POSITION_FOLLOWING
+  ).toBeTruthy();
+  // The follow-up names its model but has no question to regenerate from.
+  expect(screen.getAllByTestId("AgentMessage/regenerate")).toHaveLength(1);
+  const followUp = screen
+    .getByText("Follow-up answer")
+    .closest<HTMLElement>('[data-testid="onyx-ai-message"]');
+  if (!followUp) throw new Error("Follow-up answer is missing");
+  expect(within(followUp).getByText("test")).toBeVisible();
 });

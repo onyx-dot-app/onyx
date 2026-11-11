@@ -23,6 +23,7 @@ FILE_READER_TOOL_NAME = "read_file"
 CODE_MODE_TOOL_NAME = "execute_code"
 WAIT_CODE_TOOL_NAME = "wait_code"
 SPAWN_AGENT_TOOL_NAME = "spawn_agent"
+SEND_MESSAGE_TOOL_NAME = "send_message"
 
 INTERNAL_SEARCH_TOOL_NAME = "internal_search"
 WEB_SEARCH_TOOL_NAME = "web_search"

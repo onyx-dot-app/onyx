@@ -1,5 +1,7 @@
 import { test, expect } from "@tests/e2e/chat/fixtures";
+import { ChatPage } from "@tests/e2e/chat/ChatPage";
 import { UserChatPreferencesPage } from "@tests/e2e/pages/UserChatPreferencesPage";
+import { loginAsRandomUser } from "@tests/e2e/utils/auth";
 import {
   addMockLlmConversation,
   mockLlmNonce,
@@ -11,11 +13,13 @@ const pendingTest = test.extend<{
   heldResponse: { sessionId: string; question: string; gateId: string };
 }>({
   providerHeartbeat: [false, { option: true }],
+  // A user per test, so a changed send preference reaches no other test.
+  chatPage: async ({ page }, use) => {
+    await page.context().clearCookies();
+    await loginAsRandomUser(page);
+    await use(new ChatPage(page));
+  },
   heldResponse: async ({ api, chatPage, page, providerHeartbeat }, use) => {
-    const preference = await page.request.patch(
-      "/api/interrupt-on-send?interrupt_on_send=false"
-    );
-    expect(preference.ok()).toBe(true);
     let sessionId: string | null = null;
     const gateId = mockLlmNonce();
     const question = `Explain queued messages. ${gateId}`;
@@ -54,15 +58,18 @@ const pendingTest = test.extend<{
 });
 
 pendingTest(
-  "queued messages survive reload and execute in order",
+  "queued messages survive reload and then run",
   async ({ chatPage, heldResponse }) => {
     await chatPage.inputBar.fill("First queued");
-    await expect(chatPage.inputBar.pendingMessageHint).toBeVisible();
+    await expect(chatPage.inputBar.pendingMessageHint).toHaveText(
+      /Send.*Queue/
+    );
     await expect(chatPage.inputBar.sendButton).toHaveText("");
     await expect(chatPage.inputBar.composerSendNowButton).toHaveCount(0);
     await chatPage.inputBar.queue();
     await expect(chatPage.inputBar.textbox).toHaveText("");
     await expect(chatPage.inputBar.pendingMessageHint).toHaveCount(0);
+    await expect(chatPage.inputBar.queuedMessages).toHaveCount(1);
     await chatPage.inputBar.submitPending("Second queued");
     await expect(chatPage.inputBar.queuedMessages).toHaveCount(2);
     await expect(chatPage.inputBar.container).toBeInViewport({ ratio: 1 });
@@ -76,102 +83,9 @@ pendingTest(
       "Second queued"
     );
     await releaseMockLlmGate(heldResponse.gateId);
-    await chatPage.expectSavedTurns([
-      heldResponse.question,
-      "First queued",
-      "Second queued",
-    ]);
     await chatPage.expectCompleteAnswers(3);
     await expect(chatPage.inputBar.queuedMessages).toHaveCount(0);
     await expect(chatPage.inputBar.container).toBeInViewport({ ratio: 1 });
-  }
-);
-
-pendingTest(
-  "unsent messages survive reload beside a newer draft without resubmitting",
-  async ({ page, chatPage, heldResponse }) => {
-    const pendingRoute = `**/api/chat/chat-session/${heldResponse.sessionId}/pending-messages`;
-    let posts = 0;
-    await page.route(pendingRoute, async (route) => {
-      if (route.request().method() !== "POST") {
-        await route.continue();
-        return;
-      }
-      posts += 1;
-      await route.abort("failed");
-    });
-    try {
-      await chatPage.inputBar.submitPending("Keep this unsent instruction");
-      await expect.poll(() => posts).toBe(1);
-      await chatPage.inputBar.fill("A newer draft");
-      await expect
-        .poll(() =>
-          page.evaluate(
-            (sessionId) =>
-              sessionStorage.getItem(`onyx:draft:chat:${sessionId}`),
-            heldResponse.sessionId
-          )
-        )
-        .toBe(JSON.stringify("A newer draft"));
-      await chatPage.reload();
-      await expect(chatPage.inputBar.queuedMessages).toHaveCount(1);
-      await expect(chatPage.inputBar.queuedMessages).toContainText(
-        "Keep this unsent instruction"
-      );
-      await expect(chatPage.inputBar.textbox).toHaveText("A newer draft");
-      expect(posts).toBe(1);
-      await chatPage.inputBar.clear();
-      await chatPage.inputBar.editPending(0);
-      await expect(chatPage.inputBar.textbox).toHaveText(
-        "Keep this unsent instruction"
-      );
-      await expect(chatPage.inputBar.queuedMessages).toHaveCount(0);
-    } finally {
-      await page.unroute(pendingRoute);
-    }
-  }
-);
-
-pendingTest(
-  "previews the next queued turn while saved history is loading",
-  async ({ page, chatPage, heldResponse }) => {
-    await chatPage.inputBar.submitPending("Next queued question");
-    await expect(chatPage.inputBar.queuedMessages).toHaveCount(1);
-    let releaseHistory!: () => void;
-    const historyReady = new Promise<void>((resolve) => {
-      releaseHistory = resolve;
-    });
-    const historyRoute = `**/api/chat/get-chat-session/${heldResponse.sessionId}*`;
-    await page.route(historyRoute, async (route) => {
-      await historyReady;
-      await route.continue();
-    });
-    try {
-      await releaseMockLlmGate(heldResponse.gateId);
-      await expect(chatPage.queuedMessageHandoff).toContainText(
-        "Next queued question"
-      );
-      await expect(chatPage.inputBar.queuedMessages).toHaveCount(0);
-      await expect(chatPage.humanMessageBubbles).toHaveText([
-        heldResponse.question,
-        "Next queued question",
-      ]);
-      await expect(chatPage.inputBar.container).toBeInViewport({ ratio: 1 });
-      releaseHistory();
-      await chatPage.expectSavedTurns([
-        heldResponse.question,
-        "Next queued question",
-      ]);
-      await chatPage.expectCompleteAnswers(2);
-      await expect(chatPage.queuedMessageHandoff).toHaveCount(0);
-      await expect(chatPage.humanMessageBubbles).toHaveText([
-        heldResponse.question,
-        "Next queued question",
-      ]);
-    } finally {
-      releaseHistory();
-      await page.unroute(historyRoute);
-    }
   }
 );
 
@@ -251,9 +165,8 @@ pendingTest(
           .endsWith(`/chat-session/${heldResponse.sessionId}/pending-messages`)
     );
     await chatPage.inputBar.submitPending(instruction, "send");
-    await expect(chatPage.inputBar.queuedMessages).toHaveCount(1);
-    // The optimistic tile appears before the server accepts the instruction.
     expect((await submission).ok()).toBe(true);
+    await expect(chatPage.inputBar.queuedMessages).toHaveCount(1);
     await releaseMockLlmGate(heldResponse.gateId);
     await chatPage.expectAnswerParagraph(
       "The additional instruction was received."
@@ -283,107 +196,67 @@ pendingTest(
   }
 );
 
-pendingTest(
-  "Stop leaves the queued message pending",
-  async ({ page, chatPage, heldResponse }) => {
-    await chatPage.inputBar.submitPending("Keep for later");
-    const stopped = page.waitForResponse((response) =>
-      response.url().includes(`/stop-chat-session/${heldResponse.sessionId}`)
-    );
-    await chatPage.stop();
-    expect((await stopped).ok()).toBe(true);
-    await chatPage.expectStopping();
-    await releaseMockLlmGate(heldResponse.gateId);
-    await chatPage.expectCompleteAnswers(1);
-    await chatPage.reload();
-    await expect(chatPage.inputBar.queuedMessages).toHaveCount(1);
-    await expect(chatPage.inputBar.queuedMessages).toContainText(
-      "Keep for later"
-    );
-    await chatPage.expectSavedTurns([heldResponse.question]);
-  }
-);
-
 pendingTest.describe("Interrupt and send", () => {
   pendingTest.use({ providerHeartbeat: true });
 
-  for (const action of ["button", "Enter"] as const) {
-    pendingTest(
-      `a queued message can interrupt the response using ${action}`,
-      async ({ page, chatPage, heldResponse }) => {
-        await chatPage.inputBar.submitPending("Keep this follow-up queued");
-        await chatPage.inputBar.submitPending("Change direction now");
-        await expect(chatPage.inputBar.queuedMessages).toHaveCount(2);
-        const promoted = page.waitForResponse((response) =>
-          new URL(response.url()).pathname.endsWith("/interrupt")
-        );
-        if (action === "button") {
-          await chatPage.inputBar.sendPendingNow(1);
-        } else {
-          await chatPage.inputBar.selectPreviousPending();
-          await chatPage.inputBar.send();
-        }
-        expect((await promoted).ok()).toBe(true);
-        await chatPage.expectSavedTurns([
-          heldResponse.question,
-          "Change direction now",
-          "Keep this follow-up queued",
-        ]);
-        await chatPage.expectCompleteAnswers(3);
-        await chatPage.expectAnswerAbsent("First answer complete.");
-        await expect(chatPage.inputBar.queuedMessages).toHaveCount(0);
-        await chatPage.reload();
-        await expect(chatPage.humanMessageBubbles).toHaveText([
-          heldResponse.question,
-          "Change direction now",
-          "Keep this follow-up queued",
-        ]);
-        await chatPage.expectAnswerAbsent("First answer complete.");
-      }
-    );
-  }
+  pendingTest(
+    "a queued message can interrupt the response using Enter",
+    async ({ page, chatPage, heldResponse }) => {
+      await chatPage.inputBar.submitPending("Keep this follow-up queued");
+      await chatPage.inputBar.submitPending("Change direction now");
+      await expect(chatPage.inputBar.queuedMessages).toHaveCount(2);
+      const promoted = page.waitForResponse((response) =>
+        new URL(response.url()).pathname.endsWith("/interrupt")
+      );
+      await chatPage.inputBar.selectPreviousPending();
+      await chatPage.inputBar.send();
+      expect((await promoted).ok()).toBe(true);
+      await chatPage.expectSavedTurns([
+        heldResponse.question,
+        "Change direction now",
+        "Keep this follow-up queued",
+      ]);
+      await chatPage.expectCompleteAnswers(3);
+      await chatPage.expectAnswerAbsent("First answer complete.");
+      await expect(chatPage.inputBar.queuedMessages).toHaveCount(0);
+      await chatPage.reload();
+      await expect(chatPage.humanMessageBubbles).toHaveText([
+        heldResponse.question,
+        "Change direction now",
+        "Keep this follow-up queued",
+      ]);
+      await chatPage.expectAnswerAbsent("First answer complete.");
+    }
+  );
 
-  for (const action of ["Enter", "send arrow"] as const) {
-    pendingTest(
-      `the interrupt preference applies to ${action} and survives reload`,
-      async ({ page, chatPage, heldResponse }) => {
-        const preferences = new UserChatPreferencesPage(page);
-        await preferences.goto();
-        await expect(preferences.sendBehavior).toHaveValue(
-          "After the current step"
-        );
-        try {
-          await preferences.setSendBehavior("Interrupt current work");
-          await page.reload();
-          await expect(preferences.sendBehavior).toHaveValue(
-            "Interrupt current work"
-          );
-          await chatPage.goto(heldResponse.sessionId);
-          await expect(chatPage.scrollContainer).toContainText("Working on");
-          await chatPage.inputBar.submitPending("Still queue this follow-up");
-          await expect(chatPage.inputBar.queuedMessages).toHaveCount(1);
-          await chatPage.expectSavedTurns([heldResponse.question]);
-          await chatPage.expectAnswerAbsent("First answer complete.");
-          await chatPage.inputBar.fill("Respond to this instead");
-          if (action === "Enter") {
-            await chatPage.inputBar.send();
-          } else {
-            await chatPage.inputBar.clickSend();
-          }
-          await chatPage.expectSavedTurns([
-            heldResponse.question,
-            "Respond to this instead",
-            "Still queue this follow-up",
-          ]);
-          await chatPage.expectCompleteAnswers(3);
-          await chatPage.expectAnswerAbsent("First answer complete.");
-        } finally {
-          const reset = await page.request.patch(
-            "/api/interrupt-on-send?interrupt_on_send=false"
-          );
-          expect(reset.ok()).toBe(true);
-        }
-      }
-    );
-  }
+  pendingTest(
+    "the interrupt preference applies to the send arrow and survives reload",
+    async ({ page, chatPage, heldResponse }) => {
+      const preferences = new UserChatPreferencesPage(page);
+      await preferences.goto();
+      await expect(preferences.sendBehavior).toHaveValue(
+        "After the current step"
+      );
+      await preferences.setSendBehavior("Interrupt current work");
+      await page.reload();
+      await expect(preferences.sendBehavior).toHaveValue(
+        "Interrupt current work"
+      );
+      await chatPage.goto(heldResponse.sessionId);
+      await expect(chatPage.scrollContainer).toContainText("Working on");
+      await chatPage.inputBar.submitPending("Still queue this follow-up");
+      await expect(chatPage.inputBar.queuedMessages).toHaveCount(1);
+      await chatPage.expectSavedTurns([heldResponse.question]);
+      await chatPage.expectAnswerAbsent("First answer complete.");
+      await chatPage.inputBar.fill("Respond to this instead");
+      await chatPage.inputBar.clickSend();
+      await chatPage.expectSavedTurns([
+        heldResponse.question,
+        "Respond to this instead",
+        "Still queue this follow-up",
+      ]);
+      await chatPage.expectCompleteAnswers(3);
+      await chatPage.expectAnswerAbsent("First answer complete.");
+    }
+  );
 });

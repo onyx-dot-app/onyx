@@ -3,7 +3,7 @@
 from functools import partial
 from uuid import uuid4
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from onyx.agents.agent_coordination import AgentCoordinator
@@ -18,12 +18,10 @@ from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.chat_utils import capture_chat_history, convert_chat_history
-from onyx.chat.history_store import get_chat_history_store
 from onyx.chat.models import MessageRendering, ResponseRecord, SavedAgentContext
 from onyx.chat.prompt_utils import prepare_prompt
 from onyx.chat.restoration import restore_chat_agent
 from onyx.chat.run_store import ChatRunStore
-from onyx.chat.subagents import ChatAgentDirectory
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.db.chat import create_db_search_doc
@@ -31,12 +29,7 @@ from onyx.db.chat_response import (
     reserve_child_response__no_commit,
     save_response_content,
 )
-from onyx.db.chat_subagents import (
-    load_agent_history,
-    load_chat_branch,
-    load_session_agent_metadata,
-)
-from onyx.db.enums import IncognitoRecordMode
+from onyx.db.chat_subagents import load_agent_history, load_chat_branch
 from onyx.db.models import ChatMessage, ChatSession
 from onyx.deep_research.models import ResearchConfiguration
 from onyx.deep_research.research_agent import ResearchAgent
@@ -101,18 +94,18 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
     )
     db_session.add(previous)
     db_session.flush()
-    continuation = ChatMessage(
+    next_question = ChatMessage(
         chat_session_id=session.id,
         parent_message_id=previous.id,
         message="Continue",
         token_count=1,
         message_type=MessageType.USER,
     )
-    db_session.add(continuation)
+    db_session.add(next_question)
     db_session.flush()
     response = ChatMessage(
         chat_session_id=session.id,
-        parent_message_id=continuation.id,
+        parent_message_id=next_question.id,
         message="",
         token_count=0,
         message_type=MessageType.ASSISTANT,
@@ -172,6 +165,7 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
         parent_response_id=previous.id,
         parent_message_id=f"{previous_run_id}:0",
         parent_tool_call_id="delegate",
+        delivers_result=False,
     )
     first_response_id = str(child_response_id)
     transcript.child_runs.append(
@@ -253,25 +247,12 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
     )
     coordinator: AgentCoordinator | None = None
     try:
-        saved_child = load_agent_history(response_id, agent_id)
+        saved_child = load_agent_history(load_chat_branch(response_id), agent_id)
         assert saved_child.sources[1].document_id == "source"
         persisted_run_id = saved_child.previous_run_id
         assert persisted_run_id is not None
         saved_run_id = persisted_run_id
         branch = load_chat_branch(response_id)
-        history_store = get_chat_history_store(
-            message_id=response_id,
-            chat_session_id=session_id,
-            persist_content=True,
-            branch=branch,
-        )
-        run_store = ChatRunStore(
-            tenant_id=get_current_tenant_id(),
-            chat_session_id=session_id,
-            response_id=response_id,
-            visible_response_ids=branch.message_ids,
-            cache=get_cache_backend(),
-        )
         identity = LLMUserIdentity()
 
         def restore_research(history: SavedAgentContext) -> ResearchAgent:
@@ -291,18 +272,21 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
                 agent_id=history.agent_id,
             )
 
+        run_store = ChatRunStore(
+            tenant_id=get_current_tenant_id(),
+            chat_session_id=session_id,
+            response_id=response_id,
+            visible_response_ids=branch.message_ids,
+            cache=get_cache_backend(),
+            restore_subagent=restore_research,
+        )
         coordinator = run_store.bind(
             AgentCoordinator(),
             build_agent=partial(
                 restore_chat_agent, llm=research_llm, tools=[], user_identity=identity
             ),
-            directory=ChatAgentDirectory(
-                history_store=history_store,
-                store=run_store,
-                build_agent=restore_research,
-            ),
         )
-        for info in history_store.list_agents():
+        for info in run_store.list_agents():
             coordinator.register(info)
         coordinator.register(
             AgentInfo(
@@ -344,7 +328,7 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
             for message in requests[0].messages
         )
         assert coordinator.close(timeout=10)
-        continued = load_agent_history(response_id, agent_id)
+        continued = load_agent_history(load_chat_branch(response_id), agent_id)
         assert continued.previous_run_id != saved_run_id
         assert any(
             message.text == "Additional cedar evidence [1]."
@@ -358,40 +342,6 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
         )
         db_session.execute(delete(ChatSession).where(ChatSession.id == session_id))
         db_session.delete(db_session.merge(document))
-        db_session.commit()
-
-
-def test_incognito_does_not_persist_child_conversations(db_session: Session) -> None:
-    session = ChatSession(
-        id=uuid4(),
-        description="private",
-        incognito_record_mode=IncognitoRecordMode.USAGE_ONLY,
-    )
-    db_session.add(session)
-    db_session.flush()
-    message = ChatMessage(
-        chat_session_id=session.id,
-        message="",
-        token_count=0,
-        message_type=MessageType.ASSISTANT,
-    )
-    db_session.add(message)
-    db_session.commit()
-    try:
-        metadata = load_session_agent_metadata(message.id)
-        assert [agent.id for agent in metadata] == [str(session.id)]
-        assert metadata[0].restoration_config is None
-        assert (
-            db_session.scalar(
-                select(ChatSession)
-                .join(ChatMessage, ChatSession.spawned_by_message_id == ChatMessage.id)
-                .where(ChatMessage.chat_session_id == session.id)
-            )
-            is None
-        )
-    finally:
-        db_session.delete(message)
-        db_session.delete(session)
         db_session.commit()
 
 

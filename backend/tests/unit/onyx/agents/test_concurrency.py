@@ -347,7 +347,7 @@ def test_discovery_reads_run_status_without_holding_coordinator_lock(
 
     monkeypatch.setattr(Run, "status", property(status))
     discovery = start_thread_future(
-        lambda: coordinator.discover_children("root"), name="test-discovery"
+        lambda: coordinator.discover_agents(), name="test-discovery"
     )
     try:
         assert status_entered.wait(2)

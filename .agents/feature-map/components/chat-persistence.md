@@ -127,8 +127,8 @@ a `USAGE_ONLY` answer takes the legacy path. Reasoning display
 
 **The tree.** Each session has one root row: `SYSTEM` type, no parent, empty
 text (`db/chat.py:get_or_create_root_message`). A user message starts a turn;
-an unread child result can add another assistant response after a completed
-assistant response. An edit adds a sibling user row under the same parent. A
+unread child results start a turn under a hidden `AGENT_RESULTS` question after a
+completed assistant response. Two assistant rows never follow each other. An edit adds a sibling user row under the same parent. A
 regenerate is a send whose parent is the user row, so
 `chat/process_message.py:prepare_chat_turn` reuses that row and adds a sibling
 answer. Each row's `latest_child_message_id` marks the active child. Walking
@@ -176,36 +176,53 @@ the assistant's call order, not completion order. `tool_id`, `tab_index` and
 renderers as the live stream and reads typed results, not the tool catalog.
 It excludes background child output from the `spawn_agent` card. The parent
 receives that output as a message before its next model call.
-`ChatInput` stores pending instructions as text and links accepted inputs
-to the response item that consumed them. Starting a new run moves its pending
-instruction into the existing user-message tree in the same transaction.
+`ChatInput` is the inbox: pending human and agent messages, and unread child
+results. A step deletes the rows it accepts (`db/chat_inputs.py:consume_inputs__no_commit`)
+in the transaction that writes `ChatResponseItem.inputs`, the typed list of
+accepted messages. Starting a new run moves its pending instruction into the
+question tree in the same transaction.
 The runtime records an input only after its acceptance transaction commits.
 Live and saved rendering emit accepted human inputs as `user_message` packets
 before the model step that consumed them. This preserves their display order.
-Human input needs no invoking tool call. Main Chat accepts text only, without
-request headers or serialized request settings. Withdrawing pending text uses the
+Human input needs no invoking tool call or source response. Main Chat accepts text only, without
+request headers or serialized request settings. The human queue belongs to the
+session: only a `send` row targets a response, and a `send` that its run never
+reads waits like queued input. Withdrawing pending text uses the
 same recipient lock as acceptance; accepted text cannot be withdrawn. Promotion
-to `interrupt` changes that same row. Acceptance rechecks delivery so input
-already read by a runner cannot bypass a concurrent promotion. The existing
-Chat control thread polls interrupt intent once per second for its response IDs.
-A new root turn consumes its row with the user-message insert, then advances
-remaining entries as queued messages. An interrupt must not cancel a successor
-to its targeted response. Interrupts take priority and may
-start after any terminal response; ordinary queued turns require completion.
+to `interrupt` changes that same row and requests the turn's Stop.
+Acceptance rechecks delivery so input already read by a runner cannot bypass a
+concurrent promotion. `db/chat_inputs.py:next_queued_turn` reads the next root
+turn and `accept_queued_turn__no_commit` consumes it with the user-message
+insert under the session lock. A branch whose tip is a question, not a
+response, is not ready for a queued turn. Interrupts take priority and may start after
+any terminal response; ordinary queued turns require completion or the step
+limit (`db/chat_inputs.py:can_start_input`, shared with child inboxes). Unread
+finished results wake only an agent whose latest run completed or reached its
+step limit (`db/chat_inputs.py:wakes_for_results`).
 Inbox writers lock the recipient session before the response. The session lock
 uses `NO KEY UPDATE` so response and tool foreign-key checks can proceed.
 Accepted result inputs reference their source response; reconstructed history
-retains that provenance across compaction. The directory selects unread results
-for the invoking agent on the active branch, so receipt on one branch
-does not consume a result on another. A completed parent gets a new assistant
-response when unread child output arrives, including nested parents. The saved
-child response is the pending notification; no separate pending result is copied.
-The first model step records its consumption. Automatic revisions of one tool
-invocation deliver only the latest result. The runtime suspends a subagent before
-completion until work delegated during that run finishes and its results are
-incorporated. Storage selects unread results; it does not infer completion from
-the state of descendants.
-Cancelled, failed, and step-limited parents do not restart automatically.
+retains that provenance across compaction. Reserving a child response that its
+caller marks as result-delivering (a `spawn_agent` child, or any run started from
+the inbox) adds an `agent_result` row for the child's spawner
+(`db/chat_response.py:reserve_child_response__no_commit`). The row is readable
+once the response finishes. It names the run's root response: the invocation's
+root, or the newer root of the recipient's previous run when a message from an
+earlier turn continues it. `db/chat_inputs.py:reserve_inbox_run__no_commit`
+picks that root, and
+`db/chat_inputs.py:agent_result_states` returns it only on branches that contain
+that root, so receipt on one branch does not consume a result on another. A
+completed parent gets a follow-up run under an `AGENT_RESULTS` question when
+unread results arrive, including nested parents
+(`db/chat_inputs.py:reserve_inbox_run__no_commit`); the first model step
+consumes them. Each run of a child delivers its own result to the child's spawner,
+whichever agent's message started it, except a run that `interrupt_agent` stops:
+its row is deleted first (`db/chat_inputs.py:withdraw_agent_result__no_commit`),
+so it wakes no agent. Agent messages to the root have no target run; a root run
+reads them at its next step, and dispatch never starts a root run for them. The runtime suspends a subagent before
+completion while its unread results include running children
+(`RunOwnership.delegated_runs`).
+Cancelled and failed parents do not restart automatically.
 User-submitted queued messages take priority.
 Result inputs remain model context and do not render as user messages.
 Search documents and `tool_id` come from the `ToolCall` rows and their search-doc

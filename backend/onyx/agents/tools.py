@@ -117,9 +117,21 @@ class AgentControl(Protocol):
         self, run_id: str, callback: Callable[[], None]
     ) -> Future[None]: ...
 
-    def discover_children(self) -> list["AgentInfo"]: ...
+    @property
+    def agent_id(self) -> str:
+        """The calling agent."""
+        ...
 
-    def lookup_agent(self, agent_id: str) -> "AgentInfo | None": ...
+    def discover_agents(self) -> list["AgentInfo"]:
+        """The visible agent tree, including the root and the caller."""
+        ...
+
+    def interrupt_agent(self, agent_id: str) -> "AgentInfo | None":
+        """Cancel one agent's active run; the run reports no result.
+
+        Returns None for the caller, the root, or an agent that is not visible.
+        """
+        ...
 
 
 class ToolProgress(BaseModel):

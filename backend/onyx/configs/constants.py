@@ -420,6 +420,8 @@ class MessageType(str, Enum):
     SUMMARY = "summary"
     TOOL_CALL_RESPONSE = "tool_call_response"
     USER_REMINDER = "user_reminder"  # Custom Onyx message type which is translated into a USER message when passed to the LLM
+    # Hidden question of an automatic follow-up; its response's first step accepts the results.
+    AGENT_RESULTS = "agent_results"
 
 
 class TokenRateLimitScope(str, Enum):

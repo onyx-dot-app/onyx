@@ -7,10 +7,11 @@ import {
   type SetStateAction,
 } from "react";
 import { QueuedMessage } from "@/app/app/types";
+import type { PendingChatMessage } from "@/lib/chat/types";
 
 interface UseQueuedMessageNavigationParams {
   /** The messages currently queued for the active session. */
-  messages: readonly QueuedMessage[];
+  messages: readonly (QueuedMessage | PendingChatMessage)[];
   /**
    * Whether the text input is empty. Up-arrow only enters navigation mode
    * when there is no text to move the caret within.

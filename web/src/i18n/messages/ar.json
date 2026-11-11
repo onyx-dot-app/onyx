@@ -122,6 +122,9 @@
       "authenticate": {
         "label": "مصادقة"
       },
+      "codingAgentIncognito": {
+        "tooltip": "وكيل البرمجة غير متاح في وضع التخفي"
+      },
       "configure": {
         "tooltip": "تكوين"
       },
@@ -12433,6 +12436,7 @@
         },
         "deepResearchButton": {
           "disabledTooltip": "البحث المعمق معطّل في وضع النماذج المتعددة",
+          "incognitoTooltip": "البحث المعمق غير متاح في وضع التخفي",
           "label": "بحث معمق"
         },
         "incognitoNotice": {
@@ -12471,7 +12475,9 @@
           "sendHint": "الإرسال في الخطوة التالية من هذه الاستجابة",
           "interruptHint": "مقاطعة العمل الحالي وإرسال هذه الرسالة",
           "sendLabel": "إرسال",
-          "queueLabel": "إضافة للقائمة"
+          "queueLabel": "إضافة للقائمة",
+          "interruptKeyboardHint": "Enter للمقاطعة · Ctrl أو Command + Enter للإضافة إلى القائمة",
+          "interruptLabel": "مقاطعة"
         }
       },
       "baseInputBar": {
@@ -12602,8 +12608,7 @@
         }
       },
       "pendingMessages": {
-        "submitFailed": "تعذر إرسال الرسالة. يمكنك تعديلها أو إزالتها من الرسائل المعلقة.",
-        "restoredUnconfirmed": "استعدنا رسائل لم نتمكن من تأكيد تسليمها. تحقق من المحادثة قبل إرسالها مجددًا.",
+        "submitFailed": "تعذر إرسال الرسالة.",
         "withdrawFailed": "تعذر إزالة الرسالة المعلقة.",
         "loadFailed": "تعذر تحميل الرسائل المعلقة.",
         "alreadyAccepted": "تم قبول هذه الرسالة بالفعل ولم تعد قيد الانتظار.",
@@ -12703,6 +12708,9 @@
         "timedOut": {
           "text": "توقف الرد لأنه بلغ الحد الزمني."
         }
+      },
+      "agentResults": {
+        "received": "تم استلام نتائج الوكيل الفرعي"
       },
       "codeBlock": {
         "copyButton": {

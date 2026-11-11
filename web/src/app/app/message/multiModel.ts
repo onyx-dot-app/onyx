@@ -72,15 +72,19 @@ export interface UnresolvedMultiModelTurn {
 }
 
 // The multi-model turn a new message would continue from, when the user
-// never picked a preferred response. `chain` is the tree's latest chain.
+// never picked a preferred response. `chain` is the tree's latest chain; a
+// turn the chain continues past is not the one a new message continues.
 export function getUnresolvedMultiModelTurn(
   chain: Message[],
   messageTree: Map<number, Message>
 ): UnresolvedMultiModelTurn | null {
-  const lastUserMsg = [...chain].reverse().find((m) => m.type === "user");
-  if (!lastUserMsg || lastUserMsg.preferredResponseId != null) return null;
-  const responses = getMultiModelChildren(lastUserMsg, messageTree);
-  return responses ? { userMessage: lastUserMsg, responses } : null;
+  const parentNodeId = chain.at(-1)?.parentNodeId;
+  const userMessage =
+    parentNodeId == null ? undefined : messageTree.get(parentNodeId);
+  if (userMessage?.type !== "user" || userMessage.preferredResponseId != null)
+    return null;
+  const responses = getMultiModelChildren(userMessage, messageTree);
+  return responses ? { userMessage, responses } : null;
 }
 
 // The model of the most recent preferred response before `excludeNodeId`'s

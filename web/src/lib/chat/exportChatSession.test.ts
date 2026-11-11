@@ -126,7 +126,7 @@ describe("exportChatSession", () => {
     );
   });
 
-  it("omits system, tool-call, reminder, and empty messages", async () => {
+  it("omits system, tool-call, reminder, agent-results, and empty messages", async () => {
     mockFetchOk(
       makeSession([
         makeMessage("system", "you are a helpful assistant"),
@@ -134,6 +134,7 @@ describe("exportChatSession", () => {
         makeMessage("tool_call_response", "{...}"),
         makeMessage("assistant", "Answer."),
         makeMessage("user_reminder", "reminder"),
+        makeMessage("agent_results", "Subagent results"),
         makeMessage("assistant", "   "),
       ])
     );

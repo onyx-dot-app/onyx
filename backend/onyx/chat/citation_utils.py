@@ -29,9 +29,12 @@ def message_citation_sources(message: Message) -> CitationMapping:
 def remap_received_citations(
     messages: Sequence[UserMessage], sources: CitationMapping
 ) -> ReceivedAgentInputs:
-    """Merge incoming agent evidence into this conversation's citation numbers."""
+    """Renumber incoming agent citations into this conversation's numbers.
+
+    Returns the rewritten messages and the numbers they add to `sources`.
+    """
     inputs: list[UserMessage] = []
-    original_sources = sources
+    merged = sources
     for message in messages:
         if not isinstance(message.metadata, InputMessageMetadata) or (
             message.metadata.source != InputSource.AGENT_RESULT
@@ -40,15 +43,19 @@ def remap_received_citations(
             continue
         incoming = message_citation_sources(message)
         cited = extract_citation_order_from_text(message.text)
-        text, sources = collapse_citations(
+        text, merged = collapse_citations(
             message.text,
-            sources,
+            merged,
             {number: incoming[number] for number in cited if number in incoming},
         )
         inputs.append(message.model_copy(update={"content": text}))
     return ReceivedAgentInputs(
         messages=inputs,
-        citation_sources=sources if sources is not original_sources else None,
+        new_citations={
+            number: document
+            for number, document in merged.items()
+            if number not in sources
+        },
     )
 
 
@@ -108,8 +115,6 @@ def collapse_citations(
     answer_text: str,
     existing_citation_mapping: CitationMapping,
     new_citation_mapping: CitationMapping,
-    *,
-    minimum_citation_number: int = 1,
 ) -> tuple[str, CitationMapping]:
     """Collapse the citations in the text to use the smallest possible numbers.
 
@@ -125,7 +130,6 @@ def collapse_citations(
             are preserved unchanged in the output.
         new_citation_mapping: Citations from the current text that need to be collapsed.
             The keys are the citation numbers as they appear in answer_text.
-        minimum_citation_number: First number reserved for this call when tools run in parallel.
 
     Returns:
         A tuple of (updated_text, combined_mapping) where:
@@ -144,8 +148,6 @@ def collapse_citations(
         next_citation_num = max(existing_citation_mapping.keys()) + 1
     else:
         next_citation_num = 1
-
-    next_citation_num = max(next_citation_num, minimum_citation_number)
 
     # Build the mapping from old citation numbers (in new_citation_mapping) to new numbers
     old_to_new: dict[int, int] = {}

@@ -1,7 +1,7 @@
 import json
 from uuid import UUID
 
-from sqlalchemy import delete, inspect, literal, select
+from sqlalchemy import delete, inspect, select
 from sqlalchemy.orm import Session, aliased, joinedload, object_session, selectinload
 
 from onyx.agents.compaction import count_tokens
@@ -10,11 +10,11 @@ from onyx.agents.models import (
     AgentInfo,
     InputMessageMetadata,
     InputSource,
-    MessageDelivery,
     RunFailureKind,
     RunStatus,
     StepRecord,
     ToolExecutionRecord,
+    agent_result_message_id,
 )
 from onyx.chat.models import (
     ChatExecutionRecord,
@@ -53,6 +53,7 @@ from onyx.db.chat import (
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import record_mode_persists_content
 from onyx.db.models import (
+    AcceptedChatInput,
     ChatInput,
     ChatMessage,
     ChatResponseCheckpoint,
@@ -377,47 +378,30 @@ def save_chat_response_to_db(
 
 def _child_responses(db_session: Session, response_ids: list[int]) -> list[ChatMessage]:
     question = aliased(ChatMessage)
-    children = (
-        select(ChatMessage.id, ChatMessage.chat_session_id, ChatResponseItem.step_index)
-        .join(question, ChatMessage.parent_message_id == question.id)
-        .join(ToolCall, question.invoking_tool_call_id == ToolCall.id)
-        .join(
-            ChatResponseItem,
-            (ChatResponseItem.chat_message_id == ToolCall.parent_chat_message_id)
-            & (ChatResponseItem.step_index == ToolCall.turn_number),
-        )
-        .where(
-            ToolCall.parent_chat_message_id.in_(response_ids),
-            ChatMessage.response_status.is_not(None),
-        )
-        .cte("child_responses", recursive=True)
-    )
-    children = children.union_all(
-        select(ChatMessage.id, ChatMessage.chat_session_id, children.c.step_index)
-        .join(children, ChatMessage.parent_message_id == children.c.id)
-        .where(
-            ChatMessage.chat_session_id == children.c.chat_session_id,
-            ChatMessage.message_type == MessageType.ASSISTANT,
-            ChatMessage.response_status.is_not(None),
-        )
-    )
     return list(
         db_session.scalars(
             select(ChatMessage)
-            .join(children, children.c.id == ChatMessage.id)
+            .join(question, ChatMessage.parent_message_id == question.id)
+            .join(ToolCall, question.invoking_tool_call_id == ToolCall.id)
+            .join(
+                ChatResponseItem,
+                (ChatResponseItem.chat_message_id == ToolCall.parent_chat_message_id)
+                & (ChatResponseItem.step_index == ToolCall.turn_number),
+            )
+            .where(
+                ToolCall.parent_chat_message_id.in_(response_ids),
+                ChatMessage.response_status.is_not(None),
+            )
             .options(
                 joinedload(ChatMessage.chat_session),
                 joinedload(ChatMessage.parent_message).joinedload(
                     ChatMessage.invoking_tool_call
                 ),
-                joinedload(ChatMessage.parent_message).joinedload(
-                    ChatMessage.parent_message
-                ),
                 selectinload(ChatMessage.response_items),
                 selectinload(ChatMessage.tool_calls),
             )
             # Stable display order; predecessor links determine child history.
-            .order_by(children.c.step_index, ChatMessage.id)
+            .order_by(ChatResponseItem.step_index, ChatMessage.id)
             .limit(MAX_AGENT_HISTORY_RUNS + 1)
         )
     )
@@ -585,9 +569,9 @@ class _ResponseWriter:
             question = response.parent_message
             if question is None or question.message_type not in (
                 MessageType.USER,
-                MessageType.ASSISTANT,
+                MessageType.AGENT_RESULTS,
             ):
-                raise ValueError("Response has no conversation predecessor")
+                raise ValueError("Response has no question")
         else:
             response = self._child_response(record, parent)
         if str(response.id) != record.run_id:
@@ -664,7 +648,7 @@ class _ResponseWriter:
             if not isinstance(record.input_messages[0].content, str):
                 raise ValueError("Saved child instructions must contain text only")
         elif record.input_messages:
-            raise ValueError("A response continuation accepts input through its steps")
+            raise ValueError("A follow-up response accepts results through its steps")
         creation_id = response.chat_session.spawned_by_message_id
         creation_response = (
             self.db_session.get(ChatMessage, creation_id)
@@ -673,18 +657,11 @@ class _ResponseWriter:
         )
         if (
             creation_response is None
-            or parent.chat_session_id
-            not in session_ancestors(self.db_session, [response.chat_session_id])
             or root_response_id(self.db_session, creation_response)
             not in self.branch_ids
         ):
             raise ValueError("Child session is unavailable on this branch")
-        predecessor_id = (
-            question.id
-            if question.message_type == MessageType.ASSISTANT
-            else question.parent_message_id
-        )
-        if predecessor_id != (
+        if question.parent_message_id != (
             int(record.previous_run_id) if record.previous_run_id else None
         ):
             raise ValueError("Saved response belongs to another predecessor")
@@ -696,22 +673,34 @@ def reserve_child_response__no_commit(
     root_message_id: int,
     *,
     agent: AgentInfo,
-    instruction: UserMessage,
+    instruction: UserMessage | None,
     previous_response_id: int | None,
     parent_response_id: int,
     parent_message_id: str,
     parent_tool_call_id: str,
+    delivers_result: bool,
 ) -> int:
-    """Reserve a child question and response before execution; caller commits."""
+    """Reserve a child question and response before execution; caller commits.
+
+    Without an instruction, the question is a hidden AGENT_RESULTS message whose
+    response receives unread results. With `delivers_result`, the response also
+    gets the result inbox row of its spawner. `root_message_id` can be newer than
+    the invocation's root when the run continues a predecessor from a later turn.
+    """
     configure_response_transaction__no_commit(session)
     root = session.get(ChatMessage, root_message_id)
     parent = find_response__no_commit(session, parent_response_id)
-    if root is None or parent is None or root_response_id(session, parent) != root.id:
+    if root is None or parent is None:
+        raise ValueError("Parent response is unavailable on this branch")
+    branch_ids = visible_message_ids(session, root)
+    if root_response_id(session, parent) not in branch_ids:
         raise ValueError("Parent response is unavailable on this branch")
     if not record_mode_persists_content(root.chat_session.incognito_record_mode):
         raise ValueError("Content-free sessions cannot reserve durable child responses")
-    if not isinstance(instruction.content, str):
+    if instruction is not None and not isinstance(instruction.content, str):
         raise ValueError("Saved child instructions must contain text only")
+    if instruction is None and previous_response_id is None:
+        raise ValueError("A follow-up response requires a previous response")
     generation = next(
         (row for row in parent.response_items if row.id == parent_message_id),
         None,
@@ -729,7 +718,6 @@ def reserve_child_response__no_commit(
     if invocation is None:
         raise ValueError("Child instruction has no parent invocation")
     child_session = session.get(ChatSession, UUID(agent.id))
-    branch_ids = visible_message_ids(session, root)
     if child_session is None:
         if agent.parent_id != str(parent.chat_session_id):
             raise ValueError("Child agent belongs to another parent")
@@ -751,9 +739,9 @@ def reserve_child_response__no_commit(
         if child_session.spawned_by_message_id is not None
         else None
     )
+    # Any agent in the visible tree can start a run of an existing child.
     if (
         creation_response is None
-        or parent.chat_session_id not in session_ancestors(session, [child_session.id])
         or root_response_id(session, creation_response) not in branch_ids
     ):
         raise ValueError("Child session is unavailable on this branch")
@@ -771,14 +759,14 @@ def reserve_child_response__no_commit(
             or not predecessor.response_status.is_terminal
         ):
             raise ValueError("Child predecessor has not finished")
-    instruction_text = sanitize_string(instruction.text)
+    instruction_text = sanitize_string(instruction.text) if instruction else ""
     question = ChatMessage(
         chat_session_id=child_session.id,
         parent_message_id=predecessor.id if predecessor else None,
         invoking_tool_call_id=invocation.id,
         message=instruction_text,
         token_count=count_tokens(instruction_text),
-        message_type=MessageType.USER,
+        message_type=MessageType.USER if instruction else MessageType.AGENT_RESULTS,
     )
     session.add(question)
     session.flush()
@@ -792,25 +780,19 @@ def reserve_child_response__no_commit(
     session.add(response)
     session.flush()
     question.latest_child_message_id = response.id
-    return response.id
-
-
-def reserve_agent_continuation__no_commit(
-    session: Session, previous: ChatMessage
-) -> int:
-    """Reserve the next assistant response; the caller holds the recipient lock."""
-    if previous.response_status != RunStatus.COMPLETE:
-        raise ValueError("Only a completed response can continue on child output")
-    response = ChatMessage(
-        chat_session_id=previous.chat_session_id,
-        parent_message_id=previous.id,
-        message="",
-        token_count=0,
-        message_type=MessageType.ASSISTANT,
-    )
-    session.add(response)
-    session.flush()
-    previous.latest_child_message_id = response.id
+    if delivers_result:
+        # Results go to the spawner, whichever agent started this run.
+        session.add(
+            ChatInput(
+                recipient_session_id=creation_response.chat_session_id,
+                message_id=agent_result_message_id(str(response.id)),
+                source=InputSource.AGENT_RESULT,
+                source_response_id=response.id,
+                root_response_id=root.id,
+                content="",
+            )
+        )
+        session.flush()
     return response.id
 
 
@@ -844,13 +826,9 @@ def abort_response_start__no_commit(
     if question is None or response_invocation(response) is None:
         raise ValueError("Child response has no invocation")
     child_session_id = response.chat_session_id
-    removed_ids = [response.id]
-    if question.message_type == MessageType.USER:
-        removed_ids.append(question.id)
-    elif question.latest_child_message_id == response.id:
-        question.latest_child_message_id = None
-        session.flush()
-    session.execute(delete(ChatMessage).where(ChatMessage.id.in_(removed_ids)))
+    session.execute(
+        delete(ChatMessage).where(ChatMessage.id.in_([response.id, question.id]))
+    )
     session.execute(
         delete(ChatSession).where(
             ChatSession.id == child_session_id,
@@ -874,7 +852,16 @@ def read_response_steps(response: ChatMessage) -> list[StepRecord]:
         if row.message.id != row.id or row.step_index != len(steps):
             raise ValueError("Response assistant identity or step is invalid")
         step = StepRecord(
-            input_messages=[read_response_input(item) for item in row.inputs],
+            input_messages=[
+                UserMessage(
+                    id=item.id,
+                    content=item.content,
+                    metadata=InputMessageMetadata(
+                        source=item.source, source_run_id=item.source_run_id
+                    ),
+                )
+                for item in row.inputs
+            ],
             message=row.message.model_copy(deep=True),
             generation_status=row.generation_status,
         )
@@ -919,140 +906,27 @@ def _invoking_message_id(invocation: ToolCall) -> str:
     return row.id
 
 
-def read_response_input(row: ChatInput) -> UserMessage:
-    invocation = row.invoking_tool_call
-    source_id = (
-        invocation.parent_chat_message_id if invocation else row.source_response_id
-    )
-    metadata = InputMessageMetadata(
-        source=row.source,
-        source_run_id=str(source_id) if source_id is not None else None,
-        sender_agent_id=(
-            str(invocation.chat_session_id)
-            if invocation
-            else str(row.source_agent_id)
-            if row.source != InputSource.HUMAN and row.source_agent_id is not None
-            else None
-        ),
-    )
-    return UserMessage(id=row.message_id, content=row.content, metadata=metadata)
-
-
-def write_response_inputs(
-    session: Session,
-    response: ChatMessage,
-    item: ChatResponseItem,
-    messages: list[UserMessage],
-) -> None:
-    """Keep accepted inputs immutable and adopt pending rows in model order."""
-    existing = {row.message_id: row for row in item.inputs}
-    incoming: set[str] = set()
-    for position, message in enumerate(messages):
-        if message.id is None or message.id in incoming:
-            raise ValueError("Received input identity is missing or repeated")
-        if not isinstance(message.content, str):
-            raise ValueError("Saved response inputs must contain text only")
-        incoming.add(message.id)
-        content = sanitize_string(message.content)
-        row = existing.get(message.id)
-        if row is not None:
-            if row.position != position or row.content != content:
-                raise ValueError("Accepted input content or position changed")
-            continue
-        row = session.scalar(
-            select(ChatInput)
-            .where(
-                ChatInput.recipient_session_id == response.chat_session_id,
-                ChatInput.message_id == message.id,
-                ChatInput.response_item_id.is_(None),
-            )
-            .with_for_update(of=ChatInput)
-        )
+def _accepted_inputs(messages: list[UserMessage]) -> list[AcceptedChatInput]:
+    inputs: list[AcceptedChatInput] = []
+    for message in messages:
+        if message.id is None or not isinstance(message.content, str):
+            raise ValueError("Saved response inputs require an identity and text")
         origin = message.metadata
-        if row is not None and (
-            row.target_response_id != response.id
-            or row.delivery != MessageDelivery.SEND
-        ):
-            raise ValueError("Pending input targets another response")
-        if row is None:
-            source = (
-                origin.source
+        inputs.append(
+            AcceptedChatInput(
+                id=sanitize_string(message.id),
+                source=origin.source
                 if isinstance(origin, InputMessageMetadata)
-                else InputSource.HUMAN
-            )
-            source_id = (
-                origin.source_run_id
+                else InputSource.HUMAN,
+                source_run_id=origin.source_run_id
                 if isinstance(origin, InputMessageMetadata)
-                else None
+                else None,
+                content=sanitize_string(message.content),
             )
-            if source == InputSource.AGENT or (
-                source == InputSource.HUMAN and source_id is not None
-            ):
-                raise ValueError("Submitted input is no longer pending")
-            if source_id is not None and not source_id.isdecimal():
-                raise ValueError("Saved input source must identify a response")
-            if source == InputSource.AGENT_RESULT:
-                source_response = (
-                    session.get(ChatMessage, int(source_id))
-                    if source_id is not None
-                    else None
-                )
-                invocation = (
-                    response_invocation(source_response) if source_response else None
-                )
-                root = session.get(ChatMessage, root_response_id(session, response))
-                if source_response is None or root is None or invocation is None:
-                    raise ValueError("Input result is unavailable on this branch")
-                visible_ids = visible_message_ids(session, root)
-                if root_response_id(session, source_response) not in visible_ids:
-                    raise ValueError("Input result is unavailable on this branch")
-                if invocation.chat_session_id != response.chat_session_id:
-                    source_history: set[int] = set()
-                    predecessor: ChatMessage | None = source_response
-                    while (
-                        predecessor is not None
-                        and predecessor.message_type == MessageType.ASSISTANT
-                    ):
-                        if (
-                            predecessor.id in source_history
-                            or len(source_history) >= MAX_AGENT_HISTORY_RUNS
-                        ):
-                            raise ValueError("Response history is cyclic or too long")
-                        source_history.add(predecessor.id)
-                        predecessor = predecessor.parent_message
-                    sender_history = visible_message_ids(session, response)
-                    accepted_instruction = session.scalar(
-                        select(ChatInput.id)
-                        .join(
-                            ChatResponseItem,
-                            ChatInput.response_item_id == ChatResponseItem.id,
-                        )
-                        .join(ToolCall, ChatInput.invoking_tool_call_id == ToolCall.id)
-                        .where(
-                            ChatInput.source == InputSource.AGENT,
-                            ChatResponseItem.chat_message_id.in_(source_history),
-                            ToolCall.chat_session_id == response.chat_session_id,
-                            ToolCall.parent_chat_message_id.in_(sender_history),
-                        )
-                        .limit(1)
-                    )
-                    if accepted_instruction is None:
-                        raise ValueError("Input result is unavailable on this branch")
-            row = ChatInput(
-                recipient_session_id=response.chat_session_id,
-                message_id=sanitize_string(message.id),
-                source=source,
-                source_response_id=int(source_id) if source_id is not None else None,
-                content=content,
-            )
-        row.content = content
-        row.position = position
-        row.delivery = None
-        row.max_steps = None
-        row.total_timeout_s = None
-        item.inputs.append(row)
-    if existing.keys() - incoming:
-        raise ValueError("Response update cannot discard accepted inputs")
+        )
+    if len({item.id for item in inputs}) != len(inputs):
+        raise ValueError("Received input identity is repeated")
+    return inputs
 
 
 def read_response_record(
@@ -1066,11 +940,11 @@ def read_response_record(
     question = response.parent_message
     if (
         question is None
-        or question.message_type not in (MessageType.USER, MessageType.ASSISTANT)
+        or question.message_type not in (MessageType.USER, MessageType.AGENT_RESULTS)
         or question.chat_session_id != response.chat_session_id
     ):
-        raise ValueError("Response has no predecessor in its conversation")
-    invocation = response_invocation(response)
+        raise ValueError("Response has no question in its conversation")
+    invocation = question.invoking_tool_call
     inputs: list[Message] = []
     if question.message_type == MessageType.USER:
         inputs.append(
@@ -1081,11 +955,7 @@ def read_response_record(
                 content=question.message,
             )
         )
-    previous = (
-        question
-        if question.message_type == MessageType.ASSISTANT
-        else question.parent_message
-    )
+    previous = question.parent_message
     if previous is not None and previous.response_status is None:
         previous = None
     parent_response_id = invocation.parent_chat_message_id if invocation else None
@@ -1157,8 +1027,10 @@ def write_response_items(
         if item_id not in existing:
             response.response_items.append(row)
         row.message = message
-        with db_session.no_autoflush:
-            write_response_inputs(db_session, response, row, step.input_messages)
+        inputs = _accepted_inputs(step.input_messages)
+        if row.inputs and row.inputs != inputs:
+            raise ValueError("Accepted inputs cannot change")
+        row.inputs = inputs
         row.generation_status = step.generation_status
         row.is_answer = step_index == record.answer_step_index
         setting = presentation.pop(message_id, None)
@@ -1223,37 +1095,7 @@ def finish_checkpoint__no_commit(session: Session, message_id: int) -> None:
 def _read_response_ancestry(
     session: Session, response_id: int
 ) -> ResponseAncestry | None:
-    predecessors = (
-        select(
-            ChatMessage.parent_message_id,
-            ChatMessage.chat_session_id,
-            ChatMessage.message_type,
-            ChatMessage.invoking_tool_call_id,
-            literal(0).label("depth"),
-        )
-        .where(ChatMessage.id == response_id)
-        .cte("response_predecessors", recursive=True)
-    )
-    predecessors = predecessors.union_all(
-        select(
-            ChatMessage.parent_message_id,
-            ChatMessage.chat_session_id,
-            ChatMessage.message_type,
-            ChatMessage.invoking_tool_call_id,
-            predecessors.c.depth + 1,
-        )
-        .join(predecessors, ChatMessage.id == predecessors.c.parent_message_id)
-        .where(
-            ChatMessage.chat_session_id == predecessors.c.chat_session_id,
-            predecessors.c.message_type == MessageType.ASSISTANT,
-            predecessors.c.depth < MAX_AGENT_HISTORY_RUNS,
-        )
-    )
-    invocation_id = (
-        select(predecessors.c.invoking_tool_call_id)
-        .where(predecessors.c.message_type == MessageType.USER)
-        .scalar_subquery()
-    )
+    question = aliased(ChatMessage)
     spawning_response = aliased(ChatMessage)
     row = (
         session.execute(
@@ -1266,7 +1108,8 @@ def _read_response_ancestry(
                 ToolCall.parent_chat_message_id.label("parent_response_id"),
             )
             .join(ChatSession, ChatSession.id == ChatMessage.chat_session_id)
-            .outerjoin(ToolCall, ToolCall.id == invocation_id)
+            .outerjoin(question, question.id == ChatMessage.parent_message_id)
+            .outerjoin(ToolCall, ToolCall.id == question.invoking_tool_call_id)
             .outerjoin(
                 spawning_response,
                 spawning_response.id == ChatSession.spawned_by_message_id,

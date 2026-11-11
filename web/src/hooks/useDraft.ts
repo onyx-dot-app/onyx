@@ -18,46 +18,13 @@ function getStorage(): Storage | null {
   }
 }
 
-export function clearDraft<T>(key: string, expectedValue?: T) {
+export function clearDraft(key: string) {
   const storage = getStorage();
   if (!storage) return;
   try {
-    if (
-      expectedValue !== undefined &&
-      storage.getItem(key) !== JSON.stringify(expectedValue)
-    )
-      return;
     storage.removeItem(key);
   } catch {
     // ignore
-  }
-}
-
-export function saveDraft<T>(key: string, value: T) {
-  const storage = getStorage();
-  if (!storage) return;
-  try {
-    storage.setItem(key, JSON.stringify(value));
-  } catch {
-    // Drafts are optional when storage is unavailable.
-  }
-}
-
-/** Update the latest stored value so late callbacks cannot replace newer drafts. */
-export function updateDraft<T>(
-  key: string,
-  update: (value: T | null) => T | null
-) {
-  const storage = getStorage();
-  if (!storage) return;
-  try {
-    const raw = storage.getItem(key);
-    // SAFETY: Draft values are written and read by the same typed caller.
-    const value = update(raw === null ? null : (JSON.parse(raw) as T));
-    if (value === null) storage.removeItem(key);
-    else storage.setItem(key, JSON.stringify(value));
-  } catch {
-    // Drafts are optional when storage is unavailable.
   }
 }
 
@@ -95,6 +62,7 @@ export function useDraft<T>({
     null
   );
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const writeRef = useRef<(() => void) | null>(null);
   const isEmptyRef = useRef(isEmpty);
 
   useEffect(() => {
@@ -126,19 +94,40 @@ export function useDraft<T>({
     };
   }, [key]);
 
+  // A page unload skips React cleanup, so write the pending value before the
+  // timer is lost.
+  useEffect(() => {
+    const flush = () => {
+      if (timerRef.current === null) return;
+      clearTimeout(timerRef.current);
+      writeRef.current?.();
+    };
+    window.addEventListener("pagehide", flush);
+    return () => window.removeEventListener("pagehide", flush);
+  }, []);
+
   const save = useCallback(
     (value: T) => {
       if (timerRef.current !== null) clearTimeout(timerRef.current);
       const write = () => {
         timerRef.current = null;
-        if (isEmptyRef.current(value)) {
-          clearDraft(key);
-        } else {
-          saveDraft(key, value);
+        const storage = getStorage();
+        if (!storage) return;
+        try {
+          if (isEmptyRef.current(value)) {
+            storage.removeItem(key);
+          } else {
+            storage.setItem(key, JSON.stringify(value));
+          }
+        } catch {
+          // ignore
         }
       };
       if (debounceMs === 0) write();
-      else timerRef.current = setTimeout(write, debounceMs);
+      else {
+        writeRef.current = write;
+        timerRef.current = setTimeout(write, debounceMs);
+      }
     },
     [key, debounceMs]
   );

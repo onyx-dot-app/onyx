@@ -14,6 +14,7 @@ from onyx.agents.models import (
     RunStatus,
     StepRecord,
 )
+from onyx.cache.interface import CacheBackend
 from onyx.chat.agent import ChatAgent
 from onyx.chat.chat_processing_checker import ChatTurnAdmission
 from onyx.chat.citation_utils import message_citation_sources
@@ -23,18 +24,18 @@ from onyx.chat.history_store import (
     get_chat_history_store,
 )
 from onyx.chat.models import (
+    ChatBranch,
     ChatHistoryResult,
     ChatMessageMetadata,
     ChatResponseSnapshot,
     ChatTurnSetup,
-    IncognitoResponseReceipt,
+    IncognitoAgentResponse,
     IncognitoState,
     SavedAgentContext,
 )
 from onyx.chat.presentation import project_response
 from onyx.chat.restoration import restore_subagent
 from onyx.chat.run_store import ChatRunStore
-from onyx.chat.subagents import ChatAgentDirectory
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.db.chat_response import save_chat_response_to_db
@@ -88,6 +89,7 @@ def test_research_request_restores_a_chat_child_without_a_live_chat_root() -> No
     setup.chat_files_for_tools = []
     setup.reasoning_effort = ReasoningEffort.AUTO
     setup.all_injected_file_metadata = {}
+    setup.incognito_record_mode = None
     configuration = ChatConfiguration(kind="chat")
     history = SavedAgentContext(
         agent_id="child",
@@ -354,25 +356,25 @@ def test_agent_lookup_uses_its_tenant_and_restores_the_callers_context(
     )
     token = CURRENT_TENANT_ID_CONTEXTVAR.set("conversation-tenant")
     try:
-        run_store = Mock(spec=ChatRunStore, tenant_id="conversation-tenant")
-        run_store.pending_message_counts.return_value = {}
-        directory = ChatAgentDirectory(
-            history_store=PostgresChatHistoryStore(
-                message_id=17, chat_session_id=uuid4()
-            ),
-            store=run_store,
-            build_agent=lambda _: pytest.fail("Restoration was not requested"),
+        cache = Mock(spec=CacheBackend)
+        directory = ChatRunStore(
+            tenant_id="conversation-tenant",
+            chat_session_id=uuid4(),
+            response_id=17,
+            visible_response_ids=[],
+            cache=cache,
+            control_cache=cache,
         )
         CURRENT_TENANT_ID_CONTEXTVAR.set("caller-tenant")
 
-        def lookup(message_id: int, agent_id: str, parent_id: str) -> AgentInfo:
+        def lookup(branch: ChatBranch, agent_id: str, parent_id: str) -> AgentInfo:
             assert CURRENT_TENANT_ID_CONTEXTVAR.get() == "conversation-tenant"
-            assert (message_id, agent_id, parent_id) == (17, "child", "root")
+            assert (branch.message_ids, agent_id, parent_id) == ([17], "child", "root")
             if lookup_fails:
                 raise RuntimeError("Storage unavailable")
             return agent
 
-        with patch("onyx.chat.history_store.lookup_session_agent", side_effect=lookup):
+        with patch("onyx.chat.run_store.lookup_session_agent", side_effect=lookup):
             if lookup_fails:
                 with pytest.raises(RuntimeError, match="Storage unavailable"):
                     directory.lookup_agent("child", "root")
@@ -405,7 +407,7 @@ def test_incognito_regeneration_preserves_results_before_selected_question() -> 
     cached = IncognitoState(
         messages=[search, image, question, answer],
         responses={
-            "16": IncognitoResponseReceipt(
+            "16": IncognitoAgentResponse(
                 replay_digest="", run_id="prior", message_ids=["prior:0", "prior:1"]
             )
         },

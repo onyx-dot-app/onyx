@@ -10,15 +10,10 @@ import {
 } from "@/app/app/services/lib";
 import {
   getLatestMessageChain,
-  getMessageByMessageId,
   setMessageAsLatest,
   restoreIncognitoMessages,
 } from "@/app/app/services/messageTree";
-import {
-  BackendChatSession,
-  ChatSessionSharedStatus,
-  Message,
-} from "@/app/app/types";
+import { BackendChatSession, ChatSessionSharedStatus } from "@/app/app/types";
 import {
   SEARCH_PARAM_NAMES,
   shouldSubmitOnLoad,
@@ -36,13 +31,14 @@ import { getProjectFilesForSession } from "@/lib/projects/svc";
 import { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import type { ErrorResponseBody } from "@/lib/fetcher";
 import {
+  followChatSession,
+  prepareSavedChat,
   preserveFailedMessages,
-  settleChatSession,
-  resumeChatSession,
 } from "@/lib/chat/settleChatSession";
 import { useTranslations } from "next-intl";
 import type { Route } from "next";
 import { useNavigation } from "@opal/navigation";
+import { useChatSessionQueue } from "@/lib/chat/hooks";
 
 interface UseChatSessionControllerProps {
   existingChatSessionId: string | null;
@@ -125,7 +121,9 @@ export default function useChatSessionController({
   );
   const currentChatHistory = useCurrentMessageHistory();
   const chatSessions = useChatSessionStore((state) => state.sessions);
-  const { setIncognitoEnabled, setIncognitoSessionId } = useIncognito();
+  const { incognitoEnabled, setIncognitoEnabled, setIncognitoSessionId } =
+    useIncognito();
+  const queue = useChatSessionQueue(!incognitoEnabled);
 
   // Fetch chat messages for the chat session
   useEffect(() => {
@@ -276,24 +274,21 @@ export default function useChatSessionController({
         }
       }
 
-      const savedMessages = processRawChatHistory(
-        chatSession.messages,
-        chatSession.packets
-      );
       const localMessages = useChatSessionStore
         .getState()
         .sessions.get(chatSession.chat_session_id)?.messageTree;
-      let newMessageMap = savedMessages;
+      let savedMessages = processRawChatHistory(
+        chatSession.messages,
+        chatSession.packets
+      );
       if (recovering && localMessages?.size) {
-        if (isIncognito) {
-          newMessageMap = restoreIncognitoMessages(
-            savedMessages,
-            localMessages,
-            chatSession.current_stream?.stream_id
-          );
-        } else {
-          newMessageMap = preserveFailedMessages(savedMessages, localMessages);
-        }
+        savedMessages = isIncognito
+          ? restoreIncognitoMessages(
+              savedMessages,
+              localMessages,
+              chatSession.current_stream?.stream_id
+            )
+          : preserveFailedMessages(savedMessages, localMessages);
       }
       const currentStream = chatSession.current_stream;
       if (currentStream) {
@@ -304,32 +299,11 @@ export default function useChatSessionController({
             sendAcknowledged: Promise.resolve(currentStream.stream_id),
           });
       }
-      const resumedMessage = currentStream
-        ? getMessageByMessageId(newMessageMap, currentStream.stream_id)
-        : undefined;
-      if (currentStream && resumedMessage?.type === "assistant") {
-        const retained = localMessages
-          ? getMessageByMessageId(localMessages, currentStream.stream_id)
-          : undefined;
-        newMessageMap = new Map(newMessageMap);
-        newMessageMap.set(
-          resumedMessage.nodeId,
-          retained?.replayCursor !== undefined
-            ? {
-                ...retained,
-                nodeId: resumedMessage.nodeId,
-                parentNodeId: resumedMessage.parentNodeId,
-                childrenNodeIds: resumedMessage.childrenNodeIds,
-                latestChildNodeId: resumedMessage.latestChildNodeId,
-              }
-            : {
-                ...resumedMessage,
-                message: "",
-                packets: [],
-                packetCount: 0,
-              }
-        );
-      }
+      const { messageTree: newMessageMap, replayStreamId } = prepareSavedChat(
+        savedMessages,
+        localMessages,
+        currentStream?.stream_id
+      );
       const newMessageHistory = getLatestMessageChain(newMessageMap);
 
       // Update message history except for edge where where
@@ -361,33 +335,22 @@ export default function useChatSessionController({
 
       setIsFetchingChatMessages(chatSession.chat_session_id, false);
 
-      async function settleSession(sessionId: string) {
-        if (!sessionOwner) return;
-        await settleChatSession({
-          sessionId,
+      if (
+        sessionOwner &&
+        (replayStreamId !== null ||
+          sessionBusy ||
+          useChatSessionStore
+            .getState()
+            .sessions.get(chatSession.chat_session_id)?.chatState !== "input")
+      ) {
+        void followChatSession({
+          sessionId: chatSession.chat_session_id,
           controller: sessionOwner,
           errorMessage: tReadiness("checkFailed"),
           mode: recovering ? "recovery" : "completion",
+          streamId: replayStreamId,
+          messageMap: newMessageMap,
         });
-      }
-
-      if (currentStream && resumedMessage?.type === "assistant") {
-        if (sessionOwner) {
-          void resumeChatSession({
-            sessionId: chatSession.chat_session_id,
-            streamId: currentStream.stream_id,
-            messageMap: newMessageMap,
-            controller: sessionOwner,
-            errorMessage: tReadiness("checkFailed"),
-            mode: recovering ? "recovery" : "completion",
-          });
-        }
-      } else if (
-        sessionBusy ||
-        useChatSessionStore.getState().sessions.get(chatSession.chat_session_id)
-          ?.chatState !== "input"
-      ) {
-        void settleSession(chatSession.chat_session_id);
       }
 
       // Fetch project files for this chat session (if any)
@@ -543,5 +506,6 @@ export default function useChatSessionController({
     onMessageSelection,
     projectFiles,
     sessionFetchError,
+    queue,
   };
 }

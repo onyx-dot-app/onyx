@@ -5,7 +5,6 @@ import queue
 import threading
 from datetime import datetime, timezone
 from functools import partial
-from typing import Literal
 from unittest.mock import Mock
 
 import pytest
@@ -16,14 +15,10 @@ from onyx.agents.events import AgentEvent
 from onyx.agents.models import (
     AgentCompletion,
     AgentStep,
-    InputMessageMetadata,
-    InputSource,
-    RunState,
     RunStatus,
     StepInput,
 )
 from onyx.agents.runtime import Run
-from onyx.agents.tools import ToolInvocation
 from onyx.chat.agent import ChatAgent
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import (
@@ -34,15 +29,16 @@ from onyx.chat.models import (
     PromptMetadata,
 )
 from onyx.chat.presentation import ResponsePresenter, project_response
+from onyx.chat.run_store import agent_result_message
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
-from onyx.db.enums import IncognitoRecordMode, MCPOAuthProviderMode
+from onyx.db.enums import MCPOAuthProviderMode
 from onyx.db.models import MCPServer
 from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.deep_research.tool_definitions import RESEARCH_AGENT_TOOL_NAME
 from onyx.file_store.models import ContextFileMetadata, ExtractedContextFiles
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
-from onyx.llm.interfaces import LLMConfig
+from onyx.llm.interfaces import LLM, LLMConfig
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     Delta,
@@ -68,7 +64,8 @@ from onyx.prompts.chat_prompts import (
 )
 from onyx.server.query_and_chat.streaming_models import OverallStop, Packet
 from onyx.tools.constants import PYTHON_TOOL_NAME
-from onyx.tools.models import ChatFile, ToolContext
+from onyx.tools.interface import Tool
+from onyx.tools.models import ChatFile
 from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
 from onyx.tools.tool_implementations.custom.openapi_parsing import MethodSpec
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
@@ -76,15 +73,42 @@ from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.subagents.subagent_tools import SpawnAgentTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.utils.fleet_query_telemetry import QueryMode, QueryObservation
-from shared_configs.contextvars import CURRENT_INCOGNITO_RECORD_MODE_CONTEXTVAR
 from tests.unit.onyx.agents.fakes import (
     EchoTool,
-    FakeAgentDirectory,
     FakeModelClient,
-    FakeRunStore,
+    FakeRunOwnership,
     ScriptedLLM,
     run_agent,
 )
+
+
+def chat_agent(
+    llm: LLM, tools: list[Tool], *, code_mode: bool = False, is_subagent: bool = False
+) -> ChatAgent:
+    """Build a chat agent whose children share its configuration."""
+    return ChatAgent(
+        messages=[],
+        tools=tools,
+        code_mode=code_mode,
+        custom_agent_prompt=None,
+        base_system_prompt="",
+        context_files=ExtractedContextFiles(
+            file_texts=[],
+            image_files=[],
+            use_as_search_filter=False,
+            total_token_count=0,
+            file_metadata=[],
+            uncapped_token_count=None,
+        ),
+        persona=None,
+        user_memory_context=None,
+        llm=llm,
+        token_counter=lambda text: len(text) // 4,
+        is_subagent=is_subagent,
+        create_subagent=lambda: chat_agent(
+            llm, tools, code_mode=code_mode, is_subagent=True
+        ),
+    )
 
 
 @pytest.mark.parametrize("multiple_operations", [False, True])
@@ -763,11 +787,8 @@ def test_context_file_citations_keep_history_numbers_across_turns(
 
 
 @pytest.mark.parametrize("replace_base", [False, True])
-@pytest.mark.parametrize("incognito_mode", [None, *IncognitoRecordMode])
 def test_chat_prepared_prompt_rebuilds_history_with_captured_instructions(
-    replace_base: bool,
-    incognito_mode: IncognitoRecordMode | None,
-    monkeypatch: pytest.MonkeyPatch,
+    replace_base: bool, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr("onyx.chat.prompt_utils.get_company_context", lambda: None)
     files = ExtractedContextFiles(
@@ -778,29 +799,23 @@ def test_chat_prepared_prompt_rebuilds_history_with_captured_instructions(
         uncapped_token_count=4,
         file_metadata=[],
     )
-    token = CURRENT_INCOGNITO_RECORD_MODE_CONTEXTVAR.set(
-        incognito_mode.value if incognito_mode else None
+    agent = ChatAgent(
+        messages=[],
+        tools=[EchoTool()],
+        custom_agent_prompt="Custom instructions",
+        base_system_prompt="Base instructions",
+        context_files=files,
+        persona=PersonaPromptConfig(
+            system_prompt="Replacement instructions",
+            task_prompt="Task reminder",
+            datetime_aware=False,
+            replace_base_system_prompt=replace_base,
+        ),
+        user_memory_context=None,
+        llm=ScriptedLLM([]),
+        token_counter=len,
+        reminders_enabled=False,
     )
-    try:
-        agent = ChatAgent(
-            messages=[],
-            tools=[EchoTool()],
-            custom_agent_prompt="Custom instructions",
-            base_system_prompt="Base instructions",
-            context_files=files,
-            persona=PersonaPromptConfig(
-                system_prompt="Replacement instructions",
-                task_prompt="Task reminder",
-                datetime_aware=False,
-                replace_base_system_prompt=replace_base,
-            ),
-            user_memory_context=None,
-            llm=ScriptedLLM([]),
-            token_counter=len,
-            reminders_enabled=False,
-        )
-    finally:
-        CURRENT_INCOGNITO_RECORD_MODE_CONTEXTVAR.reset(token)
     prepared = agent._prepare_step(
         StepInput(
             history=[],
@@ -840,17 +855,7 @@ def test_chat_prepared_prompt_rebuilds_history_with_captured_instructions(
             request.messages[-1].text
             == "<system-reminder>\nTask reminder\n</system-reminder>"
         )
-        assert {tool.name for tool in request.tools} == (
-            {"echo"}
-            if incognito_mode is not None
-            else {
-                "echo",
-                "spawn_agent",
-                "list_agents",
-                "interrupt_agent",
-                "send_message",
-            }
-        )
+        assert {tool.name for tool in request.tools} == {"echo"}
     assert any(message.text == "Earlier question" for message in first.messages)
     assert not any(message.text == "Earlier question" for message in second.messages)
     assert [message.model_dump() for message in history] == original
@@ -982,14 +987,7 @@ def test_preference_is_advisory_restorable_and_scoped_to_one_turn(
     assert outcome.output.text == "Answered without the preferred tool."
     assert len(requests) == (2 if use_other_tool else 1)
     for request in requests:
-        assert [tool.name for tool in request.tools] == [
-            "echo",
-            "other",
-            "spawn_agent",
-            "list_agents",
-            "interrupt_agent",
-            "send_message",
-        ]
+        assert [tool.name for tool in request.tools] == ["echo", "other"]
         reminder = request.messages[-1]
         assert (
             "The user selected these operations for this request: echo."
@@ -1020,339 +1018,44 @@ def test_preference_is_advisory_restorable_and_scoped_to_one_turn(
     )
 
 
-@pytest.mark.parametrize("parent_action", ["finish", "work"])
 @pytest.mark.parametrize("code_mode", [False, True])
-def test_chat_delegates_to_an_independent_agent(
-    parent_action: Literal["finish", "work"], code_mode: bool
-) -> None:
-    entered, release = threading.Event(), threading.Event()
-    child_requests: list[GenerationRequest] = []
-    saved: list[RunState] = []
-    child_run_ids: list[str] = []
+def test_chat_child_has_its_own_context_and_the_parent_tools(code_mode: bool) -> None:
+    """Store-backed delegation is covered by ext-dep `test_run_store.py`."""
+    requests: list[GenerationRequest] = []
 
-    class SlowTool(EchoTool):
-        def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-            if invocation.arguments["value"] == "parent":
-                release.set()
-                coordinator.completion(child_run_ids[0]).result(10)
-            else:
-                entered.set()
-                assert release.wait(10)
-            invocation.cancellation.check()
-            return ToolResult(content="work complete")
+    def reply(request: GenerationRequest, _: CancellationSignal) -> AssistantMessage:
+        requests.append(request)
+        return AssistantMessage(content=[TextContent(text="Answer")])
 
-    def reply(
-        request: GenerationRequest, cancellation: CancellationSignal
-    ) -> AssistantMessage:
-        cancellation.check()
-        is_child = any(
-            message.text in {"Independent task", "Leaf task"}
-            for message in request.messages
-        )
-        role_messages = [
-            message
-            for message in request.messages
-            if message.text == SUBAGENT_INSTRUCTIONS
-        ]
-        assert len(role_messages) == int(is_child)
-        if role_messages:
-            assert role_messages[0].cacheable
-        names = {tool.name for tool in request.tools}
-        results = [
-            message
-            for message in request.messages
-            if isinstance(message, ToolResultMessage)
-        ]
-        assert names == {
-            *({"execute_code", "wait_code"} if code_mode else {"echo"}),
-            "spawn_agent",
-            "list_agents",
-            "interrupt_agent",
-            "send_message",
-        }
-        if any(message.text == "Leaf task" for message in request.messages):
-            if not results:
-                return AssistantMessage(
-                    content=[
-                        ToolCall(
-                            id="work",
-                            name="execute_code" if code_mode else "echo",
-                            arguments={
-                                "code": "print(await echo(value='child'))",
-                                "yield_time_ms": 10000,
-                            }
-                            if code_mode
-                            else {"value": "child"},
-                        )
-                    ]
-                )
-            assert not results[0].is_error
-            assert "work complete" in results[0].content
-            return AssistantMessage(content=[TextContent(text="Leaf answer")])
-        if any(message.text == "Independent task" for message in request.messages):
-            child_requests.append(request)
-            if not results:
-                return AssistantMessage(
-                    content=[
-                        ToolCall(
-                            id="spawn-leaf",
-                            name="spawn_agent",
-                            arguments={"name": "leaf", "instruction": "Leaf task"},
-                        )
-                    ]
-                )
-            if not any(
-                isinstance(message, UserMessage)
-                and '"answer": "Leaf answer"' in message.text
-                for message in request.messages
-            ):
-                return AssistantMessage(
-                    content=[TextContent(text="Leaf work is pending")]
-                )
-            assert any(
-                isinstance(message, UserMessage)
-                and '"answer": "Leaf answer"' in message.text
-                for message in request.messages
-            )
-            return AssistantMessage(content=[TextContent(text="Child answer")])
-        if not results:
-            return AssistantMessage(
-                content=[
-                    ToolCall(
-                        id="spawn",
-                        name="spawn_agent",
-                        arguments={
-                            "name": "investigate",
-                            "instruction": "Independent task",
-                        },
-                    )
-                ]
-            )
-        if len(results) == 1:
-            (started,) = [
-                child
-                for child in coordinator.discover_children(agent.id)
-                if child.parent_id == agent.id
-            ]
-            assert started.latest_run_id is not None
-            child_run_ids.append(started.latest_run_id)
-            assert entered.wait(10)
-            if parent_action == "work":
-                return AssistantMessage(
-                    content=[
-                        ToolCall(
-                            id="parent-work",
-                            name="execute_code" if code_mode else "echo",
-                            arguments={
-                                "code": "print(await echo(value='parent'))",
-                                "yield_time_ms": 10000,
-                            }
-                            if code_mode
-                            else {"value": "parent"},
-                        )
-                    ]
-                )
-        else:
-            assert not results[-1].is_error
-            assert any(
-                isinstance(message, UserMessage)
-                and '"answer": "Child answer"' in message.text
-                for message in request.messages
-            )
-        return AssistantMessage(content=[TextContent(text="Parent answer")])
-
-    agent = ChatAgent(
-        messages=[],
-        tools=[SlowTool()],
-        code_mode=code_mode,
-        custom_agent_prompt=None,
-        base_system_prompt="",
-        context_files=ExtractedContextFiles(
-            file_texts=[],
-            image_files=[],
-            use_as_search_filter=False,
-            total_token_count=0,
-            file_metadata=[],
-            uncapped_token_count=None,
-        ),
-        persona=None,
-        user_memory_context=None,
-        llm=FakeModelClient(reply),
-        token_counter=lambda text: len(text) // 4,
-    )
+    agent = chat_agent(FakeModelClient(reply), [EchoTool()], code_mode=code_mode)
     spawn = next(
         tool for tool in agent.application_tools if isinstance(tool, SpawnAgentTool)
     )
     child = spawn.create_agent()
     assert isinstance(child, ChatAgent)
     assert child.search_context is not agent.search_context
-    assert child.code_mode == agent.code_mode == code_mode
+    assert child.code_mode == code_mode
     if code_mode:
         assert child.code_cells is not None and child.code_cells is not agent.code_cells
-    assert {tool.name for tool in child.tools} == {tool.name for tool in agent.tools}
-    coordinator = AgentCoordinator(
-        store=FakeRunStore(save=lambda run: saved.append(run.snapshot()))
-    )
-    try:
-        result = run_agent(
-            agent,
-            messages=[UserMessage(content="Delegate this")],
-            max_steps=4,
-            coordinator=coordinator,
-        )
-        assert result.output.text == "Parent answer"
-        child_run = coordinator.child_run(child_run_ids[0], agent.id)
-        assert child_run is not None
-        progress = child_run.snapshot().progress
-        assert progress is not None
-        assert progress.step_limit == child.max_steps
-        if parent_action == "finish":
-            assert child_run.status in (RunStatus.RUNNING, RunStatus.SUSPENDED)
-            assert not child_run.cancellation_signal.cancelled
-        release.set()
-        assert child_run.result(10).output.text == "Child answer"
-        assert child_run.wait_for_idle(10)
-        assert (
-            coordinator.completion(child_run.id).result(10).status == RunStatus.COMPLETE
-        )
-        assert any(
-            state.run_id == child_run.id and state.status == RunStatus.COMPLETE
-            for state in saved
-        )
-        assert len(child_requests) == 3
-        assert any(
-            message.text == "Independent task" for message in child_requests[0].messages
-        )
-        assert all(
-            message.text != "Delegate this" for message in child_requests[0].messages
-        )
-    finally:
-        release.set()
-        assert coordinator.close(10)
-
-
-@pytest.mark.parametrize("leaf_outcome", ["complete", "error", "cancelled"])
-@pytest.mark.parametrize("child_steps", [2, 4])
-def test_nested_agent_collects_child_result_before_completing(
-    leaf_outcome: Literal["complete", "error", "cancelled"],
-    child_steps: int,
-) -> None:
-    leaf_entered = threading.Event()
-    release_leaf = threading.Event()
-    middle_answered = threading.Event()
-    final_inputs: list[str] = []
-
-    def reply(
-        request: GenerationRequest, cancellation: CancellationSignal
-    ) -> AssistantMessage:
-        instructions = {message.text for message in request.messages}
-        results = [
-            message
-            for message in request.messages
-            if isinstance(message, ToolResultMessage)
-        ]
-        if "Leaf task" in instructions:
-            leaf_entered.set()
-            assert release_leaf.wait(10)
-            cancellation.check()
-            if leaf_outcome == "error":
-                raise ValueError("Research source unavailable")
-            return AssistantMessage(content=[TextContent(text="Verified evidence")])
-        if "Middle task" in instructions:
-            received = [
-                message.text
-                for message in request.messages
-                if isinstance(message, UserMessage)
-                and "Background agent result" in message.text
-            ]
-            if received:
-                final_inputs.extend(received)
-                return AssistantMessage(
-                    content=[TextContent(text="Final child answer")]
-                )
-            if results:
-                middle_answered.set()
-                return AssistantMessage(content=[TextContent(text="Research underway")])
-            target = "Leaf"
-        else:
-            if results:
-                return AssistantMessage(
-                    content=[TextContent(text="I started the research")]
-                )
-            target = "Middle"
-        return AssistantMessage(
-            content=[
-                ToolCall(
-                    id=f"spawn-{target.lower()}",
-                    name="spawn_agent",
-                    arguments={"name": target.lower(), "instruction": f"{target} task"},
-                )
-            ]
-        )
-
-    agent = ChatAgent(
-        messages=[],
-        tools=[],
-        custom_agent_prompt=None,
-        base_system_prompt="",
-        context_files=ExtractedContextFiles(
-            file_texts=[],
-            image_files=[],
-            use_as_search_filter=False,
-            total_token_count=0,
-            file_metadata=[],
-            uncapped_token_count=None,
-        ),
-        persona=None,
-        user_memory_context=None,
-        llm=FakeModelClient(reply),
-        token_counter=lambda text: len(text) // 4,
-    )
-    for tool in agent.application_tools:
-        if isinstance(tool, SpawnAgentTool):
-            tool.max_steps = child_steps
-    coordinator = AgentCoordinator()
-    try:
-        root = agent.start(
-            messages=[UserMessage(content="Root task")],
-            max_steps=4,
-            coordinator=coordinator,
-        )
-        assert root.result(10).output.text == "I started the research"
-        if child_steps > 2:
-            assert middle_answered.wait(10)
-        assert leaf_entered.wait(10)
-        middle_info = next(
-            info
-            for info in coordinator.discover_children(agent.id)
-            if info.parent_id == agent.id
-        )
-        assert middle_info.latest_run_id is not None
-        middle = coordinator.child_run(middle_info.latest_run_id, agent.id)
-        assert middle is not None
-        assert middle.wait_until_settled(10).status == RunStatus.SUSPENDED
-        assert coordinator.completed_agents(agent.id, ()) == []
-        if leaf_outcome == "cancelled":
-            leaf_info = next(
-                info
-                for info in coordinator.discover_children(middle_info.id)
-                if info.parent_id == middle_info.id
-            )
-            leaf = coordinator.active_run(leaf_info.id)
-            assert leaf is not None
-            leaf.cancel()
-        release_leaf.set()
-        assert middle.result(10).output.text == "Final child answer"
-        assert middle.wait_for_idle(10)
-        completed = coordinator.completed_agents(agent.id, ())
-        assert len(completed) == 1
-        assert completed[0].output is not None
-        assert completed[0].output.text == "Final child answer"
-        assert len(final_inputs) == 1
-        assert f'"status": "{leaf_outcome}"' in final_inputs[0]
-    finally:
-        release_leaf.set()
-        assert coordinator.close(10)
+    for runner in (agent, child):
+        run_agent(runner, messages=[UserMessage(content="Task")], max_steps=1)
+    expected = {
+        *({"execute_code", "wait_code"} if code_mode else {"echo"}),
+        "spawn_agent",
+        "list_agents",
+        "interrupt_agent",
+        "send_message",
+    }
+    assert [{tool.name for tool in request.tools} for request in requests] == [
+        expected,
+        expected,
+    ]
+    roles = [
+        [m for m in request.messages if m.text == SUBAGENT_INSTRUCTIONS]
+        for request in requests
+    ]
+    assert [len(messages) for messages in roles] == [0, 1]
+    assert roles[1][0].cacheable
 
 
 @pytest.mark.parametrize("custom", [False, True])
@@ -1396,24 +1099,7 @@ def test_builtin_subagent_controls_do_not_shadow_configured_tools(custom: bool) 
         assert len(names) == len(set(names))
         return AssistantMessage(content=[TextContent(text="Ready")])
 
-    agent = ChatAgent(
-        messages=[],
-        tools=[configured],
-        custom_agent_prompt=None,
-        base_system_prompt="",
-        context_files=ExtractedContextFiles(
-            file_texts=[],
-            image_files=[],
-            use_as_search_filter=False,
-            total_token_count=0,
-            file_metadata=[],
-            uncapped_token_count=None,
-        ),
-        persona=None,
-        user_memory_context=None,
-        llm=FakeModelClient(reply),
-        token_counter=len,
-    )
+    agent = chat_agent(FakeModelClient(reply), [configured])
     assert (
         run_agent(
             agent, messages=[UserMessage(content="List agents")], max_steps=2
@@ -1433,136 +1119,7 @@ def test_builtin_subagent_controls_do_not_shadow_configured_tools(custom: bool) 
     assert configured.name == expected_name
 
 
-@pytest.mark.parametrize("delivery", ["send", "queue"])
-def test_chat_message_tools_continue_a_completed_child(delivery: str) -> None:
-    child_requests: list[GenerationRequest] = []
-    child_ids: list[str] = []
-    child_runs: list[str] = []
-    coordinator = AgentCoordinator()
-
-    def reply(request: GenerationRequest, _: CancellationSignal) -> AssistantMessage:
-        is_parent = any(message.text == "Delegate this" for message in request.messages)
-        if not is_parent:
-            child_requests.append(request)
-            if len(child_requests) == 1:
-                assert any(
-                    message.text == "Initial task" for message in request.messages
-                )
-                answer = "Initial child answer"
-            else:
-                assert any(
-                    isinstance(message, AssistantMessage)
-                    and message.text == "Initial child answer"
-                    for message in request.messages
-                )
-                assert any(
-                    "Follow-up task" in message.text for message in request.messages
-                )
-                answer = "Follow-up child answer"
-            return AssistantMessage(content=[TextContent(text=answer)])
-        results = [
-            message
-            for message in request.messages
-            if isinstance(message, ToolResultMessage)
-        ]
-        if not results:
-            return AssistantMessage(
-                content=[
-                    ToolCall(
-                        id="spawn",
-                        name="spawn_agent",
-                        arguments={"name": "worker", "instruction": "Initial task"},
-                    )
-                ]
-            )
-        if not child_ids:
-            (started,) = coordinator.discover_children(agent.id)
-            assert started.latest_run_id is not None
-            child_ids.append(started.id)
-            child_runs.append(started.latest_run_id)
-            assert (
-                coordinator.completion(started.latest_run_id).result(10).status
-                == RunStatus.COMPLETE
-            )
-        if any(message.text == "Continue the child" for message in request.messages):
-            if results[-1].tool_name != "send_message":
-                return AssistantMessage(
-                    content=[
-                        ToolCall(
-                            id="follow-up",
-                            name="send_message",
-                            arguments={
-                                "agent_id": child_ids[0],
-                                "message": "Follow-up task",
-                                "delivery": delivery,
-                            },
-                        )
-                    ]
-                )
-            assert not results[-1].is_error, results[-1].content
-            info = coordinator.lookup_agent(child_ids[0], agent.id)
-            assert info is not None and info.latest_run_id is not None
-            assert info.latest_run_id != child_runs[0]
-            child_runs.append(info.latest_run_id)
-            assert (
-                coordinator.completion(info.latest_run_id).result(10).status
-                == RunStatus.COMPLETE
-            )
-        return AssistantMessage(content=[TextContent(text="Done")])
-
-    agent = ChatAgent(
-        messages=[],
-        tools=[],
-        custom_agent_prompt=None,
-        base_system_prompt="",
-        context_files=ExtractedContextFiles(
-            file_texts=[],
-            image_files=[],
-            use_as_search_filter=False,
-            total_token_count=0,
-            file_metadata=[],
-            uncapped_token_count=None,
-        ),
-        persona=None,
-        user_memory_context=None,
-        llm=FakeModelClient(reply),
-        token_counter=len,
-    )
-    message_tool = next(
-        tool for tool in agent.tools if tool.definition.name == "send_message"
-    )
-    properties = message_tool.definition.parameters["properties"]
-    assert isinstance(properties, dict)
-    delivery_schema = properties["delivery"]
-    assert isinstance(delivery_schema, dict)
-    assert delivery_schema["enum"] == ["send", "queue"]
-    assert delivery_schema["default"] == "send"
-    try:
-        for question in ("Delegate this", "Continue the child"):
-            assert (
-                run_agent(
-                    agent,
-                    messages=[UserMessage(content=question)],
-                    max_steps=3,
-                    coordinator=coordinator,
-                ).output.text
-                == "Done"
-            )
-        assert len(child_requests) == 2
-        assert len(set(child_runs)) == 2
-        parents = []
-        for run_id in child_runs:
-            child = coordinator.child_run(run_id, agent.id)
-            assert child is not None
-            parent_run_id = child.snapshot().parent_run_id
-            assert parent_run_id is not None
-            parents.append(parent_run_id)
-        assert len(set(parents)) == 2
-    finally:
-        assert coordinator.close(10)
-
-
-def test_child_notification_remaps_citations_and_is_not_repeated() -> None:
+def test_child_notification_remaps_citations() -> None:
     existing, child_document, other_child_document = [
         SearchDoc(
             document_id=document_id,
@@ -1641,36 +1198,25 @@ def test_child_notification_remaps_citations_and_is_not_repeated() -> None:
         token_counter=len,
     )
     coordinator = AgentCoordinator(
-        directory=FakeAgentDirectory(
-            completed_agents=lambda _parent, received, _limit: (
-                [item for item in completions if item.run_id not in received]
-            ),
-        )
+        ownership=FakeRunOwnership(
+            receive_inputs=lambda _run: [
+                agent_result_message(item) for item in completions
+            ],
+        ),
     )
     try:
-        for question in ("Check the research", "Continue"):
-            result = run_agent(
-                agent,
-                messages=[UserMessage(content=question)],
-                max_steps=1,
-                coordinator=coordinator,
-            )
-            assert isinstance(result.output.metadata, ChatMessageMetadata)
-            assert result.output.metadata.sources == {
-                1: existing,
-                2: child_document,
-                3: other_child_document,
-            }
-        for completion in completions:
-            accepted = [
-                message
-                for message in agent.state.messages
-                if message.id == completion.message_id
-            ]
-            assert len(accepted) == 1
-            assert isinstance(accepted[0].metadata, InputMessageMetadata)
-            assert accepted[0].metadata.source == InputSource.AGENT_RESULT
-            assert accepted[0].metadata.source_run_id == completion.run_id
+        result = run_agent(
+            agent,
+            messages=[UserMessage(content="Check the research")],
+            max_steps=1,
+            coordinator=coordinator,
+        )
+        assert isinstance(result.output.metadata, ChatMessageMetadata)
+        assert result.output.metadata.sources == {
+            1: existing,
+            2: child_document,
+            3: other_child_document,
+        }
         assert agent.citation_mapping == {1: "existing", 2: "child", 3: "other-child"}
     finally:
         assert coordinator.close(10)

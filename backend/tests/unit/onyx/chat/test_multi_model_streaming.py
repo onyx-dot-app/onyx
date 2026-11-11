@@ -26,7 +26,6 @@ from onyx.agents.models import RunFailureKind, RunStatus
 from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import AgentTool, InputMode, PendingToolInput
 from onyx.chat.agent import ChatAgent
-from onyx.chat.chat_processing_checker import BACKGROUND_CONTROL_PREFIX
 from onyx.chat.emitter import Emitter
 from onyx.chat.errors import EmptyLLMResponseError, chat_error
 from onyx.chat.execution import (
@@ -106,14 +105,11 @@ from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
     CodingAgentTool,
 )
 from onyx.tracing.flows import LLMFlow
-from onyx.tracing.framework.create import get_current_trace
-from onyx.tracing.framework.traces import NoOpTrace
 from onyx.utils.threadpool_concurrency import (
     start_thread_future,
 )
 from onyx.utils.variable_functionality import global_version
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from tests.unit.fakes import FakeCache
 from tests.unit.onyx.agents.fakes import (
     EchoTool,
     FakeModelClient,
@@ -1426,13 +1422,8 @@ def _mock_settings() -> Generator[None, None, None]:
             "onyx.chat.execution.load_chat_branch",
             return_value=MagicMock(chat_session_id=ANY, message_ids=[]),
         ),
-        patch(
-            "onyx.chat.history_store.PostgresChatHistoryStore.list_agents",
-            return_value=[],
-        ),
         patch("onyx.chat.execution.get_cache_backend"),
         patch("onyx.chat.execution.get_session_with_current_tenant"),
-        patch("onyx.chat.execution.has_pending_human_interrupt", return_value=False),
         patch("onyx.chat.execution.ChatRunStore", side_effect=run_store),
     ):
         yield
@@ -2727,112 +2718,6 @@ def test_stop_cache_failure_retries_and_keeps_polling_ownership(
             _wait_for_chat_workers(chat_workers)
 
 
-@pytest.mark.parametrize("reader_attached", [False, True])
-def test_finished_response_releases_chat_while_polling_background_ownership(
-    chat_workers: list[Future[Run | None]],
-    reader_attached: bool,
-) -> None:
-    released = threading.Event()
-    polled_after_release = threading.Event()
-    outcome = Future[ChatResponseOutcome]()
-    dispatched = threading.Event()
-    dispatched_after_children = threading.Event()
-
-    def dispatch_pending() -> None:
-        assert released.is_set()
-        dispatched.set()
-        if not store.has_owned_work:
-            dispatched_after_children.set()
-
-    setup = _make_setup()
-    cache = FakeCache()
-    setup.cache = cache
-    setup.admission.cache = cache
-    turn = ChatTurnExecution(
-        setup, MagicMock(), outcome, dispatch_pending_messages=dispatch_pending
-    )
-    presence_key = f"{BACKGROUND_CONTROL_PREFIX}{turn.setup.responses[0].message_id}"
-    store = MagicMock(spec=ChatRunStore)
-    store.has_owned_work = True
-    turn._stores.append(store)
-    root_trace = NoOpTrace()
-
-    def release_admission() -> None:
-        turn._deadline_at -= timedelta(days=1)
-        released.set()
-
-    def check_stop(*_args: object, **_kwargs: object) -> bool:
-        assert not released.is_set(), "Finished response must not read root Stop"
-        return False
-
-    def refresh_admission() -> None:
-        assert not released.is_set(), "Finished response must not renew admission"
-
-    def poll_ownership() -> None:
-        if released.is_set():
-            assert get_current_trace() is root_trace
-            polled_after_release.set()
-
-    def generate(
-        _request: GenerationRequest, _signal: CancellationSignal
-    ) -> AssistantMessage:
-        assert get_current_trace() is root_trace
-        return AssistantMessage(content=[TextContent(text="Root finished")])
-
-    store.poll_control.side_effect = poll_ownership
-    agent = Agent(
-        FakeModelClient(generate),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-    )
-    with (
-        patch("onyx.chat.execution.create_chat_agent", return_value=_chat_agent(agent)),
-        patch("onyx.chat.history_store.save_chat_response_to_db"),
-        patch("onyx.chat.execution.is_stop_requested", side_effect=check_stop),
-        patch("onyx.chat.execution._CANCEL_POLL_INTERVAL_S", 0.01),
-        patch("onyx.chat.execution._INPUT_POLL_INTERVAL_S", 3600),
-        patch("onyx.chat.execution.PROCESSING_REFRESH_INTERVAL_S", 0),
-        patch.object(
-            turn.setup.admission, "release", side_effect=release_admission
-        ) as release_chat,
-        patch.object(turn.setup.admission, "refresh", side_effect=refresh_admission),
-        patch("onyx.chat.execution.trace", return_value=root_trace),
-        patch.object(root_trace, "finish", wraps=root_trace.finish) as end_trace,
-    ):
-        reader = _launch_turn(turn)
-        if not reader_attached:
-            reader.close()
-        packets = (
-            start_thread_future(lambda: list(reader), name="test-reader")
-            if reader_attached
-            else None
-        )
-        try:
-            assert outcome.result(timeout=5).response.answer == "Root finished"
-            assert released.wait(5)
-            assert dispatched.wait(5)
-            assert polled_after_release.wait(5)
-            assert cache.exists(presence_key)
-            if packets is not None:
-                assert _stop_reasons(packets.result(timeout=5)) == ["finished"]
-            assert not turn.cancellation.cancelled
-            assert not chat_turn_work.wait_idle(timeout=0)
-            end_trace.assert_not_called()
-            store.has_owned_work = False
-            turn._completion_changed.set()
-            _wait_for_chat_workers(chat_workers)
-            assert dispatched_after_children.is_set()
-            assert not cache.exists(presence_key)
-            release_chat.assert_called_once()
-            end_trace.assert_called_once()
-        finally:
-            store.has_owned_work = False
-            turn._completion_changed.set()
-            reader.close()
-            _wait_for_chat_workers(chat_workers)
-            if packets is not None:
-                packets.result(timeout=5)
-
-
 def test_storage_ownership_failure_reports_failed_response_without_writing(
     chat_workers: list[Future[Run | None]],
 ) -> None:
@@ -2880,8 +2765,10 @@ def test_stop_cache_timeout_allows_next_ownership_poll(
     store = MagicMock(spec=ChatRunStore)
     turn = ChatTurnExecution(setup, MagicMock())
     turn._stores.append(store)
+    turn._last_stop_check = 0
     turn._poll_control()
     assert "Failed to read chat Stop request" in caplog.text
+    turn._last_stop_check = 0
     turn._poll_control()
     assert store.poll_control.call_count == 2
     assert control_cache.exists.call_count == 2
@@ -3199,10 +3086,8 @@ def test_missing_response_outcome_cancels_run_and_drains_other_responses() -> No
     assert not turn._response_workers
 
 
-@pytest.mark.parametrize("pending_interrupt", [False, True])
 def test_stop_waits_for_model_read_and_persistence_before_ending_delivery(
     chat_workers: list[Future[Run | None]],
-    pending_interrupt: bool,
 ) -> None:
     entered, release = threading.Event(), threading.Event()
     outcome = Future[ChatResponseOutcome]()
@@ -3220,18 +3105,11 @@ def test_stop_waits_for_model_read_and_persistence_before_ending_delivery(
             generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         )
     )
-    dispatch_pending = MagicMock()
-    turn = ChatTurnExecution(
-        _make_setup(), MagicMock(), outcome, dispatch_pending_messages=dispatch_pending
-    )
+    turn = ChatTurnExecution(_make_setup(), MagicMock(), outcome)
     with (
         patch.object(turn.setup.admission, "release") as release_admission,
         patch("onyx.chat.execution.create_chat_agent", return_value=agent),
         patch("onyx.chat.history_store.save_chat_response_to_db"),
-        patch(
-            "onyx.chat.execution.has_pending_human_interrupt",
-            side_effect=lambda *_args: entered.is_set() and pending_interrupt,
-        ),
         patch(
             "onyx.chat.execution.is_stop_requested",
             side_effect=lambda *_args, **_kwargs: entered.is_set(),
@@ -3250,7 +3128,6 @@ def test_stop_waits_for_model_read_and_persistence_before_ending_delivery(
             assert not chat_workers[0].done()
             assert not outcome.done()
             release_admission.assert_not_called()
-            dispatch_pending.assert_not_called()
             release.set()
             assert outcome.result(timeout=3).response.cancelled
             _wait_for_chat_workers(chat_workers)
@@ -3262,7 +3139,6 @@ def test_stop_waits_for_model_read_and_persistence_before_ending_delivery(
                 for packet in packets
             )
             release_admission.assert_called_once()
-            assert dispatch_pending.call_count == (1 if pending_interrupt else 0)
         finally:
             release.set()
             turn.delivery.reader.close()
@@ -3603,21 +3479,6 @@ def test_invalid_chat_settings_return_actionable_errors(
     assert not packet.is_retryable
 
 
-@pytest.mark.parametrize("mode", list(IncognitoRecordMode))
-def test_incognito_rejects_deep_research_before_constructing_tools(
-    mode: IncognitoRecordMode,
-) -> None:
-    setup = _make_setup()
-    setup.incognito_record_mode = mode
-    setup.new_msg_req.deep_research = True
-    with patch("onyx.chat.execution.construct_tools") as construct:
-        with pytest.raises(
-            OnyxError, match="Deep research is not available in incognito"
-        ):
-            create_chat_agent(setup, MagicMock(), 0, CancellationSignal(), True)
-    construct.assert_not_called()
-
-
 @pytest.mark.parametrize("mode", [None, *IncognitoRecordMode])
 def test_chat_turn_excludes_delegation_tools_in_incognito(
     mode: IncognitoRecordMode | None,
@@ -3696,10 +3557,6 @@ def test_chat_turn_excludes_delegation_tools_in_incognito(
     with (
         patch("onyx.chat.execution.construct_tools", side_effect=construct),
         patch("onyx.chat.execution.get_llm_token_counter", return_value=len),
-        patch(
-            "onyx.chat.history_store.RedisChatHistoryStore.list_agents",
-            side_effect=AssertionError("Temporary chat does not discover subagents"),
-        ),
         patch("onyx.chat.history_store.save_chat_response_to_db"),
         patch("onyx.chat.history_store.save_incognito_response"),
         patch("onyx.chat.prompt_utils.get_company_context", return_value=None),

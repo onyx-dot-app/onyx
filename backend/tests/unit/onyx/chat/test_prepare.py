@@ -19,7 +19,7 @@ from onyx.chat.chat_processing_checker import (
 from onyx.chat.models import (
     ChatHistoryMessage,
     ChatHistoryResult,
-    IncognitoResponseReceipt,
+    IncognitoAgentResponse,
     IncognitoState,
 )
 from onyx.chat.process_message import (
@@ -430,6 +430,10 @@ def test_admission_precedes_model_setup_and_releases_after_setup_failure() -> No
             return_value=ChatSession(id=session_id, persona=None),
         ),
         patch("onyx.chat.process_message._select_models", side_effect=fail_model_setup),
+        patch(
+            "onyx.chat.process_message.load_message_branch",
+            return_value=([], MagicMock()),
+        ),
         pytest.raises(RuntimeError, match="model setup failed"),
     ):
         prepare_chat_turn(request, MagicMock(), llm_overrides=None)
@@ -615,7 +619,7 @@ def test_incognito_history_retains_summary_checkpoint(
         ],
         previous_run_id="previous-run",
         responses={
-            "1": IncognitoResponseReceipt(
+            "1": IncognitoAgentResponse(
                 replay_digest="",
                 run_id="previous-run",
                 message_ids=["previous-run:0"],

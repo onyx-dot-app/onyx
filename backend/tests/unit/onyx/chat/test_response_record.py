@@ -7,7 +7,6 @@ import pytest
 from pydantic import BaseModel, ValidationError
 
 from onyx.agents.models import (
-    AgentResultDetails,
     AgentState,
     ExecutionStatus,
     InputMessageMetadata,
@@ -53,36 +52,28 @@ def test_response_capture_keeps_input_provenance_without_transient_payloads() ->
     metadata = InputMessageMetadata(
         source=InputSource.AGENT_RESULT,
         source_run_id="child-run",
-        sender_agent_id="child",
-        result=AgentResultDetails(
-            agent_id="child", agent_path="/root/child", status=RunStatus.COMPLETE
-        ),
         content_metadata=ApplicationData(),
     )
-    snapshot = RunState(
-        run_id="parent-run",
-        status=RunStatus.COMPLETE,
-        steps=[
-            StepRecord(
-                input_messages=[
-                    UserMessage(
-                        id="delivery", content="Accepted result", metadata=metadata
-                    )
-                ],
-                message=AssistantMessage(content=[TextContent(text="Answer")]),
-                generation_status=ExecutionStatus.COMPLETE,
-            )
-        ],
+    agent = Agent(
+        FakeModelClient(
+            lambda *_: AssistantMessage(content=[TextContent(text="Answer")])
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        prepare_step=lambda _input: PreparedStep(
+            input_messages=[
+                UserMessage(id="delivery", content="Accepted result", metadata=metadata)
+            ]
+        ),
     )
-    restored = response_snapshot(response_record(snapshot))
+    runs: list[Run] = []
+    run_agent(agent, runs=runs, max_steps=1)
+    restored = response_snapshot(response_record(runs[0].snapshot()))
     accepted = restored.steps[0].input_messages[0]
     assert accepted.id == "delivery" and accepted.text == "Accepted result"
     assert accepted.metadata == InputMessageMetadata(
         source=InputSource.AGENT_RESULT,
         source_run_id="child-run",
-        sender_agent_id="child",
     )
-    assert metadata.result is not None
     assert metadata.content_metadata == ApplicationData()
 
 

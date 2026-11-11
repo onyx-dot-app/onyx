@@ -122,6 +122,9 @@
       "authenticate": {
         "label": "Authentifizieren"
       },
+      "codingAgentIncognito": {
+        "tooltip": "Der Coding-Agent ist im Inkognito-Modus nicht verfügbar"
+      },
       "configure": {
         "tooltip": "Konfigurieren"
       },
@@ -12433,6 +12436,7 @@
         },
         "deepResearchButton": {
           "disabledTooltip": "Deep Research ist im Multi-Modell-Modus deaktiviert",
+          "incognitoTooltip": "Deep Research ist im Inkognito-Modus nicht verfügbar",
           "label": "Deep Research"
         },
         "incognitoNotice": {
@@ -12471,7 +12475,9 @@
           "sendHint": "Im nächsten Schritt dieser Antwort senden",
           "interruptHint": "Aktuelle Arbeit unterbrechen und diese Nachricht senden",
           "sendLabel": "Senden",
-          "queueLabel": "Einreihen"
+          "queueLabel": "Einreihen",
+          "interruptKeyboardHint": "Enter zum Unterbrechen · Strg oder Command + Enter zum Einreihen",
+          "interruptLabel": "Unterbrechen"
         }
       },
       "baseInputBar": {
@@ -12602,8 +12608,7 @@
         }
       },
       "pendingMessages": {
-        "submitFailed": "Die Nachricht konnte nicht gesendet werden. Sie können sie in den ausstehenden Nachrichten bearbeiten oder entfernen.",
-        "restoredUnconfirmed": "Wir haben Nachrichten wiederhergestellt, deren Zustellung nicht bestätigt wurde. Prüfen Sie den Gesprächsverlauf, bevor Sie sie erneut senden.",
+        "submitFailed": "Die Nachricht konnte nicht gesendet werden.",
         "withdrawFailed": "Die ausstehende Nachricht konnte nicht entfernt werden.",
         "loadFailed": "Ausstehende Nachrichten konnten nicht geladen werden.",
         "alreadyAccepted": "Diese Nachricht wurde bereits angenommen und ist nicht mehr ausstehend.",
@@ -12703,6 +12708,9 @@
         "timedOut": {
           "text": "Die Antwort wurde gestoppt, weil sie ihr Zeitlimit erreicht hat."
         }
+      },
+      "agentResults": {
+        "received": "Ergebnisse der Subagenten empfangen"
       },
       "codeBlock": {
         "copyButton": {

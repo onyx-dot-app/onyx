@@ -22,7 +22,6 @@ from onyx.llm.models import (
     ThinkingContent,
     ToolCall,
     ToolResultMessage,
-    UserMessage,
 )
 from onyx.tools.tool_implementations.subagents.models import ChatConfiguration
 from onyx.utils.logger import setup_logger
@@ -169,15 +168,10 @@ def restore_response_sources(
 
 
 def _saved_message[T: Message](message: T) -> T:
-    update: dict[str, BaseModel | None] = {"metadata": None}
-    if isinstance(message, UserMessage) and isinstance(
-        message.metadata, InputMessageMetadata
-    ):
-        update["metadata"] = InputMessageMetadata(
-            source=message.metadata.source,
-            source_run_id=message.metadata.source_run_id,
-            sender_agent_id=message.metadata.sender_agent_id,
-        )
+    # Input provenance is saved; the runtime already dropped its content metadata.
+    update: dict[str, BaseModel | None] = (
+        {} if isinstance(message.metadata, InputMessageMetadata) else {"metadata": None}
+    )
     if isinstance(message, ToolResultMessage):
         update["details"] = saved_result_details(message.details)
     return message.model_copy(update=update).model_copy(deep=True)

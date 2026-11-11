@@ -122,6 +122,9 @@
       "authenticate": {
         "label": "Autenticar"
       },
+      "codingAgentIncognito": {
+        "tooltip": "El agente de código no está disponible en modo incógnito"
+      },
       "configure": {
         "tooltip": "Configurar"
       },
@@ -12433,6 +12436,7 @@
         },
         "deepResearchButton": {
           "disabledTooltip": "La investigación profunda está deshabilitada en el modo multimodelo",
+          "incognitoTooltip": "La investigación profunda no está disponible en modo incógnito",
           "label": "Investigación profunda"
         },
         "incognitoNotice": {
@@ -12471,7 +12475,9 @@
           "sendHint": "Enviar en el siguiente paso de esta respuesta",
           "interruptHint": "Interrumpir el trabajo actual y enviar este mensaje",
           "sendLabel": "Enviar",
-          "queueLabel": "En cola"
+          "queueLabel": "En cola",
+          "interruptKeyboardHint": "Enter para interrumpir · Ctrl o Command + Enter para poner en cola",
+          "interruptLabel": "Interrumpir"
         }
       },
       "baseInputBar": {
@@ -12602,8 +12608,7 @@
         }
       },
       "pendingMessages": {
-        "submitFailed": "No se pudo enviar el mensaje. Puedes editarlo o eliminarlo de los mensajes pendientes.",
-        "restoredUnconfirmed": "Restauramos mensajes cuya entrega no se pudo confirmar. Revisa la conversación antes de volver a enviarlos.",
+        "submitFailed": "No se pudo enviar el mensaje.",
         "withdrawFailed": "No se pudo eliminar el mensaje pendiente.",
         "loadFailed": "No se pudieron cargar los mensajes pendientes.",
         "alreadyAccepted": "Este mensaje ya fue aceptado y ya no está pendiente.",
@@ -12703,6 +12708,9 @@
         "timedOut": {
           "text": "La respuesta se detuvo porque alcanzó su límite de tiempo."
         }
+      },
+      "agentResults": {
+        "received": "Resultados de subagentes recibidos"
       },
       "codeBlock": {
         "copyButton": {

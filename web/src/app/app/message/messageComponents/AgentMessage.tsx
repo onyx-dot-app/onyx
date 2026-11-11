@@ -218,21 +218,6 @@ const AgentMessage = React.memo(function AgentMessage({
     );
 
   const sections = useMemo(() => {
-    if (
-      !pacedDisplayGroups.some(
-        (group) => group.packets[0]?.obj.type === PacketType.USER_MESSAGE
-      )
-    ) {
-      return [
-        {
-          userMessage: null,
-          turnIndex: -1,
-          toolGroups: pacedTurnGroups,
-          displayGroups: pacedDisplayGroups,
-          images: generatedImages,
-        },
-      ];
-    }
     const sections: ResponseSection[] = [
       {
         userMessage: null,

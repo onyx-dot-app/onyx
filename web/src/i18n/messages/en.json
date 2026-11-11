@@ -122,6 +122,9 @@
       "authenticate": {
         "label": "Authenticate"
       },
+      "codingAgentIncognito": {
+        "tooltip": "Coding agent isn't available in incognito mode"
+      },
       "configure": {
         "tooltip": "Configure"
       },
@@ -12433,6 +12436,7 @@
         },
         "deepResearchButton": {
           "disabledTooltip": "Deep Research is disabled in multi-model mode",
+          "incognitoTooltip": "Deep Research isn't available in incognito mode",
           "label": "Deep Research"
         },
         "incognitoNotice": {
@@ -12471,7 +12475,9 @@
           "sendHint": "Send at the next step of this response",
           "interruptHint": "Interrupt current work and send this message",
           "sendLabel": "Send",
-          "queueLabel": "Queue"
+          "queueLabel": "Queue",
+          "interruptKeyboardHint": "Enter to interrupt · Ctrl or Command + Enter to queue",
+          "interruptLabel": "Interrupt"
         }
       },
       "baseInputBar": {
@@ -12602,8 +12608,7 @@
         }
       },
       "pendingMessages": {
-        "submitFailed": "Could not submit the message. You can edit or remove it from the pending messages.",
-        "restoredUnconfirmed": "We restored messages with unconfirmed delivery. Check the conversation before sending them again.",
+        "submitFailed": "Could not submit the message.",
         "withdrawFailed": "Could not remove the pending message.",
         "loadFailed": "Could not load pending messages.",
         "alreadyAccepted": "This message was already accepted and is no longer pending.",
@@ -12703,6 +12708,9 @@
         "timedOut": {
           "text": "The response stopped because it reached its time limit."
         }
+      },
+      "agentResults": {
+        "received": "Subagent results received"
       },
       "codeBlock": {
         "copyButton": {

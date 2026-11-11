@@ -16,14 +16,24 @@ export interface ChatSessionStatus {
   is_processing: boolean;
   current_stream: { stream_id: number } | null;
   has_active_subagents: boolean;
+  /** Pending input can start a run now; false while the queue is paused. */
+  has_startable_input: boolean;
   latest_response_id: number | null;
 }
 
-/** Local intent until the active response is acknowledged and its POST finishes. */
-export interface PendingChatSubmission {
-  message: PendingChatMessage;
-  key: string;
-  request: Promise<PendingChatMessage | null> | null;
-  failed: boolean;
-  finished: Promise<void>;
+export interface ChatSessionQueue {
+  messages: PendingChatMessage[];
+  error: string | null;
+  /** A pending-message request is in flight. */
+  busy: boolean;
+  hasActiveSubagents: boolean;
+  /** The response new input targets; null lets the server pick the running one. */
+  targetResponseId: number | null;
+  needsResponseSelection: boolean;
+  submit: (
+    message: string,
+    delivery: PendingChatMessage["delivery"]
+  ) => Promise<boolean>;
+  withdraw: (id: string) => Promise<PendingChatMessage | null>;
+  interrupt: (id: string) => Promise<void>;
 }

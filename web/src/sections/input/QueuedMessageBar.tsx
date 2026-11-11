@@ -6,9 +6,11 @@ import { Text, Button } from "@opal/components";
 import { SvgTrash, SvgEdit, SvgArrowUp } from "@opal/icons";
 import { cn, clickOnKeyDown } from "@opal/utils";
 import { QueuedMessage } from "@/app/app/types";
+import type { PendingChatMessage } from "@/lib/chat/types";
 
 interface QueuedMessageBarProps {
-  messages: readonly QueuedMessage[];
+  /** Craft's local queue or the chat's server-owned pending messages. */
+  messages: readonly (QueuedMessage | PendingChatMessage)[];
   highlightedIndex: number | null;
   onDiscard: (index: number) => void;
   onHighlight: (index: number | null) => void;
@@ -88,7 +90,7 @@ function QueuedMessageBar({
                   }}
                 >
                   <Text font="secondary-body" color="text-03">
-                    {item.text}
+                    {"text" in item ? item.text : item.message}
                   </Text>
                 </div>
                 {isHighlighted && (

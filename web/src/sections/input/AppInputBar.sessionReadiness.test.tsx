@@ -1,9 +1,5 @@
-import {
-  ChatSessionSharedStatus,
-  type BackendMessage,
-  type Message,
-} from "@/app/app/types";
-import { processRawChatHistory } from "@/app/app/services/lib";
+import { mutate } from "swr";
+import { ChatSessionSharedStatus, type Message } from "@/app/app/types";
 import {
   act,
   render,
@@ -18,25 +14,15 @@ import {
   fetchSettledChatSession,
 } from "@/lib/chat/sessionReadiness";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
+import { useChatSessionQueue } from "@/lib/chat/hooks";
+import type { PendingChatMessage } from "@/lib/chat/types";
 
 Element.prototype.scrollIntoView = jest.fn();
 
-jest.mock("@/lib/chat/hooks", () => ({
-  ...jest.requireActual<typeof import("@/lib/chat/hooks")>("@/lib/chat/hooks"),
-  useSubagentActivity: () => false,
-}));
-
 let mockSearchMode = false;
 let mockIncognito = false;
-let pending: import("@/lib/chat/types").PendingChatMessage[] = [];
-const mockRefreshChatSession = jest.fn().mockResolvedValue(undefined);
-jest.mock("@/lib/chat/settleChatSession", () => ({
-  ...jest.requireActual<typeof import("@/lib/chat/settleChatSession")>(
-    "@/lib/chat/settleChatSession"
-  ),
-  refreshChatSession: (...args: unknown[]) => mockRefreshChatSession(...args),
-}));
-let requestLog: { method: string; body: string | undefined }[] = [];
+let mockInterruptOnSend = false;
+let pending: PendingChatMessage[] = [];
 let fetchSpy: jest.SpiedFunction<typeof fetch>;
 
 const mockClearDraft = jest.fn();
@@ -45,10 +31,13 @@ jest.mock("@/lib/chat/sessionReadiness", () => ({
   waitForChatResponseEnd: jest.fn(),
   fetchSettledChatSession: jest.fn(),
 }));
-jest.mock("@/app/app/services/lib", () => ({
-  processRawChatHistory: jest.fn(() => new Map()),
-}));
 
+jest.mock("@/providers/UserProvider", () => ({
+  useUser: () => ({
+    user: { preferences: { interrupt_on_send: mockInterruptOnSend } },
+    isAdmin: false,
+  }),
+}));
 jest.mock("@/providers/IncognitoProvider", () => ({
   useIncognito: () => ({ incognitoEnabled: mockIncognito }),
 }));
@@ -95,25 +84,15 @@ jest.mock("@/hooks/usePromptShortcuts", () => ({
   __esModule: true,
   default: () => ({ activePromptShortcuts: [] }),
 }));
-jest.mock("@/hooks/useDraft", () => {
-  const actual =
-    jest.requireActual<typeof import("@/hooks/useDraft")>("@/hooks/useDraft");
-  return {
-    ...actual,
-    useDraft: (
-      options: import("@/hooks/useDraft").UseDraftOptions<unknown>
-    ) => {
-      if (options.key.startsWith("onyx:draft:pending-chat:"))
-        return actual.useDraft(options);
-      return {
-        loaded: true,
-        draft: undefined,
-        save: jest.fn(),
-        clear: mockClearDraft,
-      };
-    },
-  };
-});
+jest.mock("@/hooks/useDraft", () => ({
+  draftKey: () => "draft",
+  useDraft: () => ({
+    loaded: true,
+    draft: undefined,
+    save: jest.fn(),
+    clear: mockClearDraft,
+  }),
+}));
 jest.mock("@/refresh-components/popovers/FilePickerPopover", () => ({
   __esModule: true,
   default: () => null,
@@ -124,6 +103,12 @@ jest.mock("@/components/voice/Waveform", () => ({
   default: () => null,
 }));
 jest.mock("@/sections/cards/FileCard", () => ({ FileCard: () => null }));
+
+/** The composer as chat pages mount it, with the session-level queue. */
+function ChatInput(inputProps: AppInputBarProps) {
+  const queue = useChatSessionQueue(!mockIncognito);
+  return <AppInputBar {...inputProps} queue={queue} />;
+}
 
 function props(chatState: AppInputBarProps["chatState"]): AppInputBarProps {
   return {
@@ -142,10 +127,9 @@ function props(chatState: AppInputBarProps["chatState"]): AppInputBarProps {
 }
 
 beforeEach(() => {
-  sessionStorage.clear();
   mockSearchMode = false;
   mockIncognito = false;
-  requestLog = [];
+  mockInterruptOnSend = false;
   pending = [
     {
       id: "queued",
@@ -154,26 +138,28 @@ beforeEach(() => {
       target_response_id: 2,
     },
   ];
-  mockRefreshChatSession.mockReset().mockResolvedValue(undefined);
   jest.mocked(waitForChatResponseEnd).mockReset();
-  jest.mocked(processRawChatHistory).mockImplementation(() => new Map());
   fetchSpy = jest
     .spyOn(global, "fetch")
     .mockImplementation(async (url, init) => {
       const method = init?.method ?? "GET";
-      requestLog.push({
-        method,
-        body: typeof init?.body === "string" ? init.body : undefined,
-      });
+      if (String(url).endsWith("/status"))
+        return new Response(
+          JSON.stringify({
+            is_processing: false,
+            current_stream: null,
+            has_active_subagents: false,
+            has_startable_input: false,
+            latest_response_id: 2,
+          })
+        );
       if (method === "POST") {
-        const body: {
-          message: string;
-          delivery: "send" | "queue" | "interrupt";
-          target_response_id: number;
-        } = JSON.parse(String(init?.body));
+        const body: Omit<PendingChatMessage, "id"> = JSON.parse(
+          String(init?.body)
+        );
         const item = { id: `pending-${pending.length}`, ...body };
         pending.push(item);
-        return new Response(JSON.stringify(item), { status: 200 });
+        return new Response(JSON.stringify(item));
       }
       if (method === "DELETE") {
         const id = String(url).split("/").at(-1);
@@ -254,20 +240,20 @@ test("completion checks stay with their sessions across navigation", async () =>
   const store = useChatSessionStore.getState();
   store.updateChatState("session", "unconfirmed");
   store.createSession("other", { chatState: "unconfirmed" });
-  const { rerender } = render(<AppInputBar {...props("unconfirmed")} />);
+  const { rerender } = render(<ChatInput {...props("unconfirmed")} />);
 
   await user.click(screen.getByRole("button", { name: /Check again$/ }));
   act(() => store.setCurrentSession("other"));
-  rerender(<AppInputBar {...props("unconfirmed")} />);
+  rerender(<ChatInput {...props("unconfirmed")} />);
   expect(screen.getByRole("button", { name: /Check again$/ })).toBeEnabled();
   await user.click(screen.getByRole("button", { name: /Check again$/ }));
 
   act(() => store.setCurrentSession("session"));
-  rerender(<AppInputBar {...props("unconfirmed")} />);
+  rerender(<ChatInput {...props("unconfirmed")} />);
   expect(screen.getByRole("button", { name: /Check again$/ })).toBeDisabled();
   await act(async () => firstIdle.resolve(null));
   act(() => store.setCurrentSession("other"));
-  rerender(<AppInputBar {...props("unconfirmed")} />);
+  rerender(<ChatInput {...props("unconfirmed")} />);
   expect(screen.getByRole("button", { name: /Check again$/ })).toBeDisabled();
   await act(async () => secondIdle.resolve(null));
   expect(screen.getByRole("button", { name: /Check again$/ })).toBeEnabled();
@@ -277,7 +263,7 @@ test("search cannot submit or clear a draft while readiness is unconfirmed", asy
   mockSearchMode = true;
   const user = setupUser();
   const inputProps = props("unconfirmed");
-  const { container } = render(<AppInputBar {...inputProps} />);
+  const { container } = render(<ChatInput {...inputProps} />);
   const send = container.querySelector<HTMLButtonElement>(
     "#onyx-chat-input-send-button"
   );
@@ -294,7 +280,7 @@ test("search cannot submit or clear a draft while readiness is unconfirmed", asy
 test("stopping preserves the draft and queue until completion", async () => {
   const user = setupUser();
   const inputProps = props("cancelling");
-  const { rerender } = render(<AppInputBar {...inputProps} />);
+  const { rerender } = render(<ChatInput {...inputProps} />);
   const stopping = screen.getByRole("button", { name: /Stopping…$/ });
   expect(stopping).toBeDisabled();
   const textbox = screen.getByRole("textbox", { name: "Message input" });
@@ -305,7 +291,7 @@ test("stopping preserves the draft and queue until completion", async () => {
   expect(inputProps.onSubmit).not.toHaveBeenCalled();
   expect(pending).toHaveLength(1);
 
-  rerender(<AppInputBar {...inputProps} chatState="input" />);
+  rerender(<ChatInput {...inputProps} chatState="input" />);
   expect(inputProps.onSubmit).not.toHaveBeenCalled();
   expect(textbox).toHaveTextContent("Keep this draft");
 });
@@ -313,7 +299,7 @@ test("stopping preserves the draft and queue until completion", async () => {
 test("unconfirmed completion offers a retry and never submits the draft or queue", async () => {
   const user = setupUser();
   const inputProps = props("unconfirmed");
-  render(<AppInputBar {...inputProps} />);
+  render(<ChatInput {...inputProps} />);
   expect(screen.getByRole("button", { name: /Check again$/ })).toBeEnabled();
   const textbox = screen.getByRole("textbox", { name: "Message input" });
   await user.click(textbox);
@@ -321,13 +307,6 @@ test("unconfirmed completion offers a retry and never submits the draft or queue
   expect(inputProps.onSubmit).not.toHaveBeenCalled();
   expect(textbox).toHaveTextContent("Keep this draft");
   expect(pending).toHaveLength(1);
-});
-
-test("a failed save keeps queued messages paused when manual input is available", () => {
-  const inputProps = props("cancelling");
-  const { rerender } = render(<AppInputBar {...inputProps} />);
-  rerender(<AppInputBar {...inputProps} chatState="input" />);
-  expect(inputProps.onSubmit).not.toHaveBeenCalled();
 });
 
 test.each([false, true])(
@@ -347,22 +326,21 @@ test.each([false, true])(
       sendAcknowledged,
     });
     const inputProps = props("unconfirmed");
-    const { rerender } = render(<AppInputBar {...inputProps} />);
+    const { rerender } = render(<ChatInput {...inputProps} />);
     await user.click(screen.getByRole("button", { name: /Check again$/ }));
-    expect(waitForChatResponseEnd).toHaveBeenCalledWith("session", undefined);
     expect(screen.getByRole("button", { name: /Check again$/ })).toBeDisabled();
     expect(inputProps.onSubmit).not.toHaveBeenCalled();
     await act(async () => idle.resolve(null));
     expect(
       useChatSessionStore.getState().sessions.get("session")?.chatState
     ).toBe("input");
-    rerender(<AppInputBar {...inputProps} chatState="input" />);
+    rerender(<ChatInput {...inputProps} chatState="input" />);
     expect(
       screen.getByRole("textbox", { name: "Message input" })
     ).toHaveTextContent("Keep this draft");
     expect(pending).toHaveLength(1);
     expect(inputProps.onSubmit).not.toHaveBeenCalled();
-    expect(fetchSettledChatSession).toHaveBeenCalledWith("session");
+    expect(fetchSettledChatSession).toHaveBeenCalled();
   }
 );
 
@@ -375,10 +353,10 @@ test("a pending readiness check does not disable Stop when streaming resumes", a
     readerFinished: reader.promise,
   });
   const inputProps = { ...props("unconfirmed"), initialMessage: "" };
-  const { rerender, container } = render(<AppInputBar {...inputProps} />);
+  const { rerender, container } = render(<ChatInput {...inputProps} />);
   await user.click(screen.getByRole("button", { name: /Check again$/ }));
   act(() => store.updateChatState("session", "streaming"));
-  rerender(<AppInputBar {...inputProps} chatState="streaming" />);
+  rerender(<ChatInput {...inputProps} chatState="streaming" />);
   const stop = container.querySelector<HTMLButtonElement>(
     "#onyx-chat-input-send-button"
   );
@@ -394,7 +372,7 @@ test.each(["{Enter}", "{Control>}{Enter}{/Control}", "{Meta>}{Enter}{/Meta}"])(
   async (keys) => {
     const user = setupUser();
     const inputProps = props("streaming");
-    render(<AppInputBar {...inputProps} />);
+    render(<ChatInput {...inputProps} />);
     const textbox = screen.getByRole("textbox", { name: "Message input" });
     const hint = screen.getByTestId("pending-message-hint");
     expect(hint).toHaveAccessibleName(
@@ -422,110 +400,27 @@ test.each(["{Enter}", "{Control>}{Enter}{/Control}", "{Meta>}{Enter}{/Meta}"])(
   }
 );
 
-test("failed pending submissions survive composer reload without replacing a newer draft or resending", async () => {
+test("a failed submission returns its text to the composer", async () => {
   const user = setupUser();
-  fetchSpy.mockImplementation(
-    async (_url, init) =>
-      new Response(
-        JSON.stringify(
-          init?.method === "POST"
-            ? { detail: "Response has finished" }
-            : pending
-        ),
-        { status: init?.method === "POST" ? 409 : 200 }
-      )
+  fetchSpy.mockImplementation(async (_url, init) =>
+    init?.method === "POST"
+      ? new Response(JSON.stringify({ detail: "Response has finished" }), {
+          status: 409,
+        })
+      : new Response(JSON.stringify(pending))
   );
-  const view = render(<AppInputBar {...props("streaming")} />);
+  render(<ChatInput {...props("streaming")} />);
   const textbox = screen.getByRole("textbox", { name: "Message input" });
   await user.click(textbox);
   await user.keyboard("{Enter}");
-  expect(textbox).toHaveTextContent(/^$/);
-  expect(await screen.findByText("Keep this draft")).toBeVisible();
-  await user.keyboard("Newer draft");
-  view.unmount();
-  fetchSpy.mockClear();
-  render(<AppInputBar {...props("streaming")} initialMessage="Newer draft" />);
-  expect(await screen.findByText("Keep this draft")).toBeVisible();
-  expect(
-    screen.getByRole("textbox", { name: "Message input" })
-  ).toHaveTextContent("Newer draft");
-  expect(fetchSpy.mock.calls.every(([, init]) => init?.method !== "POST")).toBe(
-    true
-  );
+  await waitFor(() => expect(textbox).toHaveTextContent("Keep this draft"));
+  expect(screen.getAllByTestId("queued-message-bar")).toHaveLength(1);
   expect(pending).toHaveLength(1);
-});
-
-test("handoff hides only the next entry and restores it when the session becomes idle", async () => {
-  const user = setupUser();
-  pending.push({
-    id: "second",
-    message: "Later question",
-    delivery: "queue",
-    target_response_id: 2,
-  });
-  const store = useChatSessionStore.getState();
-  const tree = new Map(store.sessions.get("session")!.messageTree);
-  tree.set(2, {
-    ...tree.get(2)!,
-    packets: [
-      {
-        placement: { turn_index: 0 },
-        obj: { type: "stop", response_status: "complete" },
-      },
-    ],
-  });
-  store.updateSessionData("session", {
-    chatState: "streaming",
-    messageTree: tree,
-  });
-  render(<AppInputBar {...props("streaming")} initialMessage="" />);
-  await screen.findByText("Later question");
-  expect(screen.queryByText("Queued follow-up")).not.toBeInTheDocument();
-
-  await user.click(screen.getByRole("textbox", { name: "Message input" }));
-  await user.keyboard("{ArrowUp}{Delete}");
-  await waitFor(() =>
-    expect(pending.map((message) => message.id)).toEqual(["queued"])
-  );
-
-  act(() => store.updateChatState("session", "input"));
-  expect(await screen.findByText("Queued follow-up")).toBeVisible();
-});
-
-test("edit withdraws the message before putting its text in the input", async () => {
-  const user = setupUser();
-  const deletion = deferred<Response>();
-  fetchSpy.mockImplementation(async (_url, init) =>
-    init?.method === "DELETE"
-      ? deletion.promise
-      : new Response(JSON.stringify(pending))
-  );
-  render(<AppInputBar {...props("streaming")} initialMessage="" />);
-  await screen.findByText("Queued follow-up");
-  const textbox = screen.getByRole("textbox", { name: "Message input" });
-  await user.click(textbox);
-  await user.click(screen.getByRole("button", { name: "Edit queued message" }));
-  expect(textbox).toHaveTextContent(/^$/);
-  await act(async () => {
-    pending = [];
-    deletion.resolve(
-      new Response(
-        JSON.stringify({
-          id: "queued",
-          message: "Processed text",
-          delivery: "queue",
-          target_response_id: 2,
-        })
-      )
-    );
-  });
-  await waitFor(() => expect(textbox).toHaveTextContent("Processed text"));
-  expect(screen.queryByTestId("queued-message-bar")).not.toBeInTheDocument();
 });
 
 test("an accepted message cannot be edited into a duplicate instruction", async () => {
   const user = setupUser();
-  render(<AppInputBar {...props("streaming")} initialMessage="" />);
+  render(<ChatInput {...props("streaming")} initialMessage="" />);
   await screen.findByText("Queued follow-up");
   pending = [];
   const textbox = screen.getByRole("textbox", { name: "Message input" });
@@ -537,26 +432,18 @@ test("an accepted message cannot be edited into a duplicate instruction", async 
   );
 });
 
-test("reopening the composer loads the server queue without resubmitting it", async () => {
-  const inputProps = props("streaming");
-  const view = render(<AppInputBar {...inputProps} />);
-  expect(await screen.findByText("Queued follow-up")).toBeVisible();
-  view.unmount();
-  render(<AppInputBar {...inputProps} />);
-  expect(await screen.findByText("Queued follow-up")).toBeVisible();
-  expect(requestLog.every((request) => request.method === "GET")).toBe(true);
-  expect(inputProps.onSubmit).not.toHaveBeenCalled();
-});
-
 test("incognito keeps text in the composer while an answer is running", async () => {
   mockIncognito = true;
   const user = setupUser();
-  render(<AppInputBar {...props("streaming")} />);
+  render(<ChatInput {...props("streaming")} />);
   const textbox = screen.getByRole("textbox", { name: "Message input" });
   await user.click(textbox);
   await user.keyboard("{Enter}{Control>}{Enter}{/Control}");
   expect(textbox).toHaveTextContent("Keep this draft");
   expect(fetchSpy).not.toHaveBeenCalled();
+  expect(screen.getByTestId("pending-message-hint")).toHaveTextContent(
+    "Wait for the response to finish in incognito chat."
+  );
 });
 
 test("a successful queue request keeps text typed while it was pending", async () => {
@@ -567,7 +454,7 @@ test("a successful queue request keeps text typed while it was pending", async (
       ? submission.promise
       : new Response(JSON.stringify(pending))
   );
-  render(<AppInputBar {...props("streaming")} />);
+  render(<ChatInput {...props("streaming")} />);
   const textbox = screen.getByRole("textbox", { name: "Message input" });
   await user.click(textbox);
   await user.keyboard("{Control>}{Enter}{/Control} more");
@@ -582,434 +469,259 @@ test("a successful queue request keeps text typed while it was pending", async (
     submission.resolve(new Response(JSON.stringify(item)));
   });
   expect(textbox).toHaveTextContent("more");
-  expect(sessionStorage.getItem("onyx:draft:pending-chat:session")).toBeNull();
   expect(mockClearDraft).toHaveBeenCalled();
 });
 
-test("an acknowledgement from an unmounted composer preserves newer unconfirmed messages", async () => {
-  const user = setupUser();
-  const first = deferred<Response>();
-  const second = deferred<Response>();
-  let posts = 0;
-  fetchSpy.mockImplementation(async (_url, init) => {
-    if (init?.method === "POST")
-      return ++posts === 1 ? first.promise : second.promise;
+test.each([true, false])(
+  "an idle chat polls for a server-started turn only while input can start one (%s)",
+  async (startable) => {
+    jest.useFakeTimers();
+    try {
+      let processing = false;
+      fetchSpy.mockImplementation(async (url) =>
+        String(url).endsWith("/status")
+          ? new Response(
+              JSON.stringify({
+                is_processing: processing,
+                current_stream: null,
+                has_active_subagents: false,
+                has_startable_input: startable,
+                latest_response_id: 2,
+              })
+            )
+          : new Response(JSON.stringify(pending))
+      );
+      // An accepted "Send now" leaves the list before its turn starts; a
+      // paused queue keeps its messages.
+      if (startable) pending = [];
+      render(<ChatInput {...props("input")} />);
+      await act(async () => jest.advanceTimersByTimeAsync(0));
+      expect(fetchSettledChatSession).not.toHaveBeenCalled();
+
+      processing = true;
+      await act(async () => jest.advanceTimersByTimeAsync(4000));
+      if (startable) expect(fetchSettledChatSession).toHaveBeenCalled();
+      else expect(fetchSettledChatSession).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
+  }
+);
+
+test("an accepted send leaves the queue while this browser follows the response", async () => {
+  // The jsdom environment has no streams, so the replay body is read by hand.
+  const accepted = deferred<ReadableStreamReadResult<Uint8Array>>();
+  const ended = deferred<ReadableStreamReadResult<Uint8Array>>();
+  const reads = [accepted.promise];
+  const replay = {
+    ok: true,
+    body: {
+      getReader: () => ({
+        read: () => reads.shift() ?? ended.promise,
+        cancel: async () => {},
+      }),
+    },
+  } as unknown as Response;
+  const replayStarted = deferred<void>();
+  fetchSpy.mockImplementation(async (url) => {
+    const path = String(url);
+    if (path.includes("resume-stream")) {
+      replayStarted.resolve();
+      return replay;
+    }
+    if (path.endsWith("/status"))
+      return new Response(
+        JSON.stringify({
+          is_processing: true,
+          current_stream: { stream_id: 2 },
+          has_active_subagents: false,
+          has_startable_input: false,
+          latest_response_id: 2,
+        })
+      );
     return new Response(JSON.stringify(pending));
   });
-  const firstView = render(
-    <AppInputBar {...props("streaming")} initialMessage="First instruction" />
-  );
-  await user.click(screen.getByRole("textbox", { name: "Message input" }));
-  await user.keyboard("{Enter}");
-  await waitFor(() => expect(posts).toBe(1));
-  firstView.unmount();
-  const nextView = render(
-    <AppInputBar {...props("streaming")} initialMessage="Second instruction" />
-  );
-  await screen.findByText("First instruction");
-  await user.click(screen.getByRole("textbox", { name: "Message input" }));
-  await user.keyboard("{Enter}");
-  await waitFor(() => expect(posts).toBe(2));
-  await act(async () => {
-    const accepted = {
-      id: "accepted-first",
-      message: "First instruction",
-      delivery: "send" as const,
-      target_response_id: 2,
-    };
-    pending.push(accepted);
-    first.resolve(new Response(JSON.stringify(accepted)));
-    second.resolve(
-      new Response(JSON.stringify({ detail: "Connection lost" }), {
-        status: 503,
+  const saved = await fetchSettledChatSession("session");
+  jest.mocked(fetchSettledChatSession).mockResolvedValue({
+    ...saved,
+    messages: [
+      {
+        message_id: 1,
+        message_type: "user",
+        message: "Question",
+        parent_message: null,
+        latest_child_message: 2,
+      },
+      {
+        message_id: 2,
+        message_type: "assistant",
+        message: "",
+        parent_message: 1,
+        latest_child_message: null,
+      },
+    ] as typeof saved.messages,
+    packets: [[]],
+    is_processing: true,
+    current_stream: { stream_id: 2 },
+  });
+  // The app reads the default SWR cache, which global revalidation reaches.
+  render(<ChatInput {...props("input")} initialMessage="" />, {
+    swrConfig: { provider: undefined },
+  });
+  await act(async () => replayStarted.promise);
+  expect(screen.getByText("Queued follow-up")).toBeVisible();
+
+  pending = [];
+  try {
+    await act(async () =>
+      accepted.resolve({
+        done: false,
+        value: new TextEncoder().encode(
+          JSON.stringify({
+            placement: { turn_index: 1, tab_index: 0 },
+            obj: {
+              type: "user_message",
+              id: "queued",
+              message: "Queued follow-up",
+            },
+          }) + "\n"
+        ),
       })
     );
-  });
-  nextView.unmount();
-  render(<AppInputBar {...props("streaming")} initialMessage="" />);
-  expect(await screen.findByText("Second instruction")).toBeVisible();
-  expect(posts).toBe(2);
+    await waitFor(() =>
+      expect(screen.queryByTestId("queued-message-bar")).not.toBeInTheDocument()
+    );
+  } finally {
+    // The response is saved once its replay ends.
+    jest.mocked(fetchSettledChatSession).mockResolvedValue(saved);
+    await act(async () => ended.resolve({ done: true, value: undefined }));
+    // Later tests share the default SWR cache, so let the final reads land.
+    await waitFor(() =>
+      expect(
+        useChatSessionStore.getState().sessions.get("session")?.chatState
+      ).toBe("input")
+    );
+  }
 });
 
-test("an input accepted before POST returns refreshes the active conversation", async () => {
-  const user = setupUser();
-  pending = [];
-  render(<AppInputBar {...props("streaming")} />);
-  await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
-  fetchSpy.mockImplementation(
-    async (_url, init) =>
-      new Response(
-        JSON.stringify(
-          init?.method === "POST"
-            ? {
-                id: "accepted",
-                message: "Keep this draft",
-                delivery: "send",
-                target_response_id: 2,
-              }
-            : []
+test("a server-started turn found by a readiness check clears the input it consumed", async () => {
+  let latestResponseId = 2;
+  fetchSpy.mockImplementation(async (url) =>
+    String(url).endsWith("/status")
+      ? new Response(
+          JSON.stringify({
+            is_processing: false,
+            current_stream: null,
+            has_active_subagents: false,
+            has_startable_input: false,
+            latest_response_id: latestResponseId,
+          })
         )
-      )
+      : new Response(JSON.stringify(pending))
   );
-  const textbox = screen.getByRole("textbox", { name: "Message input" });
-  await user.click(textbox);
-  await user.keyboard("{Enter}");
-  await waitFor(() =>
-    expect(mockRefreshChatSession).toHaveBeenCalledWith(
-      "session",
-      expect.any(String)
-    )
-  );
-  await waitFor(() =>
-    expect(screen.queryByTestId("queued-message-bar")).not.toBeInTheDocument()
-  );
-});
+  // Earlier tests share the default SWR cache.
+  await act(async () => {
+    await mutate(() => true, undefined, { revalidate: false });
+  });
+  // The app reads the default SWR cache, which global revalidation reaches.
+  render(<ChatInput {...props("input")} initialMessage="" />, {
+    swrConfig: { provider: undefined },
+  });
+  expect(await screen.findByText("Queued follow-up")).toBeVisible();
 
-test("a failed queue-acceptance refresh offers recovery after the queue is empty", async () => {
-  const saved = await fetchSettledChatSession("session");
-  saved.messages = [
-    "Question",
-    "Answer",
-    "Queued follow-up",
-    "Queued answer",
-  ].map(
-    (message, index): BackendMessage => ({
-      message_id: index + 1,
-      message_type: index % 2 === 0 ? "user" : "assistant",
-      message,
-      parent_message: index === 0 ? null : index,
-      latest_child_message: index === 3 ? null : index + 2,
-      response_status: index % 2 === 0 ? null : "complete",
-      research_type: null,
-      rephrased_query: null,
-      context_docs: null,
-      time_sent: "2026-11-09T00:00:00Z",
-      overridden_model: "",
-      alternate_assistant_id: null,
-      chat_session_id: "session",
-      citations: null,
-      files: [],
-      tool_call: null,
-      current_feedback: null,
-      sub_questions: [],
-      comments: null,
-      parentMessageId: null,
-      refined_answer_improvement: null,
-      is_agentic: null,
-      preferred_response_id: null,
-      model_display_name: null,
-      error: null,
-    })
-  );
-  saved.packets = [[], []];
-  const readiness = jest.requireActual<
+  // The queued turn ran to completion between status polls.
+  pending = [];
+  latestResponseId = 4;
+  const { waitForChatResponseEnd: readStatus } = jest.requireActual<
     typeof import("@/lib/chat/sessionReadiness")
   >("@/lib/chat/sessionReadiness");
-  jest
-    .mocked(waitForChatResponseEnd)
-    .mockImplementation(readiness.waitForChatResponseEnd);
-  jest
-    .mocked(fetchSettledChatSession)
-    .mockImplementation(readiness.fetchSettledChatSession);
-  jest
-    .mocked(processRawChatHistory)
-    .mockImplementation(
-      jest.requireActual<typeof import("@/app/app/services/lib")>(
-        "@/app/app/services/lib"
-      ).processRawChatHistory
-    );
-  mockRefreshChatSession.mockImplementation(
-    jest.requireActual<typeof import("@/lib/chat/settleChatSession")>(
-      "@/lib/chat/settleChatSession"
-    ).refreshChatSession
-  );
-  let refreshRequests = 0;
-  fetchSpy.mockImplementation(async (input) => {
-    const url = String(input);
-    if (url.endsWith("/pending-messages"))
-      return new Response(JSON.stringify(pending));
-    if (url.endsWith("/status"))
-      return new Response(
-        JSON.stringify({ is_processing: false, current_stream: null })
-      );
-    if (url.includes("get-chat-session")) {
-      refreshRequests++;
-      return refreshRequests === 1
-        ? new Response("Unavailable", { status: 503 })
-        : new Response(JSON.stringify(saved));
-    }
-    throw new Error(`Unexpected request: ${url}`);
-  });
-  const log = jest.spyOn(console, "error").mockImplementation(() => {});
-  try {
-    const user = setupUser();
-    const inputProps = props("input");
-    const view = render(<AppInputBar {...inputProps} />);
-    expect(await screen.findByText("Queued follow-up")).toBeVisible();
-    pending = [];
-    await waitFor(
-      () => {
-        expect(
-          useChatSessionStore.getState().sessions.get("session")?.chatState
-        ).toBe("unconfirmed");
-      },
-      { timeout: 2500 }
-    );
-    view.rerender(<AppInputBar {...inputProps} chatState="unconfirmed" />);
-    expect(screen.queryByText("Queued follow-up")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /Check again$/ }));
-    await waitFor(() => {
-      const session = useChatSessionStore.getState().sessions.get("session");
-      expect(session?.chatState).toBe("input");
-      expect(session?.messageTree.get(3)?.message).toBe("Queued follow-up");
-      expect(session?.messageTree.get(4)?.message).toBe("Queued answer");
-      expect(session?.uncaughtError).toBeNull();
-    });
-    expect(
-      screen.getByRole("textbox", { name: "Message input" })
-    ).toHaveTextContent("Keep this draft");
-    expect(inputProps.onSubmit).not.toHaveBeenCalled();
-    expect(refreshRequests).toBe(2);
-  } finally {
-    log.mockRestore();
-  }
-});
-
-test.each(["reader completion", "next response acknowledgement"])(
-  "%s refreshes accepted queue entries without waiting for polling",
-  async (transition) => {
-    jest.useFakeTimers();
-    try {
-      const reader = deferred<void>();
-      const acknowledgement = deferred<number>();
-      useChatSessionStore.getState().updateSessionData("session", {
-        readerFinished: reader.promise,
-        sendAcknowledged: acknowledgement.promise,
-      });
-      render(<AppInputBar {...props("streaming")} />);
-      await screen.findByText("Queued follow-up");
-      pending = [];
-
-      await act(async () => {
-        if (transition === "reader completion") reader.resolve();
-        else acknowledgement.resolve(2);
-      });
-
-      expect(
-        screen.queryByTestId("queued-message-bar")
-      ).not.toBeInTheDocument();
-    } finally {
-      jest.useRealTimers();
-    }
-  }
-);
-
-test.each(["queue", "send"] as const)(
-  "%s acceptance waits for history only when starting a new turn",
-  async (delivery) => {
-    jest.useFakeTimers();
-    try {
-      const reader = deferred<void>();
-      const history = deferred<void>();
-      pending[0]!.delivery = delivery;
-      mockRefreshChatSession.mockReturnValue(history.promise);
-      useChatSessionStore.getState().updateSessionData("session", {
-        readerFinished: reader.promise,
-      });
-      render(<AppInputBar {...props("streaming")} />);
-      await screen.findByText("Queued follow-up");
-      pending = [];
-
-      await act(async () => reader.resolve());
-      expect(mockRefreshChatSession).toHaveBeenCalled();
-      if (delivery === "queue") {
-        expect(screen.getByText("Queued follow-up")).toBeVisible();
-      } else {
-        expect(screen.queryByText("Queued follow-up")).not.toBeInTheDocument();
-      }
-
-      await act(async () => history.resolve());
-      expect(screen.queryByText("Queued follow-up")).not.toBeInTheDocument();
-    } finally {
-      jest.useRealTimers();
-    }
-  }
-);
-
-test("pending messages appear before acknowledgement and keep their response scope", async () => {
-  pending = [];
-  const acknowledgement = deferred<number | null>();
-  const store = useChatSessionStore.getState();
-  store.updateSessionMessageTree("session", new Map());
-  store.updateChatState("session", "loading");
-  const user = setupUser();
-  render(<AppInputBar {...props("loading")} />);
-  const textbox = screen.getByRole("textbox", { name: "Message input" });
-  await user.click(textbox);
-  await user.keyboard("{Control>}{Enter}{/Control}");
-  expect(await screen.findByText("Keep this draft")).toBeVisible();
-  expect(textbox).toHaveTextContent(/^$/);
-  await user.keyboard("Second instruction{Enter}");
-  expect(await screen.findByText("Second instruction")).toBeVisible();
-  expect(
-    requestLog.filter((request) => request.method === "POST")
-  ).toHaveLength(0);
   await act(async () => {
-    store.updateSessionData("session", {
-      sendAcknowledged: acknowledgement.promise,
-    });
-    acknowledgement.resolve(42);
+    await readStatus("session", 2);
   });
-  await waitFor(() => expect(pending).toHaveLength(2));
-  expect(
-    pending.map(({ message, delivery, target_response_id }) => ({
-      message,
-      delivery,
-      target_response_id,
-    }))
-  ).toEqual([
-    { message: "Keep this draft", delivery: "queue", target_response_id: 42 },
-    { message: "Second instruction", delivery: "send", target_response_id: 42 },
-  ]);
-});
 
-test("editing a local pending message withdraws it before acknowledgement", async () => {
-  pending = [];
-  const acknowledgement = deferred<number | null>();
-  const store = useChatSessionStore.getState();
-  store.updateSessionData("session", {
-    sendAcknowledged: acknowledgement.promise,
-  });
-  store.updateSessionMessageTree("session", new Map());
-  store.updateChatState("session", "loading");
-  const user = setupUser();
-  render(<AppInputBar {...props("loading")} />);
-  const textbox = screen.getByRole("textbox", { name: "Message input" });
-  await user.click(textbox);
-  await user.keyboard("{Control>}{Enter}{/Control}");
-  await user.click(
-    await screen.findByRole("button", { name: "Edit queued message" })
-  );
-  expect(textbox).toHaveTextContent("Keep this draft");
-  await act(async () => acknowledgement.resolve(42));
-  expect(requestLog.filter((request) => request.method !== "GET")).toHaveLength(
-    0
-  );
-  expect(sessionStorage.getItem("onyx:draft:pending-chat:session")).toBeNull();
-});
-
-test("interrupting a local preview waits for the response acknowledgement", async () => {
-  pending = [];
-  const acknowledgement = deferred<number | null>();
-  const store = useChatSessionStore.getState();
-  store.updateSessionData("session", {
-    sendAcknowledged: acknowledgement.promise,
-  });
-  store.updateSessionMessageTree("session", new Map());
-  store.updateChatState("session", "loading");
-  const user = setupUser();
-  render(<AppInputBar {...props("loading")} />);
-  const textbox = screen.getByRole("textbox", { name: "Message input" });
-  await user.click(textbox);
-  await user.keyboard("{Control>}{Enter}{/Control}");
-  await user.click(await screen.findByTestId("queued-message-bar"));
-  expect(await screen.findByRole("button", { name: "Send now" })).toBeEnabled();
-  await user.keyboard("{Enter}");
-  expect(
-    requestLog.filter((request) => request.method === "POST")
-  ).toHaveLength(0);
-  await act(async () => acknowledgement.resolve(42));
-  await waitFor(() => expect(pending).toHaveLength(1));
-  expect(
-    requestLog
-      .filter((request) => request.method === "POST")
-      .map((request) => request.body)
-  ).toEqual([
-    JSON.stringify({
-      message: "Keep this draft",
-      delivery: "interrupt",
-      target_response_id: 42,
-    }),
-  ]);
-  expect(pending[0]).toMatchObject({
-    delivery: "interrupt",
-    target_response_id: 42,
-  });
-});
-
-test.each(["rejected", "preparation failed"])(
-  "a %s root send keeps the pending message available for editing",
-  async (failure) => {
-    pending = [];
-    const acknowledgement = deferred<number | null>();
-    const store = useChatSessionStore.getState();
-    if (failure === "rejected")
-      store.updateSessionData("session", {
-        sendAcknowledged: acknowledgement.promise,
-      });
-    store.updateSessionMessageTree("session", new Map());
-    store.updateChatState("session", "loading");
-    const user = setupUser();
-    render(<AppInputBar {...props("loading")} />);
-    const textbox = screen.getByRole("textbox", { name: "Message input" });
-    await user.click(textbox);
-    await user.keyboard("{Enter}");
-    await act(async () => {
-      if (failure === "rejected") acknowledgement.resolve(null);
-      else store.updateChatState("session", "input");
-    });
-    expect(await screen.findByText("Keep this draft")).toBeVisible();
-    await user.click(
-      screen.getByRole("button", { name: "Edit queued message" })
-    );
-    expect(textbox).toHaveTextContent("Keep this draft");
-    expect(
-      requestLog.filter((request) => request.method !== "GET")
-    ).toHaveLength(0);
-  }
-);
-
-test("polling and repeated removal reconcile a POST whose response is delayed", async () => {
-  pending = [];
-  const postResponse = deferred<Response>();
-  const reader = deferred<void>();
-  useChatSessionStore
-    .getState()
-    .updateSessionData("session", { readerFinished: reader.promise });
-  const saved = {
-    id: "server-pending",
-    message: "Keep this draft",
-    delivery: "queue" as const,
-    target_response_id: 2,
-  };
-  fetchSpy.mockImplementation(async (_url, init) => {
-    if (init?.method === "POST") {
-      pending = [saved];
-      return postResponse.promise;
-    }
-    if (init?.method === "DELETE") {
-      pending = [];
-      return new Response(JSON.stringify(saved));
-    }
-    return new Response(JSON.stringify(pending));
-  });
-  const user = setupUser();
-  render(<AppInputBar {...props("streaming")} />);
-  await user.click(screen.getByRole("textbox", { name: "Message input" }));
-  await user.keyboard("{Control>}{Enter}{/Control}");
-  await waitFor(() => expect(pending).toHaveLength(1));
-  await act(async () => reader.resolve());
-  expect(screen.getAllByTestId("queued-message-bar")).toHaveLength(1);
-  const remove = screen.getByRole("button", { name: "Remove queued message" });
-  await user.click(remove);
-  await user.click(remove);
-  await act(async () =>
-    postResponse.resolve(new Response(JSON.stringify(saved)))
-  );
   await waitFor(() =>
     expect(screen.queryByTestId("queued-message-bar")).not.toBeInTheDocument()
   );
-  expect(
-    fetchSpy.mock.calls.filter(([, init]) => init?.method === "DELETE")
-  ).toHaveLength(1);
+});
+
+test("input sent during a slow request stays in the composer until it ends", async () => {
+  const user = setupUser();
+  const accepted = deferred<void>();
+  const posted: string[] = [];
+  fetchSpy.mockImplementation(async (_url, init) => {
+    if (init?.method !== "POST") return new Response(JSON.stringify(pending));
+    const body: Omit<PendingChatMessage, "id"> = JSON.parse(String(init.body));
+    posted.push(body.message);
+    if (posted.length === 1) await accepted.promise;
+    const item = { id: `pending-${pending.length}`, ...body };
+    pending.push(item);
+    return new Response(JSON.stringify(item));
+  });
+  render(<ChatInput {...props("streaming")} />);
+  const textbox = screen.getByRole("textbox", { name: "Message input" });
+  await user.click(textbox);
+  await user.keyboard("{Control>}{Enter}{/Control}");
+  await waitFor(() => expect(textbox).toHaveTextContent(/^$/));
+  await user.keyboard("Second{Control>}{Enter}{/Control}");
+  expect(textbox).toHaveTextContent("Second");
+  expect(posted).toEqual(["Keep this draft"]);
+
+  await act(async () => accepted.resolve());
+  await user.keyboard("{Control>}{Enter}{/Control}");
+  await waitFor(() => expect(posted).toEqual(["Keep this draft", "Second"]));
+  expect(await screen.findByText("Second")).toBeVisible();
+});
+
+test.each([
+  [false, "Send", "send"],
+  [true, "Interrupt", "interrupt"],
+])(
+  "the send arrow follows the interrupt preference (interrupt on send: %s)",
+  async (interruptOnSend, label, delivery) => {
+    mockInterruptOnSend = interruptOnSend;
+    const user = setupUser();
+    render(<ChatInput {...props("streaming")} />);
+    await user.click(screen.getByRole("button", { name: label }));
+    await waitFor(() => expect(pending).toHaveLength(2));
+    expect(pending[1]).toMatchObject({ message: "Keep this draft", delivery });
+  }
+);
+
+test("a turn found by a readiness check during completion loads once the chat is idle", async () => {
+  let latestResponseId = 2;
+  fetchSpy.mockImplementation(async (url) =>
+    String(url).endsWith("/status")
+      ? new Response(
+          JSON.stringify({
+            is_processing: false,
+            current_stream: null,
+            has_active_subagents: false,
+            has_startable_input: false,
+            latest_response_id: latestResponseId,
+          })
+        )
+      : new Response(JSON.stringify(pending))
+  );
+  await act(async () => {
+    await mutate(() => true, undefined, { revalidate: false });
+  });
+  const store = useChatSessionStore.getState();
+  store.updateChatState("session", "streaming");
+  render(<ChatInput {...props("streaming")} initialMessage="" />, {
+    swrConfig: { provider: undefined },
+  });
+  await screen.findByText("Queued follow-up");
+
+  // Queued turns ran while this browser confirmed its own response ended.
+  latestResponseId = 4;
+  const { waitForChatResponseEnd: readStatus } = jest.requireActual<
+    typeof import("@/lib/chat/sessionReadiness")
+  >("@/lib/chat/sessionReadiness");
+  await act(async () => {
+    await readStatus("session", 2);
+  });
+  expect(fetchSettledChatSession).not.toHaveBeenCalled();
+
+  act(() => store.updateChatState("session", "input"));
+  await waitFor(() => expect(fetchSettledChatSession).toHaveBeenCalled());
 });

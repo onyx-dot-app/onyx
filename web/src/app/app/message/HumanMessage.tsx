@@ -10,7 +10,7 @@ import { CopyButton, Text } from "@opal/components";
 import { Button } from "@opal/components";
 import { SvgEdit } from "@opal/icons";
 import { Hoverable } from "@opal/core";
-import FileDisplay from "@/app/app/message/FileDisplay";
+import FileDisplay from "./FileDisplay";
 import { useTranslations } from "next-intl";
 
 interface MessageEditingProps {

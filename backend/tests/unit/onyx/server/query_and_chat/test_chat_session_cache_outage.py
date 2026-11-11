@@ -4,7 +4,6 @@ from uuid import uuid4
 
 import pytest
 
-from onyx.chat.models import ChatBackgroundActivity
 from onyx.db.enums import ChatSessionSharedStatus
 from onyx.db.models import ChatSession, Persona, User
 from onyx.server.query_and_chat.chat_backend import get_chat_session
@@ -37,8 +36,8 @@ def test_saved_session_loads_when_processing_cache_is_unavailable(
             return_value=[],
         ),
         patch(
-            "onyx.server.query_and_chat.chat_backend.read_chat_background_activity",
-            return_value=ChatBackgroundActivity(),
+            "onyx.server.query_and_chat.chat_backend.has_chat_inputs",
+            return_value=False,
         ),
         patch(
             "onyx.server.query_and_chat.chat_backend.get_cache_backend",

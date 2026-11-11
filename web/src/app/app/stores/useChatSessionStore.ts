@@ -48,7 +48,6 @@ interface ChatSessionData {
   personaId?: number;
   // Pinned at creation server-side, so it outlives the live UI toggle.
   incognito?: boolean;
-  hasActiveSubagents?: boolean;
 
   // Streaming duration tracking
   streamingStartTime?: number;
@@ -552,7 +551,6 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
       description: backendSession?.description,
       personaId: backendSession?.persona_id,
       incognito: backendSession?.incognito ?? false,
-      hasActiveSubagents: backendSession?.has_active_subagents ?? false,
     };
 
     const existingSession = get().sessions.get(sessionId);

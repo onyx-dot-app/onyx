@@ -4,7 +4,6 @@ from typing import Annotated, Any, Literal, Union
 
 from pydantic import BaseModel, Field
 
-from onyx.agents.models import RunStatus
 from onyx.context.search.models import SearchDoc
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.models import CustomToolErrorInfo, GeneratedImage
@@ -101,7 +100,6 @@ class SectionEnd(BaseObj):
 class OverallStop(BaseObj):
     type: Literal["stop"] = StreamingType.STOP.value
     stop_reason: str | None = None
-    response_status: RunStatus | None = None
 
 
 class PacketException(BaseObj):

@@ -124,7 +124,7 @@ def test_pre_upgrade_history_expires_without_blocking_new_turns(
     session_id = uuid4()
     admission = ChatTurnAdmission(get_cache_backend())
     admission.claim(session_id)
-    # The deployed v2 schema has no root output IDs, even when child records remain.
+    # The deployed v2 schema has no root output IDs.
     payload = {
         "messages": [
             {"role": "user", "id": "chat:1", "content": "Old question"},
@@ -165,8 +165,7 @@ def test_pre_upgrade_history_expires_without_blocking_new_turns(
     response = _terminal_record(str(session_id), "New answer")
     save_incognito_response(
         session_id,
-        response.run_id,
-        checkpoint=response.checkpoint,
+        response,
         admission=admission,
         message_id=4,
         messages=response.messages,
@@ -481,34 +480,6 @@ def _terminal_record(
     )
 
 
-def test_response_retention_keeps_recent_root_history() -> None:
-    session_id = uuid4()
-    admission = ChatTurnAdmission(get_cache_backend())
-    admission.claim(session_id)
-    save_incognito_user_messages(
-        session_id, [UserMessage(content="question")], admission=admission
-    )
-    with patch("onyx.chat.incognito_context._MAX_CONTEXT_BYTES", 3000):
-        for message_id in range(1, 20):
-            save_incognito_user_messages(
-                session_id,
-                [UserMessage(content=f"question {message_id}")],
-                admission=admission,
-            )
-            reply = _terminal_record(str(session_id), f"answer {message_id}")
-            save_incognito_response(
-                session_id,
-                reply.run_id,
-                message_id=message_id,
-                messages=reply.messages,
-                admission=admission,
-            )
-        assert load_incognito_context(session_id).messages[-1].text == "answer 19"
-        context = get_redis_client().get(_context_key(session_id))
-        assert context is not None
-        assert len(context) <= 3000
-
-
 def test_terminal_write_rejects_oversize_without_changing_either_store() -> None:
     from onyx.chat.incognito_context import (
         save_incognito_response,
@@ -527,7 +498,7 @@ def test_terminal_write_rejects_oversize_without_changing_either_store() -> None
         with pytest.raises(ValueError, match="storage limit"):
             save_incognito_response(
                 session_id,
-                reply.run_id,
+                reply,
                 message_id=1,
                 messages=reply.messages,
                 admission=admission,
@@ -535,7 +506,7 @@ def test_terminal_write_rejects_oversize_without_changing_either_store() -> None
     assert client.get(_context_key(session_id)) == before
 
 
-def test_concurrent_terminal_writes_preserve_root_history() -> None:
+def test_concurrent_terminal_writes_preserve_both_responses() -> None:
     from onyx.chat import incognito_context
 
     session_id = uuid4()
@@ -552,7 +523,7 @@ def test_concurrent_terminal_writes_preserve_root_history() -> None:
         barrier.wait(timeout=5)
         incognito_context.save_incognito_response(
             session_id,
-            reply.run_id,
+            reply,
             message_id=index,
             messages=reply.messages,
             admission=admission,
@@ -568,6 +539,7 @@ def test_concurrent_terminal_writes_preserve_root_history() -> None:
     assert {
         message.text for message in load_incognito_context(session_id).messages
     } == {"question", "first", "second"}
+    assert set(load_incognito_context(session_id).responses) == {"1", "2"}
 
 
 def test_terminal_write_waiting_on_teardown_cannot_restore_replay_state() -> None:
@@ -596,7 +568,7 @@ def test_terminal_write_waiting_on_teardown_cannot_restore_replay_state() -> Non
                     copy_context().run,
                     lambda: incognito_context.save_incognito_response(
                         session_id,
-                        reply.run_id,
+                        reply,
                         message_id=1,
                         messages=reply.messages,
                         admission=admission,
@@ -614,9 +586,7 @@ def test_terminal_write_waiting_on_teardown_cannot_restore_replay_state() -> Non
 
 
 def test_root_replay_is_stored_once_and_conflicting_retries_are_rejected() -> None:
-    from onyx.chat.incognito_context import (
-        save_incognito_response,
-    )
+    from onyx.chat.incognito_context import save_incognito_response
 
     session_id = uuid4()
     admission = ChatTurnAdmission(get_cache_backend())
@@ -629,31 +599,17 @@ def test_root_replay_is_stored_once_and_conflicting_retries_are_rejected() -> No
     messages = reply.messages
     with patch("onyx.chat.incognito_context._MAX_CONTEXT_BYTES", 4096):
         save_incognito_response(
-            session_id,
-            reply.run_id,
-            message_id=1,
-            messages=messages,
-            admission=admission,
+            session_id, reply, message_id=1, messages=messages, admission=admission
         )
         before = get_redis_client().get(_context_key(session_id))
-        assert before is not None
-        # Older cache entries can contain child records; root replay remains readable.
-        legacy = json.loads(before)
-        legacy["responses"]["1"]["agents"] = [{"agent_id": "old-child"}]
-        before = json.dumps(legacy).encode()
-        get_redis_client().set(_context_key(session_id), before)
         save_incognito_response(
-            session_id,
-            reply.run_id,
-            message_id=1,
-            messages=messages,
-            admission=admission,
+            session_id, reply, message_id=1, messages=messages, admission=admission
         )
         assert get_redis_client().get(_context_key(session_id)) == before
         with pytest.raises(ValueError, match="different content"):
             save_incognito_response(
                 session_id,
-                reply.run_id,
+                reply,
                 message_id=1,
                 messages=[AssistantMessage(content=[TextContent(text="different")])],
                 admission=admission,
@@ -971,7 +927,7 @@ def test_regeneration_replaces_cached_answer_before_the_next_question() -> None:
     replacement.input_messages = [question]
     incognito_context.save_incognito_response(
         session_id,
-        replacement.run_id,
+        replacement,
         message_id=19,
         messages=replacement.messages,
         admission=admission,
@@ -1034,8 +990,7 @@ def test_parallel_responses_append_after_one_input_commit(
     for message_id, response in [(18, first), (19, second)]:
         incognito_context.save_incognito_response(
             session_id,
-            response.run_id,
-            checkpoint=response.checkpoint,
+            response,
             message_id=message_id,
             messages=response.messages,
             admission=admission,
@@ -1133,7 +1088,7 @@ def test_new_turn_rejects_previous_owner_history_writes() -> None:
     with pytest.raises(CacheLockLostError, match="admission was lost"):
         incognito_context.save_incognito_response(
             session_id,
-            response.run_id,
+            response,
             admission=old,
             message_id=18,
             messages=response.messages,
@@ -1163,7 +1118,7 @@ def test_history_write_checks_ownership_after_serialization() -> None:
         with pytest.raises(CacheLockLostError, match="admission was lost"):
             incognito_context.save_incognito_response(
                 session_id,
-                response.run_id,
+                response,
                 admission=admission,
                 message_id=18,
                 messages=response.messages,
@@ -1193,7 +1148,7 @@ def test_takeover_after_owner_check_keeps_answer_before_new_question() -> None:
         saving = start_thread_future(
             lambda: incognito_context.save_incognito_response(
                 session_id,
-                response.run_id,
+                response,
                 admission=old,
                 message_id=18,
                 messages=response.messages,
@@ -1245,8 +1200,7 @@ def test_root_checkpoint_survives_temporary_response_and_next_input(
     )
     save_incognito_response(
         session_id,
-        response.run_id,
-        checkpoint=response.checkpoint,
+        response,
         admission=admission,
         message_id=2,
         messages=response.messages,
@@ -1280,8 +1234,7 @@ def test_root_checkpoint_survives_temporary_response_and_next_input(
     with pytest.raises(ValueError, match="different content"):
         save_incognito_response(
             session_id,
-            changed.run_id,
-            checkpoint=changed.checkpoint,
+            changed,
             admission=admission,
             message_id=2,
             messages=response.messages,
@@ -1359,17 +1312,13 @@ def test_retention_evicts_complete_turns(
     answer = _terminal_record(str(session_id), "New answer")
     save_incognito_response(
         session_id,
-        answer.run_id,
-        checkpoint=answer.checkpoint,
+        answer,
         message_id=4,
         messages=answer.messages,
         admission=admission,
     )
     incoming = UserMessage(id="chat:5", content="Continue")
-    store = RedisChatHistoryStore(
-        message_id=5,
-        chat_session_id=session_id,
-    )
+    store = RedisChatHistoryStore(message_id=5, chat_session_id=session_id)
     prepared, _, _ = store.prepare_messages(
         ChatHistoryResult(
             messages=[
@@ -1403,8 +1352,7 @@ def test_retention_rejects_an_oversized_current_turn_atomically(
     first = _terminal_record(str(session_id), "First answer")
     save_incognito_response(
         session_id,
-        first.run_id,
-        checkpoint=first.checkpoint,
+        first,
         message_id=2,
         messages=first.messages,
         admission=admission,
@@ -1419,8 +1367,7 @@ def test_retention_rejects_an_oversized_current_turn_atomically(
     with pytest.raises(ValueError, match="storage limit"):
         save_incognito_response(
             session_id,
-            second.run_id,
-            checkpoint=second.checkpoint,
+            second,
             message_id=3,
             messages=second.messages,
             admission=admission,

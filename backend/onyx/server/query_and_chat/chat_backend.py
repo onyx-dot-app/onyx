@@ -21,16 +21,15 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.access.access import user_can_access_chat_file
+from onyx.agents.models import MessageDelivery, RunStatus
 from onyx.auth.api_key import get_hashed_api_key_from_request
 from onyx.auth.pat import get_hashed_pat_from_request
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_chat_accessible_user
 from onyx.background.task_utils import enqueue_user_file_deletes
 from onyx.cache.factory import get_cache_backend
-from onyx.cache.interface import CacheBackend
 from onyx.chat.chat_processing_checker import (
     ADMISSION_CACHE_TIMEOUT_S,
-    BACKGROUND_CONTROL_PREFIX,
     get_processing_stream_id,
     is_chat_session_processing,
 )
@@ -44,7 +43,6 @@ from onyx.chat.incognito import (
 )
 from onyx.chat.incognito_context import teardown_incognito_session
 from onyx.chat.models import (
-    ChatBackgroundActivity,
     ChatFullResponse,
     ChatResponseOutcome,
     CreateChatSessionID,
@@ -86,21 +84,23 @@ from onyx.db.chat import (
     get_chat_session_by_id,
     get_chat_sessions_by_user,
     get_incognito_session_ids_for_user,
+    get_selected_branch,
     set_as_latest_chat_message,
     set_preferred_response,
     translate_db_message_to_chat_message_detail,
     update_chat_session,
 )
 from onyx.db.chat_inputs import (
+    agent_result_states,
     get_human_input_session,
+    has_chat_inputs,
     interrupt_human_message__no_commit,
     list_human_messages,
-    pending_human_message,
+    next_queued_turn,
     submit_human_message__no_commit,
     withdraw_human_message__no_commit,
 )
 from onyx.db.chat_search import search_chat_sessions
-from onyx.db.chat_subagents import read_chat_background_activity
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import LLMModelFlowType, Permission, record_mode_persists_content
 from onyx.db.feedback import create_chat_message_feedback, remove_chat_message_feedback
@@ -110,7 +110,6 @@ from onyx.db.incognito import (
 )
 from onyx.db.models import (
     ChatMessage,
-    ChatSession,
     ChatSessionSharedStatus,
     Persona,
     User,
@@ -508,20 +507,10 @@ def get_chat_session(
         translate_db_message_to_chat_message_detail(msg) for msg in session_messages
     ]
 
-    background_activity = read_chat_background_activity(db_session, chat_session)
-    has_active_subagents = background_activity.has_pending_root_results
     current_stream: CurrentStreamInfo | None = None
     is_processing = True
     try:
         cache = get_cache_backend(operation_timeout_s=ADMISSION_CACHE_TIMEOUT_S)
-        background_activity = _refresh_background_activity(
-            chat_session, background_activity, cache
-        )
-        has_active_subagents = bool(
-            background_activity.running_response_ids
-            or background_activity.has_pending_root_results
-            or background_activity.completion_host_response_ids
-        )
         is_processing = is_chat_session_processing(session_id, cache)
         stream_id = get_processing_stream_id(session_id, cache)
         if stream_id is not None:
@@ -560,7 +549,6 @@ def get_chat_session(
         # Packets are now directly serialized as Packet Pydantic models
         packets=replay_packet_lists,
         current_stream=current_stream,
-        has_active_subagents=has_active_subagents,
         is_processing=is_processing,
         incognito=chat_session.incognito_record_mode is not None,
         has_older_messages=has_older_messages,
@@ -1389,35 +1377,6 @@ def search_chats(
 _RESUME_MAX_CHUNKS_PER_READ = 32
 
 
-def _refresh_background_activity(
-    chat_session: ChatSession,
-    activity: ChatBackgroundActivity,
-    cache: CacheBackend,
-) -> ChatBackgroundActivity:
-    missing_owners = set(activity.running_response_ids) - active_response_ids(
-        cache, activity.running_response_ids
-    )
-    if missing_owners:
-        # A child saves before releasing ownership. Read its result or successor
-        # before declaring idle; otherwise the browser can miss the handoff.
-        with get_session_with_current_tenant() as db_session:
-            activity = read_chat_background_activity(db_session, chat_session)
-        activity.running_response_ids = [
-            response_id
-            for response_id in activity.running_response_ids
-            if response_id not in missing_owners
-        ]
-    if activity.completion_host_response_ids:
-        keys = {
-            f"{BACKGROUND_CONTROL_PREFIX}{response_id}": response_id
-            for response_id in activity.completion_host_response_ids
-        }
-        activity.completion_host_response_ids = [
-            keys[key] for key in cache.exists_many(keys)
-        ]
-    return activity
-
-
 @router.get("/chat-session/{session_id}/status")
 def get_chat_session_processing_status(
     session_id: UUID,
@@ -1435,19 +1394,35 @@ def get_chat_session_processing_status(
             )
         except ValueError as error:
             raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND) from error
-        background_activity = read_chat_background_activity(db_session, chat_session)
+        selected, branch = get_selected_branch(db_session, session_id)
+        latest_response_id = selected.id if selected is not None else None
+        running: list[int] = []
+        queued_turn = None
+        # Only conversations with inbox rows have queued turns or child work.
+        if has_chat_inputs(db_session, session_id):
+            results = agent_result_states(db_session, branch.message_ids)
+            running = [
+                result.response_id
+                for result in results
+                if result.status == RunStatus.RUNNING
+            ]
+            queued_turn = next_queued_turn(
+                db_session, session_id, selected, branch, results
+            )
+    # Read admission after input: a turn claims admission before it consumes
+    # input, so a starting turn shows as startable input or as processing.
     cache = get_cache_backend(operation_timeout_s=ADMISSION_CACHE_TIMEOUT_S)
-    background_activity = _refresh_background_activity(
-        chat_session, background_activity, cache
-    )
+    has_startable_input = queued_turn is not None
+    # Dispatch saves a child whose owner is gone as failed, so its result wakes the root.
+    has_orphaned_children = bool(running) and len(
+        active_response_ids(get_cache_backend(), running)
+    ) < len(running)
     stream_id = get_processing_stream_id(session_id, cache)
     status = ChatSessionProcessingStatus(
-        latest_response_id=background_activity.latest_response_id,
-        has_active_subagents=bool(
-            background_activity.has_pending_root_results
-            or background_activity.running_response_ids
-            or background_activity.completion_host_response_ids
-        ),
+        latest_response_id=latest_response_id,
+        has_active_subagents=bool(running)
+        or (queued_turn is not None and queued_turn.message is None),
+        has_startable_input=has_startable_input,
         is_processing=stream_id is not None
         or is_chat_session_processing(session_id, cache),
         current_stream=CurrentStreamInfo(stream_id=stream_id)
@@ -1456,22 +1431,13 @@ def get_chat_session_processing_status(
     )
 
     if (
-        not status.is_processing
+        (has_startable_input or has_orphaned_children)
+        and not status.is_processing
         and chat_session.user_id == user.id
         and user.id is not None
-        and chat_session.incognito_record_mode is None
     ):
-        should_dispatch = background_activity.has_pending_root_results
-        if not should_dispatch:
-            with get_session_with_current_tenant() as db_session:
-                should_dispatch = (
-                    pending_human_message(db_session, session_id, user.id) is not None
-                )
-        if should_dispatch:
-            # Queued work can outlive the process that completed its previous response.
-            background_tasks.add_task(
-                dispatch_pending_chat_messages, session_id, user.id
-            )
+        # Queued work can outlive the process that completed its previous response.
+        background_tasks.add_task(dispatch_pending_chat_messages, session_id, user.id)
     return status
 
 
@@ -1576,28 +1542,18 @@ def submit_pending_chat_message(
     _api_key_usage_check: None = Depends(check_api_key_usage),
 ) -> PendingChatMessage:
     """Submit text for the next step, normal completion, or interruption."""
-    if user.is_anonymous or user.id is None:
-        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Sign in to queue chat messages")
-    user_id = user.id
-    try:
-        chat_session = get_human_input_session(db_session, session_id, user_id)
-        message = process_chat_query(body.message, chat_session, user, db_session)
-        pending = submit_human_message__no_commit(
-            db_session,
-            session_id,
-            user_id,
-            message=message,
-            delivery=body.delivery,
-            target_response_id=body.target_response_id,
-        )
-        db_session.commit()
-    except LookupError as error:
-        raise OnyxError(
-            OnyxErrorCode.SESSION_NOT_FOUND, "Chat session not found"
-        ) from error
-    except ValueError as error:
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(error)) from error
-    dispatch_pending_chat_messages(session_id, user_id)
+    chat_session = get_human_input_session(db_session, session_id, user)
+    pending = submit_human_message__no_commit(
+        db_session,
+        session_id,
+        message=process_chat_query(body.message, chat_session, user, db_session),
+        delivery=body.delivery,
+        target_response_id=body.target_response_id,
+    )
+    db_session.commit()
+    if pending.delivery == MessageDelivery.INTERRUPT:
+        _stop_processing_stream(session_id)
+    dispatch_pending_chat_messages(session_id, user.id)
     return pending
 
 
@@ -1607,16 +1563,8 @@ def list_pending_chat_messages(
     user: User = Depends(require_permission(Permission.READ_CHAT)),
     db_session: Session = Depends(get_session),
 ) -> list[PendingChatMessage]:
-    if user.is_anonymous or user.id is None:
-        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Sign in to view queued messages")
-    try:
-        return list_human_messages(db_session, session_id, user.id)
-    except LookupError as error:
-        raise OnyxError(
-            OnyxErrorCode.SESSION_NOT_FOUND, "Chat session not found"
-        ) from error
-    except ValueError as error:
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(error)) from error
+    get_human_input_session(db_session, session_id, user)
+    return list_human_messages(db_session, session_id)
 
 
 @router.delete("/chat-session/{session_id}/pending-messages/{message_id}")
@@ -1627,21 +1575,9 @@ def withdraw_pending_chat_message(
     db_session: Session = Depends(get_session),
 ) -> PendingChatMessage:
     """Remove pending input and return its text for local editing or discarding."""
-    if user.is_anonymous or user.id is None:
-        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Sign in to remove queued messages")
-    try:
-        pending = withdraw_human_message__no_commit(
-            db_session, session_id, user.id, message_id
-        )
-        if pending is None:
-            raise OnyxError(OnyxErrorCode.CONFLICT, "This message is no longer pending")
-        db_session.commit()
-    except LookupError as error:
-        raise OnyxError(
-            OnyxErrorCode.SESSION_NOT_FOUND, "Chat session not found"
-        ) from error
-    except ValueError as error:
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(error)) from error
+    get_human_input_session(db_session, session_id, user)
+    pending = withdraw_human_message__no_commit(db_session, session_id, message_id)
+    db_session.commit()
     dispatch_pending_chat_messages(session_id, user.id)
     return pending
 
@@ -1650,28 +1586,25 @@ def withdraw_pending_chat_message(
 def interrupt_with_pending_chat_message(
     session_id: UUID,
     message_id: str,
-    target_response_id: int | None = Query(default=None, gt=0),
     user: User = Depends(require_permission(Permission.WRITE_CHAT)),
     db_session: Session = Depends(get_session),
     _rate_limit_check: None = Depends(check_token_rate_limits),
     _api_key_usage_check: None = Depends(check_api_key_usage),
 ) -> PendingChatMessage:
-    """Interrupt current work and start the pending message after execution drains."""
-    if user.is_anonymous or user.id is None:
-        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Sign in to send queued messages")
-    try:
-        pending = interrupt_human_message__no_commit(
-            db_session, session_id, user.id, message_id, target_response_id
-        )
-        db_session.commit()
-    except LookupError as error:
-        raise OnyxError(
-            OnyxErrorCode.SESSION_NOT_FOUND, "Chat session not found"
-        ) from error
-    except ValueError as error:
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(error)) from error
+    """Stop current work; the message starts the next turn."""
+    get_human_input_session(db_session, session_id, user)
+    pending = interrupt_human_message__no_commit(db_session, session_id, message_id)
+    db_session.commit()
+    _stop_processing_stream(session_id)
     dispatch_pending_chat_messages(session_id, user.id)
     return pending
+
+
+def _stop_processing_stream(chat_session_id: UUID) -> None:
+    cache = get_cache_backend()
+    stream_id = get_processing_stream_id(chat_session_id, cache)
+    if stream_id is not None:
+        request_stop(chat_session_id, cache, stream_id=stream_id)
 
 
 @router.post("/stop-chat-session/{chat_session_id}", tags=PUBLIC_API_TAGS)
@@ -1693,8 +1626,8 @@ def stop_chat_session(
             OnyxErrorCode.SESSION_NOT_FOUND, "Chat session not found"
         ) from error
 
-    cache = get_cache_backend()
-    target_stream_id = stream_id or get_processing_stream_id(chat_session_id, cache)
-    if target_stream_id is not None:
-        request_stop(chat_session_id, cache, stream_id=target_stream_id)
+    if stream_id is None:
+        _stop_processing_stream(chat_session_id)
+    else:
+        request_stop(chat_session_id, get_cache_backend(), stream_id=stream_id)
     return StopChatResponse(message="Chat session stopped")

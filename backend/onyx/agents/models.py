@@ -9,9 +9,7 @@ from pydantic import (
     Field,
     JsonValue,
     SerializeAsAny,
-    TypeAdapter,
     field_serializer,
-    field_validator,
 )
 
 from onyx.agents.execution_records import messages_for_model
@@ -31,7 +29,11 @@ from onyx.llm.models import (
 )
 
 AGENT_RESULT_MESSAGE_PREFIX = "agent-result:"
-_MESSAGE_ADAPTER = TypeAdapter(Message)
+
+
+def agent_result_message_id(run_id: str) -> str:
+    """The inbox identity of a finished run's result for its spawner."""
+    return f"{AGENT_RESULT_MESSAGE_PREFIX}{run_id}"
 
 
 class RunStatus(str, Enum):
@@ -87,7 +89,7 @@ class AgentCompletion(BaseModel):
 
     @property
     def message_id(self) -> str:
-        return f"{AGENT_RESULT_MESSAGE_PREFIX}{self.run_id}"
+        return agent_result_message_id(self.run_id)
 
 
 class InputSource(str, Enum):
@@ -96,50 +98,16 @@ class InputSource(str, Enum):
     AGENT_RESULT = "agent_result"
 
 
-class AgentResultDetails(BaseModel):
-    agent_id: str
-    agent_path: str
-    status: RunStatus
-    failure: RunFailure | None = None
-
-
 class InputMessageMetadata(BaseModel):
-    """Input provenance survives flattened conversation history and compaction."""
+    """Input provenance survives flattened conversation history and compaction.
+
+    Content metadata reaches step preparation only; accepted history omits it.
+    """
 
     type: Literal["agent_input"] = "agent_input"
     source: InputSource
     source_run_id: str | None = None
-    sender_agent_id: str | None = None
-    result: AgentResultDetails | None = None
     content_metadata: SerializeAsAny[BaseModel] | None = None
-
-
-def _restore_input_metadata(
-    messages: list[Message | dict[str, JsonValue]],
-) -> list[Message]:
-    restored: list[Message] = []
-    for value in messages:
-        if not isinstance(value, dict):
-            restored.append(value)
-            continue
-        message = _MESSAGE_ADAPTER.validate_python(value)
-        metadata = value.get("metadata")
-        if isinstance(metadata, dict) and metadata.get("type") == "agent_input":
-            message.metadata = InputMessageMetadata.model_validate(metadata)
-        restored.append(message)
-    return restored
-
-
-def _serialize_inputs(messages: list[Message]) -> list[dict[str, JsonValue]]:
-    values: list[dict[str, JsonValue]] = []
-    for message in messages:
-        value = message.model_dump(mode="json")
-        if isinstance(message.metadata, InputMessageMetadata):
-            value["metadata"] = message.metadata.model_dump(
-                mode="json", exclude={"result", "content_metadata"}
-            )
-        values.append(value)
-    return values
 
 
 class MessageDelivery(str, Enum):
@@ -148,14 +116,10 @@ class MessageDelivery(str, Enum):
     INTERRUPT = "interrupt"
 
 
-class AgentMessageStatus(str, Enum):
-    PENDING = "pending"
-    ACCEPTED = "accepted"
-
-
 class AgentMessageReceipt(BaseModel):
+    """A stored instruction and the run it targets; None starts a new run."""
+
     id: str
-    status: AgentMessageStatus
     run_id: str | None = None
 
 
@@ -194,15 +158,6 @@ class AgentInfo(BaseModel):
     restoration_config: SerializeAsAny[BaseModel] | None
     latest_run_id: str | None = None
     status: RunStatus | None = None
-    pending_message_count: int = 0
-
-    @property
-    def queue_paused(self) -> bool:
-        return self.pending_message_count > 0 and self.status in (
-            RunStatus.CANCELLED,
-            RunStatus.ERROR,
-            RunStatus.LIMIT,
-        )
 
 
 class AgentStep(BaseModel):
@@ -219,13 +174,6 @@ class AgentState(BaseModel):
     model_config = ConfigDict(extra="forbid")
     messages: list[Message] = Field(default_factory=list)
     checkpoint: CompactionCheckpoint | None = None
-
-    _restore_inputs = field_validator("messages", mode="before")(
-        _restore_input_metadata
-    )
-    _serialize_input_messages = field_serializer("messages", when_used="json")(
-        _serialize_inputs
-    )
 
     def snapshot(self) -> "AgentState":
         return self.model_copy(deep=True)
@@ -356,13 +304,6 @@ class StepRecord(BaseModel):
     generation_status: ExecutionStatus
     tools: dict[str, ToolExecutionRecord] = Field(default_factory=dict)
 
-    _restore_inputs = field_validator("input_messages", mode="before")(
-        _restore_input_metadata
-    )
-    _serialize_input_messages = field_serializer("input_messages", when_used="json")(
-        _serialize_inputs
-    )
-
 
 def messages_from_steps(steps: list[StepRecord]) -> list[Message]:
     """Return message references in model order, regardless of tool completion order."""
@@ -375,15 +316,6 @@ def messages_from_steps(steps: list[StepRecord]) -> list[Message]:
             if execution is not None and execution.result is not None:
                 messages.append(execution.result)
     return messages
-
-
-class BackgroundDelegation(BaseModel):
-    """A child request whose result must be consumed before this run completes."""
-
-    agent_id: str
-    run_id: str | None = None
-    message_id: str | None = None
-    tool_call_id: str | None = None
 
 
 class RunProgress(BaseModel):
@@ -407,15 +339,6 @@ class RunProgress(BaseModel):
         default_factory=dict
     )
     human_tool_answers: dict[str, HumanToolAnswer] = Field(default_factory=dict)
-    pending_messages: list[UserMessage] = Field(default_factory=list)
-
-    _restore_inputs = field_validator("pending_messages", mode="before")(
-        _restore_input_metadata
-    )
-    _serialize_input_messages = field_serializer("pending_messages", when_used="json")(
-        _serialize_inputs
-    )
-    background_delegations: list[BackgroundDelegation] = Field(default_factory=list)
     child_run_ids: list[str] = Field(default_factory=list)
     observed_child_run_ids: list[str] = Field(default_factory=list)
     outcome: RunStatus | None = None
@@ -452,13 +375,6 @@ class RunState(BaseModel):
     request_params: GenerationRequestParams | None = None
     failure: RunFailure | None = None
     checkpoint: CompactionCheckpoint | None = None
-
-    _restore_inputs = field_validator("input_messages", mode="before")(
-        _restore_input_metadata
-    )
-    _serialize_input_messages = field_serializer("input_messages", when_used="json")(
-        _serialize_inputs
-    )
 
     @property
     def messages(self) -> list[Message]:

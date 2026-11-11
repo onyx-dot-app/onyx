@@ -210,3 +210,36 @@ def test_stop_chat_session_rejects_non_owner(
     # Unknown session IDs are also rejected.
     response = _stop_chat_session(str(uuid4()), second_user)
     assert response.status_code == 404
+
+
+def test_queue_and_status_routes_reject_callers_without_access(
+    basic_user: DATestUser, second_user: DATestUser
+) -> None:
+    """Only the owner can read a chat's status or read and change its queue."""
+    chat_session = ChatSessionManager.create(user_performing_action=basic_user)
+    session_url = f"{API_SERVER_URL}/chat/chat-session/{chat_session.id}"
+    pending_url = f"{session_url}/pending-messages"
+
+    def status_codes(user: DATestUser | None) -> list[int]:
+        headers = user.headers if user is not None else GENERAL_HEADERS
+        cookies = user.cookies if user is not None else None
+        return [
+            client.request(
+                method, url, json=body, headers=headers, cookies=cookies
+            ).status_code
+            for method, url, body in (
+                ("GET", f"{session_url}/status", None),
+                ("GET", pending_url, None),
+                ("POST", pending_url, {"message": "Private", "delivery": "queue"}),
+                ("DELETE", f"{pending_url}/unknown", None),
+                ("POST", f"{pending_url}/unknown/interrupt", None),
+            )
+        ]
+
+    assert status_codes(second_user) == [404] * 5
+    assert status_codes(None) == [403] * 5
+    response = client.get(
+        pending_url, headers=basic_user.headers, cookies=basic_user.cookies
+    )
+    assert response.status_code == 200
+    assert response.json() == []

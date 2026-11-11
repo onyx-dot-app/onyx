@@ -12,8 +12,10 @@ import type { MemberPlugin } from "@/lib/plugins/member";
 import { Button } from "@opal/components";
 import {
   memberServer,
+  memberTool,
   storedMcpTool,
 } from "@/sections/plugins/__tests__/memberPluginFixtures";
+import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
 
 jest.mock("@/lib/hooks", () => ({
   useLlmManager: () => ({ isLoadingProviders: true }),
@@ -21,8 +23,9 @@ jest.mock("@/lib/hooks", () => ({
 jest.mock("@/providers/UserProvider", () => ({
   useUser: () => ({ user: null, isAdmin: false }),
 }));
+let mockIncognitoEnabled = false;
 jest.mock("@/providers/IncognitoProvider", () => ({
-  useIncognito: () => ({ incognitoEnabled: false }),
+  useIncognito: () => ({ incognitoEnabled: mockIncognitoEnabled }),
 }));
 jest.mock("@/providers/QueryControllerProvider", () => ({
   useQueryController: () => ({ state: { phase: "idle", appMode: "chat" } }),
@@ -102,10 +105,12 @@ const plugin: MemberPlugin = {
 function Composer({
   plugins,
   agentId = 0,
+  tools = agent.tools,
   inputBarRef,
 }: {
   plugins: readonly MemberPlugin[];
   agentId?: number;
+  tools?: MinimalAgent["tools"];
   inputBarRef?: React.Ref<AppInputBarHandle>;
 }) {
   const configuration = useToolConfiguration(agentId);
@@ -124,7 +129,7 @@ function Composer({
       </output>
       <AppInputBar
         ref={inputBarRef}
-        activeAgent={{ ...agent, id: agentId }}
+        activeAgent={{ ...agent, id: agentId, tools }}
         memberPlugins={plugins}
         toolConfiguration={configuration}
         llmManager={llmManager}
@@ -142,6 +147,7 @@ function Composer({
 
 beforeEach(() => {
   localStorage.clear();
+  mockIncognitoEnabled = false;
   mockProjectsContext.currentMessageFiles = [];
   mockProjectsContext.setCurrentMessageFiles.mockClear();
 });
@@ -187,6 +193,22 @@ test("custom agents retain the preferred plugin pill without member metadata", a
   expect(
     screen.getByRole("button", { name: storedMcpTool.display_name })
   ).toBeVisible();
+});
+
+test("incognito greys out Deep Research and explains why", async () => {
+  mockIncognitoEnabled = true;
+  render(
+    <Composer
+      plugins={[]}
+      tools={[memberTool({ id: 1, in_code_tool_id: SEARCH_TOOL_ID })]}
+    />
+  );
+  const button = screen.getByRole("button", { name: "Deep Research" });
+  expect(button).toBeDisabled();
+  await setupUser().hover(button);
+  expect(await screen.findByRole("tooltip")).toHaveTextContent(
+    "Deep Research isn't available in incognito mode"
+  );
 });
 
 describe("restore after a failed send", () => {

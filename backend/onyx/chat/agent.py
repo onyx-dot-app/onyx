@@ -82,7 +82,6 @@ from onyx.tools.tool_implementations.subagents.subagent_tools import (
 )
 from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
 from onyx.tracing.flows import LLMFlow
-from shared_configs.contextvars import get_current_incognito_record_mode
 
 
 class ChatAgent(Agent, RestorableFeature):
@@ -113,6 +112,7 @@ class ChatAgent(Agent, RestorableFeature):
         additional_context: str | None = None,
         code_mode: bool = False,
         is_subagent: bool = False,
+        create_subagent: Callable[[], Agent] | None = None,
     ) -> None:
         self.is_subagent = is_subagent
         self.custom_agent_prompt = custom_agent_prompt
@@ -173,10 +173,10 @@ class ChatAgent(Agent, RestorableFeature):
         self.base_system_prompt = base_system_prompt
         self.reminders_enabled = reminders_enabled
 
-        if get_current_incognito_record_mode() is None:
+        if create_subagent is not None:
             self.application_tools.extend(
                 [
-                    SpawnAgentTool(self.create_subagent, max_steps=self.max_steps),
+                    SpawnAgentTool(create_subagent, max_steps=self.max_steps),
                     ListAgentsTool(),
                     InterruptAgentTool(),
                     SendMessageTool(max_steps=self.max_steps),
@@ -200,29 +200,6 @@ class ChatAgent(Agent, RestorableFeature):
             after_tool_call=self._finalize_tool,
             on_finish=None if self.code_cells is None else self._finished_cells,
             on_suspend=None if self.code_cells is None else self._suspended_cells,
-        )
-
-    def create_subagent(self) -> "ChatAgent":
-        """Build a child conversation with this chat's current tools and settings."""
-        return ChatAgent(
-            messages=[],
-            is_subagent=True,
-            tools=self.configured_tools,
-            code_mode=self.code_mode,
-            custom_agent_prompt=self.custom_agent_prompt,
-            base_system_prompt=self.base_system_prompt,
-            context_files=self.context_files,
-            persona=self.persona,
-            user_memory_context=self.memory,
-            llm=self.llm,
-            token_counter=self.token_counter,
-            user_identity=self.generation_context.user_identity,
-            chat_files=self.chat_files,
-            reasoning_effort=self.reasoning_effort,
-            include_citations=self.include_citations,
-            all_injected_file_metadata=self.file_metadata,
-            inject_memories_in_prompt=self.inject_memories,
-            reminders_enabled=self.reminders_enabled,
         )
 
     def capture_state(self) -> ChatFeatureState:
@@ -326,12 +303,12 @@ class ChatAgent(Agent, RestorableFeature):
         received = remap_received_citations(
             state.received_inputs, self.citation_processor.citation_to_doc
         )
-        if (citations := received.citation_sources) is not None:
+        if received.new_citations:
             known_documents = {
                 document.document_id for document in self.gathered_documents
             }
-            self.citation_processor.update_citation_mapping(citations)
-            for number, document in citations.items():
+            self.citation_processor.update_citation_mapping(received.new_citations)
+            for number, document in received.new_citations.items():
                 self.citation_mapping[number] = document.document_id
                 if document.document_id not in known_documents:
                     known_documents.add(document.document_id)
@@ -488,7 +465,7 @@ class ChatAgent(Agent, RestorableFeature):
 
 def build_chat_agent(
     state: AgentState,
-    agent_id: str,
+    agent_id: str | None,
     previous_run_id: str | None,
     *,
     setup: ChatTurnSetup,
@@ -501,6 +478,9 @@ def build_chat_agent(
 ) -> ChatAgent:
     """Build a chat conversation independently of the current root's feature."""
     return ChatAgent(
+        create_subagent=chat_subagent_factory(
+            setup=setup, llm=llm, tools=tools, inject_memories=inject_memories
+        ),
         agent_id=agent_id,
         is_subagent=is_subagent,
         messages=state.messages,
@@ -523,4 +503,23 @@ def build_chat_agent(
         include_citations=setup.new_msg_req.include_citations,
         all_injected_file_metadata=setup.all_injected_file_metadata,
         inject_memories_in_prompt=inject_memories,
+    )
+
+
+def chat_subagent_factory(
+    *, setup: ChatTurnSetup, llm: LLM, tools: list[Tool], inject_memories: bool
+) -> Callable[[], ChatAgent] | None:
+    """Build children as saved children are restored; incognito chats have none."""
+    if setup.incognito_record_mode is not None:
+        return None
+    return partial(
+        build_chat_agent,
+        AgentState(),
+        None,
+        None,
+        setup=setup,
+        llm=llm,
+        tools=tools,
+        inject_memories=inject_memories,
+        is_subagent=True,
     )

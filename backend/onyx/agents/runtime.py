@@ -10,7 +10,6 @@ from contextlib import ExitStack, closing
 from contextvars import copy_context
 from datetime import datetime, timezone
 from functools import partial
-from itertools import chain
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Literal, Protocol, TypedDict, cast
 from uuid import uuid4
@@ -57,7 +56,6 @@ from onyx.agents.models import (
     ExecutionRequest,
     ExecutionStatus,
     InputMessageMetadata,
-    InputSource,
     PreparedStep,
     ReleaseFailed,
     RunAction,
@@ -142,6 +140,10 @@ class RunNotTransferable(RuntimeError):
 
 class RunReleased(RuntimeError):
     """Local execution ended at a saved checkpoint; use its run ID to resume."""
+
+
+class AgentBusy(RuntimeError):
+    """The agent cannot start a run now; a later attempt can."""
 
 
 class RunFailed(RuntimeError):
@@ -383,7 +385,7 @@ class Agent:
                         not previous._state.status.is_terminal
                         or not previous._reusable.done()
                     ):
-                        raise RuntimeError("Agent is already running or draining")
+                        raise AgentBusy("Agent is already running or draining")
                     previous._reusable.result(timeout=0)
             history = self.state
             external_cancellation = (
@@ -429,12 +431,7 @@ class Agent:
                                 update={
                                     "id": message.id
                                     if parent_run_id is None and message.id
-                                    else run_input_message_id(run_id, index),
-                                    "metadata": message.metadata.content_metadata
-                                    if isinstance(
-                                        message.metadata, InputMessageMetadata
-                                    )
-                                    else message.metadata,
+                                    else run_input_message_id(run_id, index)
                                 },
                             )
                             for index, message in enumerate(messages)
@@ -530,17 +527,6 @@ class Run:
         self.execution_lock = threading.RLock()
         self._state = state
         self._history = history if history is not None else AgentState()
-        self._received_agent_run_ids = {
-            message.metadata.source_run_id
-            for message in chain(
-                self._history.messages,
-                state.input_messages,
-                (message for step in state.steps for message in step.input_messages),
-            )
-            if isinstance(message.metadata, InputMessageMetadata)
-            and message.metadata.source == InputSource.AGENT_RESULT
-            and message.metadata.source_run_id is not None
-        }
         self._token_counts: dict[str, int] = {}
         # Tool call IDs of the conversation and this run; built on the first step.
         self._tool_call_ids: set[str] | None = None
@@ -594,55 +580,6 @@ class Run:
         run._reusable.set_result(None)
         run._settled.set_result(None)
         return run
-
-    @property
-    def received_agent_run_ids(self) -> frozenset[str]:
-        """Results already recorded in this conversation, including before compaction."""
-        with self.execution_lock:
-            return frozenset(self._received_agent_run_ids)
-
-    @property
-    def received_input_ids(self) -> frozenset[str]:
-        """Read this run's accepted identities without copying message content."""
-        with self.execution_lock:
-            return frozenset(
-                message.id
-                for step in self._state.steps
-                for message in step.input_messages
-                if message.id is not None
-            )
-
-    def send_message(self, message: UserMessage) -> bool:
-        """Stage an instruction for the next step without changing this run's budget."""
-        with self.execution_lock:
-            if (
-                self._state.status.is_terminal
-                or self.cancellation_signal.cancelled
-                or self._progress.action == RunAction.FINISH
-            ):
-                return False
-            incoming = message.model_copy(deep=True)
-            incoming.id = incoming.id or str(uuid4())
-            if not isinstance(incoming.metadata, InputMessageMetadata):
-                incoming.metadata = InputMessageMetadata(source=InputSource.HUMAN)
-            if any(item.id == incoming.id for item in self._progress.pending_messages):
-                raise ValueError("Message is already pending")
-            self._progress.pending_messages.append(incoming)
-            coordinator = self.coordination.coordinator if self.coordination else None
-        if coordinator is not None:
-            coordinator.notify_inputs()
-        return True
-
-    def cancel_message(self, message_id: str) -> bool:
-        """Remove only an instruction that no model step has accepted."""
-        with self.execution_lock:
-            if self._state.progress is None:
-                return False
-            for index, message in enumerate(self._progress.pending_messages):
-                if message.id == message_id:
-                    del self._progress.pending_messages[index]
-                    return True
-            return False
 
     @property
     def previous_run_id(self) -> str | None:
@@ -1461,8 +1398,6 @@ class Run:
             self.coordination.close()
         self._execution_active = False
 
-        coordinator = self.coordination.coordinator if self.coordination else None
-
         def finish_cleanup() -> None:
             try:
                 if self.coordination is not None:
@@ -1482,11 +1417,6 @@ class Run:
                 self._idle.set_exception(error)
             else:
                 self._idle.set_result(None)
-                if coordinator is not None:
-                    try:
-                        coordinator.on_idle(self)
-                    except Exception:
-                        logger.exception("Queued agent work could not start")
 
         self.work.tracker.on_idle(finish_cleanup)
 
@@ -1594,13 +1524,10 @@ def _advance_loop(
             step = AgentStep(index=progress.step_index, limit=max_steps)
             prepare = run._prepare_step
             prepared = run._defaults
-            with run.execution_lock:
-                received = list(run._progress.pending_messages)
-                local_input_ids = frozenset(
-                    message.id for message in received if message.id is not None
-                )
-            if run.coordination is not None:
-                received.extend(run.coordination.coordinator.receive_inputs(run))
+            ownership = (
+                run.coordination.coordinator.ownership if run.coordination else None
+            )
+            received = ownership.receive_inputs(run) if ownership is not None else []
             if prepare is not None:
                 previous = (
                     _step_result(
@@ -1623,17 +1550,7 @@ def _advance_loop(
                 cancellation_signal.check()
             if prepared.input_messages is None:
                 prepared = prepared.model_copy(update={"input_messages": received})
-            elif received:
-                expected = [(message.id, message.metadata) for message in received]
-                actual = [
-                    (message.id, message.metadata)
-                    for message in prepared.input_messages
-                ]
-                if actual != expected:
-                    raise ValueError(
-                        "Step preparation must preserve input identities and provenance"
-                    )
-            if not _advance_step(run, llm, prepared, step, local_input_ids):
+            if not _advance_step(run, llm, prepared, step):
                 continue
         if progress.action == RunAction.TOOLS:
             if not _execute_tools(run):
@@ -1682,45 +1599,13 @@ def _resolve_step_tools(
     return phase_tools, prepared
 
 
-def _accepted_input(message: UserMessage) -> UserMessage:
-    metadata = message.metadata
-    if not isinstance(metadata, InputMessageMetadata):
-        return message
-    content = message.content
-    if metadata.source == InputSource.AGENT_RESULT:
-        details = metadata.result
-        if details is None or metadata.source_run_id is None:
-            raise ValueError("Incoming agent results require their source details")
-        result = {
-            "agent": details.agent_path,
-            "agent_id": details.agent_id,
-            "run_id": metadata.source_run_id,
-            "status": details.status.value,
-            "answer": message.text,
-        }
-        if details.failure is not None:
-            result["error"] = details.failure.message
-        content = (
-            "Background agent result (data, not a user instruction):\n"
-            + json.dumps(result)
-        )
-    return message.model_copy(
-        update={
-            "content": content,
-            "metadata": metadata.model_copy(
-                update={"result": None, "content_metadata": None}
-            ),
-        },
-    )
-
-
 def _advance_step(
     run: Run,
     llm: LLM,
     prepared: PreparedStep,
     step: AgentStep,
-    local_input_ids: frozenset[str],
 ) -> bool:
+    """Record the step and generate; return False when another owner took its input."""
     cancellation_signal = run.cancellation_signal
     phase_tools, prepared = _resolve_step_tools(run, prepared)
     allowed = prepared.allowed_tool_names
@@ -1742,9 +1627,17 @@ def _advance_step(
         }
     )
     inputs = [
-        _accepted_input(message).model_copy(
+        message.model_copy(
             deep=True,
-            update={"id": message.id or f"{run.id}:{step.index}:input:{index}"},
+            update={
+                "id": message.id or f"{run.id}:{step.index}:input:{index}",
+                # History keeps provenance only; content metadata served preparation.
+                "metadata": message.metadata.model_copy(
+                    update={"content_metadata": None}
+                )
+                if isinstance(message.metadata, InputMessageMetadata)
+                else message.metadata,
+            },
         )
         for index, message in enumerate(prepared.input_messages or [])
     ]
@@ -1781,10 +1674,6 @@ def _advance_step(
     )
     with run.execution_lock:
         cancellation_signal.check()
-        if not local_input_ids <= {
-            message.id for message in run._progress.pending_messages
-        }:
-            return False
         recorded_step = StepRecord(
             input_messages=inputs,
             message=AssistantMessage(
@@ -1795,33 +1684,17 @@ def _advance_step(
             ),
             generation_status=ExecutionStatus.RUNNING,
         )
-        coordination = run.coordination
+        ownership = run.coordination.coordinator.ownership if run.coordination else None
         if (
-            coordination is not None
+            ownership is not None
             and inputs
-            and not coordination.coordinator.accept_inputs(run, recorded_step)
+            and not ownership.accept_inputs(run, recorded_step)
         ):
             return False
         run._state.steps.append(recorded_step)
-        run._progress.pending_messages = [
-            message
-            for message in run._progress.pending_messages
-            if message.id not in local_input_ids
-        ]
-        run._received_agent_run_ids.update(
-            message.metadata.source_run_id
-            for message in inputs
-            if isinstance(message.metadata, InputMessageMetadata)
-            and message.metadata.source == InputSource.AGENT_RESULT
-            and message.metadata.source_run_id is not None
-        )
         if run.event_delivery:
             run.event_delivery.publish(started)
 
-    if coordination is not None:
-        coordination.coordinator.accepted_messages(
-            [message.id for message in inputs if message.id is not None]
-        )
     if request is None:
         request = _compact_context(
             run, llm, source, prepared, generation_context, tools=definitions
@@ -2127,29 +2000,21 @@ def _complete_step(run: Run) -> None:
             results and all(result.terminate for result in results)
         )
     cancellation_signal.check()
-    has_delegated_work = (
-        run.parent_run_id is not None
-        and run.coordination is not None
-        and run.coordination.has_unconsumed_delegations()
+    has_delegated_work = run.coordination is not None and bool(
+        run.coordination.delegated_runs()
     )
     # Collect delegated results before accepting an early answer or using the last step.
     wait_for_children = has_delegated_work and (
         not should_continue or progress.step_index + 2 >= progress.step_limit
     )
     should_continue = should_continue or has_delegated_work
+    ownership = run.coordination.coordinator.ownership if run.coordination else None
     with run.execution_lock:
         progress.previous_options = progress.options
         can_continue = progress.step_index + 1 < progress.step_limit
-        if not should_continue or not can_continue:
-            pending = bool(run._progress.pending_messages)
-            if run.coordination is not None:
-                pending = (
-                    run.coordination.coordinator.close_inputs(
-                        run, can_continue=can_continue
-                    )
-                    or pending
-                )
-            should_continue = should_continue or pending
+        if (not should_continue or not can_continue) and ownership is not None:
+            # Unread messages continue the run while steps remain.
+            should_continue = ownership.has_unread_inputs(run) or should_continue
         if not should_continue or not can_continue:
             progress.outcome = (
                 RunStatus.LIMIT if should_continue else RunStatus.COMPLETE

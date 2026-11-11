@@ -1,5 +1,8 @@
+import { mutate } from "swr";
 import type { BackendChatSession } from "@/app/app/types";
 import { chatPageUrl } from "@/lib/chat/pagedSession";
+import type { ChatSessionStatus } from "@/lib/chat/types";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 const pendingChecks = new Map<string, Promise<number | null>>();
 
@@ -25,15 +28,18 @@ async function pollSession(
 ): Promise<number | null> {
   // A successful busy response confirms live work, regardless of its duration.
   while (true) {
-    const response = await fetch(`/api/chat/chat-session/${sessionId}/status`, {
+    const response = await fetch(SWR_KEYS.chatSessionStatus(sessionId), {
       cache: "no-store",
       signal: AbortSignal.timeout(10_000),
     });
     if (!response.ok) {
       throw new Error(`Session readiness check failed: ${response.status}`);
     }
-    const status: Pick<BackendChatSession, "is_processing" | "current_stream"> =
-      await response.json();
+    const status: ChatSessionStatus = await response.json();
+    // Share each read with the chat's status subscribers.
+    void mutate(SWR_KEYS.chatSessionStatus(sessionId), status, {
+      revalidate: false,
+    });
     if (status.is_processing === false) return null;
     if (status.is_processing !== true)
       throw new Error("Session readiness response is invalid");

@@ -293,8 +293,7 @@ class DeepResearchAgent(Agent, RestorableFeature):
             received = remap_received_citations(
                 state.received_inputs, self.citation_mapping
             )
-            if received.citation_sources is not None:
-                self.citation_mapping = received.citation_sources
+            self.citation_mapping.update(received.new_citations)
             sources = dict(self.citation_mapping)
         output_metadata = ResearchMessageMetadata(
             is_reasoning_model=self.is_reasoning_model,

@@ -234,9 +234,7 @@ its background task end ([[#pure-asgi-middleware]]).
 8. `no-answer-end-packet` **The answer stream has no end packet, and errors are
    separate lines.** `AgentResponseDelta` ends at `OverallStop`. Each model's
    presenter sends one `OverallStop` with `stop_reason` `finished`, tagged with
-   its `model_index`. Its optional `response_status` distinguishes successful
-   completion from limits and errors; older packets can omit it.
-   `OverallStop` does not mean success: response errors
+   its `model_index`. `OverallStop` does not mean success: response errors
    arrive as `StreamingError`. After cancellation of the turn,
    `ChatTurnExecution._publish` drops producer packets, including stops and
    `SectionEnd`. Each response run first cancels itself at its deadline while
@@ -296,8 +294,21 @@ its background task end ([[#pure-asgi-middleware]]).
     `web/src/lib/chat/sessionReadiness.ts:waitForChatResponseEnd`.
     Background children can remain active after the root response becomes
     idle. `has_active_subagents` controls the activity indicator, not input
-    availability. Web checks `current_stream` and `latest_response_id` to
-    follow automatic replies, including replies that finish between polls.
+    availability; it is true while a child on the selected branch runs or its
+    results are about to wake the root. When a running child has no owner, the
+    endpoint schedules dispatch, which saves the child as failed so its result
+    wakes the root. `has_startable_input` is true when queued text or unread
+    root results can start a turn now; a queue that Stop or a failure paused
+    reports false. The
+    endpoint reads the branch only when the conversation has an inbox row, and
+    it reads inputs before admission. A turn claims admission before it consumes
+    input, so a starting turn shows as startable input or as processing. Web
+    polls while `has_startable_input` or `has_active_subagents` is true, and
+    checks `current_stream` and `latest_response_id` (the newest response on
+    the selected branch) to follow automatic replies, including replies that
+    finish between polls. An automatic reply's
+    `MessageResponseIDInfo` has no `user_message_id`; session history returns
+    its hidden parent with `message_type: "agent_results"`.
     Other clients wait for the session to become idle:
     `mobile/src/chat/sessionReadiness.ts:waitForSessionIdle`,
     `cli/internal/api/client.go:IsChatSessionProcessing` and

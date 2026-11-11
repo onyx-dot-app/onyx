@@ -260,11 +260,13 @@ class ResearchAgent(Agent, RestorableFeature):
         received = remap_received_citations(
             state.received_inputs, self.citation_processor.citation_to_doc
         )
-        if (citations := received.citation_sources) is not None:
-            self.citation_processor.update_citation_mapping(citations)
-            self.citation_mapping = {
-                number: document.document_id for number, document in citations.items()
+        self.citation_processor.update_citation_mapping(received.new_citations)
+        self.citation_mapping.update(
+            {
+                number: document.document_id
+                for number, document in received.new_citations.items()
             }
+        )
         output_metadata = ResearchMessageMetadata(
             is_reasoning_model=self.is_reasoning_model,
             phase=ResearchPhase.REPORT if is_final_step else ResearchPhase.RESEARCH,

@@ -4,7 +4,6 @@ import pytest
 from pydantic import ValidationError
 
 from onyx.agents.models import (
-    AgentResultDetails,
     AgentState,
     ExecutionStatus,
     InputMessageMetadata,
@@ -116,9 +115,7 @@ def test_step_inputs_reach_the_model_and_survive_partial_generation(
         metadata=InputMessageMetadata(
             source=InputSource.AGENT_RESULT,
             source_run_id="child",
-            result=AgentResultDetails(
-                agent_id="child", agent_path="/root/child", status=RunStatus.COMPLETE
-            ),
+            content_metadata=AssistantMessage(),
         ),
     )
     requests: list[list[str]] = []
@@ -185,12 +182,13 @@ def test_step_inputs_reach_the_model_and_survive_partial_generation(
         assert run.result().output.text == "Answer"
         assert any("Child found the answer" in text for text in tool_history[1])
     snapshot = run.snapshot()
-    assert "Child found the answer" in snapshot.steps[1].input_messages[0].text
-    assert run.received_agent_run_ids == {"earlier", "child"}
-    restored = Run.from_snapshot(
-        RunState.model_validate_json(snapshot.model_dump_json())
+    accepted = snapshot.steps[1].input_messages[0]
+    assert "Child found the answer" in accepted.text
+    # Accepted history keeps provenance; content metadata served preparation only.
+    assert accepted.metadata == InputMessageMetadata(
+        source=InputSource.AGENT_RESULT, source_run_id="child"
     )
-    assert restored.received_agent_run_ids == {"child"}
+    restored = Run.from_snapshot(snapshot)
     assert (
         sum(
             "Child found the answer" in message.text

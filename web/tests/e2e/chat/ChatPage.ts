@@ -26,7 +26,6 @@ export class ChatPage {
   // these hold the rendered ones, not the whole chat.
   readonly humanMessages: Locator;
   readonly humanMessageBubbles: Locator;
-  readonly queuedMessageHandoff: Locator;
   readonly aiMessages: Locator;
   /** One row per message; far from the viewport, an empty placeholder. */
   readonly messageRows: Locator;
@@ -51,7 +50,6 @@ export class ChatPage {
     this.scrollContainer = page.getByTestId("chat-scroll-container");
     this.humanMessages = page.locator("#onyx-human-message");
     this.humanMessageBubbles = page.getByTestId("human-message-bubble");
-    this.queuedMessageHandoff = page.getByTestId("queued-message-handoff");
     this.aiMessages = page.getByTestId("onyx-ai-message");
     this.messageRows = this.scrollContainer.locator('[id^="message-"]');
     this.scrollToBottomButton = page.getByRole("button", {
@@ -72,10 +70,6 @@ export class ChatPage {
     this.unselectedModelOptions = this.modelPopover.locator(
       '[data-interactive-state="empty"]'
     );
-  }
-
-  regenerateControl(index: number): Locator {
-    return this.aiMessage(index).getByTestId("AgentMessage/regenerate");
   }
 
   humanMessage(index = 0): Locator {
@@ -234,6 +228,8 @@ export class ChatPage {
     await expect(
       this.messageRows.last().getByTestId("onyx-ai-message").first()
     ).toBeVisible({ timeout });
+    // Text sent before the turn settles joins it as pending input.
+    await this.inputBar.expectIdle(timeout);
   }
 
   /**

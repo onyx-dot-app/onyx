@@ -21,12 +21,8 @@ from onyx.agents.models import (
 from onyx.agents.runtime import Run
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheLockLostError
-from onyx.chat.agent import ChatAgent, build_chat_agent
-from onyx.chat.chat_processing_checker import (
-    ACTIVE_LEASE_SECONDS,
-    BACKGROUND_CONTROL_PREFIX,
-    PROCESSING_REFRESH_INTERVAL_S,
-)
+from onyx.chat.agent import ChatAgent, build_chat_agent, chat_subagent_factory
+from onyx.chat.chat_processing_checker import PROCESSING_REFRESH_INTERVAL_S
 from onyx.chat.emitter import Emitter
 from onyx.chat.errors import chat_error
 from onyx.chat.history_store import get_chat_history_store
@@ -40,16 +36,12 @@ from onyx.chat.restoration import restore_chat_agent, restore_subagent
 from onyx.chat.run_store import ChatRunStore
 from onyx.chat.stop_signal_checker import clear_stop, is_stop_requested
 from onyx.chat.stream_buffer import ChatDelivery, ChatStream, StreamBufferWriter
-from onyx.chat.subagents import ChatAgentDirectory
 from onyx.configs.chat_configs import (
     CHAT_EXECUTION_TIMEOUT_S,
     SKIP_DEEP_RESEARCH_CLARIFICATION,
 )
 from onyx.configs.constants import DEFAULT_PERSONA_ID, DocumentSource
-from onyx.db.chat_inputs import (
-    cancel_completed_responses__no_commit,
-    has_pending_human_interrupt,
-)
+from onyx.db.chat_inputs import cancel_completed_responses__no_commit
 from onyx.db.chat_subagents import load_chat_branch
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import record_mode_persists_content
@@ -92,7 +84,6 @@ from shared_configs.contextvars import (
 
 logger = setup_logger()
 _CANCEL_POLL_INTERVAL_S = 0.25
-_INPUT_POLL_INTERVAL_S = 1.0
 # Each response run ends itself at the turn deadline. The turn cancels later only
 # when work outlives that, e.g. preparation that never started a run.
 _DEADLINE_BACKSTOP = timedelta(seconds=30)
@@ -228,8 +219,7 @@ class ChatTurnExecution:
         # Each model gets one stop, including models still preparing at cancellation.
         self._stopped_models: set[int] = set()
         self._response_stops: dict[int, OverallStop] = {}
-        self._last_refresh = 0.0
-        self._last_input_poll = 0.0
+        self._last_refresh = self._last_stop_check = time.monotonic()
         # Each response run cancels itself at this time and records a DEADLINE failure.
         self._deadline_at = datetime.now(timezone.utc) + timedelta(
             seconds=CHAT_EXECUTION_TIMEOUT_S
@@ -277,18 +267,14 @@ class ChatTurnExecution:
             len(self.setup.responses) == 1 and self.setup.new_msg_req.deep_research
         )
         # The trace stays open while background agents still own work.
-        with (
-            trace(
-                "run_deep_research" if research else "chat",
-                group_id=str(self.setup.chat_session_id),
-                metadata=ChatTraceMetadata(
-                    chat_session_id=str(self.setup.chat_session_id),
-                    user_id=self.setup.user_identity.user_id,
-                ).model_dump(),
-            ),
-            ExitStack() as cleanup,
+        with trace(
+            "run_deep_research" if research else "chat",
+            group_id=str(self.setup.chat_session_id),
+            metadata=ChatTraceMetadata(
+                chat_session_id=str(self.setup.chat_session_id),
+                user_id=self.setup.user_identity.user_id,
+            ).model_dump(),
         ):
-            cleanup.callback(self._clear_control_presence)
             try:
                 self.delivery.events.start()
             except Exception as error:
@@ -385,12 +371,6 @@ class ChatTurnExecution:
                     if self._admission_released and not any(
                         store.has_owned_work for store in stores
                     ):
-                        # The last child may have saved after the timed dispatch check.
-                        if (
-                            not self.cancellation.cancelled
-                            and self._dispatch_pending_messages
-                        ):
-                            self._dispatch_pending_messages()
                         return
                 self._completion_changed.wait(_CANCEL_POLL_INTERVAL_S)
 
@@ -445,19 +425,19 @@ class ChatTurnExecution:
 
     def _clear_processing_status(self) -> None:
         try:
+            # A Stop that arrives after the answer finished still pauses the queue.
             if self._stopped_by_user or is_stop_requested(
                 self.setup.chat_session_id,
                 self.setup.admission.cache,
                 stream_id=self.setup.stream_id,
             ):
                 self._stopped_by_user = True
-                self.cancellation.cancel()
                 try:
                     self.setup.admission.check_owner(self.setup.chat_session_id)
                 except CacheLockLostError:
                     logger.debug("Chat admission changed before Stop was saved")
                 else:
-                    # Saves have drained, so no writer can replace this terminal status.
+                    # Saves have drained, so no writer can replace this status.
                     with get_session_with_current_tenant() as session:
                         cancel_completed_responses__no_commit(
                             session,
@@ -470,20 +450,13 @@ class ChatTurnExecution:
         except Exception:
             logger.exception("Failed to clear chat processing status; will retry")
             return
-        if self._dispatch_pending_messages is None:
+        self._dispatch_after_release()
+
+    def _dispatch_after_release(self) -> None:
+        """Start queued input or a follow-up on child results once the chat is idle."""
+        if not self._admission_released or self._dispatch_pending_messages is None:
             return
         try:
-            if self.cancellation.cancelled:
-                # A late Stop can follow a completed save; only explicit
-                # interrupt-and-send should advance pending work in that case.
-                with get_session_with_current_tenant() as session:
-                    interrupted = has_pending_human_interrupt(
-                        session,
-                        self.setup.chat_session_id,
-                        [response.message_id for response in self.setup.responses],
-                    )
-                if not interrupted:
-                    return
             self._dispatch_pending_messages()
         except Exception:
             logger.exception("Could not dispatch queued chat input")
@@ -528,44 +501,25 @@ class ChatTurnExecution:
             branch = load_chat_branch(persistence.message_id)
             if branch.chat_session_id != self.setup.chat_session_id:
                 raise ValueError("Response belongs to another chat session")
-            persist_content = record_mode_persists_content(
-                self.setup.incognito_record_mode
-            )
-            store = (
-                ChatRunStore(
+            if record_mode_persists_content(self.setup.incognito_record_mode):
+                store = ChatRunStore(
                     tenant_id=get_current_tenant_id(),
                     chat_session_id=self.setup.chat_session_id,
                     response_id=persistence.message_id,
                     visible_response_ids=branch.message_ids,
                     cache=get_cache_backend(),
-                    root_response=persistence,
-                )
-                if persist_content
-                else None
-            )
-            if store is not None:
-                with self._lock:
-                    self._stores.append(store)
-            if store is None:
-                coordinator = persistence.coordinator.view(store=persistence)
-            else:
-                history_store = get_chat_history_store(
-                    message_id=persistence.message_id,
-                    chat_session_id=self.setup.chat_session_id,
-                    persist_content=True,
-                    branch=branch,
-                )
-                directory = ChatAgentDirectory(
-                    history_store=history_store,
-                    store=store,
-                    build_agent=partial(
+                    restore_subagent=partial(
                         restore_subagent,
                         setup=self.setup,
                         llm=persistence.llm,
                         tools=configured_tools,
                         inject_memories=self.user.use_memories,
                     ),
+                    root_response=persistence,
+                    on_child_released=self._dispatch_after_release,
                 )
+                with self._lock:
+                    self._stores.append(store)
                 coordinator = store.bind(
                     persistence.coordinator,
                     build_agent=partial(
@@ -573,11 +527,19 @@ class ChatTurnExecution:
                         llm=persistence.llm,
                         tools=configured_tools,
                         user_identity=self.setup.user_identity,
+                        create_subagent=chat_subagent_factory(
+                            setup=self.setup,
+                            llm=persistence.llm,
+                            tools=configured_tools,
+                            inject_memories=self.user.use_memories,
+                        ),
                     ),
-                    directory=directory,
                 )
-                for info in history_store.list_agents():
+                for info in store.list_agents():
                     coordinator.register(info)
+            else:
+                # Incognito chats have no child agents to find, restore, or own.
+                coordinator = persistence.coordinator.view(store=persistence)
             coordinator.register(
                 AgentInfo(
                     id=chat_agent.id,
@@ -641,31 +603,7 @@ class ChatTurnExecution:
             return overall_stop(RunStatus.CANCELLED, None)
         return None
 
-    def _clear_control_presence(self) -> None:
-        for response in self.setup.responses:
-            try:
-                self.setup.cache.delete(
-                    f"{BACKGROUND_CONTROL_PREFIX}{response.message_id}"
-                )
-            except Exception:
-                logger.exception("Could not clear background chat control presence")
-
     def _poll_control(self) -> None:
-        now = time.monotonic()
-        should_refresh = now - self._last_refresh >= PROCESSING_REFRESH_INTERVAL_S
-        if should_refresh:
-            self._last_refresh = now
-        if should_refresh and self.setup.incognito_record_mode is None:
-            try:
-                # Each reserved response has one control worker, even after its run ends.
-                for response in self.setup.responses:
-                    self.setup.cache.set(
-                        f"{BACKGROUND_CONTROL_PREFIX}{response.message_id}",
-                        1,
-                        ex=ACTIVE_LEASE_SECONDS,
-                    )
-            except Exception:
-                logger.exception("Could not refresh background chat control presence")
         with self._lock:
             stores = tuple(self._stores)
         for store in stores:
@@ -677,14 +615,6 @@ class ChatTurnExecution:
 
         # Background children keep their leases after this response releases the chat.
         if self._admission_released:
-            now = time.monotonic()
-            if (
-                not self.cancellation.cancelled
-                and self._dispatch_pending_messages is not None
-                and now - self._last_input_poll >= _INPUT_POLL_INTERVAL_S
-            ):
-                self._last_input_poll = now
-                self._dispatch_pending_messages()
             return
 
         if (
@@ -697,23 +627,9 @@ class ChatTurnExecution:
         now = time.monotonic()
         if (
             not self.cancellation.cancelled
-            and self.setup.incognito_record_mode is None
-            and now - self._last_input_poll >= _INPUT_POLL_INTERVAL_S
+            and now - self._last_stop_check >= _CANCEL_POLL_INTERVAL_S
         ):
-            self._last_input_poll = now
-            try:
-                with get_session_with_current_tenant() as session:
-                    interrupted = has_pending_human_interrupt(
-                        session,
-                        self.setup.chat_session_id,
-                        [response.message_id for response in self.setup.responses],
-                    )
-                if interrupted:
-                    self._stopped_by_user = True
-                    self.cancellation.cancel()
-            except Exception:
-                logger.exception("Failed to read chat interrupt request; will retry")
-        if not self.cancellation.cancelled:
+            self._last_stop_check = now
             try:
                 if is_stop_requested(
                     self.setup.chat_session_id,
@@ -724,7 +640,8 @@ class ChatTurnExecution:
                     self.cancellation.cancel()
             except Exception:
                 logger.exception("Failed to read chat Stop request; will retry")
-        if should_refresh:
+        if now - self._last_refresh >= PROCESSING_REFRESH_INTERVAL_S:
+            self._last_refresh = now
             try:
                 self.setup.admission.refresh()
             except CacheLockLostError:
@@ -748,6 +665,7 @@ def create_chat_agent(
         cancellation.check()
         tool_configuration = setup.tool_configuration
         if setup.incognito_record_mode is not None:
+            # Incognito chats have no child agents, and these features run as children.
             if setup.new_msg_req.deep_research:
                 raise OnyxError(
                     OnyxErrorCode.BAD_REQUEST,

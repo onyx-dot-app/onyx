@@ -316,7 +316,11 @@ def test_restored_chat_keeps_the_saved_code_mode(
     original = _chat_agent(llm, code_mode=saved_code_mode)
     state = original.capture_state().model_dump(mode="json")
     rebuilt = restore_chat_agent(
-        _suspended(original, state), llm=llm, tools=[EchoTool()], user_identity=None
+        _suspended(original, state),
+        llm=llm,
+        tools=[EchoTool()],
+        user_identity=None,
+        create_subagent=lambda: _chat_agent(llm),
     )
     assert isinstance(rebuilt, ChatAgent)
     assert (rebuilt.code_cells is not None) == saved_code_mode

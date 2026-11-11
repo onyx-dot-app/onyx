@@ -7,12 +7,38 @@ import { useOptionalScrollContainer } from "@/sections/chat/ScrollContainerConte
 const OVERSCAN_VIEWPORTS = 2;
 
 /**
- * `rootMargin` of an observer on the chat scroll container: `OVERSCAN_VIEWPORTS`
- * viewport heights above and below. In pixels, because browsers do not agree
- * on what a percentage of the root is.
+ * Reports whether `target` is within `OVERSCAN_VIEWPORTS` viewport heights of
+ * the chat scroll container `root`, above or below. The margin follows the
+ * root's height, which can change after the target mounts. Returns a function
+ * that stops observing.
  */
-export function overscanMargin(root: HTMLElement): string {
-  return `${root.clientHeight * OVERSCAN_VIEWPORTS}px 0px`;
+export function observeNearViewport(
+  root: HTMLElement,
+  target: Element,
+  onChange: (near: boolean) => void
+): () => void {
+  let height = root.clientHeight;
+  // In pixels, because browsers do not agree on what a percentage of the root is.
+  const observe = () => {
+    const observer = new IntersectionObserver(
+      ([entry]) => onChange(entry?.isIntersecting ?? false),
+      { root, rootMargin: `${height * OVERSCAN_VIEWPORTS}px 0px` }
+    );
+    observer.observe(target);
+    return observer;
+  };
+  let observer = observe();
+  const resizeObserver = new ResizeObserver(() => {
+    if (root.clientHeight === height) return;
+    height = root.clientHeight;
+    observer.disconnect();
+    observer = observe();
+  });
+  resizeObserver.observe(root);
+  return () => {
+    resizeObserver.disconnect();
+    observer.disconnect();
+  };
 }
 
 /** Placeholder height of a row that has never been measured. */
@@ -66,16 +92,11 @@ export default function WindowedRow({
     const row = rowRef.current;
     if (!root || !row) return;
 
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        isIntersectingRef.current = entry?.isIntersecting ?? false;
-        if (isIntersectingRef.current) setNearViewport(true);
-        else if (!hasFocusRef.current) setNearViewport(false);
-      },
-      { root, rootMargin: overscanMargin(root) }
-    );
-    observer.observe(row);
-    return () => observer.disconnect();
+    return observeNearViewport(root, row, (near) => {
+      isIntersectingRef.current = near;
+      if (near) setNearViewport(true);
+      else if (!hasFocusRef.current) setNearViewport(false);
+    });
   }, [scrollContainerRef]);
 
   useEffect(() => {
