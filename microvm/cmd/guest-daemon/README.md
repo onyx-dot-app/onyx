@@ -40,7 +40,10 @@ executions), `--max-running` (64), `--managed-mount` (`/workspace/managed`; empt
 off), `--managed-dev-a` (`/dev/vdc`), `--managed-dev-b` (`/dev/vdf`), `--ca-anchor`
 (`/usr/local/share/ca-certificates/craft-egress-ca.crt`), `--ca-bundle` (`/etc/ssl/certs/ca-certificates.crt`;
 empty turns the CA install off), `--ca-nssdb` (`/home/sandbox/.pki/nssdb`; empty to skip), `--certutil`
-(`/usr/bin/certutil`), `--listen`
+(`/usr/bin/certutil`), the file flags (`--sessions-root`,
+`--read-link-roots`, `--max-file-bytes`, `--max-zip-bytes`, `--capture-dirs`, `--capture-exclude`,
+`--capture-max-stored-bytes`, `--capture-max-expanded-bytes`, `--capture-max-entries`,
+`--capture-zstd-level`; see Files), `--listen`
 (`unix:<path>` instead of vsock, for tests; mode 0600), `--log-level`. The daemon has no TCP listener:
 the API is plaintext with a bearer key, so it is served only on vsock, through the node agent. The
 container fallback (TCP with mTLS) is not in v1.
@@ -89,7 +92,8 @@ agent, every call also carries `x-sandbox-id`.
 | `Interact` | Writes to (or closes) the stdin of a command started with `stdin: true`. |
 | `Cancel` | Kills the command's cgroup and returns the result (`CANCELED`, or `EXITED` if the command exited first). Not an error. |
 | `Inspect`, `List` | Execution records (state, PID, times, byte counts, result), `List` filtered by labels. |
-| Files, `CaptureSession`, `RestoreSession` | Reserved for ENG-4572. `UNIMPLEMENTED`. |
+| `ReadFile`, `WriteFile`, `UploadFile`, `ListFiles`, `DeleteFile`, `ZipFiles` | Session files (see Files). |
+| `CaptureSession`, `RestoreSession` | Session saves as tar + zstd (see Session saves). |
 | `BrowserStart`, `BrowserStop` | Reserved for ENG-4573. `UNIMPLEMENTED`. |
 | `ManagedStatus` | The slot on `/workspace/managed` (by the mount's device number) and, per slot, the device, size, ext4 UUID (read with `O_DIRECT`) and whether it is in use (an exclusive open fails with `EBUSY` while a mount holds it, also a detached one with open files). The node agent calls it. |
 | `MountManaged(slot, size_bytes, fs_uuid)` | Makes the slot the drive on `/workspace/managed`, in this order: refuse a slot in use (`MANAGED_SLOT_BUSY`); wait up to 5 s for the device size (Firecracker's config change after `PATCH /drives`); `BLKFLSBUF`; check the ext4 UUID (`MANAGED_DEVICE_MISMATCH`); `fsopen`/`fsmount` (`ro`, `noload`; `nodev`, `nosuid`, `noexec`, private) and `move_mount(MOVE_MOUNT_BENEATH)` beneath the current mount; `umount2(MNT_DETACH)` of the old top mount. Open files on the old drive keep working. The same slot with the same UUID is a no-op (`changed` false). A slot in use that is mounted beneath the top mount with the requested UUID is a swap that stopped before its detach: the call detaches the old top mount and finishes it. The node agent calls it during `SwapManaged`. |
@@ -121,6 +125,56 @@ Commands:
 - A daemon restart loses the records. At start-up the daemon kills every command left in its cgroups
   and removes the cgroups. If that fails, the daemon does not start (init starts it again).
 - Execution IDs come from `crypto/rand`: userspace PRNG state is the same in every clone of a snapshot.
+
+Files (`internal/guestd/files`):
+
+- Every path is relative to `/workspace/sessions/<session_id>/` (`--sessions-root`). Leading `/` are
+  dropped, so `/attachments/a.pdf` is `attachments/a.pdf`. The daemon opens that directory as an `os.Root`. A
+  path with a `..` part, a NUL byte or bad UTF-8, a path over 4096 bytes, a name over 255 bytes, or a
+  symlink that leaves the directory fails with `INVALID_ARGUMENT`. Only `ReadFile`, `ListFiles` and
+  `ZipFiles` follow a top-level session link into `--read-link-roots` (default `/workspace/managed`,
+  for `user_library`).
+- `ReadFile` streams the file info, then 64 KiB chunks. `offset`/`length` read a range. More than
+  `--max-file-bytes` (1 GiB) in one call fails with `LIMIT_EXCEEDED`.
+- `WriteFile` and `UploadFile`: a header with the exact size (at most `--max-file-bytes`) and an optional
+  SHA-256, then data messages (at most 1 MiB each). The daemon writes a temp file in the target
+  directory and renames it only when all bytes arrived and match. `WriteFile` without `overwrite` fails
+  with `FILE_EXISTS`. `UploadFile` is the direct upload call: it stores the file in `attachments/` (or
+  `directory`) under a free name (`a.pdf`, `a_1.pdf`, ...), the same rule as the pod runtime.
+- `ListFiles`: directories first, then by name. `recursive` with `max_depth` (64), `exclude_names`,
+  `skip_hidden`, `max_entries` (10,000, at most 100,000); `truncated` when cut, also when the
+  response would pass 12 MiB. Links are listed, not followed. Names that are not valid UTF-8
+  are left out.
+- `DeleteFile` removes a file or a link (never its target); a directory needs `recursive`.
+- `ZipFiles` streams a deflate zip of the regular files under a directory. It checks
+  `--max-zip-bytes` (1 GiB) and 100,000 files before it sends the first byte.
+
+Session saves:
+
+- `CaptureSession` archives the capture roots `--capture-dirs` (default `attachments`) of the
+  session as PAX tar + zstd (`--capture-zstd-level`, default `fastest`: in a 2 vCPU VM it encodes at
+  ~2 GB/s against ~220 MB/s for `default`, and the T2 archive was not larger), and leaves out `--capture-exclude` names at any depth
+  (`node_modules`, `.venv`, `venv`, `__pycache__`, `.next`, caches, ...) and every directory with
+  `pyvenv.cfg`. Symlinks, special files and names that are not UTF-8 are skipped. The request can set its own roots and exclude
+  list. The last message is the summary with the stream's SHA-256. Limits (A6): 1 GiB stored, 4 GiB of
+  files, 500,000 entries (`--capture-max-*`); a request can only lower them.
+- `RestoreSession` takes a header (exact size, SHA-256, roots, limits), then the archive. It extracts
+  into `.craft-restore-<random>` in the session directory, then checks size and SHA-256 of the whole
+  stream, then swaps each root that the archive has into place. It refuses (`ARCHIVE_INVALID`) absolute
+  names, `..`, unclean names, names outside the roots, links, devices, FIFOs, sparse members and
+  duplicate files, and stops at the limits (`LIMIT_EXCEEDED`), at a zstd window over 64 MiB and at a
+  decoded stream larger than the files plus 16 KiB per member and 64 KiB after the tar end. Modes are
+  `& 0777`; the owner is root. An error before the swap does not change the session. If one root
+  fails to swap, the daemon tries to move the roots already swapped back. If a rollback rename fails,
+  or the daemon stops during the swap, old and new roots can be mixed. The old roots then stay in a
+  `.craft-old-*` trash directory, and the next restore or capture puts back each old root that has no
+  replacement. The daemon deletes a trash directory only after it recovers all of its roots. A
+  capture fails if it cannot put back an old root, so an archive never misses those files.
+- File calls and saves open files with `O_NONBLOCK` and directories with `O_DIRECTORY|O_NONBLOCK`,
+  and use only regular files, so a FIFO cannot block them. A directory listing reads at most 100,000
+  entries of one directory; past that it returns the entries it read and sets `truncated`. Capture
+  and zip fail with `LIMIT_EXCEEDED` on a directory over their entry limit.
+- A capture and a restore of one session run one at a time.
 
 Errors are gRPC statuses with one `google.rpc.ErrorInfo`: domain `sandboxd.craft.onyx.app`, reason an
 `ErrorReason` name (`KEY_NOT_SET`, `NOT_INITIALIZED`, `UNAUTHENTICATED`, `EXECUTION_NOT_FOUND`, ...).

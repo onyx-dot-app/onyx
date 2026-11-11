@@ -40,6 +40,35 @@ service HostAgent {
   // pooled client connections in the guest fail fast and reconnect.
   rpc CloseConnections(CloseConnectionsRequest) returns (CloseConnectionsResponse);
 
+  // Session saves. The node moves the bytes between the VM and
+  // object storage with presigned URLs from the api_server, so the guest
+  // never sees a URL or a credential. Each call names the VM instance
+  // (sandbox_id, attempt, generation, as Stop) and sends the VM's guest
+  // daemon key again (the agent does not keep it). Errors of the guest
+  // daemon pass through with their own domain ("sandboxd.craft.onyx.app").
+  //
+  // Order for the api_server: CaptureSession (size_bytes, sha256) →
+  // presign_upload(size_bytes, sha256) → UploadCapture →
+  // finalize_presigned_upload → commit the new archive → prune old ones.
+
+  // CaptureSession calls the guest daemon's CaptureSession and spools the
+  // archive on the node (--capture-ttl). It returns the capture ID with the
+  // archive size and SHA-256, for presign_upload.
+  rpc CaptureSession(CaptureSessionRequest) returns (CaptureSessionResponse);
+
+  // UploadCapture sends a spooled capture with a presigned PUT, with the
+  // signed headers as given. On success the spool is deleted. On failure it
+  // stays until the TTL, so a retry (with a new URL) works.
+  rpc UploadCapture(UploadCaptureRequest) returns (UploadCaptureResponse);
+
+  // DiscardCapture deletes a spooled capture. A missing one is not an error.
+  rpc DiscardCapture(DiscardCaptureRequest) returns (DiscardCaptureResponse);
+
+  // RestoreSession downloads an archive with a presigned GET and streams it
+  // into the guest daemon's RestoreSession. The daemon checks size and
+  // SHA-256 before it replaces any file.
+  rpc RestoreSession(RestoreSessionRequest) returns (RestoreSessionResponse);
+
   // Dial opens a byte stream to a vsock port of a running VM: the guest
   // daemon or the app preview (3010). The first frame names sandbox_id and
   // guest_port and may carry data; later frames carry data only. The
@@ -173,6 +202,21 @@ enum ErrorReason {
   // --egress-ca-configmap) but cannot read a valid CA from it. No VM
   // starts. Retry later; sandbox-proxy writes the CA at its first start.
   EGRESS_CA_UNAVAILABLE = 29;
+
+  // Session saves.
+  // UploadCapture: no spooled capture with this ID (never made, uploaded,
+  // discarded or expired). Capture again.
+  CAPTURE_NOT_FOUND = 32;
+  // CaptureSession: the archive is larger than the agent allows
+  // (--capture-max-bytes or the request limit).
+  CAPTURE_TOO_LARGE = 33;
+  // UploadCapture or RestoreSession: the presigned request failed (network
+  // error or a non-2xx status), or the URL is not allowed.
+  TRANSFER_FAILED = 34;
+  // RestoreSession: the downloaded archive has another size or SHA-256 than
+  // the request names. UploadCapture: the signed Content-Length is not the
+  // spool size.
+  ARCHIVE_MISMATCH = 35;
 }
 
 // Drain state of the node (NodeInfo, SetDrain).
@@ -306,6 +350,103 @@ message DialFrame {
 message CloseConnectionsResponse {
   // Number of relay connections that were closed.
   uint32 closed = 1;
+}
+
+// Session saves.
+
+// A presigned request from the api_server (FileStore presign_upload or
+// presign_download). The agent sends exactly these headers.
+message PresignedRequest {
+  // https, or http when the agent runs with --transfer-allow-http.
+  string url = 1;
+  // "PUT" for UploadCapture, "GET" for RestoreSession.
+  string method = 2;
+  map<string, string> headers = 3;
+}
+
+// Archive limits (craft.sandboxd.v1.ArchiveLimits). 0 means the default.
+message ArchiveLimits {
+  int64 max_stored_bytes = 1;
+  int64 max_expanded_bytes = 2;
+  int64 max_entries = 3;
+}
+
+message CaptureSessionRequest {
+  string sandbox_id = 1;
+  uint64 attempt = 2;
+  uint64 generation = 3;
+  // Secret: the VM's guest daemon key (CreateRequest.sandboxd_key).
+  string sandboxd_key = 4;
+  string session_id = 5;
+  // Empty: the daemon defaults (see craft.sandboxd.v1.CaptureSessionRequest).
+  repeated string roots = 6;
+  repeated string exclude_names = 7;
+  ArchiveLimits limits = 8;
+}
+
+message CaptureSessionResponse {
+  string capture_id = 1;
+  // Archive size and hex SHA-256, as the agent received and spooled it.
+  int64 size_bytes = 2;
+  string sha256 = 3;
+  // The guest daemon's summary of the archive.
+  int64 files = 4;
+  int64 directories = 5;
+  int64 expanded_bytes = 6;
+  int64 excluded = 7;
+  int64 skipped = 8;
+  int64 changed = 9;
+  repeated string roots = 10;
+  uint64 capture_ms = 11;
+  // The agent deletes the spool after this time.
+  google.protobuf.Timestamp expires_at = 12;
+}
+
+message UploadCaptureRequest {
+  string capture_id = 1;
+  PresignedRequest request = 2;
+}
+
+message UploadCaptureResponse {
+  int64 size_bytes = 1;
+  string sha256 = 2;
+  // HTTP status of the PUT (2xx) and the ETag header, if any.
+  uint32 http_status = 3;
+  string etag = 4;
+  uint64 upload_ms = 5;
+}
+
+message DiscardCaptureRequest {
+  string capture_id = 1;
+}
+
+message DiscardCaptureResponse {
+  // False if there was no such capture.
+  bool discarded = 1;
+}
+
+message RestoreSessionRequest {
+  string sandbox_id = 1;
+  uint64 attempt = 2;
+  uint64 generation = 3;
+  // Secret: the VM's guest daemon key.
+  string sandboxd_key = 4;
+  string session_id = 5;
+  PresignedRequest request = 6;
+  // Exact archive size and hex SHA-256 (from CaptureSessionResponse).
+  int64 size_bytes = 7;
+  string sha256 = 8;
+  repeated string roots = 9;
+  ArchiveLimits limits = 10;
+}
+
+message RestoreSessionResponse {
+  int64 files = 1;
+  int64 directories = 2;
+  int64 expanded_bytes = 3;
+  repeated string roots = 4;
+  // Time from the call to the restored files.
+  uint64 restore_ms = 5;
 }
 
 message NodeInfoRequest {}

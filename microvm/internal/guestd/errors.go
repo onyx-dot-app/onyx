@@ -18,7 +18,7 @@ const ErrorDomain = "sandboxd.craft.onyx.app"
 
 func code(r pb.ErrorReason) codes.Code {
 	switch r {
-	case pb.ErrorReason_INVALID_ARGUMENT, pb.ErrorReason_START_FAILED:
+	case pb.ErrorReason_INVALID_ARGUMENT, pb.ErrorReason_START_FAILED, pb.ErrorReason_ARCHIVE_INVALID:
 		return codes.InvalidArgument
 	case pb.ErrorReason_NOT_INITIALIZED, pb.ErrorReason_STDIN_NOT_OPEN, pb.ErrorReason_EXECUTION_ENDED,
 		pb.ErrorReason_KEY_NOT_SET, pb.ErrorReason_KEY_ALREADY_SET, pb.ErrorReason_MANAGED_SLOT_BUSY,
@@ -26,9 +26,11 @@ func code(r pb.ErrorReason) codes.Code {
 		return codes.FailedPrecondition
 	case pb.ErrorReason_UNAUTHENTICATED:
 		return codes.Unauthenticated
-	case pb.ErrorReason_EXECUTION_NOT_FOUND:
+	case pb.ErrorReason_EXECUTION_NOT_FOUND, pb.ErrorReason_FILE_NOT_FOUND:
 		return codes.NotFound
-	case pb.ErrorReason_TOO_MANY_EXECUTIONS:
+	case pb.ErrorReason_FILE_EXISTS:
+		return codes.AlreadyExists
+	case pb.ErrorReason_TOO_MANY_EXECUTIONS, pb.ErrorReason_LIMIT_EXCEEDED:
 		return codes.ResourceExhausted
 	default:
 		return codes.Internal
