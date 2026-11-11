@@ -24,6 +24,10 @@ func WriteFakeLayout(storeDir, version string, k Key, layout int) (Manifest, err
 			return Manifest{}, err
 		}
 	}
-	m, _, err := Seal(dir, Manifest{Version: version, Key: k, BuiltAt: time.Now().UTC()}, nil)
+	m := Manifest{Version: version, Key: k, BuiltAt: time.Now().UTC()}
+	for _, md := range ManagedMountDrives {
+		m.GuestMounts = append(m.GuestMounts, md.Mount)
+	}
+	m, _, err := Seal(dir, m, nil)
 	return m, err
 }

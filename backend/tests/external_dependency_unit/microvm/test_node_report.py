@@ -36,7 +36,11 @@ from onyx.microvm.models import (
     ReportedVm,
     VmState,
 )
-from onyx.microvm.node_report import NODE_REPORT_AUDIENCE, reconcile_node_report
+from onyx.microvm.node_report import (
+    NODE_DEREGISTER_AUDIENCE,
+    NODE_REPORT_AUDIENCE,
+    reconcile_node_report,
+)
 from onyx.microvm.placement import record_placement
 from onyx.microvm.registry import (
     SandboxPlacement,
@@ -98,6 +102,12 @@ def node(shared_cache: CacheBackend, add_node: AddNode) -> Generator[Node, None,
             Encoding.Raw, PublicFormat.Raw
         ),
         rotation_overlap_seconds=60,
+    )
+    registry.set_node_agent_address(
+        shared_cache,
+        node_id=node_id,
+        address=reported.running.address,
+        key_id=reported.key_id,
     )
     yield reported
     shared_cache.delete(registry._KEY_PREFIX + reported.key_id)
@@ -510,3 +520,115 @@ def test_a_bad_report_time_does_not_break_placement(
     assert node.node_id in [
         n.node_id for n in registry.list_live_nodes(shared_cache, now)
     ]
+
+
+def _deregister(
+    api: TestClient,
+    node: Node,
+    body: bytes | None = None,
+    aud: str = NODE_DEREGISTER_AUDIENCE,
+) -> Any:
+    if body is None:
+        body = json.dumps({"node_id": node.node_id}).encode()
+    token = _token(node, body, aud=aud)
+    return api.post(
+        microvm_api.SANDBOX_NODE_DEREGISTER_PATH,
+        content=body,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {token}",
+        },
+    )
+
+
+def test_deregister_ends_the_registration_at_once(
+    api: TestClient, node: Node, shared_cache: CacheBackend
+) -> None:
+    registry.record_node_report(shared_cache, node.node_id, int(time.time()))
+
+    response = _deregister(api, node)
+
+    assert response.status_code == 200
+    assert response.json() == {"deregistered": True}
+    assert registry.get_registered_node(shared_cache, node.node_id) is None
+    assert node.node_id not in [
+        n.node_id for n in registry.list_registered_nodes(shared_cache)
+    ]
+    assert not shared_cache.exists(registry._NODE_LAST_REPORT_PREFIX + node.node_id)
+    # Idempotent: a retry finds nothing to end.
+    again = _deregister(api, node)
+    assert again.status_code == 200
+    assert again.json() == {"deregistered": False}
+
+
+def test_deregister_needs_a_deregister_token_for_the_same_node(
+    api: TestClient, node: Node, shared_cache: CacheBackend
+) -> None:
+    other_body = json.dumps({"node_id": "someone-else"}).encode()
+
+    assert _deregister(api, node, aud=NODE_REPORT_AUDIENCE).status_code == 401
+    assert _deregister(api, node, other_body).status_code == 401
+    assert _deregister(api, node, b"{}").status_code == 400
+    assert (
+        api.post(microvm_api.SANDBOX_NODE_DEREGISTER_PATH, content=b"{}").status_code
+        == 401
+    )
+    assert registry.get_registered_node(shared_cache, node.node_id) is not None
+
+
+def test_deregister_keeps_a_newer_agent_on_the_node(
+    api: TestClient, node: Node, shared_cache: CacheBackend
+) -> None:
+    newer = Ed25519PrivateKey.generate()
+    register_node_signing_key(
+        shared_cache,
+        node_id=node.node_id,
+        key_id=f"{node.node_id}-2",
+        public_key=newer.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw),
+        rotation_overlap_seconds=60,
+    )
+    registry.set_node_agent_address(
+        shared_cache,
+        node_id=node.node_id,
+        address=node.running.address,
+        key_id=f"{node.node_id}-2",
+    )
+    # The old agent refreshes its key after the new one registered: the
+    # address still belongs to the new agent.
+    register_node_signing_key(
+        shared_cache,
+        node_id=node.node_id,
+        key_id=node.key_id,
+        public_key=node.private_key.public_key().public_bytes(
+            Encoding.Raw, PublicFormat.Raw
+        ),
+        rotation_overlap_seconds=60,
+    )
+    try:
+        response = _deregister(api, node)
+        assert response.status_code == 200
+        assert response.json() == {"deregistered": False}
+        assert registry.get_registered_node(shared_cache, node.node_id) is not None
+    finally:
+        shared_cache.delete(registry._KEY_PREFIX + f"{node.node_id}-2")
+
+
+def test_deregister_needs_the_address_owner(
+    shared_cache: CacheBackend, node: Node
+) -> None:
+    registry.set_node_agent_address(
+        shared_cache, node_id=node.node_id, address=node.running.address
+    )
+    # An address without an owner (an older api_server wrote it) is not ended.
+    assert not registry.deregister_node(
+        shared_cache, node_id=node.node_id, key_id=node.key_id
+    )
+    registry.set_node_agent_address(
+        shared_cache,
+        node_id=node.node_id,
+        address=node.running.address,
+        key_id=node.key_id,
+    )
+    assert registry.deregister_node(
+        shared_cache, node_id=node.node_id, key_id=node.key_id
+    )

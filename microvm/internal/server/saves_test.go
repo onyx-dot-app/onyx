@@ -166,6 +166,11 @@ func TestSaveCaptureUploadRestore(t *testing.T) {
 	if s := sha256.Sum256(spool); hex.EncodeToString(s[:]) != cr.GetSha256() || int64(len(spool)) != cr.GetSizeBytes() {
 		t.Fatal("spool does not match the returned size and sha256")
 	}
+	vm := e.a.vms[sandbox2]
+	if got, ok := e.a.saves.CaptureVM(cr.GetCaptureId()); !ok || got != (CaptureVM{SandboxID: sandbox2, TenantID: "public",
+		Attempt: vm.Attempt, Generation: vm.Generation}) {
+		t.Fatalf("CaptureVM = %+v %v", got, ok)
+	}
 
 	// A wrong signed length is refused before any byte is sent; the spool stays.
 	bad := e.presignPut("s1", cr.GetSizeBytes()+1, cr.GetSha256())
@@ -187,6 +192,9 @@ func TestSaveCaptureUploadRestore(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(e.a.saves.Dir, cr.GetCaptureId())); !os.IsNotExist(err) {
 		t.Fatal("spool kept after a good upload")
+	}
+	if _, ok := e.a.saves.CaptureVM(cr.GetCaptureId()); ok {
+		t.Fatal("CaptureVM names an uploaded capture")
 	}
 	_, err = c.UploadCapture(ctx, &pb.UploadCaptureRequest{CaptureId: cr.GetCaptureId(),
 		Request: e.presignPut("s1", cr.GetSizeBytes(), cr.GetSha256())})

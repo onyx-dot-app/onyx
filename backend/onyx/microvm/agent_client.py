@@ -66,6 +66,8 @@ MAX_MESSAGE_BYTES = 16 << 20
 _TRANSFER_TIMEOUT_SECONDS = max(SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS, 15 * 60.0)
 # The agent's --managed-swap-timeout per VM.
 _SWAP_TIMEOUT_PER_VM_SECONDS = 30.0
+# The managed mount of a swap that names none; every agent supports it.
+SKILLS_MOUNT = "skills"
 _MANAGED_CHUNK_BYTES = 1 << 20
 
 
@@ -399,6 +401,7 @@ class HostAgentClient:
                     scratch_gib=t.scratch_gib,
                     guest_kernel=t.guest_kernel,
                     firecracker_version=t.firecracker_version,
+                    managed_mounts=list(t.managed_mounts),
                 )
                 for t in r.templates
             ],
@@ -544,7 +547,8 @@ class HostAgentClient:
             restore_ms=r.restore_ms,
         )
 
-    # Managed drive (read-only /workspace/managed).
+    # Managed drives: read-only mounts skills (/mnt/skills), user-uploads
+    # (/mnt/user-uploads) and spaces (/mnt/spaces).
 
     def put_managed_image(self, bundle_zip: bytes) -> ManagedImagePut:
         """Upload a managed bundle zip and build its image on the node. The
@@ -575,12 +579,40 @@ class HostAgentClient:
         )
 
     def swap_managed(
-        self, *, image_id: str, targets: list[VmInstance]
+        self, *, image_id: str, targets: list[VmInstance], mount: str = "skills"
     ) -> list[ManagedSwapResult]:
-        """Put a managed image into running VMs, one at a time. Each target
-        has its own result, in request order; a failed VM raises nothing."""
+        """Put a managed image on one mount of running VMs, one at a time.
+        Each target has its own result, in request order; a failed VM raises
+        nothing. For a mount other than skills, a VM whose template does not
+        list the mount (also every VM of an older agent, which would swap
+        skills instead) gets MANAGED_SWAP_UNSUPPORTED and is not sent."""
+        mount = mount or SKILLS_MOUNT
+        refused: dict[str, ManagedSwapResult] = {}
+        if mount != SKILLS_MOUNT:
+            supported = {
+                t.version
+                for t in self.node_info().templates
+                if mount in t.managed_mounts
+            }
+            template_of = {vm.sandbox_id: vm.template for vm in self.list_vms()}
+            for t in targets:
+                if template_of.get(t.sandbox_id) not in supported:
+                    refused[t.sandbox_id] = ManagedSwapResult(
+                        sandbox_id=t.sandbox_id,
+                        ok=False,
+                        reason=HostAgentErrorReason.MANAGED_SWAP_UNSUPPORTED,
+                        message=f"the VM's template has no managed mount {mount}",
+                        active=ManagedSlot.UNSPECIFIED,
+                        changed=False,
+                        ms=0,
+                        previous_in_use=False,
+                    )
+        send = [t for t in targets if t.sandbox_id not in refused]
+        if not send:
+            return [refused[t.sandbox_id] for t in targets]
         request = hostagent_pb2.SwapManagedRequest(
             image_id=image_id,
+            mount=mount,
             targets=[
                 hostagent_pb2.SwapTarget(
                     sandbox_id=t.sandbox_id,
@@ -588,18 +620,19 @@ class HostAgentClient:
                     generation=t.generation,
                     sandboxd_key=t.sandboxd_key.get_secret_value(),
                 )
-                for t in targets
+                for t in send
             ],
         )
         try:
             r: hostagent_pb2.SwapManagedResponse = self._stub.SwapManaged(
                 request,
                 timeout=SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS
-                + _SWAP_TIMEOUT_PER_VM_SECONDS * len(targets),
+                + _SWAP_TIMEOUT_PER_VM_SECONDS * len(send),
             )
         except grpc.RpcError as e:
             raise _error_from_rpc(e) from e
-        return [_swap_result(x) for x in r.results]
+        sent = iter(_swap_result(x) for x in r.results)
+        return [refused.get(t.sandbox_id) or next(sent) for t in targets]
 
 
 class HostAgentClientFactory(abc.ABC):

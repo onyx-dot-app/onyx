@@ -80,6 +80,7 @@ func (c *Cgroups) NewGroup(id string) (Group, error) {
 type cgroup struct {
 	dir string
 	fd  int
+	pid int
 }
 
 func (g *cgroup) Prepare(cmd *exec.Cmd) {
@@ -87,7 +88,11 @@ func (g *cgroup) Prepare(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true, UseCgroupFD: true, CgroupFD: g.fd}
 }
 
-func (g *cgroup) Started(int) {}
+// Started records the main process. Setsid makes it the leader of its own
+// process group.
+func (g *cgroup) Started(pid int) { g.pid = pid }
+
+func (g *cgroup) Signal(sig syscall.Signal) error { return signalGroup(g.pid, sig) }
 
 func (g *cgroup) Kill() error {
 	err := os.WriteFile(filepath.Join(g.dir, "cgroup.kill"), []byte("1"), 0)

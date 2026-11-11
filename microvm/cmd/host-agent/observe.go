@@ -114,6 +114,9 @@ func (o *observability) serverOptions() []grpc.ServerOption { return o.observer.
 // Recover and before the API serves.
 func (o *observability) start(ctx context.Context, svc *server.Service) error {
 	o.dials = svc.OpenDials
+	if svc.Saves != nil {
+		o.observer.Capture = svc.Saves.CaptureVM
+	}
 	if o.shipper != nil {
 		o.shipper.Start(ctx)
 	}

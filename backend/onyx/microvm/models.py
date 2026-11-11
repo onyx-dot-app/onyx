@@ -97,6 +97,9 @@ class TemplateInfo(BaseModel):
     scratch_gib: int
     guest_kernel: str
     firecracker_version: str
+    # Managed mounts the template's VMs can swap. Empty from an agent that
+    # predates named mounts (it swaps only skills).
+    managed_mounts: list[str] = Field(default_factory=list)
 
 
 class NodeInfo(BaseModel):
@@ -275,15 +278,19 @@ class ExecCommand(BaseModel):
 
     # argv[0] is looked up in PATH. For a script use ["bash", "-c", script].
     argv: list[str] = Field(min_length=1)
-    # Default "/".
+    # Absolute, or relative to the session directory. Default: the session
+    # directory, or "/" with no session_id. Commands may use any VM path.
     cwd: str = ""
-    # Added to the Init env.
+    # Added to the Init env (over the daemon's NO_COLOR, TERM=dumb, pager and
+    # UTF-8 locale defaults).
     env: dict[str, str] = Field(default_factory=dict)
     # Open a stdin pipe for Interact. Otherwise stdin is /dev/null.
     stdin: bool = False
     # None = the daemon default (30 min); the daemon caps it.
     deadline_seconds: float | None = Field(default=None, gt=0)
     labels: dict[str, str] = Field(default_factory=dict)
+    # Its directory /home/onyx/workspaces/<session_id> is the default cwd.
+    session_id: str = ""
 
 
 class OutputStream(str, Enum):
@@ -366,15 +373,29 @@ class ExecutionRecord(BaseModel):
     result: ExecResult | None
 
 
+class CancelSignal(str, Enum):
+    # Kill every process of the execution and wait for the result.
+    SIGKILL = "SIGKILL"
+    # Send to the process group of the main process and return at once.
+    SIGINT = "SIGINT"
+    SIGTERM = "SIGTERM"
+
+
 class CancelResult(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    result: ExecResult
+    # None after a SIGINT or SIGTERM to a running execution: use stream or
+    # inspect for its result.
+    result: ExecResult | None
     # True if the execution had already ended.
     already_ended: bool
+    # SIGINT or SIGTERM was sent.
+    signaled: bool = False
 
 
-# Guest daemon file calls. Paths are relative to /workspace/sessions/<session_id>/.
+# Guest daemon file calls. With a session_id, paths are relative to
+# /home/onyx/workspaces/<session_id>/. With an empty session_id, read, write,
+# list, delete and zip take an absolute path anywhere in the VM.
 
 
 class FileType(str, Enum):

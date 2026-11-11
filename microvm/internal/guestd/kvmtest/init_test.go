@@ -119,9 +119,9 @@ func TestInitKVM(t *testing.T) {
 	}
 
 	t.Run("no_managed_drive_is_read_only_tmpfs", func(t *testing.T) {
-		out := rootSh(ctx, t, c, key, `grep ' /workspace/managed ' /proc/mounts | cut -d' ' -f1,3,4 | cut -d, -f1; touch /workspace/managed/x 2>/dev/null && echo WRITABLE || echo READONLY`)
+		out := rootSh(ctx, t, c, key, `grep ' /mnt/skills ' /proc/mounts | cut -d' ' -f1,3,4 | cut -d, -f1; touch /mnt/skills/x 2>/dev/null && echo WRITABLE || echo READONLY`)
 		t.Logf("managed mount: %q", out)
-		if !strings.Contains(out, "craft-managed-empty tmpfs ro") || !strings.Contains(out, "READONLY") {
+		if !strings.Contains(out, "craft-skills-empty tmpfs ro") || !strings.Contains(out, "READONLY") {
 			t.Errorf("managed fallback: %q", out)
 		}
 	})
@@ -200,10 +200,10 @@ done; echo planted`
 		if _, err := keyInit(ctx, mc, mkey, initRequest("init-managed")); err != nil {
 			t.Fatal(err)
 		}
-		out := rootSh(ctx, t, mc, mkey, `grep ' /workspace/managed ' /proc/mounts | cut -d' ' -f1,4 | cut -d, -f1
-touch /workspace/managed/x 2>/dev/null && echo WRITABLE || echo READONLY
-mount -o remount,rw /workspace/managed 2>/dev/null && echo REMOUNT_RW || echo REMOUNT_REFUSED
-umount /workspace/managed && echo hello >/workspace/managed/f && echo WROTE_BELOW
+		out := rootSh(ctx, t, mc, mkey, `grep ' /mnt/skills ' /proc/mounts | cut -d' ' -f1,4 | cut -d, -f1
+touch /mnt/skills/x 2>/dev/null && echo WRITABLE || echo READONLY
+mount -o remount,rw /mnt/skills 2>/dev/null && echo REMOUNT_RW || echo REMOUNT_REFUSED
+umount /mnt/skills && echo hello >/mnt/skills/f && echo WROTE_BELOW
 mkdir -p /tmp/m && mount -o ro,noload /dev/vdc /tmp/m && { [ -e /tmp/m/f ] && echo ON_DRIVE || echo NOT_ON_DRIVE; }`)
 		t.Logf("managed drive:\n%s", out)
 		for _, want := range []string{"/dev/vdc ro", "READONLY", "REMOUNT_REFUSED", "NOT_ON_DRIVE"} {

@@ -341,7 +341,7 @@ func TestRestoreKVM(t *testing.T) {
 		if !ir.GetAttached() || !ir.GetRelayReset() {
 			t.Errorf("clone %d init: attached=%v relay_reset=%v, want both true", i, ir.GetAttached(), ir.GetRelayReset())
 		}
-		if r, err := run(keyed(ctx, key), c, sh("grep -c ' overlay ' /proc/mounts; grep ' /workspace/managed ' /proc/mounts | cut -d' ' -f4 | cut -c1-2")); err == nil {
+		if r, err := run(keyed(ctx, key), c, sh("grep -c ' overlay ' /proc/mounts; grep ' /mnt/skills ' /proc/mounts | cut -d' ' -f4 | cut -c1-2")); err == nil {
 			t.Logf("clone %d after Init: overlay mounts / managed mount: %q", i, r.stdout)
 		}
 		s = time.Now()
