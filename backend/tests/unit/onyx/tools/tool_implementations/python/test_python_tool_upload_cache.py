@@ -559,10 +559,15 @@ def test_logs_omit_code_filenames_and_error_text(
     code_marker = "code_marker_9c1e"
     file_marker = "file_marker_4b2d.csv"
     error_marker = "error_marker_77aa"
+    read_marker = "read_marker_31f0"
+    upload_marker = "upload_marker_e5c8"
     tool = _make_tool()
     client = MagicMock()
-    client.upload_file.return_value = None  # upload fails -> staging notice
+    client.upload_file.side_effect = RuntimeError(upload_marker)
     client.execute_streaming.side_effect = RuntimeError(error_marker)
+
+    def failing_loader() -> bytes:
+        raise RuntimeError(read_marker)
 
     ctx = MagicMock()
     ctx.__enter__ = MagicMock(return_value=client)
@@ -580,13 +585,23 @@ def test_logs_omit_code_filenames_and_error_text(
                 update=lambda _progress: None,
             ),
             context=ToolContext(
-                chat_files=[ChatFile(filename=file_marker, content=b"data")]
+                chat_files=[
+                    ChatFile(filename=file_marker, content=b"data"),
+                    ChatFile.lazy_from_filename(
+                        filename=f"lazy_{file_marker}",
+                        loader=failing_loader,
+                        file_id="lazy-id",
+                    ),
+                ]
             ),
         )
 
     assert isinstance(result, ToolResult)
     assert result.is_error
+    client.upload_file.assert_called_once()
     assert caplog.records
-    logged = caplog.text
-    for marker in (code_marker, file_marker, error_marker):
+    # caplog.text includes formatted tracebacks.
+    logged = caplog.text + "".join(r.getMessage() for r in caplog.records)
+    for marker in (code_marker, file_marker, error_marker, read_marker, upload_marker):
         assert marker not in logged
+    assert not any(r.exc_info for r in caplog.records)

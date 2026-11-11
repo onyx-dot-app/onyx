@@ -105,10 +105,33 @@ def _code_references_file(filename: str, code: str) -> bool:
     return filename in code or _safe_code_interpreter_filename(filename) in code
 
 
-def _read_chat_file_content(chat_file: ChatFile) -> bytes:
+def _read_chat_file_content(chat_file: ChatFile) -> bytes | None:
     """Materialize a (possibly lazy) chat file's bytes; the object-store read
     happens here. Extracted so reads can be batched in parallel."""
-    return chat_file.content
+    # Catch here: the parallel helper logs full exception text.
+    try:
+        return chat_file.content
+    except Exception as e:
+        logger.warning(
+            "Failed to read file for Python execution: file_id=%s (%s)",
+            chat_file.file_id,
+            type(e).__name__,
+        )
+        return None
+
+
+def _upload_file_content(
+    client: CodeInterpreterClient, content: bytes, file_name: str
+) -> str | None:
+    try:
+        return client.upload_file(content, file_name)
+    except Exception as e:
+        logger.warning(
+            "Failed to upload file for Python execution: %d bytes (%s)",
+            len(content),
+            type(e).__name__,
+        )
+        return None
 
 
 def _staging_priority(chat_files: list[ChatFile], code: str) -> list[int]:
@@ -167,10 +190,6 @@ def _select_files_for_staging(
         over_budget = False
         for idx, content in zip(batch, contents, strict=True):
             if content is None:
-                logger.warning(
-                    "Failed to read file for Python execution: file_id=%s",
-                    chat_files[idx].file_id,
-                )
                 read_failures.append(chat_files[idx].filename)
                 continue
             # Always stage at least one file; otherwise stop at the byte budget.
@@ -328,16 +347,15 @@ class PythonTool(Tool):
         misses = [p for p in plans if p.cache_key not in self._uploaded_file_cache]
         if misses:
             upload_results = run_functions_tuples_in_parallel(
-                [(client.upload_file, (p.content, p.file_name)) for p in misses],
+                [
+                    (_upload_file_content, (client, p.content, p.file_name))
+                    for p in misses
+                ],
                 allow_failures=True,
                 max_workers=CODE_INTERPRETER_STAGING_CONCURRENCY,
             )
             for plan, ci_file_id in zip(misses, upload_results, strict=True):
                 if ci_file_id is None:
-                    logger.warning(
-                        "Failed to upload file for Python execution: %d bytes",
-                        len(plan.content),
-                    )
                     continue
                 self._uploaded_file_cache[plan.cache_key] = ci_file_id
 
