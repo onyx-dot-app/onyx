@@ -129,3 +129,22 @@ def _pending_key(stage: BatchStage, index_attempt_id: int) -> str:
 
 def _in_flight_key(stage: BatchStage, index_attempt_id: int) -> str:
     return f"{stage.value}_in_flight_{index_attempt_id}"
+
+
+def _recovery_misses_key(index_attempt_id: int) -> str:
+    return f"docconversion:recovery_misses:{index_attempt_id}"
+
+
+def incr_conversion_recovery_misses(r: TenantRedisClient, index_attempt_id: int) -> int:
+    """Counts one watchdog run in which the conversion chain of the attempt
+    was stuck and nothing could be sent. Returns the count."""
+    key = _recovery_misses_key(index_attempt_id)
+    misses = r.incr(key)
+    r.expire(key, _COUNTER_TTL_SECONDS)
+    return misses
+
+
+def reset_conversion_recovery_misses(
+    r: TenantRedisClient, index_attempt_id: int
+) -> None:
+    r.delete(_recovery_misses_key(index_attempt_id))
