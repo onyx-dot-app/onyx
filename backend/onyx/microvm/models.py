@@ -227,3 +227,272 @@ class NodeStateReportResult(BaseModel):
     # out of time; the next report runs it again.
     reconciled: bool
     report: ReconcileReport | None = None
+
+
+# Guest daemon exec calls (sandboxd Run/Start/Stream/Interact/Cancel/List).
+
+
+class ExecCommand(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    # argv[0] is looked up in PATH. For a script use ["bash", "-c", script].
+    argv: list[str] = Field(min_length=1)
+    # Default "/".
+    cwd: str = ""
+    # Added to the Init env.
+    env: dict[str, str] = Field(default_factory=dict)
+    # Open a stdin pipe for Interact. Otherwise stdin is /dev/null.
+    stdin: bool = False
+    # None = the daemon default (30 min); the daemon caps it.
+    deadline_seconds: float | None = Field(default=None, gt=0)
+    labels: dict[str, str] = Field(default_factory=dict)
+
+
+class OutputStream(str, Enum):
+    STDOUT = "STDOUT"
+    STDERR = "STDERR"
+
+
+class ExecCompletion(str, Enum):
+    UNSPECIFIED = "UNSPECIFIED"
+    EXITED = "EXITED"
+    # A signal that the daemon did not send (for example the OOM killer).
+    SIGNALED = "SIGNALED"
+    CANCELED = "CANCELED"
+    DEADLINE_EXCEEDED = "DEADLINE_EXCEEDED"
+
+
+class ExecStarted(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    execution_id: str
+    pid: int
+    started_at: datetime | None
+    deadline_at: datetime | None
+
+
+class ExecOutput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    stream: OutputStream
+    # Byte offset of data[0] in this stream (the Stream resume point).
+    offset: int
+    data: bytes
+
+
+class ExecGap(BaseModel):
+    """The daemon dropped the bytes [start, end) of a stream."""
+
+    model_config = ConfigDict(frozen=True)
+
+    stream: OutputStream
+    start: int
+    end: int
+
+
+class ExecResult(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    completion: ExecCompletion
+    # Set for EXITED, -1 otherwise.
+    exit_code: int
+    signal: int
+    finished_at: datetime | None
+    stdout_bytes: int
+    stderr_bytes: int
+
+
+# The last event of a Run or Stream is always an ExecResult.
+ExecEvent = ExecStarted | ExecOutput | ExecGap | ExecResult
+
+
+class ExecState(str, Enum):
+    UNSPECIFIED = "UNSPECIFIED"
+    RUNNING = "RUNNING"
+    ENDED = "ENDED"
+
+
+class ExecutionRecord(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    execution_id: str
+    state: ExecState
+    argv: list[str]
+    labels: dict[str, str]
+    pid: int
+    started_at: datetime | None
+    deadline_at: datetime | None
+    stdout_bytes: int
+    stderr_bytes: int
+    # Set when state is ENDED.
+    result: ExecResult | None
+
+
+class CancelResult(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    result: ExecResult
+    # True if the execution had already ended.
+    already_ended: bool
+
+
+# Guest daemon file calls. Paths are relative to /workspace/sessions/<session_id>/.
+
+
+class FileType(str, Enum):
+    UNSPECIFIED = "UNSPECIFIED"
+    REGULAR = "REGULAR"
+    DIRECTORY = "DIRECTORY"
+    SYMLINK = "SYMLINK"
+    # A device, FIFO or socket.
+    OTHER = "OTHER"
+
+
+class FileEntry(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    # Session-relative, "/"-separated.
+    path: str
+    name: str
+    type: FileType
+    size: int
+    # mode & 0o777
+    mode: int
+    modified_at: datetime | None
+    # SYMLINK only.
+    link_target: str
+
+
+class WrittenFile(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    info: FileEntry
+    # Hex SHA-256 of the bytes written.
+    sha256: str
+
+
+class FileListing(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    entries: list[FileEntry]
+    # A max_entries, max_depth or response size limit cut the listing.
+    truncated: bool
+
+
+class ZipSummary(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    files: int
+    input_bytes: int
+    zip_bytes: int
+    # Links, special files and unreadable entries that were left out.
+    skipped: int
+
+
+# Host agent session saves and managed drive.
+
+
+class ArchiveLimits(BaseModel):
+    """Limits of one capture or restore. 0 = the daemon default."""
+
+    model_config = ConfigDict(frozen=True)
+
+    max_stored_bytes: int = Field(default=0, ge=0)
+    max_expanded_bytes: int = Field(default=0, ge=0)
+    max_entries: int = Field(default=0, ge=0)
+
+
+class PresignedRequest(BaseModel):
+    """A presigned object storage request. The agent sends exactly these
+    headers. The URL is a credential: never log it."""
+
+    model_config = ConfigDict(frozen=True)
+
+    url: SecretStr
+    # "PUT" for UploadCapture, "GET" for RestoreSession.
+    method: str
+    headers: dict[str, str] = Field(default_factory=dict)
+
+
+class VmInstance(BaseModel):
+    """One VM instance on a node, and its guest daemon key."""
+
+    model_config = ConfigDict(frozen=True)
+
+    sandbox_id: str
+    attempt: int
+    generation: int
+    sandboxd_key: SecretStr
+
+
+class SessionCapture(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    capture_id: str
+    # Archive size and hex SHA-256, for presign_upload.
+    size_bytes: int
+    sha256: str
+    files: int
+    directories: int
+    expanded_bytes: int
+    excluded: int
+    skipped: int
+    # Files that shrank during the capture (their tail is zero-filled).
+    changed: int
+    roots: list[str]
+    capture_ms: int
+    # The agent deletes the spool after this time.
+    expires_at: datetime | None
+
+
+class CaptureUpload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    size_bytes: int
+    sha256: str
+    http_status: int
+    etag: str
+    upload_ms: int
+
+
+class SessionRestore(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    files: int
+    directories: int
+    expanded_bytes: int
+    # Capture roots that the restore replaced.
+    roots: list[str]
+    restore_ms: int
+
+
+class ManagedSlot(str, Enum):
+    UNSPECIFIED = "UNSPECIFIED"
+    A = "A"
+    B = "B"
+
+
+class ManagedImageInfo(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    # SHA-256 of the bundle zip.
+    image_id: str
+    image_sha256: str
+    size_bytes: int
+    fs_uuid: str
+    files: int
+    content_bytes: int
+    built_at: datetime | None
+    # VMs on the node that have the image behind a slot.
+    vms: int
+
+
+class ManagedImagePut(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    image: ManagedImageInfo
+    # False when the image was already on the node.
+    built: bool
+    build_ms: int
+    # Images that the garbage collection removed.
+    removed: list[str]

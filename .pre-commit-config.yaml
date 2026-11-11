@@ -301,6 +301,14 @@ repos:
         # Deleted chart files must also trigger the check.
         always_run: true
         stages: [pre-commit]
+      - id: microvm-python-stubs
+        name: Firecracker Python gRPC stubs match the protos
+        language: python
+        entry: bash backend/onyx/microvm/generated/regenerate.sh --check
+        additional_dependencies: [grpcio-tools==1.80.0]
+        pass_filenames: false
+        stages: [pre-commit]
+        files: ^(microvm/proto/(hostagent|sandboxd)/v1/[^/]+\.proto|backend/onyx/microvm/generated/.*)$
       - id: i18n-copy-changes
         name: translation updates for English copy changes
         language: system
