@@ -19,6 +19,8 @@ from onyx.server.features.build.configs import (
 
 APP_NAMESPACE = os.environ.get("HELM_RELEASE_NAMESPACE", "onyx")
 
+CleanupState = Literal["SUCCESS", "FAILURE"]
+
 
 def require_isolated_cleanup_deployment() -> None:
     if (
@@ -42,14 +44,6 @@ def isolated_cleanup_deployment(k8s_client: client.CoreV1Api) -> None:
     ) == run_id, "The target namespace does not belong to this cleanup test run"
 
 
-# The per-tenant sweep expires stale provisioning; the reconciler then removes
-# runtime resources that no database row justifies.
-_CLEANUP_TASKS: tuple[tuple[str, dict[str, str]], ...] = (
-    (OnyxCeleryTask.CLEANUP_IDLE_SANDBOXES, {"tenant_id": "public"}),
-    (OnyxCeleryTask.RECONCILE_SANDBOX_RUNTIMES, {}),
-)
-
-
 def _send_cleanup(task_name: str, kwargs: dict[str, str]) -> str:
     task_id = str(uuid4())
     celery_app.send_task(
@@ -63,18 +57,27 @@ def _send_cleanup(task_name: str, kwargs: dict[str, str]) -> str:
 
 
 def run_cleanup(
-    core: client.CoreV1Api, expected_state: Literal["SUCCESS", "FAILURE"] = "SUCCESS"
+    core: client.CoreV1Api,
+    *,
+    sweep: CleanupState = "SUCCESS",
+    reconcile: CleanupState = "SUCCESS",
 ) -> None:
+    """Run the per-tenant sweep, which expires stale provisioning and sleeps
+    idle sandboxes, then the reconciler, which also removes runtime resources
+    that no database row justifies. Each task fails when it leaves work
+    undone, so callers state the outcome they expect from each."""
     require_isolated_cleanup_deployment()
-    for task_name, kwargs in _CLEANUP_TASKS:
-        _run_cleanup_task(core, task_name, kwargs, expected_state)
+    _run_cleanup_task(
+        core, OnyxCeleryTask.CLEANUP_IDLE_SANDBOXES, {"tenant_id": "public"}, sweep
+    )
+    _run_cleanup_task(core, OnyxCeleryTask.RECONCILE_SANDBOX_RUNTIMES, {}, reconcile)
 
 
 def _run_cleanup_task(
     core: client.CoreV1Api,
     task_name: str,
     kwargs: dict[str, str],
-    expected_state: Literal["SUCCESS", "FAILURE"],
+    expected_state: CleanupState,
 ) -> None:
     task_id = _send_cleanup(task_name, kwargs)
     marker = f"(ID: {task_id}) completed with state:"

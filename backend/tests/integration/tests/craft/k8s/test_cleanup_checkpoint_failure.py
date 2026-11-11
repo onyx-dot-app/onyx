@@ -105,7 +105,8 @@ def test_worker_preserves_files_runtime_and_ports_after_checkpoint_failure(
         )
         db_session.commit()
 
-        run_cleanup(k8s_client)
+        # Both tasks try to sleep the idle sandbox and report the failed checkpoint.
+        run_cleanup(k8s_client, sweep="FAILURE", reconcile="FAILURE")
 
         db_session.expire_all()
         db_session.refresh(sandbox)
