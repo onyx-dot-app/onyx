@@ -156,15 +156,20 @@ def google_drive_budgets() -> dict[str, SourceApiBudget]:
 
 
 def build_source_api_limiter(
-    source: DocumentSource, credential_id: int
+    source: DocumentSource,
+    credential_id: int,
+    should_stop: Callable[[], bool] | None = None,
 ) -> SourceApiLimiter | None:
     """The shared limiter for a connector of ``source`` that uses the
     credential, or None when the source has no budgets or the limiter is off.
-    Connectors that share a credential share its budgets."""
+    Connectors that share a credential share its budgets. A call that waits
+    for its budget ends with ConnectorStopSignal when ``should_stop`` turns
+    true."""
     if not ENABLE_SOURCE_API_LIMITER or source != DocumentSource.GOOGLE_DRIVE:
         return None
     return RedisSourceApiLimiter(
         tenant_id=get_current_tenant_id(),
         credential_key=f"{source.value}:{credential_id}",
         budgets=google_drive_budgets(),
+        should_stop=should_stop,
     )
