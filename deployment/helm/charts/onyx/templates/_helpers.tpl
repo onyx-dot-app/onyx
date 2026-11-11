@@ -300,6 +300,37 @@ true
 {{- $runtime -}}
 {{- end }}
 
+{{/* Sandbox tolerations plus the onyx.app/kvm taint that Terraform puts on
+Firecracker nodes (kubelet does not count VM memory). Only the host agent and
+the preflight use this; pod sandboxes and the prepuller must not. */}}
+{{- define "onyx.craftKvmNodeTolerations" -}}
+{{- $sandboxPod := .Values.sandboxPod | default dict -}}
+{{- $base := index $sandboxPod "tolerations" | default (list (dict "key" "workload" "operator" "Equal" "value" "sandbox" "effect" "NoSchedule")) -}}
+{{- $out := list -}}
+{{- $hasKvm := false -}}
+{{- range $base -}}
+{{- $out = append $out . -}}
+{{- if eq (toString .key) "onyx.app/kvm" -}}{{- $hasKvm = true -}}{{- end -}}
+{{- end -}}
+{{- if not $hasKvm -}}
+{{- $out = append $out (dict "key" "onyx.app/kvm" "operator" "Equal" "value" "true" "effect" "NoSchedule") -}}
+{{- end -}}
+{{- toYaml $out -}}
+{{- end }}
+
+{{/* Fails when sandboxPod.tolerations would let pod sandboxes onto the
+onyx.app/kvm nodes: that key, or an Exists toleration without a key. */}}
+{{- define "onyx.craftCheckSandboxTolerations" -}}
+{{- if eq (include "onyx.craftSandboxRuntime" .) "firecracker" -}}
+{{- range (index (.Values.sandboxPod | default dict) "tolerations" | default list) -}}
+{{- $effectMatches := has (toString (.effect | default "")) (list "" "NoSchedule") -}}
+{{- if and $effectMatches (or (eq (toString .key) "onyx.app/kvm") (and (not .key) (eq (toString .operator) "Exists"))) -}}
+{{- fail "sandboxPod.tolerations must not tolerate the onyx.app/kvm taint (key onyx.app/kvm, or operator Exists without a key) with craft.sandboxRuntime=firecracker: pod sandboxes must stay off the Firecracker nodes" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end }}
+
 {{/* Prometheus job label of the host agent series (alert rules, dashboard).
 The value goes into PromQL and JSON strings unescaped, so only plain characters pass. */}}
 {{- define "onyx.craftHostAgentMetricsJob" -}}

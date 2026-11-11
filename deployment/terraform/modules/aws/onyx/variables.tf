@@ -419,6 +419,36 @@ variable "craft_sandbox_runtime" {
   default     = "pod"
 }
 
+variable "enable_craft_pod_sandbox_node_group" {
+  type        = bool
+  description = "With craft_sandbox_runtime = \"firecracker\", also create a small pod sandbox node group without the onyx.app/kvm taint. Pod sandboxes and the image prepuller run there."
+  default     = false
+}
+
+variable "craft_pod_sandbox_node_instance_types" {
+  type        = list(string)
+  description = "Instance types for the pod sandbox node group next to a Firecracker group."
+  default     = ["m8i.xlarge"]
+}
+
+variable "craft_pod_sandbox_node_min_size" {
+  type        = number
+  description = "Min size of the pod sandbox node group next to a Firecracker group."
+  default     = 1
+}
+
+variable "craft_pod_sandbox_node_max_size" {
+  type        = number
+  description = "Max size of the pod sandbox node group next to a Firecracker group."
+  default     = 2
+}
+
+variable "craft_pod_sandbox_node_desired_size" {
+  type        = number
+  description = "Desired size of the pod sandbox node group next to a Firecracker group."
+  default     = 1
+}
+
 # OpenSearch Configuration Variables
 variable "enable_opensearch" {
   type        = bool

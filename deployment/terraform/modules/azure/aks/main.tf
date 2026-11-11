@@ -8,6 +8,12 @@ locals {
     { "onyx.app/workload" = "sandbox" },
     local.sandbox_firecracker ? { "onyx.app/kvm" = "true" } : {},
   )
+  # Kubelet does not count microVM memory, so a Firecracker pool also carries
+  # the onyx.app/kvm taint. Only the host agent and preflight tolerate it.
+  sandbox_node_taints = concat(
+    ["workload=sandbox:NoSchedule"],
+    local.sandbox_firecracker ? ["onyx.app/kvm=true:NoSchedule"] : [],
+  )
 
   gpu_node_pool = var.enable_gpu_node_pool ? {
     gpu = {
@@ -31,7 +37,7 @@ locals {
       os_disk_size_gb = var.sandbox_node_disk_size_gb
       os_disk_type    = "Managed"
       node_labels     = local.sandbox_node_labels
-      node_taints     = ["workload=sandbox:NoSchedule"]
+      node_taints     = local.sandbox_node_taints
       zones           = []
       mode            = "User"
     }
