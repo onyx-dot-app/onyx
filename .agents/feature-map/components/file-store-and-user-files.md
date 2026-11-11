@@ -169,6 +169,8 @@ preview.
    assumes immutable content.
    PostgreSQL large-object access uses a savepoint. Missing objects become
    `FileNotFoundError` only after an existence check; other failures propagate.
+   `FileStore.read_file(max_bytes=...)` bounds actual backend reads and consumes
+   at most one extra byte. It raises `FileSizeLimitExceeded` on overflow.
 7. `upload-rejects-indexing-does-not` **Upload rejects what extraction cannot
    read; indexing does not.**
    `server/features/projects/projects_file_utils.py:categorize_uploaded_files` rejects a file with

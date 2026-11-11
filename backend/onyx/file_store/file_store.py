@@ -7,6 +7,7 @@ import time
 import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator
+from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from functools import partial, reduce
 from io import BytesIO
@@ -40,6 +41,7 @@ from onyx.db.engine.sql_engine import (
     get_session_with_current_tenant_if_none,
 )
 from onyx.db.file_record import (
+    FileRecordNotFoundError,
     delete_filerecord_by_file_id,
     get_filerecord_by_file_id,
     get_filerecord_by_file_id_for_update,
@@ -51,6 +53,7 @@ from onyx.db.file_record import (
 from onyx.db.models import FileRecord
 from onyx.db.models import FileRecord as FileStoreModel
 from onyx.file_store.models import (
+    FileSizeLimitExceeded,
     PendingPresignedUpload,
     PresignedRequest,
     PresignedUpload,
@@ -76,6 +79,35 @@ logger = setup_logger()
 # missing, so listings stop re-probing the object store for it. Rendered as
 # "unknown" (None) in API responses.
 FILE_SIZE_MISSING_SENTINEL = -1
+
+
+def read_file_to_buffer(
+    read: Callable[[int], bytes], *, use_tempfile: bool, max_bytes: int | None
+) -> IO[bytes]:
+    """Copy actual bytes, consuming at most max_bytes + 1 when bounded."""
+    if max_bytes is not None and max_bytes < 0:
+        raise ValueError("max_bytes must be nonnegative")
+    target = (
+        tempfile.NamedTemporaryFile(mode="w+b", delete=True)
+        if use_tempfile
+        else BytesIO()
+    )
+    try:
+        total = 0
+        while chunk := read(
+            min(64 * 1024, max_bytes - total + 1)
+            if max_bytes is not None
+            else 8 * 1024 * 1024
+        ):
+            total += len(chunk)
+            if max_bytes is not None and total > max_bytes:
+                raise FileSizeLimitExceeded(f"Stored file exceeds {max_bytes} bytes")
+            target.write(chunk)
+        target.seek(0)
+        return target
+    except BaseException:
+        target.close()
+        raise
 
 
 def content_byte_size(file_content: object) -> int | None:
@@ -362,7 +394,12 @@ class FileStore(ABC):
 
     @abstractmethod
     def read_file(
-        self, file_id: str, mode: str | None = None, use_tempfile: bool = False
+        self,
+        file_id: str,
+        mode: str | None = None,
+        use_tempfile: bool = False,
+        *,
+        max_bytes: int | None = None,
     ) -> IO[bytes]:
         """
         Read the content of a given file by the ID
@@ -372,6 +409,9 @@ class FileStore(ABC):
         - mode: Mode to open the file (e.g. 'b' for binary)
         - use_tempfile: Whether to use a temporary file to store the contents
                         in order to avoid loading the entire file into memory
+
+        - max_bytes: Optional cap on actual stored bytes, enforced before buffering.
+                     Raises FileSizeLimitExceeded; consumes at most one extra byte.
 
         Returns:
             Contents of the file and metadata dict
@@ -388,7 +428,8 @@ class FileStore(ABC):
         self, file_id: str, db_session: Session | None = None
     ) -> int | None:
         """
-        Get the size of a file in bytes.
+        Check physical object existence and return its size, or None if unknown.
+        Raise FileNotFoundError only for confirmed missing objects or file records.
         Optionally provide a db_session for database access.
         """
 
@@ -917,6 +958,8 @@ class S3BackedFileStore(PresignableFileStore):
         mode: str | None = None,  # noqa: ARG002
         use_tempfile: bool = False,
         db_session: Session | None = None,
+        *,
+        max_bytes: int | None = None,
     ) -> IO[bytes]:
         with get_session_with_current_tenant_if_none(db_session) as db_session:
             file_record = get_filerecord_by_file_id(
@@ -933,21 +976,12 @@ class S3BackedFileStore(PresignableFileStore):
             logger.error("Failed to read file %s from S3", file_id)
             raise
 
-        # FIX: Stream file content instead of loading entire file into memory
-        # This prevents OOM issues with large files (500MB+ PDFs, etc.)
-        if use_tempfile:
-            # Stream directly to temp file to avoid holding entire file in memory
-            temp_file = tempfile.NamedTemporaryFile(mode="w+b", delete=True)
-            # Stream in 8MB chunks to reduce memory footprint
-            for chunk in response["Body"].iter_chunks(chunk_size=8 * 1024 * 1024):
-                temp_file.write(chunk)
-            temp_file.seek(0)
-            return temp_file
-        else:
-            # For BytesIO, we still need to read into memory (legacy behavior)
-            # but at least we're not creating duplicate copies
-            file_content = response["Body"].read()
-            return BytesIO(file_content)
+        with closing(response["Body"]) as source:
+            if use_tempfile or max_bytes is not None:
+                return read_file_to_buffer(
+                    source.read, use_tempfile=use_tempfile, max_bytes=max_bytes
+                )
+            return BytesIO(source.read())
 
     def read_file_record(
         self, file_id: str, db_session: Session | None = None
@@ -970,12 +1004,31 @@ class S3BackedFileStore(PresignableFileStore):
                     file_id=file_id, db_session=db_session
                 )
 
-            response = self._with_legacy_fallback(
-                lambda client: client.head_object(
-                    Bucket=file_record.bucket_name, Key=file_record.object_key
-                )
-            )
-            return response.get("ContentLength")
+            def head_size(client: "S3Client") -> int | None:
+                try:
+                    return client.head_object(
+                        Bucket=file_record.bucket_name, Key=file_record.object_key
+                    ).get("ContentLength")
+                except ClientError as exc:
+                    if s3_error_code(exc) in ("404", "NotFound"):
+                        # HEAD omits the error body, including NoSuchBucket.
+                        try:
+                            client.head_bucket(Bucket=file_record.bucket_name)
+                        except ClientError as bucket_error:
+                            if s3_error_code(bucket_error) in (
+                                "404",
+                                "NotFound",
+                                "NoSuchBucket",
+                            ):
+                                raise ClientError(
+                                    {"Error": {"Code": "NoSuchBucket"}}, "HeadBucket"
+                                ) from bucket_error
+                            return None
+                    raise
+
+            return self._with_legacy_fallback(head_size)
+        except FileRecordNotFoundError as e:
+            raise FileNotFoundError(f"File record {file_id} does not exist") from e
         except ClientError as e:
             if is_missing_object(e):
                 raise FileNotFoundError(

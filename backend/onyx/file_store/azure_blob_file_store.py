@@ -9,6 +9,7 @@ from io import BytesIO
 from typing import IO, TYPE_CHECKING, Any, cast
 
 import puremagic
+from azure.core.exceptions import HttpResponseError
 from sqlalchemy.orm import Session
 
 if TYPE_CHECKING:
@@ -25,6 +26,7 @@ from onyx.db.engine.sql_engine import (
     get_session_with_current_tenant_if_none,
 )
 from onyx.db.file_record import (
+    FileRecordNotFoundError,
     delete_filerecord_by_file_id,
     get_filerecord_by_file_id,
     get_filerecord_by_file_id_for_update,
@@ -39,6 +41,7 @@ from onyx.file_store.file_store import (
     PresignedUrlsNotSupportedError,
     content_byte_size,
     presign_expiry,
+    read_file_to_buffer,
 )
 from onyx.file_store.models import (
     PendingPresignedUpload,
@@ -316,6 +319,8 @@ class AzureBlobBackedFileStore(PresignableFileStore):
         mode: str | None = None,  # noqa: ARG002
         use_tempfile: bool = False,
         db_session: Session | None = None,
+        *,
+        max_bytes: int | None = None,
     ) -> IO[bytes]:
         with get_session_with_current_tenant_if_none(db_session) as db_session:
             file_record = get_filerecord_by_file_id(
@@ -326,6 +331,22 @@ class AzureBlobBackedFileStore(PresignableFileStore):
         blob_client = client.get_blob_client(
             container=file_record.bucket_name, blob=file_record.object_key
         )
+
+        if max_bytes is not None:
+            try:
+                source = blob_client.download_blob(offset=0, length=max_bytes + 1)
+            except HttpResponseError as exc:
+                if (
+                    exc.status_code != 416
+                    or blob_client.get_blob_properties().size != 0
+                ):
+                    raise
+                return read_file_to_buffer(
+                    BytesIO().read, use_tempfile=use_tempfile, max_bytes=max_bytes
+                )
+            return read_file_to_buffer(
+                source.read, use_tempfile=use_tempfile, max_bytes=max_bytes
+            )
 
         if use_tempfile:
             temp_file = tempfile.NamedTemporaryFile(mode="w+b", delete=True)
@@ -365,10 +386,18 @@ class AzureBlobBackedFileStore(PresignableFileStore):
             try:
                 properties = blob_client.get_blob_properties()
             except ResourceNotFoundError as e:
+                # The SDK adds error_code dynamically, outside azure-core stubs.
+                if (
+                    getattr(e, "error_code", None)  # ods: ignore[getattr]
+                    != "BlobNotFound"
+                ):
+                    raise
                 raise FileNotFoundError(
                     f"Object for file {file_id} does not exist"
                 ) from e
             return properties.size
+        except FileRecordNotFoundError as e:
+            raise FileNotFoundError(f"File record {file_id} does not exist") from e
         except FileNotFoundError:
             raise
         except Exception as e:

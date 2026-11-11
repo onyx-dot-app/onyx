@@ -18,7 +18,7 @@ from onyx.skills.bundle import (
     compute_bundle_sha256,
     normalize_custom_bundle,
 )
-from onyx.skills.metadata import parse_skill_document
+from onyx.skills.metadata import parse_skill_document, parse_skill_md_frontmatter
 from onyx.utils.bundle import compute_bundle_metadata
 from onyx.utils.logger import setup_logger
 
@@ -111,6 +111,18 @@ def skill_md_record(
         frontmatter=frontmatter_json,
         skill_md=text,
     )
+
+
+def bundle_skill_md_record(bundle_bytes: bytes) -> SkillMdRecord:
+    """Raises when the bundle has no root SKILL.md. Invalid frontmatter keeps
+    the raw file and leaves `frontmatter` empty."""
+    with zipfile.ZipFile(io.BytesIO(bundle_bytes)) as archive:
+        raw_skill_md = archive.read(SKILL_MD_NAME)
+    try:
+        frontmatter: dict[Any, Any] | None = parse_skill_md_frontmatter(raw_skill_md)[0]
+    except OnyxError:
+        frontmatter = None
+    return skill_md_record(raw_skill_md, frontmatter)
 
 
 class IngestedBundle(NamedTuple):

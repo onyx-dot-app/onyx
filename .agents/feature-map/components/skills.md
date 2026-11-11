@@ -137,6 +137,14 @@ The library preview of an external-app skill calls the same renderer
 
 ## Contracts and traps
 
+Metadata repair recovers retained history before clearing old bundle links.
+This keeps size and file count after retention deletes the files.
+Versions with incomplete metadata keep their links and remain repair candidates.
+Only confirmed absence clears a non-current link; transient failures retain it.
+Background repair isolates each skill in a savepoint. Both scan phases advance
+through failures and retry pending work after the cursor wraps. User saves
+still propagate unexpected storage errors.
+
 1. `rendering-input-changes-hash` **A new rendering input must change the
    hash.** If a value that changes the rendered files is not in the bytes that
    `skills/push.py:compute_skill_runtime_hash` reads, an edit never re-pushes and sessions
@@ -184,6 +192,8 @@ The library preview of an external-app skill calls the same renderer
    both the incoming and normalized ZIP sizes. Raw uploads use the per-file
    read cap; ZIP uploads use the ZIP cap.
    Stored-bundle reads follow `bundle-size-limits`.
+   Version metadata repair also bounds compressed reads at the storage backend
+   and expanded work per file and in total, without applying upload file counts.
    Skill deletion collects every retained bundle before cascading version deletion.
    Cleanup runs after commit and checks both legacy and version references.
 8. `templates-built-in-only` **Only built-ins use templates.**
@@ -252,7 +262,9 @@ The library preview of an external-app skill calls the same renderer
     `db/skill_version.py:write_skill_version`. A row lock serializes
     version numbers. The version, pointer and legacy columns change in one
     transaction. Every save and upload adds a version, also when its content
-    is equal to the current version; there is no content digest. See
+    is equal to the current version; there is no content digest.
+    `utils/bundle.py:compute_bundle_metadata` computes the unpacked size and
+    file count without database imports. See
     [[#bundle-retention]] for which bundle files stay.
     Legacy columns remain authoritative during rollout. A save repairs a stale
     or missing pointer before writing its new content. A recovery snapshot has
@@ -269,9 +281,42 @@ The library preview of an external-app skill calls the same renderer
     and marks the version `metadata_unrepairable`. Writers fill them from the
     ingest parse in the same transaction. The initial and recovery snapshots
     keep them NULL until repair.
-    Built-ins have no versions. Before readers switch, the version repair task must repair
-    every tenant, and a fresh drift check must pass after old writers drain.
-    No migration reads blobs.
+    Repair checks physical object metadata for complete history without downloading
+    its payload. Incomplete metadata still needs a bounded bundle read.
+    Confirmed missing historical objects lose their file links; current links remain
+    recoverable. Missing primary buckets, containers, and uncertain errors keep the links.
+    A confirmed primary object miss plus an absent legacy bucket confirms absence.
+    Historical failures use separate savepoints so current pointer recovery can commit.
+    Built-ins have no versions. `background/celery/tasks/skill_versions/tasks.py` repairs each
+    tenant in bounded batches through Celery or Lite's API poller. The base
+    interval is five minutes; cloud uses the standard beat multiplier (eight
+    by default). Repair prunes bundle links under the skill lock, then deletes
+    unreferenced files after commit, with the same retention rule as saves.
+    The task has a 300-second soft time limit. Its 30-second deadline is checked
+    between skills and between historical versions of one skill; a single blob
+    read can exceed it. The current version is always repaired. When the
+    deadline stops a skill, the KV key `skill_version_repair_resume:<skill id>`
+    saves the version number, and the next pass starts with older versions.
+    Versions left without metadata stay in the drift query.
+    Metadata includes the SKILL.md columns. When `frontmatter` is NULL, repair
+    fills `name`, `frontmatter` and `skill_md` from the bundle's root SKILL.md
+    with `skills/metadata.py:parse_skill_md_frontmatter`, within the stored limits.
+    Invalid YAML keeps the raw `skill_md` and leaves `frontmatter` NULL. A
+    missing root SKILL.md stores nothing. Each of these, and any column that
+    PostgreSQL cannot store, sets `metadata_unrepairable`, so repair stops.
+    A bundle that cannot be decoded sets `metadata_unrepairable`. Repair stops
+    retrying it, the drift query skips it, and pruning treats it as complete.
+    A bundle over a configurable size limit keeps empty metadata. It stays in
+    the drift query and keeps its file, so repair succeeds after the limit rises. Each skill commits
+    before its UUID cursor advances, including failed attempts. Failed work remains eligible
+    for retry after the cursor wraps.
+    Progress reloads from PostgreSQL because KV caching precedes its commit.
+    After the initial scan, `db/skill_version.py:skill_version_repair_batch`
+    checks pointer, file, hash and validity drift with an outer join and
+    null-safe comparisons. This catches old-writer edits and pointerless
+    inserts below the cursor. The completed flag means only the initial scan
+    finished. Before switching readers, drain old writers and require a fresh
+    empty drift query, not that flag. No migration reads blobs.
 16. `skill-dir-placeholder` **Skill paths resolve to the sandbox folder.**
     `skills/push.py:_resolve_skill_dirs` replaces each `${CLAUDE_SKILL_DIR}` in
     a skill's root SKILL.md with `/workspace/managed/skills/<name>`. Only the
@@ -325,9 +370,10 @@ The library preview of an external-app skill calls the same renderer
     A durable cursor advances past failed files within a fixed scan boundary,
     then wraps. New arrivals cannot postpone retries of earlier failures.
     An upload saves its file before its row commits, so
-    a younger file can be live. A version preview or restore must treat a
-    pruned bundle as gone, also when pruning wins a race. A restore that
-    copies an old version must read it under the version lock.
+    a younger file can be live. A version preview or restore must read through
+    `read_version_bundle`, which gives NOT_FOUND "The files of this version are
+    no longer kept." for a pruned bundle, also when pruning wins a race. A
+    restore that copies an old version must read it under the version lock.
 
 ---
 
