@@ -545,6 +545,25 @@ def test_skill_md_over_limit_is_refused(user: DATestUser) -> None:
     assert [v.number for v in _state(skill["id"]).versions] == [1]
 
 
+def test_skill_md_with_nul_is_refused(user: DATestUser) -> None:
+    name = f"nul-{uuid4().hex[:8]}"
+    nul_bundle = _bundle({"SKILL.md": _skill_md(name, "Nul", "Before\x00after.")})
+
+    upload = client.post(
+        f"{API_SERVER_URL}/skills/custom",
+        files={"bundle": (f"{name}.zip", io.BytesIO(nul_bundle), "application/zip")},
+        headers=_multipart_headers(user),
+    )
+    assert upload.status_code == 400, upload.text
+    assert "NUL character" in upload.json()["detail"]
+
+    skill = _upload(user, _bundle({"SKILL.md": _skill_md(name, "Clean")}), name=name)
+    replace = _replace(user, skill["id"], nul_bundle)
+    assert replace.status_code == 400, replace.text
+    assert "NUL character" in replace.json()["detail"]
+    assert [v.number for v in _state(skill["id"]).versions] == [1]
+
+
 def test_frontmatter_matches_skill_md(user: DATestUser) -> None:
     name = f"frontmatter-{uuid4().hex[:8]}"
     skill_md = (

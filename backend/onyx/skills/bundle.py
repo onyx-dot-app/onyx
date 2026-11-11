@@ -104,6 +104,12 @@ def check_skill_md_size(raw_skill_md: bytes) -> None:
             f"SKILL.md exceeds the {SKILL_MD_MAX_BYTES // 1024} KiB limit. "
             "Split it into several files and link them from SKILL.md.",
         )
+    # A Postgres text column cannot hold NUL.
+    if b"\x00" in raw_skill_md:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "SKILL.md cannot contain a NUL character. Remove it and try again.",
+        )
 
 
 def read_bundle_file(
