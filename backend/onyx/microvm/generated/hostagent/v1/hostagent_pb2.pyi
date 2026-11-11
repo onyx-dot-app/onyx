@@ -1,5 +1,5 @@
 # Generated from microvm/proto/hostagent/v1/hostagent.proto (blob cfd8bbf6c3def47bf70d4606eab935ae2bc6fbf2)
-# at commit 0137953345 by backend/onyx/microvm/generated/regenerate.sh. Do not edit.
+# at commit be53714c98 by backend/onyx/microvm/generated/regenerate.sh. Do not edit.
 import datetime
 
 from google.protobuf import timestamp_pb2 as _timestamp_pb2

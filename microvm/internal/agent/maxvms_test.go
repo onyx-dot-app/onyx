@@ -110,6 +110,22 @@ func TestMaxVMsRescansDoubtsAtTheCap(t *testing.T) {
 	}
 }
 
+// The scan at the cap finds a process of the requested sandbox: Create
+// refuses it as in doubt.
+func TestRescanAtTheCapPutsTheRequestedSandboxInDoubt(t *testing.T) {
+	f := newFixture(t, 10)
+	f.m.cfg.MaxVMs = 1
+	f.m.adopter = &fakeTable{cands: []Candidate{{ID: sb1, PID: 701, UID: 1000006}}}
+	f.m.mu.Lock()
+	f.m.doubt["kept"] = &doubt{reason: "test"}
+	f.m.mu.Unlock()
+	_, _, err := f.m.Create(context.Background(), req(sb1, 1))
+	wantReason(t, err, pb.ErrorReason_SANDBOX_IN_DOUBT)
+	if f.l.count() != 0 {
+		t.Fatalf("launches %d, want 0", f.l.count())
+	}
+}
+
 func TestNoCapByDefault(t *testing.T) {
 	f := newFixture(t, 10)
 	ctx := context.Background()

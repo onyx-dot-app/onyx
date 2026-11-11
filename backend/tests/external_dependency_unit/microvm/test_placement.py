@@ -191,16 +191,16 @@ def test_refused_placement_keeps_the_key_when_the_pinned_node_was_skipped(
         SandboxReservation(attempt=1, node_id=pinned_id, owner="crashed"),
         replaces=None,
     )
-    registry.set_sandbox_daemon_key(
-        tenant_cache, sandbox_id, attempt=1, key=new_sandboxd_key()
-    )
+    key = new_sandboxd_key()
+    registry.set_sandbox_daemon_key(tenant_cache, sandbox_id, attempt=1, key=key)
 
     with pytest.raises(OnyxError):
         place_sandbox_vm(
             shared_cache, tenant_cache, client_factory, _request(sandbox_id)
         )
 
-    assert registry.get_sandbox_daemon_key(tenant_cache, sandbox_id, attempt=1)
+    kept = registry.get_sandbox_daemon_key(tenant_cache, sandbox_id, attempt=1)
+    assert kept is not None and kept.get_secret_value() == key.get_secret_value()
 
 
 def test_refused_placement_keeps_the_key_of_a_placement_that_took_over(

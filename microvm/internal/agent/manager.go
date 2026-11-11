@@ -314,10 +314,11 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (VM, bool, erro
 	if !tenantIDRE.MatchString(req.TenantID) {
 		return VM{}, false, apierr.New(pb.ErrorReason_INVALID_ARGUMENT, "tenant_id %q must match [A-Za-z0-9_-]{1,63}", req.TenantID)
 	}
+	// Before checkDoubt: the scan can put this sandbox in doubt.
+	m.rescanAtCap()
 	if err := m.checkDoubt(ctx, req.SandboxID, true); err != nil {
 		return VM{}, false, err
 	}
-	m.rescanAtCap()
 
 	for {
 		m.mu.Lock()
@@ -402,6 +403,11 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (VM, bool, erro
 	if err := m.staleLocked(req); err != nil {
 		m.mu.Unlock()
 		return VM{}, false, err
+	}
+	// A process scan during admission may have put the sandbox in doubt.
+	if m.doubt[req.SandboxID] != nil {
+		m.mu.Unlock()
+		return VM{}, false, m.doubtError(req.SandboxID)
 	}
 	// Drain and memory are checked under the lock, so two Creates never
 	// count the same free memory.
@@ -919,10 +925,10 @@ func (m *Manager) TemplatesInUse() map[string]bool {
 // with its UID, for a VM that may still run, and a later scan frees the UID
 // once it is gone.
 func (m *Manager) BuildSlot(id string, memMiB uint32) (uint32, func(left bool), error) {
+	m.rescanAtCap()
 	if err := m.checkDoubt(context.Background(), id, true); err != nil {
 		return 0, nil, err
 	}
-	m.rescanAtCap()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, ok := m.building[id]; ok || m.vms[id] != nil || m.doubt[id] != nil {
