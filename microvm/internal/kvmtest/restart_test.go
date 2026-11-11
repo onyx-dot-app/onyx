@@ -23,6 +23,7 @@ import (
 	"github.com/onyx-dot-app/onyx/microvm/internal/fcvm"
 	"github.com/onyx-dot-app/onyx/microvm/internal/scratch"
 	"github.com/onyx-dot-app/onyx/microvm/internal/template"
+	"github.com/onyx-dot-app/onyx/microvm/internal/testcerts"
 	pb "github.com/onyx-dot-app/onyx/microvm/proto/hostagent/v1"
 )
 
@@ -41,12 +42,22 @@ func startContainer(t *testing.T, e env, name string) {
 	t.Helper()
 	bin := getenv("KVM_AGENT_BIN", "/opt/agent/host-agent")
 	image := getenv("KVM_AGENT_IMAGE", "debian:trixie-slim")
+	// The kit root drive has no egress CA, and an agent with no CA source
+	// refuses CA-free templates. Any CA certificate will do.
+	certDir := filepath.Join(e.DataDir, "restart-certs")
+	if err := os.MkdirAll(certDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	certs, err := testcerts.Write(certDir)
+	if err != nil {
+		t.Fatal(err)
+	}
 	args := []string{"run", "-d", "--name", name, "--privileged", "--pid=host", "--cgroupns=host", "--network=host",
 		"-v", e.DataDir + ":" + e.DataDir,
 		"-v", e.ArtifactsDir + ":" + e.ArtifactsDir + ":ro",
 		"-v", filepath.Dir(bin) + ":" + filepath.Dir(bin) + ":ro",
 		"-v", "/sys/fs/cgroup:/sys/fs/cgroup",
-		image, bin, "--data-dir", e.DataDir, "--artifacts-dir", e.ArtifactsDir}
+		image, bin, "--data-dir", e.DataDir, "--artifacts-dir", e.ArtifactsDir, "--egress-ca", certs.ClientCA}
 	if out, err := exec.Command("docker", args...).CombinedOutput(); err != nil {
 		t.Fatalf("docker run: %v: %s", err, out)
 	}
