@@ -85,7 +85,7 @@ agent, every call also carries `x-sandbox-id`.
 | Call | What it does |
 |---|---|
 | `Health` | Answers before Init, with no key. Initialized and key-set flags, version, guest time, generation, running count. |
-| `SetKey` | Node agent only (the pass-through refuses it). Installs the per-VM key once, and keeps the egress CA (`egress_ca_pem`) for `Init`; a repeat call with the same key can replace the CA. Starts the dial port forwards (`dial_ports`) at once; a repeat call can replace the list. Before it, every call but `Health` fails with `KEY_NOT_SET`. |
+| `SetKey` | Node agent only (the pass-through refuses it). Installs the per-VM key once, and keeps the egress CA (`egress_ca_pem`) for `Init`; a repeat call with the same key can replace the CA. Starts the dial port forwards (`dial_ports`) at once; a repeat call can replace the list. If a port cannot listen, the call fails with `INTERNAL` (the key and list stay saved, and a repeat call tries the port again). Before it, every call but `Health` fails with `KEY_NOT_SET`. |
 | `Init` | Needs the key. Sets `CLOCK_REALTIME`, adds the entropy with `RNDADDENTROPY` (credited) and `RNDRESEEDCRNG`, runs attach, grows `--grow-fs` mounts (`EXT4_IOC_RESIZE_FS`) after a device size check, installs the `SetKey` egress CA, resets the egress relay, stores env and sessions. Other calls fail with `NOT_INITIALIZED` until it succeeds. |
 | `Run` | Starts a command and streams `started`, output chunks (with byte offsets) and the result. |
 | `Start` | Starts a command and returns its execution ID at once. |

@@ -131,7 +131,9 @@ func NewServer(cfg Config, sys System, m *execs.Manager) (*Server, error) {
 		if len(ports) == 0 {
 			ports = DefaultDialPorts
 		}
-		cfg.Forwards.Set(ports)
+		if _, err := cfg.Forwards.Set(ports); err != nil {
+			cfg.Log.Warn("dial ports not all forwarded after restart", "err", err)
+		}
 	}
 	return s, nil
 }

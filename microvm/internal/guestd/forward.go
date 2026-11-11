@@ -2,6 +2,7 @@ package guestd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -18,7 +19,8 @@ import (
 var DefaultDialPorts = []uint32{3010}
 
 const (
-	maxDialPorts = 64
+	// MaxDialPorts is the largest SetKey port list.
+	MaxDialPorts = 64
 	// DefaultForwardConns caps the live connections of one forwarded port.
 	// It matches the node agent's default Dial streams per VM.
 	DefaultForwardConns = 64
@@ -45,8 +47,8 @@ type Forwards struct {
 // validateDialPorts checks a SetKey port list and returns it sorted with no
 // duplicates.
 func validateDialPorts(ports []uint32, reserved uint32) ([]uint32, error) {
-	if len(ports) > maxDialPorts {
-		return nil, fmt.Errorf("at most %d dial_ports, got %d", maxDialPorts, len(ports))
+	if len(ports) > MaxDialPorts {
+		return nil, fmt.Errorf("at most %d dial_ports, got %d", MaxDialPorts, len(ports))
 	}
 	out := slices.Clone(ports)
 	slices.Sort(out)
@@ -79,9 +81,10 @@ func (f *Forwards) dial(ctx context.Context, port uint32) (net.Conn, error) {
 
 // Set makes the forwarded ports equal to ports: it closes the listeners of
 // other ports and opens the missing ones. A port that fails to listen is
-// logged and left out; a later Set tries it again. Live connections of a
-// removed port run until they end. Set returns the forwarded ports.
-func (f *Forwards) Set(ports []uint32) []uint32 {
+// left out, and Set returns the error; a later Set tries it again. Live
+// connections of a removed port run until they end. Set returns the
+// forwarded ports.
+func (f *Forwards) Set(ports []uint32) ([]uint32, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.open == nil {
@@ -94,6 +97,7 @@ func (f *Forwards) Set(ports []uint32) []uint32 {
 			f.log().Info("dial port closed", "port", p)
 		}
 	}
+	var errs []error
 	for _, p := range ports {
 		if _, ok := f.open[p]; ok || p == f.Reserved {
 			continue
@@ -101,6 +105,7 @@ func (f *Forwards) Set(ports []uint32) []uint32 {
 		ln, err := f.Listen(p)
 		if err != nil {
 			f.log().Warn("dial port not forwarded", "port", p, "err", err)
+			errs = append(errs, fmt.Errorf("listen on dial port %d: %w", p, err))
 			continue
 		}
 		maxConns := f.MaxConns
@@ -119,7 +124,7 @@ func (f *Forwards) Set(ports []uint32) []uint32 {
 		f.open[p] = ln
 		f.log().Info("dial port forwarded", "port", p)
 	}
-	return f.ports()
+	return f.ports(), errors.Join(errs...)
 }
 
 // Ports returns the forwarded ports, sorted.
@@ -143,5 +148,5 @@ func (f *Forwards) ports() []uint32 {
 
 // Close closes every listener.
 func (f *Forwards) Close() {
-	f.Set(nil)
+	_, _ = f.Set(nil)
 }

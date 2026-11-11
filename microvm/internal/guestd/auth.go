@@ -112,9 +112,13 @@ func (s *Server) SetKey(_ context.Context, r *pb.SetKeyRequest) (*pb.SetKeyRespo
 		s.cfg.Log.Info("key set", "already_set", already, "egress_ca", caPEM != nil, "dial_ports", ports)
 	}
 	// Also on a repeat call: it opens a port that failed to listen before.
+	// A failure fails the call, so the node agent's Create fails and can
+	// be retried; the key and ports stay saved.
 	var forwarded []uint32
 	if s.cfg.Forwards != nil {
-		forwarded = s.cfg.Forwards.Set(ports)
+		if forwarded, err = s.cfg.Forwards.Set(ports); err != nil {
+			return nil, apiError(pb.ErrorReason_INTERNAL, "forward dial ports: %v", err)
+		}
 	}
 	return &pb.SetKeyResponse{AlreadySet: already, DialPorts: forwarded}, nil
 }

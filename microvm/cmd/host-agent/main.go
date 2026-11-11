@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -29,6 +30,7 @@ import (
 	"github.com/onyx-dot-app/onyx/microvm/internal/binaries"
 	"github.com/onyx-dot-app/onyx/microvm/internal/egressca"
 	"github.com/onyx-dot-app/onyx/microvm/internal/fcvm"
+	"github.com/onyx-dot-app/onyx/microvm/internal/guestd"
 	"github.com/onyx-dot-app/onyx/microvm/internal/hostinfo"
 	"github.com/onyx-dot-app/onyx/microvm/internal/jailer"
 	"github.com/onyx-dot-app/onyx/microvm/internal/journal"
@@ -435,7 +437,13 @@ func parsePorts(s string) ([]uint32, error) {
 		if err != nil || n == 0 || n > 65535 {
 			return nil, fmt.Errorf("bad --dial-ports entry %q", p)
 		}
-		out = append(out, uint32(n))
+		if !slices.Contains(out, uint32(n)) {
+			out = append(out, uint32(n))
+		}
+	}
+	// The guest daemon refuses a longer SetKey list, which would fail every Create.
+	if len(out) > guestd.MaxDialPorts {
+		return nil, fmt.Errorf("--dial-ports names %d ports; at most %d", len(out), guestd.MaxDialPorts)
 	}
 	if len(out) == 0 {
 		// An empty list would fall back to the default ports.

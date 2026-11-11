@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"math"
+	"strings"
 	"testing"
 	"time"
 )
@@ -72,8 +74,18 @@ func TestParsePortsRejectsAnEmptyList(t *testing.T) {
 			t.Errorf("%q: got %v, want an error", in, ports)
 		}
 	}
-	if ports, err := parsePorts("52, 3010"); err != nil || len(ports) != 2 || ports[0] != 52 || ports[1] != 3010 {
+	if ports, err := parsePorts("52, 3010, 3010"); err != nil || len(ports) != 2 || ports[0] != 52 || ports[1] != 3010 {
 		t.Fatalf("parse: %v %v", ports, err)
+	}
+	// Above the guest daemon's SetKey limit, or not a TCP port.
+	many := make([]string, 65)
+	for i := range many {
+		many[i] = fmt.Sprint(3000 + i)
+	}
+	for _, in := range []string{strings.Join(many, ","), "70000"} {
+		if ports, err := parsePorts(in); err == nil {
+			t.Errorf("%.20q: got %v, want an error", in, ports)
+		}
 	}
 }
 

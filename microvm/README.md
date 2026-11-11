@@ -77,7 +77,7 @@ with `--listen`, on an mTLS TCP listener for the api_server (D2):
 running VM, for example the app preview (3010). Only the ports in `--dial-ports` (default `3010`) are
 allowed (`PORT_NOT_ALLOWED`). Dial always refuses the guest daemon port (`--daemon-port`) with
 `PORT_NOT_ALLOWED`, also if `--dial-ports` names it: use the pass-through. The agent does not start with
-an empty `--dial-ports`, or with a port above 65535. Create sends the list (without `--daemon-port`) to the
+an empty `--dial-ports`, with a port above 65535, or with more than 64 ports. Create sends the list (without `--daemon-port`) to the
 guest daemon with `SetKey`, and the daemon forwards each port to TCP `127.0.0.1:<port>` in the guest. So
 the guest listens on no other port, and a VM made without `sandboxd_key` forwards no port. If nothing in the VM accepts the connection, the call fails with
 `GUEST_UNREACHABLE`. A `generation` other than 0 must match the running VM, else the call fails with
@@ -691,6 +691,9 @@ KVM_TB_ROOTFS=/opt/tb/rootfs-out KVM_TB_CA=/opt/tb/ca/ca.crt ./hostagent-kvm.tes
 # build without --ca) installs into <data-dir>/rootfs, the agent builds a template, and VMs trust only the
 # --egress-ca of their agent (a MITM proxy as --egress-proxy). A second CA keeps the same template.
 KVM_RD_IMAGE=craft-fc-rootfs:dev KVM_RD_DIR=/opt/rd/work ./hostagent-kvm.test -test.v -test.run TestRootfsDeliveryKVM
+# Preview Dial: same inputs; the agent's --dial-ports 3010,3011 reach a sandbox user web server through the
+# guest daemon forward, other ports are refused. KVM_DAEMON_VERSION (optional) is the version the daemon must report.
+KVM_RD_IMAGE=craft-fc-rootfs:dev KVM_RD_DIR=/opt/rd/work ./hostagent-kvm.test -test.v -test.run TestPreviewDialKVM
 # Managed drive swap (ENG-4614): same inputs; KVM_VMS running VMs, a reader in each VM holding files on the
 # managed drive, swaps of every VM, guest checks (content, old reader, noexec, no rw remount, no restart).
 KVM_TB_ROOTFS=/opt/tb/rootfs-out KVM_TB_CA=/opt/tb/ca/ca.crt ./hostagent-kvm.test -test.v -test.run TestManagedSwapKVM

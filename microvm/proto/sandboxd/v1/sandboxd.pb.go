@@ -590,7 +590,8 @@ type SetKeyRequest struct {
 	// each port the daemon forwards vsock <port> to TCP 127.0.0.1:<port> in the
 	// guest. Ports are 1 to 65535, at most 64, never the daemon port. Empty:
 	// keep the last list, or 3010 if there is none. A new list replaces the
-	// last one, also on a repeat call with the same key.
+	// last one, also on a repeat call with the same key. If a port cannot
+	// listen, the call fails with INTERNAL; a repeat call tries it again.
 	DialPorts     []uint32 `protobuf:"varint,3,rep,packed,name=dial_ports,json=dialPorts,proto3" json:"dial_ports,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

@@ -3,6 +3,7 @@ package guestd
 import (
 	"bufio"
 	"context"
+	"errors"
 	"io"
 	"net"
 	"path/filepath"
@@ -91,8 +92,8 @@ func echoOnce(t *testing.T, c net.Conn, msg string) {
 // connections, and closes the client when the service closes.
 func TestForwardsSplice(t *testing.T) {
 	f := newTCPForwards(t, echoServer(t), 1)
-	if got := f.Set([]uint32{3010}); !slices.Equal(got, []uint32{3010}) {
-		t.Fatalf("Set: %v", got)
+	if got, err := f.Set([]uint32{3010}); err != nil || !slices.Equal(got, []uint32{3010}) {
+		t.Fatalf("Set: %v %v", got, err)
 	}
 	c1, err := net.Dial("tcp", f.addr(3010))
 	if err != nil {
@@ -129,7 +130,9 @@ func TestForwardsSplice(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	old := f.addr(3010)
-	f.Set([]uint32{3011})
+	if _, err := f.Set([]uint32{3011}); err != nil {
+		t.Fatal(err)
+	}
 	if c, err := net.Dial("tcp", old); err == nil {
 		_ = c.Close()
 		t.Fatal("port 3010 still listens after Set([3011])")
@@ -137,7 +140,9 @@ func TestForwardsSplice(t *testing.T) {
 
 	// A guest port with no service: the client is closed, not left open.
 	none := newTCPForwards(t, "127.0.0.1:1", 0)
-	none.Set([]uint32{3011})
+	if _, err := none.Set([]uint32{3011}); err != nil {
+		t.Fatal(err)
+	}
 	c4, err := net.Dial("tcp", none.addr(3011))
 	if err != nil {
 		t.Fatal(err)
@@ -184,4 +189,27 @@ func TestForwardsSurviveRestart(t *testing.T) {
 	}
 	defer func() { _ = c.Close() }()
 	echoOnce(t, c, "after restart")
+}
+
+// A port that fails to listen fails SetKey, and a repeat SetKey opens it.
+func TestSetKeyFailsWhenAPortCannotListen(t *testing.T) {
+	f := newTCPForwards(t, echoServer(t), 0)
+	listen := f.Listen
+	var fail bool
+	f.Listen = func(port uint32) (net.Listener, error) {
+		if fail {
+			return nil, errors.New("too many open files")
+		}
+		return listen(port)
+	}
+	fail = true
+	h := newHarness(t, execs.Config{}, Config{Forwards: f.Forwards})
+	if _, err := h.srv.SetKey(context.Background(), &pb.SetKeyRequest{Key: testKey, DialPorts: []uint32{3010}}); reason(err) != "INTERNAL" {
+		t.Fatalf("SetKey with a failed listener: %v", err)
+	}
+	fail = false
+	r, err := h.srv.SetKey(context.Background(), &pb.SetKeyRequest{Key: testKey})
+	if err != nil || !r.GetAlreadySet() || !slices.Equal(r.GetDialPorts(), []uint32{3010}) {
+		t.Fatalf("repeat SetKey: %v %v", r, err)
+	}
 }
