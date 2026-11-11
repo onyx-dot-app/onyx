@@ -6,7 +6,7 @@ from typing import IO
 from uuid import uuid4
 
 from onyx.configs.constants import FileOrigin
-from onyx.file_store.file_store import FileStore
+from onyx.file_store.file_store import FileStore, get_default_file_store
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -260,3 +260,17 @@ class SnapshotManager:
         except Exception as e:
             logger.warning("Failed to delete snapshot %s: %s", storage_path, e)
             raise RuntimeError(f"Failed to delete snapshot: {e}") from e
+
+
+def delete_sandbox_blobs_best_effort(storage_paths: list[str]) -> None:
+    """Delete snapshot blobs; log failures instead of raising."""
+    if not storage_paths:
+        return
+    snapshot_manager = SnapshotManager(get_default_file_store())
+    for storage_path in storage_paths:
+        try:
+            snapshot_manager.delete_snapshot(storage_path)
+        except Exception:
+            logger.warning(
+                "Failed to delete sandbox blob %s", storage_path, exc_info=True
+            )
