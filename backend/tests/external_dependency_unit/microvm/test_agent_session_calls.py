@@ -218,6 +218,12 @@ def test_put_managed_image_then_swap(node: Node) -> None:
         image_id=put.image.image_id, targets=[node.vm], mount="spaces"
     )
     assert spaces.ok
+    # An empty mount is skills.
+    [default] = node.host.swap_managed(
+        image_id=put.image.image_id, targets=[node.vm], mount=""
+    )
+    assert default.ok
+    node.agent.swap_mounts.pop()
     # Each mount has its own slots: the first spaces swap goes to B.
     assert spaces.active is ManagedSlot.B
     assert node.agent.swap_mounts == ["skills", "spaces"]

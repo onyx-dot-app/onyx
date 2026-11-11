@@ -4,9 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -247,32 +245,25 @@ func TestSignalProcessGroup(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(m.Shutdown)
-	// The shell handles SIGINT; its foreground child sleep does not and dies.
-	e, err := m.Start(Spec{Argv: []string{"sh", "-c", `trap 'echo shell-int' INT; echo ready; sleep 30; echo "sleep-rc $?"`},
+	// The shell handles SIGINT; its foreground child does not and dies of it
+	// (before or after it execs sleep).
+	e, err := m.Start(Spec{Argv: []string{"sh", "-c", `trap 'echo shell-int' INT; sh -c 'echo child-up; exec sleep 30'; echo "child-rc $?"`},
 		Env: []string{"PATH=/usr/bin:/bin"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(10 * time.Millisecond) {
-		if data, _, _ := e.Read(Stdout, 0, 64); strings.Contains(string(data), "ready") {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("no ready")
-		}
-	}
-	waitChild(t, e.PID, "sleep")
+	waitOutput(t, e, "child-up")
 	if _, ended, err := m.Signal(e.ID, syscall.SIGINT); err != nil || ended {
 		t.Fatalf("signal: %v %v", ended, err)
 	}
 	select {
 	case <-e.Done():
 	case <-time.After(10 * time.Second):
-		t.Fatal("sleep did not get SIGINT")
+		t.Fatal("the child did not get SIGINT")
 	}
 	data, _, _ := e.Read(Stdout, 0, 1024)
 	res, _ := e.Ended()
-	if !strings.Contains(string(data), "shell-int") || !strings.Contains(string(data), "sleep-rc 130") || res.Completion != Exited {
+	if !strings.Contains(string(data), "shell-int") || !strings.Contains(string(data), "child-rc 130") || res.Completion != Exited {
 		t.Fatalf("output %q result %+v", data, res)
 	}
 }
@@ -309,17 +300,6 @@ func TestCapKeepsRecordsWhenStartFails(t *testing.T) {
 	if len(m.List(nil)) != 2 {
 		t.Fatalf("a failed start dropped a record: %d left", len(m.List(nil)))
 	}
-}
-
-// waitChild waits until pid has a child process named name.
-func waitChild(t *testing.T, pid int, name string) {
-	t.Helper()
-	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
-		if exec.Command("pgrep", "-P", strconv.Itoa(pid), "-x", name).Run() == nil {
-			return
-		}
-	}
-	t.Fatalf("no %s child of %d", name, pid)
 }
 
 // The first soft signal decides the completion, also when a second one

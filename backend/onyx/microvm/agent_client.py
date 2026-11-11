@@ -586,6 +586,7 @@ class HostAgentClient:
         nothing. For a mount other than skills, a VM whose template does not
         list the mount (also every VM of an older agent, which would swap
         skills instead) gets MANAGED_SWAP_UNSUPPORTED and is not sent."""
+        mount = mount or SKILLS_MOUNT
         refused: dict[str, ManagedSwapResult] = {}
         if mount != SKILLS_MOUNT:
             supported = {
