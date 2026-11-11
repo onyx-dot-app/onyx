@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -52,9 +53,15 @@ var DefaultCAPaths = CAPaths{
 // other programs do).
 //
 // The bundle is written before the anchor, so the anchor names the CA to
-// remove until the bundle no longer has it, and a retry after a failed
-// write still removes a retired CA.
+// remove until the bundle no longer has it. A failed anchor write restores
+// the old bundle. If that also fails, no anchor names the CA in the bundle,
+// so all later calls in this process fail.
 func InstallEgressCA(p CAPaths, caPEM []byte) error {
+	caMu.Lock()
+	defer caMu.Unlock()
+	if caBroken != nil {
+		return caBroken
+	}
 	ca, err := egressca.Parse(caPEM)
 	if err != nil {
 		return err
@@ -68,6 +75,7 @@ func InstallEgressCA(p CAPaths, caPEM []byte) error {
 		return fmt.Errorf("read %s: %w", p.Anchor, err)
 	}
 	bundle, err := os.ReadFile(p.Bundle)
+	hadBundle := err == nil
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("read %s: %w", p.Bundle, err)
 	}
@@ -79,12 +87,18 @@ func InstallEgressCA(p CAPaths, caPEM []byte) error {
 		err = writeFile(p.Anchor, ca.PEM, 0o644)
 	}
 	if err != nil {
-		// The bundle no longer has the old CA. Remove the old anchor, so
-		// that update-ca-certificates does not add it again.
-		if rerr := os.Remove(p.Anchor); rerr != nil && !errors.Is(rerr, os.ErrNotExist) {
-			return fmt.Errorf("write %s: %w (remove the old anchor: %v)", p.Anchor, err, rerr)
+		err = fmt.Errorf("write %s: %w", p.Anchor, err)
+		var rerr error
+		if hadBundle {
+			rerr = writeFile(p.Bundle, bundle, 0o644)
+		} else if rerr = os.Remove(p.Bundle); errors.Is(rerr, os.ErrNotExist) {
+			rerr = nil
 		}
-		return fmt.Errorf("write %s: %w", p.Anchor, err)
+		if rerr != nil {
+			caBroken = fmt.Errorf("egress CA trust store is inconsistent: %w (restore %s: %v)", err, p.Bundle, rerr)
+			return caBroken
+		}
+		return err
 	}
 	if p.NSSDB != "" {
 		if err := installNSS(p, p.Anchor); err != nil {
@@ -97,6 +111,12 @@ func InstallEgressCA(p CAPaths, caPEM []byte) error {
 	}
 	return nil
 }
+
+var (
+	caMu sync.Mutex
+	// caBroken is set when a failed install could not be undone.
+	caBroken error
+)
 
 // ReplaceInBundle returns bundle without the certificates in drop (DER), with
 // caPEM at the end. Text outside PEM blocks is dropped.

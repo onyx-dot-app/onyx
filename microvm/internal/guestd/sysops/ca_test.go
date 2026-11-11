@@ -194,22 +194,52 @@ func TestInstallEgressCAFailedWrite(t *testing.T) {
 	if got := strings.Join(certs(t, p.Bundle), ","); got != "public,egress two" {
 		t.Fatalf("bundle after the retry %s", got)
 	}
-	// A failed anchor write leaves no anchor of the retired CA.
+	// A failed anchor write restores the old bundle, so a retry with another
+	// CA still removes the one of the failed install.
 	failOn(p.Anchor)
 	if err := InstallEgressCA(p, ca1.PEM); err == nil || !strings.Contains(err.Error(), p.Anchor) {
 		t.Fatalf("anchor write failure: %v", err)
 	}
-	if got := strings.Join(certs(t, p.Bundle), ","); got != "public,egress one" {
-		t.Fatalf("bundle after a failed anchor write %s", got)
-	}
-	if _, err := os.Stat(p.Anchor); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("old anchor kept: %v", err)
+	if got := strings.Join(certs(t, p.Bundle), ",") + "|" + strings.Join(certs(t, p.Anchor), ","); got != "public,egress two|egress two" {
+		t.Fatalf("after a failed anchor write %s", got)
 	}
 	writeFile = writeFileAtomic
-	if err := InstallEgressCA(p, ca1.PEM); err != nil {
+	ca3 := newTestCA(t, "egress three")
+	if err := InstallEgressCA(p, ca3.PEM); err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.Join(certs(t, p.Bundle), ",") + "|" + strings.Join(certs(t, p.Anchor), ","); got != "public,egress one|egress one" {
+	if got := strings.Join(certs(t, p.Bundle), ",") + "|" + strings.Join(certs(t, p.Anchor), ","); got != "public,egress three|egress three" {
 		t.Fatalf("after the retry %s", got)
+	}
+}
+
+func TestInstallEgressCAFailedRestore(t *testing.T) {
+	dir := t.TempDir()
+	pub, ca1, ca2 := newTestCA(t, "public"), newTestCA(t, "egress one"), newTestCA(t, "egress two")
+	p := CAPaths{Anchor: filepath.Join(dir, "anchor.crt"), Bundle: filepath.Join(dir, "bundle.crt")}
+	if err := os.WriteFile(p.Bundle, pub.PEM, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		writeFile = writeFileAtomic
+		caBroken = nil
+	})
+	bundleWrites := 0
+	writeFile = func(name string, data []byte, mode os.FileMode) error {
+		if name == p.Bundle {
+			bundleWrites++
+			if bundleWrites == 1 {
+				return writeFileAtomic(name, data, mode)
+			}
+		}
+		return errors.New("no space left on device")
+	}
+	if err := InstallEgressCA(p, ca1.PEM); err == nil || !strings.Contains(err.Error(), "inconsistent") {
+		t.Fatalf("failed restore: %v", err)
+	}
+	// The bundle holds a CA that no anchor names: later installs refuse.
+	writeFile = writeFileAtomic
+	if err := InstallEgressCA(p, ca2.PEM); err == nil || !strings.Contains(err.Error(), "inconsistent") {
+		t.Fatalf("install after a failed restore: %v", err)
 	}
 }
