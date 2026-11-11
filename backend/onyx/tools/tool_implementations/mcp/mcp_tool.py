@@ -133,7 +133,7 @@ class MCPTool(Tool):
         )
 
         self._mcp_tool_name = tool_name
-        self._name = tool_name  # NOTE: this may change in _disambiguate_mcp_tool_names
+        self._name = tool_name  # Qualified with the server name on collisions.
         self._tool_definition = tool_definition
         self._output_schema = output_schema
         self._description = tool_description

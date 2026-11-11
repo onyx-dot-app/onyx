@@ -140,6 +140,12 @@ class CustomTool(Tool):
     def tool_definition(self) -> ToolDefinition:
         return self._tool_definition
 
+    def use_disambiguated_name(self) -> None:
+        self._name = f"custom_{self._id}_{self._method_spec.name}"
+        self._tool_definition = self._tool_definition.model_copy(
+            update={"name": self._name}
+        )
+
     def _save_and_get_file_references(
         self, file_content: bytes | str, content_type: str
     ) -> List[str]:

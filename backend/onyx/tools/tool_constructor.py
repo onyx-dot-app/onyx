@@ -43,6 +43,7 @@ from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
     CodingAgentTool,
 )
 from onyx.tools.tool_implementations.custom.custom_tool import (
+    CustomTool,
     build_custom_tools_from_openapi_schema_and_headers,
 )
 from onyx.tools.tool_implementations.file_reader.file_reader_tool import FileReaderTool
@@ -61,10 +62,10 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-def _disambiguate_mcp_tool_names(tools: list[Tool]) -> None:
+def disambiguate_tool_names(tools: list[Tool]) -> None:
     tool_name_counts = Counter(tool.name for tool in tools)
     for tool in tools:
-        if isinstance(tool, MCPTool) and tool_name_counts[tool.name] > 1:
+        if isinstance(tool, (MCPTool, CustomTool)) and tool_name_counts[tool.name] > 1:
             tool.use_disambiguated_name()
 
 
@@ -575,6 +576,6 @@ def _construct_tools_impl(
     tools: list[Tool] = []
     for tool_list in tool_dict.values():
         tools.extend(tool_list)
-    _disambiguate_mcp_tool_names(tools)
+    disambiguate_tool_names(tools)
 
     return tool_dict
