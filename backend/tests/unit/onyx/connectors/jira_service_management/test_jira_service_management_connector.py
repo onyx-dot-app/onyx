@@ -10,7 +10,12 @@ import pytest
 from pydantic import ValidationError
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+    UnexpectedValidationError,
+)
 from onyx.connectors.jira.models import JiraIssueIdPage
 from onyx.connectors.jira.source_operations import JiraApiError, JiraSourceOperations
 from onyx.connectors.jira_service_management.config import (
@@ -177,6 +182,13 @@ def test_config_uppercases_a_project_key_and_rejects_jql_order_by() -> None:
         JiraServiceManagementConnectorConfig.model_validate(
             {"jira_base_url": _BASE_URL, "project_key": "bad key"}
         )
+    with pytest.raises(ValidationError, match="ORDER BY"):
+        JiraServiceManagementConnectorConfig.model_validate(
+            {
+                "jira_base_url": _BASE_URL,
+                "jql_query": "summary ~ vpn ORDER BY created",
+            }
+        )
 
 
 def test_cloud_poll_scopes_to_service_desk_projects() -> None:
@@ -244,6 +256,45 @@ def test_cloud_validation_without_a_project_runs_the_service_desk_query() -> Non
     jql = gateway.search_issue_ids.call_args.kwargs["jql"]
     assert "projectType = service_desk" in jql
     assert "project =" not in jql
+
+
+@pytest.mark.parametrize(
+    ("status_code", "error_type"),
+    [
+        (401, CredentialExpiredError),
+        (403, InsufficientPermissionsError),
+    ],
+)
+def test_server_validation_translates_a_credential_error(
+    status_code: int,
+    error_type: type[ConnectorValidationError],
+) -> None:
+    gateway = _gateway(cloud=False)
+    gateway.list_projects.side_effect = JiraApiError(
+        "denied", status_code=status_code, body="no"
+    )
+    connector = _connector(gateway, project_key=None)
+
+    with pytest.raises(error_type):
+        connector.validate_connector_settings()
+
+
+def test_server_validation_reports_an_unexpected_project_list_error() -> None:
+    gateway = _gateway(cloud=False)
+    gateway.list_projects.side_effect = RuntimeError("boom")
+    connector = _connector(gateway, project_key=None)
+
+    with pytest.raises(UnexpectedValidationError):
+        connector.validate_connector_settings()
+
+
+def test_server_validation_rejects_no_visible_service_desk() -> None:
+    gateway = _gateway(cloud=False)
+    gateway.list_projects.return_value = [{"key": "SOFT", "projectTypeKey": "software"}]
+    connector = _connector(gateway, project_key=None)
+
+    with pytest.raises(ConnectorValidationError, match="No Jira Service Management"):
+        connector.validate_connector_settings()
 
 
 def test_validation_accepts_a_service_desk_project() -> None:
@@ -329,6 +380,50 @@ def test_truncated_comments_are_paged() -> None:
     )
 
 
+def test_short_comment_pages_continue_until_total() -> None:
+    gateway = _gateway(cloud=False)
+    gateway.list_projects.return_value = [
+        {"key": "IT", "projectTypeKey": "service_desk"}
+    ]
+    gateway.search_issues.return_value = [
+        _issue(
+            comment={
+                "total": 3,
+                "comments": [
+                    {"author": {"emailAddress": "ada@example.com"}, "body": "First."}
+                ],
+            }
+        )
+    ]
+
+    def page(*, issue_key: str, start_at: int, max_results: int) -> dict[str, Any]:
+        assert issue_key == "IT-1"
+        assert max_results == 100
+        pages = {
+            0: [{"author": {"emailAddress": "ada@example.com"}, "body": "First."}],
+            1: [
+                {
+                    "author": {"emailAddress": "agent@example.com"},
+                    "body": "Second.",
+                    "jsdPublic": False,
+                }
+            ],
+            2: [{"author": {"emailAddress": "sam@example.com"}, "body": "Third."}],
+        }
+        return {"total": 3, "comments": pages[start_at]}
+
+    gateway.list_issue_comments.side_effect = page
+    connector = _connector(gateway)
+
+    section_text = _documents(connector)[0].sections[0].text
+    assert isinstance(section_text, str)
+
+    assert "Comment: First." in section_text
+    assert "Comment (internal): Second." in section_text
+    assert "Comment: Third." in section_text
+    assert gateway.list_issue_comments.call_count == 3
+
+
 def test_comment_page_failure_keeps_the_embedded_comments() -> None:
     gateway = _gateway(cloud=False)
     gateway.list_projects.return_value = [
@@ -385,3 +480,34 @@ def test_auth_failure_on_comments_fails_that_request() -> None:
     assert isinstance(items[0], ConnectorFailure)
     assert items[0].failed_document is not None
     assert items[0].failed_document.document_id == f"{_BASE_URL}/browse/IT-1"
+
+
+def test_malformed_field_catalog_leaves_the_request_indexed() -> None:
+    gateway = _gateway(cloud=False)
+    gateway.list_projects.return_value = [
+        {"key": "IT", "projectTypeKey": "service_desk"}
+    ]
+    gateway.list_fields.side_effect = RuntimeError("Jira fields response is not a list")
+    gateway.search_issues.return_value = [_service_desk_issue()]
+    connector = _connector(gateway)
+
+    documents = _documents(connector)
+
+    assert len(documents) == 1
+    assert documents[0].id == f"{_BASE_URL}/browse/IT-1"
+    assert "request_type" not in documents[0].metadata
+
+
+def test_auth_failure_on_the_field_catalog_fails_the_run() -> None:
+    gateway = _gateway(cloud=False)
+    gateway.list_projects.return_value = [
+        {"key": "IT", "projectTypeKey": "service_desk"}
+    ]
+    gateway.list_fields.side_effect = JiraApiError(
+        "expired", status_code=401, body="unauthorized"
+    )
+    gateway.search_issues.return_value = [_service_desk_issue()]
+    connector = _connector(gateway)
+
+    with pytest.raises(JiraApiError):
+        _documents(connector)

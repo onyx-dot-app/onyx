@@ -225,12 +225,15 @@ class JiraServiceManagementConnector(JiraConnector):
             )
             self._field_catalog = {}
             return self._field_catalog
-        if not isinstance(fields, list):
+        except RuntimeError as error:
+            # list_fields raises this for a payload that is not a list of
+            # objects. The catalog only adds metadata, so the index continues.
+            logger.warning(
+                "Jira Service Management field catalog is malformed: %s", error
+            )
             self._field_catalog = {}
             return self._field_catalog
-        self._field_catalog = field_custom_by_id(
-            [field for field in fields if isinstance(field, dict)]
-        )
+        self._field_catalog = field_custom_by_id(fields)
         return self._field_catalog
 
     def _embedded_comments(
@@ -280,6 +283,8 @@ class JiraServiceManagementConnector(JiraConnector):
             return None
         comments: list[dict[str, Any]] = []
         start_at = 0
+        # A short page is not the end. Jira can cap the page below the
+        # requested size while ``total`` still has more comments.
         while start_at < total:
             page = self._fetch_comment_page(issue_key, start_at)
             if page is None:
@@ -292,8 +297,6 @@ class JiraServiceManagementConnector(JiraConnector):
             page_total = page.get("total")
             if isinstance(page_total, int):
                 total = page_total
-            if len(batch) < _COMMENT_PAGE_SIZE:
-                break
         return comments
 
     def _issue_comments(self, issue: JiraIssue) -> list[dict[str, Any]]:
@@ -373,7 +376,12 @@ class JiraServiceManagementConnector(JiraConnector):
             # fails here, before the first index.
             self._validate_jql()
             return
-        if not self._service_desk_project_keys():
+        try:
+            keys = self._service_desk_project_keys()
+        except Exception as error:
+            self._handle_jira_connector_settings_error(error)
+            raise
+        if not keys:
             raise ConnectorValidationError(_NO_SERVICE_DESK_ERROR)
 
     @override
