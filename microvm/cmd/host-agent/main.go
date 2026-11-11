@@ -272,14 +272,14 @@ func run(f flags, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	if err := startDrainWatch(ctx, f, m, log); err != nil {
-		return err
-	}
 	obs, err := newObservability(f.obs, m, lay, hostinfo.Stats{DataDir: f.dataDir}, log)
 	if err != nil {
 		return err
 	}
 	push.start(ctx, obs.metrics)
+	if err := startDrainWatch(ctx, f, m, log); err != nil {
+		return err
+	}
 	t0 := time.Now()
 	rep, err := m.Recover(context.Background(), launcher)
 	if err != nil {
