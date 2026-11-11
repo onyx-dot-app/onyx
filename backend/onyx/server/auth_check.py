@@ -102,6 +102,8 @@ PUBLIC_ENDPOINT_SPECS = [
     ("/metrics", {"GET"}),  # added by prometheus_fastapi_instrumentator
     # Firecracker host agents; the handler checks the shared cluster credential.
     ("/microvm/node/signing-key", {"PUT"}),
+    # Firecracker host agents; the handler checks a JWT from the node's key.
+    ("/microvm/node/state", {"POST"}),
     # craft webapp proxy — access enforced per-session via sharing_scope in handler
     ("/build/sessions/{session_id}/webapp", {"GET"}),
     ("/build/sessions/{session_id}/webapp/{path:path}", {"GET"}),

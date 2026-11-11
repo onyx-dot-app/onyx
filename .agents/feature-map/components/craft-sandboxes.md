@@ -211,6 +211,44 @@ sandbox it re-mints only when `has_active_craft_pat` is false, for example
 after a password change revoked it ([[auth-and-identity]]). The proxy reads
 the stored token on each request, so a new token takes effect at once.
 
+**Firecracker runtime (in progress, `SANDBOX_RUNTIME=firecracker` only).**
+`backend/onyx/microvm/` is the api_server side of the micro-VM runtime:
+- `backend/onyx/microvm/agent_client.py`: a typed mTLS client for the host
+  agent (stubs in `backend/onyx/microvm/generated/`).
+- `backend/onyx/microvm/daemon_client.py`: the guest daemon client, through
+  the agent pass-through. Every call but Health sends `x-sandboxd-key`.
+- `backend/onyx/microvm/placement.py`: one VM per sandbox, best of K nodes on
+  free memory, `SANDBOX_CAPACITY_UNAVAILABLE` with the reason. Wake is an
+  idempotent ensure: it reads the durable placement record and asks that
+  node's agent whether the VM runs. Before Create it takes the sandbox's
+  reservation (attempt, node) atomically; a Create with no known outcome
+  keeps the reservation on its node. Each attempt gets a random daemon key,
+  stored encrypted in the tenant cache before Create. A rejected or lost key,
+  an exited VM, or a dead node creates the next attempt; the caller must
+  store the returned attempt. A node is dead when its registration expired
+  or its last state report is older than
+  `SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS` (60 s).
+- `backend/onyx/microvm/registry.py`: placement records, reservations and
+  daemon keys have no TTL. Record writes are fenced on (attempt, generation)
+  with `CacheBackend.replace_if_value` / `delete_if_value`. Redis must use a
+  `volatile-*` or `noeviction` policy (the chart's bundled Redis uses
+  `allkeys-lru`), or use the Postgres cache backend.
+- `backend/onyx/microvm/lifecycle.py`: wake, Init, activity, the idle evictor
+  (decides, and stops only after a saved checkpoint).
+- `backend/onyx/microvm/reconcile.py`: the per-node reconcile pass, driven by
+  pushed node reports. Each agent pushes its VMs and recently ended VMs to
+  `POST /microvm/node/state`, signed with its registered key
+  (`backend/onyx/microvm/node_report.py`), and the api_server reconciles that
+  node under a per-node lease: it clears records of ended VMs, and adopts a
+  VM that a reservation names once its daemon holds the attempt's key. It
+  stops a VM of an older attempt on that report, and an unknown VM only
+  after `SANDBOX_FC_ORPHAN_GRACE_SECONDS` (no checkpoint). A record that no
+  reported VM names is cleared after a fresh `List` under the sandbox lock.
+  See `microvm/README.md`, "Sandbox state model".
+
+Agents become reachable when their signing-key registration carries
+`agent_address`. No sandbox manager uses this code yet (ENG-4575).
+
 ---
 
 ## Contracts and traps

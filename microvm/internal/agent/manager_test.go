@@ -87,6 +87,8 @@ func (f *fakeLauncher) count() int {
 type fakeStats struct {
 	availMiB uint64
 	freeDisk uint64
+	memErr   error
+	diskErr  error
 	// onDisk runs once, inside the next admission check (the disk check
 	// runs before the Manager takes its lock).
 	onDisk func()
@@ -98,14 +100,14 @@ func (s *fakeStats) MemInfo() (uint64, uint64, error) {
 	if s.onMem != nil {
 		s.onMem()
 	}
-	return 64 << 10, s.availMiB, nil
+	return 64 << 10, s.availMiB, s.memErr
 }
 func (s *fakeStats) DiskFreeBytes() (uint64, error) {
 	if h := s.onDisk; h != nil {
 		s.onDisk = nil
 		h()
 	}
-	return s.freeDisk, nil
+	return s.freeDisk, s.diskErr
 }
 
 const (
@@ -138,6 +140,7 @@ func newFixture(t *testing.T, uidCount uint32) *fixture {
 	m := NewManager(Config{
 		MinFreeMemMiB: 2048, MinFreeDiskBytes: 10 << 30, MaxScratchGiB: 64,
 		StartTimeout: 5 * time.Second, StopTimeout: 5 * time.Second, TombstoneTTL: time.Hour,
+		EndedRetention: DefaultEndedRetention,
 	}, &template.Store{Dir: dir}, l, stats, uids, Versions{Firecracker: "v1.17.0"},
 		slog.New(slog.NewTextHandler(io.Discard, nil)))
 	return &fixture{m: m, l: l, stats: stats, uids: uids}
@@ -447,9 +450,24 @@ func TestLaunchThatLeftAVMKeepsItsUID(t *testing.T) {
 	f := newFixture(t, 2)
 	f.l.fail = fmt.Errorf("pidfd_open: too many open files (cleanup: scope busy): %w", ErrVMLeft)
 	_, _, err := f.m.Create(context.Background(), req(sb1, 1))
-	wantReason(t, err, pb.ErrorReason_VMM_FAILED)
+	wantReason(t, err, pb.ErrorReason_SANDBOX_IN_DOUBT)
 	if f.uids.InUse() != 1 || len(f.m.List()) != 0 {
 		t.Fatalf("uids in use %d (want 1), vms %d", f.uids.InUse(), len(f.m.List()))
+	}
+}
+
+func TestUnreadableNodeStatsRefuseCreate(t *testing.T) {
+	f := newFixture(t, 2)
+	ctx := context.Background()
+	f.stats.memErr = errors.New("no /proc/meminfo")
+	_, _, err := f.m.Create(ctx, req(sb1, 1))
+	wantReason(t, err, pb.ErrorReason_CAPACITY_MEMORY)
+	f.stats.memErr = nil
+	f.stats.diskErr = errors.New("statfs failed")
+	_, _, err = f.m.Create(ctx, req(sb1, 1))
+	wantReason(t, err, pb.ErrorReason_CAPACITY_DISK)
+	if f.l.count() != 0 || f.uids.InUse() != 0 {
+		t.Fatalf("launches %d, uids %d", f.l.count(), f.uids.InUse())
 	}
 }
 
