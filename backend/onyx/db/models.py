@@ -2819,6 +2819,19 @@ class IndexAttempt(Base):
     total_failures_batch_level: Mapped[int] = mapped_column(Integer, default=0)
     total_chunks: Mapped[int] = mapped_column(Integer, default=0)
 
+    # Conversion stage counters. Stub batch numbers are dense from 0:
+    # [0, stored) exist, [0, sent) went to conversion, and `converted` of
+    # them became document batches.
+    stub_batches_stored: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0"
+    )
+    stub_batches_sent: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0"
+    )
+    stub_batches_converted: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0"
+    )
+
     # Progress tracking for stall detection
     last_progress_time: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
