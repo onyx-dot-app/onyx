@@ -639,6 +639,18 @@ class TenantRedisClient:
             int, self._r.zremrangebyscore(_prefix_key(self._prefix, name), min, max)
         )
 
+    def zrem(self, name: KeyArg, *values: str | bytes) -> int:
+        """Removes members from a tenant-prefixed sorted-set key.
+
+        Args:
+            name: The (unprefixed) sorted-set key.
+            values: The members to remove.
+
+        Returns:
+            The number of members removed.
+        """
+        return cast(int, self._r.zrem(_prefix_key(self._prefix, name), *values))
+
     def zscore(self, name: KeyArg, value: str | bytes) -> float | None:
         """Returns the score of a member of a tenant-prefixed sorted-set key.
 
