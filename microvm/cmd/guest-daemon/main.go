@@ -67,6 +67,7 @@ func main() {
 	flag.Int64Var(&fc.Limits.StoredBytes, "capture-max-stored-bytes", files.DefaultLimits.StoredBytes, "largest session archive (zstd bytes)")
 	flag.Int64Var(&fc.Limits.ExpandedBytes, "capture-max-expanded-bytes", files.DefaultLimits.ExpandedBytes, "largest total file size of a session archive")
 	flag.Int64Var(&fc.Limits.Entries, "capture-max-entries", files.DefaultLimits.Entries, "most files and directories in a session archive")
+	dialConns := flag.Int("dial-max-conns", guestd.DefaultForwardConns, "most live connections per forwarded dial port; more are reset at once")
 	zlevel := flag.String("capture-zstd-level", "fastest", "zstd level of CaptureSession: fastest, default, better or best")
 	flag.Parse()
 	var ok bool
@@ -127,12 +128,21 @@ func main() {
 			Devices: map[pb.ManagedSlot]string{pb.ManagedSlot_MANAGED_SLOT_A: *managedA, pb.ManagedSlot_MANAGED_SLOT_B: *managedB},
 		}
 	}
+	if *dialConns <= 0 {
+		fmt.Fprintln(os.Stderr, "--dial-max-conns must be at least 1")
+		os.Exit(2)
+	}
+	// The SetKey dial ports are vsock listeners, so the unix test mode has none.
+	var fwd *guestd.Forwards
+	if *listen == "" {
+		fwd = &guestd.Forwards{Listen: vsock.Listen, Reserved: uint32(*port), MaxConns: *dialConns, Log: log}
+	}
 	fstore, err := files.New(fc)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
 	}
-	if err := run(log, sys, managed, reclaimer, fstore, *port, *listen, *cgroupRoot, *stateFile, *growMounts, execs.Config{
+	if err := run(log, sys, managed, reclaimer, fstore, fwd, *port, *listen, *cgroupRoot, *stateFile, *growMounts, execs.Config{
 		DefaultDeadline: *defDeadline, MaxDeadline: *maxDeadline, OutputBytes: *outBytes, OutputBudget: *outBudget, MaxRunning: *maxRunning, Log: log,
 	}); err != nil {
 		log.Error("guest-daemon failed", "err", err)
@@ -151,7 +161,7 @@ func splitList(s string) []string {
 	return out
 }
 
-func run(log *slog.Logger, sys guestd.System, managed *guestd.ManagedConfig, reclaimer *guestd.Reclaimer, fstore *files.Store, port uint, listen, cgroupRoot, stateFile, growMounts string, ecfg execs.Config) error {
+func run(log *slog.Logger, sys guestd.System, managed *guestd.ManagedConfig, reclaimer *guestd.Reclaimer, fstore *files.Store, fwd *guestd.Forwards, port uint, listen, cgroupRoot, stateFile, growMounts string, ecfg execs.Config) error {
 	if cgroupRoot != "" {
 		if err := sysops.EnsureCgroup2(filepath.Dir(cgroupRoot)); err != nil {
 			return fmt.Errorf("mount cgroup2: %w", err)
@@ -186,7 +196,7 @@ func run(log *slog.Logger, sys guestd.System, managed *guestd.ManagedConfig, rec
 	}
 	srv, err := guestd.NewServer(guestd.Config{
 		Version: version, GrowMounts: mounts, StateFile: stateFile, BaseEnv: base, Managed: managed,
-		Reclaimer: reclaimer, Files: fstore, Log: log,
+		Reclaimer: reclaimer, Files: fstore, Forwards: fwd, Log: log,
 	}, sys, m)
 	if err != nil {
 		return err

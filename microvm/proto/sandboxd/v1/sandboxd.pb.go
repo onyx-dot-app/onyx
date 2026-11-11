@@ -466,7 +466,9 @@ type HealthResponse struct {
 	// Time since the daemon process started.
 	Uptime *durationpb.Duration `protobuf:"bytes,8,opt,name=uptime,proto3" json:"uptime,omitempty"`
 	// True after SetKey.
-	KeySet        bool `protobuf:"varint,9,opt,name=key_set,json=keySet,proto3" json:"key_set,omitempty"`
+	KeySet bool `protobuf:"varint,9,opt,name=key_set,json=keySet,proto3" json:"key_set,omitempty"`
+	// Guest ports that the daemon forwards from vsock to 127.0.0.1.
+	DialPorts     []uint32 `protobuf:"varint,10,rep,packed,name=dial_ports,json=dialPorts,proto3" json:"dial_ports,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -564,6 +566,13 @@ func (x *HealthResponse) GetKeySet() bool {
 	return false
 }
 
+func (x *HealthResponse) GetDialPorts() []uint32 {
+	if x != nil {
+		return x.DialPorts
+	}
+	return nil
+}
+
 type SetKeyRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Per-VM key, 32 to 512 bytes of printable ASCII with no spaces (0x21 to
@@ -576,7 +585,14 @@ type SetKeyRequest struct {
 	// got (also on a repeat call with the same key) and installs it at Init,
 	// after attach, into the guest trust stores. This replaces any CA that an
 	// earlier Init installed.
-	EgressCaPem   []byte `protobuf:"bytes,2,opt,name=egress_ca_pem,json=egressCaPem,proto3" json:"egress_ca_pem,omitempty"`
+	EgressCaPem []byte `protobuf:"bytes,2,opt,name=egress_ca_pem,json=egressCaPem,proto3" json:"egress_ca_pem,omitempty"`
+	// Guest ports that the node agent's Dial allows (its --dial-ports). For
+	// each port the daemon forwards vsock <port> to TCP 127.0.0.1:<port> in the
+	// guest. Ports are 1 to 65535, at most 64, never the daemon port. Empty:
+	// keep the last list, or 3010 if there is none. A new list replaces the
+	// last one, also on a repeat call with the same key. If a port cannot
+	// listen, the call fails with INTERNAL; a repeat call tries it again.
+	DialPorts     []uint32 `protobuf:"varint,3,rep,packed,name=dial_ports,json=dialPorts,proto3" json:"dial_ports,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -625,10 +641,19 @@ func (x *SetKeyRequest) GetEgressCaPem() []byte {
 	return nil
 }
 
+func (x *SetKeyRequest) GetDialPorts() []uint32 {
+	if x != nil {
+		return x.DialPorts
+	}
+	return nil
+}
+
 type SetKeyResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// True if the daemon already had this key.
-	AlreadySet    bool `protobuf:"varint,1,opt,name=already_set,json=alreadySet,proto3" json:"already_set,omitempty"`
+	AlreadySet bool `protobuf:"varint,1,opt,name=already_set,json=alreadySet,proto3" json:"already_set,omitempty"`
+	// Ports that the daemon forwards after this call.
+	DialPorts     []uint32 `protobuf:"varint,2,rep,packed,name=dial_ports,json=dialPorts,proto3" json:"dial_ports,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -668,6 +693,13 @@ func (x *SetKeyResponse) GetAlreadySet() bool {
 		return x.AlreadySet
 	}
 	return false
+}
+
+func (x *SetKeyResponse) GetDialPorts() []uint32 {
+	if x != nil {
+		return x.DialPorts
+	}
+	return nil
 }
 
 type InitRequest struct {
@@ -4349,7 +4381,7 @@ var File_sandboxd_v1_sandboxd_proto protoreflect.FileDescriptor
 const file_sandboxd_v1_sandboxd_proto_rawDesc = "" +
 	"\n" +
 	"\x1asandboxd/v1/sandboxd.proto\x12\x11craft.sandboxd.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x0f\n" +
-	"\rHealthRequest\"\x84\x03\n" +
+	"\rHealthRequest\"\xa3\x03\n" +
 	"\x0eHealthResponse\x12 \n" +
 	"\vinitialized\x18\x01 \x01(\bR\vinitialized\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x129\n" +
@@ -4363,13 +4395,20 @@ const file_sandboxd_v1_sandboxd_proto_rawDesc = "" +
 	"\x12running_executions\x18\x06 \x01(\rR\x11runningExecutions\x12A\n" +
 	"\x0einitialized_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\rinitializedAt\x121\n" +
 	"\x06uptime\x18\b \x01(\v2\x19.google.protobuf.DurationR\x06uptime\x12\x17\n" +
-	"\akey_set\x18\t \x01(\bR\x06keySet\"E\n" +
+	"\akey_set\x18\t \x01(\bR\x06keySet\x12\x1d\n" +
+	"\n" +
+	"dial_ports\x18\n" +
+	" \x03(\rR\tdialPorts\"d\n" +
 	"\rSetKeyRequest\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\"\n" +
-	"\regress_ca_pem\x18\x02 \x01(\fR\vegressCaPem\"1\n" +
+	"\regress_ca_pem\x18\x02 \x01(\fR\vegressCaPem\x12\x1d\n" +
+	"\n" +
+	"dial_ports\x18\x03 \x03(\rR\tdialPorts\"P\n" +
 	"\x0eSetKeyResponse\x12\x1f\n" +
 	"\valready_set\x18\x01 \x01(\bR\n" +
-	"alreadySet\"\xe3\x02\n" +
+	"alreadySet\x12\x1d\n" +
+	"\n" +
+	"dial_ports\x18\x02 \x03(\rR\tdialPorts\"\xe3\x02\n" +
 	"\vInitRequest\x127\n" +
 	"\thost_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\bhostTime\x12\x18\n" +
 	"\aentropy\x18\x02 \x01(\fR\aentropy\x129\n" +

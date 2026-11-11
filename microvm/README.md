@@ -17,7 +17,7 @@ Nothing deploys the agent yet. The Helm DaemonSet (ENG-4583) adds it behind `SAN
 
 | Call | What it does |
 |---|---|
-| `Create(sandbox_id, attempt, template, vcpus, mem_mib, scratch_gib, tenant_id, sandboxd_key)` | Restores a VM from a template snapshot and returns it with its `generation`. With `sandboxd_key`, it installs that key in the guest daemon (`SetKey` over vsock, up to 10 s) before it returns a running VM (see Guest daemon pass-through). `SetKey` also carries the deployment egress CA (see Root drive input); without a readable CA, Create fails with `EGRESS_CA_UNAVAILABLE` before any VM starts. A repeat call with the same `(sandbox_id, attempt)` returns the existing VM. A different attempt for a sandbox with a VM on the node returns `ATTEMPT_CONFLICT`. An attempt that is not newer than a stopped one returns `STALE_ATTEMPT`. |
+| `Create(sandbox_id, attempt, template, vcpus, mem_mib, scratch_gib, tenant_id, sandboxd_key)` | Restores a VM from a template snapshot and returns it with its `generation`. With `sandboxd_key`, it installs that key in the guest daemon (`SetKey` over vsock, up to 10 s) before it returns a running VM (see Guest daemon pass-through). `SetKey` also carries the deployment egress CA (see Root drive input) and the `--dial-ports` list, so the guest daemon forwards exactly the ports that `Dial` allows; without a readable CA, Create fails with `EGRESS_CA_UNAVAILABLE` before any VM starts. A repeat call with the same `(sandbox_id, attempt)` returns the existing VM. A different attempt for a sandbox with a VM on the node returns `ATTEMPT_CONFLICT`. An attempt that is not newer than a stopped one returns `STALE_ATTEMPT`. |
 | `Stop(sandbox_id, attempt, generation)` | Stops the VM only if all three match. A repeat Stop of the same instance succeeds with `already_stopped`. |
 | `CloseConnections(sandbox_id, attempt, generation)` | Closes every relay connection of the VM. New connections still work. Stop and VM exit also close them. |
 | `List()` | Every VM that the agent knows about, with its state (`STARTING`, `RUNNING`, `EXITED`). |
@@ -77,7 +77,9 @@ with `--listen`, on an mTLS TCP listener for the api_server (D2):
 running VM, for example the app preview (3010). Only the ports in `--dial-ports` (default `3010`) are
 allowed (`PORT_NOT_ALLOWED`). Dial always refuses the guest daemon port (`--daemon-port`) with
 `PORT_NOT_ALLOWED`, also if `--dial-ports` names it: use the pass-through. The agent does not start with
-an empty `--dial-ports`. If nothing in the VM accepts the connection, the call fails with
+an empty `--dial-ports`, with a port above 65535, or with no port or more than 64 ports besides `--daemon-port`. Create sends the list (without `--daemon-port`) to the
+guest daemon with `SetKey`, and the daemon forwards each port to TCP `127.0.0.1:<port>` in the guest. So
+the guest listens on no other port, and a VM made without `sandboxd_key` forwards no port. If nothing in the VM accepts the connection, the call fails with
 `GUEST_UNREACHABLE`. A `generation` other than 0 must match the running VM, else the call fails with
 `INSTANCE_MISMATCH`. A VM that is starting, stopping or exited fails with `VM_NOT_RUNNING`. One VM can
 have at most `--dial-max-streams` open Dial streams (default 64); more fail with `DIAL_LIMIT`
@@ -689,6 +691,9 @@ KVM_TB_ROOTFS=/opt/tb/rootfs-out KVM_TB_CA=/opt/tb/ca/ca.crt ./hostagent-kvm.tes
 # build without --ca) installs into <data-dir>/rootfs, the agent builds a template, and VMs trust only the
 # --egress-ca of their agent (a MITM proxy as --egress-proxy). A second CA keeps the same template.
 KVM_RD_IMAGE=craft-fc-rootfs:dev KVM_RD_DIR=/opt/rd/work ./hostagent-kvm.test -test.v -test.run TestRootfsDeliveryKVM
+# Preview Dial: same inputs; the agent's --dial-ports 3010,3011 reach a sandbox user web server through the
+# guest daemon forward, other ports are refused. KVM_DAEMON_VERSION (optional) is the version the daemon must report.
+KVM_RD_IMAGE=craft-fc-rootfs:dev KVM_RD_DIR=/opt/rd/work ./hostagent-kvm.test -test.v -test.run TestPreviewDialKVM
 # Managed drive swap (ENG-4614): same inputs; KVM_VMS running VMs, a reader in each VM holding files on the
 # managed drive, swaps of every VM, guest checks (content, old reader, noexec, no rw remount, no restart).
 KVM_TB_ROOTFS=/opt/tb/rootfs-out KVM_TB_CA=/opt/tb/ca/ca.crt ./hostagent-kvm.test -test.v -test.run TestManagedSwapKVM

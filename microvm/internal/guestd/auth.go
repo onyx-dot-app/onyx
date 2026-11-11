@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"fmt"
+	"slices"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -58,7 +59,8 @@ func validateKey(key string) error {
 }
 
 // SetKey implements pb.SandboxdServer. The first key stays. A call with the
-// right key and an egress CA keeps that CA for the next Init.
+// right key and an egress CA keeps that CA for the next Init. A call with
+// the right key and dial ports replaces the forwarded ports at once.
 func (s *Server) SetKey(_ context.Context, r *pb.SetKeyRequest) (*pb.SetKeyResponse, error) {
 	if err := validateKey(r.GetKey()); err != nil {
 		return nil, apiError(pb.ErrorReason_INVALID_ARGUMENT, "%v", err)
@@ -71,6 +73,14 @@ func (s *Server) SetKey(_ context.Context, r *pb.SetKeyRequest) (*pb.SetKeyRespo
 		}
 		caPEM = ca.PEM
 	}
+	var reserved uint32
+	if s.cfg.Forwards != nil {
+		reserved = s.cfg.Forwards.Reserved
+	}
+	ports, err := validateDialPorts(r.GetDialPorts(), reserved)
+	if err != nil {
+		return nil, apiError(pb.ErrorReason_INVALID_ARGUMENT, "%v", err)
+	}
 	s.initMu.Lock()
 	defer s.initMu.Unlock()
 	s.mu.Lock()
@@ -80,21 +90,37 @@ func (s *Server) SetKey(_ context.Context, r *pb.SetKeyRequest) (*pb.SetKeyRespo
 	if already && subtle.ConstantTimeCompare([]byte(r.GetKey()), []byte(st.Key)) != 1 {
 		return nil, apiError(pb.ErrorReason_KEY_ALREADY_SET, "the daemon already has a different key")
 	}
-	if already && (caPEM == nil || bytes.Equal(caPEM, st.EgressCA)) {
-		return &pb.SetKeyResponse{AlreadySet: true}, nil
+	switch {
+	case len(ports) > 0:
+	case already && len(st.DialPorts) > 0:
+		ports = st.DialPorts
+	default:
+		ports = DefaultDialPorts
 	}
-	st.Key = r.GetKey()
-	if caPEM != nil {
-		st.EgressCA = caPEM
+	if !already || (caPEM != nil && !bytes.Equal(caPEM, st.EgressCA)) || !slices.Equal(ports, st.DialPorts) {
+		st.Key = r.GetKey()
+		if caPEM != nil {
+			st.EgressCA = caPEM
+		}
+		st.DialPorts = ports
+		if err := s.saveState(st); err != nil {
+			return nil, apiError(pb.ErrorReason_INTERNAL, "save state: %v", err)
+		}
+		s.mu.Lock()
+		s.state.Key, s.state.EgressCA, s.state.DialPorts = st.Key, st.EgressCA, st.DialPorts
+		s.mu.Unlock()
+		s.cfg.Log.Info("key set", "already_set", already, "egress_ca", caPEM != nil, "dial_ports", ports)
 	}
-	if err := s.saveState(st); err != nil {
-		return nil, apiError(pb.ErrorReason_INTERNAL, "save state: %v", err)
+	// Also on a repeat call: it opens a port that failed to listen before.
+	// A failure fails the call, so the node agent's Create fails and can
+	// be retried; the key and ports stay saved.
+	var forwarded []uint32
+	if s.cfg.Forwards != nil {
+		if forwarded, err = s.cfg.Forwards.Set(ports); err != nil {
+			return nil, apiError(pb.ErrorReason_INTERNAL, "forward dial ports: %v", err)
+		}
 	}
-	s.mu.Lock()
-	s.state.Key, s.state.EgressCA = st.Key, st.EgressCA
-	s.mu.Unlock()
-	s.cfg.Log.Info("key set", "already_set", already, "egress_ca", caPEM != nil)
-	return &pb.SetKeyResponse{AlreadySet: already}, nil
+	return &pb.SetKeyResponse{AlreadySet: already, DialPorts: forwarded}, nil
 }
 
 // NewGRPCServer returns a gRPC server that serves s, with check applied to

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -76,6 +77,33 @@ type fakeVM struct {
 	// cas are the egress CAs that Init installed.
 	casMu sync.Mutex
 	cas   [][]byte
+	// ports are the guest daemon's forwarded dial ports (Forwards.Listen).
+	portsMu sync.Mutex
+	ports   map[uint32]*chanListener
+}
+
+func (vm *fakeVM) listen(port uint32) (net.Listener, error) {
+	vm.portsMu.Lock()
+	defer vm.portsMu.Unlock()
+	ln := &chanListener{ch: make(chan net.Conn), done: make(chan struct{})}
+	vm.ports[port] = ln
+	return ln, nil
+}
+
+// portListener returns the open forward listener of port, or nil.
+func (vm *fakeVM) portListener(port uint32) *chanListener {
+	vm.portsMu.Lock()
+	defer vm.portsMu.Unlock()
+	ln := vm.ports[port]
+	if ln == nil {
+		return nil
+	}
+	select {
+	case <-ln.done:
+		return nil
+	default:
+		return ln
+	}
 }
 
 func startFakeVM(t *testing.T) *fakeVM {
@@ -101,7 +129,10 @@ func startFakeVMWith(t *testing.T, cfg guestd.Config) *fakeVM {
 	if err != nil {
 		t.Fatal(err)
 	}
-	vm := &fakeVM{uds: sock}
+	vm := &fakeVM{uds: sock, ports: map[uint32]*chanListener{}}
+	if cfg.Forwards != nil && cfg.Forwards.Listen == nil {
+		cfg.Forwards.Listen = vm.listen
+	}
 	nop := guestd.System{
 		SetClock:   func(time.Time) error { return nil },
 		AddEntropy: func([]byte) (bool, error) { return true, nil },
@@ -124,6 +155,9 @@ func startFakeVMWith(t *testing.T, cfg guestd.Config) *fakeVM {
 		_ = os.Remove(sock)
 		gs.Stop()
 		_ = inner.Close()
+		if cfg.Forwards != nil {
+			cfg.Forwards.Close()
+		}
 		m.Shutdown()
 	})
 	go func() {
@@ -135,16 +169,27 @@ func startFakeVMWith(t *testing.T, cfg guestd.Config) *fakeVM {
 			go func(c net.Conn) {
 				br := bufio.NewReader(c)
 				line, err := br.ReadString('\n')
-				if err != nil || strings.TrimSpace(line) != "CONNECT 52" {
+				target := inner
+				if err == nil && strings.TrimSpace(line) != "CONNECT 52" {
+					var port uint32
+					if _, scanErr := fmt.Sscanf(strings.TrimSpace(line), "CONNECT %d", &port); scanErr == nil {
+						target = vm.portListener(port)
+					} else {
+						target = nil
+					}
+				}
+				if err != nil || target == nil {
 					// Firecracker closes the connection when nothing listens.
 					_ = c.Close()
 					return
 				}
-				vm.connects.Add(1)
+				if target == inner {
+					vm.connects.Add(1)
+				}
 				_, _ = io.WriteString(c, "OK 1\n")
 				select {
-				case inner.ch <- &readConn{Conn: c, r: br}:
-				case <-inner.done:
+				case target.ch <- &readConn{Conn: c, r: br}:
+				case <-target.done:
 					_ = c.Close()
 				}
 			}(c)
@@ -276,7 +321,7 @@ func initVM(t *testing.T, a *ptAgent, id string) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := a.pt.InstallKey(ctx, a.vms[id], vmKey, nil); err != nil {
+	if err := a.pt.InstallKey(ctx, a.vms[id], vmKey, nil, nil); err != nil {
 		t.Fatalf("install key %s: %v", id, err)
 	}
 	if _, err := a.daemon().Init(to(ctx, id), &sdpb.InitRequest{

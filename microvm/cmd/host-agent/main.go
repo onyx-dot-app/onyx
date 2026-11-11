@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -29,6 +30,7 @@ import (
 	"github.com/onyx-dot-app/onyx/microvm/internal/binaries"
 	"github.com/onyx-dot-app/onyx/microvm/internal/egressca"
 	"github.com/onyx-dot-app/onyx/microvm/internal/fcvm"
+	"github.com/onyx-dot-app/onyx/microvm/internal/guestd"
 	"github.com/onyx-dot-app/onyx/microvm/internal/hostinfo"
 	"github.com/onyx-dot-app/onyx/microvm/internal/jailer"
 	"github.com/onyx-dot-app/onyx/microvm/internal/journal"
@@ -286,7 +288,7 @@ func run(f flags, log *slog.Logger) error {
 		"abandoned", rep.Abandoned, "unverified", rep.Unverified, "unreadable", rep.Unreadable,
 		"tombstones", rep.Tombstones, "orphans_killed", rep.Orphans, "leftovers_removed", rep.Leftovers,
 		"ms", time.Since(t0).Milliseconds())
-	ports, err := parsePorts(f.dialPorts)
+	ports, err := parsePorts(f.dialPorts, uint32(f.daemonPort))
 	if err != nil {
 		return err
 	}
@@ -423,22 +425,35 @@ func egressCASource(f flags) (egressca.Source, error) {
 	return nil, nil
 }
 
-func parsePorts(s string) ([]uint32, error) {
+// parsePorts parses --dial-ports. The guest daemon forwards the list without
+// daemonPort, so that list must not be empty or longer than its SetKey limit.
+func parsePorts(s string, daemonPort uint32) ([]uint32, error) {
 	var out []uint32
+	guest := 0
 	for _, p := range strings.Split(s, ",") {
 		p = strings.TrimSpace(p)
 		if p == "" {
 			continue
 		}
 		n, err := strconv.ParseUint(p, 10, 32)
-		if err != nil || n == 0 {
+		// The guest daemon forwards each port to a TCP port in the guest.
+		if err != nil || n == 0 || n > 65535 {
 			return nil, fmt.Errorf("bad --dial-ports entry %q", p)
 		}
-		out = append(out, uint32(n))
+		if !slices.Contains(out, uint32(n)) {
+			out = append(out, uint32(n))
+			if uint32(n) != daemonPort {
+				guest++
+			}
+		}
 	}
-	if len(out) == 0 {
-		// An empty list would fall back to the default ports.
-		return nil, fmt.Errorf("--dial-ports %q names no port", s)
+	// The guest daemon refuses a longer SetKey list, which would fail every Create.
+	if guest > guestd.MaxDialPorts {
+		return nil, fmt.Errorf("--dial-ports names %d ports; at most %d", guest, guestd.MaxDialPorts)
+	}
+	if guest == 0 {
+		// The guest takes an empty list as "the default ports", which Dial would refuse.
+		return nil, fmt.Errorf("--dial-ports %q names no port other than --daemon-port", s)
 	}
 	return out, nil
 }
