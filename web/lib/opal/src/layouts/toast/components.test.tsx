@@ -3,14 +3,15 @@ import { ToastProvider } from "@opal/layouts/toast/components";
 import { toast } from "@opal/layouts/toast/store";
 
 function renderProvider() {
-  render(
-    <ToastProvider errorAppendix="Contact support.">
+  const { container } = render(
+    <ToastProvider>
       <main />
     </ToastProvider>
   );
+  return () => container.querySelector('[aria-live="polite"]');
 }
 
-describe("ToastProvider announcements", () => {
+describe("ToastProvider live region", () => {
   beforeEach(() => {
     jest.spyOn(console, "info").mockImplementation(() => {});
     jest.spyOn(console, "error").mockImplementation(() => {});
@@ -21,38 +22,22 @@ describe("ToastProvider announcements", () => {
     jest.restoreAllMocks();
   });
 
-  it("keeps empty live regions mounted before any toast", () => {
-    renderProvider();
-    expect(screen.getByRole("status")).toBeEmptyDOMElement();
-    expect(screen.getByRole("alert")).toBeEmptyDOMElement();
+  it("keeps an empty live region mounted before any toast", () => {
+    const region = renderProvider();
+    expect(region()).toBeInTheDocument();
+    expect(region()).toBeEmptyDOMElement();
+    expect(screen.queryByTestId("toast-container")).not.toBeInTheDocument();
   });
 
-  it("announces info politely and errors assertively", () => {
-    renderProvider();
+  it("adds each toast inside the same live region", () => {
+    const region = renderProvider();
+    const before = region();
     act(() => {
-      toast.info("Saved", { description: "Your changes are live." });
+      toast.error("Indexing failed", { description: "Connector timed out." });
     });
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Saved. Your changes are live."
-    );
-    expect(screen.getByRole("alert")).toBeEmptyDOMElement();
-
-    act(() => {
-      toast.error("Indexing failed");
-    });
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "Indexing failed. Contact support."
-    );
-  });
-
-  it("announces a toast again when it is updated in place", () => {
-    renderProvider();
-    act(() => {
-      toast.error("Load failed", { id: "fetch" });
-    });
-    act(() => {
-      toast.error("Load failed again", { id: "fetch" });
-    });
-    expect(screen.getByRole("alert")).toHaveTextContent("Load failed again");
+    expect(region()).toBe(before);
+    expect(region()).toHaveTextContent("Indexing failed");
+    expect(region()).toHaveTextContent("Connector timed out.");
+    expect(screen.getAllByText("Indexing failed")).toHaveLength(1);
   });
 });
