@@ -99,6 +99,7 @@ from onyx.db.enums import (
     IndexingStatus,
     SwitchoverType,
 )
+from onyx.db.hierarchy import remove_unfilled_stub_hierarchy_nodes_for_cc_pair
 from onyx.db.index_attempt import (
     cc_pair_has_dispatched_index_attempts,
     create_index_attempt_error,
@@ -134,6 +135,7 @@ from onyx.file_store.document_batch_storage import (
 from onyx.file_store.staging import cleanup_staged_files_for_attempt
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_docprocessing import RedisDocprocessing
+from onyx.redis.redis_hierarchy import invalidate_hierarchy_cache_for_source
 from onyx.redis.redis_pool import (
     SCAN_ITER_COUNT_DEFAULT,
     get_redis_client,
@@ -527,6 +529,36 @@ def monitor_indexing_attempt_progress(
             logger.exception("Failed to cleanup storage after monitoring failure")
 
 
+def _remove_unfilled_stub_nodes(
+    db_session: Session, cc_pair: ConnectorCredentialPair
+) -> None:
+    """After a successful attempt, a STUB parent that is still not filled
+    will not be filled: its folder is not in the source, or the connector
+    cannot see it. Move what is under it to the source root and remove it,
+    so nothing stays hidden from the tree. A failed or canceled attempt
+    keeps its STUBs, because the next attempt can still fill them."""
+    source = cc_pair.connector.source
+    try:
+        removed = remove_unfilled_stub_hierarchy_nodes_for_cc_pair(
+            db_session, source, cc_pair.connector_id, cc_pair.credential_id
+        )
+        if removed:
+            # Cached parent chains can go through a removed STUB.
+            invalidate_hierarchy_cache_for_source(get_redis_client(), source)
+            logger.info(
+                "Removed %s unfilled STUB hierarchy nodes of cc_pair %s",
+                len(removed),
+                cc_pair.id,
+            )
+    except Exception:
+        # The attempt is complete. A cleanup error must not undo that.
+        db_session.rollback()
+        logger.exception(
+            "Could not remove the unfilled STUB hierarchy nodes of cc_pair %s",
+            cc_pair.id,
+        )
+
+
 def check_indexing_completion(
     index_attempt_id: int,
     coordination_status: CoordinationStatus,
@@ -591,6 +623,9 @@ def check_indexing_completion(
             raise RuntimeError(
                 f"CC pair {attempt.connector_credential_pair_id} not found in database"
             )
+
+        if attempt.status == IndexingStatus.SUCCESS:
+            _remove_unfilled_stub_nodes(db_session, cc_pair)
 
         source = cc_pair.connector.source.value
         connector_name = cc_pair.connector.name or f"cc_pair_{cc_pair.id}"

@@ -6,7 +6,7 @@ from collections.abc import Generator
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import delete
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
@@ -16,8 +16,9 @@ from onyx.db.hierarchy import (
     ensure_source_node_exists,
     get_hierarchy_node_by_raw_id,
     persist_hierarchy_nodes_for_cc_pair,
+    remove_unfilled_stub_hierarchy_nodes_for_cc_pair,
 )
-from onyx.db.models import ConnectorCredentialPair, HierarchyNode
+from onyx.db.models import ConnectorCredentialPair, Document, HierarchyNode
 from onyx.redis.redis_hierarchy import (
     evict_hierarchy_nodes_from_cache,
     get_node_id_from_raw_id,
@@ -27,6 +28,7 @@ from onyx.redis.redis_pool import get_redis_client
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,
     make_cc_pair,
+    seed_cc_pair_documents,
 )
 
 _SOURCE = DocumentSource.MOCK_CONNECTOR
@@ -118,3 +120,145 @@ def test_document_parent_gets_a_stub_that_the_parent_fills(
             )
         )
         db_session.commit()
+
+
+def test_a_successful_attempt_moves_what_is_under_an_unfilled_stub_to_the_root(
+    db_session: Session, pair: ConnectorCredentialPair
+) -> None:
+    """A parent that never arrives: after the cleanup its document and its
+    child node are under the source root, and the STUB is gone. A STUB that
+    its parent filled keeps its children."""
+    redis_client = get_redis_client()
+    tag = uuid4().hex[:8]
+    never_id = f"never_{tag}"
+    filled_id = f"filled_{tag}"
+    child_id = f"child_{tag}"
+    raw_ids = [never_id, filled_id, child_id]
+    source_node = ensure_source_node_exists(db_session, _SOURCE)
+    doc_ids = seed_cc_pair_documents(db_session, pair, 2, prefix=f"stub-{tag}-")
+    try:
+        resolved = resolve_parent_node_ids(
+            redis_client=redis_client,
+            db_session=db_session,
+            source=_SOURCE,
+            source_node_id=source_node.id,
+            raw_parent_ids=[never_id, filled_id],
+            connector_id=pair.connector_id,
+            credential_id=pair.credential_id,
+        )
+        # A folder that names the missing parent, and the parent that arrives.
+        persist_hierarchy_nodes_for_cc_pair(
+            db_session=db_session,
+            nodes=[
+                PydanticHierarchyNode(
+                    raw_node_id=child_id,
+                    raw_parent_id=never_id,
+                    display_name="Child folder",
+                    node_type=HierarchyNodeType.FOLDER,
+                ),
+                PydanticHierarchyNode(
+                    raw_node_id=filled_id,
+                    raw_parent_id=None,
+                    display_name="Arrived",
+                    node_type=HierarchyNodeType.FOLDER,
+                ),
+            ],
+            source=_SOURCE,
+            connector_id=pair.connector_id,
+            credential_id=pair.credential_id,
+        )
+        under_never, under_filled = doc_ids
+        db_session.execute(
+            update(Document)
+            .where(Document.id == under_never)
+            .values(parent_hierarchy_node_id=resolved[never_id])
+        )
+        db_session.execute(
+            update(Document)
+            .where(Document.id == under_filled)
+            .values(parent_hierarchy_node_id=resolved[filled_id])
+        )
+        db_session.commit()
+
+        removed = remove_unfilled_stub_hierarchy_nodes_for_cc_pair(
+            db_session, _SOURCE, pair.connector_id, pair.credential_id
+        )
+
+        assert removed == [never_id]
+        db_session.expire_all()
+        assert get_hierarchy_node_by_raw_id(db_session, never_id, _SOURCE) is None
+        child = get_hierarchy_node_by_raw_id(db_session, child_id, _SOURCE)
+        assert child is not None
+        assert child.parent_id == source_node.id
+        parents = {
+            row[0]: row[1]
+            for row in db_session.execute(
+                select(Document.id, Document.parent_hierarchy_node_id).where(
+                    Document.id.in_(doc_ids)
+                )
+            )
+        }
+        assert parents == {
+            under_never: source_node.id,
+            under_filled: resolved[filled_id],
+        }
+        filled = get_hierarchy_node_by_raw_id(db_session, filled_id, _SOURCE)
+        assert filled is not None
+        assert filled.node_type == HierarchyNodeType.FOLDER
+        # A second run finds nothing to do.
+        assert (
+            remove_unfilled_stub_hierarchy_nodes_for_cc_pair(
+                db_session, _SOURCE, pair.connector_id, pair.credential_id
+            )
+            == []
+        )
+    finally:
+        evict_hierarchy_nodes_from_cache(redis_client, _SOURCE, raw_ids)
+        db_session.rollback()
+        db_session.execute(
+            delete(HierarchyNode).where(
+                HierarchyNode.source == _SOURCE,
+                HierarchyNode.raw_node_id.in_(raw_ids),
+            )
+        )
+        db_session.commit()
+
+
+def test_a_stub_that_another_cc_pair_links_to_stays(
+    db_session: Session, pair: ConnectorCredentialPair
+) -> None:
+    """The other pair's attempt can still fill it."""
+    redis_client = get_redis_client()
+    raw_id = f"shared_{uuid4().hex[:8]}"
+    other = make_cc_pair(db_session, source=_SOURCE)
+    source_node = ensure_source_node_exists(db_session, _SOURCE)
+    try:
+        for cc_pair in (pair, other):
+            resolve_parent_node_ids(
+                redis_client=redis_client,
+                db_session=db_session,
+                source=_SOURCE,
+                source_node_id=source_node.id,
+                raw_parent_ids=[raw_id],
+                connector_id=cc_pair.connector_id,
+                credential_id=cc_pair.credential_id,
+            )
+            evict_hierarchy_nodes_from_cache(redis_client, _SOURCE, [raw_id])
+
+        assert (
+            remove_unfilled_stub_hierarchy_nodes_for_cc_pair(
+                db_session, _SOURCE, pair.connector_id, pair.credential_id
+            )
+            == []
+        )
+        assert get_hierarchy_node_by_raw_id(db_session, raw_id, _SOURCE) is not None
+    finally:
+        evict_hierarchy_nodes_from_cache(redis_client, _SOURCE, [raw_id])
+        db_session.rollback()
+        db_session.execute(
+            delete(HierarchyNode).where(
+                HierarchyNode.source == _SOURCE, HierarchyNode.raw_node_id == raw_id
+            )
+        )
+        db_session.commit()
+        cleanup_cc_pair(db_session, other)
