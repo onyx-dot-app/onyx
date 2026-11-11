@@ -183,8 +183,9 @@ files are removed at once.
 
 If a cleanup fails, the VM shows as `EXITED` once its process is gone, and a repeat Stop retries the
 cleanup. A newer attempt for that sandbox gets `VMM_FAILED` until a Stop succeeds. If a start fails and
-the agent cannot confirm that the Firecracker process is gone, the agent keeps the chroot and does not
-give the jailer UID to another VM.
+the agent cannot confirm that the Firecracker process is gone, Create returns `SANDBOX_IN_DOUBT`, and
+the agent keeps the chroot and does not give the jailer UID to another VM. An unreadable memory or
+disk statistic refuses Create with `CAPACITY_MEMORY` or `CAPACITY_DISK`.
 
 ### Journal and agent restart
 
@@ -254,6 +255,64 @@ A VM has no network card. Its egress goes guest → vsock port 3128 → the agen
 - `CloseConnections(sandbox_id, attempt, generation)` closes every relay connection of the VM (T5 in
   `results/prebuild.md`); new connections still work. Stop and VM exit also close them. After an agent
   restart, the agent attaches the relay to each adopted VM again.
+
+### Node state report
+
+The agent pushes its full VM state to the api_server; the api_server reconciles the node's placement
+records on each report (`backend/onyx/microvm/node_report.py`). The agent pushes reports instead of
+the api_server polling nodes, because Onyx has no scheduler inside the api_server (see Sandbox state
+model).
+Placement does not depend on reports: it asks the agent with `List`.
+
+- After the first successful key registration, and then every `--state-report-interval` (default 20 s,
+  `0` turns it off), the agent sends `POST <--api-server-url>/microvm/node/state` with `node_id`,
+  `vms` and `ended`:
+  - `vms`: one entry per VM of `List` (`sandbox_id`, `tenant_id`, `attempt`, `generation`, `state`,
+    `template`, `vcpus`, `mem_mib`, `scratch_gib`, `pid`, `started_at`).
+  - `ended`: each VM instance that exited (`reason` `EXITED`) or stopped (`STOPPED`) within
+    `--ended-retention` (default 10 min, `0` = none), with `sandbox_id`, `tenant_id`, `attempt`,
+    `generation`, `ended_at`. Every report in that window lists it again, so a missed report changes
+    nothing. The list is in memory only.
+- `Authorization: Bearer <token>`: an EdDSA JWT signed with the registered node key. Header `kid` = the
+  registered key id. Claims `node`, `iat`, `exp` (60 s), `jti` (single use), `aud`
+  (`onyx-api-server-node-report`, never `sandbox-proxy`) and `body_sha256` (hex SHA-256 of the body).
+  The registration secret is not sent.
+- At most 1024 VMs and 1 MiB. A larger report is not sent, because a cut list would make the api_server
+  clear live records. Over 1024 ended entries, the oldest are left out. The api_server applies the same
+  caps.
+- A failed report is logged. The next one waits twice as long, up to 2 min, then the interval again.
+- The api_server answers `409` while the node has no registered `agent_address`: it needs the address to
+  check a VM again before it clears a record.
+- Placement records have no TTL. A record goes away only on Stop, on a discard, or when a report shows
+  that its VM ended or is gone (after a fresh `List` under the sandbox lock). The api_server stops VMs
+  of an older attempt on that report, and VMs that it does not know after a grace period. It adopts a
+  VM that a reservation names only when the guest daemon accepts the attempt's key: Health shows that
+  the guest answers, then a repeat Create installs the key or is rejected when the guest holds another
+  key. Adoptions run after the orphan stops. A pending key install waits 60 s before the next try. A
+  reserved VM whose key is lost or rejected, or whose guest did not answer for 10 min (and fails one
+  more Health), is stopped after the grace period.
+- The api_server records the time of each accepted report. A node counts as dead when its registration
+  expired, or when it reported before but not within `SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS` (default
+  60 s, three intervals; `0` turns this off). Wake then starts the next attempt on a live node.
+
+### Sandbox state model
+
+The agent runs the VMs; the api_server makes sure that each sandbox has at most one VM.
+
+| Rule | Onyx |
+|---|---|
+| Durable record, no TTL | Placement record (node, attempt, generation, last activity) in the tenant cache, no TTL. Only Stop, a discard, or a report that shows the VM ended or gone (after a fresh `List` under the sandbox lock) removes it. |
+| One VM per sandbox: reservation before Create | Reservation (attempt, node), SET NX or compare-and-set, no TTL. A Create with no known outcome keeps it, so the next wake repeats the same Create on the same node. A reservation on a dead node is taken over with the next attempt. |
+| Request-path ensure | Wake (`place_sandbox_vm`) reads the record and asks that node's agent with `List`. A running VM is returned; otherwise wake starts the next attempt. It never waits for a report. |
+| Instance fence | (attempt, generation) fence: `CacheBackend.replace_if_value` / `delete_if_value` (Redis and Postgres). A write for an older instance never replaces a newer record. |
+| Node state push | The agent pushes its list every 20 s (Node state report), because Onyx has no scheduler inside the api_server to poll nodes. |
+| Ended list | The agent lists each exited or stopped VM for `--ended-retention` (10 min). |
+| Orphan stops | The api_server stops a VM of an older attempt at once, and an unknown VM after `SANDBOX_FC_ORPHAN_GRACE_SECONDS` (40 s), at most 8 per report, with no checkpoint. |
+| API-side idle evictor | Idle evictor on the record's last activity (`SANDBOX_FC_IDLE_TIMEOUT_SECONDS`). The stop waits for session saves (ENG-4580). |
+| Dead node | Dead node (registration expired, or no report within `SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS`): records stay; wake starts the next attempt on a live node, and the old VM is an orphan if it reports again. |
+
+Keys without a TTL need a Redis eviction policy that never evicts them (`volatile-*` or `noeviction`), or the
+Postgres cache backend. The chart's bundled Redis uses `allkeys-lru`.
 
 ### Node requirements
 

@@ -277,6 +277,56 @@ class PostgresCacheBackend(CacheBackend):
             session.commit()
         return stored_key is not None
 
+    def replace_if_value(
+        self,
+        key: str,
+        expected: bytes,
+        value: str | bytes | int | float,
+        ex: int | None = None,
+    ) -> bool:
+        from onyx.db.engine.sql_engine import get_session_with_tenant
+
+        now = func.clock_timestamp()
+        stmt = (
+            update(CacheStore)
+            .where(
+                CacheStore.key == key,
+                CacheStore.value == expected,
+                or_(CacheStore.expires_at.is_(None), CacheStore.expires_at > now),
+            )
+            .values(
+                value=_to_bytes(value),
+                expires_at=now + timedelta(seconds=ex) if ex is not None else None,
+            )
+            .returning(CacheStore.key)
+        )
+        with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+            _set_statement_timeout(session, self._statement_timeout_ms)
+            replaced = session.execute(stmt).scalar_one_or_none()
+            session.commit()
+        return replaced is not None
+
+    def delete_if_value(self, key: str, expected: bytes) -> bool:
+        from onyx.db.engine.sql_engine import get_session_with_tenant
+
+        stmt = (
+            delete(CacheStore)
+            .where(
+                CacheStore.key == key,
+                CacheStore.value == expected,
+                or_(
+                    CacheStore.expires_at.is_(None),
+                    CacheStore.expires_at > func.clock_timestamp(),
+                ),
+            )
+            .returning(CacheStore.key)
+        )
+        with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+            _set_statement_timeout(session, self._statement_timeout_ms)
+            deleted = session.execute(stmt).scalar_one_or_none()
+            session.commit()
+        return deleted is not None
+
     def delete(self, key: str) -> None:
         from onyx.db.engine.sql_engine import get_session_with_tenant
 

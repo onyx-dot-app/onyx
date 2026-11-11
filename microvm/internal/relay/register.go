@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -36,6 +37,22 @@ type Registrar struct {
 	Interval time.Duration
 	// Retry is the wait after a failure. Default 10 s.
 	Retry time.Duration
+
+	readyOnce, closeOnce sync.Once
+	ready                chan struct{}
+}
+
+// Registered closes after the first successful registration.
+func (g *Registrar) Registered() <-chan struct{} { return g.readyChan() }
+
+func (g *Registrar) readyChan() chan struct{} {
+	g.readyOnce.Do(func() { g.ready = make(chan struct{}) })
+	return g.ready
+}
+
+func (g *Registrar) markRegistered() {
+	ch := g.readyChan()
+	g.closeOnce.Do(func() { close(ch) })
 }
 
 type registration struct {
@@ -74,6 +91,7 @@ func (g *Registrar) Register(ctx context.Context) error {
 		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		return fmt.Errorf("register signing key: HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(msg)))
 	}
+	g.markRegistered()
 	return nil
 }
 

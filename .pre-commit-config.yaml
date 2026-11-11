@@ -145,7 +145,7 @@ repos:
         # (lxml, PIL, office.*). Both are excluded from the full ty run via
         # [tool.ty.src] in pyproject; repeat here because the explicit filenames
         # bypass that discovery-time exclude too.
-        exclude: ^backend/onyx/(server/features/build/sandbox/image/sandbox_daemon/|skills/builtin/)
+        exclude: ^backend/onyx/(server/features/build/sandbox/image/sandbox_daemon/|skills/builtin/|microvm/generated/)
       - id: uv-run
         alias: ruff
         name: ruff
@@ -154,12 +154,16 @@ repos:
         args: ["--frozen", "--only-group", "ruff", "ruff", "check", "--fix"]
         pass_filenames: true
         types_or: [python]
+        # protoc output (backend/onyx/microvm/generated/regenerate.sh).
+        exclude: ^backend/onyx/microvm/generated/
       - id: uv-run
         alias: ruff-format
         name: ruff format
         args: ["--frozen", "--only-group", "ruff", "ruff", "format"]
         pass_filenames: true
         types_or: [python]
+        # protoc output (backend/onyx/microvm/generated/regenerate.sh).
+        exclude: ^backend/onyx/microvm/generated/
       - id: uv-run
         alias: terraform-fmt
         name: terraform fmt
