@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds and checks the root drive image (Dockerfile.image, ENG-4648).
+# Builds and checks the root drive image (Dockerfile.image).
 #
 #   check-image.sh                      Self-test with a small test drive (CI on pull requests).
 #   check-image.sh --context-from OUT CTX

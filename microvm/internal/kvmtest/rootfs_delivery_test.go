@@ -29,7 +29,7 @@ const (
 	rdNSS  = `runuser -u sandbox -- certutil -L -d sql:/home/sandbox/.pki/nssdb 2>&1 | grep -c craft-egress-ca; stat -c 'owner=%U' /home/sandbox/.pki/nssdb/cert9.db`
 )
 
-// TestRootfsDeliveryKVM checks ENG-4648 through the agent binary: the root
+// TestRootfsDeliveryKVM checks rootfs delivery through the agent binary: the root
 // drive image installs into --rootfs-dir like the Helm init container, the
 // agent builds a template from that CA-free drive, and each VM trusts the
 // deployment CA that the agent sends with SetKey, and no other. A second

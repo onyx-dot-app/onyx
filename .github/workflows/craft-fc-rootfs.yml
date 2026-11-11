@@ -1,4 +1,4 @@
-# Builds the Craft Firecracker root drive image (ENG-4648):
+# Builds the Craft Firecracker root drive image:
 # onyxdotapp/craft-fc-artifacts:rootfs-<version>. See
 # deployment/craft-fc/rootfs/README.md ("Delivery to nodes").
 #

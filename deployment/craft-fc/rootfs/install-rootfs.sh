@@ -1,7 +1,7 @@
 #!/craft-fc-rootfs/busybox sh
 # Copies the root drive of the rootfs image (Dockerfile.image) into DIR, the
 # host agent's --rootfs-dir. The Helm chart runs it as an init container of
-# the agent DaemonSet (ENG-4648). It does nothing when DIR already has this
+# the agent DaemonSet. It does nothing when DIR already has this
 # build (same manifest.json).
 #
 # Usage: install-rootfs.sh DIR

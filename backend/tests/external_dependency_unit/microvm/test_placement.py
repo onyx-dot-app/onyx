@@ -1,4 +1,4 @@
-"""Placement and admission against Redis and fake host agents (ENG-4577)."""
+"""Placement and admission against Redis and fake host agents."""
 
 import base64
 import random

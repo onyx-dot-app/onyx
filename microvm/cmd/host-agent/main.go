@@ -473,7 +473,7 @@ func parsePorts(s string) ([]uint32, error) {
 }
 
 // startDrainWatch reads the agent's Node every --drain-poll-interval and
-// drains the node while it has a drain taint (ENG-4569). The first read
+// drains the node while it has a drain taint. The first read
 // runs before the API serves, so a restarted agent on a cordoned node
 // never admits a VM.
 func startDrainWatch(ctx context.Context, f flags, m *agent.Manager, log *slog.Logger) error {

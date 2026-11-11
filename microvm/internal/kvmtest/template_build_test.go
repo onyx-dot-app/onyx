@@ -123,7 +123,7 @@ func memAvailMiB(t *testing.T) uint64 {
 	return avail
 }
 
-// TestTemplateBuildKVM checks the per-node template pipeline (ENG-4566)
+// TestTemplateBuildKVM checks the per-node template pipeline
 // through the agent binary: build from a build-rootfs.sh output, restore 20
 // VMs (Init + Run through the pass-through), refuse a tampered template and a
 // template with another node key, and keep 2 templates.

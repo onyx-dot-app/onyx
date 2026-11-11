@@ -13,7 +13,7 @@
 #   --ca          Optional. PEM certificate of the egress proxy CA (public
 #                 certificate only). It goes into the trust stores. Without
 #                 it, the drive has no CA and fits every deployment: the guest
-#                 daemon installs the deployment CA at Init (ENG-4648).
+#                 daemon installs the deployment CA at Init.
 #   --daemon-bin  Static guest daemon, installed at the --daemon-cmd program
 #                 path. Required.
 #   --daemon-cmd  Command line that craft-init supervises. Default:

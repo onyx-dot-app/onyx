@@ -1,4 +1,4 @@
-"""Firecracker sandbox VM lifecycle (ENG-4576): wake, activity, stop, idle eviction.
+"""Firecracker sandbox VM lifecycle: wake, activity, stop, idle eviction.
 
 - Wake (P5): `wake_sandbox_vm` is the only entry that starts a VM. Call it from
   the first tool call that needs the sandbox; nothing pre-warms. It is an
@@ -14,7 +14,7 @@
   guest daemon Init with the VM's key. A daemon without the key makes the VM
   unusable: it is stopped, and the caller wakes the next attempt.
 
-Until session saves (ENG-4580) and the daemon's execution report (ENG-4575)
+Until session saves and the daemon's execution report
 exist, the defaults (`NoCheckpointSupport`, `UnknownActivity`) keep every VM.
 """
 
@@ -63,7 +63,7 @@ class SandboxCheckpointer(abc.ABC):
 
 
 class NoCheckpointSupport(SandboxCheckpointer):
-    """No session saves yet (ENG-4580): no VM is ever stopped automatically."""
+    """No session saves yet: no VM is ever stopped automatically."""
 
     supported = False
 
@@ -79,7 +79,7 @@ class SandboxActivityProbe(abc.ABC):
 
 
 class UnknownActivity(SandboxActivityProbe):
-    """No execution report yet (ENG-4575): every sandbox counts as busy."""
+    """No execution report yet: every sandbox counts as busy."""
 
     def is_busy(self, *, tenant_id: str, sandbox_id: UUID) -> bool:  # noqa: ARG002
         return True
@@ -108,7 +108,7 @@ def wake_sandbox_vm(
 ) -> PlacedVm:
     """Return the sandbox's running VM, starting it if needed.
 
-    The Firecracker sandbox manager (ENG-4575) calls this only on the first
+    The Firecracker sandbox manager calls this only on the first
     tool call that needs the sandbox. Errors: see `place_sandbox_vm`.
     """
     return place_sandbox_vm(shared_cache, tenant_cache, client_factory, request, rng)

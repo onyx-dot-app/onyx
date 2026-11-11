@@ -58,11 +58,11 @@ type Record struct {
 	// during the start must not forget it.
 	Prev *Tombstone `json:"prev,omitempty"`
 	// Managed is the VM's managed drive slots. Nil in records from before
-	// ENG-4614: one slot.
+	// managed drive swaps: one slot.
 	Managed *Managed `json:"managed,omitempty"`
 }
 
-// Managed is the state of a VM's managed drive slots (ENG-4614).
+// Managed is the state of a VM's managed drive slots.
 type Managed struct {
 	// Slots is 2 for a VM that can swap its managed drive, else 1.
 	Slots int `json:"slots"`

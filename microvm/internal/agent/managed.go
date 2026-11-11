@@ -10,7 +10,7 @@ import (
 	pb "github.com/onyx-dot-app/onyx/microvm/proto/hostagent/v1"
 )
 
-// ManagedState is the managed drive slots of a VM (ENG-4614).
+// ManagedState is the managed drive slots of a VM.
 type ManagedState struct {
 	// Slots is 2 for a VM that can swap its managed drive, else 1.
 	Slots int

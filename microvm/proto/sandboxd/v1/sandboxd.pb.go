@@ -680,7 +680,7 @@ type InitRequest struct {
 	Entropy []byte `protobuf:"bytes,2,opt,name=entropy,proto3" json:"entropy,omitempty"`
 	// Base env for every command. Per-command env overrides it.
 	Env map[string]string `protobuf:"bytes,4,rep,name=env,proto3" json:"env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// Sessions of this sandbox (used by ENG-4572 capture/restore).
+	// Sessions of this sandbox (used by capture/restore).
 	SessionIds []string `protobuf:"bytes,5,rep,name=session_ids,json=sessionIds,proto3" json:"session_ids,omitempty"`
 	// Node agent VM generation and sandbox ID, for Health and logs.
 	Generation uint64 `protobuf:"varint,6,opt,name=generation,proto3" json:"generation,omitempty"`
