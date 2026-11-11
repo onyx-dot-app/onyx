@@ -1457,6 +1457,41 @@ def mark_document_as_indexed_for_cc_pair__no_commit(
     )
 
 
+def get_unchanged_document_ids(
+    db_session: Session,
+    connector_id: int,
+    credential_id: int,
+    listed: dict[str, tuple[datetime, int | None]],
+) -> set[str]:
+    """Returns the ids in `listed` (document id to source modified time and
+    size) whose stored document is the same version: this cc_pair indexed it,
+    with the same modified time and the same size. `doc_updated_at` is written
+    only after a document is indexed, so a match means that version is in the
+    index. A document with no stored size matches only a listing with no size.
+    """
+    if not listed:
+        return set()
+    rows = db_session.execute(
+        select(DbDocument.id, DbDocument.doc_updated_at, DbDocument.source_size_bytes)
+        .join(
+            DocumentByConnectorCredentialPair,
+            DocumentByConnectorCredentialPair.id == DbDocument.id,
+        )
+        .where(
+            DbDocument.id.in_(list(listed)),
+            DbDocument.doc_updated_at.is_not(None),
+            DocumentByConnectorCredentialPair.connector_id == connector_id,
+            DocumentByConnectorCredentialPair.credential_id == credential_id,
+            DocumentByConnectorCredentialPair.has_been_indexed.is_(True),
+        )
+    ).all()
+    return {
+        doc_id
+        for doc_id, stored_updated_at, stored_size in rows
+        if (stored_updated_at, stored_size) == listed[doc_id]
+    }
+
+
 def update_docs_updated_at__no_commit(
     ids_to_new_updated_at: dict[str, datetime],
     db_session: Session,
