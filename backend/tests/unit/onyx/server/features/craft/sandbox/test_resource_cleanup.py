@@ -731,6 +731,29 @@ def test_unknown_tenant_deletion_failure_is_reported_after_the_rest(
     assert manager.delete_resource.call_count == 2
 
 
+def test_single_tenant_reconciler_sweeps_its_tenant_without_labelled_runtimes(
+    collector: tuple[MagicMock, MagicMock],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unlabelled resources appear only in the tenant's own inventory."""
+    from onyx.background.celery.tasks.build import tasks
+
+    manager, _cache = collector
+    manager.list_resource_tenant_ids.return_value = set()
+    sweep = MagicMock()
+    monkeypatch.setattr(tasks, "MULTI_TENANT", False)
+    monkeypatch.setattr(tasks, "get_sandbox_manager", lambda: manager)
+    monkeypatch.setattr(
+        tasks, "get_all_tenant_ids", lambda: [tasks.POSTGRES_DEFAULT_SCHEMA]
+    )
+    monkeypatch.setattr(tasks, "_sweep_tenant_sandboxes", sweep)
+
+    tasks.reconcile_sandbox_runtimes_task.run()
+
+    assert sweep.call_args.args[0] == tasks.POSTGRES_DEFAULT_SCHEMA
+    assert sweep.call_args.kwargs == {"reconcile_resources": True}
+
+
 def test_deletion_batch_is_bounded(
     collector: tuple[MagicMock, MagicMock],
     monkeypatch: pytest.MonkeyPatch,

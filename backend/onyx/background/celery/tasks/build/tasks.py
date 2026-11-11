@@ -34,7 +34,7 @@ from onyx.server.features.build.timeouts import (
     SANDBOX_CLEANUP_DEADLINE_SECONDS as TIMEOUT_SECONDS,
 )
 from onyx.server.features.build.timeouts import SESSION_FLOW_LOCK_LEASE_SECONDS
-from shared_configs.configs import MULTI_TENANT
+from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 # Background snapshots ride the idle timeout: a session is re-snapshotted when
@@ -94,7 +94,10 @@ def reconcile_sandbox_runtimes_task(
     """
     deadline = time.monotonic() + TIMEOUT_SECONDS
     sandbox_manager = get_sandbox_manager()
-    owners = list(sandbox_manager.list_resource_tenant_ids(deadline))
+    # Resources created before tenant labels appear only in a tenant's own
+    # inventory, so a single-tenant deployment always sweeps its tenant.
+    always_swept = set() if MULTI_TENANT else {POSTGRES_DEFAULT_SCHEMA}
+    owners = list(sandbox_manager.list_resource_tenant_ids(deadline) | always_swept)
     known_tenants = set(get_all_tenant_ids())
     # A slow tenant must not starve the same tenants on every run.
     random.shuffle(owners)
