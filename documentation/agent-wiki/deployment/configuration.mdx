@@ -19,9 +19,9 @@ Both are validated at boot. Get either wrong and the backend refuses to start ra
 | `SECRET_KEY` | Signs sessions. Must be non-empty and not the built-in development value |
 | `PUBLIC_BASE_URL` | The browser-facing origin, no trailing slash |
 
-`PUBLIC_BASE_URL` is never inferred from request headers. It's used to build the MCP endpoint, launcher deep links,
-and links in outbound email, so if it's wrong those are all wrong in the same way.
-On Kubernetes the chart derives it from `ingress.host`.
+`PUBLIC_BASE_URL` is deliberately never inferred from request headers — a spoofed `Host` would otherwise control the
+URLs the application hands out. It's used to build the MCP endpoint, launcher deep links, and links in outbound email,
+so if it's wrong those are all wrong in the same way. On Kubernetes the chart derives it from `ingress.host`.
 
 ## Data stores
 
@@ -55,7 +55,8 @@ instance reachable.
 ## Encryption
 
 `ENCRYPTION_KEY_SECRET` encrypts sensitive columns at rest — Slack webhook URLs, MCP tokens, provider credentials.
-Leave it unset and the application uses `SECRET_KEY`.
+Leave it unset and the application falls back to `SECRET_KEY`,
+which is the historical behavior and keeps existing data decryptable.
 
 Set it when you want to rotate the encryption key independently of the cookie-signing key.
 It must be at least 32 characters, and rotation has a dedicated script — don't just change the value,

@@ -46,8 +46,11 @@ In this example, we'll index local files with the Ingestion API.
 
 <Steps>
   <Step title="Prepare your Connector">
-    To show the ingested documents under a Connector in **Admin Panel** > **Connectors**, attach them to that Connector.
-    To find its `cc_pair_id`, open **Admin Panel** > **Connectors**, click the Connector, and copy the ID from the URL.
+    Since we want these files to appear in the Connectors page, we'll need to first create a Connector.
+    For this example, we'll create a File Connector with a dummy text file.
+
+    If you already have a Connector you would like to associate your Ingestion files with,
+    open **Admin Panel** > **Connectors**, click the Connector, and copy the `cc_pair_id` from the URL.
 
     `https://cloud.onyx.app/admin/connector/243` -> `cc_pair_id` is `243`
 
@@ -325,7 +328,7 @@ In this example, we'll index local files with the Ingestion API.
 
 ## Manage ingested documents
 
-The Ingestion API also lists and deletes the documents that came in through it.
+The same router lists and deletes documents that came in through the Ingestion API.
 All three calls need `manage:connectors`.
 
 | Endpoint | What it does |
@@ -334,7 +337,8 @@ All three calls need `manage:connectors`.
 | `GET /onyx-api/connector-docs/{cc_pair_id}` | Lists the documents attached to one connector-credential pair, including ingested ones. |
 | `DELETE /onyx-api/ingestion/{document_id}` | Removes an ingested document from the index. It refuses to delete documents that a Connector indexed. |
 
-To update a document, send `POST /onyx-api/ingestion` again with the same `id`. Onyx replaces the content.
+To update a document, send `POST /onyx-api/ingestion` again with the same `id`.
+Onyx replaces the content and skips re-embedding when the content has not changed.
 
 <CodeGroup>
   ```python Python

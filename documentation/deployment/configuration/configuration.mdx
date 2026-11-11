@@ -12,8 +12,9 @@ icon: "sliders"
 
 ## Onyx Lite
 
-Onyx Lite is a minimal deployment of Onyx for teams that need only LLM chat, without connectors or RAG search.
-It uses fewer resources than a full deployment.
+Onyx Lite is a minimal deployment of Onyx designed for teams that only need the core LLM chat experience without
+connectors or RAG search. It is ideal for resource-constrained environments, quick evaluations,
+or use cases where you want to bring your own LLM and tools without ingesting external data sources.
 
 ### What's Included
 
@@ -217,7 +218,7 @@ We support the following observability providers:
 
 **Braintrust (recommended)**
 
-Set the following environment variables:
+Braintrust is what we use internally for the cloud version of Onyx. Set the following environment variables:
 
 ```bash
 BRAINTRUST_PROJECT="Your project name"
@@ -317,8 +318,8 @@ Read [Deploying Craft](/deployment/local/craft) before enabling Craft in self-ho
   </Accordion>
 
   <Accordion title="Authentication & Security">
-    `AUTH_TYPE`: Legacy (pre-`v4.4.0`). Authentication is always enabled and SSO is configured in the admin panel.
-    Onyx ignores the variable and logs a warning at startup. Remove it from your deployment.
+    `AUTH_TYPE`: Legacy (pre-`v4.4.0`). Authentication is always enabled and SSO is configured in the admin panel,
+    so the variable is inert. Planned for full removal in `v4.5`.
 
     `PASSWORD_MIN_LENGTH`: For basic auth. The minimum password length requirement
 

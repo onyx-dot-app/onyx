@@ -22,6 +22,7 @@ and [page restriction guide](https://support.atlassian.com/confluence-cloud/docs
 
 On Onyx Cloud, the **Authentication Account** section offers an **OAuth** tab with **Authorize with Confluence**.
 Select it, approve the Atlassian consent screen, then choose the Confluence site.
+Onyx stores a refresh token and renews short-lived access tokens automatically.
 An OAuth account works with Confluence Cloud only.
 
 Self-hosted Onyx does not offer OAuth. Use an API token for self-hosted Onyx or when the **OAuth** tab is not shown.
@@ -106,12 +107,15 @@ Under **Authentication Account**, select **New Confluence Account** and enter:
 
 ![The Onyx Confluence account form](/assets/admins/connectors/confluence/credential-form.webp)
 
+For both token types, Onyx uses the account email and token as HTTP Basic authentication. With a scoped token,
+Onyx directs Confluence API requests through Atlassian's API gateway.
+
 Under **Share This Account**, choose whether other admins, named groups,
 or only you can reuse the account for other connectors.
 
 ## Configure Cloud permission sync
 
-**Sync with Confluence** needs a Business plan or higher. It reads space permissions, page restrictions,
+**Sync with Confluence** requires Onyx Enterprise Edition or Onyx Cloud. It reads space permissions, page restrictions,
 inherited ancestor restrictions, users, groups, and group membership.
 
 Before you enable it:

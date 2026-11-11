@@ -156,6 +156,7 @@ Most file bytes are images, fonts, and layout, and Onyx does not index them.
 
 Indexes created before Onyx 5.0 also store a title vector,
 so they use up to twice the vector storage until a reindex builds a new index.
+A later release stops storing a second copy of the text and saves about 500 bytes per chunk.
 
 Each copy of the data uses this storage again. Keep room for a second index:
 a change of embedding model or quantization builds a new index while the old one serves search.

@@ -40,6 +40,8 @@ That release runs both stores side by side during a transition:
 - The app writes and deletes every file in both the object store and MinIO, so a rollback still finds it.
 - A read that misses the object store falls back to MinIO.
 - A copy job moves every file that Onyx tracks from MinIO into the object store.
+  It never replaces a file the app wrote, except when an older release wrote a newer version after a rollback,
+  and it skips objects no file record points at.
 
 No input is needed from admins other than upgrading. The app starts serving right away and the copy runs beside it.
 
@@ -222,7 +224,8 @@ a rollback to a release before the object store no longer sees files uploaded si
 
     It copies anything left, waits a quiet minute, and checks that nothing reached MinIO alone in that time.
     If something did, a container or pod on the older release is still running, so it refuses and MinIO stays in use.
-    Otherwise, within a minute every running process stops writing to MinIO. No restart is needed.
+    Otherwise it writes a marker to the object store, and within a minute every running process stops writing to MinIO.
+    No restart is needed.
   </Step>
 
   <Step title="Stop MinIO">

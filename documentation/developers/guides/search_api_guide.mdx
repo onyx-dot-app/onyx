@@ -4,7 +4,7 @@ description: "Query the Onyx index programmatically and get ranked documents bac
 icon: "magnifying-glass"
 ---
 
-Onyx exposes three search endpoints.
+Onyx exposes three search endpoints. Which one you want depends on what you are building.
 
 | Endpoint | Use it when |
 |----------|-------------|
@@ -136,12 +136,14 @@ This endpoint takes a different set of parameters, aimed at a search interface r
 | `num_hits` | Maximum number of merged sections to return. Defaults to 30. |
 | `hybrid_alpha` | Balance between vector and keyword matching, from `0.0` (pure keyword) to `1.0` (pure vector). Leave unset to use the deployment's `HYBRID_ALPHA`, which defaults to `0.5`. If the deployment sets `ONYX_SEARCH_UI_USES_OPENSEARCH_KEYWORD_SEARCH=true`, an unset value runs a pure keyword search instead. |
 | `include_content` | When true, each result carries the full text of the matched section in `content`. When false, `content` is `null` and only `blurb` is populated. |
-| `run_query_expansion` | Have an LLM generate extra keyword queries, and merge their results with the results of the original query. |
+| `run_query_expansion` | Have an LLM generate extra keyword queries. Every query runs in parallel and the results are merged with weighted reciprocal-rank fusion, the original query counting twice as much as each expansion. |
 | `num_docs_fed_to_llm_selection` | Hand the top N sections to an LLM that picks the most relevant ones. Omit it to skip the extra LLM call. The model's reasoning comes back in `doc_selection_reasoning`. |
 | `stream` | Whether to stream packets as they are produced. **Defaults to `false`**, unlike the chat API. |
 
-Each LLM-backed option costs an LLM call. Leave them off for a plain keyword and semantic search.
-Document selection reports its picks in `llm_selected_doc_ids` and keeps the other results.
+Both LLM-backed options are optional and each costs an LLM call. Leave them off for a plain keyword and semantic search.
+Query expansion widens recall on short keyword queries;
+document selection narrows a long result list down to what actually answers the query,
+reporting its picks in `llm_selected_doc_ids` without dropping the other results.
 
 ### Non-streaming response
 

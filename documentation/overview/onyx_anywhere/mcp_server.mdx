@@ -147,7 +147,9 @@ Use a remote custom connector:
 1. Open **Customize > Connectors**.
 2. Select **+ Add > Add custom connector**.
 3. Name it **Onyx** and enter `https://onyx.example.com/mcp/` with your domain.
-4. Continue through authentication settings and choose sign-in.
+4. Continue through authentication settings.
+   Choose sign-in. Claude can identify itself with its published Client ID Metadata Document or register dynamically.
+   Onyx supports both.
 5. Add the connector and complete Onyx sign-in when prompted.
 6. Enable Onyx through the conversation's **+ > Connectors** menu and send the [test prompt](#test-the-connection).
 
@@ -186,7 +188,10 @@ for the web connection model and your workspace's plugin availability.
 
 ## Sign in and approve access
 
-You approve access once in your browser. The client then refreshes its access token without asking you again.
+Onyx is the OAuth authorization server for its MCP endpoint. Your client discovers it from the MCP URL,
+identifies itself through dynamic client registration or a Client ID Metadata Document (CIMD),
+and uses the authorization code flow with PKCE. You approve access once in your browser.
+The client then refreshes its access token without asking you again.
 
 <Steps>
   <Step title="Add your Onyx MCP URL">
@@ -241,8 +246,9 @@ Choose a client and account that your organization permits to receive that infor
 | Access token | 15 minutes. The client normally refreshes it automatically. |
 | OAuth authorization with refresh support | 30 days from approval. Refreshing does not extend this window. |
 
-After the authorization expires, sign in and approve access again. If a client loses its refresh credentials,
-reconnect it.
+After the authorization expires, sign in and approve access again. Refresh tokens rotate after use.
+Reusing an already consumed refresh token revokes that authorization,
+so a client that loses or reuses its refresh credentials may need you to reconnect.
 
 If a client registers without refresh support, its authorization lasts only for the access token's lifetime.
 
@@ -403,7 +409,7 @@ and context expansion.
 | `time_cutoff` | string | No | ISO 8601 timestamp. Keeps documents updated on or after this time. Include a timezone. |
 | `skip_query_expansion` | boolean | No | Defaults to `false`. Set `true` to bypass query expansion. |
 | `agent` | string | No | Name of an accessible Onyx agent whose knowledge scope and model the search should use. |
-| `retrieval_only` | boolean | No | Defaults to `false`. Set `true` to make no LLM calls. The search skips query expansion and document selection, and returns up to 10 results in retrieval order. An administrator can turn it on for every search with [`MCP_SERVER_SEARCH_RETRIEVAL_ONLY`](/deployment/configuration/mcp_server#service-settings). |
+| `retrieval_only` | boolean | No | Defaults to `false`. Set `true` to make no LLM calls. Results are up to 10 sections in retrieval order, each with up to 5 chunks of surrounding context on each side. The search runs no query expansion, filter detection, federated Slack search or document selection. An administrator can turn it on for every search with [`MCP_SERVER_SEARCH_RETRIEVAL_ONLY`](/deployment/configuration/mcp_server#service-settings). |
 
 ```json
 {

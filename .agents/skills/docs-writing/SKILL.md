@@ -16,19 +16,46 @@ Pick one dominant reader for the page: end user, admin, developer, or operator w
 Pick one Diataxis type per page: tutorial, how-to, reference, or explanation. If two readers or two types compete,
 split the page or link out.
 
-### Keep feature-PR edits small
+### Decide what to include
 
-Most docs changes ship in a feature PR and add to an existing page. Before you add a sentence, ask:
-would a customer miss it if you deleted it? If not, do not add it. No docs change is better than a low-value one.
+Use these rules when you add, keep, or cut text. They apply to new pages, feature-PR edits, and audits.
 
-- Write what the user does and what the user sees. Do not explain how Onyx does it.
-- Do not restate what the UI already tells the user: disabled controls, tooltips, inline errors.
-- Do not name concepts that the user never selects or sees, such as subagents or internal queues.
-- Read the whole page first, and match its level of detail. If the page tells the user what each control does in a
-  few sentences, describe the new feature the same way. Do not add timing, recovery, or edge-case rules that the
-  page gives for no other feature.
-- Put a new section where its importance puts it among its siblings. A new feature does not go first.
-- When the change modifies existing behavior, edit the existing sentence. Do not add a parallel note or FAQ entry.
+1. **Name the reader and the task first.** Good docs give the knowledge the reader needs for the task, minus what
+   the reader already knows ([Google: Audience](https://developers.google.com/tech-writing/one/audience)).
+2. **Give each section the content its type needs**
+   ([Diataxis](https://diataxis.fr/), [Microsoft: Reference](https://learn.microsoft.com/en-us/style-guide/developer-content/reference-documentation)):
+   - Reference (API, hooks, MCP, env vars, connector fields): the complete contract. This is inputs, outputs, auth,
+     order and timing guarantees, limits, permissions, defaults, and error and failure behavior.
+   - How-to (setup, deployment, configuration): all that the reader needs to complete and verify the task:
+     prerequisites, required permissions and scopes, steps, and checks.
+   - Explanation (overviews, connector behavior): the behavior that sets what the reader expects or decides,
+     for example freshness, deletion and pruning, permission sync, and limits.
+3. **Behavior that the reader can see is not internal.** Freshness, deletion, permissions, limits, retries, and
+   failure handling are part of the product. Only names and steps that the reader cannot see or configure are internal:
+   module names, database tables, queue names
+   ([Microsoft: Reference](https://learn.microsoft.com/en-us/style-guide/developer-content/reference-documentation)).
+4. **Put information where the reader needs it.** Put prerequisites before steps, auth next to the endpoints, and
+   error recovery next to the step that can fail ([Write the Docs: Cumulative](https://www.writethedocs.org/guide/writing/docs-principles/),
+   [minimalism](https://www.instructionaldesign.org/theories/minimalism/)).
+5. **Information that prevents errors comes first.** Keep warnings about data loss, security, and wrong results,
+   and how to recognize and recover from errors ([minimalism](https://www.instructionaldesign.org/theories/minimalism/)).
+6. **Some repetition is correct** ([Write the Docs: ARID](https://www.writethedocs.org/guide/writing/docs-principles/)).
+   Cut a duplicate only if the reader finds the same text at the same point of need. When you merge copies, keep one
+   shared section and link to it. Never delete all copies.
+7. **Keep names consistent and correct** ([Write the Docs: Consistent, Current](https://www.writethedocs.org/guide/writing/docs-principles/)).
+   Do not rename products, editions, or plans (Onyx Cloud, Enterprise Edition). Change the existing edition wording
+   only if the code shows that it is wrong.
+
+Cut a sentence only if it is one of these:
+
+- (a) a duplicate that the reader still finds at the same point of need,
+- (b) wrong, as the code shows,
+- (c) a code-level name (module, table, queue) that the reader does not configure,
+- (d) on an end-user page, a restatement of a visible UI label or tooltip,
+- (e) multi-tenant or test-only material that customers cannot use.
+
+In a feature PR, check the whole page and match its detail. Edit the sentence that the change makes wrong.
+Do not add a parallel note. Put a new section where its importance puts it among its siblings.
 
 ### Ground every claim in source truth
 
@@ -92,8 +119,7 @@ Avoid:
 - meta-commentary about the docs or about AI,
 - em dashes (use a period, comma, colon, or parentheses),
 - vague references ("this", "it", "the above") where a section can be read alone,
-- internal implementation detail (module names, Celery queues, tables) and internal behavior
-  (execution order, persistence, retries) unless an admin needs it to operate the product.
+- code-level names (module names, Celery queues, database tables) unless the reader configures them.
 
 Write so that a section quoted alone still answers the reader's question. Name the feature and the page in the sentence,
 not only in the heading.
@@ -200,7 +226,7 @@ Score 0 to 2 per row. Publish at 18/22 or higher with no zero.
 | Retrievability | Each section stands alone |
 | Maintenance | Evergreen wording; volatile facts (versions, dates) are explicit |
 | Style | STE: short, active, reader-centred, no filler |
-| Proportion | A customer would miss each added sentence; detail matches the whole page; placement matches importance |
+| Fit | Content matches the reader, task, and Diataxis type; contracts, behavior, and error recovery are complete; placement matches the point of need |
 
 ## 7. Full-site audits
 

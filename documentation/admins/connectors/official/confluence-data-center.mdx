@@ -11,7 +11,8 @@ Use this guide for Confluence Data Center and legacy Confluence Server. Onyx use
 
 ## Supported authentication
 
-Onyx uses a Confluence personal access token (PAT). Confluence Data Center and Server added PATs in version 7.9.
+Onyx uses a Confluence personal access token (PAT) as a bearer token.
+Confluence Data Center and Server added PATs in version 7.9.
 Older releases cannot use the current Onyx authentication path.
 
 Use a dedicated Confluence account. Grant it view access to every space and restricted page that you want to index.
@@ -51,7 +52,7 @@ Open **Admin Panel → Connectors** and select **Confluence**. Under **Index Con
 
 Under **Authentication Account**, select **New Confluence Account** and enter:
 
-- **Personal Access Token**: The PAT.
+- **Personal Access Token**: The PAT. Onyx sends it as a bearer token.
 
 ![The Onyx Confluence account form](/assets/admins/connectors/confluence/credential-form.webp)
 
@@ -62,7 +63,7 @@ Under **Authentication Account**, select **New Confluence Account** and enter:
 
 ## Configure permission sync
 
-**Sync with Confluence** needs a Business plan or higher. Onyx reads space permissions, page restrictions,
+**Sync with Confluence** requires Onyx Enterprise Edition. Onyx reads space permissions, page restrictions,
 inherited ancestor restrictions, users, groups, and group membership. It maps Confluence users to Onyx users by email.
 
 ### Data Center 9.1 and later

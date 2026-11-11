@@ -9,6 +9,9 @@ Onyx reads pages and database content that you share with a Notion connection.
 Leave **Root Page ID** blank to index all accessible pages, or set it to index one page and its children.
 
 Onyx checks for content changes on the connector's **Refresh Every** schedule. The default is **30 minutes**.
+A refresh interval does not guarantee that changes appear within that time. Without a root page,
+Onyx uses Notion's search API and fetches pages edited within each indexing window. With a root page configured,
+Onyx traverses that page and its children on each run.
 
 ## Before you begin
 
@@ -81,6 +84,7 @@ You can also manage shared pages in the developer portal under **Content access 
     Access to a parent page includes its child pages. Repeat this process for other top-level pages you want to index.
     For databases, share the source database, not only a page containing a linked view.
     Sharing a database also gives the connection access to its row pages and their children.
+    Onyx indexes accessible content within the configured root-page scope, if one is set.
   </Step>
 </Steps>
 

@@ -11,9 +11,10 @@ with its steps and expected results as text and a link back to the case in TestR
 | Content    | Behavior                                                                                                                       |
 | ---------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | Test cases | One document per case. The document is named `<case key>: <title>` so a case is searchable by its TestRail key.                  |
-| Steps      | Steps and their expected results are indexed.                                                                                    |
-| Suites     | Onyx reads every suite in a project.                                                                                             |
-| Permissions | Not available. **Sync with TestRail** is not offered. |
+| Steps      | Separated steps and their expected results are indexed. When a case has no separated steps, Onyx falls back to its plain steps and expected-result fields. |
+| Fields     | Custom field values are resolved to their labels, so a drop-down reads as its text rather than its stored number.                |
+| Suites     | Onyx reads every suite in a project. A project in single-suite mode is read directly.                                            |
+| Permissions | Not available. **Sync with TestRail** is not offered, so **Document Access** can only be **Everyone in Your Organization**, **Specific Groups**, or **Only Me**. |
 
 ## Before you begin
 

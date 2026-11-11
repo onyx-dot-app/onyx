@@ -12,7 +12,10 @@ The Braintrust connector indexes the prompts, datasets and experiments of your B
 | Prompts     | One document per prompt, named `Prompt: <name>`.                                                                                                |
 | Datasets    | One document per dataset, named `Dataset: <name>`, holding its rows as a table.                                                                  |
 | Experiments | One document per experiment, named `Experiment: <name>`. The summary is always indexed; the per-row results depend on the lookback below.        |
-| Permissions | Not available. **Sync with Braintrust** is not offered. |
+| Permissions | Not available. **Sync with Braintrust** is not offered, so the access type can only be **Everyone in Your Organization**, **Specific Groups**, or **Only Me**. |
+
+Onyx indexes prompts first, then datasets, then experiments,
+and keeps its place between runs so a large organization is indexed across several attempts.
 
 ## Before you begin
 
@@ -45,7 +48,7 @@ You need:
 
   <Step title="Choose who can see the content">
     Under **Document Access**, select **Everyone in Your Organization** or **Specific Groups**.
-    **Specific Groups** needs a Business plan or higher.
+    **Specific Groups** is available on Onyx Cloud and Enterprise Edition.
   </Step>
 
   <Step title="Create and verify">
@@ -69,6 +72,11 @@ A longer lookback makes each indexing run read more from Braintrust.
 | Limit                   | Value          | Notes                                                                        |
 | ----------------------- | -------------- | ------------------------------------------------------------------------------ |
 | Rows per table          | 10,000         | The most recent rows are kept and the document says it was truncated.        |
+| Braintrust API call     | 60s            |                                                                               |
+| Retries per request     | 5              |                                                                               |
+| Request rate            | 4 per second   | Onyx throttles itself to stay within the Braintrust API's limits.             |
+
+The connector downloads no files, so it has no file-size cap.
 
 ## Troubleshooting
 

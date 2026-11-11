@@ -86,10 +86,10 @@ If you would rather not pipe a script to your shell, do the same steps by hand:
 Two values must be right or the backend refuses to boot:
 
 - **`SECRET_KEY`** — any non-empty, non-default value. The backend and workers refuse to start with the built-in
-  development secret.
+  development secret, so production deployments cannot accidentally run with a known key.
 - **`PUBLIC_BASE_URL`** — the browser-facing origin the stack is reached on, with no trailing slash. It is never
-  inferred from request headers. Agent Wiki uses it to build the MCP endpoint, launcher deep links,
-  and links in outbound email.
+  inferred from request headers, because a spoofed `Host` header would then control the URLs the app hands out.
+  Agent Wiki uses it to build the MCP endpoint, launcher deep links, and links in outbound email.
 
 If you put the stack behind a domain or a reverse proxy,
 set `PUBLIC_BASE_URL` to the external URL — `https://wiki.example.com`, not `http://localhost:8090`.
@@ -130,7 +130,7 @@ git pull && docker compose --profile app up -d --build
     exits at boot in both cases.
   </Accordion>
 
-  <Accordion title="Only Postgres, Redis, and OpenSearch started">
+  <Accordion title="Only Postgres and Redis started">
     The `--profile app` flag was omitted. Without it Compose starts the data plane only.
   </Accordion>
 

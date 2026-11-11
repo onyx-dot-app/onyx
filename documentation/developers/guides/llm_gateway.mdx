@@ -23,6 +23,9 @@ or coding tool to use organization-approved models without storing a separate pr
 - An [Anthropic Messages endpoint](https://platform.claude.com/docs/en/api/messages) and [token-count endpoint](https://platform.claude.com/docs/en/api/messages/count_tokens).
 - A `GET /models` endpoint that lists the models your Onyx identity can access.
 
+Onyx Craft sandboxes use the same gateway. Their coding agents call your configured providers through it,
+so Craft usage shows up with the same attribution and limits.
+
 The gateway does not replace your model-provider configuration.
 An administrator still configures providers and decides which models are visible in **Admin Panel** > [Language
 Models](/admins/ai_models/overview).
@@ -66,7 +69,7 @@ export ONYX_GATEWAY_API_KEY="onyx_pat_..."
 ## Find an available model
 
 The easiest way to find a model ID is in the **Models** section of **Settings** > **LLM Gateway**.
-The section appears only when your plan includes the gateway and at least one model is visible and accessible to your
+The tab appears only when your plan includes the gateway and at least one model is visible and accessible to your
 account. The copied value already has the required format:
 
 <img className="rounded-image" src="/assets/developers/llm_gateway_available_models.webp" alt="Onyx LLM Gateway settings with an expanded provider and model IDs"/>
@@ -241,6 +244,7 @@ the gateway no longer exposes or accepts that model for the user.
 
 Administrators can review token use and estimated model cost in **Admin Panel**
 > **Usage**. The **Manage spending limits** section on the same page sets global, user, or group token limits.
+Those limits apply before the gateway sends a generation request to a model provider.
 The token-count endpoint does not generate anything, so it is not metered and not limited.
 
 <img className="rounded-image" src="/assets/developers/llm_gateway_spending_limits.webp" alt="Onyx Admin Panel controls for global, user, and group spending limits"/>

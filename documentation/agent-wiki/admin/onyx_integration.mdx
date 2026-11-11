@@ -61,15 +61,20 @@ Below the connection details, the same admin page carries the wiki-side knobs fo
 
 ## How incoming documents are handled
 
-Two controls govern how ingestion edits pages:
+Pushed content is matched against existing pages and merged in — that's what makes the wiki a living source of truth
+rather than an archive of everything your connectors have ever seen.
+
+Two controls govern it:
 
 - **Update policies.** A page or folder with [Update](/agent-wiki/using/update_policies) switched off is never
   rewritten by ingestion. This is how you protect records that shouldn't change after the fact.
 - **Page instructions.** Free-text guidance the updater honors when it does edit — *"keep entries terse"*, *"never
   touch the SLA table"*.
 
-You can also select a separate model for ingestion on this page.
-See [A cheaper model for ingestion](/agent-wiki/admin/language_models#a-cheaper-model-for-ingestion).
+The pipeline doesn't have to run on the default model. You can select a model just for ingestion here,
+from the pool enabled under [Language Models](/agent-wiki/admin/language_models)
+— and since ingestion is high-volume background work, a cheaper model (e.g. Luna)
+than your daily-usage default is usually the right choice.
 
 ## Related
 

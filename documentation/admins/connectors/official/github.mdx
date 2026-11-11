@@ -40,7 +40,7 @@ Use a classic token when your organization does not allow fine-grained tokens,
 or when one token must cover repositories of several owners.
 
 Pick the expiration deliberately: when the token expires or is revoked, indexing stops until you save a new one in Onyx.
-After generating the token, copy it right away. GitHub shows it only once.
+After generating the token, copy it right away - GitHub shows it only once.
 
 <Tabs>
   <Tab title="Fine-grained token">
@@ -243,7 +243,8 @@ then pick the address under **Public profile -> Public email**.
 
   <Accordion title="Validation failed due to GitHub rate-limits being exceeded">
     The token has used up GitHub's hourly API quota, usually because something else shares it.
-    Wait for the quota to reset, then retry.
+    During indexing Onyx waits out the limit and retries on its own; for this error during setup,
+    wait for the quota to reset, then retry.
   </Accordion>
 
   <Accordion title="GitHub credential appears to be invalid or expired">

@@ -10,7 +10,8 @@ With permission sync, it also mirrors who can read each file in Azure.
 
 The connector indexes the files in one container, or in one directory of it with **Path Prefix**.
 Each file becomes one document that links to the file's blob URL,
-`https://<account>.blob.core.windows.net/<container>/<path>`.
+`https://<account>.blob.core.windows.net/<container>/<path>`. Each refresh reads only the files that changed,
+and the prune job removes the documents of deleted files.
 
 <Accordion title="Supported file types">
   Onyx indexes files with the following extensions:
@@ -114,7 +115,8 @@ A deny assignment removes access from both roles and ACLs. An Entra user princip
 must match the user's email in Onyx.
 
 <Note>
-  Permission sync needs a Business plan or higher. It needs an app registration account.
+  Permission sync is a paid feature: the Business and Enterprise tiers on Onyx Cloud,
+  and the Enterprise Edition when self-hosted. It needs an app registration account.
 </Note>
 
 The document sync runs every hour. The group sync runs every 30 minutes.

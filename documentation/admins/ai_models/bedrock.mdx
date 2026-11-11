@@ -50,7 +50,7 @@ You select one in the **Authentication Method** field when you connect the provi
 
 With the **Environment IAM Role** or **Access Key** method, Onyx can call Bedrock in a different AWS account.
 Enter the **Role ARN to assume** and, if the role's trust policy requires one, the **External ID**.
-Onyx assumes the role with the credentials above.
+Onyx assumes the role with the credentials above before each call.
 
 <Note>
   A Long-term API Key is bound to one account and cannot assume a role.

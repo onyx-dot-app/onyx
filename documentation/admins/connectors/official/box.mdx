@@ -13,9 +13,11 @@ You can index everything visible to that identity or limit indexing to specific 
 | Files       | Onyx extracts and indexes supported document types, their Box links, owners, timestamps, and folder paths.          |
 | Folders     | Onyx preserves the folder hierarchy for browsing and filtering.                                                     |
 | Web links   | Optional. Onyx indexes the bookmark name, description, and destination URL; it does not crawl the destination page. |
-| Permissions | Optional on a Business plan or higher. **Sync with Box** mirrors Box owners, collaborations, groups, and shared links. |
+| Permissions | Optional on Onyx Cloud and Enterprise Edition. **Sync with Box** mirrors Box owners, collaborations, groups, and shared links. |
 
-For a large Box tree, select specific folders and choose a refresh frequency that fits your Box API capacity.
+On each refresh, the connector recursively lists every folder in its configured scope,
+then downloads and processes only files and web links modified during the indexing window. For a large Box tree,
+select specific folders and choose a refresh frequency that fits your Box API capacity.
 
 ## Before you begin
 
@@ -129,7 +131,7 @@ and [Platform App approval guide](https://developer.box.com/guides/authorization
 
   <Step title="Choose who can see the files">
     Under **Document Access**, select **Everyone in Your Organization**, **Specific Groups**, or **Sync with Box**.
-    **Specific Groups** and **Sync with Box** need a Business plan or higher.
+    **Specific Groups** and **Sync with Box** are available on Onyx Cloud and Enterprise Edition.
   </Step>
 
   <Step title="Create and verify">
@@ -151,6 +153,7 @@ It also handles inherited folder access and shared links:
 The Box app must have **Manage users** and **Manage groups**,
 and an admin must reauthorize the app after adding those scopes.
 
+Permissions are attached during the first indexing attempt. After that,
 Onyx refreshes document permissions every 30 minutes and Box group membership every 5 minutes.
 Set `BOX_PERMISSION_DOC_SYNC_FREQUENCY` and `BOX_PERMISSION_GROUP_SYNC_FREQUENCY` (seconds) to change them.
 
@@ -185,13 +188,13 @@ Set `BOX_PERMISSION_DOC_SYNC_FREQUENCY` and `BOX_PERMISSION_GROUP_SYNC_FREQUENCY
 
   <Accordion title="Permission sync fails">
     Confirm **Manage users** and **Manage groups** are enabled and the app was reauthorized afterward.
-    Also confirm that your plan is Business or higher.
+    Also confirm you are using Onyx Cloud or Enterprise Edition.
   </Accordion>
 
   <Accordion title="Refreshes are slow or use many Box API calls">
-    Each refresh reads the full configured folder tree, and permission sync makes more Box API calls.
-    Limit **Folders** to the required subtrees,
-    or set a longer **Refresh Every** interval for a very large Box deployment.
+    Each refresh walks the full configured folder tree, with folder contents listed in pages of up to 200 entries.
+    Permission sync makes additional calls for folder and file collaborations, users, and groups.
+    Limit **Folders** to the required subtrees or increase the refresh frequency for very large Box deployments.
   </Accordion>
 
   <Accordion title="A file or web link is missing">

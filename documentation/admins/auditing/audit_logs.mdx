@@ -233,7 +233,8 @@ and the actor is the provisioning token (`auth_type: "scim"`). SCIM emits an eve
 
 `onyx.audit.credential_access`
 
-Credential-decrypt events use a **flat field set**.
+Credential-decrypt events predate the generalized schema and are emitted on a **flat,
+legacy field set** for backward compatibility.
 They share the `onyx.audit` logger tree and the same fail-safe / fail-open behavior,
 but do **not** carry the generalized fields — there is no `action`, `ocsf_class`, `outcome`,
 `resource_type`/`resource_id`, `extra`, or nested `actor` object, and the client IP is `client_ip` (not `source_ip`).
@@ -259,8 +260,10 @@ from **Admin Panel > Export Logs**.
 Click **Export Logs** to collect logs from the API server and background workers into one ZIP file.
 Attach the file to an Onyx support thread.
 
-If the status line for a source says **incomplete**, Onyx collected only part of the logs from that source.
-On Kubernetes, the API server needs permission to read pod logs and events. With the Helm chart,
+The page shows one status line for each source of logs.
+A line that starts with the uploaded file count and then says **incomplete** means that Onyx collected only part of the
+logs from that source. The line gives the reason and the fix. For example,
+on Kubernetes the API server can need permission to read pod logs and events. With the Helm chart,
 set `logExport.kubernetes.enabled=true` to give the API server this permission.
 
 ## Notes

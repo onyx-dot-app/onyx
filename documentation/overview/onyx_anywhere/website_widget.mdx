@@ -13,10 +13,11 @@ Your visitors can chat with an Onyx Agent without leaving your page.
 
 ## Features
 
+- **Lightweight** - ~100-150kb gzipped bundle
 - **Fully Customizable** - Colors, branding, and styling to match your site
 - **Responsive** - Desktop popup, mobile fullscreen
 - **Shadow DOM Isolation** - No style conflicts with your existing CSS
-- **Streaming** - Answers appear as Onyx writes them
+- **Real-time Streaming** - Server-sent events (SSE) for fast responses
 - **Session Persistence** - Conversations survive page reloads
 - **Two Display Modes** - Floating launcher or inline embed
 - **Source Citations** - Optional citation badges linking to source documents
@@ -103,7 +104,7 @@ Add `start-expanded` to show the full chat panel from the start:
 
 | Attribute          | Type   | Default       | Description                              |
 | ------------------ | ------ | ------------- | ---------------------------------------- |
-| `agent-id`         | number | `undefined`   | Agent to use                             |
+| `agent-id`         | number | `undefined`   | Specific agent/persona to use            |
 | `agent-name`       | string | `"Assistant"` | Display name in header                   |
 | `logo`             | string | Onyx logo     | URL to custom logo image                 |
 | `primary-color`    | string | `#1c1c1c`     | Primary brand color (buttons, accents)   |
@@ -220,6 +221,11 @@ Use this when your page already signs the visitor in with the same identity prov
   Your administrator must configure Onyx to accept the tokens.
   See the [Website Widget Deployment Guide](/deployment/configuration/website_widget).
 </Note>
+
+## How it works
+
+The widget talks directly to your Onyx server. It creates a chat session, sends each message,
+and streams the answer back in real time. Answers render with full Markdown support.
 
 ## Browser Support
 

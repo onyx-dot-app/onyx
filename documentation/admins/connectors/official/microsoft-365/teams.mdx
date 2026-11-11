@@ -17,12 +17,17 @@ and meeting transcripts also need two Teams settings that only a Teams administr
 
 | Content             | Behavior                                                                                                                                                                                                                                                                       |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Channel threads     | Always on. One document per thread: the first message and its replies, oldest first. The team's standard, private and shared channels are read.                              |
+| Channel threads     | Always on. One document per thread: the first message and its replies, oldest first. The team's standard, private and shared channels are read. A thread whose first message was deleted is not indexed, and one deleted after it was indexed keeps only its header until the next prune removes it. The system events Teams lists as messages are skipped.                              |
 | Channel files       | Optional. Each file in a channel's **Files** tab is its own document. Files over 20 MB are skipped, as are BMP, TIFF, GIF, SVG and AVIF images.                                                                                                                                                                           |
-| Inline images | Optional. The images pasted into channel messages and meeting chats are indexed with their thread or chat day, up to 100 for each. Images over 20 MB are skipped. Needs image extraction and analysis turned on in the Onyx search settings. |
+| Inline images | Optional. The images pasted into channel messages and meeting chats are indexed with their thread or chat day, up to 100 for each. Images over 20 MB are skipped. Nothing is downloaded while image extraction and analysis is off in the Onyx search settings. |
 | Meeting transcripts | Optional. One document per transcript of a scheduled meeting, with the speakers when the tenant allows speaker attribution. Transcripts from the last six months are indexed. Channel meetings are not covered.                                                                |
 | Meeting chats | Optional. One document per day (UTC) of the chat of a scheduled meeting. The events Teams lists in a chat (joined, recording started) are left out. Covers meetings organized in your tenant: Microsoft does not serve the chat of a meeting that another organization set up. |
 | Permissions | Optional, on paid plans. Each item is visible to the people who can read it in Teams. See [Auto Sync Permissions](#auto-sync-permissions). |
+
+Each refresh asks every channel for the messages that changed since the last run and rebuilds each thread that changed.
+Every meeting chat with a message in the last six months is asked what changed,
+so an edit or a delete in a chat that has gone quiet is picked up at the next refresh. Pruning removes threads, files,
+transcripts and chat days that no longer exist, and transcripts and chat days older than six months.
 
 ## Before you begin
 
@@ -178,14 +183,19 @@ Set `TEAMS_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD` (bytes) to change the 20 MB (20 
 
 ## Meeting transcripts and chats
 
-Both options read meeting organizers, not teams: Microsoft lists transcripts and meeting chats for each user.
+Both options walk meeting organizers, not teams: Microsoft lists transcripts and meeting chats for each user.
 
 - Transcripts and chat days from the last six months are indexed.
-  An item that passes six months leaves the index at the next prune.
-- Every run reads every organizer. To keep a large tenant fast, list the organizers who record meetings
-  in **Meeting Organizers**.
+  Onyx reads six months back to keep each organizer's listing short,
+  and an item that passes six months leaves the index at the next prune.
+- Every run asks Microsoft about every organizer. A refresh reads only the time since the last run.
+  A first index, a prune and a permission sync read the full six months,
+  roughly 10 to 15 seconds per organizer even when there is no transcript. Onyx reads eight organizers at a time.
+  To keep a large tenant fast, list the organizers who record meetings.
 - An organizer Microsoft refuses, for example one who lost the application access policy, lists nothing,
   so their transcripts and chat days leave the index at the next prune. The other organizers are unaffected.
+- A meeting's chat is indexed through the meeting's organizer.
+  The chat of a meeting that another organization set up is not served to apps in your tenant, so it is not indexed.
 
 ## Auto Sync Permissions
 
@@ -200,7 +210,9 @@ Transcript participants are matched by user principal name.
 | Meeting transcript | The organizer and the participants the meeting lists                                                                                 |
 | Meeting chat day   | The chat members who can see the day's first message. Someone added to a chat later sees the days after, as in Teams.                |
 
-A new connector's threads become visible after the first group sync finishes. After that,
+A thread names the group of its channel's members, and a group sync lists who is in each group.
+The first group sync starts within a minute of creating the connector,
+and a new connector's threads become visible once it finishes. After that,
 a join or a leave in Teams reaches Onyx at the next sync.
 Both the document sync and the group sync run every 5 minutes by default.
 Set `TEAMS_PERMISSION_DOC_SYNC_FREQUENCY` and `TEAMS_PERMISSION_GROUP_SYNC_FREQUENCY` (seconds) to change the intervals.

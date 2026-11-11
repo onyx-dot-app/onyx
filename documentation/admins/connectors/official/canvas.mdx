@@ -16,9 +16,13 @@ There is no course picker. Onyx indexes every **available** course returned by C
 | Assignments    | Published assignments only. Onyx indexes the name, HTML description as text, due date when present, and the Canvas assignment link.      |
 | Announcements  | Active announcements only. Onyx indexes the title, HTML message as text, and the Canvas announcement link.                               |
 | Courses        | Only courses in the Canvas `available` state. Unpublished, completed, and deleted courses are not listed.                                |
-| Permissions    | Optional on a Business plan or higher. **Sync with Canvas** mirrors course, section, and group access from enrollments and overrides. |
+| Permissions    | Optional on Onyx Cloud and Enterprise Edition. **Sync with Canvas** mirrors course, section, and group access from enrollments and overrides. |
 
-The connector does not index course attachments.
+On each refresh, the connector lists the token's available courses, then processes pages, assignments,
+and announcements in that order.
+Pages and assignments are included when their Canvas `updated_at` falls in the indexing window.
+Announcements are included when their `posted_at` falls in the window. Pages without `updated_at`,
+assignments without `updated_at`, and announcements without `posted_at` are skipped.
 
 ## Before you begin
 
@@ -67,14 +71,15 @@ and Canvas's [OAuth / access token documentation](https://canvas.instructure.com
   <Step title="Enter the Canvas base URL">
     In **Canvas Base URL**, enter the site URL, such as `https://school.instructure.com`.
 
-    Use `https`. Do not use `http`.
+    Use `https`. Do not use `http`. You can omit a trailing slash and `/api/v1`;
+    Onyx normalizes those if they are included.
 
     <img className="rounded-image" src="/assets/admins/connectors/canvas/CanvasConnector.webp" alt="Canvas connector form with a connector name and the Canvas base URL"/>
   </Step>
 
   <Step title="Choose who can see the content">
     Under **Document Access**, select **Everyone in Your Organization**, **Specific Groups**, or **Sync with Canvas**.
-    **Specific Groups** and **Sync with Canvas** need a Business plan or higher.
+    **Specific Groups** and **Sync with Canvas** are available on Onyx Cloud and Enterprise Edition.
   </Step>
 
   <Step title="Create and verify">
@@ -89,8 +94,8 @@ With **Sync with Canvas**, Onyx maps Canvas visibility to Onyx users by email.
 Canvas user emails must match the users' email addresses in Onyx.
 Users Canvas returns without an email are not granted access.
 
-The token must be able to read course roster emails.
-Onyx rejects a **Sync with Canvas** connector if the token cannot see roster emails.
+The token must be able to read course roster emails. When you create a Canvas connector with **Sync with Canvas**,
+Onyx probes the first available course's roster and rejects the connector if no emails are visible.
 
 | Canvas item | Who can see it in Onyx |
 | --- | --- |
@@ -111,11 +116,35 @@ Section-specific announcements and override-only assignments stay restricted eve
 
 ## Group sync
 
-With **Sync with Canvas**, Onyx also syncs course rosters, sections, and Canvas groups,
-so roster changes apply without a re-index.
+With **Sync with Canvas**,
+Onyx also builds user groups from Canvas so that access survives roster changes without a re-index.
+It creates four kinds of group:
+
+| Onyx group           | Members                                                                                                                |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `canvas-course-<id>` | Everyone on the course roster, from active and invited enrollments.                                                     |
+| `canvas-section-<id>` | The members of a course section.                                                                                       |
+| `canvas-group-<id>`  | The members of a Canvas group.                                                                                          |
+| `canvas-all-users`   | Every user on the Canvas account. Created only when at least one course is public, and only when the token can list account users. |
+
+Sections and Canvas groups are only created where something refers to them: a section enrollment,
+a section-targeted announcement, or an assignment override.
+A Canvas group that no assignment overrides to is not synced.
 
 Document permissions and groups both refresh every 30 minutes.
 Set `CANVAS_PERMISSION_DOC_SYNC_FREQUENCY` and `CANVAS_PERMISSION_GROUP_SYNC_FREQUENCY` (seconds) to change them.
+Permissions are attached during the initial index,
+so a new connector is searchable by the right people from its first indexing attempt.
+
+## Limits
+
+| Limit                  | Value  | Notes                                                                       |
+| ---------------------- | ------ | ----------------------------------------------------------------------------- |
+| Canvas API call        | 30s    | A Canvas request that does not answer in time fails the indexing attempt.    |
+| Results per API page   | 100    | Onyx pages through courses, rosters and account users at this size.          |
+
+The connector has no file-size cap because it indexes no files. It reads page,
+assignment and announcement text through the Canvas API and does not download course attachments.
 
 ## Troubleshooting
 
@@ -141,10 +170,12 @@ Set `CANVAS_PERMISSION_DOC_SYNC_FREQUENCY` and `CANVAS_PERMISSION_GROUP_SYNC_FRE
   <Accordion title="A course, page, assignment, or announcement is missing">
     Confirm the token's Canvas user can open the item. Onyx only lists courses in the `available` state,
     only published pages, only published assignments, and only active announcements.
+    Pages and assignments without `updated_at`, and announcements without `posted_at`, are skipped on refresh.
+    A course that returns HTTP 404 is skipped for that indexing attempt.
   </Accordion>
 
   <Accordion title="Permission sync fails at connector creation">
-    Confirm that your plan is Business or higher.
+    Confirm you are using Onyx Cloud or Enterprise Edition.
     Reconnect with a token that can read course users with email addresses. Student tokens usually fail this check.
   </Accordion>
 

@@ -27,8 +27,8 @@ A hook point is a defined stage in Onyx's pipeline where custom logic can be inj
 - **What** response it expects back
 - A default timeout and fail strategy
 
-Onyx does not make breaking changes to a hook point's payload, response format,
-or behavior without a deprecation process.
+Hook points are intentional — once a hook point is added, Onyx commits to maintaining its payload structure,
+response format, and behavior — meaning it won't change in a breaking way without a proper deprecation process.
 
 ### Hooks
 
@@ -71,7 +71,7 @@ Once connected, you can:
 
 ## Hook Health
 
-Each connected hook shows the health status of its endpoint.
+Onyx monitors your endpoint after the hook is registered and connected, displays its current health status.
 
 | Status | Meaning |
 |---|---|
@@ -89,6 +89,16 @@ Click the status to open **Most Recent Errors** and the full error log for the p
 
 <img className="rounded-image" src="/assets/admins/advanced_configs/hook_thirty_days_errors.webp" alt="Hook Errors in the Last 30 Days"/>
 
+## Authentication
+
+If you configured an API key when registering the hook, Onyx includes it in every request to every hook point:
+
+```
+Authorization: Bearer <your-api-key>
+```
+
+Each Lambda example below checks this header.
+
 ---
 
 ## Document Ingestion
@@ -96,6 +106,9 @@ Click the status to open **Most Recent Errors** and the full error log for the p
 The Document Ingestion hook point lets you intercept every document before it enters the Onyx indexing pipeline.
 Your endpoint receives the fully-formed document and can filter it out, rewrite its content,
 or pass it through unchanged.
+
+It runs immediately after Onyx's internal validation and before the indexing pipeline begins — no partial writes have
+occurred yet.
 
 | Setting | Value |
 |---|---|
@@ -366,9 +379,13 @@ the material should not appear in results since file connector documents are bei
 The Document Push hook point fires after each document is successfully indexed.
 Use it to push indexed content to an external destination such as a wiki, data warehouse, or audit log.
 
+Unlike Document Ingestion (which runs before indexing and can modify or drop documents),
+this hook fires **after** the document has been written to the index.
+
 <Note>
-  Document Push only fires for **public connectors**, and only during **incremental syncs**.
-  It does not fire during an initial index or a full re-index from the beginning.
+  Document Push only fires for **public connectors** in **single-tenant** deployments,
+  and only during **incremental syncs** — it does not fire during an initial index or a full re-index from the
+  beginning.
 </Note>
 
 | Setting | Value |
@@ -483,7 +500,7 @@ The Query Processing hook point lets you intercept every user query before it en
 Your endpoint receives the raw query and the user's identity, and can rewrite the query, reject it entirely,
 or pass it through unchanged.
 
-It runs when the user submits a message, before Onyx saves the message or sends it to the LLM.
+It runs immediately after the user submits a message, before anything is saved to the database or sent to the LLM.
 
 | Setting | Value |
 |---|---|
@@ -646,4 +663,7 @@ If your use case requires a pipeline injection point that doesn't exist yet, ope
 - **What your endpoint would return** — how should Onyx change its behavior based on your response?
 - **Use cases** — what problem does this solve? Are other customers likely to need the same point?
 
-The Onyx team reviews proposals and adds hook points that have broad applicability.
+The Onyx team reviews proposals and implements hook points that have broad applicability. Once a hook point is added,
+Onyx commits to maintaining its payload structure, response format,
+and behavior — meaning it won't change in a breaking way without a proper deprecation process.
+Because of this long-term commitment, each proposal is evaluated carefully before being added.

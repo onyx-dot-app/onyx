@@ -40,9 +40,10 @@ You can receive a streaming response or one complete response.
 
 <Note>
   `forced_tool_id` is no longer supported. Requests with a non-null value receive a validation error.
-  Use `preferred_tool_id` for an optional preference.
+  Use `preferred_tool_id` for an optional preference. Action invocation is not guaranteed.
   Selecting an Action does not grant permission to use it or bypass approval.
   Deep Research does not accept an Action preference. An unavailable Action produces an error.
+  Slack also uses a search preference; it does not guarantee a search on every request.
 </Note>
 
 ## Response Format

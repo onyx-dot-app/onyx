@@ -180,7 +180,8 @@ Environment default: `MASK_CREDENTIAL_PREFIX`.
 Lets a custom LLM provider configuration set process environment variables for the duration of a call,
 for provider options that have no LiteLLM parameter.
 Turn it off to require every provider setting to have a LiteLLM equivalent. There is no environment variable.
-The default is on for self-hosted deployments. On Onyx Cloud this is always off.
+The default is on for self-hosted deployments. On Onyx Cloud this is always off,
+because one process serves many workspaces.
 
 ### SSRF Protection
 

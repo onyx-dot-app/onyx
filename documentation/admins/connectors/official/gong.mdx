@@ -28,13 +28,18 @@ It also stores the system that recorded the call, such as Zoom, as metadata.
 
 ## How it works
 
-The first run reads every call in the account, or in the selected workspaces,
-unless [a start date](#limit-how-far-back-onyx-reads) is set.
+Onyx asks Gong for the transcripts of calls that started since its last run,
+and it reads one page of transcripts at a time. The first run reads every call in the account,
+or in the selected workspaces, unless [a start date](#limit-how-far-back-onyx-reads) is set.
 
 - **Refresh**. The default refresh interval is **30 minutes**.
   Each refresh also rereads the day before the last run,
   so a call that ended late or that Gong transcribed late is still picked up.
+- **Calls Gong is still processing**. Gong sometimes lists a transcript before it serves the call's details.
+  Onyx keeps such a call and retries it over the next 15 minutes or so.
+  A call that never resolves is reported as a failed document for that run.
 - **Rate limits**. Gong allows 3 API calls per second and 10,000 per day for the whole company.
+  Onyx spaces its requests to stay under the per-second limit and waits as long as Gong asks when it is throttled.
   A first index of a large account shares the daily allowance with your other Gong integrations.
 - **Deleted calls**. A call deleted in Gong stays in Onyx until a pruning run removes it.
   A prune rereads every transcript the connector covers, so it spends API allowance like a first index.
@@ -96,6 +101,7 @@ See Gong's guide to [managing API keys](https://help.gong.io/docs/receive-access
     enter your region's host, such as `https://eu.api.gong.io`.
 
     Onyx accepts only `api.gong.io` and hosts under it, over HTTPS.
+    It adds `https://` when the scheme is missing and drops a trailing slash.
   </Step>
 
   <Step title="Choose the workspaces">

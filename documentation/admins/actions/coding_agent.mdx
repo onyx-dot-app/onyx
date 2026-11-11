@@ -18,8 +18,28 @@ and returns a written answer.
 - **Code investigation**: Trace data flow and interactions between components
 - **Onboarding**: Summarize a project's structure and key modules
 
-One investigation explores the code for a limited number of steps.
-Then the Coding Agent writes its answer from what it found.
+## How It Works
+
+When the LLM invokes the Coding Agent, Onyx:
+
+<Steps>
+  <Step title="Downloads the repository">
+    Onyx downloads an archive of the repository's default branch (no Git history)
+    into an isolated session in the [Code Interpreter](/admins/actions/code_interpreter) service.
+  </Step>
+
+  <Step title="Investigates the code">
+    An LLM loop runs shell commands to explore the code.
+  </Step>
+
+  <Step title="Returns an answer">
+    The loop ends with a written answer based on its findings.
+  </Step>
+</Steps>
+
+One investigation runs for up to 25 minutes. After that,
+the Coding Agent stops exploring and writes its answer from what it found.
+The sandbox session is removed when the investigation ends.
 
 ## Configuration
 

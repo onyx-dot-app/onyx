@@ -11,16 +11,21 @@ Go to **Admin → Language Models** to manage provider credentials and set the m
 
 ## What the model does here
 
-Agent Wiki uses this model to:
+The model is doing more work than a chat box. It:
 
-- Evaluate [trigger](/agent-wiki/automate/triggers) conditions written in plain English, on every relevant change
-- Write the notification text a trigger sends, grounded in what actually changed
-- Apply natural-language document updates, including the ones agents request over MCP
-- Merge concurrent edits when two writers touch the same page
-- Judge and apply [Auto Organize](/agent-wiki/automate/auto_organize) proposals
+- Evaluates [trigger](/agent-wiki/automate/triggers) conditions written in plain English, on every relevant change
+- Writes the notification text a trigger sends, grounded in what actually changed
+- Applies natural-language document updates, including the ones agents request over MCP
+- Merges concurrent edits when two writers touch the same page
+- Judges and applies [Auto Organize](/agent-wiki/automate/auto_organize) proposals
 
 So provider choice and rate limits affect the responsiveness of the whole product, not one feature.
-Choose a capable model. To control cost, use a cheaper model for ingestion.
+
+<Note>
+  **Choosing a model.** A capable model is worth it here — it's behind chat, trigger evaluation,
+  and every automated edit. Cost stays reasonable because the one genuinely high-volume job, ingestion,
+  can run on its own cheaper model (below).
+</Note>
 
 ## A cheaper model for ingestion
 

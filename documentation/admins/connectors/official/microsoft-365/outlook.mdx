@@ -14,13 +14,18 @@ On-premises Exchange Server is not supported.
 
 | Content       | Behavior                                                                                                                                                                                                                                                             |
 | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Threads       | One document per mail thread across the indexed mailboxes. Each message contributes its sender, recipients, date and text body, oldest first. Drafts are skipped. Long threads keep their newest 100 indexable messages, found among the newest 500. A mailbox that holds only part of a thread, such as one that never received a private reply, gets a document of its own copy. |
+| Threads       | One document per mail thread across the indexed mailboxes, built from the mailbox that holds the thread's newest message and the most messages. Each message contributes its sender, recipients, date and text body, oldest first. Drafts are skipped. Long threads keep their newest 100 indexable messages, found among the newest 500. A mailbox that holds only part of a thread, such as one that never received a private reply, gets a document of its own copy. |
 | Folders       | Every indexed folder becomes part of the mailbox's hierarchy. Junk Email, Deleted Items, Drafts and Outbox are always skipped, as are hidden folders and search folders. You can skip more folders by name, and the subfolders of a skipped folder are skipped with it. |
 | Attachments   | Optional. The text of file attachments is added to the message it came with. Inline attachments (usually signature images), attached mail items and cloud links are skipped, as are files over 20 MB and file types Onyx cannot parse.                                                              |
 | Calendar      | Optional. One document per event with its time, location, organizer, attendees and description. A recurring series is indexed once from its master plus any modified occurrence. Cancelled events and events marked private or confidential are skipped.            |
 | Permissions   | Optional, on paid plans. A thread is visible to the owners of the mailboxes that hold every message in its document, and a partial copy to its owner. Folders are visible to the mailbox owner. An event is also visible to its organizer and attendees. |
 
+Each refresh reads the messages each folder received since the last run and rebuilds every thread that gained one.
+A thread that only lost a message keeps its old text until it gains a message or the connector is re-indexed.
 Pruning removes threads that no longer exist and calendar events that have left the calendar window.
+
+After an upgrade that brings thread documents, every existing Outlook connector is re-indexed once,
+and its per-mailbox documents are removed at the next prune.
 
 ## Before you begin
 
@@ -59,6 +64,9 @@ A client secret or a certificate both work. Outlook reads no SharePoint API, so 
 
     Onyx validates the connector when you save it: the app can sign in, each listed mailbox is reachable,
     each group in **Mailbox Groups** can be found and its members listed, or the tenant's users can be listed.
+    During indexing,
+    a mailbox or calendar the app may not open is recorded as an error naming the missing permission when you listed the
+    mailbox, and skipped with a log line for a mailbox found through a group or every-mailbox mode.
   </Step>
 
   <Step title="Choose the mailboxes">
@@ -130,7 +138,9 @@ A mailbox's address must match the user's email in Onyx.
 | Threads                         | The owners of the mailboxes that hold every message in the thread's document. A partial copy is visible to its owner only. |
 | Calendar events                 | The owner of the mailbox, the organizer and every attendee      |
 
-A new connector is searchable by the right people from its first indexing attempt.
+Permissions are attached during indexing,
+so a new connector is searchable by the right people from its first indexing attempt.
+Who can read a thread follows who holds the mail, which every refresh keeps current.
 A permission sync runs once a day by default to catch deletions and updates the access lists of existing documents.
 Set `OUTLOOK_PERMISSION_DOC_SYNC_FREQUENCY` (seconds) to change the interval.
 

@@ -168,6 +168,8 @@ Onyx runs two syncs on their own schedules, separate from indexing:
 | Documents | 30 minutes | Re-reads who has access to each site, library, folder, and document, and updates Onyx to match. |
 | Groups    | 5 minutes  | Re-reads SharePoint site groups and Entra ID groups, expanding nested groups down to individual members. |
 
+The group sync starts as soon as the connector exists, and the document sync runs once the first index finishes,
+so permissions are in place before anything becomes searchable.
 A user's access comes from their own account and from the groups they belong to,
 both SharePoint site groups and Entra ID security groups, including nested ones.
 Set `SHAREPOINT_PERMISSION_DOC_SYNC_FREQUENCY` and `SHAREPOINT_PERMISSION_GROUP_SYNC_FREQUENCY` (seconds)
@@ -252,7 +254,7 @@ consent and certificate problems every Microsoft 365 connector can show.
 
   <Accordion title="A site page is indexed with only its title">
     The page's layout is corrupted, so SharePoint does not return its contents.
-    Opening the page in SharePoint and re-saving it normally repairs this.
+    Onyx keeps the page rather than dropping it. Opening the page in SharePoint and re-saving it normally repairs this.
   </Accordion>
 
   <Accordion title="Large files are missing">

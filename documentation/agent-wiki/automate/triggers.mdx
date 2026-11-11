@@ -66,6 +66,8 @@ its condition can be about state ("still marked blocked") or about change ("a ne
   </Step>
 </Steps>
 
+**Create** stays disabled until Watch, If, and Then Send are filled in, and every action has its recipient.
+
 ## Destinations
 
 | Destination | What happens |
@@ -95,11 +97,19 @@ A plain-English summary of the schedule shows as you build it (*"Daily at 09:00 
 Under **Advanced**,
 you can write a raw 5-field cron expression instead — `*/15 * * * *` — which switches the frequency to Custom.
 
+Due triggers are evaluated every minute, so a scheduled trigger runs at its next cron tick with minute-level resolution.
+
 ### The "since last check" window
 
 For scheduled triggers, the change diff covers the window since the previous run — roughly a day for a daily schedule,
-an hour for an hourly one. A watched page that moved during the window shows up as a change to that page,
-not as a deleted page plus a new one.
+an hour for an hourly one. Worth knowing:
+
+- **Renames and moves are followed.** A watched page that moved mid-window shows up as a change to that page, not as a
+  deleted file plus a brand-new one.
+- **The first run** looks back one interval, so it behaves like every run after it.
+- **After downtime**, the lookback is capped at 14 days — a long-idle trigger can't pull months of history into one
+  check.
+- **A quiet window** reads as "no changes in this window", so a pure change condition simply doesn't fire.
 
 ## Sending to Slack
 
@@ -146,6 +156,8 @@ An admin has to save Slack app credentials first ([Notifications](/agent-wiki/ad
 
 ## Good to know
 
+- **State versus change.** Both are available on every scheduled run, so phrase the condition for the one you want.
+  "Is X true right now?" and "did X change?" produce very different triggers.
 - **Monthly skips short months.** A day-31 schedule skips February rather than rolling over to the 1st.
 - **Activity Center timestamps** use the wiki's configured timezone, falling back to your browser's.
 - **Slack formatting.** Markdown bullets render as bullets, and links don't unfurl into preview cards.

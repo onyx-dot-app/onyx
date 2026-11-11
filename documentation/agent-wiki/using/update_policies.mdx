@@ -57,6 +57,9 @@ So the usual pattern is to set the intent once on a folder — *"nothing under `
 override only the exceptions. A page with nothing set simply takes the nearest ancestor that has an opinion,
 all the way up to the wiki root.
 
+Because policies live per-path rather than in the page body, none of this guidance leaks into the content itself,
+and it survives edits by anyone.
+
 ## Update health
 
 The **Update History** card at the bottom of the panel shows how often the page has been auto-edited in the last 24
@@ -68,7 +71,8 @@ hours, measured against two limits:
   Integration](/agent-wiki/admin/onyx_integration#ingest-settings) page;
   a page owner can override it here for pages where churn is expected (or especially unwelcome).
 - **Auto-Edit Limit.** The hard cap, set by the admin for the whole wiki. A page over the cap has
-  further ingestion updates skipped until its trailing 24-hour count falls back under.
+  further ingestion updates skipped until its trailing 24-hour count falls back under — a runaway page can't burn model
+  budget or bury its own history.
 
 Unlike the switches, the alert threshold is per-page only — it doesn't inherit down folders.
 

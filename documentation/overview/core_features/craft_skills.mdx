@@ -101,6 +101,8 @@ Every new Skill is personal and private. After creating it, you can share it fro
 <Info>
   If you already have a Skill,
   use **Import skill** at the top of the creation page to fill in the form and add its files.
+  If you have already entered content, Onyx asks before replacing the name, description, instructions,
+  and supporting files with the imported Skill.
 </Info>
 
 ### Upload an existing Skill
@@ -152,7 +154,8 @@ description: Create a concise weekly customer update from meeting notes and acco
 Select **Create skill** > **Import from GitHub** and enter the repository, such as `owner/repo`.
 Onyx scans the repository for folders that contain a `SKILL.md` and lists the importable Skills.
 Select the Skills you want. Select **Configure access** to share them with people, groups, or your organization.
-The access settings apply to all selected Skills. Then import the selection.
+The access settings apply to all selected Skills. Import the selection and review the results.
+Onyx shows which Skills it imported and which it could not.
 
 Public repositories work without setup. To import from a private repository, use **Connect GitHub** in the
 import dialog. If GitHub is not set up for your workspace, ask an admin.
@@ -164,7 +167,8 @@ Open a personal Skill to edit its name, description, or instructions. Under **Su
 - Add individual files, ZIP files, or folders. New files are added to the existing bundle, and matching paths are
   replaced.
 - Browse the bundle as a directory tree and remove files you no longer need. `SKILL.md` cannot be removed.
-- Upload content that includes `SKILL.md` to replace the current name, description, instructions, and files.
+- Upload content that includes `SKILL.md` to replace the current name, description, instructions, and files. Onyx asks
+  you to confirm before replacing the existing Skill content.
 
 Changes are synchronized to people who can use the Skill. You can also disable the Skill without deleting it,
 change its sharing, transfer ownership, or delete it.

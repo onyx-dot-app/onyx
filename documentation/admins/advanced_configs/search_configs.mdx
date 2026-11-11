@@ -42,6 +42,8 @@ A re-index builds a new index from the documents that are already in the index.
 Onyx does not fetch the documents from their sources again, but a re-index of a large index can take hours or days.
 While a re-index with **Re-index All Connectors Then Switch** or **Re-index Active Connectors Then Switch** builds the
 new index, **Full Re-index** and connector edits that re-crawl a source are blocked.
+Such a re-index cannot start while a connector runs a Full Re-index or a backfill.
+A queued Full Re-index or backfill waits until the re-index is complete.
 Documents that change while the re-index runs can take until the connector's next sync to show in the new index.
 A document that failed to index during the re-index needs **Retry** on the connector page,
 and a connector without a schedule needs **Update Index** after the re-index.
@@ -287,6 +289,12 @@ and Onyx indexes the descriptions so that search can find them.
 | **Extract & Caption Images** | Turns image processing on or off. It is on by default. When it is off, connectors skip images. |
 | **Captioning LLM** | The vision-capable language model that describes the images. |
 
+If an image is larger than 3 MB,
+Onyx shrinks it to at most 1024 pixels on each side before the **Captioning LLM** describes it.
+This keeps every image within the size limits of model providers. Transparent areas become white,
+and photos keep their orientation. Connectors also skip very large files when they download them,
+so there's no size setting to manage.
+
 Onyx describes images only after you select a **Captioning LLM**. To change the settings in this section,
 you need a vision-capable [language model](/admins/ai_models/overview). Until you set one up,
 you cannot change **Extract & Caption Images**: connectors download images, but Onyx does not describe them.
@@ -315,7 +323,9 @@ Use it to stay below the rate limits of your embedding provider.
 
 <img className="rounded-image" src="/assets/admins/advanced_configs/index_settings_embedding_rate_limit.webp" alt="Embedding rate limit section with the Requests per window and Window length fields"/>
 
-When indexing reaches the limit, it waits and tries again. A batch fails only if it waits for more than six hours.
-The limit does not apply to search queries.
+When indexing reaches the limit, it waits and tries again.
+It also waits and tries again when the provider sends a rate-limit error.
+A batch fails only if it waits for more than six hours. The limit does not apply to search queries.
 
 Each field saves when you leave it. The new limit applies to the next embedding batch and does not need a re-index.
+You can change the limit during a re-index.

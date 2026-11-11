@@ -86,8 +86,10 @@ With **Sync with the source**, Onyx keeps an access list from the source and upd
 Group membership from the source is also synced where the source supports it.
 A permission change in the source can take from a few minutes to an hour to appear in Onyx.
 Click **Sync Permissions** on the Connector's page to pull permissions now.
-If a group sync cannot read a user or a group, it skips it. For Google Drive and Confluence,
-the sync's card in the **Activities** panel lists these failures with their errors.
+If a group sync cannot read a user or a group, it skips it.
+The sync's card in the **Activities** panel counts these failed users and groups.
+Click a count to see each one with its error, and click **Resolve** to close it.
+Google Drive and Confluence report these failures.
 
 Permission syncing is available for these Connectors:
 
@@ -143,11 +145,16 @@ Two cards are above the list:
   and a chart of the documents processed in the selected time window.
   Select bars on the chart to show only the activities in that time range.
 
-The pills above the list count the Connectors in each status. Click a pill to show only its Connectors.
+The pills above the list count the Connectors in each status. Indexing and syncing Connectors share one pill,
+and its tooltip shows the two counts. Click a pill to show only its Connectors, and click it again to show all.
+The **Status** menu still has separate **Indexing** and **Syncing** items.
 Click the error count on a row to show its errors in the **Activities** panel.
-Click **View Details** on a row to see its latest runs.
+Click **View Details** on a row to see its running and latest runs, six at most, with filters for time range,
+run type and status. **View All Runs** opens the Indexing tab of the Connector's page.
 
 The **Activities** panel next to the list shows the indexing activity of all Connectors.
+It opens automatically when there are errors. Click the panel button on the counts card to show or hide it.
+On a narrow screen, the panel is below the list. Click **Activities** at the end of the list to show or hide it.
 
 <img className="rounded-image" src="/assets/admins/connectors/indexing_status.webp" alt="Onyx Existing Connectors page showing connector statuses"/>
 
@@ -179,14 +186,24 @@ The status of a Connector can be:
 
 Click a Connector to open its page.
 The **Indexing Status** card shows the indexing status and the number of indexed documents.
-Click the status to go to that run on the **Indexing** tab. For file-based sources, such as Google Drive, SharePoint,
-and AWS S3, the card also shows the file types and their size.
+It does not show an estimate of the documents left to index. Click the status, or the pruning or checks icon beside it,
+to go to that run on the **Indexing** tab. Google Drive, SharePoint, OneDrive, File Upload, AWS S3, Cloudflare R2,
+Google Storage, Oracle Storage and Azure Data Lake Storage record each indexed document's file type and size.
+SharePoint site pages have no type. Documents indexed before Onyx recorded types get one on the next **Full Re-index**.
+The card shows the number of file types and, when every document has a type and a size, their total size.
+When every document has a type, click **View Details** to see the documents and size for each type.
+Types after the 11 largest show together as **Other**. Under the status,
+a scheduled Connector shows its position in the indexing queue,
+and a deleting Connector shows when the deletion started.
 Click the error count to see the latest run's errors in the **Activities** panel.
+The panel opens automatically when there are errors. When the panel is beside the page,
+use the panel button to show or hide it.
 A Connector with permission sync also shows a **Permissions Sync Status** card with the synced documents and,
 where the source syncs groups, the group memberships. Two tabs follow the status cards:
 
 - **Connector Configurations**: the account, index configurations, sharing and schedule.
 - **Indexing**: the **Document Indexing** chart and the **Indexing Runs** list.
+  The chart shows only when the selected time window has indexing. The tab is available after the first run starts.
 
 The **Manage Index** menu has these actions:
 

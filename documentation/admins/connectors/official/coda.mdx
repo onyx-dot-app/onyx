@@ -14,7 +14,11 @@ There is no doc picker. Onyx indexes every doc the token's Coda account can reac
 | Pages   | One document per Coda page. Onyx indexes the page name, its link, and the page text.                                                      |
 | Tables  | One document per table, with one section per row. A row is indexed as its name followed by the values of its cells.                       |
 | Links   | Every page, table and row keeps its Coda browser link, so a citation opens the item in Coda.                                              |
-| Permissions | Not available. **Sync with Coda** is not offered. |
+| Permissions | Not available. **Sync with Coda** is not offered, so the access type can only be **Everyone in Your Organization**, **Specific Groups**, or **Only Me**. |
+
+Each refresh re-reads the docs the token can open and indexes the pages and tables changed since the last run.
+A table whose rows cannot be read is still indexed from its name alone,
+so the table appears in search even when its contents are unavailable.
 
 <Warning>
   The connector indexes everything the token's account can open, and the access type applies to all of it at once.
@@ -48,6 +52,7 @@ You need:
   <Step title="Connect a Coda account">
     In Onyx, go to **Admin Panel → Connectors** and select **Coda**. Under **Authentication Account**,
     select **New Coda Account** and paste the token into **API Token**.
+    Onyx checks the token when you create the connector and rejects it if Coda returns an authentication error.
 
     <img className="rounded-image" src="/assets/admins/connectors/coda/CodaCredential.webp" alt="Create a Coda account with a display name and the Coda API token"/>
   </Step>
@@ -58,7 +63,7 @@ You need:
 
   <Step title="Choose who can see the content">
     Under **Document Access**, select **Everyone in Your Organization** or **Specific Groups**.
-    **Specific Groups** needs a Business plan or higher.
+    **Specific Groups** is available on Onyx Cloud and Enterprise Edition.
   </Step>
 
   <Step title="Create and verify">
@@ -66,6 +71,16 @@ You need:
     and confirm its first indexing attempt completes.
   </Step>
 </Steps>
+
+## Limits
+
+| Limit                | Value | Notes                                                                        |
+| -------------------- | ----- | ------------------------------------------------------------------------------ |
+| Coda API call        | 30s   | A Coda request that does not answer in time fails after the retries below.   |
+| Retries per request  | 3     | Backed off between attempts.                                                  |
+
+Onyx rate-limits its own calls to the Coda API. The connector downloads no files, so it has no file-size cap:
+it indexes page text and table cell values through the API.
 
 ## Troubleshooting
 
@@ -82,7 +97,8 @@ You need:
 
   <Accordion title="Indexing stops with a rate-limit error">
     `Validation failed due to Coda rate-limits being exceeded (HTTP 429)` means Coda is throttling the account.
-    Wait and retry. A persistent 429 usually means something else is also using the token.
+    Wait and retry. Onyx already rate-limits and retries its own calls,
+    so a persistent 429 usually means something else is also using the token.
   </Accordion>
 
   <Accordion title="A doc, page or table is missing">

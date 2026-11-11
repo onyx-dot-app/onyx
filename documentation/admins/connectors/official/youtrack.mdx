@@ -79,9 +79,21 @@ for the extra permissions the token's user needs.
 ### Connection checks
 
 Each check reads from YouTrack with the token, so a failure points at the token user's access.
+
+| Check                                                   | Passes when                                                              | Fails when                                                                                           |
+| ------------------------------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| YouTrack accepts the URL and token                      | YouTrack answers for the token's user                                    | The URL is wrong, a YouTrack Server URL lacks its context path, or the token is invalid or revoked   |
+| Configured projects are readable                        | Every short name you entered exists for the token's user                 | A short name is misspelled, or the token's user has no access to the project                         |
+| Issues and comments are readable                        | One issue in scope returns with its comments                             | The token's user lacks Read Issue or Read Issue Comment                                              |
+| The token's user reads every issue, restricted ones too | The token's user holds Override Visibility Restrictions in every project | The token's user lacks Override Visibility Restrictions in a project in scope, or cannot read role assignments |
+| Issue visibility settings are readable                  | One issue in scope returns with its **Visible to** settings              | The token's user lacks Read Issue in a project in scope                                              |
+| Users' emails are readable                              | YouTrack lists users with their emails                                   | YouTrack hides emails from the token's user, so no YouTrack user could be matched to an Onyx user    |
+
 The token and issues checks run for every connector, and the projects check whenever short names are entered.
 The rest run only with **Sync with YouTrack**, and run again before each scheduled permission sync,
 so a token that loses access stops the sync instead of hiding issues.
+
+If no issue in scope exists yet, the issues check passes with a note that comment access was not checked.
 
 ## Sync with YouTrack
 
