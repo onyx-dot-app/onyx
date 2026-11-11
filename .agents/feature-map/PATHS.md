@@ -381,6 +381,7 @@ the admin routes and check that each has a row above, run
 | `.devcontainer/` | Developer container image. No product surface reads it. |
 | `backend/alembic/` | Migrations. Read the component that owns the table being migrated. |
 | `backend/supervisord.conf` | The process list of the background container in Docker Compose. Read the component of the worker you change; [[background-jobs]] has the queue rules. |
+| `web/src/lib/types.ts` | Shared API types for many components. Look up the component that owns the type the diff touches. |
 | `documentation/` | Customer docs (Mintlify). `documentation/AGENTS.md` sets their rules, and `documentation/audit/` maps each page to the components it describes. A code change updates the page that covers it. |
 | `backend/onyx/db/seeding/`, `backend/onyx/seeding/`, `backend/ee/onyx/server/seeding.py` | Seed data for rows that several components own. The default agent and the built-in tool rows come from migrations. |
 | `backend/onyx/evals/`, `backend/onyx/server/evals/`, `backend/ee/onyx/server/evals/` | The eval harness. Read the component being evaluated. A prompt or retrieval change needs an eval, not only a unit test. |
