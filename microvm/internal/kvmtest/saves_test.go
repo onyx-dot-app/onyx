@@ -51,11 +51,11 @@ func startSavesAgent(t *testing.T, e env, name, certDir string, certs *testcerts
 		"-v", e.DataDir + ":" + e.DataDir, "-v", certDir + ":" + certDir + ":ro",
 		"-v", e.ArtifactsDir + ":" + e.ArtifactsDir + ":ro", "-v", filepath.Dir(bin) + ":" + filepath.Dir(bin) + ":ro",
 		"-v", ca + ":/etc/ssl/certs/ca-certificates.crt:ro"}
-	// The proxy CA, if there is one: the daemon installs it at Init. Without
-	// it, the root drive must have a built-in CA.
+	// The proxy CA only if KVM_PROXY_CONFDIR is set (check-kvm.sh): the
+	// daemon installs it at Init. Else the root drive needs a built-in CA.
 	var caFlags []string
-	confdir := getenv("KVM_PROXY_CONFDIR", "/opt/proxy/confdir")
-	if proxyCA := filepath.Join(confdir, "mitmproxy-ca-cert.pem"); fileExists(proxyCA) {
+	confdir := os.Getenv("KVM_PROXY_CONFDIR")
+	if proxyCA := filepath.Join(confdir, "mitmproxy-ca-cert.pem"); confdir != "" && fileExists(proxyCA) {
 		args = append(args, "-v", confdir+":"+confdir+":ro")
 		caFlags = []string{"--egress-ca", proxyCA}
 	}
