@@ -215,7 +215,7 @@ def test_current_content_read_refuses_bundle_over_total_limit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     limit = 1024
-    monkeypatch.setattr(validation, "DEFAULT_TOTAL_MAX_BYTES", limit)
+    monkeypatch.setattr(validation, "STORED_ZIP_MAX_BYTES", limit)
     stream = io.BytesIO(b"x" * (limit + 1))
     file_store = MagicMock(spec=FileStore)
     file_store.read_file.return_value = stream
@@ -361,3 +361,20 @@ def test_editor_ingest_skips_upload_limits_only_when_asked() -> None:
     )
 
     assert ingested.bundle_file_id == "bundle-id"
+
+
+def test_edit_that_would_not_load_again_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    saved = _build_zip([("SKILL.md", _SKILL_MD)])
+    monkeypatch.setattr(bundle_module, "STORED_ZIP_MAX_BYTES", len(saved) + 16)
+
+    with pytest.raises(OnyxError) as caught:
+        rewrite_custom_bundle_skill_md(
+            saved,
+            canonical_name="limits",
+            description="Limit checks",
+            instructions_markdown="# Instructions\n\n" + "x" * 4096,
+        )
+
+    _assert_limit_error(caught.value, "zip_bytes", len(saved) + 16)

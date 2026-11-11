@@ -35,6 +35,9 @@ DEFAULT_PER_FILE_MAX_BYTES: Final[int] = 25 * _MIB
 DEFAULT_TOTAL_MAX_BYTES: Final[int] = 100 * _MIB
 DEFAULT_ZIP_MAX_BYTES: Final[int] = 25 * _MIB
 DEFAULT_MAX_FILE_COUNT: Final[int] = 500
+# Saved bundles are read up to this many ZIP bytes; before the ZIP limit, uploads
+# were capped at the expanded total.
+STORED_ZIP_MAX_BYTES: Final[int] = DEFAULT_TOTAL_MAX_BYTES
 # A ZIP file list for 500 files fits 1 MiB. Saved bundles had no file limit.
 ZIP_DIRECTORY_MAX_BYTES: Final[int] = 1 * _MIB
 STORED_ZIP_DIRECTORY_MAX_BYTES: Final[int] = 4 * _MIB
@@ -583,11 +586,12 @@ def normalize_stored_bundle(zip_bytes: bytes) -> NormalizedSkillBundle:
     """Normalize a saved bundle, or an edit that cannot add files to one.
 
     Saved bundles can predate the ZIP-size and file-count limits, so these
-    limits do not apply. The per-file and expanded-total limits still do.
+    limits do not apply. The per-file and expanded-total limits still do, and
+    the ZIP must fit the stored-read limit so it can be loaded again.
     """
     return normalize_custom_bundle(
         zip_bytes,
-        zip_max_bytes=None,
+        zip_max_bytes=STORED_ZIP_MAX_BYTES,
         max_file_count=None,
         max_directory_bytes=STORED_ZIP_DIRECTORY_MAX_BYTES,
     )
