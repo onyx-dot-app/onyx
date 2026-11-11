@@ -42,6 +42,8 @@ import {
 import { SvgGitHub } from "@opal/logos";
 import BulkSkillSharingModal from "@/sections/modals/skills/BulkSkillSharingModal";
 import { useUser } from "@/providers/UserProvider";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
 import TextSeparator from "@/refresh-components/TextSeparator";
 import useOnMount from "@/hooks/useOnMount";
 import useUserSkills from "@/hooks/useUserSkills";
@@ -73,6 +75,9 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
   const t = useTranslations("skills");
   const bulkCopy = useTranslations("skills.bulk");
   const { isAdmin } = useUser();
+  const { isGlobalHolder: canManageOrgSkills } = usePermissionAuthority(
+    Permission.MANAGE_SKILLS
+  );
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkSharingOpen, setBulkSharingOpen] = useState(false);
@@ -693,6 +698,12 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
                                                 item.skill
                                                   .installation_policy ===
                                                 "REQUIRED"
+                                            )) ||
+                                          (!canManageOrgSkills &&
+                                            selectedItems.some(
+                                              (item) =>
+                                                item.skill.public_permission !==
+                                                null
                                             )),
                                         onSelect: () => {
                                           setBulkDeleteTargets(selectedItems);
