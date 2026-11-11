@@ -164,7 +164,7 @@ def _is_editable_by_user(user: User) -> ColumnElement[bool]:
         _is_shared_with_user_group(user, SkillSharePermission.EDITOR),
         Skill.public_permission == SkillSharePermission.EDITOR,
     )
-    if has_permission(user, Permission.MANAGE_SKILLS) is PermissionAuthority.SCOPED:
+    if has_permission(user, Permission.MANAGE_PLUGINS) is PermissionAuthority.SCOPED:
         editable = or_(editable, _is_group_shared_only_within_managed_scope(user))
     return editable
 
@@ -264,14 +264,14 @@ def _skill_select_for_management_policy(
                 ~exists().where(ExternalApp__Skill.skill_id == Skill.id),
             )
         )
-        if has_global_permission(user, Permission.MANAGE_SKILLS):
+        if has_global_permission(user, Permission.MANAGE_PLUGINS):
             return stmt
         stmt = stmt.where(skill_visible_to_user(user))
         return _exclude_unavailable_built_in_skills(stmt, db_session)
 
     if policy == SkillManagementPolicy.EDIT:
         stmt = stmt.where(Skill.built_in_skill_id.is_(None))
-        if has_global_permission(user, Permission.MANAGE_SKILLS):
+        if has_global_permission(user, Permission.MANAGE_PLUGINS):
             return stmt
         return stmt.where(_is_editable_by_user(user))
 
@@ -818,7 +818,7 @@ SkillBulkAction = Literal["share", "enable", "disable", "delete"]
 def ensure_can_edit_org_visibility(skill: Skill, user: User) -> None:
     if skill.author_user_id == user.id:
         return
-    if has_global_permission(user, Permission.MANAGE_SKILLS):
+    if has_global_permission(user, Permission.MANAGE_PLUGINS):
         return
     raise OnyxError(
         OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
@@ -832,7 +832,7 @@ def _assert_group_share_within_scope(
     user: User,
     db_session: Session,
 ) -> None:
-    """Changing a skill's group shares is a MANAGE_SKILLS action, matching how
+    """Changing a skill's group shares is a MANAGE_PLUGINS action, matching how
     agents treat group attachment. EDIT on the skill is not enough: an owner
     could otherwise publish into any group and inject the skill into that group
     manager's scope. Shares are read from the DB, never the request, so a
@@ -845,7 +845,7 @@ def _assert_group_share_within_scope(
     assert_within_scope(
         user,
         db_session,
-        permission=Permission.MANAGE_SKILLS,
+        permission=Permission.MANAGE_PLUGINS,
         current_group_ids=list(current),
         requested_group_ids=list(change.group_shares),
         is_non_public=skill.public_permission is None

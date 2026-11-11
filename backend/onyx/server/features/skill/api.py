@@ -972,7 +972,7 @@ def transfer_current_user_skill_ownership(
         or not skill.author.is_active
     )
     if skill.author_user_id != user.id and not (
-        has_global_permission(user, Permission.MANAGE_SKILLS) and ownership_vacant
+        has_global_permission(user, Permission.MANAGE_PLUGINS) and ownership_vacant
     ):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,

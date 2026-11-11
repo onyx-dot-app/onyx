@@ -216,12 +216,12 @@ The library preview of an external-app skill calls the same renderer
     `db/skill.py:set_skill_installation_policy` refuses a built-in. EDIT on a
     skill is not enough to change its groups:
     `db/skill.py:_assert_group_share_within_scope` treats any change to the
-    group set or levels as a `MANAGE_SKILLS` action within scope
+    group set or levels as a `MANAGE_PLUGINS` action within scope
     ([[authorization]]). Without it, an owner could push a skill into any
     group manager's scope. It compares against the stored shares, and the
     privacy check uses the stored visibility and the request, so a
     public-to-private change in the same request cannot get past it. A
-    `public_permission` change needs the author or global `MANAGE_SKILLS`
+    `public_permission` change needs the author or global `MANAGE_PLUGINS`
     (`db/skill.py:ensure_can_edit_org_visibility`; the patch route calls it
     too). A new sharing entry point must call `share_skill__no_commit`, not
     `db/skill.py:replace_skill_shares`.
@@ -341,7 +341,7 @@ The library preview of an external-app skill calls the same renderer
 - [[craft-external-apps]]: app readiness and action policy views. GitHub
   import and preview authenticate with the user's GitHub app credential
   (`server/features/skill/api.py:_github_authorization_header`).
-- [[authorization]]: `MANAGE_SKILLS` and the scoped-manager group check
+- [[authorization]]: `MANAGE_PLUGINS` and the scoped-manager group check
   (`assert_within_scope`).
 - [[file-store-and-user-files]]: bundle blobs.
 - [[image-generation]]: the image skill is available only when image

@@ -67,7 +67,7 @@ def user_permission_for_skill(
     if skill.author_user_id == user.id:
         return SkillAccessLevel.OWNER
 
-    if has_global_permission(user, Permission.MANAGE_SKILLS):
+    if has_global_permission(user, Permission.MANAGE_PLUGINS):
         return SkillAccessLevel.EDITOR
 
     direct_permissions = {
@@ -133,7 +133,8 @@ def skill_response_for_user(
         user_group_ids = get_user_group_ids_for_user(db_session, user.id)
     if (
         managed_user_group_ids is None
-        and has_permission(user, Permission.MANAGE_SKILLS) is PermissionAuthority.SCOPED
+        and has_permission(user, Permission.MANAGE_PLUGINS)
+        is PermissionAuthority.SCOPED
     ):
         managed_user_group_ids = fetch_managed_group_ids(user, db_session)
     return SkillResponse.from_custom(
@@ -161,7 +162,7 @@ def skills_list_response_for_user(
     user_group_ids = get_user_group_ids_for_user(db_session, user.id)
     managed_user_group_ids = (
         fetch_managed_group_ids(user, db_session)
-        if has_permission(user, Permission.MANAGE_SKILLS) is PermissionAuthority.SCOPED
+        if has_permission(user, Permission.MANAGE_PLUGINS) is PermissionAuthority.SCOPED
         else set()
     )
     states = skill_user_states(user, (skill.id for skill in rows), db_session)

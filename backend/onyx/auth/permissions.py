@@ -85,7 +85,7 @@ IMPLIED_PERMISSIONS: dict[str, set[str]] = {
 # Permissions that cannot be toggled via the group-permission API.
 # BASIC_ACCESS is always granted, FULL_ADMIN_PANEL_ACCESS is too broad,
 # and implied permissions (READ_* and the API-surface scopes) are never
-# stored directly. MANAGE_SKILLS is the old curator role: a scoped manager
+# stored directly. MANAGE_PLUGINS is the old curator role: a scoped manager
 # resolves it from the bundle below, an admin from the full-admin short-circuit,
 # so nothing grants it — and there is no global curator to grant it to.
 NON_TOGGLEABLE_PERMISSIONS: frozenset[Permission] = frozenset(
@@ -93,7 +93,7 @@ NON_TOGGLEABLE_PERMISSIONS: frozenset[Permission] = frozenset(
         Permission.BASIC_ACCESS,
         Permission.FULL_ADMIN_PANEL_ACCESS,
         Permission.CRAFT_SANDBOX,
-        Permission.MANAGE_SKILLS,
+        Permission.MANAGE_PLUGINS,
     }
     | Permission.IMPLIED
 )
@@ -126,7 +126,7 @@ SCOPED_MANAGER_PERMISSIONS: frozenset[Permission] = frozenset(
         Permission.ADD_AGENTS,
         Permission.MANAGE_USER_GROUPS,
         Permission.MANAGE_ACTIONS,  # scoped to actions the manager owns (can_manage_tool)
-        Permission.MANAGE_SKILLS,  # scoped via Skill__UserGroup at GATE 2
+        Permission.MANAGE_PLUGINS,  # scoped via Skill__UserGroup at GATE 2
     }
 )
 
