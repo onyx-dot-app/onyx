@@ -81,3 +81,41 @@ func KernelRelease() string {
 	}
 	return strings.TrimSpace(string(raw))
 }
+
+// PrivateMemoryBytes returns the Anonymous bytes of /proc/<pid>/smaps_rollup.
+// For a Firecracker process that maps its snapshot memory file, that is the
+// guest pages it wrote (copy-on-write) plus its own heap. Pages it only read
+// are page cache of the file and are not counted.
+func PrivateMemoryBytes(pid int) (uint64, error) {
+	f, err := os.Open(fmt.Sprintf("/proc/%d/smaps_rollup", pid))
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = f.Close() }()
+	return parseAnonymous(f)
+}
+
+func parseAnonymous(r io.Reader) (uint64, error) {
+	sc := bufio.NewScanner(r)
+	lines := 0
+	for sc.Scan() {
+		lines++
+		fields := strings.Fields(sc.Text())
+		if len(fields) < 2 || fields[0] != "Anonymous:" {
+			continue
+		}
+		kib, err := strconv.ParseUint(fields[1], 10, 64)
+		if err != nil {
+			return 0, fmt.Errorf("smaps_rollup Anonymous %q: %w", fields[1], err)
+		}
+		return kib << 10, nil
+	}
+	if err := sc.Err(); err != nil {
+		return 0, err
+	}
+	if lines == 0 {
+		// A zombie process has an empty smaps_rollup and no memory.
+		return 0, nil
+	}
+	return 0, fmt.Errorf("smaps_rollup has no Anonymous line")
+}

@@ -1,4 +1,4 @@
-// Package guestd serves the Sandboxd gRPC API of the guest daemon (ENG-4571).
+// Package guestd serves the Sandboxd gRPC API of the guest daemon.
 package guestd
 
 import (
@@ -12,17 +12,19 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/execs"
+	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/files"
 	pb "github.com/onyx-dot-app/onyx/microvm/proto/sandboxd/v1"
 )
 
 // System holds the guest system calls of Init. Tests replace them. A nil
-// Attach or ResetRelay is skipped.
+// Attach, ResetRelay or InstallCA is skipped.
 type System struct {
 	SetClock   func(time.Time) error
 	AddEntropy func([]byte) (credited bool, err error)
@@ -33,6 +35,9 @@ type System struct {
 	// ResetRelay makes the in-guest egress relay reset its connections. It
 	// reports false if the relay is not running.
 	ResetRelay func() (bool, error)
+	// InstallCA puts the egress CA (PEM) into the guest trust stores. It
+	// runs after Attach, so it writes to the overlays. Nil: skipped.
+	InstallCA func(pem []byte) error
 }
 
 // Config configures a Server.
@@ -50,7 +55,10 @@ type Config struct {
 	Managed *ManagedConfig
 	// Reclaimer drops the guest page cache when the VM is idle. Nil: off.
 	Reclaimer *Reclaimer
-	Log       *slog.Logger
+	// Files serves the file calls and session saves. Nil means a store
+	// with the defaults (files.Config{}).
+	Files *files.Store
+	Log   *slog.Logger
 }
 
 // DefaultBaseEnv is the command env before Init adds to it.
@@ -58,6 +66,19 @@ var DefaultBaseEnv = map[string]string{
 	"PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
 	"HOME": "/root",
 	"LANG": "C.UTF-8",
+}
+
+// CommandEnvDefaults go over BaseEnv (the daemon's own env has TERM=linux)
+// and under the Init and command env: plain, non-interactive output for a
+// caller that is not a terminal.
+var CommandEnvDefaults = map[string]string{
+	"NO_COLOR":  "1",
+	"TERM":      "dumb",
+	"PAGER":     "cat",
+	"GIT_PAGER": "cat",
+	"GH_PAGER":  "cat",
+	"LANG":      "C.UTF-8",
+	"LC_ALL":    "C.UTF-8",
 }
 
 type initState struct {
@@ -68,6 +89,8 @@ type initState struct {
 	Generation    uint64            `json:"generation"`
 	SandboxID     string            `json:"sandbox_id"`
 	InitializedAt time.Time         `json:"initialized_at"`
+	// EgressCA is the PEM of the last SetKey egress CA.
+	EgressCA []byte `json:"egress_ca,omitempty"`
 }
 
 // Server implements pb.SandboxdServer.
@@ -76,6 +99,7 @@ type Server struct {
 	cfg     Config
 	sys     System
 	m       *execs.Manager
+	files   *files.Store
 	started time.Time
 
 	initMu    sync.Mutex // one Init at a time
@@ -92,7 +116,14 @@ func NewServer(cfg Config, sys System, m *execs.Manager) (*Server, error) {
 	if cfg.BaseEnv == nil {
 		cfg.BaseEnv = DefaultBaseEnv
 	}
-	s := &Server{cfg: cfg, sys: sys, m: m, started: time.Now()}
+	if cfg.Files == nil {
+		fs, err := files.New(files.Config{})
+		if err != nil {
+			return nil, err
+		}
+		cfg.Files = fs
+	}
+	s := &Server{cfg: cfg, sys: sys, m: m, files: cfg.Files, started: time.Now()}
 	if cfg.StateFile != "" {
 		raw, err := os.ReadFile(cfg.StateFile)
 		switch {
@@ -191,6 +222,15 @@ func (s *Server) Init(_ context.Context, r *pb.InitRequest) (*pb.InitResponse, e
 		}
 		resp.Grown = append(resp.Grown, &pb.GrownFS{MountPoint: mp, OldBytes: oldB, NewBytes: newB})
 	}
+	s.mu.Lock()
+	caPEM := s.state.EgressCA
+	s.mu.Unlock()
+	if len(caPEM) > 0 && s.sys.InstallCA != nil {
+		if err := s.sys.InstallCA(caPEM); err != nil {
+			return nil, apiError(pb.ErrorReason_INIT_FAILED, "install egress CA: %v", err)
+		}
+		resp.EgressCaInstalled = true
+	}
 	if s.sys.ResetRelay != nil {
 		reset, err := s.sys.ResetRelay()
 		if err != nil {
@@ -204,7 +244,7 @@ func (s *Server) Init(_ context.Context, r *pb.InitRequest) (*pb.InitResponse, e
 	s.mu.Unlock()
 	st := initState{
 		Initialized: true, Key: key, Env: maps.Clone(r.GetEnv()), SessionIDs: slices.Clone(r.GetSessionIds()),
-		Generation: r.GetGeneration(), SandboxID: r.GetSandboxId(), InitializedAt: time.Now(),
+		Generation: r.GetGeneration(), SandboxID: r.GetSandboxId(), InitializedAt: time.Now(), EgressCA: caPEM,
 	}
 	if err := s.saveState(st); err != nil {
 		return nil, apiError(pb.ErrorReason_INIT_FAILED, "save state: %v", err)
@@ -213,7 +253,7 @@ func (s *Server) Init(_ context.Context, r *pb.InitRequest) (*pb.InitResponse, e
 	s.state = st
 	s.mu.Unlock()
 	s.cfg.Log.Info("init", "sandbox_id", st.SandboxID, "generation", st.Generation,
-		"clock_step", step, "entropy_credited", credited, "attached", resp.Attached, "relay_reset", resp.RelayReset,
+		"clock_step", step, "entropy_credited", credited, "attached", resp.Attached, "egress_ca", resp.EgressCaInstalled, "relay_reset", resp.RelayReset,
 		"sessions", len(st.SessionIDs))
 	return resp, nil
 }
@@ -251,6 +291,7 @@ func (s *Server) spec(c *pb.Command) (execs.Spec, error) {
 		return execs.Spec{}, apiError(pb.ErrorReason_INVALID_ARGUMENT, "%v", err)
 	}
 	env := maps.Clone(s.cfg.BaseEnv)
+	maps.Copy(env, CommandEnvDefaults)
 	s.mu.Lock()
 	maps.Copy(env, s.state.Env)
 	s.mu.Unlock()
@@ -266,10 +307,32 @@ func (s *Server) spec(c *pb.Command) (execs.Spec, error) {
 		}
 		deadline = d.AsDuration()
 	}
+	dir, err := s.commandDir(c.GetSessionId(), c.GetCwd())
+	if err != nil {
+		return execs.Spec{}, err
+	}
 	return execs.Spec{
-		Argv: c.GetArgv(), Dir: c.GetCwd(), Env: list, Stdin: c.GetStdin(),
+		Argv: c.GetArgv(), Dir: dir, Env: list, Stdin: c.GetStdin(),
 		Deadline: deadline, Labels: c.GetLabels(),
 	}, nil
+}
+
+// commandDir is the working directory of a command. With a session, the
+// default is the session directory (made if missing) and a relative cwd is
+// below it. Any absolute cwd is allowed: commands are not confined to the
+// session.
+func (s *Server) commandDir(sessionID, cwd string) (string, error) {
+	if sessionID == "" {
+		return cwd, nil
+	}
+	dir, err := s.files.SessionDir(sessionID)
+	if err != nil {
+		return "", fileError(err)
+	}
+	if filepath.IsAbs(cwd) {
+		return cwd, nil
+	}
+	return filepath.Join(dir, cwd), nil
 }
 
 func (s *Server) start(c *pb.Command) (*execs.Execution, error) {
@@ -382,6 +445,26 @@ func (s *Server) Interact(_ context.Context, r *pb.InteractRequest) (*pb.Interac
 
 // Cancel implements pb.SandboxdServer.
 func (s *Server) Cancel(ctx context.Context, r *pb.CancelRequest) (*pb.CancelResponse, error) {
+	var sig syscall.Signal
+	switch r.GetSignal() {
+	case pb.CancelSignal_CANCEL_SIGNAL_UNSPECIFIED, pb.CancelSignal_CANCEL_SIGNAL_SIGKILL:
+	case pb.CancelSignal_CANCEL_SIGNAL_SIGINT:
+		sig = syscall.SIGINT
+	case pb.CancelSignal_CANCEL_SIGNAL_SIGTERM:
+		sig = syscall.SIGTERM
+	default:
+		return nil, apiError(pb.ErrorReason_INVALID_ARGUMENT, "unknown signal %d", r.GetSignal())
+	}
+	if sig != 0 {
+		res, already, err := s.m.Signal(r.GetExecutionId(), sig)
+		if err != nil {
+			return nil, execError(err)
+		}
+		if already {
+			return &pb.CancelResponse{Result: toResult(res), AlreadyEnded: true}, nil
+		}
+		return &pb.CancelResponse{Signaled: true}, nil
+	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	res, already, err := s.m.Cancel(ctx, r.GetExecutionId())

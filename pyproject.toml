@@ -54,6 +54,11 @@ backend = [
     "google-auth-oauthlib==1.4.0",
     "google-cloud-storage>=3.0.0,<4.0.0",
     "graphql-core==3.2.12",
+    # Craft Firecracker host agent client (backend/onyx/microvm/). The
+    # generated stubs need protobuf; googleapis-common-protos has ErrorInfo.
+    "googleapis-common-protos==1.72.0",
+    "grpcio==1.80.0",
+    "protobuf==6.33.5",
     # GPT4All library has issues running on Macs and python:3.11.4-slim-bookworm
     # will reintroduce this when library version catches up
     # "gpt4all==2.0.2",
@@ -283,6 +288,8 @@ typeCheckingMode = "off"
 [tool.ruff]
 line-length = 88
 target-version = "py313"
+# protoc output (backend/onyx/microvm/generated/regenerate.sh).
+extend-exclude = ["backend/onyx/microvm/generated"]
 
 [tool.ruff.lint]
 ignore = [

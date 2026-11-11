@@ -76,15 +76,35 @@ func TestInitKVM(t *testing.T) {
 
 	t.Run("no_scratch_starts_no_service", func(t *testing.T) {
 		v := bootDrives(t, e, "init-noscratch", false, false)
-		hctx, hcancel := context.WithTimeout(ctx, 20*time.Second)
+		hctx, hcancel := context.WithTimeout(ctx, 90*time.Second)
 		defer hcancel()
-		if _, err := waitHealth(hctx, v); err == nil {
-			t.Fatal("daemon answered with a failed attach")
+		health := make(chan error, 1)
+		go func() {
+			_, err := waitHealth(hctx, v)
+			health <- err
+		}()
+		ticker := time.NewTicker(50 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case err := <-health:
+				if err == nil {
+					t.Fatal("daemon answered with a failed attach")
+				}
+				t.Fatalf("no attach failure before health probe ended: %v\n%s", err, v.console())
+			case <-hctx.Done():
+				t.Fatalf("no attach failure on the console:\n%s", v.console())
+			case <-ticker.C:
+				if strings.Contains(v.console(), "attach failed") {
+					hcancel()
+					if err := <-health; err == nil {
+						t.Fatal("daemon answered with a failed attach")
+					}
+					t.Log("no scratch drive: daemon did not start (fail closed)")
+					return
+				}
+			}
 		}
-		if !strings.Contains(v.console(), "attach failed") {
-			t.Errorf("no attach failure on the console:\n%s", v.console())
-		}
-		t.Logf("no scratch drive: daemon did not start (fail closed)")
 	})
 
 	v := bootDrives(t, e, "init-main", true, false)
@@ -99,9 +119,9 @@ func TestInitKVM(t *testing.T) {
 	}
 
 	t.Run("no_managed_drive_is_read_only_tmpfs", func(t *testing.T) {
-		out := rootSh(ctx, t, c, key, `grep ' /workspace/managed ' /proc/mounts | cut -d' ' -f1,3,4 | cut -d, -f1; touch /workspace/managed/x 2>/dev/null && echo WRITABLE || echo READONLY`)
+		out := rootSh(ctx, t, c, key, `grep ' /mnt/skills ' /proc/mounts | cut -d' ' -f1,3,4 | cut -d, -f1; touch /mnt/skills/x 2>/dev/null && echo WRITABLE || echo READONLY`)
 		t.Logf("managed mount: %q", out)
-		if !strings.Contains(out, "craft-managed-empty tmpfs ro") || !strings.Contains(out, "READONLY") {
+		if !strings.Contains(out, "craft-skills-empty tmpfs ro") || !strings.Contains(out, "READONLY") {
 			t.Errorf("managed fallback: %q", out)
 		}
 	})
@@ -118,6 +138,12 @@ func TestInitKVM(t *testing.T) {
 		if g := strings.TrimSpace(strings.SplitN(strings.SplitN(out, "Groups:", 2)[1], "\n", 2)[0]); g != "" {
 			t.Errorf("relay has supplementary groups %q", g)
 		}
+	})
+
+	// The root drive has no CA. SetKey carries the deployment CA,
+	// Init installs it, and a later SetKey + Init replaces it (a CA rotation).
+	t.Run("egress_ca_from_set_key", func(t *testing.T) {
+		testEgressCA(ctx, t, v, c, key)
 	})
 
 	t.Run("restart_never_runs_overlay_helpers", func(t *testing.T) {
@@ -174,10 +200,10 @@ done; echo planted`
 		if _, err := keyInit(ctx, mc, mkey, initRequest("init-managed")); err != nil {
 			t.Fatal(err)
 		}
-		out := rootSh(ctx, t, mc, mkey, `grep ' /workspace/managed ' /proc/mounts | cut -d' ' -f1,4 | cut -d, -f1
-touch /workspace/managed/x 2>/dev/null && echo WRITABLE || echo READONLY
-mount -o remount,rw /workspace/managed 2>/dev/null && echo REMOUNT_RW || echo REMOUNT_REFUSED
-umount /workspace/managed && echo hello >/workspace/managed/f && echo WROTE_BELOW
+		out := rootSh(ctx, t, mc, mkey, `grep ' /mnt/skills ' /proc/mounts | cut -d' ' -f1,4 | cut -d, -f1
+touch /mnt/skills/x 2>/dev/null && echo WRITABLE || echo READONLY
+mount -o remount,rw /mnt/skills 2>/dev/null && echo REMOUNT_RW || echo REMOUNT_REFUSED
+umount /mnt/skills && echo hello >/mnt/skills/f && echo WROTE_BELOW
 mkdir -p /tmp/m && mount -o ro,noload /dev/vdc /tmp/m && { [ -e /tmp/m/f ] && echo ON_DRIVE || echo NOT_ON_DRIVE; }`)
 		t.Logf("managed drive:\n%s", out)
 		for _, want := range []string{"/dev/vdc ro", "READONLY", "REMOUNT_REFUSED", "NOT_ON_DRIVE"} {

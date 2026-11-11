@@ -1,6 +1,7 @@
 // Package nodewatch reads the agent's own Kubernetes Node and reports its
-// drain taints (ENG-4569). It reads the Node with the pod's service account
-// (RBAC: get on nodes) and needs no Kubernetes client library.
+// drain taints. It reads the Node with the pod's service account
+// (RBAC: get on nodes) and needs no Kubernetes client library. The same
+// client reads the egress CA ConfigMap.
 package nodewatch
 
 import (
@@ -103,8 +104,8 @@ const (
 	CAPath    = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
 )
 
-// InCluster reads one Node from the Kubernetes API with the pod's service
-// account.
+// InCluster reads the agent's Node, and ConfigMaps, from the Kubernetes API
+// with the pod's service account.
 type InCluster struct {
 	// BaseURL is the API server, for example https://10.0.0.1:443.
 	BaseURL   string
@@ -155,35 +156,55 @@ type nodeJSON struct {
 	} `json:"spec"`
 }
 
-// Node implements Source. It reads the token on every call, because the
-// kubelet rotates projected tokens.
+// Node implements Source.
 func (c *InCluster) Node(ctx context.Context) (Node, error) {
+	var n nodeJSON
+	if err := c.get(ctx, "/api/v1/nodes/"+url.PathEscape(c.NodeName), "node "+c.NodeName, &n); err != nil {
+		return Node{}, err
+	}
+	return Node{Taints: n.Spec.Taints}, nil
+}
+
+// ConfigMap returns the data of ConfigMap namespace/name (RBAC: get on that
+// ConfigMap). The agent reads the egress CA with it.
+func (c *InCluster) ConfigMap(ctx context.Context, namespace, name string) (map[string]string, error) {
+	var cm struct {
+		Data map[string]string `json:"data"`
+	}
+	path := "/api/v1/namespaces/" + url.PathEscape(namespace) + "/configmaps/" + url.PathEscape(name)
+	if err := c.get(ctx, path, "configmap "+namespace+"/"+name, &cm); err != nil {
+		return nil, err
+	}
+	return cm.Data, nil
+}
+
+// get reads one API object into out. It reads the token on every call,
+// because the kubelet rotates projected tokens.
+func (c *InCluster) get(ctx context.Context, path, what string, out any) error {
 	tok, err := os.ReadFile(c.TokenPath)
 	if err != nil {
-		return Node{}, fmt.Errorf("service account token: %w", err)
+		return fmt.Errorf("service account token: %w", err)
 	}
-	u := c.BaseURL + "/api/v1/nodes/" + url.PathEscape(c.NodeName)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+path, nil)
 	if err != nil {
-		return Node{}, err
+		return err
 	}
 	req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(string(tok)))
 	req.Header.Set("Accept", "application/json")
 	resp, err := c.Client.Do(req)
 	if err != nil {
-		return Node{}, fmt.Errorf("get node %s: %w", c.NodeName, err)
+		return fmt.Errorf("get %s: %w", what, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {
-		return Node{}, fmt.Errorf("get node %s: %w", c.NodeName, err)
+		return fmt.Errorf("get %s: %w", what, err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return Node{}, fmt.Errorf("get node %s: HTTP %d: %s", c.NodeName, resp.StatusCode, strings.TrimSpace(string(body[:min(len(body), 300)])))
+		return fmt.Errorf("get %s: HTTP %d: %s", what, resp.StatusCode, strings.TrimSpace(string(body[:min(len(body), 300)])))
 	}
-	var n nodeJSON
-	if err := json.Unmarshal(body, &n); err != nil {
-		return Node{}, fmt.Errorf("get node %s: %w", c.NodeName, err)
+	if err := json.Unmarshal(body, out); err != nil {
+		return fmt.Errorf("get %s: %w", what, err)
 	}
-	return Node{Taints: n.Spec.Taints}, nil
+	return nil
 }

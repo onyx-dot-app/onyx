@@ -58,15 +58,18 @@ type Record struct {
 	// during the start must not forget it.
 	Prev *Tombstone `json:"prev,omitempty"`
 	// Managed is the VM's managed drive slots. Nil in records from before
-	// ENG-4614: one slot.
+	// managed drive swaps: one slot.
 	Managed *Managed `json:"managed,omitempty"`
+	// Mounts are the other managed mounts (layout 5), by name. Nil in
+	// older records.
+	Mounts map[string]*Managed `json:"managed_mounts,omitempty"`
 }
 
-// Managed is the state of a VM's managed drive slots (ENG-4614).
+// Managed is the state of the drive slots of one managed mount of a VM.
 type Managed struct {
-	// Slots is 2 for a VM that can swap its managed drive, else 1.
+	// Slots is 2 for a VM that can swap the drive of the mount, else 1.
 	Slots int `json:"slots"`
-	// Active is the slot on /workspace/managed: "a" or "b".
+	// Active is the slot on the mount point: "a" or "b".
 	Active string `json:"active"`
 	// A and B are the managed image IDs behind the slots. Empty: the
 	// template's placeholder.

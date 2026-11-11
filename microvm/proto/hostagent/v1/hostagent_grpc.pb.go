@@ -24,6 +24,10 @@ const (
 	HostAgent_List_FullMethodName             = "/craft.hostagent.v1.HostAgent/List"
 	HostAgent_NodeInfo_FullMethodName         = "/craft.hostagent.v1.HostAgent/NodeInfo"
 	HostAgent_CloseConnections_FullMethodName = "/craft.hostagent.v1.HostAgent/CloseConnections"
+	HostAgent_CaptureSession_FullMethodName   = "/craft.hostagent.v1.HostAgent/CaptureSession"
+	HostAgent_UploadCapture_FullMethodName    = "/craft.hostagent.v1.HostAgent/UploadCapture"
+	HostAgent_DiscardCapture_FullMethodName   = "/craft.hostagent.v1.HostAgent/DiscardCapture"
+	HostAgent_RestoreSession_FullMethodName   = "/craft.hostagent.v1.HostAgent/RestoreSession"
 	HostAgent_Dial_FullMethodName             = "/craft.hostagent.v1.HostAgent/Dial"
 	HostAgent_BuildTemplate_FullMethodName    = "/craft.hostagent.v1.HostAgent/BuildTemplate"
 	HostAgent_PutManagedImage_FullMethodName  = "/craft.hostagent.v1.HostAgent/PutManagedImage"
@@ -48,7 +52,9 @@ type HostAgentClient interface {
 	// sandbox that has a VM on this node returns ATTEMPT_CONFLICT. With
 	// sandboxd_key set, Create installs that key in the guest daemon (its
 	// SetKey, over vsock) before it returns a running VM; a repeat call
-	// installs it again (the daemon accepts the same key).
+	// installs it again (the daemon accepts the same key). SetKey also carries
+	// the deployment egress CA (--egress-ca or --egress-ca-configmap), which
+	// the daemon installs at Init.
 	Create(ctx context.Context, in *CreateRequest, opts ...grpc.CallOption) (*CreateResponse, error)
 	// Stop stops the VM only if sandbox_id, attempt and generation all match
 	// it. A repeat Stop of the same instance succeeds.
@@ -62,6 +68,20 @@ type HostAgentClient interface {
 	// api_server calls it in the daemon Init sequence after a restore, so that
 	// pooled client connections in the guest fail fast and reconnect.
 	CloseConnections(ctx context.Context, in *CloseConnectionsRequest, opts ...grpc.CallOption) (*CloseConnectionsResponse, error)
+	// CaptureSession calls the guest daemon's CaptureSession and spools the
+	// archive on the node (--capture-ttl). It returns the capture ID with the
+	// archive size and SHA-256, for presign_upload.
+	CaptureSession(ctx context.Context, in *CaptureSessionRequest, opts ...grpc.CallOption) (*CaptureSessionResponse, error)
+	// UploadCapture sends a spooled capture with a presigned PUT, with the
+	// signed headers as given. On success the spool is deleted. On failure it
+	// stays until the TTL, so a retry (with a new URL) works.
+	UploadCapture(ctx context.Context, in *UploadCaptureRequest, opts ...grpc.CallOption) (*UploadCaptureResponse, error)
+	// DiscardCapture deletes a spooled capture. A missing one is not an error.
+	DiscardCapture(ctx context.Context, in *DiscardCaptureRequest, opts ...grpc.CallOption) (*DiscardCaptureResponse, error)
+	// RestoreSession downloads an archive with a presigned GET and streams it
+	// into the guest daemon's RestoreSession. The daemon checks size and
+	// SHA-256 before it replaces any file.
+	RestoreSession(ctx context.Context, in *RestoreSessionRequest, opts ...grpc.CallOption) (*RestoreSessionResponse, error)
 	// Dial opens a byte stream to a vsock port of a running VM: the guest
 	// daemon or the app preview (3010). The first frame names sandbox_id and
 	// guest_port and may carry data; later frames carry data only. The
@@ -76,15 +96,16 @@ type HostAgentClient interface {
 	// a build waits for it.
 	BuildTemplate(ctx context.Context, in *BuildTemplateRequest, opts ...grpc.CallOption) (*BuildTemplateResponse, error)
 	// PutManagedImage uploads a managed bundle (a zip of the tree to show on
-	// /workspace/managed) and builds its read-only ext4 image on this node.
+	// a managed mount) and builds its read-only ext4 image on this node.
 	// The first message is the header, the later ones carry the zip bytes. A
 	// bundle whose image is already on the node is not built again. The image
-	// ID is the SHA256 of the zip.
+	// ID is the SHA256 of the zip. An image is not tied to a mount: one image
+	// can go on any mount (SwapManaged names the mount).
 	PutManagedImage(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[PutManagedImageRequest, PutManagedImageResponse], error)
-	// SwapManaged puts a managed image into running VMs without a restart,
-	// one VM at a time: the agent puts the image behind the VM's idle slot
-	// (Firecracker PATCH /drives), the guest daemon mounts it beneath the
-	// current /workspace/managed mount and detaches the old mount lazily
+	// SwapManaged puts a managed image on one mount of running VMs without a
+	// restart, one VM at a time: the agent puts the image behind the mount's
+	// idle slot (Firecracker PATCH /drives), the guest daemon mounts it beneath
+	// the current mount and detaches the old mount lazily
 	// (open files on it keep working until they close), and the agent records
 	// the active slot in the journal. A failure of one VM does not stop the
 	// others; each target has its own result.
@@ -147,6 +168,46 @@ func (c *hostAgentClient) CloseConnections(ctx context.Context, in *CloseConnect
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(CloseConnectionsResponse)
 	err := c.cc.Invoke(ctx, HostAgent_CloseConnections_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *hostAgentClient) CaptureSession(ctx context.Context, in *CaptureSessionRequest, opts ...grpc.CallOption) (*CaptureSessionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CaptureSessionResponse)
+	err := c.cc.Invoke(ctx, HostAgent_CaptureSession_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *hostAgentClient) UploadCapture(ctx context.Context, in *UploadCaptureRequest, opts ...grpc.CallOption) (*UploadCaptureResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UploadCaptureResponse)
+	err := c.cc.Invoke(ctx, HostAgent_UploadCapture_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *hostAgentClient) DiscardCapture(ctx context.Context, in *DiscardCaptureRequest, opts ...grpc.CallOption) (*DiscardCaptureResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DiscardCaptureResponse)
+	err := c.cc.Invoke(ctx, HostAgent_DiscardCapture_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *hostAgentClient) RestoreSession(ctx context.Context, in *RestoreSessionRequest, opts ...grpc.CallOption) (*RestoreSessionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RestoreSessionResponse)
+	err := c.cc.Invoke(ctx, HostAgent_RestoreSession_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -226,7 +287,9 @@ type HostAgentServer interface {
 	// sandbox that has a VM on this node returns ATTEMPT_CONFLICT. With
 	// sandboxd_key set, Create installs that key in the guest daemon (its
 	// SetKey, over vsock) before it returns a running VM; a repeat call
-	// installs it again (the daemon accepts the same key).
+	// installs it again (the daemon accepts the same key). SetKey also carries
+	// the deployment egress CA (--egress-ca or --egress-ca-configmap), which
+	// the daemon installs at Init.
 	Create(context.Context, *CreateRequest) (*CreateResponse, error)
 	// Stop stops the VM only if sandbox_id, attempt and generation all match
 	// it. A repeat Stop of the same instance succeeds.
@@ -240,6 +303,20 @@ type HostAgentServer interface {
 	// api_server calls it in the daemon Init sequence after a restore, so that
 	// pooled client connections in the guest fail fast and reconnect.
 	CloseConnections(context.Context, *CloseConnectionsRequest) (*CloseConnectionsResponse, error)
+	// CaptureSession calls the guest daemon's CaptureSession and spools the
+	// archive on the node (--capture-ttl). It returns the capture ID with the
+	// archive size and SHA-256, for presign_upload.
+	CaptureSession(context.Context, *CaptureSessionRequest) (*CaptureSessionResponse, error)
+	// UploadCapture sends a spooled capture with a presigned PUT, with the
+	// signed headers as given. On success the spool is deleted. On failure it
+	// stays until the TTL, so a retry (with a new URL) works.
+	UploadCapture(context.Context, *UploadCaptureRequest) (*UploadCaptureResponse, error)
+	// DiscardCapture deletes a spooled capture. A missing one is not an error.
+	DiscardCapture(context.Context, *DiscardCaptureRequest) (*DiscardCaptureResponse, error)
+	// RestoreSession downloads an archive with a presigned GET and streams it
+	// into the guest daemon's RestoreSession. The daemon checks size and
+	// SHA-256 before it replaces any file.
+	RestoreSession(context.Context, *RestoreSessionRequest) (*RestoreSessionResponse, error)
 	// Dial opens a byte stream to a vsock port of a running VM: the guest
 	// daemon or the app preview (3010). The first frame names sandbox_id and
 	// guest_port and may carry data; later frames carry data only. The
@@ -254,15 +331,16 @@ type HostAgentServer interface {
 	// a build waits for it.
 	BuildTemplate(context.Context, *BuildTemplateRequest) (*BuildTemplateResponse, error)
 	// PutManagedImage uploads a managed bundle (a zip of the tree to show on
-	// /workspace/managed) and builds its read-only ext4 image on this node.
+	// a managed mount) and builds its read-only ext4 image on this node.
 	// The first message is the header, the later ones carry the zip bytes. A
 	// bundle whose image is already on the node is not built again. The image
-	// ID is the SHA256 of the zip.
+	// ID is the SHA256 of the zip. An image is not tied to a mount: one image
+	// can go on any mount (SwapManaged names the mount).
 	PutManagedImage(grpc.ClientStreamingServer[PutManagedImageRequest, PutManagedImageResponse]) error
-	// SwapManaged puts a managed image into running VMs without a restart,
-	// one VM at a time: the agent puts the image behind the VM's idle slot
-	// (Firecracker PATCH /drives), the guest daemon mounts it beneath the
-	// current /workspace/managed mount and detaches the old mount lazily
+	// SwapManaged puts a managed image on one mount of running VMs without a
+	// restart, one VM at a time: the agent puts the image behind the mount's
+	// idle slot (Firecracker PATCH /drives), the guest daemon mounts it beneath
+	// the current mount and detaches the old mount lazily
 	// (open files on it keep working until they close), and the agent records
 	// the active slot in the journal. A failure of one VM does not stop the
 	// others; each target has its own result.
@@ -295,6 +373,18 @@ func (UnimplementedHostAgentServer) NodeInfo(context.Context, *NodeInfoRequest) 
 }
 func (UnimplementedHostAgentServer) CloseConnections(context.Context, *CloseConnectionsRequest) (*CloseConnectionsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CloseConnections not implemented")
+}
+func (UnimplementedHostAgentServer) CaptureSession(context.Context, *CaptureSessionRequest) (*CaptureSessionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CaptureSession not implemented")
+}
+func (UnimplementedHostAgentServer) UploadCapture(context.Context, *UploadCaptureRequest) (*UploadCaptureResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UploadCapture not implemented")
+}
+func (UnimplementedHostAgentServer) DiscardCapture(context.Context, *DiscardCaptureRequest) (*DiscardCaptureResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DiscardCapture not implemented")
+}
+func (UnimplementedHostAgentServer) RestoreSession(context.Context, *RestoreSessionRequest) (*RestoreSessionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RestoreSession not implemented")
 }
 func (UnimplementedHostAgentServer) Dial(grpc.BidiStreamingServer[DialFrame, DialFrame]) error {
 	return status.Error(codes.Unimplemented, "method Dial not implemented")
@@ -422,6 +512,78 @@ func _HostAgent_CloseConnections_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HostAgent_CaptureSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CaptureSessionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HostAgentServer).CaptureSession(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HostAgent_CaptureSession_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HostAgentServer).CaptureSession(ctx, req.(*CaptureSessionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HostAgent_UploadCapture_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UploadCaptureRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HostAgentServer).UploadCapture(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HostAgent_UploadCapture_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HostAgentServer).UploadCapture(ctx, req.(*UploadCaptureRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HostAgent_DiscardCapture_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DiscardCaptureRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HostAgentServer).DiscardCapture(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HostAgent_DiscardCapture_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HostAgentServer).DiscardCapture(ctx, req.(*DiscardCaptureRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HostAgent_RestoreSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RestoreSessionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HostAgentServer).RestoreSession(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HostAgent_RestoreSession_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HostAgentServer).RestoreSession(ctx, req.(*RestoreSessionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _HostAgent_Dial_Handler(srv interface{}, stream grpc.ServerStream) error {
 	return srv.(HostAgentServer).Dial(&grpc.GenericServerStream[DialFrame, DialFrame]{ServerStream: stream})
 }
@@ -516,6 +678,22 @@ var HostAgent_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CloseConnections",
 			Handler:    _HostAgent_CloseConnections_Handler,
+		},
+		{
+			MethodName: "CaptureSession",
+			Handler:    _HostAgent_CaptureSession_Handler,
+		},
+		{
+			MethodName: "UploadCapture",
+			Handler:    _HostAgent_UploadCapture_Handler,
+		},
+		{
+			MethodName: "DiscardCapture",
+			Handler:    _HostAgent_DiscardCapture_Handler,
+		},
+		{
+			MethodName: "RestoreSession",
+			Handler:    _HostAgent_RestoreSession_Handler,
 		},
 		{
 			MethodName: "BuildTemplate",

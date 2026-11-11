@@ -15,13 +15,14 @@ import (
 
 	"github.com/onyx-dot-app/onyx/microvm/internal/agent"
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestlog"
+	"github.com/onyx-dot-app/onyx/microvm/internal/hostinfo"
 	"github.com/onyx-dot-app/onyx/microvm/internal/jailer"
 	"github.com/onyx-dot-app/onyx/microvm/internal/metrics"
 	"github.com/onyx-dot-app/onyx/microvm/internal/relay"
 	"github.com/onyx-dot-app/onyx/microvm/internal/server"
 )
 
-// obsFlags are the metrics, audit and guest log flags (ENG-4570).
+// obsFlags are the metrics, audit and guest log flags.
 type obsFlags struct {
 	metricsListen string
 	metricsToken  string
@@ -75,7 +76,7 @@ func newObservability(f obsFlags, m *agent.Manager, lay jailer.Layout, stats age
 		return nil, err
 	}
 	o := &observability{f: f, log: log}
-	src := metrics.Source{VMs: m.List, Stats: stats, DialStreams: func() int {
+	src := metrics.Source{VMs: m.List, Stats: stats, PrivateMem: hostinfo.PrivateMemoryBytes, DialStreams: func() int {
 		if o.dials == nil {
 			return 0
 		}
@@ -113,6 +114,9 @@ func (o *observability) serverOptions() []grpc.ServerOption { return o.observer.
 // Recover and before the API serves.
 func (o *observability) start(ctx context.Context, svc *server.Service) error {
 	o.dials = svc.OpenDials
+	if svc.Saves != nil {
+		o.observer.Capture = svc.Saves.CaptureVM
+	}
 	if o.shipper != nil {
 		o.shipper.Start(ctx)
 	}

@@ -5,11 +5,23 @@ into the read-only root drive of a Craft Firecracker VM. It also has the guest
 init. The pod runtime keeps using the sandbox image as it is: the build does not
 change the image or its Dockerfile.
 
+The separate `onyxdotapp/craft-runtime:<Onyx version>` userspace image can also
+be passed to `--image` for the new integrated harness. Existing Craft continues
+to use `onyxdotapp/sandbox`. The new image supplies tools without OpenCode or the
+pod sidecar. The converter still owns init, the Go daemon and relay, the
+overlays and the rootfs manifest. See `../../craft-runtime/README.md`.
+Choosing that input does not change the pod or Docker image settings.
+
+`craft-runtime` is the source of the published root drive (see "Delivery to
+nodes"). `onyxdotapp/sandbox:<tag>` still works as a fallback source.
+
 ## Files
 
 | File | Installed as | What it does |
 |---|---|---|
 | `build-rootfs.sh` | – | Builds `rootfs.ext4` and `manifest.json` |
+| `Dockerfile.image`, `install-rootfs.sh` | `/craft-fc-rootfs/` in the image | The root drive image for nodes, and its install step (see "Delivery to nodes") |
+| `check-image.sh` | – | Builds and checks that image |
 | `craft-init` | `/sbin/craft-init` | PID 1: mounts, attach, starts and restarts the services |
 | `attach.sh` | `/craft-fc/lib/attach` | Mounts the scratch drive, the overlays and the managed drive |
 | `egress-relay.py` | `/craft-fc/bin/egress-relay` (only with `--python-relay`) | Fallback egress relay. The default is the static Go relay from `microvm/cmd/egress-relay` (`--relay-bin`). |
@@ -63,16 +75,20 @@ cd microvm
 GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -o ../out/guest-daemon ./cmd/guest-daemon
 GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -o ../out/egress-relay ./cmd/egress-relay
 cd ..
-sudo deployment/craft-fc/rootfs/build-rootfs.sh --image onyxdotapp/sandbox:v5.1.0 \
-  --ca egress-ca.crt --daemon-bin out/guest-daemon --relay-bin out/egress-relay --out out/
+sudo deployment/craft-fc/rootfs/build-rootfs.sh --image onyxdotapp/craft-runtime:v5.2.0 \
+  --daemon-bin out/guest-daemon --relay-bin out/egress-relay --out out/
 ```
 
-- `--image`: the sandbox image. The build pins it to its digest.
+- `--image`: the source image (`craft-runtime`, or `sandbox` as a fallback).
+  The build pins it to its digest.
 - `--registry`: optional. Pull the image through this prefix, for example the
   ECR pull-through cache `<account>.dkr.ecr.<region>.amazonaws.com/docker-hub`.
   The manifest records the reference that was pulled.
-- `--ca`: the public certificate of the egress proxy CA. The build stops if the
-  file has a private key, has more than one certificate or is not a CA.
+- `--ca`: optional, the public certificate of the egress proxy CA. The build
+  stops if the file has a private key, has more than one certificate or is not
+  a CA. Without `--ca` (the published drive), the drive has no CA and fits
+  every deployment: the guest daemon installs the deployment CA at `Init` (see
+  "Egress CA").
 - `--daemon-bin`: the guest daemon (required), installed at the `--daemon-cmd`
   program path.
 - `--relay-bin`: the egress relay, installed as `/craft-fc/bin/egress-relay`.
@@ -100,11 +116,12 @@ needs the network at boot.
   static busybox to `/craft-fc/bin/busybox` and removes the `busybox-static`
   package again.
 - Checks that `libreoffice-writer` is installed (it is, from v5.1).
-- Adds the egress CA:
-  - `/usr/local/share/ca-certificates/craft-egress-ca.crt`, then `update-ca-certificates`;
-  - `/etc/ssl/sandbox/ca-bundle.crt`, a link to the system bundle (the same
-    path as the pod runtime);
-  - the sandbox user's Chromium NSS database (`/home/sandbox/.pki/nssdb`).
+- Makes `/etc/ssl/sandbox/ca-bundle.crt`, a link to the system bundle (the
+  same path as the pod runtime), and the sandbox user's empty Chromium NSS
+  database (`/home/sandbox/.pki/nssdb`, owned by the sandbox user).
+- Only with `--ca`, adds the egress CA:
+  `/usr/local/share/ca-certificates/craft-egress-ca.crt`, then
+  `update-ca-certificates`, and the NSS database.
 - Writes the proxy settings:
   - `/craft-fc/etc/guest.env`: the image's `ENV` (Docker export drops it), plus
     `HTTP(S)_PROXY`, `NO_PROXY=localhost,127.0.0.1,::1`, `NODE_USE_ENV_PROXY=1`,
@@ -112,8 +129,9 @@ needs the network at boot.
     `NODE_EXTRA_CA_CERTS`, `GIT_SSL_CAINFO` (all set to the bundle);
   - `/etc/profile.d/craft-guest-env.sh` for login shells;
   - `/etc/apt/apt.conf.d/80craft-egress-proxy`.
-- Makes `/workspace/managed` an empty, root-owned mount point, and adds
-  `/mnt/scratch`.
+- Makes the root-owned mount points `/mnt/scratch`, `/mnt/skills`,
+  `/mnt/user-uploads` and `/mnt/spaces`, and `/home/onyx/workspaces` (the
+  session directories), owned by the sandbox user.
 - Writes `/etc/hosts`, `/etc/hostname` and an empty `/etc/resolv.conf`. There is
   no DNS in the VM.
 - Makes an ext4 file system with no journal (the drive is always read-only).
@@ -123,9 +141,61 @@ The build stops if it finds a private key in `/etc`, `/root`, `/home`,
 egress CA certificate is public. The daemon gets per-VM values from the host
 in its `Init` call.
 
-The egress CA is a build input, so each CA needs its own root drive. Aiohttp
-clients still need `trust_env=True` in code. An environment variable cannot set
-it.
+Aiohttp clients still need `trust_env=True` in code. An environment variable
+cannot set it.
+
+### Egress CA
+
+The published drive has no egress CA (`build_inputs.egress_ca` is `null`, and
+`guest.egress.ca_install` is `runtime`). One drive serves every deployment, and
+the template key does not change with the CA.
+
+1. The host agent reads the deployment CA at each `Create` (`--egress-ca-configmap`:
+   the sandbox-proxy ConfigMap, or `--egress-ca`: a file), with a 30 s cache.
+2. It sends the CA with `SetKey` (`egress_ca_pem`). Only the agent can call `SetKey`.
+3. `Init`, after `attach` (so the writes go to the overlays), installs it with
+   no program from the overlays running as root:
+   - `/usr/local/share/ca-certificates/craft-egress-ca.crt` (written by the
+     daemon). A later `update-ca-certificates`, for example from apt, keeps it;
+   - `/etc/ssl/certs/ca-certificates.crt`: the daemon removes the old egress
+     CA and adds the new one;
+   - the NSS database: `certutil` runs as the database owner, never as root. A
+     failure here is only logged.
+
+Each `Init` writes the CA again. So after a CA change, a saved scratch disk
+with an old copy of the bundle in its overlay gets the new CA. A drive built
+with `--ca` keeps working: the agent refuses it only if its CA differs from
+the deployment CA.
+
+## Delivery to nodes
+
+`.github/workflows/craft-fc-rootfs.yml` (manual dispatch on main, inputs
+`source_image` and `version`) converts the source image with no `--ca`, boots it
+in Firecracker (`../../craft-runtime/check-kvm.sh`), and publishes
+`onyxdotapp/craft-fc-artifacts:rootfs-<version>`. Pull requests run
+`check-image.sh` (the image and the install step, with a small test drive).
+
+The image (`Dockerfile.image`) has only `/craft-fc-rootfs/`: `rootfs.ext4`,
+`manifest.json`, the drive's own static busybox and `install` (from
+`install-rootfs.sh`). Its entrypoint copies the drive into the directory in its
+argument, checks the SHA256 against the manifest, and moves it into place. It
+does nothing when the directory already has the same manifest.
+
+The Helm chart runs it as an init container of the host agent
+(`craft.hostAgent.rootfs.image.tag`, for example `rootfs-0.1.0`) with the target
+`<dataDir>/rootfs`, and passes `--rootfs-dir=<dataDir>/rootfs` to the agent. An
+air-gapped install mirrors this image like the others. Each node keeps one copy
+of the drive (about 4 GiB) in the data dir, plus the image layer.
+
+To build the image by hand (Linux, Docker, e2fsprogs):
+
+```bash
+sudo deployment/craft-fc/rootfs/build-rootfs.sh --image onyxdotapp/craft-runtime:v5.2.0 \
+  --daemon-bin out/guest-daemon --relay-bin out/egress-relay --out out/rootfs
+deployment/craft-fc/rootfs/check-image.sh --context-from out/rootfs out/context
+docker build --platform linux/amd64 -f out/context/Dockerfile.image -t craft-fc-rootfs:dev out/context
+deployment/craft-fc/rootfs/check-image.sh --image craft-fc-rootfs:dev
+```
 
 ### Output
 
@@ -135,8 +205,8 @@ it.
 | Field | Content |
 |---|---|
 | `source_image` | `ref`, `pulled_from`, `pinned` (`repo@sha256:…`), `digest`, `platform` |
-| `build_inputs` | onyx commit, SHA256 of each file in this directory, the CA fingerprint, subject and expiry, packages added, removed and changed, files removed |
-| `guest` | init path, `boot_args`, `template_boot_args_extra`, `supervised_dir` (`/craft-fc`), attach (path, SHA256), busybox (path, SHA256), daemon (command, path, SHA256, vsock port 52), egress relay (kind `go` or `python`, path, SHA256, uid, PID file), config paths, egress (guest proxy, host vsock port 3128, CA bundle), drive order, overlay directories, scratch layout version |
+| `build_inputs` | onyx commit, SHA256 of each file in this directory, the CA fingerprint, subject and expiry (`null` without `--ca`), packages added, removed and changed, files removed |
+| `guest` | init path, `boot_args`, `template_boot_args_extra`, `supervised_dir` (`/craft-fc`), attach (path, SHA256), busybox (path, SHA256), daemon (command, path, SHA256, vsock port 52), egress relay (kind `go` or `python`, path, SHA256, uid, PID file), config paths, egress (guest proxy, host vsock port 3128, CA bundle, `ca_install`: `build` or `runtime`), drive order, overlay directories, scratch layout version |
 | `output` | file name, SHA256, size, file system UUID and label |
 
 The output is not reproducible byte for byte: file times and the file system
@@ -150,30 +220,41 @@ Attach the drives in this order. The guest finds them by order:
 |---|---|---|---|---|
 | `rootfs` | `/dev/vda` | `true` (root device) | `rootfs.ext4` | `/` |
 | `scratch` | `/dev/vdb` | `false` | Per-VM ext4, made by the host (empty or a saved disk) | `/mnt/scratch` |
-| `managed` | `/dev/vdc` | `true` | Managed slot A: per-VM ext4 with the managed files (skills) | `/workspace/managed` |
+| `managed` | `/dev/vdc` | `true` | Skills slot A: per-VM ext4 with the skills | `/mnt/skills` |
 | `upload_a`, `upload_b` | `/dev/vdd`, `/dev/vde` | `true` | Upload slots of the template layout | not by `attach` |
-| `managed_b` | `/dev/vdf` | `true` | Managed slot B: the spare for a skills update. Always the last drive, so the other device names do not move. Optional: older templates do not have it | not by `attach` |
+| `managed_b` | `/dev/vdf` | `true` | Skills slot B: the spare for a skills update. Optional: older templates do not have it | not by `attach` |
+| `user_uploads_a`, `user_uploads_b` | `/dev/vdg`, `/dev/vdh` | `true` | User uploads slots A and B (layout 5) | slot A on `/mnt/user-uploads` |
+| `spaces_a`, `spaces_b` | `/dev/vdi`, `/dev/vdj` | `true` | Spaces slots A and B (layout 5) | slot A on `/mnt/spaces` |
 
-`init.conf` sets the managed slot devices: `MANAGED_DEV` (slot A, default
-`/dev/vdc`) and `MANAGED_DEV_B` (slot B, default `/dev/vdf`). The manifest
-lists them in `guest.managed_slots`.
+New drives always go after the old ones, so the older device names do not
+move. `init.conf` sets the managed mounts in `MANAGED_MOUNTS`
+(`name:mount point:slot A:slot B`). The manifest lists them in
+`guest.managed_mounts` (and the skills slots in `guest.managed_slots`). The
+guest daemon's `--managed-mounts` has the same list.
+
+Each session has its directory `/home/onyx/workspaces/<session-id>`
+(`guest.sessions_root`). The build makes `/home/onyx` and
+`/home/onyx/workspaces`, owned by the sandbox user.
 
 Kernel boot arguments: `console=ttyS0 reboot=k panic=1 pci=off init=/sbin/craft-init`.
 Add `craft.scratch=defer` for a template boot.
 
-The managed drive is read-only in the device. Root in the guest cannot write it,
-also not with `mount -o remount,rw` or `blockdev --setrw`. `attach` stops (and
-init starts no service) if the guest sees the managed drive as writable. With
-no managed drive, `attach` mounts an empty read-only tmpfs on
-`/workspace/managed`, so the path is never writable.
+The managed drives are read-only in the device. Root in the guest cannot write
+them, also not with `mount -o remount,rw` or `blockdev --setrw`. `attach`
+stops (and init starts no service) if the guest sees a managed drive as
+writable. With no slot A device (an older template), `attach` mounts an empty
+read-only tmpfs on the mount point, so the path is never writable.
 
-`attach` mounts slot A with `ro,noload,nodev,nosuid,noexec` and private mount
-propagation. It never mounts slot B. If slot B is there, `attach` only checks
-that the guest sees it as read-only.
+`attach` mounts slot A of each mount with `ro,noload,nodev,nosuid,noexec` and
+private mount propagation. It never mounts slot B. If slot B is there,
+`attach` only checks that the guest sees it as read-only.
 
-### Skills update without a new VM
+### Managed update without a new VM
 
-The guest daemon and the node agent do the update (ENG-4614), not `attach`:
+Each mount (skills, user uploads, spaces) updates the same way, with its own
+two slots.
+
+The guest daemon and the node agent do the update, not `attach`:
 
 1. The host points the idle slot at the new managed image (Firecracker
    `PATCH /drives`).
@@ -181,7 +262,7 @@ The guest daemon and the node agent do the update (ENG-4614), not `attach`:
    under `/run/craft-fc`, and moves a clone of it beneath the current mount
    (`open_tree` with `OPEN_TREE_CLONE`, then `move_mount` with
    `MOVE_MOUNT_BENEATH`, Linux 6.5 or later).
-3. The daemon unmounts the top (old) mount of `/workspace/managed` with
+3. The daemon unmounts the top (old) mount of the mount point with
    `MNT_DETACH`, then the staging mount. New opens see the new files at once.
    Open files of the old mount keep working until they close.
    A plain stacked mount does not work here: after the new mount goes on top,
@@ -191,10 +272,9 @@ The guest daemon and the node agent do the update (ENG-4614), not `attach`:
 The daemon makes the new mount private too. Private mounts keep these mount
 and unmount events local. A container check (kernel 7.0) passed this order.
 
-Root in the guest can unmount `/workspace/managed` and then write to the
-directory below it. Those files go to the user's own scratch disk; the
-managed drive does not change. Nothing on the host reads `/workspace/managed`
-from the guest.
+Root in the guest can unmount a managed mount point. `/mnt` is on the
+read-only root, so the directory below it is not writable. The managed drive
+does not change. Nothing on the host reads the managed mounts from the guest.
 
 ## Init
 
@@ -248,9 +328,10 @@ PID files: `/run/craft-fc/guest-daemon.pid` and `/run/craft-fc/egress-relay.pid`
 3. Mounts an overlay on each of `/etc /home /root /opt /srv /usr /var /workspace`.
    The read-only root is the lower layer. The upper layer is
    `/mnt/scratch/overlay/<name>/upper` (for example `overlay/usr/upper`).
-4. Mounts managed slot A read-only and `noexec`, with private propagation, on
-   `/workspace/managed`, or an empty read-only tmpfs if there is no managed
-   drive. Slot B stays unmounted.
+4. Mounts slot A of each managed mount read-only and `noexec`, with private
+   propagation, on `/mnt/skills`, `/mnt/user-uploads` and `/mnt/spaces`, or
+   an empty read-only tmpfs if the template has no such drive. Slot B stays
+   unmounted.
 
 There is no overlay over the whole root. A saved scratch disk holds only the
 changes under these directories, so it can go on top of a shared template. `/usr`
@@ -263,7 +344,7 @@ a saved disk has a different version. A second run does nothing.
 
 ## Template and restore order
 
-The template build (ENG-4566) must not snapshot a guest with the scratch drive
+The template build must not snapshot a guest with the scratch drive
 mounted. A scratch disk that changes under a mounted file system corrupts it.
 Use this order:
 
@@ -274,7 +355,8 @@ Use this order:
 3. For each VM: put the VM's own `scratch.ext4` and `managed.ext4` at the drive
    paths of the template, then load the snapshot.
 4. The node agent closes its relay connections for the VM (`CloseConnections`).
-5. The daemon `Init` sets the clock, runs `/craft-fc/lib/attach` and sends
+5. The daemon `Init` sets the clock, runs `/craft-fc/lib/attach`, installs the
+   egress CA from `SetKey` (see "Egress CA") and sends
    `SIGHUP` to the PID in `/run/craft-fc/egress-relay.pid` (init writes that
    file each time it starts the relay). On `SIGHUP` the relay resets every live
    connection (TCP RST). Pooled clients and open streams then fail at once
@@ -286,7 +368,7 @@ tests and for a VM without a template. When the daemon `Init` then runs
 
 ## Change the daemon
 
-The daemon from ENG-4571 is `/craft-fc/bin/guest-daemon` on vsock port 52. To
+The guest daemon is `/craft-fc/bin/guest-daemon` on vsock port 52. To
 use another program, set `--daemon-cmd`, or edit `DAEMON_CMD` in `init.conf`.
 If the daemon serves the egress proxy itself, set `EGRESS_RELAY_CMD=` (empty). Keep any new command in `/craft-fc` (see the rule above).
 
@@ -298,10 +380,10 @@ KVM host (see `../README.md`, "Boot test") and check:
 
 - `/proc/mounts` has the overlays and the read-only managed drive;
 - `apt-get install`, `pip install` and `npm install -g` work as root;
-- writes to `/workspace/managed` fail, also after `mount -o remount,rw`, and
-  a program on it does not run (`noexec`);
-- with slot B attached: it is not mounted, and a stacked mount of slot B plus
-  a lazy unmount of slot A leaves slot B on `/workspace/managed`;
+- writes to `/mnt/skills`, `/mnt/user-uploads` and `/mnt/spaces` fail, also
+  after `mount -o remount,rw`, and a program on them does not run (`noexec`);
+- with slot B attached: it is not mounted, and `MountManaged` of slot B
+  leaves slot B on the mount point;
 - after `kill -9` of the daemon, init starts it again and the guest keeps running;
 - a service that stops during the other service's backoff starts again;
 - a failed `attach` (for example no scratch drive) starts no service;

@@ -19,7 +19,9 @@ service HostAgent {
   // sandbox that has a VM on this node returns ATTEMPT_CONFLICT. With
   // sandboxd_key set, Create installs that key in the guest daemon (its
   // SetKey, over vsock) before it returns a running VM; a repeat call
-  // installs it again (the daemon accepts the same key).
+  // installs it again (the daemon accepts the same key). SetKey also carries
+  // the deployment egress CA (--egress-ca or --egress-ca-configmap), which
+  // the daemon installs at Init.
   rpc Create(CreateRequest) returns (CreateResponse);
 
   // Stop stops the VM only if sandbox_id, attempt and generation all match
@@ -38,6 +40,35 @@ service HostAgent {
   // pooled client connections in the guest fail fast and reconnect.
   rpc CloseConnections(CloseConnectionsRequest) returns (CloseConnectionsResponse);
 
+  // Session saves. The node moves the bytes between the VM and
+  // object storage with presigned URLs from the api_server, so the guest
+  // never sees a URL or a credential. Each call names the VM instance
+  // (sandbox_id, attempt, generation, as Stop) and sends the VM's guest
+  // daemon key again (the agent does not keep it). Errors of the guest
+  // daemon pass through with their own domain ("sandboxd.craft.onyx.app").
+  //
+  // Order for the api_server: CaptureSession (size_bytes, sha256) →
+  // presign_upload(size_bytes, sha256) → UploadCapture →
+  // finalize_presigned_upload → commit the new archive → prune old ones.
+
+  // CaptureSession calls the guest daemon's CaptureSession and spools the
+  // archive on the node (--capture-ttl). It returns the capture ID with the
+  // archive size and SHA-256, for presign_upload.
+  rpc CaptureSession(CaptureSessionRequest) returns (CaptureSessionResponse);
+
+  // UploadCapture sends a spooled capture with a presigned PUT, with the
+  // signed headers as given. On success the spool is deleted. On failure it
+  // stays until the TTL, so a retry (with a new URL) works.
+  rpc UploadCapture(UploadCaptureRequest) returns (UploadCaptureResponse);
+
+  // DiscardCapture deletes a spooled capture. A missing one is not an error.
+  rpc DiscardCapture(DiscardCaptureRequest) returns (DiscardCaptureResponse);
+
+  // RestoreSession downloads an archive with a presigned GET and streams it
+  // into the guest daemon's RestoreSession. The daemon checks size and
+  // SHA-256 before it replaces any file.
+  rpc RestoreSession(RestoreSessionRequest) returns (RestoreSessionResponse);
+
   // Dial opens a byte stream to a vsock port of a running VM: the guest
   // daemon or the app preview (3010). The first frame names sandbox_id and
   // guest_port and may carry data; later frames carry data only. The
@@ -53,30 +84,33 @@ service HostAgent {
   // a build waits for it.
   rpc BuildTemplate(BuildTemplateRequest) returns (BuildTemplateResponse);
 
-  // Managed drive (ENG-4614). The managed drive is the read-only ext4 on
-  // /workspace/managed in each VM (the skills). Each VM from a layout 3 or later
-  // template has two managed slots: A (/dev/vdc) and B (/dev/vdf).
+  // Managed drives. A managed drive is a read-only, noexec ext4 mount in
+  // each VM. There are three named mounts: skills (/mnt/skills),
+  // user-uploads (/mnt/user-uploads) and spaces (/mnt/spaces). Each VM from
+  // a layout 3 or later template has two slots (A and B) for skills; layout 5
+  // adds two slots each for user-uploads and spaces (/dev/vdg to /dev/vdj).
 
   // PutManagedImage uploads a managed bundle (a zip of the tree to show on
-  // /workspace/managed) and builds its read-only ext4 image on this node.
+  // a managed mount) and builds its read-only ext4 image on this node.
   // The first message is the header, the later ones carry the zip bytes. A
   // bundle whose image is already on the node is not built again. The image
-  // ID is the SHA256 of the zip.
+  // ID is the SHA256 of the zip. An image is not tied to a mount: one image
+  // can go on any mount (SwapManaged names the mount).
   rpc PutManagedImage(stream PutManagedImageRequest) returns (PutManagedImageResponse);
 
-  // SwapManaged puts a managed image into running VMs without a restart,
-  // one VM at a time: the agent puts the image behind the VM's idle slot
-  // (Firecracker PATCH /drives), the guest daemon mounts it beneath the
-  // current /workspace/managed mount and detaches the old mount lazily
+  // SwapManaged puts a managed image on one mount of running VMs without a
+  // restart, one VM at a time: the agent puts the image behind the mount's
+  // idle slot (Firecracker PATCH /drives), the guest daemon mounts it beneath
+  // the current mount and detaches the old mount lazily
   // (open files on it keep working until they close), and the agent records
   // the active slot in the journal. A failure of one VM does not stop the
   // others; each target has its own result.
   rpc SwapManaged(SwapManagedRequest) returns (SwapManagedResponse);
 
-  // Drain (ENG-4569). A draining node refuses every Create that would start
+  // Drain. A draining node refuses every Create that would start
   // a new VM and every BuildTemplate that would boot a template VM
   // (NODE_DRAINING). Running VMs keep running; automatic evacuation
-  // by the api_server is planned (ENG-4580), so until then the operator stops
+  // by the api_server is planned, so until then the operator stops
   // each VM and waits for DRAINED. The node drains while the manual drain flag is set
   // or while it has a drain taint (the agent's --watch-node-drain).
 
@@ -167,6 +201,25 @@ enum ErrorReason {
   // node drain taint). Create the VM on another node. A repeat Create of a
   // VM that already runs here still returns it.
   NODE_DRAINING = 28;
+  // Create: the agent has an egress CA source (--egress-ca or
+  // --egress-ca-configmap) but cannot read a valid CA from it. No VM
+  // starts. Retry later; sandbox-proxy writes the CA at its first start.
+  EGRESS_CA_UNAVAILABLE = 29;
+
+  // Session saves.
+  // UploadCapture: no spooled capture with this ID (never made, uploaded,
+  // discarded or expired). Capture again.
+  CAPTURE_NOT_FOUND = 32;
+  // CaptureSession: the archive is larger than the agent allows
+  // (--capture-max-bytes or the request limit).
+  CAPTURE_TOO_LARGE = 33;
+  // UploadCapture or RestoreSession: the presigned request failed (network
+  // error or a non-2xx status), or the URL is not allowed.
+  TRANSFER_FAILED = 34;
+  // RestoreSession: the downloaded archive has another size or SHA-256 than
+  // the request names. UploadCapture: the signed Content-Length is not the
+  // spool size.
+  ARCHIVE_MISMATCH = 35;
 }
 
 // Drain state of the node (NodeInfo, SetDrain).
@@ -182,12 +235,13 @@ enum DrainState {
   DRAIN_STATE_DRAINED = 3;
 }
 
-// A managed drive slot of a VM.
+// A managed drive slot of a VM mount. For skills, slot A is drive "managed"
+// (/dev/vdc) and slot B is drive "managed_b" (/dev/vdf, layout 3 and later).
+// For user-uploads and spaces (layout 5), the drives are
+// "<mount>_a"/"<mount>_b" with "-" as "_" (/dev/vdg to /dev/vdj).
 enum ManagedSlot {
   MANAGED_SLOT_UNSPECIFIED = 0;
-  // Drive "managed", guest /dev/vdc.
   MANAGED_SLOT_A = 1;
-  // Drive "managed_b", guest /dev/vdf (layout 3 and later).
   MANAGED_SLOT_B = 2;
 }
 
@@ -266,14 +320,17 @@ message VM {
   uint32 uid = 10;
   google.protobuf.Timestamp started_at = 11;
   string tenant_id = 12;
+  // The skills mount.
   ManagedState managed = 13;
+  // The other managed mounts (layout 5 and later), by mount name.
+  map<string, ManagedState> managed_mounts = 14;
 }
 
-// The managed drive slots of a VM, as the journal records them.
+// The managed drive slots of a VM mount, as the journal records them.
 message ManagedState {
-  // 2 for a VM that can swap its managed drive (layout 3 and later), else 1.
+  // 2 for a VM that can swap the drive of this mount, else 1.
   uint32 slots = 1;
-  // The slot on /workspace/managed after the last swap.
+  // The slot on the mount point after the last swap.
   ManagedSlot active = 2;
   // Managed image ID behind each slot. Empty: the template's placeholder.
   string slot_a_image = 3;
@@ -302,6 +359,103 @@ message CloseConnectionsResponse {
   uint32 closed = 1;
 }
 
+// Session saves.
+
+// A presigned request from the api_server (FileStore presign_upload or
+// presign_download). The agent sends exactly these headers.
+message PresignedRequest {
+  // https, or http when the agent runs with --transfer-allow-http.
+  string url = 1;
+  // "PUT" for UploadCapture, "GET" for RestoreSession.
+  string method = 2;
+  map<string, string> headers = 3;
+}
+
+// Archive limits (craft.sandboxd.v1.ArchiveLimits). 0 means the default.
+message ArchiveLimits {
+  int64 max_stored_bytes = 1;
+  int64 max_expanded_bytes = 2;
+  int64 max_entries = 3;
+}
+
+message CaptureSessionRequest {
+  string sandbox_id = 1;
+  uint64 attempt = 2;
+  uint64 generation = 3;
+  // Secret: the VM's guest daemon key (CreateRequest.sandboxd_key).
+  string sandboxd_key = 4;
+  string session_id = 5;
+  // Empty: the daemon defaults (see craft.sandboxd.v1.CaptureSessionRequest).
+  repeated string roots = 6;
+  repeated string exclude_names = 7;
+  ArchiveLimits limits = 8;
+}
+
+message CaptureSessionResponse {
+  string capture_id = 1;
+  // Archive size and hex SHA-256, as the agent received and spooled it.
+  int64 size_bytes = 2;
+  string sha256 = 3;
+  // The guest daemon's summary of the archive.
+  int64 files = 4;
+  int64 directories = 5;
+  int64 expanded_bytes = 6;
+  int64 excluded = 7;
+  int64 skipped = 8;
+  int64 changed = 9;
+  repeated string roots = 10;
+  uint64 capture_ms = 11;
+  // The agent deletes the spool after this time.
+  google.protobuf.Timestamp expires_at = 12;
+}
+
+message UploadCaptureRequest {
+  string capture_id = 1;
+  PresignedRequest request = 2;
+}
+
+message UploadCaptureResponse {
+  int64 size_bytes = 1;
+  string sha256 = 2;
+  // HTTP status of the PUT (2xx) and the ETag header, if any.
+  uint32 http_status = 3;
+  string etag = 4;
+  uint64 upload_ms = 5;
+}
+
+message DiscardCaptureRequest {
+  string capture_id = 1;
+}
+
+message DiscardCaptureResponse {
+  // False if there was no such capture.
+  bool discarded = 1;
+}
+
+message RestoreSessionRequest {
+  string sandbox_id = 1;
+  uint64 attempt = 2;
+  uint64 generation = 3;
+  // Secret: the VM's guest daemon key.
+  string sandboxd_key = 4;
+  string session_id = 5;
+  PresignedRequest request = 6;
+  // Exact archive size and hex SHA-256 (from CaptureSessionResponse).
+  int64 size_bytes = 7;
+  string sha256 = 8;
+  repeated string roots = 9;
+  ArchiveLimits limits = 10;
+}
+
+message RestoreSessionResponse {
+  int64 files = 1;
+  int64 directories = 2;
+  int64 expanded_bytes = 3;
+  repeated string roots = 4;
+  // Time from the call to the restored files.
+  uint64 restore_ms = 5;
+}
+
 message NodeInfoRequest {}
 
 message NodeInfoResponse {
@@ -319,7 +473,7 @@ message NodeInfoResponse {
   uint64 disk_free_mib = 9;
   repeated ManagedImageInfo managed_images = 10;
 
-  // Memory admission and drain (ENG-4569). Create needs
+  // Memory admission and drain. Create needs
   // mem_available_mib >= mem_starting_mib + mem_mib + mem_reserve_mib.
   // The memory reserve (--min-free-mem-mib).
   uint64 mem_reserve_mib = 11;
@@ -376,9 +530,14 @@ message TemplateInfo {
   uint32 managed_slots = 14;
 
   // True when the template VMs have the balloon device with free page
-  // reporting (layout 4 and later, ENG-4569): the guest returns free
+  // reporting (layout 4 and later): the guest returns free
   // memory to the node.
   bool balloon = 15;
+  // Managed mounts that the template's VMs can swap: "skills" from layout
+  // 3, also "user-uploads" and "spaces" from layout 5 when the root drive's
+  // guest daemon serves them (rootfs manifest managed_mounts). Empty from
+  // an agent that predates named mounts: send it no other mount.
+  repeated string managed_mounts = 16;
 }
 
 message BuildTemplateRequest {}
@@ -442,6 +601,10 @@ message SwapManagedRequest {
   // The VMs, swapped one at a time in this order. At most 1000, no
   // sandbox twice.
   repeated SwapTarget targets = 2;
+  // The mount: skills (the default when empty), user-uploads or spaces. A VM
+  // whose template or guest daemon does not have the mount fails with
+  // MANAGED_SWAP_UNSUPPORTED.
+  string mount = 3;
 }
 
 message SwapTarget {
@@ -465,7 +628,7 @@ message SwapResult {
   // Set when ok is false: the error reason and message.
   ErrorReason reason = 3;
   string message = 4;
-  // The slot on /workspace/managed after the call.
+  // The slot on the mount after the call.
   ManagedSlot active = 5;
   // False when the image was already the active one.
   bool changed = 6;

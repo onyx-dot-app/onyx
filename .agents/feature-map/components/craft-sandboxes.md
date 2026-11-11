@@ -56,7 +56,10 @@ This component owns:
   in-guest egress relay inside each VM, and the node agent on each KVM node.
   The API server will reach a VM's guest daemon through the node agent: the
   agent forwards each `Sandboxd` call, routed by the `x-sandbox-id` metadata,
-  over mTLS and then vsock, without decoding it.
+  over mTLS and then vsock, without decoding it. Session saves in this
+  runtime hold only `attachments/`, without dependencies
+  (tar + zstd). The node agent moves the archive to and from object storage
+  with presigned URLs from the API server.
 
 Neighbours:
 - [[craft-sessions]]: sessions, turns and `SessionManager`, which call this
@@ -70,9 +73,30 @@ Neighbours:
 
 ## Architecture
 
+The separate userspace image in `deployment/craft-runtime/` is only for the
+new integrated harness. Existing Craft keeps its current sandbox image and
+skills. The new image is an input to `deployment/craft-fc/rootfs/build-rootfs.sh`. It includes execution tools and
+assets, without OpenCode or the current Python sidecar. The existing converter
+adds init, the static Go daemon and relay, overlays, and the rootfs manifest.
+In a Firecracker VM, managed content mounts on read-only, noexec drives at
+`/mnt/skills`, `/mnt/user-uploads` and `/mnt/spaces` (each swappable with the
+same A/B slot mechanism); scripts run through interpreters. Each session has
+`/home/onyx/workspaces/<session-id>`, the default working directory of its
+commands; commands can still reach any path in the VM. Publishing the
+userspace image does not change the current pod/Docker image settings.
+
+Rootfs delivery (Firecracker only): `.github/workflows/craft-fc-rootfs.yml` converts a
+`craft-runtime` tag with no egress CA and publishes
+`onyxdotapp/craft-fc-artifacts:rootfs-<version>`. The host agent DaemonSet copies
+it into `<dataDir>/rootfs` with an init container (`craft.hostAgent.rootfs`).
+The agent reads the sandbox-proxy CA ConfigMap at each Create and sends it with
+`SetKey`; the guest daemon installs it at `Init`. So one drive and one template
+key serve every deployment CA.
+
 Operator guides: `backend/onyx/server/features/build/sandbox/README.md` (image
 and tag coupling, IPv6), `backend/onyx/server/features/build/sandbox/docker/README.md`
-(Docker backend), and `deployment/helm/dev/README.md` (local kind cluster).
+(Docker backend), `deployment/helm/dev/README.md` (local kind cluster), and
+`microvm/RUNBOOKS.md` (Firecracker host agent alerts and node procedures).
 
 ```
 SessionManager / scheduled executor / sweep
@@ -190,6 +214,52 @@ mints a new one. The reserve step calls it on each provision. For a healthy
 sandbox it re-mints only when `has_active_craft_pat` is false, for example
 after a password change revoked it ([[auth-and-identity]]). The proxy reads
 the stored token on each request, so a new token takes effect at once.
+
+**Firecracker runtime (in progress, `SANDBOX_RUNTIME=firecracker` only).**
+`backend/onyx/microvm/` is the api_server side of the micro-VM runtime:
+- `backend/onyx/microvm/agent_client.py`: a typed mTLS client for the host
+  agent, with session saves (capture, upload, discard, restore) and the
+  managed drive (put, swap). Stubs in `backend/onyx/microvm/generated/`; the
+  `microvm-python-stubs` pre-commit hook fails when they differ from
+  `microvm/proto` (`regenerate.sh --check`).
+- `backend/onyx/microvm/daemon_client.py`: the guest daemon client, through
+  the agent pass-through: Health, Init, exec (run, start, stream by offsets,
+  interact, cancel with an optional SIGINT/SIGTERM, inspect, list; at most 64
+  tracked executions per VM) and files (read, write, upload, list, delete,
+  zip; session-relative, or absolute VM paths with no session). Every call but Health sends `x-sandboxd-key`. No caller
+  uses exec or files yet.
+- `backend/onyx/microvm/placement.py`: one VM per sandbox, best of K nodes on
+  free memory, `SANDBOX_CAPACITY_UNAVAILABLE` with the reason. Wake is an
+  idempotent ensure: it reads the durable placement record and asks that
+  node's agent whether the VM runs. Before Create it takes the sandbox's
+  reservation (attempt, node) atomically; a Create with no known outcome
+  keeps the reservation on its node. Each attempt gets a random daemon key,
+  stored encrypted in the tenant cache before Create. A rejected or lost key,
+  an exited VM, or a dead node creates the next attempt; the caller must
+  store the returned attempt. A node is dead when its registration expired
+  or ended (an agent that stops on a drained node calls
+  `POST /microvm/node/deregister`), or its last state report is older than
+  `SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS` (180 s).
+- `backend/onyx/microvm/registry.py`: placement records, reservations and
+  daemon keys have no TTL. Record writes are fenced on (attempt, generation)
+  with `CacheBackend.replace_if_value` / `delete_if_value`. Redis must use a
+  `volatile-*` or `noeviction` policy (the chart's bundled Redis uses
+  `allkeys-lru`), or use the Postgres cache backend.
+- `backend/onyx/microvm/lifecycle.py`: wake, Init, activity, the idle evictor
+  (decides, and stops only after a saved checkpoint).
+- `backend/onyx/microvm/reconcile.py`: the per-node reconcile pass, driven by
+  pushed node reports. Each agent pushes its VMs and recently ended VMs to
+  `POST /microvm/node/state`, signed with its registered key
+  (`backend/onyx/microvm/node_report.py`), and the api_server reconciles that
+  node under a per-node lease: it clears records of ended VMs, and adopts a
+  VM that a reservation names once its daemon holds the attempt's key. It
+  stops a VM of an older attempt on that report, and an unknown VM only
+  after `SANDBOX_FC_ORPHAN_GRACE_SECONDS` (no checkpoint). A record that no
+  reported VM names is cleared after a fresh `List` under the sandbox lock.
+  See `microvm/README.md`, "Sandbox state model".
+
+Agents become reachable when their signing-key registration carries
+`agent_address`. No sandbox manager uses this code yet.
 
 ---
 
@@ -381,6 +451,10 @@ the stored token on each request, so a new token takes effect at once.
 
 ## Verification
 
+- Integrated harness image: `deployment/craft-runtime/check-kvm.sh` converts
+  the image and runs the daemon, init, restore, and tool smoke tests on x86
+  KVM with the pinned guest kernel. Container smoke and rootfs conversion
+  alone do not establish VM tool coverage.
 - Unit: `backend/tests/unit/onyx/server/features/craft/sandbox/`.
 - Lifecycle, sweep and snapshots with real Postgres and Redis:
   `backend/tests/external_dependency_unit/craft/`.

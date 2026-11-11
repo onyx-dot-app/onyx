@@ -1,5 +1,4 @@
 import datetime
-import json
 import time
 from collections.abc import Generator
 from concurrent.futures import Future
@@ -37,6 +36,7 @@ from onyx.chat.chat_utils import (
     convert_chat_history_basic,
     create_chat_session_from_request,
 )
+from onyx.chat.errors import unhandled_stream_error
 from onyx.chat.incognito import (
     delete_incognito_generated_files,
     incognito_allowed_for_user,
@@ -952,7 +952,7 @@ def handle_send_chat_message(
                     yield get_json_line(obj.model_dump())
             except Exception as e:
                 logger.exception("Error in multi-model streaming")
-                yield json.dumps({"error": str(e)})
+                yield get_json_line(unhandled_stream_error(e).model_dump())
 
         return StreamingResponse(
             multi_model_stream_generator(), media_type="text/event-stream"
@@ -1025,7 +1025,7 @@ def handle_send_chat_message(
 
         except Exception as e:
             logger.exception("Error in chat message streaming")
-            yield json.dumps({"error": str(e)})
+            yield get_json_line(unhandled_stream_error(e).model_dump())
 
         finally:
             logger.debug("Stream generator finished")

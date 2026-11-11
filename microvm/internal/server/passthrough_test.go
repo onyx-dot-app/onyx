@@ -27,11 +27,14 @@ import (
 
 	"github.com/onyx-dot-app/onyx/microvm/internal/agent"
 	"github.com/onyx-dot-app/onyx/microvm/internal/apierr"
+	"github.com/onyx-dot-app/onyx/microvm/internal/egressca"
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd"
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/execs"
+	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/files"
 	"github.com/onyx-dot-app/onyx/microvm/internal/jailer"
 	"github.com/onyx-dot-app/onyx/microvm/internal/template"
 	"github.com/onyx-dot-app/onyx/microvm/internal/testcerts"
+	"github.com/onyx-dot-app/onyx/microvm/internal/transfer"
 	pb "github.com/onyx-dot-app/onyx/microvm/proto/hostagent/v1"
 	sdpb "github.com/onyx-dot-app/onyx/microvm/proto/sandboxd/v1"
 )
@@ -70,6 +73,9 @@ func (c *readConn) Read(p []byte) (int, error) { return c.r.Read(p) }
 type fakeVM struct {
 	uds      string
 	connects atomic.Int32
+	// cas are the egress CAs that Init installed.
+	casMu sync.Mutex
+	cas   [][]byte
 }
 
 func startFakeVM(t *testing.T) *fakeVM {
@@ -77,9 +83,15 @@ func startFakeVM(t *testing.T) *fakeVM {
 	return startFakeVMWith(t, guestd.Config{Version: "test"})
 }
 
+// startFakeVMFiles starts a fake VM whose daemon serves fs (nil: defaults).
+func startFakeVMFiles(t *testing.T, fs *files.Store) *fakeVM {
+	t.Helper()
+	return startFakeVMWith(t, guestd.Config{Version: "test", Files: fs})
+}
+
 func startFakeVMWith(t *testing.T, cfg guestd.Config) *fakeVM {
 	t.Helper()
-	sock := filepath.Join("/tmp", "pt-"+filepath.Base(t.TempDir())+".sock")
+	sock := shortSock(t, "pt")
 	ln, err := net.Listen("unix", sock)
 	if err != nil {
 		t.Fatal(err)
@@ -89,10 +101,17 @@ func startFakeVMWith(t *testing.T, cfg guestd.Config) *fakeVM {
 	if err != nil {
 		t.Fatal(err)
 	}
+	vm := &fakeVM{uds: sock}
 	nop := guestd.System{
 		SetClock:   func(time.Time) error { return nil },
 		AddEntropy: func([]byte) (bool, error) { return true, nil },
 		GrowFS:     func(string, uint64) (uint64, uint64, error) { return 0, 0, nil },
+		InstallCA: func(pem []byte) error {
+			vm.casMu.Lock()
+			defer vm.casMu.Unlock()
+			vm.cas = append(vm.cas, pem)
+			return nil
+		},
 	}
 	d, err := guestd.NewServer(cfg, nop, m)
 	if err != nil {
@@ -100,7 +119,6 @@ func startFakeVMWith(t *testing.T, cfg guestd.Config) *fakeVM {
 	}
 	gs := d.NewGRPCServer()
 	go func() { _ = gs.Serve(inner) }()
-	vm := &fakeVM{uds: sock}
 	t.Cleanup(func() {
 		_ = ln.Close()
 		_ = os.Remove(sock)
@@ -138,11 +156,12 @@ func startFakeVMWith(t *testing.T, cfg guestd.Config) *fakeVM {
 // ptAgent is a node agent with a pass-through and one running VM per
 // sandbox in uds.
 type ptAgent struct {
-	m    *agent.Manager
-	l    *mapLauncher
-	pt   *Passthrough
-	vms  map[string]agent.VM
-	conn *grpc.ClientConn
+	m     *agent.Manager
+	l     *mapLauncher
+	pt    *Passthrough
+	saves *Saves
+	vms   map[string]agent.VM
+	conn  *grpc.ClientConn
 }
 
 type mapLauncher struct {
@@ -172,7 +191,7 @@ func (l *mapLauncher) exit(id string) {
 	p.once.Do(func() { close(p.done) })
 }
 
-func newPTAgent(t *testing.T, mtls bool, uds map[string]string) *ptAgent {
+func newPTAgent(t *testing.T, mtls bool, uds map[string]string, opts ...func(*Service)) *ptAgent {
 	t.Helper()
 	dir := t.TempDir()
 	if _, err := template.WriteFake(filepath.Join(dir, "tpl"), "t1", template.Key{VCPUs: 2, MemMiB: 4096, ScratchGiB: 1, FirecrackerVersion: "v1.17.0"}); err != nil {
@@ -194,7 +213,11 @@ func newPTAgent(t *testing.T, mtls bool, uds map[string]string) *ptAgent {
 		}
 		a.vms[id] = vm
 	}
-	opts := pt.ServerOptions()
+	svc := &Service{M: m, Keys: pt}
+	for _, o := range opts {
+		o(svc)
+	}
+	sopts := pt.ServerOptions()
 	var ln net.Listener
 	var target string
 	var clientCreds credentials.TransportCredentials
@@ -207,14 +230,14 @@ func newPTAgent(t *testing.T, mtls bool, uds map[string]string) *ptAgent {
 		if err != nil {
 			t.Fatal(err)
 		}
-		opts = append(opts, grpc.Creds(creds))
+		sopts = append(sopts, grpc.Creds(creds))
 		if ln, err = net.Listen("tcp", "127.0.0.1:0"); err != nil {
 			t.Fatal(err)
 		}
 		target = ln.Addr().String()
 		clientCreds = credentials.NewTLS(clientTLS(t, certs, certs.GoodCert, certs.GoodKey))
 	} else {
-		sock := filepath.Join("/tmp", "ha-"+filepath.Base(t.TempDir())+".sock")
+		sock := shortSock(t, "ha")
 		var err error
 		if ln, err = ListenUnix(sock); err != nil {
 			t.Fatal(err)
@@ -222,7 +245,14 @@ func newPTAgent(t *testing.T, mtls bool, uds map[string]string) *ptAgent {
 		target = "unix://" + sock
 		clientCreds = insecure.NewCredentials()
 	}
-	srv := NewServer(&Service{M: m, Keys: pt}, opts...)
+	saves, err := NewSaves(&Saves{M: m, PT: pt, Dir: filepath.Join(dir, "captures"), Log: log,
+		Transfer: &transfer.Client{AllowHTTP: true, Parallel: 4, PartBytes: 1 << 20}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.saves = saves
+	svc.Saves = saves
+	srv := NewServer(svc, sopts...)
 	go func() { _ = srv.Serve(ln) }()
 	t.Cleanup(srv.Stop)
 	conn, err := grpc.NewClient(target, grpc.WithTransportCredentials(clientCreds))
@@ -246,7 +276,7 @@ func initVM(t *testing.T, a *ptAgent, id string) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := a.pt.InstallKey(ctx, a.vms[id], vmKey); err != nil {
+	if err := a.pt.InstallKey(ctx, a.vms[id], vmKey, nil); err != nil {
 		t.Fatalf("install key %s: %v", id, err)
 	}
 	if _, err := a.daemon().Init(to(ctx, id), &sdpb.InitRequest{
@@ -362,7 +392,7 @@ func TestPassthroughOverMTLS(t *testing.T) {
 func TestPassthroughTypedErrors(t *testing.T) {
 	vm := startFakeVM(t)
 	// sandbox2's VM has nothing on port 52: its socket refuses CONNECT.
-	refuse := filepath.Join("/tmp", "pr-"+filepath.Base(t.TempDir())+".sock")
+	refuse := shortSock(t, "pr")
 	rln, err := net.Listen("unix", refuse)
 	if err != nil {
 		t.Fatal(err)
@@ -566,7 +596,7 @@ func TestPassthroughStaleCallKeepsNewerConnection(t *testing.T) {
 func TestCreateInstallsKey(t *testing.T) {
 	vm := startFakeVM(t)
 	// sandbox2's VM has no daemon: its socket refuses CONNECT.
-	refuse := filepath.Join("/tmp", "pk-"+filepath.Base(t.TempDir())+".sock")
+	refuse := shortSock(t, "pk")
 	rln, err := net.Listen("unix", refuse)
 	if err != nil {
 		t.Fatal(err)
@@ -624,5 +654,46 @@ func TestCreateInstallsKey(t *testing.T) {
 	_, err = create(sandbox2, vmKey)
 	if status.Code(err) != codes.Unavailable || apierr.FromStatus(err) != pb.ErrorReason_GUEST_UNREACHABLE {
 		t.Fatalf("create without a daemon: %v", err)
+	}
+}
+
+// Create sends the deployment egress CA with the key; Init installs it. A CA
+// source with no CA fails Create before any VM starts.
+func TestCreateSendsEgressCA(t *testing.T) {
+	vm := startFakeVM(t)
+	ca, err := testcerts.NewCA("deployment egress CA")
+	if err != nil {
+		t.Fatal(err)
+	}
+	caFile := filepath.Join(t.TempDir(), "ca.crt")
+	src := &egressca.Cached{Src: egressca.File{Path: caFile}, TTL: time.Minute, RetryAfter: time.Nanosecond}
+	a := newPTAgent(t, false, map[string]string{sandbox: vm.uds}, func(s *Service) { s.EgressCA = src })
+	ha := pb.NewHostAgentClient(a.conn)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	launches := a.m.List()
+	_, err = ha.Create(ctx, &pb.CreateRequest{SandboxId: sandbox2, Attempt: 1, Template: "t1", Vcpus: 2, MemMib: 4096,
+		ScratchGib: 1, TenantId: "public", SandboxdKey: vmKey})
+	if status.Code(err) != codes.Unavailable || apierr.FromStatus(err) != pb.ErrorReason_EGRESS_CA_UNAVAILABLE {
+		t.Fatalf("create with no CA file: %v", err)
+	}
+	if len(a.m.List()) != len(launches) {
+		t.Fatal("a VM started without a CA")
+	}
+	if err := os.WriteFile(caFile, ca.PEM, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ha.Create(ctx, &pb.CreateRequest{SandboxId: sandbox, Attempt: 1, Template: "t1", Vcpus: 2, MemMib: 4096,
+		ScratchGib: 1, TenantId: "public", SandboxdKey: vmKey}); err != nil {
+		t.Fatal(err)
+	}
+	r, err := a.daemon().Init(to(ctx, sandbox), &sdpb.InitRequest{HostTime: timestamppb.Now(), Entropy: make([]byte, 32), SandboxId: sandbox})
+	if err != nil || !r.GetEgressCaInstalled() {
+		t.Fatalf("init: %v %v", r, err)
+	}
+	vm.casMu.Lock()
+	defer vm.casMu.Unlock()
+	if len(vm.cas) != 1 || string(vm.cas[0]) != string(ca.PEM) {
+		t.Fatalf("installed %d CAs", len(vm.cas))
 	}
 }

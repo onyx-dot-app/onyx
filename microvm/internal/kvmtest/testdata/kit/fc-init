@@ -1,0 +1,41 @@
+#!/bin/bash
+# PID 1 inside the Firecracker guest. Root drive is read-only; /dev/vdb is the per-VM scratch disk.
+# fcroot=rw on the kernel cmdline (prebuild T4): an overlay over the whole root, upper/work on the scratch disk.
+mount -t proc proc /proc
+if [ -z "$FC_STAGE2" ] && grep -qw fcroot=rw /proc/cmdline; then
+  mount -t tmpfs -o size=1m tmpfs /tmp
+  mkdir -p /tmp/sc /tmp/nr
+  mount /dev/vdb /tmp/sc
+  mkdir -p /tmp/sc/root-upper /tmp/sc/root-work
+  mount -t overlay overlay -o lowerdir=/,upperdir=/tmp/sc/root-upper,workdir=/tmp/sc/root-work /tmp/nr
+  mkdir -p /tmp/nr/mnt/scratch /tmp/nr/.oldroot
+  mount --move /tmp/sc /tmp/nr/mnt/scratch
+  umount /proc
+  cd /tmp/nr && pivot_root . .oldroot
+  FC_STAGE2=1 exec chroot . /sbin/fc-init
+fi
+[ -n "$FC_STAGE2" ] && { mount -t proc proc /proc 2>/dev/null; umount -l /.oldroot && rmdir /.oldroot; }
+mount -t sysfs sys /sys
+mount -t devtmpfs dev /dev 2>/dev/null
+mkdir -p /dev/pts /dev/shm
+mount -t devpts devpts /dev/pts
+mount -t tmpfs tmpfs /dev/shm
+mount -t tmpfs tmpfs /run
+mount -t tmpfs -o size=4g tmpfs /tmp
+mount -t tmpfs tmpfs /var/tmp
+mkdir -p /run/lock
+mountpoint -q /mnt/scratch || mount /dev/vdb /mnt/scratch
+mkdir -p /mnt/scratch/sessions /mnt/scratch/home-upper /mnt/scratch/home-work
+mount --bind /mnt/scratch/sessions /workspace/sessions
+[ -z "$FC_STAGE2" ] && mount -t overlay overlay -o lowerdir=/home/sandbox,upperdir=/mnt/scratch/home-upper,workdir=/mnt/scratch/home-work /home/sandbox
+chown sandbox:sandbox /mnt/scratch/sessions /mnt/scratch/home-upper /workspace/sessions /home/sandbox
+chmod 1777 /tmp /var/tmp
+hostname sandbox
+# bring up loopback without depending on iproute2 being in the image
+python3 -c "
+import fcntl, socket, struct
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+ifr = struct.pack('16sH', b'lo', 0x1 | 0x40)
+fcntl.ioctl(s.fileno(), 0x8914, ifr)
+"
+exec /usr/local/bin/python3 /opt/fc-agent.py

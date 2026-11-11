@@ -15,7 +15,7 @@ import (
 	pb "github.com/onyx-dot-app/onyx/microvm/proto/hostagent/v1"
 )
 
-// DrainStatus is the drain state of the node (ENG-4569). The node drains
+// DrainStatus is the drain state of the node. The node drains
 // while the manual flag is set or while it has a drain taint. A draining
 // node refuses new VMs; the api_server saves and stops the running ones.
 type DrainStatus struct {
@@ -137,6 +137,14 @@ func (m *Manager) Drain() DrainStatus {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.drainStatusLocked()
+}
+
+// DrainTaints returns the drain taints from the last node read that worked.
+// Unlike Drain it never scans processes.
+func (m *Manager) DrainTaints() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return slices.Clone(m.drain.taints)
 }
 
 func (m *Manager) drainStatusLocked() DrainStatus {

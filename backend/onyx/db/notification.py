@@ -216,6 +216,28 @@ def dismiss_all_notifications(
     db_session.commit()
 
 
+def dismiss_notifications_with_other_value(
+    notif_type: NotificationType,
+    key: str,
+    keep_value: str,
+    db_session: Session,
+) -> None:
+    """Dismiss, for every user, notifications of this type whose
+    additional_data[key] is not keep_value. Does not commit."""
+    db_session.execute(
+        update(Notification)
+        .where(
+            Notification.notif_type == notif_type,
+            Notification.dismissed.is_(False),
+            _notification_additional_data_key()[key].astext.is_distinct_from(
+                keep_value
+            ),
+        )
+        .values(dismissed=True)
+        .execution_options(synchronize_session=False)
+    )
+
+
 def dismiss_user_notifications(
     user: User,
     db_session: Session,

@@ -12,7 +12,8 @@
 //
 // Layout 4 has the same files and adds the balloon device (Balloon) to the
 // template VM. Firecracker sets the balloon only before boot, and a restore
-// keeps it.
+// keeps it. Layout 5 adds two read-only slots each for the user-uploads and
+// spaces managed mounts (ManagedMountDrives), /dev/vdg to /dev/vdj.
 //
 //	vmstate        snapshot state
 //	mem            snapshot memory
@@ -37,6 +38,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -51,9 +53,10 @@ import (
 // managed slot B (the spare for a managed drive swap) as the last drive, so
 // the guest devices of the older slots do not move. The agent still restores
 // layout 2 templates; their VMs cannot swap the managed drive. Layout 4
-// adds the balloon device with free page reporting (ENG-4569); VMs of older
-// layouts never return free memory to the node.
-const LayoutVersion = 4
+// adds the balloon device with free page reporting; VMs of older
+// layouts never return free memory to the node. Layout 5 adds the
+// user-uploads and spaces managed mounts.
+const LayoutVersion = 5
 
 // OldestLayout is the oldest layout that the agent restores.
 const OldestLayout = 2
@@ -67,8 +70,13 @@ const (
 	UploadAFile  = "upload-a.ext4"
 	UploadBFile  = "upload-b.ext4"
 	ManagedBFile = "managed-b.ext4"
-	VMStateFile  = "vmstate"
-	MemFile      = "mem"
+	// Layout 5: slots A and B of the user-uploads and spaces mounts.
+	UserUploadsAFile = "user-uploads-a.ext4"
+	UserUploadsBFile = "user-uploads-b.ext4"
+	SpacesAFile      = "spaces-a.ext4"
+	SpacesBFile      = "spaces-b.ext4"
+	VMStateFile      = "vmstate"
+	MemFile          = "mem"
 )
 
 // Drive IDs, the vsock UDS path and the guest CID that the snapshot uses.
@@ -80,8 +88,13 @@ const (
 	UploadBDriveID = "upload_b"
 	// ManagedBDriveID is managed slot B. Slot A is ManagedDriveID.
 	ManagedBDriveID = "managed_b"
-	VsockUDS        = "/v.sock"
-	GuestCID        = 3
+	// Layout 5 drives of the user-uploads and spaces mounts.
+	UserUploadsADriveID = "user_uploads_a"
+	UserUploadsBDriveID = "user_uploads_b"
+	SpacesADriveID      = "spaces_a"
+	SpacesBDriveID      = "spaces_b"
+	VsockUDS            = "/v.sock"
+	GuestCID            = 3
 )
 
 // Drive is one drive slot of the template.
@@ -117,6 +130,63 @@ var layoutDrives = map[int][]Drive{
 		{UploadBDriveID, UploadBFile, true},
 		{ManagedBDriveID, ManagedBFile, true},
 	},
+	5: {
+		{RootfsDriveID, RootfsFile, true},
+		{ScratchDriveID, ScratchFile, false},
+		{ManagedDriveID, ManagedFile, true},
+		{UploadADriveID, UploadAFile, true},
+		{UploadBDriveID, UploadBFile, true},
+		{ManagedBDriveID, ManagedBFile, true},
+		{UserUploadsADriveID, UserUploadsAFile, true},
+		{UserUploadsBDriveID, UserUploadsBFile, true},
+		{SpacesADriveID, SpacesAFile, true},
+		{SpacesBDriveID, SpacesBFile, true},
+	},
+}
+
+// SkillsMount is the managed mount of the first managed drive slots, and the
+// mount of a swap that names none.
+const SkillsMount = "skills"
+
+// MountDrives are the two slot drives of one managed mount.
+type MountDrives struct {
+	Mount string
+	A, B  Drive
+}
+
+// ManagedMountDrives are the managed mounts, in drive order. The guest
+// mounts each slot A at /mnt/<mount> at boot.
+var ManagedMountDrives = []MountDrives{
+	{SkillsMount, Drive{ManagedDriveID, ManagedFile, true}, Drive{ManagedBDriveID, ManagedBFile, true}},
+	{"user-uploads", Drive{UserUploadsADriveID, UserUploadsAFile, true}, Drive{UserUploadsBDriveID, UserUploadsBFile, true}},
+	{"spaces", Drive{SpacesADriveID, SpacesAFile, true}, Drive{SpacesBDriveID, SpacesBFile, true}},
+}
+
+// MountDrivesOf returns the slot drives of a mount, and false for an
+// unknown mount.
+func MountDrivesOf(mount string) (MountDrives, bool) {
+	for _, m := range ManagedMountDrives {
+		if m.Mount == mount {
+			return m, true
+		}
+	}
+	return MountDrives{}, false
+}
+
+// SwapMounts returns the managed mounts whose two slot drives are in the
+// layout, so its VMs can swap them.
+func SwapMounts(layout int) []string {
+	have := map[string]bool{}
+	for _, d := range DrivesFor(layout) {
+		have[d.ID] = true
+	}
+	var out []string
+	for _, m := range ManagedMountDrives {
+		if have[m.A.ID] && have[m.B.ID] {
+			out = append(out, m.Mount)
+		}
+	}
+	return out
 }
 
 // BalloonLayout is the first layout whose template VM has the balloon.
@@ -199,7 +269,8 @@ type Key struct {
 	FirecrackerVersion string `json:"firecracker_version"`
 	CPUModel           string `json:"cpu_model"`
 	HostKernel         string `json:"host_kernel"`
-	// SHA256 fingerprint of the egress CA in the root drive.
+	// SHA256 fingerprint of the egress CA in the root drive. Empty: the root
+	// drive has no CA (the guest daemon installs it at Init).
 	CAFingerprint string `json:"ca_fingerprint"`
 	LayoutVersion int    `json:"layout_version"`
 	BootArgs      string `json:"boot_args"`
@@ -226,7 +297,14 @@ type NodeKey struct {
 	GuestKernelSHA256  string
 	// CAFingerprint is the egress CA of this deployment. Empty: not checked.
 	CAFingerprint string
+	// RootfsCARequired: the agent has no CA source, so a template whose root
+	// drive has no CA does not fit (its VMs would trust no egress CA).
+	RootfsCARequired bool
 }
+
+// NoCAError is the reason that a CA-free root drive does not fit an agent
+// with no CA source.
+const NoCAError = "egress CA: the root drive has none and the agent has no --egress-ca or --egress-ca-configmap"
 
 // CheckNode returns TEMPLATE_INCOMPATIBLE if the key does not fit node n.
 func (k Key) CheckNode(n NodeKey) error {
@@ -243,8 +321,12 @@ func (k Key) CheckNode(n NodeKey) error {
 	add("cpu model", k.CPUModel, n.CPUModel)
 	add("host kernel", k.HostKernel, n.HostKernel)
 	add("guest kernel sha256", k.GuestKernelSHA256, n.GuestKernelSHA256)
-	if n.CAFingerprint != "" {
+	// A template with no CA in its root drive fits every CA.
+	if n.CAFingerprint != "" && k.CAFingerprint != "" {
 		add("egress CA", k.CAFingerprint, n.CAFingerprint)
+	}
+	if n.RootfsCARequired && k.CAFingerprint == "" {
+		bad = append(bad, NoCAError)
 	}
 	if len(bad) > 0 {
 		return apierr.New(pb.ErrorReason_TEMPLATE_INCOMPATIBLE, "template does not fit this node: %s", strings.Join(bad, ", "))
@@ -263,9 +345,12 @@ type Manifest struct {
 	Files map[string]string `json:"files"`
 	// SnapshotSHA256 is the hash over (vmstate, mem, rootfs) and then the
 	// other drive files (SnapshotHash).
-	SnapshotSHA256 string    `json:"snapshot_sha256"`
-	BuiltAt        time.Time `json:"built_at"`
-	BuildMS        int64     `json:"build_ms"`
+	SnapshotSHA256 string `json:"snapshot_sha256"`
+	// GuestMounts are the managed mounts that the root drive's guest daemon
+	// serves (rootfs manifest managed_mounts). Empty: skills only.
+	GuestMounts []string  `json:"guest_mounts,omitempty"`
+	BuiltAt     time.Time `json:"built_at"`
+	BuildMS     int64     `json:"build_ms"`
 }
 
 // SnapshotHash hashes the file hashes: first vmstate, mem and rootfs, then
@@ -339,6 +424,19 @@ func (t *Template) ManagedSlots() int {
 		}
 	}
 	return 1
+}
+
+// ManagedMounts returns the managed mounts that the template's VMs can swap:
+// the layout must have their drives, and the guest daemon must serve them
+// (skills always).
+func (t *Template) ManagedMounts() []string {
+	var out []string
+	for _, m := range SwapMounts(t.LayoutVersion) {
+		if m == SkillsMount || slices.Contains(t.GuestMounts, m) {
+			out = append(out, m)
+		}
+	}
+	return out
 }
 
 // HasBalloon reports whether the template's VMs have the balloon device.

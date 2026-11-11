@@ -31,8 +31,10 @@ const (
 	Sandboxd_List_FullMethodName           = "/craft.sandboxd.v1.Sandboxd/List"
 	Sandboxd_ReadFile_FullMethodName       = "/craft.sandboxd.v1.Sandboxd/ReadFile"
 	Sandboxd_WriteFile_FullMethodName      = "/craft.sandboxd.v1.Sandboxd/WriteFile"
+	Sandboxd_UploadFile_FullMethodName     = "/craft.sandboxd.v1.Sandboxd/UploadFile"
 	Sandboxd_ListFiles_FullMethodName      = "/craft.sandboxd.v1.Sandboxd/ListFiles"
 	Sandboxd_DeleteFile_FullMethodName     = "/craft.sandboxd.v1.Sandboxd/DeleteFile"
+	Sandboxd_ZipFiles_FullMethodName       = "/craft.sandboxd.v1.Sandboxd/ZipFiles"
 	Sandboxd_CaptureSession_FullMethodName = "/craft.sandboxd.v1.Sandboxd/CaptureSession"
 	Sandboxd_RestoreSession_FullMethodName = "/craft.sandboxd.v1.Sandboxd/RestoreSession"
 	Sandboxd_BrowserStart_FullMethodName   = "/craft.sandboxd.v1.Sandboxd/BrowserStart"
@@ -79,8 +81,9 @@ type SandboxdClient interface {
 	// is handed out. In order: set the wall clock, add host entropy to the
 	// kernel RNG, attach the per-VM drives (the image's attach script: scratch,
 	// overlays, managed drive; a no-op when init already ran it), grow the
-	// scratch file system, send SIGHUP to the in-guest egress relay (it resets
-	// every live connection), then install the env and session list. Before Init after a restore, the
+	// scratch file system, install the SetKey egress CA (if any), send SIGHUP
+	// to the in-guest egress relay (it resets every live connection), then
+	// install the env and session list. Before Init after a restore, the
 	// caller must also close the VM's host-side relay connections (node agent
 	// CloseConnections).
 	Init(ctx context.Context, in *InitRequest, opts ...grpc.CallOption) (*InitResponse, error)
@@ -96,37 +99,68 @@ type SandboxdClient interface {
 	// Interact writes to the stdin of a running command (started with
 	// stdin = true), or closes it.
 	Interact(ctx context.Context, in *InteractRequest, opts ...grpc.CallOption) (*InteractResponse, error)
-	// Cancel kills every process of the execution (its cgroup) and returns
-	// the result, with completion CANCELED. Cancel of an ended execution
-	// returns its result. If the main process exited before the kill, the
-	// result is EXITED with its exit code.
+	// Cancel stops an execution. With no signal (or SIGKILL) it kills every
+	// process of the execution (its cgroup) and returns the result, with
+	// completion CANCELED. With SIGINT or SIGTERM it sends that signal to the
+	// process group of the main process (as Ctrl-C in a terminal does) and
+	// returns at once, with signaled set; the command may handle the signal
+	// and keep running. Use Stream or Inspect for its result. Cancel of an
+	// ended execution returns its result. If the main process exited before
+	// the kill, the result is EXITED with its exit code.
 	Cancel(ctx context.Context, in *CancelRequest, opts ...grpc.CallOption) (*CancelResponse, error)
 	// Inspect returns one execution record.
 	Inspect(ctx context.Context, in *InspectRequest, opts ...grpc.CallOption) (*InspectResponse, error)
 	// List returns every execution record, optionally filtered by labels.
 	List(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*ListResponse, error)
-	// Reserved for ENG-4572 (files, session capture/restore). They return
-	// UNIMPLEMENTED; the messages get their fields with that issue.
-	ReadFile(ctx context.Context, in *ReadFileRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[DataChunk], error)
+	// ReadFile streams a regular file: the first message has its info, then
+	// data chunks of at most 64 KiB.
+	ReadFile(ctx context.Context, in *ReadFileRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ReadFileResponse], error)
+	// WriteFile writes a file. The first message is the header, the later
+	// ones carry the bytes. The daemon writes a temporary file in the same
+	// directory and renames it over the path only when size (and sha256, if
+	// set) match. On any error the path does not change.
 	WriteFile(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[WriteFileRequest, WriteFileResponse], error)
+	// UploadFile stores an ad-hoc upload in the session's attachments
+	// directory under a free name ("a.pdf", then "a_1.pdf", ...). Same
+	// message order and checks as WriteFile.
+	UploadFile(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[UploadFileRequest, UploadFileResponse], error)
+	// ListFiles lists one directory, or a tree with recursive.
 	ListFiles(ctx context.Context, in *ListFilesRequest, opts ...grpc.CallOption) (*ListFilesResponse, error)
+	// DeleteFile removes a file or a link (never its target), or a directory
+	// with recursive. A missing path is not an error (deleted is false).
 	DeleteFile(ctx context.Context, in *DeleteFileRequest, opts ...grpc.CallOption) (*DeleteFileResponse, error)
-	CaptureSession(ctx context.Context, in *CaptureSessionRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[DataChunk], error)
+	// ZipFiles streams a deflate zip of the regular files under a directory.
+	// The last message is the summary. A limit error ends the stream with a
+	// status; drop the bytes received so far.
+	ZipFiles(ctx context.Context, in *ZipFilesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ZipFilesResponse], error)
+	// CaptureSession streams a tar + zstd archive of the session's capture
+	// roots (default attachments), without the excluded names
+	// (dependencies and caches), symlinks and special files. The last message
+	// is the summary, with the SHA-256 of the stream. The node agent calls it
+	// (HostAgent CaptureSession) and spools the stream for a presigned upload.
+	CaptureSession(ctx context.Context, in *CaptureSessionRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[CaptureSessionResponse], error)
+	// RestoreSession extracts an archive from CaptureSession into the
+	// session. The first message is the header, the later ones carry the
+	// bytes. The daemon extracts into a staging directory, checks size and
+	// SHA-256 of the stream, and only then replaces each capture root that
+	// the archive has. Links, devices, FIFOs, unsafe names and archives over
+	// a limit fail with ARCHIVE_INVALID or LIMIT_EXCEEDED, and change
+	// nothing. A capture and a restore of one session never run at once.
 	RestoreSession(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[RestoreSessionRequest, RestoreSessionResponse], error)
-	// Reserved for ENG-4573 (browser). They return UNIMPLEMENTED.
+	// Reserved for the browser. They return UNIMPLEMENTED.
 	BrowserStart(ctx context.Context, in *BrowserStartRequest, opts ...grpc.CallOption) (*BrowserStartResponse, error)
 	BrowserStop(ctx context.Context, in *BrowserStopRequest, opts ...grpc.CallOption) (*BrowserStopResponse, error)
-	// ManagedStatus returns the slot that is mounted on /workspace/managed and
+	// ManagedStatus returns the slot that is mounted on the mount point and
 	// the state of each slot device.
 	ManagedStatus(ctx context.Context, in *ManagedStatusRequest, opts ...grpc.CallOption) (*ManagedStatusResponse, error)
-	// MountManaged makes a slot the drive on /workspace/managed. It waits
+	// MountManaged makes a slot the drive on the mount point. It waits
 	// until the device has size_bytes (Firecracker tells the guest the new
 	// size after the host changed the drive), drops the guest's cached blocks
 	// of the device, checks the ext4 UUID, mounts the device read-only
 	// (ro,noload,nodev,nosuid,noexec, private) beneath the current mount
 	// (MOVE_MOUNT_BENEATH) and detaches the old top mount (MNT_DETACH). Open
 	// files on the old drive keep working until they close. If the slot is
-	// already on /workspace/managed with this UUID, it does nothing.
+	// already on the mount point with this UUID, it does nothing.
 	MountManaged(ctx context.Context, in *MountManagedRequest, opts ...grpc.CallOption) (*MountManagedResponse, error)
 }
 
@@ -256,13 +290,13 @@ func (c *sandboxdClient) List(ctx context.Context, in *ListRequest, opts ...grpc
 	return out, nil
 }
 
-func (c *sandboxdClient) ReadFile(ctx context.Context, in *ReadFileRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[DataChunk], error) {
+func (c *sandboxdClient) ReadFile(ctx context.Context, in *ReadFileRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ReadFileResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &Sandboxd_ServiceDesc.Streams[2], Sandboxd_ReadFile_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &grpc.GenericClientStream[ReadFileRequest, DataChunk]{ClientStream: stream}
+	x := &grpc.GenericClientStream[ReadFileRequest, ReadFileResponse]{ClientStream: stream}
 	if err := x.ClientStream.SendMsg(in); err != nil {
 		return nil, err
 	}
@@ -273,7 +307,7 @@ func (c *sandboxdClient) ReadFile(ctx context.Context, in *ReadFileRequest, opts
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Sandboxd_ReadFileClient = grpc.ServerStreamingClient[DataChunk]
+type Sandboxd_ReadFileClient = grpc.ServerStreamingClient[ReadFileResponse]
 
 func (c *sandboxdClient) WriteFile(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[WriteFileRequest, WriteFileResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
@@ -287,6 +321,19 @@ func (c *sandboxdClient) WriteFile(ctx context.Context, opts ...grpc.CallOption)
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Sandboxd_WriteFileClient = grpc.ClientStreamingClient[WriteFileRequest, WriteFileResponse]
+
+func (c *sandboxdClient) UploadFile(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[UploadFileRequest, UploadFileResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &Sandboxd_ServiceDesc.Streams[4], Sandboxd_UploadFile_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[UploadFileRequest, UploadFileResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Sandboxd_UploadFileClient = grpc.ClientStreamingClient[UploadFileRequest, UploadFileResponse]
 
 func (c *sandboxdClient) ListFiles(ctx context.Context, in *ListFilesRequest, opts ...grpc.CallOption) (*ListFilesResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
@@ -308,13 +355,13 @@ func (c *sandboxdClient) DeleteFile(ctx context.Context, in *DeleteFileRequest, 
 	return out, nil
 }
 
-func (c *sandboxdClient) CaptureSession(ctx context.Context, in *CaptureSessionRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[DataChunk], error) {
+func (c *sandboxdClient) ZipFiles(ctx context.Context, in *ZipFilesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ZipFilesResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Sandboxd_ServiceDesc.Streams[4], Sandboxd_CaptureSession_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &Sandboxd_ServiceDesc.Streams[5], Sandboxd_ZipFiles_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &grpc.GenericClientStream[CaptureSessionRequest, DataChunk]{ClientStream: stream}
+	x := &grpc.GenericClientStream[ZipFilesRequest, ZipFilesResponse]{ClientStream: stream}
 	if err := x.ClientStream.SendMsg(in); err != nil {
 		return nil, err
 	}
@@ -325,11 +372,30 @@ func (c *sandboxdClient) CaptureSession(ctx context.Context, in *CaptureSessionR
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Sandboxd_CaptureSessionClient = grpc.ServerStreamingClient[DataChunk]
+type Sandboxd_ZipFilesClient = grpc.ServerStreamingClient[ZipFilesResponse]
+
+func (c *sandboxdClient) CaptureSession(ctx context.Context, in *CaptureSessionRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[CaptureSessionResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &Sandboxd_ServiceDesc.Streams[6], Sandboxd_CaptureSession_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[CaptureSessionRequest, CaptureSessionResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Sandboxd_CaptureSessionClient = grpc.ServerStreamingClient[CaptureSessionResponse]
 
 func (c *sandboxdClient) RestoreSession(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[RestoreSessionRequest, RestoreSessionResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Sandboxd_ServiceDesc.Streams[5], Sandboxd_RestoreSession_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &Sandboxd_ServiceDesc.Streams[7], Sandboxd_RestoreSession_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -418,8 +484,9 @@ type SandboxdServer interface {
 	// is handed out. In order: set the wall clock, add host entropy to the
 	// kernel RNG, attach the per-VM drives (the image's attach script: scratch,
 	// overlays, managed drive; a no-op when init already ran it), grow the
-	// scratch file system, send SIGHUP to the in-guest egress relay (it resets
-	// every live connection), then install the env and session list. Before Init after a restore, the
+	// scratch file system, install the SetKey egress CA (if any), send SIGHUP
+	// to the in-guest egress relay (it resets every live connection), then
+	// install the env and session list. Before Init after a restore, the
 	// caller must also close the VM's host-side relay connections (node agent
 	// CloseConnections).
 	Init(context.Context, *InitRequest) (*InitResponse, error)
@@ -435,37 +502,68 @@ type SandboxdServer interface {
 	// Interact writes to the stdin of a running command (started with
 	// stdin = true), or closes it.
 	Interact(context.Context, *InteractRequest) (*InteractResponse, error)
-	// Cancel kills every process of the execution (its cgroup) and returns
-	// the result, with completion CANCELED. Cancel of an ended execution
-	// returns its result. If the main process exited before the kill, the
-	// result is EXITED with its exit code.
+	// Cancel stops an execution. With no signal (or SIGKILL) it kills every
+	// process of the execution (its cgroup) and returns the result, with
+	// completion CANCELED. With SIGINT or SIGTERM it sends that signal to the
+	// process group of the main process (as Ctrl-C in a terminal does) and
+	// returns at once, with signaled set; the command may handle the signal
+	// and keep running. Use Stream or Inspect for its result. Cancel of an
+	// ended execution returns its result. If the main process exited before
+	// the kill, the result is EXITED with its exit code.
 	Cancel(context.Context, *CancelRequest) (*CancelResponse, error)
 	// Inspect returns one execution record.
 	Inspect(context.Context, *InspectRequest) (*InspectResponse, error)
 	// List returns every execution record, optionally filtered by labels.
 	List(context.Context, *ListRequest) (*ListResponse, error)
-	// Reserved for ENG-4572 (files, session capture/restore). They return
-	// UNIMPLEMENTED; the messages get their fields with that issue.
-	ReadFile(*ReadFileRequest, grpc.ServerStreamingServer[DataChunk]) error
+	// ReadFile streams a regular file: the first message has its info, then
+	// data chunks of at most 64 KiB.
+	ReadFile(*ReadFileRequest, grpc.ServerStreamingServer[ReadFileResponse]) error
+	// WriteFile writes a file. The first message is the header, the later
+	// ones carry the bytes. The daemon writes a temporary file in the same
+	// directory and renames it over the path only when size (and sha256, if
+	// set) match. On any error the path does not change.
 	WriteFile(grpc.ClientStreamingServer[WriteFileRequest, WriteFileResponse]) error
+	// UploadFile stores an ad-hoc upload in the session's attachments
+	// directory under a free name ("a.pdf", then "a_1.pdf", ...). Same
+	// message order and checks as WriteFile.
+	UploadFile(grpc.ClientStreamingServer[UploadFileRequest, UploadFileResponse]) error
+	// ListFiles lists one directory, or a tree with recursive.
 	ListFiles(context.Context, *ListFilesRequest) (*ListFilesResponse, error)
+	// DeleteFile removes a file or a link (never its target), or a directory
+	// with recursive. A missing path is not an error (deleted is false).
 	DeleteFile(context.Context, *DeleteFileRequest) (*DeleteFileResponse, error)
-	CaptureSession(*CaptureSessionRequest, grpc.ServerStreamingServer[DataChunk]) error
+	// ZipFiles streams a deflate zip of the regular files under a directory.
+	// The last message is the summary. A limit error ends the stream with a
+	// status; drop the bytes received so far.
+	ZipFiles(*ZipFilesRequest, grpc.ServerStreamingServer[ZipFilesResponse]) error
+	// CaptureSession streams a tar + zstd archive of the session's capture
+	// roots (default attachments), without the excluded names
+	// (dependencies and caches), symlinks and special files. The last message
+	// is the summary, with the SHA-256 of the stream. The node agent calls it
+	// (HostAgent CaptureSession) and spools the stream for a presigned upload.
+	CaptureSession(*CaptureSessionRequest, grpc.ServerStreamingServer[CaptureSessionResponse]) error
+	// RestoreSession extracts an archive from CaptureSession into the
+	// session. The first message is the header, the later ones carry the
+	// bytes. The daemon extracts into a staging directory, checks size and
+	// SHA-256 of the stream, and only then replaces each capture root that
+	// the archive has. Links, devices, FIFOs, unsafe names and archives over
+	// a limit fail with ARCHIVE_INVALID or LIMIT_EXCEEDED, and change
+	// nothing. A capture and a restore of one session never run at once.
 	RestoreSession(grpc.ClientStreamingServer[RestoreSessionRequest, RestoreSessionResponse]) error
-	// Reserved for ENG-4573 (browser). They return UNIMPLEMENTED.
+	// Reserved for the browser. They return UNIMPLEMENTED.
 	BrowserStart(context.Context, *BrowserStartRequest) (*BrowserStartResponse, error)
 	BrowserStop(context.Context, *BrowserStopRequest) (*BrowserStopResponse, error)
-	// ManagedStatus returns the slot that is mounted on /workspace/managed and
+	// ManagedStatus returns the slot that is mounted on the mount point and
 	// the state of each slot device.
 	ManagedStatus(context.Context, *ManagedStatusRequest) (*ManagedStatusResponse, error)
-	// MountManaged makes a slot the drive on /workspace/managed. It waits
+	// MountManaged makes a slot the drive on the mount point. It waits
 	// until the device has size_bytes (Firecracker tells the guest the new
 	// size after the host changed the drive), drops the guest's cached blocks
 	// of the device, checks the ext4 UUID, mounts the device read-only
 	// (ro,noload,nodev,nosuid,noexec, private) beneath the current mount
 	// (MOVE_MOUNT_BENEATH) and detaches the old top mount (MNT_DETACH). Open
 	// files on the old drive keep working until they close. If the slot is
-	// already on /workspace/managed with this UUID, it does nothing.
+	// already on the mount point with this UUID, it does nothing.
 	MountManaged(context.Context, *MountManagedRequest) (*MountManagedResponse, error)
 	mustEmbedUnimplementedSandboxdServer()
 }
@@ -507,11 +605,14 @@ func (UnimplementedSandboxdServer) Inspect(context.Context, *InspectRequest) (*I
 func (UnimplementedSandboxdServer) List(context.Context, *ListRequest) (*ListResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method List not implemented")
 }
-func (UnimplementedSandboxdServer) ReadFile(*ReadFileRequest, grpc.ServerStreamingServer[DataChunk]) error {
+func (UnimplementedSandboxdServer) ReadFile(*ReadFileRequest, grpc.ServerStreamingServer[ReadFileResponse]) error {
 	return status.Error(codes.Unimplemented, "method ReadFile not implemented")
 }
 func (UnimplementedSandboxdServer) WriteFile(grpc.ClientStreamingServer[WriteFileRequest, WriteFileResponse]) error {
 	return status.Error(codes.Unimplemented, "method WriteFile not implemented")
+}
+func (UnimplementedSandboxdServer) UploadFile(grpc.ClientStreamingServer[UploadFileRequest, UploadFileResponse]) error {
+	return status.Error(codes.Unimplemented, "method UploadFile not implemented")
 }
 func (UnimplementedSandboxdServer) ListFiles(context.Context, *ListFilesRequest) (*ListFilesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListFiles not implemented")
@@ -519,7 +620,10 @@ func (UnimplementedSandboxdServer) ListFiles(context.Context, *ListFilesRequest)
 func (UnimplementedSandboxdServer) DeleteFile(context.Context, *DeleteFileRequest) (*DeleteFileResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteFile not implemented")
 }
-func (UnimplementedSandboxdServer) CaptureSession(*CaptureSessionRequest, grpc.ServerStreamingServer[DataChunk]) error {
+func (UnimplementedSandboxdServer) ZipFiles(*ZipFilesRequest, grpc.ServerStreamingServer[ZipFilesResponse]) error {
+	return status.Error(codes.Unimplemented, "method ZipFiles not implemented")
+}
+func (UnimplementedSandboxdServer) CaptureSession(*CaptureSessionRequest, grpc.ServerStreamingServer[CaptureSessionResponse]) error {
 	return status.Error(codes.Unimplemented, "method CaptureSession not implemented")
 }
 func (UnimplementedSandboxdServer) RestoreSession(grpc.ClientStreamingServer[RestoreSessionRequest, RestoreSessionResponse]) error {
@@ -729,11 +833,11 @@ func _Sandboxd_ReadFile_Handler(srv interface{}, stream grpc.ServerStream) error
 	if err := stream.RecvMsg(m); err != nil {
 		return err
 	}
-	return srv.(SandboxdServer).ReadFile(m, &grpc.GenericServerStream[ReadFileRequest, DataChunk]{ServerStream: stream})
+	return srv.(SandboxdServer).ReadFile(m, &grpc.GenericServerStream[ReadFileRequest, ReadFileResponse]{ServerStream: stream})
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Sandboxd_ReadFileServer = grpc.ServerStreamingServer[DataChunk]
+type Sandboxd_ReadFileServer = grpc.ServerStreamingServer[ReadFileResponse]
 
 func _Sandboxd_WriteFile_Handler(srv interface{}, stream grpc.ServerStream) error {
 	return srv.(SandboxdServer).WriteFile(&grpc.GenericServerStream[WriteFileRequest, WriteFileResponse]{ServerStream: stream})
@@ -741,6 +845,13 @@ func _Sandboxd_WriteFile_Handler(srv interface{}, stream grpc.ServerStream) erro
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Sandboxd_WriteFileServer = grpc.ClientStreamingServer[WriteFileRequest, WriteFileResponse]
+
+func _Sandboxd_UploadFile_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(SandboxdServer).UploadFile(&grpc.GenericServerStream[UploadFileRequest, UploadFileResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Sandboxd_UploadFileServer = grpc.ClientStreamingServer[UploadFileRequest, UploadFileResponse]
 
 func _Sandboxd_ListFiles_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListFilesRequest)
@@ -778,16 +889,27 @@ func _Sandboxd_DeleteFile_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Sandboxd_ZipFiles_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(ZipFilesRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(SandboxdServer).ZipFiles(m, &grpc.GenericServerStream[ZipFilesRequest, ZipFilesResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Sandboxd_ZipFilesServer = grpc.ServerStreamingServer[ZipFilesResponse]
+
 func _Sandboxd_CaptureSession_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(CaptureSessionRequest)
 	if err := stream.RecvMsg(m); err != nil {
 		return err
 	}
-	return srv.(SandboxdServer).CaptureSession(m, &grpc.GenericServerStream[CaptureSessionRequest, DataChunk]{ServerStream: stream})
+	return srv.(SandboxdServer).CaptureSession(m, &grpc.GenericServerStream[CaptureSessionRequest, CaptureSessionResponse]{ServerStream: stream})
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Sandboxd_CaptureSessionServer = grpc.ServerStreamingServer[DataChunk]
+type Sandboxd_CaptureSessionServer = grpc.ServerStreamingServer[CaptureSessionResponse]
 
 func _Sandboxd_RestoreSession_Handler(srv interface{}, stream grpc.ServerStream) error {
 	return srv.(SandboxdServer).RestoreSession(&grpc.GenericServerStream[RestoreSessionRequest, RestoreSessionResponse]{ServerStream: stream})
@@ -952,6 +1074,16 @@ var Sandboxd_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "WriteFile",
 			Handler:       _Sandboxd_WriteFile_Handler,
 			ClientStreams: true,
+		},
+		{
+			StreamName:    "UploadFile",
+			Handler:       _Sandboxd_UploadFile_Handler,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "ZipFiles",
+			Handler:       _Sandboxd_ZipFiles_Handler,
+			ServerStreams: true,
 		},
 		{
 			StreamName:    "CaptureSession",

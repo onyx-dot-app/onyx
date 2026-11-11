@@ -41,6 +41,8 @@ const (
 	MaxMessageBytes = 16 << 20
 	// upstreamIdle closes an idle vsock connection. The next call dials again.
 	upstreamIdle = 10 * time.Minute
+	// upstreamWindow is the HTTP/2 flow-control window toward the daemon.
+	upstreamWindow = 16 << 20
 	// DefaultKeyTimeout bounds the wait for the daemon in InstallKey.
 	DefaultKeyTimeout = 10 * time.Second
 )
@@ -194,6 +196,10 @@ func (p *Passthrough) dial(t agent.GuestTarget) (*upstream, error) {
 			MinConnectTimeout: dialTimeout,
 		}),
 		grpc.WithIdleTimeout(upstreamIdle),
+		// Large static windows: vsock has almost no latency, and session
+		// captures stream hundreds of MiB from the guest.
+		grpc.WithInitialWindowSize(upstreamWindow), grpc.WithInitialConnWindowSize(upstreamWindow),
+		grpc.WithReadBufferSize(1<<20), grpc.WithWriteBufferSize(1<<20),
 		grpc.WithDefaultCallOptions(
 			grpc.ForceCodecV2(rawCodec{}),
 			grpc.MaxCallRecvMsgSize(MaxMessageBytes),
@@ -206,9 +212,9 @@ func (p *Passthrough) dial(t agent.GuestTarget) (*upstream, error) {
 	return &upstream{gen: t.Generation, conn: conn, dropped: make(chan struct{})}, nil
 }
 
-// InstallKey sets the daemon key of vm (SetKey over vsock). It waits for the
-// daemon to accept the connection, up to KeyTimeout.
-func (p *Passthrough) InstallKey(ctx context.Context, vm agent.VM, key string) error {
+// InstallKey sets the daemon key and the egress CA of vm (SetKey over
+// vsock). It waits for the daemon to accept the connection, up to KeyTimeout.
+func (p *Passthrough) InstallKey(ctx context.Context, vm agent.VM, key string, egressCA []byte) error {
 	u, err := p.get(vm.SandboxID)
 	if err != nil {
 		return err
@@ -222,7 +228,7 @@ func (p *Passthrough) InstallKey(ctx context.Context, vm agent.VM, key string) e
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	_, err = sdpb.NewSandboxdClient(u.conn).SetKey(ctx, &sdpb.SetKeyRequest{Key: key}, grpc.WaitForReady(true))
+	_, err = sdpb.NewSandboxdClient(u.conn).SetKey(ctx, &sdpb.SetKeyRequest{Key: key, EgressCaPem: egressCA}, grpc.WaitForReady(true))
 	switch {
 	case err == nil:
 		return nil

@@ -189,7 +189,12 @@ URL in the process (`_HEALTH_CACHE_TTL_SECONDS`). The admin health endpoint
 makes a live check, and every live check refreshes that cache.
 
 **Input files.** `PythonTool` reads the turn's chat files from
-`ToolContext.chat_files`. `chat/agent.py:ChatAgent._finalize_tool` attaches the
+`ToolContext.chat_files`. Before the turn,
+`chat/files.py:load_context_user_files_for_tools` adds project and agent files
+as lazy chat files, but only the types in
+`OnyxMimeTypes.CODE_INTERPRETER_STAGED_MIME_TYPES` (CSV, Excel, Word,
+PowerPoint). Other project and agent files reach the model only as prompt
+text or through search. `chat/agent.py:ChatAgent._finalize_tool` attaches the
 raw source files of search hits to `ChatSearchResult.staged_files`
 (`chat/files.py:build_python_chat_files_from_search_docs`, connector-origin
 files only), only when the chat offers the Python tool. Files already in

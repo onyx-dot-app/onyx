@@ -3,6 +3,7 @@ package journal
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -13,7 +14,9 @@ func TestWriteLoadRemove(t *testing.T) {
 	j := &Journal{Dir: t.TempDir()}
 	r := Record{SandboxID: id1, Attempt: 3, Generation: 42, State: Running, PID: 1234, PIDStart: 99, UID: 1000001,
 		Chroot: "/d/jail/firecracker/" + id1, Template: "t1", VCPUs: 2, MemMiB: 4096, ScratchGiB: 2,
-		StartedAt: time.Unix(1700000000, 0).UTC()}
+		StartedAt: time.Unix(1700000000, 0).UTC(),
+		Managed:   &Managed{Slots: 2, Active: "b", A: "x", B: "y"},
+		Mounts:    map[string]*Managed{"spaces": {Slots: 2, Active: "a", A: "z", Pending: &PendingSwap{Slot: "b", Image: "w"}}}}
 	if err := j.Write(r); err != nil {
 		t.Fatal(err)
 	}
@@ -25,7 +28,7 @@ func TestWriteLoadRemove(t *testing.T) {
 	if err != nil || len(bad) != 0 || len(recs) != 1 {
 		t.Fatalf("load: %v %v %v", recs, bad, err)
 	}
-	if recs[0] != r {
+	if !reflect.DeepEqual(recs[0], r) {
 		t.Fatalf("round trip\n got %+v\nwant %+v", recs[0], r)
 	}
 	if err := j.Remove(id1); err != nil {
@@ -56,7 +59,7 @@ func TestCrashBeforeRename(t *testing.T) {
 		t.Fatal(err)
 	}
 	recs, bad, err := j.Load()
-	if err != nil || len(bad) != 0 || len(recs) != 1 || recs[0] != old {
+	if err != nil || len(bad) != 0 || len(recs) != 1 || !reflect.DeepEqual(recs[0], old) {
 		t.Fatalf("after crash: %v %v %v", recs, bad, err)
 	}
 	if _, err := os.Stat(tmp); !os.IsNotExist(err) {

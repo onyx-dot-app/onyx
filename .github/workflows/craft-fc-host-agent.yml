@@ -1,5 +1,5 @@
-# Builds the Craft Firecracker host agent image, onyxdotapp/craft-fc-host-agent
-# (ENG-4607). See microvm/Dockerfile.
+# Builds the Craft Firecracker host agent image, onyxdotapp/craft-fc-host-agent.
+# See microvm/Dockerfile.
 #
 # Pull requests and pushes to main build and check the image, with no push.
 # Only a manual dispatch on main publishes it to Docker Hub.

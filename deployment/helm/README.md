@@ -231,7 +231,11 @@ With `firecracker`, the chart:
 - sets `SANDBOX_RUNTIME=firecracker` for the backend and sandbox-proxy;
 - deploys the host agent (`onyxdotapp/craft-fc-host-agent`), a privileged
   DaemonSet with `hostPID` and `/dev/kvm`, on the sandbox nodes that have the
-  label `onyx.app/kvm=true`;
+  label `onyx.app/kvm=true`. The agent and the preflight tolerate the taint
+  `onyx.app/kvm=true:NoSchedule` that Terraform puts on these nodes. Pod
+  sandboxes and the image prepuller do not, so they need a sandbox node pool
+  without that taint. The chart refuses `sandboxPod.tolerations` that tolerate
+  it;
 - puts the agent in its own namespace (`craft.hostAgent.namespace`) with Pod
   Security `privileged`;
 - adds a headless Service for the agent port (7443);
@@ -310,6 +314,19 @@ port. If Prometheus runs in another namespace, set
 `craft.hostAgent.metrics.networkPolicyFrom`. The agent writes each VM's serial console and Firecracker log to its
 stdout as JSON lines (`kind=guest_log`), and an audit line for every API call
 to stderr (`kind=audit`), so the cluster log pipeline collects both.
+
+With the agent metrics on, `monitoring.grafana.dashboards.enabled: true` also
+deploys the "Onyx Craft Firecracker Host Agent" dashboard, and
+`monitoring.prometheusRules.enabled: true` deploys its alert rules (a
+PrometheusRule in the release namespace; set `monitoring.prometheusRules.labels`
+to match your Prometheus `ruleSelector`). The thresholds in
+`craft.hostAgent.alerts` are proposed defaults. `CraftFcHostAgentPodsMissing`
+needs kube-state-metrics. The dashboard and the rules need the agent series:
+set `monitoring.serviceMonitors.enabled: true` (with
+`monitoring.serviceMonitors.labels` that match your Prometheus
+`serviceMonitorSelector`), unless another scrape configuration collects the
+agent metrics. For another scrape configuration, set `craft.hostAgent.metrics.job`
+to its `job` label. Runbooks: `microvm/RUNBOOKS.md`.
 
 ## Using an external Redis
 

@@ -9,7 +9,8 @@ import (
 
 func TestCheckRanges(t *testing.T) {
 	ok := flags{uidBase: 1000000, uidCount: 65536, maxScratchGiB: 100, tplVCPUs: 2, tplMemMiB: 4096, tplScratchGiB: 1, tplKeep: 2,
-		managedKeep: 3, managedZipMiB: 256, managedMaxMiB: 512, managedFiles: 50000, managedBuilds: 1, swapTimeout: time.Second, memOverhead: 128}
+		managedKeep: 3, managedZipMiB: 256, managedMaxMiB: 512, managedFiles: 50000, managedBuilds: 1, swapTimeout: time.Second, memOverhead: 128,
+		transferPar: 8, transferPart: 8 << 20}
 	if err := checkRanges(ok); err != nil {
 		t.Fatal(err)
 	}
@@ -35,6 +36,13 @@ func TestCheckRanges(t *testing.T) {
 		"managed swap time 0": func(f *flags) { f.swapTimeout = 0 },
 		"vm overhead 0":       func(f *flags) { f.memOverhead = 0 },
 		"vm overhead huge":    func(f *flags) { f.memOverhead = 1 << 20 },
+		"transfer parallel 0": func(f *flags) { f.transferPar = 0 },
+		"image gc negative":   func(f *flags) { f.imageGCEvery = -time.Minute },
+		"image gc too often":  func(f *flags) { f.imageGCEvery, f.imageGCGrace = time.Second, time.Hour },
+		"image gc grace":      func(f *flags) { f.imageGCEvery, f.imageGCGrace = time.Hour, time.Minute },
+		"transfer parallel":   func(f *flags) { f.transferPar = 65 },
+		"transfer part small": func(f *flags) { f.transferPart = 1024 },
+		"transfer part huge":  func(f *flags) { f.transferPart = 512 << 20 },
 	} {
 		f := ok
 		edit(&f)
@@ -45,8 +53,8 @@ func TestCheckRanges(t *testing.T) {
 }
 
 func TestStartDrainWatchChecks(t *testing.T) {
-	if err := startDrainWatch(context.Background(), flags{}, nil, nil); err != nil {
-		t.Fatalf("off: %v", err)
+	if w, err := startDrainWatch(context.Background(), flags{}, nil, nil); err != nil || w != nil {
+		t.Fatalf("off: %v %v", w, err)
 	}
 	for name, f := range map[string]flags{
 		"no taint keys": {watchDrain: true, drainPoll: time.Second, nodeID: "n"},
@@ -55,7 +63,7 @@ func TestStartDrainWatchChecks(t *testing.T) {
 		"not in a pod":  {watchDrain: true, drainTaints: "a", drainPoll: time.Second, nodeID: "n"},
 	} {
 		t.Setenv("KUBERNETES_SERVICE_HOST", "")
-		if err := startDrainWatch(context.Background(), f, nil, nil); err == nil {
+		if _, err := startDrainWatch(context.Background(), f, nil, nil); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
 	}

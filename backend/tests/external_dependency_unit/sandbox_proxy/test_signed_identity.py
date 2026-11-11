@@ -28,7 +28,7 @@ from onyx.microvm.registry import (
     get_registered_node,
     list_registered_nodes,
     set_node_agent_address,
-    set_sandbox_placement,
+    write_sandbox_placement,
 )
 from onyx.sandbox_proxy.addons.gate import GateAddon
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
@@ -120,11 +120,10 @@ def placed_vm(
     sandbox = Sandbox(id=uuid4(), user_id=user.id)
     db_session.add(sandbox)
     db_session.commit()
-    set_sandbox_placement(
+    write_sandbox_placement(
         _tenant_cache(),
         sandbox.id,
-        SandboxPlacement(node_id=node_id, generation=2),
-        ttl_seconds=300,
+        SandboxPlacement(node_id=node_id, attempt=1, generation=2, last_active=0),
     )
     private_key = Ed25519PrivateKey.generate()
     _register(node_id, key_id, private_key)
@@ -165,11 +164,10 @@ def test_verifier_rejects_stale_generation_and_moved_sandbox(
     assert stale_error.value.reason is SignedIdentityRejection.NOT_PLACED
 
     # The sandbox moved to another node: the old node can no longer vouch for it.
-    set_sandbox_placement(
+    write_sandbox_placement(
         _tenant_cache(),
         sandbox_id,
-        SandboxPlacement(node_id="node-other", generation=2),
-        ttl_seconds=300,
+        SandboxPlacement(node_id="node-other", attempt=1, generation=2, last_active=0),
     )
     moved = _token(
         private_key, key_id=key_id, node_id=node_id, sandbox_id=sandbox_id, generation=2
@@ -358,6 +356,7 @@ def _cleanup_node(node_id: str, key_ids: list[str]) -> None:
         cache.delete(f"sandbox_fc:signing_key:{key_id}")
     cache.delete(f"sandbox_fc:node_kids:{node_id}")
     cache.delete(f"sandbox_fc:node_address:{node_id}")
+    cache.delete(f"sandbox_fc:node_address_key:{node_id}")
     cache.set_remove("sandbox_fc:nodes", node_id)
 
 
@@ -382,6 +381,10 @@ def test_registration_records_agent_address() -> None:
         assert get_registered_node(cache, node_id) == node
         assert node in list_registered_nodes(cache)
         assert get_registered_node(cache, other_id) is None
+        # The address names the registration that sent it.
+        assert cache.get(registry._NODE_ADDRESS_KEY_PREFIX + node_id) == (
+            f"{node_id}-1".encode()
+        )
 
         # A rejected registration does not move the node.
         with pytest.raises(OnyxError):

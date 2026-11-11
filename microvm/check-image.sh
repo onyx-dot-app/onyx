@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Checks a built host agent image (ENG-4607).
+# Checks a built host agent image.
 # Usage: check-image.sh <image ref>
 #
 # - host-agent runs (--help).
 # - nsenter is on PATH.
-# - mkfs.ext4 is on PATH and supports -d (managed drive images, ENG-4614).
+# - mkfs.ext4 is on PATH and supports -d (managed drive images).
 # - /opt/craft-fc passes deployment/craft-fc/check-artifacts.sh.
 # - firecracker and jailer match the SHA256 pins that the agent checks at start
 #   (internal/binaries/binaries.go), so the agent does not refuse them.

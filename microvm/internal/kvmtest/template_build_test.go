@@ -123,7 +123,7 @@ func memAvailMiB(t *testing.T) uint64 {
 	return avail
 }
 
-// TestTemplateBuildKVM checks the per-node template pipeline (ENG-4566)
+// TestTemplateBuildKVM checks the per-node template pipeline
 // through the agent binary: build from a build-rootfs.sh output, restore 20
 // VMs (Init + Run through the pass-through), refuse a tampered template and a
 // template with another node key, and keep 2 templates.
@@ -212,7 +212,7 @@ func TestTemplateBuildKVM(t *testing.T) {
 		if !ir.GetAttached() {
 			return 0, fmt.Errorf("init did not attach the drives: %+v", ir)
 		}
-		r, err := ptRun(vmCtx(ctx, id, key), sd, "sh", "-c", "echo hello; grep -c ' /workspace/managed ' /proc/mounts")
+		r, err := ptRun(vmCtx(ctx, id, key), sd, "sh", "-c", "echo hello; grep -c ' /mnt/skills ' /proc/mounts")
 		if err != nil || r.stdout != "hello\n1\n" || r.res.GetExitCode() != 0 {
 			return 0, fmt.Errorf("run: %v %q %v", err, r.stdout, r.res)
 		}

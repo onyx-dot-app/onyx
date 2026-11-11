@@ -17,14 +17,16 @@ import (
 
 	"github.com/onyx-dot-app/onyx/microvm/internal/agent"
 	"github.com/onyx-dot-app/onyx/microvm/internal/apierr"
+	"github.com/onyx-dot-app/onyx/microvm/internal/egressca"
 	"github.com/onyx-dot-app/onyx/microvm/internal/template"
 	"github.com/onyx-dot-app/onyx/microvm/internal/tplbuild"
 	pb "github.com/onyx-dot-app/onyx/microvm/proto/hostagent/v1"
 )
 
-// KeyInstaller sets the guest daemon key of a running VM.
+// KeyInstaller sets the guest daemon key, and the egress CA (PEM, may be
+// nil), of a running VM.
 type KeyInstaller interface {
-	InstallKey(ctx context.Context, vm agent.VM, key string) error
+	InstallKey(ctx context.Context, vm agent.VM, key string, egressCA []byte) error
 }
 
 // Service adapts an agent.Manager to the gRPC API.
@@ -44,10 +46,15 @@ type Service struct {
 	MaxDialsPerVM int
 	// Keys installs CreateRequest.sandboxd_key. Nil ignores the key.
 	Keys KeyInstaller
+	// EgressCA is the deployment egress CA that Create sends with the key.
+	// Nil: no CA (a root drive with a built-in CA).
+	EgressCA *egressca.Cached
+	// Saves runs the session save calls. Nil turns them off (UNIMPLEMENTED).
+	Saves *Saves
 
 	dialMu sync.Mutex
 	dials  map[string]int
-	// Managed holds the managed drive images (ENG-4614). Nil: the managed
+	// Managed holds the managed drive images. Nil: the managed
 	// calls fail with MANAGED_SWAP_UNSUPPORTED.
 	Managed *ManagedImages
 	Log     *slog.Logger
@@ -66,6 +73,18 @@ func (s *Service) Create(ctx context.Context, r *pb.CreateRequest) (*pb.CreateRe
 	if err := validateDaemonKey(key); err != nil {
 		return nil, toStatus(apierr.New(pb.ErrorReason_INVALID_ARGUMENT, "sandboxd_key: %v", err))
 	}
+	var caPEM []byte
+	if key != "" && s.Keys != nil && s.EgressCA != nil {
+		// Before the VM starts: a missing CA must not leave a VM behind.
+		ca, refreshErr, err := s.EgressCA.Get(ctx)
+		if err != nil {
+			return nil, toStatus(apierr.New(pb.ErrorReason_EGRESS_CA_UNAVAILABLE, "egress CA (%s): %v", s.EgressCA, err))
+		}
+		if refreshErr != nil {
+			s.log().Warn("egress CA refresh failed; using the last CA", "source", s.EgressCA.String(), "err", refreshErr)
+		}
+		caPEM = ca.PEM
+	}
 	vm, created, err := s.M.Create(ctx, agent.CreateRequest{
 		SandboxID: r.GetSandboxId(), Attempt: r.GetAttempt(), Template: r.GetTemplate(),
 		VCPUs: r.GetVcpus(), MemMiB: r.GetMemMib(), ScratchGiB: r.GetScratchGib(), TenantID: r.GetTenantId(),
@@ -74,7 +93,7 @@ func (s *Service) Create(ctx context.Context, r *pb.CreateRequest) (*pb.CreateRe
 		return nil, toStatus(err)
 	}
 	if key != "" && s.Keys != nil && vm.State == pb.VMState_VM_STATE_RUNNING {
-		if err := s.Keys.InstallKey(ctx, vm, key); err != nil {
+		if err := s.Keys.InstallKey(ctx, vm, key, caPEM); err != nil {
 			return nil, toStatus(err)
 		}
 	}
@@ -191,7 +210,7 @@ func toTemplateInfo(t *template.Template, node template.NodeKey) *pb.TemplateInf
 		GuestKernel: t.GuestKernel, FirecrackerVersion: t.FirecrackerVersion,
 		ImageRef: t.ImageRef, ImageDigest: t.ImageDigest, RootfsSha256: t.RootfsSHA256, KeySha256: t.KeySHA256,
 		CaFingerprint: t.CAFingerprint, BuiltAt: timestamppb.New(t.BuiltAt), Compatible: t.CheckNode(node) == nil,
-		ManagedSlots: uint32(t.ManagedSlots()), Balloon: t.HasBalloon(),
+		ManagedSlots: uint32(t.ManagedSlots()), Balloon: t.HasBalloon(), ManagedMounts: t.ManagedMounts(),
 	}
 }
 
@@ -207,10 +226,23 @@ func toVM(vm agent.VM) *pb.VM {
 		SandboxId: vm.SandboxID, Attempt: vm.Attempt, Generation: vm.Generation, Template: vm.Template,
 		Vcpus: vm.VCPUs, MemMib: vm.MemMiB, ScratchGib: vm.ScratchGiB, State: vm.State, TenantId: vm.TenantID,
 		Pid: int32(vm.PID), Uid: vm.UID, StartedAt: timestamppb.New(vm.StartedAt),
-		Managed: &pb.ManagedState{
-			Slots: uint32(vm.Managed.Slots), Active: vm.Managed.Active, SlotAImage: vm.Managed.A, SlotBImage: vm.Managed.B,
-		},
+		Managed: toManagedState(vm.Managed), ManagedMounts: toManagedMounts(vm.Mounts),
 	}
+}
+
+func toManagedState(s agent.ManagedState) *pb.ManagedState {
+	return &pb.ManagedState{Slots: uint32(s.Slots), Active: s.Active, SlotAImage: s.A, SlotBImage: s.B}
+}
+
+func toManagedMounts(ms map[string]agent.ManagedState) map[string]*pb.ManagedState {
+	if len(ms) == 0 {
+		return nil
+	}
+	out := make(map[string]*pb.ManagedState, len(ms))
+	for k, v := range ms {
+		out[k] = toManagedState(v)
+	}
+	return out
 }
 
 // ListenUnix listens on a Unix socket that only root can use. It replaces a

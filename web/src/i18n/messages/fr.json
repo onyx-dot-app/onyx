@@ -12861,6 +12861,11 @@
           "text": "Génération d'images arrêtée"
         }
       },
+      "markdownTable": {
+        "copyButton": {
+          "label": "Copier le tableau"
+        }
+      },
       "memoizedLink": {
         "questionFallback": {
           "label": "Question"

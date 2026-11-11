@@ -7,11 +7,8 @@ package tplbuild
 
 import (
 	"crypto/sha256"
-	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
-	"encoding/pem"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -58,7 +55,15 @@ type RootfsManifest struct {
 		// ManagedSlots maps slot "a" and "b" to the guest devices that the
 		// image's attach and guest daemon use. Older root drives have none.
 		ManagedSlots map[string]string `json:"managed_slots"`
-		Daemon       struct {
+		// ManagedMounts are the named managed mounts and their slot
+		// devices. Older root drives have none.
+		ManagedMounts []struct {
+			Name  string `json:"name"`
+			Mount string `json:"mount"`
+			A     string `json:"a"`
+			B     string `json:"b"`
+		} `json:"managed_mounts"`
+		Daemon struct {
 			VsockPort uint32 `json:"vsock_port"`
 		} `json:"daemon"`
 	} `json:"guest"`
@@ -124,6 +129,20 @@ func checkDrives(m RootfsManifest) error {
 			return fmt.Errorf("drive %d is %s (read-only %v), the agent has %s (read-only %v)", i, d.DriveID, d.IsReadOnly, want[i].ID, want[i].ReadOnly)
 		}
 	}
+	devOf := map[string]string{}
+	for i, d := range template.Drives {
+		devOf[d.ID] = guestDev(i)
+	}
+	for _, mm := range m.Guest.ManagedMounts {
+		md, ok := template.MountDrivesOf(mm.Name)
+		if !ok {
+			return fmt.Errorf("the root drive has managed mount %q, the agent does not", mm.Name)
+		}
+		if mm.A != devOf[md.A.ID] || mm.B != devOf[md.B.ID] {
+			return fmt.Errorf("the root drive has managed mount %s on %s and %s, the agent puts it on %s and %s",
+				mm.Name, mm.A, mm.B, devOf[md.A.ID], devOf[md.B.ID])
+		}
+	}
 	if m.Guest.ManagedSlots == nil {
 		return nil
 	}
@@ -163,7 +182,9 @@ func (r *Rootfs) BootArgs() string {
 	return strings.Join(args, " ")
 }
 
-// CAFingerprint returns the rootfs egress CA fingerprint, normalized.
+// CAFingerprint returns the rootfs egress CA fingerprint, normalized. Empty:
+// the root drive has no CA (build-rootfs.sh without --ca); the guest daemon
+// installs the deployment CA at Init.
 func (r *Rootfs) CAFingerprint() string {
 	return NormalizeFingerprint(r.Manifest.BuildInputs.EgressCA.Fingerprint)
 }
@@ -171,31 +192,6 @@ func (r *Rootfs) CAFingerprint() string {
 // NormalizeFingerprint makes "AB:CD:..." (openssl) and "abcd..." equal.
 func NormalizeFingerprint(fp string) string {
 	return strings.ToLower(strings.ReplaceAll(strings.TrimSpace(fp), ":", ""))
-}
-
-// CAFileFingerprint returns the SHA256 fingerprint of the one PEM
-// certificate in path (the egress CA of the deployment), normalized.
-func CAFileFingerprint(path string) (string, error) {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return "", err
-	}
-	block, rest := pem.Decode(raw)
-	if block == nil || block.Type != "CERTIFICATE" {
-		return "", fmt.Errorf("%s has no PEM certificate", path)
-	}
-	if b2, _ := pem.Decode(rest); b2 != nil {
-		return "", fmt.Errorf("%s has more than one PEM block", path)
-	}
-	cert, err := x509.ParseCertificate(block.Bytes)
-	if err != nil {
-		return "", fmt.Errorf("%s: %w", path, err)
-	}
-	if !cert.IsCA {
-		return "", errors.New(path + " is not a CA certificate")
-	}
-	sum := sha256.Sum256(block.Bytes)
-	return hex.EncodeToString(sum[:]), nil
 }
 
 var tagRE = regexp.MustCompile(`[^A-Za-z0-9._-]+`)

@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -36,7 +37,45 @@ type Registrar struct {
 	Interval time.Duration
 	// Retry is the wait after a failure. Default 10 s.
 	Retry time.Duration
+	// Observe, if set, gets the result of each registration of Run.
+	Observe func(err error)
+
+	readyOnce, closeOnce sync.Once
+	ready                chan struct{}
 }
+
+// Registered closes after the first successful registration.
+func (g *Registrar) Registered() <-chan struct{} { return g.readyChan() }
+
+func (g *Registrar) readyChan() chan struct{} {
+	g.readyOnce.Do(func() { g.ready = make(chan struct{}) })
+	return g.ready
+}
+
+func (g *Registrar) markRegistered() {
+	ch := g.readyChan()
+	g.closeOnce.Do(func() { close(ch) })
+}
+
+// HTTPStatusError is an api_server reply that is not 2xx.
+type HTTPStatusError struct {
+	Op     string
+	Status int
+	Body   string
+}
+
+// NewHTTPStatusError reads up to 512 bytes of resp's body into the error.
+func NewHTTPStatusError(op string, resp *http.Response) *HTTPStatusError {
+	msg, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+	return &HTTPStatusError{Op: op, Status: resp.StatusCode, Body: strings.TrimSpace(string(msg))}
+}
+
+func (e *HTTPStatusError) Error() string {
+	return fmt.Sprintf("%s: HTTP %d: %s", e.Op, e.Status, e.Body)
+}
+
+// HTTPStatus returns the reply's status code.
+func (e *HTTPStatusError) HTTPStatus() int { return e.Status }
 
 type registration struct {
 	NodeID       string `json:"node_id"`
@@ -71,9 +110,9 @@ func (g *Registrar) Register(ctx context.Context) error {
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode/100 != 2 {
-		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return fmt.Errorf("register signing key: HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(msg)))
+		return NewHTTPStatusError("register signing key", resp)
 	}
+	g.markRegistered()
 	return nil
 }
 
@@ -88,7 +127,14 @@ func (g *Registrar) Run(ctx context.Context) {
 	}
 	for {
 		wait := interval
-		if err := g.Register(ctx); err != nil {
+		err := g.Register(ctx)
+		if ctx.Err() != nil {
+			return
+		}
+		if g.Observe != nil {
+			g.Observe(err)
+		}
+		if err != nil {
 			wait = retry
 			g.Log.Error("node signing key registration failed", "key_id", g.Signer.KeyID, "err", err)
 		} else {

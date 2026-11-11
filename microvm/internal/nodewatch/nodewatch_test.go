@@ -156,3 +156,32 @@ func TestNewInClusterNeedsPod(t *testing.T) {
 		t.Error("NewInCluster with no node name")
 	}
 }
+
+func TestInClusterConfigMap(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		if r.URL.Path != "/api/v1/namespaces/onyx-sandboxes/configmaps/sandbox-proxy-ca-bundle" {
+			http.Error(w, `{"reason":"Forbidden"}`, http.StatusForbidden)
+			return
+		}
+		_, _ = w.Write([]byte(`{"kind":"ConfigMap","data":{"ca.crt":"-----BEGIN CERTIFICATE-----\nAA==\n-----END CERTIFICATE-----\n"}}`))
+	}))
+	defer srv.Close()
+	caPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw})
+	tok := filepath.Join(t.TempDir(), "token")
+	if err := os.WriteFile(tok, []byte("tok"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := NewWithCA(srv.URL, "node-1", tok, caPEM)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := c.ConfigMap(context.Background(), "onyx-sandboxes", "sandbox-proxy-ca-bundle")
+	if err != nil || !strings.HasPrefix(data["ca.crt"], "-----BEGIN CERTIFICATE-----") {
+		t.Fatalf("data %v err %v (path %s)", data, err, gotPath)
+	}
+	if _, err := c.ConfigMap(context.Background(), "onyx", "other"); err == nil || !strings.Contains(err.Error(), "HTTP 403") {
+		t.Fatalf("forbidden: %v", err)
+	}
+}

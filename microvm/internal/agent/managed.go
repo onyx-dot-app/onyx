@@ -10,11 +10,11 @@ import (
 	pb "github.com/onyx-dot-app/onyx/microvm/proto/hostagent/v1"
 )
 
-// ManagedState is the managed drive slots of a VM (ENG-4614).
+// ManagedState is the drive slots of one managed mount of a VM.
 type ManagedState struct {
-	// Slots is 2 for a VM that can swap its managed drive, else 1.
+	// Slots is 2 for a VM that can swap the drive of the mount, else 1.
 	Slots int
-	// Active is the slot on /workspace/managed after the last swap.
+	// Active is the slot on the mount point after the last swap.
 	Active pb.ManagedSlot
 	// A and B are the image IDs behind the slots ("" = the placeholder).
 	A, B string
@@ -58,6 +58,44 @@ func (s ManagedState) record() *journal.Managed {
 	return r
 }
 
+// mountsRecord is the journal form of the mounts other than skills.
+func mountsRecord(ms map[string]ManagedState) map[string]*journal.Managed {
+	if len(ms) == 0 {
+		return nil
+	}
+	out := make(map[string]*journal.Managed, len(ms))
+	for k, v := range ms {
+		out[k] = v.record()
+	}
+	return out
+}
+
+func mountsFromRecord(rs map[string]*journal.Managed) map[string]ManagedState {
+	if len(rs) == 0 {
+		return nil
+	}
+	out := make(map[string]ManagedState, len(rs))
+	for k, r := range rs {
+		out[k] = managedFromRecord(r)
+	}
+	return out
+}
+
+// newMounts is the state of a new VM's mounts other than skills.
+func newMounts(mounts []string) map[string]ManagedState {
+	var out map[string]ManagedState
+	for _, name := range mounts {
+		if name == template.SkillsMount {
+			continue
+		}
+		if out == nil {
+			out = map[string]ManagedState{}
+		}
+		out[name] = ManagedState{Slots: 2, Active: pb.ManagedSlot_MANAGED_SLOT_A}
+	}
+	return out
+}
+
 func managedFromRecord(r *journal.Managed) ManagedState {
 	if r == nil {
 		return ManagedState{Slots: 1, Active: pb.ManagedSlot_MANAGED_SLOT_A}
@@ -72,12 +110,34 @@ func managedFromRecord(r *journal.Managed) ManagedState {
 	return s
 }
 
-// SlotDrive returns the Firecracker drive ID and chroot file of a slot.
-func SlotDrive(slot pb.ManagedSlot) (driveID, file string) {
-	if slot == pb.ManagedSlot_MANAGED_SLOT_B {
-		return template.ManagedBDriveID, template.ManagedBFile
+// SlotDrive returns the Firecracker drive ID and chroot file of a slot of
+// a mount ("" is skills). ok is false for an unknown mount.
+func SlotDrive(mount string, slot pb.ManagedSlot) (driveID, file string, ok bool) {
+	md, ok := template.MountDrivesOf(mountName(mount))
+	if !ok {
+		return "", "", false
 	}
-	return template.ManagedDriveID, template.ManagedFile
+	if slot == pb.ManagedSlot_MANAGED_SLOT_B {
+		return md.B.ID, md.B.File, true
+	}
+	return md.A.ID, md.A.File, true
+}
+
+// mountName maps the empty mount name to skills.
+func mountName(mount string) string {
+	if mount == "" {
+		return template.SkillsMount
+	}
+	return mount
+}
+
+// Mount returns the state of one managed mount and whether the VM has it.
+func (vm VM) Mount(mount string) (ManagedState, bool) {
+	if mount = mountName(mount); mount == template.SkillsMount {
+		return vm.Managed, true
+	}
+	s, ok := vm.Mounts[mount]
+	return s, ok
 }
 
 // OtherSlot returns the idle slot when slot is active. With no managed
@@ -118,12 +178,13 @@ type GuestMount struct {
 	PreviousInUse bool
 }
 
-// ManagedGuest calls the guest daemon of one VM with its key. Errors are
-// apierr errors with the host agent reasons. The real one is in
-// internal/server.
+// ManagedGuest calls the guest daemon of one VM with its key, for one
+// managed mount. Status fails with MANAGED_SWAP_UNSUPPORTED if the daemon
+// does not have the mount. Errors are apierr errors with the host agent
+// reasons. The real one is in internal/server.
 type ManagedGuest interface {
-	Status(ctx context.Context, t GuestTarget, key string) (GuestManaged, error)
-	Mount(ctx context.Context, t GuestTarget, key string, slot pb.ManagedSlot, size uint64, uuid string) (GuestMount, error)
+	Status(ctx context.Context, t GuestTarget, key, mount string) (GuestManaged, error)
+	Mount(ctx context.Context, t GuestTarget, key, mount string, slot pb.ManagedSlot, size uint64, uuid string) (GuestMount, error)
 }
 
 // DriveReplacer is a Process that can change the file behind a drive
@@ -157,10 +218,11 @@ type SwapResult struct {
 	Took          time.Duration
 }
 
-// SwapManaged puts img into each target VM, one at a time, in order. A
-// swap that has begun finishes even if ctx ends; the VMs after it get the
-// context error.
-func (m *Manager) SwapManaged(ctx context.Context, img ManagedImage, targets []SwapTarget) []SwapResult {
+// SwapManaged puts img on a managed mount ("" is skills) of each target
+// VM, one at a time, in order. A swap that has begun finishes even if ctx
+// ends; the VMs after it get the context error.
+func (m *Manager) SwapManaged(ctx context.Context, mount string, img ManagedImage, targets []SwapTarget) []SwapResult {
+	mount = mountName(mount)
 	out := make([]SwapResult, 0, len(targets))
 	for _, t := range targets {
 		if err := ctx.Err(); err != nil {
@@ -168,13 +230,13 @@ func (m *Manager) SwapManaged(ctx context.Context, img ManagedImage, targets []S
 			continue
 		}
 		t0 := m.now()
-		r := m.swapOne(context.WithoutCancel(ctx), img, t)
+		r := m.swapOne(context.WithoutCancel(ctx), mount, img, t)
 		r.SandboxID, r.Took = t.SandboxID, m.now().Sub(t0)
 		lvl := m.log.Info
 		if r.Err != nil {
 			lvl = m.log.Warn
 		}
-		lvl("managed swap", "sandbox_id", t.SandboxID, "image", img.ID, "active", r.Active, "changed", r.Changed,
+		lvl("managed swap", "sandbox_id", t.SandboxID, "mount", mount, "image", img.ID, "active", r.Active, "changed", r.Changed,
 			"previous_in_use", r.PreviousInUse, "ms", r.Took.Milliseconds(), "err", r.Err)
 		out = append(out, r)
 	}
@@ -183,7 +245,7 @@ func (m *Manager) SwapManaged(ctx context.Context, img ManagedImage, targets []S
 
 // beginSwap marks the VM as swapping. Create and Stop of the sandbox wait
 // for the swap to end.
-func (m *Manager) beginSwap(ctx context.Context, t SwapTarget) (*entry, error) {
+func (m *Manager) beginSwap(ctx context.Context, mount string, t SwapTarget) (*entry, error) {
 	if !sandboxIDRE.MatchString(t.SandboxID) {
 		return nil, apierr.New(pb.ErrorReason_INVALID_ARGUMENT, "sandbox_id %q is not a lowercase UUID", t.SandboxID)
 	}
@@ -214,11 +276,11 @@ func (m *Manager) beginSwap(ctx context.Context, t SwapTarget) (*entry, error) {
 			m.mu.Unlock()
 			return nil, apierr.New(pb.ErrorReason_VM_NOT_RUNNING, "sandbox %s VM is %s", t.SandboxID, state)
 		}
-		if e.vm.Managed.Slots < 2 {
+		if st, ok := e.vm.Mount(mount); !ok || st.Slots < 2 {
 			tpl := e.vm.Template
 			m.mu.Unlock()
 			return nil, apierr.New(pb.ErrorReason_MANAGED_SWAP_UNSUPPORTED,
-				"sandbox %s runs template %s, which has no managed slot B", t.SandboxID, tpl)
+				"sandbox %s runs template %s, which has no slot B for managed mount %s", t.SandboxID, tpl, mount)
 		}
 		e.swap = make(chan struct{})
 		m.mu.Unlock()
@@ -233,10 +295,22 @@ func (m *Manager) endSwap(e *entry) {
 	e.swap = nil
 }
 
-// setManaged updates the VM's slots and writes its journal record.
-func (m *Manager) setManaged(e *entry, f func(*ManagedState)) error {
+// setManaged updates the slots of one mount and writes the journal record.
+// The Mounts map is copied, not changed: VM copies share it.
+func (m *Manager) setManaged(e *entry, mount string, f func(*ManagedState)) error {
 	m.mu.Lock()
-	f(&e.vm.Managed)
+	if mount == template.SkillsMount {
+		f(&e.vm.Managed)
+	} else {
+		mounts := make(map[string]ManagedState, len(e.vm.Mounts))
+		for k, v := range e.vm.Mounts {
+			mounts[k] = v
+		}
+		st := mounts[mount]
+		f(&st)
+		mounts[mount] = st
+		e.vm.Mounts = mounts
+	}
 	rec := m.record(e, journal.Running, e.proc.Info())
 	m.mu.Unlock()
 	if err := m.writeRecord(rec); err != nil {
@@ -245,7 +319,7 @@ func (m *Manager) setManaged(e *entry, f func(*ManagedState)) error {
 	return nil
 }
 
-func (m *Manager) swapOne(ctx context.Context, img ManagedImage, t SwapTarget) SwapResult {
+func (m *Manager) swapOne(ctx context.Context, mount string, img ManagedImage, t SwapTarget) SwapResult {
 	if m.managedGuest == nil {
 		return SwapResult{Err: apierr.New(pb.ErrorReason_MANAGED_SWAP_UNSUPPORTED, "the agent has no managed drive support")}
 	}
@@ -255,7 +329,7 @@ func (m *Manager) swapOne(ctx context.Context, img ManagedImage, t SwapTarget) S
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	e, err := m.beginSwap(ctx, t)
+	e, err := m.beginSwap(ctx, mount, t)
 	if err != nil {
 		return SwapResult{Err: err}
 	}
@@ -271,7 +345,7 @@ func (m *Manager) swapOne(ctx context.Context, img ManagedImage, t SwapTarget) S
 
 	// The guest is the truth for which slot is mounted: a swap that an agent
 	// restart cut short may have finished in the guest.
-	gs, err := m.managedGuest.Status(ctx, target, t.Key)
+	gs, err := m.managedGuest.Status(ctx, target, t.Key, mount)
 	if err != nil {
 		return SwapResult{Err: err}
 	}
@@ -279,7 +353,7 @@ func (m *Manager) swapOne(ctx context.Context, img ManagedImage, t SwapTarget) S
 	res := SwapResult{Active: active}
 	if active != pb.ManagedSlot_MANAGED_SLOT_UNSPECIFIED && gs.Slots[active].UUID == img.UUID {
 		// Already active. Fix the record if a cut-short swap left it behind.
-		err := m.setManaged(e, func(s *ManagedState) {
+		err := m.setManaged(e, mount, func(s *ManagedState) {
 			s.Active = active
 			s.setImage(active, img.ID)
 			s.PendingSlot, s.PendingImage = 0, ""
@@ -289,7 +363,7 @@ func (m *Manager) swapOne(ctx context.Context, img ManagedImage, t SwapTarget) S
 	}
 	idle := OtherSlot(active)
 	if !gs.Slots[idle].Present {
-		res.Err = apierr.New(pb.ErrorReason_MANAGED_SWAP_UNSUPPORTED, "the guest has no device for managed slot %s", idle)
+		res.Err = apierr.New(pb.ErrorReason_MANAGED_SWAP_UNSUPPORTED, "the guest has no device for managed mount %s slot %s", mount, idle)
 		return res
 	}
 	// A busy idle slot that already holds this image is a swap that stopped
@@ -303,7 +377,7 @@ func (m *Manager) swapOne(ctx context.Context, img ManagedImage, t SwapTarget) S
 	}
 	// Record the swap before the drive changes, so a restarted agent knows
 	// the slot content is not the recorded one.
-	if err := m.setManaged(e, func(s *ManagedState) {
+	if err := m.setManaged(e, mount, func(s *ManagedState) {
 		s.Active = active
 		s.PendingSlot, s.PendingImage = idle, img.ID
 	}); err != nil {
@@ -311,17 +385,17 @@ func (m *Manager) swapOne(ctx context.Context, img ManagedImage, t SwapTarget) S
 		return res
 	}
 	if !resume {
-		driveID, file := SlotDrive(idle)
+		driveID, file, _ := SlotDrive(mount, idle)
 		if err := dr.ReplaceDrive(ctx, driveID, file, img.Path); err != nil {
 			res.Err = apierr.New(pb.ErrorReason_VMM_FAILED, "put image %s behind slot %s: %v", img.ID, idle, err)
 			return res
 		}
 	}
-	if err := m.setManaged(e, func(s *ManagedState) { s.setImage(idle, img.ID) }); err != nil {
+	if err := m.setManaged(e, mount, func(s *ManagedState) { s.setImage(idle, img.ID) }); err != nil {
 		res.Err = err
 		return res
 	}
-	mr, err := m.managedGuest.Mount(ctx, target, t.Key, idle, img.Size, img.UUID)
+	mr, err := m.managedGuest.Mount(ctx, target, t.Key, mount, idle, img.Size, img.UUID)
 	if err != nil {
 		res.Err = err
 		return res
@@ -331,7 +405,7 @@ func (m *Manager) swapOne(ctx context.Context, img ManagedImage, t SwapTarget) S
 		res.Err = apierr.New(pb.ErrorReason_MANAGED_MOUNT_FAILED, "the guest reports slot %s active after mounting %s", mr.Active, idle)
 		return res
 	}
-	res.Err = m.setManaged(e, func(s *ManagedState) {
+	res.Err = m.setManaged(e, mount, func(s *ManagedState) {
 		s.Active = idle
 		s.PendingSlot, s.PendingImage = 0, ""
 	})
@@ -344,11 +418,17 @@ func (m *Manager) ManagedImagesInUse() map[string]bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	out := map[string]bool{}
-	for _, e := range m.vms {
-		for _, id := range []string{e.vm.Managed.A, e.vm.Managed.B, e.vm.Managed.PendingImage} {
+	add := func(s ManagedState) {
+		for _, id := range []string{s.A, s.B, s.PendingImage} {
 			if id != "" {
 				out[id] = true
 			}
+		}
+	}
+	for _, e := range m.vms {
+		add(e.vm.Managed)
+		for _, s := range e.vm.Mounts {
+			add(s)
 		}
 	}
 	return out

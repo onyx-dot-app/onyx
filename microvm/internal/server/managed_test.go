@@ -90,21 +90,21 @@ func initDirect(t *testing.T, uds string) {
 func TestDaemonManagedOverVsock(t *testing.T) {
 	ops := &slotOps{top: "/dev/vdc", uuid: map[string]string{"/dev/vdc": "", "/dev/vdf": ""}, inUse: map[string]bool{}}
 	vm := startFakeVMWith(t, guestd.Config{Version: "test", Managed: &guestd.ManagedConfig{
-		MountPoint: "/workspace/managed", Ops: ops,
-		Devices: map[sdpb.ManagedSlot]string{sdpb.ManagedSlot_MANAGED_SLOT_A: "/dev/vdc", sdpb.ManagedSlot_MANAGED_SLOT_B: "/dev/vdf"},
+		Ops: ops, Mounts: []guestd.ManagedMount{{Name: "skills", MountPoint: "/mnt/skills",
+			Devices: map[sdpb.ManagedSlot]string{sdpb.ManagedSlot_MANAGED_SLOT_A: "/dev/vdc", sdpb.ManagedSlot_MANAGED_SLOT_B: "/dev/vdf"}}},
 	}})
 	d := DaemonManaged{}
 	tgt := agent.GuestTarget{VsockUDS: vm.uds, Generation: 1}
 	ctx := context.Background()
 
-	if _, err := d.Status(ctx, tgt, vmKey); apierr.ReasonOf(err) != pb.ErrorReason_GUEST_KEY_REJECTED {
+	if _, err := d.Status(ctx, tgt, vmKey, "skills"); apierr.ReasonOf(err) != pb.ErrorReason_GUEST_KEY_REJECTED {
 		t.Fatalf("before SetKey: %v", err)
 	}
 	initDirect(t, vm.uds)
-	if _, err := d.Status(ctx, tgt, "wrong-key-wrong-key-wrong-key-xx"); apierr.ReasonOf(err) != pb.ErrorReason_GUEST_KEY_REJECTED {
+	if _, err := d.Status(ctx, tgt, "wrong-key-wrong-key-wrong-key-xx", "skills"); apierr.ReasonOf(err) != pb.ErrorReason_GUEST_KEY_REJECTED {
 		t.Fatalf("wrong key: %v", err)
 	}
-	st, err := d.Status(ctx, tgt, vmKey)
+	st, err := d.Status(ctx, tgt, vmKey, "skills")
 	if err != nil || st.Active != pb.ManagedSlot_MANAGED_SLOT_A || !st.Slots[pb.ManagedSlot_MANAGED_SLOT_A].InUse ||
 		st.Slots[pb.ManagedSlot_MANAGED_SLOT_B].InUse || !st.Slots[pb.ManagedSlot_MANAGED_SLOT_B].Present {
 		t.Fatalf("status %+v %v", st, err)
@@ -113,7 +113,7 @@ func TestDaemonManagedOverVsock(t *testing.T) {
 	ops.mu.Lock()
 	ops.uuid["/dev/vdf"] = uuid
 	ops.mu.Unlock()
-	mr, err := d.Mount(ctx, tgt, vmKey, pb.ManagedSlot_MANAGED_SLOT_B, 1<<20, uuid)
+	mr, err := d.Mount(ctx, tgt, vmKey, "skills", pb.ManagedSlot_MANAGED_SLOT_B, 1<<20, uuid)
 	if err != nil || mr.Active != pb.ManagedSlot_MANAGED_SLOT_B || !mr.Changed {
 		t.Fatalf("mount %+v %v", mr, err)
 	}
@@ -121,25 +121,30 @@ func TestDaemonManagedOverVsock(t *testing.T) {
 	ops.mu.Lock()
 	ops.inUse["/dev/vdc"] = true
 	ops.mu.Unlock()
-	if _, err := d.Mount(ctx, tgt, vmKey, pb.ManagedSlot_MANAGED_SLOT_A, 1<<20, uuid); apierr.ReasonOf(err) != pb.ErrorReason_MANAGED_SLOT_BUSY {
+	if _, err := d.Mount(ctx, tgt, vmKey, "skills", pb.ManagedSlot_MANAGED_SLOT_A, 1<<20, uuid); apierr.ReasonOf(err) != pb.ErrorReason_MANAGED_SLOT_BUSY {
 		t.Fatalf("busy: %v", err)
 	}
 	// A wrong UUID is a failed mount.
 	ops.mu.Lock()
 	ops.inUse["/dev/vdc"] = false
 	ops.mu.Unlock()
-	if _, err := d.Mount(ctx, tgt, vmKey, pb.ManagedSlot_MANAGED_SLOT_A, 1<<20, uuid); apierr.ReasonOf(err) != pb.ErrorReason_MANAGED_MOUNT_FAILED {
+	if _, err := d.Mount(ctx, tgt, vmKey, "skills", pb.ManagedSlot_MANAGED_SLOT_A, 1<<20, uuid); apierr.ReasonOf(err) != pb.ErrorReason_MANAGED_MOUNT_FAILED {
 		t.Fatalf("wrong uuid: %v", err)
+	}
+
+	// A mount that the daemon does not have.
+	if _, err := d.Status(ctx, tgt, vmKey, "spaces"); apierr.ReasonOf(err) != pb.ErrorReason_MANAGED_SWAP_UNSUPPORTED {
+		t.Fatalf("unknown mount: %v", err)
 	}
 
 	// A daemon without managed slots (an older root drive).
 	old := startFakeVM(t)
 	initDirect(t, old.uds)
-	if _, err := d.Status(ctx, agent.GuestTarget{VsockUDS: old.uds}, vmKey); apierr.ReasonOf(err) != pb.ErrorReason_MANAGED_SWAP_UNSUPPORTED {
+	if _, err := d.Status(ctx, agent.GuestTarget{VsockUDS: old.uds}, vmKey, "skills"); apierr.ReasonOf(err) != pb.ErrorReason_MANAGED_SWAP_UNSUPPORTED {
 		t.Fatalf("old daemon: %v", err)
 	}
 	// Nothing listens.
-	if _, err := d.Status(ctx, agent.GuestTarget{VsockUDS: filepath.Join(t.TempDir(), "none.sock")}, vmKey); apierr.ReasonOf(err) != pb.ErrorReason_GUEST_UNREACHABLE {
+	if _, err := d.Status(ctx, agent.GuestTarget{VsockUDS: filepath.Join(t.TempDir(), "none.sock")}, vmKey, "skills"); apierr.ReasonOf(err) != pb.ErrorReason_GUEST_UNREACHABLE {
 		t.Fatalf("no VM: %v", err)
 	}
 	if ops.mounts != 1 {
@@ -174,7 +179,7 @@ func TestManagedImageAPI(t *testing.T) {
 		slog.New(slog.NewTextHandler(io.Discard, nil)))
 	store := &managed.Store{Dir: t.TempDir(), Limits: managed.DefaultLimits, Mkfs: fakeMkfs}
 	svc := &Service{M: m, Managed: &ManagedImages{Store: store, Keep: 2}}
-	sock := filepath.Join("/tmp", "mi-"+filepath.Base(t.TempDir())+".sock")
+	sock := shortSock(t, "mi")
 	ln, err := ListenUnix(sock)
 	if err != nil {
 		t.Fatal(err)
@@ -239,6 +244,7 @@ func TestManagedImageAPI(t *testing.T) {
 		"twice":         {&pb.SwapManagedRequest{ImageId: id, Targets: []*pb.SwapTarget{tgt, tgt}}, pb.ErrorReason_INVALID_ARGUMENT},
 		"no key":        {&pb.SwapManagedRequest{ImageId: id, Targets: []*pb.SwapTarget{{SandboxId: tgt.SandboxId}}}, pb.ErrorReason_INVALID_ARGUMENT},
 		"missing image": {&pb.SwapManagedRequest{ImageId: string(bytes.Repeat([]byte("0"), 64)), Targets: []*pb.SwapTarget{tgt}}, pb.ErrorReason_MANAGED_IMAGE_MISSING},
+		"unknown mount": {&pb.SwapManagedRequest{ImageId: id, Targets: []*pb.SwapTarget{tgt}, Mount: "photos"}, pb.ErrorReason_INVALID_ARGUMENT},
 	} {
 		if _, err := c.SwapManaged(ctx, c2.req); apierr.FromStatus(err) != c2.want {
 			t.Errorf("%s: %v", name, err)
@@ -253,5 +259,22 @@ func TestManagedImageAPI(t *testing.T) {
 	sr, err = c.SwapManaged(ctx, &pb.SwapManagedRequest{ImageId: id, Targets: []*pb.SwapTarget{tgt}})
 	if err != nil || sr.GetResults()[0].GetReason() != pb.ErrorReason_SANDBOX_NOT_FOUND || sr.GetResults()[0].GetMessage() == "" {
 		t.Fatalf("swap %v %v", sr, err)
+	}
+}
+
+func TestCheckMountEcho(t *testing.T) {
+	for _, c := range []struct {
+		got, want string
+		ok        bool
+	}{
+		{"skills", "skills", true}, {"spaces", "spaces", true},
+		{"", "skills", true}, // a daemon from before named mounts
+		{"", "spaces", false}, {"skills", "spaces", false},
+	} {
+		if err := checkMountEcho(c.got, c.want); (err == nil) != c.ok {
+			t.Errorf("%q for %q: %v", c.got, c.want, err)
+		} else if err != nil && apierr.ReasonOf(err) != pb.ErrorReason_MANAGED_SWAP_UNSUPPORTED {
+			t.Errorf("reason %v", err)
+		}
 	}
 }

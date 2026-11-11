@@ -7,8 +7,11 @@ backend/tests/external_dependency_unit/craft_helm/test_craft_fc_preflight.py.
   start, then idles so the log stays readable.
 - No readiness probe tied to the result. A failing node must not make
   `helm upgrade --wait` hang. Read the RESULT line in the pod log.
-- Scheduling follows sandboxPod.nodeSelector and tolerations, but NOT
-  sandboxPod.runtimeClassName: gVisor or Kata hides the host /dev/kvm.
+- Scheduling follows sandboxPod.nodeSelector and tolerations, plus the
+  onyx.app/kvm toleration. With craft.sandboxRuntime=firecracker it also
+  selects onyx.app/kvm=true, so a pod sandbox group next to the Firecracker
+  group is not checked. It never uses sandboxPod.runtimeClassName: gVisor or
+  Kata hides the host /dev/kvm.
 - Lives in the release namespace, not the sandbox namespace, so the
   privileged pod is not next to user sandboxes and a Pod Security label on the
   sandbox namespace does not block it.
@@ -27,6 +30,10 @@ backend/tests/external_dependency_unit/craft_helm/test_craft_fc_preflight.py.
 {{- $image := $preflight.image | default (include "onyx.sandboxImage" .) }}
 {{- $scratchHostPath := $preflight.scratchHostPath | default "/var/lib/onyx-craft-fc-preflight" }}
 {{- $kvmResource := $preflight.kvmDeviceResource }}
+{{- $nodeSelector := deepCopy (index $sandboxPod "nodeSelector" | default (dict "onyx.app/workload" "sandbox")) }}
+{{- if eq (include "onyx.craftSandboxRuntime" .) "firecracker" }}
+{{- $_ := set $nodeSelector "onyx.app/kvm" "true" }}
+{{- end }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -59,9 +66,9 @@ spec:
         checksum/script: {{ .Files.Get "scripts/craft-fc-preflight.sh" | sha256sum }}
     spec:
       nodeSelector:
-        {{- (index $sandboxPod "nodeSelector" | default (dict "onyx.app/workload" "sandbox")) | toYaml | nindent 8 }}
+        {{- $nodeSelector | toYaml | nindent 8 }}
       tolerations:
-        {{- (index $sandboxPod "tolerations" | default (list (dict "key" "workload" "operator" "Equal" "value" "sandbox" "effect" "NoSchedule"))) | toYaml | nindent 8 }}
+        {{- include "onyx.craftKvmNodeTolerations" (dict "ctx" .) | nindent 8 }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}

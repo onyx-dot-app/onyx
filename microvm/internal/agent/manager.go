@@ -79,6 +79,9 @@ type Versions struct {
 	GuestKernelSHA256 string
 	// EgressCAFingerprint is the deployment's egress CA. Empty: not checked.
 	EgressCAFingerprint string
+	// NoEgressCASource: the agent sends no CA at Create, so only a root
+	// drive with a built-in CA fits.
+	NoEgressCASource bool
 }
 
 // NodeKey is the part of a template key that this node decides.
@@ -86,6 +89,7 @@ func (v Versions) NodeKey() template.NodeKey {
 	return template.NodeKey{
 		FirecrackerVersion: v.Firecracker, CPUModel: v.CPUModel, HostKernel: v.HostKernel,
 		GuestKernelSHA256: v.GuestKernelSHA256, CAFingerprint: v.EgressCAFingerprint,
+		RootfsCARequired: v.NoEgressCASource,
 	}
 }
 
@@ -104,6 +108,9 @@ type Config struct {
 	// TombstoneTTL is how long Stop remembers a stopped instance, to make a
 	// repeat Stop succeed and to reject stale attempts.
 	TombstoneTTL time.Duration
+	// EndedRetention is how long Ended lists a VM instance that exited or
+	// stopped. 0 keeps no ended list.
+	EndedRetention time.Duration
 }
 
 // VM is the public view of one VM.
@@ -120,7 +127,11 @@ type VM struct {
 	UID        uint32
 	StartedAt  time.Time
 	TenantID   string
-	Managed    ManagedState
+	// Managed is the skills mount.
+	Managed ManagedState
+	// Mounts are the other managed mounts of the template (layout 5), by
+	// name. Never changed in place: VM copies share the map.
+	Mounts map[string]ManagedState
 }
 
 // Egress connects the VMs to the egress relay. The real one is
@@ -181,6 +192,8 @@ type Manager struct {
 	vms     map[string]*entry
 	tombs   map[string]tombstone
 	lastGen uint64
+	// ended holds the instances that ended within cfg.EndedRetention.
+	ended map[endedKey]EndedVM
 	// doubt holds the sandboxes whose Firecracker the agent keeps running
 	// but could not verify. needScan: the UIDs of such processes are not
 	// known, so Create waits for a scan that works.
@@ -204,7 +217,7 @@ func NewManager(cfg Config, templates *template.Store, launcher Launcher, stats 
 		cfg: cfg, templates: templates, launcher: launcher, stats: stats, uids: uids,
 		versions: versions, log: log, now: time.Now,
 		vms: map[string]*entry{}, tombs: map[string]tombstone{}, doubt: map[string]*doubt{},
-		building: map[string]uint32{},
+		building: map[string]uint32{}, ended: map[endedKey]EndedVM{},
 	}
 }
 
@@ -224,7 +237,7 @@ func (m *Manager) OnRelease(f func(VM)) { m.releases = append(m.releases, f) }
 // and relay connections, then the OnRelease users (the daemon pass-through).
 // Callers kill the process (which frees the vsock socket) and free the UID
 // only after release returns, so a reused UID or socket path never carries
-// the old identity (ENG-4606).
+// the old identity.
 func (m *Manager) release(vm VM) {
 	if m.egress != nil {
 		m.egress.Detach(vm.SandboxID)
@@ -245,7 +258,7 @@ func (m *Manager) record(e *entry, state journal.State, info ProcInfo) journal.R
 		PID: info.PID, PIDStart: info.PIDStart, UID: e.vm.UID,
 		Chroot: info.Chroot, APISock: info.APISock, VsockUDS: info.VsockUDS,
 		Template: e.vm.Template, VCPUs: e.vm.VCPUs, MemMiB: e.vm.MemMiB, ScratchGiB: e.vm.ScratchGiB,
-		StartedAt: e.vm.StartedAt, TenantID: e.vm.TenantID, Managed: e.vm.Managed.record(),
+		StartedAt: e.vm.StartedAt, TenantID: e.vm.TenantID, Managed: e.vm.Managed.record(), Mounts: mountsRecord(e.vm.Mounts),
 	}
 }
 
@@ -404,6 +417,7 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (VM, bool, erro
 			Template: tpl.Version, VCPUs: req.VCPUs, MemMiB: req.MemMiB, ScratchGiB: req.ScratchGiB,
 			State: pb.VMState_VM_STATE_STARTING, UID: uid, StartedAt: m.now(), TenantID: req.TenantID,
 			Managed: ManagedState{Slots: tpl.ManagedSlots(), Active: pb.ManagedSlot_MANAGED_SLOT_A},
+			Mounts:  newMounts(tpl.ManagedMounts()),
 		},
 		busy: make(chan struct{}),
 	}
@@ -461,6 +475,8 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (VM, bool, erro
 			m.log.Error("VM may still run after a failed create; the sandbox is in doubt",
 				"sandbox_id", req.SandboxID, "uid", uid)
 			m.doubt[req.SandboxID] = &doubt{reason: "a failed start may have left its VM running", uids: []uint32{uid}}
+			// Not VMM_FAILED: callers must not start this attempt on another node.
+			e.createErr = apierr.New(pb.ErrorReason_SANDBOX_IN_DOUBT, "start VM: %v", launchErr)
 		} else {
 			m.uids.Put(uid)
 		}
@@ -518,7 +534,7 @@ func (m *Manager) admit(req CreateRequest) (*template.Template, error) {
 	}
 	free, err := m.stats.DiskFreeBytes()
 	if err != nil {
-		return nil, fmt.Errorf("read disk space: %w", err)
+		return nil, apierr.New(pb.ErrorReason_CAPACITY_DISK, "read disk space: %v", err)
 	}
 	if free < m.cfg.MinFreeDiskBytes {
 		return nil, apierr.New(pb.ErrorReason_CAPACITY_DISK,
@@ -536,7 +552,8 @@ func (m *Manager) admit(req CreateRequest) (*template.Template, error) {
 func (m *Manager) admitMemoryLocked(memMiB uint32) error {
 	total, avail, err := m.stats.MemInfo()
 	if err != nil {
-		return fmt.Errorf("read memory info: %w", err)
+		// An unreadable statistic is a refusal: no VM started, another node may accept.
+		return apierr.New(pb.ErrorReason_CAPACITY_MEMORY, "read memory info: %v", err)
 	}
 	starting := m.startingMiBLocked()
 	need := starting + uint64(memMiB) + m.cfg.MinFreeMemMiB
@@ -667,6 +684,7 @@ func (m *Manager) Stop(ctx context.Context, sandboxID string, attempt, generatio
 		m.log.Error("stop: save the stopped state", "sandbox_id", sandboxID, "err", err)
 		return StopResult{}, err
 	}
+	m.addEndedLocked(e.vm, EndedStopped)
 	m.log.Info("stopped", "sandbox_id", sandboxID, "attempt", attempt, "generation", generation)
 	return StopResult{AlreadyStopped: exited}, nil
 }
@@ -786,6 +804,7 @@ func (m *Manager) watch(sandboxID string, e *entry) {
 	}
 	e.vm.State = pb.VMState_VM_STATE_EXITED
 	e.busy = make(chan struct{})
+	m.addEndedLocked(e.vm, EndedExited)
 	m.mu.Unlock()
 	m.log.Warn("VM exited without Stop", "sandbox_id", sandboxID, "attempt", e.vm.Attempt, "generation", e.vm.Generation)
 

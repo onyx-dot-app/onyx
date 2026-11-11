@@ -135,9 +135,14 @@ func (b *Builder) now() time.Time {
 func (b *Builder) Build(ctx context.Context, r *Rootfs) (Result, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if b.Node.CAFingerprint != "" && r.CAFingerprint() != b.Node.CAFingerprint {
+	// A root drive with no CA fits every deployment: the daemon installs the
+	// CA at Init. A root drive with a CA must have this deployment's CA.
+	if b.Node.CAFingerprint != "" && r.CAFingerprint() != "" && r.CAFingerprint() != b.Node.CAFingerprint {
 		return Result{}, apierr.New(pb.ErrorReason_TEMPLATE_INCOMPATIBLE,
 			"the root drive trusts egress CA %s, this deployment uses %s; build the root drive again", r.CAFingerprint(), b.Node.CAFingerprint)
+	}
+	if b.Node.RootfsCARequired && r.CAFingerprint() == "" {
+		return Result{}, apierr.New(pb.ErrorReason_TEMPLATE_INCOMPATIBLE, "%s", template.NoCAError)
 	}
 	key := b.Key(r)
 	name := Name(key.ImageRef, key.Hash())
@@ -260,11 +265,20 @@ func (b *Builder) build(ctx context.Context, r *Rootfs, key template.Key, name s
 	if err := mkfs(ctx, filepath.Join(stage, template.ScratchFile), int64(b.ScratchGiB)*scratch.GiB, "scratch"); err != nil {
 		return nil, 0, fmt.Errorf("scratch drive: %w", err)
 	}
-	if err := mkfs(ctx, filepath.Join(stage, template.ManagedFile), managedBytes, "managed"); err != nil {
-		return nil, 0, fmt.Errorf("managed drive: %w", err)
+	// Slot A of each managed mount is an empty ext4 that the guest mounts at
+	// boot; slot B and the upload slots are sparse placeholders.
+	slotA := map[string]bool{}
+	for _, m := range template.ManagedMountDrives {
+		slotA[m.A.File] = true
 	}
-	for _, f := range []string{template.UploadAFile, template.UploadBFile, template.ManagedBFile} {
-		if err := sparseFile(filepath.Join(stage, f), uploadBytes); err != nil {
+	for _, d := range template.Drives[2:] {
+		if slotA[d.File] {
+			if err := mkfs(ctx, filepath.Join(stage, d.File), managedBytes, "managed"); err != nil {
+				return nil, 0, fmt.Errorf("managed drive %s: %w", d.ID, err)
+			}
+			continue
+		}
+		if err := sparseFile(filepath.Join(stage, d.File), uploadBytes); err != nil {
 			return nil, 0, err
 		}
 	}
@@ -339,6 +353,9 @@ func (b *Builder) build(ctx context.Context, r *Rootfs, key template.Key, name s
 		}
 	}
 	m := template.Manifest{Version: name, Key: key, BuiltAt: b.now().UTC()}
+	for _, mm := range r.Manifest.Guest.ManagedMounts {
+		m.GuestMounts = append(m.GuestMounts, mm.Name)
+	}
 	m.BuildMS = b.now().Sub(t0).Milliseconds()
 	m, prints, err := template.Seal(stage, m, map[string]string{template.RootfsFile: rootSum})
 	if err != nil {

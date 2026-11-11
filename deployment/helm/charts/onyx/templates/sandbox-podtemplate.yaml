@@ -1,4 +1,5 @@
 {{- if eq (include "onyx.craftEnabled" .) "true" }}
+{{- include "onyx.craftCheckSandboxTolerations" . }}
 {{/*
 Static shape of the per-user sandbox Pod. _create_sandbox_pod reads this and
 overlays the dynamic fields (name, sandbox/tenant labels, per-pod

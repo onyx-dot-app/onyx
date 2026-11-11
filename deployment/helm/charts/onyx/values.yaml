@@ -390,11 +390,23 @@ monitoring:
       # -- Set to true to deploy Grafana dashboard ConfigMaps for the Onyx indexing pipeline.
       # Requires kube-prometheus-stack (or equivalent) with the Grafana sidecar enabled and watching this namespace.
       # The sidecar must be configured with label selector: grafana_dashboard=1
+      # With craft.sandboxRuntime=firecracker and craft.hostAgent.metrics.enabled,
+      # it also deploys the Craft Firecracker host agent dashboard.
       enabled: false
   serviceMonitors:
     # -- Set to true to deploy ServiceMonitor resources for API server and Celery worker metrics endpoints.
     # Requires the Prometheus Operator CRDs (included in kube-prometheus-stack).
     # Use `labels` to match your Prometheus CR's serviceMonitorSelector (e.g. release: onyx-monitoring).
+    enabled: false
+    labels: {}
+  prometheusRules:
+    # -- Set to true to deploy PrometheusRule resources (alert rules).
+    # Requires the Prometheus Operator CRDs (included in kube-prometheus-stack).
+    # Today this has only the Craft Firecracker host agent rules, which also need
+    # craft.sandboxRuntime=firecracker and craft.hostAgent.metrics.enabled.
+    # The rules need the agent series: set serviceMonitors.enabled too, unless
+    # another scrape configuration collects the agent metrics.
+    # Use `labels` to match your Prometheus CR's ruleSelector (e.g. release: onyx-monitoring).
     enabled: false
     labels: {}
 
@@ -2006,7 +2018,8 @@ craft:
   # SANDBOX_PROXY_NAMESPACE shared-proxy path); leave empty unless you point at a non-pod proxy.
   proxyExtraCIDRs: []
   # Opt-in check that sandbox nodes can run Firecracker. Runs one pod per
-  # sandbox node (sandboxPod.nodeSelector + tolerations) and writes
+  # sandbox node (sandboxPod.nodeSelector + tolerations + the onyx.app/kvm
+  # taint; with sandboxRuntime=firecracker only onyx.app/kvm=true nodes) and writes
   # PASS/FAIL/WARN lines to the pod log. See README "Check your nodes for
   # Craft Firecracker". Does not need ENABLE_CRAFT.
   firecrackerPreflight:
@@ -2053,7 +2066,9 @@ craft:
     # Empty = sandboxPod.nodeSelector (or onyx.app/workload=sandbox) plus
     # onyx.app/kvm=true, the label Terraform puts on Firecracker node pools.
     nodeSelector: {}
-    # Empty = sandboxPod.tolerations (or the workload=sandbox taint).
+    # Empty = sandboxPod.tolerations (or the workload=sandbox taint). The chart
+    # always adds the onyx.app/kvm=true:NoSchedule toleration (the taint that
+    # Terraform puts on Firecracker nodes).
     tolerations: []
     # Same path on the node and in the container. Must be on XFS with reflink.
     dataDir: /var/lib/craft-fc
@@ -2116,6 +2131,29 @@ craft:
       # Comma-separated taint keys.
       taints: "node.kubernetes.io/unschedulable"
       pollInterval: 10s
+    # Root drive of the VMs. With a tag, an init container copies
+    # the drive into <dataDir>/rootfs and the agent builds its node template
+    # from it at start (--rootfs-dir). Empty tag = no template, and Create
+    # fails with TEMPLATE_MISSING. Publish a tag with
+    # .github/workflows/craft-fc-rootfs.yml, for example rootfs-0.1.0. Pin it.
+    rootfs:
+      image:
+        repository: onyxdotapp/craft-fc-artifacts
+        tag: ""
+        pullPolicy: IfNotPresent
+      # The init container copies about 4 GiB once per drive version.
+      resources: {}
+    # Egress CA. The root drive has no CA. The agent reads the
+    # sandbox-proxy CA from this ConfigMap at each Create (cached 30s) and
+    # the guest daemon installs it at Init. The chart gives the agent "get"
+    # on that one ConfigMap. false: VMs trust only a CA built into the drive.
+    egressCA:
+      enabled: true
+      # Empty = configMap.SANDBOX_NAMESPACE, where sandbox-proxy writes it.
+      namespace: ""
+      # Empty = configMap.SANDBOX_PROXY_CA_CONFIGMAP (sandbox-proxy-ca-bundle).
+      configMapName: ""
+      key: ca.crt
     # Extra host-agent flags, for example ["--max-scratch-gib=200"].
     extraArgs: []
     # Prometheus metrics on a plain HTTP port (--metrics-listen). With
@@ -2135,6 +2173,27 @@ craft:
       # Operator pods (app.kubernetes.io/name=prometheus) in the release
       # namespace. Set it if Prometheus runs in another namespace.
       networkPolicyFrom: []
+      # Prometheus job label of the agent series, for the alert rules and the
+      # dashboard. Empty = the agent Service name (the chart ServiceMonitor).
+      # Set it if another scrape configuration collects the agent metrics.
+      job: ""
+    # Alert rules (monitoring.prometheusRules.enabled). The thresholds are
+    # proposed defaults; tune them per deployment. Runbooks: microvm/RUNBOOKS.md.
+    alerts:
+      runbookUrl: https://github.com/onyx-dot-app/onyx/blob/main/microvm/RUNBOOKS.md
+      # Labels added to every rule (for example team or routing labels).
+      extraLabels: {}
+      # Failed Creates (start failed after admission) / admitted Creates, 15 m.
+      createFailureRatio: 0.2
+      # Capacity refusals per node and reason in 15 m.
+      admissionRefusals: 10
+      # Failed CaptureSession, UploadCapture or RestoreSession calls per node in 30 m.
+      sessionTransferFailures: 3
+      # Failed egress relay connections (over_cap, upstream_failed) / VM
+      # connections (accepted, over_cap), 10 m.
+      relayErrorRatio: 0.1
+      # MemAvailable / MemTotal of the node.
+      memoryAvailableRatio: 0.1
 
 # -- Sandbox Pod scheduling (rendered into the sandbox-pod PodTemplate).
 # Image/resources/ports come from the configMap.SANDBOX_* keys.
