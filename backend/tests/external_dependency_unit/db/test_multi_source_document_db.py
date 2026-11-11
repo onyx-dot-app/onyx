@@ -5,8 +5,9 @@ from threading import Event, current_thread
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import delete, event
+from sqlalchemy import create_engine, delete, event, text
 from sqlalchemy.orm import Session
+from sqlalchemy.pool import NullPool
 
 from ee.onyx.background.celery.tasks.doc_permission_syncing.tasks import (
     element_update_permissions,
@@ -21,6 +22,7 @@ from onyx.db.document import (
     get_document_source_types_after_cc_pair_removal,
     upsert_document_by_connector_credential_pair,
 )
+from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
 from onyx.db.models import (
     Connector,
@@ -552,6 +554,120 @@ def test_sharepoint_indexing_writes_acls_without_owned_onedrive_permissions(
         assert document.is_public is True
     finally:
         _delete_test_data(db_session, [document_id], [onedrive])
+
+
+def test_onedrive_owned_document_does_not_suppress_other_sharepoint_documents(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    unique = uuid4().hex
+    onedrive_document_id = f"onedrive-owned-{unique}"
+    sharepoint_document_id = f"sharepoint-only-{unique}"
+    sharepoint = _add_cc_pair(
+        db_session,
+        DocumentSource.SHAREPOINT,
+        ConnectorCredentialPairStatus.ACTIVE,
+        unique,
+        AccessType.SYNC,
+    )
+    onedrive = _add_cc_pair(
+        db_session,
+        DocumentSource.ONEDRIVE,
+        ConnectorCredentialPairStatus.ACTIVE,
+        unique,
+        AccessType.SYNC,
+    )
+    db_session.commit()
+
+    try:
+        _add_document_with_onedrive_acl(
+            db_session,
+            onedrive,
+            onedrive_document_id,
+            has_been_indexed=True,
+        )
+        _index_sharepoint_document(
+            db_session,
+            sharepoint_document_id,
+            "sharepoint-initial",
+            "sharepoint-initial",
+        )
+
+        _index_sharepoint_document(
+            db_session,
+            sharepoint_document_id,
+            "sharepoint-later",
+            "sharepoint-later",
+        )
+
+        db_session.expire_all()
+        document = db_session.get(Document, sharepoint_document_id)
+        assert document is not None
+        assert document.external_user_group_ids == ["sharepoint-later"]
+    finally:
+        _delete_test_data(
+            db_session,
+            [onedrive_document_id, sharepoint_document_id],
+            [sharepoint, onedrive],
+        )
+
+
+def test_sharepoint_indexing_preserves_onedrive_permissions_in_tenant_schema(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    """Multi-tenant sessions address tables only through `schema_translate_map`.
+    An empty search_path makes any table name without a schema fail."""
+    unique = uuid4().hex
+    document_id = f"tenant-schema-owner-{unique}"
+    sharepoint = _add_cc_pair(
+        db_session,
+        DocumentSource.SHAREPOINT,
+        ConnectorCredentialPairStatus.ACTIVE,
+        unique,
+        AccessType.SYNC,
+    )
+    onedrive = _add_cc_pair(
+        db_session,
+        DocumentSource.ONEDRIVE,
+        ConnectorCredentialPairStatus.ACTIVE,
+        unique,
+        AccessType.SYNC,
+    )
+    db_session.commit()
+
+    try:
+        _add_document_with_onedrive_acl(
+            db_session,
+            onedrive,
+            document_id,
+            has_been_indexed=True,
+        )
+
+        # No pool, so the search_path change ends with this connection.
+        isolated_engine = create_engine(SqlEngine.get_engine().url, poolclass=NullPool)
+        with isolated_engine.connect().execution_options(
+            schema_translate_map={None: POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE}
+        ) as connection:
+            connection.execute(text("SET search_path TO pg_catalog"))
+            connection.commit()
+            with Session(bind=connection, expire_on_commit=False) as tenant_session:
+                _index_sharepoint_document(
+                    tenant_session,
+                    document_id,
+                    "updated-by-sharepoint",
+                    "sharepoint",
+                )
+
+        db_session.expire_all()
+        document = db_session.get(Document, document_id)
+        assert document is not None
+        assert document.semantic_id == "updated-by-sharepoint"
+        assert document.external_user_group_ids == [
+            build_ext_group_name_for_onyx("onedrive", DocumentSource.ONEDRIVE)
+        ]
+    finally:
+        _delete_test_data(db_session, [document_id], [sharepoint, onedrive])
 
 
 @pytest.mark.parametrize(
