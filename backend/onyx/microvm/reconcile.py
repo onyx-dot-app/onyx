@@ -17,15 +17,20 @@ Per reported VM:
   adopt it with a fenced record write once the guest daemon holds the key
   (Health, or a repeat Create that installs it). A crash between Create and
   the record write, or a Create whose key install timed out, leaves this
-  state.
+  state. Adoptions run after the orphan stops, so a guest that does not
+  answer cannot hold up cleanup. A pending key install waits
+  `_ADOPT_RETRY_SECONDS` before the next try, so other adoptions get a turn.
+- The reservation names it but its key is lost or the guest rejects the key:
+  nothing can use it. It is an orphan after the grace period below.
 - Anything else is unknown. It is an orphan once
   `SANDBOX_FC_ORPHAN_GRACE_SECONDS` passed since the first report of it.
 Per ended VM: clear the record that names that instance (fenced).
 Per indexed record of this node that names no reported VM: clear it after a
 fresh `List` over mTLS, read under the sandbox lock (the report may predate a
 new VM). If a `List` fails, the record stays, and the pass reads no more.
-Orphan stops run last, at most `SANDBOX_FC_ORPHAN_STOPS_PER_REPORT` per pass,
-with no checkpoint: a stale or unknown VM has no session that anyone can use.
+Orphan stops run at most `SANDBOX_FC_ORPHAN_STOPS_PER_REPORT` per pass, with
+no checkpoint: a stale, unknown or unusable VM has no session that anyone can
+use.
 """
 
 import time
@@ -86,6 +91,10 @@ logger = setup_logger()
 
 _ORPHAN_MARK_PREFIX = "sandbox_fc:orphan:"
 _ORPHAN_MARK_TTL_SECONDS = 7 * 24 * 3600
+_ADOPT_WAIT_PREFIX = "sandbox_fc:adopt_wait:"
+# About three node reports.
+_ADOPT_RETRY_SECONDS = 60
+_ADOPT_WAIT_TTL_SECONDS = 3600
 
 
 class _Verdict(str, Enum):
@@ -124,6 +133,15 @@ class _OrphanStop(BaseModel):
     vm: AgentVm
     sandbox_id: UUID
     why: str
+
+
+class _Adoption(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    vm: AgentVm
+    sandbox_id: UUID
+    key: SecretStr
+    reservation_raw: bytes
 
 
 def orphan_first_seen(
@@ -176,6 +194,8 @@ class _Pass:
         self.report = report
         self.check_lease = check_lease
         self.stops: list[_OrphanStop] = []
+        self.adoptions: list[_Adoption] = []
+        self._stops_left = SANDBOX_FC_ORPHAN_STOPS_PER_REPORT
         self._list_failed = False
 
     def check(self) -> None:
@@ -259,7 +279,18 @@ class _Pass:
                 f"record {self.node.node_id}/{indexed.sandbox_id}",
                 partial(self.record, indexed.tenant_id, indexed.sandbox_id, reported),
             )
-        for stop in self.stops[:SANDBOX_FC_ORPHAN_STOPS_PER_REPORT]:
+        self.run_stops()
+        for adoption in self.adoptions:
+            self.step(
+                f"adopt {self.node.node_id}/{adoption.vm.sandbox_id}",
+                partial(self.adopt, adoption),
+            )
+        self.run_stops()
+
+    def run_stops(self) -> None:
+        stops, self.stops = self.stops, []
+        for stop in stops[: self._stops_left]:
+            self._stops_left -= 1
             self.step(
                 f"orphan {self.node.node_id}/{stop.vm.sandbox_id}",
                 partial(self.stop_orphan, stop),
@@ -288,44 +319,71 @@ class _Pass:
                 self.evict_if_idle(vm, sandbox_id, tenant_cache, record)
             return
         if verdict is _Verdict.ADOPT and found is not None:
-            if self.adopt(vm, sandbox_id, tenant_cache, found[1]):
-                return
-            verdict = _Verdict.UNKNOWN
+            key = get_sandbox_daemon_key(tenant_cache, sandbox_id, attempt=vm.attempt)
+            if key is None:
+                self.unusable(vm, sandbox_id)
+            elif not self.adopt_waits(vm):
+                self.adoptions.append(
+                    _Adoption(
+                        vm=vm, sandbox_id=sandbox_id, key=key, reservation_raw=found[1]
+                    )
+                )
+            return
         if verdict is _Verdict.STALE:
             self.report.orphans_marked.append(vm.sandbox_id)
             self.stops.append(_OrphanStop(vm=vm, sandbox_id=sandbox_id, why="stale"))
             return
+        self.stop_after_grace(vm, sandbox_id, "unknown")
+
+    def stop_after_grace(self, vm: AgentVm, sandbox_id: UUID, why: str) -> None:
         first_seen = orphan_first_seen(
             self.shared_cache, self.node.node_id, vm, self.now
         )
         if self.now - first_seen >= SANDBOX_FC_ORPHAN_GRACE_SECONDS:
             self.report.orphans_marked.append(vm.sandbox_id)
-            self.stops.append(_OrphanStop(vm=vm, sandbox_id=sandbox_id, why="unknown"))
+            self.stops.append(_OrphanStop(vm=vm, sandbox_id=sandbox_id, why=why))
 
-    def adopt(
-        self,
-        vm: AgentVm,
-        sandbox_id: UUID,
-        tenant_cache: CacheBackend,
-        reservation_raw: bytes,
-    ) -> bool:
-        """Write the record of a VM that its reservation names, once its
-        guest daemon holds the attempt's key. False when the key is lost or
-        the daemon holds another key (nothing can use the VM)."""
-        key = get_sandbox_daemon_key(tenant_cache, sandbox_id, attempt=vm.attempt)
-        if key is None:
+    def unusable(self, vm: AgentVm, sandbox_id: UUID) -> None:
+        """The reservation names the VM, but its key is lost or the guest
+        holds another key: nothing can use it."""
+        self.stop_after_grace(vm, sandbox_id, "unusable")
+
+    def _adopt_wait_key(self, vm: AgentVm) -> str:
+        return (
+            f"{_ADOPT_WAIT_PREFIX}{self.node.node_id}:{vm.sandbox_id}:{vm.generation}"
+        )
+
+    def adopt_waits(self, vm: AgentVm) -> bool:
+        """True while a pending key install of this VM waits for its retry."""
+        raw = self.shared_cache.get(self._adopt_wait_key(vm))
+        try:
+            return raw is not None and self.now - int(raw) < _ADOPT_RETRY_SECONDS
+        except ValueError:
             return False
+
+    def adopt(self, adoption: _Adoption) -> None:
+        """Write the record of a VM that its reservation names, once its
+        guest daemon holds the attempt's key."""
+        vm, sandbox_id = adoption.vm, adoption.sandbox_id
+        tenant_cache = get_cache_backend(tenant_id=vm.tenant_id)
         with sandbox_placement_lock(tenant_cache, sandbox_id, blocking=False) as lock:
             # A placement in progress writes the record itself.
             if lock is None:
-                return True
-            installed = self.install_key(vm, key)
+                return
+            installed = self.install_key(vm, adoption.key)
             if installed is None:
-                # Keep the VM and the reservation: the next report or wake
+                # Keep the VM and the reservation: a later report or a wake
                 # tries again.
-                return True
+                self.shared_cache.set(
+                    self._adopt_wait_key(vm),
+                    str(self.now),
+                    ex=_ADOPT_WAIT_TTL_SECONDS,
+                )
+                return
             if not installed:
-                return False
+                self.unusable(vm, sandbox_id)
+                return
+            # A newer record won the fence: the next report stops this VM.
             if not record_placement(
                 self.shared_cache,
                 tenant_cache,
@@ -338,8 +396,10 @@ class _Pass:
                     last_active=self.now,
                 ),
             ):
-                return False
-            release_sandbox_reservation(tenant_cache, sandbox_id, reservation_raw)
+                return
+            release_sandbox_reservation(
+                tenant_cache, sandbox_id, adoption.reservation_raw
+            )
         logger.info(
             "sandbox_fc_reconcile_adopted node=%s sandbox=%s attempt=%d generation=%d",
             self.node.node_id,
@@ -348,7 +408,6 @@ class _Pass:
             vm.generation,
         )
         self.report.adopted.append(vm.sandbox_id)
-        return True
 
     def install_key(self, vm: AgentVm, key: SecretStr) -> bool | None:
         """Make sure the guest daemon holds `key`: Health, then a repeat
@@ -499,7 +558,10 @@ class _Pass:
                     get_sandbox_placement(tenant_cache, sandbox_id),
                     found[0] if found is not None else None,
                 )
-                if verdict in (_Verdict.OWNED, _Verdict.ADOPT):
+                if verdict is _Verdict.OWNED:
+                    return
+                # Adopt or a placement may use it, unless it is unusable.
+                if verdict is _Verdict.ADOPT and stop.why != "unusable":
                     return
             try:
                 self.client_factory.client(self.node.address).stop(

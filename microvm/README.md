@@ -250,7 +250,8 @@ Placement does not depend on reports: it asks the agent with `List`.
   that its VM ended or is gone (after a fresh `List` under the sandbox lock). The api_server stops VMs
   of an older attempt on that report, and VMs that it does not know after a grace period. It adopts a
   VM that a reservation names only when the guest daemon holds the attempt's key (Health, else a repeat
-  Create that installs it).
+  Create that installs it). Adoptions run after the orphan stops. A pending key install waits 60 s
+  before the next try. A reserved VM whose key is lost or rejected is stopped after the grace period.
 - The api_server records the time of each accepted report. A node counts as dead when its registration
   expired, or when it reported before but not within `SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS` (default
   60 s, three intervals; `0` turns this off). Wake then starts the next attempt on a live node.

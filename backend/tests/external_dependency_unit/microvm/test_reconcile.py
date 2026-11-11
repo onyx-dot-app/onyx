@@ -8,14 +8,17 @@ import time
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
+import grpc
 import pytest
 
 from onyx.cache.interface import CacheBackend
 from onyx.microvm import reconcile
 from onyx.microvm.agent_client import (
+    GuestKeyRejectedError,
     HostAgentClient,
     HostAgentClientFactory,
     HostAgentConfigError,
+    HostAgentErrorReason,
     new_sandboxd_key,
 )
 from onyx.microvm.configs import SANDBOX_FC_IDLE_TIMEOUT_SECONDS
@@ -28,6 +31,7 @@ from onyx.microvm.lifecycle import (
 )
 from onyx.microvm.models import (
     AgentVm,
+    CreateResult,
     EndedReason,
     IndexedPlacement,
     ReconcileReport,
@@ -288,8 +292,16 @@ def test_adoption_installs_the_key_that_the_daemon_did_not_take(
     assert get_sandbox_placement(tenant_cache, sandbox_id) is None
     assert get_sandbox_reservation(tenant_cache, sandbox_id) is not None
     assert node.agent.stop_calls == []
+    # The pending install waits for its retry time.
+    assert _report(shared_cache, client_factory, node_id).adopted == []
+    assert node.agent.create_calls == 1
 
-    second = _report(shared_cache, client_factory, node_id)
+    second = _report(
+        shared_cache,
+        client_factory,
+        node_id,
+        now=NOW + reconcile._ADOPT_RETRY_SECONDS,
+    )
 
     assert second.adopted == [str(sandbox_id)]
     assert node.agent.daemon_keys[str(sandbox_id)] == key.get_secret_value()
@@ -321,8 +333,107 @@ def test_vm_without_its_daemon_key_is_not_adopted(
 
     assert report.adopted == []
     assert get_sandbox_placement(tenant_cache, sandbox_id) is None
-    # Unknown, inside the grace period: not stopped yet.
+    # Inside the grace period: not stopped yet.
     assert node.agent.stop_calls == []
+
+    # Nothing can use it, though its reservation names it.
+    later = _report(
+        shared_cache,
+        client_factory,
+        node_id,
+        now=NOW + reconcile.SANDBOX_FC_ORPHAN_GRACE_SECONDS,
+    )
+    assert later.orphans_stopped == [str(sandbox_id)]
+    assert node.agent.vms == {}
+
+
+def test_vm_whose_guest_rejects_the_key_is_stopped_after_the_grace_period(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    node_id = _node("rejected")
+    node = add_node(node_id)
+    sandbox_id = new_sandbox_id()
+    reserve_sandbox(
+        tenant_cache,
+        sandbox_id,
+        SandboxReservation(attempt=1, node_id=node_id, owner="crashed"),
+        replaces=None,
+    )
+    set_sandbox_daemon_key(tenant_cache, sandbox_id, attempt=1, key=new_sandboxd_key())
+    _vm(node, sandbox_id)
+
+    def rejected(self: HostAgentClient, **_: object) -> CreateResult:  # noqa: ARG001
+        raise GuestKeyRejectedError(
+            grpc.StatusCode.FAILED_PRECONDITION,
+            "KEY_ALREADY_SET",
+            HostAgentErrorReason.GUEST_KEY_REJECTED,
+        )
+
+    monkeypatch.setattr(HostAgentClient, "create", rejected)
+
+    first = _report(shared_cache, client_factory, node_id)
+    assert first.adopted == [] and node.agent.stop_calls == []
+
+    later = _report(
+        shared_cache,
+        client_factory,
+        node_id,
+        now=NOW + reconcile.SANDBOX_FC_ORPHAN_GRACE_SECONDS,
+    )
+    assert later.adopted == []
+    assert later.orphans_stopped == [str(sandbox_id)]
+    assert get_sandbox_placement(tenant_cache, sandbox_id) is None
+
+
+def test_pending_key_install_does_not_hold_up_orphan_stops(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
+) -> None:
+    node_id = _node("pending")
+    node = add_node(node_id)
+    pending, stale = new_sandbox_id(), new_sandbox_id()
+    reserve_sandbox(
+        tenant_cache,
+        pending,
+        SandboxReservation(attempt=1, node_id=node_id, owner="timed-out"),
+        replaces=None,
+    )
+    set_sandbox_daemon_key(tenant_cache, pending, attempt=1, key=new_sandboxd_key())
+    _vm(node, pending)
+    _vm(node, stale)
+    _elsewhere(tenant_cache, stale, attempt=2)
+    node.agent.guest_unreachable_creates = 10
+    steps: list[int] = []
+
+    def check_lease() -> None:
+        steps.append(1)
+        # Two VMs, then the orphan stop; the deadline hits before adoption.
+        if len(steps) == 4:
+            raise TimeoutError("deadline")
+
+    registered = _registered(shared_cache, node_id)
+    with pytest.raises(TimeoutError):
+        reconcile_node(
+            shared_cache,
+            client_factory,
+            NoCheckpointSupport(),
+            UnknownActivity(),
+            node=registered,
+            vms=client_factory.client(registered.address).list_vms(),
+            now=NOW,
+            check_lease=check_lease,
+        )
+
+    assert [c[0] for c in node.agent.stop_calls] == [str(stale)]
+    assert node.agent.create_calls == 0
 
 
 def test_stale_write_never_replaces_a_newer_record(

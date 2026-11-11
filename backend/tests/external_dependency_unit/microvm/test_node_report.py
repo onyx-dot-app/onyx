@@ -481,3 +481,32 @@ def test_report_vm_round_trip() -> None:
         started_at=datetime(2026, 11, 10, tzinfo=timezone.utc),
     )
     assert ReportedVm.model_validate_json(json.dumps(_vm_json(vm))).to_agent_vm() == vm
+
+
+def test_a_node_that_registers_again_drops_its_old_report_time(
+    node: Node, shared_cache: CacheBackend
+) -> None:
+    now = int(time.time())
+    timeout = registry.SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS
+    registry.record_node_report(shared_cache, node.node_id, now - timeout - 1)
+    address = node.running.address
+
+    # A re-registration of a live node keeps the report time.
+    registry.set_node_agent_address(shared_cache, node_id=node.node_id, address=address)
+    assert registry.get_live_node(shared_cache, node.node_id, now) is None
+
+    registry.clear_node_agent_address(shared_cache, node_id=node.node_id)
+    registry.set_node_agent_address(shared_cache, node_id=node.node_id, address=address)
+    assert registry.get_live_node(shared_cache, node.node_id, now) is not None
+
+
+def test_a_bad_report_time_does_not_break_placement(
+    node: Node, shared_cache: CacheBackend
+) -> None:
+    shared_cache.set(f"sandbox_fc:node_last_report:{node.node_id}", "not-a-number")
+
+    now = int(time.time())
+    assert registry.get_live_node(shared_cache, node.node_id, now) is not None
+    assert node.node_id in [
+        n.node_id for n in registry.list_live_nodes(shared_cache, now)
+    ]
