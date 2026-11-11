@@ -235,7 +235,7 @@ def _persona_with_mcp_tool(
     db_session.add_all([*tools, persona])
     db_session.commit()
     db_session.refresh(persona)
-    return persona, f"mcp__{MCP_SERVER}_{mcp_server.id}"
+    return persona, f"mcp__{mcp_server.id}__{MCP_SERVER}"
 
 
 def _code_mode_packets(packets: Sequence[object]) -> list[Packet]:
@@ -1110,7 +1110,7 @@ def test_a_program_finds_a_deferred_mcp_function_with_tool_search(
     text = last_tool_text(llm, "find")
     assert f"Output:\n{namespace}__hello\n" in text
     # The stub types the result from the server's output schema.
-    assert f"-> McpAcme{persona.tools[0].mcp_server_id}HelloResult" in text
+    assert f"-> Mcp{persona.tools[0].mcp_server_id}AcmeHelloResult" in text
     assert text.rstrip().endswith("Hello, alpha!")
 
 

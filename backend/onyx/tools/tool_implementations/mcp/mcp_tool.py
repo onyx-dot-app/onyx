@@ -165,7 +165,7 @@ class MCPTool(Tool):
     def code_mode_function_name(self) -> CodeModeFunctionName:
         return CodeModeFunctionName(
             name=self._mcp_tool_name,
-            namespace=f"mcp__{sanitize_tool_name(self.mcp_server.name)}_{self.mcp_server.id}",
+            namespace=f"mcp__{self.mcp_server.id}__{sanitize_tool_name(self.mcp_server.name)}",
         )
 
     @property
