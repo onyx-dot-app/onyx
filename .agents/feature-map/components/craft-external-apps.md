@@ -224,6 +224,10 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
    two sandboxes share an IP
    (`backend/onyx/sandbox_proxy/sandbox_identity/kubernetes.py:K8sInformerLookup._initial_list`,
    `backend/onyx/sandbox_proxy/sandbox_identity/docker.py:DockerEventsLookup._initial_sync`).
+   A frozen cache rejects every sandbox created after it froze. The Kubernetes
+   watch has a read deadline, and `K8sInformerLookup.is_synced` turns false
+   when the last relist is stale, so `/healthz` fails and the liveness probe
+   restarts the proxy.
 4. `url-patterns-credential-boundary` **An app's URL patterns are its
    credential boundary.** A wide pattern lets a prompt-injected agent spend the
    tenant's token on another account of the same vendor.
