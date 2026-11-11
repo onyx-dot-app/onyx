@@ -25,7 +25,6 @@ import (
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/files"
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/sysops"
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/vsock"
-	pb "github.com/onyx-dot-app/onyx/microvm/proto/sandboxd/v1"
 )
 
 // windowBytes is the HTTP/2 flow-control window of the gRPC server.
@@ -46,11 +45,11 @@ func main() {
 	maxDeadline := flag.Duration("max-deadline", 24*time.Hour, "largest command deadline")
 	outBytes := flag.Int("output-bytes", 4<<20, "output bytes kept per stream and execution")
 	outBudget := flag.Int64("output-budget", 256<<20, "output bytes kept by all executions; over it, ended ones lose their output first")
-	maxRunning := flag.Int("max-running", 64, "most running executions")
+	maxRunning := flag.Int("max-running", 64, "most running executions (at most --max-tracked)")
+	maxTracked := flag.Int("max-tracked", 64, "most execution records, running and ended; a new one drops the least recently used ended record")
 	logLevel := flag.String("log-level", "info", "debug, info, warn or error")
-	managedMnt := flag.String("managed-mount", "/workspace/managed", "mount point of the managed drive; empty turns MountManaged off")
-	managedA := flag.String("managed-dev-a", "/dev/vdc", "managed slot A device (the image's MANAGED_DEV)")
-	managedB := flag.String("managed-dev-b", "/dev/vdf", "managed slot B device (the image's MANAGED_DEV_B)")
+	managedMounts := flag.String("managed-mounts", guestd.FormatManagedMounts(guestd.DefaultManagedMounts),
+		"comma-separated name=/mount/point:/dev/slotA:/dev/slotB managed mounts (the image's attach script); empty turns MountManaged off")
 	reportOrder := flag.Int("page-reporting-order", 0, "balloon free page reporting order to set at start (0 reports every free page); -1 leaves the kernel default")
 	reclaimIdle := flag.Duration("reclaim-idle", 5*time.Minute, "drop the page cache after this long without daemon calls (Health does not count); 0 turns it off")
 	caAnchor := flag.String("ca-anchor", sysops.DefaultCAPaths.Anchor, "egress CA file that update-ca-certificates reads")
@@ -59,7 +58,7 @@ func main() {
 	certutil := flag.String("certutil", sysops.DefaultCAPaths.Certutil, "NSS certutil program")
 	var fc files.Config
 	flag.StringVar(&fc.SessionsRoot, "sessions-root", files.DefaultSessionsRoot, "directory with one directory per session (file calls, capture, restore)")
-	readLinks := flag.String("read-link-roots", "/workspace/managed", "comma-separated directories that a top-level session link may point into for ReadFile, ListFiles and ZipFiles")
+	readLinks := flag.String("read-link-roots", "/mnt/skills,/mnt/user-uploads,/mnt/spaces", "comma-separated directories that a top-level session link may point into for ReadFile, ListFiles and ZipFiles")
 	flag.Int64Var(&fc.MaxFileBytes, "max-file-bytes", files.GiB, "largest ReadFile, WriteFile or UploadFile")
 	flag.Int64Var(&fc.MaxZipBytes, "max-zip-bytes", files.GiB, "largest total file size of one ZipFiles")
 	captureDirs := flag.String("capture-dirs", strings.Join(files.DefaultCaptureRoots, ","), "comma-separated session directories that CaptureSession saves")
@@ -127,12 +126,14 @@ func main() {
 		}
 		reclaimer = &guestd.Reclaimer{Idle: *reclaimIdle, Reclaim: sysops.ReclaimMemory, Log: log}
 	}
+	mounts, err := guestd.ParseManagedMounts(*managedMounts)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
 	var managed *guestd.ManagedConfig
-	if *managedMnt != "" {
-		managed = &guestd.ManagedConfig{
-			MountPoint: *managedMnt, Ops: sysops.Managed{},
-			Devices: map[pb.ManagedSlot]string{pb.ManagedSlot_MANAGED_SLOT_A: *managedA, pb.ManagedSlot_MANAGED_SLOT_B: *managedB},
-		}
+	if len(mounts) > 0 {
+		managed = &guestd.ManagedConfig{Mounts: mounts, Ops: sysops.Managed{}}
 	}
 	fstore, err := files.New(fc)
 	if err != nil {
@@ -140,7 +141,7 @@ func main() {
 		os.Exit(2)
 	}
 	if err := run(log, sys, managed, reclaimer, fstore, *port, *listen, *cgroupRoot, *stateFile, *growMounts, execs.Config{
-		DefaultDeadline: *defDeadline, MaxDeadline: *maxDeadline, OutputBytes: *outBytes, OutputBudget: *outBudget, MaxRunning: *maxRunning, Log: log,
+		DefaultDeadline: *defDeadline, MaxDeadline: *maxDeadline, OutputBytes: *outBytes, OutputBudget: *outBudget, MaxRunning: *maxRunning, MaxTracked: *maxTracked, Log: log,
 	}); err != nil {
 		log.Error("guest-daemon failed", "err", err)
 		os.Exit(1)

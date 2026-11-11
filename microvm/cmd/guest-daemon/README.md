@@ -21,11 +21,12 @@ Code: `cmd/guest-daemon/` (main), `internal/guestd/` (API, Init, auth), `interna
 |---|---|
 | Binary | `/craft-fc/bin/guest-daemon` (static, `CGO_ENABLED=0`, read-only root) |
 | vsock port | **52** (the node agent's default `--daemon-port` for the gRPC pass-through; `Dial` always refuses it) |
-| User and env | root (decision P2), with the env `craft-init` passes from `/craft-fc/etc/guest.env`. Commands get that env, then the Init env, then their own. |
+| User and env | root (decision P2), with the env `craft-init` passes from `/craft-fc/etc/guest.env`. Commands get that env, then the command defaults (`NO_COLOR=1`, `TERM=dumb`, `PAGER=cat`, `GIT_PAGER=cat`, `GH_PAGER=cat`, `LANG` and `LC_ALL` `C.UTF-8`), then the Init env, then their own. |
 | Supervisor | `craft-init` (PID 1) starts the daemon and restarts it when it exits. The daemon is not PID 1. |
 | cgroup v2 | Mounted at `/sys/fs/cgroup` by init. The daemon mounts it if it is missing, and makes `/sys/fs/cgroup/guestd/`. |
-| Drives | Init runs `/craft-fc/lib/attach` (scratch on `/mnt/scratch`, overlays, read-only managed drive). It does nothing if init already attached them. |
-| Managed slots | Slot A `/dev/vdc` (`MANAGED_DEV`, mounted by attach) and slot B `/dev/vdf` (`MANAGED_DEV_B`, never mounted by attach) on `/workspace/managed`. `MountManaged` changes the drive there. Needs a guest kernel with `MOVE_MOUNT_BENEATH` (6.5+). |
+| Drives | Init runs `/craft-fc/lib/attach` (scratch on `/mnt/scratch`, overlays, read-only managed drives). It does nothing if init already attached them. |
+| Managed mounts | `skills` on `/mnt/skills` (slots `/dev/vdc`, `/dev/vdf`), `user-uploads` on `/mnt/user-uploads` (`/dev/vdg`, `/dev/vdh`), `spaces` on `/mnt/spaces` (`/dev/vdi`, `/dev/vdj`). Attach mounts slot A of each (`MANAGED_MOUNTS` in `init.conf`); slot B is never mounted by attach. `MountManaged` changes the drive of one mount. Needs a guest kernel with `MOVE_MOUNT_BENEATH` (6.5+). |
+| Sessions | One directory per session: `/home/onyx/workspaces/<session_id>`. The build makes `/home/onyx` and `/home/onyx/workspaces`, owned by the sandbox user. |
 | Egress relay | Init sends SIGHUP to the PID in `/run/craft-fc/egress-relay.pid`. |
 | Scratch disk | ext4 on `/mnt/scratch`. Init grows it to the device size, and fails if the device is still smaller than `scratch_bytes` after about 1 s. |
 | Init state | `/run/craft-fc/guest-daemon-init.json` (mode 0600, tmpfs). A restarted daemon keeps its key, egress CA, env and session list. |
@@ -36,8 +37,9 @@ Flags (defaults in brackets): `--port` (52), `--attach-cmd` (`/craft-fc/lib/atta
 `--relay-pidfile` (`/run/craft-fc/egress-relay.pid`; empty to skip), `--cgroup-root`
 (`/sys/fs/cgroup/guestd`), `--state-file`, `--grow-fs` (`/mnt/scratch`), `--default-deadline` (30m),
 `--max-deadline` (24h), `--output-bytes` (4 MiB per stream), `--output-budget` (256 MiB for all
-executions), `--max-running` (64), `--managed-mount` (`/workspace/managed`; empty turns the managed calls
-off), `--managed-dev-a` (`/dev/vdc`), `--managed-dev-b` (`/dev/vdf`), `--ca-anchor`
+executions), `--max-running` (64), `--max-tracked` (64 records, running and ended), `--managed-mounts`
+(`name=/mount/point:/dev/slotA:/dev/slotB`, comma-separated; the three mounts above; empty turns the
+managed calls off), `--ca-anchor`
 (`/usr/local/share/ca-certificates/craft-egress-ca.crt`), `--ca-bundle` (`/etc/ssl/certs/ca-certificates.crt`;
 empty turns the CA install off), `--ca-nssdb` (`/home/sandbox/.pki/nssdb`; empty to skip), `--certutil`
 (`/usr/bin/certutil`), the file flags (`--sessions-root`,
@@ -90,13 +92,14 @@ agent, every call also carries `x-sandbox-id`.
 | `Start` | Starts a command and returns its execution ID at once. |
 | `Stream` | Output of an execution from given offsets, then the result. Works after a dropped client. |
 | `Interact` | Writes to (or closes) the stdin of a command started with `stdin: true`. |
-| `Cancel` | Kills the command's cgroup and returns the result (`CANCELED`, or `EXITED` if the command exited first). Not an error. |
+| `Cancel` | With no signal (or `SIGKILL`): kills the command's cgroup and returns the result (`CANCELED`, or `EXITED` if the command exited first). With `SIGINT` or `SIGTERM`: sends the signal to the process group of the main process and returns at once (`signaled`); the command can handle it. If it dies of that signal, its result is `CANCELED`. Not an error. |
 | `Inspect`, `List` | Execution records (state, PID, times, byte counts, result), `List` filtered by labels. |
-| `ReadFile`, `WriteFile`, `UploadFile`, `ListFiles`, `DeleteFile`, `ZipFiles` | Session files (see Files). |
+| `ReadFile`, `WriteFile`, `ListFiles`, `DeleteFile`, `ZipFiles` | Session files, or any VM path with no session ID (see Files). |
+| `UploadFile` | A free name in a session directory (`attachments/` by default). Always needs a session ID. |
 | `CaptureSession`, `RestoreSession` | Session saves as tar + zstd (see Session saves). |
 | `BrowserStart`, `BrowserStop` | Reserved for the browser. `UNIMPLEMENTED`. |
-| `ManagedStatus` | The slot on `/workspace/managed` (by the mount's device number) and, per slot, the device, size, ext4 UUID (read with `O_DIRECT`) and whether it is in use (an exclusive open fails with `EBUSY` while a mount holds it, also a detached one with open files). The node agent calls it. |
-| `MountManaged(slot, size_bytes, fs_uuid)` | Makes the slot the drive on `/workspace/managed`, in this order: refuse a slot in use (`MANAGED_SLOT_BUSY`); wait up to 5 s for the device size (Firecracker's config change after `PATCH /drives`); `BLKFLSBUF`; check the ext4 UUID (`MANAGED_DEVICE_MISMATCH`); `fsopen`/`fsmount` (`ro`, `noload`; `nodev`, `nosuid`, `noexec`, private) and `move_mount(MOVE_MOUNT_BENEATH)` beneath the current mount; `umount2(MNT_DETACH)` of the old top mount. Open files on the old drive keep working. The same slot with the same UUID is a no-op (`changed` false). A slot in use that is mounted beneath the top mount with the requested UUID is a swap that stopped before its detach: the call detaches the old top mount and finishes it. The node agent calls it during `SwapManaged`. |
+| `ManagedStatus(mount)` | The slot on the mount point (by the mount's device number) and, per slot, the device, size, ext4 UUID (read with `O_DIRECT`) and whether it is in use (an exclusive open fails with `EBUSY` while a mount holds it, also a detached one with open files). The node agent calls it. |
+| `MountManaged(mount, slot, size_bytes, fs_uuid)` | Makes the slot the drive on the mount point, in this order: refuse a slot in use (`MANAGED_SLOT_BUSY`); wait up to 5 s for the device size (Firecracker's config change after `PATCH /drives`); `BLKFLSBUF`; check the ext4 UUID (`MANAGED_DEVICE_MISMATCH`); `fsopen`/`fsmount` (`ro`, `noload`; `nodev`, `nosuid`, `noexec`, private) and `move_mount(MOVE_MOUNT_BENEATH)` beneath the current mount; `umount2(MNT_DETACH)` of the old top mount. Open files on the old drive keep working. The same slot with the same UUID is a no-op (`changed` false). A slot in use that is mounted beneath the top mount with the requested UUID is a swap that stopped before its detach: the call detaches the old top mount and finishes it. The node agent calls it during `SwapManaged`. |
 
 Why the mount goes beneath: a mount covered by another mount cannot be reached by path, and a lazy
 unmount of it (also through `/proc/self/fd/<n>`) removes the top mount instead (tested on #17241).
@@ -107,6 +110,8 @@ Commands:
 
 - Each command runs as root in its own cgroup `/sys/fs/cgroup/guestd/<execution_id>` (started there with
   `clone3(CLONE_INTO_CGROUP)`), in a new session.
+- With a `session_id`, the working directory defaults to the session directory (made if missing), and a
+  relative `cwd` is below it. Commands are not confined: any absolute `cwd` and any path in the VM work.
 - The deadline is 30 min unless the call sets one (at most `--max-deadline`). At the deadline, or on
   Cancel, the daemon writes `cgroup.kill`: every process dies, also ones that called `setsid`.
 - When the main process exits, the daemon kills what is left in its cgroup. A background server must run
@@ -114,7 +119,10 @@ Commands:
 - Every execution ends with one `ExecResult`: the completion marker. `completion` is `EXITED` (with
   `exit_code`), `SIGNALED`, `CANCELED` or `DEADLINE_EXCEEDED`.
 - Records and the last `--output-bytes` of each stream stay in memory after the client goes away: ended
-  records for 1 h (at most 256). A timer removes expired records, also when no new command starts.
+  records for 1 h. A timer removes expired records, also when no new command starts. The daemon keeps at
+  most `--max-tracked` (64) records: a new command drops the least recently used ended record (`Get`,
+  `Stream`, `Interact`, `Inspect` and `Cancel` count as a use). If all of them run, `Run` and `Start` fail
+  with `EXECUTION_CAP_REACHED`.
 - All kept output is capped by `--output-budget`. Over it, the daemon drops the output of ended records
   (oldest first) down to 3/4 of the budget, then keeps only the latest bytes of running ones. The
   records and results stay; a `Stream` gets an `OutputGap`.
@@ -128,12 +136,18 @@ Commands:
 
 Files (`internal/guestd/files`):
 
-- Every path is relative to `/workspace/sessions/<session_id>/` (`--sessions-root`). Leading `/` are
+- With no `session_id`, `ReadFile`, `WriteFile`, `ListFiles`, `DeleteFile` and `ZipFiles` take an
+  absolute path anywhere in the VM and follow symlinks (`DeleteFile` removes a link, not its target).
+  Paths (and link targets) under `/proc`, `/sys`, `/dev` and `/run/craft-fc` (the daemon's key and state)
+  fail with `INVALID_ARGUMENT`; `ListFiles` and `ZipFiles` leave them out, and a recursive `DeleteFile` of a
+  directory that holds one fails. `UploadFile` and the
+  session saves always need a session.
+- With a session, every path is relative to `/home/onyx/workspaces/<session_id>/` (`--sessions-root`). Leading `/` are
   dropped, so `/attachments/a.pdf` is `attachments/a.pdf`. The daemon opens that directory as an `os.Root`. A
   path with a `..` part, a NUL byte or bad UTF-8, a path over 4096 bytes, a name over 255 bytes, or a
   symlink that leaves the directory fails with `INVALID_ARGUMENT`. Only `ReadFile`, `ListFiles` and
-  `ZipFiles` follow a top-level session link into `--read-link-roots` (default `/workspace/managed`,
-  for `user_library`).
+  `ZipFiles` follow a top-level session link into `--read-link-roots` (default `/mnt/skills`,
+  `/mnt/user-uploads` and `/mnt/spaces`).
 - `ReadFile` streams the file info, then 64 KiB chunks. `offset`/`length` read a range. More than
   `--max-file-bytes` (1 GiB) in one call fails with `LIMIT_EXCEEDED`.
 - `WriteFile` and `UploadFile`: a header with the exact size (at most `--max-file-bytes`) and an optional

@@ -473,15 +473,16 @@ At start-up (after recovery, while the API serves) and on `BuildTemplate`, the a
 
 1. Reads `--rootfs-dir`. It checks that the root drive expects the drives `rootfs`, `scratch` (writable)
    and `managed` (read-only) in this order, that its `managed_slots` (if any) are `a=/dev/vdc` and
-   `b=/dev/vdf`, and that its CA (if it has one) fits the deployment CA.
+   `b=/dev/vdf`, that each of its `managed_mounts` (if any) is a mount the agent knows on the agent's
+   devices, and that its CA (if it has one) fits the deployment CA.
 2. Computes the key and the template name: `<image tag>-<first 12 hex of the key hash>`, for example
    `v5.1.0-3fa91c0e7d22`. If a valid template with this name is there, it stops (and runs GC).
 3. Copies the root drive into a staging directory (`<templates>/.build-<name>`) and checks its SHA256
-   against the root drive manifest. It makes the empty scratch and managed drives (`mkfs.ext4`), the
-   upload slots and managed slot B.
+   against the root drive manifest. It makes the empty scratch drive and slot A of each managed mount
+   (`mkfs.ext4`), and sparse files for the upload slots and each slot B.
 4. Boots a VM in a jailer chroot (ID `tpl-<key hash[:12]>`, a UID from the pool) with the guest kernel,
    the boot args of the root drive manifest plus `craft.scratch=defer` (init does not mount scratch or
-   managed), the six drives in the order above and the vsock (guest CID 3, `/v.sock`).
+   managed), the ten drives of the layout in order and the vsock (guest CID 3, `/v.sock`).
 5. Waits until the guest daemon answers `Health` on vsock `--daemon-port`, pauses the VM and takes a full
    snapshot. It moves `vmstate` and `mem` into the staging directory and stops the VM.
 6. Hashes the files, writes `manifest.json` and renames the staging directory to its name.
@@ -506,7 +507,7 @@ is `<artifacts-dir>/vmlinux`; the agent copies it to `<data-dir>/kernel/vmlinux-
 
 #### Manifest and checks
 
-`manifest.json` (schema = layout version, 4 for new builds):
+`manifest.json` (schema = layout version, 5 for new builds):
 
 - `key`: `image_ref`, `image_digest`, `rootfs_sha256`, `rootfs_manifest_sha256`, `guest_kernel` (release),
   `guest_kernel_sha256`, `firecracker_version`, `cpu_model`, `host_kernel`, `ca_fingerprint`,
@@ -528,8 +529,10 @@ Before every restore, Create checks:
    checks compare the fingerprints and hash again only if one changed. A changed file is
    `TEMPLATE_INCOMPATIBLE`.
 
-Layouts: the agent builds layout 4 and still restores layouts 2 and 3.
+Layouts: the agent builds layout 5 and still restores layouts 2 to 4.
 
+- Layout 5: the drives of layout 4, plus slots A and B of the `user-uploads` and `spaces` managed mounts
+  (`/dev/vdg` to `/dev/vdj`, see Managed drive). `TemplateInfo.managed_mounts` lists all three mounts.
 - Layout 4: the drives of layout 3, plus the balloon device (see Memory, admission and drain).
   Firecracker accepts a balloon only before boot, and a restore keeps it, so the template VM has it.
   `TemplateInfo.balloon` is true.
@@ -600,11 +603,23 @@ manual flag (`SetDrain`) before a planned drain to close this gap.
 
 ### Managed drive
 
-`/workspace/managed` in each VM is a read-only ext4 drive with the managed files (the skills). The agent
-changes it in running VMs, with no restart. Firecracker cannot add a drive after boot, so every VM has two
-managed slots: A (drive `managed`, `/dev/vdc`, the image's `MANAGED_DEV`) and B (drive `managed_b`,
-`/dev/vdf`, `MANAGED_DEV_B`, the last drive). At Create, slot A has the template's empty placeholder and
-attach mounts it; slot B is never mounted by attach.
+Each VM has three managed mounts, each a read-only, noexec ext4 drive: `skills` (`/mnt/skills`),
+`user-uploads` (`/mnt/user-uploads`) and `spaces` (`/mnt/spaces`). The agent changes them in running VMs,
+with no restart. Firecracker cannot add a drive after boot, so every mount has two slots:
+
+| Mount | Slot A | Slot B | Layout |
+|---|---|---|---|
+| `skills` | drive `managed`, `/dev/vdc` | drive `managed_b`, `/dev/vdf` | 3 and later |
+| `user-uploads` | `user_uploads_a`, `/dev/vdg` | `user_uploads_b`, `/dev/vdh` | 5 and later |
+| `spaces` | `spaces_a`, `/dev/vdi` | `spaces_b`, `/dev/vdj` | 5 and later |
+
+New drives go after the old ones, so older guest devices do not move. At Create, slot A of each mount
+has the template's empty ext4 placeholder and attach mounts it; slot B is never mounted by attach. A VM
+has only the mounts of its layout that its root drive's guest daemon serves (rootfs manifest
+`managed_mounts`, kept in the template manifest as `guest_mounts`; `TemplateInfo.managed_mounts`); attach
+puts an empty read-only tmpfs on a mount with no drive. A swap of another mount fails with
+`MANAGED_SWAP_UNSUPPORTED`. An image is not tied to a mount: `SwapManaged` names the mount
+(`mount`, default `skills`).
 
 **Images.** `PutManagedImage` streams a zip (first message: SHA256 and size; then data, at most 4 MiB per
 message). The image ID is the zip's SHA256. The agent:
@@ -637,16 +652,19 @@ the newest; a later `SwapManaged` of it gets `MANAGED_IMAGE_MISSING` and the cal
 `sandboxd_key` (the agent does not keep the key, so the caller sends it). It swaps one VM at a time, in
 order; one failure does not stop the others. For each VM:
 
-1. Daemon `ManagedStatus` (vsock, with the key): which slot is on `/workspace/managed`, and whether each
+1. Daemon `ManagedStatus(mount)` (vsock, with the key): which slot is on the mount point, and whether each
    slot device is in use. The guest is the truth, so a swap that an agent restart cut short is seen here.
    If the active slot already has the image's UUID, the call only fixes the journal (`changed` false).
+   A daemon that answers for another mount (an older root drive knows only `skills`) fails the VM with
+   `MANAGED_SWAP_UNSUPPORTED`.
 2. The idle slot is the other one. If the guest still uses it (a detached mount from the last swap with
    open files), the VM gets `MANAGED_SLOT_BUSY` and nothing changes. If the busy slot already has the
    image's UUID, a swap stopped after its guest mount: the agent skips step 3, and `MountManaged`
    detaches the old top mount.
-3. The journal records the pending swap. The agent puts a reflink copy of the image at
-   `/managed.ext4` or `/managed-b.ext4` in the chroot and calls Firecracker `PATCH /drives/<id>`.
-4. Daemon `MountManaged(slot, size, uuid)`: wait until the device has the new size (Firecracker sends a
+3. The journal records the pending swap. The agent puts a reflink copy of the image at the slot's file
+   (for example `/managed-b.ext4` or `/spaces-a.ext4`) in the chroot and calls Firecracker
+   `PATCH /drives/<id>`.
+4. Daemon `MountManaged(mount, slot, size, uuid)`: wait until the device has the new size (Firecracker sends a
    virtio config change), drop the guest's cached blocks (`BLKFLSBUF`), check the ext4 UUID, mount the
    device `ro,noload,nodev,nosuid,noexec` with private propagation beneath the current mount
    (`fsmount` + `move_mount(MOVE_MOUNT_BENEATH)`, Linux 6.5+), then detach the old top mount

@@ -55,7 +55,15 @@ type RootfsManifest struct {
 		// ManagedSlots maps slot "a" and "b" to the guest devices that the
 		// image's attach and guest daemon use. Older root drives have none.
 		ManagedSlots map[string]string `json:"managed_slots"`
-		Daemon       struct {
+		// ManagedMounts are the named managed mounts and their slot
+		// devices. Older root drives have none.
+		ManagedMounts []struct {
+			Name  string `json:"name"`
+			Mount string `json:"mount"`
+			A     string `json:"a"`
+			B     string `json:"b"`
+		} `json:"managed_mounts"`
+		Daemon struct {
 			VsockPort uint32 `json:"vsock_port"`
 		} `json:"daemon"`
 	} `json:"guest"`
@@ -119,6 +127,20 @@ func checkDrives(m RootfsManifest) error {
 	for i, d := range m.Guest.Drives {
 		if d.DriveID != want[i].ID || d.IsReadOnly != want[i].ReadOnly {
 			return fmt.Errorf("drive %d is %s (read-only %v), the agent has %s (read-only %v)", i, d.DriveID, d.IsReadOnly, want[i].ID, want[i].ReadOnly)
+		}
+	}
+	devOf := map[string]string{}
+	for i, d := range template.Drives {
+		devOf[d.ID] = guestDev(i)
+	}
+	for _, mm := range m.Guest.ManagedMounts {
+		md, ok := template.MountDrivesOf(mm.Name)
+		if !ok {
+			return fmt.Errorf("the root drive has managed mount %q, the agent does not", mm.Name)
+		}
+		if mm.A != devOf[md.A.ID] || mm.B != devOf[md.B.ID] {
+			return fmt.Errorf("the root drive has managed mount %s on %s and %s, the agent puts it on %s and %s",
+				mm.Name, mm.A, mm.B, devOf[md.A.ID], devOf[md.B.ID])
 		}
 	}
 	if m.Guest.ManagedSlots == nil {

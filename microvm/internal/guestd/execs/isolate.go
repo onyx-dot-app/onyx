@@ -1,6 +1,9 @@
 package execs
 
-import "os/exec"
+import (
+	"os/exec"
+	"syscall"
+)
 
 // Isolator puts each execution in its own kill group.
 type Isolator interface {
@@ -15,6 +18,9 @@ type Group interface {
 	Started(pid int)
 	// Kill sends SIGKILL to every process in the group.
 	Kill() error
+	// Signal sends sig to the process group of the main process (the
+	// session that it leads). Processes that left it do not get sig.
+	Signal(sig syscall.Signal) error
 	// Close releases the group after its processes are gone.
 	Close() error
 }
