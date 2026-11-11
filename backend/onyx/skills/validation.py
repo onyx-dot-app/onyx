@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import io
 import zipfile
 from contextlib import closing
 from dataclasses import dataclass
@@ -18,6 +17,7 @@ from onyx.skills.bundle import (
     STORED_ZIP_MAX_BYTES,
     NormalizedSkillBundle,
     normalize_stored_bundle,
+    open_bundle_zip,
     read_bundle_file,
 )
 from onyx.skills.metadata import parse_skill_document
@@ -119,13 +119,22 @@ def validate_stored_custom_skill(
         )
 
     try:
-        with zipfile.ZipFile(io.BytesIO(normalized.content)) as bundle_zip:
+        with open_bundle_zip(normalized.content) as bundle_zip:
             raw_skill_md = bundle_zip.read(SKILL_MD_NAME)
         document = parse_skill_document(
             raw_skill_md,
             directory_name=normalized.source_directory,
         )
     except (OnyxError, KeyError, zipfile.BadZipFile) as exc:
+        if (
+            isinstance(exc, OnyxError)
+            and exc.error_code == OnyxErrorCode.PAYLOAD_TOO_LARGE
+        ):
+            return SkillValidationResult(
+                is_valid=None,
+                normalized_bundle=None,
+                detail=f"stored bundle is outside the configured limits: {exc.detail}",
+            )
         detail = exc.detail if isinstance(exc, OnyxError) else str(exc)
         return SkillValidationResult(
             is_valid=False,

@@ -11,10 +11,15 @@ from collections.abc import Callable
 from contextlib import ExitStack
 from copy import copy
 from dataclasses import dataclass
+from itertools import pairwise
 from typing import IO, Final, Literal
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_processing.zip_limits import (
+    ZipDirectoryLimitError,
+    open_zip_within_directory_limit,
+)
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.metadata import (
     parse_skill_document,
@@ -33,8 +38,13 @@ DEFAULT_MAX_FILE_COUNT: Final[int] = 500
 # Saved bundles are read up to this many ZIP bytes; before the ZIP limit, uploads
 # were capped at the expanded total.
 STORED_ZIP_MAX_BYTES: Final[int] = DEFAULT_TOTAL_MAX_BYTES
+# A ZIP file list for 500 files fits 1 MiB. Saved bundles had no file limit.
+ZIP_DIRECTORY_MAX_BYTES: Final[int] = 1 * _MIB
+STORED_ZIP_DIRECTORY_MAX_BYTES: Final[int] = 4 * _MIB
 
-SkillBundleLimit = Literal["zip_bytes", "file_count", "file_bytes", "total_bytes"]
+SkillBundleLimit = Literal[
+    "zip_bytes", "zip_metadata_bytes", "file_count", "file_bytes", "total_bytes"
+]
 
 SKILL_MD_NAME: Final[str] = "SKILL.md"
 TEMPLATE_SUFFIX: Final[str] = ".template"
@@ -90,6 +100,19 @@ def read_bundle_file(
     return data
 
 
+def open_bundle_zip(
+    zip_bytes: bytes, max_directory_bytes: int = STORED_ZIP_DIRECTORY_MAX_BYTES
+) -> zipfile.ZipFile:
+    try:
+        return open_zip_within_directory_limit(zip_bytes, max_directory_bytes)
+    except ZipDirectoryLimitError as exc:
+        raise _bundle_limit_error(
+            "zip_metadata_bytes",
+            max_directory_bytes,
+            f"Skill bundle file list exceeds the {max_directory_bytes // _MIB} MiB limit.",
+        ) from exc
+
+
 def _check_bundle_file_count(count: int, max_file_count: int | None) -> None:
     if max_file_count is not None and count > max_file_count:
         raise _bundle_limit_error(
@@ -109,7 +132,7 @@ def strip_skill_md_frontmatter(content: str) -> str:
 
 def inspect_custom_bundle(zip_bytes: bytes) -> CustomSkillBundleContents:
     try:
-        zf = zipfile.ZipFile(io.BytesIO(zip_bytes))
+        zf = open_bundle_zip(zip_bytes)
     except zipfile.BadZipFile as exc:
         raise OnyxError(
             OnyxErrorCode.INTERNAL_ERROR,
@@ -224,7 +247,7 @@ def rewrite_custom_bundle_skill_md(
         )
 
     try:
-        source_zip = zipfile.ZipFile(io.BytesIO(zip_bytes))
+        source_zip = open_bundle_zip(zip_bytes)
     except zipfile.BadZipFile as exc:
         raise OnyxError(
             OnyxErrorCode.INTERNAL_ERROR,
@@ -439,6 +462,7 @@ def normalize_custom_bundle(
     *,
     zip_max_bytes: int | None = DEFAULT_ZIP_MAX_BYTES,
     max_file_count: int | None = DEFAULT_MAX_FILE_COUNT,
+    max_directory_bytes: int = ZIP_DIRECTORY_MAX_BYTES,
     per_file_max_bytes: int = DEFAULT_PER_FILE_MAX_BYTES,
     total_max_bytes: int = DEFAULT_TOTAL_MAX_BYTES,
 ) -> NormalizedSkillBundle:
@@ -455,7 +479,7 @@ def normalize_custom_bundle(
     if zip_max_bytes is not None and len(zip_bytes) > zip_max_bytes:
         raise _zip_too_large_error(zip_max_bytes)
     try:
-        source_zip = zipfile.ZipFile(io.BytesIO(zip_bytes))
+        source_zip = open_bundle_zip(zip_bytes, max_directory_bytes)
     except zipfile.BadZipFile:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "bundle is not a valid zip")
 
@@ -472,6 +496,34 @@ def normalize_custom_bundle(
             _is_ignored_bundle_path(path) for path in file_paths
         )
 
+        wrapper_path_prefix = "" if wrapper_prefix is None else f"{wrapper_prefix}/"
+        # With NUL for "/", a path sorts directly before every path under it, so
+        # neighbors show each conflict without building the set of parent paths.
+        entries: list[tuple[str, bool, str]] = []
+        for info, normalized in normalized_infos:
+            if (
+                _is_ignored_bundle_path(normalized)
+                or normalized == wrapper_prefix
+                or not normalized.startswith(wrapper_path_prefix)
+            ):
+                continue
+            output_path = normalized.removeprefix(wrapper_path_prefix)
+            entries.append((output_path.replace("/", "\0"), info.is_dir(), output_path))
+        entries.sort()
+        for (key, is_dir, _), (next_key, next_is_dir, next_path) in pairwise(entries):
+            if key == next_key and not is_dir and not next_is_dir:
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    f"bundle contains duplicate path '{next_path}'",
+                )
+            if (key == next_key and is_dir != next_is_dir) or (
+                not is_dir and next_key.startswith(f"{key}\0")
+            ):
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    f"bundle contains conflicting path '{next_path}'",
+                )
+
         output = io.BytesIO()
         target_zip = (
             zipfile.ZipFile(output, mode="w", compression=zipfile.ZIP_DEFLATED)
@@ -479,57 +531,13 @@ def normalize_custom_bundle(
             else None
         )
         total = 0
-        output_paths: set[str] = set()
-        output_directory_paths: set[str] = set()
         saw_skill_md = False
-
-        for info, normalized in normalized_infos:
-            if not info.is_dir() or _is_ignored_bundle_path(normalized):
-                continue
-
-            output_directory_path = normalized
-            if wrapper_prefix is not None:
-                if normalized == wrapper_prefix:
-                    continue
-                wrapper_path_prefix = f"{wrapper_prefix}/"
-                if not normalized.startswith(wrapper_path_prefix):
-                    continue
-                output_directory_path = normalized.removeprefix(wrapper_path_prefix)
-
-            directory_parts = output_directory_path.split("/")
-            output_directory_paths.add(output_directory_path)
-            output_directory_paths.update(
-                "/".join(directory_parts[:index])
-                for index in range(1, len(directory_parts))
-            )
-
         try:
             for info, normalized in normalized_infos:
                 if info.is_dir() or _is_ignored_bundle_path(normalized):
                     continue
 
-                output_path = normalized
-                if wrapper_prefix is not None:
-                    output_path = normalized.removeprefix(f"{wrapper_prefix}/")
-
-                if output_path in output_paths:
-                    raise OnyxError(
-                        OnyxErrorCode.INVALID_INPUT,
-                        f"bundle contains duplicate path '{output_path}'",
-                    )
-                path_parts = output_path.split("/")
-                parent_paths = {
-                    "/".join(path_parts[:index]) for index in range(1, len(path_parts))
-                }
-                if output_path in output_directory_paths or output_paths.intersection(
-                    parent_paths
-                ):
-                    raise OnyxError(
-                        OnyxErrorCode.INVALID_INPUT,
-                        f"bundle contains conflicting path '{output_path}'",
-                    )
-                output_paths.add(output_path)
-                output_directory_paths.update(parent_paths)
+                output_path = normalized.removeprefix(wrapper_path_prefix)
 
                 if output_path.endswith(TEMPLATE_SUFFIX):
                     raise OnyxError(
@@ -582,7 +590,10 @@ def normalize_stored_bundle(zip_bytes: bytes) -> NormalizedSkillBundle:
     the ZIP must fit the stored-read limit so it can be loaded again.
     """
     return normalize_custom_bundle(
-        zip_bytes, zip_max_bytes=STORED_ZIP_MAX_BYTES, max_file_count=None
+        zip_bytes,
+        zip_max_bytes=STORED_ZIP_MAX_BYTES,
+        max_file_count=None,
+        max_directory_bytes=STORED_ZIP_DIRECTORY_MAX_BYTES,
     )
 
 
@@ -636,7 +647,7 @@ def update_custom_bundle_files(
             )
             try:
                 upload_zip = archives.enter_context(
-                    zipfile.ZipFile(io.BytesIO(upload_archive_bytes))
+                    open_bundle_zip(upload_archive_bytes, ZIP_DIRECTORY_MAX_BYTES)
                 )
             except zipfile.BadZipFile as exc:
                 raise OnyxError(
@@ -693,9 +704,7 @@ def update_custom_bundle_files(
             else existing_zip_bytes()
         )
         try:
-            existing_zip = archives.enter_context(
-                zipfile.ZipFile(io.BytesIO(existing_bytes))
-            )
+            existing_zip = archives.enter_context(open_bundle_zip(existing_bytes))
         except zipfile.BadZipFile as exc:
             raise OnyxError(
                 OnyxErrorCode.INTERNAL_ERROR,

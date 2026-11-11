@@ -1,5 +1,3 @@
-import io
-import zipfile
 from collections.abc import Callable
 from typing import Annotated, NamedTuple
 from uuid import UUID
@@ -82,6 +80,7 @@ from onyx.skills.bundle import (
     compute_bundle_sha256,
     inspect_custom_bundle,
     normalize_custom_bundle,
+    open_bundle_zip,
     read_bundle_file,
     read_custom_bundle_instructions,
     rewrite_custom_bundle_skill_md,
@@ -674,7 +673,7 @@ def inspect_custom_skill_bundle_upload(
         )
 
     normalized = normalize_custom_bundle(upload_bytes)
-    with zipfile.ZipFile(io.BytesIO(normalized.content)) as bundle_zip:
+    with open_bundle_zip(normalized.content) as bundle_zip:
         document = parse_skill_document(
             bundle_zip.read(SKILL_MD_NAME),
             directory_name=normalized.source_directory,

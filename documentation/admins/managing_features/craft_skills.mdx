@@ -144,7 +144,8 @@ Standalone files use the per-file limit before compression.
 Each Skill from a GitHub repository must also pass these limits.
 Single-bundle uploads over a limit return HTTP 413 with `limit` and `limit_value`.
 Batch uploads and GitHub imports can return HTTP 200 with rejected Skills in `not_imported`,
-with a `reason` for each refusal. Skills saved before the ZIP-size and file-count limits keep working.
+with a `reason` for each refusal. The ZIP file list (the names and metadata of all entries) must fit in 1 MiB.
+Skills saved before the ZIP-size and file-count limits keep working if their file list fits in 4 MiB.
 You can edit their description and instructions and remove their files.
 Adding files or replacing the bundle applies the limits.
 

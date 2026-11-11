@@ -276,6 +276,21 @@ The library preview of an external-app skill calls the same renderer
     limits, so repeated merges cannot pass them. A full-replacement upload in the
     editor does not read the current bundle. Only direct uploads return 413. Batch uploads report
     `not_imported` and GitHub previews mark the Skill unavailable.
+18. `bundle-file-list-memory` **ZIP metadata memory has a fixed bound.**
+    Every Skill ZIP opens through `skills/bundle.py:open_bundle_zip`, which uses
+    `file_processing/zip_limits.py:open_zip_within_directory_limit`. `zipfile`
+    keeps one `ZipInfo` (about 550 bytes) for each file-list record, so a small
+    ZIP with many empty entries can use hundreds of MiB. The opener limits the
+    bytes `zipfile` reads while it opens: 1 MiB of file list for uploads
+    (`ZIP_DIRECTORY_MAX_BYTES`) and 4 MiB for saved bundles
+    (`STORED_ZIP_DIRECTORY_MAX_BYTES`). Over the limit is a 413
+    `zip_metadata_bytes`. `normalize_custom_bundle` finds duplicate and
+    file-versus-folder paths by sorting the paths, not by building every parent
+    path. `skills/push.py:_add_bundle_bytes` skips a Skill whose declared file
+    sizes would take the push over the receiver's `MAX_BUNDLE_BYTES`, before it
+    reads the files. It also checks the resolved SKILL.md size then, so a
+    Skill that `skill-dir-placeholder` would drop never counts against later
+    Skills.
 
 ---
 

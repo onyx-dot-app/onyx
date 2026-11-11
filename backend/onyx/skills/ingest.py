@@ -1,5 +1,4 @@
 import io
-import zipfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import NamedTuple
@@ -15,6 +14,7 @@ from onyx.skills.bundle import (
     compute_bundle_sha256,
     normalize_custom_bundle,
     normalize_stored_bundle,
+    open_bundle_zip,
 )
 from onyx.skills.metadata import parse_skill_document
 from onyx.utils.logger import setup_logger
@@ -74,7 +74,7 @@ def ingest_skill_bundle(
         if upload_limits
         else normalize_stored_bundle(bundle_bytes)
     )
-    with zipfile.ZipFile(io.BytesIO(normalized.content)) as bundle_zip:
+    with open_bundle_zip(normalized.content) as bundle_zip:
         raw_skill_md = bundle_zip.read(SKILL_MD_NAME)
     document = parse_skill_document(
         raw_skill_md,

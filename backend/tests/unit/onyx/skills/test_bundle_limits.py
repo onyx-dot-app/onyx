@@ -19,6 +19,8 @@ from onyx.file_store.file_store import FileStore
 from onyx.skills import bundle as bundle_module
 from onyx.skills import validation
 from onyx.skills.bundle import (
+    STORED_ZIP_DIRECTORY_MAX_BYTES,
+    ZIP_DIRECTORY_MAX_BYTES,
     SkillBundleLimit,
     normalize_custom_bundle,
     read_bundle_file,
@@ -253,6 +255,48 @@ def test_merge_reads_existing_bundle_once() -> None:
     existing.assert_called_once_with()
     with zipfile.ZipFile(io.BytesIO(updated)) as archive:
         assert sorted(archive.namelist()) == ["SKILL.md", "a.md"]
+
+
+def _many_entries(count: int, name_bytes: int) -> bytes:
+    return _build_zip(
+        [("SKILL.md", _SKILL_MD)]
+        + [(f"refs/{index:06d}".ljust(name_bytes, "n"), b"") for index in range(count)],
+        compression=zipfile.ZIP_STORED,
+    )
+
+
+def test_upload_with_large_file_list_is_refused_before_entries_are_read() -> None:
+    upload = _many_entries(60_000, 1)
+
+    with pytest.raises(OnyxError) as caught:
+        normalize_custom_bundle(upload)
+
+    _assert_limit_error(caught.value, "zip_metadata_bytes", ZIP_DIRECTORY_MAX_BYTES)
+
+
+def test_saved_bundle_over_the_upload_file_list_limit_still_loads() -> None:
+    stored = _many_entries(15_000, 60)
+    file_store = MagicMock(spec=FileStore)
+    file_store.read_file.return_value = io.BytesIO(stored)
+
+    with pytest.raises(OnyxError):
+        normalize_custom_bundle(stored)
+    normalized = validation.load_stored_custom_skill_bundle("id", file_store)
+
+    assert normalized.content == stored
+
+
+def test_saved_bundle_file_list_has_its_own_limit() -> None:
+    stored = _many_entries(80_000, 60)
+    file_store = MagicMock(spec=FileStore)
+    file_store.read_file.return_value = io.BytesIO(stored)
+
+    with pytest.raises(OnyxError) as caught:
+        validation.load_stored_custom_skill_bundle("id", file_store)
+
+    _assert_limit_error(
+        caught.value, "zip_metadata_bytes", STORED_ZIP_DIRECTORY_MAX_BYTES
+    )
 
 
 def _saved_bundle_over_file_count() -> bytes:
