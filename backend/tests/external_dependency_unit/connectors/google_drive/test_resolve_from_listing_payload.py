@@ -4,8 +4,6 @@ documents as today's checkpointed load, with no files.get calls."""
 import time
 from typing import Any
 
-import pytest
-
 from onyx.connectors.google_drive import doc_conversion
 from onyx.connectors.google_drive.models import DriveListingPayload
 from onyx.connectors.models import (
@@ -55,8 +53,10 @@ def _files_get_calls(mock_drive: MockDrive) -> int:
     return int(ops.get("drive.files.get", {}).get("count", 0))
 
 
-@pytest.mark.usefixtures("listing_mode")
-def test_payload_conversion_matches_reindex(mock_drive: MockDrive) -> None:
+def test_payload_conversion_matches_reindex(
+    mock_drive: MockDrive,
+    listing_mode: str,  # noqa: F811
+) -> None:
     connector = mock_drive.build_connector()
     listing = list_with_resume(connector)
     assert listing.stubs
@@ -73,7 +73,17 @@ def test_payload_conversion_matches_reindex(mock_drive: MockDrive) -> None:
     doc_conversion._folder_cache.clear()
     mock_drive.reset_stats()
     from_payload = list(connector.resolve_targets(targets))
-    assert _files_get_calls(mock_drive) == 0
+    if listing_mode == "parallel":
+        # The listing returned each folder, so each stub has its folder path.
+        assert all(
+            isinstance(t.listing_payload, DriveListingPayload)
+            and t.listing_payload.folder_path
+            for t in targets
+        )
+        assert _files_get_calls(mock_drive) == 0
+    else:
+        # The serial listing lists no folders. Conversion builds the paths.
+        assert _files_get_calls(mock_drive) > 0
 
     doc_conversion._folder_cache.clear()
     today = _load_documents(mock_drive)
@@ -84,3 +94,27 @@ def test_payload_conversion_matches_reindex(mock_drive: MockDrive) -> None:
     assert _summary([d for d in from_payload if isinstance(d, Document)]) == _summary(
         today
     )
+
+
+def test_shared_drive_stubs_name_the_drive_members_as_readers(
+    mock_drive: MockDrive,
+) -> None:
+    """Any member of a shared drive can read its files. The stub names them,
+    so conversion can spread its reads over them."""
+    listing = list_with_resume(mock_drive.build_connector())
+    state = listing.checkpoints[-1].listing
+    assert state is not None
+    assert any(state.drive_member_emails.values())
+
+    checked = 0
+    for stub in listing.stubs:
+        payload = stub.listing_payload
+        assert isinstance(payload, DriveListingPayload)
+        drive_id = (payload.drive_file or {}).get("driveId")
+        members = state.drive_member_emails.get(drive_id, []) if drive_id else []
+        others = {m for m in members if m.lower() != payload.retriever_email.lower()}
+        if others:
+            checked += 1
+            assert others <= set(payload.reader_emails)
+            assert payload.retriever_email not in payload.reader_emails
+    assert checked > 0
