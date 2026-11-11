@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import io
 import zipfile
 from dataclasses import dataclass
 from typing import Final
@@ -15,11 +14,11 @@ from onyx.file_store.file_store import FileStore
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.bundle import (
     DEFAULT_STORED_ZIP_MAX_BYTES,
-    SKILL_MD_NAME,
     NormalizedSkillBundle,
     check_stored_zip_size,
     normalize_custom_bundle,
     read_bundle_file,
+    read_bundle_skill_md,
 )
 from onyx.skills.metadata import parse_skill_document
 from onyx.skills.models import SKILL_NAME_PATTERN
@@ -64,7 +63,7 @@ def load_stored_custom_skill_bundle(
 ) -> NormalizedSkillBundle:
     bundle_bytes = read_stored_bundle_bytes(bundle_file_id, file_store)
     return normalize_custom_bundle(
-        bundle_bytes, zip_max_bytes=None, max_file_count=None
+        bundle_bytes, zip_max_bytes=None, max_file_count=None, stored_read=True
     )
 
 
@@ -141,13 +140,20 @@ def validate_stored_custom_skill(
         )
 
     try:
-        with zipfile.ZipFile(io.BytesIO(normalized.content)) as bundle_zip:
-            raw_skill_md = bundle_zip.read(SKILL_MD_NAME)
         document = parse_skill_document(
-            raw_skill_md,
+            read_bundle_skill_md(normalized.content),
             directory_name=normalized.source_directory,
         )
     except (OnyxError, KeyError, zipfile.BadZipFile) as exc:
+        if (
+            isinstance(exc, OnyxError)
+            and exc.error_code == OnyxErrorCode.SERVICE_UNAVAILABLE
+        ):
+            return SkillValidationResult(
+                is_valid=None,
+                normalized_bundle=None,
+                detail=f"stored bundle could not be read: {exc.detail}",
+            )
         detail = exc.detail if isinstance(exc, OnyxError) else str(exc)
         return SkillValidationResult(
             is_valid=False,

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import io
 import json
+import struct
+import zipfile
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import MagicMock, patch
@@ -19,14 +21,16 @@ from onyx.db.enums import (
     SkillInstallationPolicy,
     SkillSharePermission,
 )
-from onyx.db.models import User, UserSkillPreference
+from onyx.db.models import Skill, User, UserSkillPreference
 from onyx.db.skill import set_skill_enabled_for_user, skill_user_states
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.skill.api import (
     create_custom_skill,
     create_custom_skill_from_editor,
     delete_current_user_skill,
+    fetch_custom_skill_for_edit,
     fetch_custom_skill_sharing,
     fetch_skill_for_current_user,
     patch_current_user_skill,
@@ -41,7 +45,14 @@ from onyx.server.features.skill.models import (
     SkillPatchRequest,
     SkillShareRequest,
 )
-from onyx.skills.bundle import SKILL_MD_NAME, build_single_file_bundle, build_skill_md
+from onyx.skills.bundle import (
+    SKILL_MD_NAME,
+    build_single_file_bundle,
+    build_skill_md,
+    compute_bundle_sha256,
+)
+from onyx.skills.ingest import save_skill_bundle_bytes
+from onyx.skills.validation import validate_stored_custom_skill
 from tests.external_dependency_unit.craft.db_helpers import (
     add_user_to_group,
     make_external_app,
@@ -687,3 +698,100 @@ def test_full_replacement_upload_does_not_read_current_bundle(
     current_read.assert_not_called()
     editable_response.assert_called_once()
     assert editable_response.call_args.args[0].description == "New"
+
+
+def _create_owned_skill(db_session: Session, prefix: str) -> tuple[User, Skill, bytes]:
+    owner = make_user(db_session, standard_account=True)
+    name = f"{prefix}-{uuid4().hex[:8]}"
+    skill_md = build_skill_md(
+        name=name, description="Legacy", instructions_markdown="Do it."
+    ).encode("utf-8")
+    created = create_custom_skill(
+        bundle=_upload(
+            f"{name}.zip", build_single_file_bundle(SKILL_MD_NAME, skill_md)
+        ),
+        auto_enable=False,
+        user=owner,
+        db_session=db_session,
+    )
+    skill = db_session.get(Skill, created.id)
+    assert skill is not None
+    return owner, skill, skill_md
+
+
+def _store_legacy_bundle(db_session: Session, skill: Skill, content: bytes) -> None:
+    skill.bundle_file_id = save_skill_bundle_bytes(
+        content, display_name="legacy.zip", file_store=get_default_file_store()
+    )
+    skill.bundle_sha256 = compute_bundle_sha256(content)
+    skill.is_valid = None
+    db_session.commit()
+
+
+@pytest.mark.parametrize("wrapped", [False, True])
+def test_legacy_large_central_directory_stays_readable(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+    wrapped: bool,
+) -> None:
+    owner, skill, skill_md = _create_owned_skill(db_session, "legacy-directory")
+    # Fewer than 100 files, but long extra fields, comments and folders make
+    # the central directory larger than 4 MiB.
+    prefix = f"{skill.name}/" if wrapped else ""
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w") as archive:
+        archive.writestr(zipfile.ZipInfo(f"{prefix}SKILL.md"), skill_md)
+        for index in range(90):
+            info = zipfile.ZipInfo(f"{prefix}refs/{index}.md")
+            info.extra = struct.pack("<HH", 0xCAFE, 50_000) + bytes(50_000)
+            info.comment = b"c" * 1000
+            archive.writestr(info, b"x")
+        for index in range(10_000):
+            archive.writestr(zipfile.ZipInfo(f"{prefix}folders/{index}/"), b"")
+    content = output.getvalue()
+    assert int.from_bytes(content[-10:-6], "little") > 4 * 1024 * 1024
+    _store_legacy_bundle(db_session, skill, content)
+
+    if not wrapped:
+        # The editor reads root SKILL.md, so it has never opened wrapped bundles.
+        editable = fetch_custom_skill_for_edit(skill.id, owner, db_session)
+        assert len(editable.files) == 90
+    validation = validate_stored_custom_skill(skill, get_default_file_store())
+    assert validation.is_valid is True and validation.normalized_bundle is not None
+    if not wrapped:
+        assert validation.normalized_bundle == content
+
+
+def test_edits_keep_legacy_paths_over_the_write_caps(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+) -> None:
+    owner, skill, skill_md = _create_owned_skill(db_session, "legacy-long-path")
+    long_path = f"refs/{'s' * 300}.md"
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w") as archive:
+        archive.writestr("SKILL.md", skill_md)
+        archive.writestr(long_path, b"x")
+    _store_legacy_bundle(db_session, skill, output.getvalue())
+
+    patch_current_user_skill(
+        skill.id, SkillPatchRequest(description="Edited"), owner, db_session
+    )
+    db_session.refresh(skill)
+    assert skill.description == "Edited"
+    editable = fetch_custom_skill_for_edit(skill.id, owner, db_session)
+    assert long_path in [file.path for file in editable.files]
+
+    added = upload_current_user_skill_files(
+        skill.id, _upload("notes.md", b"x"), owner, db_session
+    )
+    assert {long_path, "notes.md"} <= {file.path for file in added.files}
+
+    with pytest.raises(OnyxError) as caught:
+        upload_current_user_skill_files(
+            skill.id, _upload(f"{'t' * 300}.md", b"x"), owner, db_session
+        )
+    assert caught.value.error_code == OnyxErrorCode.INVALID_INPUT
+
+    edited = remove_current_user_skill_file(skill.id, long_path, owner, db_session)
+    assert long_path not in [file.path for file in edited.files]

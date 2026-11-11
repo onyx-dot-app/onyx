@@ -1,5 +1,3 @@
-import io
-import zipfile
 from collections.abc import Callable
 from typing import Annotated, NamedTuple
 from uuid import UUID
@@ -76,6 +74,7 @@ from onyx.server.features.skill.response_helpers import (
     skills_list_response_for_user,
 )
 from onyx.skills.bundle import (
+    EVERY_PATH,
     SKILL_MD_NAME,
     build_single_file_bundle,
     build_skill_md,
@@ -83,6 +82,7 @@ from onyx.skills.bundle import (
     inspect_custom_bundle,
     normalize_custom_bundle,
     read_bundle_file,
+    read_bundle_skill_md,
     read_custom_bundle_instructions,
     rewrite_custom_bundle_skill_md,
     update_custom_bundle_files,
@@ -239,13 +239,18 @@ def _replace_skill_bundle_from_editor(
     bundle_bytes: bytes,
     user: User,
     db_session: Session,
+    *,
+    edited: bool = False,
 ) -> SkillEditableDetailResponse:
+    """``edited`` marks bundles from update_custom_bundle_files, which already
+    applied the path caps to the paths the edit added."""
     file_store = get_default_file_store()
     with ingested_skill_bundle(
         bundle_bytes,
         f"{skill.name}.zip",
         file_store,
         expected_name=skill.name,
+        uncapped_paths=EVERY_PATH if edited else None,
     ) as ingested:
         old_file_id = replace_skill_bundle(
             skill=skill,
@@ -672,11 +677,10 @@ def inspect_custom_skill_bundle_upload(
         )
 
     normalized = normalize_custom_bundle(upload_bytes)
-    with zipfile.ZipFile(io.BytesIO(normalized.content)) as bundle_zip:
-        document = parse_skill_document(
-            bundle_zip.read(SKILL_MD_NAME),
-            directory_name=normalized.source_directory,
-        )
+    document = parse_skill_document(
+        read_bundle_skill_md(normalized.content),
+        directory_name=normalized.source_directory,
+    )
     contents = inspect_custom_bundle(normalized.content)
     return SkillBundleInspectResponse(
         name=document.metadata.name,
@@ -754,7 +758,7 @@ def upload_current_user_skill_files(
         filename=upload.filename,
     )
     return _replace_skill_bundle_from_editor(
-        skill, updated_bundle_bytes, user, db_session
+        skill, updated_bundle_bytes, user, db_session, edited=True
     )
 
 
@@ -782,7 +786,7 @@ def remove_current_user_skill_file(
         remove_path=path,
     )
     return _replace_skill_bundle_from_editor(
-        skill, updated_bundle_bytes, user, db_session
+        skill, updated_bundle_bytes, user, db_session, edited=True
     )
 
 

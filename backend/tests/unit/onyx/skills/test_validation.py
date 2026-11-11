@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import os
+import sqlite3
 import zipfile
 from types import SimpleNamespace
 from typing import cast
@@ -15,7 +16,7 @@ from onyx.db.models import Skill
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
 from onyx.skills import bundle, validation
-from onyx.skills.bundle import normalize_custom_bundle
+from onyx.skills.bundle import NormalizedSkillBundle, normalize_custom_bundle
 from onyx.skills.validation import validate_stored_custom_skill
 
 
@@ -88,6 +89,24 @@ def test_transient_bundle_read_remains_unclassified() -> None:
     file_store.read_file.side_effect = TimeoutError("temporary outage")
 
     result = validate_stored_custom_skill(_skill(), file_store)
+
+    assert result.is_valid is None
+    assert result.normalized_bundle is None
+
+
+def test_temporary_storage_error_reading_skill_md_remains_unclassified(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def loaded(*_args: object) -> NormalizedSkillBundle:
+        return NormalizedSkillBundle(content=b"zip", source_directory=None)
+
+    def full(*_args: object, **_kwargs: object) -> None:
+        raise sqlite3.OperationalError("database or disk is full")
+
+    monkeypatch.setattr(validation, "load_stored_custom_skill_bundle", loaded)
+    monkeypatch.setattr(bundle, "ZipIndex", full)
+
+    result = validate_stored_custom_skill(_skill(), MagicMock(spec=FileStore))
 
     assert result.is_valid is None
     assert result.normalized_bundle is None

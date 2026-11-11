@@ -196,6 +196,17 @@ def test_read_bundle_file_refuses_26_mib_upload() -> None:
     _assert_limit_error(exc_info.value, "zip_bytes", 25 * _MIB)
 
 
+@pytest.mark.parametrize(
+    ("limit", "label"),
+    [(1024, "1,024 bytes"), (_MIB + 1, "1,048,577 bytes"), (_MIB, "1 MiB")],
+)
+def test_zip_refusal_reports_exact_configured_limit(limit: int, label: str) -> None:
+    with pytest.raises(OnyxError) as caught:
+        read_bundle_file(io.BytesIO(b"x" * (limit + 1)), max_bytes=limit)
+    _assert_limit_error(caught.value, "zip_bytes", limit)
+    assert caught.value.detail == f"Skill bundle zip exceeds the {label} limit."
+
+
 def test_read_bundle_file_accepts_upload_at_limit() -> None:
     assert len(read_bundle_file(io.BytesIO(b"\x00" * (25 * _MIB)))) == 25 * _MIB
 
@@ -335,8 +346,9 @@ def test_skipped_limits_allow_bundles_saved_before_them() -> None:
         [("SKILL.md", _SKILL_MD)] + [(f"refs/{index}.md", b"x") for index in range(600)]
     )
 
-    with pytest.raises(OnyxError):
-        normalize_custom_bundle(zip_bytes)
+    with pytest.raises(OnyxError) as caught:
+        normalize_custom_bundle(zip_bytes, max_file_count=500)
+    _assert_limit_error(caught.value, "file_count", 500)
     normalize_custom_bundle(zip_bytes, zip_max_bytes=None, max_file_count=None)
 
 

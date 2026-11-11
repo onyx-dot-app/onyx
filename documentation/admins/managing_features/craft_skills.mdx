@@ -133,6 +133,7 @@ Craft skips that Skill and logs a warning. The saved bundle stays unchanged. Oth
 | Root instructions   | One UTF-8 `SKILL.md` with valid YAML frontmatter at the Skill root.                                                                         |
 | Skills per ZIP      | One. Select multiple ZIP files to import a batch.                                                                                            |
 | Maximum ZIP size    | 25 MiB for the ZIP file.                                                                                                                     |
+| ZIP file-list size  | 1 MiB, including entry names, extra fields and comments. It is 2 KiB per allowed file if that is larger. |
 | Maximum file count  | 500 files. Folders do not count.                                                                                                            |
 | Maximum file size   | 25 MiB per file in the extracted bundle.                                                                                                     |
 | Maximum bundle size | 100 MiB total in the extracted bundle.                                                                                                       |
@@ -153,13 +154,15 @@ the allowance is the larger of 100 MiB and the expanded-total limit, plus space 
 Keep this allowance large enough for your existing bundles when you lower upload limits.
 If you previously allowed ZIPs above this default, set this allowance before upgrading.
 A saved bundle above this allowance returns a 413 read-limit error. Raise the allowance to read it.
-Onyx applies the limits when you save the Skill again.
+Stored reads have no file-list size limit. Onyx applies the current upload limits when you save the Skill again.
 
 Self-hosted operators can change the limits with `SKILL_BUNDLE_ZIP_MAX_BYTES`, `SKILL_BUNDLE_MAX_FILE_COUNT`,
 `SKILL_BUNDLE_PER_FILE_MAX_BYTES` and `SKILL_BUNDLE_TOTAL_MAX_BYTES`. If your reverse proxy sets a request size limit,
-allow space for the bundle and multipart form data.
+allow space for the bundle and multipart form data. The ZIP file-list limit follows `SKILL_BUNDLE_MAX_FILE_COUNT`.
+For example, 2000 files allow a 4,096,000-byte file list.
 The effective upload ZIP limit cannot exceed the stored ZIP allowance. To accept larger ZIPs,
 raise both `SKILL_BUNDLE_ZIP_MAX_BYTES` and `SKILL_BUNDLE_STORED_ZIP_MAX_BYTES`.
+ZIP size errors show the exact configured limit. Values that are not whole MiB are shown in bytes.
 Each of these five settings must be a positive integer. If a setting has a different value,
 Onyx logs an error and disables custom Skill bundles until you correct the value. Single-bundle uploads, edits,
 GitHub previews and imports, and stored-bundle reads return HTTP 503.
@@ -169,7 +172,12 @@ They load these Skills again after you correct the settings.
 
 The upload is rejected when the bundle has unsafe paths, symbolic links, files ending in `.template`,
 missing or invalid frontmatter, an invalid slug source, a duplicate Skill slug,
-or a slug reserved by a built-in Skill or App.
+or a slug reserved by a built-in Skill or App. Each path in the bundle can have at most 4096 bytes,
+255 bytes in each folder or file name, and 64 levels. Saved Skills that exceed these limits still load,
+and you can still edit them. An edit applies these limits only to the files that it adds,
+and you can delete a file that exceeds them. A full bundle replacement applies them to every path.
+A saved Skill has a separate 256 MiB read limit for folder paths. Onyx counts the parent folders of each file.
+A saved Skill over this limit returns HTTP 413 and Craft skips it.
 
 ## Review a Skill before publishing
 
