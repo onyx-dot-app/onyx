@@ -24,7 +24,8 @@ pattern with a fence.
   [[#task-kwargs-defaults]] and [[multi-tenancy#celery-task-tenant-kwarg]].
 - **Components that run their flows here:** [[indexing-pipeline]],
   [[permission-sync]], [[document-index]], [[file-store-and-user-files]],
-  [[connector-capability-checks]] and [[craft-scheduled-tasks]]. They rely on
+  [[connector-capability-checks]], [[craft-scheduled-tasks]] and [[skills]]
+  (orphan bundle cleanup). They rely on
   the tenant context, the ack mode and the signal handlers, and keep
   [[#idempotent-tasks]] and [[#no-session-across-external-call]].
 - **[[cc-pairs-and-creds]]** starts pruning and connector deletion from the
@@ -65,7 +66,7 @@ workers use thread pools.
 
 **Where Celery does not run.** The Helm chart with `vectorDB.enabled` off and
 the Lite compose overlay start no Celery. There, a poller in the API server runs
-user-file recovery and a few periodic tasks
+user-file recovery, orphan skill bundle cleanup, and other periodic tasks
 (`background/periodic_poller.py:start_periodic_poller`). Celery runs with
 `DISABLE_VECTOR_DB` only when an operator starts workers with the flag set
 ([[#vector-db-beat-tasks]]). A worker that is down or a queue that is backed up

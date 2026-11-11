@@ -252,9 +252,8 @@ The library preview of an external-app skill calls the same renderer
     `db/skill_version.py:write_skill_version`. A row lock serializes
     version numbers. The version, pointer and legacy columns change in one
     transaction. Every save and upload adds a version, also when its content
-    is equal to the current version; there is no content digest. Replacement
-    never deletes a historical bundle. Cleanup of staged, unused blobs stays
-    with ingestion and the caller.
+    is equal to the current version; there is no content digest. See
+    [[#bundle-retention]] for which bundle files stay.
     Legacy columns remain authoritative during rollout. A save repairs a stale
     or missing pointer before writing its new content. A recovery snapshot has
     no creator; a user content change follows it. Runtime classification updates
@@ -306,6 +305,29 @@ The library preview of an external-app skill calls the same renderer
     `SKILL_BUNDLE_STORED_ZIP_MAX_BYTES` wins. The upload ZIP limit is capped at
     the allowance. Only direct uploads return 413; batch uploads report
     `not_imported` and GitHub previews mark the Skill unavailable.
+18. `bundle-retention` **Every version row stays; retained files follow `BUNDLES_KEPT`.**
+    Under the version lock, `db/skill_version.py:prune_skill_bundles`
+    empties `bundle_file_id` on versions older than the retention cutoff (never the
+    current one). Writers and skill delete return file ids; callers delete them
+    after commit with `db/skill_version.py:delete_unreferenced_skill_bundles`,
+    which keeps any file that a version row or the legacy
+    `Skill.bundle_file_id` still uses. Old writers and pointerless skills use
+    only the legacy column, so a cleanup that checks only versions deletes
+    live bundles. The hourly `check_for_orphan_skill_bundle_cleanup` task runs
+    on the primary queue with a 300-second soft time limit and uses
+    the configured tenant-scoped cache lock. It retries failed deletes and
+    removes `SKILL_BUNDLE` files older than `ORPHAN_BUNDLE_MIN_AGE` that nothing uses.
+    Lite runs the same cleanup through `background/periodic_poller.py`.
+    A pass stops between files after 30 seconds or 500 candidates. The cursor
+    advances only past attempted files. One storage call can exceed the deadline.
+    The cleanup renews its lease around each file deletion and before cursor writes;
+    losing the lease stops the pass without advancing its cursor.
+    A durable cursor advances past failed files within a fixed scan boundary,
+    then wraps. New arrivals cannot postpone retries of earlier failures.
+    An upload saves its file before its row commits, so
+    a younger file can be live. A version preview or restore must treat a
+    pruned bundle as gone, also when pruning wins a race. A restore that
+    copies an old version must read it under the version lock.
 
 ---
 

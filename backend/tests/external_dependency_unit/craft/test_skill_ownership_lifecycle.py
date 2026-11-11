@@ -18,8 +18,31 @@ from onyx.db.users import delete_user_from_db__no_commit
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.manage.models import UserByEmail
+from onyx.server.manage.users import delete_user
 from shared_configs.contextvars import get_current_tenant_id
 from tests.external_dependency_unit.craft.db_helpers import make_skill, make_user
+
+
+@pytest.mark.asyncio
+async def test_admin_delete_preserves_private_skill_conflict(
+    db_session: Session,
+) -> None:
+    admin = make_user(db_session, is_admin=True)
+    owner = make_user(db_session, standard_account=True)
+    skill = make_skill(db_session, author_user_id=owner.id)
+    owner.is_active = False
+    db_session.commit()
+    owner_id, skill_id = owner.id, skill.id
+
+    with patch("onyx.server.manage.users.fetch_ee_implementation_or_noop"):
+        with pytest.raises(OnyxError) as exc:
+            await delete_user(UserByEmail(user_email=owner.email), admin, db_session)
+
+    assert exc.value.error_code == OnyxErrorCode.CONFLICT
+    assert db_session.get(User, owner_id) is not None
+    db_session.refresh(skill)
+    assert skill.id == skill_id
+    assert skill.author_user_id == owner_id
 
 
 def test_owner_must_transfer_private_skills_before_deletion(
