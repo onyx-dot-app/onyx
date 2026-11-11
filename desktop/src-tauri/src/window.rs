@@ -172,22 +172,30 @@ pub fn open_docs(app: &AppHandle) {
     }
 }
 
-/// The bundled settings page (`index.html`). Tauri serves the app pages from
+/// The origin that serves the bundled pages (`index.html`). Tauri uses
 /// `tauri://localhost`, but `WebView2` on Windows needs
 /// `http(s)://tauri.localhost`. Tauri does not expose this origin, so this
-/// copies its rule. The origin that a window shows at startup is not a safe
-/// source: on Windows it can still be `about:blank`.
+/// copies its rule. `windows` is a parameter so tests can cover both rules.
+const fn app_origin(windows: bool, use_https_scheme: bool) -> &'static str {
+    match (windows, use_https_scheme) {
+        (true, true) => "https://tauri.localhost",
+        (true, false) => "http://tauri.localhost",
+        (false, _) => "tauri://localhost",
+    }
+}
+
+/// The bundled settings page. The origin that a window shows at startup is
+/// not a safe source: on Windows it can still be `about:blank`.
 fn settings_url(use_https_scheme: bool) -> Result<Url, url::ParseError> {
-    let origin = if cfg!(target_os = "windows") {
-        if use_https_scheme {
-            "https://tauri.localhost"
-        } else {
-            "http://tauri.localhost"
-        }
-    } else {
-        "tauri://localhost"
-    };
+    let origin = app_origin(cfg!(target_os = "windows"), use_https_scheme);
     Url::parse(&format!("{origin}/#settings"))
+}
+
+/// True for a page that the app itself serves, such as Settings.
+fn is_app_origin_url(url: &Url, windows: bool) -> bool {
+    [false, true].into_iter().any(|https| {
+        Url::parse(app_origin(windows, https)).is_ok_and(|origin| same_origin(&origin, url))
+    })
 }
 
 fn navigate_to_settings(app: &AppHandle, window: &WebviewWindow) {
@@ -224,7 +232,16 @@ pub fn is_chat_session_url(url: &Url) -> bool {
 }
 
 pub fn should_open_in_external_browser(current_url: &Url, destination_url: &Url) -> bool {
-    if !is_chat_session_url(current_url) {
+    should_open_in_external_browser_on(current_url, destination_url, cfg!(target_os = "windows"))
+}
+
+fn should_open_in_external_browser_on(
+    current_url: &Url,
+    destination_url: &Url,
+    windows: bool,
+) -> bool {
+    // On Windows the Settings page is an `http` URL on another origin.
+    if !is_chat_session_url(current_url) || is_app_origin_url(destination_url, windows) {
         return false;
     }
 
@@ -546,6 +563,43 @@ mod tests {
                 "https://tauri.localhost/#settings"
             );
         }
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn settings_page_stays_in_the_app_from_a_chat() {
+        let chat = url("https://cloud.onyx.app/app?chatId=123");
+        let external = url("https://example.com");
+
+        for (windows, settings) in [
+            (true, "http://tauri.localhost/#settings"),
+            (true, "https://tauri.localhost/#settings"),
+            (false, "tauri://localhost/#settings"),
+        ] {
+            assert!(!should_open_in_external_browser_on(
+                &chat,
+                &url(settings),
+                windows
+            ));
+            assert!(should_open_in_external_browser_on(
+                &chat, &external, windows
+            ));
+        }
+        // Only the exact app origin is exempt, not other localhost hosts.
+        assert!(should_open_in_external_browser_on(
+            &chat,
+            &url("http://localhost:3000/"),
+            true
+        ));
+        assert!(should_open_in_external_browser_on(
+            &chat,
+            &url("http://tauri.localhost/"),
+            false
+        ));
+        assert!(!should_open_in_external_browser(
+            &chat,
+            &settings_url(false).unwrap()
+        ));
     }
 
     #[test]

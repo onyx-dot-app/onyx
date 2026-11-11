@@ -141,7 +141,9 @@ panel picks up the new session when the user returns.
    a chat.** `should_open_in_external_browser` returns true only when the
    current URL is a chat session (`is_chat_session_url`: `/app` with a
    `chatId`), and then only for `mailto`, `tel` or an `http(s)` link to another
-   origin. This keeps the settings and login flows inside the app.
+   origin. This keeps the settings and login flows inside the app. The app
+   origin (`desktop/src-tauri/src/window.rs:is_app_origin_url`) is exempt, because on Windows the
+   bundled Settings page is an `http://tauri.localhost` URL.
 4. `desktop-popup-routing` **Script popups stay in the app; plain links go to
    the browser.** `desktop/src-tauri/src/window.rs:classify_new_window` opens
    `about:blank`, same-origin pages and popups with size features in an app
