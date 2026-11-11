@@ -22,10 +22,13 @@ class EgnyteFolder(BaseModel):
     name: str
     path: str
     folder_id: str
+    # None for the domain root.
+    parent_id: str | None = None
 
 
 class EgnyteFolderPage(BaseModel):
-    """One page of a folder's direct children."""
+    """One page of a folder's direct children, with the folder itself."""
 
+    folder: EgnyteFolder
     folders: list[EgnyteFolder]
     files: list[EgnyteFile]

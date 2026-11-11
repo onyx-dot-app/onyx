@@ -1,8 +1,7 @@
-import io
-import os
 from collections.abc import Generator
 from datetime import datetime, timezone
-from typing import IO, Any
+from io import BytesIO
+from typing import Any
 
 from pydantic import Field
 
@@ -16,25 +15,38 @@ from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_oauth_callback_uri,
 )
-from onyx.connectors.egnyte.models import EgnyteFile
+from onyx.connectors.egnyte.models import EgnyteFile, EgnyteFolder, EgnyteFolderPage
 from onyx.connectors.egnyte.source_operations import (
     EgnyteApiError,
     EgnyteSourceOperations,
 )
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialInvalidError,
+    InsufficientPermissionsError,
+    UnexpectedValidationError,
+)
 from onyx.connectors.interfaces import (
-    GenerateDocumentsOutput,
-    LoadConnector,
+    CheckpointedConnector,
+    CheckpointOutput,
+    GenerateSlimDocumentOutput,
     OAuthConnector,
-    PollConnector,
     SecondsSinceUnixEpoch,
+    SlimConnector,
 )
 from onyx.connectors.models import (
     BasicExpertInfo,
+    ConnectorCheckpoint,
+    ConnectorFailure,
     ConnectorMissingCredentialError,
     Document,
+    DocumentFailure,
+    EntityFailure,
     HierarchyNode,
+    SlimDocument,
     TextSection,
 )
+from onyx.db.enums import HierarchyNodeType
 from onyx.file_processing.extract_file_text import (
     detect_encoding,
     extract_file_text,
@@ -42,12 +54,34 @@ from onyx.file_processing.extract_file_text import (
     read_text_file,
 )
 from onyx.file_processing.file_types import OnyxFileExtensions
+from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import request_with_retries
 
 logger = setup_logger()
 
-_EGNYTE_APP_BASE = "https://{domain}.egnyte.com"
+_DOCUMENT_ID_PREFIX = "egnyte-"
+# Entries per folder listing page, and the checkpoint unit: one page of one
+# folder per load_from_checkpoint call.
+FOLDER_PAGE_SIZE = 200
+# Each page re-reads the last tenth of the previous one, which absorbs that
+# many deletions between two requests without skipping a live entry.
+_PAGE_OVERLAP = FOLDER_PAGE_SIZE // 10
+_SLIM_BATCH_SIZE = 500
+
+
+def egnyte_document_id(group_id: str) -> str:
+    """group_id stays the same across file versions, unlike entry_id."""
+    return f"{_DOCUMENT_ID_PREFIX}{group_id}"
+
+
+def normalize_folder_path(folder_path: str | None) -> str:
+    """Egnyte paths start with "/", so "Shared/Docs" names "/Shared/Docs"."""
+    return "/" + (folder_path or "").strip("/")
+
+
+def _app_base(domain: str) -> str:
+    return f"https://{domain}.egnyte.com"
 
 
 def _parse_last_modified(last_modified: str) -> datetime:
@@ -56,84 +90,92 @@ def _parse_last_modified(last_modified: str) -> datetime:
     )
 
 
-def _process_egnyte_file(
+def _in_time_window(
     file: EgnyteFile,
-    file_content: IO,
-    base_url: str,
-    folder_path: str | None = None,
-) -> Document | None:
-    """Process an Egnyte file into a Document object
+    start: SecondsSinceUnixEpoch | None,
+    end: SecondsSinceUnixEpoch | None,
+) -> bool:
+    timestamp = _parse_last_modified(file.last_modified).timestamp()
+    if start is not None and timestamp < start:
+        return False
+    if end is not None and timestamp > end:
+        return False
+    return True
 
-    Args:
-        file: The file metadata from the Egnyte API
-        file_content: The raw content of the file in bytes
-        base_url: The base URL for the Egnyte instance
-        folder_path: Optional folder path to filter results
-    """
-    # Skip if file path doesn't match folder path filter
-    if folder_path and not file.path.startswith(folder_path):
-        raise ValueError(
-            f"File path {file.path} does not match folder path {folder_path}"
+
+def _is_indexable(file: EgnyteFile) -> bool:
+    """Shared by indexing and the slim listing, so pruning never keeps a
+    document for a file indexing skips."""
+    # TODO(wenxi-onyx): consider allowing images
+    return get_file_ext(file.name) in OnyxFileExtensions.TEXT_AND_DOCUMENT_EXTENSIONS
+
+
+def _extract_text(file: EgnyteFile, content: bytes) -> str:
+    file_content = BytesIO(content)
+    if get_file_ext(file.name) in OnyxFileExtensions.PLAIN_TEXT_EXTENSIONS:
+        text, _ = read_text_file(
+            file_content,
+            encoding=detect_encoding(file_content),
+            ignore_onyx_metadata=False,
         )
+        return text
+    return extract_file_text(
+        file=file_content, file_name=file.name, break_on_unprocessable=True
+    )
 
-    file_name = file.name
-    extension = get_file_ext(file_name)
 
-    # Explicitly excluding image extensions here. TODO: consider allowing images
-    if extension not in OnyxFileExtensions.TEXT_AND_DOCUMENT_EXTENSIONS:
-        logger.warning("Skipping file '%s' with extension '%s'", file_name, extension)
-        return None
-
-    # Extract text content based on file type
-    # TODO @wenxi-onyx: convert to extract_text_and_images
-    if extension in OnyxFileExtensions.PLAIN_TEXT_EXTENSIONS:
-        encoding = detect_encoding(file_content)
-        file_content_raw, _ = read_text_file(
-            file_content, encoding=encoding, ignore_onyx_metadata=False
-        )
-    else:
-        file_content_raw = extract_file_text(
-            file=file_content,
-            file_name=file_name,
-            break_on_unprocessable=True,
-        )
-
-    # Build the web URL for the file
-    web_url = f"{base_url}/navigate/file/{file.group_id}"
-
-    # Create document metadata
+def _build_document(
+    file: EgnyteFile, text: str, base_url: str, parent_folder_id: str
+) -> Document:
     metadata: dict[str, str | list[str]] = {
         "file_path": file.path,
         "last_modified": file.last_modified,
     }
-
     if file.lock_info:
         metadata["lock_owner"] = (
             f"{file.lock_info.first_name} {file.lock_info.last_name}"
         )
-
-    # Create the document owners
-    primary_owner = None
-    if file.uploaded_by:
-        primary_owner = BasicExpertInfo(
-            email=file.uploaded_by,  # Using username as email since that's what we have
-        )
-
-    # group_id stays the same across versions, so a new version updates the
-    # document instead of adding one.
     return Document(
-        id=f"egnyte-{file.group_id}",
-        sections=[TextSection(text=file_content_raw.strip(), link=web_url)],
+        id=egnyte_document_id(file.group_id),
+        sections=[
+            TextSection(
+                text=text.strip(), link=f"{base_url}/navigate/file/{file.group_id}"
+            )
+        ],
         source=DocumentSource.EGNYTE,
-        semantic_identifier=file_name,
+        semantic_identifier=file.name,
         metadata=metadata,
         doc_updated_at=_parse_last_modified(file.last_modified),
-        primary_owners=[primary_owner] if primary_owner else None,
+        # Egnyte gives a username, the closest it has to an email.
+        primary_owners=(
+            [BasicExpertInfo(email=file.uploaded_by)] if file.uploaded_by else None
+        ),
+        parent_hierarchy_raw_node_id=parent_folder_id,
     )
 
 
-class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
+def _is_fatal(error: Exception) -> bool:
+    """A rejected token, a used-up daily quota or an unreachable Egnyte fails
+    every later call too, so it ends the run instead of failing one item. The
+    checkpoint resumes the walk."""
+    return isinstance(error, (CredentialInvalidError, UnexpectedValidationError))
+
+
+class EgnyteCheckpoint(ConnectorCheckpoint):
+    # Folder paths left to walk, breadth first. None until the walk starts.
+    todo: list[str] | None = None
+    # The folder being paged and the offset of its next page.
+    current_path: str | None = None
+    offset: int = 0
+    # Entry paths of the page before, so the overlap is not yielded twice.
+    previous_page_paths: list[str] = Field(default_factory=list)
+
+
+class EgnyteConnector(
+    CheckpointedConnector[EgnyteCheckpoint], SlimConnector, OAuthConnector
+):
     supports_manual_credentials = True
+    slim_listing_honors_indexing_start = True
 
     class AdditionalOauthKwargs(OAuthConnector.AdditionalOauthKwargs):
         egnyte_domain: str = Field(
@@ -149,8 +191,7 @@ class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
         batch_size: int = INDEX_BATCH_SIZE,
     ) -> None:
         self.domain = ""  # will always be set in `load_credentials`
-        # Egnyte paths start with "/", so "Shared/Docs" must match "/Shared/Docs".
-        self.folder_path = "/" + (folder_path or "").strip("/")
+        self.folder_path = normalize_folder_path(folder_path)
         self.batch_size = batch_size
         self._ops: EgnyteSourceOperations | None = None
 
@@ -243,90 +284,181 @@ class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
         )
         return None
 
-    def _get_files_list(self, path: str) -> Generator[EgnyteFile, None, None]:
-        folder_paths = [path]
-        while folder_paths:
-            folder_path = folder_paths.pop()
-            for page in self.ops.iterate_folder_pages(folder_path=folder_path):
-                yield from page.files
-                folder_paths.extend(folder.path for folder in page.folders)
+    def validate_connector_settings(self) -> None:
+        try:
+            self.ops.list_folder_page(
+                folder_path=self.folder_path, offset=0, page_size=1
+            )
+        except EgnyteApiError as e:
+            if e.status_code == 404:
+                raise ConnectorValidationError(
+                    f"Egnyte folder {self.folder_path} was not found."
+                ) from e
+            raise UnexpectedValidationError(str(e)) from e
 
-    def _should_index_file(
-        self,
-        file: EgnyteFile,
-        start_time: datetime | None = None,
-        end_time: datetime | None = None,
-    ) -> bool:
-        """Return True if file should be included based on filters."""
-        file_modified = _parse_last_modified(file.last_modified)
-        if start_time and file_modified < start_time:
-            return False
-        if end_time and file_modified > end_time:
-            return False
+    def _folder_node(self, folder: EgnyteFolder) -> HierarchyNode:
+        return HierarchyNode(
+            raw_node_id=folder.folder_id,
+            # The configured folder is the top of this connector's tree.
+            raw_parent_id=(
+                None if folder.path == self.folder_path else folder.parent_id
+            ),
+            display_name=folder.name or folder.path,
+            link=f"{_app_base(self.domain)}/navigate/folder/{folder.folder_id}",
+            node_type=HierarchyNodeType.FOLDER,
+        )
 
-        return True
-
-    def _process_files(
-        self,
-        start_time: datetime | None = None,
-        end_time: datetime | None = None,
-    ) -> Generator[list[Document | HierarchyNode], None, None]:
-        current_batch: list[Document | HierarchyNode] = []
-
-        # Iterate through yielded files and filter them
-        for file in self._get_files_list(self.folder_path):
-            if not self._should_index_file(file, start_time, end_time):
-                logger.debug("Skipping file '%s'.", file.path)
-                continue
-
-            try:
-                content = self.ops.download_file(file_path=file.path)
-            except EgnyteApiError as e:
-                if e.status_code != 404:
-                    raise
+    def _convert_file(
+        self, file: EgnyteFile, parent_folder_id: str
+    ) -> Document | ConnectorFailure | None:
+        document_id = egnyte_document_id(file.group_id)
+        try:
+            content = self.ops.download_file(file_path=file.path)
+            return _build_document(
+                file,
+                _extract_text(file, content),
+                _app_base(self.domain),
+                parent_folder_id,
+            )
+        except Exception as e:
+            if _is_fatal(e):
+                raise
+            if isinstance(e, EgnyteApiError) and e.status_code == 404:
                 logger.warning("File '%s' was deleted before download.", file.path)
-                continue
+                return None
+            logger.warning("Failed to process Egnyte file %s: %s", file.path, e)
+            return ConnectorFailure(
+                failed_document=DocumentFailure(
+                    document_id=document_id,
+                    document_link=f"{_app_base(self.domain)}/navigate/file/{file.group_id}",
+                ),
+                failure_message=f"Failed to process Egnyte file {file.path}: {e}",
+                exception=e,
+            )
 
-            try:
-                doc = _process_egnyte_file(
-                    file=file,
-                    file_content=io.BytesIO(content),
-                    base_url=_EGNYTE_APP_BASE.format(domain=self.domain),
-                    folder_path=self.folder_path,
+    def _walk_step(
+        self,
+        checkpoint: EgnyteCheckpoint,
+        start: SecondsSinceUnixEpoch | None,
+        end: SecondsSinceUnixEpoch | None,
+        slim: bool,
+    ) -> Generator[
+        Document | SlimDocument | HierarchyNode | ConnectorFailure,
+        None,
+        EgnyteCheckpoint,
+    ]:
+        """Reads one page of one folder. The folder's node comes with its first
+        page, and its subfolders join the end of the queue."""
+        checkpoint = checkpoint.model_copy(deep=True)
+        if checkpoint.todo is None:
+            checkpoint.todo = [self.folder_path]
+        if checkpoint.current_path is None:
+            if not checkpoint.todo:
+                checkpoint.has_more = False
+                return checkpoint
+            checkpoint.current_path = checkpoint.todo.pop(0)
+            checkpoint.offset = 0
+            checkpoint.previous_page_paths = []
+
+        path = checkpoint.current_path
+        try:
+            page: EgnyteFolderPage = self.ops.list_folder_page(
+                folder_path=path, offset=checkpoint.offset, page_size=FOLDER_PAGE_SIZE
+            )
+        except (EgnyteApiError, InsufficientPermissionsError) as e:
+            # A partial slim walk reads as deletions, so only indexing goes on.
+            if slim:
+                raise
+            yield ConnectorFailure(
+                failed_entity=EntityFailure(entity_id=path),
+                failure_message=f"Failed to list Egnyte folder {path}: {e}",
+                exception=e,
+            )
+            checkpoint.current_path = None
+            checkpoint.has_more = bool(checkpoint.todo)
+            return checkpoint
+
+        if checkpoint.offset == 0:
+            yield self._folder_node(page.folder)
+        previous = set(checkpoint.previous_page_paths)
+        checkpoint.todo.extend(
+            folder.path for folder in page.folders if folder.path not in previous
+        )
+        for file in page.files:
+            if file.path in previous:
+                continue
+            if not _is_indexable(file) or not _in_time_window(file, start, end):
+                continue
+            if slim:
+                yield SlimDocument(
+                    id=egnyte_document_id(file.group_id),
+                    parent_hierarchy_raw_node_id=page.folder.folder_id,
                 )
-            except Exception:
-                logger.exception("Failed to process file %s", file.path)
                 continue
+            converted = self._convert_file(file, page.folder.folder_id)
+            if converted is not None:
+                yield converted
 
-            if doc is not None:
-                current_batch.append(doc)
+        page_paths = [entry.path for entry in [*page.folders, *page.files]]
+        if len(page_paths) < FOLDER_PAGE_SIZE:
+            checkpoint.current_path = None
+            checkpoint.previous_page_paths = []
+        else:
+            checkpoint.offset += FOLDER_PAGE_SIZE - _PAGE_OVERLAP
+            checkpoint.previous_page_paths = page_paths
+        checkpoint.has_more = checkpoint.current_path is not None or bool(
+            checkpoint.todo
+        )
+        return checkpoint
 
-                if len(current_batch) >= self.batch_size:
-                    yield current_batch
-                    current_batch = []
+    def load_from_checkpoint(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: EgnyteCheckpoint,
+    ) -> CheckpointOutput[EgnyteCheckpoint]:
+        step = self._walk_step(checkpoint, start, end, slim=False)
+        while True:
+            try:
+                item = next(step)
+            except StopIteration as e:
+                return e.value
+            if isinstance(item, SlimDocument):
+                raise RuntimeError("Unexpected SlimDocument in full document load")
+            yield item
 
-        if current_batch:
-            yield current_batch
+    def build_dummy_checkpoint(self) -> EgnyteCheckpoint:
+        return EgnyteCheckpoint(has_more=True)
 
-    def load_from_state(self) -> GenerateDocumentsOutput:
-        yield from self._process_files()
+    def validate_checkpoint_json(self, checkpoint_json: str) -> EgnyteCheckpoint:
+        return EgnyteCheckpoint.model_validate_json(checkpoint_json)
 
-    def poll_source(
-        self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
-    ) -> GenerateDocumentsOutput:
-        start_time = datetime.fromtimestamp(start, tz=timezone.utc)
-        end_time = datetime.fromtimestamp(end, tz=timezone.utc)
-
-        yield from self._process_files(start_time=start_time, end_time=end_time)
-
-
-if __name__ == "__main__":
-    connector = EgnyteConnector()
-    connector.load_credentials(
-        {
-            "domain": os.environ["EGNYTE_DOMAIN"],
-            "access_token": os.environ["EGNYTE_ACCESS_TOKEN"],
-        }
-    )
-    document_batches = connector.load_from_state()
-    print(next(document_batches))
+    def retrieve_all_slim_docs(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        checkpoint = self.build_dummy_checkpoint()
+        batch: list[SlimDocument | HierarchyNode] = []
+        while checkpoint.has_more:
+            # A partial walk reads as deletions, so stopping raises.
+            if callback is not None and callback.should_stop():
+                raise RuntimeError("Egnyte slim retrieval: stop signal detected")
+            step = self._walk_step(checkpoint, start, end, slim=True)
+            while True:
+                try:
+                    item = next(step)
+                except StopIteration as e:
+                    checkpoint = e.value
+                    break
+                if isinstance(item, (Document, ConnectorFailure)):
+                    raise RuntimeError(f"Unexpected {type(item).__name__} in slim walk")
+                batch.append(item)
+                if len(batch) >= _SLIM_BATCH_SIZE:
+                    yield batch
+                    batch = []
+            if callback is not None:
+                callback.progress("egnyte_slim_retrieval", 1)
+        if batch:
+            yield batch
