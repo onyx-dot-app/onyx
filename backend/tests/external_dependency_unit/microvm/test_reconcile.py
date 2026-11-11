@@ -14,14 +14,17 @@ import pytest
 from onyx.cache.interface import CacheBackend
 from onyx.microvm import reconcile
 from onyx.microvm.agent_client import (
-    GuestKeyRejectedError,
     HostAgentClient,
     HostAgentClientFactory,
     HostAgentConfigError,
-    HostAgentErrorReason,
     new_sandboxd_key,
 )
 from onyx.microvm.configs import SANDBOX_FC_IDLE_TIMEOUT_SECONDS
+from onyx.microvm.daemon_client import (
+    SandboxDaemonClient,
+    SandboxDaemonError,
+    SandboxDaemonErrorReason,
+)
 from onyx.microvm.generated.hostagent.v1 import hostagent_pb2
 from onyx.microvm.lifecycle import (
     NoCheckpointSupport,
@@ -31,7 +34,6 @@ from onyx.microvm.lifecycle import (
 )
 from onyx.microvm.models import (
     AgentVm,
-    CreateResult,
     EndedReason,
     IndexedPlacement,
     ReconcileReport,
@@ -257,8 +259,8 @@ def test_vm_named_by_its_reservation_is_adopted(
     record = get_sandbox_placement(tenant_cache, sandbox_id)
     assert record is not None and record.names(node_id, 2, vm.generation)
     assert get_sandbox_reservation(tenant_cache, sandbox_id) is None
-    # The daemon already held the key: no repeat Create.
-    assert node.agent.stop_calls == [] and node.agent.create_calls == 0
+    # One repeat Create checks that the guest holds this key.
+    assert node.agent.stop_calls == [] and node.agent.create_calls == 1
     assert _report(shared_cache, client_factory, node_id).adopted == []
 
 
@@ -390,13 +392,12 @@ def test_vm_whose_key_is_saved_before_its_stop_is_kept(
     assert later.orphans_stopped == [] and node.agent.stop_calls == []
 
 
-def test_vm_whose_guest_rejects_the_key_is_stopped_after_the_grace_period(
+def test_vm_whose_guest_holds_another_key_is_stopped_after_the_grace_period(
     shared_cache: CacheBackend,
     tenant_cache: CacheBackend,
     client_factory: InsecureClientFactory,
     add_node: AddNode,
     new_sandbox_id: NewSandboxId,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     node_id = _node("rejected")
     node = add_node(node_id)
@@ -407,17 +408,14 @@ def test_vm_whose_guest_rejects_the_key_is_stopped_after_the_grace_period(
         SandboxReservation(attempt=1, node_id=node_id, owner="crashed"),
         replaces=None,
     )
+    # A retry saved a new key after the guest took the old one.
     set_sandbox_daemon_key(tenant_cache, sandbox_id, attempt=1, key=new_sandboxd_key())
-    _vm(node, sandbox_id)
-
-    def rejected(self: HostAgentClient, **_: object) -> CreateResult:  # noqa: ARG001
-        raise GuestKeyRejectedError(
-            grpc.StatusCode.FAILED_PRECONDITION,
-            "KEY_ALREADY_SET",
-            HostAgentErrorReason.GUEST_KEY_REJECTED,
-        )
-
-    monkeypatch.setattr(HostAgentClient, "create", rejected)
+    node.agent.add_vm(
+        sandbox_id=str(sandbox_id),
+        tenant_id=TENANT_ID,
+        attempt=1,
+        daemon_key=new_sandboxd_key().get_secret_value(),
+    )
 
     first = _report(shared_cache, client_factory, node_id)
     assert first.adopted == [] and node.agent.stop_calls == []
@@ -431,6 +429,55 @@ def test_vm_whose_guest_rejects_the_key_is_stopped_after_the_grace_period(
     assert later.adopted == []
     assert later.orphans_stopped == [str(sandbox_id)]
     assert get_sandbox_placement(tenant_cache, sandbox_id) is None
+
+
+def test_vm_whose_guest_never_answers_is_stopped_in_the_end(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    node_id = _node("silent")
+    node = add_node(node_id)
+    sandbox_id = new_sandbox_id()
+    reserve_sandbox(
+        tenant_cache,
+        sandbox_id,
+        SandboxReservation(attempt=1, node_id=node_id, owner="timed-out"),
+        replaces=None,
+    )
+    set_sandbox_daemon_key(tenant_cache, sandbox_id, attempt=1, key=new_sandboxd_key())
+    _vm(node, sandbox_id)
+    node.agent.guest_unreachable_creates = 100
+    give_up = NOW + reconcile._ADOPT_GIVE_UP_SECONDS
+    grace = reconcile.SANDBOX_FC_ORPHAN_GRACE_SECONDS
+
+    assert _report(shared_cache, client_factory, node_id).adopted == []
+    assert _report(shared_cache, client_factory, node_id, now=give_up).adopted == []
+
+    # The guest answers Health again: keep the VM and try adoption again.
+    kept = _report(shared_cache, client_factory, node_id, now=give_up + grace)
+    assert kept.orphans_stopped == [] and node.agent.stop_calls == []
+    tries = node.agent.create_calls
+    _report(shared_cache, client_factory, node_id, now=give_up + grace + 1)
+    assert node.agent.create_calls == tries + 1
+
+    def no_answer(self: SandboxDaemonClient) -> None:  # noqa: ARG001
+        raise SandboxDaemonError(
+            grpc.StatusCode.UNAVAILABLE,
+            "no answer",
+            SandboxDaemonErrorReason.INTERNAL,
+        )
+
+    monkeypatch.setattr(SandboxDaemonClient, "health", no_answer)
+    # The grace period already ran out at the first give-up.
+    later = give_up + grace + 1 + reconcile._ADOPT_GIVE_UP_SECONDS
+    stopped = _report(shared_cache, client_factory, node_id, now=later)
+
+    assert stopped.orphans_stopped == [str(sandbox_id)]
+    assert node.agent.vms == {}
 
 
 def test_pending_key_install_does_not_hold_up_orphan_stops(

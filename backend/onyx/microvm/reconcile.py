@@ -14,14 +14,16 @@ Per reported VM:
 - The record or the reservation has a newer attempt, or the record names
   another instance of the same attempt: a stale orphan. Stop it.
 - The reservation names (attempt, node) and the attempt's daemon key exists:
-  adopt it with a fenced record write once the guest daemon holds the key
-  (Health, or a repeat Create that installs it). A crash between Create and
-  the record write, or a Create whose key install timed out, leaves this
-  state. Adoptions run after the orphan stops, so a guest that does not
-  answer cannot hold up cleanup. A pending key install waits
-  `_ADOPT_RETRY_SECONDS` before the next try, so other adoptions get a turn.
-- The reservation names it but its key is lost or the guest rejects the key:
-  nothing can use it. It is an orphan after the grace period below.
+  adopt it with a fenced record write once the guest daemon accepts the key
+  (Health shows that the guest answers; a repeat Create installs the key or
+  is rejected when the guest holds another). A crash between Create and the
+  record write, or a Create whose key install timed out, leaves this state.
+  Adoptions run after the orphan stops, so a guest that does not answer
+  cannot hold up cleanup. A pending key install waits `_ADOPT_RETRY_SECONDS`
+  before the next try, so other adoptions get a turn.
+- The reservation names it but its key is lost, the guest rejects the key,
+  or the guest did not answer for `_ADOPT_GIVE_UP_SECONDS`: nothing can use
+  it. It is an orphan after the grace period below.
 - Anything else is unknown. It is an orphan once
   `SANDBOX_FC_ORPHAN_GRACE_SECONDS` passed since the first report of it.
 Per ended VM: clear the record that names that instance (fenced).
@@ -94,6 +96,7 @@ _ORPHAN_MARK_TTL_SECONDS = 7 * 24 * 3600
 _ADOPT_WAIT_PREFIX = "sandbox_fc:adopt_wait:"
 # About three node reports.
 _ADOPT_RETRY_SECONDS = 60
+_ADOPT_GIVE_UP_SECONDS = 600
 _ADOPT_WAIT_TTL_SECONDS = 3600
 
 
@@ -320,9 +323,12 @@ class _Pass:
             return
         if verdict is _Verdict.ADOPT and found is not None:
             key = get_sandbox_daemon_key(tenant_cache, sandbox_id, attempt=vm.attempt)
+            wait = self.adopt_wait(vm)
             if key is None:
                 self.stop_after_grace(vm, sandbox_id, "key_lost")
-            elif not self.adopt_waits(vm):
+            elif wait is not None and self.now - wait[0] >= _ADOPT_GIVE_UP_SECONDS:
+                self.stop_after_grace(vm, sandbox_id, "guest_unreachable")
+            elif wait is None or self.now - wait[1] >= _ADOPT_RETRY_SECONDS:
                 self.adoptions.append(
                     _Adoption(
                         vm=vm, sandbox_id=sandbox_id, key=key, reservation_raw=found[1]
@@ -348,13 +354,16 @@ class _Pass:
             f"{_ADOPT_WAIT_PREFIX}{self.node.node_id}:{vm.sandbox_id}:{vm.generation}"
         )
 
-    def adopt_waits(self, vm: AgentVm) -> bool:
-        """True while a pending key install of this VM waits for its retry."""
+    def adopt_wait(self, vm: AgentVm) -> tuple[int, int] | None:
+        """(first, last) time of the pending key installs of this VM."""
         raw = self.shared_cache.get(self._adopt_wait_key(vm))
+        if raw is None:
+            return None
+        first, _, last = raw.decode().partition(":")
         try:
-            return raw is not None and self.now - int(raw) < _ADOPT_RETRY_SECONDS
+            return int(first), int(last)
         except ValueError:
-            return False
+            return None
 
     def adopt(self, adoption: _Adoption) -> None:
         """Write the record of a VM that its reservation names, once its
@@ -369,9 +378,11 @@ class _Pass:
             if installed is None:
                 # Keep the VM and the reservation: a later report or a wake
                 # tries again.
+                wait = self.adopt_wait(vm)
+                first = self.now if wait is None else wait[0]
                 self.shared_cache.set(
                     self._adopt_wait_key(vm),
-                    str(self.now),
+                    f"{first}:{self.now}",
                     ex=_ADOPT_WAIT_TTL_SECONDS,
                 )
                 return
@@ -406,16 +417,15 @@ class _Pass:
         self.report.adopted.append(vm.sandbox_id)
 
     def install_key(self, vm: AgentVm, key: SecretStr) -> bool | None:
-        """Make sure the guest daemon holds `key`: Health, then a repeat
-        Create of the same attempt (it returns the same VM and installs the
-        key). None when the outcome is not known yet."""
+        """Make sure the guest daemon holds `key`. Health (no key) shows that
+        the guest answers. A repeat Create of the same attempt returns the
+        same VM and installs the key, or is rejected when the guest holds
+        another key. None when the outcome is not known yet."""
         client = self.client_factory.client(self.node.address)
         try:
-            health = SandboxDaemonClient(
+            SandboxDaemonClient(
                 client.channel, sandbox_id=vm.sandbox_id, sandboxd_key=key
             ).health()
-            if health.key_set:
-                return True
             result = client.create(
                 sandbox_id=vm.sandbox_id,
                 attempt=vm.attempt,
@@ -545,12 +555,31 @@ class _Pass:
         A guest that rejected the key keeps the key that it holds."""
         if stop.why == "key_rejected":
             return True
+        if stop.why == "guest_unreachable":
+            return not self.guest_answers(stop, tenant_cache)
         return stop.why == "key_lost" and (
             get_sandbox_daemon_key(
                 tenant_cache, stop.sandbox_id, attempt=stop.vm.attempt
             )
             is None
         )
+
+    def guest_answers(self, stop: _OrphanStop, tenant_cache: CacheBackend) -> bool:
+        """One more Health before a stop. A guest that answers gets new
+        adoption tries."""
+        vm = stop.vm
+        key = get_sandbox_daemon_key(tenant_cache, stop.sandbox_id, attempt=vm.attempt)
+        if key is None:
+            return False
+        client = self.client_factory.client(self.node.address)
+        try:
+            SandboxDaemonClient(
+                client.channel, sandbox_id=vm.sandbox_id, sandboxd_key=key
+            ).health()
+        except (HostAgentError, SandboxDaemonError):
+            return False
+        self.shared_cache.delete(self._adopt_wait_key(vm))
+        return True
 
     def stop_orphan(self, stop: _OrphanStop) -> None:
         vm, sandbox_id = stop.vm, stop.sandbox_id
