@@ -97,7 +97,14 @@ holds raw batches in the file store; they cross the task boundary and survive a
 crash. `StubBatchStorage` in the same module holds the stub batches of the
 conversion stage (prefix `isb/`); the document batch cleanup also deletes them.
 `db/indexing_coordination.py:IndexingCoordination.claim_stub_batches` hands out
-stub batch numbers from the `stub_batches_*` counters on the attempt row. `indexing/chunk_batch_store.py:ChunkBatchStore` spills embedded chunks to
+stub batch numbers from the `stub_batches_*` counters on the attempt row. The
+`docconversion` worker (`background/celery/tasks/docconversion/tasks.py`) runs
+`background/indexing/run_docconversion.py:convert_stub_batch`: it loads one stub
+batch, calls the connector's `resolve_targets`, stores the document batch,
+deletes the stub batch, counts it converted and sends the docprocessing task.
+It deletes the stub batch before the send, so a redelivered task sends nothing
+twice. `dispatch_stub_batches` keeps at most `DOCCONVERSION_WINDOW_BATCHES`
+batches in flight. No code sends stub batches yet. `indexing/chunk_batch_store.py:ChunkBatchStore` spills embedded chunks to
 local disk inside one docprocessing task, so a large batch is never in memory.
 
 **Dedup gate.** `indexing/indexing_pipeline.py:get_docs_to_update`
