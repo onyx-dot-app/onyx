@@ -2597,9 +2597,11 @@ class GoogleDriveConnector(
         checkpoint: GoogleDriveCheckpoint,
         include_permissions: bool = False,
     ) -> SlimCheckpointOutput[GoogleDriveCheckpoint]:
-        """One pass of the slim listing, for indexing. It ends where the
-        listing saves a page token or finishes a partition, so the returned
-        checkpoint covers exactly the stubs this call yielded."""
+        """One pass of the slim listing, for indexing. The serial listing
+        ends where it saves a page token or finishes a partition. The parallel
+        listing ends only at its time or file budget (CALL_BUDGET_SECONDS,
+        CALL_BUDGET_FILES). The returned checkpoint covers exactly the stubs
+        this call yielded."""
         if self._ops is None or self._primary_admin_email is None:
             raise RuntimeError(
                 "Credentials missing, should not call this method before calling load_credentials"
