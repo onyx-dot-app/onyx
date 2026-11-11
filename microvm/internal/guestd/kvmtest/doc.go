@@ -9,4 +9,5 @@
 // rootfs.ext4 with the daemon, scratch-empty.ext4, managed-empty.ext4),
 // KVM_WORK_DIR, KVM_VMS (default 20), KVM_RESTORE_GAP (default 20s),
 // KVM_BOOT_ARGS, KVM_TEMPLATE_ARGS, KVM_RELAY_BIN (egress-relay binary).
+// KVM_RUNTIME_IMAGE=1 enables the tool smoke check for a craft-runtime rootfs.
 package kvmtest

@@ -70,6 +70,16 @@ Neighbours:
 
 ## Architecture
 
+The separate userspace image in `deployment/craft-runtime/` is only for the
+new integrated harness. Existing Craft keeps its current sandbox image and
+skills. The new image is an input to `deployment/craft-fc/rootfs/build-rootfs.sh`. It includes execution tools and
+assets, without OpenCode or the current Python sidecar. The existing converter
+adds init, the static Go daemon and relay, proxy CA trust, overlays, and the
+rootfs manifest. Managed skills mount at `/workspace/managed/skills` on a
+read-only, noexec drive; scripts run through interpreters. Publishing the
+userspace image does not deliver rootfs files to nodes or change the current
+pod/Docker image settings.
+
 Operator guides: `backend/onyx/server/features/build/sandbox/README.md` (image
 and tag coupling, IPv6), `backend/onyx/server/features/build/sandbox/docker/README.md`
 (Docker backend), and `deployment/helm/dev/README.md` (local kind cluster).
@@ -381,6 +391,10 @@ the stored token on each request, so a new token takes effect at once.
 
 ## Verification
 
+- Integrated harness image: `deployment/craft-runtime/check-kvm.sh` converts
+  the image and runs the daemon, init, restore, and tool smoke tests on x86
+  KVM with the pinned guest kernel. Container smoke and rootfs conversion
+  alone do not establish VM tool coverage.
 - Unit: `backend/tests/unit/onyx/server/features/craft/sandbox/`.
 - Lifecycle, sweep and snapshots with real Postgres and Redis:
   `backend/tests/external_dependency_unit/craft/`.
