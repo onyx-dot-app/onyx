@@ -304,21 +304,6 @@ def update_sandbox_heartbeat(db_session: Session, sandbox_id: UUID) -> Sandbox:
     return sandbox
 
 
-def advance_sandbox_heartbeat__no_commit(
-    db_session: Session, sandbox_id: UUID, heartbeat: datetime.datetime
-) -> bool:
-    """Move the heartbeat forward to ``heartbeat``; never move it back."""
-    result = db_session.execute(
-        update(Sandbox)
-        .where(
-            Sandbox.id == sandbox_id,
-            or_(Sandbox.last_heartbeat.is_(None), Sandbox.last_heartbeat < heartbeat),
-        )
-        .values(last_heartbeat=heartbeat, cleanup_checkpoint=None)
-    )
-    return result.rowcount == 1  # ty: ignore[unresolved-attribute]
-
-
 def get_running_sandboxes(
     db_session: Session,
     *,

@@ -863,13 +863,12 @@ def test_recent_preview_activity_keeps_sandbox_running(
     stubbed_cleanup: StubSandboxManager,
     short_idle_threshold: int,
 ) -> None:
-    """App preview requests count as activity: the reaper moves the heartbeat
-    forward instead of putting the sandbox to sleep."""
+    """App preview requests count as activity: the reaper does not put the
+    sandbox to sleep."""
     user = make_user(db_session)
     sandbox = make_sandbox(db_session, user)
     session_row = _make_preview_session(db_session, user)
     _backdate_heartbeat(db_session, sandbox, seconds_ago=short_idle_threshold * 4)
-    old_heartbeat = sandbox.last_heartbeat
     stubbed_cleanup.list_session_workspaces_returns = []
     stubbed_cleanup.terminate_silent = True
 
@@ -880,8 +879,6 @@ def test_recent_preview_activity_keeps_sandbox_running(
     refreshed = db_session.get(Sandbox, sandbox.id)
     assert refreshed is not None
     assert refreshed.status == SandboxStatus.RUNNING
-    assert old_heartbeat is not None and refreshed.last_heartbeat is not None
-    assert refreshed.last_heartbeat > old_heartbeat
     assert stubbed_cleanup.terminate_count == 0
 
 
@@ -911,3 +908,32 @@ def test_stale_preview_activity_does_not_keep_sandbox_running(
     refreshed = db_session.get(Sandbox, sandbox.id)
     assert refreshed is not None
     assert refreshed.status == SandboxStatus.SLEEPING
+
+
+def test_preview_activity_during_sleep_aborts_the_reap(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+    stubbed_cleanup: StubSandboxManager,
+    short_idle_threshold: int,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A preview request that arrives while the reaper snapshots the sandbox
+    stops the reap at the final idle check."""
+    user = make_user(db_session)
+    sandbox = make_sandbox(db_session, user)
+    session_row = _make_preview_session(db_session, user)
+    _backdate_heartbeat(db_session, sandbox, seconds_ago=short_idle_threshold * 4)
+    stubbed_cleanup.terminate_silent = True
+
+    def _list_and_mark(sandbox_id: UUID) -> list[UUID]:  # noqa: ARG001
+        mark_preview_activity(session_row.id)
+        return []
+
+    monkeypatch.setattr(stubbed_cleanup, "list_session_workspaces", _list_and_mark)
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)  # ty: ignore[invalid-argument-type]
+
+    db_session.expire_all()
+    refreshed = db_session.get(Sandbox, sandbox.id)
+    assert refreshed is not None
+    assert refreshed.status == SandboxStatus.RUNNING
+    assert stubbed_cleanup.terminate_count == 0

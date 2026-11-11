@@ -44,7 +44,6 @@ from onyx.server.features.build.db.build_session import (
     mark_user_sessions_idle__no_commit,
 )
 from onyx.server.features.build.db.sandbox import (
-    advance_sandbox_heartbeat__no_commit,
     begin_provisioning_attempt__no_commit,
     begin_recovery_attempt__no_commit,
     create_sandbox__no_commit,
@@ -788,19 +787,16 @@ def is_sandbox_idle(sandbox: Sandbox, now: datetime) -> bool:
 def is_sandbox_idle_after_preview_activity(
     db_session: DBSession, sandbox: Sandbox, now: datetime
 ) -> bool:
-    """``is_sandbox_idle`` that first counts app preview requests: a newer
-    preview request moves the heartbeat forward."""
+    """``is_sandbox_idle`` that also counts app preview requests, which the
+    webapp proxy records only in the cache."""
     if not is_sandbox_idle(sandbox, now):
         return False
     preview_at = latest_preview_activity(
         get_webapp_session_ids(db_session, sandbox.user_id)
     )
-    if preview_at is None:
-        return True
-    if advance_sandbox_heartbeat__no_commit(db_session, sandbox.id, preview_at):
-        db_session.commit()
-        db_session.refresh(sandbox)
-    return is_sandbox_idle(sandbox, now)
+    return preview_at is None or preview_at < now - timedelta(
+        seconds=SANDBOX_IDLE_TIMEOUT_SECONDS
+    )
 
 
 def list_snapshotable_session_workspaces(
@@ -1059,7 +1055,9 @@ def sleep_sandbox(
         if (
             sandbox.status != SandboxStatus.RUNNING
             or sandbox.provisioning_attempt_number != initial_attempt
-            or not is_sandbox_idle(sandbox, datetime.now(timezone.utc))
+            or not is_sandbox_idle_after_preview_activity(
+                db_session, sandbox, datetime.now(timezone.utc)
+            )
         ):
             logger.info("Sandbox %s went active mid-sweep; skipping reap", sandbox_id)
             return
@@ -1073,7 +1071,9 @@ def sleep_sandbox(
             if (
                 sandbox.status != SandboxStatus.RUNNING
                 or sandbox.provisioning_attempt_number != initial_attempt
-                or not is_sandbox_idle(sandbox, datetime.now(timezone.utc))
+                or not is_sandbox_idle_after_preview_activity(
+                    db_session, sandbox, datetime.now(timezone.utc)
+                )
             ):
                 return
             current_resources = list(
