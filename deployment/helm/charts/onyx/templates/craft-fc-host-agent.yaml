@@ -31,6 +31,14 @@ Agent flags and node requirements: microvm/README.md.
 - Drain (craft.hostAgent.drainWatch): the agent reads its own Node with a
   ServiceAccount that may only "get" nodes, and refuses new VMs while the
   Node has a drain taint. Off: no ServiceAccount token in the pod.
+- Root drive (craft.hostAgent.rootfs, ENG-4648): with an image tag, an init
+  container copies the drive of onyxdotapp/craft-fc-artifacts:rootfs-<version>
+  into <dataDir>/rootfs (skipped when it is current), and the agent builds
+  its template from it (--rootfs-dir). The drive has no egress CA.
+- Egress CA (craft.hostAgent.egressCA): the agent reads the sandbox-proxy CA
+  ConfigMap (configMap.SANDBOX_PROXY_CA_CONFIGMAP in SANDBOX_NAMESPACE) at
+  each Create and sends it to the guest daemon, which installs it at Init.
+  The agent's ServiceAccount gets "get" on that one ConfigMap.
 - craft.hostAgent.metrics.enabled adds a plain HTTP /metrics port
   (--metrics-listen); the ServiceMonitor is in
   craft-fc-host-agent-servicemonitor.yaml. /metrics uses the api_server
@@ -81,6 +89,15 @@ Agent flags and node requirements: microvm/README.md.
 {{- end }}
 {{- $drain := $agent.drainWatch | default dict }}
 {{- $watchDrain := ne (toString $drain.enabled) "false" }}
+{{- $rootfs := $agent.rootfs | default dict }}
+{{- $rootfsImage := $rootfs.image | default dict }}
+{{- $rootfsDir := printf "%s/rootfs" $dataDir }}
+{{- $egressCA := $agent.egressCA | default dict }}
+{{- $readCA := ne (toString $egressCA.enabled) "false" }}
+{{- $caNs := $egressCA.namespace | default $sandboxNs }}
+{{- $caConfigMap := $egressCA.configMapName | default (.Values.configMap.SANDBOX_PROXY_CA_CONFIGMAP | default "sandbox-proxy-ca-bundle") }}
+{{- $caKey := $egressCA.key | default "ca.crt" }}
+{{- $serviceAccount := or $watchDrain $readCA }}
 {{- $tolerations := $agent.tolerations | default (index $sandboxPod "tolerations") | default (list (dict "key" "workload" "operator" "Equal" "value" "sandbox" "effect" "NoSchedule")) }}
 {{- $metrics := $agent.metrics | default dict }}
 {{- $metricsPort := $metrics.port | default 9464 }}
@@ -119,7 +136,7 @@ stringData:
   {{ $regKey }}: {{ $regValue | quote }}
 ---
 {{- end }}
-{{- if $watchDrain }}
+{{- if $serviceAccount }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -130,6 +147,42 @@ metadata:
     app.kubernetes.io/component: craft-fc-host-agent
 automountServiceAccountToken: false
 ---
+{{- end }}
+{{- if $readCA }}
+{{- /* The egress CA is public. The agent may read only this one ConfigMap. */}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $name }}-egress-ca-read
+  namespace: {{ $caNs }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: craft-fc-host-agent
+rules:
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [{{ $caConfigMap | quote }}]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $name }}-egress-ca-read
+  namespace: {{ $caNs }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: craft-fc-host-agent
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $name }}-egress-ca-read
+subjects:
+  - kind: ServiceAccount
+    name: {{ $name }}
+    namespace: {{ $ns }}
+---
+{{- end }}
+{{- if $watchDrain }}
 {{- /* Cluster-scoped: RBAC cannot limit "get" to the pod's own Node. Node objects hold no secrets. */}}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -211,15 +264,37 @@ spec:
       {{- end }}
       # VMs keep running while the agent restarts (journal + re-adopt).
       hostPID: true
-      {{- if $watchDrain }}
+      {{- if $serviceAccount }}
       serviceAccountName: {{ $name }}
-      # The agent reads its own Node (drain taints).
+      # The agent reads its own Node (drain taints) and the egress CA ConfigMap.
       automountServiceAccountToken: true
       {{- else }}
       automountServiceAccountToken: false
       {{- end }}
       enableServiceLinks: false
       terminationGracePeriodSeconds: {{ $agent.terminationGracePeriodSeconds | default 30 }}
+      {{- if $rootfsImage.tag }}
+      initContainers:
+        # Copies the root drive into --rootfs-dir; does nothing when it is current.
+        - name: rootfs
+          image: "{{ $rootfsImage.repository | default "onyxdotapp/craft-fc-artifacts" }}:{{ $rootfsImage.tag }}"
+          imagePullPolicy: {{ $rootfsImage.pullPolicy | default "IfNotPresent" }}
+          args:
+            - {{ $rootfsDir | quote }}
+          resources:
+            {{- toYaml ($rootfs.resources | default dict) | nindent 12 }}
+          securityContext:
+            # Root: the data dir is root-owned. No capabilities are needed.
+            runAsUser: 0
+            runAsNonRoot: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: data
+              mountPath: {{ $dataDir }}
+      {{- end }}
       containers:
         - name: host-agent
           image: "{{ $image.repository | default "onyxdotapp/craft-fc-host-agent" }}:{{ $image.tag }}"
@@ -255,6 +330,12 @@ spec:
             - --watch-node-drain
             - --drain-taints={{ $drain.taints | default "node.kubernetes.io/unschedulable" }}
             - --drain-poll-interval={{ $drain.pollInterval | default "10s" }}
+            {{- end }}
+            {{- if $rootfsImage.tag }}
+            - --rootfs-dir={{ $rootfsDir }}
+            {{- end }}
+            {{- if $readCA }}
+            - --egress-ca-configmap={{ $caNs }}/{{ $caConfigMap }}:{{ $caKey }}
             {{- end }}
             {{- if $metrics.enabled }}
             - --metrics-listen=:{{ $metricsPort }}

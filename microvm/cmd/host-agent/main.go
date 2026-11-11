@@ -27,6 +27,7 @@ import (
 
 	"github.com/onyx-dot-app/onyx/microvm/internal/agent"
 	"github.com/onyx-dot-app/onyx/microvm/internal/binaries"
+	"github.com/onyx-dot-app/onyx/microvm/internal/egressca"
 	"github.com/onyx-dot-app/onyx/microvm/internal/fcvm"
 	"github.com/onyx-dot-app/onyx/microvm/internal/hostinfo"
 	"github.com/onyx-dot-app/onyx/microvm/internal/jailer"
@@ -76,6 +77,7 @@ type flags struct {
 	daemonPort    uint
 	rootfsDir     string
 	egressCA      string
+	egressCACM    string
 	tplVCPUs      uint
 	tplMemMiB     uint
 	tplScratchGiB uint
@@ -124,7 +126,8 @@ func main() {
 	flag.IntVar(&f.dialMax, "dial-max-streams", server.DefaultMaxDialsPerVM, "most open Dial streams per VM")
 	flag.UintVar(&f.daemonPort, "daemon-port", server.DefaultDaemonPort, "guest vsock port of the guest daemon (craft.sandboxd.v1.Sandboxd pass-through)")
 	flag.StringVar(&f.rootfsDir, "rootfs-dir", "", "directory with rootfs.ext4 and manifest.json (build-rootfs.sh output); the agent builds its template from it at start and on BuildTemplate. Empty: no build")
-	flag.StringVar(&f.egressCA, "egress-ca", "", "egress CA certificate (PEM) of this deployment; templates whose root drive trusts another CA are refused. Empty: not checked")
+	flag.StringVar(&f.egressCA, "egress-ca", "", "egress CA certificate file (PEM) of this deployment, read at each Create (cached 30s) and sent to the guest daemon, which installs it at Init. A root drive with another built-in CA is refused")
+	flag.StringVar(&f.egressCACM, "egress-ca-configmap", "", "like --egress-ca, but read from <namespace>/<name>[:<key>] (default key ca.crt) through the Kubernetes API; needs RBAC get on that ConfigMap")
 	flag.UintVar(&f.tplVCPUs, "template-vcpus", 2, "vCPUs of the built template (Create must ask for the same)")
 	flag.UintVar(&f.tplMemMiB, "template-mem-mib", 4096, "memory of the built template in MiB (Create must ask for the same)")
 	flag.UintVar(&f.tplScratchGiB, "template-scratch-gib", 1, "scratch disk of the built template in GiB (Create can grow it)")
@@ -180,10 +183,21 @@ func run(f flags, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	caSrc, err := egressCASource(f)
+	if err != nil {
+		return err
+	}
 	caFP := ""
-	if f.egressCA != "" {
-		if caFP, err = tplbuild.CAFileFingerprint(f.egressCA); err != nil {
-			return fmt.Errorf("--egress-ca: %w", err)
+	if caSrc != nil {
+		// sandbox-proxy writes the CA at its first start, so it can come later.
+		cctx, ccancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ca, err := caSrc.CA(cctx)
+		ccancel()
+		if err != nil {
+			log.Warn("egress CA not readable yet; Create fails with EGRESS_CA_UNAVAILABLE until it is", "source", caSrc.String(), "err", err)
+		} else {
+			caFP = ca.Fingerprint
+			log.Info("egress CA", "source", caSrc.String(), "sha256", caFP, "subject", ca.Cert.Subject.String(), "not_after", ca.Cert.NotAfter)
 		}
 	}
 	if f.advertise, err = advertiseAddress(f, os.Getenv("POD_IP")); err != nil {
@@ -275,6 +289,11 @@ func run(f flags, log *slog.Logger) error {
 	}
 	m.UseManagedGuest(server.DaemonManaged{Port: uint32(f.daemonPort)}, f.swapTimeout)
 	svc := &server.Service{M: m, DialPorts: ports, DaemonPort: uint32(f.daemonPort), MaxDialsPerVM: f.dialMax, Keys: pt, Managed: &server.ManagedImages{Store: mstore, Keep: f.managedKeep}, Log: log}
+	if caSrc != nil {
+		svc.EgressCA = &egressca.Cached{Src: caSrc, TTL: egressCACacheTTL}
+	} else {
+		log.Warn("no --egress-ca or --egress-ca-configmap: VMs trust only a CA built into the root drive")
+	}
 	if f.rootfsDir != "" {
 		svc.Builder = func(ctx context.Context) (tplbuild.Result, error) {
 			rf, err := tplbuild.LoadRootfs(f.rootfsDir)
@@ -343,6 +362,32 @@ func startupTemplates(svc *server.Service, b *tplbuild.Builder, log *slog.Logger
 		return
 	}
 	log.Info("template ready", "template", r.Template.Version, "built", r.Built, "build_ms", r.BuildMS, "removed", r.Removed)
+}
+
+// egressCACacheTTL is how long Create reuses a CA read. A rotated CA reaches
+// new VMs after at most this long.
+const egressCACacheTTL = 30 * time.Second
+
+// egressCASource returns the --egress-ca or --egress-ca-configmap source, or
+// nil if neither is set.
+func egressCASource(f flags) (egressca.Source, error) {
+	switch {
+	case f.egressCA != "" && f.egressCACM != "":
+		return nil, errors.New("set --egress-ca or --egress-ca-configmap, not both")
+	case f.egressCA != "":
+		return egressca.File{Path: f.egressCA}, nil
+	case f.egressCACM != "":
+		ns, name, key, err := egressca.ParseConfigMapRef(f.egressCACM)
+		if err != nil {
+			return nil, fmt.Errorf("--egress-ca-configmap: %w", err)
+		}
+		c, err := nodewatch.NewInCluster(f.nodeID)
+		if err != nil {
+			return nil, fmt.Errorf("--egress-ca-configmap: %w", err)
+		}
+		return egressca.ConfigMap{Getter: c, Namespace: ns, Name: name, Key: key}, nil
+	}
+	return nil, nil
 }
 
 func parsePorts(s string) ([]uint32, error) {

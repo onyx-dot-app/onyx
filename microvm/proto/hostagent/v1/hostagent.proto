@@ -19,7 +19,9 @@ service HostAgent {
   // sandbox that has a VM on this node returns ATTEMPT_CONFLICT. With
   // sandboxd_key set, Create installs that key in the guest daemon (its
   // SetKey, over vsock) before it returns a running VM; a repeat call
-  // installs it again (the daemon accepts the same key).
+  // installs it again (the daemon accepts the same key). SetKey also carries
+  // the deployment egress CA (--egress-ca or --egress-ca-configmap), which
+  // the daemon installs at Init.
   rpc Create(CreateRequest) returns (CreateResponse);
 
   // Stop stops the VM only if sandbox_id, attempt and generation all match
@@ -167,6 +169,10 @@ enum ErrorReason {
   // node drain taint). Create the VM on another node. A repeat Create of a
   // VM that already runs here still returns it.
   NODE_DRAINING = 28;
+  // Create: the agent has an egress CA source (--egress-ca or
+  // --egress-ca-configmap) but cannot read a valid CA from it. No VM
+  // starts. Retry later; sandbox-proxy writes the CA at its first start.
+  EGRESS_CA_UNAVAILABLE = 29;
 }
 
 // Drain state of the node (NodeInfo, SetDrain).

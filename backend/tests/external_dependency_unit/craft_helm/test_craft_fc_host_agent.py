@@ -180,16 +180,147 @@ def test_drain_watch_rbac_is_get_nodes_only() -> None:
     ]
 
 
-def test_drain_watch_off_has_no_rbac() -> None:
+def test_drain_watch_off_keeps_only_the_egress_ca_rbac() -> None:
     docs = _render([*_FIRECRACKER, "--set", "craft.hostAgent.drainWatch.enabled=false"])
     kinds = {d["kind"] for d in docs}
     spec = _by_kind(docs, "DaemonSet")["spec"]["template"]["spec"]
     args = spec["containers"][0]["args"]
 
-    assert not kinds & {"ServiceAccount", "ClusterRole", "ClusterRoleBinding"}
+    assert not kinds & {"ClusterRole", "ClusterRoleBinding"}
+    assert {"ServiceAccount", "Role", "RoleBinding"} <= kinds
+    assert spec["automountServiceAccountToken"] is True
+    assert not [a for a in args if "drain" in a]
+
+
+def test_drain_watch_and_egress_ca_off_have_no_rbac() -> None:
+    docs = _render(
+        [
+            *_FIRECRACKER,
+            "--set",
+            "craft.hostAgent.drainWatch.enabled=false",
+            "--set",
+            "craft.hostAgent.egressCA.enabled=false",
+        ]
+    )
+    kinds = {d["kind"] for d in docs}
+    spec = _by_kind(docs, "DaemonSet")["spec"]["template"]["spec"]
+    args = spec["containers"][0]["args"]
+
+    assert not kinds & {
+        "ServiceAccount",
+        "ClusterRole",
+        "ClusterRoleBinding",
+        "Role",
+        "RoleBinding",
+    }
     assert spec["automountServiceAccountToken"] is False
     assert "serviceAccountName" not in spec
-    assert not [a for a in args if "drain" in a]
+    assert not [a for a in args if "drain" in a or "egress-ca" in a]
+
+
+def test_egress_ca_is_read_from_the_sandbox_proxy_configmap() -> None:
+    docs = _render(_FIRECRACKER)
+    account = _by_kind(docs, "ServiceAccount")
+    role = _by_kind(docs, "Role")
+    binding = _by_kind(docs, "RoleBinding")
+    args = _by_kind(docs, "DaemonSet")["spec"]["template"]["spec"]["containers"][0][
+        "args"
+    ]
+
+    # sandbox-proxy writes the public CA into SANDBOX_NAMESPACE.
+    assert role["metadata"]["namespace"] == "onyx-sandboxes"
+    assert role["rules"] == [
+        {
+            "apiGroups": [""],
+            "resources": ["configmaps"],
+            "resourceNames": ["sandbox-proxy-ca-bundle"],
+            "verbs": ["get"],
+        }
+    ]
+    assert binding["metadata"]["namespace"] == "onyx-sandboxes"
+    assert binding["roleRef"] == {
+        "apiGroup": "rbac.authorization.k8s.io",
+        "kind": "Role",
+        "name": role["metadata"]["name"],
+    }
+    assert binding["subjects"] == [
+        {
+            "kind": "ServiceAccount",
+            "name": account["metadata"]["name"],
+            "namespace": _AGENT_NS,
+        }
+    ]
+    assert "--egress-ca-configmap=onyx-sandboxes/sandbox-proxy-ca-bundle:ca.crt" in args
+    assert not [a for a in args if a.startswith("--egress-ca=")]
+
+
+def test_egress_ca_overrides() -> None:
+    docs = _render(
+        [
+            *_FIRECRACKER,
+            "--set-string",
+            "configMap.SANDBOX_PROXY_CA_CONFIGMAP=proxy-ca",
+        ]
+    )
+    args = _by_kind(docs, "DaemonSet")["spec"]["template"]["spec"]["containers"][0][
+        "args"
+    ]
+    assert "--egress-ca-configmap=onyx-sandboxes/proxy-ca:ca.crt" in args
+    assert _by_kind(docs, "Role")["rules"][0]["resourceNames"] == ["proxy-ca"]
+
+    docs = _render(
+        [
+            *_FIRECRACKER,
+            "--set-string",
+            "craft.hostAgent.egressCA.namespace=proxy-ns",
+            "--set-string",
+            "craft.hostAgent.egressCA.configMapName=my-ca",
+            "--set-string",
+            "craft.hostAgent.egressCA.key=root.pem",
+        ]
+    )
+    args = _by_kind(docs, "DaemonSet")["spec"]["template"]["spec"]["containers"][0][
+        "args"
+    ]
+    role = _by_kind(docs, "Role")
+    assert "--egress-ca-configmap=proxy-ns/my-ca:root.pem" in args
+    assert role["metadata"]["namespace"] == "proxy-ns"
+    assert role["rules"][0]["resourceNames"] == ["my-ca"]
+
+
+def test_no_rootfs_image_has_no_init_container() -> None:
+    spec = _by_kind(_render(_FIRECRACKER), "DaemonSet")["spec"]["template"]["spec"]
+    assert "initContainers" not in spec
+    assert not [a for a in spec["containers"][0]["args"] if "rootfs" in a]
+
+
+def test_rootfs_image_copies_the_drive_into_the_rootfs_dir() -> None:
+    docs = _render(
+        [
+            *_FIRECRACKER,
+            "--set-string",
+            "craft.hostAgent.rootfs.image.tag=rootfs-0.1.0",
+            "--set-string",
+            "craft.hostAgent.dataDir=/data/craft-fc",
+        ]
+    )
+    spec = _by_kind(docs, "DaemonSet")["spec"]["template"]["spec"]
+    init = spec["initContainers"]
+    agent = spec["containers"][0]
+
+    assert [c["name"] for c in init] == ["rootfs"]
+    assert init[0]["image"] == "onyxdotapp/craft-fc-artifacts:rootfs-0.1.0"
+    # The image's entrypoint is its install script; the argument is the target.
+    assert "command" not in init[0]
+    assert init[0]["args"] == ["/data/craft-fc/rootfs"]
+    assert init[0]["volumeMounts"] == [{"name": "data", "mountPath": "/data/craft-fc"}]
+    security = init[0]["securityContext"]
+    assert security["capabilities"] == {"drop": ["ALL"]}
+    assert security["allowPrivilegeEscalation"] is False
+    assert security["readOnlyRootFilesystem"] is True
+    assert "privileged" not in security
+    assert "--rootfs-dir=/data/craft-fc/rootfs" in agent["args"]
+    assert "--data-dir=/data/craft-fc" in agent["args"]
 
 
 def test_drain_watch_overrides() -> None:

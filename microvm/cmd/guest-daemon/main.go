@@ -46,6 +46,10 @@ func main() {
 	managedB := flag.String("managed-dev-b", "/dev/vdf", "managed slot B device (the image's MANAGED_DEV_B)")
 	reportOrder := flag.Int("page-reporting-order", 0, "balloon free page reporting order to set at start (0 reports every free page); -1 leaves the kernel default")
 	reclaimIdle := flag.Duration("reclaim-idle", 5*time.Minute, "drop the page cache after this long without daemon calls (Health does not count); 0 turns it off")
+	caAnchor := flag.String("ca-anchor", sysops.DefaultCAPaths.Anchor, "egress CA file that update-ca-certificates reads")
+	caBundle := flag.String("ca-bundle", sysops.DefaultCAPaths.Bundle, "system CA bundle that Init adds the SetKey egress CA to; empty turns the CA install off")
+	caNSSDB := flag.String("ca-nssdb", sysops.DefaultCAPaths.NSSDB, "NSS database (Chromium) that gets the egress CA; certutil runs as its owner; empty to skip")
+	certutil := flag.String("certutil", sysops.DefaultCAPaths.Certutil, "NSS certutil program")
 	flag.Parse()
 
 	var lvl slog.Level
@@ -64,6 +68,11 @@ func main() {
 	}
 	if path := *attachCmd; path != "" {
 		sys.Attach = func() error { return sysops.RunAttach(path, 2*time.Minute) }
+	}
+	if *caBundle != "" {
+		paths := sysops.CAPaths{Anchor: *caAnchor, Bundle: *caBundle, NSSDB: *caNSSDB, Certutil: *certutil,
+			Nickname: sysops.DefaultCAPaths.Nickname, Log: log}
+		sys.InstallCA = func(pem []byte) error { return sysops.InstallEgressCA(paths, pem) }
 	}
 	if pf := *relayPIDFile; pf != "" {
 		sys.ResetRelay = func() (bool, error) { return sysops.SignalPIDFile(pf) }

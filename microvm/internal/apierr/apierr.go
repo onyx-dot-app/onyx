@@ -58,7 +58,7 @@ func Code(r pb.ErrorReason) codes.Code {
 		return codes.ResourceExhausted
 	case pb.ErrorReason_PORT_NOT_ALLOWED, pb.ErrorReason_METHOD_NOT_ALLOWED:
 		return codes.PermissionDenied
-	case pb.ErrorReason_GUEST_UNREACHABLE:
+	case pb.ErrorReason_GUEST_UNREACHABLE, pb.ErrorReason_EGRESS_CA_UNAVAILABLE:
 		return codes.Unavailable
 	default:
 		return codes.Internal

@@ -140,6 +140,12 @@ func TestInitKVM(t *testing.T) {
 		}
 	})
 
+	// ENG-4648: the root drive has no CA. SetKey carries the deployment CA,
+	// Init installs it, and a later SetKey + Init replaces it (a CA rotation).
+	t.Run("egress_ca_from_set_key", func(t *testing.T) {
+		testEgressCA(ctx, t, v, c, key)
+	})
+
 	t.Run("restart_never_runs_overlay_helpers", func(t *testing.T) {
 		// Fakes for every helper the old init found through PATH, in the
 		// writable /usr overlay and in the sandbox-owned venv.

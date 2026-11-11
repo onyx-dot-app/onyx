@@ -63,19 +63,20 @@ On a Linux x86-64 host, build the existing Go binaries and convert a published r
   go build -trimpath -o ../out/egress-relay ./cmd/egress-relay)
 sudo bash deployment/craft-fc/rootfs/build-rootfs.sh \
   --image onyxdotapp/craft-runtime:v5.2.0 \
-  --ca /path/to/egress-ca.crt \
   --daemon-bin out/guest-daemon --relay-bin out/egress-relay \
   --out out/rootfs
 ```
 
 Use the Onyx release tag required by your deployment instead of the example tag.
-See `../craft-fc/rootfs/README.md` for host requirements, CA validation, and the drive layout.
+The command makes a root drive with no egress CA. The guest daemon installs the deployment CA at `Init`.
+See `../craft-fc/rootfs/README.md` for host requirements, the optional `--ca`, and the drive layout.
 
 | Component | Owner and output |
 |---|---|
 | Userspace tools and assets | This image, versioned with the Onyx application |
 | Guest daemon and Go relay | `microvm/cmd/guest-daemon` and `microvm/cmd/egress-relay` |
-| Init, overlays, CA trust, proxy settings | Existing rootfs converter, producing `rootfs.ext4` and `manifest.json` |
+| Init, overlays, proxy settings | Existing rootfs converter, producing `rootfs.ext4` and `manifest.json` |
+| Deployment egress CA | The host agent sends it with `SetKey`; the guest daemon installs it at `Init` |
 | VM creation, identity, mTLS, guest gRPC pass-through | `microvm` host agent, published separately as `craft-fc-host-agent` |
 | Kernel, Firecracker, jailer | `craft-fc-artifacts` |
 
@@ -84,8 +85,9 @@ It configures the daemon on vsock port 52 and the guest proxy on `127.0.0.1:3128
 Rootfs compatibility comes from its manifest, not a separate runtime protocol file.
 
 The node template work consumes the converter's disk files and manifest, not this OCI image directly.
-Rootfs delivery to nodes and deployment-specific CA handling remain separate integration work.
-Publishing this image does not make a node ready by itself.
+`.github/workflows/craft-fc-rootfs.yml` converts a tag of this image and publishes the files as
+`onyxdotapp/craft-fc-artifacts:rootfs-<version>`. The Helm chart copies them to each node
+(`craft.hostAgent.rootfs`, see `../craft-fc/rootfs/README.md`).
 
 ## Check rootfs conversion
 
@@ -96,9 +98,9 @@ sudo env "PATH=$PATH" bash deployment/craft-runtime/check-rootfs.sh onyxdotapp/c
 ```
 
 The check builds the real guest daemon and relay from `microvm/`.
-It creates a temporary CA and loopback registry, then calls the existing rootfs converter unchanged.
-It checks the ext4 hash, embedded programs, preserved environment, ports, and managed-drive layout.
-It removes the test registry, CA key, rootfs output, and temporary image tag when it exits.
+It creates a loopback registry, then calls the existing rootfs converter with no `--ca`.
+It checks the ext4 hash, embedded programs, preserved environment, ports, the CA-free manifest, and the managed-drive layout.
+It removes the test registry, rootfs output, and temporary image tag when it exits.
 This validates conversion without KVM; it does not test VM boot, mTLS routing, or snapshot restore.
 
 ## Verify the image inside Firecracker
@@ -154,7 +156,7 @@ The managed-drive hot-swap work owns updates to these files.
 This image leaves the mount point empty and does not install or synchronize skill bundles.
 
 The rootfs converter owns scratch overlays for `/etc`, `/home`, `/root`, `/opt`, `/srv`, `/usr`, `/var`, and `/workspace`.
-It also owns proxy CA import into the sandbox user's NSS database.
+It makes the sandbox user's empty NSS database. The guest daemon adds the proxy CA to it at `Init`.
 Browser management and file/session APIs are separate guest-daemon features; this image does not implement them.
 
 ## Harness-owned operations
