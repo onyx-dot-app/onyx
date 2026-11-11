@@ -881,6 +881,38 @@ def persist_hierarchy_nodes_for_cc_pair(
     return upserted
 
 
+def persist_stub_hierarchy_nodes_for_cc_pair(
+    db_session: Session,
+    raw_node_ids: list[str],
+    source: DocumentSource,
+    source_node_id: int,
+    connector_id: int,
+    credential_id: int,
+) -> list[HierarchyNode]:
+    """The nodes for these raw ids, with a STUB for each one that is not
+    stored yet. A document whose parent arrives later points at the STUB, and
+    the STUB becomes the real node when the parent is upserted. Commits the
+    stubs and their cc_pair links together, as
+    ``persist_hierarchy_nodes_for_cc_pair`` does."""
+    nodes: list[HierarchyNode] = []
+    for raw_node_id in sorted(set(raw_node_ids)):
+        node = get_hierarchy_node_by_raw_id(db_session, raw_node_id, source)
+        if node is None:
+            node = _create_stub_hierarchy_node(
+                db_session, raw_node_id, source, source_node_id
+            )
+        nodes.append(node)
+    upsert_hierarchy_node_cc_pair_entries(
+        db_session=db_session,
+        hierarchy_node_ids=[node.id for node in nodes],
+        connector_id=connector_id,
+        credential_id=credential_id,
+        commit=False,
+    )
+    db_session.commit()
+    return nodes
+
+
 def remove_stale_hierarchy_node_cc_pair_entries(
     db_session: Session,
     connector_id: int,
