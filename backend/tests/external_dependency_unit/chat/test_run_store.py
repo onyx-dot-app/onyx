@@ -11,7 +11,8 @@ from unittest.mock import Mock, patch
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from onyx.agents.agent_coordination import AgentCoordinator, RunStore
@@ -20,6 +21,7 @@ from onyx.agents.models import (
     AgentState,
     CompactionCheckpoint,
     ExecutionCheckpoint,
+    ExecutionStatus,
     InputMessageMetadata,
     InputSource,
     MessageDelivery,
@@ -70,21 +72,27 @@ from onyx.db.chat_checkpoint import (
     claim_checkpoint__no_commit,
     release_checkpoint_claim__no_commit,
 )
+from onyx.db.chat_inputs import pending_inputs
 from onyx.db.chat_response import (
     read_chat_execution,
     read_response__no_commit,
     save_response_record__no_commit,
+    write_response_inputs,
 )
 from onyx.db.chat_subagents import (
+    read_agent_completions,
     unread_agent_result_ids,
 )
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_tenant
 from onyx.db.models import (
     ChatInput,
     ChatMessage,
+    ChatMessage__SearchDoc,
     ChatResponseCheckpoint,
+    ChatResponseItem,
     ChatSession,
 )
+from onyx.db.models import ToolCall as StoredToolCall
 from onyx.file_store.models import ExtractedContextFiles
 from onyx.file_store.postgres_file_store import PostgresBackedFileStore
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
@@ -1758,6 +1766,18 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
             metadata = later.snapshot().steps[-1].message.metadata
             assert isinstance(metadata, ChatMessageMetadata)
             assert metadata.sources[1].document_id == "child-source"
+            # Legacy children kept their citation documents on the root response.
+            db_session.execute(
+                update(ChatMessage__SearchDoc)
+                .where(ChatMessage__SearchDoc.chat_message_id == int(child.run_id))
+                .values(chat_message_id=branch[1])
+            )
+            db_session.commit()
+            completion = read_agent_completions(db_session, [int(child.run_id)])[0]
+            assert completion.output is not None
+            metadata = completion.output.metadata
+            assert isinstance(metadata, ChatMessageMetadata)
+            assert metadata.sources[1].document_id == "child-source"
         db_session.expire_all()
         parent_response = db_session.get(ChatMessage, branch[1])
         assert parent_response is not None
@@ -2517,3 +2537,209 @@ def test_nested_completion_starts_one_response_without_a_synthetic_user_message(
         release_child.set()
         release_leaf.set()
         assert coordinator.close(timeout=10)
+
+
+@pytest.mark.parametrize("sender_depth", [0, 1])
+@pytest.mark.parametrize("continuation", [False, True])
+def test_accepted_instruction_delivers_descendant_result_to_its_sender(
+    branch: tuple[UUID, int], db_session: Session, sender_depth: int, continuation: bool
+) -> None:
+    responses = [db_session.get(ChatMessage, branch[1])]
+    assert responses[0] is not None
+    for depth in range(3):
+        parent = responses[-1]
+        assert parent is not None
+        parent.response_status = RunStatus.COMPLETE
+        call = ToolCall(id=f"spawn-{depth}", name="spawn_agent", arguments={})
+        generation = ChatResponseItem(
+            id=str(uuid4()),
+            chat_message_id=parent.id,
+            step_index=0,
+            message=AssistantMessage(content=[call]),
+            generation_status=ExecutionStatus.COMPLETE,
+        )
+        invocation = StoredToolCall(
+            chat_session_id=parent.chat_session_id,
+            parent_chat_message_id=parent.id,
+            turn_number=0,
+            tool_call_id=call.id,
+            tool_call_arguments={},
+            tool_call_tokens=0,
+        )
+        db_session.add_all([generation, invocation])
+        db_session.flush()
+        child = ChatSession(
+            id=uuid4(), spawned_by_message_id=parent.id, agent_name=f"child-{depth}"
+        )
+        db_session.add(child)
+        db_session.flush()
+        question = ChatMessage(
+            chat_session_id=child.id,
+            message="Work",
+            token_count=1,
+            message_type=MessageType.USER,
+            invoking_tool_call_id=invocation.id,
+        )
+        db_session.add(question)
+        db_session.flush()
+        response = ChatMessage(
+            chat_session_id=child.id,
+            parent_message_id=question.id,
+            message="Done",
+            token_count=1,
+            message_type=MessageType.ASSISTANT,
+            response_status=RunStatus.COMPLETE,
+        )
+        db_session.add(response)
+        db_session.flush()
+        responses.append(response)
+    sender = responses[sender_depth]
+    leaf = responses[-1]
+    assert sender is not None and leaf is not None
+    sender_item = sender.response_items[0]
+    leaf_item = ChatResponseItem(
+        id=str(uuid4()),
+        chat_message_id=leaf.id,
+        step_index=0,
+        message=AssistantMessage(content=[TextContent(text="Result for sender")]),
+        generation_status=ExecutionStatus.COMPLETE,
+    )
+    db_session.add(leaf_item)
+    for position in range(2):
+        send_call = ToolCall(id=f"send-{position}", name="send_message", arguments={})
+        sender_item.message = AssistantMessage(
+            content=[*sender_item.message.content, send_call]
+        )
+        send_invocation = StoredToolCall(
+            chat_session_id=sender.chat_session_id,
+            parent_chat_message_id=sender.id,
+            turn_number=0,
+            tool_call_id=send_call.id,
+            tool_call_arguments={},
+            tool_call_tokens=0,
+        )
+        db_session.add(send_invocation)
+        db_session.flush()
+        db_session.add(
+            ChatInput(
+                recipient_session_id=leaf.chat_session_id,
+                message_id=f"instruction-{position}",
+                source=InputSource.AGENT,
+                invoking_tool_call_id=send_invocation.id,
+                response_item_id=leaf_item.id,
+                position=position,
+                content="Also answer my question",
+            )
+        )
+    db_session.commit()
+    if continuation:
+        leaf = ChatMessage(
+            chat_session_id=leaf.chat_session_id,
+            parent_message_id=leaf.id,
+            message="Final result",
+            token_count=2,
+            message_type=MessageType.ASSISTANT,
+            response_status=RunStatus.COMPLETE,
+        )
+        db_session.add(leaf)
+        db_session.commit()
+    selected = ChatBranch(chat_session_id=branch[0], message_ids=[branch[1]])
+    assert (
+        unread_agent_result_ids(
+            db_session, selected, str(sender.chat_session_id)
+        ).count(leaf.id)
+        == 1
+    )
+    receipt_item = ChatResponseItem(
+        id=str(uuid4()),
+        chat_message_id=sender.id,
+        step_index=1,
+        message=AssistantMessage(content=[]),
+        generation_status=ExecutionStatus.COMPLETE,
+    )
+    db_session.add(receipt_item)
+    db_session.flush()
+    write_response_inputs(
+        db_session,
+        sender,
+        receipt_item,
+        [
+            UserMessage(
+                id="receipt",
+                content="Result for sender",
+                metadata=InputMessageMetadata(
+                    source=InputSource.AGENT_RESULT, source_run_id=str(leaf.id)
+                ),
+            )
+        ],
+    )
+    db_session.commit()
+    assert leaf.id not in unread_agent_result_ids(
+        db_session, selected, str(sender.chat_session_id)
+    )
+
+    sibling = ChatMessage(
+        chat_session_id=sender.chat_session_id,
+        parent_message_id=sender.parent_message_id,
+        message="Different branch",
+        token_count=2,
+        message_type=MessageType.ASSISTANT,
+        response_status=RunStatus.COMPLETE,
+    )
+    db_session.add(sibling)
+    db_session.flush()
+    sibling_item = ChatResponseItem(
+        id=str(uuid4()),
+        chat_message_id=sibling.id,
+        step_index=0,
+        message=AssistantMessage(content=[]),
+        generation_status=ExecutionStatus.COMPLETE,
+    )
+    db_session.add(sibling_item)
+    db_session.flush()
+    with pytest.raises(ValueError, match="unavailable on this branch"):
+        write_response_inputs(
+            db_session,
+            sibling,
+            sibling_item,
+            [
+                UserMessage(
+                    id="wrong-branch",
+                    content="Result for sender",
+                    metadata=InputMessageMetadata(
+                        source=InputSource.AGENT_RESULT, source_run_id=str(leaf.id)
+                    ),
+                )
+            ],
+        )
+
+
+def test_message_poll_retries_after_database_failure(
+    branch: tuple[UUID, int], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("onyx.chat.run_store.INPUT_POLL_SECONDS", 0)
+    owner = ChatRunStore(
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        chat_session_id=branch[0],
+        response_id=branch[1],
+        visible_response_ids=[],
+        cache=get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE),
+    )
+    coordinator = AgentCoordinator()
+    owner.bind(
+        coordinator,
+        directory=directory(owner),
+        build_agent=lambda _: pytest.fail("Unexpected restoration"),
+    )
+    with patch(
+        "onyx.chat.run_store.pending_inputs",
+        side_effect=OperationalError(
+            "SELECT", {}, RuntimeError("connection unavailable")
+        ),
+    ):
+        owner.poll_control()
+        assert not owner.has_owned_work
+    with patch("onyx.chat.run_store.pending_inputs", wraps=pending_inputs) as read:
+        owner.poll_control()
+        read.assert_called_once()
+    assert coordinator.close(timeout=10)

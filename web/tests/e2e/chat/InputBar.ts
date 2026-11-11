@@ -240,20 +240,31 @@ export class InputBar {
     await this.page.keyboard.press("Enter");
   }
 
+  async queue(): Promise<void> {
+    await this.textbox.press("ControlOrMeta+Enter");
+  }
+
+  async selectPreviousPending(): Promise<void> {
+    await this.textbox.press("ArrowUp");
+  }
+
+  async discardSelectedPending(): Promise<void> {
+    await this.textbox.press("Delete");
+  }
+
   async submitPending(
     text: string,
     delivery: "queue" | "send" = "queue"
   ): Promise<void> {
     await this.textbox.fill(text);
-    await this.textbox.press(
-      delivery === "queue" ? "ControlOrMeta+Enter" : "Enter"
-    );
+    if (delivery === "queue") await this.queue();
+    else await this.send();
     await expect(this.textbox).toHaveText("");
   }
 
   async discardPending(index: number): Promise<void> {
     await this.queuedMessages.nth(index).click();
-    await this.textbox.press("Delete");
+    await this.discardSelectedPending();
   }
 
   async editPending(index: number): Promise<void> {

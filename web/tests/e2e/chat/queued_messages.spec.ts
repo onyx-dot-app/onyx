@@ -60,7 +60,7 @@ pendingTest(
     await expect(chatPage.inputBar.pendingMessageHint).toBeVisible();
     await expect(chatPage.inputBar.sendButton).toHaveText("");
     await expect(chatPage.inputBar.composerSendNowButton).toHaveCount(0);
-    await chatPage.inputBar.textbox.press("ControlOrMeta+Enter");
+    await chatPage.inputBar.queue();
     await expect(chatPage.inputBar.textbox).toHaveText("");
     await expect(chatPage.inputBar.pendingMessageHint).toHaveCount(0);
     await chatPage.inputBar.submitPending("Second queued");
@@ -84,6 +84,51 @@ pendingTest(
     await chatPage.expectCompleteAnswers(3);
     await expect(chatPage.inputBar.queuedMessages).toHaveCount(0);
     await expect(chatPage.inputBar.container).toBeInViewport({ ratio: 1 });
+  }
+);
+
+pendingTest(
+  "unsent messages survive reload beside a newer draft without resubmitting",
+  async ({ page, chatPage, heldResponse }) => {
+    const pendingRoute = `**/api/chat/chat-session/${heldResponse.sessionId}/pending-messages`;
+    let posts = 0;
+    await page.route(pendingRoute, async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.continue();
+        return;
+      }
+      posts += 1;
+      await route.abort("failed");
+    });
+    try {
+      await chatPage.inputBar.submitPending("Keep this unsent instruction");
+      await expect.poll(() => posts).toBe(1);
+      await chatPage.inputBar.fill("A newer draft");
+      await expect
+        .poll(() =>
+          page.evaluate(
+            (sessionId) =>
+              sessionStorage.getItem(`onyx:draft:chat:${sessionId}`),
+            heldResponse.sessionId
+          )
+        )
+        .toBe(JSON.stringify("A newer draft"));
+      await chatPage.reload();
+      await expect(chatPage.inputBar.queuedMessages).toHaveCount(1);
+      await expect(chatPage.inputBar.queuedMessages).toContainText(
+        "Keep this unsent instruction"
+      );
+      await expect(chatPage.inputBar.textbox).toHaveText("A newer draft");
+      expect(posts).toBe(1);
+      await chatPage.inputBar.clear();
+      await chatPage.inputBar.editPending(0);
+      await expect(chatPage.inputBar.textbox).toHaveText(
+        "Keep this unsent instruction"
+      );
+      await expect(chatPage.inputBar.queuedMessages).toHaveCount(0);
+    } finally {
+      await page.unroute(pendingRoute);
+    }
   }
 );
 
@@ -140,12 +185,12 @@ pendingTest(
       await expect(chatPage.inputBar.container).toBeInViewport({ ratio: 1 });
     }
 
-    await chatPage.inputBar.textbox.press("ArrowUp");
+    await chatPage.inputBar.selectPreviousPending();
     await expect(chatPage.inputBar.queuedMessages.last()).toBeInViewport({
       ratio: 1,
     });
     for (let index = 1; index < messageCount; index++) {
-      await chatPage.inputBar.textbox.press("ArrowUp");
+      await chatPage.inputBar.selectPreviousPending();
     }
     await expect(chatPage.inputBar.queuedMessages.first()).toBeInViewport({
       ratio: 1,
@@ -156,14 +201,14 @@ pendingTest(
     await chatPage.reload();
     await expect(chatPage.inputBar.queuedMessages).toHaveCount(messageCount);
     await expect(chatPage.inputBar.container).toBeInViewport({ ratio: 1 });
-    await chatPage.inputBar.textbox.press("ArrowUp");
+    await chatPage.inputBar.selectPreviousPending();
     await expect(chatPage.inputBar.queuedMessages.last()).toBeInViewport({
       ratio: 1,
     });
     await expect(chatPage.inputBar.container).toBeInViewport({ ratio: 1 });
 
     for (let remaining = messageCount; remaining > 0; remaining--) {
-      await chatPage.inputBar.textbox.press("Delete");
+      await chatPage.inputBar.discardSelectedPending();
       await expect(chatPage.inputBar.queuedMessages).toHaveCount(remaining - 1);
     }
     await releaseMockLlmGate(heldResponse.gateId);
@@ -223,6 +268,10 @@ pendingTest(
     await expect(chatPage.scrollContainer).toContainText(
       /First answer complete\.[\s\S]*Focus on durability[\s\S]*The additional instruction was received\./
     );
+    const copied = await chatPage.copyAnswerHtml();
+    expect(copied).toContain("First answer complete.");
+    expect(copied).toContain("The additional instruction was received.");
+    expect(copied).not.toContain(instruction);
     await chatPage.reload();
     await expect(chatPage.humanMessageBubbles).toHaveText([
       heldResponse.question,
@@ -271,8 +320,8 @@ pendingTest.describe("Interrupt and send", () => {
         if (action === "button") {
           await chatPage.inputBar.sendPendingNow(1);
         } else {
-          await chatPage.inputBar.textbox.press("ArrowUp");
-          await chatPage.inputBar.textbox.press("Enter");
+          await chatPage.inputBar.selectPreviousPending();
+          await chatPage.inputBar.send();
         }
         expect((await promoted).ok()).toBe(true);
         await chatPage.expectSavedTurns([

@@ -80,6 +80,8 @@ behavior. Invalid fields fall back independently; malformed containers use defau
 Warnings identify fields without logging stored values. The next preference save
 locks the user's row, preserves valid settings, and writes a validated object.
 The API retains flat `paste_as_tile` and `interrupt_on_send` response fields.
+The legacy `user.paste_as_tile` column remains for draining readers. New code
+reads and writes only JSONB; preference edits on old pods are not synchronized.
 
 **From setting to prompt.** `db/memory.py:get_memories` builds one
 `UserMemoryContext` per turn, called from

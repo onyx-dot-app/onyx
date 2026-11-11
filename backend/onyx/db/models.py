@@ -3860,7 +3860,7 @@ class ChatInput(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     recipient_session_id: Mapped[UUID] = mapped_column(
-        ForeignKey("chat_session.id", ondelete="CASCADE")
+        ForeignKey("chat_session.id", ondelete="CASCADE"), index=True
     )
     message_id: Mapped[str] = mapped_column(String)
     source: Mapped[InputSource] = mapped_column(
@@ -3871,10 +3871,10 @@ class ChatInput(Base):
         )
     )
     invoking_tool_call_id: Mapped[int | None] = mapped_column(
-        ForeignKey("tool_call.id", ondelete="CASCADE"), nullable=True
+        ForeignKey("tool_call.id", ondelete="CASCADE"), nullable=True, index=True
     )
     source_response_id: Mapped[int | None] = mapped_column(
-        ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=True
+        ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=True, index=True
     )
     source_agent_id: Mapped[UUID | None] = column_property(
         select(ChatMessage.chat_session_id)
@@ -3883,7 +3883,7 @@ class ChatInput(Base):
         .scalar_subquery()
     )
     target_response_id: Mapped[int | None] = mapped_column(
-        ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=True
+        ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=True, index=True
     )
     delivery: Mapped[MessageDelivery | None] = mapped_column(
         Enum(

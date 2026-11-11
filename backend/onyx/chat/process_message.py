@@ -72,9 +72,10 @@ from onyx.db.chat import (
 from onyx.db.chat_inputs import (
     accept_human_message__no_commit,
     fail_agent_result_response__no_commit,
+    fail_reserved_message,
     lock_agent,
     pending_agent_result_response,
-    pending_human_message__no_commit,
+    pending_human_message,
 )
 from onyx.db.document_set import filter_document_set_names_by_user_access
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -265,6 +266,7 @@ def prepare_chat_turn(
     admission = ChatTurnAdmission(
         get_cache_backend(operation_timeout_s=ADMISSION_CACHE_TIMEOUT_S)
     )
+    response_ids: list[int] = []
     try:
         with get_session_with_current_tenant() as db_session:
             chat_session = _load_session(new_msg_req, user, db_session)
@@ -293,9 +295,7 @@ def prepare_chat_turn(
                     },
                 )
             if pending_message_id is not None:
-                pending = pending_human_message__no_commit(
-                    db_session, chat_session.id, user.id
-                )
+                pending = pending_human_message(db_session, chat_session.id, user.id)
                 if pending is None or pending.id != pending_message_id:
                     raise OnyxError(
                         OnyxErrorCode.CONFLICT,
@@ -374,9 +374,17 @@ def prepare_chat_turn(
                         else content_free_file_descriptors(new_msg_req.file_descriptors)
                     ),
                     db_session=db_session,
-                    commit=True,
+                    commit=pending_message_id is None,
                 )
                 chat_history.append(user_message)
+                if pending_message_id is not None:
+                    # Accept queued text and reserve its answer in one transaction.
+                    response_ids = reserve_chat_response_ids(
+                        db_session=db_session,
+                        chat_session_id=chat_session.id,
+                        parent_message_id=user_message.id,
+                        model_display_names=[name for _, name in selected_models],
+                    )
             persona = chat_session.persona
             response_parent_id = chat_history[-1].id
             user_message_id = (
@@ -578,12 +586,13 @@ def prepare_chat_turn(
                         OnyxErrorCode.CONFLICT,
                         "The completed agent result is no longer ready to deliver.",
                     )
-            response_ids = reserve_chat_response_ids(
-                db_session=db_session,
-                chat_session_id=chat_session_id,
-                parent_message_id=response_parent_id,
-                model_display_names=[name for _, name in selected_models],
-            )
+            if not response_ids:
+                response_ids = reserve_chat_response_ids(
+                    db_session=db_session,
+                    chat_session_id=chat_session_id,
+                    parent_message_id=response_parent_id,
+                    model_display_names=[name for _, name in selected_models],
+                )
         models = [
             ReservedChatResponse(llm=llm, display_name=name, message_id=message_id)
             for (llm, name), message_id in zip(
@@ -641,7 +650,16 @@ def prepare_chat_turn(
             mcp_headers=mcp_headers,
         )
     except BaseException:
-        admission.release()
+        try:
+            if response_ids:
+                with get_session_with_current_tenant() as db_session:
+                    for response_id in response_ids:
+                        fail_reserved_message(db_session, response_id)
+                    db_session.commit()
+        except Exception:
+            logger.exception("Could not save chat preparation failure")
+        finally:
+            admission.release()
         raise
 
 
@@ -652,9 +670,7 @@ def dispatch_pending_chat_messages(chat_session_id: UUID, user_id: UUID) -> None
         if is_chat_session_processing(chat_session_id, cache):
             return
         with get_session_with_current_tenant() as db_session:
-            pending = pending_human_message__no_commit(
-                db_session, chat_session_id, user_id
-            )
+            pending = pending_human_message(db_session, chat_session_id, user_id)
             continue_after_response_id = (
                 pending_agent_result_response(db_session, chat_session_id, user_id)
                 if pending is None
@@ -714,7 +730,7 @@ def dispatch_pending_chat_messages(chat_session_id: UUID, user_id: UUID) -> None
                     logger.debug("Queued chat work was withdrawn or claimed elsewhere")
                     try:
                         with get_session_with_current_tenant() as db_session:
-                            following = pending_human_message__no_commit(
+                            following = pending_human_message(
                                 db_session, chat_session_id, user_id
                             )
                         # A withdrawal can expose a new head while admission was held.

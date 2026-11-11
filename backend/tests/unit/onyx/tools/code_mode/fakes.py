@@ -163,11 +163,10 @@ class FakeMCPTool(MCPTool):
         output_schema: dict[str, JsonValue] | None = None,
     ) -> None:
         self._id = 12
-        self.mcp_server = MCPServerConnection.model_construct(name=server)
+        self.mcp_server = MCPServerConnection.model_construct(id=1, name=server)
         self._mcp_tool_name = name
         self._output_schema = output_schema
         self._name = name
-        self._llm_name = name
         self._description = f"MCP tool {name}."
         self._display_name = name
         self._tool_definition = parameters

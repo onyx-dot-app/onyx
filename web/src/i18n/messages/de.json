@@ -12603,6 +12603,7 @@
       },
       "pendingMessages": {
         "submitFailed": "Die Nachricht konnte nicht gesendet werden. Sie können sie in den ausstehenden Nachrichten bearbeiten oder entfernen.",
+        "restoredUnconfirmed": "Wir haben Nachrichten wiederhergestellt, deren Zustellung nicht bestätigt wurde. Prüfen Sie den Gesprächsverlauf, bevor Sie sie erneut senden.",
         "withdrawFailed": "Die ausstehende Nachricht konnte nicht entfernt werden.",
         "loadFailed": "Ausstehende Nachrichten konnten nicht geladen werden.",
         "alreadyAccepted": "Diese Nachricht wurde bereits angenommen und ist nicht mehr ausstehend.",
@@ -16445,8 +16446,8 @@
         "saveFailed": "Einstellungen konnten nicht gespeichert werden"
       },
       "sendBehavior": {
-        "title": "Sendeverhalten Während Der Verarbeitung",
-        "description": "Wähle, was Enter und die Senden-Taste während einer Antwort tun. Strg/Cmd+Enter reiht eine Folgefrage ein.",
+        "title": "Sendeverhalten während der Verarbeitung",
+        "description": "Wählen Sie, was Enter und die Senden-Taste während einer Antwort tun. Strg/Cmd+Enter reiht immer eine Folgenachricht ein.",
         "afterStep": "Nach dem aktuellen Schritt",
         "interrupt": "Aktuelle Arbeit unterbrechen"
       }

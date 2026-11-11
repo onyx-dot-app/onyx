@@ -95,16 +95,25 @@ jest.mock("@/hooks/usePromptShortcuts", () => ({
   __esModule: true,
   default: () => ({ activePromptShortcuts: [] }),
 }));
-jest.mock("@/hooks/useDraft", () => ({
-  ...jest.requireActual<typeof import("@/hooks/useDraft")>("@/hooks/useDraft"),
-  draftKey: () => "draft",
-  useDraft: () => ({
-    loaded: true,
-    draft: undefined,
-    save: jest.fn(),
-    clear: mockClearDraft,
-  }),
-}));
+jest.mock("@/hooks/useDraft", () => {
+  const actual =
+    jest.requireActual<typeof import("@/hooks/useDraft")>("@/hooks/useDraft");
+  return {
+    ...actual,
+    useDraft: (
+      options: import("@/hooks/useDraft").UseDraftOptions<unknown>
+    ) => {
+      if (options.key.startsWith("onyx:draft:pending-chat:"))
+        return actual.useDraft(options);
+      return {
+        loaded: true,
+        draft: undefined,
+        save: jest.fn(),
+        clear: mockClearDraft,
+      };
+    },
+  };
+});
 jest.mock("@/refresh-components/popovers/FilePickerPopover", () => ({
   __esModule: true,
   default: () => null,
@@ -133,6 +142,7 @@ function props(chatState: AppInputBarProps["chatState"]): AppInputBarProps {
 }
 
 beforeEach(() => {
+  sessionStorage.clear();
   mockSearchMode = false;
   mockIncognito = false;
   requestLog = [];
@@ -412,7 +422,7 @@ test.each(["{Enter}", "{Control>}{Enter}{/Control}", "{Meta>}{Enter}{/Meta}"])(
   }
 );
 
-test("failed pending submission retains an editable local preview", async () => {
+test("failed pending submissions survive composer reload without replacing a newer draft or resending", async () => {
   const user = setupUser();
   fetchSpy.mockImplementation(
     async (_url, init) =>
@@ -425,12 +435,23 @@ test("failed pending submission retains an editable local preview", async () => 
         { status: init?.method === "POST" ? 409 : 200 }
       )
   );
-  render(<AppInputBar {...props("streaming")} />);
+  const view = render(<AppInputBar {...props("streaming")} />);
   const textbox = screen.getByRole("textbox", { name: "Message input" });
   await user.click(textbox);
   await user.keyboard("{Enter}");
   expect(textbox).toHaveTextContent(/^$/);
   expect(await screen.findByText("Keep this draft")).toBeVisible();
+  await user.keyboard("Newer draft");
+  view.unmount();
+  fetchSpy.mockClear();
+  render(<AppInputBar {...props("streaming")} initialMessage="Newer draft" />);
+  expect(await screen.findByText("Keep this draft")).toBeVisible();
+  expect(
+    screen.getByRole("textbox", { name: "Message input" })
+  ).toHaveTextContent("Newer draft");
+  expect(fetchSpy.mock.calls.every(([, init]) => init?.method !== "POST")).toBe(
+    true
+  );
   expect(pending).toHaveLength(1);
 });
 
@@ -561,7 +582,53 @@ test("a successful queue request keeps text typed while it was pending", async (
     submission.resolve(new Response(JSON.stringify(item)));
   });
   expect(textbox).toHaveTextContent("more");
+  expect(sessionStorage.getItem("onyx:draft:pending-chat:session")).toBeNull();
   expect(mockClearDraft).toHaveBeenCalled();
+});
+
+test("an acknowledgement from an unmounted composer preserves newer unconfirmed messages", async () => {
+  const user = setupUser();
+  const first = deferred<Response>();
+  const second = deferred<Response>();
+  let posts = 0;
+  fetchSpy.mockImplementation(async (_url, init) => {
+    if (init?.method === "POST")
+      return ++posts === 1 ? first.promise : second.promise;
+    return new Response(JSON.stringify(pending));
+  });
+  const firstView = render(
+    <AppInputBar {...props("streaming")} initialMessage="First instruction" />
+  );
+  await user.click(screen.getByRole("textbox", { name: "Message input" }));
+  await user.keyboard("{Enter}");
+  await waitFor(() => expect(posts).toBe(1));
+  firstView.unmount();
+  const nextView = render(
+    <AppInputBar {...props("streaming")} initialMessage="Second instruction" />
+  );
+  await screen.findByText("First instruction");
+  await user.click(screen.getByRole("textbox", { name: "Message input" }));
+  await user.keyboard("{Enter}");
+  await waitFor(() => expect(posts).toBe(2));
+  await act(async () => {
+    const accepted = {
+      id: "accepted-first",
+      message: "First instruction",
+      delivery: "send" as const,
+      target_response_id: 2,
+    };
+    pending.push(accepted);
+    first.resolve(new Response(JSON.stringify(accepted)));
+    second.resolve(
+      new Response(JSON.stringify({ detail: "Connection lost" }), {
+        status: 503,
+      })
+    );
+  });
+  nextView.unmount();
+  render(<AppInputBar {...props("streaming")} initialMessage="" />);
+  expect(await screen.findByText("Second instruction")).toBeVisible();
+  expect(posts).toBe(2);
 });
 
 test("an input accepted before POST returns refreshes the active conversation", async () => {
@@ -828,6 +895,7 @@ test("editing a local pending message withdraws it before acknowledgement", asyn
   expect(requestLog.filter((request) => request.method !== "GET")).toHaveLength(
     0
   );
+  expect(sessionStorage.getItem("onyx:draft:pending-chat:session")).toBeNull();
 });
 
 test("interrupting a local preview waits for the response acknowledgement", async () => {

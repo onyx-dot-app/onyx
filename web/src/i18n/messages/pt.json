@@ -12603,6 +12603,7 @@
       },
       "pendingMessages": {
         "submitFailed": "Não foi possível enviar a mensagem. Você pode editá-la ou removê-la das mensagens pendentes.",
+        "restoredUnconfirmed": "Restauramos mensagens cuja entrega não foi confirmada. Confira a conversa antes de enviá-las novamente.",
         "withdrawFailed": "Não foi possível remover a mensagem pendente.",
         "loadFailed": "Não foi possível carregar as mensagens pendentes.",
         "alreadyAccepted": "Esta mensagem já foi aceita e não está mais pendente.",

@@ -78,7 +78,8 @@ availability and the record mode; this component applies them.
 
 ```
 prepare_chat_turn                          chat/process_message.py
-  create_new_chat_message (user row)       commits at once; survives a failed answer
+  create_new_chat_message (user row)       queued input commits with its reserved answer;
+                                           other sends commit the user row at once
   RedisChatHistoryStore.save_user_messages      USAGE_ONLY: Redis, before reservation
   reserve_chat_response_ids                db/chat.py: assistant row(s), placeholder
                                            text, response_status NULL, committed;
@@ -145,7 +146,8 @@ no `SYSTEM` root: its first question has no parent, and
 `ChatRunStore.reserve_run_id` saves first. A later call to the same sub-agent
 reuses its child session and chains the new question to the previous
 response, which must be terminal. Creation links determine authorized ancestors;
-the invoking tool identifies the requester of each run. An automatic response
+the invoking tool identifies the requester of each run. Accepted instructions
+also deliver the result to their senders on the selected branch. An automatic response
 to child output links directly to the previous assistant response and retains
 its original invocation. It creates no user-message row. An ancestor can request
 a grandchild's next run without changing the grandchild's session ancestry.
