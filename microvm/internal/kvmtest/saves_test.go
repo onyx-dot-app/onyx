@@ -69,6 +69,11 @@ func startSavesAgent(t *testing.T, e env, name, certDir string, certs *testcerts
 	}
 }
 
+func onPath(program string) bool {
+	_, err := exec.LookPath(program)
+	return err == nil
+}
+
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
@@ -244,6 +249,9 @@ func TestSavesKVM(t *testing.T) {
 	bucket := os.Getenv("KVM_S3_BUCKET")
 	if bucket == "" {
 		t.Skip("KVM_S3_BUCKET not set: the saves test needs a test S3 bucket and AWS credentials")
+	}
+	if p := getenv("KVM_PRESIGN", "/opt/df/presign.py"); !onPath(p) {
+		t.Fatalf("no presigner %s: set KVM_PRESIGN to a program that prints a presigned request", p)
 	}
 	e.Template = getenv("KVM_SAVES_TEMPLATE", "kvmtest-saves-1")
 	cmd := newCommand(t, e)

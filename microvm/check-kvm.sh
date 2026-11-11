@@ -90,10 +90,11 @@ cleanup_vms() {
     case "$(readlink "${proc}/root" 2>/dev/null)" in "${xfs}"/*) kill -KILL "${proc#/proc/}" 2>/dev/null || true ;; esac
   done
 }
-test_pid=""
+test_pid="" mitm=""
 cleanup() {
   result=$?
   if [ -n "${test_pid}" ]; then kill -KILL -- "-${test_pid}" 2>/dev/null || true; fi
+  if [ -n "${mitm}" ]; then kill -KILL "${mitm}" 2>/dev/null || true; fi
   cleanup_vms
   if [ "${KVM_KEEP_WORK:-}" != 1 ]; then
     umount "${xfs}" 2>/dev/null || true
@@ -189,6 +190,7 @@ if [ "${lane}" = full ]; then
   done
   kill "${mitm}" 2>/dev/null || true
   wait "${mitm}" 2>/dev/null || true
+  mitm=""
   [ -s "${confdir}/mitmproxy-ca-cert.pem" ] || {
     echo "mitmproxy wrote no CA" >&2
     exit 1
