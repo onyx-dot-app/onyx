@@ -202,17 +202,8 @@ class ImapConnector(
                 )
                 continue
 
-            fallback_id = (
-                f"{checkpoint.current_mailbox.mailbox}:{email_id}"
-                if checkpoint.current_mailbox
-                else str(email_id)
-            )
-
             try:
-                email_headers = EmailHeaders.from_email_msg(
-                    email_msg=email_msg,
-                    fallback_id=fallback_id,
-                )
+                email_headers = EmailHeaders.from_email_msg(email_msg=email_msg)
             except Exception as e:
                 logger.warning(
                     "Failed to parse email headers for email_id=%r: %s; skipping",
@@ -372,7 +363,6 @@ def _convert_email_headers_and_body_into_document(
     email_headers: EmailHeaders,
     include_perm_sync: bool,
 ) -> Document:
-    sender_name, sender_addr = _parse_singular_addr(raw_header=email_headers.sender)
     parsed_recipients = (
         _parse_addrs(raw_header=email_headers.recipients)
         if email_headers.recipients
@@ -385,10 +375,18 @@ def _convert_email_headers_and_body_into_document(
         )
         for recipient_name, recipient_addr in parsed_recipients
     }
-    if sender_addr not in expert_info_map:
-        expert_info_map[sender_addr] = BasicExpertInfo(
-            display_name=sender_name, email=sender_addr
-        )
+    if email_headers.sender:
+        try:
+            sender_name, sender_addr = _parse_singular_addr(raw_header=email_headers.sender)
+            if sender_addr and sender_addr not in expert_info_map:
+                expert_info_map[sender_addr] = BasicExpertInfo(
+                    display_name=sender_name, email=sender_addr
+                )
+        except Exception:
+            logger.warning(
+                "Could not parse sender address %r; omitting sender from permissions",
+                email_headers.sender,
+            )
 
     email_body = _parse_email_body(email_msg=email_msg, email_headers=email_headers)
     primary_owners = list(expert_info_map.values())

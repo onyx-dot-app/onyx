@@ -26,8 +26,8 @@ class EmailHeaders(BaseModel):
 
     id: str
     subject: str
-    sender: str
-    recipients: str | None
+    sender: str | None = None
+    recipients: str | None = None
     date: datetime
 
     @classmethod
@@ -61,7 +61,7 @@ class EmailHeaders(BaseModel):
 
         # It's possible for the subject line to not exist or be an empty string.
         subject = _decode(header=Header.SUBJECT_HEADER) or "Unknown Subject"
-        from_ = _decode(header=Header.FROM_HEADER) or "unknown@unknown.com"
+        from_ = _decode(header=Header.FROM_HEADER)
         to = _decode(header=Header.TO_HEADER)
         if not to:
             to = _decode(header=Header.DELIVERED_TO_HEADER)
