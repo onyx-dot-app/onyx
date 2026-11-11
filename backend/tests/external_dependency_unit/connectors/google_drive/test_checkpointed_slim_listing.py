@@ -156,9 +156,10 @@ def test_stub_goes_through_json_with_its_payload(mock_drive: MockDrive) -> None:
 
     dumped = stub.model_dump(mode="json")
 
-    assert dumped["listing_payload"] == {
-        "retriever_email": stub.listing_payload.retriever_email  # ty: ignore[unresolved-attribute]
-    }
+    payload = stub.listing_payload
+    assert isinstance(payload, DriveListingPayload)
+    assert payload.drive_file is not None
+    assert DriveListingPayload.model_validate(dumped["listing_payload"]) == payload
     assert dumped["mime_type"] == stub.mime_type
     # Pruning and permission sync read a stub as a slim document.
     assert SlimDocument.model_validate(dumped).id == stub.id
