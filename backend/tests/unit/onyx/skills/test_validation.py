@@ -12,6 +12,8 @@ import pytest
 
 from onyx.db.file_record import FileRecordNotFoundError
 from onyx.db.models import Skill
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
 from onyx.skills import validation
 from onyx.skills.validation import validate_stored_custom_skill
@@ -103,3 +105,18 @@ def test_bundle_over_lowered_total_limit_stays_unclassified(
     monkeypatch.setattr(validation, "DEFAULT_TOTAL_MAX_BYTES", len(stored))
     file_store.read_file.return_value = io.BytesIO(stored)
     assert validate_stored_custom_skill(_skill(), file_store).is_valid is True
+
+
+def test_limit_on_normalized_bundle_leaves_skill_unclassified(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A rewrite stores CP437 names as UTF-8, so the normalized file list can grow.
+    file_store = MagicMock(spec=FileStore)
+    file_store.read_file.return_value = io.BytesIO(_valid_stored_bundle())
+    too_large = OnyxError(OnyxErrorCode.PAYLOAD_TOO_LARGE, "file list too large")
+    monkeypatch.setattr(validation, "open_bundle_zip", MagicMock(side_effect=too_large))
+
+    result = validate_stored_custom_skill(_skill(), file_store)
+
+    assert result.is_valid is None
+    assert result.normalized_bundle is None

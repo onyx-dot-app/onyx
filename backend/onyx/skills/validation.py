@@ -132,6 +132,15 @@ def validate_stored_custom_skill(
             directory_name=normalized.source_directory,
         )
     except (OnyxError, KeyError, zipfile.BadZipFile) as exc:
+        if (
+            isinstance(exc, OnyxError)
+            and exc.error_code == OnyxErrorCode.PAYLOAD_TOO_LARGE
+        ):
+            return SkillValidationResult(
+                is_valid=None,
+                normalized_bundle=None,
+                detail=f"stored bundle is outside the configured limits: {exc.detail}",
+            )
         detail = exc.detail if isinstance(exc, OnyxError) else str(exc)
         return SkillValidationResult(
             is_valid=False,
