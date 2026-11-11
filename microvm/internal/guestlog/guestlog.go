@@ -18,10 +18,8 @@
 // leave a hole. For fc.log the shipper punches a hole over the bytes it has
 // read instead (Linux): the size stays, the disk blocks are freed.
 //
-// From E2B's orchestrator (e2b-dev/infra, Apache-2.0,
-// packages/orchestrator/internal/sandbox/fc/process.go and
-// packages/shared/pkg/logger/sandbox): one structured line per Firecracker
-// output line, with the sandbox and team (here tenant) as fields.
+// The shipper writes one structured line per Firecracker output line, with
+// the sandbox and tenant as fields.
 package guestlog
 
 import (
