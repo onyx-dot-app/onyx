@@ -15,6 +15,7 @@ import (
 	"io/fs"
 	"net/http"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -340,8 +341,8 @@ func newStateCollector(src Source) *stateCollector {
 		memAvail: d("node_memory_available_bytes", "Node MemAvailable (the admission input)."),
 		diskFree: d("node_disk_free_bytes", "Free space on the data disk."),
 		memAlloc: d("vm_memory_allocated_bytes", "Guest memory of the VMs that are not exited."),
-		memPrivate: d("vm_memory_private_bytes", "Private host memory (smaps_rollup Anonymous) of the Firecracker processes of the VMs that are not exited. "+
-			"Balloon free page reporting and the guest's idle reclaim lower it; vm_memory_allocated_bytes minus this is the memory not in use on the node."),
+		memPrivate: d("vm_memory_private_bytes", "Anonymous memory (smaps_rollup) of the Firecracker processes of the VMs that are not exited: "+
+			"the guest pages each VM wrote, plus the VMM's own heap. Shared template pages are not in it. Balloon free page reporting and the guest's idle reclaim lower it."),
 		vcpuAlloc:   d("vm_vcpus_allocated", "vCPUs of the VMs that are not exited."),
 		relayOpen:   d("relay_open_connections", "Open egress relay connections."),
 		dialOpen:    d("dial_open_streams", "Open Dial streams."),
@@ -384,7 +385,7 @@ func (c *stateCollector) Collect(ch chan<- prometheus.Metric) {
 			switch {
 			case err == nil:
 				private += b
-			case !errors.Is(err, fs.ErrNotExist):
+			case !errors.Is(err, fs.ErrNotExist) && !errors.Is(err, syscall.ESRCH):
 				// A VM that exits during the scrape is not an error.
 				privateFailed = true
 			}

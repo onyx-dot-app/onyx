@@ -82,9 +82,10 @@ func KernelRelease() string {
 	return strings.TrimSpace(string(raw))
 }
 
-// PrivateMemoryBytes returns the Anonymous bytes of /proc/<pid>/smaps_rollup:
-// the private copy-on-write pages of a Firecracker process whose guest
-// memory maps the template snapshot. Shared template pages are not counted.
+// PrivateMemoryBytes returns the Anonymous bytes of /proc/<pid>/smaps_rollup.
+// For a Firecracker process that maps the template snapshot, that is the
+// guest pages it wrote (copy-on-write) plus its own heap. Shared template
+// pages are file pages and are not counted.
 func PrivateMemoryBytes(pid int) (uint64, error) {
 	f, err := os.Open(fmt.Sprintf("/proc/%d/smaps_rollup", pid))
 	if err != nil {

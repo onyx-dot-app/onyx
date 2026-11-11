@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"net/http/httptest"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -330,7 +331,7 @@ func TestPrivateMemory(t *testing.T) {
 	}
 	want := func(bytes, failed string) string {
 		return `
-# HELP craft_fc_host_agent_vm_memory_private_bytes Private host memory (smaps_rollup Anonymous) of the Firecracker processes of the VMs that are not exited. Balloon free page reporting and the guest's idle reclaim lower it; vm_memory_allocated_bytes minus this is the memory not in use on the node.
+# HELP craft_fc_host_agent_vm_memory_private_bytes Anonymous memory (smaps_rollup) of the Firecracker processes of the VMs that are not exited: the guest pages each VM wrote, plus the VMM's own heap. Shared template pages are not in it. Balloon free page reporting and the guest's idle reclaim lower it.
 # TYPE craft_fc_host_agent_vm_memory_private_bytes gauge
 craft_fc_host_agent_vm_memory_private_bytes ` + bytes + `
 # HELP craft_fc_host_agent_node_stats_errors 1 if the last scrape could not read node memory, disk, or the private memory of a VM.
@@ -343,9 +344,10 @@ craft_fc_host_agent_node_stats_errors{stat="vm_memory"} ` + failed + `
 	if err := testutil.GatherAndCompare(m.Registry(), strings.NewReader(want("3.4603008e+07", "0")), names...); err != nil {
 		t.Error(err)
 	}
-	// A VM that exits during the scrape is skipped.
+	// A VM that exits during the scrape is skipped (open or read).
 	read[10] = fs.ErrNotExist
-	if err := testutil.GatherAndCompare(m.Registry(), strings.NewReader(want("2.4117248e+07", "0")), names...); err != nil {
+	read[12] = fmt.Errorf("read: %w", syscall.ESRCH)
+	if err := testutil.GatherAndCompare(m.Registry(), strings.NewReader(want("1.1534336e+07", "0")), names...); err != nil {
 		t.Error(err)
 	}
 	// Another error is flagged and the partial sum is not reported.

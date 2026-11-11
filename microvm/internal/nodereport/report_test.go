@@ -373,7 +373,13 @@ func TestRunObservesEachResult(t *testing.T) {
 	close(ready)
 	r, _ := newReporter(t, rec, ready)
 	results := make(chan error, 64)
-	r.Observe = func(err error) { results <- err }
+	r.Observe = func(err error) {
+		// Never block Run: only the first results are checked.
+		select {
+		case results <- err:
+		default:
+		}
+	}
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan struct{})
 	go func() { r.Run(ctx); close(done) }()

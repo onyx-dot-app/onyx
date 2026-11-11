@@ -835,7 +835,13 @@ func TestRegistrarRunObservesEachResult(t *testing.T) {
 	g := &Registrar{
 		BaseURL: srv.URL, Secret: "s", Signer: NewSigner("node-a", "node-a-1", key),
 		Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Interval: time.Millisecond, Retry: time.Millisecond,
-		Observe: func(err error) { results <- err },
+		Observe: func(err error) {
+			// Never block Run: only the first results are checked.
+			select {
+			case results <- err:
+			default:
+			}
+		},
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan struct{})
