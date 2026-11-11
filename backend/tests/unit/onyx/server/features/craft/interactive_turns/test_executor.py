@@ -27,6 +27,7 @@ from onyx.server.features.build.sandbox.event_schema import (
     PromptResponse,
 )
 from onyx.server.features.build.sandbox.event_schema import Error as SandboxError
+from onyx.server.features.build.session.errors import OpencodeConfigReloadError
 from onyx.server.features.build.session.models import TurnOutputSnapshot
 from onyx.server.features.build.timeouts import (
     PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
@@ -101,6 +102,7 @@ def _run_turn_with_events(
     prompt_slot: "_FakePromptSlot | None" = None,
     session_missing: bool = False,
     turn_index: int = 0,
+    reconcile_error: Exception | None = None,
 ) -> SimpleNamespace:
     cache = FakeCache()
     db_session = _FakeDbSession()
@@ -144,6 +146,8 @@ def _run_turn_with_events(
 
         def reconcile_session_llm_config(self, *args: object) -> None:
             del args
+            if reconcile_error is not None:
+                raise reconcile_error
 
         def prompt_slot(
             self,
@@ -336,6 +340,27 @@ def test_runner_fails_turn_when_session_deleted_mid_turn(
     finished = get_turn(result.cache, result.turn.turn_id)
     assert finished is not None
     assert finished.status == TURN_STATUS_FAILED
+
+
+def test_runner_shows_config_reload_failure_and_skips_prompt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed dispose must fail the turn with its own message and must not
+    send the prompt to an instance on the old config."""
+    prompt_response = PromptResponse.model_validate({"stopReason": "end_turn"})
+
+    result = _run_turn_with_events(
+        monkeypatch,
+        [prompt_response],
+        reconcile_error=OpencodeConfigReloadError("Settings not applied."),
+    )
+
+    finished = get_turn(result.cache, result.turn.turn_id)
+    assert finished is not None
+    assert finished.status == TURN_STATUS_FAILED
+    assert result.persisted == []
+    assert len(result.turn_errors) == 1
+    assert result.turn_errors[0].startswith("Settings not applied.")
 
 
 def test_runner_fails_turn_on_sandbox_error(
