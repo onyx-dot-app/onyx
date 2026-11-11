@@ -66,7 +66,6 @@ cleanup_vms() {
   # A Go test timeout panic does not run t.Cleanup.
   # shellcheck disable=SC2086
   docker rm -f ${containers} >/dev/null 2>&1 || true
-  systemctl stop 'fcvm-*.scope' >/dev/null 2>&1 || true
   # Jailed Firecracker processes have their root in the data dir.
   for proc in /proc/[0-9]*; do
     case "$(readlink "${proc}/root" 2>/dev/null)" in "${xfs}"/*) kill -KILL "${proc#/proc/}" 2>/dev/null || true ;; esac
@@ -75,12 +74,6 @@ cleanup_vms() {
 cleanup() {
   result=$?
   cleanup_vms
-  if [ "${result}" -ne 0 ]; then
-    while IFS= read -r log; do
-      echo "== ${log}" >&2
-      tail -60 "${log}" >&2
-    done < <(find "${work}/logs" "${xfs}" -name '*.log' 2>/dev/null | head -20 || true)
-  fi
   if [ "${KVM_KEEP_WORK:-}" != 1 ]; then
     umount "${xfs}" 2>/dev/null || true
     rm -rf "${work}"
@@ -89,6 +82,13 @@ cleanup() {
 }
 trap cleanup EXIT
 step() { echo "== $(date -u +%H:%M:%S) $*"; }
+# show_logs DIR: the tails of the test and guest console logs under DIR.
+show_logs() {
+  while IFS= read -r log; do
+    echo "== ${log}" >&2
+    tail -60 "${log}" >&2
+  done < <(find "$1" -name '*.log' 2>/dev/null | head -20 || true)
+}
 
 uname -a
 "${artifacts}/firecracker" --version | head -1
@@ -218,8 +218,12 @@ for test in ${tests}; do
   rc=0
   env "KVM_DATA_DIR=${data}" "${extra[@]}" "${work}/bin/hostagent-kvm.test" -test.v -test.timeout=45m -test.run "^${test}\$" || rc=$?
   echo "RESULT ${test} rc=${rc} seconds=$(($(date +%s) - t0))"
-  [ "${rc}" -eq 0 ] || failed="${failed} ${test}"
   cleanup_vms
+  if [ "${rc}" -ne 0 ]; then
+    failed="${failed} ${test}"
+    show_logs "${data}"
+    show_logs "${work}/logs"
+  fi
   rm -rf --one-file-system "${data}"
 done
 if [ -n "${failed}" ]; then
