@@ -8,11 +8,15 @@ import pytest
 
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
+from onyx.file_store.models import BundleMetadata
 from onyx.skills.ingest import (
     IngestedBundle,
+    SkillMdRecord,
     ingest_skill_bundle,
     ingested_skill_bundle,
+    skill_md_record,
 )
+from onyx.skills.metadata import parse_skill_md_frontmatter
 
 
 def test_ingest_normalizes_wrapped_bundle_before_hashing_and_storage() -> None:
@@ -150,6 +154,7 @@ def test_ingested_skill_bundle_deletes_new_blob_on_failure(
             bundle_file_id="new-bundle",
             bundle_sha256="0" * 64,
             description="Description",
+            metadata=BundleMetadata(unpacked_size_bytes=0, file_count=0),
         ),
     )
     monkeypatch.setattr(
@@ -166,3 +171,66 @@ def test_ingested_skill_bundle_deletes_new_blob_on_failure(
             raise RuntimeError("db write failed")
 
     delete_bundle_blob.assert_called_once_with(file_store, "new-bundle")
+
+
+def _record(raw: bytes) -> SkillMdRecord:
+    frontmatter, _ = parse_skill_md_frontmatter(raw)
+    return skill_md_record(raw, frontmatter)
+
+
+def test_skill_md_record_stores_dates_as_iso_strings() -> None:
+    raw = (
+        b"---\nname: dated\ndescription: d\ncreated: 2025-01-01\n"
+        b"updated: 2025-01-02T10:00:00Z\nallowed-tools: Bash Read\n---\n\nBody\n"
+    )
+
+    record = _record(raw)
+
+    assert record.complete
+    assert record.skill_md == raw.decode()
+    assert record.name == "dated"
+    assert record.frontmatter == {
+        "name": "dated",
+        "description": "d",
+        "created": "2025-01-01",
+        "updated": "2025-01-02T10:00:00+00:00",
+        "allowed-tools": "Bash Read",
+    }
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        "score: .nan",
+        "score: .inf",
+        "score: -.inf",
+        "1: one",
+        "true: yes",
+        "null: none",
+        "nested:\n  1: one",
+        'escaped: "a\\u0000b"',
+        'escaped: "\\uD800"',
+        "blob: !!binary aGk=",
+        "huge: 0x" + "f" * 4000,
+        "tags: !!set {a: null}",
+    ],
+)
+def test_unstorable_frontmatter_keeps_raw_skill_md(extra: str) -> None:
+    raw = f"---\nname: odd\ndescription: d\n{extra}\n---\n\nBody\n".encode()
+
+    record = _record(raw)
+
+    assert record.frontmatter is None
+    assert record.skill_md == raw.decode()
+    assert record.name == "odd"
+    assert not record.complete
+
+
+def test_nul_in_raw_file_keeps_frontmatter() -> None:
+    raw = b"---\nname: nul\ndescription: d\n---\n\nBody\x00\n"
+
+    record = _record(raw)
+
+    assert record.skill_md is None
+    assert record.frontmatter == {"name": "nul", "description": "d"}
+    assert not record.complete

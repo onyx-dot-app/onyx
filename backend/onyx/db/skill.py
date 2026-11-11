@@ -11,10 +11,8 @@ Runtime selection is deliberately separate from authorization. It applies
 visibility without an admin bypass, user enablement for custom skills, app
 readiness for associated skills, validity, and built-in availability.
 
-Delete is a hard delete — `delete_skill` removes the row and returns its
-`bundle_file_id` so the caller can drop the blob from the file store
-immediately (skills sync via S3-backed bundles, so blob retention isn't
-needed).
+Delete is a hard delete: `delete_skill` returns every retained bundle file id.
+Callers use `delete_unreferenced_skill_bundles` after commit to remove unused files.
 
 Mutation helpers do not commit unless their docstring explicitly says otherwise.
 Callers normally control the transaction boundary so multi-step operations can
@@ -61,6 +59,7 @@ from onyx.db.models import (
     Skill,
     Skill__User,
     Skill__UserGroup,
+    SkillVersion,
     User,
     User__UserGroup,
     UserSkillPreference,
@@ -69,6 +68,7 @@ from onyx.db.scoped_permissions import (
     scoped_group_ids_subquery,
     within_managed_scope_clause,
 )
+from onyx.db.skill_version import save_skill_version
 from onyx.db.user_group import assert_not_shared_with_default_group
 from onyx.db.utils import is_fk_violation, is_unique_violation
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -457,39 +457,32 @@ def enable_new_skill_if_name_available__no_commit(
 def replace_skill_bundle(
     *,
     skill: Skill,
-    new_bundle_file_id: str,
-    new_bundle_sha256: str,
-    new_description: str,
+    ingested: IngestedBundle,
+    creator_id: UUID,
     db_session: Session,
-) -> str:
-    """Swap a skill's bundle blob and refresh its description.
-
-    Returns the old bundle file id so the caller can delete the old blob from
-    FileStore after the transaction commits.
-
-    Rejects built-in rows — they have no bundle.
-    """
+) -> None:
+    """Add a version for the staged blob; keep history and legacy columns."""
     if not skill.is_custom:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"Skill '{skill.name}' is a built-in and has no bundle.",
-        )
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Built-in skills have no bundle.")
+    save_skill_version(skill, ingested, creator_id, db_session)
 
-    # Custom rows always have a bundle (XOR check constraint), but guard
-    # explicitly rather than assert so a corrupt row fails loud, not silent.
-    if skill.bundle_file_id is None:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"Skill '{skill.name}' has no bundle to replace.",
-        )
 
-    old_bundle_file_id = skill.bundle_file_id
-    skill.bundle_file_id = new_bundle_file_id
-    skill.bundle_sha256 = new_bundle_sha256
-    skill.description = new_description
-    skill.is_valid = True
-    db_session.flush()
-    return old_bundle_file_id
+def create_skill_from_ingested_bundle(
+    ingested: IngestedBundle, creator_id: UUID, db_session: Session
+) -> Skill:
+    skill = add_new_skill__no_commit(
+        Skill(
+            name=ingested.canonical_name,
+            description=ingested.description,
+            bundle_file_id=ingested.bundle_file_id,
+            bundle_sha256=ingested.bundle_sha256,
+            is_valid=True,
+            author_user_id=creator_id,
+        ),
+        db_session,
+    )
+    save_skill_version(skill, ingested, creator_id, db_session, initial=True)
+    return skill
 
 
 def set_skill_public_permission(
@@ -766,12 +759,21 @@ def transfer_skill_ownership(
         raise
 
 
-def delete_skill(skill: Skill, db_session: Session) -> str | None:
-    """Hard-delete a skill and return its `bundle_file_id` for caller cleanup."""
-    bundle_file_id = skill.bundle_file_id
+def delete_skill(skill: Skill, db_session: Session) -> list[str]:
+    """Hard-delete a locked skill and its versions. Returns every bundle file id
+    for cleanup after commit."""
+    file_ids = {
+        file_id
+        for file_id in db_session.scalars(
+            select(SkillVersion.bundle_file_id).where(SkillVersion.skill_id == skill.id)
+        )
+        if file_id is not None
+    }
+    if skill.bundle_file_id is not None:
+        file_ids.add(skill.bundle_file_id)
     db_session.delete(skill)
     db_session.flush()
-    return bundle_file_id
+    return sorted(file_ids)
 
 
 def persist_skill_validity(
@@ -916,9 +918,9 @@ def share_skill__no_commit(
 
 def delete_skill_for_user__no_commit(
     skill: Skill, user: User, db_session: Session
-) -> tuple[set[UUID], str | None]:
+) -> tuple[set[UUID], list[str]]:
     """Delete a skill the user may edit. Returns the affected users and the
-    bundle file id for caller cleanup."""
+    bundle file ids for cleanup after commit."""
     if (
         skill.installation_policy == SkillInstallationPolicy.REQUIRED
         and not has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS)
@@ -942,17 +944,7 @@ def create_skill_from_bundle__no_commit(
     conflict or a rejected access change rolls back this skill only. Returns
     the skill, whether it was enabled for the user, and the affected users."""
     with db_session.begin_nested():
-        skill = add_new_skill__no_commit(
-            Skill(
-                name=ingested.canonical_name,
-                description=ingested.description,
-                bundle_file_id=ingested.bundle_file_id,
-                bundle_sha256=ingested.bundle_sha256,
-                is_valid=True,
-                author_user_id=user.id,
-            ),
-            db_session,
-        )
+        skill = create_skill_from_ingested_bundle(ingested, user.id, db_session)
         affected: set[UUID] = set()
         if change is not None:
             affected = share_skill__no_commit(skill, change, user, db_session)
@@ -970,10 +962,10 @@ def bulk_update_skill__no_commit(
     change: SkillSharingChange | None,
     user: User,
     db_session: Session,
-) -> tuple[set[UUID], str | None]:
+) -> tuple[set[UUID], list[str]]:
     """Apply one bulk action to one skill inside a savepoint, so a failure
     rolls back this skill only. Returns the affected users and, for a delete,
-    the bundle file id for caller cleanup."""
+    the bundle file ids for cleanup after commit."""
     with db_session.begin_nested():
         if action in ("enable", "disable"):
             set_skill_enabled_for_user(
@@ -982,7 +974,7 @@ def bulk_update_skill__no_commit(
                 user=user,
                 db_session=db_session,
             )
-            return {user.id}, None
+            return {user.id}, []
         skill = fetch_skill(
             skill_id,
             policy=SkillManagementPolicy.EDIT,
@@ -997,5 +989,5 @@ def bulk_update_skill__no_commit(
                 raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Sharing is required.")
             return share_skill__no_commit(
                 skill, change, user, db_session, merge_existing=True
-            ), None
+            ), []
         return delete_skill_for_user__no_commit(skill, user, db_session)
