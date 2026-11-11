@@ -2670,6 +2670,12 @@ class GoogleDriveConnector(
                 t0,
             )
             state = None
+            # The new listing starts with no claims. A claim of the old one
+            # would make the new one drop that file.
+            checkpoint.listing = None
+            checkpoint.retrieved_drive_file_ids = set()
+            checkpoint.incomplete_drive_ids = set()
+            checkpoint.organizer_email_by_drive_id = {}
         if state is not None:
             # A resumed attempt has a later end. List the added range too.
             extend_window(state, t1)
