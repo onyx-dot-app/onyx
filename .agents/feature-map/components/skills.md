@@ -282,7 +282,9 @@ The library preview of an external-app skill calls the same renderer
     file-versus-folder paths by sorting the paths, not by building every parent
     path. `skills/push.py:_add_bundle_bytes` skips a Skill whose declared file
     sizes would take the push over the receiver's `MAX_BUNDLE_BYTES`, before it
-    reads the files.
+    reads the files. It also checks the resolved `SKILL.md` size then, so a
+    Skill that `skill-dir-placeholder` would drop never counts against later
+    Skills.
 
 ---
 
