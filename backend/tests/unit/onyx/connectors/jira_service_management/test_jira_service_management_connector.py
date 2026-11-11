@@ -140,6 +140,23 @@ def _documents(connector: JiraServiceManagementConnector) -> list[Document]:
     ]
 
 
+def test_blank_project_key_and_jql_are_rejected() -> None:
+    with pytest.raises(ConnectorValidationError, match="Project key cannot be blank"):
+        JiraServiceManagementConnector(jira_base_url=_BASE_URL, project_key="  ")
+    with pytest.raises(ConnectorValidationError, match="JQL query cannot be blank"):
+        JiraServiceManagementConnector(
+            jira_base_url=_BASE_URL, project_key=None, jql_query=" \n "
+        )
+    with pytest.raises(ValidationError, match="Project key cannot be blank"):
+        JiraServiceManagementConnectorConfig.model_validate(
+            {"jira_base_url": _BASE_URL, "project_key": " "}
+        )
+    with pytest.raises(ValidationError, match="JQL query cannot be blank"):
+        JiraServiceManagementConnectorConfig.model_validate(
+            {"jira_base_url": _BASE_URL, "jql_query": " "}
+        )
+
+
 def test_project_key_is_normalized_and_rejected_when_unsafe() -> None:
     connector = JiraServiceManagementConnector(
         jira_base_url=_BASE_URL, project_key=" it "

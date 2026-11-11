@@ -33,6 +33,12 @@ from onyx.connectors.jira.source_operations import (
     is_cloud_gateway,
 )
 from onyx.connectors.jira.utils import get_issue_field
+from onyx.connectors.jira_service_management.config import (
+    BLANK_JQL_ERROR,
+    BLANK_PROJECT_KEY_ERROR,
+    PROJECT_KEY_ERROR,
+    PROJECT_KEY_RE,
+)
 from onyx.connectors.jira_service_management.fields import (
     SERVICE_DESK_PROJECT_TYPE,
     apply_service_desk_fields,
@@ -48,25 +54,41 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-_PROJECT_KEY_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
 _ISSUE_KEY_RE = re.compile(r"[A-Z][A-Z0-9_]*-[0-9]+")
 _COMMENT_PAGE_SIZE = 100
-_PROJECT_KEY_ERROR = (
-    "Project key must start with a letter and contain only letters, numbers, "
-    "and underscores."
-)
 _NO_SERVICE_DESK_ERROR = (
     "No Jira Service Management projects are visible to this account."
 )
 
 
 def _normalize_project_key(project_key: str | None) -> str | None:
-    key = (project_key or "").strip().upper()
-    if not key:
+    """Return the project key in upper case.
+
+    ``None`` means the connector does not limit by project. A blank string is
+    a project scope with no key, so it is rejected.
+    """
+    if project_key is None:
         return None
-    if _PROJECT_KEY_RE.fullmatch(key) is None:
-        raise ConnectorValidationError(_PROJECT_KEY_ERROR)
+    key = project_key.strip().upper()
+    if not key:
+        raise ConnectorValidationError(BLANK_PROJECT_KEY_ERROR)
+    if PROJECT_KEY_RE.fullmatch(key) is None:
+        raise ConnectorValidationError(PROJECT_KEY_ERROR)
     return key
+
+
+def _normalize_jql(jql_query: str | None) -> str | None:
+    """Return the JQL query with surrounding space removed.
+
+    ``None`` means the connector does not use a JQL scope. A blank string is
+    a JQL scope with no query, so it is rejected.
+    """
+    if jql_query is None:
+        return None
+    query = jql_query.strip()
+    if not query:
+        raise ConnectorValidationError(BLANK_JQL_ERROR)
+    return query
 
 
 class JiraServiceManagementConnector(JiraConnector):
@@ -90,7 +112,7 @@ class JiraServiceManagementConnector(JiraConnector):
             comment_email_blacklist=comment_email_blacklist,
             batch_size=batch_size,
             labels_to_skip=labels_to_skip,
-            jql_query=jql_query,
+            jql_query=_normalize_jql(jql_query),
             scoped_token=scoped_token,
         )
         self._field_catalog: dict[str, str] | None = None
@@ -135,6 +157,7 @@ class JiraServiceManagementConnector(JiraConnector):
         return keys
 
     def _fetched_project_type(self, project_key: str) -> str | None:
+        """The project type from the project record, or None when it cannot be read."""
         try:
             project = self.source_operations.get_project(project_key=project_key)
         except JiraApiError as error:
@@ -151,6 +174,7 @@ class JiraServiceManagementConnector(JiraConnector):
         return project_type_key(project)
 
     def _service_desk_clause(self) -> str:
+        """JQL that keeps the search inside service desk projects."""
         if is_cloud_gateway(self.source_operations):
             return "projectType = service_desk"
         keys = self._service_desk_project_keys()
@@ -160,7 +184,7 @@ class JiraServiceManagementConnector(JiraConnector):
         return f"project IN ({quoted})"
 
     def _user_scope(self) -> str | None:
-        # A JQL query replaces the project, matching the Jira connector.
+        """The admin's project or JQL limit. A JQL query replaces the project."""
         if self.jql_query:
             return f"({self.jql_query})"
         if self.jira_project:
@@ -168,6 +192,7 @@ class JiraServiceManagementConnector(JiraConnector):
         return None
 
     def _scoped_jql(self, clause: str) -> str:
+        """``clause`` plus the service desk limit and the admin's scope."""
         parts = [f"({clause})", f"({self._service_desk_clause()})"]
         user_scope = self._user_scope()
         if user_scope is not None:
@@ -187,6 +212,7 @@ class JiraServiceManagementConnector(JiraConnector):
         return list(self._search_all_issues(self._scoped_jql(keys_jql)))
 
     def _field_custom_by_id(self) -> dict[str, str]:
+        """Field id to Service Management schema key. Empty when the catalog fails."""
         if self._field_catalog is not None:
             return self._field_catalog
         try:
@@ -210,6 +236,7 @@ class JiraServiceManagementConnector(JiraConnector):
     def _embedded_comments(
         self, issue: JiraIssue
     ) -> tuple[list[dict[str, Any]], int | None]:
+        """Comments already on the issue, and the reported total when Jira sent one."""
         comment_field = get_issue_field(issue, "comment")
         if not isinstance(comment_field, dict):
             return [], None
@@ -225,6 +252,7 @@ class JiraServiceManagementConnector(JiraConnector):
     def _fetch_comment_page(
         self, issue_key: str, start_at: int
     ) -> dict[str, Any] | None:
+        """One comment page, or None when that page cannot be read."""
         try:
             page = self.source_operations.list_issue_comments(
                 issue_key=issue_key,
@@ -269,6 +297,7 @@ class JiraServiceManagementConnector(JiraConnector):
         return comments
 
     def _issue_comments(self, issue: JiraIssue) -> list[dict[str, Any]]:
+        """Every comment on the issue. Uses the embedded list when it is complete."""
         embedded, total = self._embedded_comments(issue)
         if total is None or total <= len(embedded):
             return embedded
@@ -312,6 +341,7 @@ class JiraServiceManagementConnector(JiraConnector):
         )
 
     def _assert_service_desk_project(self, project_key: str) -> None:
+        """Raise when ``project_key`` is not a visible service desk project."""
         try:
             project = self.source_operations.get_project(project_key=project_key)
         except Exception as error:
@@ -325,6 +355,7 @@ class JiraServiceManagementConnector(JiraConnector):
             )
 
     def _assert_visible_service_desk(self) -> None:
+        """Raise when the account cannot read any service desk project."""
         if is_cloud_gateway(self.source_operations):
             try:
                 projects = self.source_operations.list_projects()
@@ -347,6 +378,7 @@ class JiraServiceManagementConnector(JiraConnector):
 
     @override
     def validate_connector_settings(self) -> None:
+        """Check the credential and the chosen scope before the first index."""
         if self._source_operations is None:
             raise ConnectorMissingCredentialError("Jira Service Management")
         if self.jql_query:
@@ -358,6 +390,7 @@ class JiraServiceManagementConnector(JiraConnector):
         self._assert_visible_service_desk()
 
     def _validate_jql(self) -> None:
+        """Run the scoped query once so Jira rejects a bad clause here."""
         try:
             next(
                 iter(

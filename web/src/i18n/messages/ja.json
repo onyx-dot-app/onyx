@@ -4279,11 +4279,13 @@
             },
             "project_key": {
               "label": "プロジェクト キー",
-              "description": "1 つの Jira Service Management プロジェクトのキー（例: IT）。"
+              "description": "1 つの Jira Service Management プロジェクトのキー（例: IT）。",
+              "required": "プロジェクトキーは空白にできません。"
             },
             "jql_query": {
               "label": "JQL クエリ",
-              "description": "サービスデスクのリクエストを選ぶ JQL クエリです。\n\n時間フィルタと ORDER BY 句は追加しないでください。Onyx が更新期間を追加します。コネクタはクエリをサービスデスク プロジェクトに限定します。\n\n構文は Atlassian の [JQL ドキュメント](https://support.atlassian.com/jira-service-management-cloud/docs/use-advanced-search-with-jira-query-language-jql/)を参照してください。"
+              "description": "サービスデスクのリクエストを選ぶ JQL クエリです。\n\n時間フィルタと ORDER BY 句は追加しないでください。Onyx が更新期間を追加します。コネクタはクエリをサービスデスク プロジェクトに限定します。\n\n構文は Atlassian の [JQL ドキュメント](https://support.atlassian.com/jira-service-management-cloud/docs/use-advanced-search-with-jira-query-language-jql/)を参照してください。",
+              "required": "JQLクエリは空白にできません。"
             },
             "comment_email_blacklist": {
               "label": "コメントのメール除外リスト",

@@ -4279,11 +4279,13 @@
             },
             "project_key": {
               "label": "프로젝트 키",
-              "description": "Jira Service Management 프로젝트 하나의 키입니다(예: IT)."
+              "description": "Jira Service Management 프로젝트 하나의 키입니다(예: IT).",
+              "required": "프로젝트 키는 비워 둘 수 없습니다."
             },
             "jql_query": {
               "label": "JQL 쿼리",
-              "description": "서비스 데스크 요청을 선택하는 JQL 쿼리입니다.\n\n시간 필터나 ORDER BY 절을 추가하지 마십시오. Onyx가 업데이트 구간을 추가합니다. 커넥터는 쿼리를 서비스 데스크 프로젝트로 제한합니다.\n\n구문은 Atlassian의 [JQL 문서](https://support.atlassian.com/jira-service-management-cloud/docs/use-advanced-search-with-jira-query-language-jql/)를 참조하십시오."
+              "description": "서비스 데스크 요청을 선택하는 JQL 쿼리입니다.\n\n시간 필터나 ORDER BY 절을 추가하지 마십시오. Onyx가 업데이트 구간을 추가합니다. 커넥터는 쿼리를 서비스 데스크 프로젝트로 제한합니다.\n\n구문은 Atlassian의 [JQL 문서](https://support.atlassian.com/jira-service-management-cloud/docs/use-advanced-search-with-jira-query-language-jql/)를 참조하십시오.",
+              "required": "JQL 쿼리는 비워 둘 수 없습니다."
             },
             "comment_email_blacklist": {
               "label": "댓글 이메일 제외 목록",

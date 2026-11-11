@@ -64,8 +64,9 @@ On Data Center, the account needs a personal access token. Leave the email empty
 
   <Step title="Choose the scope">
     **All Service Desks** indexes every service desk project the account can read. **Project** indexes one project key,
-    for example `IT`. The project must be a service desk project.
-    **JQL Query** indexes the requests that match the query. Do not add `ORDER BY` or a time filter.
+    for example `IT`. The project must be a service desk project. Onyx rejects a blank project key.
+    **JQL Query** indexes the requests that match the query. Onyx rejects a blank query.
+    Do not add `ORDER BY` or a time filter.
   </Step>
 
   <Step title="Skip bot comments">

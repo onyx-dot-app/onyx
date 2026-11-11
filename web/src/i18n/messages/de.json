@@ -4279,11 +4279,13 @@
             },
             "project_key": {
               "label": "Projektschlüssel",
-              "description": "Der Schlüssel eines Jira Service Management-Projekts (z. B. IT)."
+              "description": "Der Schlüssel eines Jira Service Management-Projekts (z. B. IT).",
+              "required": "Projektschlüssel darf nicht leer sein."
             },
             "jql_query": {
               "label": "JQL-Abfrage",
-              "description": "Eine JQL-Abfrage, die Service-Desk-Anfragen auswählt.\n\nFügen Sie keine Zeitfilter und keine ORDER BY-Klausel hinzu. Onyx fügt sein eigenes Aktualisierungsfenster hinzu. Der Connector begrenzt die Abfrage zusätzlich auf Service-Desk-Projekte.\n\nDie Syntax steht in der [JQL-Dokumentation](https://support.atlassian.com/jira-service-management-cloud/docs/use-advanced-search-with-jira-query-language-jql/) von Atlassian."
+              "description": "Eine JQL-Abfrage, die Service-Desk-Anfragen auswählt.\n\nFügen Sie keine Zeitfilter und keine ORDER BY-Klausel hinzu. Onyx fügt sein eigenes Aktualisierungsfenster hinzu. Der Connector begrenzt die Abfrage zusätzlich auf Service-Desk-Projekte.\n\nDie Syntax steht in der [JQL-Dokumentation](https://support.atlassian.com/jira-service-management-cloud/docs/use-advanced-search-with-jira-query-language-jql/) von Atlassian.",
+              "required": "JQL-Abfrage darf nicht leer sein."
             },
             "comment_email_blacklist": {
               "label": "Kommentar-E-Mail-Sperrliste",

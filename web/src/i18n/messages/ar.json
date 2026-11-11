@@ -4279,11 +4279,13 @@
             },
             "project_key": {
               "label": "مفتاح المشروع",
-              "description": "مفتاح مشروع واحد في Jira Service Management (مثل IT)."
+              "description": "مفتاح مشروع واحد في Jira Service Management (مثل IT).",
+              "required": "لا يمكن أن يكون مفتاح المشروع فارغًا."
             },
             "jql_query": {
               "label": "استعلام JQL",
-              "description": "استعلام JQL يختار طلبات مكتب الخدمة.\n\nلا تضف عوامل تصفية زمنية أو عبارة ORDER BY. يضيف Onyx نافذة التحديث الخاصة به. ويحصر الموصل الاستعلام في مشاريع مكتب الخدمة.\n\nراجع [وثائق JQL](https://support.atlassian.com/jira-service-management-cloud/docs/use-advanced-search-with-jira-query-language-jql/) من Atlassian للصيغة."
+              "description": "استعلام JQL يختار طلبات مكتب الخدمة.\n\nلا تضف عوامل تصفية زمنية أو عبارة ORDER BY. يضيف Onyx نافذة التحديث الخاصة به. ويحصر الموصل الاستعلام في مشاريع مكتب الخدمة.\n\nراجع [وثائق JQL](https://support.atlassian.com/jira-service-management-cloud/docs/use-advanced-search-with-jira-query-language-jql/) من Atlassian للصيغة.",
+              "required": "لا يمكن أن يكون استعلام JQL فارغًا."
             },
             "comment_email_blacklist": {
               "label": "قائمة استبعاد بريد التعليقات",

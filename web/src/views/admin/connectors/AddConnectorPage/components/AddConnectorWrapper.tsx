@@ -785,6 +785,12 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
           confluenceScopeRequired: t(
             "connectors.confluence.fields.space.required"
           ),
+          jiraServiceManagementProjectKeyRequired: t(
+            "connectors.jiraServiceManagement.fields.project_key.required"
+          ),
+          jiraServiceManagementJqlRequired: t(
+            "connectors.jiraServiceManagement.fields.jql_query.required"
+          ),
           restrictionGroupsRequired: t(
             "settings.documentAccess.sync.restrictionRequired"
           ),

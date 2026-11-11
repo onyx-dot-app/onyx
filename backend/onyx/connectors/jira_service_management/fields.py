@@ -66,6 +66,7 @@ def _values_for(
     catalog: Mapping[str, str],
     custom: str,
 ) -> list[Any]:
+    """Values of every issue field whose schema custom key is ``custom``."""
     raw_fields = issue.get("fields")
     if not isinstance(raw_fields, dict):
         return []
@@ -111,6 +112,7 @@ def _request_type_parts(value: Any) -> tuple[str | None, str | None, str | None]
 
 
 def _names(value: Any) -> list[str]:
+    """Display names from a string, or from a list of strings and objects."""
     if isinstance(value, str) and value:
         return [value]
     if not isinstance(value, list):
@@ -167,6 +169,7 @@ def _sla_parts(value: Any) -> tuple[str | None, bool]:
 
 
 def _comment_line(comment: Mapping[str, Any], blacklist: tuple[str, ...]) -> str | None:
+    """One comment line, or None for an empty body or a blacklisted author."""
     author = comment.get("author")
     email = author.get("emailAddress") if isinstance(author, dict) else None
     if isinstance(email, str) and email in blacklist:

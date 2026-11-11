@@ -4279,11 +4279,13 @@
             },
             "project_key": {
               "label": "项目键",
-              "description": "一个 Jira Service Management 项目的键（例如 IT）。"
+              "description": "一个 Jira Service Management 项目的键（例如 IT）。",
+              "required": "项目键不能为空白。"
             },
             "jql_query": {
               "label": "JQL 查询",
-              "description": "用于选择服务台请求的 JQL 查询。\n\n不要添加时间过滤器或 ORDER BY 子句。Onyx 会加入自己的更新时间窗。连接器还会把查询限制在服务台项目内。\n\n语法见 Atlassian 的 [JQL 文档](https://support.atlassian.com/jira-service-management-cloud/docs/use-advanced-search-with-jira-query-language-jql/)。"
+              "description": "用于选择服务台请求的 JQL 查询。\n\n不要添加时间过滤器或 ORDER BY 子句。Onyx 会加入自己的更新时间窗。连接器还会把查询限制在服务台项目内。\n\n语法见 Atlassian 的 [JQL 文档](https://support.atlassian.com/jira-service-management-cloud/docs/use-advanced-search-with-jira-query-language-jql/)。",
+              "required": "JQL 查询不能为空白。"
             },
             "comment_email_blacklist": {
               "label": "评论邮箱排除列表",

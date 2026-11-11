@@ -4279,11 +4279,13 @@
             },
             "project_key": {
               "label": "Project Key",
-              "description": "The key of one Jira Service Management project (e.g. IT)."
+              "description": "The key of one Jira Service Management project (e.g. IT).",
+              "required": "Project key cannot be blank."
             },
             "jql_query": {
               "label": "JQL Query",
-              "description": "A JQL query that selects service desk requests.\n\nDo not add time filters or an ORDER BY clause. Onyx adds its own update window. The connector also limits the query to service desk projects.\n\nSee Atlassian's [JQL documentation](https://support.atlassian.com/jira-service-management-cloud/docs/use-advanced-search-with-jira-query-language-jql/) for syntax."
+              "description": "A JQL query that selects service desk requests.\n\nDo not add time filters or an ORDER BY clause. Onyx adds its own update window. The connector also limits the query to service desk projects.\n\nSee Atlassian's [JQL documentation](https://support.atlassian.com/jira-service-management-cloud/docs/use-advanced-search-with-jira-query-language-jql/) for syntax.",
+              "required": "JQL query cannot be blank."
             },
             "comment_email_blacklist": {
               "label": "Comment Email Blacklist",

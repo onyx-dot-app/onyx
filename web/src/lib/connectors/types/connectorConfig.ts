@@ -86,7 +86,7 @@ export interface JiraConfig {
 }
 
 export interface JiraServiceManagementConfig {
-  jira_base_url?: string;
+  jira_base_url: string;
   project_key?: string;
   comment_email_blacklist?: string[];
   jql_query?: string;

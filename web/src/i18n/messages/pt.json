@@ -4279,11 +4279,13 @@
             },
             "project_key": {
               "label": "Chave do projeto",
-              "description": "A chave de um projeto do Jira Service Management (por exemplo, IT)."
+              "description": "A chave de um projeto do Jira Service Management (por exemplo, IT).",
+              "required": "A chave do projeto não pode ficar em branco."
             },
             "jql_query": {
               "label": "Consulta JQL",
-              "description": "Uma consulta JQL que seleciona solicitações de service desk.\n\nNão adicione filtros de tempo nem uma cláusula ORDER BY. O Onyx adiciona a própria janela de atualização. O conector também limita a consulta a projetos de service desk.\n\nVeja a [documentação de JQL](https://support.atlassian.com/jira-service-management-cloud/docs/use-advanced-search-with-jira-query-language-jql/) da Atlassian para a sintaxe."
+              "description": "Uma consulta JQL que seleciona solicitações de service desk.\n\nNão adicione filtros de tempo nem uma cláusula ORDER BY. O Onyx adiciona a própria janela de atualização. O conector também limita a consulta a projetos de service desk.\n\nVeja a [documentação de JQL](https://support.atlassian.com/jira-service-management-cloud/docs/use-advanced-search-with-jira-query-language-jql/) da Atlassian para a sintaxe.",
+              "required": "A consulta JQL não pode ficar em branco."
             },
             "comment_email_blacklist": {
               "label": "Lista de exclusão de e-mails de comentários",
