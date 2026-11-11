@@ -29,6 +29,7 @@ from onyx.microvm.registry import (
     claim_node_report_token,
     get_registered_node,
     node_report_lease,
+    record_node_report,
 )
 from onyx.sandbox_proxy.sandbox_identity.signed import (
     CLOCK_SKEW_SECONDS,
@@ -133,6 +134,8 @@ def reconcile_node_report(
     node = get_registered_node(shared_cache, report.node_id)
     if node is None:
         raise NodeNotRegisteredError(report.node_id)
+    # Placement counts a node whose reports stop as dead.
+    record_node_report(shared_cache, node.node_id, now)
     lease = node_report_lease(shared_cache, node.node_id, _LEASE_SECONDS)
     if not lease.acquire(blocking=False):
         logger.info("sandbox_fc_node_report_busy node=%s", node.node_id)

@@ -205,7 +205,9 @@ the stored token on each request, so a new token takes effect at once.
   keeps the reservation on its node. Each attempt gets a random daemon key,
   stored encrypted in the tenant cache before Create. A rejected or lost key,
   an exited VM, or a dead node creates the next attempt; the caller must
-  store the returned attempt.
+  store the returned attempt. A node is dead when its registration expired
+  or its last state report is older than
+  `SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS` (60 s).
 - `backend/onyx/microvm/registry.py`: placement records, reservations and
   daemon keys have no TTL. Record writes are fenced on (attempt, generation)
   with `CacheBackend.replace_if_value` / `delete_if_value`. Redis must use a
@@ -217,10 +219,12 @@ the stored token on each request, so a new token takes effect at once.
   sync model with a push. Each agent pushes its VMs and recently ended VMs to
   `POST /microvm/node/state`, signed with its registered key
   (`backend/onyx/microvm/node_report.py`), and the api_server reconciles that
-  node under a per-node lease: it clears records of ended VMs, adopts VMs
-  that a reservation names, and stops VMs of an older attempt or unknown VMs
-  after a grace period (no checkpoint). See `microvm/README.md`, "Sandbox
-  state model".
+  node under a per-node lease: it clears records of ended VMs, and adopts a
+  VM that a reservation names once its daemon holds the attempt's key. It
+  stops a VM of an older attempt on that report, and an unknown VM only
+  after `SANDBOX_FC_ORPHAN_GRACE_SECONDS` (no checkpoint). A record that no
+  reported VM names is cleared after a fresh `List` under the sandbox lock.
+  See `microvm/README.md`, "Sandbox state model".
 
 Agents become reachable when their signing-key registration carries
 `agent_address`. No sandbox manager uses this code yet (ENG-4575).

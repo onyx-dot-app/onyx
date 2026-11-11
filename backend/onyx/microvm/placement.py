@@ -20,8 +20,9 @@ State model (E2B; microvm/README.md, "Sandbox state model"):
   agent returns the same VM for a repeat Create. The reservation of a dead
   node is taken over with the next attempt.
 - The record write after Create is fenced on (attempt, generation).
-- Dead node (no live registration): its record stays, and placement starts
-  the next attempt on a live node. If the old VM reports again, it is an
+- Dead node (no live registration, or no state report within
+  `SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS`): its record stays, and placement
+  starts the next attempt on a live node. If the old VM reports again, it is an
   orphan with an older attempt, and the report stops it.
 
 Guest daemon key: each attempt gets a random key, stored (encrypted, no TTL)
@@ -71,12 +72,12 @@ from onyx.microvm.registry import (
     SandboxReservation,
     clear_sandbox_daemon_key,
     clear_sandbox_placement_if,
-    get_registered_node,
+    get_live_node,
     get_sandbox_daemon_key,
     get_sandbox_placement,
     get_sandbox_reservation,
     index_sandbox_placement,
-    list_registered_nodes,
+    list_live_nodes,
     release_sandbox_reservation,
     reserve_sandbox,
     set_sandbox_daemon_key,
@@ -322,7 +323,11 @@ def _take_reservation(
         raw = reserve_sandbox(tenant_cache, sandbox_id, new, replaces=None)
     else:
         left, left_raw = found
-        node = get_registered_node(shared_cache, left.node_id) if left.node_id else None
+        node = (
+            get_live_node(shared_cache, left.node_id, int(time.time()))
+            if left.node_id
+            else None
+        )
         if left.attempt >= attempt and (not left.node_id or node is not None):
             pinned = node
             new = SandboxReservation(
@@ -363,7 +368,7 @@ def _ensure_existing(
     if record is None:
         return None, request.attempt
     next_attempt = max(request.attempt, record.attempt + 1)
-    node = get_registered_node(shared_cache, record.node_id)
+    node = get_live_node(shared_cache, record.node_id, int(time.time()))
     if node is None:
         # Dead node: start the next attempt elsewhere. The fenced record
         # write replaces this record; a VM that reports again is an orphan.
@@ -816,7 +821,7 @@ def place_sandbox_vm(
                     tenant_cache,
                     client_factory,
                     request,
-                    list_registered_nodes(shared_cache),
+                    list_live_nodes(shared_cache, int(time.time())),
                     pinned,
                     lock,
                     rng or random.Random(),

@@ -64,6 +64,7 @@ def add_node(shared_cache: CacheBackend) -> Generator[AddNode, None, None]:
         running.stop()
         shared_cache.delete(registry._NODE_ADDRESS_PREFIX + node_id)
         shared_cache.delete(registry._NODE_PLACEMENTS_PREFIX + node_id)
+        shared_cache.delete(registry._NODE_LAST_REPORT_PREFIX + node_id)
         shared_cache.delete_prefix(f"{reconcile._ORPHAN_MARK_PREFIX}{node_id}:")
 
 

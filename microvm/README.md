@@ -247,9 +247,13 @@ Placement does not depend on reports: it asks the agent with `List`.
 - The api_server answers `409` while the node has no registered `agent_address`: it needs the address to
   check a VM again before it clears a record.
 - Placement records have no TTL. A record goes away only on Stop, on a discard, or when a report shows
-  that its VM ended or is gone (after a second `List`). The api_server stops VMs of an older attempt
-  and VMs that it does not know after a grace period. A node whose registration expired counts as dead:
-  wake starts the next attempt on another node.
+  that its VM ended or is gone (after a fresh `List` under the sandbox lock). The api_server stops VMs
+  of an older attempt on that report, and VMs that it does not know after a grace period. It adopts a
+  VM that a reservation names only when the guest daemon holds the attempt's key (Health, else a repeat
+  Create that installs it).
+- The api_server records the time of each accepted report. A node counts as dead when its registration
+  expired, or when it reported before but not within `SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS` (default
+  60 s, three intervals; `0` turns this off). Wake then starts the next attempt on a live node.
 
 ### Sandbox state model
 
@@ -258,14 +262,14 @@ the VMs; the api_server makes sure that each sandbox has at most one VM.
 
 | E2B | Onyx |
 |---|---|
-| Sandbox record in Redis, no TTL | Placement record (node, attempt, generation, last activity) in the tenant cache, no TTL. Only Stop, a discard, or a report that shows the VM ended or gone (after a second `List`) removes it. |
+| Sandbox record in Redis, no TTL | Placement record (node, attempt, generation, last activity) in the tenant cache, no TTL. Only Stop, a discard, or a report that shows the VM ended or gone (after a fresh `List` under the sandbox lock) removes it. |
 | Reservation before create | Reservation (attempt, node), SET NX or compare-and-set, no TTL. A Create with no known outcome keeps it, so the next wake repeats the same Create on the same node. A reservation on a dead node is taken over with the next attempt. |
 | `execution_id` fence | (attempt, generation) fence: `CacheBackend.replace_if_value` / `delete_if_value` (Redis and Postgres). A write for an older instance never replaces a newer record. |
 | API pulls each node's list every 20 s | The agent pushes its list every 20 s (Node state report). Onyx has no API-side scheduler. |
 | Node keeps ended sandboxes for 2 min | The agent lists each exited or stopped VM for `--ended-retention` (10 min). |
 | Sync kills orphans after 1 min | The api_server stops a VM of an older attempt at once, and an unknown VM after `SANDBOX_FC_ORPHAN_GRACE_SECONDS` (40 s), at most 8 per report, with no checkpoint. |
 | API-side evictor (end time) | Idle evictor on the record's last activity (`SANDBOX_FC_IDLE_TIMEOUT_SECONDS`). The stop waits for session saves (ENG-4580). |
-| Dead node: records stay, sandboxes lost | Dead node (registration expired): records stay; wake starts the next attempt on a live node, and the old VM is an orphan if it reports again. |
+| Dead node: records stay, sandboxes lost | Dead node (registration expired, or no report within `SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS`): records stay; wake starts the next attempt on a live node, and the old VM is an orphan if it reports again. |
 
 Keys without a TTL need a Redis eviction policy that never evicts them (`volatile-*` or `noeviction`), or the
 Postgres cache backend. The chart's bundled Redis uses `allkeys-lru`.

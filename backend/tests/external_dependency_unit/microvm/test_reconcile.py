@@ -29,6 +29,7 @@ from onyx.microvm.lifecycle import (
 from onyx.microvm.models import (
     AgentVm,
     EndedReason,
+    IndexedPlacement,
     ReconcileReport,
     RegisteredNode,
     ReportedEndedVm,
@@ -237,8 +238,14 @@ def test_vm_named_by_its_reservation_is_adopted(
         SandboxReservation(attempt=2, node_id=node_id, owner="crashed"),
         replaces=None,
     )
-    set_sandbox_daemon_key(tenant_cache, sandbox_id, attempt=2, key=new_sandboxd_key())
-    vm = _vm(node, sandbox_id, attempt=2)
+    key = new_sandboxd_key()
+    set_sandbox_daemon_key(tenant_cache, sandbox_id, attempt=2, key=key)
+    vm = node.agent.add_vm(
+        sandbox_id=str(sandbox_id),
+        tenant_id=TENANT_ID,
+        attempt=2,
+        daemon_key=key.get_secret_value(),
+    )
 
     report = _report(shared_cache, client_factory, node_id)
 
@@ -246,8 +253,50 @@ def test_vm_named_by_its_reservation_is_adopted(
     record = get_sandbox_placement(tenant_cache, sandbox_id)
     assert record is not None and record.names(node_id, 2, vm.generation)
     assert get_sandbox_reservation(tenant_cache, sandbox_id) is None
-    assert node.agent.stop_calls == []
+    # The daemon already held the key: no repeat Create.
+    assert node.agent.stop_calls == [] and node.agent.create_calls == 0
     assert _report(shared_cache, client_factory, node_id).adopted == []
+
+
+def test_adoption_installs_the_key_that_the_daemon_did_not_take(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
+) -> None:
+    node_id = _node("adoptkey")
+    node = add_node(node_id)
+    sandbox_id = new_sandbox_id()
+    # Create ran out of GUEST_UNREACHABLE retries: the VM runs, its daemon
+    # has no key, and the reservation and the key stay.
+    reserve_sandbox(
+        tenant_cache,
+        sandbox_id,
+        SandboxReservation(attempt=2, node_id=node_id, owner="timed-out"),
+        replaces=None,
+    )
+    key = new_sandboxd_key()
+    set_sandbox_daemon_key(tenant_cache, sandbox_id, attempt=2, key=key)
+    vm = _vm(node, sandbox_id, attempt=2)
+    node.agent.guest_unreachable_creates = 1
+
+    # The daemon still does not take the key: keep the VM and the
+    # reservation, so a wake repeats the same Create.
+    first = _report(shared_cache, client_factory, node_id)
+    assert first.adopted == [] and first.orphans_marked == []
+    assert get_sandbox_placement(tenant_cache, sandbox_id) is None
+    assert get_sandbox_reservation(tenant_cache, sandbox_id) is not None
+    assert node.agent.stop_calls == []
+
+    second = _report(shared_cache, client_factory, node_id)
+
+    assert second.adopted == [str(sandbox_id)]
+    assert node.agent.daemon_keys[str(sandbox_id)] == key.get_secret_value()
+    assert [r[:2] for r in node.agent.create_requests] == [(str(sandbox_id), 2)] * 2
+    record = get_sandbox_placement(tenant_cache, sandbox_id)
+    assert record is not None and record.names(node_id, 2, vm.generation)
+    assert get_sandbox_reservation(tenant_cache, sandbox_id) is None
 
 
 def test_vm_without_its_daemon_key_is_not_adopted(
@@ -436,6 +485,54 @@ def test_record_stays_when_the_second_list_fails(
     assert report.cleared == []
     record = get_sandbox_placement(tenant_cache, sandbox_id)
     assert record is not None and record.generation == 9
+
+
+def test_record_of_a_vm_started_during_the_pass_is_kept(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    node_id = _node("race")
+    node = add_node(node_id)
+    gone_id, woken_id = new_sandbox_id(), new_sandbox_id()
+    _place(shared_cache, tenant_cache, gone_id, node_id, generation=3)
+    _place(shared_cache, tenant_cache, woken_id, node_id, generation=4)
+    monkeypatch.setattr(
+        reconcile,
+        "list_indexed_placements",
+        lambda cache, node: [  # noqa: ARG005
+            IndexedPlacement(tenant_id=TENANT_ID, sandbox_id=gone_id),
+            IndexedPlacement(tenant_id=TENANT_ID, sandbox_id=woken_id),
+        ],
+    )
+    real_list = HostAgentClient.list_vms
+    started: list[hostagent_pb2.VM] = []
+
+    def list_then_wake(client: HostAgentClient) -> list[AgentVm]:
+        vms = real_list(client)
+        if not started:
+            # A wake replaces the second sandbox's VM after the first List.
+            started.append(_vm(node, woken_id, attempt=2))
+            _place(
+                shared_cache,
+                tenant_cache,
+                woken_id,
+                node_id,
+                attempt=2,
+                generation=started[0].generation,
+            )
+        return vms
+
+    monkeypatch.setattr(HostAgentClient, "list_vms", list_then_wake)
+
+    report = _report(shared_cache, client_factory, node_id, vms=[])
+
+    assert report.cleared == [str(gone_id)]
+    record = get_sandbox_placement(tenant_cache, woken_id)
+    assert record is not None and record.names(node_id, 2, started[0].generation)
 
 
 def test_idle_evictor_decides_but_keeps_the_vm_without_checkpoints(

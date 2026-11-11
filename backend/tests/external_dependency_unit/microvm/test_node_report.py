@@ -401,6 +401,33 @@ def test_reports_for_one_node_run_one_at_a_time(
     ).reconciled
 
 
+def test_each_accepted_report_keeps_its_node_live(
+    node: Node,
+    shared_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+) -> None:
+    now = int(time.time())
+    timeout = registry.SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS
+    registry.record_node_report(shared_cache, node.node_id, now - timeout - 1)
+    assert registry.get_live_node(shared_cache, node.node_id, now) is None
+
+    # Recorded even when another replica holds the lease.
+    held = node_report_lease(shared_cache, node.node_id, 30)
+    assert held.acquire(blocking=False)
+    try:
+        reconcile_node_report(
+            shared_cache,
+            client_factory,
+            NodeStateReport(node_id=node.node_id, vms=[]),
+            now=now,
+        )
+    finally:
+        held.release()
+
+    assert registry.get_live_node(shared_cache, node.node_id, now) is not None
+    assert registry.get_live_node(shared_cache, node.node_id, now + timeout + 1) is None
+
+
 class _NoMtlsFactory(HostAgentClientFactory):
     def client(self, address: str) -> HostAgentClient:  # noqa: ARG002
         raise HostAgentConfigError("SANDBOX_FC_AGENT_CLIENT_CERT_PATH must be set")

@@ -6,6 +6,9 @@ No schema change. The state model follows E2B (microvm/README.md,
   `NODE_SIGNING_KEY_TTL_SECONDS`, so a dead node's keys expire on their own.
 - Agent addresses (shared cache, same TTL): the registration carries the
   agent's mTLS listener. A node without a live address counts as dead.
+- Last report time (shared cache, NO TTL): set on each accepted node state
+  report. Placement counts a node as dead when its last report is older than
+  `SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS`.
 - Placement record (tenant cache, NO TTL): the VM instance of a sandbox
   (node, attempt, generation) and its last activity. Only Stop, a discard,
   or a reconcile that confirms the VM is gone removes it. Writes from a
@@ -38,6 +41,7 @@ from onyx.cache.interface import (
     CacheLock,
     CacheLockAcquisitionError,
 )
+from onyx.microvm.configs import SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS
 from onyx.microvm.models import IndexedPlacement, RegisteredNode
 from onyx.utils.encryption import decrypt_bytes_to_string, encrypt_string_to_bytes
 
@@ -51,6 +55,7 @@ _NODES_KEY = "sandbox_fc:nodes"
 _NODE_PLACEMENTS_PREFIX = "sandbox_fc:node_placements:"
 _DAEMON_KEY_PREFIX = "sandbox_fc:daemon_key:"
 _RESERVATION_PREFIX = "sandbox_fc:reservation:"
+_NODE_LAST_REPORT_PREFIX = "sandbox_fc:node_last_report:"
 _MAX_NODES = 10_000
 _MAX_NODE_PLACEMENTS = 100_000
 _LOCK_WAIT_SECONDS = 10.0
@@ -384,6 +389,42 @@ def list_registered_nodes(shared_cache: CacheBackend) -> list[RegisteredNode]:
             continue
         nodes.append(node)
     return sorted(nodes, key=lambda n: n.node_id)
+
+
+def record_node_report(shared_cache: CacheBackend, node_id: str, now: int) -> None:
+    """Set the time of the node's last accepted state report. No TTL."""
+    shared_cache.set(_NODE_LAST_REPORT_PREFIX + node_id, str(now))
+
+
+def node_reports_stopped(shared_cache: CacheBackend, node_id: str, now: int) -> bool:
+    """True when the node reported before, but not within
+    `SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS`."""
+    if SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS <= 0:
+        return False
+    raw = shared_cache.get(_NODE_LAST_REPORT_PREFIX + node_id)
+    if raw is None:
+        return False
+    return now - int(raw) > SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS
+
+
+def get_live_node(
+    shared_cache: CacheBackend, node_id: str, now: int
+) -> RegisteredNode | None:
+    """The registered node, or None when it is dead to placement (no live
+    registration, or its reports stopped)."""
+    node = get_registered_node(shared_cache, node_id)
+    if node is None or node_reports_stopped(shared_cache, node_id, now):
+        return None
+    return node
+
+
+def list_live_nodes(shared_cache: CacheBackend, now: int) -> list[RegisteredNode]:
+    """Registered nodes whose reports did not stop, sorted by id."""
+    return [
+        node
+        for node in list_registered_nodes(shared_cache)
+        if not node_reports_stopped(shared_cache, node.node_id, now)
+    ]
 
 
 def _prune_node(shared_cache: CacheBackend, node_id: str) -> None:

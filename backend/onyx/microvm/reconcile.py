@@ -14,14 +14,16 @@ Per reported VM:
 - The record or the reservation has a newer attempt, or the record names
   another instance of the same attempt: a stale orphan. Stop it.
 - The reservation names (attempt, node) and the attempt's daemon key exists:
-  adopt it with a fenced record write. A crash between Create and the record
-  write leaves this state.
+  adopt it with a fenced record write once the guest daemon holds the key
+  (Health, or a repeat Create that installs it). A crash between Create and
+  the record write, or a Create whose key install timed out, leaves this
+  state.
 - Anything else is unknown. It is an orphan once
   `SANDBOX_FC_ORPHAN_GRACE_SECONDS` passed since the first report of it.
 Per ended VM: clear the record that names that instance (fenced).
 Per indexed record of this node that names no reported VM: clear it after a
-second `List` over mTLS (the report may predate a new VM). If that `List`
-fails, the record stays.
+fresh `List` over mTLS, read under the sandbox lock (the report may predate a
+new VM). If a `List` fails, the record stays, and the pass reads no more.
 Orphan stops run last, at most `SANDBOX_FC_ORPHAN_STOPS_PER_REPORT` per pass,
 with no checkpoint: a stale or unknown VM has no session that anyone can use.
 """
@@ -32,11 +34,12 @@ from enum import Enum
 from functools import partial
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, SecretStr
 
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
 from onyx.microvm.agent_client import (
+    GuestKeyRejectedError,
     HostAgentClientFactory,
     HostAgentConfigError,
     HostAgentError,
@@ -46,6 +49,7 @@ from onyx.microvm.configs import (
     SANDBOX_FC_ORPHAN_GRACE_SECONDS,
     SANDBOX_FC_ORPHAN_STOPS_PER_REPORT,
 )
+from onyx.microvm.daemon_client import SandboxDaemonClient, SandboxDaemonError
 from onyx.microvm.lifecycle import (
     SandboxActivityProbe,
     SandboxCheckpointer,
@@ -172,9 +176,7 @@ class _Pass:
         self.report = report
         self.check_lease = check_lease
         self.stops: list[_OrphanStop] = []
-        # The second List of this pass, read at most once.
-        self._second_list: list[AgentVm] | None = None
-        self._second_list_read = False
+        self._list_failed = False
 
     def check(self) -> None:
         if self.check_lease is not None:
@@ -197,20 +199,20 @@ class _Pass:
             logger.exception("sandbox_fc_reconcile_step_failed step=%s", what)
             self.report.failed.append(what)
 
-    def second_list(self) -> list[AgentVm] | None:
-        if not self._second_list_read:
-            self._second_list_read = True
-            try:
-                self._second_list = self.client_factory.client(
-                    self.node.address
-                ).list_vms()
-            except HostAgentError as e:
-                logger.warning(
-                    "sandbox_fc_reconcile_node_unreachable node=%s error=%s",
-                    self.node.node_id,
-                    e,
-                )
-        return self._second_list
+    def fresh_list(self) -> list[AgentVm] | None:
+        """The node's List now. None after a failed List in this pass."""
+        if self._list_failed:
+            return None
+        try:
+            return self.client_factory.client(self.node.address).list_vms()
+        except HostAgentError as e:
+            self._list_failed = True
+            logger.warning(
+                "sandbox_fc_reconcile_node_unreachable node=%s error=%s",
+                self.node.node_id,
+                e,
+            )
+            return None
 
     def valid(self, sandbox_id: str, tenant_id: str) -> UUID | None:
         try:
@@ -307,14 +309,23 @@ class _Pass:
         tenant_cache: CacheBackend,
         reservation_raw: bytes,
     ) -> bool:
-        """Write the record of a VM that its reservation names. False when
-        the daemon key is lost (nothing can use the VM)."""
-        if get_sandbox_daemon_key(tenant_cache, sandbox_id, attempt=vm.attempt) is None:
+        """Write the record of a VM that its reservation names, once its
+        guest daemon holds the attempt's key. False when the key is lost or
+        the daemon holds another key (nothing can use the VM)."""
+        key = get_sandbox_daemon_key(tenant_cache, sandbox_id, attempt=vm.attempt)
+        if key is None:
             return False
         with sandbox_placement_lock(tenant_cache, sandbox_id, blocking=False) as lock:
             # A placement in progress writes the record itself.
             if lock is None:
                 return True
+            installed = self.install_key(vm, key)
+            if installed is None:
+                # Keep the VM and the reservation: the next report or wake
+                # tries again.
+                return True
+            if not installed:
+                return False
             if not record_placement(
                 self.shared_cache,
                 tenant_cache,
@@ -337,6 +348,43 @@ class _Pass:
             vm.generation,
         )
         self.report.adopted.append(vm.sandbox_id)
+        return True
+
+    def install_key(self, vm: AgentVm, key: SecretStr) -> bool | None:
+        """Make sure the guest daemon holds `key`: Health, then a repeat
+        Create of the same attempt (it returns the same VM and installs the
+        key). None when the outcome is not known yet."""
+        client = self.client_factory.client(self.node.address)
+        try:
+            health = SandboxDaemonClient(
+                client.channel, sandbox_id=vm.sandbox_id, sandboxd_key=key
+            ).health()
+            if health.key_set:
+                return True
+            result = client.create(
+                sandbox_id=vm.sandbox_id,
+                attempt=vm.attempt,
+                template=vm.template,
+                vcpus=vm.vcpus,
+                mem_mib=vm.mem_mib,
+                scratch_gib=vm.scratch_gib,
+                tenant_id=vm.tenant_id,
+                sandboxd_key=key,
+            )
+        except GuestKeyRejectedError:
+            return False
+        except (HostAgentError, SandboxDaemonError) as e:
+            logger.warning(
+                "sandbox_fc_reconcile_adopt_key_pending node=%s sandbox=%s attempt=%d error=%s",
+                self.node.node_id,
+                vm.sandbox_id,
+                vm.attempt,
+                e,
+            )
+            return None
+        # Another VM instance: the next report adopts it.
+        if result.vm.generation != vm.generation or not result.vm.state.is_live():
+            return None
         return True
 
     def clear(
@@ -393,8 +441,12 @@ class _Pass:
         with sandbox_placement_lock(tenant_cache, sandbox_id, blocking=False) as lock:
             if lock is None:
                 return
-            # Check liveness again: the report may predate a new VM.
-            current = self.second_list()
+            # Placement writes the record under this lock, so a List read now
+            # shows the VM of the record read now.
+            placement = get_sandbox_placement(tenant_cache, sandbox_id)
+            if placement is None or placement.node_id != self.node.node_id:
+                return
+            current = self.fresh_list()
             if current is None:
                 return
             vm = find_vm(current, sandbox_id, placement.generation)

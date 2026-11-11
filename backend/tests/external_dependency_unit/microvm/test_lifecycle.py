@@ -10,7 +10,7 @@ import pytest
 from onyx.cache.interface import CacheBackend
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.microvm import registry
+from onyx.microvm import configs, registry
 from onyx.microvm.configs import SANDBOX_FC_IDLE_TIMEOUT_SECONDS
 from onyx.microvm.generated.hostagent.v1 import hostagent_pb2
 from onyx.microvm.lifecycle import (
@@ -199,6 +199,66 @@ def test_wake_on_a_dead_node_starts_the_next_attempt_elsewhere(
     assert dead.agent.stop_calls == [] and len(dead.agent.vms) == 1
     record = get_sandbox_placement(tenant_cache, sandbox_id)
     assert record is not None and record.names(live_id, 2, placed.vm.generation)
+
+
+@pytest.mark.parametrize("reported_ago", [None, 30])
+def test_a_node_counts_as_live_while_it_reports(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
+    reported_ago: int | None,
+) -> None:
+    node_id = f"reporting-{uuid4().hex[:6]}"
+    node = add_node(node_id)
+    sandbox_id = new_sandbox_id()
+    first = _wake_vm(shared_cache, tenant_cache, client_factory, sandbox_id)
+    add_node(f"other-{uuid4().hex[:6]}")
+    # A node that never reported, or reported inside the timeout, is live.
+    if reported_ago is not None:
+        registry.record_node_report(
+            shared_cache, node_id, int(time.time()) - reported_ago
+        )
+
+    placed = _wake_vm(shared_cache, tenant_cache, client_factory, sandbox_id)
+
+    assert placed.node.node_id == node_id and not placed.created
+    assert placed.vm.generation == first.vm.generation
+    assert node.agent.create_calls == 1
+
+
+def test_wake_on_a_node_whose_reports_stopped_starts_the_next_attempt_elsewhere(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
+) -> None:
+    silent_id, live_id = f"silent-{uuid4().hex[:6]}", f"live-{uuid4().hex[:6]}"
+    silent = add_node(silent_id)
+    sandbox_id = new_sandbox_id()
+    first = _wake_vm(shared_cache, tenant_cache, client_factory, sandbox_id)
+    assert first.node.node_id == silent_id
+    live = add_node(live_id)
+    # Still registered and answering, but its last report is too old.
+    registry.record_node_report(
+        shared_cache,
+        silent_id,
+        int(time.time()) - configs.SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS - 1,
+    )
+    registry.record_node_report(shared_cache, live_id, int(time.time()))
+
+    placed = _wake_vm(shared_cache, tenant_cache, client_factory, sandbox_id)
+
+    assert placed.node.node_id == live_id and placed.vm.attempt == 2
+    assert silent.agent.create_calls == 1 and silent.agent.stop_calls == []
+    assert live.agent.create_calls == 1
+    record = get_sandbox_placement(tenant_cache, sandbox_id)
+    assert record is not None and record.names(live_id, 2, placed.vm.generation)
+    assert [
+        n.node_id for n in registry.list_live_nodes(shared_cache, int(time.time()))
+    ] == [live_id]
 
 
 def test_wake_keeps_the_record_when_its_live_node_does_not_answer(

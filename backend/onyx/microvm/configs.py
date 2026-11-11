@@ -78,6 +78,14 @@ SANDBOX_FC_PLACEMENT_CANDIDATES = _fc_env_int(
 SANDBOX_FC_ORPHAN_GRACE_SECONDS = _fc_env_int(
     "SANDBOX_FC_ORPHAN_GRACE_SECONDS", 40, minimum=0
 )
+# A registered node whose last accepted state report is older than this is
+# dead to placement: a wake places the next attempt on a live node. The
+# default is three reports at the agent's default --state-report-interval
+# (20 s). A node that never reported counts as live while it is registered.
+# 0 turns the check off.
+SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS = _fc_env_int(
+    "SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS", 60, minimum=0
+)
 # Most orphan Stops per node report. The rest wait for the next report, so a
 # report stays fast.
 SANDBOX_FC_ORPHAN_STOPS_PER_REPORT = _fc_env_int(
