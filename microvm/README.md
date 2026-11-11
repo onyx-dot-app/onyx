@@ -17,7 +17,7 @@ Nothing deploys the agent yet. The Helm DaemonSet (ENG-4583) adds it behind `SAN
 
 | Call | What it does |
 |---|---|
-| `Create(sandbox_id, attempt, template, vcpus, mem_mib, scratch_gib, tenant_id, sandboxd_key)` | Restores a VM from a template snapshot and returns it with its `generation`. With `sandboxd_key`, it installs that key in the guest daemon (`SetKey` over vsock, up to 10 s) before it returns a running VM (see Guest daemon pass-through). A repeat call with the same `(sandbox_id, attempt)` returns the existing VM. A different attempt for a sandbox with a VM on the node returns `ATTEMPT_CONFLICT`. An attempt that is not newer than a stopped one returns `STALE_ATTEMPT`. |
+| `Create(sandbox_id, attempt, template, vcpus, mem_mib, scratch_gib, tenant_id, sandboxd_key)` | Restores a VM from a template snapshot and returns it with its `generation`. With `sandboxd_key`, it installs that key in the guest daemon (`SetKey` over vsock, up to 10 s) before it returns a running VM (see Guest daemon pass-through). `SetKey` also carries the deployment egress CA (see Root drive input); without a readable CA, Create fails with `EGRESS_CA_UNAVAILABLE` before any VM starts. A repeat call with the same `(sandbox_id, attempt)` returns the existing VM. A different attempt for a sandbox with a VM on the node returns `ATTEMPT_CONFLICT`. An attempt that is not newer than a stopped one returns `STALE_ATTEMPT`. |
 | `Stop(sandbox_id, attempt, generation)` | Stops the VM only if all three match. A repeat Stop of the same instance succeeds with `already_stopped`. |
 | `CloseConnections(sandbox_id, attempt, generation)` | Closes every relay connection of the VM. New connections still work. Stop and VM exit also close them. |
 | `List()` | Every VM that the agent knows about, with its state (`STARTING`, `RUNNING`, `EXITED`). |
@@ -380,17 +380,24 @@ Every file is root-owned, mode 0644, with one link.
 The agent takes the build output as files: `--rootfs-dir` is a directory with `rootfs.ext4` and
 `manifest.json`. Put it on the data dir file system, so the copy into the template is a reflink.
 
-The design for deployments (not built yet, see the open points in `plans/craft-fc-track-agent.md`):
+Delivery (ENG-4648, `deployment/craft-fc/rootfs/README.md`):
 
-- CI runs the rootfs build for each sandbox version and publishes the output as an image
-  (`onyxdotapp/craft-fc-rootfs:<sandbox version>`, files only, like `craft-fc-artifacts`). An init
-  container of the agent DaemonSet copies the two files into `<data-dir>/rootfs/`. An air-gapped install
+- CI converts `onyxdotapp/craft-runtime:<tag>` with no egress CA and publishes the output as
+  `onyxdotapp/craft-fc-artifacts:rootfs-<version>` (files only). An init container of the agent DaemonSet
+  copies the two files into `<data-dir>/rootfs/` (Helm `craft.hostAgent.rootfs`). An air-gapped install
   mirrors the image like every other image. The nodes need no Docker and no network.
-- The egress CA is a build input, and each deployment has its own CA (sandbox-proxy makes it at first
-  start). CI cannot add it. `build-rootfs.sh` must therefore split into a CI step (pull, apt, convert) and a
-  CA step (add the CA, make the ext4) that the init container runs with the deployment CA (track C).
-- With `--egress-ca`, the agent refuses a root drive whose CA fingerprint differs, and a template whose key
-  has another CA. After a CA change, put a new root drive in `--rootfs-dir` and call `BuildTemplate`.
+- Each deployment has its own egress CA (sandbox-proxy makes it at first start). The agent reads it at each
+  Create (30 s cache) from `--egress-ca-configmap <namespace>/<name>[:<key>]` (the sandbox-proxy ConfigMap,
+  through the Kubernetes API) or `--egress-ca <file>`, and sends it with `SetKey`. The guest daemon installs
+  it at `Init`. A CA change needs no new root drive and no new template.
+- One CA read runs at a time (5 s timeout). Callers with a CA do not wait for it. When reads fail, Create
+  uses the last good CA for up to 1 h after its read, and the agent waits 5 s before the next read.
+- The daemon writes the bundle before the anchor (`craft-egress-ca.crt`). Until the bundle no longer
+  has the old CA, the anchor names it, so a retry after a failed write still removes it.
+- A root drive with no CA has an empty CA in the template key, so it fits every deployment. A drive built
+  with `--ca` (older builds) must have the deployment CA: the agent refuses it, and a template whose key
+  has another CA, if the CA it read at start differs. An agent with no CA source refuses a root drive
+  and a template with no CA (TEMPLATE_INCOMPATIBLE): their VMs would trust no egress CA.
 
 #### Build
 
@@ -398,7 +405,7 @@ At start-up (after recovery, while the API serves) and on `BuildTemplate`, the a
 
 1. Reads `--rootfs-dir`. It checks that the root drive expects the drives `rootfs`, `scratch` (writable)
    and `managed` (read-only) in this order, that its `managed_slots` (if any) are `a=/dev/vdc` and
-   `b=/dev/vdf`, and that its CA fits `--egress-ca`.
+   `b=/dev/vdf`, and that its CA (if it has one) fits the deployment CA.
 2. Computes the key and the template name: `<image tag>-<first 12 hex of the key hash>`, for example
    `v5.1.0-3fa91c0e7d22`. If a valid template with this name is there, it stops (and runs GC).
 3. Copies the root drive into a staging directory (`<templates>/.build-<name>`) and checks its SHA256
@@ -417,7 +424,7 @@ At start-up (after recovery, while the API serves) and on `BuildTemplate`, the a
 One build runs at a time; a `BuildTemplate` call during a build waits for it. A template that fails its
 check is built again, unless a VM uses it.
 
-Flags: `--rootfs-dir`, `--egress-ca`, `--template-vcpus` (2), `--template-mem-mib` (4096),
+Flags: `--rootfs-dir`, `--egress-ca` or `--egress-ca-configmap`, `--template-vcpus` (2), `--template-mem-mib` (4096),
 `--template-scratch-gib` (1), `--template-keep` (2), `--template-build-timeout` (5 min). The guest kernel
 is `<artifacts-dir>/vmlinux`; the agent copies it to `<data-dir>/kernel/vmlinux-<sha256[:16]>`.
 
@@ -439,7 +446,7 @@ Before every restore, Create checks:
 1. The manifest: the schema, `key_sha256` over the key, `snapshot_sha256` over the file hashes. An edited
    key or file hash fails here.
 2. The key against the node: layout version, Firecracker version, CPU model, host kernel release, guest
-   kernel SHA256 and (with `--egress-ca`) the CA. One mismatch is `TEMPLATE_INCOMPATIBLE` with the fields.
+   kernel SHA256 and (for a template whose root drive has a CA) the CA. One mismatch is `TEMPLATE_INCOMPATIBLE` with the fields.
 3. The files against `files`. The first check of a template after an agent start hashes every file (about
    8 GiB for a 4 GiB VM). The agent then keeps each file's fingerprint (inode, size, mtime, ctime). Later
    checks compare the fingerprints and hash again only if one changed. A changed file is
@@ -642,6 +649,10 @@ KVM_IMG_DIR=/opt/craft-fc-test/img3 ./hostagent-kvm.test -test.v -test.run TestP
 # build-rootfs.sh output (KVM_TB_ROOTFS) with --egress-ca (KVM_TB_CA); 20 restores with Init + Run, a
 # tampered and a mismatched template, GC, agent restart.
 KVM_TB_ROOTFS=/opt/tb/rootfs-out KVM_TB_CA=/opt/tb/ca/ca.crt ./hostagent-kvm.test -test.v -test.run TestTemplateBuildKVM
+# Rootfs delivery (ENG-4648): the root drive image (deployment/craft-fc/rootfs/Dockerfile.image, from a
+# build without --ca) installs into <data-dir>/rootfs, the agent builds a template, and VMs trust only the
+# --egress-ca of their agent (a MITM proxy as --egress-proxy). A second CA keeps the same template.
+KVM_RD_IMAGE=craft-fc-rootfs:dev KVM_RD_DIR=/opt/rd/work ./hostagent-kvm.test -test.v -test.run TestRootfsDeliveryKVM
 # Managed drive swap (ENG-4614): same inputs; KVM_VMS running VMs, a reader in each VM holding files on the
 # managed drive, swaps of every VM, guest checks (content, old reader, noexec, no rw remount, no restart).
 KVM_TB_ROOTFS=/opt/tb/rootfs-out KVM_TB_CA=/opt/tb/ca/ca.crt ./hostagent-kvm.test -test.v -test.run TestManagedSwapKVM

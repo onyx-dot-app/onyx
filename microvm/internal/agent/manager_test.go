@@ -127,6 +127,7 @@ func newFixture(t *testing.T, uidCount uint32) *fixture {
 	dir := t.TempDir()
 	if _, err := template.WriteFake(dir, "tpl-1", template.Key{
 		VCPUs: 2, MemMiB: 4096, ScratchGiB: 1, GuestKernel: "6.18.25", FirecrackerVersion: "v1.17.0",
+		CAFingerprint: strings.Repeat("a", 64),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -320,7 +321,8 @@ func TestTemplateCheckedBeforeEveryRestore(t *testing.T) {
 		"cpu model":    func(f *fixture) { f.m.versions.CPUModel = "Other CPU" },
 		"host kernel":  func(f *fixture) { f.m.versions.HostKernel = "6.19.0" },
 		"guest kernel": func(f *fixture) { f.m.versions.GuestKernelSHA256 = strings.Repeat("a", 64) },
-		"egress CA":    func(f *fixture) { f.m.versions.EgressCAFingerprint = strings.Repeat("b", 64) },
+		// The template's root drive has a built-in CA (an older build).
+		"egress CA": func(f *fixture) { f.m.versions.EgressCAFingerprint = strings.Repeat("b", 64) },
 		"tampered mem": func(f *fixture) {
 			p := filepath.Join(f.m.templates.Dir, "tpl-1", template.MemFile)
 			if err := os.WriteFile(p, []byte("not the snapshot"), 0o644); err != nil {

@@ -22,7 +22,7 @@ import (
 )
 
 // System holds the guest system calls of Init. Tests replace them. A nil
-// Attach or ResetRelay is skipped.
+// Attach, ResetRelay or InstallCA is skipped.
 type System struct {
 	SetClock   func(time.Time) error
 	AddEntropy func([]byte) (credited bool, err error)
@@ -33,6 +33,9 @@ type System struct {
 	// ResetRelay makes the in-guest egress relay reset its connections. It
 	// reports false if the relay is not running.
 	ResetRelay func() (bool, error)
+	// InstallCA puts the egress CA (PEM) into the guest trust stores. It
+	// runs after Attach, so it writes to the overlays. Nil: skipped.
+	InstallCA func(pem []byte) error
 }
 
 // Config configures a Server.
@@ -68,6 +71,8 @@ type initState struct {
 	Generation    uint64            `json:"generation"`
 	SandboxID     string            `json:"sandbox_id"`
 	InitializedAt time.Time         `json:"initialized_at"`
+	// EgressCA is the PEM of the last SetKey egress CA.
+	EgressCA []byte `json:"egress_ca,omitempty"`
 }
 
 // Server implements pb.SandboxdServer.
@@ -191,6 +196,15 @@ func (s *Server) Init(_ context.Context, r *pb.InitRequest) (*pb.InitResponse, e
 		}
 		resp.Grown = append(resp.Grown, &pb.GrownFS{MountPoint: mp, OldBytes: oldB, NewBytes: newB})
 	}
+	s.mu.Lock()
+	caPEM := s.state.EgressCA
+	s.mu.Unlock()
+	if len(caPEM) > 0 && s.sys.InstallCA != nil {
+		if err := s.sys.InstallCA(caPEM); err != nil {
+			return nil, apiError(pb.ErrorReason_INIT_FAILED, "install egress CA: %v", err)
+		}
+		resp.EgressCaInstalled = true
+	}
 	if s.sys.ResetRelay != nil {
 		reset, err := s.sys.ResetRelay()
 		if err != nil {
@@ -204,7 +218,7 @@ func (s *Server) Init(_ context.Context, r *pb.InitRequest) (*pb.InitResponse, e
 	s.mu.Unlock()
 	st := initState{
 		Initialized: true, Key: key, Env: maps.Clone(r.GetEnv()), SessionIDs: slices.Clone(r.GetSessionIds()),
-		Generation: r.GetGeneration(), SandboxID: r.GetSandboxId(), InitializedAt: time.Now(),
+		Generation: r.GetGeneration(), SandboxID: r.GetSandboxId(), InitializedAt: time.Now(), EgressCA: caPEM,
 	}
 	if err := s.saveState(st); err != nil {
 		return nil, apiError(pb.ErrorReason_INIT_FAILED, "save state: %v", err)
@@ -213,7 +227,7 @@ func (s *Server) Init(_ context.Context, r *pb.InitRequest) (*pb.InitResponse, e
 	s.state = st
 	s.mu.Unlock()
 	s.cfg.Log.Info("init", "sandbox_id", st.SandboxID, "generation", st.Generation,
-		"clock_step", step, "entropy_credited", credited, "attached", resp.Attached, "relay_reset", resp.RelayReset,
+		"clock_step", step, "entropy_credited", credited, "attached", resp.Attached, "egress_ca", resp.EgressCaInstalled, "relay_reset", resp.RelayReset,
 		"sessions", len(st.SessionIDs))
 	return resp, nil
 }

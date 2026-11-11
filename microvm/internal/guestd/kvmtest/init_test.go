@@ -76,15 +76,35 @@ func TestInitKVM(t *testing.T) {
 
 	t.Run("no_scratch_starts_no_service", func(t *testing.T) {
 		v := bootDrives(t, e, "init-noscratch", false, false)
-		hctx, hcancel := context.WithTimeout(ctx, 20*time.Second)
+		hctx, hcancel := context.WithTimeout(ctx, 90*time.Second)
 		defer hcancel()
-		if _, err := waitHealth(hctx, v); err == nil {
-			t.Fatal("daemon answered with a failed attach")
+		health := make(chan error, 1)
+		go func() {
+			_, err := waitHealth(hctx, v)
+			health <- err
+		}()
+		ticker := time.NewTicker(50 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case err := <-health:
+				if err == nil {
+					t.Fatal("daemon answered with a failed attach")
+				}
+				t.Fatalf("no attach failure before health probe ended: %v\n%s", err, v.console())
+			case <-hctx.Done():
+				t.Fatalf("no attach failure on the console:\n%s", v.console())
+			case <-ticker.C:
+				if strings.Contains(v.console(), "attach failed") {
+					hcancel()
+					if err := <-health; err == nil {
+						t.Fatal("daemon answered with a failed attach")
+					}
+					t.Log("no scratch drive: daemon did not start (fail closed)")
+					return
+				}
+			}
 		}
-		if !strings.Contains(v.console(), "attach failed") {
-			t.Errorf("no attach failure on the console:\n%s", v.console())
-		}
-		t.Logf("no scratch drive: daemon did not start (fail closed)")
 	})
 
 	v := bootDrives(t, e, "init-main", true, false)
@@ -118,6 +138,12 @@ func TestInitKVM(t *testing.T) {
 		if g := strings.TrimSpace(strings.SplitN(strings.SplitN(out, "Groups:", 2)[1], "\n", 2)[0]); g != "" {
 			t.Errorf("relay has supplementary groups %q", g)
 		}
+	})
+
+	// ENG-4648: the root drive has no CA. SetKey carries the deployment CA,
+	// Init installs it, and a later SetKey + Init replaces it (a CA rotation).
+	t.Run("egress_ca_from_set_key", func(t *testing.T) {
+		testEgressCA(ctx, t, v, c, key)
 	})
 
 	t.Run("restart_never_runs_overlay_helpers", func(t *testing.T) {

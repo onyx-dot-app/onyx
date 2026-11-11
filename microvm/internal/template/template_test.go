@@ -123,6 +123,20 @@ func TestCheckNode(t *testing.T) {
 	if err := k.CheckNode(noCA); err != nil {
 		t.Fatalf("a node without a CA setting must not check it: %v", err)
 	}
+	runtimeCA := k
+	runtimeCA.CAFingerprint = ""
+	if err := runtimeCA.CheckNode(testNode); err != nil {
+		t.Fatalf("a template with no CA in its root drive fits every CA: %v", err)
+	}
+	// With no CA source, only a root drive with a CA fits.
+	noSource := noCA
+	noSource.RootfsCARequired = true
+	if err := runtimeCA.CheckNode(noSource); apierr.ReasonOf(err) != pb.ErrorReason_TEMPLATE_INCOMPATIBLE || !strings.Contains(err.Error(), "--egress-ca") {
+		t.Fatalf("a CA-free template on an agent with no CA source: %v", err)
+	}
+	if err := k.CheckNode(noSource); err != nil {
+		t.Fatalf("a built-in CA on an agent with no CA source: %v", err)
+	}
 	for name, edit := range map[string]func(n *NodeKey){
 		"firecracker":  func(n *NodeKey) { n.FirecrackerVersion = "v1.18.0" },
 		"cpu model":    func(n *NodeKey) { n.CPUModel = "AMD EPYC 9R14" },

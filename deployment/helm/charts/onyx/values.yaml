@@ -2116,6 +2116,29 @@ craft:
       # Comma-separated taint keys.
       taints: "node.kubernetes.io/unschedulable"
       pollInterval: 10s
+    # Root drive of the VMs (ENG-4648). With a tag, an init container copies
+    # the drive into <dataDir>/rootfs and the agent builds its node template
+    # from it at start (--rootfs-dir). Empty tag = no template, and Create
+    # fails with TEMPLATE_MISSING. Publish a tag with
+    # .github/workflows/craft-fc-rootfs.yml, for example rootfs-0.1.0. Pin it.
+    rootfs:
+      image:
+        repository: onyxdotapp/craft-fc-artifacts
+        tag: ""
+        pullPolicy: IfNotPresent
+      # The init container copies about 4 GiB once per drive version.
+      resources: {}
+    # Egress CA (ENG-4648). The root drive has no CA. The agent reads the
+    # sandbox-proxy CA from this ConfigMap at each Create (cached 30s) and
+    # the guest daemon installs it at Init. The chart gives the agent "get"
+    # on that one ConfigMap. false: VMs trust only a CA built into the drive.
+    egressCA:
+      enabled: true
+      # Empty = configMap.SANDBOX_NAMESPACE, where sandbox-proxy writes it.
+      namespace: ""
+      # Empty = configMap.SANDBOX_PROXY_CA_CONFIGMAP (sandbox-proxy-ca-bundle).
+      configMapName: ""
+      key: ca.crt
     # Extra host-agent flags, for example ["--max-scratch-gib=200"].
     extraArgs: []
     # Prometheus metrics on a plain HTTP port (--metrics-listen). With

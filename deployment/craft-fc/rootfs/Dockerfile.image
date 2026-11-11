@@ -1,0 +1,15 @@
+# Root drive image: onyxdotapp/craft-fc-artifacts:rootfs-<version> (ENG-4648).
+#
+# Files only, like the artifacts image. The Helm chart runs it as an init
+# container of the host agent DaemonSet, which copies the root drive into
+# <data-dir>/rootfs (the agent's --rootfs-dir).
+#
+# Build context: a directory with the build-rootfs.sh output (rootfs.ext4 and
+# manifest.json, built without --ca), busybox (the static busybox of that
+# root drive, /craft-fc/bin/busybox) and install-rootfs.sh from this
+# directory. .github/workflows/craft-fc-rootfs.yml makes it.
+FROM scratch
+COPY busybox /craft-fc-rootfs/busybox
+COPY install-rootfs.sh /craft-fc-rootfs/install
+COPY manifest.json rootfs.ext4 /craft-fc-rootfs/
+ENTRYPOINT ["/craft-fc-rootfs/busybox", "sh", "/craft-fc-rootfs/install"]

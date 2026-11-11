@@ -5,11 +5,23 @@ into the read-only root drive of a Craft Firecracker VM. It also has the guest
 init. The pod runtime keeps using the sandbox image as it is: the build does not
 change the image or its Dockerfile.
 
+The separate `onyxdotapp/craft-runtime:<Onyx version>` userspace image can also
+be passed to `--image` for the new integrated harness. Existing Craft continues
+to use `onyxdotapp/sandbox`. The new image supplies tools without OpenCode or the
+pod sidecar. The converter still owns init, the Go daemon and relay, the
+overlays and the rootfs manifest. See `../../craft-runtime/README.md`.
+Choosing that input does not change the pod or Docker image settings.
+
+`craft-runtime` is the source of the published root drive (see "Delivery to
+nodes"). `onyxdotapp/sandbox:<tag>` still works as a fallback source.
+
 ## Files
 
 | File | Installed as | What it does |
 |---|---|---|
 | `build-rootfs.sh` | – | Builds `rootfs.ext4` and `manifest.json` |
+| `Dockerfile.image`, `install-rootfs.sh` | `/craft-fc-rootfs/` in the image | The root drive image for nodes, and its install step (see "Delivery to nodes") |
+| `check-image.sh` | – | Builds and checks that image |
 | `craft-init` | `/sbin/craft-init` | PID 1: mounts, attach, starts and restarts the services |
 | `attach.sh` | `/craft-fc/lib/attach` | Mounts the scratch drive, the overlays and the managed drive |
 | `egress-relay.py` | `/craft-fc/bin/egress-relay` (only with `--python-relay`) | Fallback egress relay. The default is the static Go relay from `microvm/cmd/egress-relay` (`--relay-bin`). |
@@ -63,16 +75,20 @@ cd microvm
 GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -o ../out/guest-daemon ./cmd/guest-daemon
 GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -o ../out/egress-relay ./cmd/egress-relay
 cd ..
-sudo deployment/craft-fc/rootfs/build-rootfs.sh --image onyxdotapp/sandbox:v5.1.0 \
-  --ca egress-ca.crt --daemon-bin out/guest-daemon --relay-bin out/egress-relay --out out/
+sudo deployment/craft-fc/rootfs/build-rootfs.sh --image onyxdotapp/craft-runtime:v5.2.0 \
+  --daemon-bin out/guest-daemon --relay-bin out/egress-relay --out out/
 ```
 
-- `--image`: the sandbox image. The build pins it to its digest.
+- `--image`: the source image (`craft-runtime`, or `sandbox` as a fallback).
+  The build pins it to its digest.
 - `--registry`: optional. Pull the image through this prefix, for example the
   ECR pull-through cache `<account>.dkr.ecr.<region>.amazonaws.com/docker-hub`.
   The manifest records the reference that was pulled.
-- `--ca`: the public certificate of the egress proxy CA. The build stops if the
-  file has a private key, has more than one certificate or is not a CA.
+- `--ca`: optional, the public certificate of the egress proxy CA. The build
+  stops if the file has a private key, has more than one certificate or is not
+  a CA. Without `--ca` (the published drive), the drive has no CA and fits
+  every deployment: the guest daemon installs the deployment CA at `Init` (see
+  "Egress CA").
 - `--daemon-bin`: the guest daemon (required), installed at the `--daemon-cmd`
   program path.
 - `--relay-bin`: the egress relay, installed as `/craft-fc/bin/egress-relay`.
@@ -100,11 +116,12 @@ needs the network at boot.
   static busybox to `/craft-fc/bin/busybox` and removes the `busybox-static`
   package again.
 - Checks that `libreoffice-writer` is installed (it is, from v5.1).
-- Adds the egress CA:
-  - `/usr/local/share/ca-certificates/craft-egress-ca.crt`, then `update-ca-certificates`;
-  - `/etc/ssl/sandbox/ca-bundle.crt`, a link to the system bundle (the same
-    path as the pod runtime);
-  - the sandbox user's Chromium NSS database (`/home/sandbox/.pki/nssdb`).
+- Makes `/etc/ssl/sandbox/ca-bundle.crt`, a link to the system bundle (the
+  same path as the pod runtime), and the sandbox user's empty Chromium NSS
+  database (`/home/sandbox/.pki/nssdb`, owned by the sandbox user).
+- Only with `--ca`, adds the egress CA:
+  `/usr/local/share/ca-certificates/craft-egress-ca.crt`, then
+  `update-ca-certificates`, and the NSS database.
 - Writes the proxy settings:
   - `/craft-fc/etc/guest.env`: the image's `ENV` (Docker export drops it), plus
     `HTTP(S)_PROXY`, `NO_PROXY=localhost,127.0.0.1,::1`, `NODE_USE_ENV_PROXY=1`,
@@ -123,9 +140,61 @@ The build stops if it finds a private key in `/etc`, `/root`, `/home`,
 egress CA certificate is public. The daemon gets per-VM values from the host
 in its `Init` call.
 
-The egress CA is a build input, so each CA needs its own root drive. Aiohttp
-clients still need `trust_env=True` in code. An environment variable cannot set
-it.
+Aiohttp clients still need `trust_env=True` in code. An environment variable
+cannot set it.
+
+### Egress CA
+
+The published drive has no egress CA (`build_inputs.egress_ca` is `null`, and
+`guest.egress.ca_install` is `runtime`). One drive serves every deployment, and
+the template key does not change with the CA.
+
+1. The host agent reads the deployment CA at each `Create` (`--egress-ca-configmap`:
+   the sandbox-proxy ConfigMap, or `--egress-ca`: a file), with a 30 s cache.
+2. It sends the CA with `SetKey` (`egress_ca_pem`). Only the agent can call `SetKey`.
+3. `Init`, after `attach` (so the writes go to the overlays), installs it with
+   no program from the overlays running as root:
+   - `/usr/local/share/ca-certificates/craft-egress-ca.crt` (written by the
+     daemon). A later `update-ca-certificates`, for example from apt, keeps it;
+   - `/etc/ssl/certs/ca-certificates.crt`: the daemon removes the old egress
+     CA and adds the new one;
+   - the NSS database: `certutil` runs as the database owner, never as root. A
+     failure here is only logged.
+
+Each `Init` writes the CA again. So after a CA change, a saved scratch disk
+with an old copy of the bundle in its overlay gets the new CA. A drive built
+with `--ca` keeps working: the agent refuses it only if its CA differs from
+the deployment CA.
+
+## Delivery to nodes
+
+`.github/workflows/craft-fc-rootfs.yml` (manual dispatch on main, inputs
+`source_image` and `version`) converts the source image with no `--ca`, boots it
+in Firecracker (`../../craft-runtime/check-kvm.sh`), and publishes
+`onyxdotapp/craft-fc-artifacts:rootfs-<version>`. Pull requests run
+`check-image.sh` (the image and the install step, with a small test drive).
+
+The image (`Dockerfile.image`) has only `/craft-fc-rootfs/`: `rootfs.ext4`,
+`manifest.json`, the drive's own static busybox and `install` (from
+`install-rootfs.sh`). Its entrypoint copies the drive into the directory in its
+argument, checks the SHA256 against the manifest, and moves it into place. It
+does nothing when the directory already has the same manifest.
+
+The Helm chart runs it as an init container of the host agent
+(`craft.hostAgent.rootfs.image.tag`, for example `rootfs-0.1.0`) with the target
+`<dataDir>/rootfs`, and passes `--rootfs-dir=<dataDir>/rootfs` to the agent. An
+air-gapped install mirrors this image like the others. Each node keeps one copy
+of the drive (about 4 GiB) in the data dir, plus the image layer.
+
+To build the image by hand (Linux, Docker, e2fsprogs):
+
+```bash
+sudo deployment/craft-fc/rootfs/build-rootfs.sh --image onyxdotapp/craft-runtime:v5.2.0 \
+  --daemon-bin out/guest-daemon --relay-bin out/egress-relay --out out/rootfs
+deployment/craft-fc/rootfs/check-image.sh --context-from out/rootfs out/context
+docker build --platform linux/amd64 -f out/context/Dockerfile.image -t craft-fc-rootfs:dev out/context
+deployment/craft-fc/rootfs/check-image.sh --image craft-fc-rootfs:dev
+```
 
 ### Output
 
@@ -135,8 +204,8 @@ it.
 | Field | Content |
 |---|---|
 | `source_image` | `ref`, `pulled_from`, `pinned` (`repo@sha256:…`), `digest`, `platform` |
-| `build_inputs` | onyx commit, SHA256 of each file in this directory, the CA fingerprint, subject and expiry, packages added, removed and changed, files removed |
-| `guest` | init path, `boot_args`, `template_boot_args_extra`, `supervised_dir` (`/craft-fc`), attach (path, SHA256), busybox (path, SHA256), daemon (command, path, SHA256, vsock port 52), egress relay (kind `go` or `python`, path, SHA256, uid, PID file), config paths, egress (guest proxy, host vsock port 3128, CA bundle), drive order, overlay directories, scratch layout version |
+| `build_inputs` | onyx commit, SHA256 of each file in this directory, the CA fingerprint, subject and expiry (`null` without `--ca`), packages added, removed and changed, files removed |
+| `guest` | init path, `boot_args`, `template_boot_args_extra`, `supervised_dir` (`/craft-fc`), attach (path, SHA256), busybox (path, SHA256), daemon (command, path, SHA256, vsock port 52), egress relay (kind `go` or `python`, path, SHA256, uid, PID file), config paths, egress (guest proxy, host vsock port 3128, CA bundle, `ca_install`: `build` or `runtime`), drive order, overlay directories, scratch layout version |
 | `output` | file name, SHA256, size, file system UUID and label |
 
 The output is not reproducible byte for byte: file times and the file system
@@ -274,7 +343,8 @@ Use this order:
 3. For each VM: put the VM's own `scratch.ext4` and `managed.ext4` at the drive
    paths of the template, then load the snapshot.
 4. The node agent closes its relay connections for the VM (`CloseConnections`).
-5. The daemon `Init` sets the clock, runs `/craft-fc/lib/attach` and sends
+5. The daemon `Init` sets the clock, runs `/craft-fc/lib/attach`, installs the
+   egress CA from `SetKey` (see "Egress CA") and sends
    `SIGHUP` to the PID in `/run/craft-fc/egress-relay.pid` (init writes that
    file each time it starts the relay). On `SIGHUP` the relay resets every live
    connection (TCP RST). Pooled clients and open streams then fail at once

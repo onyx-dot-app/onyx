@@ -7,11 +7,8 @@ package tplbuild
 
 import (
 	"crypto/sha256"
-	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
-	"encoding/pem"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -163,7 +160,9 @@ func (r *Rootfs) BootArgs() string {
 	return strings.Join(args, " ")
 }
 
-// CAFingerprint returns the rootfs egress CA fingerprint, normalized.
+// CAFingerprint returns the rootfs egress CA fingerprint, normalized. Empty:
+// the root drive has no CA (build-rootfs.sh without --ca); the guest daemon
+// installs the deployment CA at Init.
 func (r *Rootfs) CAFingerprint() string {
 	return NormalizeFingerprint(r.Manifest.BuildInputs.EgressCA.Fingerprint)
 }
@@ -171,31 +170,6 @@ func (r *Rootfs) CAFingerprint() string {
 // NormalizeFingerprint makes "AB:CD:..." (openssl) and "abcd..." equal.
 func NormalizeFingerprint(fp string) string {
 	return strings.ToLower(strings.ReplaceAll(strings.TrimSpace(fp), ":", ""))
-}
-
-// CAFileFingerprint returns the SHA256 fingerprint of the one PEM
-// certificate in path (the egress CA of the deployment), normalized.
-func CAFileFingerprint(path string) (string, error) {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return "", err
-	}
-	block, rest := pem.Decode(raw)
-	if block == nil || block.Type != "CERTIFICATE" {
-		return "", fmt.Errorf("%s has no PEM certificate", path)
-	}
-	if b2, _ := pem.Decode(rest); b2 != nil {
-		return "", fmt.Errorf("%s has more than one PEM block", path)
-	}
-	cert, err := x509.ParseCertificate(block.Bytes)
-	if err != nil {
-		return "", fmt.Errorf("%s: %w", path, err)
-	}
-	if !cert.IsCA {
-		return "", errors.New(path + " is not a CA certificate")
-	}
-	sum := sha256.Sum256(block.Bytes)
-	return hex.EncodeToString(sum[:]), nil
 }
 
 var tagRE = regexp.MustCompile(`[^A-Za-z0-9._-]+`)

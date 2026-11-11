@@ -1,0 +1,17 @@
+**
+!deployment/
+!deployment/craft-runtime/
+!deployment/craft-runtime/**
+!backend/
+!backend/onyx/
+!backend/onyx/server/
+!backend/onyx/server/features/
+!backend/onyx/server/features/build/
+!backend/onyx/server/features/build/sandbox/
+!backend/onyx/server/features/build/sandbox/image/
+!backend/onyx/server/features/build/sandbox/image/install-browser.sh
+!backend/onyx/server/features/build/sandbox/image/templates/
+!backend/onyx/server/features/build/sandbox/image/templates/pptx/
+!backend/onyx/server/features/build/sandbox/image/templates/pptx/**
+**/.DS_Store
+**/__pycache__

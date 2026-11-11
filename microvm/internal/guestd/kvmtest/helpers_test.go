@@ -307,6 +307,7 @@ func keyInit(ctx context.Context, c pb.SandboxdClient, key string, r *pb.InitReq
 	if _, err := c.SetKey(ctx, &pb.SetKeyRequest{Key: key}); err != nil {
 		return nil, err
 	}
+	r.HostTime = timestamppb.New(time.Now())
 	return c.Init(keyed(ctx, key), r)
 }
 
@@ -331,6 +332,7 @@ func collect(s interface {
 			break
 		}
 		if err != nil {
+			r.stdout, r.stderr = out.String(), errb.String()
 			return r, err
 		}
 		switch x := ev.GetEvent().(type) {

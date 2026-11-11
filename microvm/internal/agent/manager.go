@@ -79,6 +79,9 @@ type Versions struct {
 	GuestKernelSHA256 string
 	// EgressCAFingerprint is the deployment's egress CA. Empty: not checked.
 	EgressCAFingerprint string
+	// NoEgressCASource: the agent sends no CA at Create, so only a root
+	// drive with a built-in CA fits.
+	NoEgressCASource bool
 }
 
 // NodeKey is the part of a template key that this node decides.
@@ -86,6 +89,7 @@ func (v Versions) NodeKey() template.NodeKey {
 	return template.NodeKey{
 		FirecrackerVersion: v.Firecracker, CPUModel: v.CPUModel, HostKernel: v.HostKernel,
 		GuestKernelSHA256: v.GuestKernelSHA256, CAFingerprint: v.EgressCAFingerprint,
+		RootfsCARequired: v.NoEgressCASource,
 	}
 }
 

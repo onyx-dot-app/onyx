@@ -154,10 +154,15 @@ func writeRootfs(t *testing.T, dir, data, ca string) *Rootfs {
 		t.Fatal(err)
 	}
 	sum := sha256.Sum256([]byte(data))
+	// build-rootfs.sh without --ca writes "egress_ca": null.
+	var caField any
+	if ca != "" {
+		caField = map[string]any{"sha256_fingerprint": ca}
+	}
 	m := map[string]any{
 		"schema": 1, "kind": "craft-fc-rootfs",
 		"source_image": map[string]any{"ref": "onyxdotapp/sandbox:v5.1.0", "digest": "sha256:40928cdd"},
-		"build_inputs": map[string]any{"egress_ca": map[string]any{"sha256_fingerprint": ca}},
+		"build_inputs": map[string]any{"egress_ca": caField},
 		"guest": map[string]any{
 			"boot_args": "console=ttyS0 reboot=k panic=1 pci=off init=/sbin/craft-init", "template_boot_args_extra": "craft.scratch=defer",
 			"drives": []map[string]any{
@@ -294,6 +299,39 @@ func TestBuildRefusesBadInput(t *testing.T) {
 	}
 	if ents, _ := filepath.Glob(filepath.Join(r.b.Store.Dir, ".build-*")); len(ents) != 0 {
 		t.Errorf("staging left: %v", ents)
+	}
+}
+
+// A root drive with no CA fits every deployment: the template key has no CA,
+// so a node with another CA builds the same template.
+func TestBuildRootfsWithoutCA(t *testing.T) {
+	r := newRig(t)
+	in := writeRootfs(t, filepath.Join(r.data, "in"), "root drive", "")
+	if in.CAFingerprint() != "" {
+		t.Fatalf("fingerprint %q", in.CAFingerprint())
+	}
+	res, err := r.b.Build(context.Background(), in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Template.CAFingerprint != "" {
+		t.Fatalf("key CA %q", res.Template.CAFingerprint)
+	}
+	if err := res.Template.CheckNode(node); err != nil {
+		t.Fatal(err)
+	}
+	other := node
+	other.CAFingerprint = strings.Repeat("cd", 32)
+	r.b.Node = other
+	res2, err := r.b.Build(context.Background(), in)
+	if err != nil || res2.Built || res2.Template.Version != res.Template.Version {
+		t.Fatalf("node with another CA: %+v %v", res2, err)
+	}
+	// An agent with no CA source does not use a root drive with no CA.
+	other.CAFingerprint, other.RootfsCARequired = "", true
+	r.b.Node = other
+	if _, err := r.b.Build(context.Background(), in); apierr.ReasonOf(err) != pb.ErrorReason_TEMPLATE_INCOMPATIBLE {
+		t.Fatalf("no CA source: %v", err)
 	}
 }
 
