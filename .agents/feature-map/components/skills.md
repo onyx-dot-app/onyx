@@ -252,7 +252,8 @@ The library preview of an external-app skill calls the same renderer
     private, for every route, bulk included. A publish moves the plugin to the
     Organization library (`db/plugin.py:publish_plugin__no_commit`); a name
     clash there returns `CONFLICT`. Only global `MANAGE_SKILLS` deletes a
-    published skill (`db/skill.py:delete_skill_for_user__no_commit`). A
+    published skill (`db/skill.py:delete_skill_for_user__no_commit`); the
+    card, bulk menu and editor hide Delete to match. A
     transfer moves a private plugin to the new owner's "My uploads", and a name
     clash there returns `CONFLICT`. A new sharing entry point must call `share_skill__no_commit`, not
     `db/skill.py:replace_skill_shares`.

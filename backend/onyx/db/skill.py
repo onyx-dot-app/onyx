@@ -849,8 +849,13 @@ def set_skill_enabled_for_user(
                 OnyxErrorCode.SKILL_NAME_CONFLICT,
                 f"Another skill named '{skill_name}' is already enabled.",
             )
-    lock_skill_plugin__no_commit(skill, db_session)
-    conflict_plugin_ids = _lock_custom_skill_plugins(conflicts, db_session)
+    # One id order for the target and its conflicts, so two users who switch
+    # between the same skills cannot deadlock on the plugin rows.
+    conflict_plugin_ids = [
+        plugin_id
+        for plugin_id in _lock_custom_skill_plugins([skill.id, *conflicts], db_session)
+        if plugin_id != skill.id
+    ]
     if conflicts:
         db_session.execute(
             insert(UserSkillPreference)

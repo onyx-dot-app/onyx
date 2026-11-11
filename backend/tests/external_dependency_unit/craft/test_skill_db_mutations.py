@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import threading
+import time
 from uuid import UUID, uuid4
 
 import pytest
@@ -14,6 +16,7 @@ from onyx.db.models import (
     Skill__UserGroup,
     UserSkillPreference,
 )
+from onyx.db.plugin import lock_plugin, lock_skill_plugin__no_commit
 from onyx.db.skill import (
     add_new_skill__no_commit,
     enable_new_skill_if_name_available__no_commit,
@@ -797,6 +800,62 @@ def test_creation_does_not_displace_default_skill(db_session: Session) -> None:
     assert not enable_new_skill_if_name_available__no_commit(new, user.id, db_session)
     assert db_session.get(UserSkillPreference, (user.id, new.id)) is None
     assert skill_user_states(user, [default.id], db_session)[default.id].enabled
+
+
+def test_same_name_switch_locks_plugins_in_id_order(db_session: Session) -> None:
+    user = make_user(db_session)
+    name = f"lock-order-{uuid4().hex[:8]}"
+    lower, higher = sorted(
+        (make_skill(db_session, name=name, is_public=True) for _ in range(2)),
+        key=lambda skill: skill.id,
+    )
+    set_skill_enabled_for_user(
+        skill_id=lower.id, enabled=True, user=user, db_session=db_session
+    )
+    lock_skill_plugin__no_commit(higher, db_session)
+    db_session.commit()
+
+    # Hold the lower plugin, then switch to the higher skill.
+    lock_plugin(lower.id, db_session)
+    holder_pid = db_session.scalar(text("SELECT pg_backend_pid()"))
+    errors: list[Exception] = []
+
+    def switch() -> None:
+        with Session(bind=db_session.get_bind()) as switch_session:
+            try:
+                set_skill_enabled_for_user(
+                    skill_id=higher.id,
+                    enabled=True,
+                    replace_conflict=True,
+                    user=user,
+                    db_session=switch_session,
+                )
+                switch_session.commit()
+            except Exception as error:
+                errors.append(error)
+
+    switcher = threading.Thread(target=switch)
+    switcher.start()
+    try:
+        with Session(bind=db_session.get_bind()) as probe:
+            deadline = time.monotonic() + 10
+            while not probe.scalar(
+                text(
+                    "SELECT EXISTS (SELECT 1 FROM pg_stat_activity "
+                    "WHERE :pid = ANY(pg_blocking_pids(pid)))"
+                ),
+                {"pid": holder_pid},
+            ):
+                assert time.monotonic() < deadline, "The switch did not wait."
+                time.sleep(0.05)
+            # The waiting switch holds no plugin with a higher id.
+            probe.execute(text("SET LOCAL lock_timeout = '200ms'"))
+            assert lock_plugin(higher.id, probe) is not None
+            probe.rollback()
+    finally:
+        db_session.rollback()
+        switcher.join(timeout=10)
+    assert not errors
 
 
 def test_toggle_lock_allows_concurrent_share_foreign_key_read(
