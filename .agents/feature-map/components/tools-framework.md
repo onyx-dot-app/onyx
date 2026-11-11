@@ -122,8 +122,8 @@ captured tools in order and applies these gates:
 Two tools are added outside this loop. `SearchTool` is added when the request
 forces search on (`SearchToolUsage.ENABLED`), `DISABLE_VECTOR_DB` is off, and
 the loop did not build it. `MemoryTool` is added when `user.enable_memory_tool`
-is set ([[#memory-tool-bypasses-filters]]). Last, `_disambiguate_mcp_tool_names`
-renames MCP tools whose names collide.
+is set ([[#memory-tool-bypasses-filters]]). MCP and OpenAPI tools receive stable
+qualified names at construction, independent of the other selected tools.
 
 **Execution.** A tool implements `_run(invocation, context)` and returns a
 `ToolResult`, or a `ChildRunWait` when it delegates to a sub-agent. Call data,
@@ -289,7 +289,10 @@ Their control functions, such as `think_tool`, `generate_report` and
    `chat/execution.py:ChatTurnExecution._run_response` find tools by name, so
    two tools with one name make one unreachable. OpenAI and Bedrock accept only
    `[a-zA-Z0-9_-]`. Tools that take user-supplied names, such as MCP and OpenAPI
-   tools, must pass them through `tools/tool_name.py:sanitize_tool_name`.
+   tools, use `tools/tool_name.py:normalize_external_tool_name`. MCP names include the
+   server name and database ID; OpenAPI names include the tool database ID.
+   Names fit 64 characters; sanitation and truncation add a stable hash.
+   Execution retains the original upstream name.
 11. `replay-by-class-name` **Replay finds a tool by its name or its class
    name.** Saved responses replay by tool name
    ([[#renderer-dispatches-by-name]]). Older messages with no saved response
@@ -353,11 +356,6 @@ Their control functions, such as `think_tool`, `generate_report` and
 - **A step with more than 64 tool calls fails the run.**
   `agents/tool_execution.py:ToolBatch` raises `ValueError` above
   `MAX_TOOL_CALLS_PER_STEP`.
-- **OpenAPI tool names can collide.** `_disambiguate_mcp_tool_names` renames
-  only `MCPTool`. One OpenAPI schema rejects its own duplicate operation IDs
-  (`tools/tool_implementations/custom/openapi_parsing.py`), but nothing checks
-  across two OpenAPI tools on one agent, or against a built-in name. The
-  by-name maps keep the last one ([[#tool-name-is-lookup-key]]).
 - **`tools/utils.py:is_image_generation_available` has no caller,** and its
   rule differs from the image tool's ([[image-generation]]).
 

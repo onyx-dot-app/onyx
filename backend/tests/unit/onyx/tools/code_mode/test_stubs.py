@@ -72,18 +72,20 @@ def _with_deferred(count: int) -> ToolStubs:
 
 
 def test_a_program_type_checks_against_only_the_functions_it_names() -> None:
-    code = "print(await acme__remote_3(value='x'))\n"
+    code = "print(await mcp__acme_1__remote_3(value='x'))\n"
     stubs = _with_deferred(300)
     text = stubs.program_text(code)
     # The text does not grow with the deferred functions that the code does
     # not name.
     assert text == _with_deferred(10).program_text(code)
-    assert "async def listed(" in text and "async def acme__remote_3(" in text
+    assert "async def listed(" in text and "async def mcp__acme_1__remote_3(" in text
     assert "field_3: NotRequired[str]" in text
     assert "remote_4" not in text and "field_4" not in text
     assert PRELUDE_STUBS in text and PRELUDE_STUBS not in stubs.listed_text
     # Python reads names in NFKC form.
-    assert "def acme__remote_5(" in stubs.program_text("await \uff41cme__remote_5()")
+    assert "def mcp__acme_1__remote_5(" in stubs.program_text(
+        "await mcp__\uff41cme_1__remote_5()"
+    )
 
 
 @pytest.mark.parametrize(
@@ -362,7 +364,7 @@ def test_required_entries_that_are_not_names_are_ignored() -> None:
             "required": [[]],
         },
     )
-    function = build_tool_stubs([tool]).functions["acme__list_tickets"]
+    function = build_tool_stubs([tool]).functions["mcp__acme_1__list_tickets"]
     assert function.required_arguments == {"filter"}
     assert "tickets: NotRequired[list[Any]]" in "\n".join(function.declarations)
 
@@ -401,9 +403,12 @@ def test_result_declarations_count_toward_the_stub_limit() -> None:
             },
         },
     )
-    function = build_tool_stubs([tool]).functions["acme__report"]
+    function = build_tool_stubs([tool]).functions["mcp__acme_1__report"]
     assert function.declarations == ()
-    assert "async def acme__report(*, id: str | None = None) -> Any:" in function.stub
+    assert (
+        "async def mcp__acme_1__report(*, id: str | None = None) -> Any:"
+        in function.stub
+    )
     assert len(function.stub) <= MAX_STUB_CHARS
 
 
@@ -632,11 +637,11 @@ def test_mcp_output_schema_types_the_result() -> None:
             "required": ["tickets"],
         },
     )
-    function = build_tool_stubs([tool]).functions["acme__list_tickets"]
+    function = build_tool_stubs([tool]).functions["mcp__acme_1__list_tickets"]
     declarations = "\n".join(function.declarations)
-    assert "class AcmeListTicketsResult(TypedDict):" in declarations
+    assert "class McpAcme1ListTicketsResult(TypedDict):" in declarations
     assert "next_page: NotRequired[str]" in declarations
-    assert "-> AcmeListTicketsResult:" in function.stub
+    assert "-> McpAcme1ListTicketsResult:" in function.stub
 
 
 def test_mcp_result_types_are_python_names_that_match_their_keys() -> None:
@@ -655,7 +660,7 @@ def test_mcp_result_types_are_python_names_that_match_their_keys() -> None:
     }
     stubs = build_tool_stubs([tool(items)])
     [function] = stubs.functions.values()
-    assert "class Tool3dListItemsResult(TypedDict):" in function.declarations[0]
+    assert "class Mcp3d1ListItemsResult(TypedDict):" in function.declarations[0]
     ast.parse(_full_text(stubs))
 
     # Python reads the field `ﬁle` as `file`, which is not the JSON key.
@@ -709,12 +714,13 @@ def test_soft_keywords_keep_their_names_as_arguments_and_fields() -> None:
         "required": ["type"],
     }
     tool = FakeMCPTool("list_items", _unused, schema, output_schema=schema)
-    function = build_tool_stubs([tool]).functions["acme__list_items"]
-    assert "async def acme__list_items(*, type: str) -> AcmeListItemsResult:" in (
-        function.stub
+    function = build_tool_stubs([tool]).functions["mcp__acme_1__list_items"]
+    assert (
+        "async def mcp__acme_1__list_items(*, type: str) -> McpAcme1ListItemsResult:"
+        in (function.stub)
     )
     assert (
-        "class AcmeListItemsResult(TypedDict):\n    type: str"
+        "class McpAcme1ListItemsResult(TypedDict):\n    type: str"
         in (function.declarations[0])
     )
     assert function.argument_names == {"type": "type"}
