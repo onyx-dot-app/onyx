@@ -2066,8 +2066,9 @@ craft:
     # Empty = sandboxPod.nodeSelector (or onyx.app/workload=sandbox) plus
     # onyx.app/kvm=true, the label Terraform puts on Firecracker node pools.
     nodeSelector: {}
-    # Empty = sandboxPod.tolerations (or the workload=sandbox taint) plus the
-    # onyx.app/kvm=true:NoSchedule taint that Terraform puts on Firecracker nodes.
+    # Empty = sandboxPod.tolerations (or the workload=sandbox taint). The chart
+    # always adds the onyx.app/kvm=true:NoSchedule toleration (the taint that
+    # Terraform puts on Firecracker nodes).
     tolerations: []
     # Same path on the node and in the container. Must be on XFS with reflink.
     dataDir: /var/lib/craft-fc

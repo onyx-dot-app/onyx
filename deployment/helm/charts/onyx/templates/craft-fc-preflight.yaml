@@ -68,7 +68,7 @@ spec:
       nodeSelector:
         {{- $nodeSelector | toYaml | nindent 8 }}
       tolerations:
-        {{- include "onyx.craftKvmNodeTolerations" . | nindent 8 }}
+        {{- include "onyx.craftKvmNodeTolerations" (dict "ctx" .) | nindent 8 }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}

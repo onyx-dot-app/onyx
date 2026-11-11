@@ -300,17 +300,21 @@ true
 {{- $runtime -}}
 {{- end }}
 
-{{/* Sandbox tolerations plus the onyx.app/kvm taint that Terraform puts on
-Firecracker nodes (kubelet does not count VM memory). Only the host agent and
-the preflight use this; pod sandboxes and the prepuller must not. */}}
+{{/* Tolerations (default: the sandbox tolerations) plus the onyx.app/kvm taint
+that Terraform puts on Firecracker nodes (kubelet does not count VM memory).
+Only the host agent and the preflight use this; pod sandboxes and the
+prepuller must not. Call with (dict "ctx" $ "tolerations" $list). */}}
 {{- define "onyx.craftKvmNodeTolerations" -}}
-{{- $sandboxPod := .Values.sandboxPod | default dict -}}
-{{- $base := index $sandboxPod "tolerations" | default (list (dict "key" "workload" "operator" "Equal" "value" "sandbox" "effect" "NoSchedule")) -}}
+{{- $sandboxPod := .ctx.Values.sandboxPod | default dict -}}
+{{- $base := .tolerations | default (index $sandboxPod "tolerations") | default (list (dict "key" "workload" "operator" "Equal" "value" "sandbox" "effect" "NoSchedule")) -}}
 {{- $out := list -}}
 {{- $hasKvm := false -}}
 {{- range $base -}}
 {{- $out = append $out . -}}
-{{- if eq (toString .key) "onyx.app/kvm" -}}{{- $hasKvm = true -}}{{- end -}}
+{{- $effectMatches := has (toString (.effect | default "")) (list "" "NoSchedule") -}}
+{{- $exists := eq (toString .operator) "Exists" -}}
+{{- $keyMatches := and (eq (toString .key) "onyx.app/kvm") (or $exists (eq (toString .value) "true")) -}}
+{{- if and $effectMatches (or $keyMatches (and (not .key) $exists)) -}}{{- $hasKvm = true -}}{{- end -}}
 {{- end -}}
 {{- if not $hasKvm -}}
 {{- $out = append $out (dict "key" "onyx.app/kvm" "operator" "Equal" "value" "true" "effect" "NoSchedule") -}}

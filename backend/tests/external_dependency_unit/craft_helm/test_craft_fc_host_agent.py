@@ -657,6 +657,28 @@ def test_agent_kvm_toleration_is_not_doubled() -> None:
         f"craft.hostAgent.tolerations=[{json.dumps(_KVM_TOLERATION)}]",
     ]
     assert _daemonset_spec(args, _TEMPLATE)["tolerations"] == [_KVM_TOLERATION]
+    # An explicit agent list still gets the KVM toleration.
+    custom = {"key": "dedicated", "operator": "Equal", "value": "fc"}
+    custom_args = [
+        *_FIRECRACKER,
+        "--set-json",
+        f"craft.hostAgent.tolerations=[{json.dumps(custom)}]",
+    ]
+    assert _daemonset_spec(custom_args, _TEMPLATE)["tolerations"] == [
+        custom,
+        _KVM_TOLERATION,
+    ]
+    # A KVM-key toleration with another effect does not cover NoSchedule.
+    no_execute = {"key": "onyx.app/kvm", "operator": "Exists", "effect": "NoExecute"}
+    no_execute_args = [
+        *_FIRECRACKER,
+        "--set-json",
+        f"craft.hostAgent.tolerations=[{json.dumps(no_execute)}]",
+    ]
+    assert _daemonset_spec(no_execute_args, _TEMPLATE)["tolerations"] == [
+        no_execute,
+        _KVM_TOLERATION,
+    ]
     preflight_args = [
         *_FIRECRACKER,
         "--set",

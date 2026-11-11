@@ -532,7 +532,14 @@ This group has the label `onyx.app/workload=sandbox` and the taint
 `workload=sandbox:NoSchedule`, but no `onyx.app/kvm` label or taint. It uses
 `craft_sandbox_node_disk_size_gb` with baseline gp3 (3000 IOPS, 125 MiB/s).
 EKS updates the taints of an existing node group in place; it does not replace
-the nodes.
+the nodes. `NoSchedule` does not evict running pods, and the new pod group does
+not move them. Pod sandboxes and the prepuller pod that already run on a
+Firecracker node stay there until they stop. Let those sandboxes finish, delete
+the prepuller pod on that node, and check that no such pod is left:
+
+```bash
+kubectl get pods -n onyx-sandboxes -o wide --field-selector spec.nodeName=<firecracker node>
+```
 
 The default, `"pod"`, leaves the group as it is. A change to
 `craft_sandbox_runtime` makes a new launch template version (user data, and

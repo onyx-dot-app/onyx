@@ -98,7 +98,7 @@ Agent flags and node requirements: microvm/README.md.
 {{- $caConfigMap := $egressCA.configMapName | default (.Values.configMap.SANDBOX_PROXY_CA_CONFIGMAP | default "sandbox-proxy-ca-bundle") }}
 {{- $caKey := $egressCA.key | default "ca.crt" }}
 {{- $serviceAccount := or $watchDrain $readCA }}
-{{- $tolerations := $agent.tolerations | default (include "onyx.craftKvmNodeTolerations" . | fromYamlArray) }}
+{{- $tolerations := include "onyx.craftKvmNodeTolerations" (dict "ctx" . "tolerations" $agent.tolerations) | fromYamlArray }}
 {{- $metrics := $agent.metrics | default dict }}
 {{- $metricsPort := $metrics.port | default 9464 }}
 {{- $metricsAuthMode := include "onyx.craftHostAgentMetricsAuth" . }}
