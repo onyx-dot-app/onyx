@@ -1,3 +1,4 @@
+import io
 import zipfile
 from typing import IO, Any
 
@@ -7,14 +8,47 @@ MAX_ZIP_COMPRESSION_RATIO = 200
 _ZIP_RATIO_CHECK_MIN_BYTES = 1024 * 1024
 # zipfile decompresses BZIP2/LZMA input without an output bound, so read(n) cannot cap memory.
 _ALLOWED_ZIP_COMPRESSION_TYPES = frozenset({zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED})
+# ZipFile reads up to 64 KiB of comment and the ZIP64 records to find the directory.
+_END_RECORD_READ_BYTES = 2 * (64 * 1024 + 22) + 128
 
 
 class ZipSizeLimitError(ValueError):
     pass
 
 
-class ZipMetadataLimitError(ZipSizeLimitError):
+class ZipDirectoryLimitError(ZipSizeLimitError):
     pass
+
+
+class _ReadBudgetBytesIO(io.BytesIO):
+    def __init__(self, data: bytes, budget: int) -> None:
+        super().__init__(data)
+        self._size = len(data)
+        self.budget: int | None = budget
+
+    def read(self, size: int | None = -1, /) -> bytes:
+        if self.budget is not None:
+            available = max(0, self._size - self.tell())
+            wanted = available if size is None or size < 0 else min(size, available)
+            if wanted > self.budget:
+                raise ZipDirectoryLimitError("Zip file list is too large")
+            self.budget -= wanted
+        return super().read(size)
+
+
+def open_zip_within_directory_limit(
+    data: bytes, max_directory_bytes: int
+) -> zipfile.ZipFile:
+    """Open a ZIP whose central directory fits ``max_directory_bytes``.
+
+    ZipFile keeps a ZipInfo for each directory record, so a small archive with
+    many entries can use far more memory than its size. ZipFile only parses
+    bytes that it reads, so a read budget while it opens bounds that memory.
+    """
+    file = _ReadBudgetBytesIO(data, max_directory_bytes + _END_RECORD_READ_BYTES)
+    archive = zipfile.ZipFile(file)
+    file.budget = None
+    return archive
 
 
 def _assert_supported_compression(info: zipfile.ZipInfo) -> None:

@@ -296,17 +296,6 @@ browser. For a streamed response it turns off caching and proxy buffering, so
 packets reach the client as they arrive. In development, `DEBUG_AUTH_COOKIE`
 adds an auth cookie so a local web server can call a remote backend. More
 specific routes under `web/src/app/api/` take precedence over this one.
-Catch-all API requests bypass `web/src/proxy.ts`, so Next does not clone and
-truncate uploads at its default 10 MiB buffer limit. The route stamps the
-original path header and preserves backend CSP restrictions, including sandbox.
-When no backend CSP exists, it applies the runtime policy from
-`web/src/securityHeaders.ts`, also used by the page proxy. When a backend CSP
-exists and frame protection is enabled, it adds a separate framing policy.
-Browsers enforce both policies, so stricter backend restrictions remain in force.
-Docs, the MCP OAuth
-callback, HMR rewrites and the bare API root still use the page proxy.
-The route preserves the request body and content length; backend routes enforce
-upload limits and auth.
 
 ---
 

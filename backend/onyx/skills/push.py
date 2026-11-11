@@ -16,7 +16,6 @@ from onyx.db.skill import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.file_processing.zip_index import ZipIndex
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.db.sandbox import (
     get_sandbox_user_map,
@@ -42,6 +41,7 @@ from onyx.skills.bundle import (
     DEFAULT_PER_FILE_MAX_BYTES,
     SKILL_MD_NAME,
     TEMPLATE_SUFFIX,
+    open_bundle_zip,
 )
 from onyx.skills.content import iter_builtin_skill_files
 from onyx.skills.rendering import (
@@ -128,12 +128,21 @@ def _render_template(
 def _add_bundle_bytes(files: FileSet, skill: Skill, bundle_bytes: bytes) -> None:
     try:
         bundle_files: FileSet = {}
-        with ZipIndex(bundle_bytes) as zf:
-            for info in zf.infos():
-                if info.is_dir():
-                    continue
-                with zf.open(info) as source:
-                    bundle_files[f"{skill.name}/{info.filename}"] = source.read()
+        with open_bundle_zip(bundle_bytes) as zf:
+            infos = [info for info in zf.infolist() if not info.is_dir()]
+            # A member never reads past its declared size, so this bounds memory
+            # before the receiver would refuse the whole push.
+            total = sum(len(content) for content in files.values()) + sum(
+                info.file_size for info in infos
+            )
+            if total > MAX_BUNDLE_BYTES:
+                logger.warning(
+                    "Skipping skill %s: the skills exceed the sandbox size limit",
+                    skill.name,
+                )
+                return
+            for info in infos:
+                bundle_files[f"{skill.name}/{info.filename}"] = zf.read(info)
         files.update(bundle_files)
     except Exception:
         logger.warning(
@@ -142,16 +151,6 @@ def _add_bundle_bytes(files: FileSet, skill: Skill, bundle_bytes: bytes) -> None
             skill.bundle_file_id,
             exc_info=True,
         )
-
-
-def _resolved_file_size(path: str, content: bytes) -> int:
-    name, _, relative = path.partition("/")
-    if relative != SKILL_MD_NAME:
-        return len(content)
-    placeholder = CLAUDE_SKILL_DIR_PLACEHOLDER.encode()
-    return len(content) + content.count(placeholder) * (
-        len(f"{SKILLS_MOUNT_PATH}/{name}".encode()) - len(placeholder)
-    )
 
 
 def _resolve_skill_dirs(files: FileSet, skill_names: Iterable[str]) -> None:
@@ -165,7 +164,10 @@ def _resolve_skill_dirs(files: FileSet, skill_names: Iterable[str]) -> None:
         content = files.get(path)
         if content is None or placeholder not in content:
             continue
-        resolved_size = _resolved_file_size(path, content)
+        skill_dir = f"{SKILLS_MOUNT_PATH}/{name}"
+        resolved_size = len(content) + content.count(placeholder) * (
+            len(skill_dir.encode()) - len(placeholder)
+        )
         resolved_total = total - len(content) + resolved_size
         if resolved_size > file_limit or resolved_total > MAX_BUNDLE_BYTES:
             logger.warning(
@@ -178,7 +180,7 @@ def _resolve_skill_dirs(files: FileSet, skill_names: Iterable[str]) -> None:
             continue
         total = resolved_total
         files[path] = resolve_skill_dir_placeholder(
-            content.decode("utf-8"), f"{SKILLS_MOUNT_PATH}/{name}"
+            content.decode("utf-8"), skill_dir
         ).encode("utf-8")
 
 

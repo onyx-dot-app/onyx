@@ -334,3 +334,27 @@ def test_assemble_skips_oversized_expansion_and_keeps_other_skills(
     assert validity_updates[0].is_valid is True
     file_store.save_file.assert_not_called()
     assert output.getvalue() == stored
+
+
+def test_assemble_skips_skill_that_would_pass_the_sandbox_total(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    file_store = MagicMock(spec=FileStore)
+    file_store.read_file.side_effect = [
+        io.BytesIO(_bundle("first")),
+        io.BytesIO(_bundle("second")),
+    ]
+    monkeypatch.setattr(push, "get_default_file_store", lambda: file_store)
+    monkeypatch.setattr(push, "persist_skill_validity", MagicMock())
+    first = _bundle("first")
+    with zipfile.ZipFile(io.BytesIO(first)) as bundle_zip:
+        first_size = sum(info.file_size for info in bundle_zip.infolist())
+    monkeypatch.setattr(push, "MAX_BUNDLE_BYTES", first_size + 1)
+
+    files = push._assemble_fileset(
+        [_skill(name="first", is_valid=True), _skill(name="second", is_valid=True)],
+        cast(User, SimpleNamespace()),
+        MagicMock(spec=Session),
+    )
+
+    assert set(files) == {"first/SKILL.md", "first/scripts/run.py"}

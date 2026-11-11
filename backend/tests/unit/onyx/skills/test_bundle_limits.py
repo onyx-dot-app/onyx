@@ -1,14 +1,11 @@
-"""Unit tests for the separate per-version skill bundle limits."""
+"""Unit tests for the skill bundle limits."""
 
 from __future__ import annotations
 
 import io
 import os
 import random
-import subprocess
-import sys
 import zipfile
-from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import MagicMock
@@ -22,6 +19,8 @@ from onyx.file_store.file_store import FileStore
 from onyx.skills import bundle as bundle_module
 from onyx.skills import validation
 from onyx.skills.bundle import (
+    STORED_ZIP_DIRECTORY_MAX_BYTES,
+    ZIP_DIRECTORY_MAX_BYTES,
     SkillBundleLimit,
     normalize_custom_bundle,
     read_bundle_file,
@@ -31,140 +30,6 @@ from onyx.skills.content import read_custom_skill_bundle_bytes
 
 _MIB = 1024 * 1024
 _SKILL_MD = b"---\nname: limits\ndescription: Limit checks\n---\n\n# Instructions\n"
-
-
-@pytest.mark.parametrize("upload_limit,expected", [(8192, 4096), (1024, 1024)])
-def test_upload_limit_cannot_exceed_stored_allowance(
-    upload_limit: int,
-    expected: int,
-) -> None:
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-c",
-            "from onyx.skills.bundle import DEFAULT_ZIP_MAX_BYTES, DEFAULT_STORED_ZIP_MAX_BYTES; print(DEFAULT_ZIP_MAX_BYTES, DEFAULT_STORED_ZIP_MAX_BYTES)",
-        ],
-        env={
-            **os.environ,
-            "PYTHONPATH": str(Path(__file__).resolve().parents[4]),
-            "SKILL_BUNDLE_ZIP_MAX_BYTES": str(upload_limit),
-            "SKILL_BUNDLE_STORED_ZIP_MAX_BYTES": "4096",
-        },
-        capture_output=True,
-        text=True,
-        check=True,
-        timeout=30,
-    )
-    assert result.stdout.strip() == f"{expected} 4096"
-
-
-def _bundle_settings(env: dict[str, str]) -> list[str]:
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-c",
-            "import io\n"
-            "from onyx.error_handling.exceptions import OnyxError\n"
-            "from onyx.skills import bundle\n"
-            "print(bundle.DEFAULT_STORED_ZIP_MAX_BYTES)\n"
-            "print(bundle.SKILL_BUNDLE_SETTINGS_ERROR)\n"
-            "try:\n"
-            "    bundle.read_bundle_file(io.BytesIO(b'x'))\n"
-            "    print('read')\n"
-            "except OnyxError as exc:\n"
-            "    print(exc.status_code, exc.detail)\n",
-        ],
-        env={
-            **os.environ,
-            "PYTHONPATH": str(Path(__file__).resolve().parents[4]),
-            **env,
-        },
-        capture_output=True,
-        text=True,
-        check=True,
-        timeout=30,
-    )
-    return result.stdout.strip().splitlines()
-
-
-@pytest.mark.parametrize("raw", ["abc", "0", "-1"])
-def test_invalid_setting_disables_bundles_without_failing_import(raw: str) -> None:
-    _, error, read = _bundle_settings({"SKILL_BUNDLE_TOTAL_MAX_BYTES": raw})
-
-    expected = (
-        "Custom skill bundles are disabled because "
-        "SKILL_BUNDLE_TOTAL_MAX_BYTES must be a positive integer."
-    )
-    assert error == expected
-    assert read == f"503 {expected}"
-
-
-def test_invalid_setting_blocks_editor_rewrite_with_503(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    error = "SKILL_BUNDLE_PER_FILE_MAX_BYTES must be a positive integer."
-    monkeypatch.setattr(bundle_module, "SKILL_BUNDLE_SETTINGS_ERROR", error)
-    monkeypatch.setattr(bundle_module, "DEFAULT_PER_FILE_MAX_BYTES", 0)
-
-    with pytest.raises(OnyxError) as exc_info:
-        bundle_module.rewrite_custom_bundle_skill_md(
-            bundle_module.build_single_file_bundle("SKILL.md", _SKILL_MD),
-            canonical_name="limits",
-            description="Limit checks",
-            instructions_markdown="# Instructions",
-        )
-
-    assert exc_info.value.error_code == OnyxErrorCode.SERVICE_UNAVAILABLE
-    assert exc_info.value.detail == error
-
-
-def test_invalid_setting_blocks_stored_size_check_with_503(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    error = "SKILL_BUNDLE_STORED_ZIP_MAX_BYTES must be a positive integer."
-    monkeypatch.setattr(bundle_module, "SKILL_BUNDLE_SETTINGS_ERROR", error)
-
-    with pytest.raises(OnyxError) as exc_info:
-        bundle_module.check_stored_zip_size(1, 0)
-
-    assert exc_info.value.error_code == OnyxErrorCode.SERVICE_UNAVAILABLE
-
-
-def test_stored_allowance_follows_a_raised_total_limit() -> None:
-    total = 300 * _MIB
-    stored, error, read = _bundle_settings({"SKILL_BUNDLE_TOTAL_MAX_BYTES": str(total)})
-
-    assert int(stored) == bundle_module.stored_zip_allowance(total, 500) > total
-    assert (error, read) == ("None", "read")
-    explicit, _, _ = _bundle_settings(
-        {
-            "SKILL_BUNDLE_TOTAL_MAX_BYTES": str(total),
-            "SKILL_BUNDLE_STORED_ZIP_MAX_BYTES": "4096",
-        }
-    )
-    assert explicit == "4096"
-
-
-def test_incompressible_bundle_at_every_limit_reads_back() -> None:
-    """A bundle stored before the ZIP limit can fill the total and file count."""
-    count = bundle_module.DEFAULT_MAX_FILE_COUNT
-    total = bundle_module.DEFAULT_TOTAL_MAX_BYTES
-    noise = random.Random(17).randbytes(total // count + 1)
-    remaining = total - len(_SKILL_MD)
-    entries = [("SKILL.md", _SKILL_MD)]
-    for index in range(1, count):
-        size = remaining // (count - index)
-        remaining -= size
-        entries.append((f"refs/{index:03d}-{'n' * 180}.bin", noise[:size]))
-    stored = _build_zip(entries)
-    assert len(stored) > max(100 * _MIB, total)
-
-    read = read_bundle_file(
-        io.BytesIO(stored), max_bytes=bundle_module.DEFAULT_STORED_ZIP_MAX_BYTES
-    )
-    normalized = normalize_custom_bundle(read, zip_max_bytes=None, max_file_count=None)
-
-    assert normalized.content == stored
 
 
 def _build_zip(
@@ -194,17 +59,6 @@ def test_read_bundle_file_refuses_26_mib_upload() -> None:
         read_bundle_file(io.BytesIO(b"\x00" * (26 * _MIB)))
 
     _assert_limit_error(exc_info.value, "zip_bytes", 25 * _MIB)
-
-
-@pytest.mark.parametrize(
-    ("limit", "label"),
-    [(1024, "1,024 bytes"), (_MIB + 1, "1,048,577 bytes"), (_MIB, "1 MiB")],
-)
-def test_zip_refusal_reports_exact_configured_limit(limit: int, label: str) -> None:
-    with pytest.raises(OnyxError) as caught:
-        read_bundle_file(io.BytesIO(b"x" * (limit + 1)), max_bytes=limit)
-    _assert_limit_error(caught.value, "zip_bytes", limit)
-    assert caught.value.detail == f"Skill bundle zip exceeds the {label} limit."
 
 
 def test_read_bundle_file_accepts_upload_at_limit() -> None:
@@ -346,9 +200,8 @@ def test_skipped_limits_allow_bundles_saved_before_them() -> None:
         [("SKILL.md", _SKILL_MD)] + [(f"refs/{index}.md", b"x") for index in range(600)]
     )
 
-    with pytest.raises(OnyxError) as caught:
-        normalize_custom_bundle(zip_bytes, max_file_count=500)
-    _assert_limit_error(caught.value, "file_count", 500)
+    with pytest.raises(OnyxError):
+        normalize_custom_bundle(zip_bytes)
     normalize_custom_bundle(zip_bytes, zip_max_bytes=None, max_file_count=None)
 
 
@@ -356,27 +209,25 @@ def _stored_skill() -> Skill:
     return cast(Skill, SimpleNamespace(name="limits", bundle_file_id="bundle"))
 
 
-@pytest.mark.parametrize("known_size", [True, False])
-def test_current_content_read_refuses_bundle_over_stored_allowance(
-    monkeypatch: pytest.MonkeyPatch, known_size: bool
+def test_current_content_read_refuses_bundle_over_total_limit(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     limit = 1024
-    monkeypatch.setattr(validation, "DEFAULT_STORED_ZIP_MAX_BYTES", limit)
+    monkeypatch.setattr(validation, "DEFAULT_TOTAL_MAX_BYTES", limit)
+    stream = io.BytesIO(b"x" * (limit + 1))
     file_store = MagicMock(spec=FileStore)
-    file_store.get_file_size.return_value = limit + 1 if known_size else None
-    file_store.read_file.return_value = io.BytesIO(b"x" * (limit + 1))
+    file_store.read_file.return_value = stream
 
     with pytest.raises(OnyxError) as caught:
         read_custom_skill_bundle_bytes(_stored_skill(), file_store)
 
     _assert_limit_error(caught.value, "zip_bytes", limit)
-    assert file_store.read_file.called is not known_size
+    assert stream.closed
 
 
 def test_current_content_read_returns_bundle_within_allowance() -> None:
     stored = _build_zip([("SKILL.md", _SKILL_MD)])
     file_store = MagicMock(spec=FileStore)
-    file_store.get_file_size.return_value = len(stored)
     file_store.read_file.return_value = io.BytesIO(stored)
 
     assert read_custom_skill_bundle_bytes(_stored_skill(), file_store) == (stored)
@@ -402,3 +253,45 @@ def test_merge_reads_existing_bundle_once() -> None:
     existing.assert_called_once_with()
     with zipfile.ZipFile(io.BytesIO(updated)) as archive:
         assert sorted(archive.namelist()) == ["SKILL.md", "a.md"]
+
+
+def _many_entries(count: int, name_bytes: int) -> bytes:
+    return _build_zip(
+        [("SKILL.md", _SKILL_MD)]
+        + [(f"refs/{index:06d}".ljust(name_bytes, "n"), b"") for index in range(count)],
+        compression=zipfile.ZIP_STORED,
+    )
+
+
+def test_upload_with_large_file_list_is_refused_before_entries_are_read() -> None:
+    upload = _many_entries(60_000, 1)
+
+    with pytest.raises(OnyxError) as caught:
+        normalize_custom_bundle(upload)
+
+    _assert_limit_error(caught.value, "zip_metadata_bytes", ZIP_DIRECTORY_MAX_BYTES)
+
+
+def test_saved_bundle_over_the_upload_file_list_limit_still_loads() -> None:
+    stored = _many_entries(15_000, 60)
+    file_store = MagicMock(spec=FileStore)
+    file_store.read_file.return_value = io.BytesIO(stored)
+
+    with pytest.raises(OnyxError):
+        normalize_custom_bundle(stored)
+    normalized = validation.load_stored_custom_skill_bundle("id", file_store)
+
+    assert normalized.content == stored
+
+
+def test_saved_bundle_file_list_has_its_own_limit() -> None:
+    stored = _many_entries(80_000, 60)
+    file_store = MagicMock(spec=FileStore)
+    file_store.read_file.return_value = io.BytesIO(stored)
+
+    with pytest.raises(OnyxError) as caught:
+        validation.load_stored_custom_skill_bundle("id", file_store)
+
+    _assert_limit_error(
+        caught.value, "zip_metadata_bytes", STORED_ZIP_DIRECTORY_MAX_BYTES
+    )

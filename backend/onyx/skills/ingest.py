@@ -1,5 +1,5 @@
 import io
-from collections.abc import Container, Iterator
+from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import NamedTuple
 
@@ -13,7 +13,7 @@ from onyx.skills.bundle import (
     build_single_file_bundle,
     compute_bundle_sha256,
     normalize_custom_bundle,
-    read_bundle_skill_md,
+    open_bundle_zip,
 )
 from onyx.skills.metadata import parse_skill_document
 from onyx.utils.logger import setup_logger
@@ -48,7 +48,6 @@ def ingest_skill_bundle(
     file_store: FileStore,
     *,
     expected_name: str | None = None,
-    uncapped_paths: Container[str] | None = None,
 ) -> IngestedBundle:
     """Validate, parse, hash, and store a custom skill bundle.
 
@@ -61,15 +60,16 @@ def ingest_skill_bundle(
 
     Prefer ``ingested_skill_bundle`` when the stored blob should be cleaned up
     automatically if the caller's transaction fails.
-    ``uncapped_paths`` skips the path caps for paths an edit kept unchanged.
     """
     is_standalone_skill_md = filename is not None and filename.lower() == "skill.md"
     if is_standalone_skill_md:
         bundle_bytes = build_single_file_bundle(SKILL_MD_NAME, bundle_bytes)
 
-    normalized = normalize_custom_bundle(bundle_bytes, uncapped_paths=uncapped_paths)
+    normalized = normalize_custom_bundle(bundle_bytes)
+    with open_bundle_zip(normalized.content) as bundle_zip:
+        raw_skill_md = bundle_zip.read(SKILL_MD_NAME)
     document = parse_skill_document(
-        read_bundle_skill_md(normalized.content),
+        raw_skill_md,
         directory_name=normalized.source_directory,
     )
     name = document.metadata.name
@@ -107,14 +107,12 @@ def ingested_skill_bundle(
     file_store: FileStore,
     *,
     expected_name: str | None = None,
-    uncapped_paths: Container[str] | None = None,
 ) -> Iterator[IngestedBundle]:
     ingested = ingest_skill_bundle(
         bundle_bytes,
         filename,
         file_store,
         expected_name=expected_name,
-        uncapped_paths=uncapped_paths,
     )
     try:
         yield ingested

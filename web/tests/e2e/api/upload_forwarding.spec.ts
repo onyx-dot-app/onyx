@@ -9,7 +9,6 @@ const skill = Buffer.from(
 );
 
 // Inspection validates and returns the upload without creating a stored skill.
-// A Next frontend also exercises body cloning; nginx checks the upload contract.
 test("forwards a multipart upload larger than 10 MiB without truncation", async ({
   request,
 }) => {
@@ -40,24 +39,4 @@ test("returns backend validation for a large invalid upload", async ({
   expect(result).toMatchObject({
     detail: expect.stringContaining("not a valid zip"),
   });
-});
-
-test("keeps backend authentication for multipart uploads", async ({
-  playwright,
-  baseURL,
-}) => {
-  const anonymous = await playwright.request.newContext({
-    baseURL,
-    storageState: { cookies: [], origins: [] },
-  });
-  try {
-    const response = await anonymous.post(inspectPath, {
-      multipart: {
-        upload: { name: "SKILL.md", mimeType: "text/markdown", buffer: skill },
-      },
-    });
-    expect([401, 403]).toContain(response.status());
-  } finally {
-    await anonymous.dispose();
-  }
 });

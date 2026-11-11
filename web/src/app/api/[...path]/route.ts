@@ -3,8 +3,6 @@ import {
   SERVER_SIDE_ONLY__AUTH_COOKIE_NAME,
 } from "@/lib/constants";
 import { NextRequest, NextResponse } from "next/server";
-import { withSecurityHeaders } from "@/securityHeaders";
-import { ORIGINAL_PATH_HEADER } from "@/lib/auth/paths";
 
 /* NextJS is annoying and makes use use a separate function for
 each request type >:( */
@@ -66,10 +64,6 @@ export async function OPTIONS(
 }
 
 async function handleRequest(request: NextRequest, path: string[]) {
-  return withSecurityHeaders(await forwardRequest(request, path));
-}
-
-async function forwardRequest(request: NextRequest, path: string[]) {
   if (
     process.env.NODE_ENV !== "development" &&
     // NOTE: Set this environment variable to 'true' for preview environments
@@ -98,10 +92,6 @@ async function forwardRequest(request: NextRequest, path: string[]) {
 
     // Build headers, optionally injecting debug auth cookie
     const headers = new Headers(request.headers);
-    headers.set(
-      ORIGINAL_PATH_HEADER,
-      request.nextUrl.pathname + request.nextUrl.search
-    );
     if (
       process.env.DEBUG_AUTH_COOKIE &&
       process.env.NODE_ENV === "development"

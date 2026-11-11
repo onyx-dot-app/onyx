@@ -134,7 +134,6 @@ covers new files that match it.
 | `backend/onyx/db/persona.py`, `backend/onyx/db/persona_sharing.py`, `backend/onyx/db/pinned_personas.py`, `backend/onyx/server/features/persona/`, `backend/onyx/server/features/default_assistant/`, `backend/ee/onyx/db/persona.py` | agents-personas |
 | `backend/onyx/db/projects.py`, `backend/onyx/server/features/projects/` | projects |
 | `backend/onyx/skills/`, `backend/onyx/db/skill.py`, `backend/onyx/server/features/skill/` | skills |
-| `backend/onyx/db/zip_metadata.py` | skills |
 | `backend/onyx/db/mcp.py`, `backend/onyx/server/features/mcp/`, `backend/onyx/server/features/tool/`, `backend/onyx/db/tools.py`, `backend/ee/onyx/db/mcp.py` | mcp-and-custom-tools |
 | `backend/onyx/server/features/tool/tool_visibility.py` | mcp-and-custom-tools, plugins |
 | `terraform-provider-onyx/internal/client/custom_tool.go`, `terraform-provider-onyx/internal/client/custom_tool_test.go`, `terraform-provider-onyx/internal/provider/custom_tool_resource.go`, `terraform-provider-onyx/internal/provider/custom_tool_resource_test.go`, `terraform-provider-onyx/internal/provider/custom_tool_availability_test.go`, `terraform-provider-onyx/docs/resources/custom_tool.md` | mcp-and-custom-tools |
@@ -347,7 +346,6 @@ covers new files that match it.
 | `web/src/app/admin/discord-bot/` | discord-bot |
 | `web/src/views/admin/SpendingLimitsPage/`, `web/src/lib/spendingLimits/`, `web/src/app/ee/admin/spending-limits/` | rate-and-usage-limits |
 | `web/src/app/admin/billing/`, `web/src/lib/billing/`, `web/src/components/GatedContentWrapper.tsx`, `web/src/sections/modals/DowngradeToCommunityModal.tsx`, `web/src/components/errorPages/AccessRestrictedPage.tsx`, `web/src/providers/ProductGatingWrapper.tsx`, `web/src/hooks/useLicense.ts`, `web/src/hooks/useBillingInformation.ts`, `web/src/hooks/useCloudSubscription.ts` | billing |
-| `web/src/securityHeaders.ts` | editions-and-gating |
 | `web/src/proxy.ts`, `web/src/app/ee/layout.tsx`, `web/src/app/ee/EEFeatureRedirect.tsx` | editions-and-gating |
 | `web/src/app/admin/hooks/`, `web/src/ee/views/admin/HooksPage/`, `web/src/ee/hooks/` | hooks |
 | `web/src/app/ee/admin/standard-answer/`, `web/src/components/standardAnswers/` | standard-answers |
