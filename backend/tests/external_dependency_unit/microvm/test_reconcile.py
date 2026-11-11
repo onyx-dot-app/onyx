@@ -535,18 +535,27 @@ def test_key_install_ends_by_the_pass_deadline(
 ) -> None:
     node_id = _node("deadline")
     node = add_node(node_id)
-    sandbox_id = new_sandbox_id()
-    reserve_sandbox(
-        tenant_cache,
-        sandbox_id,
-        SandboxReservation(attempt=1, node_id=node_id, owner="timed-out"),
-        replaces=None,
-    )
-    set_sandbox_daemon_key(tenant_cache, sandbox_id, attempt=1, key=new_sandboxd_key())
-    vm = _vm(node, sandbox_id)
+    slow, ready = new_sandbox_id(), new_sandbox_id()
+    vms: dict[UUID, hostagent_pb2.VM] = {}
+    for sandbox_id in (slow, ready):
+        reserve_sandbox(
+            tenant_cache,
+            sandbox_id,
+            SandboxReservation(attempt=1, node_id=node_id, owner="timed-out"),
+            replaces=None,
+        )
+        set_sandbox_daemon_key(
+            tenant_cache, sandbox_id, attempt=1, key=new_sandboxd_key()
+        )
+        vms[sandbox_id] = _vm(node, sandbox_id)
+    registered = _registered(shared_cache, node_id)
+    listed = {
+        vm.sandbox_id: vm for vm in client_factory.client(registered.address).list_vms()
+    }
+    # The slow adoption runs first.
+    ordered = [listed[str(slow)], listed[str(ready)]]
     # Slower than the time left in the pass, faster than the Create timeout.
     node.agent.create_delay_seconds = 4.0
-    registered = _registered(shared_cache, node_id)
 
     started = time.monotonic()
     with pytest.raises(TimeoutError):
@@ -556,19 +565,28 @@ def test_key_install_ends_by_the_pass_deadline(
             NoCheckpointSupport(),
             UnknownActivity(),
             node=registered,
-            vms=client_factory.client(registered.address).list_vms(),
+            vms=ordered,
             now=NOW,
             deadline=started + 2.0,
         )
 
     assert time.monotonic() - started < 3.5
-    assert get_sandbox_placement(tenant_cache, sandbox_id) is None
-    assert get_sandbox_reservation(tenant_cache, sandbox_id) is not None
-    # The next pass tries again without the retry wait.
+    assert get_sandbox_placement(tenant_cache, slow) is None
+    assert get_sandbox_reservation(tenant_cache, slow) is not None
     node.agent.create_delay_seconds = 0.0
-    assert _report(shared_cache, client_factory, node_id).adopted == [str(sandbox_id)]
-    record = get_sandbox_placement(tenant_cache, sandbox_id)
-    assert record is not None and record.names(node_id, 1, vm.generation)
+    # The cut adoption waits, so the next pass adopts the other VM.
+    second = _report(shared_cache, client_factory, node_id, vms=ordered)
+    assert second.adopted == [str(ready)]
+    third = _report(
+        shared_cache,
+        client_factory,
+        node_id,
+        vms=ordered,
+        now=NOW + reconcile._ADOPT_RETRY_SECONDS,
+    )
+    assert third.adopted == [str(slow)]
+    record = get_sandbox_placement(tenant_cache, slow)
+    assert record is not None and record.names(node_id, 1, vms[slow].generation)
 
 
 def test_stale_write_never_replaces_a_newer_record(
