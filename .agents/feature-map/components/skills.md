@@ -300,7 +300,10 @@ The library preview of an external-app skill calls the same renderer
     and author-less skills go to the Organization library, published at
     version 1. Other skills go to the author's "My uploads". A duplicate name
     in one marketplace gets the first free `-N` suffix on `plugin.name` only.
-    App code does not write the tables, so they go stale after the deploy. The
+    The skill name lives only in `plugin_skill.frontmatter` (NOT NULL, a check
+    requires a string `name`); the backfill seeds it with the name and
+    description of the legacy row. No column stores the kind (skill or
+    plugin): it comes from the layout of each version. App code does not write the tables, so they go stale after the deploy. The
     one exception: a user delete removes the plugins in that user's "My
     uploads" (`db/plugin.py`), because a stale copy there would block the
     delete after the user's skill is transferred, deleted or made public. Do

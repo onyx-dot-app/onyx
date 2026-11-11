@@ -8,7 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import MarketplaceKind, PluginKind
+from onyx.db.enums import MarketplaceKind
 from onyx.db.models import Marketplace, Plugin, PluginSkill, PluginVersion, User
 from tests.external_dependency_unit.craft.db_helpers import make_user
 
@@ -18,10 +18,10 @@ def _check_deferred_constraints(db_session: Session) -> None:
     db_session.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
 
 
-def _account_uploads(db_session: Session, owner: User) -> Marketplace:
+def _user_uploads(db_session: Session, owner: User) -> Marketplace:
     marketplace = Marketplace(
         id=uuid4(),
-        kind=MarketplaceKind.ACCOUNT_UPLOADS,
+        kind=MarketplaceKind.USER_UPLOADS,
         name="My uploads",
         owner_user_id=owner.id,
     )
@@ -40,13 +40,16 @@ def _plugin_with_first_version(
         id=plugin_id,
         name=name,
         description="d",
-        kind=PluginKind.SKILL,
         marketplace_id=marketplace_id,
         author_user_id=author.id if author else None,
         current_version_id=version_id,
     )
     version = PluginVersion(id=version_id, plugin_id=plugin_id, version_number=1)
     return plugin, version
+
+
+def _frontmatter(name: str) -> dict[str, str]:
+    return {"name": name, "description": "d"}
 
 
 def _refused(db_session: Session, write: Callable[[], object], constraint: str) -> None:
@@ -71,12 +74,16 @@ def test_one_transaction_inserts_a_plugin_and_its_first_version(
     db_session: Session, owner: User
 ) -> None:
     try:
-        marketplace = _account_uploads(db_session, owner)
+        marketplace = _user_uploads(db_session, owner)
         plugin, version = _plugin_with_first_version(marketplace.id, owner)
         db_session.add_all([plugin, version])
         db_session.flush()
         db_session.add(
-            PluginSkill(plugin_version_id=version.id, path="", name="deploy")
+            PluginSkill(
+                plugin_version_id=version.id,
+                path="",
+                frontmatter=_frontmatter("deploy"),
+            )
         )
         db_session.flush()
         _check_deferred_constraints(db_session)
@@ -86,7 +93,7 @@ def test_one_transaction_inserts_a_plugin_and_its_first_version(
 
 def test_database_refuses_invalid_plugins(db_session: Session, owner: User) -> None:
     try:
-        marketplace = _account_uploads(db_session, owner)
+        marketplace = _user_uploads(db_session, owner)
         existing, existing_version = _plugin_with_first_version(marketplace.id, owner)
         db_session.add_all([existing, existing_version])
         db_session.flush()
@@ -138,7 +145,11 @@ def test_database_refuses_invalid_plugins(db_session: Session, owner: User) -> N
 
         # A second skill with the same name in one version.
         db_session.add(
-            PluginSkill(plugin_version_id=existing_version.id, path="", name="deploy")
+            PluginSkill(
+                plugin_version_id=existing_version.id,
+                path="",
+                frontmatter=_frontmatter("deploy"),
+            )
         )
         db_session.flush()
         _refused(
@@ -147,11 +158,24 @@ def test_database_refuses_invalid_plugins(db_session: Session, owner: User) -> N
                 PluginSkill(
                     plugin_version_id=existing_version.id,
                     path="skills/deploy",
-                    name="deploy",
+                    frontmatter=_frontmatter("deploy"),
                 )
             ),
             "uq_plugin_skill_version_name",
         )
+        # A frontmatter with no name, or a name that is not a string.
+        for frontmatter in ({"description": "d"}, {"name": 7, "description": "d"}):
+            _refused(
+                db_session,
+                lambda frontmatter=frontmatter: db_session.add(
+                    PluginSkill(
+                        plugin_version_id=existing_version.id,
+                        path="skills/other",
+                        frontmatter=frontmatter,
+                    )
+                ),
+                "ck_plugin_skill_frontmatter_name",
+            )
     finally:
         db_session.rollback()
 
@@ -160,7 +184,7 @@ def test_database_refuses_invalid_marketplaces(
     db_session: Session, owner: User
 ) -> None:
     try:
-        _account_uploads(db_session, owner)
+        _user_uploads(db_session, owner)
         # The migration added the one Organization library of the tenant.
         _refused(
             db_session,
@@ -176,8 +200,8 @@ def test_database_refuses_invalid_marketplaces(
         # A second "My uploads" for one user.
         _refused(
             db_session,
-            lambda: _account_uploads(db_session, owner),
-            "uq_plugin_marketplace_account_uploads_owner",
+            lambda: _user_uploads(db_session, owner),
+            "uq_plugin_marketplace_user_uploads_owner",
         )
         # "My uploads" with no owner, and a library with an owner.
         _refused(
@@ -185,11 +209,11 @@ def test_database_refuses_invalid_marketplaces(
             lambda: db_session.add(
                 Marketplace(
                     id=uuid4(),
-                    kind=MarketplaceKind.ACCOUNT_UPLOADS,
+                    kind=MarketplaceKind.USER_UPLOADS,
                     name="My uploads",
                 )
             ),
-            "ck_plugin_marketplace_owner_iff_account_uploads",
+            "ck_plugin_marketplace_owner_iff_user_uploads",
         )
         _refused(
             db_session,
@@ -201,7 +225,7 @@ def test_database_refuses_invalid_marketplaces(
                     owner_user_id=owner.id,
                 )
             ),
-            "ck_plugin_marketplace_owner_iff_account_uploads",
+            "ck_plugin_marketplace_owner_iff_user_uploads",
         )
     finally:
         db_session.rollback()
