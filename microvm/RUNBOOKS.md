@@ -72,8 +72,12 @@ kubectl $K -n $NS logs "$(pod_on <node>)" --previous --tail=100   # after a rest
 
 - Fix the cause that the log names, then delete the pod. The DaemonSet makes a new pod. VMs
   continue to run, and the new agent adopts them from the journal (`recovered VMs` in the log).
-- For a 401, make the token in the agent namespace match `auth.metricsAuth`. The agent reads the
-  token file on each scrape, so it needs no restart.
+- For a 401 with a token, make the token in the agent namespace match `auth.metricsAuth`. The
+  agent reads the token file on each scrape, so it needs no restart.
+- For a 401 with no token (`auth.metricsAuth` off and `configMap.DISABLE_METRICS_AUTH` not
+  `"true"`), the agent refuses every scrape. Set `auth.metricsAuth` (the chart copies the token
+  to the agent namespace and the ServiceMonitor sends it), or set `DISABLE_METRICS_AUTH`. Then
+  deploy again.
 
 **Escalate** when the agent does not start after one restart, or when `recovered VMs` shows
 `unresponsive` VMs.

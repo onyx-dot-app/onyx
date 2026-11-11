@@ -404,6 +404,8 @@ monitoring:
     # Requires the Prometheus Operator CRDs (included in kube-prometheus-stack).
     # Today this has only the Craft Firecracker host agent rules, which also need
     # craft.sandboxRuntime=firecracker and craft.hostAgent.metrics.enabled.
+    # The rules need the agent series: set serviceMonitors.enabled too, unless
+    # another scrape configuration collects the agent metrics.
     # Use `labels` to match your Prometheus CR's ruleSelector (e.g. release: onyx-monitoring).
     enabled: false
     labels: {}

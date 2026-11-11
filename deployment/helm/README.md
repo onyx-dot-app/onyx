@@ -317,7 +317,11 @@ deploys the "Onyx Craft Firecracker Host Agent" dashboard, and
 PrometheusRule in the release namespace; set `monitoring.prometheusRules.labels`
 to match your Prometheus `ruleSelector`). The thresholds in
 `craft.hostAgent.alerts` are proposed defaults. `CraftFcHostAgentPodsMissing`
-needs kube-state-metrics. Runbooks: `microvm/RUNBOOKS.md`.
+needs kube-state-metrics. The dashboard and the rules need the agent series:
+set `monitoring.serviceMonitors.enabled: true` (with
+`monitoring.serviceMonitors.labels` that match your Prometheus
+`serviceMonitorSelector`), unless another scrape configuration collects the
+agent metrics. Runbooks: `microvm/RUNBOOKS.md`.
 
 ## Using an external Redis
 
