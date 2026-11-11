@@ -299,6 +299,41 @@ A Skill whose saved bundle exceeds a size limit stays blocked until you raise th
 During a rolling upgrade, a pod can still run the previous release. If a user edits a Skill on that pod,
 the Skill can show its previous content for a few minutes, until the repair job runs.
 
+### Version history API
+
+Owners, editors, and admins can read and restore custom Skill versions through the API. Viewers cannot list, preview,
+or restore historical versions. These requests return `404` for users without edit access.
+Built-in Skills do not have version history.
+
+Use a [Personal Access Token](/developers/overview) with access to the Skill:
+
+```bash
+curl "$ONYX_URL/api/skills/custom/$SKILL_ID/versions" \
+  -H "Authorization: Bearer $ONYX_TOKEN"
+```
+
+The response lists up to 50 versions from newest to oldest. Each entry contains `id`, `version_number`, `created_at`,
+`created_by`, `is_current`, and `has_bundle`. `created_by` contains the creator's `id` and `email`,
+or `null` when that information is unavailable. To read the next page,
+set `before_version` to the last entry’s `version_number`. The cursor must be a positive integer.
+Stop when the response is empty or includes version 1. New versions do not shift older pages.
+
+| Method | Path after `/api` | Result |
+| --- | --- | --- |
+| `GET` | `/skills/custom/{skill_id}/versions` | Version history, including versions whose files were removed. |
+| `GET` | `/skills/custom/{skill_id}/versions/{version_id}` | Historical name, description, instructions, and supporting-file paths and sizes. |
+| `POST` | `/skills/custom/{skill_id}/versions/{version_id}/restore` | Restored Skill details, instructions, and supporting-file list. No request body is needed. |
+
+Restore copies the selected content into a new version and updates the Skill description. It preserves ownership,
+sharing, and installation settings. Every restore adds a version, also when the content is identical.
+Restored content must pass the current bundle validation.
+Restore reads the stored ZIP within the stored ZIP allowance and does not apply the file-count limit.
+It still applies the per-file and expanded-total limits.
+
+Onyx keeps files for the newest ten versions, including a newly restored version. Older entries remain with `has_bundle:
+false`. Preview and restore return `404` with "The files of this version are no longer kept." if the bundle is absent.
+A version ID from another Skill also returns `404`.
+
 ## Troubleshooting
 
 <AccordionGroup>

@@ -4,7 +4,7 @@ from collections.abc import Callable
 from typing import Annotated, NamedTuple
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from pydantic import Field, ValidationError
 from sqlalchemy.orm import Session
 
@@ -41,7 +41,11 @@ from onyx.db.skill import (
     share_skill__no_commit,
     transfer_skill_ownership,
 )
-from onyx.db.skill_version import delete_unreferenced_skill_bundles
+from onyx.db.skill_version import (
+    delete_unreferenced_skill_bundles,
+    fetch_skill_version,
+    list_skill_versions,
+)
 from onyx.db.users import fetch_user_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -69,6 +73,7 @@ from onyx.server.features.skill.models import (
     SkillResponse,
     SkillShareRequest,
     SkillsList,
+    SkillVersionResponse,
     TransferSkillOwnershipRequest,
 )
 from onyx.server.features.skill.response_helpers import (
@@ -76,6 +81,7 @@ from onyx.server.features.skill.response_helpers import (
     skill_response_for_user,
     skills_list_response_for_user,
 )
+from onyx.server.models import MinimalUserSnapshot
 from onyx.skills.bundle import (
     SKILL_MD_NAME,
     build_single_file_bundle,
@@ -87,7 +93,10 @@ from onyx.skills.bundle import (
     rewrite_custom_bundle_skill_md,
     update_custom_bundle_files,
 )
-from onyx.skills.content import read_custom_skill_bundle_bytes
+from onyx.skills.content import (
+    read_custom_skill_bundle_bytes,
+    read_stored_version_bundle,
+)
 from onyx.skills.ingest import (
     IngestedBundle,
     delete_bundle_blob,
@@ -238,6 +247,8 @@ def _replace_skill_bundle_from_editor(
     bundle_bytes: bytes,
     user: User,
     db_session: Session,
+    *,
+    stored: bool = False,
 ) -> SkillEditableDetailResponse:
     file_store = get_default_file_store()
     with ingested_skill_bundle(
@@ -245,6 +256,7 @@ def _replace_skill_bundle_from_editor(
         f"{skill.name}.zip",
         file_store,
         expected_name=skill.name,
+        stored=stored,
     ) as ingested:
         stale_file_ids = replace_skill_bundle(
             skill=skill,
@@ -645,7 +657,17 @@ def inspect_custom_skill_bundle_upload(
             "upload must be SKILL.md or a ZIP containing SKILL.md",
         )
 
-    normalized = normalize_custom_bundle(upload_bytes)
+    return _inspect_skill_bundle(upload_bytes)
+
+
+def _inspect_skill_bundle(
+    bundle_bytes: bytes, *, stored: bool = False
+) -> SkillBundleInspectResponse:
+    normalized = (
+        normalize_custom_bundle(bundle_bytes, zip_max_bytes=None, max_file_count=None)
+        if stored
+        else normalize_custom_bundle(bundle_bytes)
+    )
     with zipfile.ZipFile(io.BytesIO(normalized.content)) as bundle_zip:
         document = parse_skill_document(
             bundle_zip.read(SKILL_MD_NAME),
@@ -657,6 +679,84 @@ def inspect_custom_skill_bundle_upload(
         description=document.metadata.description,
         instructions_markdown=contents.instructions_markdown,
         files=contents.files,
+    )
+
+
+@user_router.get("/custom/{skill_id}/versions")
+def list_custom_skill_versions(
+    skill_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+    *,
+    before_version: Annotated[int | None, Query(ge=1)] = None,
+) -> list[SkillVersionResponse]:
+    """Return up to 50 versions. Use the last version number to read older rows."""
+    skill = fetch_skill(
+        skill_id, policy=SkillManagementPolicy.EDIT, user=user, db_session=db_session
+    )
+    if skill is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+    return [
+        SkillVersionResponse(
+            id=version.id,
+            version_number=version.version_number,
+            created_at=version.created_at,
+            created_by=(
+                MinimalUserSnapshot(id=creator.id, email=creator.email)
+                if creator is not None
+                else None
+            ),
+            is_current=is_current,
+            has_bundle=version.bundle_file_id is not None,
+        )
+        for version, creator, is_current in list_skill_versions(
+            skill, db_session, before_version=before_version
+        )
+    ]
+
+
+@user_router.get("/custom/{skill_id}/versions/{version_id}")
+def preview_custom_skill_version(
+    skill_id: UUID,
+    version_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> SkillBundleInspectResponse:
+    skill = fetch_skill(
+        skill_id, policy=SkillManagementPolicy.EDIT, user=user, db_session=db_session
+    )
+    if skill is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+    version = fetch_skill_version(skill, version_id, db_session)
+    return _inspect_skill_bundle(
+        read_stored_version_bundle(skill, version, get_default_file_store()),
+        stored=True,
+    )
+
+
+@user_router.post("/custom/{skill_id}/versions/{version_id}/restore")
+def restore_custom_skill_version(
+    skill_id: UUID,
+    version_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> SkillEditableDetailResponse:
+    skill = fetch_skill(
+        skill_id,
+        policy=SkillManagementPolicy.EDIT,
+        user=user,
+        db_session=db_session,
+        lock_for_update=True,
+    )
+    if skill is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+    version = fetch_skill_version(skill, version_id, db_session)
+    return _replace_skill_bundle_from_editor(
+        skill,
+        read_stored_version_bundle(skill, version, get_default_file_store()),
+        user,
+        db_session,
+        stored=True,
     )
 
 
