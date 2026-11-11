@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -23,9 +24,10 @@ func (a Addr) Network() string { return "vsock" }
 func (a Addr) String() string  { return fmt.Sprintf("vsock:%d:%d", a.CID, a.Port) }
 
 type listener struct {
-	f    *os.File
-	rc   syscall.RawConn
-	addr Addr
+	f      *os.File
+	rc     syscall.RawConn
+	addr   Addr
+	closed atomic.Bool
 }
 
 // Listen listens on port for any CID.
@@ -61,7 +63,9 @@ func (l *listener) Accept() (net.Conn, error) {
 		return !errors.Is(aerr, unix.EAGAIN)
 	})
 	if err != nil {
-		if errors.Is(err, os.ErrClosed) {
+		// RawConn.Read returns the poller's own "use of closed file" error,
+		// not os.ErrClosed.
+		if l.closed.Load() || errors.Is(err, os.ErrClosed) {
 			return nil, net.ErrClosed
 		}
 		return nil, err
@@ -76,7 +80,10 @@ func (l *listener) Accept() (net.Conn, error) {
 	return &conn{File: os.NewFile(uintptr(nfd), "vsock-conn"), local: l.addr, remote: remote}, nil
 }
 
-func (l *listener) Close() error   { return l.f.Close() }
+func (l *listener) Close() error {
+	l.closed.Store(true)
+	return l.f.Close()
+}
 func (l *listener) Addr() net.Addr { return l.addr }
 
 // conn is a vsock stream. os.File gives poller-backed reads and deadlines.
@@ -122,17 +129,9 @@ func Dial(ctx context.Context, cid, port uint32) (net.Conn, error) {
 			// EINPROGRESS: wait until the socket is writable.
 			return !errors.Is(cerr, unix.EINPROGRESS) && !errors.Is(cerr, unix.EINTR)
 		}
-		// Writable: the connect finished.
-		v, gerr := unix.GetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_ERROR)
-		switch {
-		case gerr != nil:
-			cerr = gerr
-		case v != 0:
-			cerr = unix.Errno(v)
-		default:
-			cerr = nil
-		}
-		return true
+		var done bool
+		done, cerr = connectDone(int(fd))
+		return done
 	})
 	if err == nil {
 		err = cerr
@@ -151,4 +150,33 @@ func Dial(ctx context.Context, cid, port uint32) (net.Conn, error) {
 	}
 	_ = f.SetWriteDeadline(time.Time{})
 	return &conn{File: f, local: Addr{CID: unix.VMADDR_CID_ANY}, remote: Addr{CID: cid, Port: port}}, nil
+}
+
+// connectDone reports whether the non-blocking connect on a writable fd
+// ended, and its error. SO_ERROR 0 is not enough: a new vsock socket polls
+// writable (state TCP_CLOSE), so the poller can wake the dial before the
+// host answers. A returned socket that is still connecting fails its first
+// read and write with ENOTCONN. As in the net package, a socket with no peer
+// yet keeps waiting.
+func connectDone(fd int) (bool, error) {
+	v, err := unix.GetsockoptInt(fd, unix.SOL_SOCKET, unix.SO_ERROR)
+	if err != nil {
+		return true, err
+	}
+	switch e := unix.Errno(v); e {
+	case 0:
+	case unix.EINPROGRESS, unix.EALREADY, unix.EINTR:
+		return false, nil
+	case unix.EISCONN:
+		return true, nil
+	default:
+		return true, e
+	}
+	if _, err := unix.Getpeername(fd); err != nil {
+		if errors.Is(err, unix.ENOTCONN) {
+			return false, nil
+		}
+		return true, err
+	}
+	return true, nil
 }

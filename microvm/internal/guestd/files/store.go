@@ -83,7 +83,8 @@ type Config struct {
 	MaxFileBytes int64
 	// MaxZipBytes caps the input of one Zip. Default 1 GiB.
 	MaxZipBytes int64
-	// MaxZipEntries caps the files of one Zip. Default 100,000.
+	// MaxZipEntries caps the files plus directories of one Zip. Default
+	// 100,000.
 	MaxZipEntries int
 	CaptureRoots  []string
 	// CaptureExclude: nil means DefaultCaptureExclude.

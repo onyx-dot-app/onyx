@@ -92,7 +92,8 @@ key serve every deployment CA.
 
 Operator guides: `backend/onyx/server/features/build/sandbox/README.md` (image
 and tag coupling, IPv6), `backend/onyx/server/features/build/sandbox/docker/README.md`
-(Docker backend), and `deployment/helm/dev/README.md` (local kind cluster).
+(Docker backend), `deployment/helm/dev/README.md` (local kind cluster), and
+`microvm/RUNBOOKS.md` (Firecracker host agent alerts and node procedures).
 
 ```
 SessionManager / scheduled executor / sweep
@@ -214,9 +215,15 @@ the stored token on each request, so a new token takes effect at once.
 **Firecracker runtime (in progress, `SANDBOX_RUNTIME=firecracker` only).**
 `backend/onyx/microvm/` is the api_server side of the micro-VM runtime:
 - `backend/onyx/microvm/agent_client.py`: a typed mTLS client for the host
-  agent (stubs in `backend/onyx/microvm/generated/`).
+  agent, with session saves (capture, upload, discard, restore) and the
+  managed drive (put, swap). Stubs in `backend/onyx/microvm/generated/`; the
+  `microvm-python-stubs` pre-commit hook fails when they differ from
+  `microvm/proto` (`regenerate.sh --check`).
 - `backend/onyx/microvm/daemon_client.py`: the guest daemon client, through
-  the agent pass-through. Every call but Health sends `x-sandboxd-key`.
+  the agent pass-through: Health, Init, exec (run, start, stream by offsets,
+  interact, cancel, inspect, list) and session files (read, write, upload,
+  list, delete, zip). Every call but Health sends `x-sandboxd-key`. No caller
+  uses exec or files yet.
 - `backend/onyx/microvm/placement.py`: one VM per sandbox, best of K nodes on
   free memory, `SANDBOX_CAPACITY_UNAVAILABLE` with the reason. Wake is an
   idempotent ensure: it reads the durable placement record and asks that

@@ -464,7 +464,10 @@ def test_vm_whose_guest_never_answers_is_stopped_in_the_end(
     _report(shared_cache, client_factory, node_id, now=give_up + grace + 1)
     assert node.agent.create_calls == tries + 1
 
-    def no_answer(self: SandboxDaemonClient) -> None:  # noqa: ARG001
+    def no_answer(
+        self: SandboxDaemonClient,  # noqa: ARG001
+        timeout: float | None = None,  # noqa: ARG001
+    ) -> None:
         raise SandboxDaemonError(
             grpc.StatusCode.UNAVAILABLE,
             "no answer",
@@ -524,6 +527,165 @@ def test_pending_key_install_does_not_hold_up_orphan_stops(
 
     assert [c[0] for c in node.agent.stop_calls] == [str(stale)]
     assert node.agent.create_calls == 0
+
+
+def test_key_install_ends_by_the_pass_deadline(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
+) -> None:
+    node_id = _node("deadline")
+    node = add_node(node_id)
+    slow, ready = new_sandbox_id(), new_sandbox_id()
+    vms: dict[UUID, hostagent_pb2.VM] = {}
+    for sandbox_id in (slow, ready):
+        reserve_sandbox(
+            tenant_cache,
+            sandbox_id,
+            SandboxReservation(attempt=1, node_id=node_id, owner="timed-out"),
+            replaces=None,
+        )
+        set_sandbox_daemon_key(
+            tenant_cache, sandbox_id, attempt=1, key=new_sandboxd_key()
+        )
+        vms[sandbox_id] = _vm(node, sandbox_id)
+    registered = _registered(shared_cache, node_id)
+    listed = {
+        vm.sandbox_id: vm for vm in client_factory.client(registered.address).list_vms()
+    }
+    # The slow adoption runs first.
+    ordered = [listed[str(slow)], listed[str(ready)]]
+    # Slower than the time left in the pass, faster than the Create timeout.
+    node.agent.create_delay_seconds = 4.0
+
+    started = time.monotonic()
+    with pytest.raises(TimeoutError):
+        reconcile_node(
+            shared_cache,
+            client_factory,
+            NoCheckpointSupport(),
+            UnknownActivity(),
+            node=registered,
+            vms=ordered,
+            now=NOW,
+            deadline=started + 2.0,
+        )
+
+    assert time.monotonic() - started < 3.5
+    assert get_sandbox_placement(tenant_cache, slow) is None
+    assert get_sandbox_reservation(tenant_cache, slow) is not None
+    node.agent.create_delay_seconds = 0.0
+    # The cut adoption waits, so the next pass adopts the other VM.
+    second = _report(shared_cache, client_factory, node_id, vms=ordered)
+    assert second.adopted == [str(ready)]
+    # A cut is not a guest failure: the give-up time has not started.
+    third = _report(
+        shared_cache,
+        client_factory,
+        node_id,
+        vms=ordered,
+        now=NOW + reconcile._ADOPT_GIVE_UP_SECONDS,
+    )
+    assert third.adopted == [str(slow)] and third.orphans_marked == []
+    record = get_sandbox_placement(tenant_cache, slow)
+    assert record is not None and record.names(node_id, 1, vms[slow].generation)
+
+
+def test_orphan_stop_ends_by_the_pass_deadline(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
+) -> None:
+    node_id = _node("stopcut")
+    node = add_node(node_id)
+    stale = new_sandbox_id()
+    _vm(node, stale)
+    _elsewhere(tenant_cache, stale, attempt=2)
+    # Slower than the time left in the pass, faster than the Stop timeout.
+    node.agent.stop_delay_seconds = 4.0
+    registered = _registered(shared_cache, node_id)
+
+    started = time.monotonic()
+    with pytest.raises(TimeoutError):
+        reconcile_node(
+            shared_cache,
+            client_factory,
+            NoCheckpointSupport(),
+            UnknownActivity(),
+            node=registered,
+            vms=client_factory.client(registered.address).list_vms(),
+            now=NOW,
+            deadline=started + 2.0,
+        )
+    assert time.monotonic() - started < 3.5
+
+    # Too little time left: the pass ends before the Stop call.
+    with pytest.raises(TimeoutError):
+        reconcile_node(
+            shared_cache,
+            client_factory,
+            NoCheckpointSupport(),
+            UnknownActivity(),
+            node=registered,
+            vms=client_factory.client(registered.address).list_vms(),
+            now=NOW,
+            deadline=time.monotonic() + 0.5,
+        )
+    calls = len(node.agent.stop_calls)
+
+    # The next report stops the orphan.
+    node.agent.stop_delay_seconds = 0.0
+    report = _report(shared_cache, client_factory, node_id)
+    assert report.orphans_stopped == [str(stale)]
+    assert len(node.agent.stop_calls) == calls + 1
+
+
+def test_least_recently_tried_adoption_runs_first(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
+) -> None:
+    node_id = _node("rotate")
+    node = add_node(node_id)
+    recent, older = new_sandbox_id(), new_sandbox_id()
+    for sandbox_id, last_try in ((recent, NOW - 60), (older, NOW - 120)):
+        reserve_sandbox(
+            tenant_cache,
+            sandbox_id,
+            SandboxReservation(attempt=1, node_id=node_id, owner="timed-out"),
+            replaces=None,
+        )
+        set_sandbox_daemon_key(
+            tenant_cache, sandbox_id, attempt=1, key=new_sandboxd_key()
+        )
+        vm = _vm(node, sandbox_id)
+        shared_cache.set(
+            f"{reconcile._ADOPT_WAIT_PREFIX}{node_id}:{sandbox_id}:{vm.generation}",
+            f"{last_try}:{last_try}",
+            ex=60,
+        )
+    listed = {
+        vm.sandbox_id: vm
+        for vm in client_factory.client(
+            _registered(shared_cache, node_id).address
+        ).list_vms()
+    }
+
+    report = _report(
+        shared_cache,
+        client_factory,
+        node_id,
+        vms=[listed[str(recent)], listed[str(older)]],
+    )
+
+    assert report.adopted == [str(older), str(recent)]
+    assert [r[0] for r in node.agent.create_requests] == [str(older), str(recent)]
 
 
 def test_stale_write_never_replaces_a_newer_record(

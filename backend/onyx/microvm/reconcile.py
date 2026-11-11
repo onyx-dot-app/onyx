@@ -20,7 +20,10 @@ Per reported VM:
   record write, or a Create whose key install timed out, leaves this state.
   Adoptions run after the orphan stops, so a guest that does not answer
   cannot hold up cleanup. A pending key install waits `_ADOPT_RETRY_SECONDS`
-  before the next try, so other adoptions get a turn.
+  before the next try, and the least recently tried adoption runs first, so
+  other adoptions get a turn. The key install calls end by the pass
+  deadline; a cut call ends the pass and waits like a pending install, but
+  does not start the give-up time.
 - The reservation names it but its key is lost, the guest rejects the key,
   or the guest did not answer for `_ADOPT_GIVE_UP_SECONDS`: nothing can use
   it. It is an orphan after the grace period below.
@@ -32,7 +35,8 @@ fresh `List` over mTLS, read under the sandbox lock (the report may predate a
 new VM). If a `List` fails, the record stays, and the pass reads no more.
 Orphan stops run at most `SANDBOX_FC_ORPHAN_STOPS_PER_REPORT` per pass, with
 no checkpoint: a stale, unknown or unusable VM has no session that anyone can
-use.
+use. Orphan stops and their last Health also end by the pass deadline; a cut
+call ends the pass, and the next report finds the orphan again.
 """
 
 import time
@@ -41,6 +45,7 @@ from enum import Enum
 from functools import partial
 from uuid import UUID
 
+import grpc
 from pydantic import BaseModel, ConfigDict, SecretStr
 
 from onyx.cache.factory import get_cache_backend
@@ -53,6 +58,8 @@ from onyx.microvm.agent_client import (
     HostAgentErrorReason,
 )
 from onyx.microvm.configs import (
+    SANDBOX_FC_AGENT_CREATE_TIMEOUT_SECONDS,
+    SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS,
     SANDBOX_FC_ORPHAN_GRACE_SECONDS,
     SANDBOX_FC_ORPHAN_STOPS_PER_REPORT,
 )
@@ -98,6 +105,8 @@ _ADOPT_WAIT_PREFIX = "sandbox_fc:adopt_wait:"
 _ADOPT_RETRY_SECONDS = 60
 _ADOPT_GIVE_UP_SECONDS = 600
 _ADOPT_WAIT_TTL_SECONDS = 3600
+# A key install call needs at least this much of the pass deadline.
+_MIN_CALL_SECONDS = 1.0
 
 
 class _Verdict(str, Enum):
@@ -145,6 +154,7 @@ class _Adoption(BaseModel):
     sandbox_id: UUID
     key: SecretStr
     reservation_raw: bytes
+    last_try: int = 0
 
 
 def orphan_first_seen(
@@ -176,6 +186,10 @@ class _PassEnded(Exception):
         self.cause = cause
 
 
+class _OutOfTime(Exception):
+    """The pass deadline cut a key install call."""
+
+
 class _Pass:
     def __init__(
         self,
@@ -187,6 +201,7 @@ class _Pass:
         now: int,
         report: ReconcileReport,
         check_lease: Callable[[], None] | None,
+        deadline: float | None,
     ) -> None:
         self.shared_cache = shared_cache
         self.client_factory = client_factory
@@ -196,6 +211,7 @@ class _Pass:
         self.now = now
         self.report = report
         self.check_lease = check_lease
+        self.deadline = deadline
         self.stops: list[_OrphanStop] = []
         self.adoptions: list[_Adoption] = []
         self._stops_left = SANDBOX_FC_ORPHAN_STOPS_PER_REPORT
@@ -207,6 +223,21 @@ class _Pass:
                 self.check_lease()
             except Exception as e:
                 raise _PassEnded(e) from e
+
+    def _cut(self, default: float) -> tuple[float, bool]:
+        """`call_timeout(default)` and whether the deadline cut it."""
+        timeout = self.call_timeout(default)
+        return timeout, timeout < default
+
+    def call_timeout(self, default: float) -> float:
+        """`default`, cut to the time left before the pass deadline. Raises
+        `_OutOfTime` when too little time is left."""
+        if self.deadline is None:
+            return default
+        left = self.deadline - time.monotonic()
+        if left < _MIN_CALL_SECONDS:
+            raise _OutOfTime()
+        return min(default, left)
 
     def step(self, what: str, run: Callable[[], None]) -> None:
         """Check the lease, then run one step. A failed step is logged and
@@ -283,7 +314,7 @@ class _Pass:
                 partial(self.record, indexed.tenant_id, indexed.sandbox_id, reported),
             )
         self.run_stops()
-        for adoption in self.adoptions:
+        for adoption in sorted(self.adoptions, key=lambda a: a.last_try):
             self.step(
                 f"adopt {self.node.node_id}/{adoption.vm.sandbox_id}",
                 partial(self.adopt, adoption),
@@ -326,12 +357,20 @@ class _Pass:
             wait = self.adopt_wait(vm)
             if key is None:
                 self.stop_after_grace(vm, sandbox_id, "key_lost")
-            elif wait is not None and self.now - wait[0] >= _ADOPT_GIVE_UP_SECONDS:
+            elif (
+                wait is not None
+                and wait[0]
+                and self.now - wait[0] >= _ADOPT_GIVE_UP_SECONDS
+            ):
                 self.stop_after_grace(vm, sandbox_id, "guest_unreachable")
             elif wait is None or self.now - wait[1] >= _ADOPT_RETRY_SECONDS:
                 self.adoptions.append(
                     _Adoption(
-                        vm=vm, sandbox_id=sandbox_id, key=key, reservation_raw=found[1]
+                        vm=vm,
+                        sandbox_id=sandbox_id,
+                        key=key,
+                        reservation_raw=found[1],
+                        last_try=0 if wait is None else wait[1],
                     )
                 )
             return
@@ -355,7 +394,8 @@ class _Pass:
         )
 
     def adopt_wait(self, vm: AgentVm) -> tuple[int, int] | None:
-        """(first, last) time of the pending key installs of this VM."""
+        """(first failed, last) time of the pending key installs of this VM.
+        First is 0 while only the pass deadline cut the tries."""
         raw = self.shared_cache.get(self._adopt_wait_key(vm))
         if raw is None:
             return None
@@ -364,6 +404,17 @@ class _Pass:
             return int(first), int(last)
         except ValueError:
             return None
+
+    def mark_adopt_wait(self, vm: AgentVm, *, failed: bool) -> None:
+        wait = self.adopt_wait(vm)
+        first = wait[0] if wait is not None and wait[0] else 0
+        if failed and not first:
+            first = self.now
+        self.shared_cache.set(
+            self._adopt_wait_key(vm),
+            f"{first}:{self.now}",
+            ex=_ADOPT_WAIT_TTL_SECONDS,
+        )
 
     def adopt(self, adoption: _Adoption) -> None:
         """Write the record of a VM that its reservation names, once its
@@ -374,17 +425,16 @@ class _Pass:
             # A placement in progress writes the record itself.
             if lock is None:
                 return
-            installed = self.install_key(vm, adoption.key)
+            try:
+                installed = self.install_key(vm, adoption.key)
+            except _OutOfTime as e:
+                # Not a guest failure: the give-up time does not start.
+                self.mark_adopt_wait(vm, failed=False)
+                raise _PassEnded(TimeoutError("node report deadline exceeded")) from e
             if installed is None:
                 # Keep the VM and the reservation: a later report or a wake
                 # tries again.
-                wait = self.adopt_wait(vm)
-                first = self.now if wait is None else wait[0]
-                self.shared_cache.set(
-                    self._adopt_wait_key(vm),
-                    f"{first}:{self.now}",
-                    ex=_ADOPT_WAIT_TTL_SECONDS,
-                )
+                self.mark_adopt_wait(vm, failed=True)
                 return
             if not installed:
                 # The guest holds another key: nothing can use the VM.
@@ -420,12 +470,16 @@ class _Pass:
         """Make sure the guest daemon holds `key`. Health (no key) shows that
         the guest answers. A repeat Create of the same attempt returns the
         same VM and installs the key, or is rejected when the guest holds
-        another key. None when the outcome is not known yet."""
+        another key. None when the outcome is not known yet. Each call ends
+        by the pass deadline; `_OutOfTime` when the deadline cut it."""
         client = self.client_factory.client(self.node.address)
+        cut = False
         try:
+            timeout, cut = self._cut(SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS)
             SandboxDaemonClient(
                 client.channel, sandbox_id=vm.sandbox_id, sandboxd_key=key
-            ).health()
+            ).health(timeout=timeout)
+            timeout, cut = self._cut(SANDBOX_FC_AGENT_CREATE_TIMEOUT_SECONDS)
             result = client.create(
                 sandbox_id=vm.sandbox_id,
                 attempt=vm.attempt,
@@ -435,10 +489,13 @@ class _Pass:
                 scratch_gib=vm.scratch_gib,
                 tenant_id=vm.tenant_id,
                 sandboxd_key=key,
+                timeout=timeout,
             )
         except GuestKeyRejectedError:
             return False
         except (HostAgentError, SandboxDaemonError) as e:
+            if cut and e.code is grpc.StatusCode.DEADLINE_EXCEEDED:
+                raise _OutOfTime() from e
             logger.warning(
                 "sandbox_fc_reconcile_adopt_key_pending node=%s sandbox=%s attempt=%d error=%s",
                 self.node.node_id,
@@ -572,16 +629,26 @@ class _Pass:
         if key is None:
             return False
         client = self.client_factory.client(self.node.address)
+        timeout, cut = self._cut(SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS)
         try:
             SandboxDaemonClient(
                 client.channel, sandbox_id=vm.sandbox_id, sandboxd_key=key
-            ).health()
-        except (HostAgentError, SandboxDaemonError):
+            ).health(timeout=timeout)
+        except (HostAgentError, SandboxDaemonError) as e:
+            if cut and e.code is grpc.StatusCode.DEADLINE_EXCEEDED:
+                raise _OutOfTime() from e
             return False
         self.shared_cache.delete(self._adopt_wait_key(vm))
         return True
 
     def stop_orphan(self, stop: _OrphanStop) -> None:
+        try:
+            self._stop_orphan(stop)
+        except _OutOfTime as e:
+            # The next report finds the orphan again.
+            raise _PassEnded(TimeoutError("node report deadline exceeded")) from e
+
+    def _stop_orphan(self, stop: _OrphanStop) -> None:
         vm, sandbox_id = stop.vm, stop.sandbox_id
         tenant_cache = get_cache_backend(tenant_id=vm.tenant_id)
         with sandbox_placement_lock(tenant_cache, sandbox_id, blocking=False) as lock:
@@ -602,13 +669,17 @@ class _Pass:
                     stop, tenant_cache
                 ):
                     return
+            timeout, cut = self._cut(SANDBOX_FC_AGENT_CREATE_TIMEOUT_SECONDS)
             try:
                 self.client_factory.client(self.node.address).stop(
                     sandbox_id=vm.sandbox_id,
                     attempt=vm.attempt,
                     generation=vm.generation,
+                    timeout=timeout,
                 )
             except HostAgentError as e:
+                if cut and e.code is grpc.StatusCode.DEADLINE_EXCEEDED:
+                    raise _OutOfTime() from e
                 if e.reason in (
                     HostAgentErrorReason.SANDBOX_NOT_FOUND,
                     HostAgentErrorReason.INSTANCE_MISMATCH,
@@ -643,9 +714,12 @@ def reconcile_node(
     ended: list[ReportedEndedVm] | None = None,
     now: int | None = None,
     check_lease: Callable[[], None] | None = None,
+    deadline: float | None = None,
 ) -> ReconcileReport:
     """One reconcile pass over the state that `node` reported. `check_lease`
-    runs before each step and raises to end the pass.
+    runs before each step and raises to end the pass. `deadline`
+    (`time.monotonic()`) bounds the key install calls of adoptions; a call
+    that the deadline cuts ends the pass with `TimeoutError`.
     `HostAgentConfigError` also ends the pass and is raised. Any other error
     ends only its step."""
     report = ReconcileReport()
@@ -658,6 +732,7 @@ def reconcile_node(
         int(time.time()) if now is None else now,
         report,
         check_lease,
+        deadline,
     )
     try:
         run.run(vms, ended or [])

@@ -20,6 +20,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -33,6 +34,7 @@ import (
 	"github.com/onyx-dot-app/onyx/microvm/internal/jailer"
 	"github.com/onyx-dot-app/onyx/microvm/internal/journal"
 	"github.com/onyx-dot-app/onyx/microvm/internal/managed"
+	"github.com/onyx-dot-app/onyx/microvm/internal/metrics"
 	"github.com/onyx-dot-app/onyx/microvm/internal/nodereport"
 	"github.com/onyx-dot-app/onyx/microvm/internal/nodewatch"
 	"github.com/onyx-dot-app/onyx/microvm/internal/relay"
@@ -267,14 +269,16 @@ func run(f flags, log *slog.Logger) error {
 	pt := server.NewPassthrough(m, uint32(f.daemonPort), log)
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	if err := setupEgress(ctx, f, m, log); err != nil {
-		return err
-	}
-	if err := startDrainWatch(ctx, f, m, log); err != nil {
+	push, err := setupEgress(f, m, log)
+	if err != nil {
 		return err
 	}
 	obs, err := newObservability(f.obs, m, lay, hostinfo.Stats{DataDir: f.dataDir}, log)
 	if err != nil {
+		return err
+	}
+	push.start(ctx, obs.metrics)
+	if err := startDrainWatch(ctx, f, m, log); err != nil {
 		return err
 	}
 	t0 := time.Now()
@@ -325,13 +329,16 @@ func run(f flags, log *slog.Logger) error {
 		log.Warn("no --egress-ca or --egress-ca-configmap: VMs trust only a CA built into the root drive")
 	}
 	if f.rootfsDir != "" {
+		// Held over the build and its metrics, so template_ready shows the
+		// last build to finish.
+		var buildMu sync.Mutex
 		svc.Builder = func(ctx context.Context) (tplbuild.Result, error) {
-			rf, err := tplbuild.LoadRootfs(f.rootfsDir)
-			if err != nil {
-				return tplbuild.Result{}, err
-			}
-			// A build goes on when its caller goes away.
-			return builder.Build(context.WithoutCancel(ctx), rf)
+			buildMu.Lock()
+			defer buildMu.Unlock()
+			t0 := time.Now()
+			r, err := buildTemplate(ctx, builder, f.rootfsDir)
+			obs.metrics.TemplateBuild(time.Since(t0), templateResult(r, err))
+			return r, err
 		}
 	}
 	if err := obs.start(ctx, svc); err != nil {
@@ -373,6 +380,28 @@ func run(f flags, log *slog.Logger) error {
 	}
 	go startupTemplates(svc, builder, log)
 	return <-errs
+}
+
+func buildTemplate(ctx context.Context, b *tplbuild.Builder, rootfsDir string) (tplbuild.Result, error) {
+	rf, err := tplbuild.LoadRootfs(rootfsDir)
+	if err != nil {
+		return tplbuild.Result{}, err
+	}
+	// A build goes on when its caller goes away.
+	return b.Build(context.WithoutCancel(ctx), rf)
+}
+
+// templateResult is the metrics result of a build. A build that made a
+// template but then failed its GC still gave a usable template.
+func templateResult(r tplbuild.Result, err error) string {
+	switch {
+	case r.Template == nil:
+		return metrics.TemplateFailed
+	case r.Built:
+		return metrics.TemplateBuilt
+	default:
+		return metrics.TemplateExisting
+	}
 }
 
 // startupTemplates builds the template from --rootfs-dir, or only removes
@@ -469,26 +498,45 @@ func startDrainWatch(ctx context.Context, f flags, m *agent.Manager, log *slog.L
 	return nil
 }
 
-// setupEgress makes a fresh node signing key, attaches the relay to the
-// Manager and keeps the key registered with the api_server.
-func setupEgress(ctx context.Context, f flags, m *agent.Manager, log *slog.Logger) error {
+// pushers are the key registration and node state report loops. They
+// start after the metrics exist, so the first result is counted.
+type pushers struct {
+	reg *relay.Registrar
+	rep *nodereport.Reporter
+}
+
+func (p pushers) start(ctx context.Context, mt *metrics.Metrics) {
+	if p.reg != nil {
+		p.reg.Observe = mt.KeyRegistration
+		go p.reg.Run(ctx)
+	}
+	if p.rep != nil {
+		p.rep.Observe = mt.NodeReport
+		go p.rep.Run(ctx)
+	}
+}
+
+// setupEgress makes a fresh node signing key and attaches the relay to the
+// Manager. Its pushers keep the key registered with the api_server and send
+// the node state reports.
+func setupEgress(f flags, m *agent.Manager, log *slog.Logger) (pushers, error) {
 	if f.egressProxy == "" {
 		log.Warn("no --egress-proxy: VMs have no egress")
-		return nil
+		return pushers{}, nil
 	}
 	if f.nodeID == "" {
-		return errors.New("--egress-proxy needs --node-id (or $NODE_NAME)")
+		return pushers{}, errors.New("--egress-proxy needs --node-id (or $NODE_NAME)")
 	}
 	if f.relayMaxConns < 1 {
-		return fmt.Errorf("--relay-max-conns %d must be 1 or more", f.relayMaxConns)
+		return pushers{}, fmt.Errorf("--relay-max-conns %d must be 1 or more", f.relayMaxConns)
 	}
 	_, key, err := ed25519.GenerateKey(nil)
 	if err != nil {
-		return err
+		return pushers{}, err
 	}
 	kid, err := relay.NewKeyID(f.nodeID, time.Now())
 	if err != nil {
-		return err
+		return pushers{}, err
 	}
 	signer := relay.NewSigner(f.nodeID, kid, key)
 	m.UseEgress(&relay.AgentEgress{Relay: &relay.Relay{
@@ -496,28 +544,26 @@ func setupEgress(ctx context.Context, f flags, m *agent.Manager, log *slog.Logge
 	}})
 	if f.apiServerURL == "" {
 		log.Warn("no --api-server-url: the node signing key is not registered, so the proxy rejects VM egress")
-		return nil
+		return pushers{}, nil
 	}
 	secret := os.Getenv("SANDBOX_NODE_REGISTRATION_SECRET")
 	if secret == "" {
-		return errors.New("--api-server-url needs $SANDBOX_NODE_REGISTRATION_SECRET")
+		return pushers{}, errors.New("--api-server-url needs $SANDBOX_NODE_REGISTRATION_SECRET")
 	}
 	if f.advertise == "" {
 		log.Warn("no --advertise-address and no $POD_IP: the registration has no agent address, so the api_server cannot place VMs here")
 	}
 	g := &relay.Registrar{BaseURL: f.apiServerURL, Secret: secret, Signer: signer, AgentAddress: f.advertise, Log: log}
-	go g.Run(ctx)
 	if f.stateReport <= 0 {
 		log.Warn("--state-report-interval is 0: the api_server does not reconcile this node's VMs")
-		return nil
+		return pushers{reg: g}, nil
 	}
 	r := &nodereport.Reporter{
 		BaseURL: f.apiServerURL, Signer: signer, List: func() []nodereport.VM { return reportVMs(m.List()) },
 		Ended: func() []nodereport.EndedVM { return reportEnded(m.Ended()) },
 		Ready: g.Registered(), Log: log, Interval: f.stateReport,
 	}
-	go r.Run(ctx)
-	return nil
+	return pushers{reg: g, rep: r}, nil
 }
 
 // reportVMs converts the Manager's List for the node state report.

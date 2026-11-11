@@ -346,8 +346,8 @@ Postgres cache backend. The chart's bundled Redis uses `allkeys-lru`.
   `--metrics-token-file` holds the Onyx `METRICS_AUTH_TOKEN`. The agent reads the file on each scrape,
   so a rotated Secret applies without a restart. With no token (no flag, or a missing or empty file)
   every scrape gets 401. `--metrics-auth-disabled` (like `DISABLE_METRICS_AUTH=true`) removes auth. The VM table, node memory, allocated memory, open relay
-  connections and open Dial streams are read at scrape time, in one pass, like the observable gauges of
-  E2B's orchestrator (`e2b-dev/infra`, Apache-2.0). No metric has a sandbox or tenant label.
+  connections and open Dial streams are read at scrape time, in one pass (observable gauges). No metric
+  has a sandbox or tenant label.
 
   | Metric | Type | Labels |
   |---|---|---|
@@ -356,16 +356,37 @@ Postgres cache backend. The chart's bundled Redis uses `allkeys-lru`.
   | `craft_fc_host_agent_vms` | gauge | `state`: starting, running, exited |
   | `craft_fc_host_agent_vm_memory_allocated_bytes`, `_vm_vcpus_allocated` | gauge | |
   | `craft_fc_host_agent_node_memory_total_bytes`, `_node_memory_available_bytes`, `_node_disk_free_bytes` | gauge | |
-  | `craft_fc_host_agent_node_stats_errors` | gauge | `stat`: memory, disk |
+  | `craft_fc_host_agent_vm_memory_private_bytes` | gauge | |
+  | `craft_fc_host_agent_node_stats_errors` | gauge | `stat`: memory, disk, vm_memory |
   | `craft_fc_host_agent_rpc_requests_total` | counter | `method` (HostAgent method, else `unknown`), `code` (gRPC) |
   | `craft_fc_host_agent_rpc_duration_seconds` | histogram | `method` |
+  | `craft_fc_host_agent_transfer_duration_seconds` | histogram (0.5 s to 600 s) | `method`: CaptureSession, UploadCapture, RestoreSession |
   | `craft_fc_host_agent_passthrough_calls_total` | counter | `method` (daemon method, else `unknown`), `code` |
   | `craft_fc_host_agent_relay_open_connections` | gauge | |
   | `craft_fc_host_agent_relay_connections_total` | counter | `result`: accepted, over_cap, upstream_failed |
   | `craft_fc_host_agent_dial_open_streams` | gauge | |
   | `craft_fc_host_agent_guest_log_bytes_total`, `_guest_log_dropped_bytes_total` | counter | `stream`: console, firecracker |
+  | `craft_fc_host_agent_node_reports_total`, `_key_registrations_total` | counter | `result`: success, rejected (HTTP 4xx), server_error (other HTTP), failed (no reply; for reports also over the caps) |
+  | `craft_fc_host_agent_node_report_last_success_timestamp_seconds`, `_key_registration_last_success_timestamp_seconds` | gauge | |
+  | `craft_fc_host_agent_template_builds_total` | counter | `result`: built, existing, failed |
+  | `craft_fc_host_agent_template_build_duration_seconds` | histogram | `result` |
+  | `craft_fc_host_agent_template_ready` | gauge | |
+
+  `vm_memory_private_bytes` is the sum of `Anonymous` in `/proc/<pid>/smaps_rollup` of the Firecracker
+  processes: the guest pages that each VM wrote (copy-on-write) plus the VMM's own heap. Guest pages
+  that a VM only read come from its copy of the snapshot memory file. They are page cache, which the
+  kernel can drop, and they are not in this sum. Balloon free page reporting and the guest daemon's idle reclaim (`--reclaim-idle`) lower the sum, so
+  its drop shows the reclaim. Compare it with `vm_memory_allocated_bytes` to see how much of the guest
+  memory the VMs wrote. If a read fails (other than for a VM that exits during the scrape), the gauge is left out of that
+  scrape and `node_stats_errors{stat="vm_memory"}` is 1. `rpc_duration_seconds` keeps the default buckets (up to 10 s); use
+  `transfer_duration_seconds` for session saves and restores. The template metrics count the start-up
+  build and each `BuildTemplate` call from `--rootfs-dir`; `template_ready` is 0 before the first build
+  and after a failed one.
 
   The Go runtime and process collectors are on the same registry.
+- **Dashboard, alerts and runbooks.** The chart ships a Grafana dashboard
+  (`monitoring.grafana.dashboards.enabled`) and a PrometheusRule (`monitoring.prometheusRules.enabled`,
+  thresholds in `craft.hostAgent.alerts`), both off by default. Runbooks: `RUNBOOKS.md`.
 - **Guest logs.** The agent tails each VM's serial console (`console.log`, Firecracker's stdout and
   stderr) and Firecracker log (`fc.log`) and writes one JSON line per log line to its **stdout**:
   `kind=guest_log`, `stream`, `sandbox_id`, `generation`, `tenant_id`, `line`. The agent's own log and
@@ -659,9 +680,14 @@ go mod tidy
 ## Tests
 
 - Unit tests: `go test -race ./...`. They use a fake VMM and run in CI.
-- KVM tests: build tag `kvm`, on a KVM host (not in CI yet; ENG-4561). They use the kit rootfs
-  (`onyxdotapp/sandbox` + `fc-init` + the prototype guest agent `fc-agent.py`) and guest kernel 6.18.25.
-  Host setup: `plans/craft-sandbox-bench/work-host-agent/` (AL2023 with kernel 6.18, `m8i.4xlarge`).
+- KVM tests: build tag `kvm`, on a KVM host. The older tests use the kit rootfs (`onyxdotapp/sandbox`
+  + `internal/kvmtest/testdata/kit`: `fc-init` and the prototype guest agent `fc-agent.py`) and guest
+  kernel 6.18.25. The egress and pass-through tests use the proxy harness in
+  `internal/kvmtest/testdata/harness`.
+- `check-kvm.sh smoke|full ARTIFACTS_DIR SOURCE_IMAGE` (as root) prepares a host and runs them: the data
+  dir, the root drives, the agent image, then one test at a time. CI
+  (`.github/workflows/craft-fc-host-agent-kvm.yml`, nested KVM `m8i.2xlarge`) runs the smoke lane on pull
+  requests and the full lane nightly and on release tags. `TestSavesKVM` skips there (no S3 bucket).
 
 ```bash
 GOOS=linux GOARCH=amd64 go test -c -tags kvm -o hostagent-kvm.test ./internal/kvmtest
@@ -671,9 +697,9 @@ GOOS=linux GOARCH=amd64 go test -c -tags kvm -o hostagent-kvm.test ./internal/kv
 # Agent restart: runs the agent binary (KVM_AGENT_BIN, default /opt/agent/host-agent) in a privileged
 # --pid=host --cgroupns=host container (KVM_AGENT_IMAGE, default debian:trixie-slim) and restarts it.
 ./hostagent-kvm.test -test.v -test.run TestRestartKVM
-# Egress: needs the proxy harness from plans/craft-sandbox-bench/work-host-agent/ (KVM_HARNESS_DIR,
-# default /opt/harness), the PR #17174 backend (KVM_PR_BACKEND, default /opt/pr/backend), its Python env
-# (KVM_PYTHON) and Docker for Redis.
+# Egress: needs the proxy harness internal/kvmtest/testdata/harness (KVM_HARNESS_DIR, default
+# /opt/harness), the backend directory (KVM_PR_BACKEND, default /opt/pr/backend), a Python with
+# backend/requirements/default.txt (KVM_PYTHON) and Docker for Redis.
 ./hostagent-kvm.test -test.v -test.run TestEgressKVM
 # mTLS listener and Dial (test CAs from internal/testcerts).
 ./hostagent-kvm.test -test.v -test.run TestDialKVM

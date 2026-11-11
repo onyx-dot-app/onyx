@@ -1,5 +1,5 @@
-# Generated from microvm/proto/hostagent/v1/hostagent.proto (blob 6b31db359c9e0ceb15a23edf324ffed95f5dae99)
-# at commit 84f60fa93c by backend/onyx/microvm/generated/regenerate.sh. Do not edit.
+# Generated from microvm/proto/hostagent/v1/hostagent.proto (blob d5b9138da2875146e2e720074770f287adc05128)
+# at commit 461ea1e701 by backend/onyx/microvm/generated/regenerate.sh. Do not edit.
 import datetime
 
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
@@ -43,6 +43,11 @@ class ErrorReason(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     MANAGED_SLOT_BUSY: _ClassVar[ErrorReason]
     MANAGED_MOUNT_FAILED: _ClassVar[ErrorReason]
     NODE_DRAINING: _ClassVar[ErrorReason]
+    EGRESS_CA_UNAVAILABLE: _ClassVar[ErrorReason]
+    CAPTURE_NOT_FOUND: _ClassVar[ErrorReason]
+    CAPTURE_TOO_LARGE: _ClassVar[ErrorReason]
+    TRANSFER_FAILED: _ClassVar[ErrorReason]
+    ARCHIVE_MISMATCH: _ClassVar[ErrorReason]
 
 class DrainState(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -92,6 +97,11 @@ MANAGED_SWAP_UNSUPPORTED: ErrorReason
 MANAGED_SLOT_BUSY: ErrorReason
 MANAGED_MOUNT_FAILED: ErrorReason
 NODE_DRAINING: ErrorReason
+EGRESS_CA_UNAVAILABLE: ErrorReason
+CAPTURE_NOT_FOUND: ErrorReason
+CAPTURE_TOO_LARGE: ErrorReason
+TRANSFER_FAILED: ErrorReason
+ARCHIVE_MISMATCH: ErrorReason
 DRAIN_STATE_UNSPECIFIED: DrainState
 DRAIN_STATE_ACTIVE: DrainState
 DRAIN_STATE_DRAINING: DrainState
@@ -227,6 +237,153 @@ class CloseConnectionsResponse(_message.Message):
     CLOSED_FIELD_NUMBER: _ClassVar[int]
     closed: int
     def __init__(self, closed: _Optional[int] = ...) -> None: ...
+
+class PresignedRequest(_message.Message):
+    __slots__ = ("url", "method", "headers")
+    class HeadersEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: str
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
+    URL_FIELD_NUMBER: _ClassVar[int]
+    METHOD_FIELD_NUMBER: _ClassVar[int]
+    HEADERS_FIELD_NUMBER: _ClassVar[int]
+    url: str
+    method: str
+    headers: _containers.ScalarMap[str, str]
+    def __init__(self, url: _Optional[str] = ..., method: _Optional[str] = ..., headers: _Optional[_Mapping[str, str]] = ...) -> None: ...
+
+class ArchiveLimits(_message.Message):
+    __slots__ = ("max_stored_bytes", "max_expanded_bytes", "max_entries")
+    MAX_STORED_BYTES_FIELD_NUMBER: _ClassVar[int]
+    MAX_EXPANDED_BYTES_FIELD_NUMBER: _ClassVar[int]
+    MAX_ENTRIES_FIELD_NUMBER: _ClassVar[int]
+    max_stored_bytes: int
+    max_expanded_bytes: int
+    max_entries: int
+    def __init__(self, max_stored_bytes: _Optional[int] = ..., max_expanded_bytes: _Optional[int] = ..., max_entries: _Optional[int] = ...) -> None: ...
+
+class CaptureSessionRequest(_message.Message):
+    __slots__ = ("sandbox_id", "attempt", "generation", "sandboxd_key", "session_id", "roots", "exclude_names", "limits")
+    SANDBOX_ID_FIELD_NUMBER: _ClassVar[int]
+    ATTEMPT_FIELD_NUMBER: _ClassVar[int]
+    GENERATION_FIELD_NUMBER: _ClassVar[int]
+    SANDBOXD_KEY_FIELD_NUMBER: _ClassVar[int]
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
+    ROOTS_FIELD_NUMBER: _ClassVar[int]
+    EXCLUDE_NAMES_FIELD_NUMBER: _ClassVar[int]
+    LIMITS_FIELD_NUMBER: _ClassVar[int]
+    sandbox_id: str
+    attempt: int
+    generation: int
+    sandboxd_key: str
+    session_id: str
+    roots: _containers.RepeatedScalarFieldContainer[str]
+    exclude_names: _containers.RepeatedScalarFieldContainer[str]
+    limits: ArchiveLimits
+    def __init__(self, sandbox_id: _Optional[str] = ..., attempt: _Optional[int] = ..., generation: _Optional[int] = ..., sandboxd_key: _Optional[str] = ..., session_id: _Optional[str] = ..., roots: _Optional[_Iterable[str]] = ..., exclude_names: _Optional[_Iterable[str]] = ..., limits: _Optional[_Union[ArchiveLimits, _Mapping]] = ...) -> None: ...
+
+class CaptureSessionResponse(_message.Message):
+    __slots__ = ("capture_id", "size_bytes", "sha256", "files", "directories", "expanded_bytes", "excluded", "skipped", "changed", "roots", "capture_ms", "expires_at")
+    CAPTURE_ID_FIELD_NUMBER: _ClassVar[int]
+    SIZE_BYTES_FIELD_NUMBER: _ClassVar[int]
+    SHA256_FIELD_NUMBER: _ClassVar[int]
+    FILES_FIELD_NUMBER: _ClassVar[int]
+    DIRECTORIES_FIELD_NUMBER: _ClassVar[int]
+    EXPANDED_BYTES_FIELD_NUMBER: _ClassVar[int]
+    EXCLUDED_FIELD_NUMBER: _ClassVar[int]
+    SKIPPED_FIELD_NUMBER: _ClassVar[int]
+    CHANGED_FIELD_NUMBER: _ClassVar[int]
+    ROOTS_FIELD_NUMBER: _ClassVar[int]
+    CAPTURE_MS_FIELD_NUMBER: _ClassVar[int]
+    EXPIRES_AT_FIELD_NUMBER: _ClassVar[int]
+    capture_id: str
+    size_bytes: int
+    sha256: str
+    files: int
+    directories: int
+    expanded_bytes: int
+    excluded: int
+    skipped: int
+    changed: int
+    roots: _containers.RepeatedScalarFieldContainer[str]
+    capture_ms: int
+    expires_at: _timestamp_pb2.Timestamp
+    def __init__(self, capture_id: _Optional[str] = ..., size_bytes: _Optional[int] = ..., sha256: _Optional[str] = ..., files: _Optional[int] = ..., directories: _Optional[int] = ..., expanded_bytes: _Optional[int] = ..., excluded: _Optional[int] = ..., skipped: _Optional[int] = ..., changed: _Optional[int] = ..., roots: _Optional[_Iterable[str]] = ..., capture_ms: _Optional[int] = ..., expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+
+class UploadCaptureRequest(_message.Message):
+    __slots__ = ("capture_id", "request")
+    CAPTURE_ID_FIELD_NUMBER: _ClassVar[int]
+    REQUEST_FIELD_NUMBER: _ClassVar[int]
+    capture_id: str
+    request: PresignedRequest
+    def __init__(self, capture_id: _Optional[str] = ..., request: _Optional[_Union[PresignedRequest, _Mapping]] = ...) -> None: ...
+
+class UploadCaptureResponse(_message.Message):
+    __slots__ = ("size_bytes", "sha256", "http_status", "etag", "upload_ms")
+    SIZE_BYTES_FIELD_NUMBER: _ClassVar[int]
+    SHA256_FIELD_NUMBER: _ClassVar[int]
+    HTTP_STATUS_FIELD_NUMBER: _ClassVar[int]
+    ETAG_FIELD_NUMBER: _ClassVar[int]
+    UPLOAD_MS_FIELD_NUMBER: _ClassVar[int]
+    size_bytes: int
+    sha256: str
+    http_status: int
+    etag: str
+    upload_ms: int
+    def __init__(self, size_bytes: _Optional[int] = ..., sha256: _Optional[str] = ..., http_status: _Optional[int] = ..., etag: _Optional[str] = ..., upload_ms: _Optional[int] = ...) -> None: ...
+
+class DiscardCaptureRequest(_message.Message):
+    __slots__ = ("capture_id",)
+    CAPTURE_ID_FIELD_NUMBER: _ClassVar[int]
+    capture_id: str
+    def __init__(self, capture_id: _Optional[str] = ...) -> None: ...
+
+class DiscardCaptureResponse(_message.Message):
+    __slots__ = ("discarded",)
+    DISCARDED_FIELD_NUMBER: _ClassVar[int]
+    discarded: bool
+    def __init__(self, discarded: bool = ...) -> None: ...
+
+class RestoreSessionRequest(_message.Message):
+    __slots__ = ("sandbox_id", "attempt", "generation", "sandboxd_key", "session_id", "request", "size_bytes", "sha256", "roots", "limits")
+    SANDBOX_ID_FIELD_NUMBER: _ClassVar[int]
+    ATTEMPT_FIELD_NUMBER: _ClassVar[int]
+    GENERATION_FIELD_NUMBER: _ClassVar[int]
+    SANDBOXD_KEY_FIELD_NUMBER: _ClassVar[int]
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
+    REQUEST_FIELD_NUMBER: _ClassVar[int]
+    SIZE_BYTES_FIELD_NUMBER: _ClassVar[int]
+    SHA256_FIELD_NUMBER: _ClassVar[int]
+    ROOTS_FIELD_NUMBER: _ClassVar[int]
+    LIMITS_FIELD_NUMBER: _ClassVar[int]
+    sandbox_id: str
+    attempt: int
+    generation: int
+    sandboxd_key: str
+    session_id: str
+    request: PresignedRequest
+    size_bytes: int
+    sha256: str
+    roots: _containers.RepeatedScalarFieldContainer[str]
+    limits: ArchiveLimits
+    def __init__(self, sandbox_id: _Optional[str] = ..., attempt: _Optional[int] = ..., generation: _Optional[int] = ..., sandboxd_key: _Optional[str] = ..., session_id: _Optional[str] = ..., request: _Optional[_Union[PresignedRequest, _Mapping]] = ..., size_bytes: _Optional[int] = ..., sha256: _Optional[str] = ..., roots: _Optional[_Iterable[str]] = ..., limits: _Optional[_Union[ArchiveLimits, _Mapping]] = ...) -> None: ...
+
+class RestoreSessionResponse(_message.Message):
+    __slots__ = ("files", "directories", "expanded_bytes", "roots", "restore_ms")
+    FILES_FIELD_NUMBER: _ClassVar[int]
+    DIRECTORIES_FIELD_NUMBER: _ClassVar[int]
+    EXPANDED_BYTES_FIELD_NUMBER: _ClassVar[int]
+    ROOTS_FIELD_NUMBER: _ClassVar[int]
+    RESTORE_MS_FIELD_NUMBER: _ClassVar[int]
+    files: int
+    directories: int
+    expanded_bytes: int
+    roots: _containers.RepeatedScalarFieldContainer[str]
+    restore_ms: int
+    def __init__(self, files: _Optional[int] = ..., directories: _Optional[int] = ..., expanded_bytes: _Optional[int] = ..., roots: _Optional[_Iterable[str]] = ..., restore_ms: _Optional[int] = ...) -> None: ...
 
 class NodeInfoRequest(_message.Message):
     __slots__ = ()

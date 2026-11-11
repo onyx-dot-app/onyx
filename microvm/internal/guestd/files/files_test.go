@@ -969,3 +969,52 @@ func TestReadDirCap(t *testing.T) {
 		t.Fatalf("capture: %v", err)
 	}
 }
+
+func TestZipCountsDirectoriesAndDepth(t *testing.T) {
+	ctx := context.Background()
+	s, base := newStore(t, Config{MaxZipEntries: 3})
+	// Each directory holds one entry, under the per-directory read cap.
+	if err := os.MkdirAll(filepath.Join(base, "work/e/1/2/3/4"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Zip(ctx, sid, ZipSpec{Path: "work/e"}, io.Discard); !errors.Is(err, ErrLimit) {
+		t.Fatalf("empty directories over the limit: %v", err)
+	}
+
+	s, base = newStore(t, Config{})
+	deep := "work/z" + strings.Repeat("/d", maxDepth+1)
+	put(t, base, "work/z/top.txt", "t")
+	put(t, base, deep+"/f.txt", "f")
+	var buf bytes.Buffer
+	zs, err := s.Zip(ctx, sid, ZipSpec{Path: "work/z"}, &buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if zs.Files != 1 || zs.Skipped != 1 {
+		t.Fatalf("summary %+v", zs)
+	}
+}
+
+func TestRestoreCountsParentDirectories(t *testing.T) {
+	ms := []member{{h: tar.Header{Typeflag: tar.TypeReg, Name: "work/a/b/c/d/f"}, data: "x"}}
+	other := "a6f1b1a2-0000-4000-8000-000000000008"
+	s, _ := newStore(t, Config{Limits: Limits{Entries: 5}})
+	// One member and five parents.
+	if _, err := restore(s, other, makeArchive(t, ms), RestoreSpec{}); !errors.Is(err, ErrLimit) {
+		t.Fatalf("parents over the limit: %v", err)
+	}
+	s, _ = newStore(t, Config{Limits: Limits{Entries: 6}})
+	rs, err := restore(s, other, makeArchive(t, ms), RestoreSpec{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rs.Files != 1 || rs.Directories != 5 {
+		t.Fatalf("summary %+v", rs)
+	}
+	// A parent that is a file is refused.
+	ms = []member{{h: tar.Header{Typeflag: tar.TypeReg, Name: "work/a"}, data: "x"},
+		{h: tar.Header{Typeflag: tar.TypeReg, Name: "work/a/b"}, data: "y"}}
+	if _, err := restore(s, other, makeArchive(t, ms), RestoreSpec{}); !errors.Is(err, ErrArchive) {
+		t.Fatalf("file as a parent: %v", err)
+	}
+}

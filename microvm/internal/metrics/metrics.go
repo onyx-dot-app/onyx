@@ -2,17 +2,18 @@
 //
 // Gauges that describe the VM table and the node (VM count by state, node
 // memory, allocated memory, open relay connections and Dial streams) are read
-// at scrape time from one pass over the agent's state, as E2B's orchestrator
-// does with OpenTelemetry observable gauges (e2b-dev/infra, Apache-2.0:
-// packages/orchestrator/pkg/server/main.go, the sandbox count and allocated
-// resource callbacks). So the agent keeps no per-VM metric state and needs no
+// at scrape time from one pass over the agent's state (observable gauges with
+// a collect callback). So the agent keeps no per-VM metric state and needs no
 // goroutine per VM. No metric has a sandbox or tenant label: per-VM detail is
 // in the audit and guest log lines.
 package metrics
 
 import (
+	"errors"
+	"io/fs"
 	"net/http"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -40,6 +41,9 @@ type Source struct {
 	RelayConns func() int
 	// DialStreams returns the open Dial streams of the node.
 	DialStreams func() int
+	// PrivateMem returns the private memory bytes of a Firecracker process
+	// (hostinfo.PrivateMemoryBytes). Nil: not reported.
+	PrivateMem func(pid int) (uint64, error)
 }
 
 // Metrics are the agent's metrics on their own registry.
@@ -54,7 +58,39 @@ type Metrics struct {
 	relayConns    *prometheus.CounterVec
 	guestLog      *prometheus.CounterVec
 	guestDropped  *prometheus.CounterVec
+
+	transferSeconds *prometheus.HistogramVec
+	nodeReports     *prometheus.CounterVec
+	nodeReportLast  prometheus.Gauge
+	keyRegs         *prometheus.CounterVec
+	keyRegLast      prometheus.Gauge
+	tplBuilds       *prometheus.CounterVec
+	tplBuildSeconds *prometheus.HistogramVec
+	tplReady        prometheus.Gauge
 }
+
+// transferMethods move a session over the network or disk; they get the
+// transfer histogram as well as rpc_duration_seconds.
+var transferMethods = map[string]bool{"CaptureSession": true, "UploadCapture": true, "RestoreSession": true}
+
+// Results of the node state report and the key registration.
+const (
+	PushSuccess = "success"
+	// PushRejected is an HTTP 4xx from the api_server.
+	PushRejected = "rejected"
+	// PushServerError is any other reply that is not 2xx.
+	PushServerError = "server_error"
+	// PushFailed is no reply: a network error, a timeout, or a report over
+	// the caps.
+	PushFailed = "failed"
+)
+
+// Results of a template build.
+const (
+	TemplateBuilt    = "built"
+	TemplateExisting = "existing"
+	TemplateFailed   = "failed"
+)
 
 // New registers the agent metrics, the state collector for src, and the Go
 // and process collectors on a new registry.
@@ -95,9 +131,44 @@ func New(src Source) (*Metrics, error) {
 			Namespace: namespace, Name: "guest_log_dropped_bytes_total",
 			Help: "Guest log bytes dropped by the per-VM or node rate limit.",
 		}, []string{"stream"}),
+		transferSeconds: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Namespace: namespace, Name: "transfer_duration_seconds",
+			Help:    "CaptureSession, UploadCapture and RestoreSession duration, with buckets up to 600 s.",
+			Buckets: []float64{0.5, 1, 2.5, 5, 10, 20, 30, 60, 120, 180, 300, 450, 600},
+		}, []string{"method"}),
+		nodeReports: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: namespace, Name: "node_reports_total",
+			Help: "Node state reports to the api_server. result: success, rejected (HTTP 4xx), server_error (other HTTP), failed (no reply, or over the caps).",
+		}, []string{"result"}),
+		nodeReportLast: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: namespace, Name: "node_report_last_success_timestamp_seconds",
+			Help: "Unix time of the last node state report that the api_server accepted. 0: none yet.",
+		}),
+		keyRegs: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: namespace, Name: "key_registrations_total",
+			Help: "Node signing key registrations and refreshes. result: success, rejected (HTTP 4xx), server_error (other HTTP), failed (no reply).",
+		}, []string{"result"}),
+		keyRegLast: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: namespace, Name: "key_registration_last_success_timestamp_seconds",
+			Help: "Unix time of the last successful node signing key registration. 0: none yet.",
+		}),
+		tplBuilds: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: namespace, Name: "template_builds_total",
+			Help: "Template builds from --rootfs-dir (start-up and BuildTemplate). result: built, existing (a valid template was there), failed.",
+		}, []string{"result"}),
+		tplBuildSeconds: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Namespace: namespace, Name: "template_build_duration_seconds",
+			Help:    "Template build duration by result.",
+			Buckets: []float64{0.5, 1, 5, 10, 20, 30, 45, 60, 90, 120, 180, 300, 600},
+		}, []string{"result"}),
+		tplReady: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: namespace, Name: "template_ready",
+			Help: "1 if the last template build from --rootfs-dir gave a usable template, else 0.",
+		}),
 	}
 	cs := []prometheus.Collector{
 		m.createSeconds, m.admissions, m.rpcs, m.rpcSeconds, m.passthrough, m.relayConns, m.guestLog, m.guestDropped,
+		m.transferSeconds, m.nodeReports, m.nodeReportLast, m.keyRegs, m.keyRegLast, m.tplBuilds, m.tplBuildSeconds, m.tplReady,
 		newStateCollector(src),
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
@@ -160,6 +231,57 @@ func (m *Metrics) ObserveRPC(method, code string, d time.Duration) {
 	}
 	m.rpcs.WithLabelValues(method, code).Inc()
 	m.rpcSeconds.WithLabelValues(method).Observe(d.Seconds())
+	if transferMethods[method] {
+		m.transferSeconds.WithLabelValues(method).Observe(d.Seconds())
+	}
+}
+
+// PushResult is the result label of a node state report or key
+// registration error.
+func PushResult(err error) string {
+	if err == nil {
+		return PushSuccess
+	}
+	var h interface{ HTTPStatus() int }
+	if errors.As(err, &h) {
+		if s := h.HTTPStatus(); s >= 400 && s < 500 {
+			return PushRejected
+		}
+		return PushServerError
+	}
+	return PushFailed
+}
+
+// NodeReport records the result of one node state report.
+func (m *Metrics) NodeReport(err error) {
+	if m == nil {
+		return
+	}
+	m.nodeReports.WithLabelValues(PushResult(err)).Inc()
+	if err == nil {
+		m.nodeReportLast.SetToCurrentTime()
+	}
+}
+
+// KeyRegistration records the result of one signing key registration.
+func (m *Metrics) KeyRegistration(err error) {
+	if m == nil {
+		return
+	}
+	m.keyRegs.WithLabelValues(PushResult(err)).Inc()
+	if err == nil {
+		m.keyRegLast.SetToCurrentTime()
+	}
+}
+
+// TemplateBuild records one template build and sets template_ready.
+func (m *Metrics) TemplateBuild(d time.Duration, result string) {
+	if m == nil {
+		return
+	}
+	m.tplBuilds.WithLabelValues(result).Inc()
+	m.tplBuildSeconds.WithLabelValues(result).Observe(d.Seconds())
+	m.tplReady.Set(boolFloat(result != TemplateFailed))
 }
 
 // ObservePassthrough records one guest daemon call.
@@ -199,6 +321,7 @@ type stateCollector struct {
 	memAvail    *prometheus.Desc
 	diskFree    *prometheus.Desc
 	memAlloc    *prometheus.Desc
+	memPrivate  *prometheus.Desc
 	vcpuAlloc   *prometheus.Desc
 	relayOpen   *prometheus.Desc
 	dialOpen    *prometheus.Desc
@@ -210,22 +333,24 @@ func newStateCollector(src Source) *stateCollector {
 		return prometheus.NewDesc(prometheus.BuildFQName(namespace, "", name), help, labels, nil)
 	}
 	return &stateCollector{
-		src:         src,
-		vms:         d("vms", "VMs in the agent's table by state (starting, running, exited).", "state"),
-		memTotal:    d("node_memory_total_bytes", "Node MemTotal."),
-		memAvail:    d("node_memory_available_bytes", "Node MemAvailable (the admission input)."),
-		diskFree:    d("node_disk_free_bytes", "Free space on the data disk."),
-		memAlloc:    d("vm_memory_allocated_bytes", "Guest memory of the VMs that are not exited."),
+		src:      src,
+		vms:      d("vms", "VMs in the agent's table by state (starting, running, exited).", "state"),
+		memTotal: d("node_memory_total_bytes", "Node MemTotal."),
+		memAvail: d("node_memory_available_bytes", "Node MemAvailable (the admission input)."),
+		diskFree: d("node_disk_free_bytes", "Free space on the data disk."),
+		memAlloc: d("vm_memory_allocated_bytes", "Guest memory of the VMs that are not exited."),
+		memPrivate: d("vm_memory_private_bytes", "Anonymous memory (smaps_rollup) of the Firecracker processes of the VMs that are not exited: "+
+			"the guest pages each VM wrote, plus the VMM's own heap. Page cache of the snapshot memory files is not in it. Balloon free page reporting and the guest's idle reclaim lower it."),
 		vcpuAlloc:   d("vm_vcpus_allocated", "vCPUs of the VMs that are not exited."),
 		relayOpen:   d("relay_open_connections", "Open egress relay connections."),
 		dialOpen:    d("dial_open_streams", "Open Dial streams."),
-		statsFailed: d("node_stats_errors", "1 if the last scrape could not read node memory or disk.", "stat"),
+		statsFailed: d("node_stats_errors", "1 if the last scrape could not read node memory, disk, or the private memory of a VM.", "stat"),
 	}
 }
 
 func (c *stateCollector) Describe(ch chan<- *prometheus.Desc) {
 	for _, d := range []*prometheus.Desc{
-		c.vms, c.memTotal, c.memAvail, c.diskFree, c.memAlloc, c.vcpuAlloc, c.relayOpen, c.dialOpen, c.statsFailed,
+		c.vms, c.memTotal, c.memAvail, c.diskFree, c.memAlloc, c.memPrivate, c.vcpuAlloc, c.relayOpen, c.dialOpen, c.statsFailed,
 	} {
 		ch <- d
 	}
@@ -242,12 +367,25 @@ func (c *stateCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 	if c.src.VMs != nil {
 		counts := map[pb.VMState]int{}
-		var mem, vcpus uint64
+		var mem, vcpus, private uint64
+		privateFailed := false
 		for _, vm := range c.src.VMs() {
 			counts[vm.State]++
-			if vm.State != pb.VMState_VM_STATE_EXITED {
-				mem += uint64(vm.MemMiB) << 20
-				vcpus += uint64(vm.VCPUs)
+			if vm.State == pb.VMState_VM_STATE_EXITED {
+				continue
+			}
+			mem += uint64(vm.MemMiB) << 20
+			vcpus += uint64(vm.VCPUs)
+			if c.src.PrivateMem == nil || vm.PID <= 0 {
+				continue
+			}
+			b, err := c.src.PrivateMem(vm.PID)
+			switch {
+			case err == nil:
+				private += b
+			case !errors.Is(err, fs.ErrNotExist) && !errors.Is(err, syscall.ESRCH):
+				// A VM that exits during the scrape is not an error.
+				privateFailed = true
 			}
 		}
 		// Every state is reported, also at 0, so the series do not vanish.
@@ -256,6 +394,13 @@ func (c *stateCollector) Collect(ch chan<- prometheus.Metric) {
 		}
 		gauge(c.memAlloc, float64(mem))
 		gauge(c.vcpuAlloc, float64(vcpus))
+		if c.src.PrivateMem != nil {
+			// A partial sum would look like reclaimed memory.
+			if !privateFailed {
+				gauge(c.memPrivate, float64(private))
+			}
+			gauge(c.statsFailed, boolFloat(privateFailed), "vm_memory")
+		}
 	}
 	if c.src.Stats != nil {
 		total, avail, err := c.src.Stats.MemInfo()

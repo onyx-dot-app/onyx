@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"log/slog"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -40,7 +39,7 @@ func TestTypedErrorsOverUnixSocket(t *testing.T) {
 		&template.Store{Dir: t.TempDir()}, noLaunch{}, stats{}, uids, agent.Versions{Firecracker: "v1.17.0", Agent: "test"},
 		slog.New(slog.NewTextHandler(io.Discard, nil)))
 	// Short path: macOS limits sun_path to 104 bytes.
-	sock := filepath.Join("/tmp", "ha-"+filepath.Base(t.TempDir())+".sock")
+	sock := shortSock(t, "ha")
 	ln, err := ListenUnix(sock)
 	if err != nil {
 		t.Fatal(err)

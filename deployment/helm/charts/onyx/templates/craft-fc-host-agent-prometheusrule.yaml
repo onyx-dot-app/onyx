@@ -1,0 +1,168 @@
+{{- /* Alert rules for the Craft Firecracker host agent. Needs
+craft.sandboxRuntime=firecracker, craft.hostAgent.metrics.enabled and
+monitoring.prometheusRules.enabled. Metrics: microvm/README.md (Metrics).
+Runbooks: microvm/RUNBOOKS.md. Thresholds: craft.hostAgent.alerts. */}}
+{{- $agent := (.Values.craft | default dict).hostAgent | default dict }}
+{{- $metrics := $agent.metrics | default dict }}
+{{- $rules := .Values.monitoring.prometheusRules | default dict }}
+{{- if and (eq (include "onyx.craftSandboxRuntime" .) "firecracker") $metrics.enabled $rules.enabled }}
+{{- $alerts := $agent.alerts | default dict }}
+{{- $runbook := $alerts.runbookUrl | default "https://github.com/onyx-dot-app/onyx/blob/main/microvm/RUNBOOKS.md" }}
+{{- $ns := include "onyx.craftHostAgentNamespace" . }}
+{{- $name := include "onyx.resourceName" (list . "craft-fc-host-agent") }}
+{{- $sel := printf "job=%q, namespace=%q" (include "onyx.craftHostAgentMetricsJob" .) $ns }}
+{{- $extraLabels := $alerts.extraLabels | default dict }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: craft-fc-host-agent
+    {{- with $rules.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    - name: craft-fc-host-agent
+      rules:
+        - alert: CraftFcHostAgentDown
+          expr: |
+            up{ {{- $sel -}} } == 0
+          for: 5m
+          labels:
+            severity: critical
+            {{- with $extraLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          annotations:
+            summary: {{ `Craft host agent on {{ $labels.node }} does not answer scrapes` | quote }}
+            description: {{ `Prometheus could not scrape the host agent on node {{ $labels.node }} for 5m. The agent is down, restarting, or rejects the metrics token. Placement and VM egress on that node fail while the agent is down.` | quote }}
+            runbook_url: {{ printf "%s#craftfchostagentdown" $runbook }}
+
+        - alert: CraftFcHostAgentPodsMissing
+          # Needs kube-state-metrics. A node with no agent pod has no scrape
+          # target, so CraftFcHostAgentDown does not see it.
+          expr: |
+            kube_daemonset_status_number_available{daemonset={{ $name | quote }}, namespace={{ $ns | quote }}}
+              < kube_daemonset_status_desired_number_scheduled{daemonset={{ $name | quote }}, namespace={{ $ns | quote }}}
+          for: 15m
+          labels:
+            severity: warning
+            {{- with $extraLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          annotations:
+            summary: Craft host agent DaemonSet has unavailable pods
+            description: {{ `{{ $value }} host agent pods are available, fewer than the DaemonSet wants, for 15m. Sandbox nodes without a Ready agent take no VMs.` | quote }}
+            runbook_url: {{ printf "%s#craftfchostagentpodsmissing" $runbook }}
+
+        - alert: CraftFcCreateFailures
+          # "failed" = the start failed after admission (VMM, journal, guest
+          # key). Refusals before admission are in CraftFcAdmissionRefusals.
+          expr: |
+            (
+              sum by (namespace, node) ({{ include "onyx.craftFcCounterIncrease" (list (printf `craft_fc_host_agent_create_duration_seconds_count{%s, result="failed"}` $sel) "15m") }})
+                / sum by (namespace, node) ({{ include "onyx.craftFcCounterIncrease" (list (printf `craft_fc_host_agent_create_duration_seconds_count{%s, result=~"created|failed"}` $sel) "15m") }})
+            ) > {{ dig "createFailureRatio" 0.2 $alerts }}
+            and
+            sum by (namespace, node) ({{ include "onyx.craftFcCounterIncrease" (list (printf `craft_fc_host_agent_create_duration_seconds_count{%s, result="failed"}` $sel) "15m") }}) >= 3
+          for: 10m
+          labels:
+            severity: warning
+            {{- with $extraLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          annotations:
+            summary: {{ `VM starts fail on {{ $labels.node }}` | quote }}
+            description: {{ `{{ $value | humanizePercentage }} of admitted Creates on node {{ $labels.node }} failed in the last 15m.` | quote }}
+            runbook_url: {{ printf "%s#craftfccreatefailures" $runbook }}
+
+        - alert: CraftFcAdmissionRefusals
+          # Only node-side reasons. NODE_DRAINING is expected during a drain;
+          # template reasons are in CraftFcTemplateUnusable.
+          expr: |
+            sum by (namespace, node, reason) ({{ include "onyx.craftFcCounterIncrease" (list (printf `craft_fc_host_agent_admissions_total{%s, result="refused", reason=~"CAPACITY_MEMORY|CAPACITY_DISK|CAPACITY_VM_SLOTS|EGRESS_CA_UNAVAILABLE|SANDBOX_IN_DOUBT"}` $sel) "15m") }})
+              >= {{ dig "admissionRefusals" 10 $alerts }}
+          for: 15m
+          labels:
+            severity: warning
+            {{- with $extraLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          annotations:
+            summary: {{ `Node {{ $labels.node }} refuses VMs ({{ $labels.reason }})` | quote }}
+            description: {{ `Node {{ $labels.node }} refused {{ $value | humanize }} Creates with {{ $labels.reason }} in 15m, for 15m or more.` | quote }}
+            runbook_url: {{ printf "%s#craftfcadmissionrefusals" $runbook }}
+
+        - alert: CraftFcSessionTransferFailures
+          # Canceled = the caller gave up; not an agent failure.
+          expr: |
+            sum by (namespace, node, method) ({{ include "onyx.craftFcCounterIncrease" (list (printf `craft_fc_host_agent_rpc_requests_total{%s, method=~"CaptureSession|UploadCapture|RestoreSession", code!~"OK|Canceled"}` $sel) "30m") }})
+              >= {{ dig "sessionTransferFailures" 3 $alerts }}
+          for: 5m
+          labels:
+            severity: warning
+            {{- with $extraLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          annotations:
+            summary: {{ `{{ $labels.method }} fails on {{ $labels.node }}` | quote }}
+            description: {{ `{{ $value | humanize }} {{ $labels.method }} calls failed on node {{ $labels.node }} in 30m. Session saves or restores may be lost or late.` | quote }}
+            runbook_url: {{ printf "%s#craftfcsessiontransferfailures" $runbook }}
+
+        - alert: CraftFcRelayErrors
+          # Each connection counts once as accepted or over_cap; an accepted
+          # one also counts as upstream_failed when the proxy dial fails.
+          expr: |
+            (
+              sum by (namespace, node) ({{ include "onyx.craftFcCounterIncrease" (list (printf `craft_fc_host_agent_relay_connections_total{%s, result=~"over_cap|upstream_failed"}` $sel) "10m") }})
+                / sum by (namespace, node) ({{ include "onyx.craftFcCounterIncrease" (list (printf `craft_fc_host_agent_relay_connections_total{%s, result=~"accepted|over_cap"}` $sel) "10m") }})
+            ) > {{ dig "relayErrorRatio" 0.1 $alerts }}
+            and
+            sum by (namespace, node) ({{ include "onyx.craftFcCounterIncrease" (list (printf `craft_fc_host_agent_relay_connections_total{%s, result=~"over_cap|upstream_failed"}` $sel) "10m") }}) >= 10
+          for: 10m
+          labels:
+            severity: warning
+            {{- with $extraLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          annotations:
+            summary: {{ `VM egress fails on {{ $labels.node }}` | quote }}
+            description: {{ `{{ $value | humanizePercentage }} of egress relay connections on node {{ $labels.node }} failed (over the per-VM cap or the proxy did not answer) in 10m.` | quote }}
+            runbook_url: {{ printf "%s#craftfcrelayerrors" $runbook }}
+
+        - alert: CraftFcNodeMemoryLow
+          expr: |
+            craft_fc_host_agent_node_memory_available_bytes{ {{- $sel -}}}
+              / craft_fc_host_agent_node_memory_total_bytes{ {{- $sel -}}}
+              < {{ dig "memoryAvailableRatio" 0.1 $alerts }}
+          for: 15m
+          labels:
+            severity: warning
+            {{- with $extraLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          annotations:
+            summary: {{ `Node {{ $labels.node }} is low on memory` | quote }}
+            description: {{ `Node {{ $labels.node }} has {{ $value | humanizePercentage }} of its memory available for 15m. New VMs get CAPACITY_MEMORY.` | quote }}
+            runbook_url: {{ printf "%s#craftfcnodememorylow" $runbook }}
+
+        - alert: CraftFcTemplateUnusable
+          # The start-up build has no metric: its failure shows only in the
+          # agent log ("template build at start-up failed").
+          expr: |
+            sum by (namespace, node) ({{ include "onyx.craftFcCounterIncrease" (list (printf `craft_fc_host_agent_admissions_total{%s, result="refused", reason=~"TEMPLATE_MISSING|TEMPLATE_INCOMPATIBLE"}` $sel) "30m") }}) > 0
+            or
+            sum by (namespace, node) ({{ include "onyx.craftFcCounterIncrease" (list (printf `craft_fc_host_agent_rpc_requests_total{%s, method="BuildTemplate", code!~"OK|Canceled"}` $sel) "30m") }}) > 0
+          for: 15m
+          labels:
+            severity: warning
+            {{- with $extraLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          annotations:
+            summary: {{ `Template on {{ $labels.node }} cannot be built or used` | quote }}
+            description: {{ `Node {{ $labels.node }} refused Creates for a missing or incompatible template, or a BuildTemplate call failed, for 15m.` | quote }}
+            runbook_url: {{ printf "%s#craftfctemplateunusable" $runbook }}
+{{- end }}
