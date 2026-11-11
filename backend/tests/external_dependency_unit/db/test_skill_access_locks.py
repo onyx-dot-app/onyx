@@ -317,7 +317,7 @@ def test_toggle_waits_for_membership_before_locking_user(
     isolated_engine: Engine,
 ) -> None:
     with Session(isolated_engine) as writer:
-        user = make_user(writer)
+        user = make_user(writer, standard_account=True)
         skill = make_skill(writer, author_user_id=user.id)
         user_id, skill_id = user.id, skill.id
         writer.commit()

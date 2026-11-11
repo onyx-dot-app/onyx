@@ -1,4 +1,4 @@
-from collections.abc import Generator
+from collections.abc import Generator, Iterable
 from unittest.mock import patch
 from uuid import UUID
 
@@ -6,6 +6,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, select
+from sqlalchemy import delete as sql_delete
 from sqlalchemy.orm import Session
 
 from ee.onyx.server.user_group.api import list_minimal_user_groups
@@ -27,8 +28,13 @@ from onyx.db.models import (
     User__UserGroup,
 )
 from onyx.db.permissions import recompute_user_permissions__no_commit
-from onyx.db.skill import affected_user_ids_for_skills, skill_ownership_is_vacant
+from onyx.db.skill import (
+    SkillUserState,
+    affected_user_ids_for_skills,
+    skill_ownership_is_vacant,
+)
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
+from onyx.server.features.skill import response_helpers
 from onyx.server.features.skill.api import user_router
 from tests.external_dependency_unit.craft.db_helpers import (
     make_group,
@@ -328,3 +334,33 @@ def test_vacant_skill_user_grants_need_global_permission(
     assert {share.user_id for share in skill.user_shares} == (
         {editor.id, other.id} if global_access else {editor.id}
     )
+
+
+@pytest.mark.parametrize("single", [False, True])
+def test_deletion_between_load_and_response(session: Session, single: bool) -> None:
+    owner = make_user(session, standard_account=True)
+    skill = make_skill(session, author_user_id=owner.id)
+    unaffected = make_skill(session, author_user_id=owner.id)
+    read_states = response_helpers.skill_user_states
+
+    def delete_then_read(
+        user: User, skill_ids: Iterable[UUID], db_session: Session
+    ) -> dict[UUID, SkillUserState]:
+        session.execute(
+            sql_delete(Skill).where(Skill.id == skill.id),
+            execution_options={"synchronize_session": False},
+        )
+        return read_states(user, skill_ids, db_session)
+
+    with (
+        client_for(owner, session) as client,
+        patch.object(
+            response_helpers, "skill_user_states", side_effect=delete_then_read
+        ),
+    ):
+        response = client.get(f"/skills/{skill.id}" if single else "/skills")
+    assert response.status_code == (404 if single else 200), response.text
+    if not single:
+        ids = {row["id"] for row in response.json()["customs"]}
+        assert str(skill.id) not in ids
+        assert str(unaffected.id) in ids

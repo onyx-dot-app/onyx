@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 import onyx.server.features.build.external_apps.api as api
-from onyx.db.enums import ExternalAppType
+from onyx.db.enums import ExternalAppType, SandboxStatus
 from onyx.db.external_app import (
     get_external_app_by_skill_id,
     get_external_app_user_credential,
@@ -67,7 +67,7 @@ def test_disconnect_clears_associated_skill_preferences_only(
     test_user: User,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    user = make_user(db_session)
+    user = make_user(db_session, standard_account=True)
     associated_skill = make_skill(
         db_session,
         is_public=True,
@@ -194,6 +194,11 @@ def test_admin_toggle_updates_app_and_refreshes_affected_sandboxes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     make_sandbox(db_session, test_user)
+    other_running_user = make_user(db_session)
+    sleeping_user = make_user(db_session)
+    user_without_sandbox = make_user(db_session)
+    make_sandbox(db_session, other_running_user)
+    make_sandbox(db_session, sleeping_user, status=SandboxStatus.SLEEPING)
     skill = make_built_in_skill_row(
         db_session,
         built_in_skill_id=f"toggle-push-{uuid4().hex[:8]}",
@@ -230,7 +235,10 @@ def test_admin_toggle_updates_app_and_refreshes_affected_sandboxes(
 
     assert response.enabled is False
     assert app.enabled is False
-    assert calls == [{test_user.id}]
+    assert len(calls) == 1
+    assert {test_user.id, other_running_user.id} <= calls[0]
+    assert sleeping_user.id not in calls[0]
+    assert user_without_sandbox.id not in calls[0]
 
 
 def test_delete_removes_provider_skill_and_refreshes_affected_users(
@@ -275,14 +283,14 @@ def test_delete_removes_provider_skill_and_refreshes_affected_users(
 
 def test_delete_detaches_custom_skill_and_clears_enablement(
     db_session: Session,
-    test_user: User,
+    standard_user: User,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    make_sandbox(db_session, test_user)
+    make_sandbox(db_session, standard_user)
     skill = make_skill(db_session, is_public=True, name="retained-custom-skill")
     set_skill_enabled_for_user(
         skill_id=skill.id,
-        user=test_user,
+        user=standard_user,
         enabled=True,
         db_session=db_session,
     )
@@ -299,7 +307,7 @@ def test_delete_detaches_custom_skill_and_clears_enablement(
     assert skill_id in {
         runtime_skill.id
         for runtime_skill in list_runtime_skills_for_user(
-            user=test_user,
+            user=standard_user,
             db_session=db_session,
         )
     }
@@ -312,27 +320,27 @@ def test_delete_detaches_custom_skill_and_clears_enablement(
 
     api.delete_external_app_admin(
         external_app_id=app_id,
-        _=test_user,
+        _=standard_user,
         db_session=db_session,
     )
 
     db_session.expire_all()
     assert len(calls) == 1
-    assert test_user.id in calls[0]
+    assert standard_user.id in calls[0]
     assert api.get_external_app_by_id(db_session, app_id) is None
     assert db_session.get(Skill, skill_id) is not None
     assert get_external_app_by_skill_id(db_session, skill_id) is None
     assert (
         db_session.get(
             UserSkillPreference,
-            {"user_id": test_user.id, "skill_id": skill_id},
+            {"user_id": standard_user.id, "skill_id": skill_id},
         )
         is None
     )
     assert skill_id not in {
         runtime_skill.id
         for runtime_skill in list_runtime_skills_for_user(
-            user=test_user,
+            user=standard_user,
             db_session=db_session,
         )
     }

@@ -115,7 +115,9 @@ def skill_response_for_user(
     include_share_details: bool = False,
 ) -> SkillResponse:
     if state is None:
-        state = skill_user_states(user, [skill.id], db_session)[skill.id]
+        state = skill_user_states(user, [skill.id], db_session).get(skill.id)
+        if state is None:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
     if skill.built_in_skill_id is not None:
         definition = BUILT_IN_SKILLS.get(skill.built_in_skill_id)
         if definition is None:
@@ -166,6 +168,9 @@ def skills_list_response_for_user(
     )
     states = skill_user_states(user, (skill.id for skill in rows), db_session)
     for skill in rows:
+        state = states.get(skill.id)
+        if state is None:
+            continue
         if (
             skill.built_in_skill_id is not None
             and skill.built_in_skill_id not in BUILT_IN_SKILLS
@@ -181,7 +186,7 @@ def skills_list_response_for_user(
             skill,
             user,
             db_session,
-            state=states[skill.id],
+            state=state,
             user_group_ids=user_group_ids,
             managed_user_group_ids=managed_user_group_ids,
         )

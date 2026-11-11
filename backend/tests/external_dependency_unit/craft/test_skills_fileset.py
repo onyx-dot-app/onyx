@@ -201,7 +201,7 @@ class TestCustomSkillFileset:
     def test_custom_bundle_entries_are_added_under_their_name(
         self,
         db_session: Session,
-        test_user: User,
+        standard_user: User,
         seeded_skill: Callable[..., Skill],
     ) -> None:
         # Custom skills require both visibility and per-user enablement. Set up:
@@ -210,7 +210,7 @@ class TestCustomSkillFileset:
         # avoids collisions with leftover rows from prior partial runs.
         name = f"my-custom-{uuid4().hex[:8]}"
         team_group: UserGroup = make_group(db_session)
-        add_user_to_group(db_session, test_user, team_group)
+        add_user_to_group(db_session, standard_user, team_group)
         db_session.commit()
 
         skill = seeded_skill(
@@ -225,12 +225,12 @@ class TestCustomSkillFileset:
         set_skill_enabled_for_user(
             skill_id=skill.id,
             enabled=True,
-            user=test_user,
+            user=standard_user,
             db_session=db_session,
         )
         db_session.commit()
 
-        files = build_skills_fileset_for_user(test_user, db_session)
+        files = build_skills_fileset_for_user(standard_user, db_session)
 
         assert b"custom body" in files[f"{name}/SKILL.md"]
         assert files[f"{name}/nested/file.txt"] == b"nested body"
@@ -238,7 +238,7 @@ class TestCustomSkillFileset:
     def test_skill_dir_resolves_in_sent_files_not_in_stored_bundle(
         self,
         db_session: Session,
-        test_user: User,
+        standard_user: User,
         seeded_skill: Callable[..., Skill],
     ) -> None:
         name = f"skill-dir-{uuid4().hex[:8]}"
@@ -254,13 +254,13 @@ class TestCustomSkillFileset:
             },
         )
         set_skill_enabled_for_user(
-            skill_id=skill.id, enabled=True, user=test_user, db_session=db_session
+            skill_id=skill.id, enabled=True, user=standard_user, db_session=db_session
         )
         db_session.commit()
         assert skill.current_version is not None
         stored_sha256 = skill.current_version.bundle_sha256
 
-        files = build_skills_fileset_for_user(test_user, db_session)
+        files = build_skills_fileset_for_user(standard_user, db_session)
 
         sent = files[f"{name}/SKILL.md"].decode("utf-8")
         assert f"Run python /workspace/managed/skills/{name}/scripts/x.py" in sent
