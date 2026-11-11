@@ -252,6 +252,13 @@ A VM has no network card. Its egress goes guest → vsock port 3128 → the agen
   TTL is 1 h) and retries every 10 s after a failure. The body is `node_id`, `key_id`, `public_key` and,
   with an advertise address, `agent_address`. The api_server keeps the address as long as the key. A
   registration without `agent_address` clears the address the node registered before.
+- When the agent stops (SIGTERM) on a node with a drain taint (`--watch-node-drain`; it reads the node
+  once more first), it ends the node's registration with `POST <--api-server-url>/microvm/node/deregister`
+  (body `node_id`, a token like the state report's with `aud` `onyx-api-server-node-deregister`), so
+  placement and the node list drop the node at once. The api_server ends it only while that key is the
+  node's newest, so a later agent on the node keeps its registration; a repeat is a no-op. The keys
+  expire on their own. Without a drain taint, or if the call fails (5 s limit), the registration expires
+  after its TTL (1 h).
 - `CloseConnections(sandbox_id, attempt, generation)` closes every relay connection of the VM (T5 in
   `results/prebuild.md`); new connections still work. Stop and VM exit also close them. After an agent
   restart, the agent attaches the relay to each adopted VM again.
@@ -293,7 +300,8 @@ Placement does not depend on reports: it asks the agent with `List`.
   more Health), is stopped after the grace period.
 - The api_server records the time of each accepted report. A node counts as dead when its registration
   expired, or when it reported before but not within `SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS` (default
-  60 s, three intervals; `0` turns this off). Wake then starts the next attempt on a live node.
+  180 s, nine intervals and more than the 2 min report backoff; `0` turns this off). Wake then starts the
+  next attempt on a live node.
 
 ### Sandbox state model
 
@@ -371,6 +379,7 @@ Postgres cache backend. The chart's bundled Redis uses `allkeys-lru`.
   | `craft_fc_host_agent_template_builds_total` | counter | `result`: built, existing, failed |
   | `craft_fc_host_agent_template_build_duration_seconds` | histogram | `result` |
   | `craft_fc_host_agent_template_ready` | gauge | |
+  | `craft_fc_host_agent_image_gc_removed_total` | counter | `kind`: managed, template |
 
   `vm_memory_private_bytes` is the sum of `Anonymous` in `/proc/<pid>/smaps_rollup` of the Firecracker
   processes: the guest pages that each VM wrote (copy-on-write) plus the VMM's own heap. Guest pages
@@ -410,7 +419,8 @@ Postgres cache backend. The chart's bundled Redis uses `allkeys-lru`.
 - **Audit.** One `rpc` line (`kind=audit`) on stderr for every HostAgent call and every daemon
   pass-through call: `method`, `passthrough`, `caller` (the URI and DNS SANs of the verified client
   certificate, or `unix` for the root-only socket), `sandbox_id`, `tenant_id` (from the request or the VM
-  table), `attempt` and `generation` when the request has them, `result` (gRPC code), `reason`
+  table; for `UploadCapture` and `DiscardCapture` from the VM of the spooled capture), `attempt` and
+  `generation` when the request or the capture has them, `result` (gRPC code), `reason`
   (ErrorReason) and `ms`. A gRPC interceptor writes it. It never reads request or response bodies past
   the IDs, and never logs metadata, so `sandboxd_key` and `x-sandboxd-key` never reach the log.
 
@@ -480,6 +490,14 @@ At start-up (after recovery, while the API serves) and on `BuildTemplate`, the a
 
 One build runs at a time; a `BuildTemplate` call during a build waits for it. A template that fails its
 check is built again, unless a VM uses it.
+
+Image GC: every `--image-gc-interval` (default 15 min, `0` turns it off) the agent also removes each
+template that is not the current one (the last build from `--rootfs-dir`) and that no VM used for
+`--image-gc-grace` (default 6 h). It does the same for managed images (see Managed drive). The grace
+counts from the last pass that saw the image in use, or from the first pass after the agent started.
+A pinned template or image, or one that a VM took since, stays. Each removal is logged
+(`image GC removed unused images`) and counted in `image_gc_removed_total`. Without `--rootfs-dir`
+templates are not swept.
 
 Flags: `--rootfs-dir`, `--egress-ca` or `--egress-ca-configmap`, `--template-vcpus` (2), `--template-mem-mib` (4096),
 `--template-scratch-gib` (1), `--template-keep` (2), `--template-build-timeout` (5 min). The guest kernel
@@ -610,7 +628,9 @@ per build.
 
 GC (after each upload and swap) keeps the `--managed-keep` (default 3) newest images, every image that
 a VM has behind a slot, and the image of a swap that runs. It does not touch an image while its upload
-runs. Each VM chroot has its own reflink copy, so GC never changes a running VM.
+runs. Each VM chroot has its own reflink copy, so GC never changes a running VM. The image GC (see
+Templates) also removes an image that no VM has had behind a slot for `--image-gc-grace`, also one of
+the newest; a later `SwapManaged` of it gets `MANAGED_IMAGE_MISSING` and the caller uploads it again.
 
 **Swap.** `SwapManaged` takes an image ID and the target VMs, each with its attempt, generation and
 `sandboxd_key` (the agent does not keep the key, so the caller sends it). It swaps one VM at a time, in

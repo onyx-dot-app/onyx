@@ -68,12 +68,19 @@ func main() {
 	flag.Int64Var(&fc.Limits.ExpandedBytes, "capture-max-expanded-bytes", files.DefaultLimits.ExpandedBytes, "largest total file size of a session archive")
 	flag.Int64Var(&fc.Limits.Entries, "capture-max-entries", files.DefaultLimits.Entries, "most files and directories in a session archive")
 	zlevel := flag.String("capture-zstd-level", "fastest", "zstd level of CaptureSession: fastest, default, better or best")
+	fileOwner := flag.String("file-owner", files.DefaultOwner, "uid:gid that gets the files and directories that WriteFile, UploadFile and RestoreSession make in the sessions root (the image's sandbox user); empty: they stay root's")
 	flag.Parse()
 	var ok bool
 	if ok, fc.ZstdLevel = zstd.EncoderLevelFromString(*zlevel); !ok {
 		fmt.Fprintf(os.Stderr, "bad --capture-zstd-level %q\n", *zlevel)
 		os.Exit(2)
 	}
+	owner, err := files.ParseOwner(*fileOwner)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "bad --file-owner: %v\n", err)
+		os.Exit(2)
+	}
+	fc.Owner = owner
 	fc.ReadLinkRoots = splitList(*readLinks)
 	fc.CaptureRoots = splitList(*captureDirs)
 	fc.CaptureExclude = splitList(*captureExclude)

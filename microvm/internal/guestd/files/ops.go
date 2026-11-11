@@ -169,7 +169,7 @@ func (s *Store) checkData(size int64, sum string) (string, error) {
 
 // spool writes exactly size bytes of r to a new temporary file in dir and
 // checks the SHA-256. It returns the temp name and the hex SHA-256.
-func spool(ctx context.Context, root *os.Root, dir string, size int64, want string, mode fs.FileMode, r io.Reader) (string, string, error) {
+func (s *Store) spool(ctx context.Context, root *os.Root, dir string, size int64, want string, mode fs.FileMode, r io.Reader) (string, string, error) {
 	tmp := path.Join(dir, randName(writePrefix))
 	f, err := root.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
@@ -195,6 +195,9 @@ func spool(ctx context.Context, root *os.Root, dir string, size int64, want stri
 		return "", "", fmt.Errorf("%w: sha256 of the data is %s, the header says %s", ErrInvalid, got, want)
 	}
 	if err := f.Chmod(mode); err != nil {
+		return "", "", err
+	}
+	if err := s.own(root, tmp); err != nil {
 		return "", "", err
 	}
 	if err := f.Close(); err != nil {
@@ -240,7 +243,7 @@ func (s *Store) Write(ctx context.Context, sessionID string, spec WriteSpec, r i
 	}
 	defer func() { _ = root.Close() }()
 	dir := parentOf(rel)
-	if err := ensureDir(root, dir, spec.MakeParents); err != nil {
+	if err := s.ensureDir(root, dir, spec.MakeParents); err != nil {
 		return Info{}, "", err
 	}
 	if fi, err := root.Lstat(rel); err == nil {
@@ -251,7 +254,7 @@ func (s *Store) Write(ctx context.Context, sessionID string, spec WriteSpec, r i
 			return Info{}, "", fmt.Errorf("%w: %s is a directory", ErrInvalid, rel)
 		}
 	}
-	tmp, sum, err := spool(ctx, root, dir, spec.Size, want, mode, r)
+	tmp, sum, err := s.spool(ctx, root, dir, spec.Size, want, mode, r)
 	if err != nil {
 		return Info{}, "", err
 	}
@@ -279,12 +282,12 @@ func linkNoReplace(root *os.Root, tmp, name string) error {
 	return root.Remove(tmp)
 }
 
-func ensureDir(root *os.Root, dir string, create bool) error {
+func (s *Store) ensureDir(root *os.Root, dir string, create bool) error {
 	if dir == "." {
 		return nil
 	}
 	if create {
-		return fsErr(root.MkdirAll(dir, 0o755))
+		return s.mkdirAll(root, dir)
 	}
 	fi, err := root.Stat(dir)
 	if err != nil {
@@ -340,10 +343,10 @@ func (s *Store) Upload(ctx context.Context, sessionID string, spec UploadSpec, r
 		return Info{}, "", err
 	}
 	defer func() { _ = root.Close() }()
-	if err := ensureDir(root, dir, true); err != nil {
+	if err := s.ensureDir(root, dir, true); err != nil {
 		return Info{}, "", err
 	}
-	tmp, sum, err := spool(ctx, root, dir, spec.Size, want, 0o644, r)
+	tmp, sum, err := s.spool(ctx, root, dir, spec.Size, want, 0o644, r)
 	if err != nil {
 		return Info{}, "", err
 	}

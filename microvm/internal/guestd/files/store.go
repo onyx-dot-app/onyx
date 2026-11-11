@@ -14,6 +14,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -95,11 +96,38 @@ type Config struct {
 	// ZstdLevel of a capture. 0 means zstd.SpeedFastest (about zstd -1): on
 	// 2 vCPUs it is ~9x faster than SpeedDefault and only a few percent larger.
 	ZstdLevel zstd.EncoderLevel
+	// Owner gets the files and directories that Write, Upload and Restore
+	// make, and the session directories. Nil: they keep the daemon's user.
+	Owner *Owner
+}
+
+// Owner is a numeric user and group.
+type Owner struct {
+	UID, GID int
+}
+
+// DefaultOwner is the sandbox user of the Craft runtime image.
+const DefaultOwner = "1000:1000"
+
+// ParseOwner reads "uid:gid". Empty means no owner change (nil).
+func ParseOwner(s string) (*Owner, error) {
+	if s == "" {
+		return nil, nil
+	}
+	u, g, ok := strings.Cut(s, ":")
+	uid, uerr := strconv.ParseUint(u, 10, 31)
+	gid, gerr := strconv.ParseUint(g, 10, 31)
+	if !ok || uerr != nil || gerr != nil {
+		return nil, fmt.Errorf("owner %q is not uid:gid", s)
+	}
+	return &Owner{UID: int(uid), GID: int(gid)}, nil
 }
 
 // Store runs the file calls.
 type Store struct {
 	cfg Config
+	// chown is (*os.Root).Lchown; tests replace it.
+	chown func(root *os.Root, name string, uid, gid int) error
 
 	mu    sync.Mutex
 	locks map[string]chan struct{}
@@ -155,7 +183,51 @@ func New(cfg Config) (*Store, error) {
 		cfg.Limits.StoredBytes < 0 || cfg.Limits.ExpandedBytes < 0 || cfg.Limits.Entries < 0 {
 		return nil, errors.New("limits must not be negative")
 	}
-	return &Store{cfg: cfg, locks: map[string]chan struct{}{}}, nil
+	if o := cfg.Owner; o != nil && (o.UID < 0 || o.GID < 0) {
+		return nil, errors.New("owner uid and gid must not be negative")
+	}
+	return &Store{cfg: cfg, chown: (*os.Root).Lchown, locks: map[string]chan struct{}{}}, nil
+}
+
+// own gives name in root to the configured owner.
+func (s *Store) own(root *os.Root, name string) error {
+	if s.cfg.Owner == nil {
+		return nil
+	}
+	if err := s.chown(root, name, s.cfg.Owner.UID, s.cfg.Owner.GID); err != nil {
+		return fmt.Errorf("set the owner of %s: %w", name, err)
+	}
+	return nil
+}
+
+// mkdirAll makes dir and its missing parents in root (mode 0755), each owned
+// by the configured owner. Directories that exist keep their owner.
+func (s *Store) mkdirAll(root *os.Root, dir string) error {
+	if dir == "." {
+		return nil
+	}
+	parts := strings.Split(dir, "/")
+	for i := range parts {
+		p := strings.Join(parts[:i+1], "/")
+		err := root.Mkdir(p, 0o755)
+		if err == nil {
+			if err := s.own(root, p); err != nil {
+				return err
+			}
+			continue
+		}
+		if !errors.Is(err, fs.ErrExist) {
+			return fsErr(err)
+		}
+		fi, err := root.Stat(p)
+		if err != nil {
+			return fsErr(err)
+		}
+		if !fi.IsDir() {
+			return fmt.Errorf("%w: %s is not a directory", ErrInvalid, p)
+		}
+	}
+	return nil
 }
 
 // Config returns the effective configuration.
@@ -250,9 +322,13 @@ func (s *Store) openSession(id string, create bool) (*os.Root, error) {
 	if err := ValidSessionID(id); err != nil {
 		return nil, err
 	}
+	madeRoot := false
 	if create {
-		if err := os.MkdirAll(s.cfg.SessionsRoot, 0o755); err != nil {
-			return nil, err
+		if _, err := os.Lstat(s.cfg.SessionsRoot); errors.Is(err, fs.ErrNotExist) {
+			if err := os.MkdirAll(s.cfg.SessionsRoot, 0o755); err != nil {
+				return nil, err
+			}
+			madeRoot = true
 		}
 	}
 	base, err := os.OpenRoot(s.cfg.SessionsRoot)
@@ -260,10 +336,22 @@ func (s *Store) openSession(id string, create bool) (*os.Root, error) {
 		return nil, fsErr(err)
 	}
 	defer func() { _ = base.Close() }()
+	// Only the sessions root itself: parents it needed keep root's owner.
+	if madeRoot {
+		if err := s.own(base, "."); err != nil {
+			return nil, err
+		}
+	}
 	fi, err := base.Lstat(id)
 	if errors.Is(err, fs.ErrNotExist) && create {
-		if err := base.Mkdir(id, 0o755); err != nil && !errors.Is(err, fs.ErrExist) {
-			return nil, err
+		mkErr := base.Mkdir(id, 0o755)
+		if mkErr == nil {
+			mkErr = s.own(base, id)
+		} else if errors.Is(mkErr, fs.ErrExist) {
+			mkErr = nil
+		}
+		if mkErr != nil {
+			return nil, mkErr
 		}
 		fi, err = base.Lstat(id)
 	}

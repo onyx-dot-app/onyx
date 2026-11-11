@@ -4,7 +4,8 @@ No schema change. State model: microvm/README.md, "Sandbox state model".
 - Signing keys (shared cache, TTL): the host agent re-registers well inside
   `NODE_SIGNING_KEY_TTL_SECONDS`, so a dead node's keys expire on their own.
 - Agent addresses (shared cache, same TTL): the registration carries the
-  agent's mTLS listener. A node without a live address counts as dead.
+  agent's mTLS listener. A node without a live address counts as dead. An
+  agent that stops on a draining node deletes its address at once.
 - Last report time (shared cache, NO TTL): set on each accepted node state
   report, and deleted when the node's registration ends or starts again. Placement counts a node as dead when its last report is older than
   `SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS`.
@@ -374,6 +375,26 @@ def clear_node_agent_address(shared_cache: CacheBackend, *, node_id: str) -> Non
         shared_cache.delete(_NODE_ADDRESS_PREFIX + node_id)
         shared_cache.delete(_NODE_LAST_REPORT_PREFIX + node_id)
         shared_cache.set_remove(_NODES_KEY, node_id)
+
+
+def deregister_node(shared_cache: CacheBackend, *, node_id: str, key_id: str) -> bool:
+    """End the node's registration now, for an agent that leaves a draining node.
+
+    Only while `key_id` is the node's newest key: a later agent on the same
+    node keeps its registration. The keys expire on their own. Returns False
+    when nothing changed.
+    """
+    with _node_lock(shared_cache, node_id):
+        kids_raw = shared_cache.get(_NODE_KIDS_PREFIX + node_id)
+        kids: list[str] = json.loads(kids_raw) if kids_raw else []
+        if not kids or kids[-1] != key_id:
+            return False
+        if not shared_cache.exists(_NODE_ADDRESS_PREFIX + node_id):
+            return False
+        shared_cache.delete(_NODE_ADDRESS_PREFIX + node_id)
+        shared_cache.delete(_NODE_LAST_REPORT_PREFIX + node_id)
+        shared_cache.set_remove(_NODES_KEY, node_id)
+        return True
 
 
 def get_registered_node(
