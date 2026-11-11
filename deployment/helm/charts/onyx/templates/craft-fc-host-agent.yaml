@@ -17,11 +17,16 @@ Agent flags and node requirements: microvm/README.md.
   passes these paths to the jailer, which runs in the host mount namespace.
 - mTLS: craft.hostAgent.tls.existingSecret (in the agent namespace) has the
   server certificate (tls.crt, tls.key) and the api_server client CA (ca.crt).
-  The chart does not make certificates.
+  craft.hostAgent.client.existingSecret (in the release namespace) has the
+  client certificate and the agent CA for the pods that call the agents
+  (onyx.craftFcAgentClient.*). The chart does not make certificates.
+- The agent registers $(POD_IP):listenPort with its signing key, so the
+  api_server finds the agent of each node.
 - SANDBOX_NODE_REGISTRATION_SECRET: the api_server reads it from
   auth.sandboxNodeRegistration. Secrets are namespaced, so the agent reads a
   copy in its own namespace.
-- Only api_server pods reach the agent listener (NetworkPolicy below). Agent
+- Only the agent clients (api_server, heavy and scheduled-tasks workers) reach
+  the agent listener (NetworkPolicy below). Agent
   pods may reach the sandbox-proxy port (sandbox-proxy/networkpolicy.yaml).
 - Drain (craft.hostAgent.drainWatch): the agent reads its own Node with a
   ServiceAccount that may only "get" nodes, and refuses new VMs while the
@@ -54,6 +59,7 @@ Agent flags and node requirements: microvm/README.md.
 {{- if not $tls.existingSecret }}
 {{- fail "craft.hostAgent.tls.existingSecret is required with craft.sandboxRuntime=firecracker" }}
 {{- end }}
+{{- $_ := include "onyx.craftFcAgentClient.secretName" . }}
 {{- $reg := (.Values.auth | default dict).sandboxNodeRegistration | default dict }}
 {{- if ne (toString $reg.enabled) "true" }}
 {{- fail "auth.sandboxNodeRegistration.enabled must be true with craft.sandboxRuntime=firecracker" }}
@@ -233,8 +239,16 @@ spec:
             - --tls-cert=/etc/craft-fc/tls/tls.crt
             - --tls-key=/etc/craft-fc/tls/tls.key
             - --client-ca=/etc/craft-fc/tls/ca.crt
-            - --dial-ports={{ $agent.dialPorts | default "52,3010" }}
+            - --dial-ports={{ $agent.dialPorts | default "3010" }}
             - --relay-max-conns={{ $agent.relayMaxConns | default 256 | int64 }}
+            - --dial-max-streams={{ $agent.dialMaxStreams | default 64 | int64 }}
+            {{- with $agent.clientAllowedSans }}
+            - --client-allowed-sans={{ . }}
+            {{- end }}
+            {{- /* Unset: the agent joins $POD_IP and the --listen port (brackets IPv6). */}}
+            {{- with $agent.advertiseAddress }}
+            - {{ printf "--advertise-address=%s" . | quote }}
+            {{- end }}
             - --egress-proxy={{ include "onyx.sandboxProxyHost" . }}:{{ include "onyx.sandboxProxyPort" . }}
             - --api-server-url={{ $agent.apiServerUrl | default (include "onyx.sandboxApiUrl" .) }}
             {{- if $watchDrain }}
@@ -258,6 +272,10 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
             - name: SANDBOX_NODE_REGISTRATION_SECRET
               valueFrom:
                 secretKeyRef:
@@ -346,7 +364,7 @@ spec:
       protocol: TCP
     {{- end }}
 ---
-{{- /* Only api_server pods reach the agent listener. Egress is not limited:
+{{- /* Only the agent clients reach the agent listener. Egress is not limited:
 the agent calls the api_server, sandbox-proxy and DNS. */}}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -364,12 +382,17 @@ spec:
   policyTypes: [Ingress]
   ingress:
     - from:
+        {{- range list
+              (.Values.api.deploymentLabels | default (dict "app" "api-server"))
+              (.Values.celery_worker_heavy.deploymentLabels | default (dict "app" "celery-worker-heavy"))
+              (.Values.celery_worker_scheduled_tasks.deploymentLabels | default (dict "app" "celery-worker-scheduled-tasks")) }}
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+              kubernetes.io/metadata.name: {{ $.Release.Namespace }}
           podSelector:
             matchLabels:
-              {{- (.Values.api.deploymentLabels | default (dict "app" "api-server")) | toYaml | nindent 14 }}
+              {{- . | toYaml | nindent 14 }}
+        {{- end }}
       ports:
         - protocol: TCP
           port: {{ $port }}

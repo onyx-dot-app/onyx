@@ -100,3 +100,48 @@ func TestCheckListen(t *testing.T) {
 		}
 	}
 }
+
+func TestAdvertiseAddress(t *testing.T) {
+	for name, c := range map[string]struct {
+		f     flags
+		podIP string
+		want  string
+	}{
+		"no listener":        {flags{}, "10.0.3.7", ""},
+		"pod IP":             {flags{listen: ":7443"}, "10.0.3.7", "10.0.3.7:7443"},
+		"pod IPv6":           {flags{listen: ":7443"}, "fd00::7", "[fd00::7]:7443"},
+		"explicit wins":      {flags{listen: ":7443", advertise: "agent.local:9000"}, "10.0.3.7", "agent.local:9000"},
+		"explicit IPv6":      {flags{listen: ":7443", advertise: "[fd00::7]:7443"}, "", "[fd00::7]:7443"},
+		"specific listen":    {flags{listen: "10.0.0.5:7443"}, "", "10.0.0.5:7443"},
+		"wildcard, no IP":    {flags{listen: ":7443"}, "", ""},
+		"unspecified, no IP": {flags{listen: "0.0.0.0:7443"}, "", ""},
+	} {
+		got, err := advertiseAddress(c.f, c.podIP)
+		if err != nil || got != c.want {
+			t.Errorf("%s: got %q, %v; want %q", name, got, err, c.want)
+		}
+	}
+	for name, c := range map[string]struct {
+		f     flags
+		podIP string
+	}{
+		"advertise without listen": {flags{advertise: "10.0.3.7:7443"}, ""},
+		"no port":                  {flags{listen: ":7443", advertise: "10.0.3.7"}, ""},
+		"no host":                  {flags{listen: ":7443", advertise: ":7443"}, ""},
+		"bad port":                 {flags{listen: ":7443", advertise: "a:99999"}, ""},
+		"leading-zero port":        {flags{listen: ":7443", advertise: "a:0000080"}, ""},
+		"unbracketed IPv6":         {flags{listen: ":7443", advertise: "fd00::7:7443"}, ""},
+		"host the API rejects":     {flags{listen: ":7443", advertise: "agent_0.local:7443"}, ""},
+		"IPv6 zone":                {flags{listen: ":7443", advertise: "[fe80::1%eth0]:7443"}, ""},
+		"bad pod IP":               {flags{listen: ":7443"}, "not-an-ip"},
+		"leading-zero listen port": {flags{listen: ":00007443"}, "10.0.3.7"},
+		"leading-zero listen host": {flags{listen: "10.0.0.5:07443"}, ""},
+		"listen port 0":            {flags{listen: ":0"}, "10.0.3.7"},
+		"named listen port":        {flags{listen: ":https"}, "10.0.3.7"},
+		"wildcard bad port":        {flags{listen: ":00007443"}, ""},
+	} {
+		if got, err := advertiseAddress(c.f, c.podIP); err == nil {
+			t.Errorf("%s: got %q, want an error", name, got)
+		}
+	}
+}
