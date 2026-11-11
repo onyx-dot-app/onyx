@@ -311,8 +311,11 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         return f"{prefix}-{next(self._ids)}"
 
     def _drop_guest_state(self, sandbox_id: str) -> None:
-        """A new or stopped VM has none of the old guest's executions or files."""
-        self.executions.pop(sandbox_id, None)
+        """A new or stopped VM has none of the old guest's executions or files.
+        Call with the lock held."""
+        for execution in self.executions.pop(sandbox_id, {}).values():
+            execution.vm_gone = True
+        self.ended.notify_all()
         self.managed_active.pop(sandbox_id, None)
         for key in [k for k in self.files if k[0] == sandbox_id]:
             del self.files[key]
@@ -469,6 +472,10 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         context: grpc.ServicerContext,
     ) -> hostagent_pb2.PutManagedImageResponse:
         first = next(request_iterator)
+        if first.WhichOneof("part") != "header":
+            abort_with_reason(
+                context, HostAgentErrorReason.INVALID_ARGUMENT, "header first"
+            )
         header = first.header
         data = b"".join(r.data for r in request_iterator)
         try:
@@ -559,6 +566,8 @@ class FakeExecution:
     stdout_kept_from: int = 0
     stderr_kept_from: int = 0
     stdin_data: bytearray = field(default_factory=bytearray)
+    # The VM stopped: open streams of the execution break.
+    vm_gone: bool = False
 
     def end(self, completion: sandboxd_pb2.Completion, exit_code: int = -1) -> None:
         self.stdin_open = False
@@ -784,8 +793,16 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
         """Like the daemon: the stream stays open until the result. A client
         that goes away ends the stream, not the command."""
         with self.agent.lock:
-            while execution.result is None and context.is_active():
+            while (
+                execution.result is None
+                and not execution.vm_gone
+                and context.is_active()
+            ):
                 self.agent.ended.wait(timeout=0.05)
+            if execution.vm_gone:
+                abort_with_reason(
+                    context, HostAgentErrorReason.VM_NOT_RUNNING, "VM stopped"
+                )
             if execution.result is None:
                 return
             events = self._events(execution, stdout_offset, stderr_offset)
@@ -933,7 +950,12 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
         request_iterator: Iterator[sandboxd_pb2.WriteFileRequest],
         context: grpc.ServicerContext,
     ) -> sandboxd_pb2.WriteFileResponse:
-        header = next(request_iterator).header
+        first = next(request_iterator)
+        if first.WhichOneof("part") != "header":
+            abort_daemon(
+                context, SandboxDaemonErrorReason.INVALID_ARGUMENT, "header first"
+            )
+        header = first.header
         data = b"".join(r.data for r in request_iterator)
         with self.agent.lock:
             sandbox_id = self._ready(context)
@@ -953,7 +975,12 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
         request_iterator: Iterator[sandboxd_pb2.UploadFileRequest],
         context: grpc.ServicerContext,
     ) -> sandboxd_pb2.UploadFileResponse:
-        header = next(request_iterator).header
+        first = next(request_iterator)
+        if first.WhichOneof("part") != "header":
+            abort_daemon(
+                context, SandboxDaemonErrorReason.INVALID_ARGUMENT, "header first"
+            )
+        header = first.header
         data = b"".join(r.data for r in request_iterator)
         with self.agent.lock:
             sandbox_id = self._ready(context)
@@ -1040,6 +1067,8 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
             files = self._session_files(sandbox_id, request.session_id)
             limit = self.agent.zip_max_input_bytes
         prefix = f"{base}/" if base else ""
+        if base and not any(p.startswith(prefix) for p in files):
+            abort_daemon(context, SandboxDaemonErrorReason.FILE_NOT_FOUND, base)
         exclude = set(request.exclude_names)
         members = {
             p[len(prefix) :]: d
@@ -1047,8 +1076,6 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
             if p.startswith(prefix)
             and not _skipped(p[len(prefix) :], exclude, skip_hidden=request.skip_hidden)
         }
-        if base and not members:
-            abort_daemon(context, SandboxDaemonErrorReason.FILE_NOT_FOUND, base)
         archive = _zip(members)
         half = len(archive) // 2
         yield sandboxd_pb2.ZipFilesResponse(data=archive[:half])

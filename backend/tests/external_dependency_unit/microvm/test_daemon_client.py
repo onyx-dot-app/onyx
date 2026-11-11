@@ -12,6 +12,7 @@ import pytest
 from onyx.microvm.agent_client import (
     HostAgentClient,
     HostAgentErrorReason,
+    VmNotRunningError,
     new_sandboxd_key,
 )
 from onyx.microvm.daemon_client import (
@@ -123,6 +124,17 @@ def test_closing_a_run_keeps_the_command_running(guest: Guest) -> None:
     assert record.execution_id == started.execution_id
     assert record.state is ExecState.RUNNING
     del unread  # an unread run never starts its command
+
+
+def test_a_stopped_vm_breaks_an_open_run(guest: Guest) -> None:
+    events = guest.daemon.run(ExecCommand(argv=["sleep", "60"]))
+    assert isinstance(next(events), ExecStarted)
+    vm = guest.agent.vms[SANDBOX_ID]
+
+    guest.host.stop(sandbox_id=SANDBOX_ID, attempt=vm.attempt, generation=vm.generation)
+
+    with pytest.raises(VmNotRunningError):
+        next(events)
 
 
 def test_run_of_a_missing_program_raises_start_failed(guest: Guest) -> None:
@@ -369,6 +381,21 @@ def test_zip_files_streams_a_zip_and_returns_the_summary(guest: Guest) -> None:
         3,
         len(data),
     )
+
+
+def test_zip_of_a_directory_with_only_excluded_files_is_empty(guest: Guest) -> None:
+    guest.daemon.write_file(session_id=SESSION, path="outputs/.git/x", data=b"g")
+
+    data, summary = _drain_zip(
+        guest.daemon.zip_files(session_id=SESSION, path="outputs", skip_hidden=True)
+    )
+
+    with zipfile.ZipFile(io.BytesIO(data)) as zf:
+        assert zf.namelist() == []
+    assert summary.files == 0
+    with pytest.raises(SandboxDaemonError) as exc:
+        _drain_zip(guest.daemon.zip_files(session_id=SESSION, path="missing"))
+    assert exc.value.reason is SandboxDaemonErrorReason.FILE_NOT_FOUND
 
 
 def test_zip_files_over_a_limit_raises_limit_exceeded(guest: Guest) -> None:
