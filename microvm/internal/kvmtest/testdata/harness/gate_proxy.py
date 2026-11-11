@@ -14,6 +14,7 @@ REDIS_HOST, MULTI_TENANT=false), HARNESS_PROXY_PORT, HARNESS_CONFDIR.
 import asyncio
 import logging
 import os
+from collections.abc import Callable
 from uuid import UUID
 
 from mitmproxy import http
@@ -36,20 +37,24 @@ from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox
 from onyx.sandbox_proxy.sandbox_identity.resolution import SandboxIdentityResolver
 from onyx.sandbox_proxy.sandbox_identity.signed import (
     SandboxClaims,
+    SandboxPlacementLookup,
     SignedIdentityVerifier,
 )
 from onyx.sandbox_proxy.sandbox_identity.signed_lookups import (
     CachedNodeSigningKeyLookup,
     CacheReplayGuard,
-    CacheSandboxPlacementLookup,
 )
 
 OWNER = UUID("7c9e6679-7425-40de-944b-e07fc1f90ae7")
 log = logging.getLogger("harness")
 
 
-class PlacementNoDB(CacheSandboxPlacementLookup):
-    """The real placement record check; a fixed owner instead of Postgres."""
+class PlacementNoDB(SandboxPlacementLookup):
+    """The placement record check of CacheSandboxPlacementLookup; a fixed
+    owner instead of Postgres."""
+
+    def __init__(self, cache_factory: Callable[[str], CacheBackend]) -> None:
+        self._cache_factory = cache_factory
 
     def owner_if_placed(self, claims: SandboxClaims) -> UUID | None:
         p = get_sandbox_placement(
