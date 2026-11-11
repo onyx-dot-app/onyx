@@ -57,7 +57,6 @@ export BUILDX_BUILDER=default
 work="$(mktemp -d /var/tmp/craft-fc-kvm.XXXXXX)"
 # A short path: the jail's API socket path must fit in sun_path (108 bytes).
 xfs=/mnt/fckvm
-data="${xfs}/craft-fc"
 if mountpoint -q "${xfs}"; then
   echo "${xfs} is already mounted" >&2
   exit 1
@@ -70,7 +69,7 @@ cleanup_vms() {
   systemctl stop 'fcvm-*.scope' >/dev/null 2>&1 || true
   # Jailed Firecracker processes have their root in the data dir.
   for proc in /proc/[0-9]*; do
-    case "$(readlink "${proc}/root" 2>/dev/null)" in "${data}"/*) kill -KILL "${proc#/proc/}" 2>/dev/null || true ;; esac
+    case "$(readlink "${proc}/root" 2>/dev/null)" in "${xfs}"/*) kill -KILL "${proc#/proc/}" 2>/dev/null || true ;; esac
   done
 }
 cleanup() {
@@ -80,7 +79,7 @@ cleanup() {
     while IFS= read -r log; do
       echo "== ${log}" >&2
       tail -60 "${log}" >&2
-    done < <(find "${work}/logs" "${data}/jail" -name '*.log' 2>/dev/null | head -20 || true)
+    done < <(find "${work}/logs" "${xfs}" -name '*.log' 2>/dev/null | head -20 || true)
   fi
   if [ "${KVM_KEEP_WORK:-}" != 1 ]; then
     umount "${xfs}" 2>/dev/null || true
@@ -100,7 +99,6 @@ step "XFS data dir"
 truncate -s 100G "${work}/xfs.img"
 mkfs.xfs -q -f -m reflink=1 "${work}/xfs.img"
 mount -o loop "${work}/xfs.img" "${xfs}"
-mkdir -p "${data}"
 
 step "Go binaries"
 (
@@ -148,7 +146,7 @@ cp "${artifacts}/vmlinux" "${img}/vmlinux"
 truncate -s 1G "${img}/scratch-empty.ext4"
 mkfs.ext4 -q -F -L scratch "${img}/scratch-empty.ext4"
 
-export KVM_DATA_DIR="${data}" KVM_ARTIFACTS_DIR="${artifacts}" KVM_IMG_DIR="${img}" KVM_VMS="${vms}" \
+export KVM_ARTIFACTS_DIR="${artifacts}" KVM_IMG_DIR="${img}" KVM_VMS="${vms}" \
   KVM_LOG_DIR="${work}/logs" KVM_AGENT_BIN="${work}/bin/host-agent" KVM_AGENT_IMAGE=craft-fc-kvm-agent:local \
   KVM_PR_BACKEND="${repo}/backend" KVM_HARNESS_DIR="${testdata}/harness"
 
@@ -213,12 +211,16 @@ for test in ${tests}; do
     TestMemAdmissionKVM | TestMemOOMKVM) extra=("KVM_TB_ROOTFS=${work}/rootfs-reclaim" "KVM_CERT_DIR=${work}/certs-ma") ;;
   esac
   step "${test}"
+  # Each test gets an empty data dir: no journal or templates of another test.
+  data="${xfs}/${test}"
+  mkdir -p "${data}"
   t0=$(date +%s)
   rc=0
-  env "${extra[@]}" "${work}/bin/hostagent-kvm.test" -test.v -test.timeout=45m -test.run "^${test}\$" || rc=$?
+  env "KVM_DATA_DIR=${data}" "${extra[@]}" "${work}/bin/hostagent-kvm.test" -test.v -test.timeout=45m -test.run "^${test}\$" || rc=$?
   echo "RESULT ${test} rc=${rc} seconds=$(($(date +%s) - t0))"
   [ "${rc}" -eq 0 ] || failed="${failed} ${test}"
   cleanup_vms
+  rm -rf --one-file-system "${data}"
 done
 if [ -n "${failed}" ]; then
   echo "FAILED:${failed}" >&2

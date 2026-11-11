@@ -159,6 +159,9 @@ func TestRestartKVM(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := store.Verify(tpl); err != nil {
+		t.Fatal(err)
+	}
 	l := &fcvm.Launcher{Cmd: cmd, Log: slog.Default()}
 	orphan, err := l.Launch(ctx, agent.LaunchSpec{ID: orphanID, UID: 999990, Template: tpl, ScratchBytes: int64(tplScratchGiB) * scratch.GiB})
 	if err != nil {

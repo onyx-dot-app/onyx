@@ -89,6 +89,9 @@ func startPTAgent(t *testing.T, e env, name, cgroupns, certDir string, certs *te
 		"-e", "SANDBOX_NODE_REGISTRATION_SECRET=" + ptSecret,
 		"-v", e.DataDir + ":" + e.DataDir,
 		"-v", certDir + ":" + certDir + ":ro"}
+	// The proxy CA, which the daemon installs at Init.
+	confdir := getenv("KVM_PROXY_CONFDIR", "/opt/proxy/confdir")
+	args = append(args, "-v", confdir+":"+confdir+":ro")
 	if !chartMode() {
 		args = append(args, "-v", e.ArtifactsDir+":"+e.ArtifactsDir+":ro", "-v", filepath.Dir(bin)+":"+filepath.Dir(bin)+":ro")
 	}
@@ -108,7 +111,8 @@ func startPTAgent(t *testing.T, e env, name, cgroupns, certDir string, certs *te
 	}
 	args = append(args, "--data-dir", e.DataDir, "--artifacts-dir", artifacts,
 		"--listen", ptListen, "--tls-cert", certs.ServerCert, "--tls-key", certs.ServerKey, "--client-ca", certs.ClientCA,
-		"--node-id", ptNodeID, "--egress-proxy", ptProxy, "--api-server-url", ptRegURL)
+		"--node-id", ptNodeID, "--egress-proxy", ptProxy, "--api-server-url", ptRegURL,
+		"--egress-ca", filepath.Join(confdir, "mitmproxy-ca-cert.pem"))
 	if out, err := exec.Command("docker", args...).CombinedOutput(); err != nil {
 		t.Fatalf("docker run: %v: %s", err, out)
 	}
