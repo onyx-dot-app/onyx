@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.9.39
+version: 0.9.40
 appVersion: latest
 annotations:
   category: Productivity
@@ -20,12 +20,8 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: added
-      description: Craft Firecracker host agent Grafana dashboard
-        (monitoring.grafana.dashboards.enabled) and alert rules
-        (monitoring.prometheusRules.enabled, thresholds in
-        craft.hostAgent.alerts). Both need the agent metrics and are off by
-        default.
+    - kind: changed
+      description: Document the stored Skill ZIP allowance separately from upload limits.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it

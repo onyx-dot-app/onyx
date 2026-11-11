@@ -50,7 +50,9 @@
 
 When it fails:
 - A bundle with bad frontmatter, an unsafe path, a reserved name, or a
-  `.template` file is rejected with a message.
+  `.template` file is rejected with a message. A direct upload over a size or
+  file count limit is rejected with a 413 that names the limit. Batch uploads
+  list the Skill in `not_imported`, and a GitHub preview marks it unavailable.
 - Turning on a skill whose name another enabled skill uses returns a name
   conflict. The client can retry with `replace_conflict` to switch skills.
 - A required skill rejects a toggle.
@@ -177,6 +179,11 @@ The library preview of an external-app skill calls the same renderer
    after `skills/validation.py:validate_stored_custom_skill` passes for an
    unclassified row. `db/skill.py:persist_skill_validity` writes only to rows that are still unclassified
    and still point at the same bundle.
+   Writes check four limits in `skills/bundle.py:normalize_custom_bundle`.
+   Count all non-directory archive entries, including ignored files. Check
+   both the incoming and normalized ZIP sizes. Raw uploads use the per-file
+   read cap; ZIP uploads use the ZIP cap.
+   Stored-bundle reads follow `bundle-size-limits`.
 8. `templates-built-in-only` **Only built-ins use templates.**
    `skills/bundle.py:normalize_custom_bundle` and
    `skills/bundle.py:update_custom_bundle_files` reject `.template` files. If
@@ -252,6 +259,29 @@ The library preview of an external-app skill calls the same renderer
     `backend/tests/unit/onyx/skills/test_skill_dir.py` fails when the sandbox
     `OPENCODE_VERSION` pin changes, so the next pin bump checks that OpenCode
     still does this.
+17. `bundle-size-limits` **Upload limits never lower the stored-read
+    allowance.** `skills/bundle.py` reads its five `SKILL_BUNDLE_*` settings
+    with `configs/constants.py:positive_int_from_env`. A value that is not a
+    positive integer logs an error and sets `SKILL_BUNDLE_SETTINGS_ERROR`.
+    Then `assert_skill_bundle_settings_valid` refuses every upload, edit,
+    GitHub import and stored read with `SERVICE_UNAVAILABLE`, and the zero
+    limits fail closed. Batch uploads catch it per Skill and report
+    `not_imported`. `skills/validation.py:validate_stored_custom_skill` returns
+    `is_valid=None` for `SERVICE_UNAVAILABLE` and `PAYLOAD_TOO_LARGE`, so the
+    push skips the Skill without saving it invalid; it loads again when the
+    settings change. Stored-bundle reads
+    (`skills/validation.py:load_stored_custom_skill_bundle`) skip the upload
+    ZIP-size and file-count limits but keep the per-file and expanded-total
+    limits. Their allowance defaults to `stored_zip_allowance`: the larger of
+    100 MiB and the total limit, plus ZIP framing, so bundles saved before the
+    ZIP limit existed still load. Editor reads of the current bundle
+    (`skills/content.py:read_custom_skill_bundle_bytes`) use the same
+    allowance through `skills/validation.py:read_stored_bundle_bytes` and
+    return 413 above it. A full-replacement upload in the editor does not read
+    the current bundle. An explicit
+    `SKILL_BUNDLE_STORED_ZIP_MAX_BYTES` wins. The upload ZIP limit is capped at
+    the allowance. Only direct uploads return 413; batch uploads report
+    `not_imported` and GitHub previews mark the Skill unavailable.
 
 ---
 
