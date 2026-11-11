@@ -116,6 +116,11 @@ SANDBOX_FC_TEMPLATE = os.environ.get("SANDBOX_FC_TEMPLATE", "").strip()
 SANDBOX_FC_EXEC_DEADLINE_SECONDS = _fc_env_float(
     "SANDBOX_FC_EXEC_DEADLINE_SECONDS", 4 * 3600.0, minimum=1.0
 )
+# A harness call retries a full node (or a concurrent placement) for this
+# long, with backoff and jitter, before it fails.
+SANDBOX_FC_WAKE_RETRY_SECONDS = _fc_env_float(
+    "SANDBOX_FC_WAKE_RETRY_SECONDS", 10.0, minimum=0.0
+)
 # A turn mark expires after this long without a renewal (begin_turn).
 SANDBOX_FC_TURN_LEASE_SECONDS = _fc_env_int(
     "SANDBOX_FC_TURN_LEASE_SECONDS", 900, minimum=1

@@ -26,10 +26,14 @@ Exec contract (Codex `exec_command` / `write_stdin`):
 
 import abc
 from collections.abc import Iterator
-from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from onyx.server.features.build.sandbox.models import (
+    ExecCommandResult,
+    ExecEvent,
+    HarnessSandboxRef,
+    SandboxFileListing,
+)
 
 # Parent of each chat session's working directory in the sandbox.
 SESSION_WORKSPACE_ROOT = "/home/onyx/workspaces"
@@ -66,55 +70,6 @@ def session_workspace(session_id: UUID) -> str:
     return f"{SESSION_WORKSPACE_ROOT}/{session_id}"
 
 
-class HarnessSandboxRef(BaseModel):
-    """The sandbox of one user, seen from one chat session."""
-
-    model_config = ConfigDict(frozen=True)
-
-    tenant_id: str
-    sandbox_id: UUID
-    session_id: UUID
-    # Lower bound of the VM attempt (the Sandbox row's attempt number). The
-    # running VM can have a higher attempt.
-    attempt: int = Field(default=1, ge=1)
-
-
-class ExecOutputDelta(BaseModel):
-    """New output of a command (stdout and stderr in arrival order)."""
-
-    model_config = ConfigDict(frozen=True)
-
-    text: str
-
-
-class ExecCommandResult(BaseModel):
-    """The last event of `exec_command` and `write_stdin`."""
-
-    model_config = ConfigDict(frozen=True)
-
-    # Output of this call, cut to max_output_tokens (head and tail).
-    output: str
-    # Set while the command runs: pass it to write_stdin.
-    exec_session_id: str | None
-    # Set when the command exited. None while it runs, or when a signal,
-    # an interrupt or its deadline ended it.
-    exit_code: int | None
-    # "exited", "signaled", "canceled" or "deadline_exceeded" after the end.
-    completion: str | None
-    wall_time_seconds: float
-    # Estimated tokens of the output before the token cut.
-    original_token_count: int
-    # True when the byte or token cap removed output.
-    truncated: bool
-
-    @property
-    def running(self) -> bool:
-        return self.exec_session_id is not None
-
-
-ExecEvent = ExecOutputDelta | ExecCommandResult
-
-
 def collect_exec_result(events: Iterator[ExecEvent]) -> ExecCommandResult:
     """Drain an exec stream and return its result. Reads the stream to its
     end, so the implementation releases what it holds."""
@@ -125,24 +80,6 @@ def collect_exec_result(events: Iterator[ExecEvent]) -> ExecCommandResult:
     if result is None:
         raise RuntimeError("The exec stream ended without a result")
     return result
-
-
-class SandboxFile(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    # Relative to the session directory, "/"-separated.
-    path: str
-    name: str
-    is_directory: bool
-    size: int
-    modified_at: datetime | None
-
-
-class SandboxFileListing(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    entries: list[SandboxFile]
-    truncated: bool
 
 
 class HarnessSandboxError(Exception):

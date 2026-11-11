@@ -9,6 +9,7 @@ before the VM is used. Exec sessions live in durable cache records
 
 import mimetypes
 import posixpath
+import random
 import secrets
 import threading
 import time
@@ -18,11 +19,12 @@ from io import BytesIO
 from uuid import UUID
 
 import grpc
-from pydantic import BaseModel, ConfigDict
 
 from onyx.cache.factory import get_cache_backend, get_shared_cache_backend
 from onyx.cache.interface import CacheBackend, CacheLockAcquisitionError
 from onyx.configs.constants import FileOrigin
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.microvm.agent_client import (
     HostAgentClientFactory,
@@ -35,6 +37,7 @@ from onyx.microvm.configs import (
     SANDBOX_FC_EXEC_DEADLINE_SECONDS,
     SANDBOX_FC_PUBLISH_MAX_BYTES,
     SANDBOX_FC_TURN_LEASE_SECONDS,
+    SANDBOX_FC_WAKE_RETRY_SECONDS,
 )
 from onyx.microvm.daemon_client import (
     SandboxDaemonClient,
@@ -73,16 +76,20 @@ from onyx.server.features.build.sandbox.exec_output import (
 )
 from onyx.server.features.build.sandbox.firecracker.harness_state import (
     ActivityKind,
-    ExecSessionRecord,
     add_exec_session,
     clear_activity,
     clear_exec_sessions,
+    eviction_order,
     get_exec_session,
     has_activity,
     list_exec_sessions,
     remove_exec_session,
     set_activity_mark,
     update_exec_session,
+)
+from onyx.server.features.build.sandbox.firecracker.models import (
+    ExecSessionRecord,
+    ManagedImageRecord,
 )
 from onyx.server.features.build.sandbox.harness_base import (
     DEFAULT_MAX_OUTPUT_TOKENS,
@@ -96,19 +103,22 @@ from onyx.server.features.build.sandbox.harness_base import (
     POLL_MIN_YIELD_MS,
     WRITE_STDIN_DEFAULT_YIELD_MS,
     WRITE_STDIN_MAX_YIELD_MS,
-    ExecCommandResult,
-    ExecEvent,
-    ExecOutputDelta,
     ExecSessionEndedError,
     ExecSessionNotFoundError,
     HarnessSandbox,
     HarnessSandboxError,
-    HarnessSandboxRef,
-    SandboxFile,
-    SandboxFileListing,
     SandboxFileTooLargeError,
     SandboxPathError,
     session_workspace,
+)
+from onyx.server.features.build.sandbox.models import (
+    ExecCommandResult,
+    ExecEvent,
+    ExecOutputDelta,
+    HarnessSandboxRef,
+    SandboxFile,
+    SandboxFileListing,
+    SandboxProvisionContentionError,
 )
 from onyx.utils.logger import setup_logger
 
@@ -125,6 +135,8 @@ _EXEC_LOCK_PREFIX = "sandbox_fc:exec_lock:"
 # A second call on one exec session waits this long for the first one.
 _EXEC_LOCK_WAIT_SECONDS = 30.0
 _EXEC_LOCK_MARGIN_SECONDS = 30.0
+_WAKE_RETRY_FIRST_DELAY_SECONDS = 0.25
+_WAKE_RETRY_MAX_DELAY_SECONDS = 2.0
 _INIT_LOCK_PREFIX = "sandbox_fc:init_lock:"
 # Covers one daemon Init (attach drives, grow the scratch file system).
 _INIT_LOCK_SECONDS = 90.0
@@ -146,14 +158,6 @@ _COMPLETION_NAMES: dict[ExecCompletion, str] = {
 # The read-only content of the managed drive for a sandbox (a bundle zip),
 # or None for no managed drive.
 ManagedBundleSource = Callable[[HarnessSandboxRef], bytes | None]
-
-
-class _ManagedImageRecord(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    attempt: int
-    generation: int
-    image_id: str
 
 
 class ManagedDriveError(HarnessSandboxError):
@@ -219,6 +223,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox):
         managed_bundle: ManagedBundleSource | None = None,
         exec_deadline_seconds: float = SANDBOX_FC_EXEC_DEADLINE_SECONDS,
         max_exec_sessions: int = MAX_EXEC_SESSIONS_PER_SANDBOX,
+        wake_retry_seconds: float = SANDBOX_FC_WAKE_RETRY_SECONDS,
     ) -> None:
         if not template:
             raise ValueError("FirecrackerHarnessSandbox needs a template version")
@@ -230,6 +235,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox):
         self._managed_bundle = managed_bundle
         self._exec_deadline_seconds = exec_deadline_seconds
         self._max_exec_sessions = max_exec_sessions
+        self._wake_retry_seconds = wake_retry_seconds
         # (sandbox, attempt, generation, session) whose directory exists,
         # oldest first.
         self._prepared: OrderedDict[tuple[str, int, int, str], None] = OrderedDict()
@@ -241,6 +247,12 @@ class FirecrackerHarnessSandbox(HarnessSandbox):
         self._place(ref)
 
     def _place(self, ref: HarnessSandboxRef) -> PlacedVm:
+        """The running, initialized VM with its managed drive."""
+        placed = self._place_vm(ref)
+        self._ensure_managed(get_cache_backend(tenant_id=ref.tenant_id), ref, placed)
+        return placed
+
+    def _place_vm(self, ref: HarnessSandboxRef) -> PlacedVm:
         shared_cache = get_shared_cache_backend()
         tenant_cache = get_cache_backend(tenant_id=ref.tenant_id)
         request = VmRequest(
@@ -251,7 +263,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox):
             scratch_gib=self._scratch_gib,
         )
         try:
-            placed = self._wake_and_init(shared_cache, tenant_cache, request)
+            placed = self._wake_with_retry(shared_cache, tenant_cache, request)
         except SandboxVmUnusableError as e:
             # The unusable VM is stopped; one more try with the next attempt.
             logger.warning(
@@ -260,13 +272,43 @@ class FirecrackerHarnessSandbox(HarnessSandbox):
                 e.attempt,
                 e.reason,
             )
-            placed = self._wake_and_init(
+            placed = self._wake_with_retry(
                 shared_cache,
                 tenant_cache,
                 request.model_copy(update={"attempt": e.attempt}),
             )
-        self._ensure_managed(tenant_cache, ref, placed)
         return placed
+
+    def _wake_with_retry(
+        self,
+        shared_cache: CacheBackend,
+        tenant_cache: CacheBackend,
+        request: VmRequest,
+    ) -> PlacedVm:
+        """Wake and Init. A node takes a few Creates at a time: retry a full
+        node or a concurrent placement with backoff and jitter, within
+        `self._wake_retry_seconds`."""
+        give_up_at = time.monotonic() + self._wake_retry_seconds
+        delay = _WAKE_RETRY_FIRST_DELAY_SECONDS
+        while True:
+            try:
+                return self._wake_and_init(shared_cache, tenant_cache, request)
+            except (OnyxError, SandboxProvisionContentionError) as e:
+                if isinstance(e, OnyxError) and (
+                    e.error_code is not OnyxErrorCode.SANDBOX_CAPACITY_UNAVAILABLE
+                ):
+                    raise
+                pause = random.uniform(delay / 2, delay)
+                if time.monotonic() + pause > give_up_at:
+                    raise
+                logger.info(
+                    "sandbox_fc_wake_retry sandbox=%s pause=%.2f error=%s",
+                    request.sandbox_id,
+                    pause,
+                    e,
+                )
+                time.sleep(pause)
+                delay = min(delay * 2, _WAKE_RETRY_MAX_DELAY_SECONDS)
 
     def _wake_and_init(
         self,
@@ -320,7 +362,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox):
         key = _MANAGED_PREFIX + str(ref.sandbox_id)
         raw = tenant_cache.get(key)
         if raw is not None:
-            record = _ManagedImageRecord.model_validate_json(raw)
+            record = ManagedImageRecord.model_validate_json(raw)
             if (record.attempt, record.generation) == (
                 placed.vm.attempt,
                 placed.vm.generation,
@@ -335,7 +377,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox):
         (for example after the user's skills changed)."""
         if self._managed_bundle is None:
             return
-        placed = placed or self._place(ref)
+        placed = placed or self._place_vm(ref)
         bundle = self._managed_bundle(ref)
         if bundle is None:
             return
@@ -350,7 +392,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox):
             )
         get_cache_backend(tenant_id=ref.tenant_id).set(
             _MANAGED_PREFIX + str(ref.sandbox_id),
-            _ManagedImageRecord(
+            ManagedImageRecord(
                 attempt=placed.vm.attempt,
                 generation=placed.vm.generation,
                 image_id=image.image_id,
@@ -545,6 +587,35 @@ class FirecrackerHarnessSandbox(HarnessSandbox):
             if e.result is not None
         }
 
+    def _make_room(
+        self,
+        tenant_cache: CacheBackend,
+        daemon: SandboxDaemonClient,
+        placed: PlacedVm,
+        sandbox_id: UUID,
+    ) -> None:
+        """Before a Start: at the cap, evict ended commands first, then the
+        least recently used running ones (canceled), so the guest has room."""
+        live = {
+            r.exec_session_id: r
+            for r in list_exec_sessions(tenant_cache, sandbox_id)
+            if r.on_instance(placed.vm.attempt, placed.vm.generation)
+        }
+        excess = len(live) - self._max_exec_sessions + 1
+        if excess <= 0:
+            return
+        ended = self._ended_executions(daemon)
+        for session_id in eviction_order(live, ended)[:excess]:
+            victim = live[session_id]
+            if victim.execution_id not in ended:
+                self._cancel_evicted(daemon, [victim])
+            remove_exec_session(
+                tenant_cache,
+                sandbox_id,
+                session_id,
+                execution_id=victim.execution_id,
+            )
+
     def _cancel_evicted(
         self, daemon: SandboxDaemonClient, evicted: list[ExecSessionRecord]
     ) -> None:
@@ -597,6 +668,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox):
         cwd = self._workdir(ref, workdir)
         tenant_cache = get_cache_backend(tenant_id=ref.tenant_id)
         exec_session_id = secrets.token_hex(4)
+        self._make_room(tenant_cache, daemon, placed, ref.sandbox_id)
         started = daemon.start(
             ExecCommand(
                 argv=["bash", "-c", cmd],
@@ -619,24 +691,14 @@ class FirecrackerHarnessSandbox(HarnessSandbox):
             generation=placed.vm.generation,
             last_used=time.time(),
         )
-        # Only a full table needs the daemon's view of which commands ended.
-        live = [
-            r
-            for r in list_exec_sessions(tenant_cache, ref.sandbox_id)
-            if r.on_instance(record.attempt, record.generation)
-        ]
-        ended = (
-            self._ended_executions(daemon)
-            if len(live) >= self._max_exec_sessions
-            else set()
-        )
         try:
+            # _make_room left room; this evicts only after a race.
             evicted = add_exec_session(
                 tenant_cache,
                 ref.sandbox_id,
                 record,
                 max_sessions=self._max_exec_sessions,
-                ended_execution_ids=ended,
+                ended_execution_ids=set(),
             )
         except Exception:
             # Without a record nobody can reach the command: stop it.
@@ -646,9 +708,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox):
             # The VM was replaced during this call.
             self._cancel_evicted(daemon, [record])
             raise ExecSessionEndedError(exec_session_id)
-        self._cancel_evicted(
-            daemon, [r for r in evicted if r.execution_id not in ended]
-        )
+        self._cancel_evicted(daemon, evicted)
         yield from self._collect(
             tenant_cache,
             ref,

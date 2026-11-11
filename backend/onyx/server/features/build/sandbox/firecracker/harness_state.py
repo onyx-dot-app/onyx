@@ -19,9 +19,14 @@ from enum import Enum
 from typing import TypeVar
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
 from onyx.cache.interface import CacheBackend
+from onyx.server.features.build.sandbox.firecracker.models import (
+    ExecSessionRecord,
+    ExecSessionTable,
+    HarnessActivity,
+)
 
 _EXEC_SESSIONS_PREFIX = "sandbox_fc:exec_sessions:"
 _ACTIVITY_PREFIX = "sandbox_fc:harness_activity:"
@@ -29,32 +34,6 @@ _CAS_TRIES = 16
 
 _T = TypeVar("_T")
 _M = TypeVar("_M", bound=BaseModel)
-
-
-class ExecSessionRecord(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    exec_session_id: str
-    chat_session_id: str
-    execution_id: str
-    attempt: int
-    generation: int
-    stdout_offset: int = 0
-    stderr_offset: int = 0
-    last_used: float
-
-    def on_instance(self, attempt: int, generation: int) -> bool:
-        return (self.attempt, self.generation) == (attempt, generation)
-
-
-class _ExecSessions(BaseModel):
-    sessions: dict[str, ExecSessionRecord] = {}
-
-
-class _Activity(BaseModel):
-    # chat session ID → Unix seconds when the mark expires.
-    turns: dict[str, float] = {}
-    approvals: dict[str, float] = {}
 
 
 class ActivityKind(str, Enum):
@@ -90,15 +69,17 @@ def _update(
     raise StateContentionError(key)
 
 
-def _parse_sessions(raw: bytes | None) -> _ExecSessions:
-    return _ExecSessions() if raw is None else _ExecSessions.model_validate_json(raw)
+def _parse_sessions(raw: bytes | None) -> ExecSessionTable:
+    return (
+        ExecSessionTable() if raw is None else ExecSessionTable.model_validate_json(raw)
+    )
 
 
 def _sessions_key(sandbox_id: UUID) -> str:
     return _EXEC_SESSIONS_PREFIX + str(sandbox_id)
 
 
-def _eviction_order(
+def eviction_order(
     sessions: dict[str, ExecSessionRecord], ended_execution_ids: set[str]
 ) -> list[str]:
     """Ended commands first, then running ones; least recently used first."""
@@ -126,8 +107,8 @@ def add_exec_session(
     fence = (record.attempt, record.generation)
 
     def change(
-        state: _ExecSessions,
-    ) -> tuple[_ExecSessions | None, list[ExecSessionRecord] | None]:
+        state: ExecSessionTable,
+    ) -> tuple[ExecSessionTable | None, list[ExecSessionRecord] | None]:
         if any((r.attempt, r.generation) > fence for r in state.sessions.values()):
             return state, None
         sessions = {
@@ -136,12 +117,12 @@ def add_exec_session(
             if r.on_instance(record.attempt, record.generation)
         }
         evicted: list[ExecSessionRecord] = []
-        for sid in _eviction_order(sessions, ended_execution_ids):
+        for sid in eviction_order(sessions, ended_execution_ids):
             if len(sessions) < max_sessions:
                 break
             evicted.append(sessions.pop(sid))
         sessions[record.exec_session_id] = record
-        return _ExecSessions(sessions=sessions), evicted
+        return ExecSessionTable(sessions=sessions), evicted
 
     return _update(cache, _sessions_key(sandbox_id), _parse_sessions, change)
 
@@ -172,7 +153,7 @@ def update_exec_session(
     """Advance the offsets and the last use of a session, while the record
     still names `execution_id`. Offsets never move back."""
 
-    def change(state: _ExecSessions) -> tuple[_ExecSessions | None, bool]:
+    def change(state: ExecSessionTable) -> tuple[ExecSessionTable | None, bool]:
         current = state.sessions.get(exec_session_id)
         if current is None or current.execution_id != execution_id:
             return state, False
@@ -184,7 +165,7 @@ def update_exec_session(
                 "last_used": max(current.last_used, time.time()),
             }
         )
-        return _ExecSessions(sessions=sessions), True
+        return ExecSessionTable(sessions=sessions), True
 
     return _update(cache, _sessions_key(sandbox_id), _parse_sessions, change)
 
@@ -194,14 +175,14 @@ def remove_exec_session(
 ) -> bool:
     """Remove a session while the record still names `execution_id`."""
 
-    def change(state: _ExecSessions) -> tuple[_ExecSessions | None, bool]:
+    def change(state: ExecSessionTable) -> tuple[ExecSessionTable | None, bool]:
         current = state.sessions.get(exec_session_id)
         if current is None or current.execution_id != execution_id:
             return state, False
         sessions = {
             sid: r for sid, r in state.sessions.items() if sid != exec_session_id
         }
-        return (_ExecSessions(sessions=sessions) if sessions else None), True
+        return (ExecSessionTable(sessions=sessions) if sessions else None), True
 
     return _update(cache, _sessions_key(sandbox_id), _parse_sessions, change)
 
@@ -210,8 +191,10 @@ def clear_exec_sessions(cache: CacheBackend, sandbox_id: UUID) -> None:
     cache.delete(_sessions_key(sandbox_id))
 
 
-def _parse_activity(raw: bytes | None) -> _Activity:
-    return _Activity() if raw is None else _Activity.model_validate_json(raw)
+def _parse_activity(raw: bytes | None) -> HarnessActivity:
+    return (
+        HarnessActivity() if raw is None else HarnessActivity.model_validate_json(raw)
+    )
 
 
 def _activity_key(sandbox_id: UUID) -> str:
@@ -232,7 +215,7 @@ def set_activity_mark(
 ) -> None:
     """Set (ttl_seconds) or clear (None) one chat session's mark."""
 
-    def change(state: _Activity) -> tuple[_Activity | None, None]:
+    def change(state: HarnessActivity) -> tuple[HarnessActivity | None, None]:
         now = time.time()
         turns = _live(state.turns, now)
         approvals = _live(state.approvals, now)
@@ -243,7 +226,7 @@ def set_activity_mark(
             marks[str(session_id)] = now + ttl_seconds
         if not turns and not approvals:
             return None, None
-        return _Activity(turns=turns, approvals=approvals), None
+        return HarnessActivity(turns=turns, approvals=approvals), None
 
     _update(cache, _activity_key(sandbox_id), _parse_activity, change)
 

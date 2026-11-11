@@ -12,8 +12,11 @@ from uuid import UUID, uuid4
 import pytest
 
 from onyx.cache.interface import CacheBackend
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.microvm import registry
+from onyx.microvm.agent_client import HostAgentErrorReason
 from onyx.microvm.generated.hostagent.v1 import hostagent_pb2
 from onyx.microvm.models import OutputStream
 from onyx.microvm.registry import get_sandbox_daemon_key, get_sandbox_placement
@@ -31,19 +34,22 @@ from onyx.server.features.build.sandbox.firecracker.harness_sandbox import (
     ManagedBundleSource,
     session_relative_path,
 )
+from onyx.server.features.build.sandbox.firecracker.models import ExecSessionRecord
 from onyx.server.features.build.sandbox.harness_base import (
     EXEC_DEFAULT_ENV,
     MAX_EXEC_SESSIONS_PER_SANDBOX,
-    ExecCommandResult,
-    ExecEvent,
-    ExecOutputDelta,
     ExecSessionEndedError,
     ExecSessionNotFoundError,
-    HarnessSandboxRef,
     SandboxFileTooLargeError,
     SandboxPathError,
     collect_exec_result,
     session_workspace,
+)
+from onyx.server.features.build.sandbox.models import (
+    ExecCommandResult,
+    ExecEvent,
+    ExecOutputDelta,
+    HarnessSandboxRef,
 )
 from tests.external_dependency_unit.microvm.conftest import (
     TENANT_ID,
@@ -67,6 +73,7 @@ def make_sandbox(client_factory: InsecureClientFactory) -> MakeSandbox:
         *,
         managed_bundle: ManagedBundleSource | None = None,
         max_exec_sessions: int = MAX_EXEC_SESSIONS_PER_SANDBOX,
+        wake_retry_seconds: float = 10.0,
     ) -> FirecrackerHarnessSandbox:
         return FirecrackerHarnessSandbox(
             template="tpl-1",
@@ -74,6 +81,7 @@ def make_sandbox(client_factory: InsecureClientFactory) -> MakeSandbox:
             init_env={"CRAFT_TEST": "1"},
             managed_bundle=managed_bundle,
             max_exec_sessions=max_exec_sessions,
+            wake_retry_seconds=wake_retry_seconds,
         )
 
     return make
@@ -176,6 +184,51 @@ def test_ensure_running_replaces_a_vm_whose_daemon_rejects_the_key(
     assert placement is not None and placement.attempt == 2
     assert node.agent.create_calls == 2
     assert len(node.agent.stop_calls) == 1
+
+
+def test_a_full_node_is_retried_with_backoff_then_the_wake_succeeds(
+    sandbox: FirecrackerHarnessSandbox,
+    node: RunningFakeAgent,
+    new_ref: NewRef,
+) -> None:
+    node.agent.refuse_create = HostAgentErrorReason.CAPACITY_MEMORY
+    node.agent.refuse_create_times = 2
+    ref = new_ref()
+    sandbox.ensure_running(ref)
+    # Two refused Creates, then one that starts the VM.
+    assert node.agent.create_calls == 3
+    assert str(ref.sandbox_id) in node.agent.daemon_inits
+
+
+def test_a_full_node_fails_the_call_after_the_retry_window(
+    make_sandbox: MakeSandbox,
+    node: RunningFakeAgent,
+    new_ref: NewRef,
+) -> None:
+    node.agent.refuse_create = HostAgentErrorReason.CAPACITY_MEMORY
+    sandbox = make_sandbox(wake_retry_seconds=0.6)
+    started = time.monotonic()
+    with pytest.raises(OnyxError) as exc:
+        sandbox.ensure_running(new_ref())
+    assert exc.value.error_code is OnyxErrorCode.SANDBOX_CAPACITY_UNAVAILABLE
+    assert 0.1 <= time.monotonic() - started <= 1.5
+
+
+def test_a_replaced_vm_after_a_crash_is_initialized(
+    tenant_cache: CacheBackend,
+    sandbox: FirecrackerHarnessSandbox,
+    node: RunningFakeAgent,
+    new_ref: NewRef,
+) -> None:
+    ref = new_ref()
+    sandbox.ensure_running(ref)
+    node.agent.vms[str(ref.sandbox_id)].state = hostagent_pb2.VM_STATE_EXITED
+
+    _, result = _run(sandbox.exec_command(ref, "echo back"))
+    assert result.output == "back\n"
+    placement = get_sandbox_placement(tenant_cache, ref.sandbox_id)
+    assert placement is not None and placement.attempt == 2
+    assert node.agent.daemon_inits[str(ref.sandbox_id)] == placement.generation
 
 
 def test_terminate_stops_the_exact_instance_and_clears_records(
@@ -429,6 +482,8 @@ def test_the_session_cap_evicts_ended_commands_first_then_cancels_the_lru(
     new_ref: NewRef,
 ) -> None:
     sandbox = make_sandbox(max_exec_sessions=2)
+    # The guest refuses a third running command: room is made before Start.
+    node.agent.max_running = 2
     ref = new_ref()
     first = _run(sandbox.exec_command(ref, "sleep 60", yield_time_ms=250))[1]
     second = _run(sandbox.exec_command(ref, "sleep 60", yield_time_ms=250))[1]
@@ -489,6 +544,11 @@ def test_the_output_buffer_keeps_head_and_tail_bytes() -> None:
     assert split.add(OutputStream.STDERR, "é".encode()[1:]) == "é"
     assert cut_to_tokens("short", 10) == ("short", False)
     # A character split between the head and the tail stays whole.
+    mixed = ExecOutputBuffer()
+    mixed.add(OutputStream.STDOUT, "é".encode()[:1])
+    mixed.add(OutputStream.STDERR, b"err")
+    mixed.add(OutputStream.STDOUT, "é".encode()[1:])
+    assert mixed.text() == "erré"
     boundary = ExecOutputBuffer(max_bytes=4)
     boundary.add(OutputStream.STDOUT, "aé".encode())
     assert not boundary.truncated and boundary.text() == "aé"
@@ -750,8 +810,8 @@ def test_a_record_of_an_older_vm_never_replaces_newer_records(
 ) -> None:
     ref = new_ref()
 
-    def record(attempt: int, generation: int) -> harness_state.ExecSessionRecord:
-        return harness_state.ExecSessionRecord(
+    def record(attempt: int, generation: int) -> ExecSessionRecord:
+        return ExecSessionRecord(
             exec_session_id=uuid4().hex[:8],
             chat_session_id=str(ref.session_id),
             execution_id=uuid4().hex,

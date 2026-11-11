@@ -2,6 +2,7 @@
 and tail) and a token cap for the model (head and tail)."""
 
 import codecs
+from collections import deque
 
 from onyx.microvm.models import OutputStream
 from onyx.server.features.build.sandbox.harness_base import EXEC_CALL_OUTPUT_MAX_BYTES
@@ -14,15 +15,28 @@ def _omitted_marker(count: int, unit: str) -> str:
     return f"\n[... {count} {unit} omitted ...]\n"
 
 
+def _utf8_len(text: str) -> int:
+    return len(text.encode("utf-8"))
+
+
+def _utf8_prefix(text: str, max_bytes: int) -> str:
+    """The longest prefix of whole characters within max_bytes."""
+    return text.encode("utf-8")[: max(max_bytes, 0)].decode("utf-8", errors="ignore")
+
+
 class ExecOutputBuffer:
-    """Collects one call's output. Keeps the first and last half of
-    `max_bytes`; `add` returns the text to stream now (the head only)."""
+    """Collects one call's output. Each stream is decoded on its own (a
+    character never mixes bytes of stdout and stderr). Keeps the first and
+    last half of `max_bytes` (UTF-8); `add` returns the text to stream now
+    (the head only)."""
 
     def __init__(self, max_bytes: int = EXEC_CALL_OUTPUT_MAX_BYTES) -> None:
         self._head_budget = max_bytes // 2
         self._tail_budget = max_bytes - self._head_budget
-        self._head = bytearray()
-        self._tail = bytearray()
+        self._head: list[str] = []
+        self._head_bytes = 0
+        self._tail: deque[str] = deque()
+        self._tail_bytes = 0
         self._dropped = 0
         self.total_bytes = 0
         self._decoders = {
@@ -34,35 +48,55 @@ class ExecOutputBuffer:
         """Add bytes of one stream. Returns the decoded part that went into
         the head (empty once the head is full)."""
         self.total_bytes += len(data)
-        room = self._head_budget - len(self._head)
-        head_part = data[: max(room, 0)]
-        self._head += head_part
-        rest = data[len(head_part) :]
-        if rest:
-            self._tail += rest
-            over = len(self._tail) - self._tail_budget
-            if over > 0:
-                del self._tail[:over]
-                self._dropped += over
-        return self._decoders[stream].decode(head_part) if head_part else ""
+        return self._add_text(self._decoders[stream].decode(data))
 
     def add_gap(self, stream: OutputStream, count: int) -> str:
         """The daemon dropped `count` bytes of a stream before we read them."""
-        marker = f"\n[... {count} bytes of {stream.value.lower()} lost ...]\n"
-        return self.add(stream, marker.encode())
+        return self._add_text(
+            f"\n[... {count} bytes of {stream.value.lower()} lost ...]\n"
+        )
+
+    def _add_text(self, text: str) -> str:
+        if not text:
+            return ""
+        head_part = ""
+        if not self._tail:
+            head_part = _utf8_prefix(text, self._head_budget - self._head_bytes)
+            self._head.append(head_part)
+            self._head_bytes += _utf8_len(head_part)
+        rest = text[len(head_part) :]
+        if rest:
+            self._tail.append(rest)
+            self._tail_bytes += _utf8_len(rest)
+            self._trim_tail()
+        return head_part
+
+    def _trim_tail(self) -> None:
+        while self._tail_bytes > self._tail_budget:
+            first = self._tail[0]
+            size = _utf8_len(first)
+            over = self._tail_bytes - self._tail_budget
+            if size <= over:
+                self._tail.popleft()
+                self._tail_bytes -= size
+                self._dropped += size
+                continue
+            kept = first.encode("utf-8")[over:].decode("utf-8", errors="ignore")
+            removed = size - _utf8_len(kept)
+            self._tail[0] = kept
+            self._tail_bytes -= removed
+            self._dropped += removed
 
     @property
     def truncated(self) -> bool:
         return self._dropped > 0
 
     def text(self) -> str:
-        if not self._dropped:
-            # Nothing cut: decode as one, so a character split between the
-            # head and the tail stays whole.
-            return (self._head + self._tail).decode("utf-8", errors="replace")
-        head = self._head.decode("utf-8", errors="replace")
-        tail = self._tail.decode("utf-8", errors="replace")
-        return head + _omitted_marker(self._dropped, "bytes") + tail
+        head = "".join(self._head)
+        tail = "".join(self._tail)
+        if self._dropped:
+            return head + _omitted_marker(self._dropped, "bytes") + tail
+        return head + tail
 
 
 def estimate_tokens(text: str) -> int:
