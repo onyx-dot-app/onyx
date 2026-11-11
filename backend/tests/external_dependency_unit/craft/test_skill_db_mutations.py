@@ -137,7 +137,7 @@ def test_skill_user_states_resolve_defaults_and_visibility(
 def test_new_skill_is_enabled_only_when_name_is_available(
     db_session: Session,
 ) -> None:
-    user = make_user(db_session)
+    user = make_user(db_session, standard_account=True)
     name = f"auto-enable-{uuid4().hex[:8]}"
     first_skill = make_skill(db_session, name=name, is_public=True)
     second_skill = make_skill(db_session, name=name, is_public=True)
@@ -373,8 +373,8 @@ def test_transfer_skill_ownership_preserves_new_owner_selection(
 
 
 def test_same_name_skills_switch_atomically_per_user(db_session: Session) -> None:
-    first_user = make_user(db_session)
-    second_user = make_user(db_session)
+    first_user = make_user(db_session, standard_account=True)
+    second_user = make_user(db_session, standard_account=True)
     name = f"shared-name-{uuid4().hex[:8]}"
     first_skill = make_skill(db_session, name=name, is_public=True)
     second_skill = make_skill(db_session, name=name, is_public=True)
@@ -454,7 +454,7 @@ def test_same_name_skills_switch_atomically_per_user(db_session: Session) -> Non
 
 
 def test_disabling_skill_records_opt_out(db_session: Session) -> None:
-    user = make_user(db_session)
+    user = make_user(db_session, standard_account=True)
     skill = make_skill(db_session, is_public=True)
     set_skill_enabled_for_user(
         skill_id=skill.id,
@@ -584,13 +584,13 @@ def test_transfer_skill_ownership_rejects_missing_new_owner(
 def test_installation_policies_preserve_choices_through_updates(
     db_session: Session,
 ) -> None:
-    user = make_user(db_session)
+    user = make_user(db_session, standard_account=True)
     skill = make_skill(db_session, is_public=True)
     assert not skill_user_states(user, [skill.id], db_session)[skill.id].enabled
     set_skill_installation_policy(skill, SkillInstallationPolicy.DEFAULT, db_session)
     assert skill_user_states(user, [skill.id], db_session)[skill.id].enabled
     # New users inherit the policy without preference rows.
-    newcomer = make_user(db_session)
+    newcomer = make_user(db_session, standard_account=True)
     assert skill_user_states(newcomer, [skill.id], db_session)[skill.id].enabled
     set_skill_enabled_for_user(
         skill_id=skill.id, enabled=False, user=user, db_session=db_session
@@ -628,7 +628,7 @@ def test_installation_policies_preserve_choices_through_updates(
 
 
 def test_automatic_skill_name_conflicts(db_session: Session) -> None:
-    user = make_user(db_session)
+    user = make_user(db_session, standard_account=True)
     name = f"policy-conflict-{uuid4().hex[:8]}"
     optional = make_skill(db_session, name=name, is_public=True)
     automatic = make_skill(db_session, name=name, is_public=True)
@@ -672,10 +672,10 @@ def test_automatic_skill_name_conflicts(db_session: Session) -> None:
 def test_installation_policy_follows_invited_users_and_groups(
     db_session: Session, policy: SkillInstallationPolicy
 ) -> None:
-    owner = make_user(db_session)
-    invited = make_user(db_session)
-    member = make_user(db_session)
-    outsider = make_user(db_session)
+    owner = make_user(db_session, standard_account=True)
+    invited = make_user(db_session, standard_account=True)
+    member = make_user(db_session, standard_account=True)
+    outsider = make_user(db_session, standard_account=True)
     group = make_group(db_session)
     skill = make_skill(db_session, is_public=False, author_user_id=owner.id)
     share_skill_with_user(db_session, skill, invited)
@@ -709,7 +709,7 @@ def test_installation_policy_follows_invited_users_and_groups(
 
 
 def test_replacing_default_skill_remembers_opt_out(db_session: Session) -> None:
-    user = make_user(db_session)
+    user = make_user(db_session, standard_account=True)
     name = f"default-replace-{uuid4().hex[:8]}"
     default = make_skill(db_session, name=name, is_public=True)
     other = make_skill(db_session, name=name, is_public=True)
@@ -737,8 +737,8 @@ def test_replacing_default_skill_remembers_opt_out(db_session: Session) -> None:
 def test_inaccessible_selection_does_not_suppress_default(
     db_session: Session, share_via_group: bool
 ) -> None:
-    owner = make_user(db_session)
-    user = make_user(db_session)
+    owner = make_user(db_session, standard_account=True)
+    user = make_user(db_session, standard_account=True)
     selected = make_skill(db_session, is_public=False, author_user_id=owner.id)
     group = make_group(db_session)
     if share_via_group:
@@ -779,8 +779,8 @@ def test_inaccessible_selection_does_not_suppress_default(
 def test_replacement_clears_inaccessible_selection_and_effective_default(
     db_session: Session,
 ) -> None:
-    user = make_user(db_session)
-    owner = make_user(db_session)
+    user = make_user(db_session, standard_account=True)
+    owner = make_user(db_session, standard_account=True)
     previous = make_skill(db_session, is_public=False, author_user_id=owner.id)
     share_skill_with_user(db_session, previous, user)
     set_skill_enabled_for_user(
@@ -816,7 +816,7 @@ def test_replacement_clears_inaccessible_selection_and_effective_default(
 
 
 def test_creation_does_not_displace_default_skill(db_session: Session) -> None:
-    user = make_user(db_session)
+    user = make_user(db_session, standard_account=True)
     default = make_skill(db_session, is_public=True)
     set_skill_installation_policy(default, SkillInstallationPolicy.DEFAULT, db_session)
     new = make_skill(db_session, name=default.name, author_user_id=user.id)
@@ -828,7 +828,7 @@ def test_creation_does_not_displace_default_skill(db_session: Session) -> None:
 def test_toggle_lock_allows_concurrent_share_foreign_key_read(
     db_session: Session,
 ) -> None:
-    user = make_user(db_session)
+    user = make_user(db_session, standard_account=True)
     toggled = make_skill(db_session, is_public=True)
     shared = make_skill(db_session, is_public=True)
     db_session.commit()
@@ -849,7 +849,7 @@ def test_toggle_lock_allows_concurrent_share_foreign_key_read(
 
 
 def test_creation_serializes_with_toggle_preference_writes(db_session: Session) -> None:
-    user = make_user(db_session)
+    user = make_user(db_session, standard_account=True)
     existing = make_skill(db_session, is_public=True)
     db_session.commit()
     new = make_skill(db_session, name=existing.name, author_user_id=user.id)

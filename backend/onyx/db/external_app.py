@@ -418,7 +418,10 @@ def associate_custom_skill_with_external_app__no_commit(
         )
 
     skill = db_session.scalar(
-        select(Skill).where(Skill.id == skill_id).with_for_update(of=Skill)
+        select(Skill)
+        .where(Skill.id == skill_id)
+        .with_for_update(of=Skill)
+        .execution_options(populate_existing=True)
     )
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found.")

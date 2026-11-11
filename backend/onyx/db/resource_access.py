@@ -9,7 +9,7 @@ from onyx.auth.permissions import has_global_permission
 from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.db.enums import Permission, SkillInstallationPolicy, SkillSharePermission
 from onyx.db.models import User
-from onyx.db.users import lock_group_membership
+from onyx.db.users import fetch_user_by_id, lock_group_membership
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
@@ -53,6 +53,19 @@ class ResourceAccessAdapter[Resource](Protocol):
     ) -> dict[UUID, set[UUID]]: ...
 
 
+def lock_resource_access_user(user_id: UUID, db_session: Session) -> User:
+    """Reload authority after membership writers finish, using the request session."""
+    lock_group_membership(db_session)
+    user = fetch_user_by_id(db_session, user_id, refresh=True)
+    if (
+        user is None
+        or not user.is_active
+        or not has_global_permission(user, Permission.BASIC_ACCESS)
+    ):
+        raise OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS)
+    return user
+
+
 def mutate_resource_access[Resource](
     resource_ids: Collection[UUID],
     change: ResourceAccessChange,
@@ -64,7 +77,7 @@ def mutate_resource_access[Resource](
     allow_partial: bool = False,
 ) -> AccessMutationResult:
     """Caller commits, then pushes result.affected once for the whole batch."""
-    lock_group_membership(db_session)
+    user = lock_resource_access_user(user.id, db_session)
     result = AccessMutationResult()
     resources: dict[UUID, Resource] = {}
     for resource_id in sorted(set(resource_ids)):

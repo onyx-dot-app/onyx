@@ -66,6 +66,7 @@ from onyx.db.models import (
 from onyx.db.resource_access import (
     ResourceAccessAdapter,
     ResourceAccessState,
+    lock_resource_access_user,
     mutate_resource_access,
 )
 from onyx.db.resource_access import (
@@ -450,9 +451,7 @@ def enable_new_skill_if_name_available__no_commit(
 ) -> bool:
     """Enable a newly inserted skill under the same user lock as toggles."""
     _lock_user_skill_preferences(user_id, db_session)
-    user = db_session.get(User, user_id)
-    if user is None:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User not found.")
+    user = lock_resource_access_user(user_id, db_session)
     if skill.installation_policy == SkillInstallationPolicy.REQUIRED:
         return True
     if (
@@ -588,6 +587,7 @@ def set_skill_enabled_for_user(
     db_session: Session,
 ) -> Skill:
     _lock_user_skill_preferences(user.id, db_session)
+    user = lock_resource_access_user(user.id, db_session)
     skill = fetch_skill(
         skill_id,
         policy=SkillManagementPolicy.VIEW,
@@ -928,6 +928,7 @@ def create_skill_from_bundle__no_commit(
     conflict or a rejected access change rolls back this skill only. Returns
     the skill, whether it was enabled for the user, and the affected users."""
     with db_session.begin_nested():
+        user = lock_resource_access_user(user.id, db_session)
         skill = create_skill_from_ingested_bundle(ingested, user.id, db_session)
         affected: set[UUID] = set()
         if change is not None:
@@ -958,6 +959,7 @@ def bulk_update_skill__no_commit(
                 db_session=db_session,
             )
             return {user.id}, []
+        user = lock_resource_access_user(user.id, db_session)
         skill = fetch_skill(
             skill_id,
             policy=SkillManagementPolicy.EDIT,

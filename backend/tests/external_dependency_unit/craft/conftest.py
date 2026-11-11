@@ -41,6 +41,7 @@ from onyx.db.models import (
     UserGroup,
 )
 from onyx.db.skill_version import repair_skill_version
+from onyx.db.users import assign_user_to_default_groups__no_commit
 from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.constants import LlmProviderNames
 from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
@@ -190,6 +191,16 @@ def test_user(
     db_session.execute(delete(ScheduledTask).where(ScheduledTask.user_id == user_id))
     db_session.commit()
     _best_effort_delete(User, [user_id])
+
+
+@pytest.fixture
+def standard_user(db_session: Session, test_user: User) -> User:
+    """A sign-in user with the default Basic group and normal fixture cleanup."""
+    test_user.account_type = AccountType.STANDARD
+    assign_user_to_default_groups__no_commit(db_session, test_user, is_admin=False)
+    db_session.flush()
+    db_session.refresh(test_user)
+    return test_user
 
 
 @pytest.fixture(scope="function")

@@ -179,7 +179,9 @@ still propagate unexpected storage errors.
 5. `name-uniqueness-in-db` **Name uniqueness is in the database.** The partial
    unique index `uq_user_skill_preference_name` allows one enabled choice per
    user and name. `uq_skill_automatic_name` allows one default or required
-   skill per name in the tenant. Every write that enables a preference first
+   skill per name in the tenant. Deleting a skill cascades its preferences, so
+   both automatic and personal name reservations become available.
+   Every write that enables a preference first
    takes `db/skill.py:_lock_user_skill_preferences`, a `FOR NO KEY UPDATE`
    lock on the user row. The lock orders concurrent enables of one name, so
    the second one gets `SKILL_NAME_CONFLICT`, not an `IntegrityError`. The
@@ -257,8 +259,10 @@ still propagate unexpected storage errors.
     failures roll back one skill's savepoint. Bulk toggles affect only the caller.
     Access and preference writes acquire the membership lock before resource/user locks.
     Content and metadata preparation holds no Skill row or membership lock.
-    The final write takes membership then Skill and checks a freshly loaded request-session user.
-    Authentication uses a separate session; later access writes must use the fresh actor.
+    `db/resource_access.py:lock_resource_access_user` reloads active authority after acquiring membership.
+    Authentication uses a separate session. Skill writes and their response permissions use the refreshed request-session actor.
+    Creation and import recheck authority after staging, even when auto-enable and sharing are omitted.
+    The final content write takes membership then Skill.
     Derived edits compare their observed content; a changed snapshot returns a retryable conflict.
     Full replacements always append a version, also on stale observations.
     Metadata repair refreshes each batch row before staging reads without locks.
@@ -273,6 +277,7 @@ still propagate unexpected storage errors.
     A Skill without an active owner (`db/skill.py:skill_ownership_is_vacant`) keeps its
     direct-user grants unless the actor has global `MANAGE_SKILLS`. This covers direct
     editors and scoped managers; `ShareSkillModal` disables those controls to match.
+    List and detail responses skip skills deleted during the request.
     New access entry points must use the
     adapter function, not `db/skill.py:replace_skill_shares`.
     `POST /skills/custom/batch` and GitHub import create each bundle through
@@ -291,6 +296,8 @@ still propagate unexpected storage errors.
     warning, a `skill` row whose `built_in_skill_id` is not in
     `skills/built_in.py:_REGISTRY`, so the rows otherwise stay.
 15. `version-rollout-reads` **Custom readers use `Skill.current_version`.**
+    History rows and their current-version markers come from one SQL statement,
+    so an edit after authorization cannot mark an older version as current.
     Its eager outer join retains built-ins, which have no versions. A custom
     row without a pointer cannot load or enable. Locks on joined skill queries
     must specify `of=Skill`. Reload `current_version` after a locking read before
@@ -340,7 +347,8 @@ still propagate unexpected storage errors.
     Built-ins have no versions. `background/celery/tasks/skill_versions/tasks.py` repairs each
     tenant in bounded batches through Celery or Lite's API poller. The base
     interval is five minutes; cloud uses the standard beat multiplier (eight
-    by default). Repair prunes bundle links under the skill lock, then deletes
+    by default). Repair saves recovered metadata before pruning bundle links
+    under the skill lock, then deletes
     unreferenced files after commit, with the same retention rule as saves.
     The task has a 300-second soft time limit. Its 30-second deadline is checked
     between skills and between historical versions of one skill; a single blob
