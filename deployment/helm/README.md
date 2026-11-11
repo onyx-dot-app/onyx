@@ -311,6 +311,19 @@ port. If Prometheus runs in another namespace, set
 stdout as JSON lines (`kind=guest_log`), and an audit line for every API call
 to stderr (`kind=audit`), so the cluster log pipeline collects both.
 
+With the agent metrics on, `monitoring.grafana.dashboards.enabled: true` also
+deploys the "Onyx Craft Firecracker Host Agent" dashboard, and
+`monitoring.prometheusRules.enabled: true` deploys its alert rules (a
+PrometheusRule in the release namespace; set `monitoring.prometheusRules.labels`
+to match your Prometheus `ruleSelector`). The thresholds in
+`craft.hostAgent.alerts` are proposed defaults. `CraftFcHostAgentPodsMissing`
+needs kube-state-metrics. The dashboard and the rules need the agent series:
+set `monitoring.serviceMonitors.enabled: true` (with
+`monitoring.serviceMonitors.labels` that match your Prometheus
+`serviceMonitorSelector`), unless another scrape configuration collects the
+agent metrics. For another scrape configuration, set `craft.hostAgent.metrics.job`
+to its `job` label. Runbooks: `microvm/RUNBOOKS.md`.
+
 ## Using an external Redis
 
 To point Onyx at an externally-managed Redis (e.g. AWS ElastiCache) and skip

@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.9.38
+version: 0.9.39
 appVersion: latest
 annotations:
   category: Productivity
@@ -21,10 +21,11 @@ annotations:
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
     - kind: added
-      description: Craft Firecracker host agent (off by default) can copy the
-        VM root drive from craft.hostAgent.rootfs.image into its data dir with
-        an init container (--rootfs-dir), and reads the sandbox-proxy egress CA
-        ConfigMap (craft.hostAgent.egressCA, get on that one ConfigMap).
+      description: Craft Firecracker host agent Grafana dashboard
+        (monitoring.grafana.dashboards.enabled) and alert rules
+        (monitoring.prometheusRules.enabled, thresholds in
+        craft.hostAgent.alerts). Both need the agent metrics and are off by
+        default.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it

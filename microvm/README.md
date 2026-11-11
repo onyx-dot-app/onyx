@@ -384,6 +384,9 @@ Postgres cache backend. The chart's bundled Redis uses `allkeys-lru`.
   and after a failed one.
 
   The Go runtime and process collectors are on the same registry.
+- **Dashboard, alerts and runbooks.** The chart ships a Grafana dashboard
+  (`monitoring.grafana.dashboards.enabled`) and a PrometheusRule (`monitoring.prometheusRules.enabled`,
+  thresholds in `craft.hostAgent.alerts`), both off by default. Runbooks: `RUNBOOKS.md`.
 - **Guest logs.** The agent tails each VM's serial console (`console.log`, Firecracker's stdout and
   stderr) and Firecracker log (`fc.log`) and writes one JSON line per log line to its **stdout**:
   `kind=guest_log`, `stream`, `sandbox_id`, `generation`, `tenant_id`, `line`. The agent's own log and

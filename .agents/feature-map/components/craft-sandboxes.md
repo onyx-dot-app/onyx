@@ -92,7 +92,8 @@ key serve every deployment CA.
 
 Operator guides: `backend/onyx/server/features/build/sandbox/README.md` (image
 and tag coupling, IPv6), `backend/onyx/server/features/build/sandbox/docker/README.md`
-(Docker backend), and `deployment/helm/dev/README.md` (local kind cluster).
+(Docker backend), `deployment/helm/dev/README.md` (local kind cluster), and
+`microvm/RUNBOOKS.md` (Firecracker host agent alerts and node procedures).
 
 ```
 SessionManager / scheduled executor / sweep

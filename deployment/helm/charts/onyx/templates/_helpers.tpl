@@ -300,6 +300,29 @@ true
 {{- $runtime -}}
 {{- end }}
 
+{{/* Prometheus job label of the host agent series (alert rules, dashboard).
+The value goes into PromQL and JSON strings unescaped, so only plain characters pass. */}}
+{{- define "onyx.craftHostAgentMetricsJob" -}}
+{{- $job := (dig "hostAgent" "metrics" "job" "" (.Values.craft | default dict)) | default (include "onyx.resourceName" (list . "craft-fc-host-agent")) -}}
+{{- if not (regexMatch "^[A-Za-z0-9_.:/-]+$" $job) -}}
+{{- fail "craft.hostAgent.metrics.job may only have letters, digits and _ . : / -" -}}
+{{- end -}}
+{{- $job -}}
+{{- end }}
+
+{{/*
+Increase of a counter selector over a window, for alert rules. A labeled
+counter series starts at its first event, and increase() does not count that
+event, so a series with no sample in the hour before the window gives its
+full value. The hour keeps a short scrape gap from making an old series new.
+Input: (list "<selector>" "<window>").
+*/}}
+{{- define "onyx.craftFcCounterIncrease" -}}
+{{- $x := index . 0 -}}
+{{- $w := index . 1 -}}
+(({{ $x }} unless present_over_time({{ $x }}[1h] offset {{ $w }})) or increase({{ $x }}[{{ $w }}]))
+{{- end }}
+
 {{- define "onyx.craftHostAgentNamespace" -}}
 {{- (dig "hostAgent" "namespace" "" (.Values.craft | default dict)) | default "onyx-sandbox-runtime" -}}
 {{- end }}
