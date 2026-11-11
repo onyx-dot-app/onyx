@@ -39,18 +39,44 @@ const savesScratchGiB = 8
 func startSavesAgent(t *testing.T, e env, name, certDir string, certs *testcerts.Set) {
 	t.Helper()
 	bin := getenv("KVM_AGENT_BIN", "/opt/agent/host-agent")
-	ca := getenv("KVM_CA_BUNDLE", "/etc/pki/tls/certs/ca-bundle.crt")
+	// The host CA bundle: AL2023, else Debian and Ubuntu.
+	ca := os.Getenv("KVM_CA_BUNDLE")
+	if ca == "" {
+		ca = "/etc/pki/tls/certs/ca-bundle.crt"
+		if !fileExists(ca) {
+			ca = "/etc/ssl/certs/ca-certificates.crt"
+		}
+	}
 	args := []string{"run", "-d", "--name", name, "--privileged", "--pid=host", "--cgroupns=private", "--network=host",
 		"-v", e.DataDir + ":" + e.DataDir, "-v", certDir + ":" + certDir + ":ro",
 		"-v", e.ArtifactsDir + ":" + e.ArtifactsDir + ":ro", "-v", filepath.Dir(bin) + ":" + filepath.Dir(bin) + ":ro",
-		"-v", ca + ":/etc/ssl/certs/ca-certificates.crt:ro",
-		getenv("KVM_AGENT_IMAGE", "debian:trixie-slim"), bin,
+		"-v", ca + ":/etc/ssl/certs/ca-certificates.crt:ro"}
+	// The proxy CA only if KVM_PROXY_CONFDIR is set (check-kvm.sh): the
+	// daemon installs it at Init. Else the root drive needs a built-in CA.
+	var caFlags []string
+	confdir := os.Getenv("KVM_PROXY_CONFDIR")
+	if proxyCA := filepath.Join(confdir, "mitmproxy-ca-cert.pem"); confdir != "" && fileExists(proxyCA) {
+		args = append(args, "-v", confdir+":"+confdir+":ro")
+		caFlags = []string{"--egress-ca", proxyCA}
+	}
+	args = append(args, getenv("KVM_AGENT_IMAGE", "debian:trixie-slim"), bin,
 		"--data-dir", e.DataDir, "--artifacts-dir", e.ArtifactsDir,
 		"--listen", ptListen, "--tls-cert", certs.ServerCert, "--tls-key", certs.ServerKey, "--client-ca", certs.ClientCA,
-		"--transfer-parallel", getenv("KVM_TRANSFER_PARALLEL", "8")}
+		"--transfer-parallel", getenv("KVM_TRANSFER_PARALLEL", "8"))
+	args = append(args, caFlags...)
 	if out, err := exec.Command("docker", args...).CombinedOutput(); err != nil {
 		t.Fatalf("docker run: %v: %s", err, out)
 	}
+}
+
+func onPath(program string) bool {
+	_, err := exec.LookPath(program)
+	return err == nil
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 // presign signs a request the way FileStore does (KVM_PRESIGN: presign.py
@@ -222,7 +248,10 @@ func TestSavesKVM(t *testing.T) {
 	e := loadEnv()
 	bucket := os.Getenv("KVM_S3_BUCKET")
 	if bucket == "" {
-		t.Skip("KVM_S3_BUCKET not set")
+		t.Skip("KVM_S3_BUCKET not set: the saves test needs a test S3 bucket and AWS credentials")
+	}
+	if p := getenv("KVM_PRESIGN", "/opt/df/presign.py"); !onPath(p) {
+		t.Fatalf("no presigner %s: set KVM_PRESIGN to a program that prints a presigned request", p)
 	}
 	e.Template = getenv("KVM_SAVES_TEMPLATE", "kvmtest-saves-1")
 	cmd := newCommand(t, e)
