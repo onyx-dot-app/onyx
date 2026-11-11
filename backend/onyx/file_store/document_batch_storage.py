@@ -12,6 +12,7 @@ from onyx.connectors.models import (
     DocExtractionContext,
     DocIndexingContext,
     Document,
+    ListingPayload,
     SlimDocumentStub,
 )
 from onyx.file_store.file_store import FileStore, get_default_file_store
@@ -395,8 +396,17 @@ class StubBatchStorage:
             f"Stub Batch {batch_num}",
         )
 
-    def get_batch(self, batch_num: int) -> list[SlimDocumentStub] | None:
-        return self._files._read_batch_file(batch_num, _deserialize_stubs)
+    def get_batch(
+        self,
+        batch_num: int,
+        payload_type: type[ListingPayload] | None = None,
+    ) -> list[SlimDocumentStub] | None:
+        """`payload_type` is the connector's `ListingPayload` subclass.
+        Without it, the listing payload loads as the base model and loses
+        its fields."""
+        return self._files._read_batch_file(
+            batch_num, lambda data: _deserialize_stubs(data, payload_type)
+        )
 
     def delete_batch_by_num(self, batch_num: int) -> None:
         self._files.delete_batch_by_num(batch_num)
@@ -419,10 +429,19 @@ class StubBatchStorage:
         return self._files.extract_path_info(path)
 
 
-def _deserialize_stubs(data: str) -> list[SlimDocumentStub]:
-    # TODO(conversion stage): the listing payload loads as the base model
-    # here. The payload resolver must parse its own subclass.
-    return [SlimDocumentStub.model_validate(stub) for stub in json.loads(data)]
+def _deserialize_stubs(
+    data: str, payload_type: type[ListingPayload] | None
+) -> list[SlimDocumentStub]:
+    stubs: list[SlimDocumentStub] = []
+    for stub_dict in json.loads(data):
+        raw_payload = stub_dict.pop("listing_payload", None)
+        stub = SlimDocumentStub.model_validate(stub_dict)
+        if raw_payload is not None:
+            stub.listing_payload = (payload_type or ListingPayload).model_validate(
+                raw_payload
+            )
+        stubs.append(stub)
+    return stubs
 
 
 def get_stub_batch_storage(
