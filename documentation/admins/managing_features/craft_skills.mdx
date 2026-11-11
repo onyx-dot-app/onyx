@@ -147,9 +147,7 @@ Batch uploads and GitHub imports can return HTTP 200 with rejected Skills in `no
 with a `reason` for each refusal. Skills saved before the ZIP-size and file-count limits keep working.
 Onyx applies those limits when you save the Skill again.
 
-Self-hosted operators can change the per-file and bundle size limits with `SKILL_BUNDLE_PER_FILE_MAX_BYTES` and
-`SKILL_BUNDLE_TOTAL_MAX_BYTES`. If your reverse proxy sets a request size limit,
-allow space for the bundle and multipart form data.
+If your reverse proxy sets a request size limit, allow space for the bundle and multipart form data.
 
 The upload is rejected when the bundle has unsafe paths, symbolic links, files ending in `.template`,
 missing or invalid frontmatter, an invalid slug source, a duplicate Skill slug,

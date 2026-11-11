@@ -228,8 +228,8 @@ def test_create_skill_413_on_oversized_bundle(admin_user: DATestUser) -> None:
     streaming size check sees the uncompressed size and raises
     ``PAYLOAD_TOO_LARGE`` (413).
     """
-    # CI lowers SKILL_BUNDLE_PER_FILE_MAX_BYTES to 1 MiB; a 2 MiB file trips it.
-    oversized_payload = b"A" * (2 * 1024 * 1024)
+    # 26 MiB of one byte is over the 25 MiB per-file limit and compresses to ~26 KiB.
+    oversized_payload = b"A" * (26 * 1024 * 1024)
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr(

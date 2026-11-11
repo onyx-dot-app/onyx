@@ -98,7 +98,7 @@ def validate_stored_custom_skill(
                 normalized_bundle=None,
                 detail="stored bundle does not exist",
             )
-        # Operators can raise the size limits, so a skill over them stays unclassified.
+        # A later release can raise the size limits, so a skill over them stays unclassified.
         if (
             isinstance(exc, OnyxError)
             and exc.error_code == OnyxErrorCode.PAYLOAD_TOO_LARGE

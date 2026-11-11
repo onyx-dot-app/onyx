@@ -260,11 +260,11 @@ The library preview of an external-app skill calls the same renderer
     `OPENCODE_VERSION` pin changes, so the next pin bump checks that OpenCode
     still does this.
 17. `bundle-size-limits` **Upload limits do not apply to saved bundles.**
-    `skills/bundle.py` has a 25 MiB ZIP limit and a 500-file limit for new
-    uploads. These are constants. The per-file and expanded-total limits keep
-    their `SKILL_BUNDLE_*` env vars. Stored reads
+    `skills/bundle.py` limits are constants, not env vars: 25 MiB per file and
+    100 MiB expanded for every bundle, plus a 25 MiB ZIP and 500 files for new
+    uploads. Stored reads
     (`skills/validation.py:read_stored_bundle_bytes`) stop at the expanded-total
-    limit, which was the upload limit before this change, and skip the ZIP-size
+    limit and skip the ZIP-size
     and file-count limits. `skills/validation.py:validate_stored_custom_skill`
     returns `is_valid=None` for `PAYLOAD_TOO_LARGE`, so the push skips the Skill
     without saving it invalid. A full-replacement upload in the editor does not
