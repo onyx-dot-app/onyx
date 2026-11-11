@@ -1,29 +1,33 @@
-"""Two-way reconcile of host agent VMs and placement records (ENG-4576).
+"""Reconcile one node's VMs against the durable placement records (ENG-4576).
 
-One pass per node. The node's agent pushes its VM list (`List`) to the
-api_server every few seconds; the report route runs this pass for that node
-under a per-node lease (`onyx.microvm.node_report`):
+Each node agent pushes its full state every `--state-report-interval` (20 s):
+`vms` (its `List`: live and exited VMs) and `ended` (VM instances that ended
+within its `--ended-retention`). The report route runs one pass per node
+under a per-node lease (`onyx.microvm.node_report`). This is E2B's sync with
+a push instead of a pull (microvm/README.md, "Sandbox state model"). Records
+have no TTL, so a pass that runs out of time loses nothing; the next report
+goes on.
 
-- A live VM whose record matches: refresh the record TTL, then apply the idle
-  sleep rules. All refreshes run first, in one cache-only step, so a pass that
-  runs out of time still keeps every live record. The slower per-VM steps
-  start where the last unfinished pass stopped.
-- A live VM without a record, whose sandbox row is at that attempt and still
-  PROVISIONING or RUNNING, and whose guest daemon key is stored: write the
-  record (adopt it). Placement can lose the record write after Create, for
-  example on a crash.
-- Any other live VM is an orphan: mark it. Stop it only after a saved
-  checkpoint and a second liveness check. Without checkpoint support
-  (before ENG-4580) orphans are only marked.
-- A record whose VM is gone or exited: clear it, after a second `List` of the
-  node over mTLS (the report may predate a new VM). If that `List` fails, the
-  record stays. Records of a node that stops reporting are not refreshed, so
-  their TTL (`SANDBOX_FC_PLACEMENT_TTL_SECONDS`) ends them.
+Per reported VM:
+- The record names it: keep it. A running VM goes to the idle evictor. An
+  exited VM ended: clear its record and stop it (frees the node).
+- The record or the reservation has a newer attempt, or the record names
+  another instance of the same attempt: a stale orphan. Stop it.
+- The reservation names (attempt, node) and the attempt's daemon key exists:
+  adopt it with a fenced record write. A crash between Create and the record
+  write leaves this state.
+- Anything else is unknown. It is an orphan once
+  `SANDBOX_FC_ORPHAN_GRACE_SECONDS` passed since the first report of it.
+Per ended VM: clear the record that names that instance (fenced).
+Per indexed record of this node that names no reported VM: clear it after a
+second `List` over mTLS (the report may predate a new VM). If that `List`
+fails, the record stays.
+Orphan stops run last, at most `SANDBOX_FC_ORPHAN_STOPS_PER_REPORT` per pass,
+with no checkpoint: a stale or unknown VM has no session that anyone can use.
 """
 
 import time
 from collections.abc import Callable
-from datetime import datetime
 from enum import Enum
 from functools import partial
 from uuid import UUID
@@ -32,80 +36,100 @@ from pydantic import BaseModel, ConfigDict
 
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
-from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.enums import SandboxStatus
 from onyx.microvm.agent_client import (
     HostAgentClientFactory,
     HostAgentConfigError,
     HostAgentError,
+    HostAgentErrorReason,
+)
+from onyx.microvm.configs import (
+    SANDBOX_FC_ORPHAN_GRACE_SECONDS,
+    SANDBOX_FC_ORPHAN_STOPS_PER_REPORT,
 )
 from onyx.microvm.lifecycle import (
     SandboxActivityProbe,
     SandboxCheckpointer,
     VmStopOutcome,
-    sleep_idle_sandbox_vm,
+    evict_idle_sandbox_vm,
 )
-from onyx.microvm.models import AgentVm, ReconcileReport, RegisteredNode, VmState
+from onyx.microvm.models import (
+    AgentVm,
+    ReconcileReport,
+    RegisteredNode,
+    ReportedEndedVm,
+    VmState,
+)
 from onyx.microvm.placement import (
     find_vm,
     forget_placement,
     record_placement,
-    refresh_placement,
     sandbox_placement_lock,
 )
 from onyx.microvm.registry import (
     SandboxPlacement,
+    SandboxReservation,
     get_sandbox_daemon_key,
     get_sandbox_placement,
+    get_sandbox_reservation,
     list_indexed_placements,
+    release_sandbox_reservation,
     unindex_sandbox_placement,
 )
 from onyx.sandbox_proxy.sandbox_identity.signed import is_allowed_tenant_id
-from onyx.server.features.build.db.sandbox import get_sandbox_by_id
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 _ORPHAN_MARK_PREFIX = "sandbox_fc:orphan:"
 _ORPHAN_MARK_TTL_SECONDS = 7 * 24 * 3600
-# The sandbox ID where the last unfinished pass of a node stopped.
-_RESUME_CURSOR_PREFIX = "sandbox_fc:node_report_cursor:"
-_RESUME_CURSOR_TTL_SECONDS = 600
-_ADOPTABLE_STATUSES = frozenset({SandboxStatus.PROVISIONING, SandboxStatus.RUNNING})
 
 
-class _SandboxRow(BaseModel):
+class _Verdict(str, Enum):
+    OWNED = "owned"
+    ADOPT = "adopt"
+    STALE = "stale"
+    UNKNOWN = "unknown"
+
+
+def _verdict(
+    node_id: str,
+    vm: AgentVm,
+    record: SandboxPlacement | None,
+    reservation: SandboxReservation | None,
+) -> _Verdict:
+    if record is not None:
+        if record.names(node_id, vm.attempt, vm.generation):
+            return _Verdict.OWNED
+        if record.attempt >= vm.attempt:
+            return _Verdict.STALE
+    if reservation is not None:
+        if reservation.attempt > vm.attempt:
+            return _Verdict.STALE
+        if (
+            reservation.attempt == vm.attempt
+            and reservation.node_id == node_id
+            and vm.state.is_live()
+        ):
+            return _Verdict.ADOPT
+    return _Verdict.UNKNOWN
+
+
+class _OrphanStop(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    status: SandboxStatus
-    attempt: int
-    last_heartbeat: datetime | None
-    created_at: datetime
+    vm: AgentVm
+    sandbox_id: UUID
+    why: str
 
 
-def _load_sandbox_row(tenant_id: str, sandbox_id: UUID) -> _SandboxRow | None:
-    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
-        sandbox = get_sandbox_by_id(db_session, sandbox_id)
-        if sandbox is None:
-            return None
-        return _SandboxRow(
-            status=sandbox.status,
-            attempt=sandbox.provisioning_attempt_number,
-            last_heartbeat=sandbox.last_heartbeat,
-            created_at=sandbox.created_at,
-        )
-
-
-def mark_orphan(shared_cache: CacheBackend, node_id: str, vm: AgentVm) -> bool:
-    """Record when an orphan was first seen. True on the first sighting."""
-    first = shared_cache.set_if_absent(
-        f"{_ORPHAN_MARK_PREFIX}{node_id}:{vm.sandbox_id}:{vm.generation}",
-        str(int(time.time())),
-        ex=_ORPHAN_MARK_TTL_SECONDS,
-    )
-    if first:
+def orphan_first_seen(
+    shared_cache: CacheBackend, node_id: str, vm: AgentVm, now: int
+) -> int:
+    """When the api_server first saw this unknown VM (its own clock)."""
+    key = f"{_ORPHAN_MARK_PREFIX}{node_id}:{vm.sandbox_id}:{vm.generation}"
+    if shared_cache.set_if_absent(key, str(now), ex=_ORPHAN_MARK_TTL_SECONDS):
         logger.warning(
-            "sandbox_fc_orphan_vm node=%s sandbox=%s tenant=%s attempt=%d generation=%d state=%s",
+            "sandbox_fc_unknown_vm node=%s sandbox=%s tenant=%s attempt=%d generation=%d state=%s",
             node_id,
             vm.sandbox_id,
             vm.tenant_id,
@@ -113,13 +137,9 @@ def mark_orphan(shared_cache: CacheBackend, node_id: str, vm: AgentVm) -> bool:
             vm.generation,
             vm.state.value,
         )
-    return first
-
-
-def is_orphan_marked(shared_cache: CacheBackend, node_id: str, vm: AgentVm) -> bool:
-    return shared_cache.exists(
-        f"{_ORPHAN_MARK_PREFIX}{node_id}:{vm.sandbox_id}:{vm.generation}"
-    )
+        return now
+    raw = shared_cache.get(key)
+    return int(raw) if raw is not None else now
 
 
 class _PassEnded(Exception):
@@ -131,25 +151,6 @@ class _PassEnded(Exception):
         self.cause = cause
 
 
-class _Refresh(Enum):
-    REFRESHED = "refreshed"
-    # The record names this VM no more: a wake replaced it. Skip the VM.
-    REPLACED = "replaced"
-    NO_MATCH = "no_match"
-
-
-def _resume_order(
-    pending: list[tuple[AgentVm, UUID]], cursor: str | None
-) -> list[tuple[AgentVm, UUID]]:
-    """`pending` by sandbox ID, from `cursor` (inclusive) and then wrapping
-    around, so an unfinished pass does not starve the VMs late in the list."""
-    ordered = sorted(pending, key=lambda item: item[0].sandbox_id)
-    if cursor is None:
-        return ordered
-    start = next((i for i, (vm, _) in enumerate(ordered) if vm.sandbox_id >= cursor), 0)
-    return ordered[start:] + ordered[:start]
-
-
 class _Pass:
     def __init__(
         self,
@@ -157,7 +158,8 @@ class _Pass:
         client_factory: HostAgentClientFactory,
         checkpointer: SandboxCheckpointer,
         activity: SandboxActivityProbe,
-        now: datetime,
+        node: RegisteredNode,
+        now: int,
         report: ReconcileReport,
         check_lease: Callable[[], None] | None,
     ) -> None:
@@ -165,9 +167,14 @@ class _Pass:
         self.client_factory = client_factory
         self.checkpointer = checkpointer
         self.activity = activity
+        self.node = node
         self.now = now
         self.report = report
         self.check_lease = check_lease
+        self.stops: list[_OrphanStop] = []
+        # The second List of this pass, read at most once.
+        self._second_list: list[AgentVm] | None = None
+        self._second_list_read = False
 
     def check(self) -> None:
         if self.check_lease is not None:
@@ -190,205 +197,225 @@ class _Pass:
             logger.exception("sandbox_fc_reconcile_step_failed step=%s", what)
             self.report.failed.append(what)
 
-    def list_vms(self, node: RegisteredNode) -> list[AgentVm] | None:
+    def second_list(self) -> list[AgentVm] | None:
+        if not self._second_list_read:
+            self._second_list_read = True
+            try:
+                self._second_list = self.client_factory.client(
+                    self.node.address
+                ).list_vms()
+            except HostAgentError as e:
+                logger.warning(
+                    "sandbox_fc_reconcile_node_unreachable node=%s error=%s",
+                    self.node.node_id,
+                    e,
+                )
+        return self._second_list
+
+    def valid(self, sandbox_id: str, tenant_id: str) -> UUID | None:
         try:
-            return self.client_factory.client(node.address).list_vms()
-        except HostAgentError as e:
-            logger.warning(
-                "sandbox_fc_reconcile_node_unreachable node=%s error=%s",
-                node.node_id,
-                e,
+            parsed = UUID(sandbox_id)
+        except ValueError:
+            logger.error(
+                "sandbox_fc_reconcile_bad_sandbox_id node=%s id=%r",
+                self.node.node_id,
+                sandbox_id,
             )
             return None
-
-    def node(self, node: RegisteredNode, vms: list[AgentVm]) -> None:
-        live_vms: list[tuple[AgentVm, UUID]] = []
-        for vm in vms:
-            try:
-                sandbox_id = UUID(vm.sandbox_id)
-            except ValueError:
-                logger.error(
-                    "sandbox_fc_reconcile_bad_sandbox_id node=%s id=%r",
-                    node.node_id,
-                    vm.sandbox_id,
-                )
-                continue
-            if not is_allowed_tenant_id(vm.tenant_id):
-                logger.error(
-                    "sandbox_fc_reconcile_bad_tenant_id node=%s sandbox=%s tenant=%r",
-                    node.node_id,
-                    vm.sandbox_id,
-                    vm.tenant_id,
-                )
-                continue
-            # An exited VM has no files left; the record step clears its record.
-            if vm.state.is_live():
-                live_vms.append((vm, sandbox_id))
-
-        # Cache only (no agent or database calls), so it ends quickly and
-        # needs no deadline check per VM.
-        self.check()
-        pending: list[tuple[AgentVm, UUID]] = []
-        for vm, sandbox_id in live_vms:
-            try:
-                outcome = self.refresh(node, vm, sandbox_id)
-            except Exception:
-                logger.exception(
-                    "sandbox_fc_reconcile_step_failed step=refresh %s/%s",
-                    node.node_id,
-                    vm.sandbox_id,
-                )
-                self.report.failed.append(f"refresh {node.node_id}/{vm.sandbox_id}")
-                continue
-            if outcome is not _Refresh.REPLACED:
-                pending.append((vm, sandbox_id))
-
-        cursor_key = _RESUME_CURSOR_PREFIX + node.node_id
-        raw_cursor = self.shared_cache.get(cursor_key)
-        ordered = _resume_order(
-            pending, raw_cursor.decode() if raw_cursor is not None else None
-        )
-        for vm, sandbox_id in ordered:
-            try:
-                self.step(
-                    f"vm {node.node_id}/{vm.sandbox_id}",
-                    partial(self.vm, node, vm, sandbox_id),
-                )
-            except _PassEnded:
-                self.shared_cache.set(
-                    cursor_key, vm.sandbox_id, ex=_RESUME_CURSOR_TTL_SECONDS
-                )
-                raise
-        if raw_cursor is not None:
-            self.shared_cache.delete(cursor_key)
-
-        live = {(vm.sandbox_id, vm.generation) for vm, _ in live_vms}
-        for indexed in list_indexed_placements(self.shared_cache, node.node_id):
-            self.step(
-                f"record {node.node_id}/{indexed.sandbox_id}",
-                partial(self.record, node, indexed.tenant_id, indexed.sandbox_id, live),
-            )
-
-    def refresh(
-        self, node: RegisteredNode, vm: AgentVm, sandbox_id: UUID
-    ) -> "_Refresh":
-        tenant_cache = get_cache_backend(tenant_id=vm.tenant_id)
-        placement = SandboxPlacement(node_id=node.node_id, generation=vm.generation)
-        if get_sandbox_placement(tenant_cache, sandbox_id) != placement:
-            return _Refresh.NO_MATCH
-        # Atomic compare-and-renew: a wake may have replaced the VM since the
-        # read above.
-        if not refresh_placement(
-            self.shared_cache,
-            tenant_cache,
-            tenant_id=vm.tenant_id,
-            sandbox_id=sandbox_id,
-            placement=placement,
-        ):
-            return _Refresh.REPLACED
-        self.report.refreshed.append(vm.sandbox_id)
-        return _Refresh.REFRESHED
-
-    def vm(self, node: RegisteredNode, vm: AgentVm, sandbox_id: UUID) -> None:
-        tenant_cache = get_cache_backend(tenant_id=vm.tenant_id)
-        placement = get_sandbox_placement(tenant_cache, sandbox_id)
-        if placement == SandboxPlacement(
-            node_id=node.node_id, generation=vm.generation
-        ):
-            # Refreshed above (or recorded since by a wake).
-            if vm.state is VmState.RUNNING:
-                self.maybe_sleep(vm, sandbox_id, tenant_cache)
-            return
-
-        row = _load_sandbox_row(vm.tenant_id, sandbox_id)
-        if (
-            placement is None
-            and row is not None
-            and row.status in _ADOPTABLE_STATUSES
-            and row.attempt == vm.attempt
-            # Without the key nothing can use the VM.
-            and get_sandbox_daemon_key(tenant_cache, sandbox_id, attempt=vm.attempt)
-            is not None
-        ):
-            with sandbox_placement_lock(
-                tenant_cache, sandbox_id, blocking=False
-            ) as lock:
-                # A placement in progress writes the record itself.
-                if lock is None or get_sandbox_placement(tenant_cache, sandbox_id):
-                    return
-                record_placement(
-                    self.shared_cache,
-                    tenant_cache,
-                    tenant_id=vm.tenant_id,
-                    sandbox_id=sandbox_id,
-                    placement=SandboxPlacement(
-                        node_id=node.node_id, generation=vm.generation
-                    ),
-                )
-            logger.info(
-                "sandbox_fc_reconcile_adopted node=%s sandbox=%s generation=%d",
-                node.node_id,
+        if not is_allowed_tenant_id(tenant_id):
+            logger.error(
+                "sandbox_fc_reconcile_bad_tenant_id node=%s sandbox=%s tenant=%r",
+                self.node.node_id,
                 sandbox_id,
-                vm.generation,
+                tenant_id,
             )
-            self.report.adopted.append(vm.sandbox_id)
+            return None
+        return parsed
+
+    def run(self, vms: list[AgentVm], ended: list[ReportedEndedVm]) -> None:
+        reported: set[tuple[str, int]] = set()
+        for vm in vms:
+            sandbox_id = self.valid(vm.sandbox_id, vm.tenant_id)
+            if sandbox_id is None:
+                continue
+            if vm.state.is_live():
+                reported.add((vm.sandbox_id, vm.generation))
+            self.step(
+                f"vm {self.node.node_id}/{vm.sandbox_id}",
+                partial(self.vm, vm, sandbox_id),
+            )
+        for gone in ended:
+            sandbox_id = self.valid(gone.sandbox_id, gone.tenant_id)
+            if sandbox_id is None:
+                continue
+            self.step(
+                f"ended {self.node.node_id}/{gone.sandbox_id}",
+                partial(self.ended, gone, sandbox_id),
+            )
+        for indexed in list_indexed_placements(self.shared_cache, self.node.node_id):
+            self.step(
+                f"record {self.node.node_id}/{indexed.sandbox_id}",
+                partial(self.record, indexed.tenant_id, indexed.sandbox_id, reported),
+            )
+        for stop in self.stops[:SANDBOX_FC_ORPHAN_STOPS_PER_REPORT]:
+            self.step(
+                f"orphan {self.node.node_id}/{stop.vm.sandbox_id}",
+                partial(self.stop_orphan, stop),
+            )
+
+    def vm(self, vm: AgentVm, sandbox_id: UUID) -> None:
+        tenant_cache = get_cache_backend(tenant_id=vm.tenant_id)
+        record = get_sandbox_placement(tenant_cache, sandbox_id)
+        found = get_sandbox_reservation(tenant_cache, sandbox_id)
+        verdict = _verdict(
+            self.node.node_id, vm, record, found[0] if found is not None else None
+        )
+        if verdict is _Verdict.OWNED and record is not None:
+            if vm.state is VmState.EXITED:
+                self.clear(
+                    tenant_cache,
+                    vm.tenant_id,
+                    sandbox_id,
+                    attempt=vm.attempt,
+                    generation=vm.generation,
+                )
+                self.stops.append(
+                    _OrphanStop(vm=vm, sandbox_id=sandbox_id, why="exited")
+                )
+            elif vm.state is VmState.RUNNING:
+                self.evict_if_idle(vm, sandbox_id, tenant_cache, record)
             return
+        if verdict is _Verdict.ADOPT and found is not None:
+            if self.adopt(vm, sandbox_id, tenant_cache, found[1]):
+                return
+            verdict = _Verdict.UNKNOWN
+        if verdict is _Verdict.STALE:
+            self.report.orphans_marked.append(vm.sandbox_id)
+            self.stops.append(_OrphanStop(vm=vm, sandbox_id=sandbox_id, why="stale"))
+            return
+        first_seen = orphan_first_seen(
+            self.shared_cache, self.node.node_id, vm, self.now
+        )
+        if self.now - first_seen >= SANDBOX_FC_ORPHAN_GRACE_SECONDS:
+            self.report.orphans_marked.append(vm.sandbox_id)
+            self.stops.append(_OrphanStop(vm=vm, sandbox_id=sandbox_id, why="unknown"))
 
-        mark_orphan(self.shared_cache, node.node_id, vm)
-        self.report.orphans_marked.append(vm.sandbox_id)
-        self.maybe_stop_orphan(node, vm, sandbox_id, tenant_cache)
-
-    def maybe_stop_orphan(
+    def adopt(
         self,
-        node: RegisteredNode,
         vm: AgentVm,
         sandbox_id: UUID,
         tenant_cache: CacheBackend,
+        reservation_raw: bytes,
+    ) -> bool:
+        """Write the record of a VM that its reservation names. False when
+        the daemon key is lost (nothing can use the VM)."""
+        if get_sandbox_daemon_key(tenant_cache, sandbox_id, attempt=vm.attempt) is None:
+            return False
+        with sandbox_placement_lock(tenant_cache, sandbox_id, blocking=False) as lock:
+            # A placement in progress writes the record itself.
+            if lock is None:
+                return True
+            if not record_placement(
+                self.shared_cache,
+                tenant_cache,
+                tenant_id=vm.tenant_id,
+                sandbox_id=sandbox_id,
+                placement=SandboxPlacement(
+                    node_id=self.node.node_id,
+                    attempt=vm.attempt,
+                    generation=vm.generation,
+                    last_active=self.now,
+                ),
+            ):
+                return False
+            release_sandbox_reservation(tenant_cache, sandbox_id, reservation_raw)
+        logger.info(
+            "sandbox_fc_reconcile_adopted node=%s sandbox=%s attempt=%d generation=%d",
+            self.node.node_id,
+            sandbox_id,
+            vm.attempt,
+            vm.generation,
+        )
+        self.report.adopted.append(vm.sandbox_id)
+        return True
+
+    def clear(
+        self,
+        tenant_cache: CacheBackend,
+        tenant_id: str,
+        sandbox_id: UUID,
+        *,
+        attempt: int,
+        generation: int,
     ) -> None:
+        if forget_placement(
+            self.shared_cache,
+            tenant_cache,
+            tenant_id=tenant_id,
+            sandbox_id=sandbox_id,
+            node_id=self.node.node_id,
+            attempt=attempt,
+            generation=generation,
+        ):
+            logger.info(
+                "sandbox_fc_reconcile_cleared node=%s sandbox=%s attempt=%d generation=%d",
+                self.node.node_id,
+                sandbox_id,
+                attempt,
+                generation,
+            )
+            self.report.cleared.append(str(sandbox_id))
+
+    def ended(self, gone: ReportedEndedVm, sandbox_id: UUID) -> None:
+        self.clear(
+            get_cache_backend(tenant_id=gone.tenant_id),
+            gone.tenant_id,
+            sandbox_id,
+            attempt=gone.attempt,
+            generation=gone.generation,
+        )
+
+    def record(
+        self, tenant_id: str, sandbox_id: UUID, reported: set[tuple[str, int]]
+    ) -> None:
+        tenant_cache = get_cache_backend(tenant_id=tenant_id)
+        placement = get_sandbox_placement(tenant_cache, sandbox_id)
+        if placement is None or placement.node_id != self.node.node_id:
+            unindex_sandbox_placement(
+                self.shared_cache,
+                node_id=self.node.node_id,
+                tenant_id=tenant_id,
+                sandbox_id=sandbox_id,
+            )
+            return
+        if (str(sandbox_id), placement.generation) in reported:
+            return
         with sandbox_placement_lock(tenant_cache, sandbox_id, blocking=False) as lock:
             if lock is None:
                 return
-            if not self.checkpointer.save_checkpoint(
-                tenant_id=vm.tenant_id, sandbox_id=sandbox_id, vm=vm
-            ):
+            # Check liveness again: the report may predate a new VM.
+            current = self.second_list()
+            if current is None:
                 return
-            current = self.list_vms(node)
-            again = (
-                find_vm(current, sandbox_id, vm.generation)
-                if current is not None
-                else None
+            vm = find_vm(current, sandbox_id, placement.generation)
+            if vm is not None and vm.state.is_live():
+                return
+            self.clear(
+                tenant_cache,
+                tenant_id,
+                sandbox_id,
+                attempt=placement.attempt,
+                generation=placement.generation,
             )
-            placement = get_sandbox_placement(tenant_cache, sandbox_id)
-            if (
-                again is None
-                or not again.state.is_live()
-                or placement
-                == SandboxPlacement(node_id=node.node_id, generation=vm.generation)
-            ):
-                return
-            try:
-                self.client_factory.client(node.address).stop(
-                    sandbox_id=vm.sandbox_id,
-                    attempt=again.attempt,
-                    generation=again.generation,
-                )
-            except HostAgentError as e:
-                logger.warning(
-                    "sandbox_fc_orphan_stop_failed node=%s sandbox=%s error=%s",
-                    node.node_id,
-                    sandbox_id,
-                    e,
-                )
-                return
-        self.report.orphans_stopped.append(vm.sandbox_id)
 
-    def maybe_sleep(
-        self, vm: AgentVm, sandbox_id: UUID, tenant_cache: CacheBackend
+    def evict_if_idle(
+        self,
+        vm: AgentVm,
+        sandbox_id: UUID,
+        tenant_cache: CacheBackend,
+        record: SandboxPlacement,
     ) -> None:
-        row = _load_sandbox_row(vm.tenant_id, sandbox_id)
-        if row is None:
-            return
-        outcome = sleep_idle_sandbox_vm(
+        outcome = evict_idle_sandbox_vm(
             self.shared_cache,
             tenant_cache,
             self.client_factory,
@@ -396,59 +423,60 @@ class _Pass:
             self.activity,
             tenant_id=vm.tenant_id,
             sandbox_id=sandbox_id,
-            last_heartbeat=row.last_heartbeat,
-            created_at=row.created_at,
+            last_active=record.last_active,
             now=self.now,
         )
+        if outcome is VmStopOutcome.NOT_IDLE:
+            return
+        self.report.idle.append(vm.sandbox_id)
         if outcome is VmStopOutcome.STOPPED:
             self.report.slept.append(vm.sandbox_id)
 
-    def record(
-        self,
-        node: RegisteredNode,
-        tenant_id: str,
-        sandbox_id: UUID,
-        live: set[tuple[str, int]],
-    ) -> None:
-        tenant_cache = get_cache_backend(tenant_id=tenant_id)
-        placement = get_sandbox_placement(tenant_cache, sandbox_id)
-        if placement is None or placement.node_id != node.node_id:
-            unindex_sandbox_placement(
-                self.shared_cache,
-                node_id=node.node_id,
-                tenant_id=tenant_id,
-                sandbox_id=sandbox_id,
-            )
-            return
-        if (str(sandbox_id), placement.generation) in live:
-            return
+    def stop_orphan(self, stop: _OrphanStop) -> None:
+        vm, sandbox_id = stop.vm, stop.sandbox_id
+        tenant_cache = get_cache_backend(tenant_id=vm.tenant_id)
         with sandbox_placement_lock(tenant_cache, sandbox_id, blocking=False) as lock:
-            if (
-                lock is None
-                or get_sandbox_placement(tenant_cache, sandbox_id) != placement
-            ):
+            # A placement in progress may own this VM: next report.
+            if lock is None:
                 return
-            # Check liveness again: the first List may predate a new VM.
-            current = self.list_vms(node)
-            if current is None:
+            if stop.why != "exited":
+                found = get_sandbox_reservation(tenant_cache, sandbox_id)
+                verdict = _verdict(
+                    self.node.node_id,
+                    vm,
+                    get_sandbox_placement(tenant_cache, sandbox_id),
+                    found[0] if found is not None else None,
+                )
+                if verdict in (_Verdict.OWNED, _Verdict.ADOPT):
+                    return
+            try:
+                self.client_factory.client(self.node.address).stop(
+                    sandbox_id=vm.sandbox_id,
+                    attempt=vm.attempt,
+                    generation=vm.generation,
+                )
+            except HostAgentError as e:
+                if e.reason in (
+                    HostAgentErrorReason.SANDBOX_NOT_FOUND,
+                    HostAgentErrorReason.INSTANCE_MISMATCH,
+                ):
+                    return
+                logger.warning(
+                    "sandbox_fc_orphan_stop_failed node=%s sandbox=%s error=%s",
+                    self.node.node_id,
+                    sandbox_id,
+                    e,
+                )
                 return
-            vm = find_vm(current, sandbox_id, placement.generation)
-            if vm is not None and vm.state.is_live():
-                return
-            forget_placement(
-                self.shared_cache,
-                tenant_cache,
-                tenant_id=tenant_id,
-                sandbox_id=sandbox_id,
-                node_id=node.node_id,
-            )
-        logger.info(
-            "sandbox_fc_reconcile_cleared node=%s sandbox=%s generation=%d",
-            node.node_id,
+        logger.warning(
+            "sandbox_fc_orphan_stopped node=%s sandbox=%s attempt=%d generation=%d why=%s",
+            self.node.node_id,
             sandbox_id,
-            placement.generation,
+            vm.attempt,
+            vm.generation,
+            stop.why,
         )
-        self.report.cleared.append(str(sandbox_id))
+        self.report.orphans_stopped.append(vm.sandbox_id)
 
 
 def reconcile_node(
@@ -459,19 +487,27 @@ def reconcile_node(
     *,
     node: RegisteredNode,
     vms: list[AgentVm],
-    now: datetime,
+    ended: list[ReportedEndedVm] | None = None,
+    now: int | None = None,
     check_lease: Callable[[], None] | None = None,
 ) -> ReconcileReport:
-    """One reconcile pass over the VMs that `node` reported. `check_lease`
-    runs before the refreshes and before each VM and record, and raises to
-    end the pass. `HostAgentConfigError` also ends the pass and is raised.
-    Any other error ends only its step."""
+    """One reconcile pass over the state that `node` reported. `check_lease`
+    runs before each step and raises to end the pass.
+    `HostAgentConfigError` also ends the pass and is raised. Any other error
+    ends only its step."""
     report = ReconcileReport()
     run = _Pass(
-        shared_cache, client_factory, checkpointer, activity, now, report, check_lease
+        shared_cache,
+        client_factory,
+        checkpointer,
+        activity,
+        node,
+        int(time.time()) if now is None else now,
+        report,
+        check_lease,
     )
     try:
-        run.node(node, vms)
-    except _PassEnded as ended:
-        raise ended.cause from None
+        run.run(vms, ended or [])
+    except _PassEnded as ended_pass:
+        raise ended_pass.cause from None
     return report

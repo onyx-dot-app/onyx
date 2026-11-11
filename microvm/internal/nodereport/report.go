@@ -1,9 +1,11 @@
-// Package nodereport pushes the node's VM list to the api_server.
+// Package nodereport pushes the node's full VM state to the api_server.
 //
-// The api_server reconciles the node's placement records on each report
-// (backend/onyx/microvm/node_report.py). Nothing on the api_server side polls
-// the agents. The report is signed with the registered node key, so it starts
-// only after the key registration succeeds.
+// Each report has every VM of List and every VM instance that ended within
+// --ended-retention. The api_server reconciles the node's placement records
+// on each report (backend/onyx/microvm/node_report.py). This is E2B's
+// 20 s sync with a push instead of a pull: Onyx has no API-side scheduler
+// (microvm/README.md, "Sandbox state model"). The report is signed with the
+// registered node key, so it starts only after the key registration succeeds.
 package nodereport
 
 import (
@@ -39,10 +41,11 @@ const TokenLifetime = 60 * time.Second
 const (
 	MaxBodyBytes = 1 << 20
 	MaxVMs       = 1024
+	MaxEnded     = 1024
 )
 
-// DefaultInterval is the default --state-report-interval.
-const DefaultInterval = 15 * time.Second
+// DefaultInterval is the default --state-report-interval (E2B's sync interval).
+const DefaultInterval = 20 * time.Second
 
 // DefaultMaxBackoff caps the wait after repeated failures.
 const DefaultMaxBackoff = 2 * time.Minute
@@ -62,9 +65,20 @@ type VM struct {
 	StartedAt  *time.Time `json:"started_at"`
 }
 
+// EndedVM is one VM instance that exited or stopped within --ended-retention.
+type EndedVM struct {
+	SandboxID  string    `json:"sandbox_id"`
+	TenantID   string    `json:"tenant_id"`
+	Attempt    uint64    `json:"attempt"`
+	Generation uint64    `json:"generation"`
+	Reason     string    `json:"reason"`
+	EndedAt    time.Time `json:"ended_at"`
+}
+
 type report struct {
-	NodeID string `json:"node_id"`
-	VMs    []VM   `json:"vms"`
+	NodeID string    `json:"node_id"`
+	VMs    []VM      `json:"vms"`
+	Ended  []EndedVM `json:"ended"`
 }
 
 type tokenHeader struct {
@@ -90,6 +104,8 @@ type Reporter struct {
 	Signer *relay.Signer
 	// List returns the node's VMs.
 	List func() []VM
+	// Ended returns the VM instances that ended recently. nil: none.
+	Ended func() []EndedVM
 	// Ready closes when the key registration first succeeds.
 	Ready  <-chan struct{}
 	Client *http.Client
@@ -102,15 +118,23 @@ type Reporter struct {
 	Now func() time.Time
 }
 
-// Body returns the JSON report of vms, or an error if it is over the caps.
-func Body(nodeID string, vms []VM) ([]byte, error) {
+// Body returns the JSON report of vms and ended, or an error if it is over
+// the caps. Only the oldest ended entries are dropped over MaxEnded: a lost
+// ended entry delays a record clear, it never clears a live record.
+func Body(nodeID string, vms []VM, ended []EndedVM) ([]byte, error) {
 	if len(vms) > MaxVMs {
 		return nil, fmt.Errorf("node report has %d VMs, the cap is %d", len(vms), MaxVMs)
 	}
 	if vms == nil {
 		vms = []VM{}
 	}
-	body, err := json.Marshal(report{NodeID: nodeID, VMs: vms})
+	if len(ended) > MaxEnded {
+		ended = ended[len(ended)-MaxEnded:]
+	}
+	if ended == nil {
+		ended = []EndedVM{}
+	}
+	body, err := json.Marshal(report{NodeID: nodeID, VMs: vms, Ended: ended})
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +175,11 @@ func (r *Reporter) now() time.Time {
 
 // Send sends one report.
 func (r *Reporter) Send(ctx context.Context) error {
-	body, err := Body(r.Signer.NodeID, r.List())
+	var ended []EndedVM
+	if r.Ended != nil {
+		ended = r.Ended()
+	}
+	body, err := Body(r.Signer.NodeID, r.List(), ended)
 	if err != nil {
 		return err
 	}

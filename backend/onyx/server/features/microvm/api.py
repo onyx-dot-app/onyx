@@ -7,14 +7,15 @@ relay stamps on VM traffic; the sandbox proxy verifies with the public half.
 The optional `agent_address` (the agent's mTLS listener, `host:port`) is how
 the api_server finds the node for placement and lifecycle calls.
 
-The agent also pushes its VM list to `SANDBOX_NODE_STATE_REPORT_PATH`, signed
-with its registered key; the api_server reconciles that node on each report.
+The agent also pushes its VM state (VMs and recently ended VMs) to
+`SANDBOX_NODE_STATE_REPORT_PATH`, signed with its registered key; the
+api_server reconciles that node on each report.
 """
 
 import base64
 import binascii
 import secrets
-from datetime import datetime, timezone
+import time
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from fastapi import APIRouter, Depends, Request
@@ -192,7 +193,7 @@ def _verify_and_reconcile(token: str, body: bytes) -> NodeStateReportResult:
             shared_cache,
             _node_report_agents,
             report,
-            now=datetime.now(timezone.utc),
+            now=int(time.time()),
         )
     except NodeNotRegisteredError:
         raise OnyxError(
@@ -203,7 +204,7 @@ def _verify_and_reconcile(token: str, body: bytes) -> NodeStateReportResult:
 
 @router.post(SANDBOX_NODE_STATE_REPORT_PATH)
 async def report_sandbox_node_state(request: Request) -> NodeStateReportResult:
-    """The agent's VM list; the api_server reconciles that node's records.
+    """The agent's VM state; the api_server reconciles that node's records.
 
     Auth: a JWT signed by the node's registered key (`onyx.microvm.node_report`).
     """

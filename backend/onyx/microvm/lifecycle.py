@@ -1,13 +1,15 @@
-"""Firecracker sandbox VM lifecycle (ENG-4576): wake, heartbeat, stop, idle sleep.
+"""Firecracker sandbox VM lifecycle (ENG-4576): wake, activity, stop, idle eviction.
 
 - Wake (P5): `wake_sandbox_vm` is the only entry that starts a VM. Call it from
-  the first tool call that needs the sandbox; nothing pre-warms.
-- Heartbeat: `refresh_sandbox_placement` refreshes the placement record TTL.
-  The reconcile loop also refreshes every record that matches a live VM.
+  the first tool call that needs the sandbox; nothing pre-warms. It is an
+  idempotent ensure (see `place_sandbox_vm`).
+- Activity: `touch_sandbox_vm` sets the record's `last_active`. The record has
+  no TTL, so activity only feeds the idle evictor.
 - Stop: never without a saved checkpoint, and the VM's liveness is checked
   again right before the Stop call.
-- Idle sleep: after `SANDBOX_FC_IDLE_TIMEOUT_SECONDS` without a heartbeat (P4),
-  and only when nothing runs in the sandbox (P7).
+- Idle evictor (API side, like E2B's): a node report checks each running VM's
+  `last_active` against `SANDBOX_FC_IDLE_TIMEOUT_SECONDS` (P4), and stops it
+  only when nothing runs in it (P7) and a checkpoint is saved.
 - Init: `initialize_sandbox_vm` closes the VM's relay connections and runs the
   guest daemon Init with the VM's key. A daemon without the key makes the VM
   unusable: it is stopped, and the caller wakes the next attempt.
@@ -18,7 +20,7 @@ exist, the defaults (`NoCheckpointSupport`, `UnknownActivity`) keep every VM.
 
 import abc
 import random
-from datetime import datetime, timedelta
+import time
 from enum import Enum
 from uuid import UUID
 
@@ -36,13 +38,12 @@ from onyx.microvm.placement import (
     find_vm,
     forget_placement,
     place_sandbox_vm,
-    refresh_placement,
     sandbox_placement_lock,
 )
 from onyx.microvm.registry import (
-    SandboxPlacement,
     get_registered_node,
     get_sandbox_placement,
+    touch_sandbox_placement,
 )
 from onyx.utils.logger import setup_logger
 
@@ -52,6 +53,9 @@ logger = setup_logger()
 class SandboxCheckpointer(abc.ABC):
     """Saves the session state of a VM before the VM may be stopped."""
 
+    # False: no VM is stopped automatically, so callers skip the agent calls.
+    supported: bool = True
+
     @abc.abstractmethod
     def save_checkpoint(self, *, tenant_id: str, sandbox_id: UUID, vm: AgentVm) -> bool:
         """True only when the VM's state is saved and committed."""
@@ -60,6 +64,8 @@ class SandboxCheckpointer(abc.ABC):
 
 class NoCheckpointSupport(SandboxCheckpointer):
     """No session saves yet (ENG-4580): no VM is ever stopped automatically."""
+
+    supported = False
 
     def save_checkpoint(self, *, tenant_id: str, sandbox_id: UUID, vm: AgentVm) -> bool:  # noqa: ARG002
         return False
@@ -173,21 +179,16 @@ def initialize_sandbox_vm(
         raise SandboxVmUnusableError(sandbox_id, vm.attempt + 1, e.reason.value) from e
 
 
-def refresh_sandbox_placement(
-    shared_cache: CacheBackend,
-    tenant_cache: CacheBackend,
-    *,
-    tenant_id: str,
-    sandbox_id: UUID,
-    placement: SandboxPlacement,
-) -> bool:
-    """Heartbeat: refresh the record if it still names this VM instance."""
-    return refresh_placement(
-        shared_cache,
+def touch_sandbox_vm(tenant_cache: CacheBackend, placed: PlacedVm) -> bool:
+    """Record activity of a placed VM. False when the record names another
+    VM instance (the sandbox was replaced)."""
+    return touch_sandbox_placement(
         tenant_cache,
-        tenant_id=tenant_id,
-        sandbox_id=sandbox_id,
-        placement=placement,
+        UUID(placed.vm.sandbox_id),
+        node_id=placed.node.node_id,
+        attempt=placed.vm.attempt,
+        generation=placed.vm.generation,
+        now=int(time.time()),
     )
 
 
@@ -228,6 +229,8 @@ def stop_sandbox_vm(
                 tenant_id=tenant_id,
                 sandbox_id=sandbox_id,
                 node_id=placement.node_id,
+                attempt=placement.attempt,
+                generation=placement.generation,
             )
             return VmStopOutcome.ALREADY_GONE
 
@@ -265,25 +268,25 @@ def stop_sandbox_vm(
             tenant_id=tenant_id,
             sandbox_id=sandbox_id,
             node_id=placement.node_id,
+            attempt=placement.attempt,
+            generation=placement.generation,
         )
         logger.info(
-            "sandbox_fc_stopped node=%s sandbox=%s generation=%d",
+            "sandbox_fc_stopped node=%s sandbox=%s attempt=%d generation=%d",
             placement.node_id,
             sandbox_id,
+            placement.attempt,
             placement.generation,
         )
         return VmStopOutcome.STOPPED
 
 
-def is_vm_idle(
-    last_heartbeat: datetime | None, created_at: datetime, now: datetime
-) -> bool:
-    """P4: no heartbeat for the idle timeout (no heartbeat yet: since creation)."""
-    reference = last_heartbeat or created_at
-    return reference < now - timedelta(seconds=SANDBOX_FC_IDLE_TIMEOUT_SECONDS)
+def is_vm_idle(last_active: int, now: int) -> bool:
+    """P4: no activity in the record for the idle timeout."""
+    return now - last_active >= SANDBOX_FC_IDLE_TIMEOUT_SECONDS
 
 
-def sleep_idle_sandbox_vm(
+def evict_idle_sandbox_vm(
     shared_cache: CacheBackend,
     tenant_cache: CacheBackend,
     client_factory: HostAgentClientFactory,
@@ -292,13 +295,15 @@ def sleep_idle_sandbox_vm(
     *,
     tenant_id: str,
     sandbox_id: UUID,
-    last_heartbeat: datetime | None,
-    created_at: datetime,
-    now: datetime,
+    last_active: int,
+    now: int,
 ) -> VmStopOutcome:
-    """Stop an idle VM (P4) when nothing runs in it (P7)."""
-    if not is_vm_idle(last_heartbeat, created_at, now):
+    """The idle evictor: stop a VM idle past the timeout (P4) when nothing
+    runs in it (P7). Without checkpoint support it decides and keeps the VM."""
+    if not is_vm_idle(last_active, now):
         return VmStopOutcome.NOT_IDLE
+    if not checkpointer.supported:
+        return VmStopOutcome.KEPT_NO_CHECKPOINT
     if activity.is_busy(tenant_id=tenant_id, sandbox_id=sandbox_id):
         return VmStopOutcome.KEPT_BUSY
     return stop_sandbox_vm(

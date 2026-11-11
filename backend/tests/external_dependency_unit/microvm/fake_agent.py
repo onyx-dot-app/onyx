@@ -2,6 +2,7 @@
 daemon behind its pass-through."""
 
 import threading
+import time
 from concurrent import futures
 
 import grpc
@@ -109,6 +110,8 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         # answer, e.g. a deadline): the caller cannot know the VM runs.
         self.lost_create_answers = 0
         self.init_requests: list[tuple[sandboxd_pb2.InitRequest, str]] = []
+        # Seconds each Create waits before it runs (to overlap two wakes).
+        self.create_delay_seconds = 0.0
 
     def add_vm(
         self,
@@ -141,6 +144,8 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
     def Create(  # noqa: N802
         self, request: hostagent_pb2.CreateRequest, context: grpc.ServicerContext
     ) -> hostagent_pb2.CreateResponse:
+        if self.create_delay_seconds:
+            time.sleep(self.create_delay_seconds)
         with self.lock:
             self.create_calls += 1
             self.create_requests.append(

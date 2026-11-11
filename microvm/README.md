@@ -222,23 +222,53 @@ A VM has no network card. Its egress goes guest → vsock port 3128 → the agen
 
 ### Node state report
 
-The agent pushes its VM list to the api_server; the api_server reconciles the node's placement records
-on each report (`backend/onyx/microvm/node_report.py`). Nothing on the api_server side polls the agents.
+The agent pushes its full VM state to the api_server; the api_server reconciles the node's placement
+records on each report (`backend/onyx/microvm/node_report.py`). This is E2B's 20 s sync with a push
+instead of a pull, because Onyx has no API-side scheduler (see Sandbox state model).
+Placement does not depend on reports: it asks the agent with `List`.
 
-- After the first successful key registration, and then every `--state-report-interval` (default 15 s,
-  `0` turns it off), the agent sends `POST <--api-server-url>/microvm/node/state` with `node_id` and
-  `vms`: one entry per VM of `List` (`sandbox_id`, `tenant_id`, `attempt`, `generation`, `state`,
-  `template`, `vcpus`, `mem_mib`, `scratch_gib`, `pid`, `started_at`).
+- After the first successful key registration, and then every `--state-report-interval` (default 20 s,
+  `0` turns it off), the agent sends `POST <--api-server-url>/microvm/node/state` with `node_id`,
+  `vms` and `ended`:
+  - `vms`: one entry per VM of `List` (`sandbox_id`, `tenant_id`, `attempt`, `generation`, `state`,
+    `template`, `vcpus`, `mem_mib`, `scratch_gib`, `pid`, `started_at`).
+  - `ended`: each VM instance that exited (`reason` `EXITED`) or stopped (`STOPPED`) within
+    `--ended-retention` (default 10 min, `0` = none), with `sandbox_id`, `tenant_id`, `attempt`,
+    `generation`, `ended_at`. Every report in that window lists it again, so a missed report changes
+    nothing. The list is in memory only.
 - `Authorization: Bearer <token>`: an EdDSA JWT signed with the registered node key. Header `kid` = the
   registered key id. Claims `node`, `iat`, `exp` (60 s), `jti` (single use), `aud`
   (`onyx-api-server-node-report`, never `sandbox-proxy`) and `body_sha256` (hex SHA-256 of the body).
   The registration secret is not sent.
 - At most 1024 VMs and 1 MiB. A larger report is not sent, because a cut list would make the api_server
-  clear live records. The api_server applies the same caps.
+  clear live records. Over 1024 ended entries, the oldest are left out. The api_server applies the same
+  caps.
 - A failed report is logged. The next one waits twice as long, up to 2 min, then the interval again.
 - The api_server answers `409` while the node has no registered `agent_address`: it needs the address to
-  check a VM again before it clears a record. The placement record TTL (`SANDBOX_FC_PLACEMENT_TTL_SECONDS`,
-  300 s) is about 20 report intervals; a node that stops reporting loses its records when they expire.
+  check a VM again before it clears a record.
+- Placement records have no TTL. A record goes away only on Stop, on a discard, or when a report shows
+  that its VM ended or is gone (after a second `List`). The api_server stops VMs of an older attempt
+  and VMs that it does not know after a grace period. A node whose registration expired counts as dead:
+  wake starts the next attempt on another node.
+
+### Sandbox state model
+
+The api_server keeps sandbox state the way E2B does (checked against `e2b-dev/infra` at `fa14b81a`). The agent runs
+the VMs; the api_server makes sure that each sandbox has at most one VM.
+
+| E2B | Onyx |
+|---|---|
+| Sandbox record in Redis, no TTL | Placement record (node, attempt, generation, last activity) in the tenant cache, no TTL. Only Stop, a discard, or a report that shows the VM ended or gone (after a second `List`) removes it. |
+| Reservation before create | Reservation (attempt, node), SET NX or compare-and-set, no TTL. A Create with no known outcome keeps it, so the next wake repeats the same Create on the same node. A reservation on a dead node is taken over with the next attempt. |
+| `execution_id` fence | (attempt, generation) fence: `CacheBackend.replace_if_value` / `delete_if_value` (Redis and Postgres). A write for an older instance never replaces a newer record. |
+| API pulls each node's list every 20 s | The agent pushes its list every 20 s (Node state report). Onyx has no API-side scheduler. |
+| Node keeps ended sandboxes for 2 min | The agent lists each exited or stopped VM for `--ended-retention` (10 min). |
+| Sync kills orphans after 1 min | The api_server stops a VM of an older attempt at once, and an unknown VM after `SANDBOX_FC_ORPHAN_GRACE_SECONDS` (40 s), at most 8 per report, with no checkpoint. |
+| API-side evictor (end time) | Idle evictor on the record's last activity (`SANDBOX_FC_IDLE_TIMEOUT_SECONDS`). The stop waits for session saves (ENG-4580). |
+| Dead node: records stay, sandboxes lost | Dead node (registration expired): records stay; wake starts the next attempt on a live node, and the old VM is an orphan if it reports again. |
+
+Keys without a TTL need a Redis eviction policy that never evicts them (`volatile-*` or `noeviction`), or the
+Postgres cache backend. The chart's bundled Redis uses `allkeys-lru`.
 
 ### Node requirements
 

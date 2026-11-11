@@ -1,19 +1,27 @@
-"""Cache-backed Firecracker state for signed egress identity (`SANDBOX_RUNTIME=firecracker`).
+"""Cache-backed Firecracker state (`SANDBOX_RUNTIME=firecracker`).
 
-No schema change: host-node signing keys live in the shared cache and VM
-placement in the tenant cache, both with TTLs their writers refresh.
-- Signing keys: the host agent re-registers well inside
+No schema change. The state model follows E2B (microvm/README.md,
+"Sandbox state model").
+- Signing keys (shared cache, TTL): the host agent re-registers well inside
   `NODE_SIGNING_KEY_TTL_SECONDS`, so a dead node's keys expire on their own.
-- Placement: the Firecracker lifecycle writes it at VM start, refreshes it on
-  heartbeat and clears it at stop.
-- Agent addresses: the registration carries the agent's mTLS listener, so the
-  api_server knows how to reach every node that registered a live key.
-- Placement index: per node, the (tenant, sandbox) pairs placed on it, so the
-  cluster-wide reconcile loop can find placement records in tenant caches.
-- Guest daemon key: per sandbox, the key of one attempt, encrypted with the
-  app encryption key. Placement writes it before Create and it lives as long
-  as the placement record. A lost key makes the VM unusable: placement then
-  replaces the VM with a new attempt.
+- Agent addresses (shared cache, same TTL): the registration carries the
+  agent's mTLS listener. A node without a live address counts as dead.
+- Placement record (tenant cache, NO TTL): the VM instance of a sandbox
+  (node, attempt, generation) and its last activity. Only Stop, a discard,
+  or a reconcile that confirms the VM is gone removes it. Writes from a
+  Create result or a node report are fenced on (attempt, generation).
+- Reservation (tenant cache, NO TTL): taken atomically before Create, holds
+  (attempt, node). One VM per sandbox: at most one reservation exists, and a
+  Create of the same (sandbox, attempt) on the same node returns the same VM.
+- Placement index (shared cache): per node, the (tenant, sandbox) pairs placed
+  on it, so a node report can find the records in tenant caches.
+- Guest daemon key (tenant cache, NO TTL): per sandbox, the key of one
+  attempt, encrypted with the app encryption key. It lives as long as the
+  sandbox's VM. A lost key makes the VM unusable: placement then replaces the
+  VM with a new attempt.
+
+Keys without a TTL need a Redis eviction policy that never evicts them
+(`volatile-*` or `noeviction`), or the Postgres cache backend.
 """
 
 import base64
@@ -42,6 +50,7 @@ _NODE_ADDRESS_PREFIX = "sandbox_fc:node_address:"
 _NODES_KEY = "sandbox_fc:nodes"
 _NODE_PLACEMENTS_PREFIX = "sandbox_fc:node_placements:"
 _DAEMON_KEY_PREFIX = "sandbox_fc:daemon_key:"
+_RESERVATION_PREFIX = "sandbox_fc:reservation:"
 _MAX_NODES = 10_000
 _MAX_NODE_PLACEMENTS = 100_000
 _LOCK_WAIT_SECONDS = 10.0
@@ -71,10 +80,39 @@ class RegisteredSigningKey(BaseModel):
 
 
 class SandboxPlacement(BaseModel):
+    """The durable placement record: one VM instance of a sandbox."""
+
     model_config = ConfigDict(frozen=True)
 
     node_id: str
+    attempt: int
     generation: int
+    # Unix seconds of the last activity (wake or touch); the idle evictor
+    # reads it.
+    last_active: int
+
+    def fence(self) -> tuple[int, int]:
+        return (self.attempt, self.generation)
+
+    def names(self, node_id: str, attempt: int, generation: int) -> bool:
+        return (self.node_id, self.attempt, self.generation) == (
+            node_id,
+            attempt,
+            generation,
+        )
+
+
+class SandboxReservation(BaseModel):
+    """The intent to create one VM: taken before Create, ended after it."""
+
+    model_config = ConfigDict(frozen=True)
+
+    attempt: int
+    # Empty until placement picks a node.
+    node_id: str
+    # Random per reservation, so a compare-and-set never mistakes another
+    # caller's reservation of the same (attempt, node) for its own.
+    owner: str
 
 
 def get_node_signing_key(
@@ -141,49 +179,171 @@ def register_node_signing_key(
         lock.release()
 
 
+_CAS_TRIES = 8
+
+
 def _placement_record(placement: SandboxPlacement) -> str:
-    return json.dumps({"node": placement.node_id, "gen": placement.generation})
-
-
-def set_sandbox_placement(
-    tenant_cache: CacheBackend,
-    sandbox_id: UUID,
-    placement: SandboxPlacement,
-    ttl_seconds: int,
-) -> None:
-    tenant_cache.set(
-        _PLACEMENT_PREFIX + str(sandbox_id),
-        _placement_record(placement),
-        ex=ttl_seconds,
+    return json.dumps(
+        {
+            "node": placement.node_id,
+            "attempt": placement.attempt,
+            "gen": placement.generation,
+            "active": placement.last_active,
+        }
     )
 
 
-def renew_sandbox_placement(
-    tenant_cache: CacheBackend,
-    sandbox_id: UUID,
-    placement: SandboxPlacement,
-    ttl_seconds: int,
-) -> bool:
-    """Reset the record TTL only while it still names `placement` (atomic)."""
-    return tenant_cache.renew_if_value(
-        _PLACEMENT_PREFIX + str(sandbox_id),
-        _placement_record(placement).encode(),
-        ttl_seconds,
+def _parse_placement(raw: bytes) -> SandboxPlacement:
+    record = json.loads(raw)
+    return SandboxPlacement(
+        node_id=record["node"],
+        attempt=record["attempt"],
+        generation=record["gen"],
+        last_active=record["active"],
     )
-
-
-def clear_sandbox_placement(tenant_cache: CacheBackend, sandbox_id: UUID) -> None:
-    tenant_cache.delete(_PLACEMENT_PREFIX + str(sandbox_id))
 
 
 def get_sandbox_placement(
     tenant_cache: CacheBackend, sandbox_id: UUID
 ) -> SandboxPlacement | None:
     raw = tenant_cache.get(_PLACEMENT_PREFIX + str(sandbox_id))
+    return _parse_placement(raw) if raw is not None else None
+
+
+def write_sandbox_placement(
+    tenant_cache: CacheBackend, sandbox_id: UUID, placement: SandboxPlacement
+) -> bool:
+    """Write the record unless the stored one is newer (the fence).
+
+    Compare-and-set on the stored value: a write for an older
+    (attempt, generation) never replaces a newer record. A rewrite of the
+    same instance keeps the later `last_active`. No TTL. False when fenced
+    out (or after `_CAS_TRIES` lost races).
+    """
+    key = _PLACEMENT_PREFIX + str(sandbox_id)
+    for _ in range(_CAS_TRIES):
+        raw = tenant_cache.get(key)
+        if raw is None:
+            if tenant_cache.set_if_absent(key, _placement_record(placement)):
+                return True
+            continue
+        current = _parse_placement(raw)
+        if current.fence() > placement.fence():
+            return False
+        new = placement
+        if current.fence() == placement.fence():
+            new = placement.model_copy(
+                update={"last_active": max(current.last_active, placement.last_active)}
+            )
+        if tenant_cache.replace_if_value(key, raw, _placement_record(new)):
+            return True
+    return False
+
+
+def touch_sandbox_placement(
+    tenant_cache: CacheBackend,
+    sandbox_id: UUID,
+    *,
+    node_id: str,
+    attempt: int,
+    generation: int,
+    now: int,
+) -> bool:
+    """Set `last_active` while the record still names this VM instance."""
+    key = _PLACEMENT_PREFIX + str(sandbox_id)
+    for _ in range(_CAS_TRIES):
+        raw = tenant_cache.get(key)
+        if raw is None:
+            return False
+        current = _parse_placement(raw)
+        if not current.names(node_id, attempt, generation):
+            return False
+        if current.last_active >= now:
+            return True
+        updated = current.model_copy(update={"last_active": now})
+        if tenant_cache.replace_if_value(key, raw, _placement_record(updated)):
+            return True
+    return False
+
+
+def clear_sandbox_placement_if(
+    tenant_cache: CacheBackend,
+    sandbox_id: UUID,
+    *,
+    node_id: str,
+    attempt: int,
+    generation: int,
+) -> bool:
+    """Delete the record only while it names this VM instance."""
+    key = _PLACEMENT_PREFIX + str(sandbox_id)
+    for _ in range(_CAS_TRIES):
+        raw = tenant_cache.get(key)
+        if raw is None or not _parse_placement(raw).names(node_id, attempt, generation):
+            return False
+        if tenant_cache.delete_if_value(key, raw):
+            return True
+    return False
+
+
+def clear_sandbox_placement(tenant_cache: CacheBackend, sandbox_id: UUID) -> None:
+    tenant_cache.delete(_PLACEMENT_PREFIX + str(sandbox_id))
+
+
+def _reservation_record(reservation: SandboxReservation) -> str:
+    return json.dumps(
+        {
+            "attempt": reservation.attempt,
+            "node": reservation.node_id,
+            "owner": reservation.owner,
+        }
+    )
+
+
+def get_sandbox_reservation(
+    tenant_cache: CacheBackend, sandbox_id: UUID
+) -> tuple[SandboxReservation, bytes] | None:
+    """The reservation and its stored value (for compare-and-set), or None."""
+    raw = tenant_cache.get(_RESERVATION_PREFIX + str(sandbox_id))
     if raw is None:
         return None
     record = json.loads(raw)
-    return SandboxPlacement(node_id=record["node"], generation=record["gen"])
+    return (
+        SandboxReservation(
+            attempt=record["attempt"], node_id=record["node"], owner=record["owner"]
+        ),
+        raw,
+    )
+
+
+def reserve_sandbox(
+    tenant_cache: CacheBackend,
+    sandbox_id: UUID,
+    reservation: SandboxReservation,
+    *,
+    replaces: bytes | None,
+) -> bytes | None:
+    """Take the reservation atomically: SET NX when `replaces` is None, else
+    compare-and-set over that stored value. Returns the stored value, or None
+    when another caller holds or changed it. No TTL."""
+    key = _RESERVATION_PREFIX + str(sandbox_id)
+    record = _reservation_record(reservation)
+    taken = (
+        tenant_cache.set_if_absent(key, record)
+        if replaces is None
+        else tenant_cache.replace_if_value(key, replaces, record)
+    )
+    return record.encode() if taken else None
+
+
+def release_sandbox_reservation(
+    tenant_cache: CacheBackend, sandbox_id: UUID, held: bytes
+) -> bool:
+    """Delete the reservation only while it is still `held`."""
+    return tenant_cache.delete_if_value(_RESERVATION_PREFIX + str(sandbox_id), held)
+
+
+def clear_sandbox_reservation(tenant_cache: CacheBackend, sandbox_id: UUID) -> None:
+    tenant_cache.delete(_RESERVATION_PREFIX + str(sandbox_id))
 
 
 def set_node_agent_address(
@@ -278,14 +438,12 @@ def set_sandbox_daemon_key(
     *,
     attempt: int,
     key: SecretStr,
-    ttl_seconds: int,
 ) -> None:
-    """Store the guest daemon key of one attempt; it replaces any other."""
+    """Store the guest daemon key of one attempt; it replaces any other. No TTL."""
     sealed = encrypt_string_to_bytes(key.get_secret_value())
     tenant_cache.set(
         _DAEMON_KEY_PREFIX + str(sandbox_id),
         json.dumps({"attempt": attempt, "key": base64.b64encode(sealed).decode()}),
-        ex=ttl_seconds,
     )
 
 
@@ -302,14 +460,17 @@ def get_sandbox_daemon_key(
     return SecretStr(decrypt_bytes_to_string(base64.b64decode(record["key"])))
 
 
-def refresh_sandbox_daemon_key(
-    tenant_cache: CacheBackend, sandbox_id: UUID, ttl_seconds: int
+def clear_sandbox_daemon_key(
+    tenant_cache: CacheBackend, sandbox_id: UUID, *, attempt: int | None = None
 ) -> None:
-    tenant_cache.expire(_DAEMON_KEY_PREFIX + str(sandbox_id), ttl_seconds)
-
-
-def clear_sandbox_daemon_key(tenant_cache: CacheBackend, sandbox_id: UUID) -> None:
-    tenant_cache.delete(_DAEMON_KEY_PREFIX + str(sandbox_id))
+    """Delete the key; with `attempt`, only while it is that attempt's key."""
+    key = _DAEMON_KEY_PREFIX + str(sandbox_id)
+    if attempt is None:
+        tenant_cache.delete(key)
+        return
+    raw = tenant_cache.get(key)
+    if raw is not None and json.loads(raw)["attempt"] == attempt:
+        tenant_cache.delete_if_value(key, raw)
 
 
 _NODE_REPORT_LEASE_PREFIX = "sandbox_fc:node_report_lease:"

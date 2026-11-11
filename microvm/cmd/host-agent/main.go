@@ -48,52 +48,53 @@ var version = "dev"
 const longestSock = "/v.sock_65535"
 
 type flags struct {
-	obs           obsFlags
-	dataDir       string
-	artifactsDir  string
-	socket        string
-	slice         string
-	hostMountNS   bool
-	uidBase       uint
-	uidCount      uint
-	minFreeMemMiB uint64
-	minFreeDiskGB uint64
-	maxScratchGiB uint
-	startTimeout  time.Duration
-	stopTimeout   time.Duration
-	logLevel      string
-	nodeID        string
-	egressProxy   string
-	apiServerURL  string
-	stateReport   time.Duration
-	relayIdle     time.Duration
-	relayMaxConns int
-	listen        string
-	tlsCert       string
-	tlsKey        string
-	clientCA      string
-	dialPorts     string
-	clientSANs    string
-	dialMax       int
-	daemonPort    uint
-	rootfsDir     string
-	egressCA      string
-	tplVCPUs      uint
-	tplMemMiB     uint
-	tplScratchGiB uint
-	tplKeep       int
-	tplTimeout    time.Duration
-	managedKeep   int
-	managedZipMiB int64
-	managedMaxMiB int64
-	managedFiles  int
-	managedBuilds int
-	swapTimeout   time.Duration
-	memOverhead   uint
-	watchDrain    bool
-	drainTaints   string
-	drainPoll     time.Duration
-	advertise     string
+	obs            obsFlags
+	dataDir        string
+	artifactsDir   string
+	socket         string
+	slice          string
+	hostMountNS    bool
+	uidBase        uint
+	uidCount       uint
+	minFreeMemMiB  uint64
+	minFreeDiskGB  uint64
+	maxScratchGiB  uint
+	startTimeout   time.Duration
+	stopTimeout    time.Duration
+	logLevel       string
+	nodeID         string
+	egressProxy    string
+	apiServerURL   string
+	stateReport    time.Duration
+	endedRetention time.Duration
+	relayIdle      time.Duration
+	relayMaxConns  int
+	listen         string
+	tlsCert        string
+	tlsKey         string
+	clientCA       string
+	dialPorts      string
+	clientSANs     string
+	dialMax        int
+	daemonPort     uint
+	rootfsDir      string
+	egressCA       string
+	tplVCPUs       uint
+	tplMemMiB      uint
+	tplScratchGiB  uint
+	tplKeep        int
+	tplTimeout     time.Duration
+	managedKeep    int
+	managedZipMiB  int64
+	managedMaxMiB  int64
+	managedFiles   int
+	managedBuilds  int
+	swapTimeout    time.Duration
+	memOverhead    uint
+	watchDrain     bool
+	drainTaints    string
+	drainPoll      time.Duration
+	advertise      string
 }
 
 func main() {
@@ -115,7 +116,8 @@ func main() {
 	flag.StringVar(&f.nodeID, "node-id", os.Getenv("NODE_NAME"), "node name in the signed egress identity (default $NODE_NAME)")
 	flag.StringVar(&f.egressProxy, "egress-proxy", "", "sandbox-proxy relay listener host:port; empty turns VM egress off")
 	flag.StringVar(&f.apiServerURL, "api-server-url", "", "api_server URL for the node key registration (needs $SANDBOX_NODE_REGISTRATION_SECRET)")
-	flag.DurationVar(&f.stateReport, "state-report-interval", nodereport.DefaultInterval, "how often the agent sends its VM list to --api-server-url, signed with the node key (0 = off)")
+	flag.DurationVar(&f.stateReport, "state-report-interval", nodereport.DefaultInterval, "how often the agent sends its VM state to --api-server-url, signed with the node key (0 = off)")
+	flag.DurationVar(&f.endedRetention, "ended-retention", agent.DefaultEndedRetention, "how long each state report lists a VM that exited or stopped (0 = not listed)")
 	flag.DurationVar(&f.relayIdle, "relay-idle-timeout", relay.DefaultIdleTimeout, "close a relay connection after this long without traffic (at least 180s)")
 	flag.IntVar(&f.relayMaxConns, "relay-max-conns", relay.DefaultMaxConns, "most open relay connections per VM; new ones over the cap are closed")
 	flag.StringVar(&f.listen, "listen", "", "mTLS TCP address for the api_server (for example :7443); empty: Unix socket only")
@@ -216,6 +218,7 @@ func run(f flags, log *slog.Logger) error {
 		StartTimeout:     f.startTimeout,
 		StopTimeout:      f.stopTimeout,
 		TombstoneTTL:     24 * time.Hour,
+		EndedRetention:   f.endedRetention,
 	},
 		store,
 		launcher,
@@ -438,6 +441,7 @@ func setupEgress(ctx context.Context, f flags, m *agent.Manager, log *slog.Logge
 	}
 	r := &nodereport.Reporter{
 		BaseURL: f.apiServerURL, Signer: signer, List: func() []nodereport.VM { return reportVMs(m.List()) },
+		Ended: func() []nodereport.EndedVM { return reportEnded(m.Ended()) },
 		Ready: g.Registered(), Log: log, Interval: f.stateReport,
 	}
 	go r.Run(ctx)
@@ -458,6 +462,18 @@ func reportVMs(vms []agent.VM) []nodereport.VM {
 			v.StartedAt = &t
 		}
 		out = append(out, v)
+	}
+	return out
+}
+
+// reportEnded converts the Manager's ended list for the node state report.
+func reportEnded(ended []agent.EndedVM) []nodereport.EndedVM {
+	out := make([]nodereport.EndedVM, 0, len(ended))
+	for _, e := range ended {
+		out = append(out, nodereport.EndedVM{
+			SandboxID: e.SandboxID, TenantID: e.TenantID, Attempt: e.Attempt, Generation: e.Generation,
+			Reason: string(e.Reason), EndedAt: e.EndedAt.UTC(),
+		})
 	}
 	return out
 }

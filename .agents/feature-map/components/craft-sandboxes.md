@@ -198,20 +198,29 @@ the stored token on each request, so a new token takes effect at once.
 - `backend/onyx/microvm/daemon_client.py`: the guest daemon client, through
   the agent pass-through. Every call but Health sends `x-sandboxd-key`.
 - `backend/onyx/microvm/placement.py`: one VM per sandbox, best of K nodes on
-  free memory, `SANDBOX_CAPACITY_UNAVAILABLE` with the reason. Each attempt
-  gets a random daemon key, stored encrypted in the tenant cache before
-  Create. A rejected or lost key, or an exited VM, stops the VM and creates
-  the next attempt; the caller must store the returned attempt. A Create with
-  no known outcome pins the sandbox to its node until the outcome is known.
-- `backend/onyx/microvm/lifecycle.py`: wake on the first tool call, Init,
-  idle sleep, stop only after a saved checkpoint.
-- `backend/onyx/microvm/reconcile.py`: the per-node reconcile pass. No
-  background task polls the agents. Each agent pushes its VM list to
+  free memory, `SANDBOX_CAPACITY_UNAVAILABLE` with the reason. Wake is an
+  idempotent ensure: it reads the durable placement record and asks that
+  node's agent whether the VM runs. Before Create it takes the sandbox's
+  reservation (attempt, node) atomically; a Create with no known outcome
+  keeps the reservation on its node. Each attempt gets a random daemon key,
+  stored encrypted in the tenant cache before Create. A rejected or lost key,
+  an exited VM, or a dead node creates the next attempt; the caller must
+  store the returned attempt.
+- `backend/onyx/microvm/registry.py`: placement records, reservations and
+  daemon keys have no TTL. Record writes are fenced on (attempt, generation)
+  with `CacheBackend.replace_if_value` / `delete_if_value`. Redis must use a
+  `volatile-*` or `noeviction` policy (the chart's bundled Redis uses
+  `allkeys-lru`), or use the Postgres cache backend.
+- `backend/onyx/microvm/lifecycle.py`: wake, Init, activity, the idle evictor
+  (decides, and stops only after a saved checkpoint).
+- `backend/onyx/microvm/reconcile.py`: the per-node reconcile pass, the E2B
+  sync model with a push. Each agent pushes its VMs and recently ended VMs to
   `POST /microvm/node/state`, signed with its registered key
   (`backend/onyx/microvm/node_report.py`), and the api_server reconciles that
-  node under a per-node lease. A pass refreshes every live record first;
-  the slower steps resume where the last unfinished pass stopped. A node
-  that stops reporting loses its placement records when their TTL ends.
+  node under a per-node lease: it clears records of ended VMs, adopts VMs
+  that a reservation names, and stops VMs of an older attempt or unknown VMs
+  after a grace period (no checkpoint). See `microvm/README.md`, "Sandbox
+  state model".
 
 Agents become reachable when their signing-key registration carries
 `agent_address`. No sandbox manager uses this code yet (ENG-4575).

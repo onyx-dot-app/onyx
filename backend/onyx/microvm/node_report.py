@@ -1,9 +1,12 @@
 """Node state reports (`SANDBOX_RUNTIME=firecracker`).
 
-Each host agent pushes its VM list to `POST /microvm/node/state` every
-`--state-report-interval` (default 15 s). The api_server then reconciles that
-node's placement records (`reconcile_node`). No background task polls the
-agents.
+Each host agent pushes its full state to `POST /microvm/node/state` every
+`--state-report-interval` (default 20 s): its VM list and the VM instances
+that ended within its `--ended-retention`. The api_server then reconciles that
+node (`reconcile_node`). E2B's API pulls the same list from each node every
+20 s; Onyx has no API-side scheduler, so the agent pushes it (microvm/README.md,
+"Sandbox state model"). Correctness never depends on reports: placement asks
+the agent directly.
 
 The report is signed with the node's registered key: an EdDSA JWT with
 `kid` = the registered key id, `aud` = `NODE_REPORT_AUDIENCE` (so a relay
@@ -16,7 +19,6 @@ import hashlib
 import hmac
 import time
 from collections.abc import Callable
-from datetime import datetime
 
 from onyx.cache.interface import CacheBackend, CacheLock, CacheLockLostError
 from onyx.microvm.agent_client import HostAgentClientFactory, HostAgentConfigError
@@ -121,7 +123,7 @@ def reconcile_node_report(
     client_factory: HostAgentClientFactory,
     report: NodeStateReport,
     *,
-    now: datetime,
+    now: int,
 ) -> NodeStateReportResult:
     """Reconcile one node's records against its verified report.
 
@@ -145,6 +147,7 @@ def reconcile_node_report(
             UnknownActivity(),
             node=node,
             vms=[vm.to_agent_vm() for vm in report.vms],
+            ended=report.ended,
             now=now,
             check_lease=lambda: _check_lease(lease, deadline),
         )
@@ -154,7 +157,7 @@ def reconcile_node_report(
         )
         return NodeStateReportResult(reconciled=False)
     except HostAgentConfigError as e:
-        # The refreshes ran; adopt, clear and orphan steps need the agent.
+        # Adopt, clear and orphan steps need the agent.
         logger.error(
             "sandbox_fc_node_report_pass_ended node=%s: agent mTLS is not configured: %s",
             node.node_id,
@@ -173,15 +176,17 @@ def reconcile_node_report(
         or result.failed
     ):
         logger.info(
-            "sandbox_fc_node_report node=%s vms=%d failed=%s adopted=%d cleared=%d "
-            "orphans=%d stopped=%d slept=%d",
+            "sandbox_fc_node_report node=%s vms=%d ended=%d failed=%s adopted=%d "
+            "cleared=%d orphans=%d stopped=%d idle=%d slept=%d",
             node.node_id,
             len(report.vms),
+            len(report.ended),
             result.failed,
             len(result.adopted),
             len(result.cleared),
             len(result.orphans_marked),
             len(result.orphans_stopped),
+            len(result.idle),
             len(result.slept),
         )
     return NodeStateReportResult(reconciled=True, report=result)

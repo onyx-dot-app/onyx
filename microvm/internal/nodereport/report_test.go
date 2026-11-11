@@ -81,7 +81,7 @@ func TestTokenFields(t *testing.T) {
 	s := newSigner(t)
 	now := time.Unix(1_800_000_000, 0)
 	r := &Reporter{Signer: s, Now: func() time.Time { return now }}
-	body, err := Body(s.NodeID, oneVM())
+	body, err := Body(s.NodeID, oneVM(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,27 +112,84 @@ func TestTokenFields(t *testing.T) {
 }
 
 func TestBodyCaps(t *testing.T) {
-	body, err := Body("node-a", nil)
-	if err != nil || string(body) != `{"node_id":"node-a","vms":[]}` {
+	body, err := Body("node-a", nil, nil)
+	if err != nil || string(body) != `{"node_id":"node-a","vms":[],"ended":[]}` {
 		t.Fatalf("empty body %q %v", body, err)
 	}
 	var got report
-	body, _ = Body("node-a", oneVM())
+	body, _ = Body("node-a", oneVM(), nil)
 	if err := json.Unmarshal(body, &got); err != nil || len(got.VMs) != 1 || got.VMs[0].State != "RUNNING" {
 		t.Fatalf("body %s", body)
 	}
 	if !strings.Contains(string(body), `"started_at":"2026-11-10T12:00:00Z"`) {
 		t.Fatalf("started_at missing: %s", body)
 	}
-	if _, err := Body("node-a", make([]VM, MaxVMs+1)); err == nil {
+	if _, err := Body("node-a", make([]VM, MaxVMs+1), nil); err == nil {
 		t.Fatal("accepted more than MaxVMs")
 	}
 	big := make([]VM, 2)
 	for i := range big {
 		big[i].Template = strings.Repeat("x", MaxBodyBytes/2)
 	}
-	if _, err := Body("node-a", big); err == nil {
+	if _, err := Body("node-a", big, nil); err == nil {
 		t.Fatal("accepted a body over MaxBodyBytes")
+	}
+}
+
+func TestBodyHasEndedVMs(t *testing.T) {
+	at := time.Date(2026, 11, 10, 12, 5, 0, 0, time.UTC)
+	ended := []EndedVM{{
+		SandboxID: "3b5f8a52-6a4e-4f63-9a8f-3f1d2c4b5a69", TenantID: "public", Attempt: 1, Generation: 1700000000100,
+		Reason: "EXITED", EndedAt: at,
+	}}
+	body, err := Body("node-a", oneVM(), ended)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got report
+	if err := json.Unmarshal(body, &got); err != nil || len(got.Ended) != 1 || got.Ended[0] != ended[0] {
+		t.Fatalf("body %s", body)
+	}
+	if !strings.Contains(string(body), `"ended_at":"2026-11-10T12:05:00Z"`) ||
+		!strings.Contains(string(body), `"reason":"EXITED"`) {
+		t.Fatalf("ended fields: %s", body)
+	}
+
+	many := make([]EndedVM, MaxEnded+2)
+	for i := range many {
+		many[i] = EndedVM{SandboxID: "s", Generation: uint64(i), Reason: "STOPPED", EndedAt: at}
+	}
+	body, err = Body("node-a", nil, many)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(body, &got); err != nil || len(got.Ended) != MaxEnded || got.Ended[0].Generation != 2 {
+		t.Fatalf("over the cap: %d entries, first generation %d", len(got.Ended), got.Ended[0].Generation)
+	}
+}
+
+func TestSendIncludesEnded(t *testing.T) {
+	bodies := make(chan []byte, 1)
+	s := newSigner(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		bodies <- b
+		_, _ = w.Write([]byte(`{"reconciled":true}`))
+	}))
+	t.Cleanup(srv.Close)
+	r := &Reporter{
+		BaseURL: srv.URL, Signer: s, List: oneVM, Log: quiet(),
+		Ended: func() []EndedVM {
+			return []EndedVM{{SandboxID: "x", Attempt: 3, Generation: 9, Reason: "STOPPED", EndedAt: time.Unix(0, 0).UTC()}}
+		},
+	}
+	if err := r.Send(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	var got report
+	if err := json.Unmarshal(<-bodies, &got); err != nil || len(got.VMs) != 1 || len(got.Ended) != 1 ||
+		got.Ended[0].Attempt != 3 || got.Ended[0].Generation != 9 {
+		t.Fatalf("sent %+v %v", got, err)
 	}
 }
 

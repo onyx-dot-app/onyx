@@ -1,11 +1,16 @@
-"""VM lifecycle against Redis and fake host agents (ENG-4576): wake on the
-first tool call, idle sleep only when nothing runs, and stop only after a
-saved checkpoint and a fresh liveness check."""
+"""VM lifecycle against Redis and fake host agents (ENG-4576): wake is an
+idempotent ensure, idle eviction only when nothing runs, and stop only after
+a saved checkpoint and a fresh liveness check."""
 
-from datetime import datetime, timedelta, timezone
+import time
 from uuid import UUID, uuid4
 
+import pytest
+
 from onyx.cache.interface import CacheBackend
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.microvm import registry
 from onyx.microvm.configs import SANDBOX_FC_IDLE_TIMEOUT_SECONDS
 from onyx.microvm.generated.hostagent.v1 import hostagent_pb2
 from onyx.microvm.lifecycle import (
@@ -13,12 +18,12 @@ from onyx.microvm.lifecycle import (
     SandboxActivityProbe,
     SandboxCheckpointer,
     VmStopOutcome,
-    refresh_sandbox_placement,
-    sleep_idle_sandbox_vm,
+    evict_idle_sandbox_vm,
+    touch_sandbox_vm,
     wake_sandbox_vm,
 )
-from onyx.microvm.models import AgentVm, VmRequest
-from onyx.microvm.registry import SandboxPlacement, get_sandbox_placement
+from onyx.microvm.models import AgentVm, PlacedVm, VmRequest
+from onyx.microvm.registry import get_sandbox_placement
 from tests.external_dependency_unit.microvm.conftest import (
     TENANT_ID,
     AddNode,
@@ -29,9 +34,9 @@ from tests.external_dependency_unit.microvm.fake_agent import (
     InsecureClientFactory,
 )
 
-NOW = datetime.now(timezone.utc)
-IDLE = NOW - timedelta(seconds=SANDBOX_FC_IDLE_TIMEOUT_SECONDS + 60)
-ACTIVE = NOW - timedelta(seconds=SANDBOX_FC_IDLE_TIMEOUT_SECONDS - 60)
+NOW = int(time.time())
+IDLE = NOW - SANDBOX_FC_IDLE_TIMEOUT_SECONDS - 60
+ACTIVE = NOW - SANDBOX_FC_IDLE_TIMEOUT_SECONDS + 60
 
 
 class SavedCheckpoint(SandboxCheckpointer):
@@ -55,13 +60,13 @@ class Activity(SandboxActivityProbe):
         return self.busy
 
 
-def _wake(
+def _wake_vm(
     shared_cache: CacheBackend,
     tenant_cache: CacheBackend,
     client_factory: InsecureClientFactory,
     sandbox_id: UUID,
-) -> int:
-    placed = wake_sandbox_vm(
+) -> PlacedVm:
+    return wake_sandbox_vm(
         shared_cache,
         tenant_cache,
         client_factory,
@@ -69,7 +74,17 @@ def _wake(
             tenant_id=TENANT_ID, sandbox_id=sandbox_id, attempt=1, template="tpl-1"
         ),
     )
-    return placed.vm.generation
+
+
+def _wake(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    sandbox_id: UUID,
+) -> int:
+    return _wake_vm(
+        shared_cache, tenant_cache, client_factory, sandbox_id
+    ).vm.generation
 
 
 def _sleep(
@@ -80,9 +95,9 @@ def _sleep(
     *,
     checkpointer: SandboxCheckpointer,
     busy: bool,
-    last_heartbeat: datetime,
+    last_active: int,
 ) -> VmStopOutcome:
-    return sleep_idle_sandbox_vm(
+    return evict_idle_sandbox_vm(
         shared_cache,
         tenant_cache,
         client_factory,
@@ -90,8 +105,7 @@ def _sleep(
         Activity(busy),
         tenant_id=TENANT_ID,
         sandbox_id=sandbox_id,
-        last_heartbeat=last_heartbeat,
-        created_at=last_heartbeat,
+        last_active=last_active,
         now=NOW,
     )
 
@@ -113,9 +127,10 @@ def test_wake_starts_vm_only_on_first_call(
     assert _wake(shared_cache, tenant_cache, client_factory, sandbox_id) == generation
     assert node.agent.create_calls == 1
 
-    # The VM exited: the next tool call starts a new instance.
+    # The VM is gone: the next tool call starts the next attempt.
     node.agent.vms.pop(str(sandbox_id))
-    assert _wake(shared_cache, tenant_cache, client_factory, sandbox_id) != generation
+    placed = _wake_vm(shared_cache, tenant_cache, client_factory, sandbox_id)
+    assert placed.vm.generation != generation and placed.vm.attempt == 2
     assert node.agent.create_calls == 2
 
 
@@ -154,40 +169,91 @@ def test_wake_replaces_an_exited_vm_with_the_next_attempt(
         assert placed.vm.attempt == 2 and placed.created
         assert placed.vm.state.is_live()
         assert (str(sandbox_id), 1, old_generation) in node.agent.stop_calls
-        assert get_sandbox_placement(tenant_cache, sandbox_id) == SandboxPlacement(
-            node_id=placed.node.node_id, generation=placed.vm.generation
+        record = get_sandbox_placement(tenant_cache, sandbox_id)
+        assert record is not None and record.names(
+            placed.node.node_id, 2, placed.vm.generation
         )
 
 
-def test_heartbeat_refreshes_only_the_current_instance(
+def test_wake_on_a_dead_node_starts_the_next_attempt_elsewhere(
     shared_cache: CacheBackend,
     tenant_cache: CacheBackend,
     client_factory: InsecureClientFactory,
     add_node: AddNode,
     new_sandbox_id: NewSandboxId,
 ) -> None:
-    node_id = f"hb-{uuid4().hex[:6]}"
-    add_node(node_id)
+    dead_id, live_id = f"dead-{uuid4().hex[:6]}", f"live-{uuid4().hex[:6]}"
+    dead = add_node(dead_id)
     sandbox_id = new_sandbox_id()
-    generation = _wake(shared_cache, tenant_cache, client_factory, sandbox_id)
-    current = SandboxPlacement(node_id=node_id, generation=generation)
-    stale = SandboxPlacement(node_id=node_id, generation=generation - 1)
+    first = _wake_vm(shared_cache, tenant_cache, client_factory, sandbox_id)
+    assert first.node.node_id == dead_id
+    live = add_node(live_id)
+    # The registration of the first node expired: it counts as dead.
+    shared_cache.delete(registry._NODE_ADDRESS_PREFIX + dead_id)
 
-    assert refresh_sandbox_placement(
-        shared_cache,
-        tenant_cache,
-        tenant_id=TENANT_ID,
-        sandbox_id=sandbox_id,
-        placement=current,
+    placed = _wake_vm(shared_cache, tenant_cache, client_factory, sandbox_id)
+
+    assert placed.node.node_id == live_id and placed.vm.attempt == 2
+    assert live.agent.create_calls == 1
+    # The old VM is not touched; its node's next report stops it as an orphan.
+    assert dead.agent.stop_calls == [] and len(dead.agent.vms) == 1
+    record = get_sandbox_placement(tenant_cache, sandbox_id)
+    assert record is not None and record.names(live_id, 2, placed.vm.generation)
+
+
+def test_wake_keeps_the_record_when_its_live_node_does_not_answer(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
+) -> None:
+    quiet = add_node(f"quiet-{uuid4().hex[:6]}")
+    sandbox_id = new_sandbox_id()
+    first = _wake_vm(shared_cache, tenant_cache, client_factory, sandbox_id)
+    running = add_node(f"other-{uuid4().hex[:6]}")
+    # Still registered, but its agent does not answer: its VM may still run.
+    quiet.stop()
+
+    with pytest.raises(OnyxError) as exc:
+        _wake_vm(shared_cache, tenant_cache, client_factory, sandbox_id)
+    assert exc.value.error_code is OnyxErrorCode.SANDBOX_CAPACITY_UNAVAILABLE
+    assert running.agent.create_calls == 0
+    record = get_sandbox_placement(tenant_cache, sandbox_id)
+    assert record is not None and record.generation == first.vm.generation
+
+
+def test_touch_updates_only_the_current_instance(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
+) -> None:
+    add_node(f"touch-{uuid4().hex[:6]}")
+    sandbox_id = new_sandbox_id()
+    placed = _wake_vm(shared_cache, tenant_cache, client_factory, sandbox_id)
+    tenant_cache.set(
+        registry._PLACEMENT_PREFIX + str(sandbox_id),
+        registry._placement_record(
+            registry.SandboxPlacement(
+                node_id=placed.node.node_id,
+                attempt=1,
+                generation=placed.vm.generation,
+                last_active=IDLE,
+            )
+        ),
     )
-    assert not refresh_sandbox_placement(
-        shared_cache,
-        tenant_cache,
-        tenant_id=TENANT_ID,
-        sandbox_id=sandbox_id,
-        placement=stale,
+    stale = placed.model_copy(
+        update={"vm": placed.vm.model_copy(update={"generation": 1})}
     )
-    assert get_sandbox_placement(tenant_cache, sandbox_id) == current
+
+    assert not touch_sandbox_vm(tenant_cache, stale)
+    record = get_sandbox_placement(tenant_cache, sandbox_id)
+    assert record is not None and record.last_active == IDLE
+    assert touch_sandbox_vm(tenant_cache, placed)
+    record = get_sandbox_placement(tenant_cache, sandbox_id)
+    assert record is not None and record.last_active >= NOW
 
 
 def test_idle_sleep_rules(
@@ -203,7 +269,7 @@ def test_idle_sleep_rules(
     saver = SavedCheckpoint()
 
     def sleep(
-        checkpointer: SandboxCheckpointer, busy: bool, heartbeat: datetime
+        checkpointer: SandboxCheckpointer, busy: bool, last_active: int
     ) -> VmStopOutcome:
         return _sleep(
             shared_cache,
@@ -212,14 +278,14 @@ def test_idle_sleep_rules(
             sandbox_id,
             checkpointer=checkpointer,
             busy=busy,
-            last_heartbeat=heartbeat,
+            last_active=last_active,
         )
 
     # P4: not idle for the timeout yet.
     assert sleep(saver, False, ACTIVE) is VmStopOutcome.NOT_IDLE
     # P7: idle, but something runs.
     assert sleep(saver, True, IDLE) is VmStopOutcome.KEPT_BUSY
-    # Idle and quiet, but no checkpoint support: keep the VM.
+    # Idle, but no checkpoint support (until ENG-4580): decide and keep.
     assert sleep(NoCheckpointSupport(), False, IDLE) is VmStopOutcome.KEPT_NO_CHECKPOINT
     assert node.agent.stop_calls == []
     assert saver.saved == []
@@ -248,7 +314,7 @@ def test_stop_rechecks_liveness_after_checkpoint(
         sandbox_id,
         checkpointer=SavedCheckpoint(on_save=node.agent),
         busy=False,
-        last_heartbeat=IDLE,
+        last_active=IDLE,
     )
 
     assert outcome is VmStopOutcome.ALREADY_GONE

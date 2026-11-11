@@ -26,3 +26,14 @@ func TestReportVMs(t *testing.T) {
 		t.Fatal("a zero start time must be omitted")
 	}
 }
+
+func TestReportEnded(t *testing.T) {
+	at := time.Date(2026, 11, 10, 12, 0, 0, 0, time.FixedZone("x", 3600))
+	got := reportEnded([]agent.EndedVM{
+		{SandboxID: "a", TenantID: "public", Attempt: 2, Generation: 7, Reason: agent.EndedExited, EndedAt: at},
+	})
+	if len(got) != 1 || got[0].Reason != "EXITED" || got[0].Attempt != 2 || got[0].Generation != 7 ||
+		got[0].TenantID != "public" || !got[0].EndedAt.Equal(at) || got[0].EndedAt.Location() != time.UTC {
+		t.Fatalf("reportEnded %+v", got)
+	}
+}

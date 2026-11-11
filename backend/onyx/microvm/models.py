@@ -142,11 +142,12 @@ class NodeRefusal(BaseModel):
 class ReconcileReport(BaseModel):
     # Steps that raised; the pass logged them and went on.
     failed: list[str] = Field(default_factory=list)
-    refreshed: list[str] = Field(default_factory=list)
     adopted: list[str] = Field(default_factory=list)
     cleared: list[str] = Field(default_factory=list)
     orphans_marked: list[str] = Field(default_factory=list)
     orphans_stopped: list[str] = Field(default_factory=list)
+    # Idle past SANDBOX_FC_IDLE_TIMEOUT_SECONDS (the evictor's decision).
+    idle: list[str] = Field(default_factory=list)
     slept: list[str] = Field(default_factory=list)
 
 
@@ -154,6 +155,7 @@ class ReconcileReport(BaseModel):
 # (microvm/internal/nodereport) applies the same caps before it sends.
 NODE_REPORT_MAX_BODY_BYTES = 1 << 20
 NODE_REPORT_MAX_VMS = 1024
+NODE_REPORT_MAX_ENDED = 1024
 
 
 class ReportedVm(BaseModel):
@@ -190,11 +192,34 @@ class ReportedVm(BaseModel):
         )
 
 
+class EndedReason(str, Enum):
+    # The VM process ended without a Stop (crash, guest power-off).
+    EXITED = "EXITED"
+    STOPPED = "STOPPED"
+
+
+class ReportedEndedVm(BaseModel):
+    """A VM instance that ended on the node within the agent's
+    --ended-retention. The agent lists it in every report until then."""
+
+    model_config = ConfigDict(frozen=True)
+
+    sandbox_id: str = Field(min_length=1, max_length=64)
+    tenant_id: str = Field(max_length=128, pattern=r"^[A-Za-z0-9_-]*$")
+    attempt: int = Field(ge=0)
+    generation: int = Field(ge=0)
+    reason: EndedReason
+    ended_at: datetime
+
+
 class NodeStateReport(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     node_id: str = Field(min_length=1, max_length=253)
     vms: list[ReportedVm] = Field(max_length=NODE_REPORT_MAX_VMS)
+    ended: list[ReportedEndedVm] = Field(
+        default_factory=list, max_length=NODE_REPORT_MAX_ENDED
+    )
 
 
 class NodeStateReportResult(BaseModel):

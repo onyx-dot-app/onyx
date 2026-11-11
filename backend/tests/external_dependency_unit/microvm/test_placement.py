@@ -2,7 +2,11 @@
 
 import base64
 import random
-from unittest.mock import patch
+import threading
+from collections.abc import Iterator, MutableSequence
+from contextlib import contextmanager
+from typing import Any
+from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
 
 import pytest
@@ -10,19 +14,22 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from pydantic import ValidationError
 
-from onyx.cache.interface import CacheBackend
+from onyx.cache.interface import TTL_NO_EXPIRY, CacheBackend, CacheLock
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.microvm import admission, configs, placement, registry
 from onyx.microvm.agent_client import HostAgentErrorReason
-from onyx.microvm.models import RegisteredNode, VmRequest
+from onyx.microvm.models import PlacedVm, RegisteredNode, VmRequest
 from onyx.microvm.placement import place_sandbox_vm
 from onyx.microvm.registry import (
-    SandboxPlacement,
+    SandboxReservation,
     get_sandbox_placement,
+    get_sandbox_reservation,
     list_indexed_placements,
     list_registered_nodes,
+    reserve_sandbox,
 )
+from onyx.server.features.build.sandbox.models import SandboxProvisionContentionError
 from onyx.server.features.microvm.api import (
     SandboxNodeSigningKeyRegistration,
     register_sandbox_node_signing_key,
@@ -71,12 +78,25 @@ def test_picks_most_free_memory_and_writes_record(
     assert small.agent.create_calls == mid.agent.create_calls == 0
     # mem_mib and vcpus come from the node's template.
     assert placed.vm.mem_mib == 2048 and placed.vm.vcpus == 2
-    assert get_sandbox_placement(tenant_cache, sandbox_id) == SandboxPlacement(
-        node_id=big_id, generation=placed.vm.generation
+    record = get_sandbox_placement(tenant_cache, sandbox_id)
+    assert record is not None
+    assert (record.node_id, record.attempt, record.generation) == (
+        big_id,
+        1,
+        placed.vm.generation,
     )
     assert [p.sandbox_id for p in list_indexed_placements(shared_cache, big_id)] == [
         sandbox_id
     ]
+    # Durable: the record and the daemon key have no TTL, and the
+    # reservation ended with the Create.
+    assert (
+        tenant_cache.ttl(registry._PLACEMENT_PREFIX + str(sandbox_id)) == TTL_NO_EXPIRY
+    )
+    assert (
+        tenant_cache.ttl(registry._DAEMON_KEY_PREFIX + str(sandbox_id)) == TTL_NO_EXPIRY
+    )
+    assert get_sandbox_reservation(tenant_cache, sandbox_id) is None
 
 
 @pytest.mark.parametrize(
@@ -223,7 +243,7 @@ def test_unknown_create_outcome_pins_the_next_wake_to_that_node(
     assert placed.node.node_id == first_id and not placed.created
     assert second.agent.create_calls == 0
     assert len(first.agent.vms) == 1
-    assert placement._pending_create_node(tenant_cache, sandbox_id) is None
+    assert get_sandbox_reservation(tenant_cache, sandbox_id) is None
 
 
 @pytest.mark.parametrize(
@@ -233,7 +253,7 @@ def test_unknown_create_outcome_pins_the_next_wake_to_that_node(
         (HostAgentErrorReason.SANDBOX_IN_DOUBT, OnyxErrorCode.CONFLICT),
     ],
 )
-def test_unknown_create_failure_keeps_the_pin(
+def test_unknown_create_failure_keeps_the_reservation(
     shared_cache: CacheBackend,
     tenant_cache: CacheBackend,
     client_factory: InsecureClientFactory,
@@ -256,10 +276,15 @@ def test_unknown_create_failure_keeps_the_pin(
     assert exc.value.error_code == code
     assert exc.value.extra is not None and exc.value.extra["reason"] == reason.value
     assert other.agent.create_calls == 0
-    assert placement._pending_create_node(tenant_cache, sandbox_id) == failing_id
+    found = get_sandbox_reservation(tenant_cache, sandbox_id)
+    assert found is not None
+    assert (found[0].node_id, found[0].attempt) == (failing_id, 1)
+    assert tenant_cache.ttl(registry._RESERVATION_PREFIX + str(sandbox_id)) == (
+        TTL_NO_EXPIRY
+    )
 
 
-def test_pinned_node_refusal_moves_to_next_node(
+def test_reserved_node_refusal_moves_to_next_node(
     shared_cache: CacheBackend,
     tenant_cache: CacheBackend,
     client_factory: InsecureClientFactory,
@@ -272,15 +297,147 @@ def test_pinned_node_refusal_moves_to_next_node(
     other_id = _node("other")
     add_node(other_id, FakeHostAgent(mem_available_mib=8192))
     sandbox_id = new_sandbox_id()
-    placement._pin_pending_create(tenant_cache, sandbox_id, pinned_id)
+    # A leftover reservation, as a Create with no known outcome leaves it.
+    reserve_sandbox(
+        tenant_cache,
+        sandbox_id,
+        SandboxReservation(attempt=1, node_id=pinned_id, owner="crashed"),
+        replaces=None,
+    )
 
     placed = place_sandbox_vm(
         shared_cache, tenant_cache, client_factory, _request(sandbox_id)
     )
 
     assert refusing.agent.create_calls == 1
-    assert placed.node.node_id == other_id
-    assert placement._pending_create_node(tenant_cache, sandbox_id) is None
+    assert placed.node.node_id == other_id and placed.vm.attempt == 1
+    assert get_sandbox_reservation(tenant_cache, sandbox_id) is None
+
+
+def test_reservation_on_a_dead_node_is_taken_over_with_the_next_attempt(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
+) -> None:
+    live_id = _node("live")
+    live = add_node(live_id)
+    sandbox_id = new_sandbox_id()
+    reserve_sandbox(
+        tenant_cache,
+        sandbox_id,
+        SandboxReservation(attempt=3, node_id=_node("dead"), owner="crashed"),
+        replaces=None,
+    )
+
+    placed = place_sandbox_vm(
+        shared_cache, tenant_cache, client_factory, _request(sandbox_id)
+    )
+
+    # Attempt 3 may still run on the dead node: the new VM is attempt 4.
+    assert placed.node.node_id == live_id and placed.vm.attempt == 4
+    assert live.agent.create_requests[0][1] == 4
+    record = get_sandbox_placement(tenant_cache, sandbox_id)
+    assert record is not None and record.attempt == 4
+
+
+def test_concurrent_wakes_create_one_vm(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
+) -> None:
+    a = add_node(_node("a"), FakeHostAgent(mem_available_mib=32_768))
+    b = add_node(_node("b"), FakeHostAgent(mem_available_mib=32_000))
+    a.agent.create_delay_seconds = b.agent.create_delay_seconds = 0.3
+    sandbox_id = new_sandbox_id()
+    results: list[PlacedVm] = []
+    errors: list[Exception] = []
+
+    def wake() -> None:
+        try:
+            results.append(
+                place_sandbox_vm(
+                    shared_cache, tenant_cache, client_factory, _request(sandbox_id)
+                )
+            )
+        except Exception as e:
+            errors.append(e)
+
+    threads = [threading.Thread(target=wake) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert errors == []
+    assert len(a.agent.vms) + len(b.agent.vms) == 1
+    assert len({r.vm.generation for r in results}) == 1
+    assert sorted(r.created for r in results) == [False, True]
+
+
+@contextmanager
+def _no_lock(*_args: object, **_kwargs: object) -> Iterator[CacheLock]:
+    yield MagicMock(spec=CacheLock)
+
+
+class _NodeOrder(random.Random):
+    """Ranks equal nodes by id, ascending or descending, so concurrent wakes
+    would pick different nodes."""
+
+    def __init__(self, descending: bool) -> None:
+        super().__init__(0)
+        self.descending = descending
+
+    def shuffle(self, x: MutableSequence[Any]) -> None:
+        x[:] = sorted(x, key=lambda n: n.node_id, reverse=self.descending)
+
+
+def test_reservation_alone_keeps_one_vm_without_the_lock(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
+) -> None:
+    """The placement lock only makes the second wake wait. Without it (an
+    expired lease), the reservation still allows one VM per sandbox."""
+    a = add_node(_node("a"), FakeHostAgent(mem_available_mib=32_768))
+    b = add_node(_node("b"), FakeHostAgent(mem_available_mib=32_768))
+    a.agent.create_delay_seconds = b.agent.create_delay_seconds = 0.3
+    sandbox_id = new_sandbox_id()
+    results: list[PlacedVm] = []
+    errors: list[Exception] = []
+    start = threading.Barrier(3)
+
+    def wake(descending: bool) -> None:
+        start.wait()
+        try:
+            results.append(
+                place_sandbox_vm(
+                    shared_cache,
+                    tenant_cache,
+                    client_factory,
+                    _request(sandbox_id),
+                    rng=_NodeOrder(descending),
+                )
+            )
+        except Exception as e:
+            errors.append(e)
+
+    with patch.object(placement, "sandbox_placement_lock", _no_lock):
+        threads = [threading.Thread(target=wake, args=(i % 2 == 1,)) for i in range(3)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+    assert len(a.agent.vms) + len(b.agent.vms) == 1
+    assert results, errors
+    assert len({r.vm.generation for r in results}) == 1
+    assert all(isinstance(e, SandboxProvisionContentionError) for e in errors)
 
 
 def test_bad_number_settings_use_the_default(monkeypatch: pytest.MonkeyPatch) -> None:

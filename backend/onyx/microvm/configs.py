@@ -72,14 +72,20 @@ SANDBOX_FC_CREATE_GUEST_RETRIES = _fc_env_int(
 SANDBOX_FC_PLACEMENT_CANDIDATES = _fc_env_int(
     "SANDBOX_FC_PLACEMENT_CANDIDATES", 3, minimum=1
 )
-# The placement record expires unless a node state report or a heartbeat
-# refreshes it. Keep it many times the agent's --state-report-interval
-# (default 15 s): the default 300 s survives about 20 missed reports. A node
-# that stops reporting loses its records when they expire.
-SANDBOX_FC_PLACEMENT_TTL_SECONDS = _fc_env_int(
-    "SANDBOX_FC_PLACEMENT_TTL_SECONDS", 300, minimum=1
+# A VM that a node reports with no placement record and no reservation is an
+# orphan once this long has passed since the api_server first saw it. The
+# default is two reports at the agent's default --state-report-interval (20 s).
+SANDBOX_FC_ORPHAN_GRACE_SECONDS = _fc_env_int(
+    "SANDBOX_FC_ORPHAN_GRACE_SECONDS", 40, minimum=0
 )
-# P4: a VM can sleep after this long without a heartbeat.
+# Most orphan Stops per node report. The rest wait for the next report, so a
+# report stays fast.
+SANDBOX_FC_ORPHAN_STOPS_PER_REPORT = _fc_env_int(
+    "SANDBOX_FC_ORPHAN_STOPS_PER_REPORT", 8, minimum=1
+)
+# P4: the idle evictor stops a VM after this long without activity in its
+# placement record. The stop needs session saves (ENG-4580): until then
+# NoCheckpointSupport keeps every VM.
 SANDBOX_FC_IDLE_TIMEOUT_SECONDS = _fc_env_int(
     "SANDBOX_FC_IDLE_TIMEOUT_SECONDS", 1800, minimum=1
 )

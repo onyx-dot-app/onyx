@@ -104,6 +104,9 @@ type Config struct {
 	// TombstoneTTL is how long Stop remembers a stopped instance, to make a
 	// repeat Stop succeed and to reject stale attempts.
 	TombstoneTTL time.Duration
+	// EndedRetention is how long Ended lists a VM instance that exited or
+	// stopped. 0 keeps no ended list.
+	EndedRetention time.Duration
 }
 
 // VM is the public view of one VM.
@@ -181,6 +184,8 @@ type Manager struct {
 	vms     map[string]*entry
 	tombs   map[string]tombstone
 	lastGen uint64
+	// ended holds the instances that ended within cfg.EndedRetention.
+	ended map[endedKey]EndedVM
 	// doubt holds the sandboxes whose Firecracker the agent keeps running
 	// but could not verify. needScan: the UIDs of such processes are not
 	// known, so Create waits for a scan that works.
@@ -204,7 +209,7 @@ func NewManager(cfg Config, templates *template.Store, launcher Launcher, stats 
 		cfg: cfg, templates: templates, launcher: launcher, stats: stats, uids: uids,
 		versions: versions, log: log, now: time.Now,
 		vms: map[string]*entry{}, tombs: map[string]tombstone{}, doubt: map[string]*doubt{},
-		building: map[string]uint32{},
+		building: map[string]uint32{}, ended: map[endedKey]EndedVM{},
 	}
 }
 
@@ -670,6 +675,7 @@ func (m *Manager) Stop(ctx context.Context, sandboxID string, attempt, generatio
 		m.log.Error("stop: save the stopped state", "sandbox_id", sandboxID, "err", err)
 		return StopResult{}, err
 	}
+	m.addEndedLocked(e.vm, EndedStopped)
 	m.log.Info("stopped", "sandbox_id", sandboxID, "attempt", attempt, "generation", generation)
 	return StopResult{AlreadyStopped: exited}, nil
 }
@@ -789,6 +795,7 @@ func (m *Manager) watch(sandboxID string, e *entry) {
 	}
 	e.vm.State = pb.VMState_VM_STATE_EXITED
 	e.busy = make(chan struct{})
+	m.addEndedLocked(e.vm, EndedExited)
 	m.mu.Unlock()
 	m.log.Warn("VM exited without Stop", "sandbox_id", sandboxID, "attempt", e.vm.Attempt, "generation", e.vm.Generation)
 

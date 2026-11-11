@@ -139,6 +139,7 @@ func newFixture(t *testing.T, uidCount uint32) *fixture {
 	m := NewManager(Config{
 		MinFreeMemMiB: 2048, MinFreeDiskBytes: 10 << 30, MaxScratchGiB: 64,
 		StartTimeout: 5 * time.Second, StopTimeout: 5 * time.Second, TombstoneTTL: time.Hour,
+		EndedRetention: DefaultEndedRetention,
 	}, &template.Store{Dir: dir}, l, stats, uids, Versions{Firecracker: "v1.17.0"},
 		slog.New(slog.NewTextHandler(io.Discard, nil)))
 	return &fixture{m: m, l: l, stats: stats, uids: uids}

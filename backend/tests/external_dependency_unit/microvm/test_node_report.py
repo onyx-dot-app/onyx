@@ -1,6 +1,6 @@
-"""Node state reports: the agent pushes its VM list and the api_server
-reconciles that node (`POST /microvm/node/state`), against Postgres, Redis and
-fake host agents."""
+"""Node state reports: the agent pushes its VMs and its ended list, and the
+api_server reconciles that node (`POST /microvm/node/state`), against Redis
+and fake host agents."""
 
 import hashlib
 import json
@@ -9,7 +9,7 @@ import time
 from collections.abc import Generator
 from datetime import datetime, timezone
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import jwt
 import pytest
@@ -19,7 +19,6 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from onyx.cache.interface import CacheBackend
-from onyx.db.enums import SandboxStatus
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.microvm import node_report, registry
 from onyx.microvm.agent_client import (
@@ -41,10 +40,14 @@ from onyx.microvm.node_report import NODE_REPORT_AUDIENCE, reconcile_node_report
 from onyx.microvm.placement import record_placement
 from onyx.microvm.registry import (
     SandboxPlacement,
+    SandboxReservation,
     get_sandbox_placement,
+    get_sandbox_reservation,
     node_report_lease,
     register_node_signing_key,
+    reserve_sandbox,
     set_sandbox_daemon_key,
+    write_sandbox_placement,
 )
 from onyx.server.auth_check import check_router_auth
 from onyx.server.features.build.configs import SandboxRuntime
@@ -52,7 +55,6 @@ from onyx.server.features.microvm import api as microvm_api
 from tests.external_dependency_unit.microvm.conftest import (
     TENANT_ID,
     AddNode,
-    MakeSandbox,
     NewSandboxId,
 )
 from tests.external_dependency_unit.microvm.fake_agent import (
@@ -107,11 +109,56 @@ def _vm_json(vm: AgentVm) -> dict[str, Any]:
     return ReportedVm(**vm.model_dump()).model_dump(mode="json")
 
 
-def _body(node: Node, vms: list[dict[str, Any]] | None = None) -> bytes:
+def _body(
+    node: Node,
+    vms: list[dict[str, Any]] | None = None,
+    ended: list[dict[str, Any]] | None = None,
+) -> bytes:
     if vms is None:
         listed = InsecureClientFactory().client(node.running.address).list_vms()
         vms = [_vm_json(vm) for vm in listed]
-    return json.dumps({"node_id": node.node_id, "vms": vms}).encode()
+    return json.dumps(
+        {"node_id": node.node_id, "vms": vms, "ended": ended or []}
+    ).encode()
+
+
+def _crashed_placement(
+    tenant_cache: CacheBackend, sandbox_id: UUID, node_id: str, attempt: int
+) -> None:
+    """A reservation and a daemon key, as a placement leaves them when it
+    crashes after Create."""
+    reserve_sandbox(
+        tenant_cache,
+        sandbox_id,
+        SandboxReservation(attempt=attempt, node_id=node_id, owner="crashed"),
+        replaces=None,
+    )
+    set_sandbox_daemon_key(
+        tenant_cache, sandbox_id, attempt=attempt, key=new_sandboxd_key()
+    )
+
+
+def _place(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    sandbox_id: UUID,
+    node_id: str,
+    *,
+    attempt: int = 1,
+    generation: int,
+) -> None:
+    assert record_placement(
+        shared_cache,
+        tenant_cache,
+        tenant_id=TENANT_ID,
+        sandbox_id=sandbox_id,
+        placement=SandboxPlacement(
+            node_id=node_id,
+            attempt=attempt,
+            generation=generation,
+            last_active=int(time.time()),
+        ),
+    )
 
 
 def _token(
@@ -148,82 +195,90 @@ def _post(api: TestClient, body: bytes, token: str | None) -> Any:
     return api.post(PATH, content=body, headers=headers)
 
 
-def test_report_adopts_refreshes_clears_and_marks_orphans(
+def test_report_adopts_keeps_clears_and_stops_orphans(
     api: TestClient,
     node: Node,
     shared_cache: CacheBackend,
     tenant_cache: CacheBackend,
-    make_db_sandbox: MakeSandbox,
     new_sandbox_id: NewSandboxId,
 ) -> None:
     agent = node.running.agent
-    # A VM whose record was lost after Create: adopt it.
-    lost = make_db_sandbox(status=SandboxStatus.RUNNING, attempt=2)
-    lost_vm = agent.add_vm(sandbox_id=str(lost.id), tenant_id=TENANT_ID, attempt=2)
-    set_sandbox_daemon_key(
-        tenant_cache, lost.id, attempt=2, key=new_sandboxd_key(), ttl_seconds=60
-    )
-    # A VM with a matching record: refresh it.
-    placed = make_db_sandbox(attempt=1)
-    placed_vm = agent.add_vm(sandbox_id=str(placed.id), tenant_id=TENANT_ID, attempt=1)
-    record_placement(
+    # Placement crashed after Create: adopt the VM its reservation names.
+    lost_id = new_sandbox_id()
+    lost_vm = agent.add_vm(sandbox_id=str(lost_id), tenant_id=TENANT_ID, attempt=2)
+    _crashed_placement(tenant_cache, lost_id, node.node_id, attempt=2)
+    # A VM with a matching record: keep it (no write, no TTL to renew).
+    placed_id = new_sandbox_id()
+    placed_vm = agent.add_vm(sandbox_id=str(placed_id), tenant_id=TENANT_ID, attempt=1)
+    _place(
         shared_cache,
         tenant_cache,
-        tenant_id=TENANT_ID,
-        sandbox_id=placed.id,
-        placement=SandboxPlacement(
-            node_id=node.node_id, generation=placed_vm.generation
-        ),
+        placed_id,
+        node.node_id,
+        generation=placed_vm.generation,
     )
-    # A record whose VM is gone: clear it.
+    # A record whose VM is gone: clear it (after the second List).
     gone_id = new_sandbox_id()
-    record_placement(
-        shared_cache,
+    _place(shared_cache, tenant_cache, gone_id, node.node_id, generation=1)
+    # A record whose VM is in the ended list: clear it.
+    ended_id = new_sandbox_id()
+    _place(shared_cache, tenant_cache, ended_id, node.node_id, attempt=4, generation=8)
+    # A VM of an older attempt than its record: stop it.
+    stale_id = new_sandbox_id()
+    stale_vm = agent.add_vm(sandbox_id=str(stale_id), tenant_id=TENANT_ID, attempt=1)
+    assert write_sandbox_placement(
         tenant_cache,
-        tenant_id=TENANT_ID,
-        sandbox_id=gone_id,
-        placement=SandboxPlacement(node_id=node.node_id, generation=1),
+        stale_id,
+        SandboxPlacement(node_id="elsewhere", attempt=2, generation=1, last_active=0),
     )
-    # A VM with no sandbox row: an orphan, marked but never stopped.
-    orphan_id = new_sandbox_id()
-    agent.add_vm(sandbox_id=str(orphan_id), tenant_id=TENANT_ID, attempt=1)
+    # A VM nothing knows: inside the grace period, so not stopped yet.
+    unknown_id = new_sandbox_id()
+    agent.add_vm(sandbox_id=str(unknown_id), tenant_id=TENANT_ID, attempt=1)
 
-    body = _body(node)
+    ended = [
+        {
+            "sandbox_id": str(ended_id),
+            "tenant_id": TENANT_ID,
+            "attempt": 4,
+            "generation": 8,
+            "reason": "EXITED",
+            "ended_at": datetime.now(timezone.utc).isoformat(),
+        }
+    ]
+    body = _body(node, ended=ended)
     response = _post(api, body, _token(node, body))
 
     assert response.status_code == 200, response.text
     result = response.json()
     assert result["reconciled"] is True
     report = ReconcileReport(**result["report"])
-    assert report.adopted == [str(lost.id)]
-    assert report.refreshed == [str(placed.id)]
-    assert report.cleared == [str(gone_id)]
-    assert report.orphans_marked == [str(orphan_id)]
-    assert report.orphans_stopped == [] and report.slept == []
-    assert get_sandbox_placement(tenant_cache, lost.id) == SandboxPlacement(
-        node_id=node.node_id, generation=lost_vm.generation
-    )
+    assert report.adopted == [str(lost_id)]
+    assert sorted(report.cleared) == sorted([str(gone_id), str(ended_id)])
+    assert report.orphans_marked == [str(stale_id)]
+    assert report.orphans_stopped == [str(stale_id)]
+    assert report.idle == [] and report.slept == []
+    lost = get_sandbox_placement(tenant_cache, lost_id)
+    assert lost is not None and lost.names(node.node_id, 2, lost_vm.generation)
+    assert get_sandbox_reservation(tenant_cache, lost_id) is None
     assert get_sandbox_placement(tenant_cache, gone_id) is None
-    assert agent.stop_calls == []
+    assert get_sandbox_placement(tenant_cache, ended_id) is None
+    assert agent.stop_calls == [(str(stale_id), 1, stale_vm.generation)]
 
-    # Idempotent: the next report only refreshes.
-    body = _body(node)
+    # Idempotent: the next report changes nothing.
+    body = _body(node, ended=ended)
     again = ReconcileReport(**_post(api, body, _token(node, body)).json()["report"])
-    assert sorted(again.refreshed) == sorted([str(lost.id), str(placed.id)])
-    assert again.adopted == [] and again.cleared == []
+    assert again.adopted == [] and again.cleared == [] and again.orphans_stopped == []
 
 
 def test_bad_tokens_are_rejected_and_change_nothing(
     api: TestClient,
     node: Node,
     tenant_cache: CacheBackend,
-    make_db_sandbox: MakeSandbox,
+    new_sandbox_id: NewSandboxId,
 ) -> None:
-    lost = make_db_sandbox(status=SandboxStatus.RUNNING, attempt=1)
-    node.running.agent.add_vm(sandbox_id=str(lost.id), tenant_id=TENANT_ID, attempt=1)
-    set_sandbox_daemon_key(
-        tenant_cache, lost.id, attempt=1, key=new_sandboxd_key(), ttl_seconds=60
-    )
+    lost_id = new_sandbox_id()
+    node.running.agent.add_vm(sandbox_id=str(lost_id), tenant_id=TENANT_ID, attempt=1)
+    _crashed_placement(tenant_cache, lost_id, node.node_id, attempt=1)
     body = _body(node)
     now = int(time.time())
     other_node_body = _body(node).replace(node.node_id.encode(), b"someone-else", 1)
@@ -247,11 +302,11 @@ def test_bad_tokens_are_rejected_and_change_nothing(
 
     for name, response in rejected.items():
         assert response.status_code == 401, name
-    assert get_sandbox_placement(tenant_cache, lost.id) is None
+    assert get_sandbox_placement(tenant_cache, lost_id) is None
 
     token = _token(node, body)
     assert _post(api, body, token).status_code == 200
-    assert get_sandbox_placement(tenant_cache, lost.id) is not None
+    assert get_sandbox_placement(tenant_cache, lost_id) is not None
     # A token is single use.
     assert _post(api, body, token).status_code == 401
 
@@ -304,7 +359,7 @@ def test_reports_for_one_node_run_one_at_a_time(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     report = NodeStateReport(node_id=node.node_id, vms=[])
-    now = datetime.now(timezone.utc)
+    now = int(time.time())
 
     # Another replica holds the node's lease: skip, do not wait.
     held = node_report_lease(shared_cache, node.node_id, 30)
@@ -359,18 +414,12 @@ def test_missing_mtls_settings_end_the_report_with_one_error(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     for sandbox_id in (new_sandbox_id(), new_sandbox_id()):
-        record_placement(
-            shared_cache,
-            tenant_cache,
-            tenant_id=TENANT_ID,
-            sandbox_id=sandbox_id,
-            placement=SandboxPlacement(node_id=node.node_id, generation=3),
-        )
+        _place(shared_cache, tenant_cache, sandbox_id, node.node_id, generation=3)
     report = NodeStateReport(node_id=node.node_id, vms=[])
 
     with caplog.at_level("ERROR"):
         result = reconcile_node_report(
-            shared_cache, _NoMtlsFactory(), report, now=datetime.now(timezone.utc)
+            shared_cache, _NoMtlsFactory(), report, now=int(time.time())
         )
 
     assert result.reconciled is False
@@ -380,6 +429,14 @@ def test_missing_mtls_settings_end_the_report_with_one_error(
     lease = node_report_lease(shared_cache, node.node_id, 30)
     assert lease.acquire(blocking=False)
     lease.release()
+
+
+def test_report_without_ended_list_is_accepted(api: TestClient, node: Node) -> None:
+    """An agent without the ended list (older build) still reports."""
+    body = json.dumps({"node_id": node.node_id, "vms": []}).encode()
+    response = _post(api, body, _token(node, body))
+    assert response.status_code == 200, response.text
+    assert response.json()["reconciled"] is True
 
 
 def test_report_vm_round_trip() -> None:
