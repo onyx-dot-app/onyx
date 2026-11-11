@@ -1,14 +1,13 @@
 import time
-from datetime import datetime
 from enum import Enum
 
 from celery import Task, shared_task
 from celery.exceptions import SoftTimeLimitExceeded
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.access.access import get_access_for_documents, get_null_document_access
 from onyx.background.celery.apps.app_base import task_logger
+from onyx.background.celery.tasks.shared.models import CleanupBatchPlan
 from onyx.configs.constants import ONYX_CELERY_BEAT_HEARTBEAT_KEY, OnyxCeleryTask
 from onyx.db.connector_credential_pair import get_connector_credential_pair
 from onyx.db.document import (
@@ -61,20 +60,6 @@ class OnyxCeleryTaskCompletionStatus(str, Enum):
 
     NON_RETRYABLE_EXCEPTION = "non_retryable_exception"
     RETRYABLE_EXCEPTION = "retryable_exception"
-
-
-class _CleanupBatchPlan(BaseModel):
-    """What phase 1 decided for a batch, split by the links each document keeps
-    once this cc_pair's link is gone."""
-
-    # Linked only to this cc_pair: drop the chunks and the rows.
-    delete_ids: list[str] = []
-    # Still linked elsewhere: unlinked here, re-sync the index.
-    update_ids: list[str] = []
-    update_requests: list[MetadataUpdateRequest] = []
-    # The last_modified stamped on update_ids, their sync watermark.
-    update_modified_at: datetime | None = None
-    num_skipped: int = 0
 
 
 def _clear_port_orphan_candidates_for_live_docs(
@@ -150,14 +135,14 @@ def _plan_cleanup_batch(
     document_ids: list[str],
     connector_id: int,
     credential_id: int,
-) -> _CleanupBatchPlan:
+) -> CleanupBatchPlan:
     """Phase 1: lock the batch, unlink the shared docs from this cc_pair and record
     port candidates for the docs about to be deleted, in one commit. The commit
     lands before any index write, so a failed or concurrent write retries safely
     off the stale watermark."""
     docs = get_documents_for_update(document_ids, db_session)
     if not docs:
-        return _CleanupBatchPlan(num_skipped=len(document_ids))
+        return CleanupBatchPlan(num_skipped=len(document_ids))
 
     existing_ids = [doc.id for doc in docs]
     linked_ids = {
@@ -170,7 +155,7 @@ def _plan_cleanup_batch(
     shared_ids = get_document_ids_linked_to_other_cc_pairs(
         db_session, existing_ids, connector_id, credential_id
     )
-    plan = _CleanupBatchPlan(
+    plan = CleanupBatchPlan(
         # A doc with no links at all needs nothing from this cc_pair.
         delete_ids=[
             doc_id
