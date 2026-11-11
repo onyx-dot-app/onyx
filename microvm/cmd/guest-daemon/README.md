@@ -43,7 +43,7 @@ empty turns the CA install off), `--ca-nssdb` (`/home/sandbox/.pki/nssdb`; empty
 (`/usr/bin/certutil`), the file flags (`--sessions-root`,
 `--read-link-roots`, `--max-file-bytes`, `--max-zip-bytes`, `--capture-dirs`, `--capture-exclude`,
 `--capture-max-stored-bytes`, `--capture-max-expanded-bytes`, `--capture-max-entries`,
-`--capture-zstd-level`; see Files), `--listen`
+`--capture-zstd-level`, `--file-owner`; see Files), `--listen`
 (`unix:<path>` instead of vsock, for tests; mode 0600), `--log-level`. The daemon has no TCP listener:
 the API is plaintext with a bearer key, so it is served only on vsock, through the node agent. The
 container fallback (TCP with mTLS) is not in v1.
@@ -145,6 +145,10 @@ Files (`internal/guestd/files`):
   `skip_hidden`, `max_entries` (10,000, at most 100,000); `truncated` when cut, also when the
   response would pass 12 MiB. Links are listed, not followed. Names that are not valid UTF-8
   are left out.
+- Owner: the files and directories that `WriteFile`, `UploadFile` and `RestoreSession` make, and a
+  sessions root or session directory that the daemon makes, belong to `--file-owner` (default
+  `1000:1000`, the image's `sandbox` user; empty keeps root). Directories that exist keep their owner,
+  also the parents of the sessions root. If the owner change fails, the call fails.
 - `DeleteFile` removes a file or a link (never its target); a directory needs `recursive`.
 - `ZipFiles` streams a deflate zip of the regular files under a directory. It checks
   `--max-zip-bytes` (1 GiB) and 100,000 files before it sends the first byte.
@@ -164,7 +168,7 @@ Session saves:
   names, `..`, unclean names, names outside the roots, links, devices, FIFOs, sparse members and
   duplicate files, and stops at the limits (`LIMIT_EXCEEDED`), at a zstd window over 64 MiB and at a
   decoded stream larger than the files plus 16 KiB per member and 64 KiB after the tar end. Modes are
-  `& 0777`; the owner is root. An error before the swap does not change the session. If one root
+  `& 0777`; the owner is `--file-owner` (root when it is empty). An error before the swap does not change the session. If one root
   fails to swap, the daemon tries to move the roots already swapped back. If a rollback rename fails,
   or the daemon stops during the swap, old and new roots can be mixed. The old roots then stay in a
   `.craft-old-*` trash directory, and the next restore or capture puts back each old root that has no

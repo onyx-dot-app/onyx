@@ -36,6 +36,9 @@ type Observer struct {
 	// Tenant returns the tenant of a sandbox on this node, or "". Nil skips
 	// the lookup.
 	Tenant func(sandboxID string) string
+	// Capture returns the VM of a spooled capture (UploadCaptureRequest and
+	// DiscardCaptureRequest name only the capture). Nil skips the lookup.
+	Capture func(captureID string) (CaptureVM, bool)
 }
 
 // ServerOptions returns the interceptors.
@@ -58,6 +61,7 @@ type call struct {
 }
 
 type sandboxMsg interface{ GetSandboxId() string }
+type captureMsg interface{ GetCaptureId() string }
 type tenantMsg interface{ GetTenantId() string }
 type attemptMsg interface{ GetAttempt() uint64 }
 type generationMsg interface{ GetGeneration() uint64 }
@@ -66,6 +70,7 @@ func (o *Observer) unary(ctx context.Context, req any, info *grpc.UnaryServerInf
 	t0 := time.Now()
 	c := &call{method: hostAgentMethod(info.FullMethod), caller: callerOf(ctx)}
 	c.fromMsg(req, o.Tenant)
+	c.fromCapture(req, o.Capture)
 	admitted := func() bool { return false }
 	if c.method == "Create" {
 		ctx, admitted = agent.WithAdmission(ctx)
@@ -143,6 +148,21 @@ func (c *call) fromMsg(msg any, tenant func(string) string) {
 		c.tenantID = clip(m.GetTenantId())
 	}
 	c.lookupTenant(tenant)
+}
+
+// fromCapture names the VM of a request that names only a spooled capture.
+// It runs before the call, which may delete the spool.
+func (c *call) fromCapture(msg any, capture func(string) (CaptureVM, bool)) {
+	m, ok := msg.(captureMsg)
+	if !ok || capture == nil || c.sandboxID != "" {
+		return
+	}
+	vm, ok := capture(m.GetCaptureId())
+	if !ok {
+		return
+	}
+	c.sandboxID, c.tenantID = clip(vm.SandboxID), clip(vm.TenantID)
+	c.attempt, c.generation = vm.Attempt, vm.Generation
 }
 
 func (c *call) lookupTenant(tenant func(string) string) {

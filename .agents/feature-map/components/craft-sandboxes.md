@@ -233,8 +233,9 @@ the stored token on each request, so a new token takes effect at once.
   stored encrypted in the tenant cache before Create. A rejected or lost key,
   an exited VM, or a dead node creates the next attempt; the caller must
   store the returned attempt. A node is dead when its registration expired
-  or its last state report is older than
-  `SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS` (60 s).
+  or ended (an agent that stops on a drained node calls
+  `POST /microvm/node/deregister`), or its last state report is older than
+  `SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS` (180 s).
 - `backend/onyx/microvm/registry.py`: placement records, reservations and
   daemon keys have no TTL. Record writes are fenced on (attempt, generation)
   with `CacheBackend.replace_if_value` / `delete_if_value`. Redis must use a
