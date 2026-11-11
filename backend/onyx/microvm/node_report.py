@@ -3,8 +3,8 @@
 Each host agent pushes its full state to `POST /microvm/node/state` every
 `--state-report-interval` (default 20 s): its VM list and the VM instances
 that ended within its `--ended-retention`. The api_server then reconciles that
-node (`reconcile_node`). E2B's API pulls the same list from each node every
-20 s; Onyx has no API-side scheduler, so the agent pushes it (microvm/README.md,
+node (`reconcile_node`). Onyx has no scheduler inside the api_server, so the
+agent pushes the list instead of the api_server polling it (microvm/README.md,
 "Sandbox state model"). Correctness never depends on reports: placement asks
 the agent directly.
 

@@ -215,8 +215,8 @@ the stored token on each request, so a new token takes effect at once.
   `allkeys-lru`), or use the Postgres cache backend.
 - `backend/onyx/microvm/lifecycle.py`: wake, Init, activity, the idle evictor
   (decides, and stops only after a saved checkpoint).
-- `backend/onyx/microvm/reconcile.py`: the per-node reconcile pass, the E2B
-  sync model with a push. Each agent pushes its VMs and recently ended VMs to
+- `backend/onyx/microvm/reconcile.py`: the per-node reconcile pass, driven by
+  pushed node reports. Each agent pushes its VMs and recently ended VMs to
   `POST /microvm/node/state`, signed with its registered key
   (`backend/onyx/microvm/node_report.py`), and the api_server reconciles that
   node under a per-node lease: it clears records of ended VMs, and adopts a

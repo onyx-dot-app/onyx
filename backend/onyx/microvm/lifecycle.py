@@ -7,7 +7,7 @@
   no TTL, so activity only feeds the idle evictor.
 - Stop: never without a saved checkpoint, and the VM's liveness is checked
   again right before the Stop call.
-- Idle evictor (API side, like E2B's): a node report checks each running VM's
+- Idle evictor (API side): a node report checks each running VM's
   `last_active` against `SANDBOX_FC_IDLE_TIMEOUT_SECONDS` (P4), and stops it
   only when nothing runs in it (P7) and a checkpoint is saved.
 - Init: `initialize_sandbox_vm` closes the VM's relay connections and runs the

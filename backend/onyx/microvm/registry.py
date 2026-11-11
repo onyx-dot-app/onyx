@@ -1,7 +1,6 @@
 """Cache-backed Firecracker state (`SANDBOX_RUNTIME=firecracker`).
 
-No schema change. The state model follows E2B (microvm/README.md,
-"Sandbox state model").
+No schema change. State model: microvm/README.md, "Sandbox state model".
 - Signing keys (shared cache, TTL): the host agent re-registers well inside
   `NODE_SIGNING_KEY_TTL_SECONDS`, so a dead node's keys expire on their own.
 - Agent addresses (shared cache, same TTL): the registration carries the

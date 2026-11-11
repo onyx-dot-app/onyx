@@ -8,7 +8,7 @@ Placement samples K registered nodes, ranks them by free memory from
 node-local reason (capacity, template) moves placement to the next node; when
 no node accepts, `SANDBOX_CAPACITY_UNAVAILABLE` carries the reasons.
 
-State model (E2B; microvm/README.md, "Sandbox state model"):
+State model (microvm/README.md, "Sandbox state model"):
 - `place_sandbox_vm` is an idempotent ensure. It reads the durable placement
   record and asks that node's agent (`List`) whether the VM runs. A running
   VM is returned; otherwise placement replaces it with the next attempt. It

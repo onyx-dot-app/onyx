@@ -2,8 +2,8 @@
 //
 // Each report has every VM of List and every VM instance that ended within
 // --ended-retention. The api_server reconciles the node's placement records
-// on each report (backend/onyx/microvm/node_report.py). This is E2B's
-// 20 s sync with a push instead of a pull: Onyx has no API-side scheduler
+// on each report (backend/onyx/microvm/node_report.py). The agent pushes
+// because Onyx has no scheduler inside the api_server to poll nodes
 // (microvm/README.md, "Sandbox state model"). The report is signed with the
 // registered node key, so it starts only after the key registration succeeds.
 package nodereport
@@ -44,7 +44,7 @@ const (
 	MaxEnded     = 1024
 )
 
-// DefaultInterval is the default --state-report-interval (E2B's sync interval).
+// DefaultInterval is the default --state-report-interval (20 s).
 const DefaultInterval = 20 * time.Second
 
 // DefaultMaxBackoff caps the wait after repeated failures.

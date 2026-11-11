@@ -3,8 +3,8 @@
 Each node agent pushes its full state every `--state-report-interval` (20 s):
 `vms` (its `List`: live and exited VMs) and `ended` (VM instances that ended
 within its `--ended-retention`). The report route runs one pass per node
-under a per-node lease (`onyx.microvm.node_report`). This is E2B's sync with
-a push instead of a pull (microvm/README.md, "Sandbox state model"). Records
+under a per-node lease (`onyx.microvm.node_report`). The agent pushes
+reports instead of a poll loop (microvm/README.md, "Sandbox state model"). Records
 have no TTL, so a pass that runs out of time loses nothing; the next report
 goes on.
 

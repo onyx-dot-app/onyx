@@ -1,7 +1,7 @@
 """Per-node reconcile against Redis and fake host agents (ENG-4576).
 
 Each pass gets the state that the node would report: its `List` and its
-ended list. The state model follows E2B (microvm/README.md, "Sandbox state model").
+ended list. State model: microvm/README.md, "Sandbox state model".
 """
 
 import time
