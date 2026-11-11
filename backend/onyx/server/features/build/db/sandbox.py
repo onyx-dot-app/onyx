@@ -5,6 +5,7 @@ from typing import Literal
 from uuid import UUID
 
 from sqlalchemy import func, or_, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from onyx.auth.pat import hash_pat
@@ -302,6 +303,30 @@ def update_sandbox_heartbeat(db_session: Session, sandbox_id: UUID) -> Sandbox:
     sandbox.cleanup_checkpoint = None
     db_session.flush()
     return sandbox
+
+
+async def touch_running_sandbox_heartbeat_for_session_async(
+    db_session: AsyncSession, session_id: UUID
+) -> bool:
+    """Refresh the heartbeat of the RUNNING sandbox that owns a build session.
+    Returns False when the session is absent or its sandbox is not RUNNING."""
+    owner_id = (
+        select(BuildSession.user_id)
+        .where(BuildSession.id == session_id)
+        .scalar_subquery()
+    )
+    result = await db_session.execute(
+        update(Sandbox)
+        .where(
+            Sandbox.user_id == owner_id,
+            Sandbox.status == SandboxStatus.RUNNING,
+        )
+        .values(
+            last_heartbeat=datetime.datetime.now(datetime.timezone.utc),
+            cleanup_checkpoint=None,
+        )
+    )
+    return result.rowcount == 1  # ty: ignore[unresolved-attribute]
 
 
 def get_running_sandboxes(

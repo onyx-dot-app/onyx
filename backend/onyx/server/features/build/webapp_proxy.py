@@ -31,6 +31,9 @@ from onyx.server.features.build.db.build_session import (
     get_webapp_access_async,
     get_webapp_target_async,
 )
+from onyx.server.features.build.db.sandbox import (
+    touch_running_sandbox_heartbeat_for_session_async,
+)
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.nextjs_dev import webapp_base_path
 from onyx.utils.logger import setup_logger
@@ -59,6 +62,8 @@ def _get_proxy_client() -> httpx.AsyncClient:
 # Redis-backed so cache entries are shared across pods. Only grants are cached.
 _SANDBOX_URL_TTL = 60
 _WEBAPP_ACCESS_TTL = 30
+# Preview traffic refreshes the sandbox heartbeat at most once per interval.
+_PREVIEW_HEARTBEAT_INTERVAL_SECONDS = 60
 
 
 def _sandbox_url_cache_key(session_id: UUID) -> str:
@@ -67,6 +72,33 @@ def _sandbox_url_cache_key(session_id: UUID) -> str:
 
 def _webapp_access_cache_key(session_id: UUID, user_id: UUID) -> str:
     return f"craft:webapp:access:{session_id}:{user_id}"
+
+
+def _preview_heartbeat_cache_key(session_id: UUID) -> str:
+    return f"craft:webapp:heartbeat:{session_id}"
+
+
+async def _touch_preview_heartbeat(session_id: UUID) -> None:
+    """Count preview traffic as sandbox activity so the idle reaper does not
+    put a sandbox to sleep while its app preview is in use."""
+    if not get_cache_backend().set_if_absent(
+        _preview_heartbeat_cache_key(session_id),
+        b"1",
+        ex=_PREVIEW_HEARTBEAT_INTERVAL_SECONDS,
+    ):
+        return
+    try:
+        async with get_async_session_context_manager() as db_session:
+            await touch_running_sandbox_heartbeat_for_session_async(
+                db_session, session_id
+            )
+            await db_session.commit()
+    except Exception:
+        logger.warning(
+            "Failed to refresh sandbox heartbeat for session %s",
+            session_id,
+            exc_info=True,
+        )
 
 
 # Response headers to skip when proxying back from the sandbox.
@@ -381,6 +413,7 @@ async def get_webapp(
         if e.status_code == 401:
             return RedirectResponse(url="/auth/login", status_code=302)
         raise
+    await _touch_preview_heartbeat(session_id)
     try:
         return await _proxy_request(path, request, session_id)
     except HTTPException as e:
