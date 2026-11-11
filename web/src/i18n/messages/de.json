@@ -14477,7 +14477,7 @@
         "promote": {
           "cancelButton": "Abbrechen",
           "confirmButton": "Organisationsweit verfügbar machen",
-          "description": "Mit Apps verknüpfte Skills müssen für alle verfügbar sein. Diese Änderung wird beim Speichern der App übernommen.",
+          "description": "Mit Apps verknüpfte Skills müssen für alle verfügbar sein. Beim Speichern der App wird der Skill in der Organisation veröffentlicht. Die Veröffentlichung kann nicht rückgängig gemacht werden.",
           "title": "„{name}“ organisationsweit verfügbar machen?"
         },
         "search": {
@@ -17332,9 +17332,6 @@
           "message": "Freigabedetails werden geladen..."
         },
         "noOwnerTitle": "Kein aktiver Eigentümer",
-        "organizationPermissionMenu": {
-          "ariaLabel": "Organisationsberechtigung ändern"
-        },
         "ownerLabel": "Eigentümer",
         "permissionMenu": {
           "ariaLabel": "Zugriff für {name} aktualisieren"
@@ -17375,7 +17372,15 @@
         "peopleTitle": "Personen mit Zugriff",
         "manageIndividualAccess": "Individuellen Zugriff verwalten",
         "individualAccessTitle": "Individueller Zugriff",
-        "ownershipTitle": "Eigentümerschaft"
+        "ownershipTitle": "Eigentümerschaft",
+        "published": {
+          "title": "Organisation",
+          "description": "Veröffentlicht. Jeder in der Organisation kann diesen Skill verwenden."
+        },
+        "publishWarning": {
+          "title": "Die Veröffentlichung kann nicht rückgängig gemacht werden",
+          "description": "Nach dem Speichern kann jeder in der Organisation diesen Skill verwenden. Sie können ihn danach nicht wieder privat machen. Nur ein Administrator kann ihn löschen."
+        }
       },
       "placeholders": {
         "githubRepository": "inhaber/repository oder https://github.com/inhaber/repository"
@@ -17535,10 +17540,13 @@
       "shareDescription": "Diese Änderungen auf jeden ausgewählten Skill anwenden. Nicht geänderte Einstellungen behalten ihre aktuellen Werte.",
       "unchanged": "Unverändert lassen",
       "everyone": "Alle in der Organisation",
-      "invitedOnly": "Eingeladene Personen und Gruppen",
       "addAccessDescription": "Diese Personen und Gruppen zu jedem ausgewählten Skill hinzufügen. Aufgeführte Personen und Gruppen erhalten die gewählte Berechtigung. Alle anderen behalten ihren bisherigen Zugriff.",
       "apply": "{count, plural, one {Auf # Skill anwenden} other {Auf # Skills anwenden}}",
-      "moreActions": "Weitere Aktionen"
+      "moreActions": "Weitere Aktionen",
+      "publishWarning": {
+        "title": "Die Veröffentlichung kann nicht rückgängig gemacht werden",
+        "description": "Nach dem Anwenden kann jeder in der Organisation die ausgewählten Skills verwenden. Veröffentlichte Skills können nicht wieder privat gemacht werden. Nur ein Administrator kann sie löschen."
+      }
     }
   },
   "opensearchHealth": {

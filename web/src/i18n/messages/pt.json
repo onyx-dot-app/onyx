@@ -14477,7 +14477,7 @@
         "promote": {
           "cancelButton": "Cancelar",
           "confirmButton": "Disponibilizar para toda a organização",
-          "description": "Habilidades associadas a um app devem estar disponíveis para todos. Esta alteração é aplicada quando você salva o app.",
+          "description": "Habilidades associadas a um app devem estar disponíveis para todos. Quando você salva o app, a habilidade é publicada na organização. A publicação não pode ser desfeita.",
           "title": "Tornar “{name}” disponível para toda a organização?"
         },
         "search": {
@@ -17332,9 +17332,6 @@
           "message": "Carregando os detalhes de compartilhamento..."
         },
         "noOwnerTitle": "Sem proprietário ativo",
-        "organizationPermissionMenu": {
-          "ariaLabel": "Alterar a permissão da organização"
-        },
         "ownerLabel": "Proprietário",
         "permissionMenu": {
           "ariaLabel": "Atualizar o acesso de {name}"
@@ -17375,7 +17372,15 @@
         "peopleTitle": "Pessoas com acesso",
         "manageIndividualAccess": "Gerenciar acesso individual",
         "individualAccessTitle": "Acesso individual",
-        "ownershipTitle": "Propriedade"
+        "ownershipTitle": "Propriedade",
+        "published": {
+          "title": "Organização",
+          "description": "Publicada. Todos na organização podem usar esta habilidade."
+        },
+        "publishWarning": {
+          "title": "A publicação não pode ser desfeita",
+          "description": "Depois de salvar, todos na organização podem usar esta habilidade. Não é possível torná-la privada novamente. Somente um administrador pode excluí-la."
+        }
       },
       "placeholders": {
         "githubRepository": "proprietario/repositorio ou https://github.com/proprietario/repositorio"
@@ -17535,10 +17540,13 @@
       "shareDescription": "Aplique estas alterações a cada habilidade selecionada. As configurações não alteradas mantêm os valores atuais.",
       "unchanged": "Manter sem alterações",
       "everyone": "Todos na organização",
-      "invitedOnly": "Pessoas e grupos convidados",
       "addAccessDescription": "Adicione estas pessoas e grupos a cada habilidade selecionada. As pessoas e grupos indicados recebem a permissão escolhida. Os demais mantêm o acesso atual.",
       "apply": "{count, plural, one {Aplicar a # habilidade} other {Aplicar a # habilidades}}",
-      "moreActions": "Mais ações"
+      "moreActions": "Mais ações",
+      "publishWarning": {
+        "title": "A publicação não pode ser desfeita",
+        "description": "Depois de aplicar, todos na organização podem usar as habilidades selecionadas. Habilidades publicadas não podem voltar a ser privadas. Somente um administrador pode excluí-las."
+      }
     }
   },
   "opensearchHealth": {
