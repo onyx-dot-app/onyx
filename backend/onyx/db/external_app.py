@@ -29,6 +29,7 @@ from onyx.db.models import (
 )
 from onyx.db.plugin import (
     delete_plugin_preferences__no_commit,
+    get_plugin_version_validity,
     lock_skill_plugin__no_commit,
     publish_plugin__no_commit,
     set_plugin_installation_policy__no_commit,
@@ -435,7 +436,7 @@ def associate_custom_skill_with_external_app__no_commit(
             OnyxErrorCode.INVALID_INPUT,
             "Built-in skills cannot be associated through the admin workflow.",
         )
-    if skill.is_valid is False:
+    if get_plugin_version_validity([skill.id], "current", db_session).get(skill.id) is False:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             f"Invalid skill '{skill.name}' cannot be associated with an app.",
@@ -527,8 +528,10 @@ def replace_custom_skill_associations__no_commit(
             OnyxErrorCode.INVALID_INPUT,
             "Built-in skills cannot be associated through the admin workflow.",
         )
+    # Associating publishes the current version.
+    validity = get_plugin_version_validity(target_ids, "current", db_session)
     invalid_skill = next(
-        (skill for skill in target_skills if skill.is_valid is False),
+        (skill for skill in target_skills if validity.get(skill.id) is False),
         None,
     )
     if invalid_skill is not None:

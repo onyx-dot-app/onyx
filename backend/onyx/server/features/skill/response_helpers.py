@@ -17,7 +17,6 @@ from onyx.db.models import Skill, User
 from onyx.db.persona_sharing import (
     get_user_group_ids_for_user,
 )
-from onyx.db.plugin import get_version_ids_for_bundles
 from onyx.db.plugin_access import PluginAccess, load_plugin_access
 from onyx.db.scoped_permissions import fetch_managed_group_ids
 from onyx.db.skill import SkillUserState, skill_user_states
@@ -36,7 +35,7 @@ from onyx.skills.built_in import (
 from onyx.skills.bundle import SKILL_MD_NAME, strip_skill_md_frontmatter
 from onyx.skills.content import (
     read_builtin_skill_instructions,
-    read_custom_skill_bundle_instructions,
+    read_version_contents,
 )
 from onyx.skills.rendering import render_external_app_files
 from onyx.utils.logger import setup_logger
@@ -118,8 +117,10 @@ def skill_response_for_user(
     managed_user_group_ids: set[int] | None = None,
     include_share_details: bool = False,
     plugin_access: dict[UUID, PluginAccess] | None = None,
-    current_version_ids: dict[UUID, UUID] | None = None,
+    shown_version_id: UUID | None = None,
 ) -> SkillResponse:
+    """``shown_version_id`` is the version whose files the response shows, and
+    so the edit base; by default the plugin's current version."""
     if state is None:
         state = skill_user_states(user, [skill.id], db_session)[skill.id]
     if skill.built_in_skill_id is not None:
@@ -145,10 +146,8 @@ def skill_response_for_user(
     if plugin_access is None:
         plugin_access = load_plugin_access([skill.id], user.id, db_session)
     access = plugin_access.get(skill.id)
-    if current_version_ids is None:
-        current_version_ids = get_version_ids_for_bundles(
-            {skill.id: skill.bundle_file_id}, db_session
-        )
+    if shown_version_id is None and access is not None:
+        shown_version_id = access.current_version_id
     return SkillResponse.from_custom(
         skill,
         access,
@@ -163,7 +162,7 @@ def skill_response_for_user(
         ),
         include_share_details=include_share_details,
         external_app=_dependency_response(state.external_app_dependency),
-        current_version_id=current_version_ids.get(skill.id),
+        current_version_id=shown_version_id,
     )
 
 
@@ -183,10 +182,6 @@ def skills_list_response_for_user(
     states = skill_user_states(user, (skill.id for skill in rows), db_session)
     plugin_access = load_plugin_access(
         (skill.id for skill in rows if skill.is_custom), user.id, db_session
-    )
-    current_version_ids = get_version_ids_for_bundles(
-        {skill.id: skill.bundle_file_id for skill in rows if skill.is_custom},
-        db_session,
     )
     for skill in rows:
         if (
@@ -208,7 +203,6 @@ def skills_list_response_for_user(
             user_group_ids=user_group_ids,
             managed_user_group_ids=managed_user_group_ids,
             plugin_access=plugin_access,
-            current_version_ids=current_version_ids,
         )
         (customs if skill.is_custom else builtins).append(response)
 
@@ -247,9 +241,14 @@ def skill_preview_response(
             external_app=external_app,
         )
 
+    access = load_plugin_access([skill.id], user.id, db_session).get(skill.id)
+    if access is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill has no plugin version.")
     return SkillPreviewResponse.from_custom(
         skill,
-        load_plugin_access([skill.id], user.id, db_session).get(skill.id),
-        instructions_markdown=read_custom_skill_bundle_instructions(skill),
+        access,
+        instructions_markdown=read_version_contents(
+            access.version_user_runs, db_session
+        ).instructions_markdown,
         external_app=external_app,
     )

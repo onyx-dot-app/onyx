@@ -12,14 +12,15 @@ visibility without an admin bypass, user enablement for custom skills, app
 readiness for associated skills, validity, and built-in availability.
 
 Delete is a hard delete — `delete_skill` removes the row and its plugin and
-returns its `bundle_file_id` so the caller can drop the blob from the file
-store immediately.
+returns the bundle of its current version so the caller can drop the blob from
+the file store immediately.
 
 Each custom skill is also a plugin of kind skill with the same id
 (`onyx.db.plugin`). Every write goes to both: the plugin rows and the legacy
-skill rows, which a rollback still uses. Access reads of custom skills come
-from the plugin rows (`onyx.db.plugin_access`); built-in skills have no plugin
-and keep their skill rows. A bundle change adds a plugin version
+skill rows, which a rollback still uses. Access, bundle and validity reads of
+custom skills come from the plugin rows (`onyx.db.plugin_access`): each user
+reads the version they run. Built-in skills have no plugin and keep their skill
+rows. A bundle change adds a plugin version
 and never deletes the previous bundle. Access writes (shares, publishing, the
 install setting, user choices, transfer) call one `onyx.db.plugin` helper for
 each legacy write. Publishing is one-way, and there is no organization-wide
@@ -89,6 +90,7 @@ from onyx.db.plugin import (
     apply_plugin_access_change__no_commit,
     create_skill_plugin__no_commit,
     delete_plugin__no_commit,
+    get_current_version_bundle_file_id,
     lock_skill_plugin__no_commit,
     persist_plugin_version_validity__no_commit,
     plugin_installation_policy,
@@ -103,6 +105,7 @@ from onyx.db.plugin_access import (
     plugin_visible_to_user,
     policy_rank,
     skill_name_in_version,
+    version_is_valid,
     version_user_runs,
 )
 from onyx.db.scoped_permissions import (
@@ -127,6 +130,24 @@ class SkillValidityUpdate:
     skill_id: UUID
     bundle_file_id: str | None
     is_valid: bool
+
+
+@dataclass(frozen=True)
+class RuntimeSkillVersion:
+    """The plugin version a user runs (``version_user_runs``)."""
+
+    id: UUID
+    bundle_file_id: str | None
+    is_valid: bool | None
+
+
+@dataclass(frozen=True)
+class RuntimeSkill:
+    skill: Skill
+    # The name in the version the user runs; the row name for a built-in.
+    name: str
+    # None for a built-in skill.
+    version: RuntimeSkillVersion | None
 
 
 @dataclass(frozen=True)
@@ -282,6 +303,16 @@ def _runtime_name(user: User) -> ColumnElement[str]:
     )
 
 
+def _runtime_version_is_valid(user: User) -> ColumnElement[bool | None]:
+    """Validity of the version the user runs; NULL without a plugin or while
+    the version is unclassified."""
+    return _plugin_of_skill(
+        lambda plugin, _marketplace: version_is_valid(
+            version_user_runs(plugin, user.id)
+        )
+    ).scalar_subquery()
+
+
 def _is_required_for_user(user: User) -> ColumnElement[bool]:
     return and_(
         _installation_rank_for_user(user)
@@ -342,9 +373,9 @@ def _is_enabled_for_user(user: User) -> ColumnElement[bool]:
     )
 
 
-def _exclude_unavailable_built_in_skills(
-    stmt: Select[tuple[Skill]], db_session: Session
-) -> Select[tuple[Skill]]:
+def _exclude_unavailable_built_in_skills[RowT: tuple[Any, ...]](
+    stmt: Select[RowT], db_session: Session
+) -> Select[RowT]:
     """Hide built-ins whose codified ``is_available(db)`` returns False.
     User-facing reads use this; admin reads don't (admins see all rows)."""
     unavailable = [
@@ -471,11 +502,13 @@ def list_runtime_skills_for_user(
     *,
     db_session: Session,
     user: User,
-) -> list[Skill]:
-    """Return the user's effective sandbox skills.
+) -> list[RuntimeSkill]:
+    """Return the user's effective sandbox skills, each with the plugin version
+    the user runs.
 
     Management visibility, user selection, bundle validity, built-in
-    availability, and external-app readiness remain independent inputs.
+    availability, and external-app readiness remain independent inputs. The
+    plugin and its version are outer joins, so built-in skills stay.
     """
     external_app_dependencies = get_skill_external_app_dependencies(db_session, user)
     ready_external_app_skill_ids = [
@@ -483,9 +516,27 @@ def list_runtime_skills_for_user(
         for skill_id, dependency in external_app_dependencies.items()
         if dependency.ready
     ]
+    run_plugin: type[Plugin] = aliased(Plugin)
+    run_version: type[PluginVersion] = aliased(PluginVersion)
+    name = _runtime_name(user)
     stmt = (
-        _skill_select_with_eager_load(order_by_name=False)
-        .order_by(_runtime_name(user), Skill.id)
+        select(
+            Skill,
+            name,
+            run_version.id,
+            run_version.bundle_file_id,
+            run_version.is_valid,
+        )
+        .options(
+            selectinload(Skill.author),
+            selectinload(Skill.user_shares).selectinload(Skill__User.user),
+            selectinload(Skill.group_shares).selectinload(Skill__UserGroup.user_group),
+        )
+        .outerjoin(run_plugin, run_plugin.id == Skill.id)
+        .outerjoin(
+            run_version, run_version.id == version_user_runs(run_plugin, user.id)
+        )
+        .order_by(name, Skill.id)
         .where(
             skill_visible_to_user(user),
             _is_enabled_for_user(user),
@@ -495,14 +546,25 @@ def list_runtime_skills_for_user(
             ),
             or_(
                 Skill.built_in_skill_id.isnot(None),
-                Skill.is_valid.is_(None),
-                Skill.is_valid.is_(True),
+                and_(run_version.id.isnot(None), run_version.is_valid.is_not(False)),
             ),
         )
     )
-    return list(
-        db_session.scalars(_exclude_unavailable_built_in_skills(stmt, db_session))
-    )
+    rows = db_session.execute(_exclude_unavailable_built_in_skills(stmt, db_session))
+    return [
+        RuntimeSkill(
+            skill=skill,
+            name=skill_name,
+            version=(
+                RuntimeSkillVersion(
+                    id=version_id, bundle_file_id=bundle_file_id, is_valid=is_valid
+                )
+                if skill.built_in_skill_id is None and version_id is not None
+                else None
+            ),
+        )
+        for skill, skill_name, version_id, bundle_file_id, is_valid in rows
+    ]
 
 
 def fetch_skill(
@@ -652,14 +714,6 @@ def replace_skill_bundle(
             f"Skill '{skill.name}' is a built-in and has no bundle.",
         )
 
-    # Custom rows always have a bundle (XOR check constraint), but guard
-    # explicitly rather than assert so a corrupt row fails loud, not silent.
-    if skill.bundle_file_id is None:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"Skill '{skill.name}' has no bundle to replace.",
-        )
-
     # A skill with no plugin gets one copied from its legacy row first, so the
     # change below is version 2, as for every other skill.
     plugin = lock_skill_plugin__no_commit(skill, db_session)
@@ -763,7 +817,7 @@ def skill_user_states(
             skill_visible_to_user(user).label("visible"),
             and_(
                 Skill.built_in_skill_id.is_(None),
-                Skill.is_valid.is_not(False),
+                _runtime_version_is_valid(user).is_not(False),
                 _installation_rank_for_user(user)
                 != policy_rank(PluginInstallationPolicy.REQUIRED),
             ).label("supports_preference"),
@@ -1002,10 +1056,11 @@ def transfer_skill_ownership(
 
 
 def delete_skill(skill: Skill, db_session: Session) -> str | None:
-    """Hard-delete a skill and its plugin, and return its current
-    `bundle_file_id` for caller cleanup."""
-    bundle_file_id = skill.bundle_file_id
+    """Hard-delete a skill and its plugin, and return the bundle file id of
+    its current version for caller cleanup."""
+    bundle_file_id: str | None = None
     if skill.is_custom:
+        bundle_file_id = get_current_version_bundle_file_id(skill.id, db_session)
         delete_plugin__no_commit(skill.id, db_session)
     db_session.delete(skill)
     db_session.flush()

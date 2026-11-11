@@ -133,7 +133,7 @@ class SkillResponse(BaseModel):
             description=(
                 access.description if access is not None else skill.description
             ),
-            is_valid=skill.is_valid,
+            is_valid=access.is_valid if access is not None else None,
             installation_policy=(
                 access.skill_installation_policy
                 if access is not None
