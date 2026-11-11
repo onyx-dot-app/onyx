@@ -64,9 +64,10 @@ major.minor.hotfix-beta.betahotfix
   - **Hotfix version** - Incremented only when backporting bugfixes to releases
 </Note>
 
-### Docker Files and Helm Charts
+### Docker Images and Helm Charts
 
-Changes to Docker files and Helm charts increment the version numbers in their respective files.
+Docker images are tagged with the Onyx version of the release. The Helm chart has its own version,
+`version` in `Chart.yaml`. Each change to the chart increments it.
 
 ## Release Schedule
 

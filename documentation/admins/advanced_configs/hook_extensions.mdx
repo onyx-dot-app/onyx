@@ -97,7 +97,8 @@ If you configured an API key when registering the hook, Onyx includes it in ever
 Authorization: Bearer <your-api-key>
 ```
 
-Each Lambda example below checks this header.
+Each Lambda example below checks this header only when you set the same key in the `HOOK_API_KEY` environment variable
+of the Lambda function. If `HOOK_API_KEY` is not set, the example accepts every request.
 
 ---
 
@@ -458,6 +459,8 @@ URL](https://docs.aws.amazon.com/lambda/latest/dg/lambda-urls.html).
   logger = logging.getLogger()
   logger.setLevel(logging.INFO)
 
+  # Set the HOOK_API_KEY environment variable in your Lambda configuration.
+  # If not set, API key validation is skipped.
   API_KEY = os.environ.get("HOOK_API_KEY")
 
   def lambda_handler(event, context):
