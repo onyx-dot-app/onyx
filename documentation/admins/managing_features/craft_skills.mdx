@@ -119,6 +119,12 @@ description: Create a weekly customer update from account activity and meeting n
 5. Run `scripts/validate.py` before returning the final file.
 ```
 
+Craft reads a relative path such as `scripts/validate.py` from the Skill folder.
+A command can also use `${CLAUDE_SKILL_DIR}`, as in `python ${CLAUDE_SKILL_DIR}/scripts/validate.py`.
+Craft replaces `${CLAUDE_SKILL_DIR}` in `SKILL.md` with the Skill folder before the agent reads it.
+The stored `SKILL.md` keeps the variable. If expansion exceeds the file limit or the sandbox delivery limit,
+Craft skips that Skill and logs a warning. The saved bundle stays unchanged. Other Skills remain available.
+
 ### Bundle requirements
 
 | Requirement         | Default                                                                                                                                     |
