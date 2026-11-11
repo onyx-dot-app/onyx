@@ -1,6 +1,7 @@
 import email.header
 import email.utils
-from datetime import datetime
+import hashlib
+from datetime import datetime, timezone
 from email.message import Message
 from enum import Enum
 
@@ -30,7 +31,9 @@ class EmailHeaders(BaseModel):
     date: datetime
 
     @classmethod
-    def from_email_msg(cls, email_msg: Message) -> "EmailHeaders":
+    def from_email_msg(
+        cls, email_msg: Message, fallback_id: str | None = None
+    ) -> "EmailHeaders":
         def _decode(header: str, default: str | None = None) -> str | None:
             value = email_msg.get(header, default)
             if not value:
@@ -53,18 +56,34 @@ class EmailHeaders(BaseModel):
             except (TypeError, ValueError):
                 return None
 
-        message_id = _decode(header=Header.MESSAGE_ID_HEADER)
+        raw_msg_id = _decode(header=Header.MESSAGE_ID_HEADER)
+        message_id = raw_msg_id.strip() if raw_msg_id and raw_msg_id.strip() else None
+
         # It's possible for the subject line to not exist or be an empty string.
         subject = _decode(header=Header.SUBJECT_HEADER) or "Unknown Subject"
-        from_ = _decode(header=Header.FROM_HEADER)
+        from_ = _decode(header=Header.FROM_HEADER) or "unknown@unknown.com"
         to = _decode(header=Header.TO_HEADER)
         if not to:
             to = _decode(header=Header.DELIVERED_TO_HEADER)
         date_str = _decode(header=Header.DATE_HEADER)
-        date = _parse_date(date_str=date_str)
+        date = _parse_date(date_str=date_str) or datetime.now(timezone.utc)
 
-        # If any of the above are `None`, model validation will fail.
-        # Therefore, no guards (i.e.: `if <header> is None: raise RuntimeError(..)`) were written.
+        if not message_id:
+            if fallback_id:
+                message_id = fallback_id
+            else:
+                hasher = hashlib.sha256()
+                hasher.update((from_ or "").encode("utf-8", errors="replace"))
+                hasher.update((to or "").encode("utf-8", errors="replace"))
+                hasher.update((subject or "").encode("utf-8", errors="replace"))
+                hasher.update((date_str or "").encode("utf-8", errors="replace"))
+                try:
+                    payload = email_msg.as_bytes()
+                    hasher.update(payload[:2048])
+                except Exception:
+                    pass
+                message_id = f"fallback-msg-{hasher.hexdigest()[:24]}"
+
         return cls.model_validate(
             {
                 "id": message_id,

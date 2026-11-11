@@ -202,13 +202,38 @@ class ImapConnector(
                 )
                 continue
 
-            email_headers = EmailHeaders.from_email_msg(email_msg=email_msg)
-
-            yield _convert_email_headers_and_body_into_document(
-                email_msg=email_msg,
-                email_headers=email_headers,
-                include_perm_sync=include_perm_sync,
+            fallback_id = (
+                f"{checkpoint.current_mailbox.mailbox}:{email_id}"
+                if checkpoint.current_mailbox
+                else str(email_id)
             )
+
+            try:
+                email_headers = EmailHeaders.from_email_msg(
+                    email_msg=email_msg,
+                    fallback_id=fallback_id,
+                )
+            except Exception as e:
+                logger.warning(
+                    "Failed to parse email headers for email_id=%r: %s; skipping",
+                    email_id,
+                    e,
+                )
+                continue
+
+            try:
+                yield _convert_email_headers_and_body_into_document(
+                    email_msg=email_msg,
+                    email_headers=email_headers,
+                    include_perm_sync=include_perm_sync,
+                )
+            except Exception as e:
+                logger.warning(
+                    "Failed to convert email message into document for email_id=%r: %s; skipping",
+                    email_id,
+                    e,
+                )
+                continue
 
         return checkpoint
 
