@@ -7,6 +7,7 @@ import io
 import stat
 import sys
 import zipfile
+from collections.abc import Callable
 from contextlib import ExitStack
 from copy import copy
 from dataclasses import dataclass
@@ -24,6 +25,7 @@ from onyx.skills.metadata import (
     split_skill_md,
 )
 from onyx.skills.models import CustomSkillBundleContents, SkillBundleFile
+from onyx.utils.bundle import is_ignored_bundle_path as _is_ignored_bundle_path
 
 _MIB: Final[int] = 1024 * 1024
 
@@ -84,10 +86,6 @@ SKILL_MD_NAME: Final[str] = "SKILL.md"
 TEMPLATE_SUFFIX: Final[str] = ".template"
 
 _ZIP_UNIX_CREATE_SYSTEM: Final[int] = 3
-
-_IGNORED_BUNDLE_FILE_NAMES: Final[frozenset[str]] = frozenset(
-    {".DS_Store", "Thumbs.db"}
-)
 
 
 @dataclass(frozen=True)
@@ -386,16 +384,6 @@ def _validated_bundle_path(info: zipfile.ZipInfo) -> str:
     return trimmed
 
 
-def _is_ignored_bundle_path(path: str) -> bool:
-    parts = path.split("/")
-    basename = parts[-1]
-    return (
-        parts[0] == "__MACOSX"
-        or basename in _IGNORED_BUNDLE_FILE_NAMES
-        or basename.startswith("._")
-    )
-
-
 def _bundle_wrapper_prefix(file_paths: list[str]) -> str | None:
     """Identify an optional single directory wrapped around a skill bundle."""
     meaningful_paths = [
@@ -634,7 +622,7 @@ def normalize_custom_bundle(
 
 
 def update_custom_bundle_files(
-    existing_zip_bytes: bytes,
+    existing_zip_bytes: bytes | Callable[[], bytes],
     upload_bytes: bytes | None = None,
     *,
     filename: str | None = None,
@@ -647,6 +635,8 @@ def update_custom_bundle_files(
     A ZIP or standalone file containing ``SKILL.md`` is a full bundle
     replacement. Other uploads are merged into the existing bundle, replacing
     files at matching paths while preserving ``SKILL.md`` and unrelated files.
+    A callable for ``existing_zip_bytes`` is read only when the existing bundle
+    is needed, so a full replacement does not depend on it.
     """
     assert_skill_bundle_settings_valid()
     is_upload = upload_bytes is not None
@@ -733,9 +723,14 @@ def update_custom_bundle_files(
                 )
             changed_paths = {normalized_remove_path}
 
+        existing_bytes = (
+            existing_zip_bytes
+            if isinstance(existing_zip_bytes, bytes)
+            else existing_zip_bytes()
+        )
         try:
             existing_zip = archives.enter_context(
-                zipfile.ZipFile(io.BytesIO(existing_zip_bytes))
+                zipfile.ZipFile(io.BytesIO(existing_bytes))
             )
         except zipfile.BadZipFile as exc:
             raise OnyxError(

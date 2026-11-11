@@ -154,3 +154,30 @@ def test_current_bundle_over_read_limit_has_specific_payload_error(
         == "Stored bundle for skill 'preview-test' exceeds the 8-byte read limit."
     )
     assert source.tell() == 9
+
+
+def test_current_bundle_over_expansion_limit_has_payload_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from onyx.file_store.models import BundleLimits
+    from onyx.skills import content
+
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w") as archive:
+        archive.writestr("SKILL.md", b"x" * 9)
+    monkeypatch.setattr(
+        content,
+        "STORED_BUNDLE_LIMITS",
+        BundleLimits(max_stored_bytes=10_000, max_file_bytes=8, max_total_bytes=8),
+    )
+    store = Mock(spec=FileStore)
+    store.read_file.return_value = io.BytesIO(output.getvalue())
+    with pytest.raises(OnyxError) as error:
+        read_custom_skill_bundle_bytes(
+            Skill(
+                name="preview-test",
+                current_version=SkillVersion(bundle_file_id="bundle"),
+            ),
+            store,
+        )
+    assert error.value.error_code == OnyxErrorCode.PAYLOAD_TOO_LARGE

@@ -12,6 +12,7 @@ from onyx.db.file_record import FileRecordNotFoundError
 from onyx.db.models import Skill, SkillVersion
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
+from onyx.file_store.models import BundleLimits, FileSizeLimitExceeded
 from onyx.skills import bundle, validation
 from onyx.skills.bundle import normalize_custom_bundle
 from onyx.skills.validation import validate_stored_custom_skill
@@ -20,7 +21,15 @@ from onyx.skills.validation import validate_stored_custom_skill
 def test_stored_read_accepts_zip_larger_than_extracted_cap(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(validation, "DEFAULT_STORED_ZIP_MAX_BYTES", 4096)
+    monkeypatch.setattr(
+        validation,
+        "STORED_BUNDLE_LIMITS",
+        BundleLimits(
+            max_stored_bytes=4096,
+            max_file_bytes=1024,
+            max_total_bytes=1024,
+        ),
+    )
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, mode="w") as zf:
         zf.writestr(
@@ -50,7 +59,11 @@ def test_stored_read_accepts_zip_larger_than_extracted_cap(
 def test_stored_read_still_enforces_its_own_limit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(validation, "DEFAULT_STORED_ZIP_MAX_BYTES", 1024)
+    monkeypatch.setattr(
+        validation,
+        "STORED_BUNDLE_LIMITS",
+        validation.STORED_BUNDLE_LIMITS.model_copy(update={"max_stored_bytes": 1024}),
+    )
     stream = io.BytesIO(b"x" * 1025)
     file_store = MagicMock(spec=FileStore)
     file_store.read_file.return_value = stream
@@ -58,6 +71,7 @@ def test_stored_read_still_enforces_its_own_limit(
         validation.load_stored_custom_skill_bundle("id", file_store)
     assert exc.value.extra == {"limit": "zip_bytes", "limit_value": 1024}
     assert stream.closed
+    file_store.read_file.assert_called_once_with("id", max_bytes=1024)
 
 
 def _skill(name: str = "canonical-name") -> Skill:
@@ -136,7 +150,12 @@ def test_bundle_over_lowered_stored_allowance_stays_unclassified(
     stored = _valid_stored_bundle()
     file_store = MagicMock(spec=FileStore)
     file_store.read_file.return_value = io.BytesIO(stored)
-    monkeypatch.setattr(validation, "DEFAULT_STORED_ZIP_MAX_BYTES", len(stored) - 1)
+    limits = validation.STORED_BUNDLE_LIMITS
+    monkeypatch.setattr(
+        validation,
+        "STORED_BUNDLE_LIMITS",
+        limits.model_copy(update={"max_stored_bytes": len(stored) - 1}),
+    )
 
     result = validate_stored_custom_skill(_skill(), file_store)
 
@@ -149,9 +168,19 @@ def test_bundle_over_lowered_stored_allowance_stays_unclassified(
     assert validate_stored_custom_skill(_skill(), file_store).is_valid is None
     file_store.read_file.assert_not_called()
 
-    monkeypatch.setattr(validation, "DEFAULT_STORED_ZIP_MAX_BYTES", len(stored))
+    monkeypatch.setattr(validation, "STORED_BUNDLE_LIMITS", limits)
     file_store.read_file.return_value = io.BytesIO(stored)
     assert validate_stored_custom_skill(_skill(), file_store).is_valid is True
+
+
+def test_store_read_over_allowance_stays_unclassified() -> None:
+    file_store = MagicMock(spec=FileStore)
+    file_store.read_file.side_effect = FileSizeLimitExceeded("too large")
+
+    result = validate_stored_custom_skill(_skill(), file_store)
+
+    assert result.is_valid is None
+    assert result.normalized_bundle is None
 
 
 def test_invalid_bundle_settings_leave_skill_unclassified(

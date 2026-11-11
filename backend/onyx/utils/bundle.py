@@ -2,8 +2,24 @@
 
 import io
 import zipfile
+from typing import Final
 
 from onyx.file_store.models import BundleLimits, BundleMetadata, FileSizeLimitExceeded
+
+_IGNORED_BUNDLE_FILE_NAMES: Final[frozenset[str]] = frozenset(
+    {".DS_Store", "Thumbs.db"}
+)
+
+
+def is_ignored_bundle_path(path: str) -> bool:
+    """OS metadata that bundles drop on upload: __MACOSX/, .DS_Store, ._*."""
+    parts = path.split("/")
+    basename = parts[-1]
+    return (
+        parts[0] == "__MACOSX"
+        or basename in _IGNORED_BUNDLE_FILE_NAMES
+        or basename.startswith("._")
+    )
 
 
 def compute_bundle_metadata(
@@ -13,7 +29,7 @@ def compute_bundle_metadata(
     count = 0
     with zipfile.ZipFile(io.BytesIO(bundle_bytes)) as archive:
         for info in sorted(archive.infolist(), key=lambda entry: entry.filename):
-            if info.is_dir():
+            if info.is_dir() or is_ignored_bundle_path(info.filename):
                 continue
             size = 0
             with archive.open(info) as source:
