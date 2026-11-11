@@ -79,8 +79,9 @@ type SandboxdClient interface {
 	// is handed out. In order: set the wall clock, add host entropy to the
 	// kernel RNG, attach the per-VM drives (the image's attach script: scratch,
 	// overlays, managed drive; a no-op when init already ran it), grow the
-	// scratch file system, send SIGHUP to the in-guest egress relay (it resets
-	// every live connection), then install the env and session list. Before Init after a restore, the
+	// scratch file system, install the SetKey egress CA (if any), send SIGHUP
+	// to the in-guest egress relay (it resets every live connection), then
+	// install the env and session list. Before Init after a restore, the
 	// caller must also close the VM's host-side relay connections (node agent
 	// CloseConnections).
 	Init(ctx context.Context, in *InitRequest, opts ...grpc.CallOption) (*InitResponse, error)
@@ -418,8 +419,9 @@ type SandboxdServer interface {
 	// is handed out. In order: set the wall clock, add host entropy to the
 	// kernel RNG, attach the per-VM drives (the image's attach script: scratch,
 	// overlays, managed drive; a no-op when init already ran it), grow the
-	// scratch file system, send SIGHUP to the in-guest egress relay (it resets
-	// every live connection), then install the env and session list. Before Init after a restore, the
+	// scratch file system, install the SetKey egress CA (if any), send SIGHUP
+	// to the in-guest egress relay (it resets every live connection), then
+	// install the env and session list. Before Init after a restore, the
 	// caller must also close the VM's host-side relay connections (node agent
 	// CloseConnections).
 	Init(context.Context, *InitRequest) (*InitResponse, error)

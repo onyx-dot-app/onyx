@@ -1,0 +1,232 @@
+# Builds the Craft Firecracker root drive image (ENG-4648):
+# onyxdotapp/craft-fc-artifacts:rootfs-<version>. See
+# deployment/craft-fc/rootfs/README.md ("Delivery to nodes").
+#
+# The root drive has no egress CA, so one image serves every deployment. The
+# host agent sends the deployment CA to the guest daemon, which installs it
+# at Init.
+#
+# Pull requests and pushes to main check Dockerfile.image and
+# install-rootfs.sh with a small test drive, with no push. Conversion and
+# KVM boot of the real image are checked by craft-runtime.yml.
+# Only a manual dispatch on main converts a source image and publishes it.
+name: Craft Firecracker Rootfs
+concurrency:
+  group: Craft-FC-Rootfs-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+on:
+  pull_request:
+    paths:
+      - "deployment/craft-fc/rootfs/**"
+      - ".github/workflows/craft-fc-rootfs.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "deployment/craft-fc/rootfs/**"
+      - ".github/workflows/craft-fc-rootfs.yml"
+  workflow_dispatch:
+    inputs:
+      source_image:
+        description: "Rootfs source image with a pinned tag, for example onyxdotapp/craft-runtime:v5.2.0. Fallback: onyxdotapp/sandbox:<tag>."
+        type: string
+        required: true
+      version:
+        description: "Version to publish as rootfs-<version>, for example 0.1.0. An existing tag is never replaced."
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY_IMAGE: onyxdotapp/craft-fc-artifacts
+  ROOTFS_DIR: deployment/craft-fc/rootfs
+
+jobs:
+  check-image:
+    runs-on:
+      - runs-on
+      - runner=2cpu-linux-x64
+      - run-id=${{ github.run_id }}-craft-fc-rootfs-check
+      - extras=ecr-cache
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Log in to ECR pull-through cache
+        uses: ./.github/actions/login-ecr-pullthrough-cache
+        with:
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
+
+      - name: Check the image and the install script
+        run: bash "${ROOTFS_DIR}/check-image.sh"
+
+  publish:
+    needs:
+      - check-image
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on:
+      - runs-on
+      - runner=8cpu-linux-x64
+      - family=m8i.2xlarge
+      - ram=32
+      - nested-virt=true
+      - spot=false
+      - volume=80gb
+      - run-id=${{ github.run_id }}-craft-fc-rootfs-publish
+      - extras=ecr-cache
+    timeout-minutes: 90
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      SOURCE_IMAGE: ${{ inputs.source_image }}
+      IMAGE_TAG: rootfs-${{ inputs.version }}
+      VERSION: ${{ inputs.version }}
+    steps:
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Check the inputs
+        run: |
+          set -euo pipefail
+          if ! [[ "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::version must look like 0.1.0."
+            exit 1
+          fi
+          # A pinned tag: the published drive must name the image it came from.
+          if ! [[ "${SOURCE_IMAGE}" =~ ^onyxdotapp/(craft-runtime|sandbox):[A-Za-z0-9][A-Za-z0-9._-]*$ ]] \
+            || [[ "${SOURCE_IMAGE}" =~ :(latest|edge|beta)(-dev)?$ ]]; then
+            echo "::error::source_image must be onyxdotapp/craft-runtime:<tag> or onyxdotapp/sandbox:<tag>, with a pinned tag."
+            exit 1
+          fi
+
+      - name: Log in to ECR pull-through cache
+        uses: ./.github/actions/login-ecr-pullthrough-cache
+        with:
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+
+      - name: Get AWS Secrets
+        uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53
+        with:
+          secret-ids: |
+            DOCKER_USERNAME, deploy/docker-username
+            DOCKER_TOKEN, deploy/docker-token
+          parse-json-secrets: true
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
+        with:
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ env.DOCKER_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
+
+      # Never replace an existing tag. Only a clear "not found" counts as
+      # absent; any other error stops the job.
+      - name: Refuse to replace a published tag
+        run: |
+          set -euo pipefail
+          ref="${REGISTRY_IMAGE}:${IMAGE_TAG}"
+          if out="$(docker buildx imagetools inspect "${ref}" 2>&1)"; then
+            echo "::error::${ref} already exists. Publish a new version."
+            exit 1
+          fi
+          if grep -qiE 'not found|manifest unknown|repository does not exist' <<<"${out}"; then
+            echo "${ref} does not exist yet."
+          else
+            echo "::error::Could not check whether ${ref} exists: ${out}"
+            exit 1
+          fi
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # ratchet:actions/setup-go@v5
+        with:
+          go-version-file: microvm/go.mod
+          cache: false
+
+      - name: Install rootfs build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends e2fsprogs file openssl python3
+
+      - name: Pull the source image
+        run: docker pull --platform linux/amd64 "${SOURCE_IMAGE}"
+
+      # The kernel and Firecracker of the published host agent (microvm/Dockerfile ARTIFACTS_TAG).
+      - name: Get the Firecracker artifacts
+        run: |
+          set -euo pipefail
+          tag="$(sed -n 's/^ARG ARTIFACTS_TAG=//p' microvm/Dockerfile)"
+          cid="$(docker create --platform linux/amd64 "${REGISTRY_IMAGE}:${tag}" /none)"
+          mkdir -p "${RUNNER_TEMP}/artifacts"
+          docker cp "${cid}:/craft-fc" "${RUNNER_TEMP}/artifacts/"
+          docker rm "${cid}" >/dev/null
+
+      # The same check as craft-runtime.yml: convert with no CA, boot in
+      # Firecracker, and run the daemon, init, restore and egress CA tests.
+      - name: Check the source image in Firecracker KVM
+        run: |
+          sudo modprobe kvm_intel
+          sudo env "PATH=$PATH" "BASE_IMAGE_REGISTRY=${BASE_IMAGE_REGISTRY}" \
+            "DOCKER_CONFIG=${DOCKER_CONFIG:-$HOME/.docker}" \
+            bash deployment/craft-runtime/check-kvm.sh "${SOURCE_IMAGE}" "${RUNNER_TEMP}/artifacts/craft-fc"
+
+      - name: Build the root drive
+        run: |
+          set -euo pipefail
+          out="${RUNNER_TEMP}/rootfs"
+          (
+            cd microvm
+            CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o "${RUNNER_TEMP}/bin/guest-daemon" ./cmd/guest-daemon
+            CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o "${RUNNER_TEMP}/bin/egress-relay" ./cmd/egress-relay
+          )
+          sudo env "PATH=$PATH" bash "${ROOTFS_DIR}/build-rootfs.sh" --image "${SOURCE_IMAGE}" \
+            --daemon-bin "${RUNNER_TEMP}/bin/guest-daemon" --relay-bin "${RUNNER_TEMP}/bin/egress-relay" --out "${out}"
+          bash "${ROOTFS_DIR}/check-image.sh" --context-from "${out}" "${RUNNER_TEMP}/context"
+
+      - name: Push the root drive image by digest
+        id: push
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+        with:
+          context: ${{ runner.temp }}/context
+          file: ${{ runner.temp }}/context/Dockerfile.image
+          platforms: linux/amd64
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ env.IMAGE_TAG }}
+            app.onyx.craft-fc-rootfs.source=${{ env.SOURCE_IMAGE }}
+          outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+
+      - name: Check the pushed image
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          set -euo pipefail
+          docker pull --platform linux/amd64 "${REGISTRY_IMAGE}@${DIGEST}"
+          bash "${ROOTFS_DIR}/check-image.sh" --image "${REGISTRY_IMAGE}@${DIGEST}"
+
+      - name: Tag the checked image
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: docker buildx imagetools create -t "${REGISTRY_IMAGE}:${IMAGE_TAG}" "${REGISTRY_IMAGE}@${DIGEST}"

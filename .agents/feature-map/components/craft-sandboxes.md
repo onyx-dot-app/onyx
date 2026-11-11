@@ -74,11 +74,18 @@ The separate userspace image in `deployment/craft-runtime/` is only for the
 new integrated harness. Existing Craft keeps its current sandbox image and
 skills. The new image is an input to `deployment/craft-fc/rootfs/build-rootfs.sh`. It includes execution tools and
 assets, without OpenCode or the current Python sidecar. The existing converter
-adds init, the static Go daemon and relay, proxy CA trust, overlays, and the
-rootfs manifest. Managed skills mount at `/workspace/managed/skills` on a
-read-only, noexec drive; scripts run through interpreters. Publishing the
-userspace image does not deliver rootfs files to nodes or change the current
-pod/Docker image settings.
+adds init, the static Go daemon and relay, overlays, and the rootfs manifest.
+Managed skills mount at `/workspace/managed/skills` on a read-only, noexec
+drive; scripts run through interpreters. Publishing the userspace image does
+not change the current pod/Docker image settings.
+
+Rootfs delivery (Firecracker only, ENG-4648): `.github/workflows/craft-fc-rootfs.yml` converts a
+`craft-runtime` tag with no egress CA and publishes
+`onyxdotapp/craft-fc-artifacts:rootfs-<version>`. The host agent DaemonSet copies
+it into `<dataDir>/rootfs` with an init container (`craft.hostAgent.rootfs`).
+The agent reads the sandbox-proxy CA ConfigMap at each Create and sends it with
+`SetKey`; the guest daemon installs it at `Init`. So one drive and one template
+key serve every deployment CA.
 
 Operator guides: `backend/onyx/server/features/build/sandbox/README.md` (image
 and tag coupling, IPv6), `backend/onyx/server/features/build/sandbox/docker/README.md`

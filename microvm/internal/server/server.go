@@ -17,14 +17,16 @@ import (
 
 	"github.com/onyx-dot-app/onyx/microvm/internal/agent"
 	"github.com/onyx-dot-app/onyx/microvm/internal/apierr"
+	"github.com/onyx-dot-app/onyx/microvm/internal/egressca"
 	"github.com/onyx-dot-app/onyx/microvm/internal/template"
 	"github.com/onyx-dot-app/onyx/microvm/internal/tplbuild"
 	pb "github.com/onyx-dot-app/onyx/microvm/proto/hostagent/v1"
 )
 
-// KeyInstaller sets the guest daemon key of a running VM.
+// KeyInstaller sets the guest daemon key, and the egress CA (PEM, may be
+// nil), of a running VM.
 type KeyInstaller interface {
-	InstallKey(ctx context.Context, vm agent.VM, key string) error
+	InstallKey(ctx context.Context, vm agent.VM, key string, egressCA []byte) error
 }
 
 // Service adapts an agent.Manager to the gRPC API.
@@ -44,6 +46,9 @@ type Service struct {
 	MaxDialsPerVM int
 	// Keys installs CreateRequest.sandboxd_key. Nil ignores the key.
 	Keys KeyInstaller
+	// EgressCA is the deployment egress CA that Create sends with the key.
+	// Nil: no CA (a root drive with a built-in CA).
+	EgressCA *egressca.Cached
 
 	dialMu sync.Mutex
 	dials  map[string]int
@@ -66,6 +71,18 @@ func (s *Service) Create(ctx context.Context, r *pb.CreateRequest) (*pb.CreateRe
 	if err := validateDaemonKey(key); err != nil {
 		return nil, toStatus(apierr.New(pb.ErrorReason_INVALID_ARGUMENT, "sandboxd_key: %v", err))
 	}
+	var caPEM []byte
+	if key != "" && s.Keys != nil && s.EgressCA != nil {
+		// Before the VM starts: a missing CA must not leave a VM behind.
+		ca, refreshErr, err := s.EgressCA.Get(ctx)
+		if err != nil {
+			return nil, toStatus(apierr.New(pb.ErrorReason_EGRESS_CA_UNAVAILABLE, "egress CA (%s): %v", s.EgressCA, err))
+		}
+		if refreshErr != nil {
+			s.log().Warn("egress CA refresh failed; using the last CA", "source", s.EgressCA.String(), "err", refreshErr)
+		}
+		caPEM = ca.PEM
+	}
 	vm, created, err := s.M.Create(ctx, agent.CreateRequest{
 		SandboxID: r.GetSandboxId(), Attempt: r.GetAttempt(), Template: r.GetTemplate(),
 		VCPUs: r.GetVcpus(), MemMiB: r.GetMemMib(), ScratchGiB: r.GetScratchGib(), TenantID: r.GetTenantId(),
@@ -74,7 +91,7 @@ func (s *Service) Create(ctx context.Context, r *pb.CreateRequest) (*pb.CreateRe
 		return nil, toStatus(err)
 	}
 	if key != "" && s.Keys != nil && vm.State == pb.VMState_VM_STATE_RUNNING {
-		if err := s.Keys.InstallKey(ctx, vm, key); err != nil {
+		if err := s.Keys.InstallKey(ctx, vm, key, caPEM); err != nil {
 			return nil, toStatus(err)
 		}
 	}

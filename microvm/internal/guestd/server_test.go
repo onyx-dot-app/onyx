@@ -24,6 +24,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/execs"
+	"github.com/onyx-dot-app/onyx/microvm/internal/testcerts"
 	pb "github.com/onyx-dot-app/onyx/microvm/proto/sandboxd/v1"
 )
 
@@ -36,6 +37,7 @@ type fakeSys struct {
 	grown   []string
 	minDev  []uint64
 	order   []string
+	cas     [][]byte
 	// If set, SetClock signals inClock and waits for clockGate.
 	inClock, clockGate chan struct{}
 }
@@ -75,6 +77,13 @@ func (f *fakeSys) system() System {
 			defer f.mu.Unlock()
 			f.step("relay")
 			return true, nil
+		},
+		InstallCA: func(pem []byte) error {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			f.cas = append(f.cas, pem)
+			f.step("ca")
+			return nil
 		},
 		GrowFS: func(mp string, minDev uint64) (uint64, uint64, error) {
 			f.mu.Lock()
@@ -327,6 +336,83 @@ func TestInitGateAndKey(t *testing.T) {
 	}
 	if _, err := c.Start(keyed(ctx), &pb.StartRequest{Command: sh("true")}); err != nil {
 		t.Fatalf("start after init: %v", err)
+	}
+}
+
+// The agent sends the egress CA with SetKey; Init installs it after attach
+// and grow, before the relay reset. A later SetKey with the same key can
+// replace the CA; one without a CA keeps it.
+func TestEgressCA(t *testing.T) {
+	state := filepath.Join(t.TempDir(), "init.json")
+	h := newHarness(t, execs.Config{}, Config{StateFile: state, GrowMounts: []string{"/mnt/scratch"}})
+	c, _ := h.client()
+	ctx := context.Background()
+	ca1, err := testcerts.NewCA("egress one")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ca2, err := testcerts.NewCA("egress two")
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaf, _, err := ca1.Leaf("server", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.SetKey(ctx, &pb.SetKeyRequest{Key: testKey, EgressCaPem: leaf}); reason(err) != "INVALID_ARGUMENT" {
+		t.Fatalf("leaf as CA: %v", err)
+	}
+	if hr, _ := c.Health(ctx, &pb.HealthRequest{}); hr.GetKeySet() {
+		t.Fatal("key set by a refused SetKey")
+	}
+	if _, err := c.SetKey(ctx, &pb.SetKeyRequest{Key: testKey, EgressCaPem: ca1.PEM}); err != nil {
+		t.Fatal(err)
+	}
+	resp, err := c.Init(keyed(ctx), initReq())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(h.sys.order, ","); got != "clock,entropy,attach,grow,ca,relay" || !resp.GetEgressCaInstalled() {
+		t.Fatalf("init steps %q, egress_ca_installed %v", got, resp.GetEgressCaInstalled())
+	}
+	if len(h.sys.cas) != 1 || string(h.sys.cas[0]) != string(ca1.PEM) {
+		t.Fatalf("installed %q", h.sys.cas)
+	}
+	// A new CA with the same key (a later Create after a CA rotation).
+	if r, err := c.SetKey(ctx, &pb.SetKeyRequest{Key: testKey, EgressCaPem: ca2.PEM}); err != nil || !r.GetAlreadySet() {
+		t.Fatalf("new CA: %v %v", r, err)
+	}
+	if _, err := c.SetKey(ctx, &pb.SetKeyRequest{Key: testKey}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Init(keyed(ctx), initReq()); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.sys.cas) != 2 || string(h.sys.cas[1]) != string(ca2.PEM) {
+		t.Fatalf("second install %d CAs", len(h.sys.cas))
+	}
+	// A restarted daemon keeps the CA for the next Init.
+	m, err := execs.NewManager(execs.Config{Isolator: execs.ProcessGroups{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(m.Shutdown)
+	sys2 := &fakeSys{}
+	srv, err := NewServer(Config{StateFile: state}, sys2.system(), m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	in := metadata.NewIncomingContext(ctx, metadata.Pairs(KeyHeader, testKey))
+	if _, err := srv.Init(in, initReq()); err != nil {
+		t.Fatal(err)
+	}
+	if len(sys2.cas) != 1 || string(sys2.cas[0]) != string(ca2.PEM) {
+		t.Fatalf("after restart: %d CAs", len(sys2.cas))
+	}
+	// A failed install fails Init.
+	h.srv.sys.InstallCA = func([]byte) error { return errors.New("read-only file system") }
+	if _, err := c.Init(keyed(ctx), initReq()); reason(err) != "INIT_FAILED" {
+		t.Fatalf("failed install: %v", err)
 	}
 }
 

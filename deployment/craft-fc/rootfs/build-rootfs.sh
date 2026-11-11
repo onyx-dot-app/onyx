@@ -3,15 +3,17 @@
 # Firecracker VMs, and writes manifest.json next to it.
 #
 # Usage (Linux, as root, with Docker):
-#   build-rootfs.sh --image onyxdotapp/sandbox:v5.1.0 --ca egress-ca.crt \
+#   build-rootfs.sh --image onyxdotapp/craft-runtime:v5.2.0 [--ca egress-ca.crt] \
 #     --daemon-bin guest-daemon --relay-bin egress-relay [--daemon-cmd "<argv>"] \
 #     [--registry PREFIX] [--out DIR]
 #
 #   --image       Sandbox image tag or digest. The build pins it to its digest.
 #   --registry    Pull the image through this registry prefix (for example an
 #                 ECR pull-through cache, <account>.dkr.ecr.<region>.amazonaws.com/docker-hub).
-#   --ca          PEM certificate of the egress proxy CA (public certificate
-#                 only). It goes into the trust stores.
+#   --ca          Optional. PEM certificate of the egress proxy CA (public
+#                 certificate only). It goes into the trust stores. Without
+#                 it, the drive has no CA and fits every deployment: the guest
+#                 daemon installs the deployment CA at Init (ENG-4648).
 #   --daemon-bin  Static guest daemon, installed at the --daemon-cmd program
 #                 path. Required.
 #   --daemon-cmd  Command line that craft-init supervises. Default:
@@ -51,8 +53,8 @@ while [ $# -gt 0 ]; do
   esac
   shift 2
 done
-[ -n "${image}" ] && [ -n "${ca}" ] && [ -n "${daemon_bin}" ] || {
-  echo "usage: build-rootfs.sh --image IMAGE --ca CA.pem --daemon-bin F (--relay-bin F | --python-relay) [--daemon-cmd CMD] [--registry PREFIX] [--out DIR]" >&2
+[ -n "${image}" ] && [ -n "${daemon_bin}" ] || {
+  echo "usage: build-rootfs.sh --image IMAGE [--ca CA.pem] --daemon-bin F (--relay-bin F | --python-relay) [--daemon-cmd CMD] [--registry PREFIX] [--out DIR]" >&2
   exit 2
 }
 [ "$(id -u)" = 0 ] || {
@@ -121,23 +123,27 @@ fi
 log() { echo "== $(date -u +%T) $*"; }
 
 # The CA input must be one public certificate. Never a key.
-if grep -q 'PRIVATE KEY' "${ca}"; then
-  echo "${ca} has a private key. Pass the public CA certificate only." >&2
-  exit 1
+ca_fingerprint="" ca_subject="" ca_not_after="" ca_install=runtime
+if [ -n "${ca}" ]; then
+  ca_install=build
+  if grep -q 'PRIVATE KEY' "${ca}"; then
+    echo "${ca} has a private key. Pass the public CA certificate only." >&2
+    exit 1
+  fi
+  [ "$(grep -c 'BEGIN CERTIFICATE' "${ca}")" = 1 ] || {
+    echo "${ca} must have exactly one certificate" >&2
+    exit 1
+  }
+  # Capture first: grep -q can end the pipe early, and pipefail then fails it.
+  ca_text=$(openssl x509 -in "${ca}" -noout -text)
+  grep -q 'CA:TRUE' <<<"${ca_text}" || {
+    echo "${ca} is not a CA certificate" >&2
+    exit 1
+  }
+  ca_fingerprint=$(openssl x509 -in "${ca}" -noout -fingerprint -sha256 | cut -d= -f2)
+  ca_subject=$(openssl x509 -in "${ca}" -noout -subject -nameopt RFC2253 | sed 's/^subject=//')
+  ca_not_after=$(openssl x509 -in "${ca}" -noout -enddate | cut -d= -f2)
 fi
-[ "$(grep -c 'BEGIN CERTIFICATE' "${ca}")" = 1 ] || {
-  echo "${ca} must have exactly one certificate" >&2
-  exit 1
-}
-# Capture first: grep -q can end the pipe early, and pipefail then fails it.
-ca_text=$(openssl x509 -in "${ca}" -noout -text)
-grep -q 'CA:TRUE' <<<"${ca_text}" || {
-  echo "${ca} is not a CA certificate" >&2
-  exit 1
-}
-ca_fingerprint=$(openssl x509 -in "${ca}" -noout -fingerprint -sha256 | cut -d= -f2)
-ca_subject=$(openssl x509 -in "${ca}" -noout -subject -nameopt RFC2253 | sed 's/^subject=//')
-ca_not_after=$(openssl x509 -in "${ca}" -noout -enddate | cut -d= -f2)
 
 mkdir -p "${out}"
 out="$(cd "${out}" && pwd)"
@@ -179,7 +185,19 @@ no_proxy=localhost,127.0.0.1,::1
 
 cp "${here}/craft-init" "${here}/attach.sh" "${here}/init.conf" "${ctx}/"
 cp "${relay_bin}" "${ctx}/egress-relay"
-cp "${ca}" "${ctx}/egress-ca.crt"
+# With --ca the CA goes into the stores now. Without it, the guest daemon adds
+# the deployment CA at Init: the drive only gets the bundle link and an empty
+# NSS database that the sandbox user owns.
+if [ -n "${ca}" ]; then
+  cp "${ca}" "${ctx}/egress-ca.crt"
+  ca_steps='COPY egress-ca.crt /usr/local/share/ca-certificates/craft-egress-ca.crt
+RUN update-ca-certificates'
+  # shellcheck disable=SC2016 # ${db} is for the shell of the Dockerfile RUN.
+  nss_add='&& certutil -d "sql:${db}" -A -t "C,," -n craft-egress-ca -i /usr/local/share/ca-certificates/craft-egress-ca.crt'
+else
+  ca_steps='# No egress CA: the guest daemon installs it at Init.'
+  nss_add=''
+fi
 [ -n "${daemon_cmd}" ] && printf '\n# Set by build-rootfs.sh --daemon-cmd.\nDAEMON_CMD="%s"\n' "${daemon_cmd}" >>"${ctx}/init.conf"
 cp "${daemon_bin}" "${ctx}/guest-daemon"
 
@@ -196,13 +214,11 @@ RUN apt-get update \\
  && DEBIAN_FRONTEND=noninteractive apt-get purge -y --auto-remove iptables gosu busybox-static \\
  && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*.deb \\
  && rm -f /workspace/firewall-init.sh /workspace/sidecar-entrypoint.sh
-COPY egress-ca.crt /usr/local/share/ca-certificates/craft-egress-ca.crt
-RUN update-ca-certificates \\
- && install -d -m 0755 /etc/ssl/sandbox \\
+${ca_steps}
+RUN install -d -m 0755 /etc/ssl/sandbox \\
  && ln -sf /etc/ssl/certs/ca-certificates.crt ${bundle} \\
  && db=/home/sandbox/.pki/nssdb && mkdir -p "\${db}" \\
- && { [ -f "\${db}/cert9.db" ] || certutil -d "sql:\${db}" -N --empty-password; } \\
- && certutil -d "sql:\${db}" -A -t "C,," -n craft-egress-ca -i /usr/local/share/ca-certificates/craft-egress-ca.crt \\
+ && { [ -f "\${db}/cert9.db" ] || certutil -d "sql:\${db}" -N --empty-password; } ${nss_add} \\
  && chown -R sandbox:sandbox /home/sandbox/.pki
 COPY craft-init /sbin/craft-init
 # /craft-fc: everything init starts. A top-level directory on the read-only
@@ -291,7 +307,7 @@ iid=""
 
 onyx_commit=$(git -C "${here}" rev-parse HEAD 2>/dev/null || echo unknown)
 export MF_IMAGE="${image}" MF_PULL_REF="${pull_ref}" MF_PINNED="${pinned}" MF_DIGEST="${digest}" MF_ROOTFS="${rootfs}" \
-  MF_CA_FP="${ca_fingerprint}" MF_CA_SUBJECT="${ca_subject}" MF_CA_NOT_AFTER="${ca_not_after}" \
+  MF_CA_FP="${ca_fingerprint}" MF_CA_SUBJECT="${ca_subject}" MF_CA_NOT_AFTER="${ca_not_after}" MF_CA_INSTALL="${ca_install}" \
   MF_DAEMON_CMD="${daemon_cmd:-/craft-fc/bin/guest-daemon}" MF_DAEMON_PATH="${daemon_path}" MF_HERE="${here}" MF_WORK="${work}" \
   MF_TREE="${tree}" MF_COMMIT="${onyx_commit}" MF_BUNDLE="${bundle}" MF_PROXY="${proxy}" \
   MF_RELAY_KIND="${relay_kind}"
@@ -345,11 +361,14 @@ manifest = {
             n: sha256(os.path.join(e["MF_HERE"], n))
             for n in ("build-rootfs.sh", "craft-init", "attach.sh", "egress-relay.py", "init.conf")
         },
+        # None: no CA in the drive; the guest daemon installs it at Init.
         "egress_ca": {
             "sha256_fingerprint": e["MF_CA_FP"],
             "subject": e["MF_CA_SUBJECT"],
             "not_after": e["MF_CA_NOT_AFTER"],
-        },
+        }
+        if e["MF_CA_INSTALL"] == "build"
+        else None,
         "packages_added": {k: v for k, v in after.items() if k not in before},
         "packages_removed": sorted(k for k in before if k not in after),
         "packages_changed": {k: [before[k], after[k]] for k in after if k in before and before[k] != after[k]},
@@ -376,7 +395,12 @@ manifest = {
             "user": 65534,
         },
         "config": {"init_conf": "/craft-fc/etc/init.conf", "env": "/craft-fc/etc/guest.env"},
-        "egress": {"guest_proxy": e["MF_PROXY"], "host_vsock_port": 3128, "ca_bundle": e["MF_BUNDLE"]},
+        "egress": {
+            "guest_proxy": e["MF_PROXY"],
+            "host_vsock_port": 3128,
+            "ca_bundle": e["MF_BUNDLE"],
+            "ca_install": e["MF_CA_INSTALL"],
+        },
         "drives": [
             {"drive_id": "rootfs", "guest_dev": "/dev/vda", "is_root_device": True, "is_read_only": True},
             {"drive_id": "scratch", "guest_dev": "/dev/vdb", "is_read_only": False, "fs": "ext4", "mount": "/mnt/scratch"},

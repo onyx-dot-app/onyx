@@ -44,7 +44,8 @@ const (
 	ErrorReason_START_FAILED ErrorReason = 7
 	// Too many running commands.
 	ErrorReason_TOO_MANY_EXECUTIONS ErrorReason = 8
-	// Init could not set the clock, add entropy or grow a file system.
+	// Init could not set the clock, add entropy, grow a file system or
+	// install the egress CA.
 	ErrorReason_INIT_FAILED ErrorReason = 9
 	// Any other error.
 	ErrorReason_INTERNAL ErrorReason = 10
@@ -495,7 +496,13 @@ type SetKeyRequest struct {
 	// 0x7E), because later calls send it as x-sandboxd-key metadata. Encode
 	// random bytes, for example the hex or base64url of 32 bytes from
 	// os.urandom. Any other key fails with INVALID_ARGUMENT.
-	Key           string `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Key string `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	// Public PEM certificate of the deployment egress CA (one CA certificate,
+	// no key, at most 16 KiB). Empty: no CA. The daemon keeps the last CA it
+	// got (also on a repeat call with the same key) and installs it at Init,
+	// after attach, into the guest trust stores. This replaces any CA that an
+	// earlier Init installed.
+	EgressCaPem   []byte `protobuf:"bytes,2,opt,name=egress_ca_pem,json=egressCaPem,proto3" json:"egress_ca_pem,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -535,6 +542,13 @@ func (x *SetKeyRequest) GetKey() string {
 		return x.Key
 	}
 	return ""
+}
+
+func (x *SetKeyRequest) GetEgressCaPem() []byte {
+	if x != nil {
+		return x.EgressCaPem
+	}
+	return nil
 }
 
 type SetKeyResponse struct {
@@ -696,9 +710,11 @@ type InitResponse struct {
 	// True if the attach script ran (it does nothing when already attached).
 	Attached bool `protobuf:"varint,5,opt,name=attached,proto3" json:"attached,omitempty"`
 	// True if the egress relay got SIGHUP. False if it was not running.
-	RelayReset    bool `protobuf:"varint,6,opt,name=relay_reset,json=relayReset,proto3" json:"relay_reset,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	RelayReset bool `protobuf:"varint,6,opt,name=relay_reset,json=relayReset,proto3" json:"relay_reset,omitempty"`
+	// True if Init installed the SetKey egress CA in the system trust store.
+	EgressCaInstalled bool `protobuf:"varint,7,opt,name=egress_ca_installed,json=egressCaInstalled,proto3" json:"egress_ca_installed,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *InitResponse) Reset() {
@@ -769,6 +785,13 @@ func (x *InitResponse) GetAttached() bool {
 func (x *InitResponse) GetRelayReset() bool {
 	if x != nil {
 		return x.RelayReset
+	}
+	return false
+}
+
+func (x *InitResponse) GetEgressCaInstalled() bool {
+	if x != nil {
+		return x.EgressCaInstalled
 	}
 	return false
 }
@@ -2918,9 +2941,10 @@ const file_sandboxd_v1_sandboxd_proto_rawDesc = "" +
 	"\x12running_executions\x18\x06 \x01(\rR\x11runningExecutions\x12A\n" +
 	"\x0einitialized_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\rinitializedAt\x121\n" +
 	"\x06uptime\x18\b \x01(\v2\x19.google.protobuf.DurationR\x06uptime\x12\x17\n" +
-	"\akey_set\x18\t \x01(\bR\x06keySet\"!\n" +
+	"\akey_set\x18\t \x01(\bR\x06keySet\"E\n" +
 	"\rSetKeyRequest\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\"1\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\"\n" +
+	"\regress_ca_pem\x18\x02 \x01(\fR\vegressCaPem\"1\n" +
 	"\x0eSetKeyResponse\x12\x1f\n" +
 	"\valready_set\x18\x01 \x01(\bR\n" +
 	"alreadySet\"\xe3\x02\n" +
@@ -2938,7 +2962,7 @@ const file_sandboxd_v1_sandboxd_proto_rawDesc = "" +
 	"\rscratch_bytes\x18\b \x01(\x04R\fscratchBytes\x1a6\n" +
 	"\bEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\x03\x10\x04R\x03key\"\xfc\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\x03\x10\x04R\x03key\"\xac\x02\n" +
 	"\fInitResponse\x128\n" +
 	"\n" +
 	"clock_step\x18\x01 \x01(\v2\x19.google.protobuf.DurationR\tclockStep\x12)\n" +
@@ -2947,7 +2971,8 @@ const file_sandboxd_v1_sandboxd_proto_rawDesc = "" +
 	"\aversion\x18\x04 \x01(\tR\aversion\x12\x1a\n" +
 	"\battached\x18\x05 \x01(\bR\battached\x12\x1f\n" +
 	"\vrelay_reset\x18\x06 \x01(\bR\n" +
-	"relayReset\"d\n" +
+	"relayReset\x12.\n" +
+	"\x13egress_ca_installed\x18\a \x01(\bR\x11egressCaInstalled\"d\n" +
 	"\aGrownFS\x12\x1f\n" +
 	"\vmount_point\x18\x01 \x01(\tR\n" +
 	"mountPoint\x12\x1b\n" +

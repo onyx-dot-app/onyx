@@ -36,15 +36,8 @@ trap cleanup EXIT
   CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath -o "$work/guest-daemon" ./cmd/guest-daemon
   CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath -o "$work/egress-relay" ./cmd/egress-relay
 )
-old_umask="$(umask)"
-umask 077
-openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
-  -subj /CN=craft-runtime-rootfs-check \
-  -addext basicConstraints=critical,CA:TRUE \
-  -keyout "$work/ca.key" -out "$work/ca.crt" >/dev/null 2>&1
-umask "$old_umask"
-chmod 0644 "$work/ca.crt"
-
+# No --ca: the published root drive has no egress CA. The guest daemon
+# installs the deployment CA at Init (ENG-4648).
 # The production builder requires a pulled image digest. Keep this check local.
 registry="$(docker run --rm -d -p 127.0.0.1::5000 \
   "${BASE_IMAGE_REGISTRY:-docker.io}/library/registry:2")"
@@ -61,7 +54,7 @@ local_ref="${address}/craft-runtime:check"
 docker tag "$checked_id" "$local_ref"
 docker push "$local_ref" >/dev/null
 bash "$repo/deployment/craft-fc/rootfs/build-rootfs.sh" \
-  --image "$local_ref" --ca "$work/ca.crt" \
+  --image "$local_ref" \
   --daemon-bin "$work/guest-daemon" --relay-bin "$work/egress-relay" \
   --out "$work/rootfs"
 
@@ -117,6 +110,7 @@ assert manifest["output"]["file"] == rootfs.name
 assert manifest["output"]["sha256"] == digest.hexdigest()
 assert manifest["output"]["size_bytes"] == rootfs.stat().st_size
 assert manifest["output"]["fs"] == "ext4"
+assert manifest["build_inputs"]["egress_ca"] is None
 guest = manifest["guest"]
 assert guest["init"] == "/sbin/craft-init"
 assert "init=/sbin/craft-init" in guest["boot_args"].split()
@@ -127,6 +121,7 @@ assert guest["egress_relay"]["kind"] == "go"
 assert guest["egress_relay"]["path"] == "/craft-fc/bin/egress-relay"
 assert guest["egress"]["guest_proxy"] == "http://127.0.0.1:3128"
 assert guest["egress"]["host_vsock_port"] == 3128
+assert guest["egress"]["ca_install"] == "runtime"
 assert guest["drives"] == [
     {"drive_id": "rootfs", "guest_dev": "/dev/vda", "is_root_device": True, "is_read_only": True},
     {"drive_id": "scratch", "guest_dev": "/dev/vdb", "is_read_only": False, "fs": "ext4", "mount": "/mnt/scratch"},
