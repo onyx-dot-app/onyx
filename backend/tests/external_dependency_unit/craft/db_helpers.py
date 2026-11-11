@@ -21,7 +21,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from fastapi_users.password import PasswordHelper
-from sqlalchemy import delete, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -47,8 +47,10 @@ from onyx.db.models import (
     Credential,
     ExternalApp,
     ExternalAppUserCredential,
+    Plugin,
     Plugin__User,
     Plugin__UserGroup,
+    PluginVersion,
     Sandbox,
     Skill,
     Skill__User,
@@ -216,6 +218,24 @@ def make_skill(
             skill, legacy_skill_version_content(skill), None, db_session
         )
     return skill
+
+
+def set_current_version_validity(
+    db_session: Session, skill_id: UUID, is_valid: bool | None
+) -> None:
+    """Set the lazy validity of the skill plugin's current version, which the
+    readers use."""
+    db_session.execute(
+        update(PluginVersion)
+        .where(
+            PluginVersion.id
+            == select(Plugin.current_version_id)
+            .where(Plugin.id == skill_id)
+            .scalar_subquery()
+        )
+        .values(is_valid=is_valid)
+    )
+    db_session.flush()
 
 
 def make_built_in_skill_row(

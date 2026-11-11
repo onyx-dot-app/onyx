@@ -45,6 +45,7 @@ class _Case:
             version_user_runs=self.skill.id,
             name=self.skill.name,
             description=self.skill.description,
+            is_valid=True,
             user_shares=tuple(self.user_shares),
             group_shares=tuple(self.group_shares),
         )

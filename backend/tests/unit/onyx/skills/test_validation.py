@@ -3,38 +3,25 @@ from __future__ import annotations
 import io
 import os
 import zipfile
-from types import SimpleNamespace
-from typing import cast
 from unittest.mock import MagicMock
-from uuid import uuid4
 
 import pytest
 
 from onyx.db.file_record import FileRecordNotFoundError
-from onyx.db.models import Skill
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
 from onyx.skills import validation
 from onyx.skills.validation import validate_stored_custom_skill
 
-
-def _skill(name: str = "canonical-name") -> Skill:
-    return cast(
-        Skill,
-        SimpleNamespace(
-            id=uuid4(),
-            name=name,
-            bundle_file_id="bundle-id",
-        ),
-    )
+_BUNDLE_ID = "bundle-id"
 
 
 def test_missing_bundle_is_invalid() -> None:
     file_store = MagicMock(spec=FileStore)
     file_store.read_file.side_effect = FileRecordNotFoundError("missing")
 
-    result = validate_stored_custom_skill(_skill(), file_store)
+    result = validate_stored_custom_skill("canonical-name", _BUNDLE_ID, file_store)
 
     assert result.is_valid is False
     assert result.normalized_bundle is None
@@ -44,7 +31,7 @@ def test_transient_bundle_read_remains_unclassified() -> None:
     file_store = MagicMock(spec=FileStore)
     file_store.read_file.side_effect = TimeoutError("temporary outage")
 
-    result = validate_stored_custom_skill(_skill(), file_store)
+    result = validate_stored_custom_skill("canonical-name", _BUNDLE_ID, file_store)
 
     assert result.is_valid is None
     assert result.normalized_bundle is None
@@ -54,7 +41,7 @@ def test_malformed_bundle_is_invalid() -> None:
     file_store = MagicMock(spec=FileStore)
     file_store.read_file.return_value = io.BytesIO(b"not a zip")
 
-    result = validate_stored_custom_skill(_skill(), file_store)
+    result = validate_stored_custom_skill("canonical-name", _BUNDLE_ID, file_store)
 
     assert result.is_valid is False
     assert result.normalized_bundle is None
@@ -75,7 +62,7 @@ def test_bundle_stored_before_zip_and_file_count_limits_still_loads() -> None:
     file_store = MagicMock(spec=FileStore)
     file_store.read_file.return_value = io.BytesIO(stored_bundle)
 
-    result = validate_stored_custom_skill(_skill(), file_store)
+    result = validate_stored_custom_skill("canonical-name", _BUNDLE_ID, file_store)
 
     assert result.is_valid is True
     assert result.normalized_bundle == stored_bundle
@@ -97,14 +84,14 @@ def test_bundle_over_lowered_total_limit_stays_unclassified(
     file_store.read_file.return_value = io.BytesIO(stored)
     monkeypatch.setattr(validation, "STORED_ZIP_MAX_BYTES", len(stored) - 1)
 
-    result = validate_stored_custom_skill(_skill(), file_store)
+    result = validate_stored_custom_skill("canonical-name", _BUNDLE_ID, file_store)
 
     assert result.is_valid is None
     assert result.normalized_bundle is None
 
     monkeypatch.setattr(validation, "STORED_ZIP_MAX_BYTES", len(stored))
     file_store.read_file.return_value = io.BytesIO(stored)
-    assert validate_stored_custom_skill(_skill(), file_store).is_valid is True
+    assert validate_stored_custom_skill("canonical-name", _BUNDLE_ID, file_store).is_valid is True
 
 
 def test_limit_on_normalized_bundle_leaves_skill_unclassified(
@@ -116,7 +103,7 @@ def test_limit_on_normalized_bundle_leaves_skill_unclassified(
     too_large = OnyxError(OnyxErrorCode.PAYLOAD_TOO_LARGE, "file list too large")
     monkeypatch.setattr(validation, "open_bundle_zip", MagicMock(side_effect=too_large))
 
-    result = validate_stored_custom_skill(_skill(), file_store)
+    result = validate_stored_custom_skill("canonical-name", _BUNDLE_ID, file_store)
 
     assert result.is_valid is None
     assert result.normalized_bundle is None

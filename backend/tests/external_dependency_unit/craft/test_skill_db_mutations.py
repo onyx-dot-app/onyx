@@ -40,6 +40,7 @@ from tests.external_dependency_unit.craft.db_helpers import (
     make_group,
     make_skill,
     make_user,
+    set_current_version_validity,
     share_skill_with_group,
     share_skill_with_user,
 )
@@ -74,7 +75,7 @@ def test_skill_user_states_resolve_defaults_and_visibility(
         is_public=True,
         name=f"invalid-{uuid4().hex[:8]}",
     )
-    invalid_custom.is_valid = False
+    set_current_version_validity(db_session, invalid_custom.id, False)
     built_in = make_built_in_skill_row(
         db_session,
         built_in_skill_id=f"built-in-{uuid4().hex[:8]}",
@@ -359,7 +360,7 @@ def test_same_name_skills_switch_atomically_per_user(db_session: Session) -> Non
     )
 
     assert {
-        skill.id
+        skill.skill.id
         for skill in list_runtime_skills_for_user(
             user=first_user,
             db_session=db_session,
@@ -367,7 +368,7 @@ def test_same_name_skills_switch_atomically_per_user(db_session: Session) -> Non
         if skill.name == name
     } == {first_skill.id}
     assert {
-        skill.id
+        skill.skill.id
         for skill in list_runtime_skills_for_user(
             user=second_user,
             db_session=db_session,
@@ -589,7 +590,7 @@ def test_installation_policies_preserve_choices_through_updates(
     state = skill_user_states(user, [skill.id], db_session)[skill.id]
     assert state.enabled and not state.can_toggle
     assert skill.id in {
-        row.id for row in list_runtime_skills_for_user(user=user, db_session=db_session)
+        row.skill.id for row in list_runtime_skills_for_user(user=user, db_session=db_session)
     }
     with pytest.raises(OnyxError):
         set_skill_enabled_for_user(
@@ -664,7 +665,7 @@ def test_installation_policy_follows_invited_users_and_groups(
         assert state.enabled
         assert state.can_toggle == (policy != SkillInstallationPolicy.REQUIRED)
         assert skill.id in {
-            row.id
+            row.skill.id
             for row in list_runtime_skills_for_user(user=user, db_session=db_session)
         }
     assert not skill_user_states(outsider, [skill.id], db_session)[skill.id].enabled
@@ -680,7 +681,7 @@ def test_installation_policy_follows_invited_users_and_groups(
     for user in (invited, member):
         assert not skill_user_states(user, [skill.id], db_session)[skill.id].enabled
         assert skill.id not in {
-            row.id
+            row.skill.id
             for row in list_runtime_skills_for_user(user=user, db_session=db_session)
         }
 
@@ -735,7 +736,7 @@ def test_inaccessible_selection_does_not_suppress_default(
     )
     assert skill_user_states(user, [default.id], db_session)[default.id].enabled
     runtime_ids = {
-        skill.id
+        skill.skill.id
         for skill in list_runtime_skills_for_user(user=user, db_session=db_session)
     }
     assert default.id in runtime_ids
