@@ -492,6 +492,14 @@ class ListingPayload(BaseModel):
         return payload_type.model_validate(self.model_dump())
 
 
+class ResolveTarget(BaseModel):
+    """One document for `Resolver.resolve_targets` to fetch and convert."""
+
+    document_id: str
+    document_link: str | None = None
+    listing_payload: SerializeAsAny[ListingPayload] | None = None
+
+
 class SlimDocumentStub(SlimDocument):
     """A listed document whose content is not fetched yet. It has what a
     later step needs to decide if the document changed and to fetch it.
