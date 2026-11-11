@@ -57,7 +57,9 @@ type Config struct {
 	// Files serves the file calls and session saves. Nil means a store
 	// with the defaults (files.Config{}).
 	Files *files.Store
-	Log   *slog.Logger
+	// Forwards serves the SetKey dial ports. Nil: no port is forwarded.
+	Forwards *Forwards
+	Log      *slog.Logger
 }
 
 // DefaultBaseEnv is the command env before Init adds to it.
@@ -77,6 +79,8 @@ type initState struct {
 	InitializedAt time.Time         `json:"initialized_at"`
 	// EgressCA is the PEM of the last SetKey egress CA.
 	EgressCA []byte `json:"egress_ca,omitempty"`
+	// DialPorts are the forwarded ports of the last SetKey.
+	DialPorts []uint32 `json:"dial_ports,omitempty"`
 }
 
 // Server implements pb.SandboxdServer.
@@ -121,6 +125,14 @@ func NewServer(cfg Config, sys System, m *execs.Manager) (*Server, error) {
 			return nil, err
 		}
 	}
+	// A restarted daemon forwards the ports of the key it kept.
+	if s.state.Key != "" && cfg.Forwards != nil {
+		ports := s.state.DialPorts
+		if len(ports) == 0 {
+			ports = DefaultDialPorts
+		}
+		cfg.Forwards.Set(ports)
+	}
 	return s, nil
 }
 
@@ -132,7 +144,7 @@ func (s *Server) Health(context.Context, *pb.HealthRequest) (*pb.HealthResponse,
 	r := &pb.HealthResponse{
 		Initialized: st.Initialized, Version: s.cfg.Version, GuestTime: timestamppb.Now(),
 		Generation: st.Generation, SandboxId: st.SandboxID, RunningExecutions: uint32(s.m.Running()),
-		Uptime: durationpb.New(time.Since(s.started)), KeySet: st.Key != "",
+		Uptime: durationpb.New(time.Since(s.started)), KeySet: st.Key != "", DialPorts: s.cfg.Forwards.Ports(),
 	}
 	if st.Initialized {
 		r.InitializedAt = timestamppb.New(st.InitializedAt)
@@ -232,6 +244,9 @@ func (s *Server) Init(_ context.Context, r *pb.InitRequest) (*pb.InitResponse, e
 		Initialized: true, Key: key, Env: maps.Clone(r.GetEnv()), SessionIDs: slices.Clone(r.GetSessionIds()),
 		Generation: r.GetGeneration(), SandboxID: r.GetSandboxId(), InitializedAt: time.Now(), EgressCA: caPEM,
 	}
+	s.mu.Lock()
+	st.DialPorts = s.state.DialPorts
+	s.mu.Unlock()
 	if err := s.saveState(st); err != nil {
 		return nil, apiError(pb.ErrorReason_INIT_FAILED, "save state: %v", err)
 	}

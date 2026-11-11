@@ -151,6 +151,22 @@ func (s *Service) daemonPort() uint32 {
 	return s.DaemonPort
 }
 
+// guestDialPorts are the ports that the guest daemon forwards: the Dial
+// ports without the daemon port.
+func (s *Service) guestDialPorts() []uint32 {
+	ports := s.DialPorts
+	if ports == nil {
+		ports = DefaultDialPorts
+	}
+	out := make([]uint32, 0, len(ports))
+	for _, p := range ports {
+		if p != s.daemonPort() {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 func (s *Service) dialAllowed(port uint32) bool {
 	ports := s.DialPorts
 	if ports == nil {

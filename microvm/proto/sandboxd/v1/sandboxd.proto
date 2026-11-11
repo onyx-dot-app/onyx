@@ -218,6 +218,8 @@ message HealthResponse {
   google.protobuf.Duration uptime = 8;
   // True after SetKey.
   bool key_set = 9;
+  // Guest ports that the daemon forwards from vsock to 127.0.0.1.
+  repeated uint32 dial_ports = 10;
 }
 
 message SetKeyRequest {
@@ -232,11 +234,19 @@ message SetKeyRequest {
   // after attach, into the guest trust stores. This replaces any CA that an
   // earlier Init installed.
   bytes egress_ca_pem = 2;
+  // Guest ports that the node agent's Dial allows (its --dial-ports). For
+  // each port the daemon forwards vsock <port> to TCP 127.0.0.1:<port> in the
+  // guest. Ports are 1 to 65535, at most 64, never the daemon port. Empty:
+  // keep the last list, or 3010 if there is none. A new list replaces the
+  // last one, also on a repeat call with the same key.
+  repeated uint32 dial_ports = 3;
 }
 
 message SetKeyResponse {
   // True if the daemon already had this key.
   bool already_set = 1;
+  // Ports that the daemon forwards after this call.
+  repeated uint32 dial_ports = 2;
 }
 
 message InitRequest {

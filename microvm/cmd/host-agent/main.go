@@ -431,7 +431,8 @@ func parsePorts(s string) ([]uint32, error) {
 			continue
 		}
 		n, err := strconv.ParseUint(p, 10, 32)
-		if err != nil || n == 0 {
+		// The guest daemon forwards each port to a TCP port in the guest.
+		if err != nil || n == 0 || n > 65535 {
 			return nil, fmt.Errorf("bad --dial-ports entry %q", p)
 		}
 		out = append(out, uint32(n))

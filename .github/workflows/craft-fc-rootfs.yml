@@ -196,10 +196,13 @@ jobs:
         run: |
           set -euo pipefail
           out="${RUNNER_TEMP}/rootfs"
+          # Health.version and Init.version show <version>+<commit>, so a
+          # version skew between agent, daemon and backend is visible.
+          ldflags="-s -w -X main.version=${VERSION}+${GITHUB_SHA::10}"
           (
             cd microvm
-            CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o "${RUNNER_TEMP}/bin/guest-daemon" ./cmd/guest-daemon
-            CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o "${RUNNER_TEMP}/bin/egress-relay" ./cmd/egress-relay
+            CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="${ldflags}" -o "${RUNNER_TEMP}/bin/guest-daemon" ./cmd/guest-daemon
+            CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="${ldflags}" -o "${RUNNER_TEMP}/bin/egress-relay" ./cmd/egress-relay
           )
           sudo env "PATH=$PATH" bash "${ROOTFS_DIR}/build-rootfs.sh" --image "${SOURCE_IMAGE}" \
             --daemon-bin "${RUNNER_TEMP}/bin/guest-daemon" --relay-bin "${RUNNER_TEMP}/bin/egress-relay" --out "${out}"

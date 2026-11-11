@@ -23,10 +23,10 @@ import (
 	pb "github.com/onyx-dot-app/onyx/microvm/proto/hostagent/v1"
 )
 
-// KeyInstaller sets the guest daemon key, and the egress CA (PEM, may be
-// nil), of a running VM.
+// KeyInstaller sets the guest daemon key, the egress CA (PEM, may be nil)
+// and the forwarded dial ports of a running VM.
 type KeyInstaller interface {
-	InstallKey(ctx context.Context, vm agent.VM, key string, egressCA []byte) error
+	InstallKey(ctx context.Context, vm agent.VM, key string, egressCA []byte, dialPorts []uint32) error
 }
 
 // Service adapts an agent.Manager to the gRPC API.
@@ -93,7 +93,7 @@ func (s *Service) Create(ctx context.Context, r *pb.CreateRequest) (*pb.CreateRe
 		return nil, toStatus(err)
 	}
 	if key != "" && s.Keys != nil && vm.State == pb.VMState_VM_STATE_RUNNING {
-		if err := s.Keys.InstallKey(ctx, vm, key, caPEM); err != nil {
+		if err := s.Keys.InstallKey(ctx, vm, key, caPEM, s.guestDialPorts()); err != nil {
 			return nil, toStatus(err)
 		}
 	}
