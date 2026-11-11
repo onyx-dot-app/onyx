@@ -3107,7 +3107,15 @@
           "close": "关闭",
           "count": "({count})"
         },
-        "showing": "显示第 <mono>{from}</mono>~<mono>{to}</mono> 条，共 <mono>{total}</mono> 条"
+        "showing": "显示第 <mono>{from}</mono>~<mono>{to}</mono> 条，共 <mono>{total}</mono> 条",
+        "progress": {
+          "listed": "已列出",
+          "converted": "已转换",
+          "indexed": "已索引",
+          "listedSoFar": "{count, plural, other {目前已列出 # 个文档}}",
+          "skipped": "{count, plural, other {已跳过 # 个未更改的文档}}",
+          "eta": "大约还需 {duration}"
+        }
       },
       "activity": {
         "search": {
