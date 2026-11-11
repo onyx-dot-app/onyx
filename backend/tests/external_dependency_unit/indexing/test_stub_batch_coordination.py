@@ -10,7 +10,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.connectors.models import SlimDocumentStub
+from onyx.connectors.models import ListingPayload, SlimDocumentStub
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import IndexingStatus
 from onyx.db.indexing_coordination import IndexingCoordination
@@ -27,6 +27,11 @@ from tests.external_dependency_unit.indexing_helpers import (
     make_cc_pair,
     make_doc,
 )
+
+
+class _TestPayload(ListingPayload):
+    reader: str
+
 
 _CLAIMER_COUNT = 8
 _CLAIMS_PER_CLAIMER = 25
@@ -188,11 +193,19 @@ def test_stub_batches_store_apart_and_clean_up_with_doc_batches(
     stubs = get_stub_batch_storage(cc_pair.id, attempt_id, is_backfill=False)
     docs = get_document_batch_storage(cc_pair.id, attempt_id, is_backfill=False)
 
-    stub = SlimDocumentStub(id="stub-doc-0", mime_type="text/plain", size_bytes=3)
+    stub = SlimDocumentStub(
+        id="stub-doc-0",
+        mime_type="text/plain",
+        size_bytes=3,
+        listing_payload=_TestPayload(reader="reader@example.com"),
+    )
     stubs.store_batch(0, [stub])
     docs.store_batch(0, [make_doc("stub-doc-0")])
 
-    assert stubs.get_batch(0) == [stub]
+    loaded = stubs.get_batch(0, _TestPayload)
+    assert loaded is not None
+    assert loaded == [stub]
+    assert isinstance(loaded[0].listing_payload, _TestPayload)
     assert stubs.get_all_batches_for_cc_pair() == [
         f"isb/{cc_pair.id}/{attempt_id}/0.json"
     ]
