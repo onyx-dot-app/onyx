@@ -43,44 +43,55 @@ pub fn focus_main_window(app: &AppHandle) {
     }
 }
 
-pub fn trigger_new_chat(app: &AppHandle) {
-    let server_url = app.state::<ConfigState>().config().server_url;
-
-    if let Some(window) = app.get_webview_window("main") {
-        let url = format!("{server_url}/chat");
-        if let Err(e) = window.eval(format!("window.location.href = '{url}'")) {
-            log_backend_error(app, &format!("Failed to navigate to new chat: {e}"));
-        }
-    }
+/// The window a File-menu action applies to: the focused app window, else
+/// `main`. Popups are skipped because they host sign-in pages, not the app.
+fn target_app_window(app: &AppHandle) -> Option<WebviewWindow> {
+    focused_webview_window(app)
+        .filter(|window| !window.label().starts_with(POPUP_LABEL_PREFIX))
+        .or_else(|| app.get_webview_window("main"))
 }
 
-/// Focus the main window and navigate it to `/chat`, building it first if it
-/// doesn't exist. Building and navigating must happen in the same task --
-/// doing them as the two independent fire-and-forget steps `focus_main_window`
-/// / `trigger_new_chat` normally are lets the navigation run against a window
-/// that hasn't finished being created yet, silently dropping it.
-pub fn open_chat_window(app: &AppHandle) {
-    if app.get_webview_window("main").is_some() {
-        focus_main_window(app);
-        trigger_new_chat(app);
-        return;
-    }
-
+/// Build a new window, then run `action` on it in the same task. Two
+/// independent fire-and-forget steps let the action run against a window
+/// that is not created yet, which silently drops it.
+fn build_window_then(app: &AppHandle, action: fn(&AppHandle, &WebviewWindow)) {
     let handle = app.clone();
     tauri::async_runtime::spawn(async move {
         match build_and_setup_window(&handle) {
-            Ok(window) => {
-                let server_url = handle.state::<ConfigState>().config().server_url;
-                let url = format!("{server_url}/chat");
-                if let Err(e) = window.eval(format!("window.location.href = '{url}'")) {
-                    log_backend_error(&handle, &format!("Failed to navigate to new chat: {e}"));
-                }
-            }
-            Err(e) => {
-                log_backend_error(&handle, &format!("Failed to open new window: {e}"));
-            }
+            Ok(window) => action(&handle, &window),
+            Err(e) => log_backend_error(&handle, &format!("Failed to open new window: {e}")),
         }
     });
+}
+
+/// Native navigation, not `eval`: a script cannot run on an error page or on
+/// a page that failed to load, so `eval` cannot recover such a window.
+fn navigate_to_new_chat(app: &AppHandle, window: &WebviewWindow) {
+    let server_url = app.state::<ConfigState>().config().server_url;
+    let result = Url::parse(&format!("{server_url}/chat"))
+        .map_err(|e| e.to_string())
+        .and_then(|url| window.navigate(url).map_err(|e| e.to_string()));
+    if let Err(e) = result {
+        log_backend_error(app, &format!("Failed to navigate to new chat: {e}"));
+    }
+}
+
+pub fn trigger_new_chat(app: &AppHandle) {
+    match target_app_window(app) {
+        Some(window) => navigate_to_new_chat(app, &window),
+        None => build_window_then(app, navigate_to_new_chat),
+    }
+}
+
+/// Focus the main window and navigate it to `/chat`, building a window first
+/// if `main` does not exist.
+pub fn open_chat_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        focus_main_window(app);
+        navigate_to_new_chat(app, &window);
+    } else {
+        build_window_then(app, navigate_to_new_chat);
+    }
 }
 
 /// Build a new Onyx window (title, size, platform-specific transparency /
@@ -161,25 +172,44 @@ pub fn open_docs(app: &AppHandle) {
     }
 }
 
-pub fn open_settings(app: &AppHandle) {
-    // Navigate main window to the settings page (index.html) with settings flag
-    let settings_url = app
-        .state::<ConfigState>()
-        .app_base_url()
-        .map(|mut url| {
-            url.set_query(None);
-            url.set_fragment(Some("settings"));
-            url.set_path("/");
-            url
-        })
-        .or_else(|| Url::parse("tauri://localhost/#settings").ok());
-
-    if let Some(window) = app.get_webview_window("main") {
-        if let Some(url) = settings_url {
-            if let Err(e) = window.navigate(url) {
-                log_backend_error(app, &format!("Failed to navigate to settings: {e}"));
-            }
+/// The bundled settings page (`index.html`). Tauri serves the app pages from
+/// `tauri://localhost`, but `WebView2` on Windows needs
+/// `http(s)://tauri.localhost`. Tauri does not expose this origin, so this
+/// copies its rule. The origin that a window shows at startup is not a safe
+/// source: on Windows it can still be `about:blank`.
+fn settings_url(use_https_scheme: bool) -> Result<Url, url::ParseError> {
+    let origin = if cfg!(target_os = "windows") {
+        if use_https_scheme {
+            "https://tauri.localhost"
+        } else {
+            "http://tauri.localhost"
         }
+    } else {
+        "tauri://localhost"
+    };
+    Url::parse(&format!("{origin}/#settings"))
+}
+
+fn navigate_to_settings(app: &AppHandle, window: &WebviewWindow) {
+    let use_https_scheme = app
+        .config()
+        .app
+        .windows
+        .iter()
+        .find(|config| config.label == "main")
+        .is_some_and(|config| config.use_https_scheme);
+    let result = settings_url(use_https_scheme)
+        .map_err(|e| e.to_string())
+        .and_then(|url| window.navigate(url).map_err(|e| e.to_string()));
+    if let Err(e) = result {
+        log_backend_error(app, &format!("Failed to navigate to settings: {e}"));
+    }
+}
+
+pub fn open_settings(app: &AppHandle) {
+    match target_app_window(app) {
+        Some(window) => navigate_to_settings(app, &window),
+        None => build_window_then(app, navigate_to_settings),
     }
 }
 
@@ -499,6 +529,23 @@ mod tests {
     #[allow(clippy::unwrap_used)]
     fn url(s: &str) -> Url {
         Url::parse(s).unwrap()
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn settings_url_uses_the_platform_app_origin() {
+        let expected = if cfg!(target_os = "windows") {
+            "http://tauri.localhost/#settings"
+        } else {
+            "tauri://localhost/#settings"
+        };
+        assert_eq!(settings_url(false).unwrap().as_str(), expected);
+        if cfg!(target_os = "windows") {
+            assert_eq!(
+                settings_url(true).unwrap().as_str(),
+                "https://tauri.localhost/#settings"
+            );
+        }
     }
 
     #[test]

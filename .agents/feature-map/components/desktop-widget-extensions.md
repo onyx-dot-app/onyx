@@ -64,7 +64,10 @@ verification ([[auth-and-identity]]), or the acting-user rules for the widget
 registers shortcuts, the tray and a navigation plugin. `desktop/src/index.html`
 is the fallback page for a missing or unreachable server. It calls the Tauri
 commands `get_bootstrap_state`, `check_server_reachable` and `set_server_url`
-(`desktop/src-tauri/src/commands.rs`), then sends the webview to the server. On
+(`desktop/src-tauri/src/commands.rs`), then sends the webview to the server.
+**File → Settings** sends the focused window back to this page at the
+platform app origin (`desktop/src-tauri/src/window.rs:settings_url`):
+`tauri://localhost`, but `http://tauri.localhost` on Windows. On
 macOS, `desktop/src-tauri/src/window.rs:eval_titlebar_script` injects
 `desktop/src/titlebar.js` on every page load. It reserves the titlebar strip and
 keeps the root layout, toasts and modals below it, so installed apps stay
