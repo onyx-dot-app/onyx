@@ -9,9 +9,8 @@ const skill = Buffer.from(
 );
 
 // Inspection validates and returns the upload without creating a stored skill.
-test("forwards a multipart upload larger than 10 MiB without truncation", async ({
-  request,
-}) => {
+// CI reaches the backend through nginx, so this does not exercise the Next proxy.
+test("accepts a Skill upload larger than 10 MiB", async ({ request }) => {
   const response = await request.post(inspectPath, {
     multipart: {
       upload: { name: "SKILL.md", mimeType: "text/markdown", buffer: skill },
