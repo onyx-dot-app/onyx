@@ -33,7 +33,6 @@ from onyx.agents.concurrency import (
     EventDelivery,
     EventDispatcher,
     ExecutionWork,
-    wait_operation,
 )
 from onyx.agents.events import (
     AgentEndEvent,
@@ -804,10 +803,6 @@ class Run:
     def wait_for_completion(self, timeout: float = OPERATION_TIMEOUT_SECONDS) -> None:
         """Wait for terminal handling without copying output or waiting for cleanup."""
         self._completed.result(timeout=timeout)
-
-    def wait_until_reusable(self, cancellation: CancellationSignal) -> None:
-        """Wait for ownership cleanup before another run uses this agent."""
-        wait_operation(self._reusable, cancellation)
 
     def track_child_work(self, child: "Run") -> None:
         """Keep this execution busy until the child's current workers drain."""

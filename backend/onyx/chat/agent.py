@@ -77,7 +77,6 @@ from onyx.tools.tool_implementations.search.search_tool import (
 from onyx.tools.tool_implementations.subagents.subagent_tools import (
     InterruptAgentTool,
     ListAgentsTool,
-    QueueMessageTool,
     SendMessageTool,
     SpawnAgentTool,
 )
@@ -181,7 +180,6 @@ class ChatAgent(Agent, RestorableFeature):
                     ListAgentsTool(),
                     InterruptAgentTool(),
                     SendMessageTool(max_steps=self.max_steps),
-                    QueueMessageTool(max_steps=self.max_steps),
                 ]
             )
         super().__init__(

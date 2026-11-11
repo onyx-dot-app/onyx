@@ -230,22 +230,13 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
     saved_run_id: str
 
     def reuse(invocation: ToolInvocation) -> ToolResult:
-        historical = invocation.agents.wait_run(saved_run_id, timeout=2)
-        assert (
-            historical is not None and historical.output.text == "Cedar evidence [1]."
-        )
-        run_id = invocation.agents.start_run(
+        receipt = invocation.agents.send_message(
             agent_id,
-            messages=[UserMessage(content="Check the evidence again")],
+            message="Check the evidence again",
             max_steps=1,
         )
-        assert run_id != saved_run_id
-        result = invocation.agents.wait_run(run_id, timeout=5)
-        assert (
-            result is not None
-            and result.output.text == "Additional cedar evidence [1]."
-        )
-        return ToolResult(content=result.output.text)
+        assert receipt.run_id is None
+        return ToolResult(content="Follow-up submitted")
 
     root = Agent(
         FakeModelClient(lambda *_: next(root_replies)),
@@ -324,17 +315,23 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
             )
         )
         assert root.id == root_id
-        assert (
-            root.start(
-                background=False,
-                max_steps=2,
-                messages=[UserMessage(content="Continue")],
-                coordinator=coordinator,
-            )
-            .result()
-            .output.text
-            == "Done"
+        historical = coordinator.child_completion(saved_run_id, root.id).result(
+            timeout=2
         )
+        assert historical.steps[0].message.text == "Cedar evidence [1]."
+        run = root.start(
+            background=False,
+            max_steps=2,
+            messages=[UserMessage(content="Continue")],
+            coordinator=coordinator,
+        )
+        assert run.result().output.text == "Done"
+        assert run.wait_for_idle(timeout=5)
+        run_store.poll_control()
+        following = coordinator.active_run(agent_id)
+        assert following is not None and following.id != saved_run_id
+        assert following.result().output.text == "Additional cedar evidence [1]."
+        assert following.wait_for_idle(timeout=5)
         assert len(requests) == 1
         assert any(
             "Investigate cedar" in message.text for message in requests[0].messages

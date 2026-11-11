@@ -467,7 +467,7 @@ def test_queued_runs_follow_normal_completion_and_pause_after_failure(
             assert saved_initial.progress is not None
             assert not saved_initial.progress.pending_messages
         finished = owner.lookup_agent(child.id, parent.id)
-        assert finished is not None and not finished.pending_messages
+        assert finished is not None and finished.pending_message_count == 0
     finally:
         release.set()
         assert owner.close(3)

@@ -73,7 +73,6 @@ SUBAGENT_TOOLS = [
     "list_agents",
     "interrupt_agent",
     "send_message",
-    "queue_message",
 ]
 
 PLACEMENT = Placement(turn_index=1, tab_index=0)

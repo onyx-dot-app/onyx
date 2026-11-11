@@ -44,7 +44,7 @@ document does not repeat it.
   `MessageStartEvent.input_messages` contains the inputs durably accepted by
   that step; it excludes instructions still queued or withdrawn before acceptance.
   `send_message` targets the next step or starts an idle child with fresh limits.
-  `queue_message` waits for normal completion; Stop, failure, and step limits pause
+  `send_message(delivery="queue")` waits for normal completion; Stop, failure, and step limits pause
   queued work. `interrupt_agent` cancels the current run while retaining its conversation.
   Chat starts a follow-up response when an idle parent has unread child results.
 - [[tools-framework]]: `tools/interface.py:Tool.bind` turns each chat `Tool`
@@ -154,9 +154,9 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
 
 **Live and not wired.** In-process suspension is live: deep research and the
 coding agent suspend the parent on `ChildRunWait`, and it continues in the same
-process. No product code calls `Run.suspend`, `Run.submit` or
-`ToolInvocation.agents.start_run`, returns a `PendingToolInput`, or calls
-`ChatRunStore.handoff` or `ChatRunStore.resume`. Only tests do.
+process. No product code requests human input through `PendingToolInput` or calls
+`Run.suspend`, `Run.submit`, `ChatRunStore.handoff`, or `ChatRunStore.resume`.
+Only tests do.
 `chat/subagents.py:ChatAgentDirectory.restore_agent` loads a saved child for a
 new run. `chat/restoration.py:restore_subagent` rebuilds it with the current
 request's tools and settings. Checkpoint resume is separate:
@@ -167,7 +167,7 @@ the unwired `ChatRunStore.resume` calls it. Checkpoint serialization,
 `ChatResponseCheckpoint` row. Product saves still lock the response, check
 the checkpoint owner and delete any row at a terminal status.
 To check again, run
-`git grep -n "\.handoff(\|\.suspend()\|\.resume(\|\.submit(\|start_run(\|PendingToolInput" -- backend/onyx ':!backend/onyx/agents' ':!backend/onyx/chat/run_store.py'`
+`git grep -n "\.handoff(\|\.suspend()\|\.resume(\|\.submit(\|PendingToolInput" -- backend/onyx ':!backend/onyx/agents' ':!backend/onyx/chat/run_store.py'`
 and ignore thread-pool `submit` calls; expect no runtime matches.
 
 ---

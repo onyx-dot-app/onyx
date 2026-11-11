@@ -369,9 +369,9 @@ def accept_human_message__no_commit(
     return pending
 
 
-def pending_inputs(
+def _pending_inputs(
     session: Session, branch: ChatBranch, agent_id: str | None = None
-) -> list[ChatInput]:
+) -> Select[tuple[ChatInput]]:
     selected = _selected_responses(branch)
     query = (
         select(ChatInput)
@@ -385,7 +385,25 @@ def pending_inputs(
     if agent_id is not None:
         _visible_agent(session, branch, agent_id)
         query = query.where(ChatInput.recipient_session_id == UUID(agent_id))
-    return list(session.scalars(query))
+    return query
+
+
+def pending_inputs(
+    session: Session, branch: ChatBranch, agent_id: str | None = None
+) -> list[ChatInput]:
+    return list(session.scalars(_pending_inputs(session, branch, agent_id)))
+
+
+def pending_message_counts(
+    session: Session, branch: ChatBranch, agent_id: str | None = None
+) -> dict[str, int]:
+    rows = session.execute(
+        _pending_inputs(session, branch, agent_id)
+        .with_only_columns(ChatInput.recipient_session_id, func.count())
+        .order_by(None)
+        .group_by(ChatInput.recipient_session_id)
+    )
+    return {str(recipient_id): count for recipient_id, count in rows}
 
 
 def latest_agent_response(
@@ -420,28 +438,18 @@ def latest_agent_responses(
     return {str(row.chat_session_id): row for row in rows}
 
 
-def message_receipt(row: ChatInput) -> AgentMessageReceipt:
-    if row.delivery is None or row.response_item_id is not None:
-        raise ValueError("Message is no longer pending")
-    return AgentMessageReceipt(
-        id=row.message_id,
-        agent_id=str(row.recipient_session_id),
-        status=AgentMessageStatus.PENDING,
-        run_id=str(row.target_response_id)
-        if row.target_response_id is not None
-        else None,
-        message=row.content,
-        delivery=row.delivery,
-    )
-
-
 def enqueue_message(
     session: Session, branch: ChatBranch, request: AgentMessageRequest
 ) -> AgentMessageReceipt:
     if not isinstance(request.message.content, str):
         raise ValueError("Agent messages must contain text only")
     recipient = lock_agent(session, request.agent_id)
-    if len(pending_inputs(session, branch, request.agent_id)) >= MAX_PENDING_MESSAGES:
+    if (
+        pending_message_counts(session, branch, request.agent_id).get(
+            request.agent_id, 0
+        )
+        >= MAX_PENDING_MESSAGES
+    ):
         raise ValueError("Agent message queue is full")
     invocation = session.scalar(
         select(ToolCall)
@@ -491,7 +499,11 @@ def enqueue_message(
     )
     session.add(row)
     session.flush()
-    return message_receipt(row)
+    return AgentMessageReceipt(
+        id=row.message_id,
+        status=AgentMessageStatus.PENDING,
+        run_id=str(target_id) if target_id is not None else None,
+    )
 
 
 def receive_messages(

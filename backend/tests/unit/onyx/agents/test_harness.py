@@ -20,6 +20,7 @@ from onyx.agents.models import (
 from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import (
     AgentTool,
+    ChildRunWait,
     ToolExecutionMode,
     ToolInvocation,
     ToolProgress,
@@ -540,7 +541,7 @@ def test_abort_reaches_nested_agent_and_waits_for_idle() -> None:
             signal.check()
         raise AssertionError("child must cancel")
 
-    def execute(invocation: ToolInvocation) -> ToolResult:
+    def execute(invocation: ToolInvocation) -> ChildRunWait:
         signals.append(invocation.cancellation)
         submission = invocation.agents.spawn_agent(
             Agent(
@@ -552,8 +553,7 @@ def test_abort_reaches_nested_agent_and_waits_for_idle() -> None:
             max_steps=1,
             messages=[UserMessage(content="Child task")],
         )
-        invocation.agents.wait_run(submission.run_id)
-        raise AssertionError("parent must cancel")
+        return ChildRunWait(run_ids=[submission.run_id])
 
     agent = Agent(
         scripted(calls()),
@@ -562,6 +562,9 @@ def test_abort_reaches_nested_agent_and_waits_for_idle() -> None:
             AgentTool(
                 definition=ToolDefinition(name="echo", description="", parameters={}),
                 execute=execute,
+                result_from_children=lambda _invocation, _children: pytest.fail(
+                    "parent must cancel"
+                ),
             )
         ],
     )
@@ -571,7 +574,7 @@ def test_abort_reaches_nested_agent_and_waits_for_idle() -> None:
         run = agent.start(max_steps=2, coordinator=coordinator)
         try:
             assert started.wait(3)
-            assert not run.wait_for_idle(timeout=0)
+            assert not run.status.is_terminal
             with pytest.raises(RuntimeError, match="already running"):
                 agent.start(max_steps=1)
             run.cancel()

@@ -5,7 +5,7 @@ from typing import ClassVar
 
 from pydantic import BaseModel
 
-from onyx.agents.models import AgentMessageStatus
+from onyx.agents.models import AgentMessageStatus, MessageDelivery
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentLifetime, ToolInvocation
 from onyx.configs.chat_configs import CHAT_EXECUTION_TIMEOUT_S
@@ -90,8 +90,8 @@ class ListAgentsTool(_SubagentTool):
         for child in children:
             status = child.status.value if child.status is not None else "not started"
             line = f"{child.path} (agent_id: {child.id}): {status}"
-            if child.pending_messages:
-                line += f"; {len(child.pending_messages)} queued messages"
+            if child.pending_message_count:
+                line += f"; {child.pending_message_count} queued messages"
             if child.queue_paused:
                 line += "; queue paused"
             lines.append(line)
@@ -104,7 +104,9 @@ class SendMessageTool(_SubagentTool):
     description = (
         "Send instructions to an existing agent. A running agent receives them before "
         "its next model step without resetting its limits. An idle agent starts a new "
-        "run in its existing conversation. Returns immediately; results arrive separately."
+        "run in its existing conversation. Set delivery to queue for a new run after normal "
+        "completion with fresh limits. Stopped, failed, or limited agents keep queued work "
+        "paused until an explicit send. Returns immediately; results arrive separately."
     )
     input_model = AgentMessageInput
 
@@ -116,42 +118,16 @@ class SendMessageTool(_SubagentTool):
         receipt = invocation.agents.send_message(
             request.agent_id,
             message=request.message,
+            delivery=request.delivery,
             max_steps=self.max_steps,
             total_timeout_s=CHAT_EXECUTION_TIMEOUT_S,
         )
+        if receipt.status == AgentMessageStatus.ACCEPTED:
+            return ToolResult(content="Message accepted by the agent.")
         return ToolResult(
-            content="Message accepted by the agent."
-            if receipt.status == AgentMessageStatus.ACCEPTED
+            content="Message queued for a new run."
+            if request.delivery == MessageDelivery.QUEUE
             else "Message queued for the agent's next model step."
-        )
-
-
-class QueueMessageTool(_SubagentTool):
-    name = "queue_message"
-    display_name = "Queue agent message"
-    description = (
-        "Queue instructions for a new run in an existing agent's conversation. "
-        "The run starts after normal completion with fresh limits. A stopped, failed, "
-        "or limited agent keeps its queue paused until send_message starts another run. "
-        "An idle agent that completed normally starts immediately. Returns immediately."
-    )
-    input_model = AgentMessageInput
-
-    def __init__(self, *, max_steps: int) -> None:
-        self.max_steps = max_steps
-
-    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-        request = parse_tool_arguments(AgentMessageInput, invocation.arguments)
-        receipt = invocation.agents.queue_message(
-            request.agent_id,
-            message=request.message,
-            max_steps=self.max_steps,
-            total_timeout_s=CHAT_EXECUTION_TIMEOUT_S,
-        )
-        return ToolResult(
-            content="The agent started a new run with your message."
-            if receipt.status == AgentMessageStatus.ACCEPTED
-            else "Message queued for a new run."
         )
 
 

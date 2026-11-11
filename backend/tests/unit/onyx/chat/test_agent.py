@@ -849,7 +849,6 @@ def test_chat_prepared_prompt_rebuilds_history_with_captured_instructions(
                 "list_agents",
                 "interrupt_agent",
                 "send_message",
-                "queue_message",
             }
         )
     assert any(message.text == "Earlier question" for message in first.messages)
@@ -990,7 +989,6 @@ def test_preference_is_advisory_restorable_and_scoped_to_one_turn(
             "list_agents",
             "interrupt_agent",
             "send_message",
-            "queue_message",
         ]
         reminder = request.messages[-1]
         assert (
@@ -1071,7 +1069,6 @@ def test_chat_delegates_to_an_independent_agent(
             "list_agents",
             "interrupt_agent",
             "send_message",
-            "queue_message",
         }
         if any(message.text == "Leaf task" for message in request.messages):
             if not results:
@@ -1436,8 +1433,8 @@ def test_builtin_subagent_controls_do_not_shadow_configured_tools(custom: bool) 
     assert configured.name == expected_name
 
 
-@pytest.mark.parametrize("message_tool", ["send_message", "queue_message"])
-def test_chat_message_tools_continue_a_completed_child(message_tool: str) -> None:
+@pytest.mark.parametrize("delivery", ["send", "queue"])
+def test_chat_message_tools_continue_a_completed_child(delivery: str) -> None:
     child_requests: list[GenerationRequest] = []
     child_ids: list[str] = []
     child_runs: list[str] = []
@@ -1488,15 +1485,16 @@ def test_chat_message_tools_continue_a_completed_child(message_tool: str) -> Non
                 == RunStatus.COMPLETE
             )
         if any(message.text == "Continue the child" for message in request.messages):
-            if results[-1].tool_name != message_tool:
+            if results[-1].tool_name != "send_message":
                 return AssistantMessage(
                     content=[
                         ToolCall(
                             id="follow-up",
-                            name=message_tool,
+                            name="send_message",
                             arguments={
                                 "agent_id": child_ids[0],
                                 "message": "Follow-up task",
+                                "delivery": delivery,
                             },
                         )
                     ]
@@ -1530,6 +1528,15 @@ def test_chat_message_tools_continue_a_completed_child(message_tool: str) -> Non
         llm=FakeModelClient(reply),
         token_counter=len,
     )
+    message_tool = next(
+        tool for tool in agent.tools if tool.definition.name == "send_message"
+    )
+    properties = message_tool.definition.parameters["properties"]
+    assert isinstance(properties, dict)
+    delivery_schema = properties["delivery"]
+    assert isinstance(delivery_schema, dict)
+    assert delivery_schema["enum"] == ["send", "queue"]
+    assert delivery_schema["default"] == "send"
     try:
         for question in ("Delegate this", "Continue the child"):
             assert (

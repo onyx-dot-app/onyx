@@ -40,11 +40,9 @@ class ChatAgentDirectory(AgentDirectory):
             agents = self.history_store.list_agents()
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
-        pending: dict[str, list[AgentMessageReceipt]] = {}
-        for receipt in self.store.pending_messages():
-            pending.setdefault(receipt.agent_id, []).append(receipt)
+        pending = self.store.pending_message_counts()
         return [
-            agent.model_copy(update={"pending_messages": pending.get(agent.id, [])})
+            agent.model_copy(update={"pending_message_count": pending.get(agent.id, 0)})
             for agent in agents
         ]
 
@@ -56,7 +54,11 @@ class ChatAgentDirectory(AgentDirectory):
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
         if agent is not None:
             agent = agent.model_copy(
-                update={"pending_messages": self.store.pending_messages(agent_id)}
+                update={
+                    "pending_message_count": self.store.pending_message_counts(
+                        agent_id
+                    ).get(agent_id, 0)
+                }
             )
         return agent
 

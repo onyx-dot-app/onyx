@@ -285,7 +285,7 @@ def _unread_agent_results(selected: CTE) -> Select[tuple[int, RunStatus | None, 
                             )
                         )
                     )
-                    for name in (SPAWN_AGENT_TOOL_NAME, "send_message", "queue_message")
+                    for name in (SPAWN_AGENT_TOOL_NAME, "send_message")
                 ]
             ),
         )

@@ -19,7 +19,7 @@ from onyx.agents.events import (
 )
 from onyx.agents.models import RunStatus, ToolCallContext
 from onyx.agents.runtime import Agent, RunFailed
-from onyx.agents.tools import AgentTool, ToolInvocation, ToolProgress
+from onyx.agents.tools import AgentTool, ChildRunWait, ToolInvocation, ToolProgress
 from onyx.context.search.models import SearchDocsResponse
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.interfaces import GenerationContext
@@ -119,7 +119,7 @@ def test_nested_parallel_children_and_grandchildren_keep_context() -> None:
             observed.append(tenant.get())
         return AssistantMessage(content=[TextContent(text=tenant.get())])
 
-    def delegate(invocation: ToolInvocation) -> ToolResult:
+    def delegate(invocation: ToolInvocation) -> ChildRunWait:
         token = tenant.set(invocation.call_id)
         try:
             child = Agent(
@@ -129,13 +129,11 @@ def test_nested_parallel_children_and_grandchildren_keep_context() -> None:
             spawned = invocation.agents.spawn_agent(
                 child, name=invocation.call_id, description="", messages=[], max_steps=1
             )
-            result = invocation.agents.wait_run(spawned.run_id, timeout=4)
-            assert result is not None
-            return ToolResult(content=result.output.text)
+            return ChildRunWait(run_ids=[spawned.run_id])
         finally:
             tenant.reset(token)
 
-    def parent_tool(invocation: ToolInvocation) -> ToolResult:
+    def parent_tool(invocation: ToolInvocation) -> ChildRunWait:
         child = Agent(
             FakeModelClient(
                 lambda *_: AssistantMessage(
@@ -154,14 +152,16 @@ def test_nested_parallel_children_and_grandchildren_keep_context() -> None:
                         name="leaf", description="", parameters={}
                     ),
                     execute=delegate,
+                    result_from_children=lambda _invocation, _children: ToolResult(
+                        content="done"
+                    ),
                 )
             ],
         )
         spawned = invocation.agents.spawn_agent(
             child, name=invocation.call_id, description="", messages=[], max_steps=1
         )
-        assert invocation.agents.wait_run(spawned.run_id, timeout=5) is not None
-        return ToolResult(content="done")
+        return ChildRunWait(run_ids=[spawned.run_id])
 
     root = Agent(
         FakeModelClient(
@@ -176,6 +176,9 @@ def test_nested_parallel_children_and_grandchildren_keep_context() -> None:
             AgentTool(
                 definition=ToolDefinition(name="parent", description="", parameters={}),
                 execute=parent_tool,
+                result_from_children=lambda _invocation, _children: ToolResult(
+                    content="done"
+                ),
             )
         ],
     )
@@ -214,7 +217,7 @@ def test_child_thread_start_failure_rolls_back_registration(
     coordinator = AgentCoordinator()
     original = runtime.start_thread_with_context
 
-    def delegate(invocation: ToolInvocation) -> ToolResult:
+    def delegate(invocation: ToolInvocation) -> ChildRunWait:
         def fail(*_args: object, **_kwargs: object) -> None:
             raise RuntimeError("cannot start child")
 
@@ -230,8 +233,7 @@ def test_child_thread_start_failure_rolls_back_registration(
         spawned = invocation.agents.spawn_agent(
             child, name="child", description="", messages=[], max_steps=1
         )
-        assert invocation.agents.wait_run(spawned.run_id, timeout=2) is not None
-        return ToolResult(content="recovered")
+        return ChildRunWait(run_ids=[spawned.run_id])
 
     root = Agent(
         FakeModelClient(
@@ -246,6 +248,9 @@ def test_child_thread_start_failure_rolls_back_registration(
                     name="delegate", description="", parameters={}
                 ),
                 execute=delegate,
+                result_from_children=lambda _invocation, _children: ToolResult(
+                    content="recovered"
+                ),
             )
         ],
     )

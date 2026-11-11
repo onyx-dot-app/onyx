@@ -34,6 +34,7 @@ from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import (
     AgentLifetime,
     AgentTool,
+    ChildRunWait,
     HumanToolAnswer,
     InputDecision,
     InputMode,
@@ -963,7 +964,7 @@ def test_parallel_children_use_reserved_response_identity(
         build_agent=unexpected_restore,
     )
 
-    def delegate(invocation: ToolInvocation) -> ToolResult:
+    def delegate(invocation: ToolInvocation) -> ChildRunWait:
         def child_reply(
             _request: GenerationRequest, _cancellation: CancellationSignal
         ) -> AssistantMessage:
@@ -980,9 +981,7 @@ def test_parallel_children_use_reserved_response_identity(
             messages=[UserMessage(content=invocation.call_id)],
             max_steps=1,
         )
-        result = invocation.agents.wait_run(spawned.run_id, timeout=10)
-        assert result is not None
-        return ToolResult(content=result.output.text)
+        return ChildRunWait(run_ids=[spawned.run_id])
 
     replies = iter(
         [
@@ -1005,6 +1004,9 @@ def test_parallel_children_use_reserved_response_identity(
                     name="delegate", description="", parameters={}
                 ),
                 execute=delegate,
+                result_from_children=lambda _invocation, children: ToolResult(
+                    content=children[0].messages[-1].text
+                ),
             )
         ],
     )
@@ -1044,13 +1046,11 @@ def test_parallel_children_use_reserved_response_identity(
         assert coordinator.close(timeout=10)
 
 
-@pytest.mark.parametrize("existing_child", [False, True])
 @pytest.mark.parametrize("failure_point", ["bind", "worker", "owner_publication"])
 def test_failed_child_start_can_retry_without_an_orphan_response(
     branch: tuple[UUID, int],
     db_session: Session,
     user_message: UserMessage,
-    existing_child: bool,
     failure_point: str,
 ) -> None:
     owner = store(branch)
@@ -1071,14 +1071,8 @@ def test_failed_child_start_can_retry_without_an_orphan_response(
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
     )
 
-    def delegate(invocation: ToolInvocation) -> ToolResult:
+    def delegate(invocation: ToolInvocation) -> ChildRunWait:
         def start_child() -> str:
-            if existing_child:
-                return invocation.agents.start_run(
-                    child.id,
-                    messages=[UserMessage(content="next request")],
-                    max_steps=1,
-                )
             return invocation.agents.spawn_agent(
                 child,
                 name="research",
@@ -1086,16 +1080,6 @@ def test_failed_child_start_can_retry_without_an_orphan_response(
                 messages=[UserMessage(content="first request")],
                 max_steps=1,
             ).run_id
-
-        if existing_child:
-            first = invocation.agents.spawn_agent(
-                child,
-                name="research",
-                description="Research",
-                messages=[UserMessage(content="first request")],
-                max_steps=1,
-            )
-            assert invocation.agents.wait_run(first.run_id, timeout=10) is not None
 
         target = (
             "onyx.agents.agent_coordination.AgentCoordinator.bind"
@@ -1113,16 +1097,12 @@ def test_failed_child_start_can_retry_without_an_orphan_response(
         with get_session_with_tenant(
             tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
         ) as session:
-            assert (
-                session.get(ChatSession, UUID(child.id)) is not None
-            ) == existing_child
+            assert session.get(ChatSession, UUID(child.id)) is None
             parent_response = session.get(ChatMessage, branch[1])
             assert parent_response is not None
             assert parent_response.response_status == RunStatus.RUNNING
         retried_id = start_child()
-        completed = invocation.agents.wait_run(retried_id, timeout=10)
-        assert completed is not None
-        return ToolResult(content=completed.output.text)
+        return ChildRunWait(run_ids=[retried_id])
 
     replies = iter(
         [
@@ -1142,6 +1122,9 @@ def test_failed_child_start_can_retry_without_an_orphan_response(
                     name="delegate", description="", parameters={}
                 ),
                 execute=delegate,
+                result_from_children=lambda _invocation, children: ToolResult(
+                    content=children[0].messages[-1].text
+                ),
             )
         ],
     )
@@ -1163,11 +1146,9 @@ def test_failed_child_start_can_retry_without_an_orphan_response(
         )
         responses = [row for row in rows if row.message_type == MessageType.ASSISTANT]
         questions = [row for row in rows if row.message_type == MessageType.USER]
-        assert len(responses) == len(questions) == (2 if existing_child else 1)
+        assert len(responses) == len(questions) == 1
         assert all(row.response_status == RunStatus.COMPLETE for row in responses)
         assert questions[0].parent_message_id is None
-        if existing_child:
-            assert questions[1].parent_message_id == responses[0].id
         assert not owner.has_owned_work
     finally:
         assert coordinator.close(timeout=10)
@@ -1237,7 +1218,7 @@ def test_resumed_child_keeps_its_original_response_tree(
         ),
     )
 
-    def nested_delegate(invocation: ToolInvocation) -> ToolResult:
+    def nested_delegate(invocation: ToolInvocation) -> ChildRunWait:
         spawned = invocation.agents.spawn_agent(
             Agent(
                 FakeModelClient(
@@ -1251,15 +1232,16 @@ def test_resumed_child_keeps_its_original_response_tree(
             max_steps=1,
         )
         grandchild_ids.append(spawned.run_id)
-        result = invocation.agents.wait_run(spawned.run_id, timeout=10)
-        assert result is not None
-        return ToolResult(content=result.output.text)
+        return ChildRunWait(run_ids=[spawned.run_id])
 
     child_tools = [
         ask,
         AgentTool(
             definition=ToolDefinition(name="delegate", description="", parameters={}),
             execute=nested_delegate,
+            result_from_children=lambda _invocation, children: ToolResult(
+                content=children[0].messages[-1].text
+            ),
         ),
     ]
 
@@ -1595,7 +1577,6 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
         )
         for info in later_owner.discovery():
             later_view.register(info)
-        later_owner.poll_control()
         assert not later_owner.has_owned_work
         spawn_leaf.set()
         if nested:
@@ -1633,8 +1614,12 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
             later_calls.append(
                 ToolCall(
                     id="queue",
-                    name="queue_message",
-                    arguments={"agent_id": child.agent_id, "message": "Continue later"},
+                    name="send_message",
+                    arguments={
+                        "agent_id": child.agent_id,
+                        "message": "Continue later",
+                        "delivery": "queue",
+                    },
                 )
             )
             later_calls.append(
@@ -1654,8 +1639,14 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
             if call is None:
                 return AssistantMessage(content=[TextContent(text="Checked")])
             if call.id == "interrupt":
-                observer = store(
-                    (branch[0], later_response.id), visible_response_ids=[branch[1]]
+                observer = ChatRunStore(
+                    tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+                    chat_session_id=branch[0],
+                    response_id=later_response.id,
+                    visible_response_ids=[branch[1]],
+                    cache=get_cache_backend(
+                        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+                    ),
                 )
                 observer.bind(
                     later_coordinator,
@@ -1729,12 +1720,7 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
         if action == "cancel":
             loaded_child = later_view.lookup_agent(child.agent_id, str(branch[0]))
             assert loaded_child is not None and loaded_child.queue_paused
-            assert [item.message for item in loaded_child.pending_messages] == [
-                "Continue later"
-            ]
-            assert [item.delivery for item in loaded_child.pending_messages] == [
-                MessageDelivery.QUEUE
-            ]
+            assert loaded_child.pending_message_count == 1
         received = [
             message
             for step in later.snapshot().steps
@@ -1796,7 +1782,7 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
 
 @pytest.mark.parametrize(
     ("delivery", "child_is_running"),
-    [("send_message", False), ("queue_message", False), ("send_message", True)],
+    [("send", False), ("queue", False), ("send", True)],
 )
 def test_later_turn_sends_to_chat_child_through_another_coordinator(
     branch: tuple[UUID, int],
@@ -1940,15 +1926,16 @@ def test_later_turn_sends_to_chat_child_through_another_coordinator(
                 for message in request.messages
                 if isinstance(message, ToolResultMessage)
             }
-            if delivery not in result_names:
+            if "send_message" not in result_names:
                 return AssistantMessage(
                     content=[
                         ToolCall(
                             id="send",
-                            name=delivery,
+                            name="send_message",
                             arguments={
                                 "agent_id": child.agent_id,
                                 "message": "follow up",
+                                "delivery": delivery,
                             },
                         )
                     ]
@@ -2030,14 +2017,16 @@ def test_later_turn_sends_to_chat_child_through_another_coordinator(
             assert saved.previous_run_id == child.run_id
             assert saved.input_messages[0].text == "follow up"
         latest = later_directory.lookup_agent(child.agent_id, str(branch[0]))
-        assert latest is not None and not latest.pending_messages
+        assert latest is not None and latest.pending_message_count == 0
     finally:
         release_child.set()
         assert later_coordinator.close(timeout=10)
         assert first_coordinator.close(timeout=10)
 
 
-@pytest.mark.parametrize("failure", ["owner_publication", "interrupted_reservation"])
+@pytest.mark.parametrize(
+    "failure", ["owner_publication", "interrupted_reservation", "bind", "worker"]
+)
 def test_queued_reservation_failure_is_durable_and_explicit_send_recovers(
     branch: tuple[UUID, int],
     user_message: UserMessage,
@@ -2046,7 +2035,13 @@ def test_queued_reservation_failure_is_durable_and_explicit_send_recovers(
 ) -> None:
     monkeypatch.setattr("onyx.chat.run_store.INPUT_POLL_SECONDS", 0)
     coordinator = AgentCoordinator()
-    owner = store(branch)
+    owner = ChatRunStore(
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        chat_session_id=branch[0],
+        response_id=branch[1],
+        visible_response_ids=[],
+        cache=get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE),
+    )
     observer = store(branch)
     model_inputs: list[list[str]] = []
 
@@ -2100,7 +2095,7 @@ def test_queued_reservation_failure_is_durable_and_explicit_send_recovers(
         build_agent=lambda _: pytest.fail("No handoff"),
     )
     child = restore(AgentState(), str(uuid4()), None)
-    dispatch = owner.dispatch_messages
+    dispatch = owner._dispatch_messages
     failed_response_ids: list[str] = []
 
     def interrupt_before_register(run: Run) -> None:
@@ -2125,7 +2120,10 @@ def test_queued_reservation_failure_is_durable_and_explicit_send_recovers(
             max_steps=2,
             restoration_config=ChatConfiguration(kind="chat"),
         )
-        assert invocation.agents.wait_run(started.run_id, timeout=10) is not None
+        assert (
+            coordinator.completion(started.run_id).result(timeout=10).status
+            == RunStatus.COMPLETE
+        )
         assert coordinator.run(started.run_id).wait_for_idle(timeout=10)
         request = AgentMessageRequest(
             agent_id=child.id,
@@ -2138,52 +2136,51 @@ def test_queued_reservation_failure_is_durable_and_explicit_send_recovers(
             parent_message_id=f"{branch[1]}:0",
             parent_tool_call_id="delegate",
         )
-        with patch.object(owner, "dispatch_messages", return_value=None):
-            owner.submit_message(request)
-            failure_patch = (
-                patch.object(
-                    owner.cache,
-                    "set",
-                    side_effect=RuntimeError("Owner publication failed"),
-                )
-                if failure == "owner_publication"
-                else patch.object(
-                    owner, "register", side_effect=interrupt_before_register
-                )
+        owner.submit_message(request)
+        if failure == "owner_publication":
+            failure_patch = patch.object(
+                owner.cache, "set", side_effect=RuntimeError("Owner publication failed")
             )
-            with failure_patch:
-                dispatch()
-            info = agent_directory.lookup_agent(child.id, str(branch[0]))
-            assert info is not None and info.latest_run_id is not None
-            failed_response_ids.append(info.latest_run_id)
-            assert (
-                observer.read_run_status(info.latest_run_id, str(branch[0]))
-                == RunStatus.ERROR
+        elif failure == "interrupted_reservation":
+            failure_patch = patch.object(
+                owner, "register", side_effect=interrupt_before_register
             )
-            saved = observer.read_run(info.latest_run_id, str(branch[0]))
-            assert saved is not None
-            assert saved.input_messages[0].text == "failed queued task"
-            assert not owner.pending_messages(child.id)
-            assert not owner.cache.exists(owner._owner_key(int(info.latest_run_id)))
-            assert all(
-                "failed queued task" not in messages for messages in model_inputs
+        else:
+            failure_patch = patch(
+                "onyx.agents.agent_coordination.AgentCoordinator.bind"
+                if failure == "bind"
+                else "onyx.agents.runtime.start_thread_with_context",
+                side_effect=RuntimeError("Queued startup failed"),
             )
-            # A fresh explicit send may restart after failure; it keeps the failed question in history.
-            owner.submit_message(
-                request.model_copy(
-                    update={"message": UserMessage(content="retry task")}
-                )
-            )
+        with failure_patch:
             dispatch()
-            retried = agent_directory.lookup_agent(child.id, str(branch[0]))
-            assert retried is not None and retried.latest_run_id is not None
-            assert retried.latest_run_id != info.latest_run_id
-            completed = coordinator.completion(retried.latest_run_id).result(timeout=10)
-            assert completed.status == RunStatus.COMPLETE
-            assert (
-                observer.read_run_status(retried.latest_run_id, str(branch[0]))
-                == RunStatus.COMPLETE
-            )
+        info = agent_directory.lookup_agent(child.id, str(branch[0]))
+        assert info is not None and info.latest_run_id is not None
+        failed_response_ids.append(info.latest_run_id)
+        assert (
+            observer.read_run_status(info.latest_run_id, str(branch[0]))
+            == RunStatus.ERROR
+        )
+        saved = observer.read_run(info.latest_run_id, str(branch[0]))
+        assert saved is not None
+        assert saved.input_messages[0].text == "failed queued task"
+        assert not owner.pending_message_counts(child.id)
+        assert not owner.cache.exists(owner._owner_key(int(info.latest_run_id)))
+        assert all("failed queued task" not in messages for messages in model_inputs)
+        # A fresh explicit send may restart after failure; it keeps the failed question in history.
+        owner.submit_message(
+            request.model_copy(update={"message": UserMessage(content="retry task")})
+        )
+        dispatch()
+        retried = agent_directory.lookup_agent(child.id, str(branch[0]))
+        assert retried is not None and retried.latest_run_id is not None
+        assert retried.latest_run_id != info.latest_run_id
+        completed = coordinator.completion(retried.latest_run_id).result(timeout=10)
+        assert completed.status == RunStatus.COMPLETE
+        assert (
+            observer.read_run_status(retried.latest_run_id, str(branch[0]))
+            == RunStatus.COMPLETE
+        )
         return ToolResult(content="Recovered")
 
     replies = iter(
@@ -2504,7 +2501,6 @@ def test_nested_completion_starts_one_response_without_a_synthetic_user_message(
             completion.run_id
             for completion in fresh_owner.completed_agents(str(branch[0]), (), limit=8)
         ] == [child.id]
-        owner.poll_control()
         assert (
             next(
                 info for info in owner.discovery() if info.id == child.agent_id
@@ -2743,3 +2739,138 @@ def test_message_poll_retries_after_database_failure(
         owner.poll_control()
         read.assert_called_once()
     assert coordinator.close(timeout=10)
+
+
+def test_message_submitted_during_empty_poll_starts_after_parent_releases(
+    branch: tuple[UUID, int],
+    db_session: Session,
+    user_message: UserMessage,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("onyx.chat.run_store.INPUT_POLL_SECONDS", 0)
+    owner = ChatRunStore(
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        chat_session_id=branch[0],
+        response_id=branch[1],
+        visible_response_ids=[],
+        cache=get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE),
+    )
+    coordinator = AgentCoordinator()
+    view = owner.bind(
+        coordinator,
+        directory=directory(owner),
+        build_agent=lambda _: pytest.fail("Unexpected restoration"),
+    )
+    child_finished = threading.Event()
+    submit_message = threading.Event()
+    scan_started = threading.Event()
+    finish_scan = threading.Event()
+    child_messages: list[list[str]] = []
+    spawned: list[SpawnResult] = []
+
+    def child_reply(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        child_messages.append([message.text for message in request.messages])
+        return AssistantMessage(content=[TextContent(text="Child answer")])
+
+    def delegate(invocation: ToolInvocation) -> ToolResult:
+        child = invocation.agents.spawn_agent(
+            Agent(
+                FakeModelClient(child_reply),
+                generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+            ),
+            name="worker",
+            description="Collect evidence",
+            messages=[UserMessage(content="Initial task")],
+            max_steps=1,
+            restoration_config=ChatConfiguration(kind="chat"),
+            lifetime=AgentLifetime.BACKGROUND,
+        )
+        spawned.append(child)
+        assert (
+            coordinator.completion(child.run_id).result(timeout=10).status
+            == RunStatus.COMPLETE
+        )
+        child_finished.set()
+        assert submit_message.wait(10)
+        invocation.agents.send_message(
+            child.agent_id,
+            message="Follow up during scan",
+            delivery=MessageDelivery.QUEUE,
+            max_steps=1,
+        )
+        return ToolResult(content="Queued")
+
+    replies = iter(
+        [
+            AssistantMessage(
+                content=[ToolCall(id="delegate", name="delegate", arguments={})]
+            ),
+            AssistantMessage(content=[TextContent(text="Root answer")]),
+        ]
+    )
+    root = Agent(
+        FakeModelClient(lambda *_: next(replies)),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        agent_id=str(branch[0]),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(
+                    name="delegate", description="", parameters={}
+                ),
+                execute=delegate,
+            )
+        ],
+    )
+    run = root.start(messages=[user_message], max_steps=2, coordinator=view)
+
+    def read_then_wait(
+        session: Session, selected_branch: ChatBranch, agent_id: str | None = None
+    ) -> list[ChatInput]:
+        rows = pending_inputs(session, selected_branch, agent_id)
+        assert not rows
+        scan_started.set()
+        assert finish_scan.wait(10)
+        return rows
+
+    try:
+        assert child_finished.wait(10)
+        with patch("onyx.chat.run_store.pending_inputs", side_effect=read_then_wait):
+            polling = start_thread_future(
+                lambda: owner.poll_control(), name="test-message-poll"
+            )
+            try:
+                assert scan_started.wait(10)
+                submit_message.set()
+                assert run.result(timeout=10).output.text == "Root answer"
+                assert run.wait_for_idle(timeout=10)
+                coordinator.completion(run.id).result(timeout=10)
+            finally:
+                finish_scan.set()
+                polling.result(timeout=10)
+        assert owner.has_owned_work
+        owner.poll_control()
+        child = view.lookup_agent(spawned[0].agent_id, str(branch[0]))
+        assert child is not None and child.latest_run_id is not None
+        assert child.latest_run_id != spawned[0].run_id
+        assert (
+            coordinator.completion(child.latest_run_id).result(timeout=10).status
+            == RunStatus.COMPLETE
+        )
+        assert len(child_messages) == 2
+        assert "Follow up during scan" in child_messages[1]
+        assert not owner.pending_message_counts()
+        responses = list(
+            db_session.scalars(
+                select(ChatMessage.id).where(
+                    ChatMessage.chat_session_id == UUID(child.id),
+                    ChatMessage.message_type == MessageType.ASSISTANT,
+                )
+            )
+        )
+        assert set(responses) == {int(spawned[0].run_id), int(child.latest_run_id)}
+    finally:
+        submit_message.set()
+        finish_scan.set()
+        assert coordinator.close(timeout=10)

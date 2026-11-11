@@ -155,11 +155,8 @@ class AgentMessageStatus(str, Enum):
 
 class AgentMessageReceipt(BaseModel):
     id: str
-    agent_id: str
     status: AgentMessageStatus
     run_id: str | None = None
-    message: str
-    delivery: MessageDelivery
 
 
 class AgentMessageRequest(BaseModel):
@@ -197,8 +194,15 @@ class AgentInfo(BaseModel):
     restoration_config: SerializeAsAny[BaseModel] | None
     latest_run_id: str | None = None
     status: RunStatus | None = None
-    pending_messages: list[AgentMessageReceipt] = Field(default_factory=list)
-    queue_paused: bool = False
+    pending_message_count: int = 0
+
+    @property
+    def queue_paused(self) -> bool:
+        return self.pending_message_count > 0 and self.status in (
+            RunStatus.CANCELLED,
+            RunStatus.ERROR,
+            RunStatus.LIMIT,
+        )
 
 
 class AgentStep(BaseModel):
