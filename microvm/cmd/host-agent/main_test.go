@@ -9,7 +9,8 @@ import (
 
 func TestCheckRanges(t *testing.T) {
 	ok := flags{uidBase: 1000000, uidCount: 65536, maxScratchGiB: 100, tplVCPUs: 2, tplMemMiB: 4096, tplScratchGiB: 1, tplKeep: 2,
-		managedKeep: 3, managedZipMiB: 256, managedMaxMiB: 512, managedFiles: 50000, managedBuilds: 1, swapTimeout: time.Second, memOverhead: 128}
+		managedKeep: 3, managedZipMiB: 256, managedMaxMiB: 512, managedFiles: 50000, managedBuilds: 1, swapTimeout: time.Second, memOverhead: 128,
+		transferPar: 8, transferPart: 8 << 20}
 	if err := checkRanges(ok); err != nil {
 		t.Fatal(err)
 	}
@@ -35,6 +36,10 @@ func TestCheckRanges(t *testing.T) {
 		"managed swap time 0": func(f *flags) { f.swapTimeout = 0 },
 		"vm overhead 0":       func(f *flags) { f.memOverhead = 0 },
 		"vm overhead huge":    func(f *flags) { f.memOverhead = 1 << 20 },
+		"transfer parallel 0": func(f *flags) { f.transferPar = 0 },
+		"transfer parallel":   func(f *flags) { f.transferPar = 65 },
+		"transfer part small": func(f *flags) { f.transferPart = 1024 },
+		"transfer part huge":  func(f *flags) { f.transferPart = 512 << 20 },
 	} {
 		f := ok
 		edit(&f)

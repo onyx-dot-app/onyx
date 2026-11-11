@@ -49,6 +49,8 @@ type Service struct {
 	// EgressCA is the deployment egress CA that Create sends with the key.
 	// Nil: no CA (a root drive with a built-in CA).
 	EgressCA *egressca.Cached
+	// Saves runs the session save calls. Nil turns them off (UNIMPLEMENTED).
+	Saves *Saves
 
 	dialMu sync.Mutex
 	dials  map[string]int

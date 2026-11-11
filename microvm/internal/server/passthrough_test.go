@@ -30,9 +30,11 @@ import (
 	"github.com/onyx-dot-app/onyx/microvm/internal/egressca"
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd"
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/execs"
+	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/files"
 	"github.com/onyx-dot-app/onyx/microvm/internal/jailer"
 	"github.com/onyx-dot-app/onyx/microvm/internal/template"
 	"github.com/onyx-dot-app/onyx/microvm/internal/testcerts"
+	"github.com/onyx-dot-app/onyx/microvm/internal/transfer"
 	pb "github.com/onyx-dot-app/onyx/microvm/proto/hostagent/v1"
 	sdpb "github.com/onyx-dot-app/onyx/microvm/proto/sandboxd/v1"
 )
@@ -79,6 +81,12 @@ type fakeVM struct {
 func startFakeVM(t *testing.T) *fakeVM {
 	t.Helper()
 	return startFakeVMWith(t, guestd.Config{Version: "test"})
+}
+
+// startFakeVMFiles starts a fake VM whose daemon serves fs (nil: defaults).
+func startFakeVMFiles(t *testing.T, fs *files.Store) *fakeVM {
+	t.Helper()
+	return startFakeVMWith(t, guestd.Config{Version: "test", Files: fs})
 }
 
 func startFakeVMWith(t *testing.T, cfg guestd.Config) *fakeVM {
@@ -148,11 +156,12 @@ func startFakeVMWith(t *testing.T, cfg guestd.Config) *fakeVM {
 // ptAgent is a node agent with a pass-through and one running VM per
 // sandbox in uds.
 type ptAgent struct {
-	m    *agent.Manager
-	l    *mapLauncher
-	pt   *Passthrough
-	vms  map[string]agent.VM
-	conn *grpc.ClientConn
+	m     *agent.Manager
+	l     *mapLauncher
+	pt    *Passthrough
+	saves *Saves
+	vms   map[string]agent.VM
+	conn  *grpc.ClientConn
 }
 
 type mapLauncher struct {
@@ -236,6 +245,13 @@ func newPTAgent(t *testing.T, mtls bool, uds map[string]string, opts ...func(*Se
 		target = "unix://" + sock
 		clientCreds = insecure.NewCredentials()
 	}
+	saves, err := NewSaves(&Saves{M: m, PT: pt, Dir: filepath.Join(dir, "captures"), Log: log,
+		Transfer: &transfer.Client{AllowHTTP: true, Parallel: 4, PartBytes: 1 << 20}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.saves = saves
+	svc.Saves = saves
 	srv := NewServer(svc, sopts...)
 	go func() { _ = srv.Serve(ln) }()
 	t.Cleanup(srv.Stop)
