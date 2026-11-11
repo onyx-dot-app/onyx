@@ -181,8 +181,10 @@ Custom Skill cards show **Personal**, **Shared**, or **Organization** access.
 Open a Skill to view its instructions.
 Owners and editors can switch between **Details** and **Sharing** to manage access.
 Company access and installation settings require global manage-skills permission, even for owners.
-This applies during creation, GitHub import, ZIP upload, and later sharing changes. For uploaded Skills,
-owners and editors can manage individual access. Group sharing follows their group permissions.
+This applies during creation, GitHub import, ZIP upload, and later sharing changes.
+For uploaded Skills with an active owner, owners and editors can manage individual access.
+When a Skill has no active owner, only users with global manage-skills permission can change individual access.
+Group sharing follows their group permissions.
 Editing a public Skill without global permission preserves its organization access.
 Bulk sharing shows **Keep unchanged** when you cannot change organization access.
 Choose who can use it and give each person or group **Can use** or **Can edit** access. Under **Installation**,

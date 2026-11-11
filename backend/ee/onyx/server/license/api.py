@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 
 from ee.onyx.configs.app_configs import CLOUD_DATA_PLANE_URL
 from ee.onyx.db.community_downgrade import (
+    community_skill_push_recipients,
     disable_paid_features__no_commit,
     make_all_cc_pairs_public__no_commit,
     remove_custom_user_groups__no_commit,
@@ -61,6 +62,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.manage.llm.provider_cache import invalidate_provider_listing_cache
 from onyx.server.settings.store import clear_chat_retention
+from onyx.skills.push import push_skills_for_users
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
@@ -326,6 +328,8 @@ def downgrade_to_community(
     reset_enterprise_settings()
     clear_chat_retention()
     db_delete_license(db_session)
+    push_skills_for_users(community_skill_push_recipients(db_session), db_session)
+    db_session.commit()
 
     logger.notice(
         "Downgraded to Community by %s: %d connectors made public, "

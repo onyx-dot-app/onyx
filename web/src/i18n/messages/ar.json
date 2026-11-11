@@ -17321,6 +17321,7 @@
         "header": {
           "transferTitle": "نقل *{name}*"
         },
+        "inactiveOwnerNotice": "تم إلغاء تنشيط {email}. يمكن فقط للمستخدمين الذين لديهم إذن عام لإدارة Skills تغيير الوصول الفردي أو نقل هذه Skill.",
         "loading": {
           "message": "جارٍ تحميل تفاصيل المشاركة..."
         },

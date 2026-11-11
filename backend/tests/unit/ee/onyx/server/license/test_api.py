@@ -261,6 +261,8 @@ _DOWNGRADE_STEPS: list[str] = [
     "reset_enterprise_settings",
     "clear_chat_retention",
     "db_delete_license",
+    "community_skill_push_recipients",
+    "push_skills_for_users",
 ]
 
 
@@ -319,6 +321,9 @@ class TestDowngradeToCommunity:
             "reset_enterprise_settings",
             "clear_chat_retention",
             "db_delete_license",
+            "community_skill_push_recipients",
+            "push_skills_for_users",
+            "commit",
         ]
 
     @patch("ee.onyx.server.license.api.MULTI_TENANT", True)

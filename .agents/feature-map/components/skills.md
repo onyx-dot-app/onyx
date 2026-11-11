@@ -269,6 +269,10 @@ still propagate unexpected storage errors.
     Uncertain commits leave staged blobs for the orphan sweep.
     Unexpected storage or credential errors during content preparation abort the save;
     only the shared metadata reader classifies missing or malformed stored content.
+    Membership locks precede resource locks, including preference user locks.
+    A Skill without an active owner (`db/skill.py:skill_ownership_is_vacant`) keeps its
+    direct-user grants unless the actor has global `MANAGE_SKILLS`. This covers direct
+    editors and scoped managers; `ShareSkillModal` disables those controls to match.
     New access entry points must use the
     adapter function, not `db/skill.py:replace_skill_shares`.
     `POST /skills/custom/batch` and GitHub import create each bundle through

@@ -26,6 +26,8 @@ class ResourceAccessChange:
 @dataclass(frozen=True)
 class ResourceAccessState:
     owner_user_id: UUID | None
+    # No active owner: only global managers change direct-user grants.
+    ownership_vacant: bool
     public_permission: SkillSharePermission | None
     user_shares: Mapping[UUID, SkillSharePermission]
     group_shares: Mapping[int, SkillSharePermission]
@@ -112,6 +114,16 @@ def mutate_resource_access[Resource](
                         users = dict(current.user_shares) | users
                     if current.owner_user_id is not None:
                         users.pop(current.owner_user_id, None)
+                if (
+                    users is not None
+                    and users != current.user_shares
+                    and current.ownership_vacant
+                    and not has_global_permission(user, adapter.permission)
+                ):
+                    raise OnyxError(
+                        OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                        "Company user grants require global manage-skills permission.",
+                    )
                 adapter.write(
                     resource,
                     replace(change, user_shares=users, group_shares=groups),

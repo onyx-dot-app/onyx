@@ -13,7 +13,7 @@ from onyx.db.enums import (
     SkillSharePermission,
 )
 from onyx.db.models import Skill
-from onyx.db.skill import SkillSharingChange
+from onyx.db.skill import SkillSharingChange, skill_ownership_is_vacant
 from onyx.server.models import MinimalUserSnapshot
 from onyx.skills.built_in import BuiltInSkillDefinition
 from onyx.skills.models import GITHUB_SKILL_MAX_COUNT, SkillBundleFile
@@ -133,9 +133,7 @@ class SkillResponse(BaseModel):
                 if skill.author is not None
                 else None
             ),
-            ownership_vacant=skill.author_user_id is None
-            or skill.author is None
-            or not skill.author.is_active,
+            ownership_vacant=skill_ownership_is_vacant(skill),
             created_at=skill.created_at,
             updated_at=skill.updated_at,
             user_shares=visible_user_shares,
