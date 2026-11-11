@@ -17125,6 +17125,13 @@
         "savingChanges": "正在保存更改...",
         "savingSkill": "正在保存技能..."
       },
+      "staleVersion": {
+        "description": "有人保存了更新的版本。请重新加载以获取。未保存的更改将丢失。",
+        "reload": {
+          "label": "重新加载"
+        },
+        "title": "此技能在您打开后已被更改"
+      },
       "toasts": {
         "created": "已创建“{name}”",
         "deleteFailed": "删除技能失败",

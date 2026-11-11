@@ -39,6 +39,7 @@ import {
   deleteUserSkill,
   inspectSkillBundle,
   isSkillNameConflict,
+  isSkillVersionStale,
   patchUserSkill,
   removeUserSkillFile,
   uploadUserSkillFiles,
@@ -144,6 +145,10 @@ export default function SkillEditorPage({
   const [appConflictingSkillName, setAppConflictingSkillName] = useState<
     string | null
   >(null);
+  // A save, upload or file removal started from an older version than the
+  // newest saved one. The user must reload before the next edit.
+  const [isVersionStale, setIsVersionStale] = useState(false);
+  const [isReloadingStale, setIsReloadingStale] = useState(false);
 
   const syncEditableFields = useCallback((nextSkill: SkillEditableDetail) => {
     setName(nextSkill.name);
@@ -207,7 +212,8 @@ export default function SkillEditorPage({
     !!name.trim() &&
     !!description.trim() &&
     !!instructionsMarkdown.trim() &&
-    !isSaving;
+    !isSaving &&
+    !isVersionStale;
 
   function leaveEditor() {
     navigation.go(
@@ -278,6 +284,7 @@ export default function SkillEditorPage({
       const updated = await patchUserSkill(skill.id, {
         description,
         instructions_markdown: instructionsMarkdown,
+        base_version_id: skill.current_version_id,
       });
       const nextSkill: SkillEditableDetail = {
         ...skill,
@@ -291,6 +298,10 @@ export default function SkillEditorPage({
     } catch (err) {
       if (isCreatingForApp && isSkillNameConflict(err)) {
         setAppConflictingSkillName(name.trim());
+        return;
+      }
+      if (!isCreating && isSkillVersionStale(err)) {
+        setIsVersionStale(true);
         return;
       }
       if (
@@ -348,12 +359,20 @@ export default function SkillEditorPage({
 
     setIsUploadingFiles(true);
     try {
-      const updated = await uploadUserSkillFiles(skill.id, upload.file);
+      const updated = await uploadUserSkillFiles(
+        skill.id,
+        upload.file,
+        skill.current_version_id
+      );
       await refreshSkill(updated, { revalidate: false });
       syncEditableFields(updated);
       await refreshSkillList();
       toast.success(t("editor.toasts.filesUpdated", { name: updated.name }));
     } catch (err) {
+      if (isSkillVersionStale(err)) {
+        setIsVersionStale(true);
+        return;
+      }
       console.error("Failed to update skill files", err);
       toast.error(
         err instanceof Error
@@ -390,17 +409,42 @@ export default function SkillEditorPage({
     if (!skill || !canManageSkill || removingFilePath !== null) return;
     setRemovingFilePath(path);
     try {
-      const updated = await removeUserSkillFile(skill.id, path);
+      const updated = await removeUserSkillFile(
+        skill.id,
+        path,
+        skill.current_version_id
+      );
       await refreshSkill(updated, { revalidate: false });
       await refreshSkillList();
       toast.success(t("editor.toasts.fileRemoved", { path }));
     } catch (err) {
+      if (isSkillVersionStale(err)) {
+        setIsVersionStale(true);
+        return;
+      }
       console.error("Failed to remove skill file", err);
       toast.error(
         err instanceof Error ? err.message : t("editor.toasts.fileRemoveFailed")
       );
     } finally {
       setRemovingFilePath(null);
+    }
+  }
+
+  async function handleReloadStale() {
+    if (isReloadingStale) return;
+    setIsReloadingStale(true);
+    try {
+      const fresh = await refreshSkill();
+      if (fresh) syncEditableFields(fresh);
+      setIsVersionStale(false);
+    } catch (err) {
+      console.error("Failed to reload skill", err);
+      toast.error(
+        err instanceof Error ? err.message : t("editor.loadError.description")
+      );
+    } finally {
+      setIsReloadingStale(false);
     }
   }
 
@@ -458,6 +502,7 @@ export default function SkillEditorPage({
     isPreparingFiles ||
     isUploadingFiles ||
     isSaving ||
+    isVersionStale ||
     (!isCreating && isDirty);
   const filesUploadTooltip =
     !isCreating && isDirty
@@ -539,6 +584,24 @@ export default function SkillEditorPage({
 
           {(isCreating || skill) && !isLoading && !error && (
             <>
+              {isVersionStale && (
+                <MessageCard
+                  variant="warning"
+                  title={t("editor.staleVersion.title")}
+                  description={t("editor.staleVersion.description")}
+                  rightChildren={
+                    <Button
+                      type="button"
+                      prominence="secondary"
+                      disabled={isReloadingStale}
+                      onClick={() => void handleReloadStale()}
+                    >
+                      {t("editor.staleVersion.reload.label")}
+                    </Button>
+                  }
+                />
+              )}
+
               {appConflictingSkillName && (
                 <MessageCard
                   variant="error"

@@ -17125,6 +17125,13 @@
         "savingChanges": "Guardando los cambios...",
         "savingSkill": "Guardando la habilidad..."
       },
+      "staleVersion": {
+        "description": "Alguien guardó una versión más reciente. Recarga para obtenerla. Se perderán los cambios no guardados.",
+        "reload": {
+          "label": "Recargar"
+        },
+        "title": "Esta habilidad cambió desde que la abriste"
+      },
       "toasts": {
         "created": "Se creó \"{name}\"",
         "deleteFailed": "No se pudo eliminar la habilidad",

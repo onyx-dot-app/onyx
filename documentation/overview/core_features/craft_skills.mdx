@@ -173,6 +173,10 @@ Open a personal Skill to edit its name, description, or instructions. Under **Su
 Changes are synchronized to people who can use the Skill. You can also disable the Skill without deleting it,
 change its sharing, transfer ownership, or delete it.
 
+If another person saves the Skill while you edit it, Onyx does not save your change. The editor shows
+**This skill changed since you opened it**. Select **Reload** to get the newest version, then make your change again.
+Reload discards your unsaved changes.
+
 ### Share a Skill
 
 Custom Skill cards show **Personal**, **Shared**, or **Organization** access.
@@ -208,6 +212,10 @@ See [Manage several Skills](/admins/managing_features/craft_skills#manage-severa
   <Accordion title="A skill is missing from the picker">
     Confirm the skill is enabled and shared with you. Unavailable built-in skills do not appear in the session picker.
     If the skill depends on a model or deployment feature, ask an admin to configure that dependency.
+  </Accordion>
+
+  <Accordion title="My change was not saved because the Skill changed">
+    Another person saved the Skill after you opened it. Select **Reload** in the editor, then make your change again.
   </Accordion>
 
   <Accordion title="My Skill will not upload">

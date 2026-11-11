@@ -17125,6 +17125,13 @@
         "savingChanges": "Saving changes...",
         "savingSkill": "Saving skill..."
       },
+      "staleVersion": {
+        "description": "Someone saved a newer version. Reload to get it. Your unsaved changes will be lost.",
+        "reload": {
+          "label": "Reload"
+        },
+        "title": "This skill changed since you opened it"
+      },
       "toasts": {
         "created": "Created \"{name}\"",
         "deleteFailed": "Failed to delete skill",
