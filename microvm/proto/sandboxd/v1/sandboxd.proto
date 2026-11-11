@@ -66,10 +66,14 @@ service Sandboxd {
   // stdin = true), or closes it.
   rpc Interact(InteractRequest) returns (InteractResponse);
 
-  // Cancel kills every process of the execution (its cgroup) and returns
-  // the result, with completion CANCELED. Cancel of an ended execution
-  // returns its result. If the main process exited before the kill, the
-  // result is EXITED with its exit code.
+  // Cancel stops an execution. With no signal (or SIGKILL) it kills every
+  // process of the execution (its cgroup) and returns the result, with
+  // completion CANCELED. With SIGINT or SIGTERM it sends that signal to the
+  // process group of the main process (as Ctrl-C in a terminal does) and
+  // returns at once, with signaled set; the command may handle the signal
+  // and keep running. Use Stream or Inspect for its result. Cancel of an
+  // ended execution returns its result. If the main process exited before
+  // the kill, the result is EXITED with its exit code.
   rpc Cancel(CancelRequest) returns (CancelResponse);
 
   // Inspect returns one execution record.
@@ -78,12 +82,18 @@ service Sandboxd {
   // List returns every execution record, optionally filtered by labels.
   rpc List(ListRequest) returns (ListResponse);
 
-  // Files and session saves. Every path is relative to the
-  // session directory /workspace/sessions/<session_id>/. A path with "..",
-  // an absolute path, or a symlink that leaves the session directory fails
-  // with INVALID_ARGUMENT. Only ReadFile, ListFiles and ZipFiles can follow
-  // a top-level link of the session (for example user_library) into a
-  // read-only root of the daemon (--read-link-roots).
+  // Files and session saves. With a session_id, every path is relative to
+  // the session directory /home/onyx/workspaces/<session_id>/ (a leading
+  // "/" is dropped). A path with "..", or a symlink that leaves the session
+  // directory, fails with INVALID_ARGUMENT. Only ReadFile, ListFiles and
+  // ZipFiles can follow a top-level link of the session into a read-only
+  // root of the daemon (--read-link-roots).
+  //
+  // With no session_id, ReadFile, WriteFile, ListFiles, DeleteFile and
+  // ZipFiles take an absolute path anywhere in the VM, and follow symlinks.
+  // Paths under /proc, /sys, /dev and the daemon's own state
+  // (/run/craft-fc) fail with INVALID_ARGUMENT. UploadFile, CaptureSession
+  // and RestoreSession always need a session_id.
 
   // ReadFile streams a regular file: the first message has its info, then
   // data chunks of at most 64 KiB.
@@ -132,23 +142,31 @@ service Sandboxd {
   rpc BrowserStart(BrowserStartRequest) returns (BrowserStartResponse);
   rpc BrowserStop(BrowserStopRequest) returns (BrowserStopResponse);
 
-  // Managed drive slots. The node agent calls these during a
-  // managed drive swap (HostAgent SwapManaged), with the VM's key. Slot A
-  // is /dev/vdc and slot B is /dev/vdf (the image's MANAGED_DEV and
-  // MANAGED_DEV_B).
+  // Managed drives. The node agent calls these during a managed drive swap
+  // (HostAgent SwapManaged), with the VM's key. Each managed mount is a
+  // read-only, noexec mount with two slot devices (A and B):
+  //
+  //   mount         mount point        slot A    slot B
+  //   skills        /mnt/skills        /dev/vdc  /dev/vdf
+  //   user-uploads  /mnt/user-uploads  /dev/vdg  /dev/vdh
+  //   spaces        /mnt/spaces        /dev/vdi  /dev/vdj
+  //
+  // An empty mount name means "skills". An unknown mount fails with
+  // INVALID_ARGUMENT. Older daemons know only one mount and leave the
+  // mount fields of the responses empty.
 
-  // ManagedStatus returns the slot that is mounted on /workspace/managed and
+  // ManagedStatus returns the slot that is mounted on the mount point and
   // the state of each slot device.
   rpc ManagedStatus(ManagedStatusRequest) returns (ManagedStatusResponse);
 
-  // MountManaged makes a slot the drive on /workspace/managed. It waits
+  // MountManaged makes a slot the drive on the mount point. It waits
   // until the device has size_bytes (Firecracker tells the guest the new
   // size after the host changed the drive), drops the guest's cached blocks
   // of the device, checks the ext4 UUID, mounts the device read-only
   // (ro,noload,nodev,nosuid,noexec, private) beneath the current mount
   // (MOVE_MOUNT_BENEATH) and detaches the old top mount (MNT_DETACH). Open
   // files on the old drive keep working until they close. If the slot is
-  // already on /workspace/managed with this UUID, it does nothing.
+  // already on the mount point with this UUID, it does nothing.
   rpc MountManaged(MountManagedRequest) returns (MountManagedResponse);
 }
 
@@ -199,6 +217,9 @@ enum ErrorReason {
   // RestoreSession: the archive is not a valid capture (bad zstd or tar, an
   // unsafe member, or size or SHA-256 differ from the header).
   ARCHIVE_INVALID = 19;
+  // Run or Start: the daemon already keeps the most executions (64) and all
+  // of them run, so no ended one can be dropped. Cancel one, or wait.
+  EXECUTION_CAP_REACHED = 20;
 }
 
 message HealthRequest {}
@@ -288,9 +309,13 @@ message Command {
   // argv[0] is looked up in PATH. For a shell script use
   // ["bash", "-c", script].
   repeated string argv = 1;
-  // Working directory. Default "/".
+  // Working directory: an absolute path, or a path relative to the session
+  // directory (with session_id). Default: the session directory, or "/"
+  // with no session_id. A command may use any path in the VM.
   string cwd = 2;
-  // Added to the Init env.
+  // Added to the Init env. Commands also get NO_COLOR=1, TERM=dumb,
+  // PAGER=cat, GIT_PAGER=cat, GH_PAGER=cat and a UTF-8 locale (LANG and
+  // LC_ALL C.UTF-8) unless the Init env or this env sets them.
   map<string, string> env = 3;
   // Open a stdin pipe for Interact. Otherwise stdin is /dev/null.
   bool stdin = 4;
@@ -300,6 +325,9 @@ message Command {
   // Free-form labels, for example session_id or task_id. Inspect and List
   // return them.
   map<string, string> labels = 6;
+  // Optional session. Its directory /home/onyx/workspaces/<session_id> is
+  // the default working directory; the daemon creates it if it is missing.
+  string session_id = 7;
 }
 
 message RunRequest {
@@ -400,14 +428,33 @@ message InteractResponse {
   int64 written = 1;
 }
 
+// The signal of a Cancel.
+enum CancelSignal {
+  // Kill every process of the execution (its cgroup) and wait for the
+  // result.
+  CANCEL_SIGNAL_UNSPECIFIED = 0;
+  // Send SIGINT to the process group of the main process and return.
+  CANCEL_SIGNAL_SIGINT = 1;
+  // Send SIGTERM to the process group of the main process and return.
+  CANCEL_SIGNAL_SIGTERM = 2;
+  // The same as CANCEL_SIGNAL_UNSPECIFIED.
+  CANCEL_SIGNAL_SIGKILL = 3;
+}
+
 message CancelRequest {
   string execution_id = 1;
+  CancelSignal signal = 2;
 }
 
 message CancelResponse {
+  // Set when the execution has ended: always for a kill, and for SIGINT or
+  // SIGTERM only if it had already ended.
   ExecResult result = 1;
   // True if the execution had already ended; result is its own result.
   bool already_ended = 2;
+  // SIGINT or SIGTERM: true if the signal was sent. A command that ends from
+  // that signal has completion CANCELED.
+  bool signaled = 3;
 }
 
 enum ExecState {
@@ -459,7 +506,8 @@ enum FileType {
 }
 
 message FileInfo {
-  // Session-relative path, "/"-separated.
+  // Session-relative path, "/"-separated. Absolute for a call with no
+  // session_id.
   string path = 1;
   string name = 2;
   FileType type = 3;
@@ -694,16 +742,19 @@ message BrowserStartResponse {}
 message BrowserStopRequest {}
 message BrowserStopResponse {}
 
-// A managed drive slot.
+// A managed drive slot. The devices depend on the mount (see the service).
 enum ManagedSlot {
   MANAGED_SLOT_UNSPECIFIED = 0;
-  // /dev/vdc
+  // skills: /dev/vdc
   MANAGED_SLOT_A = 1;
-  // /dev/vdf
+  // skills: /dev/vdf
   MANAGED_SLOT_B = 2;
 }
 
-message ManagedStatusRequest {}
+message ManagedStatusRequest {
+  // skills (the default when empty), user-uploads or spaces.
+  string mount = 1;
+}
 
 message ManagedSlotState {
   ManagedSlot slot = 1;
@@ -726,10 +777,14 @@ message ManagedStatusResponse {
   // example the empty tmpfs) or nothing.
   ManagedSlot active = 2;
   repeated ManagedSlotState slots = 3;
+  // The mount name. Empty from a daemon that has only one mount.
+  string mount = 4;
 }
 
 message MountManagedRequest {
   ManagedSlot slot = 1;
+  // skills (the default when empty), user-uploads or spaces.
+  string mount = 4;
   // Size of the new drive in bytes.
   uint64 size_bytes = 2;
   // ext4 UUID of the new drive (8-4-4-4-12 lowercase hex).
@@ -747,4 +802,6 @@ message MountManagedResponse {
   bool previous_in_use = 4;
   // Time spent waiting for the device size, in milliseconds.
   uint64 wait_ms = 5;
+  // The mount name. Empty from a daemon that has only one mount.
+  string mount = 6;
 }

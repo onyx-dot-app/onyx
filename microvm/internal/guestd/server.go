@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -65,6 +66,19 @@ var DefaultBaseEnv = map[string]string{
 	"PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
 	"HOME": "/root",
 	"LANG": "C.UTF-8",
+}
+
+// CommandEnvDefaults go over BaseEnv (the daemon's own env has TERM=linux)
+// and under the Init and command env: plain, non-interactive output for a
+// caller that is not a terminal.
+var CommandEnvDefaults = map[string]string{
+	"NO_COLOR":  "1",
+	"TERM":      "dumb",
+	"PAGER":     "cat",
+	"GIT_PAGER": "cat",
+	"GH_PAGER":  "cat",
+	"LANG":      "C.UTF-8",
+	"LC_ALL":    "C.UTF-8",
 }
 
 type initState struct {
@@ -277,6 +291,7 @@ func (s *Server) spec(c *pb.Command) (execs.Spec, error) {
 		return execs.Spec{}, apiError(pb.ErrorReason_INVALID_ARGUMENT, "%v", err)
 	}
 	env := maps.Clone(s.cfg.BaseEnv)
+	maps.Copy(env, CommandEnvDefaults)
 	s.mu.Lock()
 	maps.Copy(env, s.state.Env)
 	s.mu.Unlock()
@@ -292,10 +307,29 @@ func (s *Server) spec(c *pb.Command) (execs.Spec, error) {
 		}
 		deadline = d.AsDuration()
 	}
+	dir, err := s.commandDir(c.GetSessionId(), c.GetCwd())
+	if err != nil {
+		return execs.Spec{}, err
+	}
 	return execs.Spec{
-		Argv: c.GetArgv(), Dir: c.GetCwd(), Env: list, Stdin: c.GetStdin(),
+		Argv: c.GetArgv(), Dir: dir, Env: list, Stdin: c.GetStdin(),
 		Deadline: deadline, Labels: c.GetLabels(),
 	}, nil
+}
+
+// commandDir is the working directory of a command. With a session, the
+// default is the session directory (made if missing) and a relative cwd is
+// below it. Any absolute cwd is allowed: commands are not confined to the
+// session.
+func (s *Server) commandDir(sessionID, cwd string) (string, error) {
+	if sessionID == "" || filepath.IsAbs(cwd) {
+		return cwd, nil
+	}
+	dir, err := s.files.SessionDir(sessionID)
+	if err != nil {
+		return "", fileError(err)
+	}
+	return filepath.Join(dir, cwd), nil
 }
 
 func (s *Server) start(c *pb.Command) (*execs.Execution, error) {
@@ -408,6 +442,26 @@ func (s *Server) Interact(_ context.Context, r *pb.InteractRequest) (*pb.Interac
 
 // Cancel implements pb.SandboxdServer.
 func (s *Server) Cancel(ctx context.Context, r *pb.CancelRequest) (*pb.CancelResponse, error) {
+	var sig syscall.Signal
+	switch r.GetSignal() {
+	case pb.CancelSignal_CANCEL_SIGNAL_UNSPECIFIED, pb.CancelSignal_CANCEL_SIGNAL_SIGKILL:
+	case pb.CancelSignal_CANCEL_SIGNAL_SIGINT:
+		sig = syscall.SIGINT
+	case pb.CancelSignal_CANCEL_SIGNAL_SIGTERM:
+		sig = syscall.SIGTERM
+	default:
+		return nil, apiError(pb.ErrorReason_INVALID_ARGUMENT, "unknown signal %d", r.GetSignal())
+	}
+	if sig != 0 {
+		res, already, err := s.m.Signal(r.GetExecutionId(), sig)
+		if err != nil {
+			return nil, execError(err)
+		}
+		if already {
+			return &pb.CancelResponse{Result: toResult(res), AlreadyEnded: true}, nil
+		}
+		return &pb.CancelResponse{Signaled: true}, nil
+	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	res, already, err := s.m.Cancel(ctx, r.GetExecutionId())

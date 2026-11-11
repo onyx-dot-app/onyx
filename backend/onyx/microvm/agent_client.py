@@ -544,7 +544,8 @@ class HostAgentClient:
             restore_ms=r.restore_ms,
         )
 
-    # Managed drive (read-only /workspace/managed).
+    # Managed drives: read-only mounts skills (/mnt/skills), user-uploads
+    # (/mnt/user-uploads) and spaces (/mnt/spaces).
 
     def put_managed_image(self, bundle_zip: bytes) -> ManagedImagePut:
         """Upload a managed bundle zip and build its image on the node. The
@@ -575,12 +576,14 @@ class HostAgentClient:
         )
 
     def swap_managed(
-        self, *, image_id: str, targets: list[VmInstance]
+        self, *, image_id: str, targets: list[VmInstance], mount: str = "skills"
     ) -> list[ManagedSwapResult]:
-        """Put a managed image into running VMs, one at a time. Each target
-        has its own result, in request order; a failed VM raises nothing."""
+        """Put a managed image on one mount of running VMs, one at a time.
+        Each target has its own result, in request order; a failed VM raises
+        nothing."""
         request = hostagent_pb2.SwapManagedRequest(
             image_id=image_id,
+            mount=mount,
             targets=[
                 hostagent_pb2.SwapTarget(
                     sandbox_id=t.sandbox_id,

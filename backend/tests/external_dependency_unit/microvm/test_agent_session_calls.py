@@ -214,6 +214,12 @@ def test_put_managed_image_then_swap(node: Node) -> None:
     assert not rejected.ok
     assert rejected.reason is HostAgentErrorReason.GUEST_KEY_REJECTED
 
+    [spaces] = node.host.swap_managed(
+        image_id=put.image.image_id, targets=[node.vm], mount="spaces"
+    )
+    assert spaces.ok
+    assert node.agent.swap_mounts == ["skills", "spaces"]
+
 
 def test_put_of_a_bundle_that_is_not_a_zip_raises_bundle_invalid(node: Node) -> None:
     with pytest.raises(HostAgentError) as exc:

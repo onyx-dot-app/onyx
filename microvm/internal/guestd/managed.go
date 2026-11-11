@@ -2,7 +2,10 @@ package guestd
 
 import (
 	"context"
+	"fmt"
+	"path/filepath"
 	"regexp"
+	"strings"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -48,11 +51,75 @@ type ManagedOps interface {
 	MountedOn(mountPoint string, rdev uint64) (bool, error)
 }
 
-// ManagedConfig names the managed mount point and the slot devices.
-type ManagedConfig struct {
+// ManagedMount is one named managed mount and its slot devices.
+type ManagedMount struct {
+	Name       string
 	MountPoint string
 	// Devices maps each slot to its guest block device.
 	Devices map[pb.ManagedSlot]string
+}
+
+// DefaultManagedMount is the mount of a call with an empty mount name.
+const DefaultManagedMount = "skills"
+
+// DefaultManagedMounts match the image's attach script and the host agent's
+// layout 5 drive order (rootfs vda, scratch vdb, skills A vdc, upload
+// vdd/vde, skills B vdf, then two slots per added mount).
+var DefaultManagedMounts = []ManagedMount{
+	{Name: "skills", MountPoint: "/mnt/skills", Devices: slotDevs("/dev/vdc", "/dev/vdf")},
+	{Name: "user-uploads", MountPoint: "/mnt/user-uploads", Devices: slotDevs("/dev/vdg", "/dev/vdh")},
+	{Name: "spaces", MountPoint: "/mnt/spaces", Devices: slotDevs("/dev/vdi", "/dev/vdj")},
+}
+
+// FormatManagedMounts writes mounts in the ParseManagedMounts form.
+func FormatManagedMounts(mounts []ManagedMount) string {
+	parts := make([]string, 0, len(mounts))
+	for _, m := range mounts {
+		parts = append(parts, fmt.Sprintf("%s=%s:%s:%s", m.Name, m.MountPoint,
+			m.Devices[pb.ManagedSlot_MANAGED_SLOT_A], m.Devices[pb.ManagedSlot_MANAGED_SLOT_B]))
+	}
+	return strings.Join(parts, ",")
+}
+
+var mountNameRE = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
+
+// ParseManagedMounts reads "name=/mount/point:/dev/slotA:/dev/slotB,...".
+// An empty string is no mounts.
+func ParseManagedMounts(s string) ([]ManagedMount, error) {
+	var out []ManagedMount
+	seen := map[string]bool{}
+	for _, item := range strings.Split(s, ",") {
+		if item = strings.TrimSpace(item); item == "" {
+			continue
+		}
+		name, rest, ok := strings.Cut(item, "=")
+		parts := strings.Split(rest, ":")
+		if !ok || !mountNameRE.MatchString(name) || len(parts) != 3 {
+			return nil, fmt.Errorf("managed mount %q: want name=/mount/point:/dev/a:/dev/b", item)
+		}
+		for _, p := range parts {
+			if !filepath.IsAbs(p) {
+				return nil, fmt.Errorf("managed mount %q: %q is not absolute", item, p)
+			}
+		}
+		if seen[name] || seen[parts[0]] || seen[parts[1]] || seen[parts[2]] {
+			return nil, fmt.Errorf("managed mount %q: a name, mount point or device is used twice", item)
+		}
+		for _, k := range []string{name, parts[0], parts[1], parts[2]} {
+			seen[k] = true
+		}
+		out = append(out, ManagedMount{Name: name, MountPoint: parts[0], Devices: slotDevs(parts[1], parts[2])})
+	}
+	return out, nil
+}
+
+func slotDevs(a, b string) map[pb.ManagedSlot]string {
+	return map[pb.ManagedSlot]string{pb.ManagedSlot_MANAGED_SLOT_A: a, pb.ManagedSlot_MANAGED_SLOT_B: b}
+}
+
+// ManagedConfig names the managed mounts and their slot devices.
+type ManagedConfig struct {
+	Mounts []ManagedMount
 	// SizeWait bounds how long MountManaged waits for the new device size.
 	SizeWait time.Duration
 	Ops      ManagedOps
@@ -60,17 +127,26 @@ type ManagedConfig struct {
 
 var uuidRE = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
-func (s *Server) managed() (*ManagedConfig, error) {
+// managed returns the mount of a call. An empty name is the default mount.
+func (s *Server) managed(name string) (*ManagedConfig, *ManagedMount, error) {
 	mc := s.cfg.Managed
-	if mc == nil || mc.Ops == nil || mc.MountPoint == "" {
-		return nil, status.Error(codes.Unimplemented, "this daemon has no managed drive slots")
+	if mc == nil || mc.Ops == nil || len(mc.Mounts) == 0 {
+		return nil, nil, status.Error(codes.Unimplemented, "this daemon has no managed drive slots")
 	}
-	return mc, nil
+	if name == "" {
+		name = DefaultManagedMount
+	}
+	for i := range mc.Mounts {
+		if mc.Mounts[i].Name == name {
+			return mc, &mc.Mounts[i], nil
+		}
+	}
+	return nil, nil, apiError(pb.ErrorReason_INVALID_ARGUMENT, "unknown managed mount %q", name)
 }
 
-// slotStates probes every slot and returns them with the active slot.
-func (mc *ManagedConfig) slotStates() (pb.ManagedSlot, []*pb.ManagedSlotState, map[pb.ManagedSlot]DevState, error) {
-	top, isMount, err := mc.Ops.MountedDev(mc.MountPoint)
+// slotStates probes every slot of mt and returns them with the active slot.
+func (mc *ManagedConfig) slotStates(mt *ManagedMount) (pb.ManagedSlot, []*pb.ManagedSlotState, map[pb.ManagedSlot]DevState, error) {
+	top, isMount, err := mc.Ops.MountedDev(mt.MountPoint)
 	if err != nil {
 		return 0, nil, nil, err
 	}
@@ -78,7 +154,7 @@ func (mc *ManagedConfig) slotStates() (pb.ManagedSlot, []*pb.ManagedSlotState, m
 	var out []*pb.ManagedSlotState
 	raw := map[pb.ManagedSlot]DevState{}
 	for _, slot := range []pb.ManagedSlot{pb.ManagedSlot_MANAGED_SLOT_A, pb.ManagedSlot_MANAGED_SLOT_B} {
-		dev, ok := mc.Devices[slot]
+		dev, ok := mt.Devices[slot]
 		if !ok {
 			continue
 		}
@@ -100,18 +176,18 @@ func (mc *ManagedConfig) slotStates() (pb.ManagedSlot, []*pb.ManagedSlotState, m
 }
 
 // ManagedStatus implements pb.SandboxdServer.
-func (s *Server) ManagedStatus(context.Context, *pb.ManagedStatusRequest) (*pb.ManagedStatusResponse, error) {
-	mc, err := s.managed()
+func (s *Server) ManagedStatus(_ context.Context, r *pb.ManagedStatusRequest) (*pb.ManagedStatusResponse, error) {
+	mc, mt, err := s.managed(r.GetMount())
 	if err != nil {
 		return nil, err
 	}
 	s.managedMu.Lock()
 	defer s.managedMu.Unlock()
-	active, slots, _, err := mc.slotStates()
+	active, slots, _, err := mc.slotStates(mt)
 	if err != nil {
 		return nil, apiError(pb.ErrorReason_INTERNAL, "managed status: %v", err)
 	}
-	return &pb.ManagedStatusResponse{MountPoint: mc.MountPoint, Active: active, Slots: slots}, nil
+	return &pb.ManagedStatusResponse{MountPoint: mt.MountPoint, Active: active, Slots: slots, Mount: mt.Name}, nil
 }
 
 // MountManaged implements pb.SandboxdServer. Steps, in order: check the
@@ -120,11 +196,11 @@ func (s *Server) ManagedStatus(context.Context, *pb.ManagedStatusRequest) (*pb.M
 // swap that stopped after its mount (a daemon restart, a failed detach)
 // left the slot mounted beneath the old one; a repeat detaches the old top.
 func (s *Server) MountManaged(ctx context.Context, r *pb.MountManagedRequest) (*pb.MountManagedResponse, error) {
-	mc, err := s.managed()
+	mc, mt, err := s.managed(r.GetMount())
 	if err != nil {
 		return nil, err
 	}
-	dev, ok := mc.Devices[r.GetSlot()]
+	dev, ok := mt.Devices[r.GetSlot()]
 	if !ok {
 		return nil, apiError(pb.ErrorReason_INVALID_ARGUMENT, "slot %s has no device", r.GetSlot())
 	}
@@ -137,7 +213,7 @@ func (s *Server) MountManaged(ctx context.Context, r *pb.MountManagedRequest) (*
 	s.managedMu.Lock()
 	defer s.managedMu.Unlock()
 
-	active, _, states, err := mc.slotStates()
+	active, _, states, err := mc.slotStates(mt)
 	if err != nil {
 		return nil, apiError(pb.ErrorReason_INTERNAL, "managed status: %v", err)
 	}
@@ -152,11 +228,11 @@ func (s *Server) MountManaged(ctx context.Context, r *pb.MountManagedRequest) (*
 			return nil, apiError(pb.ErrorReason_MANAGED_DEVICE_MISMATCH,
 				"slot %s is mounted with UUID %q, the request has %q", r.GetSlot(), st.UUID, r.GetFsUuid())
 		}
-		return &pb.MountManagedResponse{Active: active, Previous: active}, nil
+		return &pb.MountManagedResponse{Active: active, Previous: active, Mount: mt.Name}, nil
 	}
 	t0 := time.Now()
 	if st.InUse {
-		beneath, err := mc.Ops.MountedOn(mc.MountPoint, st.Rdev)
+		beneath, err := mc.Ops.MountedOn(mt.MountPoint, st.Rdev)
 		if err != nil {
 			return nil, apiError(pb.ErrorReason_INTERNAL, "managed mounts: %v", err)
 		}
@@ -168,11 +244,11 @@ func (s *Server) MountManaged(ctx context.Context, r *pb.MountManagedRequest) (*
 			return nil, apiError(pb.ErrorReason_MANAGED_DEVICE_MISMATCH,
 				"slot %s is mounted beneath with UUID %q, the request has %q", r.GetSlot(), st.UUID, r.GetFsUuid())
 		}
-		if err := mc.Ops.DetachTop(mc.MountPoint); err != nil {
-			return nil, apiError(pb.ErrorReason_MANAGED_MOUNT_FAILED, "detach the old mount on %s: %v", mc.MountPoint, err)
+		if err := mc.Ops.DetachTop(mt.MountPoint); err != nil {
+			return nil, apiError(pb.ErrorReason_MANAGED_MOUNT_FAILED, "detach the old mount on %s: %v", mt.MountPoint, err)
 		}
-		s.cfg.Log.Warn("finished a managed swap that stopped after its mount", "slot", r.GetSlot(), "device", dev)
-		return s.mountedResponse(mc, r.GetSlot(), dev, active, 0, t0)
+		s.cfg.Log.Warn("finished a managed swap that stopped after its mount", "mount", mt.Name, "slot", r.GetSlot(), "device", dev)
+		return s.mountedResponse(mc, mt, r.GetSlot(), dev, active, 0, t0)
 	}
 	wait := mc.SizeWait
 	if wait <= 0 {
@@ -199,38 +275,38 @@ func (s *Server) MountManaged(ctx context.Context, r *pb.MountManagedRequest) (*
 		return nil, apiError(pb.ErrorReason_MANAGED_DEVICE_MISMATCH,
 			"slot %s device %s has ext4 UUID %q, the request has %q", r.GetSlot(), dev, st.UUID, r.GetFsUuid())
 	}
-	_, isMount, err := mc.Ops.MountedDev(mc.MountPoint)
+	_, isMount, err := mc.Ops.MountedDev(mt.MountPoint)
 	if err != nil {
 		return nil, apiError(pb.ErrorReason_INTERNAL, "%v", err)
 	}
-	if err := mc.Ops.Mount(dev, mc.MountPoint, isMount); err != nil {
-		return nil, apiError(pb.ErrorReason_MANAGED_MOUNT_FAILED, "mount %s on %s: %v", dev, mc.MountPoint, err)
+	if err := mc.Ops.Mount(dev, mt.MountPoint, isMount); err != nil {
+		return nil, apiError(pb.ErrorReason_MANAGED_MOUNT_FAILED, "mount %s on %s: %v", dev, mt.MountPoint, err)
 	}
 	if isMount {
-		if err := mc.Ops.DetachTop(mc.MountPoint); err != nil {
+		if err := mc.Ops.DetachTop(mt.MountPoint); err != nil {
 			// The new drive is beneath the old one. Leave both: the old
 			// drive stays visible, and the slot shows as in use.
-			return nil, apiError(pb.ErrorReason_MANAGED_MOUNT_FAILED, "detach the old mount on %s: %v", mc.MountPoint, err)
+			return nil, apiError(pb.ErrorReason_MANAGED_MOUNT_FAILED, "detach the old mount on %s: %v", mt.MountPoint, err)
 		}
 	}
-	return s.mountedResponse(mc, r.GetSlot(), dev, active, waitMS, t0)
+	return s.mountedResponse(mc, mt, r.GetSlot(), dev, active, waitMS, t0)
 }
 
 // mountedResponse checks that slot is now the top mount and reports the swap.
-func (s *Server) mountedResponse(mc *ManagedConfig, slot pb.ManagedSlot, dev string, previous pb.ManagedSlot,
+func (s *Server) mountedResponse(mc *ManagedConfig, mt *ManagedMount, slot pb.ManagedSlot, dev string, previous pb.ManagedSlot,
 	waitMS uint64, t0 time.Time) (*pb.MountManagedResponse, error) {
-	now, _, states, err := mc.slotStates()
+	now, _, states, err := mc.slotStates(mt)
 	if err != nil {
 		return nil, apiError(pb.ErrorReason_INTERNAL, "managed status: %v", err)
 	}
 	if now != slot {
-		return nil, apiError(pb.ErrorReason_MANAGED_MOUNT_FAILED, "after the mount, slot %s is on %s, not %s", now, mc.MountPoint, slot)
+		return nil, apiError(pb.ErrorReason_MANAGED_MOUNT_FAILED, "after the mount, slot %s is on %s, not %s", now, mt.MountPoint, slot)
 	}
-	resp := &pb.MountManagedResponse{Active: now, Changed: true, Previous: previous, WaitMs: waitMS}
+	resp := &pb.MountManagedResponse{Active: now, Changed: true, Previous: previous, WaitMs: waitMS, Mount: mt.Name}
 	if prev, ok := states[previous]; ok {
 		resp.PreviousInUse = prev.InUse
 	}
-	s.cfg.Log.Info("managed drive mounted", "slot", now, "device", dev, "previous", previous,
+	s.cfg.Log.Info("managed drive mounted", "mount", mt.Name, "slot", now, "device", dev, "previous", previous,
 		"previous_in_use", resp.PreviousInUse, "wait_ms", waitMS, "ms", time.Since(t0).Milliseconds())
 	return resp, nil
 }

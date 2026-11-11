@@ -143,6 +143,8 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         # Managed images by ID (the bundle zip) and each VM's active slot.
         self.managed_images: dict[str, bytes] = {}
         self.managed_active: dict[str, int] = {}
+        # SwapManagedRequest.mount of each swapped VM, in order.
+        self.swap_mounts: list[str] = []
         self._ids = itertools.count(1)
         # Seconds each Create waits before it runs (to overlap two wakes).
         self.create_delay_seconds = 0.0
@@ -547,6 +549,7 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
                     else hostagent_pb2.MANAGED_SLOT_B
                 )
                 self.managed_active[t.sandbox_id] = active
+                self.swap_mounts.append(request.mount)
                 results.append(
                     hostagent_pb2.SwapResult(
                         sandbox_id=t.sandbox_id, ok=True, active=active, changed=True
@@ -563,6 +566,7 @@ class FakeExecution:
     argv: list[str]
     labels: dict[str, str]
     stdin_open: bool
+    session_id: str = ""
     stdout: bytes = b""
     stderr: bytes = b""
     result: sandboxd_pb2.ExecResult | None = None
@@ -572,6 +576,8 @@ class FakeExecution:
     stdin_data: bytearray = field(default_factory=bytearray)
     # The VM stopped: open streams of the execution break.
     vm_gone: bool = False
+    # The CancelSignal of a SIGINT or SIGTERM cancel.
+    signaled: int = 0
 
     def end(self, completion: sandboxd_pb2.Completion, exit_code: int = -1) -> None:
         self.stdin_open = False
@@ -714,6 +720,7 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
             argv=argv,
             labels=dict(command.labels),
             stdin_open=command.stdin,
+            session_id=command.session_id,
         )
         if argv[0] == "echo":
             execution.stdout = (" ".join(argv[1:]) + "\n").encode()
@@ -857,6 +864,14 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
         with self.agent.lock:
             execution = self._execution(context, request.execution_id)
             already_ended = execution.result is not None
+            soft = request.signal in (
+                sandboxd_pb2.CANCEL_SIGNAL_SIGINT,
+                sandboxd_pb2.CANCEL_SIGNAL_SIGTERM,
+            )
+            if soft and not already_ended:
+                # The scripted command dies of the signal later; no result yet.
+                execution.signaled = request.signal
+                return sandboxd_pb2.CancelResponse(signaled=True)
             if not already_ended:
                 execution.end(sandboxd_pb2.CANCELED)
                 self.agent.ended.notify_all()

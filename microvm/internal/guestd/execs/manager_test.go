@@ -2,9 +2,11 @@ package execs
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -14,7 +16,7 @@ func TestNewManagerValidates(t *testing.T) {
 		"nil isolator":      {},
 		"negative output":   {Isolator: ProcessGroups{}, OutputBytes: -1},
 		"negative running":  {Isolator: ProcessGroups{}, MaxRunning: -1},
-		"negative ended":    {Isolator: ProcessGroups{}, MaxEnded: -1},
+		"negative tracked":  {Isolator: ProcessGroups{}, MaxTracked: -1},
 		"negative budget":   {Isolator: ProcessGroups{}, OutputBudget: -1},
 		"negative ttl":      {Isolator: ProcessGroups{}, EndedTTL: -time.Second},
 		"negative deadline": {Isolator: ProcessGroups{}, DefaultDeadline: -time.Second},
@@ -185,4 +187,90 @@ func TestOutputBudgetTrimsRunning(t *testing.T) {
 		t.Fatal(err)
 	}
 	<-e.Done()
+}
+
+// Over MaxTracked, Start drops the least recently used ended record, never a
+// running one; with every record running it fails with ErrCapReached.
+func TestTrackedCapEvictsLeastRecentlyUsedEnded(t *testing.T) {
+	m, err := NewManager(Config{Isolator: ProcessGroups{}, MaxTracked: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(m.Shutdown)
+	env := []string{"PATH=/usr/bin:/bin"}
+	start := func(argv ...string) *Execution {
+		t.Helper()
+		e, err := m.Start(Spec{Argv: argv, Env: env})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return e
+	}
+	running := start("sleep", "30")
+	a, b := start("true"), start("true")
+	<-a.Done()
+	<-b.Done()
+	// a is older, but a Get makes it the most recently used.
+	time.Sleep(time.Millisecond)
+	if _, err := m.Get(a.ID); err != nil {
+		t.Fatal(err)
+	}
+	c := start("sleep", "30")
+	if _, err := m.Get(b.ID); err == nil {
+		t.Fatal("b (least recently used, ended) was kept")
+	}
+	for _, e := range []*Execution{running, a, c} {
+		if _, err := m.Get(e.ID); err != nil {
+			t.Fatalf("%s dropped: %v", e.Argv, err)
+		}
+	}
+	d := start("sleep", "30") // drops a, the last ended record
+	if _, err := m.Get(a.ID); err == nil {
+		t.Fatal("a kept over the cap")
+	}
+	if _, err := m.Start(Spec{Argv: []string{"true"}, Env: env}); !errors.Is(err, ErrCapReached) {
+		t.Fatalf("all running: %v", err)
+	}
+	for _, e := range []*Execution{running, c, d} {
+		if _, err := m.Get(e.ID); err != nil {
+			t.Fatalf("running record dropped: %v", err)
+		}
+	}
+}
+
+// Signal reaches every process of the main process's group and does not wait.
+func TestSignalProcessGroup(t *testing.T) {
+	m, err := NewManager(Config{Isolator: ProcessGroups{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(m.Shutdown)
+	// The shell handles SIGINT; its foreground child sleep does not and dies.
+	e, err := m.Start(Spec{Argv: []string{"sh", "-c", `trap 'echo shell-int' INT; echo ready; sleep 30; echo "sleep-rc $?"`},
+		Env: []string{"PATH=/usr/bin:/bin"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		if data, _, _ := e.Read(Stdout, 0, 64); strings.Contains(string(data), "ready") {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("no ready")
+		}
+	}
+	time.Sleep(50 * time.Millisecond) // let sh start sleep
+	if _, ended, err := m.Signal(e.ID, syscall.SIGINT); err != nil || ended {
+		t.Fatalf("signal: %v %v", ended, err)
+	}
+	select {
+	case <-e.Done():
+	case <-time.After(10 * time.Second):
+		t.Fatal("sleep did not get SIGINT")
+	}
+	data, _, _ := e.Read(Stdout, 0, 1024)
+	res, _ := e.Ended()
+	if !strings.Contains(string(data), "shell-int") || !strings.Contains(string(data), "sleep-rc 130") || res.Completion != Exited {
+		t.Fatalf("output %q result %+v", data, res)
+	}
 }

@@ -286,15 +286,16 @@ func (DrainState) EnumDescriptor() ([]byte, []int) {
 	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{1}
 }
 
-// A managed drive slot of a VM.
+// A managed drive slot of a VM mount. For skills, slot A is drive "managed"
+// (/dev/vdc) and slot B is drive "managed_b" (/dev/vdf, layout 3 and later).
+// For user-uploads and spaces (layout 5), the drives are
+// "<mount>_a"/"<mount>_b" with "-" as "_" (/dev/vdg to /dev/vdj).
 type ManagedSlot int32
 
 const (
 	ManagedSlot_MANAGED_SLOT_UNSPECIFIED ManagedSlot = 0
-	// Drive "managed", guest /dev/vdc.
-	ManagedSlot_MANAGED_SLOT_A ManagedSlot = 1
-	// Drive "managed_b", guest /dev/vdf (layout 3 and later).
-	ManagedSlot_MANAGED_SLOT_B ManagedSlot = 2
+	ManagedSlot_MANAGED_SLOT_A           ManagedSlot = 1
+	ManagedSlot_MANAGED_SLOT_B           ManagedSlot = 2
 )
 
 // Enum value maps for ManagedSlot.
@@ -760,10 +761,13 @@ type VM struct {
 	// Host PID of the Firecracker process. 0 while starting.
 	Pid int32 `protobuf:"varint,9,opt,name=pid,proto3" json:"pid,omitempty"`
 	// Jailer UID and GID of the VM.
-	Uid           uint32                 `protobuf:"varint,10,opt,name=uid,proto3" json:"uid,omitempty"`
-	StartedAt     *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
-	TenantId      string                 `protobuf:"bytes,12,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
-	Managed       *ManagedState          `protobuf:"bytes,13,opt,name=managed,proto3" json:"managed,omitempty"`
+	Uid       uint32                 `protobuf:"varint,10,opt,name=uid,proto3" json:"uid,omitempty"`
+	StartedAt *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
+	TenantId  string                 `protobuf:"bytes,12,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	// The skills mount.
+	Managed *ManagedState `protobuf:"bytes,13,opt,name=managed,proto3" json:"managed,omitempty"`
+	// The other managed mounts (layout 5 and later), by mount name.
+	ManagedMounts map[string]*ManagedState `protobuf:"bytes,14,rep,name=managed_mounts,json=managedMounts,proto3" json:"managed_mounts,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -889,12 +893,19 @@ func (x *VM) GetManaged() *ManagedState {
 	return nil
 }
 
-// The managed drive slots of a VM, as the journal records them.
+func (x *VM) GetManagedMounts() map[string]*ManagedState {
+	if x != nil {
+		return x.ManagedMounts
+	}
+	return nil
+}
+
+// The managed drive slots of a VM mount, as the journal records them.
 type ManagedState struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// 2 for a VM that can swap its managed drive (layout 3 and later), else 1.
+	// 2 for a VM that can swap the drive of this mount, else 1.
 	Slots uint32 `protobuf:"varint,1,opt,name=slots,proto3" json:"slots,omitempty"`
-	// The slot on /workspace/managed after the last swap.
+	// The slot on the mount point after the last swap.
 	Active ManagedSlot `protobuf:"varint,2,opt,name=active,proto3,enum=craft.hostagent.v1.ManagedSlot" json:"active,omitempty"`
 	// Managed image ID behind each slot. Empty: the template's placeholder.
 	SlotAImage    string `protobuf:"bytes,3,opt,name=slot_a_image,json=slotAImage,proto3" json:"slot_a_image,omitempty"`
@@ -2294,7 +2305,10 @@ type TemplateInfo struct {
 	// True when the template VMs have the balloon device with free page
 	// reporting (layout 4 and later): the guest returns free
 	// memory to the node.
-	Balloon       bool `protobuf:"varint,15,opt,name=balloon,proto3" json:"balloon,omitempty"`
+	Balloon bool `protobuf:"varint,15,opt,name=balloon,proto3" json:"balloon,omitempty"`
+	// Managed mounts that the template's VMs can swap: "skills" from layout
+	// 3, also "user-uploads" and "spaces" from layout 5.
+	ManagedMounts []string `protobuf:"bytes,16,rep,name=managed_mounts,json=managedMounts,proto3" json:"managed_mounts,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2432,6 +2446,13 @@ func (x *TemplateInfo) GetBalloon() bool {
 		return x.Balloon
 	}
 	return false
+}
+
+func (x *TemplateInfo) GetManagedMounts() []string {
+	if x != nil {
+		return x.ManagedMounts
+	}
+	return nil
 }
 
 type BuildTemplateRequest struct {
@@ -2862,7 +2883,11 @@ type SwapManagedRequest struct {
 	ImageId string `protobuf:"bytes,1,opt,name=image_id,json=imageId,proto3" json:"image_id,omitempty"`
 	// The VMs, swapped one at a time in this order. At most 1000, no
 	// sandbox twice.
-	Targets       []*SwapTarget `protobuf:"bytes,2,rep,name=targets,proto3" json:"targets,omitempty"`
+	Targets []*SwapTarget `protobuf:"bytes,2,rep,name=targets,proto3" json:"targets,omitempty"`
+	// The mount: skills (the default when empty), user-uploads or spaces. A VM
+	// whose template or guest daemon does not have the mount fails with
+	// MANAGED_SWAP_UNSUPPORTED.
+	Mount         string `protobuf:"bytes,3,opt,name=mount,proto3" json:"mount,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2909,6 +2934,13 @@ func (x *SwapManagedRequest) GetTargets() []*SwapTarget {
 		return x.Targets
 	}
 	return nil
+}
+
+func (x *SwapManagedRequest) GetMount() string {
+	if x != nil {
+		return x.Mount
+	}
+	return ""
 }
 
 type SwapTarget struct {
@@ -3034,7 +3066,7 @@ type SwapResult struct {
 	// Set when ok is false: the error reason and message.
 	Reason  ErrorReason `protobuf:"varint,3,opt,name=reason,proto3,enum=craft.hostagent.v1.ErrorReason" json:"reason,omitempty"`
 	Message string      `protobuf:"bytes,4,opt,name=message,proto3" json:"message,omitempty"`
-	// The slot on /workspace/managed after the call.
+	// The slot on the mount after the call.
 	Active ManagedSlot `protobuf:"varint,5,opt,name=active,proto3,enum=craft.hostagent.v1.ManagedSlot" json:"active,omitempty"`
 	// False when the image was already the active one.
 	Changed bool `protobuf:"varint,6,opt,name=changed,proto3" json:"changed,omitempty"`
@@ -3164,7 +3196,7 @@ const file_hostagent_v1_hostagent_proto_rawDesc = "" +
 	"\x0falready_stopped\x18\x01 \x01(\bR\x0ealreadyStopped\"\r\n" +
 	"\vListRequest\"8\n" +
 	"\fListResponse\x12(\n" +
-	"\x03vms\x18\x01 \x03(\v2\x16.craft.hostagent.v1.VMR\x03vms\"\xb4\x03\n" +
+	"\x03vms\x18\x01 \x03(\v2\x16.craft.hostagent.v1.VMR\x03vms\"\xea\x04\n" +
 	"\x02VM\x12\x1d\n" +
 	"\n" +
 	"sandbox_id\x18\x01 \x01(\tR\tsandboxId\x12\x18\n" +
@@ -3184,7 +3216,11 @@ const file_hostagent_v1_hostagent_proto_rawDesc = "" +
 	"\n" +
 	"started_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\x12\x1b\n" +
 	"\ttenant_id\x18\f \x01(\tR\btenantId\x12:\n" +
-	"\amanaged\x18\r \x01(\v2 .craft.hostagent.v1.ManagedStateR\amanaged\"\xa1\x01\n" +
+	"\amanaged\x18\r \x01(\v2 .craft.hostagent.v1.ManagedStateR\amanaged\x12P\n" +
+	"\x0emanaged_mounts\x18\x0e \x03(\v2).craft.hostagent.v1.VM.ManagedMountsEntryR\rmanagedMounts\x1ab\n" +
+	"\x12ManagedMountsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x126\n" +
+	"\x05value\x18\x02 \x01(\v2 .craft.hostagent.v1.ManagedStateR\x05value:\x028\x01\"\xa1\x01\n" +
 	"\fManagedState\x12\x14\n" +
 	"\x05slots\x18\x01 \x01(\rR\x05slots\x127\n" +
 	"\x06active\x18\x02 \x01(\x0e2\x1f.craft.hostagent.v1.ManagedSlotR\x06active\x12 \n" +
@@ -3321,7 +3357,7 @@ const file_hostagent_v1_hostagent_proto_rawDesc = "" +
 	"\x0fSetDrainRequest\x12\x14\n" +
 	"\x05drain\x18\x01 \x01(\bR\x05drain\"I\n" +
 	"\x10SetDrainResponse\x125\n" +
-	"\x05drain\x18\x01 \x01(\v2\x1f.craft.hostagent.v1.DrainStatusR\x05drain\"\x8d\x04\n" +
+	"\x05drain\x18\x01 \x01(\v2\x1f.craft.hostagent.v1.DrainStatusR\x05drain\"\xb4\x04\n" +
 	"\fTemplateInfo\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x14\n" +
 	"\x05vcpus\x18\x02 \x01(\rR\x05vcpus\x12\x17\n" +
@@ -3342,7 +3378,8 @@ const file_hostagent_v1_hostagent_proto_rawDesc = "" +
 	"compatible\x18\r \x01(\bR\n" +
 	"compatible\x12#\n" +
 	"\rmanaged_slots\x18\x0e \x01(\rR\fmanagedSlots\x12\x18\n" +
-	"\aballoon\x18\x0f \x01(\bR\aballoon\"\x16\n" +
+	"\aballoon\x18\x0f \x01(\bR\aballoon\x12%\n" +
+	"\x0emanaged_mounts\x18\x10 \x03(\tR\rmanagedMounts\"\x16\n" +
 	"\x14BuildTemplateRequest\"\xa0\x01\n" +
 	"\x15BuildTemplateResponse\x12<\n" +
 	"\btemplate\x18\x01 \x01(\v2 .craft.hostagent.v1.TemplateInfoR\btemplate\x12\x14\n" +
@@ -3371,10 +3408,11 @@ const file_hostagent_v1_hostagent_proto_rawDesc = "" +
 	"\x05files\x18\x05 \x01(\rR\x05files\x12#\n" +
 	"\rcontent_bytes\x18\x06 \x01(\x04R\fcontentBytes\x125\n" +
 	"\bbuilt_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\abuiltAt\x12\x10\n" +
-	"\x03vms\x18\b \x01(\rR\x03vms\"i\n" +
+	"\x03vms\x18\b \x01(\rR\x03vms\"\x7f\n" +
 	"\x12SwapManagedRequest\x12\x19\n" +
 	"\bimage_id\x18\x01 \x01(\tR\aimageId\x128\n" +
-	"\atargets\x18\x02 \x03(\v2\x1e.craft.hostagent.v1.SwapTargetR\atargets\"\x88\x01\n" +
+	"\atargets\x18\x02 \x03(\v2\x1e.craft.hostagent.v1.SwapTargetR\atargets\x12\x14\n" +
+	"\x05mount\x18\x03 \x01(\tR\x05mount\"\x88\x01\n" +
 	"\n" +
 	"SwapTarget\x12\x1d\n" +
 	"\n" +
@@ -3480,7 +3518,7 @@ func file_hostagent_v1_hostagent_proto_rawDescGZIP() []byte {
 }
 
 var file_hostagent_v1_hostagent_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_hostagent_v1_hostagent_proto_msgTypes = make([]protoimpl.MessageInfo, 38)
+var file_hostagent_v1_hostagent_proto_msgTypes = make([]protoimpl.MessageInfo, 39)
 var file_hostagent_v1_hostagent_proto_goTypes = []any{
 	(ErrorReason)(0),                 // 0: craft.hostagent.v1.ErrorReason
 	(DrainState)(0),                  // 1: craft.hostagent.v1.DrainState
@@ -3523,70 +3561,73 @@ var file_hostagent_v1_hostagent_proto_goTypes = []any{
 	(*SwapTarget)(nil),               // 38: craft.hostagent.v1.SwapTarget
 	(*SwapManagedResponse)(nil),      // 39: craft.hostagent.v1.SwapManagedResponse
 	(*SwapResult)(nil),               // 40: craft.hostagent.v1.SwapResult
-	nil,                              // 41: craft.hostagent.v1.PresignedRequest.HeadersEntry
-	(*timestamppb.Timestamp)(nil),    // 42: google.protobuf.Timestamp
+	nil,                              // 41: craft.hostagent.v1.VM.ManagedMountsEntry
+	nil,                              // 42: craft.hostagent.v1.PresignedRequest.HeadersEntry
+	(*timestamppb.Timestamp)(nil),    // 43: google.protobuf.Timestamp
 }
 var file_hostagent_v1_hostagent_proto_depIdxs = []int32{
 	10, // 0: craft.hostagent.v1.CreateResponse.vm:type_name -> craft.hostagent.v1.VM
 	10, // 1: craft.hostagent.v1.ListResponse.vms:type_name -> craft.hostagent.v1.VM
 	3,  // 2: craft.hostagent.v1.VM.state:type_name -> craft.hostagent.v1.VMState
-	42, // 3: craft.hostagent.v1.VM.started_at:type_name -> google.protobuf.Timestamp
+	43, // 3: craft.hostagent.v1.VM.started_at:type_name -> google.protobuf.Timestamp
 	11, // 4: craft.hostagent.v1.VM.managed:type_name -> craft.hostagent.v1.ManagedState
-	2,  // 5: craft.hostagent.v1.ManagedState.active:type_name -> craft.hostagent.v1.ManagedSlot
-	41, // 6: craft.hostagent.v1.PresignedRequest.headers:type_name -> craft.hostagent.v1.PresignedRequest.HeadersEntry
-	16, // 7: craft.hostagent.v1.CaptureSessionRequest.limits:type_name -> craft.hostagent.v1.ArchiveLimits
-	42, // 8: craft.hostagent.v1.CaptureSessionResponse.expires_at:type_name -> google.protobuf.Timestamp
-	15, // 9: craft.hostagent.v1.UploadCaptureRequest.request:type_name -> craft.hostagent.v1.PresignedRequest
-	15, // 10: craft.hostagent.v1.RestoreSessionRequest.request:type_name -> craft.hostagent.v1.PresignedRequest
-	16, // 11: craft.hostagent.v1.RestoreSessionRequest.limits:type_name -> craft.hostagent.v1.ArchiveLimits
-	30, // 12: craft.hostagent.v1.NodeInfoResponse.templates:type_name -> craft.hostagent.v1.TemplateInfo
-	36, // 13: craft.hostagent.v1.NodeInfoResponse.managed_images:type_name -> craft.hostagent.v1.ManagedImageInfo
-	27, // 14: craft.hostagent.v1.NodeInfoResponse.drain:type_name -> craft.hostagent.v1.DrainStatus
-	1,  // 15: craft.hostagent.v1.DrainStatus.state:type_name -> craft.hostagent.v1.DrainState
-	42, // 16: craft.hostagent.v1.DrainStatus.since:type_name -> google.protobuf.Timestamp
-	27, // 17: craft.hostagent.v1.SetDrainResponse.drain:type_name -> craft.hostagent.v1.DrainStatus
-	42, // 18: craft.hostagent.v1.TemplateInfo.built_at:type_name -> google.protobuf.Timestamp
-	30, // 19: craft.hostagent.v1.BuildTemplateResponse.template:type_name -> craft.hostagent.v1.TemplateInfo
-	34, // 20: craft.hostagent.v1.PutManagedImageRequest.header:type_name -> craft.hostagent.v1.ManagedBundleHeader
-	36, // 21: craft.hostagent.v1.PutManagedImageResponse.image:type_name -> craft.hostagent.v1.ManagedImageInfo
-	42, // 22: craft.hostagent.v1.ManagedImageInfo.built_at:type_name -> google.protobuf.Timestamp
-	38, // 23: craft.hostagent.v1.SwapManagedRequest.targets:type_name -> craft.hostagent.v1.SwapTarget
-	40, // 24: craft.hostagent.v1.SwapManagedResponse.results:type_name -> craft.hostagent.v1.SwapResult
-	0,  // 25: craft.hostagent.v1.SwapResult.reason:type_name -> craft.hostagent.v1.ErrorReason
-	2,  // 26: craft.hostagent.v1.SwapResult.active:type_name -> craft.hostagent.v1.ManagedSlot
-	4,  // 27: craft.hostagent.v1.HostAgent.Create:input_type -> craft.hostagent.v1.CreateRequest
-	6,  // 28: craft.hostagent.v1.HostAgent.Stop:input_type -> craft.hostagent.v1.StopRequest
-	8,  // 29: craft.hostagent.v1.HostAgent.List:input_type -> craft.hostagent.v1.ListRequest
-	25, // 30: craft.hostagent.v1.HostAgent.NodeInfo:input_type -> craft.hostagent.v1.NodeInfoRequest
-	12, // 31: craft.hostagent.v1.HostAgent.CloseConnections:input_type -> craft.hostagent.v1.CloseConnectionsRequest
-	17, // 32: craft.hostagent.v1.HostAgent.CaptureSession:input_type -> craft.hostagent.v1.CaptureSessionRequest
-	19, // 33: craft.hostagent.v1.HostAgent.UploadCapture:input_type -> craft.hostagent.v1.UploadCaptureRequest
-	21, // 34: craft.hostagent.v1.HostAgent.DiscardCapture:input_type -> craft.hostagent.v1.DiscardCaptureRequest
-	23, // 35: craft.hostagent.v1.HostAgent.RestoreSession:input_type -> craft.hostagent.v1.RestoreSessionRequest
-	13, // 36: craft.hostagent.v1.HostAgent.Dial:input_type -> craft.hostagent.v1.DialFrame
-	31, // 37: craft.hostagent.v1.HostAgent.BuildTemplate:input_type -> craft.hostagent.v1.BuildTemplateRequest
-	33, // 38: craft.hostagent.v1.HostAgent.PutManagedImage:input_type -> craft.hostagent.v1.PutManagedImageRequest
-	37, // 39: craft.hostagent.v1.HostAgent.SwapManaged:input_type -> craft.hostagent.v1.SwapManagedRequest
-	28, // 40: craft.hostagent.v1.HostAgent.SetDrain:input_type -> craft.hostagent.v1.SetDrainRequest
-	5,  // 41: craft.hostagent.v1.HostAgent.Create:output_type -> craft.hostagent.v1.CreateResponse
-	7,  // 42: craft.hostagent.v1.HostAgent.Stop:output_type -> craft.hostagent.v1.StopResponse
-	9,  // 43: craft.hostagent.v1.HostAgent.List:output_type -> craft.hostagent.v1.ListResponse
-	26, // 44: craft.hostagent.v1.HostAgent.NodeInfo:output_type -> craft.hostagent.v1.NodeInfoResponse
-	14, // 45: craft.hostagent.v1.HostAgent.CloseConnections:output_type -> craft.hostagent.v1.CloseConnectionsResponse
-	18, // 46: craft.hostagent.v1.HostAgent.CaptureSession:output_type -> craft.hostagent.v1.CaptureSessionResponse
-	20, // 47: craft.hostagent.v1.HostAgent.UploadCapture:output_type -> craft.hostagent.v1.UploadCaptureResponse
-	22, // 48: craft.hostagent.v1.HostAgent.DiscardCapture:output_type -> craft.hostagent.v1.DiscardCaptureResponse
-	24, // 49: craft.hostagent.v1.HostAgent.RestoreSession:output_type -> craft.hostagent.v1.RestoreSessionResponse
-	13, // 50: craft.hostagent.v1.HostAgent.Dial:output_type -> craft.hostagent.v1.DialFrame
-	32, // 51: craft.hostagent.v1.HostAgent.BuildTemplate:output_type -> craft.hostagent.v1.BuildTemplateResponse
-	35, // 52: craft.hostagent.v1.HostAgent.PutManagedImage:output_type -> craft.hostagent.v1.PutManagedImageResponse
-	39, // 53: craft.hostagent.v1.HostAgent.SwapManaged:output_type -> craft.hostagent.v1.SwapManagedResponse
-	29, // 54: craft.hostagent.v1.HostAgent.SetDrain:output_type -> craft.hostagent.v1.SetDrainResponse
-	41, // [41:55] is the sub-list for method output_type
-	27, // [27:41] is the sub-list for method input_type
-	27, // [27:27] is the sub-list for extension type_name
-	27, // [27:27] is the sub-list for extension extendee
-	0,  // [0:27] is the sub-list for field type_name
+	41, // 5: craft.hostagent.v1.VM.managed_mounts:type_name -> craft.hostagent.v1.VM.ManagedMountsEntry
+	2,  // 6: craft.hostagent.v1.ManagedState.active:type_name -> craft.hostagent.v1.ManagedSlot
+	42, // 7: craft.hostagent.v1.PresignedRequest.headers:type_name -> craft.hostagent.v1.PresignedRequest.HeadersEntry
+	16, // 8: craft.hostagent.v1.CaptureSessionRequest.limits:type_name -> craft.hostagent.v1.ArchiveLimits
+	43, // 9: craft.hostagent.v1.CaptureSessionResponse.expires_at:type_name -> google.protobuf.Timestamp
+	15, // 10: craft.hostagent.v1.UploadCaptureRequest.request:type_name -> craft.hostagent.v1.PresignedRequest
+	15, // 11: craft.hostagent.v1.RestoreSessionRequest.request:type_name -> craft.hostagent.v1.PresignedRequest
+	16, // 12: craft.hostagent.v1.RestoreSessionRequest.limits:type_name -> craft.hostagent.v1.ArchiveLimits
+	30, // 13: craft.hostagent.v1.NodeInfoResponse.templates:type_name -> craft.hostagent.v1.TemplateInfo
+	36, // 14: craft.hostagent.v1.NodeInfoResponse.managed_images:type_name -> craft.hostagent.v1.ManagedImageInfo
+	27, // 15: craft.hostagent.v1.NodeInfoResponse.drain:type_name -> craft.hostagent.v1.DrainStatus
+	1,  // 16: craft.hostagent.v1.DrainStatus.state:type_name -> craft.hostagent.v1.DrainState
+	43, // 17: craft.hostagent.v1.DrainStatus.since:type_name -> google.protobuf.Timestamp
+	27, // 18: craft.hostagent.v1.SetDrainResponse.drain:type_name -> craft.hostagent.v1.DrainStatus
+	43, // 19: craft.hostagent.v1.TemplateInfo.built_at:type_name -> google.protobuf.Timestamp
+	30, // 20: craft.hostagent.v1.BuildTemplateResponse.template:type_name -> craft.hostagent.v1.TemplateInfo
+	34, // 21: craft.hostagent.v1.PutManagedImageRequest.header:type_name -> craft.hostagent.v1.ManagedBundleHeader
+	36, // 22: craft.hostagent.v1.PutManagedImageResponse.image:type_name -> craft.hostagent.v1.ManagedImageInfo
+	43, // 23: craft.hostagent.v1.ManagedImageInfo.built_at:type_name -> google.protobuf.Timestamp
+	38, // 24: craft.hostagent.v1.SwapManagedRequest.targets:type_name -> craft.hostagent.v1.SwapTarget
+	40, // 25: craft.hostagent.v1.SwapManagedResponse.results:type_name -> craft.hostagent.v1.SwapResult
+	0,  // 26: craft.hostagent.v1.SwapResult.reason:type_name -> craft.hostagent.v1.ErrorReason
+	2,  // 27: craft.hostagent.v1.SwapResult.active:type_name -> craft.hostagent.v1.ManagedSlot
+	11, // 28: craft.hostagent.v1.VM.ManagedMountsEntry.value:type_name -> craft.hostagent.v1.ManagedState
+	4,  // 29: craft.hostagent.v1.HostAgent.Create:input_type -> craft.hostagent.v1.CreateRequest
+	6,  // 30: craft.hostagent.v1.HostAgent.Stop:input_type -> craft.hostagent.v1.StopRequest
+	8,  // 31: craft.hostagent.v1.HostAgent.List:input_type -> craft.hostagent.v1.ListRequest
+	25, // 32: craft.hostagent.v1.HostAgent.NodeInfo:input_type -> craft.hostagent.v1.NodeInfoRequest
+	12, // 33: craft.hostagent.v1.HostAgent.CloseConnections:input_type -> craft.hostagent.v1.CloseConnectionsRequest
+	17, // 34: craft.hostagent.v1.HostAgent.CaptureSession:input_type -> craft.hostagent.v1.CaptureSessionRequest
+	19, // 35: craft.hostagent.v1.HostAgent.UploadCapture:input_type -> craft.hostagent.v1.UploadCaptureRequest
+	21, // 36: craft.hostagent.v1.HostAgent.DiscardCapture:input_type -> craft.hostagent.v1.DiscardCaptureRequest
+	23, // 37: craft.hostagent.v1.HostAgent.RestoreSession:input_type -> craft.hostagent.v1.RestoreSessionRequest
+	13, // 38: craft.hostagent.v1.HostAgent.Dial:input_type -> craft.hostagent.v1.DialFrame
+	31, // 39: craft.hostagent.v1.HostAgent.BuildTemplate:input_type -> craft.hostagent.v1.BuildTemplateRequest
+	33, // 40: craft.hostagent.v1.HostAgent.PutManagedImage:input_type -> craft.hostagent.v1.PutManagedImageRequest
+	37, // 41: craft.hostagent.v1.HostAgent.SwapManaged:input_type -> craft.hostagent.v1.SwapManagedRequest
+	28, // 42: craft.hostagent.v1.HostAgent.SetDrain:input_type -> craft.hostagent.v1.SetDrainRequest
+	5,  // 43: craft.hostagent.v1.HostAgent.Create:output_type -> craft.hostagent.v1.CreateResponse
+	7,  // 44: craft.hostagent.v1.HostAgent.Stop:output_type -> craft.hostagent.v1.StopResponse
+	9,  // 45: craft.hostagent.v1.HostAgent.List:output_type -> craft.hostagent.v1.ListResponse
+	26, // 46: craft.hostagent.v1.HostAgent.NodeInfo:output_type -> craft.hostagent.v1.NodeInfoResponse
+	14, // 47: craft.hostagent.v1.HostAgent.CloseConnections:output_type -> craft.hostagent.v1.CloseConnectionsResponse
+	18, // 48: craft.hostagent.v1.HostAgent.CaptureSession:output_type -> craft.hostagent.v1.CaptureSessionResponse
+	20, // 49: craft.hostagent.v1.HostAgent.UploadCapture:output_type -> craft.hostagent.v1.UploadCaptureResponse
+	22, // 50: craft.hostagent.v1.HostAgent.DiscardCapture:output_type -> craft.hostagent.v1.DiscardCaptureResponse
+	24, // 51: craft.hostagent.v1.HostAgent.RestoreSession:output_type -> craft.hostagent.v1.RestoreSessionResponse
+	13, // 52: craft.hostagent.v1.HostAgent.Dial:output_type -> craft.hostagent.v1.DialFrame
+	32, // 53: craft.hostagent.v1.HostAgent.BuildTemplate:output_type -> craft.hostagent.v1.BuildTemplateResponse
+	35, // 54: craft.hostagent.v1.HostAgent.PutManagedImage:output_type -> craft.hostagent.v1.PutManagedImageResponse
+	39, // 55: craft.hostagent.v1.HostAgent.SwapManaged:output_type -> craft.hostagent.v1.SwapManagedResponse
+	29, // 56: craft.hostagent.v1.HostAgent.SetDrain:output_type -> craft.hostagent.v1.SetDrainResponse
+	43, // [43:57] is the sub-list for method output_type
+	29, // [29:43] is the sub-list for method input_type
+	29, // [29:29] is the sub-list for extension type_name
+	29, // [29:29] is the sub-list for extension extendee
+	0,  // [0:29] is the sub-list for field type_name
 }
 
 func init() { file_hostagent_v1_hostagent_proto_init() }
@@ -3604,7 +3645,7 @@ func file_hostagent_v1_hostagent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_hostagent_v1_hostagent_proto_rawDesc), len(file_hostagent_v1_hostagent_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   38,
+			NumMessages:   39,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

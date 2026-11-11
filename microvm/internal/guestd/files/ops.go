@@ -223,18 +223,11 @@ func (s *Store) Write(ctx context.Context, sessionID string, spec WriteSpec, r i
 	if err != nil {
 		return Info{}, "", err
 	}
-	rel, err := cleanPath(spec.Path)
-	if err != nil {
-		return Info{}, "", err
-	}
-	if rel == "." {
-		return Info{}, "", fmt.Errorf("%w: path is required", ErrInvalid)
-	}
 	mode := fs.FileMode(spec.Mode) & fs.ModePerm
 	if mode == 0 {
 		mode = 0o644
 	}
-	root, err := s.openSession(sessionID, true)
+	root, rel, shown, err := s.openWrite(sessionID, spec.Path, spec.MakeParents)
 	if err != nil {
 		return Info{}, "", err
 	}
@@ -268,7 +261,27 @@ func (s *Store) Write(ctx context.Context, sessionID string, spec WriteSpec, r i
 	if err != nil {
 		return Info{}, "", err
 	}
-	return infoOf(rel, fi), sum, nil
+	return infoOf(shown, fi), sum, nil
+}
+
+// openWrite opens the root of a write and the path in it, and the path to
+// report. With no session ID, p is an absolute VM path.
+func (s *Store) openWrite(sessionID, p string, mkParents bool) (*os.Root, string, string, error) {
+	if sessionID == "" {
+		return s.openVMEntry(p, mkParents)
+	}
+	rel, err := cleanPath(p)
+	if err != nil {
+		return nil, "", "", err
+	}
+	if rel == "." {
+		return nil, "", "", fmt.Errorf("%w: path is required", ErrInvalid)
+	}
+	root, err := s.openSession(sessionID, true)
+	if err != nil {
+		return nil, "", "", err
+	}
+	return root, rel, rel, nil
 }
 
 // linkNoReplace moves tmp to name unless name exists.
@@ -542,14 +555,14 @@ func setOf(names []string) map[string]bool {
 // Delete removes a file or a link, or a directory with recursive. It
 // reports false if the path did not exist.
 func (s *Store) Delete(sessionID, p string, recursive bool) (bool, error) {
-	rel, err := cleanPath(p)
-	if err != nil {
-		return false, err
+	var root *os.Root
+	var rel string
+	var err error
+	if sessionID == "" {
+		root, rel, _, err = s.openVMEntry(p, false)
+	} else {
+		root, rel, err = s.openDelete(sessionID, p)
 	}
-	if rel == "." {
-		return false, fmt.Errorf("%w: cannot delete the session directory", ErrInvalid)
-	}
-	root, err := s.openSession(sessionID, false)
 	if errors.Is(err, ErrNotFound) {
 		return false, nil
 	}
@@ -571,4 +584,16 @@ func (s *Store) Delete(sessionID, p string, recursive bool) (bool, error) {
 		return true, fsErr(root.RemoveAll(rel))
 	}
 	return true, fsErr(root.Remove(rel))
+}
+
+func (s *Store) openDelete(sessionID, p string) (*os.Root, string, error) {
+	rel, err := cleanPath(p)
+	if err != nil {
+		return nil, "", err
+	}
+	if rel == "." {
+		return nil, "", fmt.Errorf("%w: cannot delete the session directory", ErrInvalid)
+	}
+	root, err := s.openSession(sessionID, false)
+	return root, rel, err
 }

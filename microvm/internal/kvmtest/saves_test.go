@@ -182,14 +182,14 @@ func (s *savesEnv) restore(ctx context.Context, v *savesVM, session, key string,
 // manifestScript prints one hash over every file path, mode and content of
 // the session's capture roots, and the file count.
 // It leaves out what a capture leaves out (node_modules, .venv, .next).
-const manifestScript = `cd /workspace/sessions/%s && P='( -name node_modules -o -name .venv -o -name .next ) -prune -o' && \
+const manifestScript = `cd /home/onyx/workspaces/%s && P='( -name node_modules -o -name .venv -o -name .next ) -prune -o' && \
   find attachments $P -type f -printf '%%m %%p\n' | LC_ALL=C sort > /tmp/m.list && \
   (cat /tmp/m.list; find attachments $P -type f -print0 | LC_ALL=C sort -z | xargs -0 cat) | sha256sum | cut -c1-16; wc -l < /tmp/m.list`
 
 // costScript times guest-only steps with a cold page cache: tar | zstd -3
 // to a file on the scratch disk, zstd -d of that file, a local extract, and
 // a 1 GiB write with fdatasync.
-const costScript = `cd /workspace/sessions/%s; t() { sync; echo 3 > /proc/sys/vm/drop_caches; s=$(date +%%s%%N); eval "$1" >/dev/null; echo "$2=$(( ($(date +%%s%%N)-s)/1000000 ))ms"; }
+const costScript = `cd /home/onyx/workspaces/%s; t() { sync; echo 3 > /proc/sys/vm/drop_caches; s=$(date +%%s%%N); eval "$1" >/dev/null; echo "$2=$(( ($(date +%%s%%N)-s)/1000000 ))ms"; }
 t 'tar cf - attachments | zstd -3 -T0 -q -c > /mnt/scratch/a.zst' tar_zstd3_to_disk
 t 'zstd -d -q -c /mnt/scratch/a.zst' zstd_decode
 t 'mkdir -p /mnt/scratch/x && zstd -d -q -c /mnt/scratch/a.zst | tar x -C /mnt/scratch/x && sync' local_extract_sync
@@ -200,7 +200,7 @@ rm -rf /mnt/scratch/a.zst /mnt/scratch/x /mnt/scratch/dd`
 // documents, CSV, images (random, incompressible), small source files and
 // attachments.
 const genFiles = `import os, base64, sys
-s = "/workspace/sessions/" + sys.argv[1]
+s = "/home/onyx/workspaces/" + sys.argv[1]
 def w(p, b):
     os.makedirs(os.path.dirname(p), exist_ok=True)
     open(p, "wb").write(b)
@@ -220,7 +220,7 @@ print("GEN_DONE")
 // genT2 makes the T2 session: 1 GiB, mostly dependencies (node_modules,
 // .venv, .next) that a capture leaves out, plus ~90 MiB of user files.
 const genT2 = `import os, base64, sys
-s = "/workspace/sessions/" + sys.argv[1]
+s = "/home/onyx/workspaces/" + sys.argv[1]
 def w(p, b):
     os.makedirs(os.path.dirname(p), exist_ok=True)
     open(p, "wb").write(b)
@@ -305,7 +305,7 @@ func TestSavesKVM(t *testing.T) {
 			if out := s.run(a, "cat > /tmp/gen.py <<'EOF'\n"+variant.gen+"EOF\npython3 /tmp/gen.py "+variant.session); !strings.Contains(out, "GEN_DONE") {
 				t.Fatalf("gen: %s", out)
 			}
-			du := s.run(a, "du -sb /workspace/sessions/"+variant.session+" | cut -f1; find /workspace/sessions/"+variant.session+" -type f | wc -l")
+			du := s.run(a, "du -sb /home/onyx/workspaces/"+variant.session+" | cut -f1; find /home/onyx/workspaces/"+variant.session+" -type f | wc -l")
 			src := s.run(a, fmt.Sprintf(manifestScript, variant.session))
 			if variant.name == "files_1gib" {
 				t.Logf("guest cost (cold cache, 2 vCPU): %s", strings.ReplaceAll(s.run(a, fmt.Sprintf(costScript, variant.session)), "\n", " "))
@@ -357,7 +357,7 @@ func TestSavesKVM(t *testing.T) {
 				if got != src {
 					t.Errorf("restored manifest %q, source %q", got, src)
 				}
-				if left := s.run(b, "ls -A /workspace/sessions/"+variant.session+"/attachments/web 2>/dev/null | tr '\\n' ' '"); strings.Contains(left, "node_modules") || strings.Contains(left, ".next") {
+				if left := s.run(b, "ls -A /home/onyx/workspaces/"+variant.session+"/attachments/web 2>/dev/null | tr '\\n' ' '"); strings.Contains(left, "node_modules") || strings.Contains(left, ".next") {
 					t.Errorf("dependencies restored: %s", left)
 				}
 				s.stop(ctx, b)
@@ -436,7 +436,7 @@ func fileCallsKVM(t *testing.T, ctx context.Context, s *savesEnv, a *savesVM, se
 		t.Errorf("upload names %v", names)
 	}
 
-	s.run(a, "mkdir -p /workspace/sessions/"+session+"/attachments/web/src && cd /workspace/sessions/"+session+
+	s.run(a, "mkdir -p /home/onyx/workspaces/"+session+"/attachments/web/src && cd /home/onyx/workspaces/"+session+
 		"/attachments/web/src && for i in $(seq 1 2000); do echo \"export const a$i = $i;\" > f$i.ts; done; ln -sf /etc/shadow leak; echo ok")
 	t0 = time.Now()
 	lr, err := s.sd.ListFiles(a.ctx, &sdpb.ListFilesRequest{SessionId: session, Recursive: true, MaxEntries: 100000})
@@ -483,7 +483,7 @@ func fileCallsKVM(t *testing.T, ctx context.Context, s *savesEnv, a *savesVM, se
 	if out := s.run(a, "test -f /etc/shadow && echo present"); out != "present" {
 		t.Error("/etc/shadow is gone after deleting a link to it")
 	}
-	s.run(a, "rm -rf /workspace/sessions/"+session+"/attachments")
+	s.run(a, "rm -rf /home/onyx/workspaces/"+session+"/attachments")
 }
 
 func evilArchive(t *testing.T) []byte {
@@ -512,7 +512,7 @@ func evilArchive(t *testing.T) []byte {
 func restoreSafetyKVM(t *testing.T, ctx context.Context, s *savesEnv, session string) {
 	b, _ := s.newVM(ctx, session)
 	defer s.stop(ctx, b)
-	s.run(b, "mkdir -p /workspace/sessions/"+session+"/attachments && echo keep > /workspace/sessions/"+session+"/attachments/marker")
+	s.run(b, "mkdir -p /home/onyx/workspaces/"+session+"/attachments && echo keep > /home/onyx/workspaces/"+session+"/attachments/marker")
 	evil := evilArchive(t)
 	sum := sha256.Sum256(evil)
 	sha := hex.EncodeToString(sum[:])
@@ -545,7 +545,7 @@ func restoreSafetyKVM(t *testing.T, ctx context.Context, s *savesEnv, session st
 	if apierr.FromStatus(err) != pb.ErrorReason_ARCHIVE_MISMATCH {
 		t.Errorf("wrong sha: %v", err)
 	}
-	if out := s.run(b, "cat /workspace/sessions/"+session+"/attachments/marker; ls /etc/pwned 2>&1 | head -1; ls -A /workspace/sessions/"+session); !strings.HasPrefix(out, "keep") ||
+	if out := s.run(b, "cat /home/onyx/workspaces/"+session+"/attachments/marker; ls /etc/pwned 2>&1 | head -1; ls -A /home/onyx/workspaces/"+session); !strings.HasPrefix(out, "keep") ||
 		!strings.Contains(out, "No such file") || strings.Contains(out, ".craft-") {
 		t.Errorf("guest after refused restores: %q", out)
 	}
@@ -579,6 +579,6 @@ func guestBenchKVM(t *testing.T, s *savesEnv, a *savesVM, session, bin string) {
 	if _, err := ws.CloseAndRecv(); err != nil {
 		t.Fatal(err)
 	}
-	out := s.run(a, "/workspace/sessions/"+session+"/bench/gobench; rm -rf /workspace/sessions/"+session+"/bench")
+	out := s.run(a, "/home/onyx/workspaces/"+session+"/bench/gobench; rm -rf /home/onyx/workspaces/"+session+"/bench")
 	t.Logf("guest bench: %s", strings.ReplaceAll(out, "\n", " | "))
 }

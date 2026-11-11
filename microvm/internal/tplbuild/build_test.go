@@ -170,7 +170,10 @@ func writeRootfs(t *testing.T, dir, data, ca string) *Rootfs {
 				{"drive_id": "managed", "is_read_only": true},
 			},
 			"managed_slots": map[string]any{"a": "/dev/vdc", "b": "/dev/vdf"},
-			"daemon":        map[string]any{"vsock_port": 52},
+			"managed_mounts": []map[string]any{
+				{"name": "user-uploads", "mount": "/mnt/user-uploads", "a": "/dev/vdg", "b": "/dev/vdh"},
+			},
+			"daemon": map[string]any{"vsock_port": 52},
 		},
 		"output": map[string]any{"file": RootfsImageFile, "sha256": hex.EncodeToString(sum[:]), "size_bytes": len(data)},
 	}
@@ -237,16 +240,20 @@ func TestBuildWritesAVerifiedTemplate(t *testing.T) {
 	for _, d := range cfg.Drives {
 		ids = append(ids, d.ID)
 	}
-	if strings.Join(ids, ",") != "rootfs,scratch,managed,upload_a,upload_b,managed_b" || !cfg.Drives[2].ReadOnly || !cfg.Drives[3].ReadOnly ||
-		!cfg.Drives[4].ReadOnly || !cfg.Drives[5].ReadOnly || cfg.Drives[1].ReadOnly || !cfg.Drives[0].ReadOnly {
+	if strings.Join(ids, ",") != "rootfs,scratch,managed,upload_a,upload_b,managed_b,user_uploads_a,user_uploads_b,spaces_a,spaces_b" {
 		t.Fatalf("drives %+v", cfg.Drives)
+	}
+	for i, d := range cfg.Drives {
+		if d.ReadOnly != (i != 1) {
+			t.Fatalf("drive %s read-only %v", d.ID, d.ReadOnly)
+		}
 	}
 	// The balloon is set at boot (Firecracker accepts it only then), so
 	// every restore of the template has it.
 	if b := cfg.Balloon; b == nil || !b.FreePageReporting || b.FreePageHinting || b.AmountMiB != 0 || b.StatsIntervalS <= 0 {
 		t.Fatalf("balloon %+v", cfg.Balloon)
 	}
-	if !tpl.HasBalloon() || tpl.LayoutVersion != template.BalloonLayout {
+	if !tpl.HasBalloon() || tpl.LayoutVersion != template.LayoutVersion {
 		t.Fatalf("template layout %d, balloon %v", tpl.LayoutVersion, tpl.HasBalloon())
 	}
 	if r.vmm.killed != 1 || r.slots.freed != 1 || len(r.slots.held) != 0 {
@@ -485,10 +492,13 @@ func TestLoadRootfsChecksTheDriveOrder(t *testing.T) {
 		from, to string
 		ok       bool
 	}{
-		"slot b moved": {`"b":"/dev/vdf"`, `"b":"/dev/vde"`, false},
-		"slot a moved": {`"a":"/dev/vdc"`, `"a":"/dev/vdd"`, false},
-		"no slot b":    {`,"b":"/dev/vdf"`, ``, false},
-		"no slots":     {`"managed_slots":{"a":"/dev/vdc","b":"/dev/vdf"},`, ``, true},
+		"slot b moved":  {`"b":"/dev/vdf"`, `"b":"/dev/vde"`, false},
+		"slot a moved":  {`"a":"/dev/vdc"`, `"a":"/dev/vdd"`, false},
+		"no slot b":     {`,"b":"/dev/vdf"`, ``, false},
+		"no slots":      {`"managed_slots":{"a":"/dev/vdc","b":"/dev/vdf"},`, ``, true},
+		"no mounts":     {`"managed_mounts":[{"a":"/dev/vdg","b":"/dev/vdh","mount":"/mnt/user-uploads","name":"user-uploads"}],`, ``, true},
+		"mount moved":   {`"a":"/dev/vdg"`, `"a":"/dev/vdi"`, false},
+		"mount unknown": {`"name":"user-uploads"`, `"name":"photos"`, false},
 	} {
 		d := t.TempDir()
 		writeRootfs(t, d, "x", opensslCA)

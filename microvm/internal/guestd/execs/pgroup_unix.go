@@ -34,4 +34,19 @@ func (g *pgroup) Kill() error {
 	return err
 }
 
+func (g *pgroup) Signal(sig syscall.Signal) error { return signalGroup(g.pid, sig) }
+
 func (g *pgroup) Close() error { return nil }
+
+// signalGroup sends sig to process group pgid. A group that is gone is not
+// an error.
+func signalGroup(pgid int, sig syscall.Signal) error {
+	if pgid <= 0 {
+		return nil
+	}
+	err := syscall.Kill(-pgid, sig)
+	if errors.Is(err, syscall.ESRCH) {
+		return nil
+	}
+	return err
+}

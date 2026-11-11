@@ -84,21 +84,24 @@ service HostAgent {
   // a build waits for it.
   rpc BuildTemplate(BuildTemplateRequest) returns (BuildTemplateResponse);
 
-  // Managed drive. The managed drive is the read-only ext4 on
-  // /workspace/managed in each VM (the skills). Each VM from a layout 3 or later
-  // template has two managed slots: A (/dev/vdc) and B (/dev/vdf).
+  // Managed drives. A managed drive is a read-only, noexec ext4 mount in
+  // each VM. There are three named mounts: skills (/mnt/skills),
+  // user-uploads (/mnt/user-uploads) and spaces (/mnt/spaces). Each VM from
+  // a layout 3 or later template has two slots (A and B) for skills; layout 5
+  // adds two slots each for user-uploads and spaces (/dev/vdg to /dev/vdj).
 
   // PutManagedImage uploads a managed bundle (a zip of the tree to show on
-  // /workspace/managed) and builds its read-only ext4 image on this node.
+  // a managed mount) and builds its read-only ext4 image on this node.
   // The first message is the header, the later ones carry the zip bytes. A
   // bundle whose image is already on the node is not built again. The image
-  // ID is the SHA256 of the zip.
+  // ID is the SHA256 of the zip. An image is not tied to a mount: one image
+  // can go on any mount (SwapManaged names the mount).
   rpc PutManagedImage(stream PutManagedImageRequest) returns (PutManagedImageResponse);
 
-  // SwapManaged puts a managed image into running VMs without a restart,
-  // one VM at a time: the agent puts the image behind the VM's idle slot
-  // (Firecracker PATCH /drives), the guest daemon mounts it beneath the
-  // current /workspace/managed mount and detaches the old mount lazily
+  // SwapManaged puts a managed image on one mount of running VMs without a
+  // restart, one VM at a time: the agent puts the image behind the mount's
+  // idle slot (Firecracker PATCH /drives), the guest daemon mounts it beneath
+  // the current mount and detaches the old mount lazily
   // (open files on it keep working until they close), and the agent records
   // the active slot in the journal. A failure of one VM does not stop the
   // others; each target has its own result.
@@ -232,12 +235,13 @@ enum DrainState {
   DRAIN_STATE_DRAINED = 3;
 }
 
-// A managed drive slot of a VM.
+// A managed drive slot of a VM mount. For skills, slot A is drive "managed"
+// (/dev/vdc) and slot B is drive "managed_b" (/dev/vdf, layout 3 and later).
+// For user-uploads and spaces (layout 5), the drives are
+// "<mount>_a"/"<mount>_b" with "-" as "_" (/dev/vdg to /dev/vdj).
 enum ManagedSlot {
   MANAGED_SLOT_UNSPECIFIED = 0;
-  // Drive "managed", guest /dev/vdc.
   MANAGED_SLOT_A = 1;
-  // Drive "managed_b", guest /dev/vdf (layout 3 and later).
   MANAGED_SLOT_B = 2;
 }
 
@@ -316,14 +320,17 @@ message VM {
   uint32 uid = 10;
   google.protobuf.Timestamp started_at = 11;
   string tenant_id = 12;
+  // The skills mount.
   ManagedState managed = 13;
+  // The other managed mounts (layout 5 and later), by mount name.
+  map<string, ManagedState> managed_mounts = 14;
 }
 
-// The managed drive slots of a VM, as the journal records them.
+// The managed drive slots of a VM mount, as the journal records them.
 message ManagedState {
-  // 2 for a VM that can swap its managed drive (layout 3 and later), else 1.
+  // 2 for a VM that can swap the drive of this mount, else 1.
   uint32 slots = 1;
-  // The slot on /workspace/managed after the last swap.
+  // The slot on the mount point after the last swap.
   ManagedSlot active = 2;
   // Managed image ID behind each slot. Empty: the template's placeholder.
   string slot_a_image = 3;
@@ -526,6 +533,9 @@ message TemplateInfo {
   // reporting (layout 4 and later): the guest returns free
   // memory to the node.
   bool balloon = 15;
+  // Managed mounts that the template's VMs can swap: "skills" from layout
+  // 3, also "user-uploads" and "spaces" from layout 5.
+  repeated string managed_mounts = 16;
 }
 
 message BuildTemplateRequest {}
@@ -589,6 +599,10 @@ message SwapManagedRequest {
   // The VMs, swapped one at a time in this order. At most 1000, no
   // sandbox twice.
   repeated SwapTarget targets = 2;
+  // The mount: skills (the default when empty), user-uploads or spaces. A VM
+  // whose template or guest daemon does not have the mount fails with
+  // MANAGED_SWAP_UNSUPPORTED.
+  string mount = 3;
 }
 
 message SwapTarget {
@@ -612,7 +626,7 @@ message SwapResult {
   // Set when ok is false: the error reason and message.
   ErrorReason reason = 3;
   string message = 4;
-  // The slot on /workspace/managed after the call.
+  // The slot on the mount after the call.
   ManagedSlot active = 5;
   // False when the image was already the active one.
   bool changed = 6;

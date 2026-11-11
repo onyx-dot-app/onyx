@@ -32,11 +32,15 @@ type Config struct {
 	// Over it, ended records lose their output (oldest first), then running
 	// ones keep only their latest bytes.
 	OutputBudget int64
-	MaxRunning   int           // 64 if zero
-	MaxEnded     int           // ended records kept; 256 if zero
-	EndedTTL     time.Duration // 1 h if zero
-	Isolator     Isolator
-	Log          *slog.Logger
+	// MaxTracked caps the records, running and ended; 64 if zero. A Start
+	// over it drops the least recently used ended record; with none, it
+	// fails with ErrCapReached.
+	MaxTracked int
+	// MaxRunning caps the running executions; MaxTracked if zero.
+	MaxRunning int
+	EndedTTL   time.Duration // 1 h if zero
+	Isolator   Isolator
+	Log        *slog.Logger
 }
 
 // validate rejects a missing Isolator and negative limits. Zero means the
@@ -47,7 +51,7 @@ func (c *Config) validate() error {
 		return errors.New("execs: Isolator is required")
 	case c.DefaultDeadline < 0, c.MaxDeadline < 0, c.EndedTTL < 0:
 		return errors.New("execs: durations must not be negative")
-	case c.OutputBytes < 0, c.MaxRunning < 0, c.MaxEnded < 0, c.OutputBudget < 0:
+	case c.OutputBytes < 0, c.MaxRunning < 0, c.MaxTracked < 0, c.OutputBudget < 0:
 		return errors.New("execs: limits must not be negative")
 	}
 	return nil
@@ -66,11 +70,11 @@ func (c *Config) defaults() {
 	if c.OutputBudget == 0 {
 		c.OutputBudget = 256 << 20
 	}
-	if c.MaxRunning == 0 {
-		c.MaxRunning = 64
+	if c.MaxTracked == 0 {
+		c.MaxTracked = 64
 	}
-	if c.MaxEnded == 0 {
-		c.MaxEnded = 256
+	if c.MaxRunning == 0 || c.MaxRunning > c.MaxTracked {
+		c.MaxRunning = c.MaxTracked
 	}
 	if c.EndedTTL == 0 {
 		c.EndedTTL = time.Hour
@@ -93,6 +97,7 @@ type Spec struct {
 var (
 	ErrNotFound    = errors.New("execution not found")
 	ErrTooMany     = errors.New("too many running executions")
+	ErrCapReached  = errors.New("execution cap reached: every tracked execution is running")
 	ErrBadArgument = errors.New("invalid argument")
 )
 
@@ -170,6 +175,10 @@ func (m *Manager) Start(spec Spec) (*Execution, error) {
 
 	m.mu.Lock()
 	m.gcLocked(time.Now())
+	if len(m.execs) >= m.cfg.MaxTracked && !m.evictLocked() {
+		m.mu.Unlock()
+		return nil, fmt.Errorf("%w (%d)", ErrCapReached, m.cfg.MaxTracked)
+	}
 	if m.runningLocked() >= m.cfg.MaxRunning {
 		m.mu.Unlock()
 		return nil, ErrTooMany
@@ -179,6 +188,7 @@ func (m *Manager) Start(spec Spec) (*Execution, error) {
 		ID: id, Argv: slices.Clone(spec.Argv), Labels: maps.Clone(spec.Labels),
 		done: make(chan struct{}), changed: make(chan struct{}), acct: m.account,
 	}
+	e.touch()
 	e.out[Stdout].max, e.out[Stderr].max = m.cfg.OutputBytes, m.cfg.OutputBytes
 	// Reserve the slot while the process starts.
 	m.execs[id] = e
@@ -328,6 +338,8 @@ func (m *Manager) wait(e *Execution, readers [2]*os.File, deadline time.Duration
 	switch {
 	case res.Signal != 0 && reason == killCancel:
 		res.Completion = Canceled
+	case res.Signal != 0 && reason == killExited && res.Signal == int(e.softSignal.Load()):
+		res.Completion = Canceled
 	case res.Signal != 0 && reason == killDeadline:
 		res.Completion = DeadlineExceeded
 	case res.Signal != 0:
@@ -345,7 +357,7 @@ func (m *Manager) wait(e *Execution, readers [2]*os.File, deadline time.Duration
 		"exit_code", res.ExitCode, "signal", res.Signal)
 }
 
-// Get returns the record of id.
+// Get returns the record of id and marks it used.
 func (m *Manager) Get(id string) (*Execution, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -353,6 +365,7 @@ func (m *Manager) Get(id string) (*Execution, error) {
 	if !ok || !e.ready {
 		return nil, ErrNotFound
 	}
+	e.touch()
 	return e, nil
 }
 
@@ -385,6 +398,23 @@ func (m *Manager) Running() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.runningLocked()
+}
+
+// Signal sends sig to the process group of the execution's main process and
+// does not wait. It returns the result and true if the execution had
+// already ended.
+func (m *Manager) Signal(id string, sig syscall.Signal) (Result, bool, error) {
+	e, err := m.Get(id)
+	if err != nil {
+		return Result{}, false, err
+	}
+	if r, ended := e.Ended(); ended {
+		return r, true, nil
+	}
+	if err := e.signal(sig); err != nil {
+		return Result{}, false, err
+	}
+	return Result{}, false, nil
 }
 
 // Cancel kills the execution and waits for its result. alreadyEnded is
@@ -442,29 +472,36 @@ func (m *Manager) runningLocked() int {
 	return n
 }
 
-// gcLocked drops ended records older than EndedTTL and the oldest ended
-// records above MaxEnded.
+// gcLocked drops ended records older than EndedTTL.
 func (m *Manager) gcLocked(now time.Time) {
-	var ended []*Execution
 	for _, e := range m.execs {
 		e.mu.Lock()
 		done, at := e.ended, e.endedAt
 		e.mu.Unlock()
-		if !done {
-			continue
-		}
-		if now.Sub(at) > m.cfg.EndedTTL {
-			m.drop(e)
-			continue
-		}
-		ended = append(ended, e)
-	}
-	if over := len(ended) - m.cfg.MaxEnded; over > 0 {
-		slices.SortFunc(ended, func(a, b *Execution) int { return a.endedAt.Compare(b.endedAt) })
-		for _, e := range ended[:over] {
+		if done && now.Sub(at) > m.cfg.EndedTTL {
 			m.drop(e)
 		}
 	}
+}
+
+// evictLocked drops the least recently used ended record. It returns false
+// if every record still runs.
+func (m *Manager) evictLocked() bool {
+	var lru *Execution
+	for _, e := range m.execs {
+		if _, ended := e.Ended(); !ended {
+			continue
+		}
+		if lru == nil || e.lastUsed.Load() < lru.lastUsed.Load() {
+			lru = e
+		}
+	}
+	if lru == nil {
+		return false
+	}
+	m.cfg.Log.Info("execution cap: dropped the least recently used ended record", "execution_id", lru.ID)
+	m.drop(lru)
+	return true
 }
 
 // drop removes an ended record. Caller holds m.mu.

@@ -45,11 +45,11 @@ func skillsBundle(t *testing.T, ver string, bigMiB, small int) (zipBytes []byte,
 	big := make([]byte, bigMiB<<20)
 	_, _ = rand.Read(big)
 	sum := sha256.Sum256(big)
-	add("skills/hello/SKILL.md", 0o644, []byte("skills "+ver+"\n"))
-	add("skills/hello/run.sh", 0o755, []byte("#!/bin/sh\necho ran "+ver+"\n"))
-	add("skills/hello/big.bin", 0o644, big)
+	add("hello/SKILL.md", 0o644, []byte("skills "+ver+"\n"))
+	add("hello/run.sh", 0o755, []byte("#!/bin/sh\necho ran "+ver+"\n"))
+	add("hello/big.bin", 0o644, big)
 	for i := range small {
-		add(fmt.Sprintf("skills/lib/f%04d.txt", i), 0o644, []byte(fmt.Sprintf("%s file %d\n", ver, i)))
+		add(fmt.Sprintf("lib/f%04d.txt", i), 0o644, []byte(fmt.Sprintf("%s file %d\n", ver, i)))
 	}
 	if err := zw.Close(); err != nil {
 		t.Fatal(err)
@@ -77,7 +77,7 @@ func putImage(ctx context.Context, ha pb.HostAgentClient, z []byte) (*pb.PutMana
 }
 
 const managedHoldPy = `import hashlib, os, sys, time
-d = '/workspace/managed/skills/hello'
+d = '/mnt/skills/hello'
 f = open(d + '/SKILL.md', 'rb')
 big = open(d + '/big.bin', 'rb')
 os.chdir(d)
@@ -189,7 +189,7 @@ func TestManagedSwapKVM(t *testing.T) {
 	}
 
 	// Before any swap: slot A has the empty template placeholder.
-	if r, err := run(0, "grep ' /workspace/managed ' /proc/self/mountinfo; ls -A /workspace/managed | wc -l"); err == nil {
+	if r, err := run(0, "grep ' /mnt/skills ' /proc/self/mountinfo; ls -A /mnt/skills | wc -l"); err == nil {
 		t.Logf("before: %s", strings.TrimSpace(r.stdout))
 	}
 
@@ -272,18 +272,18 @@ func TestManagedSwapKVM(t *testing.T) {
 
 	// 4. Guest checks.
 	const checks = `set -u
-cat /workspace/managed/skills/hello/SKILL.md
-echo mounts=$(grep -c ' /workspace/managed ' /proc/self/mountinfo)
-grep ' /workspace/managed ' /proc/self/mountinfo | awk '{print "opts=" $6, "src=" $(NF-1)}'
-/workspace/managed/skills/hello/run.sh >/dev/null 2>&1; echo exec_rc=$?
-sh /workspace/managed/skills/hello/run.sh
-mount -o remount,rw /workspace/managed 2>/dev/null; echo remount_rc=$?
-touch /workspace/managed/x 2>/dev/null; echo touch_rc=$?
-dev=$(grep ' /workspace/managed ' /proc/self/mountinfo | awk '{print $(NF-1)}')
+cat /mnt/skills/hello/SKILL.md
+echo mounts=$(grep -c ' /mnt/skills ' /proc/self/mountinfo)
+grep ' /mnt/skills ' /proc/self/mountinfo | awk '{print "opts=" $6, "src=" $(NF-1)}'
+/mnt/skills/hello/run.sh >/dev/null 2>&1; echo exec_rc=$?
+sh /mnt/skills/hello/run.sh
+mount -o remount,rw /mnt/skills 2>/dev/null; echo remount_rc=$?
+touch /mnt/skills/x 2>/dev/null; echo touch_rc=$?
+dev=$(grep ' /mnt/skills ' /proc/self/mountinfo | awk '{print $(NF-1)}')
 blockdev --setrw "$dev" 2>/dev/null; echo setrw_rc=$?
-mount -o remount,rw /workspace/managed 2>/dev/null; echo remount2_rc=$?
-touch /workspace/managed/y 2>/dev/null; echo touch2_rc=$?
-echo files=$(ls /workspace/managed/skills/lib | wc -l)
+mount -o remount,rw /mnt/skills 2>/dev/null; echo remount2_rc=$?
+touch /mnt/skills/y 2>/dev/null; echo touch2_rc=$?
+echo files=$(ls /mnt/skills/lib | wc -l)
 `
 	failures := 0
 	for i := range ids {
@@ -378,7 +378,7 @@ echo files=$(ls /workspace/managed/skills/lib | wc -l)
 	if !again[0].GetOk() || again[0].GetChanged() {
 		t.Fatalf("repeat: %v", again[0])
 	}
-	if r, err := run(0, "cat /workspace/managed/skills/hello/SKILL.md; grep ' /workspace/managed ' /proc/self/mountinfo | awk '{print $(NF-1)}'"); err != nil ||
+	if r, err := run(0, "cat /mnt/skills/hello/SKILL.md; grep ' /mnt/skills ' /proc/self/mountinfo | awk '{print $(NF-1)}'"); err != nil ||
 		r.stdout != "skills v3\n/dev/vdf\n" {
 		t.Fatalf("after v3: %q %v", r.stdout, err)
 	}
@@ -399,7 +399,7 @@ echo files=$(ls /workspace/managed/skills/lib | wc -l)
 		}
 	}
 	mustOK("v2 after restart", swap("v2 after an agent restart", imgs["v2"].id, []int{0}), pb.ManagedSlot_MANAGED_SLOT_A)
-	if r, err := run(0, "cat /workspace/managed/skills/hello/SKILL.md"); err != nil || r.stdout != "skills v2\n" {
+	if r, err := run(0, "cat /mnt/skills/hello/SKILL.md"); err != nil || r.stdout != "skills v2\n" {
 		t.Fatalf("after restart swap: %q %v", r.stdout, err)
 	}
 	ni, err := ha.NodeInfo(ctx, &pb.NodeInfoRequest{})
