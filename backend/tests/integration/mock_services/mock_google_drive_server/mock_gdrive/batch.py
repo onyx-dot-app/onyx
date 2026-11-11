@@ -73,7 +73,10 @@ async def handle_batch(
         request = _parse_part(part, outer_headers)
         if request is None:
             return bad_request("Invalid batch part.")
-        requests.append((str(part.get("Content-ID", "")), request))
+        # The Google client folds a long Content-ID over two lines. Google
+        # echoes it unfolded, and the client splits it on " + ".
+        content_id = " ".join(str(part.get("Content-ID", "")).split())
+        requests.append((content_id, request))
     responses = await asyncio.gather(*(api.handle(r) for _, r in requests))
     boundary = f"batch_{secrets.token_hex(12)}"
     out = b""
