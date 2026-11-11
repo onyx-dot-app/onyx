@@ -141,6 +141,9 @@ func (b *Builder) Build(ctx context.Context, r *Rootfs) (Result, error) {
 		return Result{}, apierr.New(pb.ErrorReason_TEMPLATE_INCOMPATIBLE,
 			"the root drive trusts egress CA %s, this deployment uses %s; build the root drive again", r.CAFingerprint(), b.Node.CAFingerprint)
 	}
+	if b.Node.RootfsCARequired && r.CAFingerprint() == "" {
+		return Result{}, apierr.New(pb.ErrorReason_TEMPLATE_INCOMPATIBLE, "%s", template.NoCAError)
+	}
 	key := b.Key(r)
 	name := Name(key.ImageRef, key.Hash())
 	res := Result{}

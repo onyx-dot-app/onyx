@@ -50,6 +50,10 @@ var DefaultCAPaths = CAPaths{
 // and from the NSS database. A failed anchor or bundle write is an error; a
 // failed NSS update is only logged (Chromium then does not trust the proxy,
 // other programs do).
+//
+// The bundle is written before the anchor, so the anchor names the CA to
+// remove until the bundle no longer has it, and a retry after a failed
+// write still removes a retired CA.
 func InstallEgressCA(p CAPaths, caPEM []byte) error {
 	ca, err := egressca.Parse(caPEM)
 	if err != nil {
@@ -63,18 +67,24 @@ func InstallEgressCA(p CAPaths, caPEM []byte) error {
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("read %s: %w", p.Anchor, err)
 	}
-	if err := os.MkdirAll(filepath.Dir(p.Anchor), 0o755); err != nil {
-		return err
-	}
-	if err := writeFileAtomic(p.Anchor, ca.PEM, 0o644); err != nil {
-		return err
-	}
 	bundle, err := os.ReadFile(p.Bundle)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("read %s: %w", p.Bundle, err)
 	}
-	if err := writeFileAtomic(p.Bundle, ReplaceInBundle(bundle, drop, ca.PEM), 0o644); err != nil {
-		return err
+	if err := writeFile(p.Bundle, ReplaceInBundle(bundle, drop, ca.PEM), 0o644); err != nil {
+		return fmt.Errorf("write %s: %w", p.Bundle, err)
+	}
+	err = os.MkdirAll(filepath.Dir(p.Anchor), 0o755)
+	if err == nil {
+		err = writeFile(p.Anchor, ca.PEM, 0o644)
+	}
+	if err != nil {
+		// The bundle no longer has the old CA. Remove the old anchor, so
+		// that update-ca-certificates does not add it again.
+		if rerr := os.Remove(p.Anchor); rerr != nil && !errors.Is(rerr, os.ErrNotExist) {
+			return fmt.Errorf("write %s: %w (remove the old anchor: %v)", p.Anchor, err, rerr)
+		}
+		return fmt.Errorf("write %s: %w", p.Anchor, err)
 	}
 	if p.NSSDB != "" {
 		if err := installNSS(p, p.Anchor); err != nil {
@@ -116,6 +126,9 @@ func containsDER(list [][]byte, der []byte) bool {
 	}
 	return false
 }
+
+// writeFile is writeFileAtomic; tests replace it to fail a write.
+var writeFile = writeFileAtomic
 
 // writeFileAtomic writes a new file next to path and renames it over path.
 // A link at path is replaced, not followed.

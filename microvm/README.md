@@ -331,9 +331,14 @@ Delivery (ENG-4648, `deployment/craft-fc/rootfs/README.md`):
   Create (30 s cache) from `--egress-ca-configmap <namespace>/<name>[:<key>]` (the sandbox-proxy ConfigMap,
   through the Kubernetes API) or `--egress-ca <file>`, and sends it with `SetKey`. The guest daemon installs
   it at `Init`. A CA change needs no new root drive and no new template.
+- One CA read runs at a time (5 s timeout). Callers with a CA do not wait for it. When reads fail, Create
+  uses the last good CA for up to 1 h after its read, and the agent waits 5 s before the next read.
+- The daemon writes the bundle before the anchor (`craft-egress-ca.crt`). Until the bundle no longer
+  has the old CA, the anchor names it, so a retry after a failed write still removes it.
 - A root drive with no CA has an empty CA in the template key, so it fits every deployment. A drive built
   with `--ca` (older builds) must have the deployment CA: the agent refuses it, and a template whose key
-  has another CA, if the CA it read at start differs.
+  has another CA, if the CA it read at start differs. An agent with no CA source refuses a root drive
+  and a template with no CA (TEMPLATE_INCOMPATIBLE): their VMs would trust no egress CA.
 
 #### Build
 

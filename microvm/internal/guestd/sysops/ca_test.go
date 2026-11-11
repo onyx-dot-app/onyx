@@ -5,6 +5,7 @@ package sysops
 import (
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -156,5 +157,59 @@ func TestInstallEgressCANSS(t *testing.T) {
 	p.NSSDB = filepath.Join(dir, "none")
 	if err := InstallEgressCA(p, newTestCA(t, "egress three").PEM); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestInstallEgressCAFailedWrite(t *testing.T) {
+	dir := t.TempDir()
+	pub, ca1, ca2 := newTestCA(t, "public"), newTestCA(t, "egress one"), newTestCA(t, "egress two")
+	p := CAPaths{Anchor: filepath.Join(dir, "anchor.crt"), Bundle: filepath.Join(dir, "bundle.crt")}
+	if err := os.WriteFile(p.Bundle, pub.PEM, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := InstallEgressCA(p, ca1.PEM); err != nil {
+		t.Fatal(err)
+	}
+	failOn := func(path string) {
+		t.Cleanup(func() { writeFile = writeFileAtomic })
+		writeFile = func(name string, data []byte, mode os.FileMode) error {
+			if name == path {
+				return errors.New("no space left on device")
+			}
+			return writeFileAtomic(name, data, mode)
+		}
+	}
+	// A failed bundle write changes nothing; the retry removes the old CA.
+	failOn(p.Bundle)
+	if err := InstallEgressCA(p, ca2.PEM); err == nil || !strings.Contains(err.Error(), p.Bundle) {
+		t.Fatalf("bundle write failure: %v", err)
+	}
+	if got := strings.Join(certs(t, p.Anchor), ","); got != "egress one" {
+		t.Fatalf("anchor after a failed bundle write %s", got)
+	}
+	writeFile = writeFileAtomic
+	if err := InstallEgressCA(p, ca2.PEM); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(certs(t, p.Bundle), ","); got != "public,egress two" {
+		t.Fatalf("bundle after the retry %s", got)
+	}
+	// A failed anchor write leaves no anchor of the retired CA.
+	failOn(p.Anchor)
+	if err := InstallEgressCA(p, ca1.PEM); err == nil || !strings.Contains(err.Error(), p.Anchor) {
+		t.Fatalf("anchor write failure: %v", err)
+	}
+	if got := strings.Join(certs(t, p.Bundle), ","); got != "public,egress one" {
+		t.Fatalf("bundle after a failed anchor write %s", got)
+	}
+	if _, err := os.Stat(p.Anchor); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("old anchor kept: %v", err)
+	}
+	writeFile = writeFileAtomic
+	if err := InstallEgressCA(p, ca1.PEM); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(certs(t, p.Bundle), ",") + "|" + strings.Join(certs(t, p.Anchor), ","); got != "public,egress one|egress one" {
+		t.Fatalf("after the retry %s", got)
 	}
 }

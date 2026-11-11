@@ -219,6 +219,7 @@ func run(f flags, log *slog.Logger) error {
 	versions := agent.Versions{
 		Firecracker: bins.Version, HostKernel: hostinfo.KernelRelease(), CPUModel: hostinfo.CPUModel(), Agent: version,
 		GuestKernel: kernel.Release, GuestKernelSHA256: kernel.SHA256, EgressCAFingerprint: caFP,
+		NoEgressCASource: caSrc == nil,
 	}
 	m := agent.NewManager(agent.Config{
 		MinFreeMemMiB:    f.minFreeMemMiB,
@@ -290,7 +291,7 @@ func run(f flags, log *slog.Logger) error {
 	m.UseManagedGuest(server.DaemonManaged{Port: uint32(f.daemonPort)}, f.swapTimeout)
 	svc := &server.Service{M: m, DialPorts: ports, DaemonPort: uint32(f.daemonPort), MaxDialsPerVM: f.dialMax, Keys: pt, Managed: &server.ManagedImages{Store: mstore, Keep: f.managedKeep}, Log: log}
 	if caSrc != nil {
-		svc.EgressCA = &egressca.Cached{Src: caSrc, TTL: egressCACacheTTL}
+		svc.EgressCA = &egressca.Cached{Src: caSrc, TTL: egressCACacheTTL, MaxAge: egressCAMaxAge}
 	} else {
 		log.Warn("no --egress-ca or --egress-ca-configmap: VMs trust only a CA built into the root drive")
 	}
@@ -367,6 +368,9 @@ func startupTemplates(svc *server.Service, b *tplbuild.Builder, log *slog.Logger
 // egressCACacheTTL is how long Create reuses a CA read. A rotated CA reaches
 // new VMs after at most this long.
 const egressCACacheTTL = 30 * time.Second
+
+// egressCAMaxAge is how long Create uses the last good CA while reads fail.
+const egressCAMaxAge = time.Hour
 
 // egressCASource returns the --egress-ca or --egress-ca-configmap source, or
 // nil if neither is set.

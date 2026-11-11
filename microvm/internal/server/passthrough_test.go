@@ -650,7 +650,7 @@ func TestCreateSendsEgressCA(t *testing.T) {
 		t.Fatal(err)
 	}
 	caFile := filepath.Join(t.TempDir(), "ca.crt")
-	src := &egressca.Cached{Src: egressca.File{Path: caFile}, TTL: time.Minute}
+	src := &egressca.Cached{Src: egressca.File{Path: caFile}, TTL: time.Minute, RetryAfter: time.Nanosecond}
 	a := newPTAgent(t, false, map[string]string{sandbox: vm.uds}, func(s *Service) { s.EgressCA = src })
 	ha := pb.NewHostAgentClient(a.conn)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

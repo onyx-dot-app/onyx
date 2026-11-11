@@ -138,16 +138,37 @@ func ParseConfigMapRef(ref string) (namespace, name, key string, err error) {
 	return namespace, name, key, nil
 }
 
+// Defaults of Cached.
+const (
+	DefaultReadTimeout = 5 * time.Second
+	DefaultRetryAfter  = 5 * time.Second
+)
+
 // Cached keeps the last good CA of Src for TTL. When a read fails, it keeps
-// using the last good CA, so a short API outage does not stop Create.
+// using the last good CA for up to MaxAge after that CA was read, so a short
+// API outage does not stop Create.
+//
+// One read runs at a time, in the background, bounded by ReadTimeout. A
+// caller with a usable CA does not wait for another caller's read. After a
+// failed read, the next read starts RetryAfter later.
 type Cached struct {
 	Src Source
 	TTL time.Duration
-	Now func() time.Time
+	// MaxAge is how long after its read the last good CA is used when reads
+	// fail. 0: no limit.
+	MaxAge time.Duration
+	// ReadTimeout bounds one read. 0: DefaultReadTimeout.
+	ReadTimeout time.Duration
+	// RetryAfter is the wait after a failed read. 0: DefaultRetryAfter.
+	RetryAfter time.Duration
+	Now        func() time.Time
 
-	mu   sync.Mutex
-	last *CA
-	at   time.Time
+	mu       sync.Mutex
+	last     *CA
+	at       time.Time
+	lastErr  error
+	failedAt time.Time
+	reading  chan struct{}
 }
 
 func (c *Cached) String() string { return c.Src.String() }
@@ -159,6 +180,13 @@ func (c *Cached) now() time.Time {
 	return time.Now()
 }
 
+func orDefault(d, def time.Duration) time.Duration {
+	if d > 0 {
+		return d
+	}
+	return def
+}
+
 // CA implements Source.
 func (c *Cached) CA(ctx context.Context) (*CA, error) {
 	ca, _, err := c.Get(ctx)
@@ -168,18 +196,64 @@ func (c *Cached) CA(ctx context.Context) (*CA, error) {
 // Get returns the CA. If a refresh failed and the last good CA is returned,
 // refreshErr is that failure.
 func (c *Cached) Get(ctx context.Context) (ca *CA, refreshErr error, err error) {
+	started := false
+	for {
+		c.mu.Lock()
+		now := c.now()
+		if c.last != nil && now.Sub(c.at) < c.TTL {
+			last := c.last
+			c.mu.Unlock()
+			return last, nil, nil
+		}
+		var usable *CA
+		if c.last != nil && (c.MaxAge <= 0 || now.Sub(c.at) < c.MaxAge) {
+			usable = c.last
+		}
+		failed := c.lastErr != nil && now.Sub(c.failedAt) < orDefault(c.RetryAfter, DefaultRetryAfter)
+		if started || (failed && c.reading == nil) {
+			// This caller's read is done, or a read failed a short time ago.
+			lastErr := c.lastErr
+			c.mu.Unlock()
+			if usable != nil {
+				return usable, lastErr, nil
+			}
+			if lastErr == nil {
+				lastErr = errors.New("no CA read")
+			}
+			return nil, nil, lastErr
+		}
+		if c.reading != nil && usable != nil {
+			c.mu.Unlock()
+			return usable, nil, nil
+		}
+		if c.reading == nil {
+			c.reading = make(chan struct{})
+			started = true
+			go c.read(context.WithoutCancel(ctx), c.reading)
+		}
+		done := c.reading
+		c.mu.Unlock()
+		select {
+		case <-done:
+		case <-ctx.Done():
+			return nil, nil, ctx.Err()
+		}
+	}
+}
+
+// read reads Src once and closes done. It does not use the caller's
+// cancellation: the result serves every caller.
+func (c *Cached) read(ctx context.Context, done chan struct{}) {
+	rctx, cancel := context.WithTimeout(ctx, orDefault(c.ReadTimeout, DefaultReadTimeout))
+	fresh, err := c.Src.CA(rctx)
+	cancel()
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.last != nil && c.now().Sub(c.at) < c.TTL {
-		return c.last, nil, nil
+	if err == nil {
+		c.last, c.at, c.lastErr = fresh, c.now(), nil
+	} else {
+		c.lastErr, c.failedAt = err, c.now()
 	}
-	fresh, ferr := c.Src.CA(ctx)
-	if ferr == nil {
-		c.last, c.at = fresh, c.now()
-		return fresh, nil, nil
-	}
-	if c.last != nil {
-		return c.last, ferr, nil
-	}
-	return nil, nil, ferr
+	c.reading = nil
+	close(done)
+	c.mu.Unlock()
 }

@@ -50,13 +50,23 @@ PY
   echo "context ready in ${ctx}"
 }
 
+# remove_install DIR REF: the image writes as root, so remove its files with
+# its own busybox. A missing DIR is skipped (docker would make it as root).
+remove_install() {
+  local dir=$1 ref=$2
+  [ -d "${dir}" ] || return 0
+  docker run --rm --platform linux/amd64 -v "${dir}:${dir}" --entrypoint /craft-fc-rootfs/busybox "${ref}" \
+    rm -rf "${dir}/rootfs" >/dev/null 2>&1 || true
+  rm -rf "${dir}"
+}
+
 # check_image REF: install into an empty directory, then again (no copy).
 check_image() {
   local ref=$1 dir
   dir="$(mktemp -d)"
-  # The image writes as root; remove its files with its own busybox.
+  # A RETURN trap stays set after the function returns, so it clears itself.
   # shellcheck disable=SC2064 # expand now: dir and ref are local.
-  trap "docker run --rm --platform linux/amd64 -v '${dir}:${dir}' --entrypoint /craft-fc-rootfs/busybox '${ref}' rm -rf '${dir}/rootfs' >/dev/null 2>&1; rm -rf '${dir}'" RETURN
+  trap "trap - RETURN; remove_install '${dir}' '${ref}'" RETURN
   docker run --rm --platform linux/amd64 -v "${dir}:${dir}" "${ref}" "${dir}/rootfs" | tee "${dir}/log1"
   grep -q "installed in ${dir}/rootfs" "${dir}/log1"
   python3 - "${dir}/rootfs" <<'PY'

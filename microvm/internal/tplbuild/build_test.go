@@ -327,6 +327,12 @@ func TestBuildRootfsWithoutCA(t *testing.T) {
 	if err != nil || res2.Built || res2.Template.Version != res.Template.Version {
 		t.Fatalf("node with another CA: %+v %v", res2, err)
 	}
+	// An agent with no CA source does not use a root drive with no CA.
+	other.CAFingerprint, other.RootfsCARequired = "", true
+	r.b.Node = other
+	if _, err := r.b.Build(context.Background(), in); apierr.ReasonOf(err) != pb.ErrorReason_TEMPLATE_INCOMPATIBLE {
+		t.Fatalf("no CA source: %v", err)
+	}
 }
 
 func TestBuildCleansUpWhenTheGuestIsNotReady(t *testing.T) {

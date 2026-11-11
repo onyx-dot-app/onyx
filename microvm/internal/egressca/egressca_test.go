@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -133,7 +135,12 @@ func TestCached(t *testing.T) {
 	if _, _, err := c.Get(ctx); err == nil {
 		t.Fatal("no error without a CA")
 	}
+	// A failed read is not repeated before RetryAfter.
 	g.err, g.data = nil, map[string]string{"ca.crt": string(ca1.PEM)}
+	if _, _, err := c.Get(ctx); err == nil || g.n != 1 {
+		t.Fatalf("read again before RetryAfter: %v, %d reads", err, g.n)
+	}
+	now = now.Add(DefaultRetryAfter)
 	got, refreshErr, err := c.Get(ctx)
 	if err != nil || refreshErr != nil || string(got.PEM) != string(ca1.PEM) {
 		t.Fatalf("first read: %v %v", refreshErr, err)
@@ -155,5 +162,107 @@ func TestCached(t *testing.T) {
 	got, refreshErr, err = c.Get(ctx)
 	if err != nil || refreshErr == nil || string(got.PEM) != string(ca2.PEM) {
 		t.Fatalf("stale: %v %v", refreshErr, err)
+	}
+}
+
+func TestCachedMaxAge(t *testing.T) {
+	ca1 := newCA(t, "one")
+	g := &fakeGetter{data: map[string]string{"ca.crt": string(ca1.PEM)}}
+	now := time.Unix(1000, 0)
+	c := &Cached{Src: ConfigMap{Getter: g, Namespace: "onyx-sandboxes", Name: "sandbox-proxy-ca-bundle", Key: "ca.crt"},
+		TTL: 30 * time.Second, MaxAge: time.Hour, Now: func() time.Time { return now }}
+	ctx := context.Background()
+	if _, _, err := c.Get(ctx); err != nil {
+		t.Fatal(err)
+	}
+	g.err = errors.New("API down")
+	now = now.Add(59 * time.Minute)
+	if got, refreshErr, err := c.Get(ctx); err != nil || refreshErr == nil || got == nil {
+		t.Fatalf("within MaxAge: %v %v", refreshErr, err)
+	}
+	// Past MaxAge the last CA is not used.
+	now = now.Add(2 * time.Minute)
+	n := g.n
+	if _, _, err := c.Get(ctx); err == nil || !strings.Contains(err.Error(), "API down") || g.n != n+1 {
+		t.Fatalf("past MaxAge: %v, %d reads", err, g.n-n)
+	}
+	// The backoff still applies.
+	if _, _, err := c.Get(ctx); err == nil || g.n != n+1 {
+		t.Fatalf("past MaxAge, before RetryAfter: %v, %d reads", err, g.n-n)
+	}
+}
+
+// blockingSource blocks each read until release is closed or its context ends.
+type blockingSource struct {
+	ca      *CA
+	release chan struct{}
+	started chan struct{}
+	reads   atomic.Int32
+}
+
+func (b *blockingSource) String() string { return "blocking" }
+
+func (b *blockingSource) CA(ctx context.Context) (*CA, error) {
+	b.reads.Add(1)
+	b.started <- struct{}{}
+	select {
+	case <-b.release:
+		return b.ca, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func TestCachedSlowSource(t *testing.T) {
+	ca1, err := Parse(newCA(t, "one").PEM)
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := &blockingSource{ca: ca1, release: make(chan struct{}), started: make(chan struct{}, 4)}
+	var mu sync.Mutex
+	now := time.Unix(1000, 0)
+	clock := func() time.Time { mu.Lock(); defer mu.Unlock(); return now }
+	c := &Cached{Src: src, TTL: 30 * time.Second, ReadTimeout: 50 * time.Millisecond, Now: clock}
+	// The read times out; a caller with no deadline does not wait longer.
+	if _, _, err := c.Get(context.Background()); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("slow read: %v", err)
+	}
+	<-src.started
+	// A caller that cancels stops waiting for a read that another caller
+	// started, and the read goes on.
+	c.ReadTimeout = time.Minute
+	mu.Lock()
+	now = now.Add(DefaultRetryAfter)
+	mu.Unlock()
+	first := make(chan error, 1)
+	go func() { _, _, err := c.Get(context.Background()); first <- err }()
+	<-src.started
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, _, err := c.Get(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled waiter: %v", err)
+	}
+	close(src.release)
+	if err := <-first; err != nil {
+		t.Fatal(err)
+	}
+	// After the TTL, a read in progress does not block callers: they get
+	// the last CA.
+	src.release = make(chan struct{})
+	mu.Lock()
+	now = now.Add(time.Minute)
+	mu.Unlock()
+	go func() { _, _, err := c.Get(context.Background()); first <- err }()
+	<-src.started
+	got, refreshErr, err := c.Get(context.Background())
+	if err != nil || refreshErr != nil || string(got.PEM) != string(ca1.PEM) {
+		t.Fatalf("during a read: %v %v", refreshErr, err)
+	}
+	close(src.release)
+	if err := <-first; err != nil {
+		t.Fatal(err)
+	}
+	if n := src.reads.Load(); n != 3 {
+		t.Fatalf("%d reads, want 3", n)
 	}
 }
