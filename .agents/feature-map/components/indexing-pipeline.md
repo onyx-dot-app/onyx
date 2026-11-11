@@ -104,7 +104,18 @@ batch, calls the connector's `resolve_targets`, stores the document batch,
 deletes the stub batch, counts it converted and sends the docprocessing task.
 It deletes the stub batch before the send, so a redelivered task sends nothing
 twice. `dispatch_stub_batches` keeps at most `DOCCONVERSION_WINDOW_BATCHES`
-batches in flight. No code sends stub batches yet. `indexing/chunk_batch_store.py:ChunkBatchStore` spills embedded chunks to
+batches in flight. With `ENABLE_CONVERSION_STAGE` on,
+`background/indexing/run_docfetching.py:connector_document_extraction` only
+lists a connector that can do it (`connector_uses_conversion_stage`): it stores
+stub batches and dispatches them. The attempt row keeps
+`uses_conversion_stage` and the last task that dispatched. An attempt that
+continues a failed one takes over its stub batches with new numbers; a change
+of the switch between attempts starts the listing again.
+`background/indexing/conversion_recovery.py:check_conversion_chain` runs in
+the watchdog: when stub batches wait, no conversion task exists and the last
+dispatcher is gone, it sends the lost batches again and counts that as a
+heartbeat. The watchdog fails the attempt only after two runs in a row in
+which a restart sent nothing. `indexing/chunk_batch_store.py:ChunkBatchStore` spills embedded chunks to
 local disk inside one docprocessing task, so a large batch is never in memory.
 
 **Dedup gate.** `indexing/indexing_pipeline.py:get_docs_to_update`
