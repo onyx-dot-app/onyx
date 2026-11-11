@@ -2170,6 +2170,10 @@ craft:
       # Operator pods (app.kubernetes.io/name=prometheus) in the release
       # namespace. Set it if Prometheus runs in another namespace.
       networkPolicyFrom: []
+      # Prometheus job label of the agent series, for the alert rules and the
+      # dashboard. Empty = the agent Service name (the chart ServiceMonitor).
+      # Set it if another scrape configuration collects the agent metrics.
+      job: ""
     # Alert rules (monitoring.prometheusRules.enabled). The thresholds are
     # proposed defaults; tune them per deployment. Runbooks: microvm/RUNBOOKS.md.
     alerts:

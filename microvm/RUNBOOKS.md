@@ -75,9 +75,13 @@ kubectl $K -n $NS logs "$(pod_on <node>)" --previous --tail=100   # after a rest
 - For a 401 with a token, make the token in the agent namespace match `auth.metricsAuth`. The
   agent reads the token file on each scrape, so it needs no restart.
 - For a 401 with no token (`auth.metricsAuth` off and `configMap.DISABLE_METRICS_AUTH` not
-  `"true"`), the agent refuses every scrape. Set `auth.metricsAuth` (the chart copies the token
-  to the agent namespace and the ServiceMonitor sends it), or set `DISABLE_METRICS_AUTH`. Then
-  deploy again.
+  `"true"`), the agent refuses every scrape. Set `auth.metricsAuth`, then deploy again. The chart
+  copies the token to the agent namespace and the ServiceMonitor sends it.
+- If `auth.metricsAuth` uses `existingSecret`, the chart cannot copy the token, and Helm fails
+  without `craft.hostAgent.metrics.authExistingSecret`. Create a Secret with the same key in the
+  agent namespace and set that value.
+- Do not use `DISABLE_METRICS_AUTH: "true"` to fix a 401. It also removes the auth of the
+  api_server and MCP server `/metrics`.
 
 **Escalate** when the agent does not start after one restart, or when `recovered VMs` shows
 `unresponsive` VMs.

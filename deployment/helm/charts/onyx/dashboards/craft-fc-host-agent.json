@@ -130,14 +130,14 @@
       "type": "stat",
       "id": 2,
       "title": "Agents up",
-      "description": "Host agent scrape targets that answer.",
+      "description": "Host agent scrape targets that answer. No data: Prometheus has no agent target.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
       "gridPos": {
         "h": 4,
-        "w": 4,
+        "w": 3,
         "x": 0,
         "y": 1
       },
@@ -188,15 +188,15 @@
       "type": "stat",
       "id": 3,
       "title": "Agents down",
-      "description": "",
+      "description": "Scrape targets that do not answer. No data: Prometheus has no agent target.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
       "gridPos": {
         "h": 4,
-        "w": 4,
-        "x": 4,
+        "w": 3,
+        "x": 3,
         "y": 1
       },
       "fieldConfig": {
@@ -241,7 +241,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "count(up{namespace=~\"$namespace\", node=~\"$node\", job=\"__CRAFT_FC_HOST_AGENT_JOB__\"} == 0) or vector(0)",
+          "expr": "count(up{namespace=~\"$namespace\", node=~\"$node\", job=\"__CRAFT_FC_HOST_AGENT_JOB__\"} == 0) or (count(up{namespace=~\"$namespace\", node=~\"$node\", job=\"__CRAFT_FC_HOST_AGENT_JOB__\"}) * 0)",
           "refId": "A"
         }
       ]
@@ -249,6 +249,68 @@
     {
       "type": "stat",
       "id": 4,
+      "title": "Agent pods unavailable",
+      "description": "Desired - available agent pods (kube-state-metrics). A node with no agent pod has no scrape target.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 6,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(kube_daemonset_status_desired_number_scheduled{daemonset=\"__CRAFT_FC_HOST_AGENT_DAEMONSET__\", namespace=~\"$namespace\"}) - sum(kube_daemonset_status_number_available{daemonset=\"__CRAFT_FC_HOST_AGENT_DAEMONSET__\", namespace=~\"$namespace\"})",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "id": 5,
       "title": "VMs running",
       "description": "",
       "datasource": {
@@ -257,8 +319,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 4,
-        "x": 8,
+        "w": 3,
+        "x": 9,
         "y": 1
       },
       "fieldConfig": {
@@ -306,7 +368,7 @@
     },
     {
       "type": "stat",
-      "id": 5,
+      "id": 6,
       "title": "VMs starting",
       "description": "",
       "datasource": {
@@ -315,7 +377,7 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 4,
+        "w": 3,
         "x": 12,
         "y": 1
       },
@@ -364,7 +426,7 @@
     },
     {
       "type": "stat",
-      "id": 6,
+      "id": 7,
       "title": "Create p95 (created)",
       "description": "",
       "datasource": {
@@ -374,7 +436,7 @@
       "gridPos": {
         "h": 4,
         "w": 4,
-        "x": 16,
+        "x": 15,
         "y": 1
       },
       "fieldConfig": {
@@ -422,7 +484,7 @@
     },
     {
       "type": "stat",
-      "id": 7,
+      "id": 8,
       "title": "Admission refusals (1h)",
       "description": "",
       "datasource": {
@@ -431,8 +493,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 4,
-        "x": 20,
+        "w": 5,
+        "x": 19,
         "y": 1
       },
       "fieldConfig": {
@@ -489,7 +551,7 @@
     {
       "type": "row",
       "title": "VMs and Create",
-      "id": 8,
+      "id": 9,
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -501,7 +563,7 @@
     },
     {
       "type": "timeseries",
-      "id": 9,
+      "id": 10,
       "title": "VMs by node and state",
       "description": "VMs in the agent table. Exited VMs are not shown.",
       "datasource": {
@@ -564,7 +626,7 @@
     },
     {
       "type": "timeseries",
-      "id": 10,
+      "id": 11,
       "title": "Create latency p50 / p95 (created)",
       "description": "Create calls that started a new VM (snapshot restore, guest key install).",
       "datasource": {
@@ -636,7 +698,7 @@
     },
     {
       "type": "timeseries",
-      "id": 11,
+      "id": 12,
       "title": "Create results",
       "description": "created: new VM. existing: repeat call for a VM that runs. refused: stopped before admission passed. failed: the start failed after admission.",
       "datasource": {
@@ -699,7 +761,7 @@
     },
     {
       "type": "timeseries",
-      "id": 12,
+      "id": 13,
       "title": "Admission refusals and failures by reason",
       "description": "reason is the ErrorReason name. NODE_DRAINING is normal during a drain.",
       "datasource": {
@@ -763,7 +825,7 @@
     {
       "type": "row",
       "title": "Node memory and disk",
-      "id": 13,
+      "id": 14,
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -775,7 +837,7 @@
     },
     {
       "type": "timeseries",
-      "id": 14,
+      "id": 15,
       "title": "Guest memory allocated vs node memory",
       "description": "Allocated = guest memory of VMs that are not exited. In use = MemTotal - MemAvailable. When in use stays below allocated, the balloon (free page reporting) gives guest memory back to the node. The agent has no direct balloon metric.",
       "datasource": {
@@ -856,7 +918,7 @@
     },
     {
       "type": "timeseries",
-      "id": 15,
+      "id": 16,
       "title": "Node memory available",
       "description": "MemAvailable / MemTotal. Admission needs MemAvailable >= starting VMs + the new VM + --min-free-mem-mib. Alert: CraftFcNodeMemoryLow.",
       "datasource": {
@@ -919,7 +981,7 @@
     },
     {
       "type": "timeseries",
-      "id": 16,
+      "id": 17,
       "title": "Guest memory allocated / node memory",
       "description": "Guest memory promised to VMs as a share of node memory. Over 100% means overcommit that the balloon makes possible.",
       "datasource": {
@@ -982,7 +1044,7 @@
     },
     {
       "type": "timeseries",
-      "id": 17,
+      "id": 18,
       "title": "Data disk free",
       "description": "Free space on the agent data disk. Create needs --min-free-disk-gib; captures reserve --capture-max-bytes.",
       "datasource": {
@@ -1045,7 +1107,7 @@
     },
     {
       "type": "timeseries",
-      "id": 18,
+      "id": 19,
       "title": "vCPUs allocated",
       "description": "",
       "datasource": {
@@ -1108,7 +1170,7 @@
     },
     {
       "type": "timeseries",
-      "id": 19,
+      "id": 20,
       "title": "Node stats read errors",
       "description": "1 = the last scrape could not read node memory or disk. Create then refuses with CAPACITY_MEMORY or CAPACITY_DISK.",
       "datasource": {
@@ -1172,7 +1234,7 @@
     {
       "type": "row",
       "title": "Egress relay and Dial",
-      "id": 20,
+      "id": 21,
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -1184,7 +1246,7 @@
     },
     {
       "type": "timeseries",
-      "id": 21,
+      "id": 22,
       "title": "Relay connections by result",
       "description": "accepted, over_cap (VM over --relay-max-conns, closed at once), upstream_failed (an accepted connection that sandbox-proxy did not answer). Alert: CraftFcRelayErrors.",
       "datasource": {
@@ -1247,7 +1309,7 @@
     },
     {
       "type": "timeseries",
-      "id": 22,
+      "id": 23,
       "title": "Relay error ratio",
       "description": "Failed connections / all VM connections. A connection counts once as accepted or over_cap; an accepted one can also count as upstream_failed.",
       "datasource": {
@@ -1310,7 +1372,7 @@
     },
     {
       "type": "timeseries",
-      "id": 23,
+      "id": 24,
       "title": "Open relay connections and Dial streams",
       "description": "",
       "datasource": {
@@ -1383,7 +1445,7 @@
     {
       "type": "row",
       "title": "Session saves and templates",
-      "id": 24,
+      "id": 25,
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -1395,7 +1457,7 @@
     },
     {
       "type": "timeseries",
-      "id": 25,
+      "id": 26,
       "title": "Capture / upload / restore duration p95",
       "description": "rpc_duration_seconds uses the default buckets (up to 10 s), so longer transfers show as 10 s or more.",
       "datasource": {
@@ -1467,7 +1529,7 @@
     },
     {
       "type": "timeseries",
-      "id": 26,
+      "id": 27,
       "title": "Capture / upload / restore calls by code",
       "description": "Alert: CraftFcSessionTransferFailures (codes other than OK and Canceled).",
       "datasource": {
@@ -1530,7 +1592,7 @@
     },
     {
       "type": "timeseries",
-      "id": 27,
+      "id": 28,
       "title": "BuildTemplate calls by code",
       "description": "Only BuildTemplate API calls. The start-up build has no metric: read the agent log (\"template ready\" or \"template build at start-up failed\").",
       "datasource": {
@@ -1594,7 +1656,7 @@
     {
       "type": "row",
       "title": "HostAgent API",
-      "id": 28,
+      "id": 29,
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -1606,7 +1668,7 @@
     },
     {
       "type": "timeseries",
-      "id": 29,
+      "id": 30,
       "title": "Errors by method and code",
       "description": "",
       "datasource": {
@@ -1669,7 +1731,7 @@
     },
     {
       "type": "timeseries",
-      "id": 30,
+      "id": 31,
       "title": "Duration p95 by method",
       "description": "Dial is left out: it counts the whole stream.",
       "datasource": {
@@ -1732,7 +1794,7 @@
     },
     {
       "type": "timeseries",
-      "id": 31,
+      "id": 32,
       "title": "Guest daemon pass-through errors by method and code",
       "description": "",
       "datasource": {
@@ -1795,7 +1857,7 @@
     },
     {
       "type": "timeseries",
-      "id": 32,
+      "id": 33,
       "title": "Guest log bytes shipped and dropped",
       "description": "",
       "datasource": {
@@ -1868,7 +1930,7 @@
     {
       "type": "row",
       "title": "Agent process",
-      "id": 33,
+      "id": 34,
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -1880,7 +1942,7 @@
     },
     {
       "type": "timeseries",
-      "id": 34,
+      "id": 35,
       "title": "Agent resident memory",
       "description": "",
       "datasource": {
@@ -1943,7 +2005,7 @@
     },
     {
       "type": "timeseries",
-      "id": 35,
+      "id": 36,
       "title": "Agent CPU",
       "description": "",
       "datasource": {
@@ -2006,7 +2068,7 @@
     },
     {
       "type": "timeseries",
-      "id": 36,
+      "id": 37,
       "title": "Agent goroutines and open files",
       "description": "",
       "datasource": {
@@ -2079,7 +2141,7 @@
     {
       "type": "row",
       "title": "api_server: sandbox ready (all sandbox runtimes)",
-      "id": 37,
+      "id": 38,
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -2091,7 +2153,7 @@
     },
     {
       "type": "timeseries",
-      "id": 38,
+      "id": 39,
       "title": "Sandbox ready p95 by outcome",
       "description": "Time a user waits for a ready sandbox, from the api_server. Not filtered by node.",
       "datasource": {
@@ -2154,7 +2216,7 @@
     },
     {
       "type": "timeseries",
-      "id": 39,
+      "id": 40,
       "title": "Sandbox provisions in progress",
       "description": "",
       "datasource": {

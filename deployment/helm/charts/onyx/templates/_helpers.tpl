@@ -300,6 +300,11 @@ true
 {{- $runtime -}}
 {{- end }}
 
+{{/* Prometheus job label of the host agent series (alert rules, dashboard). */}}
+{{- define "onyx.craftHostAgentMetricsJob" -}}
+{{- (dig "hostAgent" "metrics" "job" "" (.Values.craft | default dict)) | default (include "onyx.resourceName" (list . "craft-fc-host-agent")) -}}
+{{- end }}
+
 {{/*
 Increase of a counter selector over a window, for alert rules. A labeled
 counter series starts at its first event, and increase() does not count that

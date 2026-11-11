@@ -209,7 +209,7 @@ def test_dashboard_job_is_the_agent_service_name() -> None:
     )
     assert dashboard is not None
     text = json.dumps(dashboard)
-    assert "__CRAFT_FC_HOST_AGENT_JOB__" not in text
+    assert "__CRAFT_FC_HOST_AGENT_" not in text
     jobs = set(re.findall(r'job=\\"([^\\"]+)\\"', text))
     assert len(jobs) == 1
     (job,) = jobs
@@ -218,3 +218,17 @@ def test_dashboard_job_is_the_agent_service_name() -> None:
         [*_METRICS_ON, *_RULES_ON, "--set-string", f"fullnameOverride={long_name}"]
     )
     assert f'job="{job}"' in rules[0]["expr"]
+    assert f'daemonset=\\"{job}\\"' in text
+
+
+def test_metrics_job_overrides_rules_and_dashboard() -> None:
+    custom = ["--set-string", "craft.hostAgent.metrics.job=my-scrape"]
+    rules = _by_alert(_rules([*_METRICS_ON, *_RULES_ON, *custom]))
+    assert 'job="my-scrape"' in rules["CraftFcHostAgentDown"]["expr"]
+    # kube-state-metrics names the DaemonSet, not the scrape job.
+    assert f'daemonset="{_JOB}"' in rules["CraftFcHostAgentPodsMissing"]["expr"]
+    dashboard = _dashboard([*_METRICS_ON, *_DASHBOARDS_ON, *custom])
+    assert dashboard is not None
+    text = json.dumps(dashboard)
+    assert set(re.findall(r'job=\\"([^\\"]+)\\"', text)) == {"my-scrape"}
+    assert f'daemonset=\\"{_JOB}\\"' in text

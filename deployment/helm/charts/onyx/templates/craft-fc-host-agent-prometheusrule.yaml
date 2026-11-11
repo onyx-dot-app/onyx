@@ -10,8 +10,7 @@ Runbooks: microvm/RUNBOOKS.md. Thresholds: craft.hostAgent.alerts. */}}
 {{- $runbook := $alerts.runbookUrl | default "https://github.com/onyx-dot-app/onyx/blob/main/microvm/RUNBOOKS.md" }}
 {{- $ns := include "onyx.craftHostAgentNamespace" . }}
 {{- $name := include "onyx.resourceName" (list . "craft-fc-host-agent") }}
-{{- /* The ServiceMonitor job label is the Service name. */}}
-{{- $sel := printf "job=%q, namespace=%q" $name $ns }}
+{{- $sel := printf "job=%q, namespace=%q" (include "onyx.craftHostAgentMetricsJob" .) $ns }}
 {{- $extraLabels := $alerts.extraLabels | default dict }}
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule

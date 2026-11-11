@@ -321,7 +321,8 @@ needs kube-state-metrics. The dashboard and the rules need the agent series:
 set `monitoring.serviceMonitors.enabled: true` (with
 `monitoring.serviceMonitors.labels` that match your Prometheus
 `serviceMonitorSelector`), unless another scrape configuration collects the
-agent metrics. Runbooks: `microvm/RUNBOOKS.md`.
+agent metrics. For another scrape configuration, set `craft.hostAgent.metrics.job`
+to its `job` label. Runbooks: `microvm/RUNBOOKS.md`.
 
 ## Using an external Redis
 
