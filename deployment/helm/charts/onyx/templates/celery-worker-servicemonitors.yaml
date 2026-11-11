@@ -60,6 +60,17 @@ metadata:
     {{- with .Values.monitoring.serviceMonitors.labels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
+{{- if and .Values.celery_worker_docconversion.enabled (or .Values.celery_worker_docconversion.autoscaling.enabled (gt (int .Values.celery_worker_docconversion.replicaCount) 0)) }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "onyx.resourceName" (list . "celery-worker-docconversion") }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    {{- with .Values.monitoring.serviceMonitors.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
 spec:
   namespaceSelector:
     matchNames:

@@ -50,6 +50,7 @@ _STALL_WARNING_INTERVAL = 120.0
 _QUEUE_LABEL_MAP: dict[str, str] = {
     OnyxCeleryQueues.PRIMARY: "primary",
     OnyxCeleryQueues.DOCPROCESSING: "docprocessing",
+    OnyxCeleryQueues.DOCCONVERSION: "docconversion",
     OnyxCeleryQueues.CONNECTOR_DOC_FETCHING: "docfetching",
     OnyxCeleryQueues.VESPA_METADATA_SYNC: "vespa_metadata_sync",
     OnyxCeleryQueues.CONNECTOR_DELETION: "connector_deletion",
