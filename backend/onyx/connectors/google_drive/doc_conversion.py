@@ -1,5 +1,5 @@
 import io
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import NamedTuple, cast
@@ -1087,6 +1087,11 @@ def build_slim_document_stub(
     file: GoogleDriveFileType,
     permission_sync_context: PermissionSyncContext | None,
     retriever_email: str,
+    # The path from the folders the listing returned. None when a parent is
+    # not listed yet: conversion then builds the path itself.
+    folder_path: list[str] | None = None,
+    # More users who can read the file, for example the shared drive's members.
+    other_reader_emails: Sequence[str] = (),
 ) -> SlimDocumentStub | None:
     """`build_slim_document`, plus what a later conversion needs."""
     slim = build_slim_document(ops, file, permission_sync_context, retriever_email)
@@ -1107,10 +1112,18 @@ def build_slim_document_stub(
         listing_payload=DriveListingPayload(
             retriever_email=retriever_email,
             drive_file=dict(file),
-            # Built once here, so conversion workers do not each fetch the
-            # parent folders.
-            folder_path=build_folder_path(file, ops, retriever_email),
-            # TODO(conversion stage): add the shared drive's members.
-            reader_emails=_domain_readers(file, retriever_email),
+            folder_path=folder_path,
+            reader_emails=list(
+                dict.fromkeys(
+                    [
+                        *_domain_readers(file, retriever_email),
+                        *(
+                            email
+                            for email in other_reader_emails
+                            if email.lower() != retriever_email.lower()
+                        ),
+                    ]
+                )
+            ),
         ),
     )
