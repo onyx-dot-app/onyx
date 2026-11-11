@@ -265,6 +265,22 @@ class IndexingCoordination:
         db_session.commit()
 
     @staticmethod
+    def record_stubs_listed(
+        db_session: Session, index_attempt_id: int, listed: int, skipped: int
+    ) -> None:
+        """Adds to the attempt's counts of listed documents and of those
+        dropped as unchanged."""
+        db_session.execute(
+            update(IndexAttempt)
+            .where(IndexAttempt.id == index_attempt_id)
+            .values(
+                stubs_listed=IndexAttempt.stubs_listed + listed,
+                stubs_skipped=IndexAttempt.stubs_skipped + skipped,
+            )
+        )
+        db_session.commit()
+
+    @staticmethod
     def claim_stub_batches(
         db_session: Session,
         index_attempt_id: int,
