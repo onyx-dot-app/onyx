@@ -95,6 +95,7 @@ from onyx.db.chat_inputs import (
     get_human_input_session,
     interrupt_human_message__no_commit,
     list_human_messages,
+    pending_human_message,
     submit_human_message__no_commit,
     withdraw_human_message__no_commit,
 )
@@ -1455,13 +1456,22 @@ def get_chat_session_processing_status(
     )
 
     if (
-        background_activity.has_pending_root_results
-        and not status.is_processing
+        not status.is_processing
         and chat_session.user_id == user.id
         and user.id is not None
+        and chat_session.incognito_record_mode is None
     ):
-        # A result can outlive the process that delivered its parent's response.
-        background_tasks.add_task(dispatch_pending_chat_messages, session_id, user.id)
+        should_dispatch = background_activity.has_pending_root_results
+        if not should_dispatch:
+            with get_session_with_current_tenant() as db_session:
+                should_dispatch = (
+                    pending_human_message(db_session, session_id, user.id) is not None
+                )
+        if should_dispatch:
+            # Queued work can outlive the process that completed its previous response.
+            background_tasks.add_task(
+                dispatch_pending_chat_messages, session_id, user.id
+            )
     return status
 
 

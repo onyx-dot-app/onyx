@@ -184,6 +184,10 @@ def test_status_observes_result_handoff_when_child_releases_ownership(
             "onyx.server.query_and_chat.chat_backend.is_chat_session_processing",
             return_value=False,
         ),
+        patch(
+            "onyx.server.query_and_chat.chat_backend.pending_human_message",
+            return_value=None,
+        ),
     ):
         status = get_chat_session_processing_status(
             chat.id, background_tasks=background_tasks, user=user

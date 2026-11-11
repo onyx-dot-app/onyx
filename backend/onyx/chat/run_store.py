@@ -7,6 +7,9 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import TimeoutError as DatabaseTimeoutError
+
 from onyx.agents.agent_coordination import (
     AgentCoordinator,
     AgentDirectory,
@@ -471,6 +474,10 @@ class ChatRunStore(RunStore, RunOwnership):
                     lock.release()
             self._dispatch_completions(coordinator, completions, selected)
             coordinator.notify_inputs()
+        except (OperationalError, DatabaseTimeoutError):
+            logger.exception(
+                "Could not poll agent messages; retrying on the next control poll"
+            )
         finally:
             self._dispatch_lock.release()
 

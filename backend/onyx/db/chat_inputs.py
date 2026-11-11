@@ -266,7 +266,7 @@ def has_pending_human_interrupt(
     )
 
 
-def pending_human_message__no_commit(
+def pending_human_message(
     session: Session, chat_session_id: UUID, user_id: UUID
 ) -> PendingChatMessage | None:
     """Read an eligible next turn; acceptance rechecks under the session lock."""
@@ -316,7 +316,7 @@ def pending_agent_result_response(
     selected = get_selected_response(session, chat_session_id)
     if selected is None or selected.response_status != RunStatus.COMPLETE:
         return None
-    if pending_human_message__no_commit(session, chat_session_id, user_id) is not None:
+    if pending_human_message(session, chat_session_id, user_id) is not None:
         return None
     branch = ChatBranch(
         chat_session_id=chat_session_id,
@@ -355,7 +355,7 @@ def accept_human_message__no_commit(
     """Adopt the next instruction in the transaction that creates its user message."""
     get_human_input_session(session, chat_session_id, user_id)
     lock_agent(session, str(chat_session_id))
-    pending = pending_human_message__no_commit(session, chat_session_id, user_id)
+    pending = pending_human_message(session, chat_session_id, user_id)
     if pending is None or pending.id != message_id:
         return None
     row = session.scalar(

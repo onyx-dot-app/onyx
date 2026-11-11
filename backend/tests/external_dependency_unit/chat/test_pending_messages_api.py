@@ -6,7 +6,7 @@ from typing import override
 from uuid import uuid4
 
 import pytest
-from fastapi import FastAPI
+from fastapi import BackgroundTasks, FastAPI
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from pydantic import JsonValue
@@ -27,6 +27,7 @@ from onyx.db.chat_response import read_response_record
 from onyx.db.enums import HookPoint, IncognitoRecordMode
 from onyx.db.models import ChatInput, ChatMessage, ChatSession, User
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
+from onyx.file_store.models import ChatFileInput, ChatLoadedFile
 from onyx.hooks.executor import HookSkipped
 from onyx.hooks.points.query_processing import (
     QueryProcessingPayload,
@@ -920,3 +921,94 @@ def test_withdrawal_dispatches_the_next_message_after_preparation_stops(
     finally:
         release.set()
         assert chat_turn_work.wait_idle(timeout=30)
+
+
+def test_queued_preparation_failure_saves_answer_and_keeps_next_message(
+    client: TestClient,
+    chat: ChatSession,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = f"/chat/chat-session/{chat.id}/pending-messages"
+    entered, release = Event(), Event()
+    model = QueueTestLLM(
+        lambda _request, _signal: AssistantMessage(content=[TextContent(text="Done")])
+    )
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
+    )
+
+    def fail_file_loading(
+        _inputs: list[ChatFileInput], *, text_file_ids: set[str] | None = None
+    ) -> list[ChatLoadedFile]:
+        assert text_file_ids is None
+        entered.set()
+        assert release.wait(15)
+        raise RuntimeError("File store unavailable")
+
+    monkeypatch.setattr("onyx.chat.process_message.load_chat_files", fail_file_loading)
+    try:
+        first = client.post(path, json={"message": "First", "delivery": "queue"})
+        assert first.status_code == 200, first.text
+        assert entered.wait(15)
+        answer = db_session.scalar(
+            select(ChatMessage).where(
+                ChatMessage.chat_session_id == chat.id,
+                ChatMessage.message_type == MessageType.ASSISTANT,
+            )
+        )
+        assert answer is not None
+        release.set()
+        assert chat_turn_work.wait_idle(timeout=30)
+        db_session.refresh(answer)
+        assert answer.response_status == RunStatus.ERROR
+        assert answer.response_failure is not None
+        assert answer.parent_message is not None
+        assert answer.parent_message.message == "First"
+        assert client.get(path).json() == []
+        assert (
+            client.post(
+                path,
+                json={
+                    "message": "Second",
+                    "delivery": "queue",
+                    "target_response_id": answer.id,
+                },
+            ).status_code
+            == 200
+        )
+        assert len(client.get(path).json()) == 1
+    finally:
+        release.set()
+        assert chat_turn_work.wait_idle(timeout=30)
+
+
+def test_status_recovers_queued_message_after_previous_dispatcher_exits(
+    client: TestClient,
+    response: ChatMessage,
+    owner: User,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = f"/chat/chat-session/{response.chat_session_id}/pending-messages"
+    response.response_status = RunStatus.COMPLETE
+    db_session.commit()
+    monkeypatch.setattr(chat_backend, "dispatch_pending_chat_messages", lambda *_: None)
+    assert (
+        client.post(
+            path,
+            json={
+                "message": "Continue",
+                "delivery": "queue",
+                "target_response_id": response.id,
+            },
+        ).status_code
+        == 200
+    )
+    tasks = BackgroundTasks()
+    status = chat_backend.get_chat_session_processing_status(
+        response.chat_session_id, tasks, owner
+    )
+    assert not status.is_processing
+    assert len(tasks.tasks) == 1
+    assert tasks.tasks[0].args == (response.chat_session_id, owner.id)

@@ -53,6 +53,7 @@ from onyx.db.chat import (
     checkpoint_from_summary,
     find_summary_for_ancestry,
     get_selected_response,
+    root_response_id,
     session_ancestors,
     translate_db_search_doc_to_saved_search_doc,
     visible_message_ids,
@@ -203,6 +204,32 @@ def _unread_agent_results(selected: CTE) -> Select[tuple[int, RunStatus | None, 
     later_revision = selected.alias("later_revision")
     invocation = aliased(ToolCall)
     generation = aliased(ChatResponseItem)
+    instructed_response = selected.alias("instructed_response")
+    sender_response = selected.alias("sender_response")
+    # An accepted instruction also gives its sender a result, including when
+    # the instruction joins a run originally started by another ancestor.
+    recipients = (
+        select(selected.c.id, selected.c.invocation_id)
+        .union(
+            select(selected.c.id, ChatInput.invoking_tool_call_id)
+            .select_from(selected)
+            .join(
+                instructed_response,
+                instructed_response.c.invocation_id == selected.c.invocation_id,
+            )
+            .join(
+                ChatResponseItem,
+                ChatResponseItem.chat_message_id == instructed_response.c.id,
+            )
+            .join(ChatInput, ChatInput.response_item_id == ChatResponseItem.id)
+            .join(ToolCall, ChatInput.invoking_tool_call_id == ToolCall.id)
+            .join(
+                sender_response, sender_response.c.id == ToolCall.parent_chat_message_id
+            )
+            .where(ChatInput.source == InputSource.AGENT)
+        )
+        .subquery("result_recipients")
+    )
     accepted = (
         select(ChatInput.id)
         .join(ChatResponseItem, ChatInput.response_item_id == ChatResponseItem.id)
@@ -224,8 +251,10 @@ def _unread_agent_results(selected: CTE) -> Select[tuple[int, RunStatus | None, 
             ChatMessage.response_status.label("status"),
             invocation.chat_session_id.label("recipient_id"),
         )
+        .distinct()
         .join(selected, selected.c.id == ChatMessage.id)
-        .join(invocation, selected.c.invocation_id == invocation.id)
+        .join(recipients, recipients.c.id == ChatMessage.id)
+        .join(invocation, recipients.c.invocation_id == invocation.id)
         .join(
             generation,
             and_(
@@ -269,7 +298,7 @@ def background_response_statuses(
     parent_agent_id: str,
     received_run_ids: Collection[str],
 ) -> dict[int, RunStatus]:
-    """Read unread direct-child statuses on the authorized branch; does not commit."""
+    """Read unread results from spawned or instructed descendants; does not commit."""
     unread = _unread_agent_results(_selected_responses(branch)).subquery()
     rows = db_session.execute(
         select(unread.c.id, unread.c.status)
@@ -387,6 +416,13 @@ def read_agent_completions(
         for rendering in renderings.values()
         for document_id in rendering.citation_documents.values()
     }
+    document_query = (
+        select(ChatMessage__SearchDoc.chat_message_id, StoredSearchDoc)
+        .join(
+            StoredSearchDoc, StoredSearchDoc.id == ChatMessage__SearchDoc.search_doc_id
+        )
+        .where(StoredSearchDoc.document_id.in_(cited_document_ids))
+    )
     documents = (
         {
             (
@@ -394,20 +430,40 @@ def read_agent_completions(
                 document.document_id,
             ): translate_db_search_doc_to_saved_search_doc(document)
             for response_id, document in db_session.execute(
-                select(ChatMessage__SearchDoc.chat_message_id, StoredSearchDoc)
-                .join(
-                    StoredSearchDoc,
-                    StoredSearchDoc.id == ChatMessage__SearchDoc.search_doc_id,
-                )
-                .where(
-                    ChatMessage__SearchDoc.chat_message_id.in_(response_ids),
-                    StoredSearchDoc.document_id.in_(cited_document_ids),
+                document_query.where(
+                    ChatMessage__SearchDoc.chat_message_id.in_(response_ids)
                 )
             )
         }
         if cited_document_ids
         else {}
     )
+    # Older child responses attached their cited documents to the root response.
+    legacy_roots = {
+        response.id: root_response_id(db_session, response)
+        for response, _ in rows
+        if (rendering := renderings.get(response.id)) is not None
+        and any(
+            (response.id, document_id) not in documents
+            for document_id in rendering.citation_documents.values()
+        )
+    }
+    if legacy_roots:
+        documents.update(
+            {
+                (
+                    response_id,
+                    document.document_id,
+                ): translate_db_search_doc_to_saved_search_doc(document)
+                for response_id, document in db_session.execute(
+                    document_query.where(
+                        ChatMessage__SearchDoc.chat_message_id.in_(
+                            set(legacy_roots.values())
+                        )
+                    )
+                )
+            }
+        )
     completions: list[AgentCompletion] = []
     for response, item in rows:
         if response.response_status is None or not response.response_status.is_terminal:
@@ -415,12 +471,15 @@ def read_agent_completions(
         output = item.message if item is not None else None
         rendering = renderings.get(response.id)
         if output is not None and rendering is not None:
-            output.metadata = ChatMessageMetadata(
-                sources={
-                    number: documents[(response.id, document_id)]
-                    for number, document_id in rendering.citation_documents.items()
-                }
-            )
+            sources = {}
+            for number, document_id in rendering.citation_documents.items():
+                document = documents.get((response.id, document_id))
+                if document is None and response.id in legacy_roots:
+                    document = documents.get((legacy_roots[response.id], document_id))
+                if document is None:
+                    raise ValueError("Cited source is unavailable on the response")
+                sources[number] = document
+            output.metadata = ChatMessageMetadata(sources=sources)
         completions.append(
             AgentCompletion(
                 agent_id=str(response.chat_session_id),

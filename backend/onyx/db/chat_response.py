@@ -1001,15 +1001,43 @@ def write_response_inputs(
                     response_invocation(source_response) if source_response else None
                 )
                 root = session.get(ChatMessage, root_response_id(session, response))
-                if (
-                    source_response is None
-                    or root is None
-                    or invocation is None
-                    or invocation.chat_session_id != response.chat_session_id
-                    or root_response_id(session, source_response)
-                    not in visible_message_ids(session, root)
-                ):
+                if source_response is None or root is None or invocation is None:
                     raise ValueError("Input result is unavailable on this branch")
+                visible_ids = visible_message_ids(session, root)
+                if root_response_id(session, source_response) not in visible_ids:
+                    raise ValueError("Input result is unavailable on this branch")
+                if invocation.chat_session_id != response.chat_session_id:
+                    source_history: set[int] = set()
+                    predecessor: ChatMessage | None = source_response
+                    while (
+                        predecessor is not None
+                        and predecessor.message_type == MessageType.ASSISTANT
+                    ):
+                        if (
+                            predecessor.id in source_history
+                            or len(source_history) >= MAX_AGENT_HISTORY_RUNS
+                        ):
+                            raise ValueError("Response history is cyclic or too long")
+                        source_history.add(predecessor.id)
+                        predecessor = predecessor.parent_message
+                    sender_history = visible_message_ids(session, response)
+                    accepted_instruction = session.scalar(
+                        select(ChatInput.id)
+                        .join(
+                            ChatResponseItem,
+                            ChatInput.response_item_id == ChatResponseItem.id,
+                        )
+                        .join(ToolCall, ChatInput.invoking_tool_call_id == ToolCall.id)
+                        .where(
+                            ChatInput.source == InputSource.AGENT,
+                            ChatResponseItem.chat_message_id.in_(source_history),
+                            ToolCall.chat_session_id == response.chat_session_id,
+                            ToolCall.parent_chat_message_id.in_(sender_history),
+                        )
+                        .limit(1)
+                    )
+                    if accepted_instruction is None:
+                        raise ValueError("Input result is unavailable on this branch")
             row = ChatInput(
                 recipient_session_id=response.chat_session_id,
                 message_id=sanitize_string(message.id),
