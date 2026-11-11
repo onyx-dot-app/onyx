@@ -179,6 +179,7 @@ describe("ShareSkillModal", () => {
         customFixture({
           user_permission: permission,
           public_permission: "VIEWER",
+          ownership_vacant: false,
           user_shares: [
             {
               user: { id: "invitee", email: "invitee@example.com" },
@@ -464,5 +465,74 @@ describe("ShareSkillModal", () => {
         })
       )
     );
+  });
+
+  it.each([
+    ["without", false],
+    ["with", true],
+  ])(
+    "an editor %s global authority on a skill without an active owner edits user access accordingly",
+    async (_label, global) => {
+      mockIsAdmin = false;
+      mockPermissions = global ? [Permission.MANAGE_SKILLS] : [];
+      mockLoadSkill.mockResolvedValue(
+        customFixture({
+          user_permission: "EDITOR",
+          ownership_vacant: true,
+          user_shares: [
+            {
+              user: { id: "user-a", email: "a@example.com" },
+              permission: "VIEWER",
+            },
+          ],
+        })
+      );
+      render(
+        <ShareSkillModal
+          mode="edit"
+          skillId="custom-1"
+          open
+          onClose={jest.fn()}
+          onSaved={jest.fn()}
+        />
+      );
+      await setupUser().click(
+        await screen.findByRole("button", { name: "Manage individual access" })
+      );
+      const menu = await screen.findByRole("button", {
+        name: "Update access for a@example.com",
+      });
+      if (global) {
+        expect(menu).toBeEnabled();
+      } else {
+        expect(menu).toBeDisabled();
+      }
+    }
+  );
+
+  it("does not present a deactivated author as the owner", async () => {
+    mockIsAdmin = false;
+    mockLoadSkill.mockResolvedValue(
+      customFixture({
+        user_permission: "EDITOR",
+        public_permission: null,
+        owner: { id: "former", email: "former@example.com" },
+        ownership_vacant: true,
+      })
+    );
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        open
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+      />
+    );
+    expect(await screen.findByText("No active owner")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "former@example.com is deactivated."
+    );
+    expect(screen.queryByText("former@example.com")).not.toBeInTheDocument();
   });
 });

@@ -42,6 +42,7 @@ from onyx.db.skill import (
     replace_skill_bundle,
     set_skill_enabled_for_user,
     share_skill__no_commit,
+    skill_ownership_is_vacant,
     transfer_skill_ownership,
 )
 from onyx.db.skill_version import (
@@ -1154,13 +1155,9 @@ def transfer_current_user_skill_ownership(
             f"Skill '{skill.name}' is a built-in and cannot change ownership.",
         )
 
-    ownership_vacant = (
-        skill.author_user_id is None
-        or skill.author is None
-        or not skill.author.is_active
-    )
     if skill.author_user_id != user.id and not (
-        has_global_permission(user, Permission.MANAGE_SKILLS) and ownership_vacant
+        has_global_permission(user, Permission.MANAGE_SKILLS)
+        and skill_ownership_is_vacant(skill)
     ):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,

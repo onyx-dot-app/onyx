@@ -814,6 +814,15 @@ def persist_skill_validity(
 SkillBulkAction = Literal["enable", "disable", "delete"]
 
 
+def skill_ownership_is_vacant(skill: Skill) -> bool:
+    """True when no active user owns the skill. Requires `skill.author` loaded."""
+    return (
+        skill.author_user_id is None
+        or skill.author is None
+        or not skill.author.is_active
+    )
+
+
 def ensure_can_edit_org_visibility(user: User) -> None:
     if not has_global_permission(user, Permission.MANAGE_SKILLS):
         raise OnyxError(
@@ -840,6 +849,7 @@ class SkillAccessAdapter(ResourceAccessAdapter[Skill]):
     def state(self, resource: Skill) -> ResourceAccessState:
         return ResourceAccessState(
             owner_user_id=resource.author_user_id,
+            ownership_vacant=skill_ownership_is_vacant(resource),
             public_permission=resource.public_permission,
             user_shares={
                 share.user_id: share.permission for share in resource.user_shares

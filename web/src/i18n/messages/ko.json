@@ -17321,6 +17321,7 @@
         "header": {
           "transferTitle": "*{name}* 이전"
         },
+        "inactiveOwnerNotice": "{email} 계정이 비활성화되었습니다. 전역 Skills 관리 권한이 있는 사용자만 개별 액세스를 변경하거나 이 Skill을 이전할 수 있습니다.",
         "loading": {
           "message": "공유 정보를 불러오는 중..."
         },

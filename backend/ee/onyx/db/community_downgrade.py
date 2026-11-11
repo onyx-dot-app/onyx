@@ -14,6 +14,7 @@ from onyx.db.enums import (
     AccountType,
     Permission,
     PersonaSharePermission,
+    SandboxStatus,
     SkillSharePermission,
 )
 from onyx.db.models import (
@@ -33,6 +34,7 @@ from onyx.db.models import (
     Persona__UserFile,
     Persona__UserGroup,
     PublicExternalUserGroup,
+    Sandbox,
     ScimToken,
     Skill,
     Skill__UserGroup,
@@ -342,3 +344,12 @@ def disable_paid_features__no_commit(db_session: Session) -> None:
         update(ScimToken).where(ScimToken.is_active.is_(True)).values(is_active=False)
     )
     remove_all_api_keys__no_commit(db_session)
+
+
+def community_skill_push_recipients(db_session: Session) -> set[UUID]:
+    """Downgrade can broaden access across the workspace; refresh active sandboxes."""
+    return set(
+        db_session.scalars(
+            select(Sandbox.user_id).where(Sandbox.status == SandboxStatus.RUNNING)
+        )
+    )

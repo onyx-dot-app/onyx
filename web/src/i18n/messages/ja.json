@@ -17321,6 +17321,7 @@
         "header": {
           "transferTitle": "*{name}* を譲渡"
         },
+        "inactiveOwnerNotice": "{email} は無効化されています。個別のアクセスを変更したりこの Skill を移管したりできるのは、Skills のグローバル管理権限を持つユーザーだけです。",
         "loading": {
           "message": "共有設定を読み込み中..."
         },

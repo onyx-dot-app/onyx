@@ -17321,6 +17321,7 @@
         "header": {
           "transferTitle": "转移 *{name}*"
         },
+        "inactiveOwnerNotice": "{email} 已停用。只有拥有全局 Skills 管理权限的用户才能更改个人访问权限或转移此 Skill。",
         "loading": {
           "message": "正在加载共享详情…"
         },

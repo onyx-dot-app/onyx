@@ -21,12 +21,13 @@ from onyx.db.enums import (
 from onyx.db.models import (
     PermissionGrant,
     Skill,
+    Skill__User,
     Skill__UserGroup,
     User,
     User__UserGroup,
 )
 from onyx.db.permissions import recompute_user_permissions__no_commit
-from onyx.db.skill import affected_user_ids_for_skills
+from onyx.db.skill import affected_user_ids_for_skills, skill_ownership_is_vacant
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.server.features.skill.api import user_router
 from tests.external_dependency_unit.craft.db_helpers import (
@@ -284,3 +285,46 @@ def test_share_uses_actor_permissions_read_after_the_lock(session: Session) -> N
     assert result.status_code == 403, result.text
     session.refresh(skill)
     assert skill.public_permission is None
+
+
+@pytest.mark.parametrize("owner", ["none", "inactive"])
+@pytest.mark.parametrize("global_access", [False, True])
+def test_vacant_skill_user_grants_need_global_permission(
+    session: Session, global_access: bool, owner: str
+) -> None:
+    editor, _ = manager(session, global_access=global_access)
+    other = make_user(session, standard_account=True)
+    if owner == "none":
+        skill = make_skill(session, is_public=True)
+    else:
+        author = make_user(session, standard_account=True)
+        author.is_active = False
+        skill = make_skill(session, author_user_id=author.id)
+    assert skill_ownership_is_vacant(skill)
+    session.add(
+        Skill__User(
+            skill_id=skill.id,
+            user_id=editor.id,
+            permission=SkillSharePermission.EDITOR,
+        )
+    )
+    session.flush()
+    current = [{"user_id": str(editor.id), "permission": "EDITOR"}]
+    path = f"/skills/custom/{skill.id}/share"
+    with client_for(editor, session) as client:
+        kept = client.patch(path, json={"user_shares": current})
+        assert kept.status_code == 200, kept.text
+        added = client.patch(
+            path,
+            json={
+                "user_shares": [
+                    *current,
+                    {"user_id": str(other.id), "permission": "VIEWER"},
+                ]
+            },
+        )
+    assert added.status_code == (200 if global_access else 403), added.text
+    session.expire(skill, ["user_shares"])
+    assert {share.user_id for share in skill.user_shares} == (
+        {editor.id, other.id} if global_access else {editor.id}
+    )

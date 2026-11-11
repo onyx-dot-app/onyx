@@ -211,7 +211,8 @@ deletes the custom analytics script and both logo files.
    `backend/ee/onyx/db/community_downgrade.py:disable_paid_features__no_commit`.
 8. `downgrade-deletes-license-last` **The downgrade deletes the license last.** A
    failure before that leaves a licensed deployment part way to Community, and a
-   retry finishes it.
+   retry finishes it. After deletion, active sandboxes receive the changed skill
+   access. Failed pushes retain their old hashes for retry.
 9. `checkout-claim-keeps-tenant` **A claim with a `session_id` must keep the
    stored tenant.**
    `backend/ee/onyx/utils/license.py:verify_and_store_license` with

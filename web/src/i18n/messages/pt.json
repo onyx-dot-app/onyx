@@ -17321,6 +17321,7 @@
         "header": {
           "transferTitle": "Transferir *{name}*"
         },
+        "inactiveOwnerNotice": "{email} está desativado. Somente usuários com permissão global para gerenciar Skills podem alterar o acesso individual ou transferir esta Skill.",
         "loading": {
           "message": "Carregando os detalhes de compartilhamento..."
         },

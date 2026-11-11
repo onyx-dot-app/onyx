@@ -198,6 +198,9 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
             (group) => group.id === share.group_id
           )
         )));
+  // Direct-user grants on a Skill without an active owner need global authority.
+  const canEditUserShares =
+    canEditShares && (canManageCompanySkills || !skill?.ownership_vacant);
   const canEditOrgVisibility =
     !skill?.external_app && canEditShares && canManageCompanySkills;
   const canTransfer =
@@ -580,7 +583,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
                 stagedGroups={stagedGroups}
                 stagedPermission={stagedPermission}
                 stagedUsers={stagedUsers}
-                users={shareableUsersData ?? []}
+                users={canEditUserShares ? (shareableUsersData ?? []) : []}
               />
             ) : null}
             {(effectiveState.userShares.length > 0 ||
@@ -599,7 +602,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
                             ariaLabel={t("share.permissionMenu.ariaLabel", {
                               name: share.user.email,
                             })}
-                            disabled={!canEditShares}
+                            disabled={!canEditUserShares}
                             onChange={(permission) =>
                               updateUserSharePermission(
                                 share.user.id,
@@ -655,7 +658,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
         <Section gap={3} height="auto" alignItems="stretch">
           <Content font="main-ui-action" title={t("share.ownershipTitle")} />
           <Card border="solid" padding={2}>
-            {skill.owner ? (
+            {skill.owner && !skill.ownership_vacant ? (
               <ShareAccessRow
                 avatarInitial={skill.owner.email.charAt(0).toUpperCase()}
                 icon={SvgUser}
@@ -701,6 +704,11 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
               />
             )}
           </Card>
+          {skill.owner && skill.ownership_vacant && (
+            <Text color="text-03" font="secondary-body" role="status">
+              {t("share.inactiveOwnerNotice", { email: skill.owner.email })}
+            </Text>
+          )}
         </Section>
       </Section>
     );
