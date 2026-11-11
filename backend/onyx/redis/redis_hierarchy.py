@@ -25,7 +25,10 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import DocumentSource
 from onyx.db.enums import HierarchyNodeType
 from onyx.db.hierarchy import ensure_source_node_exists as db_ensure_source_node_exists
-from onyx.db.hierarchy import get_all_hierarchy_nodes_for_source
+from onyx.db.hierarchy import (
+    get_all_hierarchy_nodes_for_source,
+    persist_stub_hierarchy_nodes_for_cc_pair,
+)
 from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
 
@@ -534,6 +537,46 @@ def get_source_node_id_from_cache(
 
     logger.error("SOURCE node not found for source %s", source.value)
     return None
+
+
+def resolve_parent_node_ids(
+    redis_client: TenantRedisClient,
+    db_session: Session,
+    source: DocumentSource,
+    source_node_id: int,
+    raw_parent_ids: list[str],
+    connector_id: int,
+    credential_id: int,
+) -> dict[str, int]:
+    """Maps each raw parent id to its node id. A parent that is in neither
+    the cache nor the database gets a STUB node, so the document does not
+    fall back to the source root. The STUB is filled in when the parent
+    node arrives."""
+    resolved: dict[str, int] = {}
+    missing: list[str] = []
+    for raw_id in set(raw_parent_ids):
+        node_id, found = get_node_id_from_raw_id(redis_client, source, raw_id)
+        if found and node_id is not None:
+            resolved[raw_id] = node_id
+        else:
+            missing.append(raw_id)
+    if not missing:
+        return resolved
+    nodes = persist_stub_hierarchy_nodes_for_cc_pair(
+        db_session=db_session,
+        raw_node_ids=missing,
+        source=source,
+        source_node_id=source_node_id,
+        connector_id=connector_id,
+        credential_id=credential_id,
+    )
+    cache_hierarchy_nodes_batch(
+        redis_client=redis_client,
+        source=source,
+        entries=[HierarchyNodeCacheEntry.from_db_model(node) for node in nodes],
+    )
+    resolved.update({node.raw_node_id: node.id for node in nodes})
+    return resolved
 
 
 def clear_hierarchy_cache(
