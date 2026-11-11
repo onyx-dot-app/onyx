@@ -222,7 +222,7 @@ func TestSavesKVM(t *testing.T) {
 	e := loadEnv()
 	bucket := os.Getenv("KVM_S3_BUCKET")
 	if bucket == "" {
-		t.Skip("KVM_S3_BUCKET not set")
+		t.Skip("KVM_S3_BUCKET not set: the saves test needs a test S3 bucket and AWS credentials")
 	}
 	e.Template = getenv("KVM_SAVES_TEMPLATE", "kvmtest-saves-1")
 	cmd := newCommand(t, e)

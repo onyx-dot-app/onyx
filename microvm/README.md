@@ -659,9 +659,14 @@ go mod tidy
 ## Tests
 
 - Unit tests: `go test -race ./...`. They use a fake VMM and run in CI.
-- KVM tests: build tag `kvm`, on a KVM host (not in CI yet; ENG-4561). They use the kit rootfs
-  (`onyxdotapp/sandbox` + `fc-init` + the prototype guest agent `fc-agent.py`) and guest kernel 6.18.25.
-  Host setup: `plans/craft-sandbox-bench/work-host-agent/` (AL2023 with kernel 6.18, `m8i.4xlarge`).
+- KVM tests: build tag `kvm`, on a KVM host. The older tests use the kit rootfs (`onyxdotapp/sandbox`
+  + `internal/kvmtest/testdata/kit`: `fc-init` and the prototype guest agent `fc-agent.py`) and guest
+  kernel 6.18.25. The egress and pass-through tests use the proxy harness in
+  `internal/kvmtest/testdata/harness`.
+- `check-kvm.sh smoke|full ARTIFACTS_DIR SOURCE_IMAGE` (as root) prepares a host and runs them: the data
+  dir, the root drives, the agent image, then one test at a time. CI
+  (`.github/workflows/craft-fc-host-agent-kvm.yml`, nested KVM `m8i.2xlarge`) runs the smoke lane on pull
+  requests and the full lane nightly and on release tags. `TestSavesKVM` skips there (no S3 bucket).
 
 ```bash
 GOOS=linux GOARCH=amd64 go test -c -tags kvm -o hostagent-kvm.test ./internal/kvmtest
@@ -671,9 +676,9 @@ GOOS=linux GOARCH=amd64 go test -c -tags kvm -o hostagent-kvm.test ./internal/kv
 # Agent restart: runs the agent binary (KVM_AGENT_BIN, default /opt/agent/host-agent) in a privileged
 # --pid=host --cgroupns=host container (KVM_AGENT_IMAGE, default debian:trixie-slim) and restarts it.
 ./hostagent-kvm.test -test.v -test.run TestRestartKVM
-# Egress: needs the proxy harness from plans/craft-sandbox-bench/work-host-agent/ (KVM_HARNESS_DIR,
-# default /opt/harness), the PR #17174 backend (KVM_PR_BACKEND, default /opt/pr/backend), its Python env
-# (KVM_PYTHON) and Docker for Redis.
+# Egress: needs the proxy harness internal/kvmtest/testdata/harness (KVM_HARNESS_DIR, default
+# /opt/harness), the backend directory (KVM_PR_BACKEND, default /opt/pr/backend), a Python with
+# backend/requirements/default.txt (KVM_PYTHON) and Docker for Redis.
 ./hostagent-kvm.test -test.v -test.run TestEgressKVM
 # mTLS listener and Dial (test CAs from internal/testcerts).
 ./hostagent-kvm.test -test.v -test.run TestDialKVM
