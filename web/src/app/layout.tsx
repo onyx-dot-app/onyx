@@ -1,8 +1,8 @@
 import "./globals.css";
 
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { GTM_ENABLED, MODAL_ROOT_ID } from "@/lib/constants";
-import { generateFaviconMetadata } from "@/lib/app/svcSS";
+import { fetchAppName, generateFaviconMetadata } from "@/lib/app/svcSS";
 import AppProvider from "@/providers/AppProvider";
 import { PHProvider } from "./providers";
 import {
@@ -57,8 +57,17 @@ const dmMono = DM_Mono({
 // time — many child routes use cookies() which requires dynamic rendering.
 export const dynamic = "force-dynamic";
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  interactiveWidget: "resizes-content",
+};
+
 export async function generateMetadata(): Promise<Metadata> {
-  return { icons: await generateFaviconMetadata() };
+  return {
+    title: await fetchAppName(),
+    icons: await generateFaviconMetadata(),
+  };
 }
 
 interface LayoutProps {
@@ -106,11 +115,6 @@ export default async function Layout({ children }: LayoutProps) {
       suppressHydrationWarning
     >
       <head>
-        <meta
-          name="viewport"
-          content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0, interactive-widget=resizes-content"
-        />
-
         {/* When running inside the Tauri desktop wrapper on macOS, tag <html>
             as desktop so the native title-bar reservation in
             css/desktop-titlebar.css engages before paint. macOS is the only
