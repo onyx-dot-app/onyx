@@ -13,6 +13,10 @@ class ZipSizeLimitError(ValueError):
     pass
 
 
+class ZipMetadataLimitError(ZipSizeLimitError):
+    pass
+
+
 def _assert_supported_compression(info: zipfile.ZipInfo) -> None:
     if info.compress_type not in _ALLOWED_ZIP_COMPRESSION_TYPES:
         raise ZipSizeLimitError("Zip member uses an unsupported compression method")
