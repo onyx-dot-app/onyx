@@ -13,6 +13,7 @@ Functions here flush and never commit.
 
 import hashlib
 from collections.abc import Callable, Iterable
+from typing import Literal
 from uuid import UUID, uuid4
 
 from sqlalchemy import delete, func, select, update
@@ -20,7 +21,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import MarketplaceKind, PluginInstallationPolicy, PluginKind
+from onyx.db.enums import MarketplaceKind, PluginInstallationPolicy
 from onyx.db.models import Marketplace, Plugin, PluginSkill, PluginVersion, User
 from onyx.db.utils import is_unique_violation
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -30,31 +31,47 @@ from onyx.skills.models import PluginFileEntry, PluginVersionContent
 # Same fixed id as the migration that made the plugin tables.
 ORGANIZATION_LIBRARY_ID = UUID("00000000-0000-4000-8000-00000000011b")
 ORGANIZATION_LIBRARY_NAME = "Organization library"
-ACCOUNT_UPLOADS_NAME = "My uploads"
+USER_UPLOADS_NAME = "My uploads"
 PLUGIN_NAME_MAX_LENGTH = 64
 
 _PLUGIN_NAME_INDEX = "uq_plugin_marketplace_name"
 
+PluginVersionKind = Literal["skill", "plugin"]
 
-def account_uploads_marketplace_id(user_id: UUID) -> UUID:
-    """Same id as SQL md5('account_uploads:' || user_id)::uuid."""
+
+def plugin_version_kind(skill_paths: Iterable[str]) -> PluginVersionKind:
+    """The kind of a version, from the paths of its plugin_skill rows. A
+    version is a skill when it holds exactly one skill, with SKILL.md at the
+    bundle root; otherwise it is a plugin. No column stores the result, so a
+    later version can change it."""
+    return "skill" if list(skill_paths) == [""] else "plugin"
+
+
+def get_plugin_version_kind(version_id: UUID, db_session: Session) -> PluginVersionKind:
+    return plugin_version_kind(
+        db_session.scalars(
+            select(PluginSkill.path).where(PluginSkill.plugin_version_id == version_id)
+        )
+    )
+
+
+def user_uploads_marketplace_id(user_id: UUID) -> UUID:
+    """Same id as SQL md5('user_uploads:' || user_id)::uuid."""
     digest = hashlib.md5(
-        f"account_uploads:{user_id}".encode(), usedforsecurity=False
+        f"user_uploads:{user_id}".encode(), usedforsecurity=False
     ).hexdigest()
     return UUID(digest)
 
 
-def get_or_create_account_uploads__no_commit(
-    user_id: UUID, db_session: Session
-) -> UUID:
+def get_or_create_user_uploads__no_commit(user_id: UUID, db_session: Session) -> UUID:
     """Return the user's "My uploads" id. Two first uploads at the same time
     both work: the second insert waits for the first and then does nothing."""
     db_session.execute(
         insert(Marketplace)
         .values(
-            id=account_uploads_marketplace_id(user_id),
-            kind=MarketplaceKind.ACCOUNT_UPLOADS,
-            name=ACCOUNT_UPLOADS_NAME,
+            id=user_uploads_marketplace_id(user_id),
+            kind=MarketplaceKind.USER_UPLOADS,
+            name=USER_UPLOADS_NAME,
             owner_user_id=user_id,
             default_installation_policy=PluginInstallationPolicy.AVAILABLE,
         )
@@ -62,7 +79,7 @@ def get_or_create_account_uploads__no_commit(
     )
     return db_session.scalars(
         select(Marketplace.id).where(
-            Marketplace.kind == MarketplaceKind.ACCOUNT_UPLOADS,
+            Marketplace.kind == MarketplaceKind.USER_UPLOADS,
             Marketplace.owner_user_id == user_id,
         )
     ).one()
@@ -148,7 +165,6 @@ def _add_version_rows(
         PluginSkill(
             plugin_version_id=version.id,
             path=skill.path,
-            name=skill.name,
             skill_md=skill.skill_md,
             frontmatter=skill.frontmatter,
         )
@@ -162,7 +178,6 @@ def create_plugin__no_commit(
     *,
     plugin_id: UUID,
     name: str,
-    kind: PluginKind,
     marketplace_id: UUID,
     author_user_id: UUID | None,
     installation_policy: PluginInstallationPolicy | None,
@@ -174,7 +189,11 @@ def create_plugin__no_commit(
     """Add a plugin with version 1 and its plugin_skill rows. A used name
     takes the next free name. A plugin that takes the same name at the same
     time gets SKILL_NAME_CONFLICT."""
-    description = content.skills[0].description if content.skills else ""
+    description = (
+        content.skills[0].description
+        if plugin_version_kind(skill.path for skill in content.skills) == "skill"
+        else ""
+    )
     version_id = uuid4()
     try:
         with db_session.begin_nested():
@@ -182,7 +201,6 @@ def create_plugin__no_commit(
                 id=plugin_id,
                 name=free_plugin_name(marketplace_id, name, db_session),
                 description=description,
-                kind=kind,
                 marketplace_id=marketplace_id,
                 author_user_id=author_user_id,
                 installation_policy=installation_policy,
@@ -264,10 +282,10 @@ def add_plugin_version__no_commit(
     if current is None:
         raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "Plugin has no current version.")
 
-    if plugin.kind == PluginKind.SKILL:
+    if get_plugin_version_kind(current.id, db_session) == "skill":
         current_names = sorted(
             db_session.scalars(
-                select(PluginSkill.name).where(
+                select(PluginSkill.frontmatter["name"].astext).where(
                     PluginSkill.plugin_version_id == current.id
                 )
             )
@@ -305,7 +323,7 @@ def add_plugin_version__no_commit(
     )
     if marketplace_kind == MarketplaceKind.ORGANIZATION_LIBRARY:
         plugin.published_version_id = version.id
-    if plugin.kind == PluginKind.SKILL and content.skills:
+    if plugin_version_kind(skill.path for skill in content.skills) == "skill":
         plugin.description = content.skills[0].description
     db_session.flush()
     return version

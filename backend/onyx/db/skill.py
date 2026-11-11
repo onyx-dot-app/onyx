@@ -52,7 +52,6 @@ from onyx.db.enums import (
     Permission,
     PermissionAuthority,
     PluginInstallationPolicy,
-    PluginKind,
     SandboxStatus,
     SkillInstallationPolicy,
     SkillSharePermission,
@@ -77,8 +76,8 @@ from onyx.db.plugin import (
     add_plugin_version__no_commit,
     create_plugin__no_commit,
     delete_plugin__no_commit,
-    get_or_create_account_uploads__no_commit,
     get_or_create_organization_library__no_commit,
+    get_or_create_user_uploads__no_commit,
     lock_plugin,
     persist_plugin_version_validity__no_commit,
 )
@@ -490,13 +489,12 @@ def _create_plugin_for_skill__no_commit(
     if skill.public_permission is not None or author_user_id is None:
         marketplace_id = get_or_create_organization_library__no_commit(db_session)
     else:
-        marketplace_id = get_or_create_account_uploads__no_commit(
+        marketplace_id = get_or_create_user_uploads__no_commit(
             author_user_id, db_session
         )
     plugin = create_plugin__no_commit(
         plugin_id=skill.id,
         name=skill.name,
-        kind=PluginKind.SKILL,
         marketplace_id=marketplace_id,
         author_user_id=skill.author_user_id,
         installation_policy=(
@@ -533,10 +531,8 @@ def _legacy_version_content(skill: Skill) -> PluginVersionContent:
         skills=[
             PluginSkillContent(
                 path="",
-                name=skill.name,
-                description=skill.description,
                 skill_md=None,
-                frontmatter=None,
+                frontmatter={"name": skill.name, "description": skill.description},
             )
         ],
     )

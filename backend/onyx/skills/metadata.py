@@ -195,6 +195,16 @@ class _NotJsonbSafe(Exception):
     pass
 
 
+def _is_jsonb_string(value: str) -> bool:
+    if "\x00" in value:
+        return False
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
 def _jsonb_value(value: Any) -> Any:
     if value is None or isinstance(value, bool):
         return value
@@ -205,12 +215,8 @@ def _jsonb_value(value: Any) -> Any:
             raise _NotJsonbSafe
         return value
     if isinstance(value, str):
-        if "\x00" in value:
+        if not _is_jsonb_string(value):
             raise _NotJsonbSafe
-        try:
-            value.encode("utf-8")
-        except UnicodeEncodeError as exc:
-            raise _NotJsonbSafe from exc
         return value
     # datetime is a subclass of date, so both take this branch.
     if isinstance(value, datetime.date):
@@ -218,24 +224,39 @@ def _jsonb_value(value: Any) -> Any:
     if isinstance(value, list):
         return [_jsonb_value(item) for item in value]
     if isinstance(value, dict):
-        converted: dict[str, Any] = {}
-        for key, item in value.items():
-            if not isinstance(key, str):
-                raise _NotJsonbSafe
-            converted[_jsonb_value(key)] = _jsonb_value(item)
-        return converted
+        return _jsonb_mapping(value)
     # bytes, sets, OversizedYamlInt and other YAML types JSON cannot hold.
     raise _NotJsonbSafe
 
 
-def frontmatter_for_jsonb(frontmatter: Mapping[str, Any]) -> dict[str, Any] | None:
-    """Return a copy of parsed frontmatter that a JSONB column can hold, with
-    dates as ISO strings, or None when any value cannot be stored."""
+def _jsonb_mapping(mapping: Mapping[Any, Any]) -> dict[str, Any]:
+    """Keep each entry JSONB can hold. Drop an entry whose key is not a string
+    or whose value (a list, for example) holds a value JSONB cannot hold."""
+    converted: dict[str, Any] = {}
+    for key, item in mapping.items():
+        if not isinstance(key, str) or not _is_jsonb_string(key):
+            continue
+        try:
+            converted[key] = _jsonb_value(item)
+        except (_NotJsonbSafe, RecursionError):
+            continue
+    return converted
+
+
+def frontmatter_for_jsonb(document: SkillDocument) -> dict[str, Any]:
+    """Return a copy of the parsed frontmatter that a JSONB column can hold,
+    with dates as ISO strings. A value JSONB cannot hold is dropped and every
+    other key is kept. name and description are always the validated
+    strings."""
+    required = {
+        "name": document.metadata.name,
+        "description": document.metadata.description,
+    }
+    converted = _jsonb_mapping(document.frontmatter) | required
     try:
-        converted = _jsonb_value(dict(frontmatter))
         json.dumps(converted, allow_nan=False)
-    except (_NotJsonbSafe, ValueError, TypeError, RecursionError):
-        return None
+    except (ValueError, TypeError, RecursionError):
+        return required
     return converted
 
 

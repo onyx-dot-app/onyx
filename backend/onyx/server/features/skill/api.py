@@ -76,6 +76,7 @@ from onyx.skills.bundle import (
     SKILL_MD_NAME,
     build_single_file_bundle,
     build_skill_md,
+    check_skill_md_size,
     compute_bundle_manifest,
     inspect_custom_bundle,
     normalize_custom_bundle,
@@ -656,10 +657,12 @@ def inspect_custom_skill_bundle_upload(
 
     normalized = normalize_custom_bundle(upload_bytes)
     with open_bundle_zip(normalized.content) as bundle_zip:
-        document = parse_skill_document(
-            bundle_zip.read(SKILL_MD_NAME),
-            directory_name=normalized.source_directory,
-        )
+        raw_skill_md = bundle_zip.read(SKILL_MD_NAME)
+    check_skill_md_size(raw_skill_md)
+    document = parse_skill_document(
+        raw_skill_md,
+        directory_name=normalized.source_directory,
+    )
     contents = inspect_custom_bundle(normalized.content)
     return SkillBundleInspectResponse(
         name=document.metadata.name,

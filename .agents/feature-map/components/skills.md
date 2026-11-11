@@ -274,7 +274,11 @@ The library preview of an external-app skill calls the same renderer
     `skills/bundle.py:normalize_stored_bundle`, so a saved bundle over the ZIP-size
     or file-count limit stays editable. Merges that add files keep the upload
     limits, so repeated merges cannot pass them. A full-replacement upload in the
-    editor does not read the current bundle. Only direct uploads return 413. Batch uploads report
+    editor does not read the current bundle. One limit applies to every new
+    version, edits included: `skills/bundle.py:check_skill_md_size` refuses a
+    SKILL.md over `SKILL_MD_MAX_BYTES` (256 KiB), because each version stores
+    the text. `skills/ingest.py:ingest_skill_bundle` and the GitHub preview call
+    it. Only direct uploads return 413. Batch uploads report
     `not_imported` and GitHub previews mark the Skill unavailable.
 18. `bundle-file-list-memory` **ZIP metadata memory has a fixed bound.**
     Every Skill ZIP opens through `skills/bundle.py:open_bundle_zip`, which uses
@@ -331,9 +335,10 @@ The library preview of an external-app skill calls the same renderer
     the edit gets 409 `PLUGIN_VERSION_STALE`. Routes no longer delete the
     previous bundle, because older versions still point at it; a skill delete
     removes only the current bundle, so earlier blobs stay until a cleanup
-    task exists. `plugin_skill.skill_md` is empty above 256 KiB, and
-    `plugin_skill.frontmatter` is empty when JSONB cannot hold a value
-    (`skills/metadata.py:frontmatter_for_jsonb`).
+    task exists. Each new version stores `plugin_skill.skill_md`
+    ([[#bundle-size-limits]]). `skills/metadata.py:frontmatter_for_jsonb`
+    drops a frontmatter value that JSONB cannot hold and keeps every other
+    key; name and description are always the validated strings.
 
 ---
 

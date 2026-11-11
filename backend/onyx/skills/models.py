@@ -72,10 +72,6 @@ class SkillBundleFile(BaseModel):
     size: int
 
 
-# Larger SKILL.md text is not stored on plugin_skill; readers open the bundle.
-PLUGIN_SKILL_MD_MAX_BYTES: Final[int] = 256 * 1024
-
-
 class PluginFileEntry(BaseModel):
     """One file of a plugin version's bundle, as stored in file_manifest."""
 
@@ -93,14 +89,18 @@ class PluginSkillContent(BaseModel):
 
     # Folder in the bundle; empty for a SKILL.md at the root.
     path: str
-    name: str
-    # Validated frontmatter description. Copied to plugin.description for a
-    # plugin of kind skill; plugin_skill has no column for it.
-    description: str
-    # None when SKILL.md is larger than PLUGIN_SKILL_MD_MAX_BYTES.
+    # None only for a version copied from a legacy skill row.
     skill_md: str | None
-    # None when a frontmatter value cannot be stored in JSONB.
-    frontmatter: dict[str, Any] | None
+    # Always holds the validated name and description strings.
+    frontmatter: dict[str, Any]
+
+    @property
+    def name(self) -> str:
+        return self.frontmatter["name"]
+
+    @property
+    def description(self) -> str:
+        return self.frontmatter["description"]
 
 
 class PluginVersionContent(BaseModel):

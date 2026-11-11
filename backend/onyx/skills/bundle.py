@@ -29,7 +29,6 @@ from onyx.skills.metadata import (
     split_skill_md,
 )
 from onyx.skills.models import (
-    PLUGIN_SKILL_MD_MAX_BYTES,
     CustomSkillBundleContents,
     PluginFileEntry,
     PluginSkillContent,
@@ -44,6 +43,8 @@ DEFAULT_PER_FILE_MAX_BYTES: Final[int] = 25 * _MIB
 DEFAULT_TOTAL_MAX_BYTES: Final[int] = 100 * _MIB
 DEFAULT_ZIP_MAX_BYTES: Final[int] = 25 * _MIB
 DEFAULT_MAX_FILE_COUNT: Final[int] = 500
+# Each new version stores its SKILL.md text in the database.
+SKILL_MD_MAX_BYTES: Final[int] = 256 * 1024
 # Saved bundles are read up to this many ZIP bytes; before the ZIP limit, uploads
 # were capped at the expanded total.
 STORED_ZIP_MAX_BYTES: Final[int] = DEFAULT_TOTAL_MAX_BYTES
@@ -52,7 +53,12 @@ ZIP_DIRECTORY_MAX_BYTES: Final[int] = 1 * _MIB
 STORED_ZIP_DIRECTORY_MAX_BYTES: Final[int] = 4 * _MIB
 
 SkillBundleLimit = Literal[
-    "zip_bytes", "zip_metadata_bytes", "file_count", "file_bytes", "total_bytes"
+    "zip_bytes",
+    "zip_metadata_bytes",
+    "file_count",
+    "file_bytes",
+    "total_bytes",
+    "skill_md_bytes",
 ]
 
 SKILL_MD_NAME: Final[str] = "SKILL.md"
@@ -87,6 +93,17 @@ def _zip_too_large_error(max_bytes: int) -> OnyxError:
         max_bytes,
         f"Skill bundle zip exceeds the {max_bytes // (1024 * 1024)} MiB limit.",
     )
+
+
+def check_skill_md_size(raw_skill_md: bytes) -> None:
+    """Refuse a SKILL.md that a new version cannot store."""
+    if len(raw_skill_md) > SKILL_MD_MAX_BYTES:
+        raise _bundle_limit_error(
+            "skill_md_bytes",
+            SKILL_MD_MAX_BYTES,
+            f"SKILL.md exceeds the {SKILL_MD_MAX_BYTES // 1024} KiB limit. "
+            "Split it into several files and link them from SKILL.md.",
+        )
 
 
 def read_bundle_file(
@@ -818,14 +835,8 @@ def build_skill_version_content(
         skills=[
             PluginSkillContent(
                 path="",
-                name=document.metadata.name,
-                description=document.metadata.description,
-                skill_md=(
-                    raw_skill_md.decode("utf-8")
-                    if len(raw_skill_md) <= PLUGIN_SKILL_MD_MAX_BYTES
-                    else None
-                ),
-                frontmatter=frontmatter_for_jsonb(document.frontmatter),
+                skill_md=raw_skill_md.decode("utf-8"),
+                frontmatter=frontmatter_for_jsonb(document),
             )
         ],
     )
