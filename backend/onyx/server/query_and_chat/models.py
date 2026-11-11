@@ -3,9 +3,9 @@ from enum import Enum
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from onyx.agents.models import RunStatus
+from onyx.agents.models import MessageDelivery, RunStatus
 from onyx.configs.constants import DocumentSource, MessageType, SessionType
 from onyx.context.search.models import BaseFilters, SavedSearchDoc, SearchDoc, Tag
 from onyx.db.enums import ChatSessionSharedStatus
@@ -188,6 +188,30 @@ class ChatMessageIdentifier(BaseModel):
     message_id: int
 
 
+class PendingChatMessageRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    message: str = Field(min_length=1)
+    delivery: MessageDelivery = Field(
+        description=(
+            "send adds input at the next step; queue waits for normal completion; "
+            "interrupt stops current work and starts a new turn."
+        )
+    )
+    target_response_id: int | None = Field(
+        default=None,
+        gt=0,
+        description="The selected response; omit only for an empty session.",
+    )
+
+    @field_validator("message")
+    @classmethod
+    def require_message_text(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("A pending message must contain text")
+        return value
+
+
 class ChatRenameRequest(BaseModel):
     chat_session_id: UUID
     name: str | None = None
@@ -288,6 +312,9 @@ class CurrentStreamInfo(BaseModel):
 
 class ChatSessionProcessingStatus(BaseModel):
     is_processing: bool
+    has_active_subagents: bool = False
+    latest_response_id: int | None = None
+    current_stream: CurrentStreamInfo | None = None
 
 
 class ChatSessionDetailResponse(BaseModel):
@@ -307,6 +334,7 @@ class ChatSessionDetailResponse(BaseModel):
     packets: list[list[Packet]]
     # The buffer also retains interrupted work until its cache TTL expires.
     current_stream: CurrentStreamInfo | None = None
+    has_active_subagents: bool = False
     # Readiness is independent of whether a stream can be replayed.
     is_processing: bool = False
     # True for sessions pinned to an incognito record mode, so a reload can

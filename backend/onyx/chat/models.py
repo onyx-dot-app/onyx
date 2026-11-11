@@ -19,6 +19,7 @@ from onyx.agents.models import (
     AgentInfo,
     CompactionCheckpoint,
     CompactionMetadata,
+    MessageDelivery,
     RunFailure,
     RunStatus,
     StepRecord,
@@ -45,6 +46,7 @@ from onyx.llm.models import (
     Message,
     ReasoningEffort,
     ToolResultMessage,
+    UserMessage,
 )
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.server.query_and_chat.models import (
@@ -68,11 +70,19 @@ from onyx.tools.models import (
 from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
 from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultType
 from onyx.tools.tool_implementations.search.models import SearchContext
+from onyx.tools.tool_implementations.subagents.models import ChatConfiguration
 
 MAX_DISCOVERED_AGENTS = 128
 _MESSAGE_ADAPTER = TypeAdapter(Message)
 _INCOGNITO_IMAGES = TypeAdapter(list[SavedLoadedFile])
 _INCOGNITO_DETAILS = TypeAdapter(SavedToolResultDetails)
+
+
+class PendingChatMessage(BaseModel):
+    id: str
+    message: str
+    delivery: MessageDelivery
+    target_response_id: int | None
 
 
 class PromptMetadata(CompactionMetadata):
@@ -145,7 +155,7 @@ class ResponseRecord(BaseModel):
     agent_id: str | None = None
     agent_path: str = "/root"
     agent_description: str = ""
-    restoration_config: ResearchConfiguration | None = None
+    restoration_config: ResearchConfiguration | ChatConfiguration | None = None
     previous_run_id: str | None = None
     parent_run_id: str | None = None
     parent_tool_call_id: str | None = None
@@ -188,7 +198,7 @@ class ResponseStatus(BaseModel):
     message_id: int
     root_message_id: int
     root_session_id: UUID
-    parent_agent_id: str | None
+    ancestor_agent_ids: list[str]
     status: RunStatus
 
 
@@ -199,6 +209,13 @@ class ResponseAncestry(BaseModel):
     spawned_by_message_id: int | None
     parent_session_id: UUID | None
     parent_response_id: int | None
+
+
+class ChatBackgroundActivity(BaseModel):
+    latest_response_id: int | None = None
+    running_response_ids: list[int] = Field(default_factory=list)
+    has_pending_root_results: bool = False
+    completion_host_response_ids: list[int] = Field(default_factory=list)
 
 
 class ChatBranch(BaseModel):
@@ -214,22 +231,11 @@ class ResponseLink(BaseModel):
     status: RunStatus
 
 
-class IncognitoAgentState(BaseModel):
-    parent_agent_id: str | None = None
-    agent_id: str
-    agent_path: str
-    description: str
-    configuration: ResearchConfiguration | None
-    responses: list[ResponseRecord]
-    sources: dict[int, SearchDoc] = Field(default_factory=dict)
-
-
-class IncognitoAgentResponse(BaseModel):
+class IncognitoResponseReceipt(BaseModel):
     run_id: str | None = None
     checkpoint: CompactionCheckpoint | None = None
     message_ids: list[str] = Field(default_factory=list)
     replay_digest: str
-    agents: list[IncognitoAgentState] = Field(default_factory=list)
 
 
 def _read_incognito_message(value: dict[str, JsonValue] | Message) -> Message:
@@ -304,14 +310,14 @@ class IncognitoState(BaseModel):
     messages: list[IncognitoMessage] = Field(default_factory=list)
     file_metadata: dict[str, FileToolMetadata] = Field(default_factory=dict)
     previous_run_id: str | None = None
-    responses: dict[str, IncognitoAgentResponse] = Field(default_factory=dict)
+    responses: dict[str, IncognitoResponseReceipt] = Field(default_factory=dict)
 
 
 class SavedAgentContext(BaseModel):
     """Saved history, settings, and sources used to rebuild an agent."""
 
     agent_id: str
-    configuration: ResearchConfiguration | None
+    configuration: ResearchConfiguration | ChatConfiguration | None
     messages: list[Message]
     checkpoint: CompactionCheckpoint | None = None
     previous_run_id: str | None = None
@@ -325,6 +331,13 @@ class ChatMessageMetadata(BaseModel):
     documents: list[SearchDoc] = Field(default_factory=list)
     include_citations: bool = True
     elapsed_seconds: float = 0
+
+
+class ReceivedAgentInputs(BaseModel):
+    """Received messages and an updated citation map, when their sources changed."""
+
+    messages: list[UserMessage]
+    citation_sources: dict[int, SearchDoc] | None = None
 
 
 class ToolRecordReference(BaseModel):
@@ -662,7 +675,8 @@ class ChatTurnSetup(BaseModel):
     tool_configuration: PersonaToolConfiguration
     research_tool_id: int | None
     checkpoint: CompactionCheckpoint | None
-    user_message_id: int
+    # Child-result delivery has no new user message.
+    user_message_id: int | None
     user_identity: LLMUserIdentity
     responses: list[ReservedChatResponse]
     messages: list[Message]

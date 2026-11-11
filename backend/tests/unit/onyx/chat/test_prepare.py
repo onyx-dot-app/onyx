@@ -19,12 +19,12 @@ from onyx.chat.chat_processing_checker import (
 from onyx.chat.models import (
     ChatHistoryMessage,
     ChatHistoryResult,
-    IncognitoAgentResponse,
+    IncognitoResponseReceipt,
     IncognitoState,
 )
 from onyx.chat.process_message import (
-    _process_query,
     prepare_chat_turn,
+    process_chat_query,
 )
 from onyx.chat.prompt_utils import build_chat_prompt, prepare_prompt
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
@@ -69,7 +69,7 @@ def test_process_query_applies_hook_result(
     expected: str,
 ) -> None:
     with patch("onyx.chat.process_message.execute_hook", return_value=hook_result):
-        result = _process_query(
+        result = process_chat_query(
             "original query",
             chat_session,
             User(id=uuid4(), email="reader@example.com"),
@@ -94,7 +94,7 @@ def test_process_query_rejects_empty_hook_query(
         ),
         pytest.raises(OnyxError) as exc_info,
     ):
-        _process_query(
+        process_chat_query(
             "original query",
             chat_session,
             User(id=uuid4(), email="reader@example.com"),
@@ -407,7 +407,6 @@ def test_attachment_loading_releases_preparation_session_before_reservation_fail
 
 
 def test_admission_precedes_model_setup_and_releases_after_setup_failure() -> None:
-    from types import SimpleNamespace
     from unittest.mock import MagicMock
     from uuid import uuid4
 
@@ -428,7 +427,7 @@ def test_admission_precedes_model_setup_and_releases_after_setup_failure() -> No
         patch("onyx.chat.process_message.get_session_with_current_tenant"),
         patch(
             "onyx.chat.process_message._load_session",
-            return_value=SimpleNamespace(id=session_id, persona=None),
+            return_value=ChatSession(id=session_id, persona=None),
         ),
         patch("onyx.chat.process_message._select_models", side_effect=fail_model_setup),
         pytest.raises(RuntimeError, match="model setup failed"),
@@ -438,7 +437,6 @@ def test_admission_precedes_model_setup_and_releases_after_setup_failure() -> No
 
 
 def test_busy_session_rejects_before_model_or_history_setup() -> None:
-    from types import SimpleNamespace
     from unittest.mock import MagicMock
     from uuid import uuid4
 
@@ -459,7 +457,7 @@ def test_busy_session_rejects_before_model_or_history_setup() -> None:
         patch("onyx.chat.process_message.get_session_with_current_tenant"),
         patch(
             "onyx.chat.process_message._load_session",
-            return_value=SimpleNamespace(id=session_id, persona=None),
+            return_value=ChatSession(id=session_id, persona=None),
         ),
         patch("onyx.chat.process_message._select_models") as select_models,
         patch("onyx.chat.process_message.load_message_branch") as load_branch,
@@ -617,7 +615,7 @@ def test_incognito_history_retains_summary_checkpoint(
         ],
         previous_run_id="previous-run",
         responses={
-            "1": IncognitoAgentResponse(
+            "1": IncognitoResponseReceipt(
                 replay_digest="",
                 run_id="previous-run",
                 message_ids=["previous-run:0"],

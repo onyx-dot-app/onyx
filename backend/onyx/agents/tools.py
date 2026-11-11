@@ -17,7 +17,7 @@ from onyx.llm.models import (
 )
 
 if TYPE_CHECKING:
-    from onyx.agents.models import AgentInfo, RunResult, RunState
+    from onyx.agents.models import AgentInfo, AgentMessageReceipt, RunResult, RunState
     from onyx.agents.runtime import Agent
 
 
@@ -113,16 +113,39 @@ class AgentControl(Protocol):
     def wait_run(
         self, run_id: str, *, timeout: float = DEFAULT_AGENT_WAIT_SECONDS
     ) -> "RunResult | None":
-        """Return completed output, or raise ChildRunCancelled for a cancelled child."""
+        """Return completed output or raise ChildRunCancelled.
+
+        A zero timeout checks saved status once without polling for completion.
+        """
         ...
 
     def cancel_run(self, run_id: str) -> None: ...
+
+    def send_message(
+        self,
+        agent_id: str,
+        *,
+        message: str,
+        max_steps: int,
+        total_timeout_s: float | None = None,
+    ) -> "AgentMessageReceipt": ...
+
+    def queue_message(
+        self,
+        agent_id: str,
+        *,
+        message: str,
+        max_steps: int,
+        total_timeout_s: float | None = None,
+    ) -> "AgentMessageReceipt": ...
 
     def add_completion_cleanup(
         self, run_id: str, callback: Callable[[], None]
     ) -> Future[None]: ...
 
     def discover_children(self) -> list["AgentInfo"]: ...
+
+    def lookup_agent(self, agent_id: str) -> "AgentInfo | None": ...
 
 
 class ToolProgress(BaseModel):

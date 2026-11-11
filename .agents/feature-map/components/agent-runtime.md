@@ -32,6 +32,21 @@ document does not repeat it.
   `ToolInvocation.agents.spawn_agent`. The tool returns a `ChildRunWait` and
   sets `result_from_children` instead of blocking, and the parent run suspends
   until the child ends.
+- **Independent children.** A feature can register controls from
+  `tools/tool_implementations/subagents/subagent_tools.py` to spawn, list, message, and interrupt children. Background children survive
+  the root response. A subagent must incorporate work it delegates before completing.
+  `WAIT_CHILDREN` releases its execution thread while results are pending and reserves
+  the last model step for synthesis. Dependencies belong to the current run, not the
+  agent's entire history. Failure and cancellation remain terminal outcomes.
+  Later turns use the branch-scoped directory and run store to access children. The runtime accepts submitted instructions and unread results
+  before a model call. Chat can remap citations through `PreparedStep.input_messages`.
+  Accepted inputs retain their identity and source in saved history.
+  `MessageStartEvent.input_messages` contains the inputs durably accepted by
+  that step; it excludes instructions still queued or withdrawn before acceptance.
+  `send_message` targets the next step or starts an idle child with fresh limits.
+  `queue_message` waits for normal completion; Stop, failure, and step limits pause
+  queued work. `interrupt_agent` cancels the current run while retaining its conversation.
+  Chat starts a follow-up response when an idle parent has unread child results.
 - [[tools-framework]]: `tools/interface.py:Tool.bind` turns each chat `Tool`
   into an `AgentTool`.
 - **A backend developer who builds a feature on the runtime.** Start from the
@@ -119,7 +134,8 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
   completed calls in call order, and model history replays them in call order. A step with more than `MAX_TOOL_CALLS_PER_STEP` (64) calls or a
   repeated call ID fails the whole run.
 - `backend/onyx/agents/agent_coordination.py:AgentCoordinator` runs children and
-  calls the application's storage and ownership adapters.
+  calls the application's storage and ownership adapters. Explicit discovery
+  refreshes directory metadata so later turns can find newly spawned descendants.
 - `backend/onyx/agents/execution_records.py:messages_for_model` filters history
   for the model. It drops incomplete tool exchanges, orphaned results, calls
   that repeat an ID in one message (with their results) and thinking that
@@ -131,7 +147,7 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
 |---|---|
 | `RunStore` | `chat/persistence.py:ChatResponsePersistence` saves the root response at the end and skips child runs. In a session that keeps content, `chat/run_store.py:ChatRunStore` wraps it: it saves the parent's partial record before each child reservation and saves each child when it ends. In a content-free incognito session no adapter saves children. |
 | `RunOwnership` | `ChatRunStore`, with cache leases that the turn's control thread renews. A content-free incognito run keeps local ownership only. |
-| `AgentDirectory` | `chat/subagents.py:ChatAgentDirectory`, limited to the selected branch. |
+| `AgentDirectory` | `chat/subagents.py:ChatAgentDirectory`, limited to descendants on the selected branch. |
 | Event listener | `chat/presentation.py:ResponsePresenter`. |
 | `RestorableFeature` | `ChatAgent`, `DeepResearchAgent` and `ResearchAgent`. Product calls only `capture_state`, at each suspension. `chat/restoration.py:restore_chat_agent` rebuilds them for `ChatRunStore.resume`. |
 | `AgentTool` | `tools/interface.py:Tool.bind`. |
@@ -141,13 +157,15 @@ coding agent suspend the parent on `ChildRunWait`, and it continues in the same
 process. No product code calls `Run.suspend`, `Run.submit` or
 `ToolInvocation.agents.start_run`, returns a `PendingToolInput`, or calls
 `ChatRunStore.handoff` or `ChatRunStore.resume`. Only tests do.
-`chat/execution.py` binds `restore_chat_agent` into `ChatRunStore` on every
-content-persisting turn, but only the unwired `ChatRunStore.resume` calls it. So
-`chat/checkpoint.py`, `chat/restoration.py`, `RestorableFeature.restore_state`,
-`chat/subagents.py:ChatAgentDirectory.restore_agent`, and the publish and claim
-functions in `db/chat_checkpoint.py` run only in tests, and no product
-path creates a `ChatResponseCheckpoint` row. Product saves still lock the
-response, check the checkpoint owner and delete any row at a terminal status.
+`chat/subagents.py:ChatAgentDirectory.restore_agent` loads a saved child for a
+new run. `chat/restoration.py:restore_subagent` rebuilds it with the current
+request's tools and settings. Checkpoint resume is separate:
+`chat/execution.py` binds `restore_chat_agent` into `ChatRunStore`, but only
+the unwired `ChatRunStore.resume` calls it. Checkpoint serialization,
+`RestorableFeature.restore_state`, and the publish and claim functions in
+`db/chat_checkpoint.py` run only in tests. No product path creates a
+`ChatResponseCheckpoint` row. Product saves still lock the response, check
+the checkpoint owner and delete any row at a terminal status.
 To check again, run
 `git grep -n "\.handoff(\|\.suspend()\|\.resume(\|\.submit(\|start_run(\|PendingToolInput" -- backend/onyx ':!backend/onyx/agents' ':!backend/onyx/chat/run_store.py'`
 and ignore thread-pool `submit` calls; expect no runtime matches.
@@ -275,11 +293,12 @@ and ignore thread-pool `submit` calls; expect no runtime matches.
     Return `ChildRunWait`, set `result_from_children`, and release held
     resources through `agents.add_completion_cleanup`. The chat adapters then
     save and own the child for one run, except in content-free incognito. To
-    restore or rerun it, add a `restoration_config`, a `RestorableFeature` and a
-    branch in `ChatAgentDirectory.restore_agent` and `restore_chat_agent`.
-    `restore_agent` rebuilds only `ResearchAgent`; `restore_chat_agent` rebuilds
-    `ChatAgent`, `ResearchAgent` and `DeepResearchAgent`. Neither rebuilds
-    `CodingAgent`.
+    rerun it, add a `restoration_config` and a branch in
+    `chat/restoration.py:restore_subagent`. `ChatAgentDirectory` authorizes and
+    loads saved history; this factory rebuilds Chat and Research children with
+    the current request's authorized resources. For suspended execution, add
+    a `RestorableFeature` and a branch in `restore_chat_agent`, which rebuilds
+    Chat, Research and DeepResearch agents. Neither factory rebuilds CodingAgent.
   - Outside chat, only tests implement `RunStore`, `RunOwnership` and
     `AgentDirectory` without chat storage
     (`backend/tests/unit/onyx/agents/fakes.py`). Children and durable completion

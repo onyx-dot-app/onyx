@@ -1,5 +1,6 @@
 """Exercise feature policies through shared execution, child ownership, and rendering."""
 
+import json
 import queue
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -11,12 +12,22 @@ import pytest
 
 from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.events import AgentEvent, ToolEndEvent
-from onyx.agents.models import AgentStep, PreparedStep, RunFailureKind, StepInput
+from onyx.agents.models import (
+    AgentCompletion,
+    AgentStep,
+    InputMessageMetadata,
+    InputSource,
+    PreparedStep,
+    RunFailureKind,
+    RunStatus,
+    StepInput,
+)
 from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.chat.citation_processor import CitationMapping
 from onyx.chat.citation_utils import collapse_citations
 from onyx.chat.emitter import Emitter
+from onyx.chat.models import ChatMessageMetadata
 from onyx.chat.presentation import ResponsePresenter, project_response, replay_response
 from onyx.coding_agent.agent import CodingAgent
 from onyx.coding_agent.tool_definitions import BASH_TOOL_NAME, GENERATE_ANSWER_TOOL_NAME
@@ -74,6 +85,7 @@ from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearch
 from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import (
     EchoTool,
+    FakeAgentDirectory,
     FakeModelClient,
     ScriptedLLM,
     run_agent,
@@ -473,6 +485,116 @@ def test_deep_research_advances_phases_without_user_queue_messages() -> None:
         for message in feature.state.messages
         if isinstance(message, UserMessage)
     ] == ["Research"]
+
+
+@pytest.mark.parametrize("deep_research", [False, True])
+def test_research_receives_background_evidence_with_distinct_citations(
+    deep_research: bool,
+) -> None:
+    existing, incoming = [
+        SearchDoc(
+            document_id=name,
+            chunk_ind=0,
+            semantic_identifier=name,
+            blurb="Evidence",
+            source_type=DocumentSource.WEB,
+            boost=0,
+            hidden=False,
+            metadata={},
+            match_highlights=[],
+        )
+        for name in ("earlier", "child")
+    ]
+    completion = AgentCompletion(
+        agent_id="child",
+        agent_path="/root/child",
+        run_id="child-run",
+        status=RunStatus.COMPLETE,
+        output=AssistantMessage(
+            content=[TextContent(text="Child evidence [1]")],
+            metadata=ChatMessageMetadata(sources={1: incoming}),
+        ),
+    )
+    requests: list[GenerationRequest] = []
+
+    def reply(request: GenerationRequest, _: CancellationSignal) -> AssistantMessage:
+        requests.append(request)
+        notifications = [
+            message
+            for message in request.messages
+            if message.text.startswith("Background agent result")
+        ]
+        assert len(notifications) == 1
+        assert (
+            json.loads(notifications[0].text.split("\n", 1)[1])["answer"]
+            == "Child evidence [2]"
+        )
+        return AssistantMessage(content=[TextContent(text="Report cites evidence [2]")])
+
+    llm = FakeModelClient(reply)
+    history: list[Message] = [
+        AssistantMessage(
+            content=[TextContent(text="Earlier evidence [1]")],
+            metadata=ChatMessageMetadata(sources={1: existing}),
+        )
+    ]
+    feature = (
+        DeepResearchAgent(
+            messages=history,
+            allowed_tools=[],
+            llm=llm,
+            token_counter=len,
+            user_identity=None,
+            language_section="",
+            reasoning_effort=ReasoningEffort.LOW,
+            all_injected_file_metadata=None,
+            skip_clarification=True,
+        )
+        if deep_research
+        else ResearchAgent(
+            messages=history,
+            sources={1: existing},
+            tools=[],
+            llm=llm,
+            token_counter=len,
+            user_identity=None,
+            language_section="",
+            reasoning_effort=ReasoningEffort.LOW,
+        )
+    )
+    coordinator = AgentCoordinator(
+        directory=FakeAgentDirectory(
+            completed_agents=lambda _parent, received, _limit: (
+                [] if completion.run_id in received else [completion]
+            )
+        )
+    )
+    try:
+        result = run_agent(
+            feature,
+            messages=[UserMessage(content="Use the background evidence")],
+            max_steps=3 if deep_research else 2,
+            coordinator=coordinator,
+        )
+        assert result.output.text == "Report cites evidence [2]"
+        assert isinstance(result.output.metadata, ResearchMessageMetadata)
+        assert result.output.metadata.sources == {1: existing, 2: incoming}
+        accepted = [
+            message
+            for message in feature.state.messages
+            if message.id == completion.message_id
+        ]
+        assert len(accepted) == 1
+        assert isinstance(accepted[0].metadata, InputMessageMetadata)
+        assert accepted[0].metadata.source == InputSource.AGENT_RESULT
+        assert accepted[0].metadata.source_run_id == completion.run_id
+        assert len(requests) == (3 if deep_research else 2)
+        assert (
+            completion.output is not None
+            and completion.output.text == "Child evidence [1]"
+        )
+    finally:
+        assert coordinator.close(10)
 
 
 @pytest.mark.parametrize(

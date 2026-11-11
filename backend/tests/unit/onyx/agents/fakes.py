@@ -1,6 +1,13 @@
 """Run the chat adapter through model streaming, tools, and packet rendering."""
 
-from collections.abc import Callable, Generator, Iterable, Iterator, Sequence
+from collections.abc import (
+    Callable,
+    Collection,
+    Generator,
+    Iterable,
+    Iterator,
+    Sequence,
+)
 from typing import Any, override
 from uuid import uuid4
 
@@ -11,7 +18,17 @@ from onyx.agents.agent_coordination import (
     RunStore,
 )
 from onyx.agents.events import AgentEvent
-from onyx.agents.models import AgentInfo, RunResult, RunState, RunStatus
+from onyx.agents.models import (
+    AgentCompletion,
+    AgentInfo,
+    AgentMessageReceipt,
+    AgentMessageRequest,
+    BackgroundDelegation,
+    RunResult,
+    RunState,
+    RunStatus,
+    StepRecord,
+)
 from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import ToolInvocation
 from onyx.llm.cancellation import CancellationSignal
@@ -33,6 +50,7 @@ from onyx.llm.models import (
     ToolCallStartEvent,
     ToolDefinition,
     ToolResult,
+    UserMessage,
     apply_generation_event,
 )
 from onyx.llm.multi_llm import LitellmLLM
@@ -44,17 +62,34 @@ class FakeAgentDirectory(AgentDirectory):
     def __init__(
         self,
         *,
+        list_agents: Callable[[], list[AgentInfo]] | None = None,
+        completed_agents: Callable[[str, Collection[str], int], list[AgentCompletion]]
+        | None = None,
         lookup_agent: Callable[[str, str], AgentInfo | None] | None = None,
         restore_agent: Callable[[str, str], Agent] | None = None,
         read_run: Callable[[str, str], RunState | None] | None = None,
         read_run_status: Callable[[str, str], RunStatus] | None = None,
         cancel_run: Callable[[str, str], None] | None = None,
     ) -> None:
+        self._list_agents = list_agents
+        self._completed_agents = completed_agents
         self._lookup_agent = lookup_agent
         self._restore_agent = restore_agent
         self._read_run = read_run
         self._read_run_status = read_run_status
         self._cancel_run = cancel_run
+
+    def list_agents(self) -> list[AgentInfo]:
+        return self._list_agents() if self._list_agents else []
+
+    def completed_agents(
+        self, parent_id: str, received_run_ids: Collection[str], *, limit: int
+    ) -> list[AgentCompletion]:
+        return (
+            self._completed_agents(parent_id, received_run_ids, limit)
+            if self._completed_agents
+            else []
+        )
 
     def lookup_agent(self, agent_id: str, parent_id: str) -> AgentInfo | None:
         return self._lookup_agent(agent_id, parent_id) if self._lookup_agent else None
@@ -79,6 +114,16 @@ class FakeAgentDirectory(AgentDirectory):
         if self._cancel_run is None:
             raise ValueError("Remote run cancellation is unavailable")
         self._cancel_run(run_id, parent_id)
+
+    @override
+    def resolve_delegation_messages(
+        self, parent_run_id: str, delegations: Sequence[BackgroundDelegation]
+    ) -> dict[str, str | None]:
+        raise ValueError("Remote messaging is unavailable")
+
+    @override
+    def submit_message(self, request: AgentMessageRequest) -> AgentMessageReceipt:
+        raise ValueError("Remote messaging is unavailable")
 
 
 class FakeRunStore(RunStore):
@@ -125,6 +170,18 @@ class FakeRunOwnership(RunOwnership):
     def abort_start(self, run_id: str) -> None:
         if self._abort_start is not None:
             self._abort_start(run_id)
+
+    @override
+    def receive_inputs(self, run: Run) -> list[UserMessage]:
+        return []
+
+    @override
+    def accept_inputs(self, run: Run, step: StepRecord) -> bool:
+        return True
+
+    @override
+    def close_inputs(self, run: Run, *, can_continue: bool) -> bool:
+        return False
 
 
 class ScriptedLLM(LitellmLLM):

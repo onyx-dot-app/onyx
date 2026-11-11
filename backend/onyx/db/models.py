@@ -170,6 +170,7 @@ from onyx.tools.models import (
 )
 from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
+from onyx.tools.tool_implementations.subagents.models import ChatConfiguration
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
 from onyx.utils.encryption import decrypt_bytes_to_string, encrypt_string_to_bytes
 from onyx.utils.headers import HeaderItemDict
@@ -3488,8 +3489,13 @@ class ChatSession(Base):
         ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=True, index=True
     )
     agent_name: Mapped[str | None] = mapped_column(String, nullable=True)
-    restoration_config: Mapped[ResearchConfiguration | None] = mapped_column(
-        PydanticType(ResearchConfiguration, sanitize_strings=True), nullable=True
+    restoration_config: Mapped[ResearchConfiguration | ChatConfiguration | None] = (
+        mapped_column(
+            PydanticType(
+                ResearchConfiguration | ChatConfiguration, sanitize_strings=True
+            ),
+            nullable=True,
+        )
     )
     user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("user.id", ondelete="CASCADE"), nullable=True

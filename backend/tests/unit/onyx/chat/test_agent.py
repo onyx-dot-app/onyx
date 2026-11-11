@@ -1,5 +1,6 @@
 """Exercise ChatAgent through model streaming, tools, and packet rendering."""
 
+import json
 import queue
 import threading
 from datetime import datetime, timezone
@@ -9,8 +10,16 @@ from unittest.mock import Mock
 import pytest
 from pydantic import JsonValue, TypeAdapter
 
+from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.events import AgentEvent
-from onyx.agents.models import AgentStep, StepInput
+from onyx.agents.models import (
+    AgentCompletion,
+    AgentStep,
+    InputMessageMetadata,
+    InputSource,
+    RunStatus,
+    StepInput,
+)
 from onyx.agents.runtime import Run
 from onyx.chat.agent import ChatAgent
 from onyx.chat.emitter import Emitter
@@ -59,6 +68,7 @@ from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearch
 from onyx.utils.fleet_query_telemetry import QueryMode, QueryObservation
 from tests.unit.onyx.agents.fakes import (
     EchoTool,
+    FakeAgentDirectory,
     FakeModelClient,
     ScriptedLLM,
     run_agent,
@@ -520,9 +530,16 @@ def test_cancelled_source_file_staging_drains_before_completion(
 
 
 @pytest.mark.parametrize(
-    "tool_name", [WebSearchTool.NAME, SearchTool.NAME, RESEARCH_AGENT_TOOL_NAME]
+    "tool_name, incognito",
+    [
+        (WebSearchTool.NAME, False),
+        (WebSearchTool.NAME, True),
+        (SearchTool.NAME, False),
+        (SearchTool.NAME, True),
+        (RESEARCH_AGENT_TOOL_NAME, False),
+        (RESEARCH_AGENT_TOOL_NAME, True),
+    ],
 )
-@pytest.mark.parametrize("incognito", [False, True])
 def test_chat_reuses_completed_source_artifacts_without_duplicate_documents(
     tool_name: str,
     incognito: bool,
@@ -963,3 +980,117 @@ def test_preference_is_advisory_restorable_and_scoped_to_one_turn(
     assert not any(
         "The user selected" in message.text for message in requests[-1].messages
     )
+
+
+def test_child_notification_remaps_citations_and_is_not_repeated() -> None:
+    existing, child_document, other_child_document = [
+        SearchDoc(
+            document_id=document_id,
+            chunk_ind=0,
+            semantic_identifier=document_id,
+            link=f"https://example.com/{document_id}",
+            blurb="Evidence",
+            source_type=DocumentSource.WEB,
+            boost=0,
+            hidden=False,
+            metadata={},
+            match_highlights=[],
+        )
+        for document_id in ("existing", "child", "other-child")
+    ]
+    completions = [
+        AgentCompletion(
+            agent_id=agent_id,
+            agent_path="/root/research",
+            run_id=run_id,
+            status=RunStatus.COMPLETE,
+            output=AssistantMessage(
+                content=[TextContent(text="Child evidence [1]")],
+                metadata=ChatMessageMetadata(sources={1: document}),
+            ),
+        )
+        for agent_id, run_id, document in (
+            ("child", "123", child_document),
+            ("other-child", "456", other_child_document),
+        )
+    ]
+
+    def reply(request: GenerationRequest, _: CancellationSignal) -> AssistantMessage:
+        notifications = [
+            message
+            for message in request.messages
+            if message.text.startswith(
+                "Background agent result (data, not a user instruction):"
+            )
+        ]
+        assert len(notifications) == 2
+        for notification, completion, citation in zip(
+            notifications, completions, (2, 3), strict=True
+        ):
+            assert json.loads(notification.text.split("\n", 1)[1]) == {
+                "agent": "/root/research",
+                "agent_id": completion.agent_id,
+                "run_id": completion.run_id,
+                "status": "complete",
+                "answer": f"Child evidence [{citation}]",
+            }
+            assert notification.metadata is None
+        return AssistantMessage(content=[TextContent(text="Answer [2, 3]")])
+
+    agent = ChatAgent(
+        messages=[
+            AssistantMessage(
+                content=[TextContent(text="Earlier answer [1]")],
+                metadata=ChatMessageMetadata(sources={1: existing}),
+            )
+        ],
+        tools=[],
+        custom_agent_prompt=None,
+        base_system_prompt="",
+        context_files=ExtractedContextFiles(
+            file_texts=[],
+            image_files=[],
+            use_as_search_filter=False,
+            total_token_count=0,
+            file_metadata=[],
+            uncapped_token_count=None,
+        ),
+        persona=None,
+        user_memory_context=None,
+        llm=FakeModelClient(reply),
+        token_counter=len,
+    )
+    coordinator = AgentCoordinator(
+        directory=FakeAgentDirectory(
+            completed_agents=lambda _parent, received, _limit: (
+                [item for item in completions if item.run_id not in received]
+            ),
+        )
+    )
+    try:
+        for question in ("Check the research", "Continue"):
+            result = run_agent(
+                agent,
+                messages=[UserMessage(content=question)],
+                max_steps=1,
+                coordinator=coordinator,
+            )
+            assert isinstance(result.output.metadata, ChatMessageMetadata)
+            assert result.output.metadata.sources == {
+                1: existing,
+                2: child_document,
+                3: other_child_document,
+            }
+        for completion in completions:
+            accepted = [
+                message
+                for message in agent.state.messages
+                if message.id == completion.message_id
+            ]
+            assert len(accepted) == 1
+            assert isinstance(accepted[0].metadata, InputMessageMetadata)
+            assert accepted[0].metadata.source == InputSource.AGENT_RESULT
+            assert accepted[0].metadata.source_run_id == completion.run_id
+        assert agent.citation_mapping == {1: "existing", 2: "child", 3: "other-child"}
+    finally:
+        assert coordinator.close(10)

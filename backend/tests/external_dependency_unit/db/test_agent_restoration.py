@@ -19,7 +19,7 @@ from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.chat_utils import capture_chat_history, convert_chat_history
 from onyx.chat.history_store import get_chat_history_store
-from onyx.chat.models import MessageRendering, ResponseRecord
+from onyx.chat.models import MessageRendering, ResponseRecord, SavedAgentContext
 from onyx.chat.prompt_utils import prepare_prompt
 from onyx.chat.restoration import restore_chat_agent
 from onyx.chat.run_store import ChatRunStore
@@ -39,6 +39,7 @@ from onyx.db.chat_subagents import (
 from onyx.db.enums import IncognitoRecordMode
 from onyx.db.models import ChatMessage, ChatSession
 from onyx.deep_research.models import ResearchConfiguration
+from onyx.deep_research.research_agent import ResearchAgent
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import GenerationContext, LLMUserIdentity
 from onyx.llm.models import (
@@ -281,6 +282,24 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
             cache=get_cache_backend(),
         )
         identity = LLMUserIdentity()
+
+        def restore_research(history: SavedAgentContext) -> ResearchAgent:
+            configuration = history.configuration
+            assert isinstance(configuration, ResearchConfiguration)
+            return ResearchAgent(
+                tools=[],
+                llm=research_llm,
+                token_counter=len,
+                user_identity=identity,
+                language_section=configuration.language_section,
+                reasoning_effort=configuration.reasoning_effort,
+                messages=history.messages,
+                checkpoint=history.checkpoint,
+                sources=history.sources,
+                previous_run_id=history.previous_run_id,
+                agent_id=history.agent_id,
+            )
+
         coordinator = run_store.bind(
             AgentCoordinator(),
             build_agent=partial(
@@ -288,10 +307,8 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
             ),
             directory=ChatAgentDirectory(
                 history_store=history_store,
-                llm=research_llm,
-                tools=[],
-                user_identity=identity,
                 store=run_store,
+                build_agent=restore_research,
             ),
         )
         for info in history_store.list_agents():

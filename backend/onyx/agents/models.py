@@ -9,7 +9,9 @@ from pydantic import (
     Field,
     JsonValue,
     SerializeAsAny,
+    TypeAdapter,
     field_serializer,
+    field_validator,
 )
 
 from onyx.agents.execution_records import messages_for_model
@@ -25,7 +27,11 @@ from onyx.llm.models import (
     ToolDefinition,
     ToolResult,
     ToolResultMessage,
+    UserMessage,
 )
+
+AGENT_RESULT_MESSAGE_PREFIX = "agent-result:"
+_MESSAGE_ADAPTER = TypeAdapter(Message)
 
 
 class RunStatus(str, Enum):
@@ -69,16 +75,103 @@ class RunFailure(BaseModel):
     llm_error: LLMErrorInfo | None = None
 
 
+class AgentCompletion(BaseModel):
+    """A background agent's saved terminal result, ready for its parent to receive."""
+
+    agent_id: str
+    agent_path: str
+    run_id: str
+    status: RunStatus
+    output: AssistantMessage | None = None
+    failure: RunFailure | None = None
+
+    @property
+    def message_id(self) -> str:
+        return f"{AGENT_RESULT_MESSAGE_PREFIX}{self.run_id}"
+
+
 class InputSource(str, Enum):
     HUMAN = "human"
     AGENT = "agent"
     AGENT_RESULT = "agent_result"
 
 
+class AgentResultDetails(BaseModel):
+    agent_id: str
+    agent_path: str
+    status: RunStatus
+    failure: RunFailure | None = None
+
+
+class InputMessageMetadata(BaseModel):
+    """Input provenance survives flattened conversation history and compaction."""
+
+    type: Literal["agent_input"] = "agent_input"
+    source: InputSource
+    source_run_id: str | None = None
+    sender_agent_id: str | None = None
+    result: AgentResultDetails | None = None
+    content_metadata: SerializeAsAny[BaseModel] | None = None
+
+
+def _restore_input_metadata(
+    messages: list[Message | dict[str, JsonValue]],
+) -> list[Message]:
+    restored: list[Message] = []
+    for value in messages:
+        if not isinstance(value, dict):
+            restored.append(value)
+            continue
+        message = _MESSAGE_ADAPTER.validate_python(value)
+        metadata = value.get("metadata")
+        if isinstance(metadata, dict) and metadata.get("type") == "agent_input":
+            message.metadata = InputMessageMetadata.model_validate(metadata)
+        restored.append(message)
+    return restored
+
+
+def _serialize_inputs(messages: list[Message]) -> list[dict[str, JsonValue]]:
+    values: list[dict[str, JsonValue]] = []
+    for message in messages:
+        value = message.model_dump(mode="json")
+        if isinstance(message.metadata, InputMessageMetadata):
+            value["metadata"] = message.metadata.model_dump(
+                mode="json", exclude={"result", "content_metadata"}
+            )
+        values.append(value)
+    return values
+
+
 class MessageDelivery(str, Enum):
     SEND = "send"
     QUEUE = "queue"
     INTERRUPT = "interrupt"
+
+
+class AgentMessageStatus(str, Enum):
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+
+
+class AgentMessageReceipt(BaseModel):
+    id: str
+    agent_id: str
+    status: AgentMessageStatus
+    run_id: str | None = None
+    message: str
+    delivery: MessageDelivery
+
+
+class AgentMessageRequest(BaseModel):
+    agent_id: str
+    parent_id: str
+    message: UserMessage
+    delivery: Literal[MessageDelivery.SEND, MessageDelivery.QUEUE]
+    max_steps: int = Field(gt=0)
+    total_timeout_s: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    parent_run_id: str
+    parent_message_id: str
+    parent_tool_call_id: str
 
 
 class ContextBudget(BaseModel):
@@ -104,6 +197,8 @@ class AgentInfo(BaseModel):
     restoration_config: SerializeAsAny[BaseModel] | None
     latest_run_id: str | None = None
     status: RunStatus | None = None
+    pending_messages: list[AgentMessageReceipt] = Field(default_factory=list)
+    queue_paused: bool = False
 
 
 class AgentStep(BaseModel):
@@ -121,6 +216,13 @@ class AgentState(BaseModel):
     messages: list[Message] = Field(default_factory=list)
     checkpoint: CompactionCheckpoint | None = None
 
+    _restore_inputs = field_validator("messages", mode="before")(
+        _restore_input_metadata
+    )
+    _serialize_input_messages = field_serializer("messages", when_used="json")(
+        _serialize_inputs
+    )
+
     def snapshot(self) -> "AgentState":
         return self.model_copy(deep=True)
 
@@ -133,10 +235,11 @@ class CompactionMetadata(BaseModel):
 
 
 class PreparedStep(BaseModel):
-    """Step settings; permissions restrict the configured tools without changing schemas."""
+    """Incoming messages and generation settings; permissions preserve tool schemas."""
 
     model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True, frozen=True)
     system_prompt: str = ""
+    input_messages: list[UserMessage] | None = None
     allowed_tool_names: frozenset[str] | None = None
     tool_phase: str | None = None
     options: GenerationOptions = Field(default_factory=GenerationOptions)
@@ -202,6 +305,7 @@ class StepInput(BaseModel):
     messages: list[Message]
     step: AgentStep
     previous: StepResult | None = None
+    received_inputs: list[UserMessage] = Field(default_factory=list)
 
 
 class RunResult(BaseModel):
@@ -225,6 +329,7 @@ class RunAction(str, Enum):
     PREPARE = "prepare"
     TOOLS = "tools"
     AFTER_STEP = "after_step"
+    WAIT_CHILDREN = "wait_children"
     FINISH = "finish"
 
 
@@ -238,25 +343,43 @@ class ToolExecutionRecord(BaseModel):
 
 
 class StepRecord(BaseModel):
-    """One model generation and the executions of its tool calls."""
+    """Inputs accepted before one generation, its message, and its tool executions."""
 
     model_config = ConfigDict(extra="forbid")
 
+    input_messages: list[UserMessage] = Field(default_factory=list)
     message: AssistantMessage
     generation_status: ExecutionStatus
     tools: dict[str, ToolExecutionRecord] = Field(default_factory=dict)
+
+    _restore_inputs = field_validator("input_messages", mode="before")(
+        _restore_input_metadata
+    )
+    _serialize_input_messages = field_serializer("input_messages", when_used="json")(
+        _serialize_inputs
+    )
 
 
 def messages_from_steps(steps: list[StepRecord]) -> list[Message]:
     """Return message references in model order, regardless of tool completion order."""
     messages: list[Message] = []
     for step in steps:
+        messages.extend(step.input_messages)
         messages.append(step.message)
         for call in step.message.tool_calls:
             execution = step.tools.get(call.id)
             if execution is not None and execution.result is not None:
                 messages.append(execution.result)
     return messages
+
+
+class BackgroundDelegation(BaseModel):
+    """A child request whose result must be consumed before this run completes."""
+
+    agent_id: str
+    run_id: str | None = None
+    message_id: str | None = None
+    tool_call_id: str | None = None
 
 
 class RunProgress(BaseModel):
@@ -280,6 +403,15 @@ class RunProgress(BaseModel):
         default_factory=dict
     )
     human_tool_answers: dict[str, HumanToolAnswer] = Field(default_factory=dict)
+    pending_messages: list[UserMessage] = Field(default_factory=list)
+
+    _restore_inputs = field_validator("pending_messages", mode="before")(
+        _restore_input_metadata
+    )
+    _serialize_input_messages = field_serializer("pending_messages", when_used="json")(
+        _serialize_inputs
+    )
+    background_delegations: list[BackgroundDelegation] = Field(default_factory=list)
     child_run_ids: list[str] = Field(default_factory=list)
     observed_child_run_ids: list[str] = Field(default_factory=list)
     outcome: RunStatus | None = None
@@ -316,6 +448,13 @@ class RunState(BaseModel):
     request_params: GenerationRequestParams | None = None
     failure: RunFailure | None = None
     checkpoint: CompactionCheckpoint | None = None
+
+    _restore_inputs = field_validator("input_messages", mode="before")(
+        _restore_input_metadata
+    )
+    _serialize_input_messages = field_serializer("input_messages", when_used="json")(
+        _serialize_inputs
+    )
 
     @property
     def messages(self) -> list[Message]:

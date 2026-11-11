@@ -19,12 +19,14 @@ from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.citation_utils import (
     build_context_file_citation_mapping,
     message_citation_sources,
+    remap_received_citations,
 )
 from onyx.chat.errors import build_empty_llm_response_error
 from onyx.chat.files import build_python_chat_files_from_search_docs
 from onyx.chat.models import (
     ChatFeatureState,
     ChatMessageMetadata,
+    ChatTurnSetup,
     CitationMode,
     PersonaPromptConfig,
     PromptMetadata,
@@ -41,9 +43,14 @@ from onyx.chat.tool_results import (
     tool_result_parts,
     tool_result_sources,
 )
-from onyx.configs.chat_configs import CODE_MODE_MAX_LLM_CYCLES, MAX_LLM_CYCLES
+from onyx.configs.chat_configs import (
+    CODE_MODE_ENABLED,
+    CODE_MODE_MAX_LLM_CYCLES,
+    MAX_LLM_CYCLES,
+)
 from onyx.context.models import UserMemoryContext
 from onyx.file_store.models import ExtractedContextFiles, FileToolMetadata
+from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM, GenerationContext, LLMUserIdentity
 from onyx.llm.models import (
     AssistantMessage,
@@ -98,7 +105,9 @@ class ChatAgent(Agent, RestorableFeature):
         agent_id: str | None = None,
         additional_context: str | None = None,
         code_mode: bool = False,
+        is_subagent: bool = False,
     ) -> None:
+        self.is_subagent = is_subagent
         self.custom_agent_prompt = custom_agent_prompt
         self.additional_context = additional_context
         self.context_files = context_files.model_copy(deep=True)
@@ -274,6 +283,19 @@ class ChatAgent(Agent, RestorableFeature):
                     self._update_tool_context([message])
             # Query expansion applies to the current turn only.
             self.has_called_search_tool = False
+        received = remap_received_citations(
+            state.received_inputs, self.citation_processor.citation_to_doc
+        )
+        if (citations := received.citation_sources) is not None:
+            known_documents = {
+                document.document_id for document in self.gathered_documents
+            }
+            self.citation_processor.update_citation_mapping(citations)
+            for number, document in citations.items():
+                self.citation_mapping[number] = document.document_id
+                if document.document_id not in known_documents:
+                    known_documents.add(document.document_id)
+                    self.gathered_documents.append(document)
         results = [
             message
             for message in state.messages
@@ -304,6 +326,7 @@ class ChatAgent(Agent, RestorableFeature):
             preferred_tool_id=self.preferred_tool_id,
         )
         return PreparedStep(
+            input_messages=received.messages,
             allowed_tool_names=allowed_tool_names,
             options=GenerationOptions(
                 tool_choice=tool_choice, reasoning_effort=self.reasoning_effort
@@ -316,6 +339,7 @@ class ChatAgent(Agent, RestorableFeature):
             ),
             assemble_messages=partial(
                 prepare_prompt,
+                is_subagent=self.is_subagent,
                 system_prompt=prompt.system_prompt,
                 user_info_prompt=prompt.user_info_prompt,
                 custom_agent_prompt=prompt.custom_prompt,
@@ -420,3 +444,43 @@ class ChatAgent(Agent, RestorableFeature):
                 "The model did not return a final answer after tool execution."
             )
         return None
+
+
+def build_chat_agent(
+    state: AgentState,
+    agent_id: str,
+    previous_run_id: str | None,
+    *,
+    setup: ChatTurnSetup,
+    llm: LLM,
+    tools: list[Tool],
+    inject_memories: bool,
+    preferred_tool_id: int | None = None,
+    additional_context: str | None = None,
+    is_subagent: bool = False,
+) -> ChatAgent:
+    """Build a chat conversation independently of the current root's feature."""
+    return ChatAgent(
+        agent_id=agent_id,
+        is_subagent=is_subagent,
+        messages=state.messages,
+        checkpoint=state.checkpoint,
+        previous_run_id=previous_run_id,
+        tools=tools,
+        code_mode=CODE_MODE_ENABLED,
+        custom_agent_prompt=setup.custom_agent_prompt,
+        additional_context=additional_context,
+        context_files=setup.extracted_context_files,
+        persona=setup.persona,
+        base_system_prompt=setup.base_system_prompt,
+        user_memory_context=setup.user_memory_context,
+        llm=llm,
+        token_counter=get_llm_token_counter(llm),
+        preferred_tool_id=preferred_tool_id,
+        user_identity=setup.user_identity,
+        chat_files=setup.chat_files_for_tools,
+        reasoning_effort=setup.reasoning_effort,
+        include_citations=setup.new_msg_req.include_citations,
+        all_injected_file_metadata=setup.all_injected_file_metadata,
+        inject_memories_in_prompt=inject_memories,
+    )

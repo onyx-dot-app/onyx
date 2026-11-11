@@ -251,7 +251,8 @@ def test_generation_deadline_rejects_output_when_blocked_read_returns() -> None:
     assert run.wait_for_idle(2)
 
 
-def test_archive_timeout_waits_for_owned_io_before_returning() -> None:
+@pytest.mark.parametrize("timeout", [0, 0.05])
+def test_archive_timeout_waits_for_owned_io_before_returning(timeout: float) -> None:
     entered, release, finished = Event(), Event(), Event()
     tool_thread: list[threading.Thread] = []
 
@@ -266,9 +267,7 @@ def test_archive_timeout_waits_for_owned_io_before_returning() -> None:
 
     def inspect(invocation: ToolInvocation) -> ToolResult:
         tool_thread.append(threading.current_thread())
-        assert invocation.agents.wait_run("saved", timeout=0) is None
-        assert not entered.is_set()
-        assert invocation.agents.wait_run("saved", timeout=0.05) is None
+        assert invocation.agents.wait_run("saved", timeout=timeout) is None
         assert finished.is_set()
         assert not invocation.cancellation.cancelled
         return ToolResult(content="timed out")
