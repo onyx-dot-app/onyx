@@ -60,13 +60,22 @@ func (g *fakeGuest) vm(id string) {
 	}
 }
 
-func (g *fakeGuest) Status(_ context.Context, t GuestTarget, key string) (GuestManaged, error) {
+// slotKey is the fake's key of one mount of one VM. The skills mount keeps
+// the VM's own key, so older tests read it as before.
+func slotKey(vm, mount string) string {
+	if mount == "" || mount == template.SkillsMount {
+		return vm
+	}
+	return vm + "|" + mount
+}
+
+func (g *fakeGuest) Status(_ context.Context, t GuestTarget, key, mount string) (GuestManaged, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if key != g.key {
 		return GuestManaged{}, apierr.New(pb.ErrorReason_GUEST_KEY_REJECTED, "wrong key")
 	}
-	id := t.VsockUDS
+	id := slotKey(t.VsockUDS, mount)
 	g.vm(id)
 	g.ops = append(g.ops, "status")
 	out := GuestManaged{Active: g.active[id], Slots: map[pb.ManagedSlot]GuestSlot{}}
@@ -76,13 +85,13 @@ func (g *fakeGuest) Status(_ context.Context, t GuestTarget, key string) (GuestM
 	return out, nil
 }
 
-func (g *fakeGuest) Mount(_ context.Context, t GuestTarget, key string, slot pb.ManagedSlot, _ uint64, uuid string) (GuestMount, error) {
+func (g *fakeGuest) Mount(_ context.Context, t GuestTarget, key, mount string, slot pb.ManagedSlot, _ uint64, uuid string) (GuestMount, error) {
 	if g.mountGate != nil {
 		<-g.mountGate
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	id := t.VsockUDS
+	id := slotKey(t.VsockUDS, mount)
 	g.ops = append(g.ops, fmt.Sprintf("mount %s", slotNames[slot]))
 	if g.failMount != nil {
 		return GuestMount{}, g.failMount
@@ -116,17 +125,22 @@ func (p *guestProc) ReplaceDrive(_ context.Context, driveID, file, src string) e
 	}
 	p.g.mu.Lock()
 	defer p.g.mu.Unlock()
-	p.g.vm(p.id)
 	p.g.ops = append(p.g.ops, "replace "+driveID+" /"+file)
-	slot := slotA
-	if driveID == template.ManagedBDriveID {
-		slot = slotB
+	for _, md := range template.ManagedMountDrives {
+		for slot, d := range map[pb.ManagedSlot]template.Drive{slotA: md.A, slotB: md.B} {
+			if d.ID != driveID {
+				continue
+			}
+			id := slotKey(p.id, md.Mount)
+			p.g.vm(id)
+			if p.g.busy[id][slot] {
+				return errors.New("replaced a drive the guest uses")
+			}
+			p.g.uuids[id][slot] = p.g.pathUUID[src]
+			return nil
+		}
 	}
-	if p.g.busy[p.id][slot] {
-		return errors.New("replaced a drive the guest uses")
-	}
-	p.g.uuids[p.id][slot] = p.g.pathUUID[src]
-	return nil
+	return fmt.Errorf("unknown drive %s", driveID)
 }
 
 type swapFixture struct {
@@ -195,7 +209,7 @@ func TestSwapManagedAlternatesSlots(t *testing.T) {
 	img1, img2 := sf.image("one"), sf.image("two")
 
 	// Slot A has the placeholder; the first swap goes to slot B.
-	res := sf.m.SwapManaged(ctx, img1, []SwapTarget{sf.target(sb1)})
+	res := sf.m.SwapManaged(ctx, "", img1, []SwapTarget{sf.target(sb1)})
 	if len(res) != 1 || res[0].Err != nil || res[0].Active != slotB || !res[0].Changed {
 		t.Fatalf("swap 1: %+v", res)
 	}
@@ -209,7 +223,7 @@ func TestSwapManagedAlternatesSlots(t *testing.T) {
 
 	// The next swap goes back to slot A.
 	sf.g.ops = nil
-	res = sf.m.SwapManaged(ctx, img2, []SwapTarget{sf.target(sb1)})
+	res = sf.m.SwapManaged(ctx, "", img2, []SwapTarget{sf.target(sb1)})
 	if res[0].Err != nil || res[0].Active != slotA {
 		t.Fatalf("swap 2: %+v", res)
 	}
@@ -229,7 +243,7 @@ func TestSwapManagedAlternatesSlots(t *testing.T) {
 
 	// The active image again: nothing changes.
 	sf.g.ops = nil
-	res = sf.m.SwapManaged(ctx, img2, []SwapTarget{sf.target(sb1)})
+	res = sf.m.SwapManaged(ctx, "", img2, []SwapTarget{sf.target(sb1)})
 	if res[0].Err != nil || res[0].Changed || res[0].Active != slotA || strings.Join(sf.g.ops, ",") != "status" {
 		t.Fatalf("repeat: %+v ops %v", res, sf.g.ops)
 	}
@@ -242,7 +256,7 @@ func TestSwapManagedJournalsBeforeTheDriveChanges(t *testing.T) {
 	img := sf.image("one")
 	var during journal.Record
 	sf.g.onReplace = func() { during = sf.record(t, sb1) }
-	res := sf.m.SwapManaged(context.Background(), img, []SwapTarget{sf.target(sb1)})
+	res := sf.m.SwapManaged(context.Background(), "", img, []SwapTarget{sf.target(sb1)})
 	if res[0].Err != nil {
 		t.Fatal(res[0].Err)
 	}
@@ -261,7 +275,7 @@ func TestSwapManagedReconcilesFromTheGuest(t *testing.T) {
 	img := sf.image("one")
 	sf.g.vm("vm-1")
 	sf.g.active["vm-1"], sf.g.uuids["vm-1"][slotB], sf.g.busy["vm-1"][slotB] = slotB, img.UUID, true
-	res := sf.m.SwapManaged(context.Background(), img, []SwapTarget{sf.target(sb1)})
+	res := sf.m.SwapManaged(context.Background(), "", img, []SwapTarget{sf.target(sb1)})
 	if res[0].Err != nil || res[0].Changed || res[0].Active != slotB {
 		t.Fatalf("%+v", res)
 	}
@@ -278,7 +292,7 @@ func TestSwapManagedResumesAnInterruptedMount(t *testing.T) {
 	img := sf.image("one")
 	sf.g.vm("vm-1")
 	sf.g.uuids["vm-1"][slotB], sf.g.busy["vm-1"][slotB] = img.UUID, true
-	res := sf.m.SwapManaged(context.Background(), img, []SwapTarget{sf.target(sb1)})
+	res := sf.m.SwapManaged(context.Background(), "", img, []SwapTarget{sf.target(sb1)})
 	if res[0].Err != nil || res[0].Active != slotB || !res[0].Changed {
 		t.Fatalf("%+v", res)
 	}
@@ -298,12 +312,12 @@ func TestSwapManagedRefusals(t *testing.T) {
 	// A reader holds the old drive: the swap reports it, and the next swap
 	// into that slot is refused without touching the drive.
 	sf.g.keepReaders = true
-	res := sf.m.SwapManaged(ctx, img1, []SwapTarget{sf.target(sb1)})
+	res := sf.m.SwapManaged(ctx, "", img1, []SwapTarget{sf.target(sb1)})
 	if res[0].Err != nil || !res[0].PreviousInUse {
 		t.Fatalf("%+v", res)
 	}
 	sf.g.ops = nil
-	res = sf.m.SwapManaged(ctx, img2, []SwapTarget{sf.target(sb1)})
+	res = sf.m.SwapManaged(ctx, "", img2, []SwapTarget{sf.target(sb1)})
 	wantReason(t, res[0].Err, pb.ErrorReason_MANAGED_SLOT_BUSY)
 	if strings.Join(sf.g.ops, ",") != "status" {
 		t.Fatalf("busy slot touched: %v", sf.g.ops)
@@ -311,14 +325,14 @@ func TestSwapManagedRefusals(t *testing.T) {
 	// The reader closed its file.
 	sf.g.busy["vm-1"][slotA] = false
 	sf.g.keepReaders = false
-	if res = sf.m.SwapManaged(ctx, img2, []SwapTarget{sf.target(sb1)}); res[0].Err != nil {
+	if res = sf.m.SwapManaged(ctx, "", img2, []SwapTarget{sf.target(sb1)}); res[0].Err != nil {
 		t.Fatal(res[0].Err)
 	}
 
 	// One bad target does not stop the others; results keep the order.
 	stale := sf.target(sb2)
 	stale.Generation++
-	res = sf.m.SwapManaged(ctx, img3, []SwapTarget{stale, sf.target(sb1),
+	res = sf.m.SwapManaged(ctx, "", img3, []SwapTarget{stale, sf.target(sb1),
 		{SandboxID: "33333333-3333-4333-8333-333333333333", Attempt: 1, Generation: 1, Key: "the-key"}, {SandboxID: "bad"}})
 	wantReason(t, res[0].Err, pb.ErrorReason_INSTANCE_MISMATCH)
 	if res[1].Err != nil || res[1].SandboxID != sb1 {
@@ -331,7 +345,7 @@ func TestSwapManagedRefusals(t *testing.T) {
 	sf.g.ops = nil
 	bad := sf.target(sb2)
 	bad.Key = "other"
-	res = sf.m.SwapManaged(ctx, img3, []SwapTarget{bad})
+	res = sf.m.SwapManaged(ctx, "", img3, []SwapTarget{bad})
 	wantReason(t, res[0].Err, pb.ErrorReason_GUEST_KEY_REJECTED)
 	if len(sf.g.ops) != 0 {
 		t.Fatalf("ops %v", sf.g.ops)
@@ -339,7 +353,7 @@ func TestSwapManagedRefusals(t *testing.T) {
 
 	// A failed mount keeps the old drive active in the record.
 	sf.g.failMount = apierr.New(pb.ErrorReason_MANAGED_MOUNT_FAILED, "EINVAL")
-	res = sf.m.SwapManaged(ctx, img1, []SwapTarget{sf.target(sb2)})
+	res = sf.m.SwapManaged(ctx, "", img1, []SwapTarget{sf.target(sb2)})
 	wantReason(t, res[0].Err, pb.ErrorReason_MANAGED_MOUNT_FAILED)
 	if r := sf.record(t, sb2); r.Managed.Active != "a" || r.Managed.B != img1.ID || r.Managed.Pending == nil {
 		t.Fatalf("journal after a failed mount: %+v", r.Managed)
@@ -363,7 +377,7 @@ func TestSwapManagedNeedsSlotB(t *testing.T) {
 	if vm.Managed.Slots != 1 {
 		t.Fatalf("slots %d", vm.Managed.Slots)
 	}
-	res := f.m.SwapManaged(context.Background(), ManagedImage{ID: strings.Repeat("a", 64)},
+	res := f.m.SwapManaged(context.Background(), "", ManagedImage{ID: strings.Repeat("a", 64)},
 		[]SwapTarget{{SandboxID: sb1, Attempt: vm.Attempt, Generation: vm.Generation, Key: "k"}})
 	wantReason(t, res[0].Err, pb.ErrorReason_MANAGED_SWAP_UNSUPPORTED)
 }
@@ -375,7 +389,7 @@ func TestStopWaitsForSwap(t *testing.T) {
 	sf.g.mountGate = make(chan struct{})
 	img := sf.image("one")
 	swapped := make(chan []SwapResult)
-	go func() { swapped <- sf.m.SwapManaged(context.Background(), img, []SwapTarget{sf.target(sb1)}) }()
+	go func() { swapped <- sf.m.SwapManaged(context.Background(), "", img, []SwapTarget{sf.target(sb1)}) }()
 	// Wait until the swap reached Mount (the drive is replaced).
 	for {
 		sf.g.mu.Lock()
@@ -420,10 +434,84 @@ func TestManagedRecordRoundTrip(t *testing.T) {
 	if OtherSlot(slotA) != slotB || OtherSlot(slotB) != slotA || OtherSlot(pb.ManagedSlot_MANAGED_SLOT_UNSPECIFIED) != slotB {
 		t.Fatal("OtherSlot")
 	}
-	if d, f := SlotDrive(slotB); d != "managed_b" || f != "managed-b.ext4" {
+	if d, f, _ := SlotDrive("", slotB); d != "managed_b" || f != "managed-b.ext4" {
 		t.Fatal(d, f)
 	}
-	if d, f := SlotDrive(slotA); d != "managed" || f != "managed.ext4" {
+	if d, f, _ := SlotDrive("skills", slotA); d != "managed" || f != "managed.ext4" {
 		t.Fatal(d, f)
 	}
+}
+
+// A layout 5 VM swaps each named mount on its own slots and journal entry.
+func TestSwapManagedNamedMount(t *testing.T) {
+	sf := newSwapFixture(t)
+	ctx := context.Background()
+	vm := sf.vms[sb1]
+	if st, ok := vm.Mount("spaces"); !ok || st.Slots != 2 || st.Active != slotA || len(vm.Mounts) != 2 {
+		t.Fatalf("new VM mounts %+v", vm.Mounts)
+	}
+	if r := sf.record(t, sb1); r.Mounts["user-uploads"] == nil || r.Mounts["spaces"].Active != "a" {
+		t.Fatalf("journal after Create: %+v", r.Mounts)
+	}
+	img := sf.image("space")
+	res := sf.m.SwapManaged(ctx, "spaces", img, []SwapTarget{sf.target(sb1)})
+	if res[0].Err != nil || res[0].Active != slotB || !res[0].Changed {
+		t.Fatalf("swap spaces: %+v", res)
+	}
+	if got := strings.Join(sf.g.ops, ","); got != "status,replace spaces_b /spaces-b.ext4,mount b" {
+		t.Fatalf("ops %s", got)
+	}
+	r := sf.record(t, sb1)
+	if s := r.Mounts["spaces"]; s.Active != "b" || s.B != img.ID || s.Pending != nil {
+		t.Fatalf("journal spaces %+v", s)
+	}
+	if r.Managed.Active != "a" || r.Managed.B != "" || r.Mounts["user-uploads"].B != "" {
+		t.Fatalf("other mounts changed: %+v %+v", r.Managed, r.Mounts["user-uploads"])
+	}
+	// The copy that Create returned does not see the swap (the map is copied).
+	if st, _ := vm.Mount("spaces"); st.Active != slotA {
+		t.Fatalf("Create's VM copy changed: %+v", st)
+	}
+	if st, _ := sf.m.List()[0].Mount("spaces"); st.Active != slotB || st.B != img.ID {
+		t.Fatalf("List: %+v", st)
+	}
+	if in := sf.m.ManagedImagesInUse(); !in[img.ID] {
+		t.Fatalf("in use %v", in)
+	}
+	if d, f, ok := SlotDrive("user-uploads", slotA); !ok || d != "user_uploads_a" || f != "user-uploads-a.ext4" {
+		t.Fatalf("slot drive %s %s %v", d, f, ok)
+	}
+
+	// After an agent restart the mounts come back from the journal.
+	rec := managedFromRecord(r.Mounts["spaces"])
+	if rec.Active != slotB || rec.B != img.ID {
+		t.Fatalf("from record %+v", rec)
+	}
+
+	// A mount the template does not have.
+	res = sf.m.SwapManaged(ctx, "photos", img, []SwapTarget{sf.target(sb1)})
+	wantReason(t, res[0].Err, pb.ErrorReason_MANAGED_SWAP_UNSUPPORTED)
+}
+
+// An older layout has only the skills mount.
+func TestSwapManagedMountMissingOnOldLayout(t *testing.T) {
+	f := newFixture(t, 16)
+	dir := t.TempDir()
+	if _, err := template.WriteFakeLayout(dir, "l4", template.Key{VCPUs: 2, MemMiB: 4096, ScratchGiB: 1, FirecrackerVersion: "v1.17.0"}, 4); err != nil {
+		t.Fatal(err)
+	}
+	f.m.templates = &template.Store{Dir: dir}
+	f.m.UseManagedGuest(newFakeGuest(), time.Second)
+	r := req(sb1, 1)
+	r.Template = "l4"
+	vm, _, err := f.m.Create(context.Background(), r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(vm.Mounts) != 0 || vm.Managed.Slots != 2 {
+		t.Fatalf("layout 4 VM %+v %+v", vm.Managed, vm.Mounts)
+	}
+	res := f.m.SwapManaged(context.Background(), "spaces", ManagedImage{ID: strings.Repeat("a", 64)},
+		[]SwapTarget{{SandboxID: sb1, Attempt: vm.Attempt, Generation: vm.Generation, Key: "the-key"}})
+	wantReason(t, res[0].Err, pb.ErrorReason_MANAGED_SWAP_UNSUPPORTED)
 }

@@ -1,3 +1,4 @@
+import asyncio
 import contextvars
 import hashlib
 import os
@@ -166,6 +167,10 @@ from onyx.redis.redis_pool import (
     get_async_redis_connection,
     retrieve_auth_token_data,
     retrieve_ws_token_data,
+)
+from onyx.server.features.build.db.sandbox import get_user_sandbox_blob_paths
+from onyx.server.features.build.sandbox.snapshot_manager import (
+    delete_sandbox_blobs_best_effort,
 )
 from onyx.server.security.store import get_security_settings
 from onyx.server.settings.store import load_settings
@@ -612,10 +617,14 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         request: Request | None = None,
     ) -> None:
         await self.on_before_delete(user, request)
+        sandbox_blob_paths = await self.user_db.session.run_sync(
+            partial(get_user_sandbox_blob_paths, user_id=user.id)
+        )
         await self.user_db.session.run_sync(
             partial(delete_user_from_db__no_commit, user)
         )
         await self.user_db.session.commit()
+        await asyncio.to_thread(delete_sandbox_blobs_best_effort, sandbox_blob_paths)
         await self.on_after_delete(user, request)
 
     @asynccontextmanager

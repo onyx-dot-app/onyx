@@ -212,7 +212,7 @@ func TestTemplateBuildKVM(t *testing.T) {
 		if !ir.GetAttached() {
 			return 0, fmt.Errorf("init did not attach the drives: %+v", ir)
 		}
-		r, err := ptRun(vmCtx(ctx, id, key), sd, "sh", "-c", "echo hello; grep -c ' /workspace/managed ' /proc/mounts")
+		r, err := ptRun(vmCtx(ctx, id, key), sd, "sh", "-c", "echo hello; grep -c ' /mnt/skills ' /proc/mounts")
 		if err != nil || r.stdout != "hello\n1\n" || r.res.GetExitCode() != 0 {
 			return 0, fmt.Errorf("run: %v %q %v", err, r.stdout, r.res)
 		}

@@ -1,5 +1,5 @@
-# Generated from microvm/proto/sandboxd/v1/sandboxd.proto (blob a0af50aa58efb5e5a5a08c946dbdb0eb7bbf651b)
-# at commit eefc7b62f6 by backend/onyx/microvm/generated/regenerate.sh. Do not edit.
+# Generated from microvm/proto/sandboxd/v1/sandboxd.proto (blob 9461f25efa5996eca03ea481c4a5baebd6183b4e)
+# at commit 2d160151ce by backend/onyx/microvm/generated/regenerate.sh. Do not edit.
 import datetime
 
 from google.protobuf import duration_pb2 as _duration_pb2
@@ -35,6 +35,7 @@ class ErrorReason(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     FILE_EXISTS: _ClassVar[ErrorReason]
     LIMIT_EXCEEDED: _ClassVar[ErrorReason]
     ARCHIVE_INVALID: _ClassVar[ErrorReason]
+    EXECUTION_CAP_REACHED: _ClassVar[ErrorReason]
 
 class OutputStream(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -49,6 +50,13 @@ class Completion(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     SIGNALED: _ClassVar[Completion]
     CANCELED: _ClassVar[Completion]
     DEADLINE_EXCEEDED: _ClassVar[Completion]
+
+class CancelSignal(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    CANCEL_SIGNAL_UNSPECIFIED: _ClassVar[CancelSignal]
+    CANCEL_SIGNAL_SIGINT: _ClassVar[CancelSignal]
+    CANCEL_SIGNAL_SIGTERM: _ClassVar[CancelSignal]
+    CANCEL_SIGNAL_SIGKILL: _ClassVar[CancelSignal]
 
 class ExecState(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -89,6 +97,7 @@ FILE_NOT_FOUND: ErrorReason
 FILE_EXISTS: ErrorReason
 LIMIT_EXCEEDED: ErrorReason
 ARCHIVE_INVALID: ErrorReason
+EXECUTION_CAP_REACHED: ErrorReason
 OUTPUT_STREAM_UNSPECIFIED: OutputStream
 STDOUT: OutputStream
 STDERR: OutputStream
@@ -97,6 +106,10 @@ EXITED: Completion
 SIGNALED: Completion
 CANCELED: Completion
 DEADLINE_EXCEEDED: Completion
+CANCEL_SIGNAL_UNSPECIFIED: CancelSignal
+CANCEL_SIGNAL_SIGINT: CancelSignal
+CANCEL_SIGNAL_SIGTERM: CancelSignal
+CANCEL_SIGNAL_SIGKILL: CancelSignal
 EXEC_STATE_UNSPECIFIED: ExecState
 RUNNING: ExecState
 ENDED: ExecState
@@ -203,7 +216,7 @@ class GrownFS(_message.Message):
     def __init__(self, mount_point: _Optional[str] = ..., old_bytes: _Optional[int] = ..., new_bytes: _Optional[int] = ...) -> None: ...
 
 class Command(_message.Message):
-    __slots__ = ("argv", "cwd", "env", "stdin", "deadline", "labels")
+    __slots__ = ("argv", "cwd", "env", "stdin", "deadline", "labels", "session_id")
     class EnvEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -224,13 +237,15 @@ class Command(_message.Message):
     STDIN_FIELD_NUMBER: _ClassVar[int]
     DEADLINE_FIELD_NUMBER: _ClassVar[int]
     LABELS_FIELD_NUMBER: _ClassVar[int]
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
     argv: _containers.RepeatedScalarFieldContainer[str]
     cwd: str
     env: _containers.ScalarMap[str, str]
     stdin: bool
     deadline: _duration_pb2.Duration
     labels: _containers.ScalarMap[str, str]
-    def __init__(self, argv: _Optional[_Iterable[str]] = ..., cwd: _Optional[str] = ..., env: _Optional[_Mapping[str, str]] = ..., stdin: bool = ..., deadline: _Optional[_Union[datetime.timedelta, _duration_pb2.Duration, _Mapping]] = ..., labels: _Optional[_Mapping[str, str]] = ...) -> None: ...
+    session_id: str
+    def __init__(self, argv: _Optional[_Iterable[str]] = ..., cwd: _Optional[str] = ..., env: _Optional[_Mapping[str, str]] = ..., stdin: bool = ..., deadline: _Optional[_Union[datetime.timedelta, _duration_pb2.Duration, _Mapping]] = ..., labels: _Optional[_Mapping[str, str]] = ..., session_id: _Optional[str] = ...) -> None: ...
 
 class RunRequest(_message.Message):
     __slots__ = ("command",)
@@ -336,18 +351,22 @@ class InteractResponse(_message.Message):
     def __init__(self, written: _Optional[int] = ...) -> None: ...
 
 class CancelRequest(_message.Message):
-    __slots__ = ("execution_id",)
+    __slots__ = ("execution_id", "signal")
     EXECUTION_ID_FIELD_NUMBER: _ClassVar[int]
+    SIGNAL_FIELD_NUMBER: _ClassVar[int]
     execution_id: str
-    def __init__(self, execution_id: _Optional[str] = ...) -> None: ...
+    signal: CancelSignal
+    def __init__(self, execution_id: _Optional[str] = ..., signal: _Optional[_Union[CancelSignal, str]] = ...) -> None: ...
 
 class CancelResponse(_message.Message):
-    __slots__ = ("result", "already_ended")
+    __slots__ = ("result", "already_ended", "signaled")
     RESULT_FIELD_NUMBER: _ClassVar[int]
     ALREADY_ENDED_FIELD_NUMBER: _ClassVar[int]
+    SIGNALED_FIELD_NUMBER: _ClassVar[int]
     result: ExecResult
     already_ended: bool
-    def __init__(self, result: _Optional[_Union[ExecResult, _Mapping]] = ..., already_ended: bool = ...) -> None: ...
+    signaled: bool
+    def __init__(self, result: _Optional[_Union[ExecResult, _Mapping]] = ..., already_ended: bool = ..., signaled: bool = ...) -> None: ...
 
 class Execution(_message.Message):
     __slots__ = ("execution_id", "state", "argv", "labels", "pid", "started_at", "deadline_at", "stdout_bytes", "stderr_bytes", "result")
@@ -690,8 +709,10 @@ class BrowserStopResponse(_message.Message):
     def __init__(self) -> None: ...
 
 class ManagedStatusRequest(_message.Message):
-    __slots__ = ()
-    def __init__(self) -> None: ...
+    __slots__ = ("mount",)
+    MOUNT_FIELD_NUMBER: _ClassVar[int]
+    mount: str
+    def __init__(self, mount: _Optional[str] = ...) -> None: ...
 
 class ManagedSlotState(_message.Message):
     __slots__ = ("slot", "device", "present", "size_bytes", "fs_uuid", "mounted", "in_use")
@@ -712,35 +733,41 @@ class ManagedSlotState(_message.Message):
     def __init__(self, slot: _Optional[_Union[ManagedSlot, str]] = ..., device: _Optional[str] = ..., present: bool = ..., size_bytes: _Optional[int] = ..., fs_uuid: _Optional[str] = ..., mounted: bool = ..., in_use: bool = ...) -> None: ...
 
 class ManagedStatusResponse(_message.Message):
-    __slots__ = ("mount_point", "active", "slots")
+    __slots__ = ("mount_point", "active", "slots", "mount")
     MOUNT_POINT_FIELD_NUMBER: _ClassVar[int]
     ACTIVE_FIELD_NUMBER: _ClassVar[int]
     SLOTS_FIELD_NUMBER: _ClassVar[int]
+    MOUNT_FIELD_NUMBER: _ClassVar[int]
     mount_point: str
     active: ManagedSlot
     slots: _containers.RepeatedCompositeFieldContainer[ManagedSlotState]
-    def __init__(self, mount_point: _Optional[str] = ..., active: _Optional[_Union[ManagedSlot, str]] = ..., slots: _Optional[_Iterable[_Union[ManagedSlotState, _Mapping]]] = ...) -> None: ...
+    mount: str
+    def __init__(self, mount_point: _Optional[str] = ..., active: _Optional[_Union[ManagedSlot, str]] = ..., slots: _Optional[_Iterable[_Union[ManagedSlotState, _Mapping]]] = ..., mount: _Optional[str] = ...) -> None: ...
 
 class MountManagedRequest(_message.Message):
-    __slots__ = ("slot", "size_bytes", "fs_uuid")
+    __slots__ = ("slot", "mount", "size_bytes", "fs_uuid")
     SLOT_FIELD_NUMBER: _ClassVar[int]
+    MOUNT_FIELD_NUMBER: _ClassVar[int]
     SIZE_BYTES_FIELD_NUMBER: _ClassVar[int]
     FS_UUID_FIELD_NUMBER: _ClassVar[int]
     slot: ManagedSlot
+    mount: str
     size_bytes: int
     fs_uuid: str
-    def __init__(self, slot: _Optional[_Union[ManagedSlot, str]] = ..., size_bytes: _Optional[int] = ..., fs_uuid: _Optional[str] = ...) -> None: ...
+    def __init__(self, slot: _Optional[_Union[ManagedSlot, str]] = ..., mount: _Optional[str] = ..., size_bytes: _Optional[int] = ..., fs_uuid: _Optional[str] = ...) -> None: ...
 
 class MountManagedResponse(_message.Message):
-    __slots__ = ("active", "changed", "previous", "previous_in_use", "wait_ms")
+    __slots__ = ("active", "changed", "previous", "previous_in_use", "wait_ms", "mount")
     ACTIVE_FIELD_NUMBER: _ClassVar[int]
     CHANGED_FIELD_NUMBER: _ClassVar[int]
     PREVIOUS_FIELD_NUMBER: _ClassVar[int]
     PREVIOUS_IN_USE_FIELD_NUMBER: _ClassVar[int]
     WAIT_MS_FIELD_NUMBER: _ClassVar[int]
+    MOUNT_FIELD_NUMBER: _ClassVar[int]
     active: ManagedSlot
     changed: bool
     previous: ManagedSlot
     previous_in_use: bool
     wait_ms: int
-    def __init__(self, active: _Optional[_Union[ManagedSlot, str]] = ..., changed: bool = ..., previous: _Optional[_Union[ManagedSlot, str]] = ..., previous_in_use: bool = ..., wait_ms: _Optional[int] = ...) -> None: ...
+    mount: str
+    def __init__(self, active: _Optional[_Union[ManagedSlot, str]] = ..., changed: bool = ..., previous: _Optional[_Union[ManagedSlot, str]] = ..., previous_in_use: bool = ..., wait_ms: _Optional[int] = ..., mount: _Optional[str] = ...) -> None: ...

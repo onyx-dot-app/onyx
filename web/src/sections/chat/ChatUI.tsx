@@ -247,7 +247,8 @@ const ChatUI = React.memo(
             Multi-model responses use full width while normal messages stay centered. */}
         <div
           className={cn(
-            "flex flex-col w-full h-full pt-4 pb-8 gap-12",
+            // Size container for answer tables that grow past the prose column.
+            "@container flex flex-col w-full h-full pt-4 pb-8 gap-12",
             !fullWidthChat && "md:pe-1"
           )}
         >
@@ -347,7 +348,10 @@ const ChatUI = React.memo(
                 <WindowedRow
                   id={messageReactComponentKey}
                   key={messageReactComponentKey}
-                  className={cn("w-full self-center", msgWidth)}
+                  className={cn(
+                    "chat-table-breakout w-full self-center",
+                    msgWidth
+                  )}
                   pinned={pinned}
                   initiallyMounted={initiallyMounted}
                   heightCache={rowHeightCache}

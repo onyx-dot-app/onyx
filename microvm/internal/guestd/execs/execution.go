@@ -8,6 +8,7 @@ import (
 	"slices"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 )
 
@@ -91,11 +92,19 @@ type Execution struct {
 	StartedAt  time.Time
 	DeadlineAt time.Time
 
-	ready  bool // guarded by Manager.mu: started, visible to Get
-	cmd    *exec.Cmd
-	group  Group
-	reason atomic.Int32
-	done   chan struct{}
+	ready bool // guarded by Manager.mu: started, visible to Get
+	// evicting is guarded by Manager.mu: a Start drops this ended record once
+	// its own command has started.
+	evicting bool
+	cmd      *exec.Cmd
+	group    Group
+	reason   atomic.Int32
+	// softSignals has bit 1<<sig set for each SIGINT or SIGTERM that Signal
+	// sent.
+	softSignals atomic.Uint32
+	// lastUsed is the UnixNano of the start or of the last Get.
+	lastUsed atomic.Int64
+	done     chan struct{}
 	// acct reports changes of the output memory to the Manager.
 	acct func(delta int64)
 
@@ -204,6 +213,18 @@ func (e *Execution) WriteStdin(data []byte, closeStdin bool) (int, error) {
 		e.stdin = nil
 	}
 	return n, err
+}
+
+func (e *Execution) touch() { e.lastUsed.Store(time.Now().UnixNano()) }
+
+// signal sends sig to the process group of the main process. It does
+// nothing after the main process exited.
+func (e *Execution) signal(sig syscall.Signal) error {
+	if e.reason.Load() == killExited {
+		return nil
+	}
+	e.softSignals.Or(1 << uint(sig))
+	return e.group.Signal(sig)
 }
 
 // kill stops every process of the execution. The first reason wins. It does
