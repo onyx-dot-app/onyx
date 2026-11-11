@@ -8,8 +8,8 @@
 
 ## Docs
 
-- [ ] Customer-facing change: I updated `documentation/` (text and screenshots).
-- [ ] No docs change needed (internal, tests, CI, or multi-tenant cloud only).
+- [ ] Customer-facing change: I updated `documentation/` with only what a customer needs, at the level of detail of the whole page.
+- [ ] No docs change needed (internal, tests, CI, multi-tenant cloud only, or the UI already explains it).
 
 ## Additional Options
 

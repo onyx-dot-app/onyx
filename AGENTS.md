@@ -72,9 +72,11 @@ Explore the tree with `ls` rather than relying on docs for the full package list
 ### Docs
 
 When you change something a customer sees or configures (UI, admin settings, connectors, environment variables, the
-public API, deployment), update the matching page in `documentation/` in the same PR. Recapture screenshots of UI you
-changed: follow `.agents/skills/docs-writing/SKILL.md` and use the local app and admin login above. Skip docs for
-internal refactors, tests, CI, and multi-tenant cloud operations, which customers cannot use.
+public API, deployment), check the matching page in `documentation/`. If the change makes the page wrong or leaves out
+something a customer needs, update it in the same PR. Add only what a customer would miss: what they do and what they
+see, at the level of detail of the whole page. Recapture the screenshots that your change makes wrong. Follow
+`.agents/skills/docs-writing/SKILL.md` and use the local app and admin login above. Skip docs for internal refactors,
+tests, CI, and multi-tenant cloud operations, which customers cannot use.
 
 ### Feature Map
 

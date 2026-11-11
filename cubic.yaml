@@ -81,6 +81,21 @@ reviews:
         does not update that document, flag it and name the stale section. Do
         not flag changes that leave every documented statement true.
 
+    - name: Customer docs stay proportional
+      description: >
+        For changes under documentation/, flag added text that a customer
+        would not miss: how Onyx works internally (execution order, queues,
+        persistence, retries), rules that the UI already explains, and
+        concepts that users never select or see. Flag added text that is more
+        detailed than the rest of the page (for example, timing, recovery, or
+        edge-case rules that the page gives for no other feature), and a new
+        section that sits above more important sections. Flag a new image that shows a cropped control
+        or uses a different framing from the other images on the page. Name
+        the sentences to cut. The rules are in "Keep feature-PR edits small"
+        in .agents/skills/docs-writing/SKILL.md.
+      include:
+        - documentation/**
+
     - name: No hardcoded booleans
       description: >
         When hardcoding a boolean variable to a constant value, remove the

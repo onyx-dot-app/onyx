@@ -1,6 +1,6 @@
 ---
 name: "docs-writing"
-description: "Write, rewrite, audit, or review a page of the Onyx customer docs (the Mintlify site in `documentation/`). Use for new pages, release refreshes, screenshot updates, connector and provider guides, API guides, and docs quality reviews. Covers audience, source-of-truth checks against the onyx repo, ASD-STE100 prose rules, Mintlify page patterns, screenshot capture, and the checks to run before a PR."
+description: "Write, rewrite, audit, or review a page of the Onyx customer docs (the Mintlify site in `documentation/`). Use for new pages, release refreshes, screenshot updates, connector and provider guides, API guides, docs edits in a feature PR, and docs quality reviews. Covers audience, source-of-truth checks against the onyx repo, ASD-STE100 prose rules, Mintlify page patterns, screenshot capture, and the checks to run before a PR."
 ---
 
 # Onyx docs writing
@@ -15,6 +15,20 @@ or developer who wants to do one thing with the product. Write for that reader, 
 Pick one dominant reader for the page: end user, admin, developer, or operator who deploys Onyx.
 Pick one Diataxis type per page: tutorial, how-to, reference, or explanation. If two readers or two types compete,
 split the page or link out.
+
+### Keep feature-PR edits small
+
+Most docs changes ship in a feature PR and add to an existing page. Before you add a sentence, ask:
+would a customer miss it if you deleted it? If not, do not add it. No docs change is better than a low-value one.
+
+- Write what the user does and what the user sees. Do not explain how Onyx does it.
+- Do not restate what the UI already tells the user: disabled controls, tooltips, inline errors.
+- Do not name concepts that the user never selects or sees, such as subagents or internal queues.
+- Read the whole page first, and match its level of detail. If the page tells the user what each control does in a
+  few sentences, describe the new feature the same way. Do not add timing, recovery, or edge-case rules that the
+  page gives for no other feature.
+- Put a new section where its importance puts it among its siblings. A new feature does not go first.
+- When the change modifies existing behavior, edit the existing sentence. Do not add a parallel note or FAQ entry.
 
 ### Ground every claim in source truth
 
@@ -78,8 +92,8 @@ Avoid:
 - meta-commentary about the docs or about AI,
 - em dashes (use a period, comma, colon, or parentheses),
 - vague references ("this", "it", "the above") where a section can be read alone,
-- internal implementation detail (module names, Celery queues, tables) unless an admin needs
-  it to operate the product.
+- internal implementation detail (module names, Celery queues, tables) and internal behavior
+  (execution order, persistence, retries) unless an admin needs it to operate the product.
 
 Write so that a section quoted alone still answers the reader's question. Name the feature and the page in the sentence,
 not only in the heading.
@@ -136,8 +150,8 @@ Every page must be in `docs.json` or reachable by a `redirects` entry. Removed p
   `<video className="rounded-image" src="/assets/.../name.mp4" autoPlay muted loop playsInline aria-label="..." />`.
 - Keep the existing path and filename when you replace a screenshot so the MDX does not
   change. Delete the asset file when you delete the image.
-- When a PR changes UI, recapture its screenshots in the same PR. Agents can use Playwright against
-  `http://localhost:3000` with the admin login in the root `AGENTS.md`.
+- When a PR changes UI that a screenshot shows, recapture that screenshot in the same PR.
+  Agents can use Playwright against `http://localhost:3000` with the admin login in the root `AGENTS.md`.
 - Capture Onyx UI shots on a local stack: light theme, 1440x900 viewport at 2x device scale,
   admin user, seeded data that looks real (a connector, an agent, a chat), no personal data.
   Admin forms scroll in an inner container, so grow the viewport instead of `fullPage`.
@@ -146,8 +160,9 @@ Every page must be in `docs.json` or reachable by a `redirects` entry. Removed p
   **Admin Panel → Billing**; never commit it.
 - Vendor-console screenshots (Google Cloud, Atlassian, Slack) stay unless the vendor flow
   changed.
-- Add media only when text cannot show the flow. Every image has alt text that says what it
-  shows.
+- Add a new image only when text cannot show the flow. It shows the full surface at the same
+  framing and scale as the other images on the page, not a cropped control. Every image has alt
+  text that says what it shows.
 
 ## 5. Checks before you open a PR
 
@@ -171,7 +186,7 @@ Also confirm:
 
 ## 6. Review rubric
 
-Score 0 to 2 per row. Publish at 16/20 or higher with no zero.
+Score 0 to 2 per row. Publish at 18/22 or higher with no zero.
 
 | Dimension | 2 means |
 | --- | --- |
@@ -185,6 +200,7 @@ Score 0 to 2 per row. Publish at 16/20 or higher with no zero.
 | Retrievability | Each section stands alone |
 | Maintenance | Evergreen wording; volatile facts (versions, dates) are explicit |
 | Style | STE: short, active, reader-centred, no filler |
+| Proportion | A customer would miss each added sentence; detail matches the whole page; placement matches importance |
 
 ## 7. Full-site audits
 
