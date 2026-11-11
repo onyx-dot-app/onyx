@@ -79,7 +79,7 @@ class EmailHeaders(BaseModel):
                 hasher.update((date_str or "").encode("utf-8", errors="replace"))
                 try:
                     payload = email_msg.as_bytes()
-                    hasher.update(payload[:2048])
+                    hasher.update(payload)
                 except Exception:
                     pass
                 message_id = f"fallback-msg-{hasher.hexdigest()[:24]}"

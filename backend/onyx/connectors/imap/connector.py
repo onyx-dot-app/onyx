@@ -6,7 +6,7 @@ import re
 import ssl
 from datetime import datetime, timezone
 from email.message import Message
-from email.utils import parseaddr
+from email.utils import getaddresses, parseaddr
 from enum import Enum
 from typing import Any, cast
 
@@ -203,7 +203,12 @@ class ImapConnector(
                 continue
 
             try:
-                email_headers = EmailHeaders.from_email_msg(email_msg=email_msg)
+                mailbox_name = checkpoint.current_mailbox.mailbox
+                fallback_id = f"imap-{mailbox_name}-{email_id}"
+                email_headers = EmailHeaders.from_email_msg(
+                    email_msg=email_msg,
+                    fallback_id=fallback_id,
+                )
             except Exception as e:
                 logger.warning(
                     "Failed to parse email headers for email_id=%r: %s; skipping",
@@ -333,7 +338,7 @@ def _fetch_email_ids_in_mailbox(
     end_str = datetime.fromtimestamp(end, tz=timezone.utc).strftime("%d-%b-%Y")
     search_criteria = f'(SINCE "{start_str}" BEFORE "{end_str}")'
 
-    status, email_ids_byte_array = mail_client.search(None, search_criteria)
+    status, email_ids_byte_array = mail_client.uid("search", None, search_criteria)
 
     if status != _IMAP_OKAY_STATUS or not email_ids_byte_array:
         raise RuntimeError(f"Failed to fetch email ids; {status=}")
@@ -344,7 +349,7 @@ def _fetch_email_ids_in_mailbox(
 
 
 def _fetch_email(mail_client: imaplib.IMAP4_SSL, email_id: str) -> Message | None:
-    status, msg_data = mail_client.fetch(message_set=email_id, message_parts="(RFC822)")
+    status, msg_data = mail_client.uid("fetch", email_id, "(RFC822)")
     if status != _IMAP_OKAY_STATUS or not msg_data:
         return None
 
@@ -377,11 +382,11 @@ def _convert_email_headers_and_body_into_document(
     }
     if email_headers.sender:
         try:
-            sender_name, sender_addr = _parse_singular_addr(raw_header=email_headers.sender)
-            if sender_addr and sender_addr not in expert_info_map:
-                expert_info_map[sender_addr] = BasicExpertInfo(
-                    display_name=sender_name, email=sender_addr
-                )
+            for sender_name, sender_addr in _parse_addrs(raw_header=email_headers.sender):
+                if sender_addr and sender_addr not in expert_info_map:
+                    expert_info_map[sender_addr] = BasicExpertInfo(
+                        display_name=sender_name, email=sender_addr
+                    )
         except Exception:
             logger.warning(
                 "Could not parse sender address %r; omitting sender from permissions",
@@ -461,8 +466,7 @@ def _sanitize_mailbox_names(mailboxes: list[str]) -> list[str]:
 
 
 def _parse_addrs(raw_header: str) -> list[tuple[str, str]]:
-    addrs = raw_header.split(",")
-    name_addr_pairs = [parseaddr(addr=addr) for addr in addrs if addr]
+    name_addr_pairs = getaddresses([raw_header])
     return [(name, addr) for name, addr in name_addr_pairs if addr]
 
 
@@ -471,10 +475,6 @@ def _parse_singular_addr(raw_header: str) -> tuple[str, str]:
     if not addrs:
         raise RuntimeError(
             f"Parsing email header resulted in no addresses being found; {raw_header=}"
-        )
-    elif len(addrs) >= 2:
-        raise RuntimeError(
-            f"Expected a singular address, but instead got multiple; {raw_header=} {addrs=}"
         )
 
     return addrs[0]

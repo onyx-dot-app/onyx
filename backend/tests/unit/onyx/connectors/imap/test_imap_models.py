@@ -59,3 +59,58 @@ def test_email_headers_empty_message_id() -> None:
 
     headers = EmailHeaders.from_email_msg(msg, fallback_id="INBOX:99")
     assert headers.id == "INBOX:99"
+
+
+def test_fallback_hash_distinguishes_content_beyond_2048_bytes() -> None:
+    # Two messages identical in header and first 3000 bytes except at the end
+    prefix = "A" * 3000
+    msg1 = EmailMessage()
+    msg1["Subject"] = "Same Subject"
+    msg1["From"] = "sender@example.com"
+    msg1["To"] = "recipient@example.com"
+    msg1["Date"] = "Wed, 11 Nov 2026 12:00:00 +0000"
+    msg1.set_content(prefix + "content_1")
+
+    msg2 = EmailMessage()
+    msg2["Subject"] = "Same Subject"
+    msg2["From"] = "sender@example.com"
+    msg2["To"] = "recipient@example.com"
+    msg2["Date"] = "Wed, 11 Nov 2026 12:00:00 +0000"
+    msg2.set_content(prefix + "content_2")
+
+    headers1 = EmailHeaders.from_email_msg(msg1)
+    headers2 = EmailHeaders.from_email_msg(msg2)
+
+    assert headers1.id != headers2.id
+
+
+def test_parse_addrs_with_quoted_commas_and_multiple_senders() -> None:
+    from onyx.connectors.imap.connector import (
+        _convert_email_headers_and_body_into_document,
+        _parse_addrs,
+    )
+
+    header = '"Doe, John" <john@example.com>, "Smith, Jane" <jane@example.com>'
+    addrs = _parse_addrs(header)
+    assert addrs == [("Doe, John", "john@example.com"), ("Smith, Jane", "jane@example.com")]
+
+    # Test multi-author sender in _convert_email_headers_and_body_into_document
+    msg = EmailMessage()
+    msg["Message-ID"] = "<multi-sender@example.com>"
+    msg["Subject"] = "Multi Sender Test"
+    msg["From"] = '"Doe, John" <john@example.com>, Jane Smith <jane@example.com>'
+    msg["To"] = "recipient@example.com"
+    msg.set_content("Hello from two authors")
+
+    headers = EmailHeaders.from_email_msg(msg)
+    doc = _convert_email_headers_and_body_into_document(
+        email_msg=msg,
+        email_headers=headers,
+        include_perm_sync=True,
+    )
+
+    assert doc.external_access is not None
+    assert "john@example.com" in doc.external_access.external_user_emails
+    assert "jane@example.com" in doc.external_access.external_user_emails
+    assert "recipient@example.com" in doc.external_access.external_user_emails
+
