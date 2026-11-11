@@ -63,8 +63,8 @@ class SkillResponse(BaseModel):
     is_personal: bool = False
     user_permission: SkillAccessLevel | None = None
     external_app: SkillExternalAppDependencyResponse | None = None
-    # Newest plugin version of a custom skill. Edits send it back as
-    # base_version_id. None for built-ins.
+    # The plugin version of a custom skill whose files this response shows.
+    # Edits send it back as base_version_id. None for built-ins.
     current_version_id: UUID | None = None
 
     @classmethod

@@ -17,7 +17,7 @@ from onyx.db.models import Skill, User
 from onyx.db.persona_sharing import (
     get_user_group_ids_for_user,
 )
-from onyx.db.plugin import get_current_version_ids
+from onyx.db.plugin import get_version_ids_for_bundles
 from onyx.db.scoped_permissions import fetch_managed_group_ids
 from onyx.db.skill import SkillUserState, skill_user_states
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -141,7 +141,9 @@ def skill_response_for_user(
     ):
         managed_user_group_ids = fetch_managed_group_ids(user, db_session)
     if current_version_ids is None:
-        current_version_ids = get_current_version_ids([skill.id], db_session)
+        current_version_ids = get_version_ids_for_bundles(
+            {skill.id: skill.bundle_file_id}, db_session
+        )
     return SkillResponse.from_custom(
         skill,
         enabled=state.enabled,
@@ -172,8 +174,9 @@ def skills_list_response_for_user(
         else set()
     )
     states = skill_user_states(user, (skill.id for skill in rows), db_session)
-    current_version_ids = get_current_version_ids(
-        (skill.id for skill in rows if skill.is_custom), db_session
+    current_version_ids = get_version_ids_for_bundles(
+        {skill.id: skill.bundle_file_id for skill in rows if skill.is_custom},
+        db_session,
     )
     for skill in rows:
         if (
