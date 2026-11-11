@@ -14,6 +14,7 @@ from onyx.skills.bundle import (
     read_custom_bundle_instructions,
     strip_skill_md_frontmatter,
 )
+from onyx.skills.validation import read_stored_bundle_bytes
 
 
 def iter_builtin_skill_files(source_dir: Path) -> Iterator[Path]:
@@ -66,7 +67,9 @@ def read_custom_skill_bundle_bytes(
         )
     store = file_store or get_default_file_store()
     try:
-        bundle_bytes = store.read_file(skill.bundle_file_id).read()
+        bundle_bytes = read_stored_bundle_bytes(skill.bundle_file_id, store)
+    except OnyxError:
+        raise
     except Exception as exc:
         raise OnyxError(
             OnyxErrorCode.INTERNAL_ERROR,

@@ -154,3 +154,9 @@ def test_parse_skill_document_requires_directory_name_match() -> None:
             raw,
             directory_name="other",
         )
+
+
+def test_deep_yaml_is_invalid_input() -> None:
+    raw = _skill_md("metadata: " + "[" * 5000 + "]" * 5000)
+    with pytest.raises(OnyxError, match="not valid YAML"):
+        parse_skill_document(raw)

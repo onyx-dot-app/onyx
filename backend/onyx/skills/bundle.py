@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import io
-import os
 import stat
 import sys
 import zipfile
+from collections.abc import Callable
 from contextlib import ExitStack
 from copy import copy
 from dataclasses import dataclass
-from typing import IO, Final
+from typing import IO, Final, Literal
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -24,12 +24,17 @@ from onyx.skills.metadata import (
 )
 from onyx.skills.models import CustomSkillBundleContents, SkillBundleFile
 
-DEFAULT_PER_FILE_MAX_BYTES: Final[int] = int(
-    os.environ.get("SKILL_BUNDLE_PER_FILE_MAX_BYTES") or 25 * 1024 * 1024
-)
-DEFAULT_TOTAL_MAX_BYTES: Final[int] = int(
-    os.environ.get("SKILL_BUNDLE_TOTAL_MAX_BYTES") or 100 * 1024 * 1024
-)
+_MIB: Final[int] = 1024 * 1024
+
+DEFAULT_PER_FILE_MAX_BYTES: Final[int] = 25 * _MIB
+DEFAULT_TOTAL_MAX_BYTES: Final[int] = 100 * _MIB
+DEFAULT_ZIP_MAX_BYTES: Final[int] = 25 * _MIB
+DEFAULT_MAX_FILE_COUNT: Final[int] = 500
+# Saved bundles are read up to this many ZIP bytes; before the ZIP limit, uploads
+# were capped at the expanded total.
+STORED_ZIP_MAX_BYTES: Final[int] = DEFAULT_TOTAL_MAX_BYTES
+
+SkillBundleLimit = Literal["zip_bytes", "file_count", "file_bytes", "total_bytes"]
 
 SKILL_MD_NAME: Final[str] = "SKILL.md"
 TEMPLATE_SUFFIX: Final[str] = ".template"
@@ -47,15 +52,51 @@ class NormalizedSkillBundle:
     source_directory: str | None
 
 
-def read_bundle_file(bundle_file: IO[bytes]) -> bytes:
+def _bundle_limit_error(
+    limit: SkillBundleLimit, limit_value: int, detail: str
+) -> OnyxError:
+    return OnyxError(
+        OnyxErrorCode.PAYLOAD_TOO_LARGE,
+        detail,
+        extra={"limit": limit, "limit_value": limit_value},
+    )
+
+
+def _zip_too_large_error(max_bytes: int) -> OnyxError:
+    return _bundle_limit_error(
+        "zip_bytes",
+        max_bytes,
+        f"Skill bundle zip exceeds the {max_bytes // (1024 * 1024)} MiB limit.",
+    )
+
+
+def read_bundle_file(
+    bundle_file: IO[bytes],
+    *,
+    filename: str | None = None,
+    max_bytes: int | None = None,
+) -> bytes:
     """Read a bundle stream without buffering an arbitrarily large body."""
-    data = bundle_file.read(DEFAULT_TOTAL_MAX_BYTES + 1)
-    if len(data) > DEFAULT_TOTAL_MAX_BYTES:
-        raise OnyxError(
-            OnyxErrorCode.PAYLOAD_TOO_LARGE,
-            f"Skill bundle exceeds the {DEFAULT_TOTAL_MAX_BYTES} byte limit.",
-        )
+    is_raw_file = filename is not None and not filename.lower().endswith(".zip")
+    if max_bytes is None:
+        max_bytes = DEFAULT_PER_FILE_MAX_BYTES if is_raw_file else DEFAULT_ZIP_MAX_BYTES
+    data = bundle_file.read(max_bytes + 1)
+    if len(data) > max_bytes:
+        if is_raw_file:
+            raise _bundle_limit_error(
+                "file_bytes", max_bytes, f"file '{filename}' exceeds the per-file limit"
+            )
+        raise _zip_too_large_error(max_bytes)
     return data
+
+
+def _check_bundle_file_count(count: int, max_file_count: int | None) -> None:
+    if max_file_count is not None and count > max_file_count:
+        raise _bundle_limit_error(
+            "file_count",
+            max_file_count,
+            f"bundle contains more than {max_file_count} files",
+        )
 
 
 def strip_skill_md_frontmatter(content: str) -> str:
@@ -175,8 +216,9 @@ def rewrite_custom_bundle_skill_md(
         instructions_markdown=instructions_markdown,
     ).encode("utf-8")
     if len(base_skill_md) > DEFAULT_PER_FILE_MAX_BYTES:
-        raise OnyxError(
-            OnyxErrorCode.PAYLOAD_TOO_LARGE,
+        raise _bundle_limit_error(
+            "file_bytes",
+            DEFAULT_PER_FILE_MAX_BYTES,
             f"file '{SKILL_MD_NAME}' exceeds "
             f"{DEFAULT_PER_FILE_MAX_BYTES // (1024 * 1024)} MiB",
         )
@@ -224,8 +266,9 @@ def rewrite_custom_bundle_skill_md(
                     instructions_markdown,
                 ).encode("utf-8")
                 if len(new_skill_md) > DEFAULT_PER_FILE_MAX_BYTES:
-                    raise OnyxError(
-                        OnyxErrorCode.PAYLOAD_TOO_LARGE,
+                    raise _bundle_limit_error(
+                        "file_bytes",
+                        DEFAULT_PER_FILE_MAX_BYTES,
                         f"file '{SKILL_MD_NAME}' exceeds "
                         f"{DEFAULT_PER_FILE_MAX_BYTES // (1024 * 1024)} MiB",
                     )
@@ -253,7 +296,7 @@ def rewrite_custom_bundle_skill_md(
         )
 
     rewritten = output.getvalue()
-    return normalize_custom_bundle(rewritten).content
+    return normalize_stored_bundle(rewritten).content
 
 
 def _validated_bundle_path(info: zipfile.ZipInfo) -> str:
@@ -355,14 +398,16 @@ def _copy_validated_bundle_file(
                     break
                 size += len(chunk)
                 if size > per_file_max_bytes:
-                    raise OnyxError(
-                        OnyxErrorCode.PAYLOAD_TOO_LARGE,
+                    raise _bundle_limit_error(
+                        "file_bytes",
+                        per_file_max_bytes,
                         f"file '{output_path}' exceeds "
                         f"{per_file_max_bytes // (1024 * 1024)} MiB",
                     )
                 if total_bytes_before_file + size > total_max_bytes:
-                    raise OnyxError(
-                        OnyxErrorCode.PAYLOAD_TOO_LARGE,
+                    raise _bundle_limit_error(
+                        "total_bytes",
+                        total_max_bytes,
                         f"bundle exceeds "
                         f"{total_max_bytes // (1024 * 1024)} MiB uncompressed",
                     )
@@ -392,6 +437,8 @@ def _copy_validated_bundle_file(
 def normalize_custom_bundle(
     zip_bytes: bytes,
     *,
+    zip_max_bytes: int | None = DEFAULT_ZIP_MAX_BYTES,
+    max_file_count: int | None = DEFAULT_MAX_FILE_COUNT,
     per_file_max_bytes: int = DEFAULT_PER_FILE_MAX_BYTES,
     total_max_bytes: int = DEFAULT_TOTAL_MAX_BYTES,
 ) -> NormalizedSkillBundle:
@@ -400,7 +447,13 @@ def normalize_custom_bundle(
     Stored custom bundles always use a canonical root-level ``SKILL.md`` layout.
     A common ``zip -r skill.zip skill`` archive is accepted at ingestion and
     flattened here before metadata parsing, hashing, and storage.
+
+    Each limit is checked on its own and the first one that fails raises a
+    413. ``None`` skips the zip size or file count check; reads of bundles
+    stored before those limits existed use it.
     """
+    if zip_max_bytes is not None and len(zip_bytes) > zip_max_bytes:
+        raise _zip_too_large_error(zip_max_bytes)
     try:
         source_zip = zipfile.ZipFile(io.BytesIO(zip_bytes))
     except zipfile.BadZipFile:
@@ -413,6 +466,7 @@ def normalize_custom_bundle(
         file_paths = [
             normalized for info, normalized in normalized_infos if not info.is_dir()
         ]
+        _check_bundle_file_count(len(file_paths), max_file_count)
         wrapper_prefix = _bundle_wrapper_prefix(file_paths)
         needs_rewrite = wrapper_prefix is not None or any(
             _is_ignored_bundle_path(path) for path in file_paths
@@ -514,14 +568,26 @@ def normalize_custom_bundle(
             "SKILL.md missing at bundle root or directly inside one "
             "top-level directory",
         )
-    return NormalizedSkillBundle(
-        content=output.getvalue() if needs_rewrite else zip_bytes,
-        source_directory=wrapper_prefix,
+    content = output.getvalue() if needs_rewrite else zip_bytes
+    if zip_max_bytes is not None and len(content) > zip_max_bytes:
+        raise _zip_too_large_error(zip_max_bytes)
+    return NormalizedSkillBundle(content=content, source_directory=wrapper_prefix)
+
+
+def normalize_stored_bundle(zip_bytes: bytes) -> NormalizedSkillBundle:
+    """Normalize a saved bundle, or an edit that cannot add files to one.
+
+    Saved bundles can predate the ZIP-size and file-count limits, so these
+    limits do not apply. The per-file and expanded-total limits still do, and
+    the ZIP must fit the stored-read limit so it can be loaded again.
+    """
+    return normalize_custom_bundle(
+        zip_bytes, zip_max_bytes=STORED_ZIP_MAX_BYTES, max_file_count=None
     )
 
 
 def update_custom_bundle_files(
-    existing_zip_bytes: bytes,
+    existing_zip_bytes: bytes | Callable[[], bytes],
     upload_bytes: bytes | None = None,
     *,
     filename: str | None = None,
@@ -534,6 +600,8 @@ def update_custom_bundle_files(
     A ZIP or standalone file containing ``SKILL.md`` is a full bundle
     replacement. Other uploads are merged into the existing bundle, replacing
     files at matching paths while preserving ``SKILL.md`` and unrelated files.
+    A callable for ``existing_zip_bytes`` is read only when the existing bundle
+    is needed, so a full replacement does not depend on it.
     """
     is_upload = upload_bytes is not None
     if is_upload == (remove_path is not None):
@@ -551,6 +619,11 @@ def update_custom_bundle_files(
         changed_paths: set[str]
         if upload_bytes is not None:
             assert filename is not None
+            if (
+                filename.lower().endswith(".zip")
+                and len(upload_bytes) > DEFAULT_ZIP_MAX_BYTES
+            ):
+                raise _zip_too_large_error(DEFAULT_ZIP_MAX_BYTES)
             upload_archive_bytes = (
                 upload_bytes
                 if filename.lower().endswith(".zip")
@@ -573,6 +646,10 @@ def update_custom_bundle_files(
             upload_infos = [
                 (info, _validated_bundle_path(info)) for info in upload_zip.infolist()
             ]
+            _check_bundle_file_count(
+                sum(not info.is_dir() for info, _ in upload_infos),
+                DEFAULT_MAX_FILE_COUNT,
+            )
             upload_file_paths = [
                 path
                 for info, path in upload_infos
@@ -610,9 +687,14 @@ def update_custom_bundle_files(
                 )
             changed_paths = {normalized_remove_path}
 
+        existing_bytes = (
+            existing_zip_bytes
+            if isinstance(existing_zip_bytes, bytes)
+            else existing_zip_bytes()
+        )
         try:
             existing_zip = archives.enter_context(
-                zipfile.ZipFile(io.BytesIO(existing_zip_bytes))
+                zipfile.ZipFile(io.BytesIO(existing_bytes))
             )
         except zipfile.BadZipFile as exc:
             raise OnyxError(
@@ -652,6 +734,8 @@ def update_custom_bundle_files(
                         total_max_bytes=total_max_bytes,
                     )
 
+    if remove_path is not None:
+        return normalize_stored_bundle(output.getvalue()).content
     return normalize_custom_bundle(
         output.getvalue(),
         per_file_max_bytes=per_file_max_bytes,
