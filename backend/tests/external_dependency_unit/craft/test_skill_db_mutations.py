@@ -12,6 +12,7 @@ from onyx.db.models import (
     Skill,
     Skill__User,
     Skill__UserGroup,
+    SkillVersion,
     UserSkillPreference,
 )
 from onyx.db.skill import (
@@ -28,6 +29,10 @@ from onyx.db.skill import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from tests.common.craft.skill_table_isolation import (
+    restore_skill_tables,
+    snapshot_skill_tables,
+)
 from tests.external_dependency_unit.craft.db_helpers import (
     add_user_to_group,
     make_built_in_skill_row,
@@ -47,6 +52,49 @@ def _direct_share_permissions(
         select(Skill__User).where(Skill__User.skill_id == skill_id)
     ).all()
     return {row.user_id: row.permission for row in rows}
+
+
+@pytest.mark.parametrize("delete", [False, True])
+def test_skill_snapshot_preserves_version_history(
+    db_session: Session, delete: bool
+) -> None:
+    skill = make_skill(db_session, is_public=True)
+    version = SkillVersion(
+        skill_id=skill.id,
+        version_number=1,
+        bundle_file_id=skill.bundle_file_id,
+        bundle_sha256=skill.bundle_sha256,
+    )
+    db_session.add(version)
+    db_session.flush()
+    skill.current_version_id = version.id
+    db_session.commit()
+    skill_id, version_id = skill.id, version.id
+    snapshot = snapshot_skill_tables(db_session)
+    if delete:
+        db_session.delete(skill)
+    else:
+        newer = SkillVersion(
+            skill_id=skill.id, version_number=2, bundle_file_id="newer.zip"
+        )
+        db_session.add(newer)
+        db_session.flush()
+        skill.current_version_id = newer.id
+        version.bundle_file_id = None
+    db_session.commit()
+    restore_skill_tables(db_session, snapshot)
+    db_session.expire_all()
+    restored = db_session.get(Skill, skill_id)
+    assert restored is not None
+    assert restored.current_version_id == version_id
+    history = list(
+        db_session.scalars(
+            select(SkillVersion).where(SkillVersion.skill_id == skill_id)
+        )
+    )
+    assert len(history) == 1
+    assert history[0].id == version_id
+    assert history[0].bundle_file_id == restored.bundle_file_id
 
 
 def _group_share_permissions(

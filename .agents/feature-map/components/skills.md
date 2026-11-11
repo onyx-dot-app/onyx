@@ -62,10 +62,10 @@ When it fails:
 
 ## Scope
 
-This component owns the skill row, its shares, installation policy and user
-preferences; bundle parsing and validation; built-in skill definitions;
-per-user rendering of templates; GitHub import; the push of a user's skill
-files into a sandbox; and the skills library UI.
+This component owns the skill row and version snapshots, its shares,
+installation policy and user preferences; bundle parsing and validation;
+built-in skill definitions; per-user rendering of templates; GitHub import;
+the push of a user's skill files into a sandbox; and the skills library UI.
 
 Neighbours own the rest:
 - [[craft-sandboxes]]: the sandbox, the managed volume and the push transport.
@@ -237,6 +237,20 @@ The library preview of an external-app skill calls the same renderer
     migration that deletes its rows.** `_assemble_fileset` skips, with a
     warning, a `skill` row whose `built_in_skill_id` is not in
     `skills/built_in.py:_REGISTRY`, so the rows otherwise stay.
+15. `version-rollout-reads` **Runtime reads still use the bundle columns on
+    `db/models.py:Skill`.** The version schema alone does not capture new
+    writes. A custom skill can have no current pointer until version writes
+    and their repair task ship. An old writer can also leave a stale pointer
+    and delete its version's bundle. Before readers switch, the repair task
+    must compare the legacy columns with the current version, append a version
+    from the legacy columns when they differ, and tolerate missing old files.
+    Built-ins have no version. Each version also stores its root SKILL.md
+    outside the bundle: `name` (the frontmatter name), `frontmatter` (the
+    parsed YAML as JSON) and `skill_md` (the raw file, loaded on access only).
+    The initial snapshot copies database values without opening bundles; its
+    unpacked size, file count and SKILL.md columns stay NULL until an
+    application backfill.
+    Do not use these snapshots as runtime content during this rollout.
 
 ---
 
