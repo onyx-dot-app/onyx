@@ -26,6 +26,11 @@ _TRACKED_TASK_STAGES: dict[str, BatchStage] = {
     OnyxCeleryTask.DOCCONVERSION_TASK: BatchStage.DOCCONVERSION,
 }
 
+# Stages whose tasks refresh a live entry while they run (see
+# docconversion_task), so the watchdog can tell a killed worker's in-flight
+# count from a running task.
+_LIVE_TASK_STAGES = frozenset({BatchStage.DOCCONVERSION})
+
 
 def on_docprocessing_task_prerun(
     task_id: str | None,
@@ -68,7 +73,11 @@ def on_docprocessing_task_prerun(
 
     try:
         r = get_redis_client(tenant_id=tenant_id)
-        RedisDocprocessing(index_attempt_id, r, stage).decr_pending_incr_in_flight()
+        counters = RedisDocprocessing(index_attempt_id, r, stage)
+        if stage in _LIVE_TASK_STAGES:
+            # Before the count, so a counted task that runs has an entry.
+            counters.mark_task_live(task_id)
+        counters.decr_pending_incr_in_flight()
     except Exception:
         logger.debug(
             "Failed to update docprocessing counters on prerun for attempt %s",
@@ -96,7 +105,10 @@ def on_docprocessing_task_postrun(
 
     try:
         r = get_redis_client(tenant_id=tenant_id)
-        RedisDocprocessing(index_attempt_id, r, stage).decr_in_flight()
+        counters = RedisDocprocessing(index_attempt_id, r, stage)
+        counters.decr_in_flight()
+        if stage in _LIVE_TASK_STAGES:
+            counters.clear_task_live(task_id)
     except Exception:
         logger.debug(
             "Failed to update docprocessing counters on postrun for attempt %s",
