@@ -32,6 +32,7 @@ function configuredApp(
     enabled: true,
     actions: [],
     associated_skills: [],
+    users_can_manage_policies: true,
     is_onyx_managed: false,
     ...overrides,
   };

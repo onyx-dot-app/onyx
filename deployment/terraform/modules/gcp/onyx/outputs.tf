@@ -25,6 +25,11 @@ output "workload_identity_principal" {
   value       = module.gke.workload_identity_principal
 }
 
+output "workload_google_service_account_email" {
+  description = "Google service account the workload service account maps to, which signs GCS URLs. Null unless craft_sandbox_runtime = \"firecracker\" with the sandbox pool on."
+  value       = module.gke.workload_google_service_account_email
+}
+
 output "workload_namespace" {
   description = "Namespace of the workload service account. Install the Helm release into it."
   value       = module.gke.workload_namespace
@@ -62,6 +67,16 @@ output "gcs_bucket_name" {
 output "gcs_project_id" {
   description = "Set as GCS_PROJECT_ID"
   value       = var.project_id
+}
+
+output "sandbox_archive_bucket_name" {
+  description = "Craft sandbox archive bucket. Null unless enable_sandbox_archive_bucket is true."
+  value       = var.enable_sandbox_archive_bucket ? module.gcs_sandbox_archive[0].bucket_name : null
+}
+
+output "sandbox_archive_kms_key_name" {
+  description = "Cloud KMS key that encrypts the sandbox archive bucket. Null unless enable_sandbox_archive_bucket is true."
+  value       = var.enable_sandbox_archive_bucket ? module.gcs_sandbox_archive[0].kms_key_name : null
 }
 
 output "postgres_host" {

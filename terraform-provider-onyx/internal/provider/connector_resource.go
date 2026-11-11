@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/hashicorp/terraform-plugin-framework-jsontypes/jsontypes"
+	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -40,6 +41,7 @@ type connectorResourceModel struct {
 	ConnectorSpecificConfig jsontypes.Normalized `tfsdk:"connector_specific_config"`
 	RefreshFreq             types.Int64          `tfsdk:"refresh_freq"`
 	PruneFreq               types.Int64          `tfsdk:"prune_freq"`
+	CheckFreq               types.Int64          `tfsdk:"check_freq"`
 	IndexingStart           types.String         `tfsdk:"indexing_start"`
 	CredentialIDs           types.List           `tfsdk:"credential_ids"`
 }
@@ -92,15 +94,36 @@ func (r *connectorResource) Schema(_ context.Context, _ resource.SchemaRequest, 
 			},
 			"refresh_freq": schema.Int64Attribute{
 				Optional:            true,
-				MarkdownDescription: "Seconds between index runs. Unset means index once, with no refresh.",
+				MarkdownDescription: "Seconds between index runs, at least 60. Unset means index once, with no refresh.",
+				Validators: []validator.Int64{
+					int64validator.AtLeast(60),
+				},
 			},
 			"prune_freq": schema.Int64Attribute{
 				Optional: true,
 				Computed: true,
-				MarkdownDescription: "Seconds between pruning runs. Onyx rewrites an unset value to its " +
-					"default of 604800 (7 days) on the first update, and Terraform then keeps that value.",
+				MarkdownDescription: "Seconds between pruning runs, at least 300. Unset on Onyx v5.1 and " +
+					"later, Onyx uses its default of 604800 (7 days) on create and keeps the stored value " +
+					"on update. Unset on Onyx v5.0 and earlier, a new connector has no pruning schedule " +
+					"until its first update sets 7 days. Set it to prune from the start.",
+				Validators: []validator.Int64{
+					int64validator.AtLeast(300),
+				},
 				PlanModifiers: []planmodifier.Int64{
 					ServerDefaultedInt64(),
+				},
+			},
+			"check_freq": schema.Int64Attribute{
+				Optional: true,
+				Computed: true,
+				MarkdownDescription: "Seconds between scheduled connector checks, at least 300. Unset on " +
+					"create, the checks run only on request. Unset on update, Onyx keeps the stored " +
+					"value. Needs Onyx v5.0.0 or later.",
+				Validators: []validator.Int64{
+					int64validator.AtLeast(300),
+				},
+				PlanModifiers: []planmodifier.Int64{
+					StoredWhenUnconfiguredInt64(),
 				},
 			},
 			"indexing_start": schema.StringAttribute{
@@ -136,12 +159,22 @@ func (r *connectorResource) upsertFromModel(ctx context.Context, model connector
 		ConnectorSpecificConfig: config,
 		RefreshFreq:             int64Pointer(model.RefreshFreq),
 		PruneFreq:               int64Pointer(model.PruneFreq),
+		CheckFreq:               int64Pointer(model.CheckFreq),
 		IndexingStart:           stringPointer(model.IndexingStart),
 		// Required by the request body but ignored by both handlers: access
 		// control is applied when a credential is associated, on the cc-pair.
 		AccessType: "public",
 		Groups:     []int64{},
 	}, true
+}
+
+// addCheckFreqUnsupportedError reports a configured check_freq that the server
+// did not store. Servers before v5.0.0 ignore the field.
+func addCheckFreqUnsupportedError(configured bool, remote *client.Connector, diags *diag.Diagnostics) {
+	if configured && remote.CheckFreq == nil {
+		diags.AddAttributeError(path.Root("check_freq"), "check_freq is not supported",
+			"This Onyx server did not store check_freq. The attribute needs Onyx v5.0.0 or later.")
+	}
 }
 
 // applyRemote copies the server's view of a connector into the model.
@@ -163,6 +196,7 @@ func applyRemote(ctx context.Context, model *connectorResourceModel, remote *cli
 	model.ConnectorSpecificConfig = config
 	model.RefreshFreq = types.Int64PointerValue(remote.RefreshFreq)
 	model.PruneFreq = types.Int64PointerValue(remote.PruneFreq)
+	model.CheckFreq = types.Int64PointerValue(remote.CheckFreq)
 	model.IndexingStart = types.StringPointerValue(remote.IndexingStart)
 	model.CredentialIDs = credentialIDs
 	return true
@@ -195,10 +229,12 @@ func (r *connectorResource) Create(ctx context.Context, req resource.CreateReque
 		resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 		return
 	}
+	checkFreqSet := !plan.CheckFreq.IsNull() && !plan.CheckFreq.IsUnknown()
 	if !applyRemote(ctx, &plan, remote, &resp.Diagnostics) {
 		return
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
+	addCheckFreqUnsupportedError(checkFreqSet, remote, &resp.Diagnostics)
 }
 
 func (r *connectorResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
@@ -250,10 +286,12 @@ func (r *connectorResource) Update(ctx context.Context, req resource.UpdateReque
 		resp.Diagnostics.AddError("Failed to update Onyx connector", err.Error())
 		return
 	}
+	checkFreqSet := !plan.CheckFreq.IsNull() && !plan.CheckFreq.IsUnknown()
 	if !applyRemote(ctx, &plan, remote, &resp.Diagnostics) {
 		return
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
+	addCheckFreqUnsupportedError(checkFreqSet, remote, &resp.Diagnostics)
 }
 
 func (r *connectorResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {

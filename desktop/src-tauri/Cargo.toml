@@ -16,9 +16,11 @@ tauri-build = { version = "2.6", features = [] }
 
 [dependencies]
 tauri = { version = "2.11", features = ["macos-private-api", "tray-icon", "image-png"] }
+tauri-plugin-deep-link = "~2.4.10"
 tauri-plugin-global-shortcut = "2.3.1"
 tauri-plugin-shell = "2.3.5"
 tauri-plugin-window-state = "2.4.1"
+tauri-plugin-single-instance = { version = "~2.4.5", features = ["deep-link"] }
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -28,6 +30,12 @@ tokio = { version = "1", features = ["time"] }
 window-vibrancy = "0.7.1"
 url = "2.5"
 reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+block2 = "0.6"
+objc2 = "0.6.4"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSGeometry", "objc2-core-foundation"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "NSAlert", "NSApplication", "NSButton", "NSControl", "NSResponder", "NSTextField", "NSView", "NSWindow"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18"

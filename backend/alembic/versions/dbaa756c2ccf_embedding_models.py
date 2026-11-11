@@ -22,7 +22,7 @@ from onyx.db.enums import EmbeddingPrecision
 from onyx.db.models import IndexModelStatus
 from onyx.db.search_settings import user_has_overridden_embedding_model
 from onyx.indexing.models import IndexingSetting
-from onyx.natural_language_processing.search_nlp_models import clean_model_name
+from shared_configs.utils import clean_model_name
 
 # revision identifiers, used by Alembic.
 revision = "dbaa756c2ccf"

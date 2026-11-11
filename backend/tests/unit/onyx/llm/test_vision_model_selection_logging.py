@@ -14,7 +14,7 @@ _FACTORY = "onyx.llm.factory"
 
 def _make_mock_model(
     *,
-    name: str = "gpt-4o",
+    name: str = "gpt-6-sol",
     provider: str = "openai",
     provider_id: int = 1,
 ) -> MagicMock:
@@ -26,7 +26,7 @@ def _make_mock_model(
 
 
 @patch(f"{_FACTORY}.get_session_with_current_tenant")
-@patch(f"{_FACTORY}.fetch_default_vision_model")
+@patch(f"{_FACTORY}.fetch_default_model")
 @patch(f"{_FACTORY}.model_supports_image_input", return_value=True)
 @patch(f"{_FACTORY}.llm_from_provider")
 @patch(f"{_FACTORY}.LLMProviderView")
@@ -39,7 +39,9 @@ def test_uses_the_default_vision_model(
     mock_fetch_default: MagicMock,
     mock_session: MagicMock,  # noqa: ARG001
 ) -> None:
-    mock_fetch_default.return_value = _make_mock_model(name="gpt-4o", provider="azure")
+    mock_fetch_default.return_value = _make_mock_model(
+        name="gpt-6-sol", provider="azure"
+    )
 
     result = get_default_llm_with_vision()
 
@@ -50,7 +52,7 @@ def test_uses_the_default_vision_model(
 
 
 @patch(f"{_FACTORY}.get_session_with_current_tenant")
-@patch(f"{_FACTORY}.fetch_default_vision_model")
+@patch(f"{_FACTORY}.fetch_default_model")
 @patch(f"{_FACTORY}.model_supports_image_input", return_value=False)
 @patch(f"{_FACTORY}.llm_from_provider")
 @patch(f"{_FACTORY}.logger")
@@ -78,7 +80,7 @@ def test_returns_none_when_default_model_lacks_vision(
 
 
 @patch(f"{_FACTORY}.get_session_with_current_tenant")
-@patch(f"{_FACTORY}.fetch_default_vision_model", return_value=None)
+@patch(f"{_FACTORY}.fetch_default_model", return_value=None)
 @patch(f"{_FACTORY}.llm_from_provider")
 @patch(f"{_FACTORY}.logger")
 def test_returns_none_when_no_default_is_set(

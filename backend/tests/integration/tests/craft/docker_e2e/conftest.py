@@ -10,7 +10,7 @@ from uuid import UUID
 import pytest
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.enums import EndpointPolicy, ExternalAppType, SandboxStatus
+from onyx.db.enums import ActionPolicy, ExternalAppType, SandboxStatus
 from onyx.db.external_app import (
     associate_built_in_skill__no_commit,
     create_external_app,
@@ -207,7 +207,7 @@ def slack_external_app() -> None:
                 upstream_url_patterns=["https://slack\\.com/api/.*"],
                 auth_template={"Authorization": "Bearer {access_token}"},
                 organization_credentials={"access_token": "fake-test-token"},
-                action_policies={"slack.messages.write": EndpointPolicy.ASK},
+                action_policies={"slack.messages.write": ActionPolicy.ASK},
             )
             associate_built_in_skill__no_commit(db, app)
             db.commit()

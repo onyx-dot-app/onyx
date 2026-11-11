@@ -9,6 +9,8 @@ Verifies that:
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from onyx.access.models import ExternalAccess
 from onyx.background.celery.celery_utils import extract_ids_from_runnable_connector
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
@@ -590,3 +592,62 @@ class TestImpersonationGateRefreshError:
         _run_gate(connector, user_email, checkpoint, fresh_emails=[_ADMIN_EMAIL])
 
         assert checkpoint.user_emails == [user_email, _ADMIN_EMAIL]
+
+
+def _passes_with_no_files(checkpoint: GoogleDriveCheckpoint, num_passes: int) -> object:
+    """Stands in for _extract_slim_docs_from_google_drive: each pass yields
+    nothing, as when every listed file is filtered out or none changed."""
+    calls = 0
+
+    def _pass(**_kwargs: object) -> object:
+        nonlocal calls
+        calls += 1
+        if calls >= num_passes:
+            checkpoint.completion_stage = DriveRetrievalStage.DONE
+        yield from ()
+
+    return _pass
+
+
+class TestSlimWalkProgress:
+    def test_every_pass_reports_progress_even_without_files(self) -> None:
+        connector = _make_connector()
+        checkpoint = _make_done_checkpoint()
+        checkpoint.completion_stage = DriveRetrievalStage.START
+        callback = MagicMock()
+        callback.should_stop.return_value = False
+
+        with patch.object(
+            connector,
+            "_extract_slim_docs_from_google_drive",
+            side_effect=_passes_with_no_files(checkpoint, num_passes=3),
+        ):
+            batches = list(
+                connector.retrieve_all_slim_docs_perm_sync(
+                    callback=callback, checkpoint=checkpoint
+                )
+            )
+
+        assert batches == []
+        assert callback.progress.call_count == 3
+
+    def test_stop_signal_between_passes_raises(self) -> None:
+        connector = _make_connector()
+        checkpoint = _make_done_checkpoint()
+        checkpoint.completion_stage = DriveRetrievalStage.START
+        callback = MagicMock()
+        callback.should_stop.return_value = True
+
+        with patch.object(
+            connector,
+            "_extract_slim_docs_from_google_drive",
+            side_effect=_passes_with_no_files(checkpoint, num_passes=3),
+        ):
+            with pytest.raises(RuntimeError, match="Stop signal detected"):
+                list(
+                    connector.retrieve_all_slim_docs_perm_sync(
+                        callback=callback, checkpoint=checkpoint
+                    )
+                )
+
+        callback.progress.assert_not_called()

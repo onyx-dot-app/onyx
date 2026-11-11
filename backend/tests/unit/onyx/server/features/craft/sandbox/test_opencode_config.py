@@ -15,13 +15,14 @@ from onyx.server.features.build.sandbox.util.opencode_config import (
     build_opencode_base_config,
     build_provider_opencode_config,
 )
+from onyx.server.gateway.configs import CRAFT_SESSION_HEADER
 from onyx.server.gateway.models import (
     GatewayModelCapabilities,
     GatewayModelDescriptor,
 )
 
 
-def _gateway(*, default: str = "7/gpt-5.5") -> CraftLLMProviderConfig:
+def _gateway(*, default: str = "7/gpt-6.1-sol") -> CraftLLMProviderConfig:
     return CraftLLMProviderConfig(
         provider="onyx",
         model_name=default,
@@ -30,8 +31,8 @@ def _gateway(*, default: str = "7/gpt-5.5") -> CraftLLMProviderConfig:
         display_name="Onyx",
         models=[
             GatewayModelDescriptor(
-                id="7/gpt-5.5",
-                display_name="GPT-5.5",
+                id="7/gpt-6.1-sol",
+                display_name="GPT-6.1 Sol",
                 provider="openai",
             ),
             GatewayModelDescriptor(
@@ -61,7 +62,7 @@ def _mcp(
 
 def test_gateway_is_the_only_enabled_provider() -> None:
     config = build_provider_opencode_config(_gateway())
-    assert config["model"] == "onyx/7/gpt-5.5"
+    assert config["model"] == "onyx/7/gpt-6.1-sol"
     assert config["enabled_providers"] == ["onyx"]
     provider = config["provider"]["onyx"]
     assert provider["npm"] == "@ai-sdk/openai-compatible"
@@ -69,14 +70,14 @@ def test_gateway_is_the_only_enabled_provider() -> None:
         "apiKey": "proxy-placeholder",
         "baseURL": "https://onyx.test/api/gateway/v1",
     }
-    assert set(provider["models"]) == {"7/gpt-5.5", "9/claude-opus-4-8"}
+    assert set(provider["models"]) == {"7/gpt-6.1-sol", "9/claude-opus-4-8"}
     assert provider["models"]["9/claude-opus-4-8"]["limit"] == {
         "context": 200_000,
         "input": 200_000,
         "output": 128_000,
     }
-    assert provider["models"]["7/gpt-5.5"] == {
-        "name": "GPT-5.5",
+    assert provider["models"]["7/gpt-6.1-sol"] == {
+        "name": "GPT-6.1 Sol",
         "attachment": False,
         "reasoning": False,
         "temperature": False,
@@ -234,6 +235,22 @@ def test_pod_global_base_config_never_carries_mcp() -> None:
     # Craft MCP servers live in the per-session config so they can hot-reload;
     # the pod-global base config must not carry them.
     assert "mcp" not in build_opencode_base_config()
+
+
+def test_session_config_sends_session_header_to_gateway() -> None:
+    config = build_provider_opencode_config(_gateway(), session_id="sess-abc")
+    # opencode-serve is one process for many sessions, so this header is the
+    # gateway's only way to attribute an LLM call to its session.
+    assert config["provider"]["onyx"]["options"]["headers"] == {
+        CRAFT_SESSION_HEADER: "sess-abc"
+    }
+
+
+def test_base_config_sends_no_session_header() -> None:
+    assert (
+        "headers"
+        not in build_provider_opencode_config(_gateway())["provider"]["onyx"]["options"]
+    )
 
 
 def test_session_config_without_mcp_omits_mcp_key() -> None:

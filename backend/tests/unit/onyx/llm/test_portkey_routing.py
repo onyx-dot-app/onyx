@@ -19,7 +19,7 @@ from onyx.llm.well_known_providers.constants import PORTKEY_API_MODE_CONFIG_KEY
 def _make_portkey_llm(
     mode: str | None,
     api_base: str,
-    model_name: str = "gpt-4o",
+    model_name: str = "gpt-6-sol",
 ) -> LitellmLLM:
     custom_config = {PORTKEY_API_MODE_CONFIG_KEY: mode} if mode is not None else None
     return LitellmLLM(
@@ -49,7 +49,7 @@ def test_chat_completions_mode_routes_via_openai_with_v1_base() -> None:
     assert kwargs["custom_llm_provider"] == "openai"
     assert kwargs["base_url"] == "https://api.portkey.ai/v1"
     # OpenAI-compatible proxies send a bare model name.
-    assert kwargs["model"] == "gpt-4o"
+    assert kwargs["model"] == "gpt-6-sol"
 
 
 def test_chat_completions_mode_coerces_bare_base_to_v1() -> None:
@@ -73,7 +73,7 @@ def test_responses_mode_prefixes_model_and_keeps_v1_base() -> None:
     assert kwargs["custom_llm_provider"] == "openai"
     assert kwargs["base_url"] == "https://api.portkey.ai/v1"
     # Responses mode drives litellm's completions->responses bridge via the prefix.
-    assert kwargs["model"] == "responses/gpt-4o"
+    assert kwargs["model"] == "responses/gpt-6-sol"
 
 
 def test_messages_mode_routes_via_anthropic_with_bare_base() -> None:
@@ -100,8 +100,8 @@ def test_messages_mode_strips_trailing_slash_but_keeps_bare_host() -> None:
 
 def test_api_mode_is_never_injected_into_environment() -> None:
     # The mode is UI-only form state: it must be readable for routing but must
-    # never reach os.environ via temporary_env_and_lock at call time.
+    # never become provider arguments.
     llm = _make_portkey_llm("messages", "https://api.portkey.ai")
     assert llm._api_surface is LlmApiSurface.ANTHROPIC_MESSAGES
     assert PORTKEY_API_MODE_CONFIG_KEY in UI_ONLY_CONFIG_KEYS
-    assert PORTKEY_API_MODE_CONFIG_KEY not in llm._env_only_custom_config
+    assert PORTKEY_API_MODE_CONFIG_KEY not in llm._model_kwargs

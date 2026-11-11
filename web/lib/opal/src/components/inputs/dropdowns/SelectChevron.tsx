@@ -21,6 +21,7 @@ export function SelectChevron({
   onToggle,
 }: SelectChevronProps) {
   const strings = useOpalStrings();
+  const label = isOpen ? strings.comboBoxClose : strings.comboBoxOpen;
   return (
     <Button
       disabled={disabled}
@@ -28,7 +29,8 @@ export function SelectChevron({
       size="sm"
       icon={ChevronIcon}
       interaction={isOpen ? "hover" : undefined}
-      aria-label={isOpen ? strings.comboBoxClose : strings.comboBoxOpen}
+      tooltip={label}
+      aria-label={label}
       tabIndex={-1}
       type="button"
       onMouseDown={(event) => event.preventDefault()}

@@ -24,7 +24,7 @@ def _bridge_response(
     raw = ResponsesAPIResponse(
         id="resp_1",
         created_at=1,
-        model="gpt-5",
+        model="gpt-6-sol",
         object="response",
         output=output,
         parallel_tool_calls=False,
@@ -32,7 +32,7 @@ def _bridge_response(
         tools=[],
         usage=None,
     )
-    model_response = litellm.ModelResponse(id="resp_1", created=1, model="gpt-5")
+    model_response = litellm.ModelResponse(id="resp_1", created=1, model="gpt-6-sol")
     model_response.choices = (
         LiteLLMResponsesTransformationHandler._convert_response_output_to_choices(
             raw.output
@@ -120,7 +120,7 @@ def test_a_single_choice_is_passed_through_unchanged() -> None:
 
 
 def test_no_choices_is_an_error() -> None:
-    raw = litellm.ModelResponse(id="resp_1", created=1, model="gpt-5")
+    raw = litellm.ModelResponse(id="resp_1", created=1, model="gpt-6-sol")
     raw.choices = []
 
     with pytest.raises(ValueError, match="at least one choice"):
@@ -128,7 +128,7 @@ def test_no_choices_is_an_error() -> None:
 
 
 def test_preamble_and_answer_are_both_kept() -> None:
-    """gpt-5.4+ can put a preamble in choices[0] and the answer in choices[1].
+    """gpt-6.1-sol+ can put a preamble in choices[0] and the answer in choices[1].
     Reading only choices[0] would return the preamble instead of the answer."""
     raw = _bridge_response([_text("Let me check. "), _text("Your meeting is at 3pm.")])
 

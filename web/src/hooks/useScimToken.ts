@@ -3,7 +3,7 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/tiers/types";
-import type { ScimTokenResponse } from "@/app/admin/scim/interfaces";
+import type { ScimTokenResponse } from "@/views/admin/ScimPage/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
 export function useScimToken() {

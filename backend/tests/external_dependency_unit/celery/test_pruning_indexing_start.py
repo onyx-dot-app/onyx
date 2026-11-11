@@ -207,7 +207,8 @@ def _run_prune(
                 "connector_id": cc_pair.connector_id,
                 "credential_id": cc_pair.credential_id,
                 "tenant_id": tenant_id,
-            }
+            },
+            task_id="prune-indexing-start-task",
         )
         assert result.successful(), result.traceback
     finally:

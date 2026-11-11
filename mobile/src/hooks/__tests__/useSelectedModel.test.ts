@@ -13,9 +13,9 @@ interface SelectedModelProps {
 const model: ModelOption = {
   modelConfigurationId: 1,
   modelProvider: "OpenAI Prod",
-  modelVersion: "gpt-5",
+  modelVersion: "gpt-6-sol",
   providerDisplayName: "OpenAI Prod",
-  displayName: "GPT-5",
+  displayName: "GPT-6 Sol",
 };
 
 function renderSelected(

@@ -9,22 +9,20 @@ test.describe("OneDrive connector setup", () => {
     const setup = new OneDriveConnectorSetupPage(page);
     await setup.mockRoutes();
     await setup.goto();
-    await setup.createClientSecretCredential();
+    await setup.fillClientSecretCredential();
     await setup.runChecks();
     await setup.selectSpecificScope("owner@example.com");
     await setup.selectGeneralScope();
     await setup.submitConnector("General OneDrive");
     await setup.expectCreated();
 
-    expect(setup.credentialRequests).toEqual([
-      {
-        authenticationMethod: "client_secret",
-        clientId: "client-id",
-        directoryId: "directory-id",
-        hasClientSecret: true,
-        hasCertificatePassword: false,
-      },
-    ]);
+    expect(setup.credentialRequest).toEqual({
+      authenticationMethod: "client_secret",
+      clientId: "client-id",
+      directoryId: "directory-id",
+      hasClientSecret: true,
+      hasCertificatePassword: false,
+    });
     const expectedConfig: OneDriveConfigRequest = {
       connector_specific_config: {
         users: [],
@@ -37,23 +35,20 @@ test.describe("OneDrive connector setup", () => {
     const setup = new OneDriveConnectorSetupPage(page);
     await setup.mockRoutes();
     await setup.goto();
-    await setup.createCertificateCredential();
+    await setup.fillCertificateCredential();
     await setup.runChecks();
     await setup.selectSpecificScope("owner@example.com");
     await setup.submitConnector("Specific OneDrive");
     await setup.expectCreated();
 
-    expect(setup.credentialRequests).toEqual([
-      {
-        authenticationMethod: "certificate",
-        clientId: "client-id",
-        directoryId: "directory-id",
-        hasClientSecret: false,
-        hasCertificatePassword: true,
-        privateKeyField: "onedrive_private_key",
-        privateKeyType: "onedrive_pfx_file",
-      },
-    ]);
+    expect(setup.credentialRequest).toEqual({
+      authenticationMethod: "certificate",
+      clientId: "client-id",
+      directoryId: "directory-id",
+      hasClientSecret: false,
+      hasCertificatePassword: true,
+      privateKey: Buffer.from("test-pfx").toString("base64"),
+    });
     const expectedConfig: OneDriveConfigRequest = {
       connector_specific_config: {
         users: ["owner@example.com"],
@@ -67,7 +62,7 @@ test.describe("OneDrive connector setup", () => {
     const setup = new OneDriveConnectorSetupPage(page);
     await setup.mockRoutes();
     await setup.goto();
-    await setup.createClientSecretCredential();
+    await setup.fillClientSecretCredential();
     await setup.runChecks();
     await setup.selectSpecificScope();
     await setup.submitInvalidConnector(

@@ -1,4 +1,6 @@
-import type { ScheduledRunContextResponse } from "@/app/craft/v1/tasks/interfaces";
+import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
+import { parseErrorDetail } from "@/lib/fetcher";
+import type { ScheduledRunContextResponse } from "@/app/craft/v1/tasks/types";
 import { downloadFile } from "@/lib/download";
 import { FetchError } from "@/lib/fetcher";
 import {
@@ -18,16 +20,13 @@ import {
   SharingScope,
   ApiSessionSkillsState,
   type OutputInventory,
+  type OutputCard,
 } from "@/app/craft/types/streamingTypes";
 import {
-  ApprovalListResponse,
-  ApprovalSubmitDecision,
   ApprovalView,
+  ApprovalSubmitDecision,
 } from "@/app/craft/types/approvals";
-import {
-  RATE_LIMITED_ERROR_CODE,
-  RateLimitDetails,
-} from "@/app/app/interfaces";
+import { RATE_LIMITED_ERROR_CODE, RateLimitDetails } from "@/app/app/types";
 import { BUILD_API_BASE } from "@/app/craft/v1/constants";
 import type { ErrorResponseBody } from "@/lib/fetcher";
 import { CRAFT_GATEWAY_PROVIDER } from "@/app/craft/onboarding/constants";
@@ -115,11 +114,6 @@ interface ApiSessionListResponse {
   sessions: ApiSessionResponse[];
 }
 
-// Mirrors backend `SessionNameGenerateResponse`.
-interface ApiSessionNameGenerateResponse {
-  name: string;
-}
-
 export async function createSession(
   options?: CreateSessionOptions
 ): Promise<ApiDetailedSessionResponse> {
@@ -200,27 +194,10 @@ export async function fetchSessionHistory(): Promise<SessionHistoryItem[]> {
   }));
 }
 
-export async function generateSessionName(sessionId: string): Promise<string> {
-  const res = await fetch(
-    `${BUILD_API_BASE}/sessions/${sessionId}/generate-name`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-    }
-  );
-
-  if (!res.ok) {
-    throw new Error(`Failed to generate session name: ${res.status}`);
-  }
-
-  const data: ApiSessionNameGenerateResponse = await res.json();
-  return data.name;
-}
-
 export async function updateSessionName(
   sessionId: string,
   name: string | null
-): Promise<void> {
+): Promise<ApiSessionResponse> {
   const res = await fetch(`${BUILD_API_BASE}/sessions/${sessionId}/name`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -230,6 +207,8 @@ export async function updateSessionName(
   if (!res.ok) {
     throw new Error(`Failed to update session name: ${res.status}`);
   }
+
+  return res.json();
 }
 
 export async function setSessionSharing(
@@ -623,6 +602,69 @@ export async function fetchArtifacts(sessionId: string): Promise<Artifact[]> {
 // Webapp API
 // =============================================================================
 
+export async function fetchOutputCards(
+  sessionId: string
+): Promise<OutputCard[]> {
+  const response = await fetch(
+    `${BUILD_API_BASE}/sessions/${sessionId}/output-cards`
+  );
+  if (!response.ok)
+    throw new FetchError(
+      `Failed to fetch output cards: ${response.status}`,
+      response.status,
+      null
+    );
+  const result: { cards: OutputCard[] } = await response.json();
+  return result.cards;
+}
+
+export async function markOutputsViewed(
+  sessionId: string,
+  cards: readonly OutputCard[]
+): Promise<OutputCard[]> {
+  const response = await fetch(
+    `${BUILD_API_BASE}/sessions/${sessionId}/output-cards/viewed`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        revisions: Object.fromEntries(
+          cards.map((card) => [card.id, card.revision])
+        ),
+      }),
+    }
+  );
+  if (!response.ok)
+    throw new FetchError(
+      `Failed to mark outputs viewed: ${response.status}`,
+      response.status,
+      null
+    );
+  const result: { cards: OutputCard[] } = await response.json();
+  return result.cards;
+}
+
+export async function markOutputViewed(
+  sessionId: string,
+  card: OutputCard
+): Promise<OutputCard> {
+  const response = await fetch(
+    `${BUILD_API_BASE}/sessions/${sessionId}/output-cards/${card.id}/viewed`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ revision: card.revision }),
+    }
+  );
+  if (!response.ok)
+    throw new FetchError(
+      `Failed to mark output viewed: ${response.status}`,
+      response.status,
+      null
+    );
+  return response.json();
+}
+
 export async function fetchWebappInfo(
   sessionId: string,
   signal?: AbortSignal
@@ -633,7 +675,11 @@ export async function fetchWebappInfo(
   );
 
   if (!res.ok) {
-    throw new Error(`Failed to fetch webapp info: ${res.status}`);
+    throw new FetchError(
+      `Failed to fetch webapp info: ${res.status}`,
+      res.status,
+      null
+    );
   }
 
   return res.json();
@@ -652,7 +698,11 @@ export async function fetchOutputInventory(
     { signal }
   );
   if (!response.ok)
-    throw new Error(`Failed to fetch output inventory: ${response.status}`);
+    throw new FetchError(
+      `Failed to fetch output inventory: ${response.status}`,
+      response.status,
+      null
+    );
   return response.json();
 }
 
@@ -684,7 +734,11 @@ export async function fetchDirectoryListing(
         : controller.signal,
     });
     if (!res.ok) {
-      throw new Error(`Failed to fetch directory listing: ${res.status}`);
+      throw new FetchError(
+        `Failed to fetch directory listing: ${res.status}`,
+        res.status,
+        null
+      );
     }
     return await res.json();
   } finally {
@@ -693,7 +747,7 @@ export async function fetchDirectoryListing(
 }
 
 /**
- * Trigger a browser download for a single file from the sandbox.
+ * Build an encoded sandbox file URL for previews and downloads.
  */
 export function buildArtifactUrl(sessionId: string, path: string): string {
   const encodedPath = path
@@ -726,16 +780,49 @@ export interface FileContentResponse {
   content: string; // For text files: text content. For images: data URL (base64-encoded)
   mimeType: string;
   isImage?: boolean; // True if the content is an image data URL
-  error?: string; // Error message if file can't be previewed
+  error?: "unsupported_binary" | "image_too_large";
 }
 
 // Maximum file size for image preview (10MB)
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
+const MAX_UNKNOWN_TEXT_SIZE = 10 * 1024 * 1024;
 
 /**
  * Fetch file content from the sandbox for preview.
  * Reuses the artifacts download endpoint but reads content as text.
  */
+function imageBlobDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (typeof reader.result === "string") resolve(reader.result);
+      else reject(new Error("FileReader returned unexpected type"));
+    };
+    reader.onerror = () =>
+      reject(new Error(reader.error?.message || "Failed to read image file"));
+    reader.readAsDataURL(blob);
+  });
+}
+
+/** Fetch the sandbox converter's cached first page without mounting a document viewer. */
+export async function fetchOutputThumbnail(
+  sessionId: string,
+  path: string
+): Promise<string> {
+  const encodedPath = path.split("/").map(encodeURIComponent).join("/");
+  const response = await fetch(
+    `${BUILD_API_BASE}/sessions/${sessionId}/output-thumbnail/${encodedPath}`,
+    { cache: "no-store" }
+  );
+  if (!response.ok)
+    throw new FetchError(
+      `Failed to fetch thumbnail: ${response.status}`,
+      response.status,
+      null
+    );
+  return imageBlobDataUrl(await response.blob());
+}
+
 export async function fetchFileContent(
   sessionId: string,
   path: string
@@ -764,32 +851,48 @@ export async function fetchFileContent(
         content: "",
         mimeType,
         isImage: false,
-        error: `Image too large to preview (${(
-          blob.size /
-          (1024 * 1024)
-        ).toFixed(1)}MB). Maximum size is ${MAX_IMAGE_SIZE / (1024 * 1024)}MB.`,
+        error: "image_too_large",
       };
     }
 
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        // Verify result is a string
-        if (typeof reader.result !== "string") {
-          reject(new Error("FileReader returned unexpected type"));
-          return;
+    return { content: await imageBlobDataUrl(blob), mimeType, isImage: true };
+  }
+
+  const textMimeType =
+    /^(text\/|application\/(json|(?:[^;]+\+)?json|xml|(?:[^;]+\+)?xml|javascript|x-yaml|yaml))/i.test(
+      mimeType
+    );
+  // MIME guessing often labels source files as binary (for example TSX and TypeScript).
+  const sourceFile =
+    /\.(?:py|js|jsx|ts|tsx|mjs|cjs|sql|sh|bash|zsh|css|scss|sass|html?|xml|ya?ml|toml|ini|conf|config|env|log|go|rs|java|c|cpp|h|hpp|rb|r|vue|svelte|md|txt|csv)$/i.test(
+      path
+    ) || /(?:^|\/)(?:Dockerfile|Makefile|README|LICENSE)$/i.test(path);
+  if (!textMimeType && !sourceFile) {
+    if (/^application\/octet-stream(?:;|$)/i.test(mimeType)) {
+      const bytes = await res.arrayBuffer();
+      if (
+        bytes.byteLength <= MAX_UNKNOWN_TEXT_SIZE &&
+        !new Uint8Array(bytes).some(
+          (byte) => byte < 9 || (byte >= 14 && byte < 32)
+        )
+      ) {
+        try {
+          const content = new TextDecoder("utf-8", { fatal: true }).decode(
+            bytes
+          );
+          return { content, mimeType, isImage: false };
+        } catch {
+          // Unknown binary files must not become replacement-character text previews.
         }
-        resolve({
-          content: reader.result,
-          mimeType,
-          isImage: true,
-        });
-      };
-      reader.onerror = () => {
-        reject(new Error(reader.error?.message || "Failed to read image file"));
-      };
-      reader.readAsDataURL(blob);
-    });
+      }
+    }
+
+    return {
+      content: "",
+      mimeType,
+      isImage: false,
+      error: "unsupported_binary",
+    };
   }
 
   const content = await res.text();
@@ -832,36 +935,6 @@ export async function uploadFile(
   }
 
   return res.json();
-}
-
-/**
- * Delete a file from the session's sandbox.
- */
-export async function deleteFile(
-  sessionId: string,
-  path: string
-): Promise<void> {
-  // Encode each path segment individually (spaces, special chars) but preserve slashes
-  const encodedPath = path
-    .split("/")
-    .map((segment) => encodeURIComponent(segment))
-    .join("/");
-
-  const res = await fetch(
-    `${BUILD_API_BASE}/sessions/${sessionId}/files/${encodedPath}`,
-    {
-      method: "DELETE",
-    }
-  );
-
-  if (!res.ok) {
-    const errorData: ErrorResponseBody = await res.json().catch(() => ({}));
-    throw new FetchError(
-      errorData.detail || `Failed to delete file: ${res.status}`,
-      res.status,
-      errorData
-    );
-  }
 }
 
 /**
@@ -935,20 +1008,6 @@ export async function fetchPptxPreview(
 // Approvals API
 // =============================================================================
 
-export async function fetchLiveApprovals(
-  sessionId: string
-): Promise<ApprovalListResponse> {
-  const res = await fetch(
-    `${BUILD_API_BASE}/approvals/sessions/${sessionId}/live`
-  );
-
-  if (!res.ok) {
-    throw new Error(`Failed to fetch live approvals: ${res.status}`);
-  }
-
-  return res.json();
-}
-
 // Lets the approval card distinguish "already resolved" from a generic
 // network error so both can flow through the same SWR revalidation
 // while keeping logs clean.
@@ -982,29 +1041,6 @@ export async function postApprovalDecision(
     const errorData: ErrorResponseBody = await res.json().catch(() => ({}));
     throw new Error(
       errorData.detail || `Failed to post approval decision: ${res.status}`
-    );
-  }
-  return res.json();
-}
-
-export async function postApprovalSessionGrant(
-  approvalId: string
-): Promise<ApprovalView> {
-  const res = await fetch(
-    `${BUILD_API_BASE}/approvals/${approvalId}/session-grant`,
-    {
-      method: "POST",
-    }
-  );
-
-  if (res.status === 409) {
-    const body: ErrorResponseBody = await res.json().catch(() => ({}));
-    throw new ApprovalConflictError(body.detail ?? "decision conflict");
-  }
-  if (!res.ok) {
-    const errorData: ErrorResponseBody = await res.json().catch(() => ({}));
-    throw new Error(
-      errorData.detail || `Failed to approve for session: ${res.status}`
     );
   }
   return res.json();
@@ -1122,6 +1158,63 @@ export async function deleteLibraryFile(documentId: string): Promise<void> {
 
   if (!res.ok) {
     const errorData: ErrorResponseBody = await res.json().catch(() => ({}));
-    throw new Error(errorData.detail || `Failed to delete file: ${res.status}`);
+    throw new FetchError(
+      errorData.detail || `Failed to delete file: ${res.status}`,
+      res.status,
+      errorData
+    );
   }
+}
+
+export async function saveAppActionPolicies(
+  appId: number,
+  actionPolicies: Record<string, ActionPolicy>,
+  errorMessage: string
+): Promise<void> {
+  const response = await fetch(`/api/build/action-policies/${appId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action_policies: actionPolicies,
+    }),
+  });
+  if (!response.ok)
+    throw new Error(await parseErrorDetail(response, errorMessage));
+}
+
+/** Mint a folder-scoped URL; the isolated frame never receives login credentials. */
+export async function createStaticPreview(
+  sessionId: string,
+  path: string,
+  renewToken?: string
+): Promise<{ url: string; expiresAt: number; token: string }> {
+  const encodedPath = path.split("/").map(encodeURIComponent).join("/");
+  const response = await fetch(
+    `${BUILD_API_BASE}/sessions/${sessionId}/static-preview/${encodedPath}${renewToken ? `?renew_token=${encodeURIComponent(renewToken)}` : ""}`,
+    {
+      method: "POST",
+      cache: "no-store",
+    }
+  );
+  if (!response.ok)
+    throw new FetchError("Failed to load HTML preview", response.status, null);
+  const result: unknown = await response.json();
+  if (
+    !result ||
+    typeof result !== "object" ||
+    !("path" in result) ||
+    typeof result.path !== "string" ||
+    !/^[\w-]{43}\/[^/]+$/.test(result.path) ||
+    !("expires_in" in result) ||
+    typeof result.expires_in !== "number" ||
+    !Number.isFinite(result.expires_in) ||
+    result.expires_in <= 60
+  ) {
+    throw new Error("Invalid HTML preview response");
+  }
+  return {
+    url: `${BUILD_API_BASE}/static-preview/${result.path}`,
+    expiresAt: Date.now() + result.expires_in * 1000,
+    token: result.path.split("/")[0]!,
+  };
 }

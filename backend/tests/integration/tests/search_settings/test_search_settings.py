@@ -108,13 +108,14 @@ def test_get_secondary_search_settings_none_by_default(
     assert secondary is None
 
 
-def test_contextual_rag_model_update_requires_enabled_feature(
+def test_contextual_rag_enabled_in_place_without_reindex(
     reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,
 ) -> None:
     mc_id = llm_provider.model_configuration_ids[0]
     settings = _get_current_search_settings(admin_user)
+    assert settings["enable_contextual_rag"] is False
     settings["enable_contextual_rag"] = True
     settings["contextual_rag_model_configuration_id"] = mc_id
     response = client.post(
@@ -122,14 +123,29 @@ def test_contextual_rag_model_update_requires_enabled_feature(
         json=settings,
         headers=admin_user.headers,
     )
-    assert response.status_code == 400
-    assert "must be enabled" in response.json()["detail"]
-    assert (
-        _get_current_search_settings(admin_user)[
-            "contextual_rag_model_configuration_id"
-        ]
-        is None
+    assert response.status_code == 200
+    assert response.json()["contextual_rag_model_configuration_id"] == mc_id
+    current = _get_current_search_settings(admin_user)
+    assert current["enable_contextual_rag"] is True
+    assert current["contextual_rag_model_configuration_id"] == mc_id
+    assert _get_secondary_search_settings(admin_user) is None
+
+
+def test_contextual_rag_enable_requires_a_model(
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+) -> None:
+    settings = _get_current_search_settings(admin_user)
+    settings["enable_contextual_rag"] = True
+    settings["contextual_rag_model_configuration_id"] = None
+    response = client.post(
+        f"{SEARCH_SETTINGS_URL}/update-inference-settings",
+        json=settings,
+        headers=admin_user.headers,
     )
+    assert response.status_code == 400
+    assert "Select a Contextual Retrieval model" in response.json()["detail"]
+    assert _get_current_search_settings(admin_user)["enable_contextual_rag"] is False
 
 
 def test_disabled_contextual_rag_rejected_before_embedding_model_change(
@@ -148,7 +164,7 @@ def test_disabled_contextual_rag_rejected_before_embedding_model_change(
         headers=admin_user.headers,
     )
     assert response.status_code == 400
-    assert "must be enabled" in response.json()["detail"]
+    assert "already off" in response.json()["detail"]
 
 
 def test_set_new_search_settings_with_contextual_rag(

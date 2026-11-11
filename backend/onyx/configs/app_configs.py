@@ -7,7 +7,7 @@ from typing import cast
 
 from onyx.auth.schemas import AuthBackend
 from onyx.cache.interface import CacheBackendType
-from onyx.configs.constants import QueryHistoryType
+from onyx.configs.constants import FileStoreType, QueryHistoryType
 from onyx.document_index.opensearch.constants import OpenSearchAuthMethod
 from onyx.file_processing.enums import HtmlBasedConnectorTransformLinksStrategy
 from onyx.prompts.image_analysis import (
@@ -577,6 +577,13 @@ DOCUMENT_INDEX_NUM_ATTEMPTS_ON_STARTUP = int(
     os.environ.get("NUM_RETRIES_ON_STARTUP") or 10
 )
 
+# Seconds the API server waits on startup for the model server to load the
+# self-hosted embedding model, which includes a download if it is not cached.
+# Startup fails when the wait runs out. 0 disables the wait.
+LOCAL_EMBEDDING_MODEL_STARTUP_TIMEOUT = int(
+    os.environ.get("LOCAL_EMBEDDING_MODEL_STARTUP_TIMEOUT") or 1800
+)
+
 # Number of documents in a batch during indexing (further batching done by chunks before passing to bi-encoder)
 INDEX_BATCH_SIZE = int(os.environ.get("INDEX_BATCH_SIZE") or 16)
 
@@ -906,6 +913,8 @@ if REDIS_SENTINEL_HOSTS and USE_REDIS_IAM_AUTH:
     )
 
 REDIS_AUTH_KEY_PREFIX = "fastapi_users_token:"
+# Per-user set of live session tokens, used to revoke all of a user's sessions.
+REDIS_USER_SESSIONS_KEY_PREFIX = "fastapi_users_user_sessions:"
 
 # Rate limiting for auth endpoints
 RATE_LIMIT_WINDOW_SECONDS: int | None = None
@@ -1158,7 +1167,8 @@ CELERY_WORKER_SCHEDULED_TASKS_CONCURRENCY = int(
 )
 
 # The maximum number of tasks that can be queued up to sync to the document index
-# in a single pass
+# in a single pass. Connector deletion queues its per-document cleanup in batches
+# of this size, so the broker holds at most one batch per cc_pair.
 DOCUMENT_INDEX_SYNC_MAX_TASKS = 8192
 
 DB_YIELD_PER_DEFAULT = 64
@@ -1390,6 +1400,11 @@ BLOB_STORAGE_SIZE_THRESHOLD = int(
     os.environ.get("BLOB_STORAGE_SIZE_THRESHOLD", 20 * 1024 * 1024)
 )
 
+# Concurrent ACL reads per listing page during Azure Data Lake permission sync.
+AZURE_DATALAKE_ACL_READ_CONCURRENCY = int(
+    os.environ.get("AZURE_DATALAKE_ACL_READ_CONCURRENCY") or 16
+)
+
 BOX_CONNECTOR_SIZE_THRESHOLD = int(
     os.environ.get("BOX_CONNECTOR_SIZE_THRESHOLD", 20 * 1024 * 1024)
 )
@@ -1467,6 +1482,8 @@ LEAVE_CONNECTOR_ACTIVE_ON_INITIALIZATION_FAILURE = (
 )
 
 DEFAULT_PRUNING_FREQ = 60 * 60 * 24 * 7  # 7 days
+# What the create form fills in for a new connector's schedule.
+DEFAULT_REFRESH_FREQ = 60 * 30  # 30 minutes
 
 ALLOW_SIMULTANEOUS_PRUNING = (
     os.environ.get("ALLOW_SIMULTANEOUS_PRUNING", "").lower() == "true"
@@ -1554,6 +1571,17 @@ INDEXING_EMBEDDING_MODEL_NUM_THREADS = int(
 # Default is 512MB worth of characters (536,870,912). Configurable via MAX_DOCUMENT_CHARS env var.
 MAX_DOCUMENT_CHARS = int(os.environ.get("MAX_DOCUMENT_CHARS") or 536_870_912)
 
+# When true, connectors replace the content of spreadsheets and other tabular
+# files (xlsx, Google Sheets, CSV, TSV) with a "<content-skipped>" placeholder
+# at fetch time, so each file indexes as its title only. The sheets are not
+# parsed, but the raw file is still downloaded and stored. Docprocessing applies
+# the same replacement to tabular sections that still reach it, e.g. in batches
+# staged before this was set. Bounds the embedding cost of large spreadsheets.
+# User uploads keep their content. Set it on docfetching and docprocessing.
+SKIP_SPREADSHEET_CONTENT = (
+    os.environ.get("SKIP_SPREADSHEET_CONTENT", "").lower() == "true"
+)
+
 # Max RSS (in MB) for a spawned indexing worker process. When exceeded, the
 # docfetching watchdog terminates the worker and fails the attempt with a clear
 # error, pre-empting a kernel OOM kill of the whole pod — which would also kill
@@ -1626,6 +1654,28 @@ MAX_EMBEDDED_IMAGES_PER_UPLOAD = max(
 # Peak Memory ~= 100 B * MAX_CELLS
 MAX_XLSX_CELLS_PER_SHEET = max(
     0, int(os.environ.get("MAX_XLSX_CELLS_PER_SHEET") or 10_000_000)
+)
+
+
+# A sheet whose rows fit in this many chunks keeps all its rows verbatim;
+# bigger sheets get a profile instead.
+TABULAR_FULL_ROWS_MAX_CHUNKS = max(
+    0, int(os.environ.get("TABULAR_FULL_ROWS_MAX_CHUNKS") or 3)
+)
+# Chunks of frequent text values added for each large sheet.
+TABULAR_VALUE_CHUNKS_PER_SHEET = max(
+    0, int(os.environ.get("TABULAR_VALUE_CHUNKS_PER_SHEET") or 2)
+)
+# Upper bound on the chunks of one workbook or CSV file.
+TABULAR_MAX_CHUNKS_PER_WORKBOOK = max(
+    1, int(os.environ.get("TABULAR_MAX_CHUNKS_PER_WORKBOOK") or 24)
+)
+
+# Arms the one-time migration that re-chunks tabular documents indexed with the
+# previous strategy. Only arms it: the KV record decides whether work remains,
+# so leaving this true across restarts does not re-run a finished migration.
+TABULAR_RECHUNK_ENABLED = (
+    os.environ.get("TABULAR_RECHUNK_ENABLED", "").lower() == "true"
 )
 
 # PDF text extraction runs isolated (a malformed PDF can make PDFium hard-abort
@@ -1708,13 +1758,14 @@ MCP_TOOL_CALL_TIMEOUT_SECONDS = int(
 # Miscellaneous
 #####
 JOB_TIMEOUT = int(os.environ.get("JOB_TIMEOUT_SECONDS") or 60 * 60 * 6)  # default 6h
+# Group sync only: a full group sync of a large source can take longer than
+# other jobs. A doc permission sync has no time limit.
+PERMISSION_SYNC_TIMEOUT = int(
+    os.environ.get("PERMISSION_SYNC_TIMEOUT_SECONDS") or JOB_TIMEOUT
+)
 # Logs Onyx only model interactions like prompts, responses, messages etc.
 LOG_ONYX_MODEL_INTERACTIONS = (
     os.environ.get("LOG_ONYX_MODEL_INTERACTIONS", "").lower() == "true"
-)
-
-PROMPT_CACHE_CHAT_HISTORY = (
-    os.environ.get("PROMPT_CACHE_CHAT_HISTORY", "").lower() == "true"
 )
 
 # Opt-in cap on outgoing image-count for Azure providers (any model_provider
@@ -1834,7 +1885,7 @@ AZURE_IMAGE_API_BASE = os.environ.get("AZURE_IMAGE_API_BASE")
 AZURE_IMAGE_DEPLOYMENT_NAME = os.environ.get("AZURE_IMAGE_DEPLOYMENT_NAME")
 
 # configurable image model
-IMAGE_MODEL_NAME = os.environ.get("IMAGE_MODEL_NAME", "gpt-image-1")
+IMAGE_MODEL_NAME = os.environ.get("IMAGE_MODEL_NAME", "gpt-image-2.5-flare")
 IMAGE_MODEL_PROVIDER = os.environ.get("IMAGE_MODEL_PROVIDER", "openai")
 
 ENABLE_EMAIL_INVITES = os.environ.get("ENABLE_EMAIL_INVITES", "").lower() == "true"
@@ -1910,6 +1961,12 @@ MCP_SERVER_CORS_ORIGINS = [
     if origin.strip()
 ]
 
+# Run every MCP document search in retrieval-only mode (no LLM calls), whatever
+# the client asks for.
+MCP_SERVER_SEARCH_RETRIEVAL_ONLY = (
+    os.environ.get("MCP_SERVER_SEARCH_RETRIEVAL_ONLY", "").lower() == "true"
+)
+
 
 POD_NAME = os.environ.get("POD_NAME")
 POD_NAMESPACE = os.environ.get("POD_NAMESPACE")
@@ -1948,8 +2005,20 @@ SIGNUP_RATE_LIMIT_ENABLED = (
 
 MOCK_CONNECTOR_FILE_PATH = os.environ.get("MOCK_CONNECTOR_FILE_PATH")
 
+# Where providers reach the webhook server. Set it when the API and web hosts
+# differ: the Helm webhook ingress is on `ingress.api.host`.
+WEBHOOK_PUBLIC_URL = os.environ.get("WEBHOOK_PUBLIC_URL") or WEB_DOMAIN
 
-DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB = 20
+# Global limit on indexing embedding requests (see embedding_rate_limit.py).
+# The window is stored in Redis, one entry per request, so the request count
+# is capped. Gemini Embedding 2 on Vertex allows 60,000 requests per minute.
+DEFAULT_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS = 60
+# How long one indexing embedding request may wait for the rate limit or a
+# provider's rate limit before its batch fails. Cloud workers are shared by all
+# tenants, so they give up quickly.
+EMBEDDING_RATE_LIMIT_MAX_WAIT_SECONDS = 60 if MULTI_TENANT else 6 * 60 * 60
+MAX_EMBEDDING_RATE_LIMIT_REQUESTS = 100_000
+MAX_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS = 24 * 60 * 60
 
 # Number of pre-provisioned tenants to maintain
 TARGET_AVAILABLE_TENANTS = int(os.environ.get("TARGET_AVAILABLE_TENANTS", "5"))
@@ -2060,6 +2129,36 @@ if _uses_default_object_storage_credentials(
 S3_GENERATE_LOCAL_CHECKSUM = (
     os.environ.get("S3_GENERATE_LOCAL_CHECKSUM", "").lower() == "true"
 )
+
+# Presigned file store URLs. Keep them short: an S3 URL also stops working when
+# the session credentials that signed it expire.
+FILE_STORE_PRESIGN_DEFAULT_TTL_SECONDS = 5 * 60
+FILE_STORE_PRESIGN_MAX_TTL_SECONDS = 15 * 60
+# The largest single S3 PUT. It also bounds the hash that finalize computes on
+# stores that keep no SHA-256.
+FILE_STORE_PRESIGN_MAX_UPLOAD_BYTES = 5 * 1024 * 1024 * 1024
+
+# The bundled MinIO that releases before the object store wrote to. A hand-run
+# upgrade keeps this endpoint in .env, so the files stay in MinIO.
+BUNDLED_LEGACY_MINIO_ENDPOINT_URL = "http://minio:9000"
+
+
+def _runs_on_legacy_minio(file_store_backend: str, s3_endpoint_url: str | None) -> bool:
+    return (
+        file_store_backend == FileStoreType.S3
+        and (s3_endpoint_url or "").rstrip("/") == BUNDLED_LEGACY_MINIO_ENDPOINT_URL
+    )
+
+
+# Fires in every process that imports this module, so object-store-copy shows it too.
+if _runs_on_legacy_minio(FILE_STORE_BACKEND, S3_ENDPOINT_URL):
+    logger.warning(
+        "Files are still stored in the legacy MinIO service, which a later "
+        "release removes. Set S3_ENDPOINT_URL=http://object-store:8333 and "
+        "S3_LEGACY_ENDPOINT_URL=%s in .env and run `docker compose up -d`, "
+        "or run `onyx-cli deploy upgrade`.",
+        BUNDLED_LEGACY_MINIO_ENDPOINT_URL,
+    )
 
 # The MinIO store earlier releases wrote to. While set, writes and deletes reach
 # both stores and reads that miss fall back to it. The same endpoint as

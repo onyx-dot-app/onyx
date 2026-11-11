@@ -16,39 +16,8 @@ import {
   createSearchToolStartPacket,
   createMessageStartPacket,
   createStopPacket,
+  createImageDeltaPacket,
 } from "./__tests__/testHelpers";
-
-// Mock the transformers module
-jest.mock("../transformers", () => ({
-  transformPacketGroups: jest.fn((groups) =>
-    groups.map(
-      (g: { turn_index: number; tab_index: number; packets: Packet[] }) => ({
-        key: `${g.turn_index}-${g.tab_index}`,
-        turnIndex: g.turn_index,
-        tabIndex: g.tab_index,
-        packets: g.packets,
-      })
-    )
-  ),
-  groupStepsByTurn: jest.fn((steps) => {
-    const turnMap = new Map<number, typeof steps>();
-    for (const step of steps) {
-      const existing = turnMap.get(step.turnIndex);
-      if (existing) {
-        existing.push(step);
-      } else {
-        turnMap.set(step.turnIndex, [step]);
-      }
-    }
-    return Array.from(turnMap.entries())
-      .sort(([a], [b]) => a - b)
-      .map(([turnIndex, stepsForTurn]) => ({
-        turnIndex,
-        steps: stepsForTurn,
-        isParallel: stepsForTurn.length > 1,
-      }));
-  }),
-}));
 
 // ============================================================================
 // Tests
@@ -416,7 +385,7 @@ describe("usePacketProcessor", () => {
       expect(result.current.isComplete).toBe(false);
     });
 
-    test("true only when BOTH stopPacketSeen and renderComplete are true", () => {
+    test("true when stopped and the answer finished rendering", () => {
       const packets = [
         createMessageStartPacket({ turn_index: 0 }),
         createStopPacket(),
@@ -430,6 +399,17 @@ describe("usePacketProcessor", () => {
       act(() => {
         result.current.onRenderComplete();
       });
+
+      expect(result.current.isComplete).toBe(true);
+    });
+
+    test("true when stopped with no answer to render", () => {
+      const packets = [
+        createSearchToolStartPacket({ turn_index: 0 }),
+        createStopPacket(),
+      ];
+
+      const { result } = renderHook(() => usePacketProcessor(packets, 1));
 
       expect(result.current.isComplete).toBe(true);
     });
@@ -523,15 +503,63 @@ describe("usePacketProcessor", () => {
           }
         ),
         createPacket(PacketType.SECTION_END, { turn_index: 0 }),
+        createMessageStartPacket({ turn_index: 1 }),
         createStopPacket(),
       ];
 
       const { result } = renderHook(() => usePacketProcessor(packets, 1));
 
-      expect(result.current.isGeneratingImage).toBe(true);
-      expect(result.current.generatedImageCount).toBe(1);
+      expect(result.current.generatedImages.map((i) => i.file_id)).toEqual([
+        "img1",
+      ]);
+      expect(result.current.hasSteps).toBe(true);
       expect(result.current.finalAnswerComing).toBe(true);
       expect(result.current.displayGroups.length).toBe(1);
     });
+
+    test.each([
+      ["a live stop", createStopPacket()],
+      [
+        "a reloaded stop without a reason",
+        createPacket(PacketType.STOP, { turn_index: 0 }, { stop_reason: null }),
+      ],
+    ])("a response of only generated images completes after %s", (_, stop) => {
+      const packets = [
+        createPacket(PacketType.IMAGE_GENERATION_TOOL_START, { turn_index: 0 }),
+        createImageDeltaPacket(2, { turn_index: 0 }, "reloaded"),
+        createPacket(PacketType.SECTION_END, { turn_index: 0 }),
+        stop,
+      ];
+
+      const { result } = renderHook(() => usePacketProcessor(packets, 1));
+
+      expect(result.current.generatedImages.map((i) => i.file_id)).toEqual([
+        "reloaded-0",
+        "reloaded-1",
+      ]);
+      expect(result.current.hasSteps).toBe(true);
+      expect(result.current.displayGroups.length).toBe(0);
+      expect(result.current.stopPacketSeen).toBe(true);
+      expect(result.current.isComplete).toBe(true);
+    });
   });
+});
+
+test("a stop after a retracted answer completes without a hidden renderer", () => {
+  const packets = [createMessageStartPacket({ turn_index: 0 })];
+  const { result, rerender } = renderHook(
+    ({ packets }) => usePacketProcessor(packets, 1),
+    { initialProps: { packets } }
+  );
+  expect(result.current.displayGroups).toHaveLength(1);
+  rerender({
+    packets: [
+      ...packets,
+      createSearchToolStartPacket({ turn_index: 1 }),
+      createStopPacket(StopReason.USER_CANCELLED),
+    ],
+  });
+  expect(result.current.finalAnswerComing).toBe(false);
+  expect(result.current.displayGroups).toEqual([]);
+  expect(result.current.isComplete).toBe(true);
 });

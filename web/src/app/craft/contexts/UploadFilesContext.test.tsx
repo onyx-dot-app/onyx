@@ -11,13 +11,11 @@ import {
 } from "@/app/craft/contexts/UploadFilesContext";
 import {
   fetchDirectoryListing,
-  deleteFile,
   uploadFile,
 } from "@/app/craft/services/apiServices";
 
 jest.mock("@/app/craft/services/apiServices", () => ({
   fetchDirectoryListing: jest.fn(),
-  deleteFile: jest.fn(),
   uploadFile: jest.fn(),
 }));
 
@@ -74,7 +72,6 @@ it("retains the selected source after uploading and deselects without deleting h
   if (!selected) throw new Error("Expected a selected file");
   act(() => result.current.removeFile(selected.id));
   expect(result.current.currentMessageFiles).toEqual([]);
-  expect(deleteFile).not.toHaveBeenCalled();
   expect(fetchDirectoryListing).not.toHaveBeenCalled();
 });
 
@@ -106,7 +103,6 @@ it.each(["remove", "send"])(
     });
     expect(result.current.currentMessageFiles).toEqual([]);
     expect(refresh).toHaveBeenCalledWith("session");
-    expect(deleteFile).not.toHaveBeenCalled();
     refresh.mockRestore();
   }
 );
@@ -126,7 +122,6 @@ it("clears sent selections while retaining sandbox files, including after revisi
   act(() => fresh.result.current.setActiveSession("session"));
   await act(async () => {});
   expect(fresh.result.current.currentMessageFiles).toEqual([]);
-  expect(deleteFile).not.toHaveBeenCalled();
   expect(fetchDirectoryListing).not.toHaveBeenCalled();
 });
 

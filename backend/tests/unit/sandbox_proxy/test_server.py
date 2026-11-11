@@ -1,6 +1,7 @@
 """Unit tests for sandbox-proxy process configuration."""
 
 import asyncio
+import runpy
 import tempfile
 from unittest.mock import patch
 
@@ -10,9 +11,50 @@ from mitmproxy.options import Options
 from mitmproxy.tools.dump import DumpMaster
 
 from onyx.sandbox_proxy import server
-from onyx.sandbox_proxy.destination_policy import is_destination_blocked
+from onyx.sandbox_proxy.destination_policy import resolve_destination
 from onyx.sandbox_proxy.models import DestinationPolicyConfig
+from onyx.server.features.build import configs
 from tests.unit.sandbox_proxy.conftest import wait_for_proxy_listener
+
+
+@pytest.mark.parametrize(
+    ("explicit_ca", "ssl_cert_file", "expected"),
+    [
+        (None, None, None),
+        ("", "", None),
+        ("   ", "  ", None),
+        (None, "/shared.pem", "/shared.pem"),
+        ("  ", " /shared.pem ", "/shared.pem"),
+        (" /explicit.pem ", "/shared.pem", "/explicit.pem"),
+        ("/explicit.pem", None, "/explicit.pem"),
+    ],
+)
+def test_upstream_ca_environment_precedence(
+    monkeypatch: pytest.MonkeyPatch,
+    explicit_ca: str | None,
+    ssl_cert_file: str | None,
+    expected: str | None,
+) -> None:
+    for name, value in (
+        ("SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA", explicit_ca),
+        ("SSL_CERT_FILE", ssl_cert_file),
+    ):
+        if value is None:
+            monkeypatch.delenv(name, raising=False)
+        else:
+            monkeypatch.setenv(name, value)
+    # Evaluate startup settings without changing other tests' imported constants.
+    loaded = runpy.run_path(configs.__file__)
+    monkeypatch.setattr(
+        server,
+        "SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA",
+        loaded["SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA"],
+    )
+    with patch.object(server, "DumpMaster") as build_master:
+        server._build_mitm_master()
+    options: Options = build_master.call_args.kwargs["options"]
+    assert options.ssl_verify_upstream_trusted_ca == expected
+    assert options.ssl_insecure is False
 
 
 def test_mitm_options_use_custom_upstream_ca_when_configured(
@@ -128,5 +170,5 @@ def test_startup_uses_internal_cidrs(monkeypatch: pytest.MonkeyPatch) -> None:
         server, "SANDBOX_PROXY_INTERNAL_CIDRS", " 2600:ffff::/32 ,10.0.0.0/8"
     )
     policy: DestinationPolicyConfig = server._build_destination_policy()
-    assert is_destination_blocked(policy, "2600:ffff::1", 443)
-    assert not is_destination_blocked(policy, "2606:4700:4700::1111", 443)
+    assert resolve_destination(policy, "2600:ffff::1", 443) is None
+    assert resolve_destination(policy, "2606:4700:4700::1111", 443) is not None

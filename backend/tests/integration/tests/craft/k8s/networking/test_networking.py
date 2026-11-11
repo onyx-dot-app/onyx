@@ -409,3 +409,62 @@ def test_local_http_bypasses_proxy(sandbox: Sandbox) -> None:
         exec_sandbox(sandbox, "python3", "-c", LOCAL_HTTP_PROBE, host).strip()
         == "sandbox loopback verified"
     )
+
+
+def test_firewall_mode_matches_deployment(sandbox: Sandbox) -> None:
+    pod = json.loads(
+        kubectl(sandbox_namespace(), "get", "pod", sandbox.pod, "-o", "json")
+    )
+    bootstrap = next(
+        c for c in pod["spec"]["initContainers"] if c["name"] == "sandbox-init"
+    )
+    env = {item["name"]: item.get("value") for item in bootstrap["env"]}
+    mode = env["SANDBOX_NET_ADMIN_LOCKDOWN"]
+    assert mode in {"true", "false"}
+    expected = os.environ.get("SANDBOX_TEST_NET_ADMIN_LOCKDOWN")
+    if expected is not None:
+        assert expected in {"true", "false"}
+        assert mode == expected
+    assert pod["metadata"]["labels"]["onyx.app/net-admin-lockdown"] == mode
+    assert bootstrap["securityContext"]["capabilities"].get("add", []) == (
+        ["NET_ADMIN"] if mode == "true" else []
+    )
+
+
+def test_direct_dns_is_blocked(sandbox: Sandbox) -> None:
+    dns = json.loads(kubectl("kube-system", "get", "service", "kube-dns", "-o", "json"))
+    query = """import socket,struct,sys
+host=sys.argv[1]
+q=b''.join(bytes([len(p)])+p.encode() for p in 'kubernetes.default.svc.cluster.local'.split('.'))+bytes([0])
+packet=struct.pack('!6H',1234,256,1,0,0,0)+q+struct.pack('!2H',1,1)
+s=socket.socket(socket.AF_INET6 if ':' in host else socket.AF_INET,socket.SOCK_DGRAM)
+s.settimeout(3)
+try:
+ s.sendto(packet,(host,53));s.recv(4096);print('REACHABLE')
+except OSError:
+ print('BLOCKED')
+"""
+    for host in dns["spec"]["clusterIPs"]:
+        # A reachable control prevents a broken DNS server from passing this test.
+        assert exec_proxy("python3", "-c", query, host).strip() == "REACHABLE"
+        assert exec_sandbox(sandbox, "python3", "-c", query, host).strip() == "BLOCKED"
+
+
+def test_direct_public_egress_is_blocked(sandbox: Sandbox) -> None:
+    addresses: list[str] = json.loads(
+        exec_proxy(
+            "python3",
+            "-c",
+            "import json,socket; print(json.dumps([a[4][0] for a in socket.getaddrinfo('example.com',443,type=socket.SOCK_STREAM)]))",
+        )
+    )
+    version = 6 if os.environ["SANDBOX_TEST_IP_FAMILY"] == "ipv6" else 4
+    host = next(ip for ip in addresses if ipaddress.ip_address(ip).version == version)
+    probe = """import socket,sys
+try:
+ s=socket.create_connection((sys.argv[1],443),timeout=3);s.close();print('REACHABLE')
+except OSError:
+ print('BLOCKED')
+"""
+    assert exec_proxy("python3", "-c", probe, host).strip() == "REACHABLE"
+    assert exec_sandbox(sandbox, "python3", "-c", probe, host).strip() == "BLOCKED"

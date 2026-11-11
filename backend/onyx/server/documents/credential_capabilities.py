@@ -6,7 +6,7 @@ here gates connector creation or indexing, and check failures are report
 content, never an HTTP error.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 from uuid import UUID
@@ -20,20 +20,33 @@ from onyx.configs.constants import (
     DocumentSource,
 )
 from onyx.connectors.capability_checks.draft_runs import (
-    DraftCheckPlan,
     DraftCheckRunSnapshot,
     DraftRerunMode,
     read_draft_run_for_user,
 )
 from onyx.connectors.capability_checks.findings_setting import (
-    hide_findings_if_disabled,
+    shown_check_results,
 )
-from onyx.connectors.capability_checks.models import CredentialCapabilityReport
+from onyx.connectors.capability_checks.models import (
+    CredentialCapabilityReport,
+    DraftCheckActions,
+    DraftCheckPlan,
+    StoredRunProgress,
+    TwoStepRow,
+)
+from onyx.connectors.capability_checks.stored_run_progress import (
+    load_stored_run_progress,
+)
+from onyx.connectors.capability_checks.two_step import (
+    two_step_rows_of_progress,
+    two_step_rows_of_results,
+)
 from onyx.connectors.credential_families import is_credential_usable_for_source
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.factory import (
     CredentialBindingFieldError,
     credential_binding_field_errors,
+    credential_use_refusal,
     validate_connector_config,
     validate_credential_binding,
 )
@@ -45,6 +58,7 @@ from onyx.db.connector_credential_pair import (
     get_connector_credential_pairs_for_user,
 )
 from onyx.db.credential_capability import (
+    effective_run_status,
     get_capability_report_row,
     get_capability_report_rows_for_source,
 )
@@ -93,26 +107,48 @@ class CapabilityReportSnapshot(BaseModel):
     run_started_at: datetime | None
     connector_config_hash: str | None
     report: CredentialCapabilityReport | None
+    # The per-check progress of the run in flight; None unless RUNNING.
+    progress: StoredRunProgress | None = None
+    # How each two-step row shows: of ``progress`` while a run is in flight,
+    # else of ``report``.
+    two_step_rows: list[TwoStepRow] = []
     time_updated: datetime
 
     @classmethod
     def from_row(cls, row: CredentialCapabilityReportRow) -> "CapabilityReportSnapshot":
+        run_status = effective_run_status(row, datetime.now(timezone.utc))
         report: CredentialCapabilityReport | None = (
             CredentialCapabilityReport.model_validate(row.report)
             if row.report is not None
             else None
         )
         if report is not None:
-            hide_findings_if_disabled(report.check_results)
+            report.check_results = shown_check_results(report.check_results)
+        progress: StoredRunProgress | None = (
+            load_stored_run_progress(row.run_id)
+            if run_status == CapabilityReportRunStatus.RUNNING
+            and row.run_id is not None
+            else None
+        )
+        if progress is not None:
+            progress.check_results = shown_check_results(progress.check_results)
         return cls(
             credential_id=row.credential_id,
             connector_id=row.connector_id,
             source=row.source,
             trigger=row.trigger,
-            run_status=row.run_status,
+            run_status=run_status,
             run_started_at=row.run_started_at,
             connector_config_hash=row.connector_config_hash,
             report=report,
+            progress=progress,
+            two_step_rows=(
+                two_step_rows_of_progress(progress)
+                if progress is not None
+                else two_step_rows_of_results(report.check_results)
+                if report is not None
+                else []
+            ),
             time_updated=row.time_updated,
         )
 
@@ -187,8 +223,9 @@ def trigger_capability_check(
     """Marks the scope RUNNING, enqueues the check run, and returns the row.
 
     Accepted-style: the run happens on a worker and the caller polls the GET;
-    the previous report stays readable meanwhile. A run already RUNNING within
-    the staleness bound makes this a no-op returning the standing row. A
+    the previous report stays readable meanwhile. A run RUNNING before its
+    deadline that started only minutes ago makes this a no-op returning the
+    standing row; an older one is replaced, and its worker stops. A
     connector-scoped trigger requires the pairing to be visible to the caller.
     """
     # GATE 2 for ``allow_scope``, mirroring the report reads: credential
@@ -387,7 +424,11 @@ class CredentialBindingCheckRequest(BaseModel):
 
 
 class CredentialBindingRejectionCode(str, Enum):
+    # The credential records a different site than the bound fields.
     BINDING_REJECTED = "binding_rejected"
+    # The credential is shared with the user, and the bound fields match no
+    # connector that uses it (``credential_use_refusal``).
+    SHARED_CREDENTIAL_SETTINGS = "shared_credential_settings"
 
 
 class CredentialBindingRejection(BaseModel):
@@ -434,7 +475,7 @@ def check_credential_binding(
         user=user,
         db_session=db_session,
     )
-    return _check_binding(request, credential)
+    return _check_binding(request, credential, user, db_session)
 
 
 class DraftCredentialBindingCheckRequest(CredentialBindingCheckRequest):
@@ -471,7 +512,7 @@ def check_draft_credential_binding(
         user=user,
         db_session=db_session,
     )
-    result = _check_binding(request, credential)
+    result = _check_binding(request, credential, user, db_session)
     return DraftCredentialBindingCheckResponse(
         field_errors=result.field_errors,
         rejection=result.rejection,
@@ -482,12 +523,34 @@ def check_draft_credential_binding(
 def _check_binding(
     request: CredentialBindingCheckRequest,
     credential: Credential,
+    user: User,
+    db_session: Session,
 ) -> CredentialBindingCheckResponse:
+    """Applies the checks a run or pairing applies to the bound fields, so a
+    form that passes here is not refused later for them."""
     field_errors = credential_binding_field_errors(
         request.source, request.connector_specific_config
     )
     if field_errors:
         return CredentialBindingCheckResponse(field_errors=field_errors, rejection=None)
+    # Before validate_credential_binding, which decrypts the credential.
+    refusal = credential_use_refusal(
+        db_session,
+        user=user,
+        credential=credential,
+        source=request.source,
+        connector_specific_config=request.connector_specific_config,
+    )
+    if refusal is not None:
+        if refusal.error_code is not OnyxErrorCode.INSUFFICIENT_PERMISSIONS:
+            raise refusal
+        return CredentialBindingCheckResponse(
+            field_errors={},
+            rejection=CredentialBindingRejection(
+                code=CredentialBindingRejectionCode.SHARED_CREDENTIAL_SETTINGS,
+                detail=refusal.detail,
+            ),
+        )
     try:
         validate_credential_binding(
             request.source, request.connector_specific_config, credential
@@ -541,8 +604,9 @@ def plan_draft_checks(
     )
 
 
-class DraftCheckRunRequest(BaseModel):
-    """Body of the draft run endpoint: an unsaved connector form."""
+class DraftCheckRunRequest(DraftCheckActions):
+    """Body of the draft run endpoint: an unsaved connector form, and the
+    admin's per-check actions."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -581,7 +645,8 @@ def start_draft_check_run(
 
     Checks that cannot run yet resolve at once (waiting, not applicable), and
     fresh cached results fill others; one task runs the rest. The caller polls
-    the GET with the returned ``run_id``. Never writes a stored report.
+    the GET with the returned ``run_id``. Never writes a stored report. The
+    request's per-check actions run, re-run, skip or start one check first.
     """
     mapping = CONNECTOR_CLASS_MAP.get(request.source)
     if mapping is None:
@@ -607,6 +672,7 @@ def start_draft_check_run(
             draft_key=request.draft_key,
             form_values=request.form_state,
             rerun=request.rerun,
+            actions=request,
         )
     except CapabilityRunEnqueueError as e:
         raise OnyxError(

@@ -4,8 +4,8 @@ import pytest
 
 from onyx.db.enums import Permission, SkillAccessLevel, SkillSharePermission
 from onyx.db.models import Skill, Skill__User, Skill__UserGroup, User
+from onyx.db.skill import ensure_can_edit_org_visibility
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.skill.api import _ensure_can_edit_org_visibility
 from onyx.server.features.skill.response_helpers import user_permission_for_skill
 
 
@@ -310,7 +310,7 @@ def test_curator_editor_cannot_edit_org_visibility() -> None:
     _share_with_groups(skill, [1])
 
     with pytest.raises(OnyxError):
-        _ensure_can_edit_org_visibility(skill, curator)
+        ensure_can_edit_org_visibility(skill, curator)
 
 
 def test_admin_editor_can_edit_org_visibility() -> None:
@@ -318,11 +318,11 @@ def test_admin_editor_can_edit_org_visibility() -> None:
     admin = _user(is_admin=True)
     skill = _skill(author, is_public=True)
 
-    _ensure_can_edit_org_visibility(skill, admin)
+    ensure_can_edit_org_visibility(skill, admin)
 
 
 def test_admin_can_edit_personal_skill_org_visibility() -> None:
     author = _user()
     admin = _user(is_admin=True)
 
-    _ensure_can_edit_org_visibility(_skill(author), admin)
+    ensure_can_edit_org_visibility(_skill(author), admin)

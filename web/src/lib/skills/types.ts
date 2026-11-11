@@ -3,6 +3,8 @@
  * `backend/onyx/server/features/skill/models.py`.
  */
 
+export type SkillInstallationPolicy = "AVAILABLE" | "DEFAULT" | "REQUIRED";
+
 export type SkillSource = "builtin" | "custom";
 export type SkillAccessLevel = "OWNER" | "EDITOR" | "VIEWER";
 export type SkillSharePermission = "EDITOR" | "VIEWER";
@@ -42,6 +44,7 @@ export interface Skill {
   is_personal: boolean;
   enabled: boolean;
   can_toggle: boolean;
+  installation_policy: SkillInstallationPolicy;
   author_user_id: string | null;
   author_email: string | null;
   owner: {

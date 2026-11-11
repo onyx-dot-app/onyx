@@ -10,10 +10,19 @@ import {
   InputTypeIn,
   MessageCard,
   Modal,
-  Tag,
+  Badge,
   Text,
+  useCreateModal,
 } from "@opal/components";
 import { SvgArrowRight } from "@opal/icons";
+import { Section } from "@opal/layouts";
+import ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
+import SkillSharingSummary from "@/sections/skills/SkillSharingSummary";
+import {
+  emptySkillSharingDraft,
+  serializeSkillSharing,
+  type SkillSharingDraft,
+} from "@/lib/skills/sharing";
 import { SvgGitHub } from "@opal/logos";
 import { cn } from "@opal/utils";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
@@ -46,6 +55,8 @@ interface ImportSkillsFromGitHubModalViewProps {
   onRepositoryChange: (value: string) => void;
   onSelectedPathsChange: (paths: string[]) => void;
   onSubmit: () => void;
+  sharing: SkillSharingDraft;
+  onConfigureSharing: () => void;
 }
 
 export default function ImportSkillsFromGitHubModal({
@@ -60,7 +71,15 @@ export default function ImportSkillsFromGitHubModal({
   const [result, setResult] = useState<GitHubSkillsImportResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { isAdmin } = useUser();
+  const { isAdmin, user } = useUser();
+  const [sharing, setSharing] = useState<SkillSharingDraft | null>(null);
+  const sharingModal = useCreateModal();
+  const sharingDraft =
+    sharing ??
+    emptySkillSharingDraft(
+      t("importGithub.sharing.title"),
+      user ? { id: user.id, email: user.email } : null
+    );
   const { data: externalApps } = useUserExternalApps();
 
   useEffect(() => {
@@ -70,7 +89,9 @@ export default function ImportSkillsFromGitHubModal({
     setSelectedPaths([]);
     setResult(null);
     setError(null);
-  }, [open]);
+    setSharing(null);
+    sharingModal.toggle(false);
+  }, [open, sharingModal.toggle]);
 
   async function submit() {
     if (loading || !repository.trim()) return;
@@ -88,7 +109,13 @@ export default function ImportSkillsFromGitHubModal({
         return;
       }
       if (selectedPaths.length === 0) return;
-      const nextResult = await importGitHubSkills(preview, selectedPaths);
+      const nextResult = sharing
+        ? await importGitHubSkills(
+            preview,
+            selectedPaths,
+            serializeSkillSharing(sharing, isAdmin)
+          )
+        : await importGitHubSkills(preview, selectedPaths);
       setResult(nextResult);
       if (nextResult.imported.length > 0) onImported();
     } catch (caught) {
@@ -106,27 +133,40 @@ export default function ImportSkillsFromGitHubModal({
   }
 
   return (
-    <ImportSkillsFromGitHubModalView
-      open={open}
-      repository={repository}
-      preview={preview}
-      selectedPaths={selectedPaths}
-      result={result}
-      loading={loading}
-      error={error}
-      isAdmin={isAdmin}
-      externalApps={externalApps}
-      onClose={onClose}
-      onRepositoryChange={(value) => {
-        setRepository(value);
-        setPreview(null);
-        setSelectedPaths([]);
-        setResult(null);
-        setError(null);
-      }}
-      onSelectedPathsChange={setSelectedPaths}
-      onSubmit={() => void submit()}
-    />
+    <>
+      <ImportSkillsFromGitHubModalView
+        open={open}
+        repository={repository}
+        preview={preview}
+        selectedPaths={selectedPaths}
+        result={result}
+        loading={loading}
+        error={error}
+        isAdmin={isAdmin}
+        externalApps={externalApps}
+        onClose={onClose}
+        onRepositoryChange={(value) => {
+          setRepository(value);
+          setPreview(null);
+          setSelectedPaths([]);
+          setResult(null);
+          setError(null);
+        }}
+        onSelectedPathsChange={setSelectedPaths}
+        onSubmit={() => void submit()}
+        sharing={sharingDraft}
+        onConfigureSharing={() => sharingModal.toggle(true)}
+      />
+      <sharingModal.Provider>
+        <ShareSkillModal
+          mode="create"
+          open
+          draft={sharingDraft}
+          onSaveDraft={setSharing}
+          onClose={() => sharingModal.toggle(false)}
+        />
+      </sharingModal.Provider>
+    </>
   );
 }
 
@@ -144,6 +184,8 @@ export function ImportSkillsFromGitHubModalView({
   onRepositoryChange,
   onSelectedPathsChange,
   onSubmit,
+  sharing,
+  onConfigureSharing,
 }: ImportSkillsFromGitHubModalViewProps) {
   const t = useTranslations("skills.modals");
   const importablePaths = useMemo(
@@ -209,7 +251,10 @@ export function ImportSkillsFromGitHubModalView({
     : 0;
 
   return (
-    <Modal open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
+    <Modal
+      open={open}
+      onOpenChange={(nextOpen) => !nextOpen && !loading && onClose()}
+    >
       <Modal.Content
         width={preview || result ? "md" : "sm"}
         height={preview || result ? "lg" : "fit"}
@@ -234,7 +279,7 @@ export function ImportSkillsFromGitHubModalView({
         />
         <Modal.Body>
           {result ? (
-            <div className="flex w-full flex-col gap-3">
+            <Section height="auto" alignItems="stretch" gap={3}>
               <MessageCard
                 outerPadding={1}
                 innerPadding={1}
@@ -279,16 +324,21 @@ export function ImportSkillsFromGitHubModalView({
               />
 
               {result.imported.length > 0 && (
-                <section className="flex flex-col gap-1.5">
+                <Section height="auto" alignItems="stretch" gap={1.5}>
                   <Text font="main-ui-action">
                     {t("importGithub.result.importedSection.title")}
                   </Text>
                   <Card border="solid" rounding={2} padding={0}>
                     <div className="divide-y divide-border-01">
                       {result.imported.map((item) => (
-                        <div
+                        <Section
                           key={item.skill.id}
-                          className="flex items-start gap-2 px-3 py-2"
+                          flexDirection="row"
+                          justifyContent="start"
+                          height="auto"
+                          alignItems="start"
+                          gap={2}
+                          padding={3}
                         >
                           <div className="min-w-0 flex-1">
                             <Text font="main-ui-action">{item.skill.name}</Text>
@@ -302,63 +352,70 @@ export function ImportSkillsFromGitHubModalView({
                               </Text>
                             )}
                           </div>
-                          <Tag
-                            color={item.skill.enabled ? "green" : "gray"}
+                          <Badge
+                            color={item.skill.enabled ? "success" : "default"}
                             title={
                               item.skill.enabled
                                 ? t("importGithub.skillTag.enabled")
                                 : t("importGithub.skillTag.disabled")
                             }
                           />
-                        </div>
+                        </Section>
                       ))}
                     </div>
                   </Card>
-                </section>
+                </Section>
               )}
 
               {resultNotImported.length > 0 && (
-                <section className="flex flex-col gap-1.5">
+                <Section height="auto" alignItems="stretch" gap={1.5}>
                   <Text font="main-ui-action">
                     {t("importGithub.result.notImportedSection.title")}
                   </Text>
                   <Card border="solid" rounding={2} padding={0}>
                     <div className="divide-y divide-border-01">
                       {resultNotImported.map((item) => (
-                        <div
+                        <Section
                           key={item.path}
-                          className="flex flex-col gap-0.5 px-3 py-2"
+                          height="auto"
+                          alignItems="stretch"
+                          gap={0.5}
+                          padding={3}
                         >
                           <Text font="main-ui-action">{item.name}</Text>
                           <Text as="p" font="secondary-body" color="text-03">
                             {item.reason}
                           </Text>
-                        </div>
+                        </Section>
                       ))}
                     </div>
                   </Card>
-                </section>
+                </Section>
               )}
-            </div>
+            </Section>
           ) : (
-            <div className="flex w-full flex-col gap-3">
-              <div className="flex flex-col gap-1">
+            <Section height="auto" alignItems="stretch" gap={3}>
+              <Section height="auto" alignItems="stretch" gap={1}>
                 <Text font="main-ui-action">
                   {t("importGithub.repositoryInput.label")}
                 </Text>
                 <InputTypeIn
                   value={repository}
                   variant={loading ? "disabled" : "primary"}
-                  // oxlint-disable-next-line i18n/no-raw-jsx-text -- URL/format example, not copy
-                  placeholder="owner/repository or https://github.com/owner/repository"
+                  placeholder={t("placeholders.githubRepository")}
                   onChange={(event) => onRepositoryChange(event.target.value)}
                   onKeyDown={(event) => {
                     if (event.key === "Enter") onSubmit();
                   }}
                 />
-              </div>
+              </Section>
 
-              <div className="flex items-center justify-between gap-2">
+              <Section
+                height="auto"
+                flexDirection="row"
+                justifyContent="between"
+                gap={2}
+              >
                 <Text font="secondary-body" color="text-03">
                   {privateRepositoryMessage}
                 </Text>
@@ -372,7 +429,7 @@ export function ImportSkillsFromGitHubModalView({
                     {privateRepositoryAction.label}
                   </Button>
                 )}
-              </div>
+              </Section>
 
               {error && (
                 <MessageCard
@@ -389,8 +446,41 @@ export function ImportSkillsFromGitHubModalView({
               )}
 
               {preview && (
-                <div className="flex min-h-0 flex-col gap-2">
-                  <div className="flex items-center gap-2">
+                <SkillSharingSummary
+                  title={t("importGithub.sharing.title")}
+                  draft={sharing}
+                  count={selectedPaths.length}
+                  configureLabel={t("importGithub.sharing.configureButton")}
+                  disabled={loading}
+                  onConfigure={onConfigureSharing}
+                >
+                  {isAdmin && (
+                    <Text font="secondary-body" color="text-03">
+                      {t(
+                        `share.installation.${({ AVAILABLE: "available", DEFAULT: "default", REQUIRED: "required" } as const)[sharing.installation_policy]}`
+                      )}
+                    </Text>
+                  )}
+                  <Text font="secondary-body" color="text-03">
+                    {t("importGithub.sharing.description", {
+                      count: selectedPaths.length,
+                    })}
+                  </Text>
+                </SkillSharingSummary>
+              )}
+              {preview && (
+                <Section
+                  height="auto"
+                  alignItems="stretch"
+                  gap={2}
+                  className="min-h-0"
+                >
+                  <Section
+                    height="auto"
+                    flexDirection="row"
+                    justifyContent="start"
+                    gap={2}
+                  >
                     <InputCheckbox
                       checked={allImportableSelected}
                       indeterminate={
@@ -408,19 +498,22 @@ export function ImportSkillsFromGitHubModalView({
                         total: importablePaths.length,
                       })}
                     </Text>
-                  </div>
+                  </Section>
                   <Card border="solid" rounding={2} padding={0}>
                     <div className="max-h-80 divide-y divide-border-01 overflow-y-auto overscroll-contain">
                       {preview.skills.map((skill) => {
                         const unavailable = skill.unavailable_reason !== null;
                         const checked = selectedPathSet.has(skill.path);
                         return (
-                          <div
+                          <Section
+                            flexDirection="row"
+                            justifyContent="start"
+                            height="auto"
+                            alignItems="start"
+                            gap={2}
+                            padding={3}
                             key={skill.path}
-                            className={cn(
-                              "flex items-start gap-2 px-3 py-2",
-                              unavailable && "opacity-50"
-                            )}
+                            className={cn(unavailable && "opacity-50")}
                           >
                             <InputCheckbox
                               checked={checked}
@@ -454,19 +547,19 @@ export function ImportSkillsFromGitHubModalView({
                               </Text>
                             </div>
                             {unavailable && (
-                              <Tag
-                                color="amber"
+                              <Badge
+                                color="pending"
                                 title={t("importGithub.unavailableTag.label")}
                               />
                             )}
-                          </div>
+                          </Section>
                         );
                       })}
                     </div>
                   </Card>
-                </div>
+                </Section>
               )}
-            </div>
+            </Section>
           )}
         </Modal.Body>
         <Modal.Footer>

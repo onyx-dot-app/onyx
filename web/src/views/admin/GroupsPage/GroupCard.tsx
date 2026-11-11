@@ -1,13 +1,11 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useNavigation } from "@opal/navigation";
 import { useTranslations } from "next-intl";
 import type { UserGroup } from "@/lib/types";
-import { SvgChevronRight, SvgUserManage, SvgUsers } from "@opal/icons";
+import { SvgChevronRight, SvgUser, SvgUserManage, SvgUsers } from "@opal/icons";
 import { ContentAction, toast } from "@opal/layouts";
-import { Section } from "@/layouts/general-layouts";
-import { Button, Card } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
+import { Button, SelectCard } from "@opal/components";
 import {
   isBuiltInGroup,
   buildGroupDescription,
@@ -25,20 +23,21 @@ interface GroupCardProps {
 
 function GroupCard({ group }: GroupCardProps) {
   const t = useTranslations("admin.groups");
-  const router = useRouter();
+  const navigation = useNavigation();
   const { mutate } = useSWRConfig();
   const builtIn = isBuiltInGroup(group);
   const isAdmin = group.name === "Admin";
+  const isBasic = builtIn && group.name === "Basic";
   const isSyncing = !group.is_up_to_date;
   // a default group has only members, so no `manage` — `manage_members` still opens it
   const canManage = can(group, "manage");
   const canManageMembers = can(group, "manage_members");
 
   async function handleRename(newName: string) {
+    if (!newName) return;
     try {
       await renameGroup(group.id, newName);
       await refreshGroupLists(mutate);
-      toast.success(t("card.toasts.renamed", { name: newName }));
     } catch (e) {
       console.error("Failed to rename group:", e);
       toast.error(
@@ -47,42 +46,43 @@ function GroupCard({ group }: GroupCardProps) {
     }
   }
 
+  function openGroup() {
+    navigation.go(`/admin/groups/${group.id}`);
+  }
+
   return (
-    <Card border="solid" padding={2} data-card rounding={4}>
-      <Section alignItems="start" height="fit">
-        <ContentAction
-          icon={isAdmin ? SvgUserManage : SvgUsers}
-          title={displayGroupName(group, t)}
-          description={buildGroupDescription(group, t)}
-          sizePreset="main-content"
-          variant="section"
-          tag={builtIn ? { title: t("card.defaultTag.label") } : undefined}
-          editable={!isSyncing && canManage}
-          onTitleChange={!isSyncing && canManage ? handleRename : undefined}
-          rightChildren={
-            <Section flexDirection="row" alignItems="start" gap={0}>
-              <div className="py-1">
-                <Text mainUiBody text03>
-                  {formatMemberCount(
-                    group.users.filter((u) => u.is_active).length,
-                    t
-                  )}
-                </Text>
-              </div>
-              {canManageMembers && (
-                <Button
-                  icon={SvgChevronRight}
-                  prominence="tertiary"
-                  tooltip={t("card.viewGroup.label")}
-                  aria-label={t("card.viewGroup.label")}
-                  onClick={() => router.push(`/admin/groups/${group.id}`)}
-                />
-              )}
-            </Section>
-          }
-        />
-      </Section>
-    </Card>
+    <SelectCard
+      state="filled"
+      border="solid"
+      padding={2}
+      data-card
+      rounding={4}
+      onClick={canManageMembers ? openGroup : undefined}
+    >
+      <ContentAction
+        font="main-content-emphasis"
+        icon={isAdmin ? SvgUserManage : isBasic ? SvgUser : SvgUsers}
+        title={displayGroupName(group, t)}
+        description={buildGroupDescription(group, t)}
+        padding={1}
+        suffix={isBasic ? t("card.defaultSuffix.label") : undefined}
+        editable={!isSyncing && canManage}
+        onTitleChange={!isSyncing && canManage ? handleRename : undefined}
+        rightChildren={
+          <Button
+            rightIcon={SvgChevronRight}
+            prominence="tertiary"
+            tooltip={t("card.viewGroup.label")}
+            disabled={!canManageMembers}
+            // Repeats the card's action: a click bubbles to the card's
+            // `openGroup`, and the card is the tab stop.
+            tabIndex={-1}
+          >
+            {formatMemberCount(group.active_member_count, t)}
+          </Button>
+        }
+      />
+    </SelectCard>
   );
 }
 

@@ -9,6 +9,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/devstack"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/docker"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 )
@@ -68,12 +69,22 @@ Examples:
 }
 
 func runObjectStoreMigrate(keepMinio bool) error {
+	target, err := resolveRuntimeTarget()
+	if err != nil {
+		return err
+	}
+	release, err := lockRuntimeTarget(target, true)
+	if err != nil {
+		return err
+	}
+	defer release()
 	root, err := paths.GitRoot()
 	if err != nil {
 		return fatalErrorf("Failed to find git root: %v", err)
 	}
-	proj := docker.ProjectName()
-	if _, err := runningPort(proj, docker.RelationalDB); err != nil {
+	proj := target.Project
+	databasePort, err := runningPort(proj, docker.RelationalDB)
+	if err != nil {
 		return err
 	}
 	objectStorePort, err := runningPort(proj, docker.ObjectStore)
@@ -82,7 +93,7 @@ func runObjectStoreMigrate(keepMinio bool) error {
 	}
 
 	log.Info("Starting MinIO...")
-	if err := execDockerCompose(append(baseArgs("dev"), "up", "-d", "--wait", "minio"), minioEnv); err != nil {
+	if err := execDockerCompose(append(baseArgs("dev", proj), "up", "-d", "--wait", "minio"), minioEnv); err != nil {
 		return err
 	}
 	minioPort, err := docker.GetHostPort(docker.ContainerName(proj, "minio"), minioContainerPort)
@@ -90,21 +101,23 @@ func runObjectStoreMigrate(keepMinio bool) error {
 		return fatalErrorf("MinIO started but publishes no port: %v", err)
 	}
 
-	envFile, err := ensureBackendEnvFile(root)
-	if err != nil {
+	if _, _, err := devstack.PrepareEnvFiles(root); err != nil {
 		return err
 	}
-	fileVars, err := loadBackendEnvFile(envFile)
+	envFile := filepath.Join(root, ".vscode", ".env")
+	fileVars, err := devstack.LoadEnvFile(envFile)
 	if err != nil {
 		return err
 	}
 	objectStore := docker.ObjectStore.Ports[0]
 	overrides := []string{
-		objectStore.AppVar + "=" + objectStore.AppValue(objectStorePort),
 		fmt.Sprintf("%s=http://localhost:%d", legacyEndpointVar, minioPort),
 		"LEGACY_COPY_ALL_OBJECTS=true",
 	}
-	env := mergeEnv(overrides, mergeEnv(os.Environ(), fileVars))
+	env := devstack.MergeEnv(devstack.HostServiceEnv(map[string]int{
+		"POSTGRES_HOST_PORT":   databasePort,
+		objectStore.ComposeVar: objectStorePort,
+	}).With(fileVars), overrides)
 
 	log.Infof("Copying MinIO (localhost:%d) into the object store (localhost:%d) and retiring it...", minioPort, objectStorePort)
 	copyCmd := exec.Command("uv", "run", "python", "-m", "onyx.file_store.legacy_copy", "--retire")
@@ -125,7 +138,7 @@ func runObjectStoreMigrate(keepMinio bool) error {
 		log.Infof("MinIO is still running on localhost:%d.", minioPort)
 		return nil
 	}
-	if err := execDockerCompose(append(baseArgs("dev"), "stop", "minio"), minioEnv); err != nil {
+	if err := execDockerCompose(append(baseArgs("dev", proj), "stop", "minio"), minioEnv); err != nil {
 		return err
 	}
 	log.Infof("MinIO is stopped; the %s_minio_data volume stays until you remove it.", proj)

@@ -3,7 +3,7 @@
 import React, { FunctionComponent, useMemo, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { StopReason } from "@/app/app/services/streamingModels";
-import { FullChatState } from "../interfaces";
+import { FullChatState } from "@/app/app/message/messageComponents/types";
 import { TurnGroup, TransformedStep } from "./transformers";
 import { SvgCheckCircle, SvgStopCircle } from "@opal/icons";
 import { IconProps } from "@opal/types";
@@ -77,6 +77,8 @@ const TimelineStep = React.memo(function TimelineStep({
   return (
     <TimelineRendererComponent
       packets={step.packets}
+      nestedCalls={step.nestedCalls}
+      streamPackets={step.streamPackets}
       chatState={chatState}
       animate={!stopPacketSeen}
       stopPacketSeen={stopPacketSeen}
@@ -121,7 +123,9 @@ export const ExpandedTimelineContent = React.memo(
 
     return (
       <div className="w-full">
-        {turnGroups.map((turnGroup, turnIdx) => {
+        {/* One flat list keyed by step: code mode can insert a step before
+            others, and position keys would remount the later steps. */}
+        {turnGroups.flatMap((turnGroup, turnIdx) => {
           // Coding-agent groups always render via ParallelTimelineTabs so
           // their tab-pill chrome is consistent with the multi-agent case.
           const renderAsParallelTabs =
@@ -130,7 +134,7 @@ export const ExpandedTimelineContent = React.memo(
 
           return renderAsParallelTabs ? (
             <ParallelTimelineTabs
-              key={turnGroup.turnIndex}
+              key={turnGroup.steps[0]!.key}
               turnGroup={turnGroup}
               chatState={chatState}
               stopPacketSeen={stopPacketSeen}

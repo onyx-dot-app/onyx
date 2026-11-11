@@ -9,7 +9,7 @@
 
 import { test as base, expect, Page } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
-import type { ScimTokenResponse } from "@/app/admin/scim/interfaces";
+import type { ScimTokenResponse } from "@/views/admin/ScimPage/types";
 
 // ---------------------------------------------------------------------------
 // Fixture control interface

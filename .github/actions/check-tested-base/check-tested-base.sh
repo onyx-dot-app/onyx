@@ -63,11 +63,15 @@ is_ancestor() {
   [[ "${status}" == "ahead" || "${status}" == "identical" ]]
 }
 
+# Longest chain of open PRs, from the tested parent down to TARGET, that the
+# check follows. Stacks of a dozen or more PRs merge together.
+MAX_CHAIN_DEPTH=30
+
 # True when a chain of open same-repo PRs leads from head branch $1 to TARGET.
 reaches_target() {
   local ref="$1" depth="${2:-0}" base
   [[ "${ref}" == "${TARGET}" ]] && return 0
-  ((depth >= 10)) && return 1
+  ((depth >= MAX_CHAIN_DEPTH)) && return 1
   while IFS= read -r base; do
     [[ -z "${base}" ]] && continue
     echo "open PR chain: ${ref} -> ${base}"

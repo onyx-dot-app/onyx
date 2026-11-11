@@ -1,0 +1,70 @@
+name: Run Coding Agent
+description: Run a pinned coding harness with restricted tools and bounded execution
+inputs:
+  harness:
+    description: "Harness adapter (currently claude-code)"
+    default: claude-code
+  prompt-file:
+    description: Path to the trusted task prompt
+    required: true
+  working-directory:
+    description: Repository or task checkout the agent reads
+    default: "."
+  model:
+    description: Harness model
+    default: claude-opus-5-5
+  max-turns:
+    description: Maximum agent turns
+    default: "60"
+  timeout-seconds:
+    description: Wall-clock limit for the agent process
+    default: "1200"
+  additional-directories:
+    description: Additional input or report directories, one per line
+    default: ""
+  prompt-vars:
+    description: Space-separated environment variable names to substitute in the prompt
+    default: ""
+  allowed-files:
+    description: Space-separated output paths; enables isolated edits and approved-file transfer
+    default: ""
+  rationale-file:
+    description: Required rationale destination for generated PR tasks
+    default: ""
+  failure-context-file:
+    description: Optional validation logs for a repair task
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Run harness
+      shell: bash
+      env:
+        HARNESS: ${{ inputs.harness }}
+        PROMPT_FILE: ${{ inputs.prompt-file }}
+        WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        MODEL: ${{ inputs.model }}
+        MAX_TURNS: ${{ inputs.max-turns }}
+        TIMEOUT_SECONDS: ${{ inputs.timeout-seconds }}
+        ADDITIONAL_DIRECTORIES: ${{ inputs.additional-directories }}
+        PROMPT_VARS: ${{ inputs.prompt-vars }}
+        ALLOWED_FILES: ${{ inputs.allowed-files }}
+        RATIONALE_FILE: ${{ inputs.rationale-file }}
+        FAILURE_CONTEXT_FILE: ${{ inputs.failure-context-file }}
+      run: |
+        args=(
+          --harness "${HARNESS}"
+          --prompt-file "${PROMPT_FILE}"
+          --working-directory "${WORKING_DIRECTORY}"
+          --model "${MODEL}"
+          --max-turns "${MAX_TURNS}"
+          --timeout-seconds "${TIMEOUT_SECONDS}"
+          --prompt-vars "${PROMPT_VARS}"
+        )
+        while IFS= read -r directory; do
+          [ -z "${directory}" ] || args+=(--add-dir "${directory}")
+        done <<< "${ADDITIONAL_DIRECTORIES}"
+        [ -z "${ALLOWED_FILES}" ] || args+=(--allowed-files "${ALLOWED_FILES}")
+        [ -z "${RATIONALE_FILE}" ] || args+=(--rationale-file "${RATIONALE_FILE}")
+        [ -z "${FAILURE_CONTEXT_FILE}" ] || args+=(--failure-context-file "${FAILURE_CONTEXT_FILE}")
+        python3 "${GITHUB_ACTION_PATH}/../../scripts/run_coding_agent.py" "${args[@]}"

@@ -1,5 +1,5 @@
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.capability_checks.draft_runs import DraftCheckStateKind
+from onyx.connectors.capability_checks.models import DraftCheckStateKind
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from onyx.server.documents.capability_check_runs import plan_draft_capability_checks
 

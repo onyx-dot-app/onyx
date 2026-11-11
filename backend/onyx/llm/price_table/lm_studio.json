@@ -49,7 +49,7 @@
       "name": "Qwen3 30B A3B 2507",
       "open_weights": true,
       "reasoning": false,
-      "release_date": "2025-07-30",
+      "release_date": "2025-07-28",
       "temperature": true,
       "tool_call": true
     },
@@ -75,7 +75,7 @@
       "name": "Qwen3 Coder 30B",
       "open_weights": true,
       "reasoning": false,
-      "release_date": "2025-07-23",
+      "release_date": "2025-07-31",
       "temperature": true,
       "tool_call": true
     }

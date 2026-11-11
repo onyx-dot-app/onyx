@@ -1,60 +1,55 @@
-"""Service for fetching and syncing LLM model configurations from GitHub.
+"""Auto-update for LLM providers from model labs.
 
-This service manages Auto mode LLM providers, where models and configuration
-are managed centrally via a GitHub-hosted JSON file. In Auto mode:
-- Model list is controlled by GitHub config
-- Model visibility is controlled by GitHub config
-- Default model is controlled by GitHub config
-- Admin only needs to provide API credentials
+A provider with auto-update on gets the models its lab releases after setup,
+and loses the models the lab retires. The admin's selection and the global
+defaults are never changed. See ``AUTO_UPDATE_PROVIDERS``.
 """
-
-from datetime import datetime
 
 import httpx
 from sqlalchemy.orm import Session
 
-from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import AUTO_LLM_CONFIG_URL
 from onyx.db.llm import fetch_auto_mode_providers, sync_auto_mode_models
+from onyx.db.models import LLMProvider
+from onyx.key_value_store.factory import get_kv_store
+from onyx.key_value_store.interface import KvKeyNotFoundError
+from onyx.llm.constants import AUTO_UPDATE_PROVIDERS
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import ONYX_AIRGAPPED
 
 logger = setup_logger()
 
-_CACHE_KEY_LAST_UPDATED_AT = "auto_llm_update:last_updated_at"
-_CACHE_TTL_SECONDS = 60 * 60 * 24  # 24 hours
+_SEEN_CATALOG_KEY_PREFIX = "llm_auto_update_seen_models_"
 
 
-def _get_cached_last_updated_at() -> datetime | None:
+def _seen_catalog_key(provider_id: int) -> str:
+    return f"{_SEEN_CATALOG_KEY_PREFIX}{provider_id}"
+
+
+def reset_seen_catalog(provider_id: int) -> None:
+    """Make the next sync record a new baseline instead of applying the
+    releases since auto-update was last on."""
     try:
-        value = get_cache_backend().get(_CACHE_KEY_LAST_UPDATED_AT)
-        if value is not None:
-            return datetime.fromisoformat(value.decode("utf-8"))
-    except Exception as e:
-        logger.warning("Failed to get cached last_updated_at: %s", e)
-    return None
+        get_kv_store().delete(_seen_catalog_key(provider_id))
+    except KvKeyNotFoundError:
+        pass
 
 
-def _set_cached_last_updated_at(updated_at: datetime) -> None:
+def _load_seen_catalog(provider: LLMProvider) -> set[str] | None:
     try:
-        get_cache_backend().set(
-            _CACHE_KEY_LAST_UPDATED_AT,
-            updated_at.isoformat(),
-            ex=_CACHE_TTL_SECONDS,
-        )
-    except Exception as e:
-        logger.warning("Failed to set cached last_updated_at: %s", e)
+        seen = get_kv_store().load(_seen_catalog_key(provider.id), refresh_cache=True)
+    except KvKeyNotFoundError:
+        return None
+    if not isinstance(seen, list) or not all(isinstance(name, str) for name in seen):
+        raise ValueError(f"Invalid seen catalog for provider {provider.id}")
+    return {name for name in seen if isinstance(name, str)}
 
 
 def fetch_llm_recommendations_from_github(
     timeout: float = 30.0,
 ) -> LLMRecommendations | None:
-    """Fetch LLM configuration from GitHub.
-
-    Returns:
-        GitHubLLMConfig if successful, None on error.
-    """
+    """Fetch the recommended models from GitHub. Returns None on error."""
     if ONYX_AIRGAPPED:
         logger.debug("ONYX_AIRGAPPED set, skipping LLM config fetch")
         return None
@@ -77,78 +72,60 @@ def fetch_llm_recommendations_from_github(
         return None
 
 
-def sync_llm_models_from_github(
-    db_session: Session,
-    force: bool = False,
-) -> dict[str, int]:
-    """Sync models from GitHub config to database for all Auto mode providers.
+def sync_auto_update_providers(db_session: Session) -> dict[str, int]:
+    """Sync every auto-update provider with its lab's model catalog.
 
-    In Auto mode, EVERYTHING is controlled by GitHub config:
-    - Model list
-    - Model visibility (is_visible)
-    - Default model
-    - Fast default model
-
-    Args:
-        db_session: Database session
-        config: GitHub LLM configuration
-        force: If True, skip the updated_at check and force sync
-
-    Returns:
-        Dict of provider_name -> number of changes made.
+    Returns a dict of provider id -> number of changes made.
     """
+    from onyx.llm.well_known_providers.llm_provider_options import (
+        fetch_latest_models_for_provider,
+        get_recommendations,
+    )
+
+    providers = [
+        provider
+        for provider in fetch_auto_mode_providers(db_session)
+        if provider.provider in AUTO_UPDATE_PROVIDERS
+    ]
+    if not providers:
+        return {}
+
+    recommendations = get_recommendations()
+    kv_store = get_kv_store()
     results: dict[str, int] = {}
-
-    # Get all providers in Auto mode
-    auto_providers = fetch_auto_mode_providers(db_session)
-    if not auto_providers:
-        logger.debug("No providers in Auto mode found")
-        return {}
-
-    # Fetch config from GitHub
-    config = fetch_llm_recommendations_from_github()
-    if not config:
-        logger.warning("Failed to fetch GitHub config")
-        return {}
-
-    # Skip if we've already processed this version (unless forced)
-    last_updated_at = _get_cached_last_updated_at()
-    if not force and last_updated_at and config.updated_at <= last_updated_at:
-        logger.debug("GitHub config unchanged, skipping sync")
-        _set_cached_last_updated_at(config.updated_at)
-        return {}
-
-    for provider in auto_providers:
-        provider_type = provider.provider  # e.g., "openai", "anthropic"
-
-        if provider_type not in config.providers:
-            logger.debug(
-                "No config for provider type '%s' in GitHub config", provider_type
-            )
+    for provider in providers:
+        catalog = fetch_latest_models_for_provider(provider.provider)
+        if catalog is None:
+            continue
+        try:
+            seen = _load_seen_catalog(provider)
+        except ValueError:
+            # Keep the stored value for inspection; never overwrite it.
+            logger.exception("Skipping auto-update for provider %s", provider.id)
+            continue
+        # The first sync records the catalog the admin set up against.
+        if seen is None:
+            kv_store.store(_seen_catalog_key(provider.id), catalog)
             continue
 
-        # Sync models - this replaces the model list entirely for Auto mode
+        display_names = {
+            model.name: model.display_name
+            for model in recommendations.get_visible_models(provider.provider)
+            if model.display_name
+        }
         changes = sync_auto_mode_models(
             db_session=db_session,
             provider=provider,
-            llm_recommendations=config,
+            released_model_names=[name for name in catalog if name not in seen],
+            retired_model_names=seen - set(catalog),
+            display_names=display_names,
         )
-
-        if changes > 0:
+        kv_store.store(_seen_catalog_key(provider.id), catalog)
+        if changes:
             results[str(provider.id)] = changes
             logger.info(
                 "Applied %s model changes to provider '%s'",
                 changes,
                 provider.name or provider.provider,
             )
-
-    _set_cached_last_updated_at(config.updated_at)
     return results
-
-
-def reset_cache() -> None:
-    """Reset the cache timestamp. Useful for testing."""
-    try:
-        get_cache_backend().delete(_CACHE_KEY_LAST_UPDATED_AT)
-    except Exception as e:
-        logger.warning("Failed to reset cache: %s", e)

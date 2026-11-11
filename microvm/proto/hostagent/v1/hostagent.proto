@@ -1,0 +1,625 @@
+syntax = "proto3";
+
+package craft.hostagent.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/onyx-dot-app/onyx/microvm/proto/hostagent/v1;hostagentv1";
+
+// HostAgent runs the Firecracker VMs of one Craft node.
+//
+// Errors: every failed call returns a gRPC status with one
+// google.rpc.ErrorInfo detail. ErrorInfo.domain is
+// "hostagent.craft.onyx.app" and ErrorInfo.reason is the name of an
+// ErrorReason value, for example "CAPACITY_MEMORY".
+service HostAgent {
+  // Create restores a VM for (sandbox_id, attempt) from a template on this
+  // node. A repeat call with the same (sandbox_id, attempt) returns the
+  // existing VM and does not start a second one. A different attempt for a
+  // sandbox that has a VM on this node returns ATTEMPT_CONFLICT. With
+  // sandboxd_key set, Create installs that key in the guest daemon (its
+  // SetKey, over vsock) before it returns a running VM; a repeat call
+  // installs it again (the daemon accepts the same key). SetKey also carries
+  // the deployment egress CA (--egress-ca or --egress-ca-configmap), which
+  // the daemon installs at Init.
+  rpc Create(CreateRequest) returns (CreateResponse);
+
+  // Stop stops the VM only if sandbox_id, attempt and generation all match
+  // it. A repeat Stop of the same instance succeeds.
+  rpc Stop(StopRequest) returns (StopResponse);
+
+  // List returns every VM that this agent knows about.
+  rpc List(ListRequest) returns (ListResponse);
+
+  // NodeInfo returns the node capacity, versions and templates.
+  rpc NodeInfo(NodeInfoRequest) returns (NodeInfoResponse);
+
+  // CloseConnections closes every egress relay connection of the VM, with
+  // the same preconditions as Stop. New connections still work. The
+  // api_server calls it in the daemon Init sequence after a restore, so that
+  // pooled client connections in the guest fail fast and reconnect.
+  rpc CloseConnections(CloseConnectionsRequest) returns (CloseConnectionsResponse);
+
+  // Session saves. The node moves the bytes between the VM and
+  // object storage with presigned URLs from the api_server, so the guest
+  // never sees a URL or a credential. Each call names the VM instance
+  // (sandbox_id, attempt, generation, as Stop) and sends the VM's guest
+  // daemon key again (the agent does not keep it). Errors of the guest
+  // daemon pass through with their own domain ("sandboxd.craft.onyx.app").
+  //
+  // Order for the api_server: CaptureSession (size_bytes, sha256) →
+  // presign_upload(size_bytes, sha256) → UploadCapture →
+  // finalize_presigned_upload → commit the new archive → prune old ones.
+
+  // CaptureSession calls the guest daemon's CaptureSession and spools the
+  // archive on the node (--capture-ttl). It returns the capture ID with the
+  // archive size and SHA-256, for presign_upload.
+  rpc CaptureSession(CaptureSessionRequest) returns (CaptureSessionResponse);
+
+  // UploadCapture sends a spooled capture with a presigned PUT, with the
+  // signed headers as given. On success the spool is deleted. On failure it
+  // stays until the TTL, so a retry (with a new URL) works.
+  rpc UploadCapture(UploadCaptureRequest) returns (UploadCaptureResponse);
+
+  // DiscardCapture deletes a spooled capture. A missing one is not an error.
+  rpc DiscardCapture(DiscardCaptureRequest) returns (DiscardCaptureResponse);
+
+  // RestoreSession downloads an archive with a presigned GET and streams it
+  // into the guest daemon's RestoreSession. The daemon checks size and
+  // SHA-256 before it replaces any file.
+  rpc RestoreSession(RestoreSessionRequest) returns (RestoreSessionResponse);
+
+  // Dial opens a byte stream to a vsock port of a running VM: the guest
+  // daemon or the app preview (3010). The first frame names sandbox_id and
+  // guest_port and may carry data; later frames carry data only. The
+  // response stream carries the guest's bytes and ends when the guest closes
+  // the connection. When the client ends its send side, the agent keeps
+  // reading until the guest closes (Firecracker vsock has no half-close).
+  rpc Dial(stream DialFrame) returns (stream DialFrame);
+
+  // BuildTemplate builds the template of this node from the root drive in
+  // the agent's --rootfs-dir, unless a valid template for its key is there,
+  // and then removes old templates (the agent keeps --template-keep and the
+  // ones that VMs use). The agent also does this at start-up. A call during
+  // a build waits for it.
+  rpc BuildTemplate(BuildTemplateRequest) returns (BuildTemplateResponse);
+
+  // Managed drive (ENG-4614). The managed drive is the read-only ext4 on
+  // /workspace/managed in each VM (the skills). Each VM from a layout 3 or later
+  // template has two managed slots: A (/dev/vdc) and B (/dev/vdf).
+
+  // PutManagedImage uploads a managed bundle (a zip of the tree to show on
+  // /workspace/managed) and builds its read-only ext4 image on this node.
+  // The first message is the header, the later ones carry the zip bytes. A
+  // bundle whose image is already on the node is not built again. The image
+  // ID is the SHA256 of the zip.
+  rpc PutManagedImage(stream PutManagedImageRequest) returns (PutManagedImageResponse);
+
+  // SwapManaged puts a managed image into running VMs without a restart,
+  // one VM at a time: the agent puts the image behind the VM's idle slot
+  // (Firecracker PATCH /drives), the guest daemon mounts it beneath the
+  // current /workspace/managed mount and detaches the old mount lazily
+  // (open files on it keep working until they close), and the agent records
+  // the active slot in the journal. A failure of one VM does not stop the
+  // others; each target has its own result.
+  rpc SwapManaged(SwapManagedRequest) returns (SwapManagedResponse);
+
+  // Drain (ENG-4569). A draining node refuses every Create that would start
+  // a new VM and every BuildTemplate that would boot a template VM
+  // (NODE_DRAINING). Running VMs keep running; automatic evacuation
+  // by the api_server is planned (ENG-4580), so until then the operator stops
+  // each VM and waits for DRAINED. The node drains while the manual drain flag is set
+  // or while it has a drain taint (the agent's --watch-node-drain).
+
+  // SetDrain sets or clears the manual drain flag. The agent keeps the flag
+  // on disk, so it stays set across agent restarts. Clearing it does not end
+  // a drain that a node taint causes.
+  rpc SetDrain(SetDrainRequest) returns (SetDrainResponse);
+}
+
+// The reason of a host agent error (google.rpc.ErrorInfo.reason).
+enum ErrorReason {
+  ERROR_REASON_UNSPECIFIED = 0;
+  // A request field is not valid (format or range).
+  INVALID_ARGUMENT = 1;
+  // The template version is not on this node.
+  TEMPLATE_MISSING = 2;
+  // vcpus or mem_mib differ from the template. A snapshot restore keeps the
+  // template's shape.
+  TEMPLATE_SHAPE_MISMATCH = 3;
+  // The template does not fit this node (layout version, Firecracker
+  // version, CPU model, host kernel, guest kernel or egress CA), or a
+  // template file does not match the SHA256 in its manifest.
+  TEMPLATE_INCOMPATIBLE = 4;
+  // scratch_gib is smaller than the template's scratch disk. The scratch
+  // disk can only grow.
+  SCRATCH_TOO_SMALL = 5;
+  // scratch_gib is larger than the node allows.
+  SCRATCH_TOO_LARGE = 6;
+  // The node does not have enough free memory for the VM.
+  CAPACITY_MEMORY = 7;
+  // The node data disk does not have enough free space.
+  CAPACITY_DISK = 8;
+  // The node has no free VM slot (jailer UID).
+  CAPACITY_VM_SLOTS = 9;
+  // The sandbox has a VM with a different attempt on this node.
+  ATTEMPT_CONFLICT = 10;
+  // The attempt is not newer than an attempt that this node already stopped.
+  STALE_ATTEMPT = 11;
+  // This node has no VM and no record of a stopped VM for the sandbox.
+  SANDBOX_NOT_FOUND = 12;
+  // Stop: the attempt or the generation does not match the VM. Dial: the
+  // running VM has another generation than the first frame asks for.
+  INSTANCE_MISMATCH = 13;
+  // The jailer, Firecracker or the snapshot restore failed.
+  VMM_FAILED = 14;
+  // Any other error.
+  INTERNAL = 15;
+  // The agent keeps a Firecracker process for the sandbox that it could not
+  // verify (an unreadable journal record, a failed check at start-up, or a
+  // failed start). Create and Stop fail until that process exits, or until an
+  // operator fixes the journal record and restarts the agent.
+  SANDBOX_IN_DOUBT = 16;
+  // Dial: the guest port is not on the agent's allow-list.
+  PORT_NOT_ALLOWED = 17;
+  // Dial or the guest daemon pass-through: nothing in the VM accepted the
+  // connection on that port.
+  GUEST_UNREACHABLE = 18;
+  // Dial or the guest daemon pass-through: the sandbox has a VM on this node,
+  // but it is not running (starting, stopping or exited).
+  VM_NOT_RUNNING = 19;
+  // Dial: the VM already has the most open Dial streams that the agent
+  // allows (--dial-max-streams).
+  DIAL_LIMIT = 20;
+  // The guest daemon pass-through: only the agent may call this daemon
+  // method (SetKey).
+  METHOD_NOT_ALLOWED = 21;
+  // Create: the guest daemon refused sandboxd_key, for example because it
+  // already has a different key. Do not use the VM: Stop it and create a
+  // new attempt.
+  GUEST_KEY_REJECTED = 22;
+  // PutManagedImage or SwapManaged: no managed image with this ID on the node.
+  MANAGED_IMAGE_MISSING = 23;
+  // PutManagedImage: the bundle is not a safe zip (an absolute or ".." path,
+  // a link or device, a duplicate name) or is over a size limit, or its
+  // bytes do not match the header.
+  MANAGED_BUNDLE_INVALID = 24;
+  // SwapManaged: the VM cannot swap its managed drive. Its template has no
+  // managed slot B (layout 2), or its guest daemon has no MountManaged.
+  MANAGED_SWAP_UNSUPPORTED = 25;
+  // SwapManaged: a process in the guest still has a file open on the
+  // managed drive of the idle slot (the drive before the last swap). Retry
+  // after it closes the file.
+  MANAGED_SLOT_BUSY = 26;
+  // SwapManaged: the guest daemon could not mount the new drive. The old
+  // drive stays mounted.
+  MANAGED_MOUNT_FAILED = 27;
+  // Create, BuildTemplate: the node is draining (the manual drain flag or a
+  // node drain taint). Create the VM on another node. A repeat Create of a
+  // VM that already runs here still returns it.
+  NODE_DRAINING = 28;
+  // Create: the agent has an egress CA source (--egress-ca or
+  // --egress-ca-configmap) but cannot read a valid CA from it. No VM
+  // starts. Retry later; sandbox-proxy writes the CA at its first start.
+  EGRESS_CA_UNAVAILABLE = 29;
+
+  // Session saves.
+  // UploadCapture: no spooled capture with this ID (never made, uploaded,
+  // discarded or expired). Capture again.
+  CAPTURE_NOT_FOUND = 32;
+  // CaptureSession: the archive is larger than the agent allows
+  // (--capture-max-bytes or the request limit).
+  CAPTURE_TOO_LARGE = 33;
+  // UploadCapture or RestoreSession: the presigned request failed (network
+  // error or a non-2xx status), or the URL is not allowed.
+  TRANSFER_FAILED = 34;
+  // RestoreSession: the downloaded archive has another size or SHA-256 than
+  // the request names. UploadCapture: the signed Content-Length is not the
+  // spool size.
+  ARCHIVE_MISMATCH = 35;
+}
+
+// Drain state of the node (NodeInfo, SetDrain).
+enum DrainState {
+  DRAIN_STATE_UNSPECIFIED = 0;
+  // The node admits new VMs.
+  DRAIN_STATE_ACTIVE = 1;
+  // The node refuses new VMs and still has VMs that are starting or running,
+  // Firecracker processes in doubt or template build VMs, or no process scan
+  // that worked.
+  DRAIN_STATE_DRAINING = 2;
+  // The node refuses new VMs and runs no Firecracker process.
+  DRAIN_STATE_DRAINED = 3;
+}
+
+// A managed drive slot of a VM.
+enum ManagedSlot {
+  MANAGED_SLOT_UNSPECIFIED = 0;
+  // Drive "managed", guest /dev/vdc.
+  MANAGED_SLOT_A = 1;
+  // Drive "managed_b", guest /dev/vdf (layout 3 and later).
+  MANAGED_SLOT_B = 2;
+}
+
+enum VMState {
+  VM_STATE_UNSPECIFIED = 0;
+  // Create is in progress.
+  VM_STATE_STARTING = 1;
+  // The VM runs.
+  VM_STATE_RUNNING = 2;
+  // The Firecracker process ended without a Stop call. Its resources are
+  // released. Stop it, or Create a new attempt.
+  VM_STATE_EXITED = 3;
+}
+
+message CreateRequest {
+  // Lowercase canonical UUID.
+  string sandbox_id = 1;
+  // Attempt number from the api_server. Must be 1 or more.
+  uint64 attempt = 2;
+  // Template version on this node.
+  string template = 3;
+  // Must equal the template's vcpus.
+  uint32 vcpus = 4;
+  // Must equal the template's mem_mib.
+  uint32 mem_mib = 5;
+  // Scratch disk size. Must be at least the template's scratch size. A
+  // larger value grows the disk; the guest daemon grows the file system.
+  uint32 scratch_gib = 6;
+  // Tenant of the sandbox (^[A-Za-z0-9_-]+$). The egress relay stamps
+  // spiffe://onyx/tenant/<tenant_id>/sandbox/<sandbox_id>.
+  string tenant_id = 7;
+  // Secret. The per-VM guest daemon key (craft.sandboxd.v1 SetKey rules:
+  // 32 to 512 bytes, 0x21 to 0x7E). Daemon calls must carry it in
+  // x-sandboxd-key. The agent does not log or store it. Without it, the
+  // daemon answers only Health.
+  string sandboxd_key = 8;
+}
+
+message CreateResponse {
+  VM vm = 1;
+  // False when the call returned an existing VM.
+  bool created = 2;
+}
+
+message StopRequest {
+  string sandbox_id = 1;
+  uint64 attempt = 2;
+  uint64 generation = 3;
+}
+
+message StopResponse {
+  // True when this instance was already stopped.
+  bool already_stopped = 1;
+}
+
+message ListRequest {}
+
+message ListResponse {
+  repeated VM vms = 1;
+}
+
+message VM {
+  string sandbox_id = 1;
+  uint64 attempt = 2;
+  // Identifies this VM instance. Unique on the node and increases with each
+  // Create.
+  uint64 generation = 3;
+  string template = 4;
+  uint32 vcpus = 5;
+  uint32 mem_mib = 6;
+  uint32 scratch_gib = 7;
+  VMState state = 8;
+  // Host PID of the Firecracker process. 0 while starting.
+  int32 pid = 9;
+  // Jailer UID and GID of the VM.
+  uint32 uid = 10;
+  google.protobuf.Timestamp started_at = 11;
+  string tenant_id = 12;
+  ManagedState managed = 13;
+}
+
+// The managed drive slots of a VM, as the journal records them.
+message ManagedState {
+  // 2 for a VM that can swap its managed drive (layout 3 and later), else 1.
+  uint32 slots = 1;
+  // The slot on /workspace/managed after the last swap.
+  ManagedSlot active = 2;
+  // Managed image ID behind each slot. Empty: the template's placeholder.
+  string slot_a_image = 3;
+  string slot_b_image = 4;
+}
+
+message CloseConnectionsRequest {
+  string sandbox_id = 1;
+  uint64 attempt = 2;
+  uint64 generation = 3;
+}
+
+message DialFrame {
+  // First frame only.
+  string sandbox_id = 1;
+  // First frame only.
+  uint32 guest_port = 2;
+  bytes data = 3;
+  // First frame only. If set, Dial fails with INSTANCE_MISMATCH unless the
+  // running VM has this generation. 0 means any running VM.
+  uint64 generation = 4;
+}
+
+message CloseConnectionsResponse {
+  // Number of relay connections that were closed.
+  uint32 closed = 1;
+}
+
+// Session saves.
+
+// A presigned request from the api_server (FileStore presign_upload or
+// presign_download). The agent sends exactly these headers.
+message PresignedRequest {
+  // https, or http when the agent runs with --transfer-allow-http.
+  string url = 1;
+  // "PUT" for UploadCapture, "GET" for RestoreSession.
+  string method = 2;
+  map<string, string> headers = 3;
+}
+
+// Archive limits (craft.sandboxd.v1.ArchiveLimits). 0 means the default.
+message ArchiveLimits {
+  int64 max_stored_bytes = 1;
+  int64 max_expanded_bytes = 2;
+  int64 max_entries = 3;
+}
+
+message CaptureSessionRequest {
+  string sandbox_id = 1;
+  uint64 attempt = 2;
+  uint64 generation = 3;
+  // Secret: the VM's guest daemon key (CreateRequest.sandboxd_key).
+  string sandboxd_key = 4;
+  string session_id = 5;
+  // Empty: the daemon defaults (see craft.sandboxd.v1.CaptureSessionRequest).
+  repeated string roots = 6;
+  repeated string exclude_names = 7;
+  ArchiveLimits limits = 8;
+}
+
+message CaptureSessionResponse {
+  string capture_id = 1;
+  // Archive size and hex SHA-256, as the agent received and spooled it.
+  int64 size_bytes = 2;
+  string sha256 = 3;
+  // The guest daemon's summary of the archive.
+  int64 files = 4;
+  int64 directories = 5;
+  int64 expanded_bytes = 6;
+  int64 excluded = 7;
+  int64 skipped = 8;
+  int64 changed = 9;
+  repeated string roots = 10;
+  uint64 capture_ms = 11;
+  // The agent deletes the spool after this time.
+  google.protobuf.Timestamp expires_at = 12;
+}
+
+message UploadCaptureRequest {
+  string capture_id = 1;
+  PresignedRequest request = 2;
+}
+
+message UploadCaptureResponse {
+  int64 size_bytes = 1;
+  string sha256 = 2;
+  // HTTP status of the PUT (2xx) and the ETag header, if any.
+  uint32 http_status = 3;
+  string etag = 4;
+  uint64 upload_ms = 5;
+}
+
+message DiscardCaptureRequest {
+  string capture_id = 1;
+}
+
+message DiscardCaptureResponse {
+  // False if there was no such capture.
+  bool discarded = 1;
+}
+
+message RestoreSessionRequest {
+  string sandbox_id = 1;
+  uint64 attempt = 2;
+  uint64 generation = 3;
+  // Secret: the VM's guest daemon key.
+  string sandboxd_key = 4;
+  string session_id = 5;
+  PresignedRequest request = 6;
+  // Exact archive size and hex SHA-256 (from CaptureSessionResponse).
+  int64 size_bytes = 7;
+  string sha256 = 8;
+  repeated string roots = 9;
+  ArchiveLimits limits = 10;
+}
+
+message RestoreSessionResponse {
+  int64 files = 1;
+  int64 directories = 2;
+  int64 expanded_bytes = 3;
+  repeated string roots = 4;
+  // Time from the call to the restored files.
+  uint64 restore_ms = 5;
+}
+
+message NodeInfoRequest {}
+
+message NodeInfoResponse {
+  uint64 mem_total_mib = 1;
+  uint64 mem_available_mib = 2;
+  // VMs that are starting or running.
+  uint32 vm_count = 3;
+  repeated TemplateInfo templates = 4;
+  string cpu_model = 5;
+  // For example "v1.17.0".
+  string firecracker_version = 6;
+  // Host kernel release.
+  string host_kernel = 7;
+  string agent_version = 8;
+  uint64 disk_free_mib = 9;
+  repeated ManagedImageInfo managed_images = 10;
+
+  // Memory admission and drain (ENG-4569). Create needs
+  // mem_available_mib >= mem_starting_mib + mem_mib + mem_reserve_mib.
+  // The memory reserve (--min-free-mem-mib).
+  uint64 mem_reserve_mib = 11;
+  // Guest memory of the VMs that are starting. Their memory is not in
+  // mem_available_mib yet, so Create counts it.
+  uint64 mem_starting_mib = 12;
+  DrainStatus drain = 13;
+}
+
+message DrainStatus {
+  DrainState state = 1;
+  // True when the manual drain flag (SetDrain) is set.
+  bool manual = 2;
+  // The drain taints on the node, as "key=value:effect" (value may be
+  // empty), from the last node read.
+  repeated string taints = 3;
+  // When the node started to drain. Not set while it is active.
+  google.protobuf.Timestamp since = 4;
+  // The error of the last node read, if it failed. The agent then keeps
+  // the taints of the last read that worked.
+  string watch_error = 5;
+}
+
+message SetDrainRequest {
+  // True sets the manual drain flag, false clears it.
+  bool drain = 1;
+}
+
+message SetDrainResponse {
+  DrainStatus drain = 1;
+}
+
+message TemplateInfo {
+  string version = 1;
+  uint32 vcpus = 2;
+  uint32 mem_mib = 3;
+  uint32 scratch_gib = 4;
+  // Guest kernel release.
+  string guest_kernel = 5;
+  string firecracker_version = 6;
+  // Source image of the root drive, for example "onyxdotapp/sandbox:v5.1.0".
+  string image_ref = 7;
+  string image_digest = 8;
+  string rootfs_sha256 = 9;
+  // SHA256 of the template key (manifest.json "key").
+  string key_sha256 = 10;
+  string ca_fingerprint = 11;
+  google.protobuf.Timestamp built_at = 12;
+  // True when the template key fits this node. Create refuses the others
+  // with TEMPLATE_INCOMPATIBLE.
+  bool compatible = 13;
+  // Managed drive slots of the template's VMs: 2 (layout 3 and later, the VMs can
+  // swap the managed drive) or 1.
+  uint32 managed_slots = 14;
+
+  // True when the template VMs have the balloon device with free page
+  // reporting (layout 4 and later, ENG-4569): the guest returns free
+  // memory to the node.
+  bool balloon = 15;
+}
+
+message BuildTemplateRequest {}
+
+message BuildTemplateResponse {
+  TemplateInfo template = 1;
+  // False when a valid template for the key was already on the node.
+  bool built = 2;
+  // Build time; 0 when built is false.
+  uint64 build_ms = 3;
+  // Templates that the garbage collection removed.
+  repeated string removed = 4;
+}
+
+message PutManagedImageRequest {
+  oneof part {
+    // The first message.
+    ManagedBundleHeader header = 1;
+    // Every later message: the next bytes of the zip (at most 4 MiB each).
+    bytes data = 2;
+  }
+}
+
+message ManagedBundleHeader {
+  // SHA256 of the whole zip, 64 lowercase hex characters. It is the image ID.
+  string sha256 = 1;
+  // Size of the zip in bytes.
+  uint64 size_bytes = 2;
+}
+
+message PutManagedImageResponse {
+  ManagedImageInfo image = 1;
+  // False when the image was already on the node.
+  bool built = 2;
+  // Unzip + mkfs time; 0 when built is false.
+  uint64 build_ms = 3;
+  // Images that the garbage collection removed.
+  repeated string removed = 4;
+}
+
+message ManagedImageInfo {
+  // SHA256 of the bundle zip.
+  string image_id = 1;
+  // SHA256 and size of the ext4 image file.
+  string image_sha256 = 2;
+  uint64 size_bytes = 3;
+  // ext4 UUID. The agent derives it from the image ID; the guest daemon
+  // checks it before it mounts the drive.
+  string fs_uuid = 4;
+  // Regular files and their total size in the bundle.
+  uint32 files = 5;
+  uint64 content_bytes = 6;
+  google.protobuf.Timestamp built_at = 7;
+  // VMs on this node that have the image behind a slot.
+  uint32 vms = 8;
+}
+
+message SwapManagedRequest {
+  // A managed image on this node (PutManagedImage).
+  string image_id = 1;
+  // The VMs, swapped one at a time in this order. At most 1000, no
+  // sandbox twice.
+  repeated SwapTarget targets = 2;
+}
+
+message SwapTarget {
+  string sandbox_id = 1;
+  uint64 attempt = 2;
+  uint64 generation = 3;
+  // The VM's guest daemon key (CreateRequest.sandboxd_key). The agent does
+  // not keep it, so the caller sends it again. The agent calls the guest
+  // daemon (ManagedStatus, MountManaged) with it.
+  string sandboxd_key = 4;
+}
+
+message SwapManagedResponse {
+  // One result per target, in request order.
+  repeated SwapResult results = 1;
+}
+
+message SwapResult {
+  string sandbox_id = 1;
+  bool ok = 2;
+  // Set when ok is false: the error reason and message.
+  ErrorReason reason = 3;
+  string message = 4;
+  // The slot on /workspace/managed after the call.
+  ManagedSlot active = 5;
+  // False when the image was already the active one.
+  bool changed = 6;
+  // Time for this VM, in milliseconds.
+  uint64 ms = 7;
+  // True when a guest process still has a file open on the old drive. The
+  // old drive stays readable for it; the next swap of this VM gets
+  // MANAGED_SLOT_BUSY until the file is closed.
+  bool previous_in_use = 8;
+}

@@ -1,0 +1,105 @@
+---
+title: "TestRail"
+description: "Index test cases from TestRail projects"
+---
+
+The TestRail connector indexes test cases from your TestRail projects. Each case becomes one document,
+with its steps and expected results as text and a link back to the case in TestRail.
+
+## How it works
+
+| Content    | Behavior                                                                                                                       |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Test cases | One document per case. The document is named `<case key>: <title>` so a case is searchable by its TestRail key.                  |
+| Steps      | Separated steps and their expected results are indexed. When a case has no separated steps, Onyx falls back to its plain steps and expected-result fields. |
+| Fields     | Custom field values are resolved to their labels, so a drop-down reads as its text rather than its stored number.                |
+| Suites     | Onyx reads every suite in a project. A project in single-suite mode is read directly.                                            |
+| Permissions | Not available. **Sync with TestRail** is not offered, so **Document Access** can only be **Everyone in Your Organization** or **Specific Groups**. |
+
+## Before you begin
+
+You need:
+
+- The URL of your TestRail site, such as `https://example.testrail.io`
+- A TestRail user that can read the projects you want to index
+- An API key for that user
+- TestRail's API enabled for the site
+- An Onyx administrator account
+
+See TestRail's [API accessibility
+documentation](https://support.testrail.com/hc/en-us/articles/7077039051284-Accessing-the-TestRail-API)
+for enabling the API and generating a key.
+
+<Note>
+  The connector reads only what its TestRail user can read.
+</Note>
+
+## Configure Onyx
+
+<Steps>
+  <Step title="Create a credential">
+    In the Admin Panel, go to **Connectors** and select **TestRail**. Under **Authentication Account**,
+    select **New TestRail Account**. Enter the site URL in **TestRail Base URL**,
+    the user's login in **TestRail Account Email**, and the API key in **API Token**.
+
+    <img className="rounded-image" src="/assets/admins/connectors/testrail/TestRailCredential.webp" alt="Create a TestRail credential with a base URL, username and API key"/>
+  </Step>
+
+  <Step title="Choose the projects">
+    Enter the site URL again in **TestRail Base URL**. In **Project IDs**,
+    enter a comma-separated list of TestRail project IDs, for example `1,2,3`.
+    Leave it empty to index every project the user can read.
+  </Step>
+
+  <Step title="Choose the document access">
+    Under **Connector Settings**, set **Document Access**. **Specific Groups** is a paid feature:
+    the Business and Enterprise tiers on Onyx Cloud, and the Enterprise Edition when self-hosted.
+  </Step>
+
+  <Step title="Connect and verify">
+    Select **Create Connector**. Then open **Indexing Status** in the Admin Panel, select the connector,
+    and confirm its first indexing attempt completes.
+  </Step>
+</Steps>
+
+### Advanced settings
+
+| Setting                       | Default | Purpose                                                                                            |
+| ----------------------------- | ------- | ---------------------------------------------------------------------------------------------------- |
+| Cases Page Size               | 250     | How many cases Onyx requests per API call. Lower it if TestRail times out on large projects.        |
+| Max Pages                     | 10000   | A stop so a paging loop cannot run forever. Raise it only for a project larger than this allows.    |
+| Skip Document Character Limit | 200000  | A case whose text is longer than this is skipped rather than indexed. The skip is logged.           |
+
+## Limits
+
+| Limit                | Value  | Notes                                                                             |
+| -------------------- | ------ | ----------------------------------------------------------------------------------- |
+| TestRail API call    | 60s    | Set `REQUEST_TIMEOUT_SECONDS` to change it. This is a global setting.              |
+
+The connector indexes no attachments, so it has no file-size cap.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="The credentials are rejected">
+    `Invalid or expired TestRail credentials (HTTP 401)` means the username or API key is wrong,
+    or the key has been revoked. Confirm the username is the user's login and create a new API key.
+    Also confirm the API is enabled in TestRail's site settings.
+  </Accordion>
+
+  <Accordion title="Permission is denied">
+    `Insufficient permissions to access TestRail resources (HTTP 403)` means the user cannot read the projects being
+    indexed. Grant it access in TestRail, or narrow **Project IDs** to the projects it can read.
+  </Accordion>
+
+  <Accordion title="A project or case is missing">
+    Confirm the user can open it in TestRail,
+    and that its project ID is in **Project IDs** when that field is not empty.
+    A case longer than **Skip Document Character Limit** is skipped and logged; raise the limit to index it.
+  </Accordion>
+
+  <Accordion title="Indexing is slow or times out">
+    Lower **Cases Page Size** so each API call returns less,
+    and raise `REQUEST_TIMEOUT_SECONDS` if TestRail is slow to answer.
+  </Accordion>
+</AccordionGroup>

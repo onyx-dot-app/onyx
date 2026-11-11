@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { IconLoader } from "@opal/loaders";
 import {
   useCallback,
@@ -10,7 +11,6 @@ import {
 } from "react";
 import { useTranslations } from "next-intl";
 import useSWR, { useSWRConfig } from "swr";
-import { useRouter } from "next/navigation";
 import {
   Button,
   Card,
@@ -19,8 +19,9 @@ import {
   InputTextArea,
   InputTypeIn,
   MessageCard,
-  Tag,
   Tooltip,
+  Text,
+  useCreateModal,
 } from "@opal/components";
 import { SvgAlertTriangle, SvgBlocks, SvgShare, SvgTrash } from "@opal/icons";
 import {
@@ -28,9 +29,9 @@ import {
   InputHorizontal,
   InputVertical,
   SettingsLayouts,
+  Section,
   toast,
 } from "@opal/layouts";
-import { Section } from "@/layouts/general-layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
@@ -53,6 +54,12 @@ import InstructionsDisplayModeToggle, {
   type InstructionsDisplayMode,
 } from "@/sections/skills/InstructionsDisplayModeToggle";
 import ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
+import SkillSharingSummary from "@/sections/skills/SkillSharingSummary";
+import {
+  emptySkillSharingDraft,
+  serializeSkillSharing,
+  type SkillSharingDraft,
+} from "@/lib/skills/sharing";
 import SkillNameConflictModal from "@/sections/modals/skills/SkillNameConflictModal";
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 import UnsavedChangesModal from "@/sections/modals/UnsavedChangesModal";
@@ -69,54 +76,6 @@ interface SkillEditorPageProps {
   externalAppName?: string;
 }
 
-type SkillsTranslate = ReturnType<typeof useTranslations<"skills">>;
-
-function getSharingStatus(
-  skill: SkillEditableDetail,
-  t: SkillsTranslate
-): {
-  title: string;
-  description: string;
-  color: "blue" | "gray" | "purple";
-} {
-  if (skill.external_app) {
-    return {
-      title: t("editor.sharing.organization.title"),
-      description: t("modals.share.externalAppNotice", {
-        appName: skill.external_app.name,
-      }),
-      color: "blue",
-    };
-  }
-  if (skill.public_permission !== null) {
-    return {
-      title: t("editor.sharing.organization.title"),
-      description:
-        skill.public_permission === "EDITOR"
-          ? t("editor.sharing.organization.editorDescription")
-          : t("editor.sharing.organization.viewerDescription"),
-      color: "blue",
-    };
-  }
-
-  const userCount = skill.user_shares.length;
-  const groupCount = skill.group_shares.length;
-  const shareCount = userCount + groupCount;
-  if (shareCount > 0) {
-    return {
-      title: t("editor.sharing.shares.title", { count: shareCount }),
-      description: t("editor.sharing.shares.description"),
-      color: "gray",
-    };
-  }
-
-  return {
-    title: t("editor.sharing.personal.title"),
-    description: t("editor.sharing.personal.description"),
-    color: "purple",
-  };
-}
-
 export default function SkillEditorPage({
   skillId,
   draftId,
@@ -127,8 +86,8 @@ export default function SkillEditorPage({
   const isCreating = skillId === undefined;
   const hasAppContext = externalAppId !== undefined;
   const isCreatingForApp = isCreating && hasAppContext;
-  const router = useRouter();
-  const { isAdmin } = useUser();
+  const navigation = useNavigation();
+  const { isAdmin, user } = useUser();
   const creationDraft = useMemo(
     () => (isCreating && draftId ? getSkillCreationDraft(draftId) : undefined),
     [draftId, isCreating]
@@ -154,8 +113,22 @@ export default function SkillEditorPage({
   const [instructionsDisplayMode, setInstructionsDisplayMode] =
     useState<InstructionsDisplayMode>("raw");
   const [hydratedSkillId, setHydratedSkillId] = useState<string | null>(null);
+  const [creationSharing, setCreationSharing] =
+    useState<SkillSharingDraft | null>(null);
+  const sharingDraft: SkillSharingDraft = {
+    ...emptySkillSharingDraft(
+      name || t("editor.header.createTitle"),
+      user ? { id: user.id, email: user.email } : null
+    ),
+    public_permission: isCreatingForApp ? "VIEWER" : null,
+    external_app: isCreatingForApp ? { name: externalAppName ?? "" } : null,
+    ...creationSharing,
+    name: name || t("editor.header.createTitle"),
+  };
   const [shareOpen, setShareOpen] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
+  const deleteModal = useCreateModal();
+  const confirmUploadModal = useCreateModal();
+  const nameConflictModal = useCreateModal();
   const [isSaving, setIsSaving] = useState(false);
   const [isPreparingFiles, setIsPreparingFiles] = useState(false);
   const [isUploadingFiles, setIsUploadingFiles] = useState(false);
@@ -187,7 +160,11 @@ export default function SkillEditorPage({
   const isDirty = useMemo(() => {
     if (isCreating) {
       return Boolean(
-        name || description || instructionsMarkdown || pendingFilesUpload
+        name ||
+        description ||
+        instructionsMarkdown ||
+        pendingFilesUpload ||
+        creationSharing
       );
     }
     if (!skill) return false;
@@ -197,6 +174,7 @@ export default function SkillEditorPage({
     );
   }, [
     description,
+    creationSharing,
     instructionsMarkdown,
     isCreating,
     name,
@@ -232,7 +210,7 @@ export default function SkillEditorPage({
     !isSaving;
 
   function leaveEditor() {
-    router.push(
+    navigation.go(
       hasAppContext ? externalAppAdminUrl(externalAppId) : "/craft/v1/skills"
     );
   }
@@ -263,10 +241,13 @@ export default function SkillEditorPage({
             instructions_markdown: instructionsMarkdown,
             auto_enable: isCreatingForApp ? false : !createDisabled,
             external_app_id: externalAppId,
+            sharing: creationSharing
+              ? serializeSkillSharing(creationSharing, isAdmin)
+              : undefined,
           },
           pendingFilesUpload?.file
         );
-        setConflictingSkillName(null);
+        nameConflictModal.toggle(false);
         if (draftId) discardSkillCreationDraft(draftId);
         if (isCreatingForApp) {
           // The app editor reads this cache as soon as we return. Wait for its
@@ -284,10 +265,11 @@ export default function SkillEditorPage({
           console.error("Failed to refresh skill data after creation", error);
         });
         toast.success(t("editor.toasts.created", { name: created.name }));
-        router.replace(
+        navigation.go(
           isCreatingForApp
             ? externalAppAdminUrl(externalAppId)
-            : "/craft/v1/skills"
+            : "/craft/v1/skills",
+          { replace: true }
         );
         return;
       }
@@ -318,6 +300,7 @@ export default function SkillEditorPage({
         isSkillNameConflict(err)
       ) {
         setConflictingSkillName(name.trim());
+        nameConflictModal.toggle(true);
         return;
       }
       console.error("Failed to save skill", err);
@@ -389,6 +372,7 @@ export default function SkillEditorPage({
         return;
       }
       setFilesUploadToConfirm(upload);
+      confirmUploadModal.toggle(true);
       return;
     }
     void applyFilesUpload(upload);
@@ -469,7 +453,6 @@ export default function SkillEditorPage({
                 ? t("editor.saveTooltip.noChanges")
                 : undefined;
 
-  const sharingStatus = skill ? getSharingStatus(skill, t) : null;
   const filesUploadDisabled =
     !canManageSkill ||
     isPreparingFiles ||
@@ -514,6 +497,20 @@ export default function SkillEditorPage({
           }
           cancel={handleCancel}
           actions={[
+            ...(canManageSkill && !isCreating && skill
+              ? [
+                  <Button
+                    key="sharing"
+                    type="button"
+                    prominence="secondary"
+                    icon={SvgShare}
+                    disabled={fieldsLocked}
+                    onClick={() => setShareOpen(true)}
+                  >
+                    {t("editor.management.sharing.edit.label")}
+                  </Button>,
+                ]
+              : []),
             <Tooltip key="save" tooltip={saveTooltip} side="bottom">
               <Button disabled={!canSave} type="submit">
                 {isSaving
@@ -527,9 +524,9 @@ export default function SkillEditorPage({
 
         <SettingsLayouts.Body>
           {!isCreating && isLoading && (
-            <div className="flex min-h-40 items-center justify-center">
+            <Section height="auto" className="min-h-40">
               <IconLoader />
-            </div>
+            </Section>
           )}
 
           {!isCreating && error && !isLoading && (
@@ -560,10 +557,9 @@ export default function SkillEditorPage({
                     <Card border="solid" rounding={4} padding={2}>
                       <Section gap={2} alignItems="stretch" height="auto">
                         <Content
+                          font="main-content-emphasis"
                           title={t("editor.import.title")}
                           description={t("editor.import.description")}
-                          sizePreset="main-content"
-                          variant="section"
                         />
                         <SkillFilesPicker
                           disabled={filesUploadDisabled}
@@ -587,12 +583,22 @@ export default function SkillEditorPage({
                 </>
               )}
 
+              {isCreating && (
+                <SkillSharingSummary
+                  title={t("editor.creationAccess.title")}
+                  draft={sharingDraft}
+                  count={1}
+                  configureLabel={t("editor.management.sharing.edit.label")}
+                  disabled={fieldsLocked}
+                  onConfigure={() => setShareOpen(true)}
+                />
+              )}
+
               <Section alignItems="stretch">
                 <Content
+                  font="main-content-emphasis"
                   title={t("editor.details.title")}
                   description={t("editor.details.description")}
-                  sizePreset="main-content"
-                  variant="section"
                 />
                 <InputVertical
                   withLabel="name"
@@ -654,18 +660,23 @@ export default function SkillEditorPage({
               <Divider paddingParallel={0} paddingPerpendicular={0} />
 
               <Section alignItems="stretch">
-                <div className="flex w-full items-start justify-between gap-2">
+                <Section
+                  height="auto"
+                  flexDirection="row"
+                  alignItems="start"
+                  justifyContent="between"
+                  gap={2}
+                >
                   <Content
+                    font="main-content-emphasis"
                     title={t("editor.instructions.title")}
                     description={t("editor.instructions.description")}
-                    sizePreset="main-content"
-                    variant="section"
                   />
                   <InstructionsDisplayModeToggle
                     value={instructionsDisplayMode}
                     onChange={setInstructionsDisplayMode}
                   />
-                </div>
+                </Section>
 
                 <Card border="solid" rounding={4} padding={2}>
                   {instructionsDisplayMode === "raw" ? (
@@ -695,10 +706,9 @@ export default function SkillEditorPage({
 
               <Section gap={2} alignItems="stretch" height="auto">
                 <Content
+                  font="main-content-emphasis"
                   title={t("editor.files.title")}
                   description={t("editor.files.description")}
-                  sizePreset="main-content"
-                  variant="section"
                 />
                 <Card border="solid" rounding={4}>
                   <SkillFileTree
@@ -738,171 +748,99 @@ export default function SkillEditorPage({
                 </Card>
               </Section>
 
-              {skill && (
-                <>
-                  <Divider paddingParallel={0} paddingPerpendicular={0} />
+              {skill &&
+                canManageSkill &&
+                (skill.installation_policy !== "REQUIRED" || isAdmin) && (
+                  <>
+                    <Divider paddingParallel={0} paddingPerpendicular={0} />
 
-                  <Section gap={2} alignItems="stretch" height="auto">
-                    <Content
-                      title={t("editor.management.title")}
-                      description={t("editor.management.description")}
-                      sizePreset="main-content"
-                      variant="section"
-                    />
                     <Card border="solid" rounding={4}>
                       <Section>
-                        {skill.external_app && (
-                          <InputHorizontal
-                            title={t("editor.management.externalApp.title")}
-                            description={
-                              skill.external_app.ready
-                                ? t(
-                                    "editor.management.externalApp.readyDescription",
-                                    { appName: skill.external_app.name }
-                                  )
-                                : skill.external_app.enabled
-                                  ? t(
-                                      "modals.preview.unavailable.appNotConnected",
-                                      { appName: skill.external_app.name }
-                                    )
-                                  : t(
-                                      "modals.preview.unavailable.appDisabled",
-                                      {
-                                        appName: skill.external_app.name,
-                                      }
-                                    )
-                            }
-                            center
+                        <InputHorizontal
+                          title={t("editor.delete.title")}
+                          description={t("editor.delete.description")}
+                          center
+                        >
+                          <Button
+                            type="button"
+                            variant="danger"
+                            prominence="secondary"
+                            icon={SvgTrash}
+                            disabled={isDeleting}
+                            onClick={() => deleteModal.toggle(true)}
                           >
-                            <div className="flex items-center gap-2">
-                              <Tag
-                                title={skill.external_app.name}
-                                color={
-                                  skill.external_app.ready ? "blue" : "amber"
-                                }
-                              />
-                              {isAdmin && (
-                                <Button
-                                  type="button"
-                                  prominence="secondary"
-                                  href={externalAppAdminUrl(
-                                    skill.external_app.external_app_id
-                                  )}
-                                >
-                                  {t(
-                                    "editor.management.externalApp.manage.label"
-                                  )}
-                                </Button>
-                              )}
-                            </div>
-                          </InputHorizontal>
-                        )}
-                        {sharingStatus && (
-                          <InputHorizontal
-                            title={t("editor.management.sharing.title")}
-                            description={sharingStatus.description}
-                            center
-                          >
-                            <div className="flex items-center gap-2">
-                              <Tag
-                                title={sharingStatus.title}
-                                color={sharingStatus.color}
-                              />
-                              {canManageSkill && (
-                                <Button
-                                  type="button"
-                                  prominence="secondary"
-                                  icon={SvgShare}
-                                  onClick={() => setShareOpen(true)}
-                                >
-                                  {t("editor.management.sharing.edit.label")}
-                                </Button>
-                              )}
-                            </div>
-                          </InputHorizontal>
-                        )}
+                            {t("editor.delete.button.label")}
+                          </Button>
+                        </InputHorizontal>
                       </Section>
                     </Card>
-                  </Section>
-
-                  {canManageSkill && (
-                    <>
-                      <Divider paddingParallel={0} paddingPerpendicular={0} />
-
-                      <Card border="solid" rounding={4}>
-                        <Section>
-                          <InputHorizontal
-                            title={t("editor.delete.title")}
-                            description={t("editor.delete.description")}
-                            center
-                          >
-                            <Button
-                              type="button"
-                              variant="danger"
-                              prominence="secondary"
-                              icon={SvgTrash}
-                              disabled={isDeleting}
-                              onClick={() => setDeleteOpen(true)}
-                            >
-                              {t("editor.delete.button.label")}
-                            </Button>
-                          </InputHorizontal>
-                        </Section>
-                      </Card>
-                    </>
-                  )}
-                </>
-              )}
+                  </>
+                )}
             </>
           )}
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>
 
-      <ShareSkillModal
-        skill={shareOpen ? (skill ?? null) : null}
-        open={shareOpen}
-        onClose={() => setShareOpen(false)}
-        onSaved={handleSharingSaved}
-      />
-
-      {filesUploadToConfirm && (
-        <ConfirmationModalLayout
-          icon={SvgAlertTriangle}
-          title={
-            isCreating
-              ? t("editor.confirmUpload.importTitle")
-              : t("editor.confirmUpload.replaceTitle")
-          }
-          onClose={() => setFilesUploadToConfirm(null)}
-          submit={
-            <Button
-              type="button"
-              onClick={() => {
-                const upload = filesUploadToConfirm;
-                setFilesUploadToConfirm(null);
-                void applyFilesUpload(upload);
-              }}
-            >
-              {isCreating
-                ? t("editor.confirmUpload.importSubmit.label")
-                : t("editor.confirmUpload.replaceSubmit.label")}
-            </Button>
-          }
-        >
-          {isCreating
-            ? t("editor.confirmUpload.importBody")
-            : t("editor.confirmUpload.replaceBody")}
-        </ConfirmationModalLayout>
-      )}
-
-      {conflictingSkillName && (
-        <SkillNameConflictModal
-          skillName={conflictingSkillName}
-          onClose={() => setConflictingSkillName(null)}
-          onConfirm={() => void handleSave(undefined, true)}
-          pending={isSaving}
+      {isCreating ? (
+        <ShareSkillModal
+          mode="create"
+          draft={sharingDraft}
+          onSaveDraft={setCreationSharing}
+          open={shareOpen}
+          onClose={() => setShareOpen(false)}
         />
-      )}
+      ) : skillId ? (
+        <ShareSkillModal
+          mode="edit"
+          skillId={skillId}
+          open={shareOpen}
+          onClose={() => setShareOpen(false)}
+          onSaved={handleSharingSaved}
+        />
+      ) : null}
+
+      <confirmUploadModal.Provider>
+        {filesUploadToConfirm && (
+          <ConfirmationModalLayout
+            icon={SvgAlertTriangle}
+            title={
+              isCreating
+                ? t("editor.confirmUpload.importTitle")
+                : t("editor.confirmUpload.replaceTitle")
+            }
+            onClose={() => confirmUploadModal.toggle(false)}
+            submit={
+              <Button
+                type="button"
+                onClick={() => {
+                  const upload = filesUploadToConfirm;
+                  confirmUploadModal.toggle(false);
+                  void applyFilesUpload(upload);
+                }}
+              >
+                {isCreating
+                  ? t("editor.confirmUpload.importSubmit.label")
+                  : t("editor.confirmUpload.replaceSubmit.label")}
+              </Button>
+            }
+          >
+            {isCreating
+              ? t("editor.confirmUpload.importBody")
+              : t("editor.confirmUpload.replaceBody")}
+          </ConfirmationModalLayout>
+        )}
+      </confirmUploadModal.Provider>
+
+      <nameConflictModal.Provider>
+        {conflictingSkillName && (
+          <SkillNameConflictModal
+            skillName={conflictingSkillName}
+            onClose={() => nameConflictModal.toggle(false)}
+            onConfirm={() => void handleSave(undefined, true)}
+            pending={isSaving}
+          />
+        )}
+      </nameConflictModal.Provider>
 
       <UnsavedChangesModal
         open={unsavedChanges.confirmationOpen}
@@ -910,20 +848,22 @@ export default function SkillEditorPage({
         onDiscard={unsavedChanges.discardAndLeave}
       />
 
-      {skill && deleteOpen && (
-        <ConfirmEntityModal
-          danger
-          entityType={t("editor.deleteModal.entityType")}
-          entityName={skill.name}
-          actionButtonText={
-            isDeleting
-              ? t("editor.deleteModal.pendingLabel")
-              : t("editor.deleteModal.label")
-          }
-          onClose={() => setDeleteOpen(false)}
-          onSubmit={handleDeleteConfirmed}
-        />
-      )}
+      <deleteModal.Provider>
+        {skill && (
+          <ConfirmEntityModal
+            danger
+            entityType={t("editor.deleteModal.entityType")}
+            entityName={skill.name}
+            actionButtonText={
+              isDeleting
+                ? t("editor.deleteModal.pendingLabel")
+                : t("editor.deleteModal.label")
+            }
+            onClose={() => deleteModal.toggle(false)}
+            onSubmit={handleDeleteConfirmed}
+          />
+        )}
+      </deleteModal.Provider>
     </form>
   );
 }

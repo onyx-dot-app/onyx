@@ -6,7 +6,7 @@ import {
   type KeyboardEvent,
   type SetStateAction,
 } from "react";
-import { QueuedMessage } from "@/app/app/interfaces";
+import { QueuedMessage } from "@/app/app/types";
 
 interface UseQueuedMessageNavigationParams {
   /** The messages currently queued for the active session. */

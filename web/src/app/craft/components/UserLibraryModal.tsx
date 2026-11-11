@@ -1,5 +1,6 @@
 "use client";
 
+import { Section } from "@opal/layouts";
 import { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { useFocusOnMount } from "@opal/hooks";
@@ -13,7 +14,7 @@ import {
   deleteLibraryFile,
 } from "@/app/craft/services/apiServices";
 import { LibraryEntry } from "@/app/craft/types/user-library";
-import { Modal } from "@opal/components";
+import { Modal, useCreateModal } from "@opal/components";
 import { cn, clickOnKeyDown } from "@opal/utils";
 import {
   SvgFolder,
@@ -26,7 +27,6 @@ import {
   SvgFolderPlus,
 } from "@opal/icons";
 import { Button, InputTypeIn, ShadowDiv, Text } from "@opal/components";
-import { Section } from "@/layouts/general-layouts";
 
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 
@@ -101,6 +101,8 @@ export default function UserLibraryModal({
   const [isUploading, setIsUploading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [entryToDelete, setEntryToDelete] = useState<LibraryEntry | null>(null);
+  const deleteModal = useCreateModal();
+  const toggleDeleteModal = deleteModal.toggle;
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const focusOnMount = useFocusOnMount<HTMLInputElement>();
@@ -256,9 +258,9 @@ export default function UserLibraryModal({
         err instanceof Error ? err.message : t("errors.deleteFailed")
       );
     } finally {
-      setEntryToDelete(null);
+      toggleDeleteModal(false);
     }
-  }, [entryToDelete, mutate, onChanges, t]);
+  }, [entryToDelete, mutate, onChanges, t, toggleDeleteModal]);
 
   const handleCreateDirectory = useCallback(async () => {
     const name = newFolderName.trim();
@@ -296,7 +298,7 @@ export default function UserLibraryModal({
                 placeholder={t("search.placeholder")}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                searchIcon
+                icon="search"
                 autoComplete="off"
               />
               <Button
@@ -373,7 +375,10 @@ export default function UserLibraryModal({
                         expandedPaths={expandedPaths}
                         forceExpanded={trimmedQuery.length > 0}
                         onToggleFolder={toggleFolder}
-                        onDelete={setEntryToDelete}
+                        onDelete={(entry) => {
+                          setEntryToDelete(entry);
+                          toggleDeleteModal(true);
+                        }}
                         onUploadToFolder={handleUploadToFolder}
                       />
                     </div>
@@ -401,26 +406,28 @@ export default function UserLibraryModal({
       </Modal>
 
       {/* Delete confirmation modal */}
-      {entryToDelete && (
-        <ConfirmEntityModal
-          danger
-          entityType={
-            entryToDelete.is_directory
-              ? t("delete.entityTypeFolder")
-              : t("delete.entityTypeFile")
-          }
-          entityName={entryToDelete.name}
-          action={t("delete.action")}
-          actionButtonText={t("delete.button")}
-          additionalDetails={
-            entryToDelete.is_directory
-              ? t("delete.folderDetails")
-              : t("delete.fileDetails")
-          }
-          onClose={() => setEntryToDelete(null)}
-          onSubmit={handleDeleteConfirm}
-        />
-      )}
+      <deleteModal.Provider>
+        {entryToDelete && (
+          <ConfirmEntityModal
+            danger
+            entityType={
+              entryToDelete.is_directory
+                ? t("delete.entityTypeFolder")
+                : t("delete.entityTypeFile")
+            }
+            entityName={entryToDelete.name}
+            action={t("delete.action")}
+            actionButtonText={t("delete.button")}
+            additionalDetails={
+              entryToDelete.is_directory
+                ? t("delete.folderDetails")
+                : t("delete.fileDetails")
+            }
+            onClose={() => toggleDeleteModal(false)}
+            onSubmit={handleDeleteConfirm}
+          />
+        )}
+      </deleteModal.Provider>
 
       {/* New folder modal */}
       <Modal

@@ -3,13 +3,27 @@ import time
 from typing import Any
 
 from mcp.client.auth import OAuthClientProvider
+from pydantic import JsonValue
 
-from onyx.chat.emitter import Emitter
-from onyx.db.enums import MCPAuthenticationType, MCPTransport
+from onyx.agents.tools import ToolInvocation
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import (
+    MCPAuthenticationType,
+    MCPTransport,
+)
+from onyx.db.mcp import mark_connection_config_reauth_required
 from onyx.db.models import MCPConnectionConfig, MCPServer
-from onyx.llm.models import ToolDefinition
-from onyx.server.features.mcp.client import call_mcp_tool
-from onyx.server.features.mcp.credentials import ResolvedMCPCredentials
+from onyx.llm.cancellation import AgentCancelled
+from onyx.llm.models import ToolDefinition, ToolResult
+from onyx.server.features.mcp.client import (
+    call_mcp_tool,
+    has_unauthorized_response,
+    process_mcp_result,
+)
+from onyx.server.features.mcp.credentials import (
+    ResolvedMCPCredentials,
+    uses_user_managed_headers,
+)
 from onyx.server.features.mcp.models import (
     DENYLISTED_MCP_HEADERS,
     MCPServerConnection,
@@ -22,14 +36,15 @@ from onyx.server.features.mcp.oauth import (
 )
 from onyx.server.metrics.mcp_client import record_mcp_client_tool_outcome
 from onyx.server.metrics.mcp_common import MCPToolCallStatus
-from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import (
-    CustomToolDelta,
-    CustomToolStart,
-    Packet,
-)
 from onyx.tools.interface import Tool
-from onyx.tools.models import CustomToolCallSummary, ToolResponse
+from onyx.tools.models import (
+    CodeModeExposure,
+    CodeModeFunctionName,
+    CodeModeResultKind,
+    CodeModeResultSpec,
+    CustomToolCallSummary,
+    ToolContext,
+)
 from onyx.tools.tool_name import sanitize_tool_name
 from onyx.utils.logger import setup_logger
 
@@ -56,6 +71,21 @@ _AUTH_ERROR_INDICATORS = (
 #     server_name: str
 
 
+def _reject_non_finite_number(constant: str) -> float:
+    raise ValueError(f"Non-finite JSON number: {constant}")
+
+
+def _tool_result_value(text: str) -> JsonValue:
+    """The server's text, parsed when it is a JSON object or array, so the
+    result is JSON-encoded once rather than as an escaped string inside JSON.
+    Any other text, including a JSON scalar, stays a string."""
+    try:
+        parsed = json.loads(text, parse_constant=_reject_non_finite_number)
+    except (ValueError, RecursionError):
+        return text
+    return parsed if isinstance(parsed, dict | list) else text
+
+
 def _normalize_parameters_schema(schema: dict[str, Any] | None) -> dict[str, Any]:
     # Azure OpenAI rejects object schemas that omit `properties` with
     # "object schema missing properties". MCP servers (e.g. AWS Knowledge MCP's
@@ -68,28 +98,28 @@ def _normalize_parameters_schema(schema: dict[str, Any] | None) -> dict[str, Any
     return schema
 
 
-class MCPTool(Tool[None]):
+class MCPTool(Tool):
     """Tool implementation for MCP (Model Context Protocol) servers"""
 
     def __init__(
         self,
         tool_id: int,
-        emitter: Emitter,
         mcp_server: MCPServer,
         tool_name: str,
         tool_description: str,
         tool_definition: dict[str, Any],
         connection_config: MCPConnectionConfig | None = None,
+        output_schema: dict[str, JsonValue] | None = None,
         user_email: str = "",
         user_id: str = "",
         user_oauth_token: str | None = None,
         additional_headers: dict[str, str] | None = None,
         resolved_credentials: ResolvedMCPCredentials | None = None,
     ) -> None:
-        super().__init__(emitter=emitter)
 
         self._id = tool_id
         self.mcp_server = MCPServerConnection.model_validate(mcp_server)
+        self._auth_performer = mcp_server.auth_performer
         self._user_id = user_id
         self._additional_headers = additional_headers or {}
         self._resolved_credentials = (
@@ -105,6 +135,7 @@ class MCPTool(Tool[None]):
         self._mcp_tool_name = tool_name
         self._name = tool_name  # NOTE: this may change in _disambiguate_mcp_tool_names
         self._tool_definition = tool_definition
+        self._output_schema = output_schema
         self._description = tool_description
         self._display_name = tool_definition.get("displayName", tool_name)
         self._llm_name = sanitize_tool_name(f"mcp_{mcp_server.name}_{tool_name}")
@@ -112,6 +143,10 @@ class MCPTool(Tool[None]):
     @property
     def id(self) -> int:
         return self._id
+
+    @property
+    def code_mode_exposure(self) -> CodeModeExposure:
+        return CodeModeExposure.DEFERRED
 
     @property
     def name(self) -> str:
@@ -125,6 +160,24 @@ class MCPTool(Tool[None]):
     def display_name(self) -> str:
         return self._display_name
 
+    @property
+    def code_mode_function_name(self) -> CodeModeFunctionName:
+        return CodeModeFunctionName(
+            name=self._mcp_tool_name, namespace=self.mcp_server.name
+        )
+
+    @property
+    def code_mode_result(self) -> CodeModeResultSpec:
+        return CodeModeResultSpec(
+            kind=CodeModeResultKind.MCP,
+            output_schema=self._output_schema,
+            returns=None
+            if self._output_schema is not None
+            else "The server's result. Structured content and JSON objects or "
+            "arrays arrive parsed; other output arrives as a string. Print a small "
+            "sample first if the shape is unknown.",
+        )
+
     def use_disambiguated_name(self) -> None:
         self._name = self._llm_name
 
@@ -136,21 +189,18 @@ class MCPTool(Tool[None]):
             parameters=_normalize_parameters_schema(self._tool_definition),
         )
 
-    def emit_start(self, placement: Placement) -> None:
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=CustomToolStart(tool_name=self._name),
-            )
+    def _error_result(self, message: JsonValue) -> ToolResult:
+        error_result = {"error": message}
+        return ToolResult(
+            details=CustomToolCallSummary(
+                tool_name=self._name, response_type="json", tool_result=error_result
+            ),
+            content=json.dumps(error_result),
+            is_error=True,
         )
 
-    def run(
-        self,
-        placement: Placement,
-        override_kwargs: None = None,  # noqa: ARG002
-        **llm_kwargs: Any,
-    ) -> ToolResponse:
-        """Execute the MCP tool by calling the MCP server"""
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+        """Check credentials, call the server, and report tool or authentication errors."""
         _start = time.monotonic()
         _server = self.mcp_server.name
         outcome = MCPToolCallStatus.ERROR
@@ -174,12 +224,7 @@ class MCPTool(Tool[None]):
                 credentials.build_headers(),
             )
 
-            # Extra request headers can stand in for missing credentials, but
-            # not for a dead OAuth grant — its stale bearer wins the header
-            # merge, so the call can only fail upstream.
-            if not credentials.can_authenticate() and (
-                credentials.needs_reauth() or not self._additional_headers
-            ):
+            if not credentials.can_authenticate_with_headers(request_headers):
                 auth_error_msg = (
                     f"The {self._name} tool from {self.mcp_server.name} requires "
                     "connection values. Tell the user to connect to the server "
@@ -190,30 +235,8 @@ class MCPTool(Tool[None]):
                     self._name,
                 )
 
-                error_result = {"error": auth_error_msg}
-                llm_facing_response = json.dumps(error_result)
-
-                # Emit CustomToolDelta packet
-                self.emitter.emit(
-                    Packet(
-                        placement=placement,
-                        obj=CustomToolDelta(
-                            tool_name=self._name,
-                            response_type="json",
-                            data=error_result,
-                        ),
-                    )
-                )
-
                 outcome = MCPToolCallStatus.AUTH_ERROR
-                return ToolResponse(
-                    rich_response=CustomToolCallSummary(
-                        tool_name=self._name,
-                        response_type="json",
-                        tool_result=error_result,
-                    ),
-                    llm_facing_response=llm_facing_response,
-                )
+                return self._error_result(auth_error_msg)
 
             # For OAuth servers, construct OAuthClientProvider so the MCP SDK
             # can refresh expired tokens automatically
@@ -248,47 +271,68 @@ class MCPTool(Tool[None]):
             tool_result = call_mcp_tool(
                 self.mcp_server.server_url,
                 self._mcp_tool_name,
-                llm_kwargs,
+                invocation.arguments,
                 connection_headers=headers,
                 transport=self.mcp_server.transport or MCPTransport.STREAMABLE_HTTP,
                 auth=auth,
+                cancellation=invocation.cancellation,
             )
+
+            if tool_result.isError:
+                # A server-reported tool failure does not reject its credentials.
+                message = _tool_result_value(process_mcp_result(tool_result))
+                logger.info("MCP tool '%s' reported an error", self._name)
+                return self._error_result(message)
 
             logger.info("MCP tool '%s' executed successfully", self._name)
 
             # Format the tool result for response
-            tool_result_dict = {"tool_result": tool_result}
-            llm_facing_response = json.dumps(tool_result_dict)
-
-            # Emit CustomToolDelta packet
-            self.emitter.emit(
-                Packet(
-                    placement=placement,
-                    obj=CustomToolDelta(
-                        tool_name=self._name,
-                        response_type="json",
-                        data=tool_result_dict,
-                    ),
-                )
-            )
-
-            response = ToolResponse(
-                rich_response=CustomToolCallSummary(
+            tool_result_dict = {
+                "tool_result": _tool_result_value(process_mcp_result(tool_result))
+            }
+            response = ToolResult(
+                details=CustomToolCallSummary(
                     tool_name=self._name,
                     response_type="json",
                     tool_result=tool_result_dict,
+                    structured_result=tool_result.structuredContent,
                 ),
-                llm_facing_response=llm_facing_response,
+                content=json.dumps(tool_result_dict),
             )
             outcome = MCPToolCallStatus.SUCCESS
             return response
 
+        except AgentCancelled:
+            outcome = MCPToolCallStatus.CANCELLED
+            raise
         except Exception as e:
+            credentials = self._resolved_credentials
+            unauthorized_response = has_unauthorized_response(e)
+            if (
+                unauthorized_response
+                and credentials.connection_config_id is not None
+                and uses_user_managed_headers(
+                    self.mcp_server.auth_type,
+                    self._auth_performer,
+                    credentials.auth_template,
+                )
+            ):
+                try:
+                    with get_session_with_current_tenant() as db_session:
+                        mark_connection_config_reauth_required(
+                            credentials.connection_config_id,
+                            credentials.connection_data,
+                            db_session,
+                        )
+                except Exception:
+                    logger.exception("Could not record rejected MCP credentials")
             error_str = str(e).lower()
             logger.error("Failed to execute MCP tool '%s': %s", self._name, e)
 
-            is_auth_error = isinstance(e, MCPReauthenticationRequired) or any(
-                indicator in error_str for indicator in _AUTH_ERROR_INDICATORS
+            is_auth_error = (
+                unauthorized_response
+                or isinstance(e, MCPReauthenticationRequired)
+                or any(indicator in error_str for indicator in _AUTH_ERROR_INDICATORS)
             )
 
             if is_auth_error:
@@ -298,32 +342,8 @@ class MCPTool(Tool[None]):
                     f"Please use the MCP dropdown in the chat bar to update your credentials "
                     f"for the {self.mcp_server.name} server. Original error: {str(e)}"
                 )
-                error_result = {"error": auth_error_msg}
-            else:
-                error_result = {"error": f"Tool execution failed: {str(e)}"}
-
-            llm_facing_response = json.dumps(error_result)
-
-            # Emit CustomToolDelta packet
-            self.emitter.emit(
-                Packet(
-                    placement=placement,
-                    obj=CustomToolDelta(
-                        tool_name=self._name,
-                        response_type="json",
-                        data=error_result,
-                    ),
-                )
-            )
-
-            return ToolResponse(
-                rich_response=CustomToolCallSummary(
-                    tool_name=self._name,
-                    response_type="json",
-                    tool_result=error_result,
-                ),
-                llm_facing_response=llm_facing_response,
-            )
+                return self._error_result(auth_error_msg)
+            return self._error_result(f"Tool execution failed: {str(e)}")
         finally:
             record_mcp_client_tool_outcome(
                 server_name=_server,

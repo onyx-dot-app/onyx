@@ -1,9 +1,9 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { toast } from "@opal/layouts";
 import { SlackBot } from "@/lib/types";
 import { useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import { updateSlackBotField } from "@/lib/updateSlackBotField";
 import { SlackTokensForm } from "./SlackTokensForm";
@@ -11,7 +11,11 @@ import { SlackTokensForm } from "./SlackTokensForm";
 import { EditableStringFieldDisplay } from "@/components/EditableStringFieldDisplay";
 import { deleteSlackBot } from "./new/lib";
 import GenericConfirmModal from "@/sections/modals/GenericConfirmModal";
-import { Button } from "@opal/components";
+import {
+  Button,
+  InputCheckbox as OpalInputCheckbox,
+  useCreateModal,
+} from "@opal/components";
 import { cn } from "@opal/utils";
 import { SvgChevronDownSmall, SvgTrash } from "@opal/icons";
 
@@ -25,12 +29,11 @@ function InputCheckbox({
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
   return (
-    <label className="flex text-xs cursor-pointer">
-      <input
+    <label className="flex items-center gap-2 text-xs cursor-pointer">
+      <OpalInputCheckbox
         checked={checked}
         onChange={onChange}
-        type="checkbox"
-        className="me-2 w-3.5 h-3.5 my-auto"
+        aria-label={label}
       />
       <span className="block font-medium text-text-700 text-sm">{label}</span>
     </label>
@@ -47,9 +50,9 @@ export const ExistingSlackBotForm = ({
   const t = useTranslations("admin.slackBots");
   const [isExpanded, setIsExpanded] = useState(false);
   const [formValues, setFormValues] = useState(existingSlackBot);
-  const router = useRouter();
+  const navigation = useNavigation();
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const deleteModal = useCreateModal();
 
   const handleUpdateField = async (
     field: keyof SlackBot,
@@ -64,7 +67,6 @@ export const ExistingSlackBotForm = ({
       if (!response.ok) {
         throw new Error(await response.text());
       }
-      toast.success(t("updateForm.fieldUpdated.toast", { field }));
     } catch (error) {
       toast.error(t("updateForm.fieldUpdateFailed.toast", { field }));
     }
@@ -117,7 +119,7 @@ export const ExistingSlackBotForm = ({
             </Button>
             <Button
               variant="danger"
-              onClick={() => setShowDeleteModal(true)}
+              onClick={() => deleteModal.toggle(true)}
               icon={SvgTrash}
             >
               {t("updateForm.deleteButton.label")}
@@ -132,7 +134,6 @@ export const ExistingSlackBotForm = ({
                   initialValues={formValues}
                   existingSlackBotId={existingSlackBot.id}
                   refreshSlackBot={refreshSlackBot}
-                  router={router}
                   onValuesChange={(values) => setFormValues(values)}
                 />
               </div>
@@ -148,12 +149,12 @@ export const ExistingSlackBotForm = ({
             onChange={(e) => handleUpdateField("enabled", e.target.checked)}
           />
         </div>
-        {showDeleteModal && (
+        <deleteModal.Provider>
           <GenericConfirmModal
             title={t("deleteModal.title")}
             message={t("deleteModal.message")}
             confirmText={t("deleteModal.confirmButton.label")}
-            onClose={() => setShowDeleteModal(false)}
+            onClose={() => deleteModal.toggle(false)}
             onConfirm={async () => {
               try {
                 const response = await deleteSlackBot(existingSlackBot.id);
@@ -161,14 +162,14 @@ export const ExistingSlackBotForm = ({
                   throw new Error(await response.text());
                 }
                 toast.success(t("deleteModal.success.toast"));
-                router.push("/admin/bots");
+                navigation.go("/admin/bots");
               } catch (error) {
                 toast.error(t("deleteModal.error.toast"));
               }
-              setShowDeleteModal(false);
+              deleteModal.toggle(false);
             }}
           />
-        )}
+        </deleteModal.Provider>
       </div>
     </div>
   );

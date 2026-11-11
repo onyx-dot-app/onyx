@@ -4,6 +4,7 @@ import pytest
 from kubernetes import client
 
 from onyx.sandbox_proxy.sandbox_identity.kubernetes import (
+    _SYNC_STALE_AFTER_S,
     K8sInformerLookup,
     _identity_from_pod,
 )
@@ -159,3 +160,27 @@ def test_synced_clears_after_watch_loop_returns_cleanly() -> None:
     assert lookup._initial_sync_done.is_set()
     assert not lookup._synced.is_set()
     assert call_count[0] == 1
+
+
+def test_is_synced_goes_stale_without_a_recent_relist(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Health reflects cache freshness, not only whether a watch is open."""
+    module = "onyx.sandbox_proxy.sandbox_identity.kubernetes"
+    core_api = MagicMock(spec=client.CoreV1Api)
+    core_api.list_namespaced_pod.return_value = client.V1PodList(
+        metadata=client.V1ListMeta(resource_version="1"), items=[]
+    )
+    lookup = K8sInformerLookup(core_api=core_api)
+    now = [1000.0]
+    monkeypatch.setattr(f"{module}.time.monotonic", lambda: now[0])
+
+    lookup._initial_list()
+    lookup._synced.set()
+    assert lookup.is_synced()
+
+    now[0] += _SYNC_STALE_AFTER_S + 1
+    assert not lookup.is_synced()
+
+    lookup._initial_list()
+    assert lookup.is_synced()

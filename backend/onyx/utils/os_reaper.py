@@ -23,6 +23,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 _PR_SET_CHILD_SUBREAPER = 36
+_PR_GET_CHILD_SUBREAPER = 37
 
 
 def become_child_subreaper() -> bool:
@@ -44,6 +45,23 @@ def become_child_subreaper() -> bool:
         return False
 
     return True
+
+
+def is_child_subreaper() -> bool:
+    if sys.platform != "linux":
+        return False
+
+    try:
+        import ctypes
+
+        libc = ctypes.CDLL(None, use_errno=True)
+        flag = ctypes.c_int(0)
+        if libc.prctl(_PR_GET_CHILD_SUBREAPER, ctypes.byref(flag), 0, 0, 0) != 0:
+            return False
+    except Exception:
+        return False
+
+    return flag.value != 0
 
 
 def reap_exited_children() -> int:
@@ -69,10 +87,10 @@ def reap_exited_children() -> int:
     return reaped
 
 
-def _live_child_pids() -> list[int]:
-    """Direct children (adopted orphans included) that are still running."""
+def _child_pids_by_state() -> list[tuple[int, str]]:
+    """Direct children (adopted orphans included) with their process state."""
     me = os.getpid()
-    pids = []
+    children = []
     for entry in os.listdir("/proc"):
         if not entry.isdigit():
             continue
@@ -81,11 +99,37 @@ def _live_child_pids() -> list[int]:
                 data = f.read()
             # comm may contain spaces; state and ppid follow the closing paren
             state, ppid = data[data.rindex(")") + 2 :].split()[:2]
-            if int(ppid) == me and state != "Z":
-                pids.append(int(entry))
+            if int(ppid) == me:
+                children.append((int(entry), state))
         except (OSError, IndexError, ValueError):
             continue
-    return pids
+    return children
+
+
+def _live_child_pids() -> list[int]:
+    """Direct children (adopted orphans included) that are still running."""
+    return [pid for pid, state in _child_pids_by_state() if state != "Z"]
+
+
+def reap_zombie_children() -> int:
+    """Mid-run drain for a subreaper: reap only children that are already
+    zombies, pid by pid. Running children are never waited on, so a live
+    subprocess (e.g. the Playwright driver) keeps its exit status for its own
+    waiter. No-op unless this process is a subreaper — elsewhere orphans go to
+    PID 1 and any zombie child here belongs to code that will wait() on it."""
+    if not is_child_subreaper():
+        return 0
+
+    reaped = 0
+    for pid, state in _child_pids_by_state():
+        if state != "Z":
+            continue
+        try:
+            if os.waitpid(pid, os.WNOHANG)[0] == pid:
+                reaped += 1
+        except ChildProcessError:
+            continue  # someone else reaped it first
+    return reaped
 
 
 def reap_children_before_exit(grace_seconds: float = 2.0) -> int:

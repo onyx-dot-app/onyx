@@ -16,13 +16,13 @@ from ee.onyx.db.user_group import (
     assert_group_membership_survives_deletion,
     fetch_user_group,
     fetch_user_group_for_snapshot,
+    fetch_user_group_member_counts,
     fetch_user_groups,
     fetch_user_groups_for_user,
     insert_user_group,
-    make_group_manager,
     prepare_user_group_for_deletion,
     rename_user_group,
-    revoke_group_manager,
+    set_group_manager__no_commit,
     set_group_permissions_bulk__no_commit,
     set_user_group_data_access_cc_pairs,
     set_user_group_incognito,
@@ -42,6 +42,7 @@ from ee.onyx.server.user_group.models import (
     UserGroupCreate,
     UserGroupDataAccessCCPairs,
     UserGroupIncognitoUpdate,
+    UserGroupMemberCounts,
     UserGroupRename,
     UserGroupUpdate,
 )
@@ -106,6 +107,8 @@ _ACCESS_LEVEL_TO_GIVE_ROLE: dict[ConnectorManageRole, CCPairAccessLevel] = {
 @router.get("/admin/user-group")
 def list_user_groups(
     include_default: bool = False,
+    # False sends member counts without member lists, which are large in big orgs.
+    include_users: bool = True,
     user: User = Depends(
         require_permission(Permission.READ_USER_GROUPS, allow_scope=True)
     ),
@@ -129,12 +132,27 @@ def list_user_groups(
         eager_load_for_snapshot=True,
         include_default=include_default,
         restrict_to_group_ids=get_visible_user_group_ids(user, db_session),
+        include_users=include_users,
+    )
+    member_counts = (
+        None
+        if include_users
+        else fetch_user_group_member_counts(
+            db_session, [user_group.id for user_group in user_groups]
+        )
     )
     mask_credential_prefix = get_security_settings().mask_credential_prefix
     return [
         UserGroup.from_model(
             user_group,
             mask_credential_prefix=mask_credential_prefix,
+            member_counts=(
+                None
+                if member_counts is None
+                else member_counts.get(
+                    user_group.id, UserGroupMemberCounts(total=0, active=0)
+                )
+            ),
             permissions=user_group_permissions(
                 can_manage=manages_group(
                     user,
@@ -755,10 +773,12 @@ def set_group_manager(
     )
 
     try:
-        if request.is_manager:
-            make_group_manager(db_session, request.user_id, user_group_id)
-        else:
-            revoke_group_manager(db_session, request.user_id, user_group_id)
+        set_group_manager__no_commit(
+            db_session,
+            user_id=request.user_id,
+            group_id=user_group_id,
+            is_manager=request.is_manager,
+        )
     except ValueError as e:
         # Target isn't a member of the group (a manager is always a member).
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))

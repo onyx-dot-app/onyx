@@ -4,7 +4,6 @@ concurrency:
   cancel-in-progress: true
 
 on:
-  merge_group:
   pull_request:
     paths:
       - "desktop/**"
@@ -125,6 +124,14 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ""
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+
+      - name: Run desktop runtime smoke test (Linux)
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get install -y webkit2gtk-driver xvfb x11-utils dbus
+          command -v tauri-driver || cargo install tauri-driver --locked
+          xvfb-run --auto-servernum dbus-run-session -- python3 desktop/tests/webdriver_smoke.py \
+            desktop/src-tauri/target/release/onyx
 
       - name: Upload build artifacts
         if: always()

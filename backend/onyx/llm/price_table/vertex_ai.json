@@ -95,6 +95,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-06-09",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -125,6 +126,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-10-15",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -199,6 +201,7 @@
       "reasoning": true,
       "release_date": "2025-08-05",
       "status": "deprecated",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -228,7 +231,8 @@
       "name": "Claude Opus 4.5",
       "open_weights": false,
       "reasoning": true,
-      "release_date": "2025-11-01",
+      "release_date": "2025-11-24",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -259,6 +263,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-02-05",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -289,6 +294,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-04-16",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -319,6 +325,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-05-28",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -350,6 +357,7 @@
       "reasoning": true,
       "release_date": "2025-05-22",
       "status": "deprecated",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -411,6 +419,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-07-24",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -442,6 +451,7 @@
       "reasoning": true,
       "release_date": "2025-09-29",
       "status": "deprecated",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -472,6 +482,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-02-17",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -503,6 +514,7 @@
       "reasoning": true,
       "release_date": "2025-05-22",
       "status": "deprecated",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -564,6 +576,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-06-30",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -626,7 +639,8 @@
         "output": 1.2
       },
       "mode": "ocr",
-      "name": "deepseek-ai/deepseek-ocr-maas"
+      "name": "deepseek-ai/deepseek-ocr-maas",
+      "status": "deprecated"
     },
     "deepseek-ai/deepseek-v3.1-maas": {
       "attachment": false,
@@ -1216,7 +1230,9 @@
       "modalities": {
         "input": [
           "text",
-          "image"
+          "image",
+          "video",
+          "pdf"
         ],
         "output": [
           "text",
@@ -1641,6 +1657,66 @@
       "mode": "realtime",
       "name": "gemini-3.8-live"
     },
+    "gemini-4-argon": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.1,
+        "input": 2,
+        "input_audio": 2,
+        "output": 10
+      },
+      "family": "gemini",
+      "limit": {
+        "context": 1048576,
+        "output": 65536
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "audio",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Gemini 4 Argon",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-13",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "gemini-4-argon-cyber-permissive": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "input": 4.0,
+        "output": 20.0
+      },
+      "limit": {
+        "context": 1048576,
+        "output": 1048576
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gemini-4-argon-cyber-permissive",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
     "gemini-embedding-001": {
       "attachment": false,
       "cost": {
@@ -1744,7 +1820,8 @@
         "input": [
           "text",
           "image",
-          "video"
+          "video",
+          "pdf"
         ],
         "output": [
           "text",
@@ -1782,7 +1859,7 @@
         "output": 9.0
       },
       "limit": {
-        "context": 57920,
+        "context": 131072,
         "output": 57920
       },
       "modalities": {
@@ -1798,14 +1875,14 @@
       "name": "gemini-omni-1.1-flash-preview",
       "reasoning": true
     },
-    "gemini-omni-flash-preview": {
+    "gemini-omni-1.2-flash": {
       "cost": {
         "input": 1.5,
         "output": 9.0
       },
       "limit": {
-        "context": 1048576,
-        "output": 65535
+        "context": 131072,
+        "output": 260640
       },
       "modalities": {
         "input": [
@@ -1817,8 +1894,10 @@
         ]
       },
       "mode": "chat",
-      "name": "gemini-omni-flash-preview",
-      "reasoning": true
+      "name": "gemini-omni-1.2-flash",
+      "reasoning": true,
+      "structured_output": false,
+      "tool_call": false
     },
     "gemini-robotics-er-1.5-preview": {
       "cost": {
@@ -1841,6 +1920,32 @@
       },
       "mode": "chat",
       "name": "gemini-robotics-er-1.5-preview",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
+    "gemini-robotics-er-2-preview": {
+      "cost": {
+        "cache_read": 0.09999999999999999,
+        "input": 1.0,
+        "output": 5.0
+      },
+      "limit": {
+        "context": 131072,
+        "output": 65536
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gemini-robotics-er-2-preview",
       "reasoning": true,
       "structured_output": true,
       "tool_call": true
@@ -2209,6 +2314,70 @@
       "mode": "vector_store",
       "name": "search_api"
     },
+    "semantic-ranker-default": {
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
+      "mode": "rerank",
+      "name": "semantic-ranker-default"
+    },
+    "semantic-ranker-default-002": {
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
+      "mode": "rerank",
+      "name": "semantic-ranker-default-002"
+    },
+    "semantic-ranker-default-003": {
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
+      "mode": "rerank",
+      "name": "semantic-ranker-default-003"
+    },
+    "semantic-ranker-default-004": {
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
+      "mode": "rerank",
+      "name": "semantic-ranker-default-004"
+    },
+    "semantic-ranker-default@latest": {
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
+      "mode": "rerank",
+      "name": "semantic-ranker-default@latest"
+    },
+    "semantic-ranker-fast": {
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
+      "mode": "rerank",
+      "name": "semantic-ranker-fast"
+    },
+    "semantic-ranker-fast-004": {
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
+      "mode": "rerank",
+      "name": "semantic-ranker-fast-004"
+    },
+    "semantic-ranker-fast@latest": {
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
+      "mode": "rerank",
+      "name": "semantic-ranker-fast@latest"
+    },
     "text-embedding-004": {
       "cost": {
         "input": 0.09999999999999999,
@@ -2415,7 +2584,8 @@
         "context": 1024
       },
       "mode": "video_generation",
-      "name": "vertex_ai/veo-2.0-generate-001"
+      "name": "vertex_ai/veo-2.0-generate-001",
+      "status": "deprecated"
     },
     "vertex_ai/veo-3.0-fast-generate-001": {
       "cost": {
@@ -2425,7 +2595,8 @@
         "context": 1024
       },
       "mode": "video_generation",
-      "name": "vertex_ai/veo-3.0-fast-generate-001"
+      "name": "vertex_ai/veo-3.0-fast-generate-001",
+      "status": "deprecated"
     },
     "vertex_ai/veo-3.0-generate-001": {
       "cost": {
@@ -2435,7 +2606,8 @@
         "context": 1024
       },
       "mode": "video_generation",
-      "name": "vertex_ai/veo-3.0-generate-001"
+      "name": "vertex_ai/veo-3.0-generate-001",
+      "status": "deprecated"
     },
     "vertex_ai/veo-3.1-fast-generate-001": {
       "cost": {

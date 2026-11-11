@@ -37,7 +37,7 @@ export function AuthScreenShell({
               className="text-theme-primary-05"
             />
             <View className="mt-12">
-              <Text font="heading-h2" color="text-05">
+              <Text font="heading-headline" color="text-05">
                 {title}
               </Text>
               {subtitle ? (

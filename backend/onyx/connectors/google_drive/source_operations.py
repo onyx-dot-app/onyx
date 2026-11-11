@@ -6,7 +6,8 @@ to act as: a service account impersonates that user through domain-wide
 delegation, and an OAuth credential ignores it and acts as its own user.
 Directory operations act as the primary admin. Operations return plain data,
 and SDK errors leave the gateway as ``GoogleDriveHttpError`` and
-``GoogleDriveRefreshError``.
+``GoogleDriveRefreshError``. A request that gets no answer raises one of
+``GOOGLE_CONNECTION_ERRORS`` untranslated, as indexing's retries expect.
 """
 
 import functools
@@ -19,8 +20,9 @@ from contextlib import contextmanager
 from enum import Enum
 from typing import Any, ParamSpec, TypeVar, cast
 
+import httplib2
 import requests
-from google.auth.exceptions import RefreshError
+from google.auth.exceptions import RefreshError, TransportError
 from google.oauth2.credentials import Credentials as OAuthCredentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
 from googleapiclient.errors import HttpError
@@ -28,6 +30,7 @@ from googleapiclient.http import BatchHttpRequest, MediaIoBaseDownload
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capabilities import CredentialCapability
+from onyx.connectors.exceptions import SourceApiError
 from onyx.connectors.google_drive.constants import (
     DRIVE_FOLDER_TYPE,
     DRIVE_RESOURCE_KEY_FIELD,
@@ -50,9 +53,9 @@ from onyx.connectors.google_utils.google_utils import (
     is_access_denied,
 )
 from onyx.connectors.google_utils.resources import (
-    get_admin_service,
-    get_drive_service,
+    GoogleService,
     get_google_authorized_session,
+    get_google_service,
 )
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
@@ -80,6 +83,7 @@ _DOWNLOAD_NUM_RETRIES = 3
 # file is detected without reading all of it.
 _CHUNK_SIZE_BUFFER = 64
 _DOCS_API_DOCUMENT_URL = "https://docs.googleapis.com/v1/documents/{doc_id}"
+_FORMS_API_FORM_URL = "https://forms.googleapis.com/v1/forms/{form_id}"
 _DOCS_FETCH_TIMEOUT_SECONDS = 60
 _DOCS_FETCH_CHUNK_SIZE = 1024 * 1024
 # The Docs API's per-user read quota resets each minute; these waits add up to
@@ -88,6 +92,7 @@ _DOCS_FETCH_TRIES = 5
 _DOCS_FETCH_RETRY_DELAY_SECONDS = 2
 _DOCS_FETCH_RETRY_MAX_DELAY_SECONDS = 16
 _RATE_LIMIT_REASONS = frozenset({"userRateLimitExceeded", "rateLimitExceeded"})
+_DISABLED_API_REASONS = frozenset({"accessNotConfigured", "SERVICE_DISABLED"})
 
 # What a requested target probe needs to decide who should crawl it.
 _TARGET_PROBE_FIELDS = "id, mimeType, driveId, owners(emailAddress)"
@@ -102,7 +107,7 @@ _FOLDER_PERMISSION_FIELDS = (
 )
 
 
-class GoogleDriveHttpError(Exception):
+class GoogleDriveHttpError(SourceApiError):
     """A Google API request failed with an HTTP error status."""
 
     def __init__(
@@ -112,9 +117,15 @@ class GoogleDriveHttpError(Exception):
         reasons: tuple[str, ...],
         access_denied: bool,
         message: str,
+        method: str | None = None,
+        url: str | None = None,
+        body: str | None = None,
     ) -> None:
-        super().__init__(message)
-        self.status_code = status_code
+        super().__init__(
+            message, status_code=status_code, method=method, url=url, body=body
+        )
+        # Always set for a Drive error.
+        self.status_code: int = status_code
         # The machine-readable reasons Google gave, e.g. "accessNotConfigured"
         # or "teamDriveMembershipRequired".
         self.reasons = reasons
@@ -127,6 +138,11 @@ class GoogleDriveHttpError(Exception):
         return self.status_code == 429 or any(
             reason in _RATE_LIMIT_REASONS for reason in self.reasons
         )
+
+    @property
+    def api_disabled(self) -> bool:
+        """The API is turned off in the credential's Google Cloud project."""
+        return bool(_DISABLED_API_REASONS.intersection(self.reasons))
 
     @property
     def transient(self) -> bool:
@@ -168,11 +184,16 @@ def _error_reasons(error_details: object) -> tuple[str, ...]:
 
 
 def _from_http_error(error: HttpError) -> GoogleDriveHttpError:
+    content: bytes | str = error.content or b""
     return GoogleDriveHttpError(
         status_code=error.status_code,
         reasons=_error_reasons(error.error_details),
         access_denied=is_access_denied(error),
         message=str(error),
+        url=error.uri,
+        body=(
+            content.decode(errors="replace") if isinstance(content, bytes) else content
+        ),
     )
 
 
@@ -198,6 +219,13 @@ def _from_requests_error(error: requests.HTTPError) -> GoogleDriveHttpError:
         reasons=reasons,
         access_denied=status in (403, 404) and not rate_limited,
         message=str(error),
+        method=(
+            response.request.method
+            if response is not None and response.request is not None
+            else None
+        ),
+        url=response.url if response is not None else None,
+        body=response.text if response is not None else None,
     )
 
 
@@ -219,6 +247,30 @@ _TRANSIENT_REQUEST_ERRORS = (
 )
 
 
+# A request that got no answer from Google: a token request through google-auth
+# (``TransportError``), an API call through httplib2, or a raw requests call.
+GOOGLE_CONNECTION_ERRORS: tuple[type[Exception], ...] = (
+    TransportError,
+    httplib2.ServerNotFoundError,
+    requests.ConnectionError,
+    requests.Timeout,
+    ConnectionError,
+    TimeoutError,
+)
+
+
+def is_google_timeout(error: BaseException) -> bool:
+    """True when a connection error, or an error it wraps, is a timeout."""
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while current is not None and id(current) not in seen:
+        if isinstance(current, (TimeoutError, requests.Timeout)):
+            return True
+        seen.add(id(current))
+        current = current.__cause__ or current.__context__
+    return False
+
+
 def _is_transient_docs_error(error: BaseException) -> bool:
     if isinstance(error, _TRANSIENT_REQUEST_ERRORS):
         return True
@@ -235,7 +287,7 @@ def is_transient_google_error(error: BaseException) -> bool:
     return isinstance(error, _TRANSIENT_REQUEST_ERRORS)
 
 
-_retry_transient_docs_fetch = retry_builder(
+_retry_transient_fetch = retry_builder(
     tries=_DOCS_FETCH_TRIES,
     delay=_DOCS_FETCH_RETRY_DELAY_SECONDS,
     max_delay=_DOCS_FETCH_RETRY_MAX_DELAY_SECONDS,
@@ -379,12 +431,16 @@ class GoogleDriveSourceOperations(SourceOperations):
         )
         clients: dict[str, Any] = vars(local).setdefault("by_user", {})
         if user_email not in clients:
-            clients[user_email] = get_drive_service(self._creds(), user_email)
+            clients[user_email] = get_google_service(
+                GoogleService.DRIVE, self._creds(), user_email
+            )
         return clients[user_email]
 
     def _directory(self) -> Any:
         """The Admin SDK directory service, acting as the primary admin."""
-        return get_admin_service(self._creds(), self._auth().primary_admin_email)
+        return get_google_service(
+            GoogleService.ADMIN, self._creds(), self._auth().primary_admin_email
+        )
 
     def _domain(self) -> str:
         return self._auth().primary_admin_email.split("@")[-1]
@@ -786,21 +842,58 @@ class GoogleDriveSourceOperations(SourceOperations):
         when the response exceeds ``max_response_bytes``; it is streamed, so an
         oversized one is never held whole. A rate limit or a server error is
         retried with backoff; the last one raises."""
-        return _retry_transient_docs_fetch(self._fetch_google_doc_once)(
+        return _retry_transient_fetch(self._fetch_google_doc_once)(
             user_email=user_email,
             doc_id=doc_id,
+            max_response_bytes=max_response_bytes,
+        )
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "Needs a Google Form to read. With the Forms API off, indexing "
+            "skips each Form and indexes the other files."
+        ),
+    )
+    @_translated
+    def fetch_google_form(
+        self, *, user_email: str, form_id: str, max_response_bytes: int
+    ) -> dict[str, Any] | None:
+        """A Google Form from the Forms API: its title, description and items.
+        Responses are not read. None when the response exceeds
+        ``max_response_bytes``. A rate limit or a server error is retried with
+        backoff; the last one raises."""
+        return _retry_transient_fetch(self._get_capped_json)(
+            user_email=user_email,
+            url=_FORMS_API_FORM_URL.format(form_id=form_id),
+            params={},
             max_response_bytes=max_response_bytes,
         )
 
     def _fetch_google_doc_once(
         self, *, user_email: str, doc_id: str, max_response_bytes: int
     ) -> dict[str, Any] | None:
+        return self._get_capped_json(
+            user_email=user_email,
+            url=_DOCS_API_DOCUMENT_URL.format(doc_id=doc_id),
+            params={"includeTabsContent": "true"},
+            max_response_bytes=max_response_bytes,
+        )
+
+    def _get_capped_json(
+        self,
+        *,
+        user_email: str,
+        url: str,
+        params: dict[str, str],
+        max_response_bytes: int,
+    ) -> dict[str, Any] | None:
+        """The JSON body of a GET, streamed so an oversized one is never held
+        whole. None when it exceeds ``max_response_bytes``."""
         with get_google_authorized_session(self._creds(), user_email) as session:
             with session.get(
-                _DOCS_API_DOCUMENT_URL.format(doc_id=doc_id),
-                params={"includeTabsContent": "true"},
-                stream=True,
-                timeout=_DOCS_FETCH_TIMEOUT_SECONDS,
+                url, params=params, stream=True, timeout=_DOCS_FETCH_TIMEOUT_SECONDS
             ) as response:
                 response.raise_for_status()
                 buffer = bytearray()

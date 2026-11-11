@@ -16,26 +16,26 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from onyx.db.action_policy import (
+    get_gated_app_id,
+    get_or_create_gated_app_id,
+    get_workspace_action_policies,
+    replace_workspace_action_policies,
+)
 from onyx.db.enums import (
+    ActionPolicy,
     ApprovalDecidedVia,
     ApprovalDecision,
-    EndpointPolicy,
     GatedAppKind,
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
     MCPTransport,
 )
-from onyx.db.gated_app import (
-    get_action_policies,
-    get_gated_app_id,
-    get_or_create_gated_app_id,
-    replace_action_policies__no_commit,
-)
 from onyx.db.mcp import (
     create_mcp_server__no_commit,
     update_mcp_server__no_commit,
 )
-from onyx.db.models import BuildSession, GatedApp, MCPServer
+from onyx.db.models import BuildSession, GatedApp, MCPServer, Tool
 from onyx.server.features.build.db import action_approval
 from tests.external_dependency_unit.conftest import create_test_user
 
@@ -46,7 +46,7 @@ _ASK_ACTION = [
         "action_type": "send_email",
         "display_name": "send_email",
         "description": "Call send_email.",
-        "policy": EndpointPolicy.ASK.value,
+        "policy": ActionPolicy.ASK.value,
     }
 ]
 
@@ -156,28 +156,39 @@ def test_mcp_tool_policy_storage_round_trips(
     db_session: Session, craft_server: CraftServerFactory
 ) -> None:
     server = craft_server()
-    assert get_action_policies(db_session, GatedAppKind.MCP_SERVER, server.id) == {}
+    assert (
+        get_workspace_action_policies(db_session, GatedAppKind.MCP_SERVER, server.id)
+        == {}
+    )
 
+    db_session.add_all(
+        Tool(name=name, mcp_server_id=server.id, enabled=True)
+        for name in ("read_inbox", "wipe")
+    )
+    db_session.flush()
     gated_app_id = get_or_create_gated_app_id(
         db_session, GatedAppKind.MCP_SERVER, server.id
     )
-    replace_action_policies__no_commit(
+    replace_workspace_action_policies(
         db_session,
         gated_app_id,
-        {"read_inbox": EndpointPolicy.ALWAYS, "wipe": EndpointPolicy.DENY},
+        {"read_inbox": ActionPolicy.ALWAYS, "wipe": ActionPolicy.DENY},
     )
     db_session.commit()
 
-    assert get_action_policies(db_session, GatedAppKind.MCP_SERVER, server.id) == {
-        "read_inbox": EndpointPolicy.ALWAYS,
-        "wipe": EndpointPolicy.DENY,
+    assert get_workspace_action_policies(
+        db_session, GatedAppKind.MCP_SERVER, server.id
+    ) == {
+        "read_inbox": ActionPolicy.ALWAYS,
+        "wipe": ActionPolicy.DENY,
     }
 
-    # Re-setting replaces the prior rows rather than colliding on the unique key.
-    replace_action_policies__no_commit(
-        db_session, gated_app_id, {"read_inbox": EndpointPolicy.ASK}
+    # Resetting to the MCP default removes overrides, including omitted tools.
+    replace_workspace_action_policies(
+        db_session, gated_app_id, {"read_inbox": ActionPolicy.ASK}
     )
     db_session.commit()
-    assert get_action_policies(db_session, GatedAppKind.MCP_SERVER, server.id) == {
-        "read_inbox": EndpointPolicy.ASK
-    }
+    assert (
+        get_workspace_action_policies(db_session, GatedAppKind.MCP_SERVER, server.id)
+        == {}
+    )

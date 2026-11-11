@@ -1,0 +1,75 @@
+---
+title: "Discourse"
+description: "Index topics from your Discourse forum"
+---
+
+## How it works
+
+The Discourse connector indexes the topics of your Discourse forum.
+Each topic becomes one document that holds every post in the topic, with the category and tags kept as metadata.
+
+You can index every category, or only the categories you name.
+
+Onyx pulls new and changed topics every 30 minutes by default. You can change this under **Schedule**.
+
+**Sync with Discourse** is not offered.
+The access type can only be **Everyone in Your Organization** or **Specific Groups**.
+
+## Setting up
+
+### Authorization
+
+<Steps>
+  <Step title="Open API keys">
+    Log in to Discourse as an admin. Only an admin can create an API key. Open the **Admin** menu, then **Advanced**,
+    and select **API keys**.
+
+    <video className="rounded-image" src="/assets/admins/connectors/discourse/discourse_1.mp4" autoPlay muted loop playsInline aria-label="Discourse admin navigation to the API keys page" />
+  </Step>
+
+  <Step title="Create an API key">
+    Click **New API Key** and name it `Onyx`. Select **All Users** for **User Level** and **Read-only** for **Scope**.
+
+    <video className="rounded-image" src="/assets/admins/connectors/discourse/discourse_2.mp4" autoPlay muted loop playsInline aria-label="Create and fill out API key" />
+  </Step>
+
+  <Step title="Save and copy the key">
+    Click **Save** and copy the key.
+
+    <video className="rounded-image" src="/assets/admins/connectors/discourse/discourse_3.mp4" autoPlay muted loop playsInline aria-label="Create and copy API key" />
+  </Step>
+</Steps>
+
+### Indexing
+
+<Steps>
+  <Step title="Connect a Discourse account">
+    In Onyx, go to **Admin Panel → Connectors** and select **Discourse**. Under **Authentication Account**,
+    select **New Discourse Account** and enter:
+
+    - **API Token**: The API key you copied.
+    - **Discourse API Username**: The username of the Discourse account whose access Onyx uses.
+    Onyx indexes only the topics this user can see.
+  </Step>
+
+  <Step title="Enter the forum URL">
+    In **Base URL**, enter your Discourse site, such as `https://forum.example.com`.
+
+    <img className="rounded-image" src="/assets/admins/connectors/discourse/discourse_4.webp" alt="Fill out the Discourse connector in Onyx"/>
+  </Step>
+
+  <Step title="Choose the categories">
+    Under **Categories**, add the names of the categories to index.
+    Leave it empty to index every category the account can see.
+  </Step>
+
+  <Step title="Choose who can see the topics">
+    Under **Document Access**, select **Everyone in Your Organization** or **Specific Groups**.
+    **Specific Groups** is available on Onyx Cloud and Enterprise Edition.
+  </Step>
+
+  <Step title="Create the connector">
+    Select **Create Connector**. Open **Admin Panel → Indexing Status**, select the connector,
+    and confirm its first indexing attempt completes.
+  </Step>
+</Steps>

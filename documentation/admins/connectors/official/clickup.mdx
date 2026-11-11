@@ -1,0 +1,86 @@
+---
+title: "ClickUp"
+description: "Index tasks and comments from ClickUp"
+---
+
+## How it works
+
+The ClickUp connector indexes tasks from a ClickUp workspace. You can index the whole workspace, or only the spaces,
+folders, or lists you choose.
+
+Each task becomes one document. It holds the task name, description, status, assignees, custom fields, and,
+if you enable it, the task's comments.
+
+Onyx pulls new and changed tasks every 30 minutes by default. You can change this under **Schedule**.
+
+**Sync with ClickUp** is not offered.
+The access type can only be **Everyone in Your Organization** or **Specific Groups**.
+
+## Understanding the ClickUp hierarchy
+
+In ClickUp, tasks live inside containers:
+
+- The entire Workspace
+- Spaces
+- Folders
+- Lists
+
+See ClickUp's [Intro to the Hierarchy](https://help.clickup.com/hc/en-us/articles/13856392825367-Intro-to-the-Hierarchy)
+for details.
+
+<video className="rounded-image" src="/assets/admins/connectors/clickup/ClickUp_Hierarchy.mp4" autoPlay muted loop playsInline aria-label="ClickUp workspace hierarchy illustrating spaces, folders, and lists" />
+
+## Setting up
+
+### Authorization
+
+<Steps>
+  <Step title="Generate an API token">
+    In ClickUp, click your avatar, select **Settings → Apps**, and under **API Token** click **Generate**.
+
+    <img className="rounded-image" src="/assets/admins/connectors/clickup/ClickupToken.webp" alt="ClickUp token generation"/>
+  </Step>
+
+  <Step title="Find your Team ID">
+    Open your workspace in the browser. The number after `https://app.clickup.com/` is the Team ID,
+    for example `9012345678` in `https://app.clickup.com/9012345678/home`.
+  </Step>
+</Steps>
+
+### Indexing
+
+<Steps>
+  <Step title="Connect a ClickUp account">
+    In Onyx, go to **Admin Panel → Connectors** and select **ClickUp**. Under **Authentication Account**,
+    select **New ClickUp Account**. Paste the token into **API Token** and enter the **ClickUp Team ID**.
+
+    <img className="rounded-image" src="/assets/admins/connectors/clickup/ClickupAuth.webp" alt="ClickUp account form in Onyx"/>
+  </Step>
+
+  <Step title="Choose the connector type">
+    In **Connector Type**, select `workspace`, `space`, `folder`, or `list`.
+
+    - To index the whole workspace, select `workspace` and leave **Connector IDs** empty.
+    - To index specific spaces, folders, or lists, select the matching type and add at least one ID under
+    **Connector IDs**.
+
+    Space, folder, and list IDs appear in the ClickUp URL. For example, when you open a list,
+    the list ID is in the address bar:
+
+    <img className="rounded-image" src="/assets/admins/connectors/clickup/ClickupListid.webp" alt="ClickUp list ID in the address bar"/>
+  </Step>
+
+  <Step title="Choose comment indexing">
+    Select **Retrieve Task Comments** to also index every comment on each task.
+  </Step>
+
+  <Step title="Choose who can see the tasks">
+    Under **Document Access**, select **Everyone in Your Organization** or **Specific Groups**.
+    **Specific Groups** is available on Onyx Cloud and Enterprise Edition.
+  </Step>
+
+  <Step title="Create the connector">
+    Select **Create Connector**. Open **Admin Panel → Indexing Status**, select the connector,
+    and confirm its first indexing attempt completes.
+  </Step>
+</Steps>

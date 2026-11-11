@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session, aliased
 
 from onyx.configs.app_configs import DEFAULT_PRUNING_FREQ
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.event_inbox.source_registry import webhook_source_for
+from onyx.connectors.event_inbox.sources import load_event_sources
 from onyx.connectors.models import InputType
 from onyx.db.enums import IndexingMode
 from onyx.db.models import (
@@ -140,6 +142,8 @@ def create_connector(
             "Connector by this name already exists, duplicate naming not allowed."
         )
 
+    _settle_event_input_type(connector_data)
+
     connector = Connector(
         name=connector_data.name,
         source=connector_data.source,
@@ -147,12 +151,38 @@ def create_connector(
         connector_specific_config=connector_data.connector_specific_config,
         refresh_freq=connector_data.refresh_freq,
         indexing_start=connector_data.indexing_start,
-        prune_freq=connector_data.prune_freq,
+        # Omitted takes the default; an explicit null never prunes.
+        prune_freq=(
+            connector_data.prune_freq
+            if "prune_freq" in connector_data.model_fields_set
+            else DEFAULT_PRUNING_FREQ
+        ),
+        check_freq=connector_data.check_freq,
     )
+    connector.validate_prune_freq()
+    connector.validate_check_freq()
     db_session.add(connector)
     db_session.commit()
 
     return ObjectCreationIdResponse(id=connector.id)
+
+
+def _settle_event_input_type(connector_data: ConnectorBase) -> None:
+    """A source with a webhook spec is always EVENT: as `poll` it would never
+    drain its queue. Decided here so every route that writes a connector
+    agrees."""
+    load_event_sources()
+    if webhook_source_for(connector_data.source) is None:
+        return
+    if connector_data.input_type != InputType.EVENT:
+        logger.info(
+            "Storing %s connector %r as %s, not the requested %s",
+            connector_data.source.value,
+            connector_data.name,
+            InputType.EVENT.value,
+            connector_data.input_type.value,
+        )
+    connector_data.input_type = InputType.EVENT
 
 
 def update_connector(
@@ -171,19 +201,34 @@ def update_connector(
             "Connector by this name already exists, duplicate naming not allowed."
         )
 
+    _settle_event_input_type(connector_data)
+
     connector.name = connector_data.name
     connector.source = connector_data.source
     connector.input_type = connector_data.input_type
     connector.connector_specific_config = connector_data.connector_specific_config
     connector.refresh_freq = connector_data.refresh_freq
-    connector.prune_freq = (
-        connector_data.prune_freq
-        if connector_data.prune_freq is not None
-        else DEFAULT_PRUNING_FREQ
-    )
+    # As check_freq: omitted keeps the schedule, an explicit null clears it
+    # (the connector then never prunes).
+    if "prune_freq" in connector_data.model_fields_set:
+        connector.prune_freq = connector_data.prune_freq
+        connector.validate_prune_freq()
+    # Omitted keeps the schedule (Terraform's upsert never sends it), an explicit null clears it.
+    if "check_freq" in connector_data.model_fields_set:
+        connector.check_freq = connector_data.check_freq
+        connector.validate_check_freq()
 
     db_session.commit()
     return connector
+
+
+def set_connector_check_frequency(
+    db_session: Session, connector: Connector, seconds: int | None
+) -> None:
+    """Schedules the connector's checks every ``seconds``, or None for on request only. Commits."""
+    connector.check_freq = seconds
+    connector.validate_check_freq()
+    db_session.commit()
 
 
 def delete_connector(

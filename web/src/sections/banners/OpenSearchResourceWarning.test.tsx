@@ -20,7 +20,11 @@ import type {
 let mockAdminId: string | null = "admin-one";
 let mockPathname: string = "/app";
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   usePathname: () => mockPathname,
+  useSearchParams: () => new URLSearchParams(),
 }));
 jest.mock("@/providers/UserProvider", () => ({
   useUser: () => ({

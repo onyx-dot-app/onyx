@@ -1,0 +1,64 @@
+---
+title: "Asana"
+description: "Index tasks and comments from Asana projects"
+---
+
+## How it works
+
+The Asana connector indexes tasks from one Asana workspace. You can index every project in the workspace,
+or only the projects you list.
+
+Each task becomes one document. It holds the task name, description, assignee, due date, custom fields,
+and every comment on the task. Archived projects are skipped.
+
+Onyx pulls new and changed tasks every 30 minutes by default. You can change this under **Schedule**.
+
+**Sync with Asana** is not offered.
+The access type can only be **Everyone in Your Organization** or **Specific Groups**.
+
+## Setting up
+
+### Authorization
+
+<Steps>
+  <Step title="Create a Personal Access Token">
+    - Log in to Asana and go to https://app.asana.com/0/my-apps
+    - Click **Create new token**
+    - Give it a name, such as `Onyx`, and create the token
+    - Copy the token.
+  </Step>
+</Steps>
+
+### Indexing
+
+<Steps>
+  <Step title="Connect an Asana account">
+    In Onyx, go to **Admin Panel → Connectors** and select **Asana**. Under **Authentication Account**,
+    select **New Asana Account** and paste the Personal Access Token into **API Token**.
+  </Step>
+
+  <Step title="Choose what to index">
+    - **Workspace ID**: Your Asana workspace ID. Find it at https://app.asana.com/api/1.0/workspaces.
+    It is a number such as `1234567890123456`.
+    - **Project IDs** (optional): To index specific projects, enter their IDs separated by commas,
+    for example `1234567890123456,2345678901234567`. Leave it empty to index every project in the workspace.
+    To find a project ID, open the project in Asana.
+    In a URL such as `https://app.asana.com/0/1208338159336610/1208338159510597`, `1208338159336610` is the project ID.
+    - **Team ID** (optional): A team whose private projects Onyx may index in addition to public projects.
+    When you set a Team ID and leave **Project IDs** empty, private projects outside that team are skipped.
+    Projects you list under **Project IDs** are always indexed.
+  </Step>
+
+  <Step title="Choose who can see the tasks">
+    Under **Document Access**, select **Everyone in Your Organization** or **Specific Groups**.
+    **Specific Groups** is available on Onyx Cloud and Enterprise Edition.
+  </Step>
+
+  <Step title="Create the connector">
+    Select **Create Connector**. Open **Admin Panel → Indexing Status**, select the connector,
+    and confirm its first indexing attempt completes.
+  </Step>
+</Steps>
+
+The connector indexes only what the token's Asana user can see.
+Make sure that user has access to every project you want to index.

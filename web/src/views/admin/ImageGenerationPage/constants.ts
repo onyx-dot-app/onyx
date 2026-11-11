@@ -71,6 +71,7 @@ export const IMAGE_PROVIDER_GROUPS: ProviderGroup[] = [
         provider_name: "openai",
         title: "GPT Image 1",
         descriptionKey: "providers.openaiGptImage1.description",
+        deprecated: true,
       },
     ],
   },

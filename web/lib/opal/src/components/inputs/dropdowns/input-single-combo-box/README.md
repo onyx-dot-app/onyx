@@ -36,7 +36,7 @@ is typed text, so it shows no option icon.
   options={[
     {
       title: "OpenAI",
-      options: [{ value: "gpt", title: "GPT-5", description: "Default" }],
+      options: [{ value: "gpt", title: "GPT-6 Sol", description: "Default" }],
     },
     { title: "Anthropic", options: [{ value: "opus", title: "Claude Opus" }] },
   ]}

@@ -17,6 +17,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import (
+    KV_ALLOW_RENAMED_ACCOUNT_CLAIM_KEY,
     KV_ALLOW_SAME_PROVIDER_SUBJECT_RELINK_KEY,
     KV_PASSWORD_AUTH_ENABLED_KEY,
 )
@@ -432,6 +433,17 @@ def test_put_relink_window_persists_in_kv_not_row() -> None:
     cleared: SecuritySettings = _put({"allow_same_provider_subject_relink": None})
     assert cleared.allow_same_provider_subject_relink is False
     assert _load_kv(KV_ALLOW_SAME_PROVIDER_SUBJECT_RELINK_KEY) is None
+
+
+def test_put_renamed_claim_window_persists_in_kv_not_row() -> None:
+    opened: SecuritySettings = _put({"allow_renamed_account_claim": True})
+    assert opened.allow_renamed_account_claim is True
+    assert _load_kv(KV_ALLOW_RENAMED_ACCOUNT_CLAIM_KEY) is True
+    assert _load_row_as_dict() == {}
+
+    cleared: SecuritySettings = _put({"allow_renamed_account_claim": None})
+    assert cleared.allow_renamed_account_claim is False
+    assert _load_kv(KV_ALLOW_RENAMED_ACCOUNT_CLAIM_KEY) is None
 
 
 def test_put_multi_tenant_accepts_relink_window(

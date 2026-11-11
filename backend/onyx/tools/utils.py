@@ -1,6 +1,3 @@
-import json
-from collections.abc import Callable
-
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import AZURE_IMAGE_API_KEY
@@ -9,8 +6,6 @@ from onyx.db.document import check_docs_exist
 from onyx.db.models import LLMProvider
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.model_capabilities import find_model_obj, get_model_map
-from onyx.llm.model_request import serialize_tools
-from onyx.llm.models import ToolDefinition
 from onyx.tools.interface import Tool
 
 
@@ -25,25 +20,6 @@ def explicit_tool_calling_supported(model_provider: str, model_name: str) -> boo
     if not model_obj:
         return False
     return bool(model_obj.get("supports_function_calling"))
-
-
-def compute_tool_tokens(tool: Tool, token_counter: Callable[[str], int]) -> int:
-    return compute_tool_definition_tokens([tool.tool_definition()], token_counter)
-
-
-def compute_all_tool_tokens(
-    tools: list[Tool], token_counter: Callable[[str], int]
-) -> int:
-    return sum(compute_tool_tokens(tool, token_counter) for tool in tools)
-
-
-def compute_tool_definition_tokens(
-    tool_definitions: list[ToolDefinition], token_counter: Callable[[str], int]
-) -> int:
-    return sum(
-        token_counter(json.dumps(tool_definition))
-        for tool_definition in serialize_tools(tool_definitions)
-    )
 
 
 def is_image_generation_available(db_session: Session) -> bool:

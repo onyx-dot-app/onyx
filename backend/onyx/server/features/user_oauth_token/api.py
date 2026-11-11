@@ -18,6 +18,7 @@ class OAuthTokenStatus(BaseModel):
     oauth_config_id: int
     expires_at: int | None  # Unix timestamp
     is_expired: bool
+    can_refresh: bool = False
 
 
 @router.get("/status")
@@ -37,11 +38,21 @@ def get_user_oauth_token_status(
         token_data = (
             token.token_data.get_value(apply_mask=False) if token.token_data else {}
         )
+        refresh_token = token_data.get("refresh_token")
+        config = token.oauth_config
         result.append(
             OAuthTokenStatus(
                 oauth_config_id=token.oauth_config_id,
                 expires_at=OAuthTokenManager.token_expiration_time(token_data),
                 is_expired=OAuthTokenManager.is_token_expired(token_data),
+                can_refresh=(
+                    isinstance(refresh_token, str)
+                    and bool(refresh_token)
+                    and config.client_id is not None
+                    and bool(config.client_id.get_value(apply_mask=False))
+                    and config.client_secret is not None
+                    and bool(config.client_secret.get_value(apply_mask=False))
+                ),
             )
         )
     return result

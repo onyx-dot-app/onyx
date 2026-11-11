@@ -2,11 +2,14 @@ package cmd
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/devstack"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/docker"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/postgres"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/prompt"
@@ -51,25 +54,53 @@ WARNING: This is a destructive operation. All data will be lost.`,
 	return cmd
 }
 
-func runDBDrop(opts *DBDropOptions) error {
-	// Find PostgreSQL container.
-	container, err := docker.FindPostgresContainer(docker.ProjectName())
-	if err != nil {
-		return fatalErrorf("Failed to find PostgreSQL container: %w", err)
+func resolveDBContainerTarget() (devstack.Target, string, *postgres.Config, error) {
+	if os.Getenv("POSTGRES_HOST") != "" {
+		if flagProjectName() != "" {
+			return devstack.Target{}, "", nil, fmt.Errorf("--project conflicts with explicit POSTGRES_HOST; select either a stack or a network database")
+		}
+		return devstack.Target{}, "", nil, fmt.Errorf("explicit POSTGRES_HOST requires a host PostgreSQL client; container-only drop, dump and restore are not supported for network targets")
 	}
-	log.Infof("Found PostgreSQL container: %s", container)
+	target, err := resolveRuntimeTarget()
+	if err != nil {
+		return target, "", nil, err
+	}
+	fileEnv, err := devstack.LoadEnvFile(filepath.Join(target.Root, ".vscode", ".env"))
+	if err != nil && !os.IsNotExist(err) {
+		return target, "", nil, err
+	}
+	config := postgres.NewConfigFromEnvironment(append(fileEnv, os.Environ()...))
+	if !target.Managed && !postgres.IsLoopbackHost(config.Host) {
+		return target, "", nil, fmt.Errorf("POSTGRES_HOST in the checkout environment selects a network database; container-only drop, dump and restore are not supported")
+	}
+	container, err := docker.FindPostgresContainer(target.Project)
+	if err != nil {
+		return target, "", nil, fatalErrorf("Failed to find PostgreSQL container: %w", err)
+	}
+	return target, container, config, nil
+}
 
-	config := postgres.NewConfigFromEnv()
+func runDBDrop(opts *DBDropOptions) error {
+	target, container, config, err := resolveDBContainerTarget()
+	if err != nil {
+		return err
+	}
+	log.Infof("Selected project %s, PostgreSQL container %s", target.Project, container)
+	release, err := lockRuntimeTarget(target, true)
+	if err != nil {
+		return err
+	}
+	defer release()
 
 	// Confirmation prompt
 	if !opts.Yes {
 		var msg string
 		if opts.Schema != "" {
-			msg = fmt.Sprintf("This will DROP the schema '%s' in database '%s'. All data will be lost. Continue? (yes/no): ",
-				opts.Schema, config.Database)
+			msg = fmt.Sprintf("This will DROP the schema '%s' in database '%s' on project '%s', container '%s'. All data will be lost. Continue? (yes/no): ",
+				opts.Schema, config.Database, target.Project, container)
 		} else {
-			msg = fmt.Sprintf("This will DROP and RECREATE the database '%s'. All data will be lost. Continue? (yes/no): ",
-				config.Database)
+			msg = fmt.Sprintf("This will DROP and RECREATE the database '%s' on project '%s', container '%s'. All data will be lost. Continue? (yes/no): ",
+				config.Database, target.Project, container)
 		}
 
 		if !prompt.Confirm(msg) {

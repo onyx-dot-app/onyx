@@ -37,7 +37,8 @@ def test_google_drive_candidates_include_native_doc_form(url: str) -> None:
 
 
 def test_google_drive_candidates_cover_all_type_forms() -> None:
-    """A type-ambiguous file/d URL should offer doc, sheet, slide, and file forms."""
+    """A type-ambiguous file/d URL should offer doc, sheet, slide, Google Form,
+    and file forms."""
     candidates = normalize_url_candidates(
         f"https://drive.google.com/file/d/{_GDRIVE_ID}",
         source_type=DocumentSource.GOOGLE_DRIVE,
@@ -46,6 +47,7 @@ def test_google_drive_candidates_cover_all_type_forms() -> None:
         _GDRIVE_DOC_ID,
         f"https://docs.google.com/spreadsheets/d/{_GDRIVE_ID}",
         f"https://docs.google.com/presentation/d/{_GDRIVE_ID}",
+        f"https://docs.google.com/forms/d/{_GDRIVE_ID}",
         f"https://drive.google.com/file/d/{_GDRIVE_ID}",
     }
 
@@ -246,12 +248,26 @@ def test_sharepoint_normalization(url: str, expected: str) -> None:
         ("https://gitlab.com/owner/repo", DocumentSource.GITLAB),
         ("https://example.sharepoint.com/sites/Site", DocumentSource.SHAREPOINT),
         ("https://workspace.slack.com/archives/C123/p456", DocumentSource.SLACK),
+        # Host match, not substring: a look-alike domain is not Slack.
+        ("https://notslack.com/archives/C123/p456", None),
         ("https://example.com/doc", None),  # Unknown source
     ],
 )
 def test_detect_source_type(url: str, expected_source: DocumentSource | None) -> None:
     """Test source type detection from URL patterns."""
     assert _detect_source_type(url) == expected_source
+
+
+def test_detect_source_type_follows_govslack(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With SLACK_API_URL on GovSlack, GovSlack links are Slack documents."""
+    from onyx.configs import slack_configs
+
+    monkeypatch.setattr(slack_configs, "SLACK_DOMAIN", "slack-gov.com")
+    assert (
+        _detect_source_type("https://acme.slack-gov.com/archives/C123/p456")
+        == DocumentSource.SLACK
+    )
+    assert _detect_source_type("https://workspace.slack.com/archives/C123/p456") is None
 
 
 @pytest.mark.parametrize(

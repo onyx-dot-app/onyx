@@ -19,6 +19,7 @@ class GDriveMimeType(str, Enum):
     PDF = "application/pdf"
     WORD_DOC = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     PPT = "application/vnd.google-apps.presentation"
+    FORM = "application/vnd.google-apps.form"
     POWERPOINT = (
         "application/vnd.openxmlformats-officedocument.presentationml.presentation"
     )

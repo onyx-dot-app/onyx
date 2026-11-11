@@ -12,5 +12,4 @@ export interface FileValidationRule {
 export interface FileTypeDefinition {
   category: FileTypeCategory;
   validation?: FileValidationRule;
-  description?: string;
 }

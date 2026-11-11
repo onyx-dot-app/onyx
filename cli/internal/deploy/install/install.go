@@ -102,7 +102,11 @@ func (in *installer) runInstall(ctx context.Context) error {
 			"--prod and --dev cannot be used together: the dev overlay publishes Postgres, Redis, OpenSearch and the API on the host, which a production deployment keeps behind nginx")
 	}
 
-	in.root = paths.Resolve(in.opts.Dir)
+	root, err := paths.Resolve(in.opts.Dir)
+	if err != nil {
+		return exitcodes.New(exitcodes.BadRequest, err.Error())
+	}
+	in.root = root
 	envPath := filepath.Join(in.deploymentDir(), ".env")
 	_, envErr := os.Stat(envPath)
 	rerun := envErr == nil

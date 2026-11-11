@@ -1,11 +1,10 @@
 "use client";
 
+import { Section } from "@opal/layouts";
 import { memo } from "react";
 import { useTranslations } from "next-intl";
-import * as GeneralLayouts from "@/layouts/general-layouts";
-import Text from "@/refresh-components/texts/Text";
 import type { ValidSources } from "@/lib/connectors/types/source";
-import { Button } from "@opal/components";
+import { Text, Button } from "@opal/components";
 import { SvgArrowUpRight, SvgPlusCircle } from "@opal/icons";
 
 interface KnowledgeMainContentProps {
@@ -33,13 +32,13 @@ export const KnowledgeMainContent = memo(function KnowledgeMainContent({
 
   if (!hasAnyKnowledge) {
     return (
-      <GeneralLayouts.Section
+      <Section
         flexDirection="row"
         justifyContent="between"
         alignItems="center"
         height="auto"
       >
-        <Text text03 secondaryBody>
+        <Text color="text-03" font="secondary-body">
           {t("mainContent.empty.description")}
         </Text>
         <Button
@@ -48,7 +47,7 @@ export const KnowledgeMainContent = memo(function KnowledgeMainContent({
           prominence="tertiary"
           aria-label="knowledge-add-button"
         />
-      </GeneralLayouts.Section>
+      </Section>
     );
   }
 
@@ -60,13 +59,13 @@ export const KnowledgeMainContent = memo(function KnowledgeMainContent({
     selectedSources.length;
 
   return (
-    <GeneralLayouts.Section
+    <Section
       flexDirection="row"
       justifyContent="between"
       alignItems="center"
       height="auto"
     >
-      <Text as="p" text03 secondaryBody>
+      <Text as="p" color="text-03" font="secondary-body">
         {t("mainContent.selectedCount.label", { count: totalSelected })}
       </Text>
       <Button
@@ -77,6 +76,6 @@ export const KnowledgeMainContent = memo(function KnowledgeMainContent({
       >
         {t("mainContent.viewEdit.label")}
       </Button>
-    </GeneralLayouts.Section>
+    </Section>
   );
 });

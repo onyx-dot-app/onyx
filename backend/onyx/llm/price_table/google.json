@@ -99,44 +99,6 @@
       "temperature": true,
       "tool_call": true
     },
-    "deep-research-pro-preview-12-2025": {
-      "cost": {
-        "image_input": 0.0011,
-        "input": 2.0,
-        "output": 12.0
-      },
-      "limit": {
-        "context": 1048576,
-        "output": 65536
-      },
-      "modalities": {
-        "input": [
-          "text",
-          "image",
-          "pdf"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "deep-research-pro-preview-12-2025",
-      "structured_output": true,
-      "tool_call": false
-    },
-    "gemini-2.0-flash-exp-image-generation": {
-      "cost": {
-        "image": 0.039,
-        "input": 0.0,
-        "output": 0.0
-      },
-      "limit": {
-        "context": 32768,
-        "output": 32768
-      },
-      "mode": "image_generation",
-      "name": "gemini-2.0-flash-exp-image-generation"
-    },
     "gemini-2.5-computer-use-preview-10-2025": {
       "attachment": true,
       "cost": {
@@ -239,8 +201,9 @@
       "mode": "image_generation",
       "name": "Nano Banana",
       "open_weights": false,
-      "reasoning": true,
+      "reasoning": false,
       "release_date": "2025-08-26",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": false
     },
@@ -484,35 +447,19 @@
       "tool_call": false
     },
     "gemini-3-pro-image-preview": {
-      "attachment": true,
       "cost": {
         "image": 0.134,
         "image_input": 0.0011,
-        "input": 2,
-        "output": 120
+        "input": 2.0,
+        "output": 12.0
       },
-      "family": "gemini-pro",
       "limit": {
         "context": 131072,
         "output": 32768
       },
-      "modalities": {
-        "input": [
-          "text",
-          "image"
-        ],
-        "output": [
-          "text",
-          "image"
-        ]
-      },
       "mode": "image_generation",
-      "name": "Nano Banana Pro",
-      "open_weights": false,
-      "reasoning": true,
-      "release_date": "2025-11-20",
-      "temperature": true,
-      "tool_call": false
+      "name": "gemini-3-pro-image-preview",
+      "status": "deprecated"
     },
     "gemini-3.1-flash-image": {
       "attachment": true,
@@ -547,35 +494,18 @@
       "tool_call": false
     },
     "gemini-3.1-flash-image-preview": {
-      "attachment": true,
       "cost": {
         "image": 0.045,
         "input": 0.5,
-        "output": 60
+        "output": 3.0
       },
-      "family": "gemini-flash",
       "limit": {
         "context": 65536,
         "output": 65536
       },
-      "modalities": {
-        "input": [
-          "text",
-          "image",
-          "pdf"
-        ],
-        "output": [
-          "text",
-          "image"
-        ]
-      },
       "mode": "image_generation",
-      "name": "Nano Banana 2",
-      "open_weights": false,
-      "reasoning": true,
-      "release_date": "2026-02-26",
-      "temperature": true,
-      "tool_call": false
+      "name": "gemini-3.1-flash-image-preview",
+      "status": "deprecated"
     },
     "gemini-3.1-flash-lite": {
       "attachment": true,
@@ -906,7 +836,7 @@
       "tool_call": true
     },
     "gemini-3.5-live-translate-preview": {
-      "attachment": false,
+      "attachment": true,
       "cost": {
         "input": 3.5,
         "input_audio": 3.5,
@@ -1111,6 +1041,40 @@
       "mode": "realtime",
       "name": "gemini-3.8-live-extended-thinking"
     },
+    "gemini-4-argon": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.1,
+        "input": 2,
+        "input_audio": 2,
+        "output": 10
+      },
+      "family": "gemini",
+      "limit": {
+        "context": 1048576,
+        "output": 32768
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "audio",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Gemini 4 Argon",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-13",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
     "gemini-embedding-001": {
       "attachment": false,
       "cost": {
@@ -1179,7 +1143,8 @@
         "context": 8192
       },
       "mode": "embedding",
-      "name": "gemini-embedding-2-preview"
+      "name": "gemini-embedding-2-preview",
+      "status": "deprecated"
     },
     "gemini-exp-1114": {
       "cost": {
@@ -1370,7 +1335,7 @@
         "output": 9.0
       },
       "limit": {
-        "context": 1048576,
+        "context": 131072,
         "output": 65536
       },
       "modalities": {
@@ -1384,6 +1349,28 @@
       },
       "mode": "chat",
       "name": "gemini-omni-1.1-flash",
+      "reasoning": true
+    },
+    "gemini-omni-1.2-flash": {
+      "cost": {
+        "input": 1.5,
+        "output": 9.0
+      },
+      "limit": {
+        "context": 131072,
+        "output": 65536
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gemini-omni-1.2-flash",
       "reasoning": true
     },
     "gemini-omni-flash-preview": {
@@ -1416,11 +1403,29 @@
       "tool_call": false
     },
     "gemini-pro-latest": {
+      "attachment": true,
       "cost": {
-        "cache_read": 0.19999999999999998,
-        "input": 2.0,
-        "output": 12.0
+        "cache_read": 0.2,
+        "context_over_200k": {
+          "cache_read": 0.4,
+          "input": 4,
+          "output": 18
+        },
+        "input": 2,
+        "output": 12,
+        "tiers": [
+          {
+            "cache_read": 0.4,
+            "input": 4,
+            "output": 18,
+            "tier": {
+              "size": 200000,
+              "type": "context"
+            }
+          }
+        ]
       },
+      "family": "gemini-pro",
       "limit": {
         "context": 1048576,
         "output": 65536
@@ -1429,6 +1434,8 @@
         "input": [
           "text",
           "image",
+          "video",
+          "audio",
           "pdf"
         ],
         "output": [
@@ -1436,9 +1443,12 @@
         ]
       },
       "mode": "chat",
-      "name": "gemini-pro-latest",
+      "name": "Gemini Pro Latest",
+      "open_weights": false,
       "reasoning": true,
+      "release_date": "2026-02-19",
       "structured_output": true,
+      "temperature": true,
       "tool_call": true
     },
     "gemini-robotics-er-2-preview": {
@@ -1789,32 +1799,15 @@
       "name": "veo-3.1-fast-generate-001"
     },
     "veo-3.1-fast-generate-preview": {
-      "attachment": true,
       "cost": {
         "second": 0.1
       },
-      "family": "veo",
       "limit": {
-        "context": 480,
-        "output": 8192
-      },
-      "modalities": {
-        "input": [
-          "text",
-          "image",
-          "video"
-        ],
-        "output": [
-          "video"
-        ]
+        "context": 1024
       },
       "mode": "video_generation",
-      "name": "Veo 3.1 fast",
-      "open_weights": false,
-      "reasoning": false,
-      "release_date": "2025-10-15",
-      "temperature": false,
-      "tool_call": false
+      "name": "veo-3.1-fast-generate-preview",
+      "status": "deprecated"
     },
     "veo-3.1-generate-001": {
       "cost": {
@@ -1827,59 +1820,26 @@
       "name": "veo-3.1-generate-001"
     },
     "veo-3.1-generate-preview": {
-      "attachment": true,
       "cost": {
         "second": 0.4
       },
-      "family": "veo",
       "limit": {
-        "context": 480,
-        "output": 8192
-      },
-      "modalities": {
-        "input": [
-          "text",
-          "image"
-        ],
-        "output": [
-          "video"
-        ]
+        "context": 1024
       },
       "mode": "video_generation",
-      "name": "Veo 3.1",
-      "open_weights": false,
-      "reasoning": false,
-      "release_date": "2025-10-15",
-      "status": "beta",
-      "temperature": false,
-      "tool_call": false
+      "name": "veo-3.1-generate-preview",
+      "status": "deprecated"
     },
     "veo-3.1-lite-generate-preview": {
-      "attachment": true,
       "cost": {
         "second": 0.05
       },
-      "family": "veo",
       "limit": {
-        "context": 480,
-        "output": 8192
-      },
-      "modalities": {
-        "input": [
-          "text",
-          "image"
-        ],
-        "output": [
-          "video"
-        ]
+        "context": 1024
       },
       "mode": "video_generation",
-      "name": "Veo 3.1 lite",
-      "open_weights": false,
-      "reasoning": false,
-      "release_date": "2026-03-31",
-      "temperature": false,
-      "tool_call": false
+      "name": "veo-3.1-lite-generate-preview",
+      "status": "deprecated"
     }
   },
   "models_dev_providers": [

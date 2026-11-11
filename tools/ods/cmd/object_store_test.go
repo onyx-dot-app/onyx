@@ -19,6 +19,8 @@ func objectStoreRepo(t *testing.T, bin string) string {
 	if err := os.MkdirAll(filepath.Join(root, "backend"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	writeFile(t, filepath.Join(root, ".vscode", "env_template.txt"), "")
+	writeFile(t, filepath.Join(root, ".vscode", "env.web_template.txt"), "")
 	composeFakeTool(t, bin, "docker", `case "$1" in
 port) case "$2" in *-relational_db-1) echo "0.0.0.0:5432" ;; *-object-store-1) echo "0.0.0.0:9004" ;; *-minio-1) echo "0.0.0.0:9005" ;; *) exit 1 ;; esac ;;
 compose) echo "${MINIO_REPLICAS-unset} ${MINIO_API_HOST_PORT-unset}" >> "`+filepath.Join(bin, "docker.env")+`" ;;
@@ -30,7 +32,7 @@ func TestObjectStoreMigrate_copiesThenStopsMinio(t *testing.T) {
 	bin := composeFakeBin(t)
 	root := objectStoreRepo(t, bin)
 	uvEnv := filepath.Join(bin, "uv.env")
-	composeFakeTool(t, bin, "uv", `echo "$S3_ENDPOINT_URL $S3_LEGACY_ENDPOINT_URL $LEGACY_COPY_ALL_OBJECTS" > "`+uvEnv+`"`)
+	composeFakeTool(t, bin, "uv", `echo "$S3_ENDPOINT_URL $S3_LEGACY_ENDPOINT_URL $LEGACY_COPY_ALL_OBJECTS $POSTGRES_HOST $POSTGRES_PORT" > "`+uvEnv+`"`)
 	envPath := filepath.Join(root, ".vscode", ".env")
 	writeFile(t, envPath, "POSTGRES_PORT=1\nS3_ENDPOINT_URL=http://localhost:9\nS3_LEGACY_ENDPOINT_URL=http://localhost:8\n")
 
@@ -59,7 +61,7 @@ func TestObjectStoreMigrate_copiesThenStopsMinio(t *testing.T) {
 		t.Fatalf("expected the legacy copy in retire mode, got %q", got)
 	}
 	// The discovered ports beat the .env file, and every object is copied.
-	if got := composeReadFile(t, uvEnv); got != "http://localhost:9004 http://localhost:9005 true\n" {
+	if got := composeReadFile(t, uvEnv); got != "http://localhost:9004 http://localhost:9005 true localhost 5432\n" {
 		t.Fatalf("copy ran with env %q", got)
 	}
 	if got := composeReadFile(t, envPath); got != "POSTGRES_PORT=1\nS3_ENDPOINT_URL=http://localhost:9\n" {

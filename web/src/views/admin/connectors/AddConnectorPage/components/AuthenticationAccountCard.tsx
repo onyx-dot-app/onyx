@@ -1,27 +1,32 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useFormatter, useTranslations } from "next-intl";
+import { getSourceMetadata } from "@/lib/connectors/utils";
+import { useTranslations } from "next-intl";
 import { Disabled } from "@opal/core";
 import {
   Button,
   Card,
   Divider,
   Modal,
-  OverflowText,
   SelectCard,
   Text,
   Tooltip,
 } from "@opal/components";
-import { Content, ContentAction, Section, toast } from "@opal/layouts";
 import {
-  SvgAlertTriangle,
+  Content,
+  ContentAction,
+  KeyValue,
+  Section,
+  toast,
+} from "@opal/layouts";
+import {
   SvgArrowRightCircle,
   SvgCheckSquare,
   SvgChevronDown,
   SvgChevronUp,
+  SvgEdit,
   SvgLinkedDots,
-  SvgPlay,
   SvgTrash,
   SvgUserKey,
 } from "@opal/icons";
@@ -39,40 +44,9 @@ import {
 } from "@/lib/credentials/components/ShareAccountField";
 import { getCredentialDetails } from "@/lib/credentials/utils";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
-import { IconLoader } from "@opal/loaders";
-import { getSourceMetadata } from "@/lib/sources";
+import { formatDateLog, formatDateTimeLog } from "@/lib/dateUtils";
+import { escapeMarkdown, markdown } from "@opal/utils";
 import { useUser } from "@/providers/UserProvider";
-import { hasPermission } from "@/lib/permissions/utils";
-import { Permission } from "@/lib/types";
-
-interface DetailRowProps {
-  label: string;
-  value: string;
-  /** Sets the value in the mono font, as for a secret. */
-  mono?: boolean;
-}
-function DetailRow({ label, value, mono = false }: DetailRowProps) {
-  return (
-    <Section flexDirection="row" gap={4}>
-      {/* Each side is capped at the form's input column width, and a long
-      label or value is cut with its full text on hover. */}
-      <div className="min-w-0 max-w-(--block-width-form-input-column-max)">
-        <OverflowText as="p" font="main-ui-action" color="text-03">
-          {label}
-        </OverflowText>
-      </div>
-      <div className="ms-auto min-w-0 max-w-(--block-width-form-input-column-max) flex-1 text-end">
-        <OverflowText
-          as="p"
-          font={mono ? "main-ui-mono" : "main-ui-body"}
-          color="text-04"
-        >
-          {value}
-        </OverflowText>
-      </div>
-    </Section>
-  );
-}
 
 interface AuthenticationAccountCardProps {
   /** The saved account this card shows. */
@@ -84,8 +58,8 @@ interface AuthenticationAccountCardProps {
   /** Whether the connector will use this account. */
   selected: boolean;
   /**
-   * Whether the account can be picked: it works in the realm the form names.
-   * One that cannot is disabled.
+   * Whether the account can be picked: it works in the realm the form names,
+   * and the user may use it. One that cannot is disabled.
    */
   selectable: boolean;
   /**
@@ -97,21 +71,27 @@ interface AuthenticationAccountCardProps {
   onSelect: () => void;
   /** Called when the user picks the selected account again, to drop it. */
   onDeselect: () => void;
+  /** Shown in place of the pick button on a card that shows an account rather than offers it. `null` shows nothing. */
+  action?: React.ReactNode;
   /** Called once the user confirms the deletion. */
   onDelete: () => void;
+  /** Whether the details below the header are open. */
+  detailsOpen: boolean;
+  /** Called when the chevron opens or closes the details. */
+  onDetailsOpenChange: (open: boolean) => void;
   /** The account's stored check report, or null if it was never checked. */
   checkReport: CredentialCheckReport | null;
-  /** Starts the checks on this account; resolves once the run is queued. */
-  onRerunChecks: () => Promise<void>;
   /** Locks sharing with groups, which needs the Business plan. */
   groupsLocked: boolean;
   /**
-   * Saves who may reuse the account; resolves to what the server stored and
-   * rejects when the save fails.
+   * Saves who may reuse the account, and its name when given; resolves to
+   * what the server stored and rejects when the save fails.
    */
-  onUpdateSharing: (
-    sharing: Pick<CredentialSharing, "admin_public" | "groups">
+  onSaveAccount: (
+    update: Pick<CredentialSharing, "admin_public" | "groups" | "name">
   ) => Promise<{ admin_public: boolean; groups?: number[] }>;
+  /** Shows the action that changes the saved values in place. */
+  onUpdateCredentials?: () => void;
 }
 /**
  * One saved account in the Authentication Account section. The whole card
@@ -127,44 +107,27 @@ export default function AuthenticationAccountCard({
   quietSelection = false,
   onSelect,
   onDeselect,
+  action,
   onDelete,
+  detailsOpen,
+  onDetailsOpenChange,
   checkReport,
-  onRerunChecks,
   groupsLocked,
-  onUpdateSharing,
+  onSaveAccount,
+  onUpdateCredentials,
 }: AuthenticationAccountCardProps) {
   const t = useTranslations("admin.connectorsList.add.account");
   const tCredentials = useTranslations("admin.credentials.delete");
   const tCredentialCopy = useTranslations("admin.credentials");
   const fieldCopy = useCredentialFieldCopy(source);
   const details = getCredentialDetails(credential, source);
-  const format = useFormatter();
-  const { user, permissions } = useUser();
-  const [starting, setStarting] = useState<boolean>(false);
-  const running: boolean = starting || checkReport?.run_status === "running";
+  const { user } = useUser();
   const lastChecked: string | null = checkReport?.report?.checked_at ?? null;
   const checkedAt: string | null = lastChecked
-    ? format.dateTime(new Date(lastChecked), {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-      })
+    ? formatDateTimeLog(lastChecked)
     : null;
 
-  async function rerunChecks() {
-    setStarting(true);
-    try {
-      await onRerunChecks();
-    } catch {
-      toast.error(t("rerunFailed.toast"));
-    } finally {
-      setStarting(false);
-    }
-  }
-  const [expanded, setExpanded] = useState<boolean>(false);
+  const failedToRun: boolean = checkReport?.run_status === "failed_to_run";
   // What the server holds, and what the select shows: group edits stay
   // local until focus leaves the group picker.
   const [savedSharing, setSavedSharing] = useState<ShareAccountFormValues>(() =>
@@ -186,58 +149,85 @@ export default function AuthenticationAccountCard({
     setSavedSharing(next);
     setSharing(next);
     // Only a new server value resets the select.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serverSharing]);
 
-  // One save at a time, without locking the select: a change made while a
-  // save runs waits, and only the latest waiting change is sent next.
+  // A rename shows at once, until the list refetch brings the stored name.
+  const [pendingName, setPendingName] = useState<string | null>(null);
+  useEffect(() => {
+    setPendingName(null);
+  }, [credential.name]);
+
+  // Sharing and the name save through one route, one save at a time, without
+  // locking the controls: a change made while a save runs waits, and the
+  // waiting changes merge, so only the latest of each is sent next. Saves
+  // therefore land in order, and only the newest decides what shows.
   const savedSharingRef = useRef<ShareAccountFormValues>(savedSharing);
-  const sharingInFlightRef = useRef<boolean>(false);
-  const queuedSharingRef = useRef<ShareAccountFormValues | null>(null);
+  const saveInFlightRef = useRef<boolean>(false);
+  const queuedSaveRef = useRef<{
+    sharing: ShareAccountFormValues | null;
+    name: string | null;
+  } | null>(null);
   // Group edits not yet sent: they wait for the picker's blur, so a save
   // that lands meanwhile must not replace them.
   const unsentGroupEditsRef = useRef<boolean>(false);
-  async function saveSharing(next: ShareAccountFormValues) {
-    unsentGroupEditsRef.current = false;
-    setSharing(next);
-    if (sharingInFlightRef.current) {
-      queuedSharingRef.current = next;
-      return;
+  // Read fresh: a change can queue while a save is awaited.
+  function waitingSave() {
+    return queuedSaveRef.current;
+  }
+  async function saveAccount(change: {
+    sharing?: ShareAccountFormValues;
+    name?: string;
+  }) {
+    if (change.sharing) {
+      unsentGroupEditsRef.current = false;
+      setSharing(change.sharing);
     }
-    sharingInFlightRef.current = true;
+    if (change.name !== undefined) setPendingName(change.name);
+    queuedSaveRef.current = {
+      sharing: change.sharing ?? queuedSaveRef.current?.sharing ?? null,
+      name: change.name ?? queuedSaveRef.current?.name ?? null,
+    };
+    if (saveInFlightRef.current) return;
+    saveInFlightRef.current = true;
     setSavingSharing(true);
-    let target: ShareAccountFormValues | null = next;
-    while (target !== null) {
-      queuedSharingRef.current = null;
+    while (queuedSaveRef.current !== null) {
+      const target = queuedSaveRef.current;
+      queuedSaveRef.current = null;
       try {
-        const stored = shareAccountValues(
-          await onUpdateSharing(shareAccountPayload(target))
-        );
-        savedSharingRef.current = stored;
-        setSavedSharing(stored);
+        // A rename alone sends the stored sharing, so it changes nothing else.
+        const stored = await onSaveAccount({
+          ...shareAccountPayload(target.sharing ?? savedSharingRef.current),
+          ...(target.name !== null && { name: target.name }),
+        });
+        const storedSharing = shareAccountValues(stored);
+        savedSharingRef.current = storedSharing;
+        setSavedSharing(storedSharing);
         // A newer change, sent or not, keeps what the select shows.
-        if (queuedSharingRef.current === null && !unsentGroupEditsRef.current) {
-          setSharing(stored);
+        if (waitingSave()?.sharing == null && !unsentGroupEditsRef.current) {
+          setSharing(storedSharing);
         }
-        toast.success(t("shareSaved.toast"));
       } catch {
-        if (queuedSharingRef.current === null && !unsentGroupEditsRef.current) {
+        if (
+          target.sharing &&
+          waitingSave()?.sharing == null &&
+          !unsentGroupEditsRef.current
+        ) {
           setSharing(savedSharingRef.current);
         }
-        toast.error(t("shareFailed.toast"));
+        if (target.sharing) toast.error(t("shareFailed.toast"));
+        if (target.name !== null) {
+          // A newer rename still waiting keeps showing.
+          if (waitingSave()?.name == null) setPendingName(null);
+          toast.error(t("renameFailed.toast"));
+        }
       }
-      target = queuedSharingRef.current;
     }
-    sharingInFlightRef.current = false;
+    saveInFlightRef.current = false;
     setSavingSharing(false);
   }
   const [confirmingDelete, setConfirmingDelete] = useState<boolean>(false);
 
-  const addedOn: string = format.dateTime(new Date(credential.time_created), {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
+  const addedOn: string = formatDateLog(credential.time_created);
 
   // The creator, by display name where they set one. An account with no
   // creator shows no owner.
@@ -245,15 +235,56 @@ export default function AuthenticationAccountCard({
     credential.user_id === null
       ? null
       : (credential.user_personal_name ?? credential.user_email);
+  // The account's name, which its editors can change in place; an unnamed
+  // account shows who created it.
+  const accountName: string =
+    (pendingName ?? credential.name) ||
+    credential.user_email ||
+    t("untitled.label");
   const inUse: boolean = credential.usages.length > 0;
   const isOwnAccount: boolean =
     credential.is_owner ?? (user !== null && credential.user_id === user.id);
-  // The owner, or an admin when the account is shared with admins or has no
-  // owner, may change its sharing; a group-shared user may only use it.
-  const canEditSharing: boolean =
-    isOwnAccount ||
-    (hasPermission(permissions, Permission.MANAGE_CONNECTORS) &&
-      (credential.admin_public || credential.user_id === null));
+  // Only the owner may rename the account and change its sharing; anyone it
+  // is shared with may only use it.
+  const canEditAccount: boolean = isOwnAccount;
+
+  // The control beside the chevron: a caller's own, else the pick state.
+  function pickControl(): React.ReactNode {
+    if (action !== undefined) return action;
+    if (selected) {
+      return (
+        <Button
+          variant="action"
+          prominence="tertiary"
+          rightIcon={SvgCheckSquare}
+          tabIndex={-1}
+        >
+          {t("selected.label")}
+        </Button>
+      );
+    }
+    if (selectable) {
+      // Repeats the card's own action, so it leaves the tab order.
+      return (
+        <Button
+          prominence="tertiary"
+          rightIcon={SvgArrowRightCircle}
+          tabIndex={-1}
+        >
+          {t("useButton.label")}
+        </Button>
+      );
+    }
+    return (
+      <div className="p-1.5">
+        <Text font="secondary-body" color="text-03">
+          {credential.usable
+            ? t("unsupportedRealm.label")
+            : t("unavailable.label")}
+        </Text>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -261,16 +292,26 @@ export default function AuthenticationAccountCard({
         <Modal open onOpenChange={() => setConfirmingDelete(false)}>
           <Modal.Content width="sm" height="sm">
             <Modal.Header
-              icon={SvgAlertTriangle}
-              title={tCredentials("confirmTitle")}
+              icon={SvgTrash}
+              title={markdown(
+                tCredentials("confirmTitle", {
+                  name: escapeMarkdown(accountName),
+                })
+              )}
               onClose={() => setConfirmingDelete(false)}
             />
             <Modal.Body>
-              <Text font="main-ui-body" color="text-04">
+              <Text font="main-ui-body" color="text-03">
                 {tCredentials("confirmBody.message")}
               </Text>
             </Modal.Body>
             <Modal.Footer>
+              <Button
+                prominence="secondary"
+                onClick={() => setConfirmingDelete(false)}
+              >
+                {tCredentials("cancelButton.label")}
+              </Button>
               <Button
                 variant="danger"
                 onClick={() => {
@@ -280,12 +321,6 @@ export default function AuthenticationAccountCard({
               >
                 {tCredentials("confirmButton.label")}
               </Button>
-              <Button
-                prominence="secondary"
-                onClick={() => setConfirmingDelete(false)}
-              >
-                {tCredentials("cancelButton.label")}
-              </Button>
             </Modal.Footer>
           </Modal.Content>
         </Modal>
@@ -294,7 +329,7 @@ export default function AuthenticationAccountCard({
       <Disabled disabled={!selectable}>
         <SelectCard
           expandable
-          expanded={expanded}
+          expanded={detailsOpen}
           expandableContentHeight="full"
           state={selected && !quietSelection ? "selected" : "filled"}
           border="solid"
@@ -307,14 +342,15 @@ export default function AuthenticationAccountCard({
               <Card border="none" padding={2} rounding={3}>
                 <Section gap={3} alignItems="stretch" width="full">
                   <ContentAction
+                    font="main-ui-action"
                     title={
-                      checkedAt
-                        ? t("lastTested.title", { date: checkedAt })
-                        : t("notTested.title")
+                      failedToRun
+                        ? t("failedToRun.title")
+                        : checkedAt
+                          ? t("lastTested.title", { date: checkedAt })
+                          : t("notTested.title")
                     }
                     description={t("details.description")}
-                    sizePreset="main-ui"
-                    variant="section"
                     padding={0}
                     rightChildren={
                       <Section
@@ -323,34 +359,42 @@ export default function AuthenticationAccountCard({
                         width="fit"
                         height="fit"
                       >
+                        {onUpdateCredentials && (
+                          <Button
+                            prominence="tertiary"
+                            icon={SvgEdit}
+                            aria-label={t("updateButton.label")}
+                            disabled={!isOwnAccount}
+                            tooltip={
+                              isOwnAccount
+                                ? t("updateButton.tooltip")
+                                : t("updateButton.notOwnerTooltip")
+                            }
+                            onClick={onUpdateCredentials}
+                          />
+                        )}
                         <Button
                           variant="danger"
-                          prominence="tertiary"
+                          prominence="internal"
                           icon={SvgTrash}
                           aria-label={t("deleteButton.label")}
-                          // The server refuses to delete an account that
-                          // connectors still use.
-                          disabled={inUse}
+                          // Only the owner may delete the account, and the
+                          // server refuses one that connectors still use.
+                          disabled={!isOwnAccount || inUse}
                           tooltip={
-                            inUse ? t("deleteButton.inUseTooltip") : undefined
+                            !isOwnAccount
+                              ? t("deleteButton.notOwnerTooltip")
+                              : inUse
+                                ? t("deleteButton.inUseTooltip")
+                                : undefined
                           }
                           onClick={() => setConfirmingDelete(true)}
                         />
-                        <Button
-                          prominence="secondary"
-                          // The label holds still while the checks run; only
-                          // the icon turns into a spinner.
-                          icon={running ? IconLoader : SvgPlay}
-                          disabled={running}
-                          onClick={rerunChecks}
-                        >
-                          {t("rerunButton.label")}
-                        </Button>
                       </Section>
                     }
                   />
                   {details.method && (
-                    <DetailRow
+                    <KeyValue
                       label={t("authenticationType.label")}
                       value={tCredentialCopy(
                         `methods.labels.${details.method.label}`
@@ -358,7 +402,7 @@ export default function AuthenticationAccountCard({
                     />
                   )}
                   {details.fields.map(({ key, field, value }) => (
-                    <DetailRow
+                    <KeyValue
                       key={key}
                       label={fieldCopy(key).title}
                       value={value}
@@ -372,8 +416,9 @@ export default function AuthenticationAccountCard({
                 <Divider paddingParallel={2} paddingPerpendicular={0} />
                 <Tooltip
                   tooltip={
-                    canEditSharing ? undefined : t("shareLocked.tooltip")
+                    canEditAccount ? undefined : t("shareLocked.tooltip")
                   }
+                  align="follow"
                 >
                   <div className="p-2">
                     <ShareAccountSelect
@@ -390,16 +435,16 @@ export default function AuthenticationAccountCard({
                             next.groups.length === 0
                           )
                         ) {
-                          void saveSharing(next);
+                          void saveAccount({ sharing: next });
                           return;
                         }
                         unsentGroupEditsRef.current = true;
                         setSharing(next);
                       }}
                       onGroupsBlur={() => {
-                        if (hasUnsavedSharing) void saveSharing(sharing);
+                        if (hasUnsavedSharing) void saveAccount({ sharing });
                       }}
-                      disabled={!canEditSharing}
+                      disabled={!canEditAccount}
                       onlyMeDisabledReason={
                         isOwnAccount ? undefined : t("onlyMeOwnerOnly.tooltip")
                       }
@@ -417,46 +462,59 @@ export default function AuthenticationAccountCard({
             gap={4}
             width="full"
           >
-            <Section alignItems="start" gap={0} padding={2} width="full">
+            {/* Stretched, and free to shrink beside the buttons, so a long
+            name is cut at the column's edge rather than widening the card. */}
+            <Section
+              alignItems="stretch"
+              gap={0}
+              padding={2}
+              width="full"
+              className="min-w-0"
+            >
               <Content
+                font="main-ui-action"
                 icon={getSourceMetadata(source).icon}
-                // Named by who created it; the account's own name stands in
-                // for one with no creator.
-                title={
-                  credential.user_email ??
-                  credential.name ??
-                  t("untitled.label")
-                }
+                title={accountName}
+                // One line; a long name is cut, in full on hover.
+                titleMaxLines={1}
+                editable={canEditAccount}
+                editTooltip={t("renameButton.tooltip")}
+                // An empty name falls back to the creator's email.
+                onTitleChange={(name) => void saveAccount({ name })}
                 suffix={t("sourceSuffix", { source: sourceName })}
                 description={t("addedOn.label", { date: addedOn })}
-                sizePreset="main-ui"
-                variant="section"
               />
               {/* One-sided padding, which Section's own padding overrides. */}
               <div className="flex flex-row gap-4 ps-5.5 pt-2">
                 <Content
+                  font="secondary-body"
                   icon={SvgLinkedDots}
                   title={t("usedBy.label", { count: credential.usages.length })}
-                  sizePreset="secondary"
-                  variant="body"
-                  color="muted"
+                  titleColor="text-03"
                   width="fit"
                 />
                 {ownerName !== null && (
                   <Content
+                    font="secondary-body"
                     icon={SvgUserKey}
                     title={
                       isOwnAccount
                         ? t("owner.you", { name: ownerName })
                         : ownerName
                     }
-                    sizePreset="secondary"
-                    variant="body"
-                    color="muted"
+                    titleColor="text-03"
                     width="fit"
                   />
                 )}
               </div>
+              {/* Not `selectable`: a selected unusable account stays so. */}
+              {!credential.usable && credential.refusal_reason !== null && (
+                <div className="ps-5.5 pt-2">
+                  <Text font="secondary-body" color="text-03">
+                    {credential.refusal_reason}
+                  </Text>
+                </div>
+              )}
             </Section>
             <Section
               alignItems="end"
@@ -464,44 +522,21 @@ export default function AuthenticationAccountCard({
               gap={1}
               width="fit"
             >
-              {selected ? (
-                <Button
-                  variant="action"
-                  prominence="tertiary"
-                  rightIcon={SvgCheckSquare}
-                  tabIndex={-1}
-                >
-                  {t("selected.label")}
-                </Button>
-              ) : selectable ? (
-                // Repeats the card's own action, so it leaves the tab order.
-                <Button
-                  prominence="tertiary"
-                  rightIcon={SvgArrowRightCircle}
-                  tabIndex={-1}
-                >
-                  {t("useButton.label")}
-                </Button>
-              ) : (
-                <div className="p-1.5">
-                  <Text font="secondary-body" color="text-03">
-                    {t("unsupportedRealm.label")}
-                  </Text>
-                </div>
-              )}
+              {pickControl()}
               <Button
-                icon={expanded ? SvgChevronUp : SvgChevronDown}
+                icon={detailsOpen ? SvgChevronUp : SvgChevronDown}
                 prominence="tertiary"
+                tooltip={t("viewDetails.tooltip")}
                 aria-label={
-                  expanded
+                  detailsOpen
                     ? t("collapseButton.ariaLabel")
                     : t("expandButton.ariaLabel")
                 }
-                aria-expanded={expanded}
+                aria-expanded={detailsOpen}
                 onClick={(event) => {
                   // Opens the details; it does not pick the account.
                   event.stopPropagation();
-                  setExpanded((open) => !open);
+                  onDetailsOpenChange(!detailsOpen);
                 }}
               />
             </Section>

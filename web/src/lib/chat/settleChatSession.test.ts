@@ -1,0 +1,542 @@
+import { ChatSessionSharedStatus } from "@/app/app/types";
+import type { BackendChatSession, Message } from "@/app/app/types";
+import { processRawChatHistory } from "@/app/app/services/lib";
+import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
+import { settleChatSession } from "@/lib/chat/settleChatSession";
+import {
+  fetchSettledChatSession,
+  waitForChatSessionIdle,
+} from "@/lib/chat/sessionReadiness";
+
+jest.mock("@/app/app/services/lib", () => ({
+  processRawChatHistory: jest.fn(),
+}));
+jest.mock("@/lib/chat/sessionReadiness", () => ({
+  fetchSettledChatSession: jest.fn(),
+  waitForChatSessionIdle: jest.fn(),
+}));
+
+const errorMessage = "Check again";
+
+function message(nodeId: number, type: Message["type"], text: string): Message {
+  return {
+    nodeId,
+    type,
+    message: text,
+    files: [],
+    packets: [],
+    toolCall: null,
+    parentNodeId: null,
+  };
+}
+
+beforeEach(() => {
+  jest.resetAllMocks();
+  useChatSessionStore.setState({ sessions: new Map(), currentSessionId: null });
+  const store = useChatSessionStore.getState();
+  store.createSession("session");
+  store.updateSessionData("session", {
+    chatState: "cancelling",
+    queuedMessagesPaused: true,
+  });
+  jest.mocked(waitForChatSessionIdle).mockResolvedValue();
+  jest.mocked(fetchSettledChatSession).mockResolvedValue({
+    chat_session_id: "session",
+    description: "Existing chat",
+    persona_id: 0,
+    persona_name: "Assistant",
+    time_created: "2026-10-02T00:00:00Z",
+    time_updated: "2026-10-02T00:00:00Z",
+    shared_status: ChatSessionSharedStatus.Private,
+    current_temperature_override: null,
+    current_reasoning_effort_override: null,
+    owner_name: null,
+    messages: [],
+    packets: [],
+    is_processing: false,
+    current_stream: null,
+  });
+  jest.mocked(processRawChatHistory).mockReturnValue(new Map());
+});
+
+function settle(mode: "completion" | "recovery" = "completion") {
+  const controller = useChatSessionStore
+    .getState()
+    .sessions.get("session")!.abortController;
+  return settleChatSession({
+    sessionId: "session",
+    controller,
+    errorMessage,
+    mode,
+  });
+}
+
+test("explicit recovery checks server state after acknowledgement fails", async () => {
+  const log = jest.spyOn(console, "error").mockImplementation(() => {});
+  const acknowledgement = Promise.reject(new TypeError("Connection lost"));
+  useChatSessionStore.getState().updateSessionData("session", {
+    sendAcknowledged: acknowledgement,
+  });
+  try {
+    await settle();
+    expect(waitForChatSessionIdle).not.toHaveBeenCalled();
+    expect(fetchSettledChatSession).not.toHaveBeenCalled();
+    expect(
+      useChatSessionStore.getState().sessions.get("session")
+    ).toMatchObject({
+      chatState: "unconfirmed",
+      queuedMessagesPaused: true,
+    });
+
+    const idle = Promise.withResolvers<void>();
+    const polling = Promise.withResolvers<void>();
+    jest.mocked(waitForChatSessionIdle).mockImplementation(() => {
+      polling.resolve();
+      return idle.promise;
+    });
+    const saved = new Map([[42, message(42, "assistant", "Saved answer")]]);
+    jest.mocked(processRawChatHistory).mockReturnValue(saved);
+    const recovery = settle("recovery");
+    await polling.promise;
+    expect(fetchSettledChatSession).not.toHaveBeenCalled();
+    expect(
+      useChatSessionStore.getState().sessions.get("session")?.chatState
+    ).toBe("unconfirmed");
+
+    idle.resolve();
+    await recovery;
+    expect(fetchSettledChatSession).toHaveBeenCalledWith("session");
+    expect(
+      useChatSessionStore.getState().sessions.get("session")
+    ).toMatchObject({
+      chatState: "input",
+      sendAcknowledged: undefined,
+      messageTree: saved,
+      queuedMessagesPaused: true,
+      uncaughtError: null,
+    });
+  } finally {
+    log.mockRestore();
+  }
+});
+
+test("explicit recovery still waits for a pending send acknowledgement", async () => {
+  const acknowledgement = Promise.withResolvers<number | null>();
+  useChatSessionStore.getState().updateSessionData("session", {
+    chatState: "unconfirmed",
+    sendAcknowledged: acknowledgement.promise,
+  });
+  const recovery = settle("recovery");
+  await Promise.resolve();
+  expect(waitForChatSessionIdle).not.toHaveBeenCalled();
+  acknowledgement.resolve(42);
+  await recovery;
+  expect(waitForChatSessionIdle).toHaveBeenCalledWith("session");
+  expect(fetchSettledChatSession).toHaveBeenCalledWith("session");
+});
+
+test("a rejected send without a reserved row keeps its submitted text and error", async () => {
+  const user = {
+    ...message(-1, "user", "Keep this question"),
+    childrenNodeIds: [-2],
+    latestChildNodeId: -2,
+  };
+  const error = {
+    ...message(-2, "error", ""),
+    errorMessage: "Too many requests",
+    parentNodeId: -1,
+  };
+  const tree = new Map<number, Message>([
+    [-1, user],
+    [-2, error],
+  ]);
+  useChatSessionStore.getState().updateSessionMessageTree("session", tree);
+  await settle();
+  const session = useChatSessionStore.getState().sessions.get("session")!;
+  expect(session.messageTree).toEqual(tree);
+  expect(session.chatState).toBe("input");
+  expect(session.queuedMessagesPaused).toBe(true);
+});
+
+test("stopping waits for saved history and preserves error retry details", async () => {
+  const idle = Promise.withResolvers<void>();
+  const history = Promise.withResolvers<BackendChatSession>();
+  jest.mocked(waitForChatSessionIdle).mockReturnValue(idle.promise);
+  jest.mocked(fetchSettledChatSession).mockReturnValue(history.promise);
+  const failed = {
+    ...message(-2, "error", "Partial answer"),
+    errorMessage: "Save failed",
+    messageId: 42,
+    isRetryable: true,
+    errorCode: "RESPONSE_SAVE_ERROR",
+  };
+  useChatSessionStore
+    .getState()
+    .updateSessionMessageTree("session", new Map([[-2, failed]]));
+  jest
+    .mocked(processRawChatHistory)
+    .mockReturnValue(
+      new Map([[42, { ...message(42, "assistant", ""), messageId: 42 }]])
+    );
+  const pending = settle();
+  expect(fetchSettledChatSession).not.toHaveBeenCalled();
+  idle.resolve();
+  await Promise.resolve();
+  expect(
+    useChatSessionStore.getState().sessions.get("session")?.chatState
+  ).toBe("cancelling");
+  history.resolve({
+    chat_session_id: "session",
+    description: "Existing chat",
+    persona_id: 0,
+    persona_name: "Assistant",
+    time_created: "2026-10-02T00:00:00Z",
+    time_updated: "2026-10-02T00:00:00Z",
+    shared_status: ChatSessionSharedStatus.Private,
+    current_temperature_override: null,
+    current_reasoning_effort_override: null,
+    owner_name: null,
+    messages: [],
+    packets: [],
+    is_processing: false,
+    current_stream: null,
+  });
+  await pending;
+  const session = useChatSessionStore.getState().sessions.get("session")!;
+  expect(session.chatState).toBe("input");
+  expect(session.messageTree.get(42)).toMatchObject({
+    type: "error",
+    message: "Partial answer",
+    errorMessage: "Save failed",
+    isRetryable: true,
+    errorCode: "RESPONSE_SAVE_ERROR",
+  });
+});
+
+test.each([
+  {
+    status: undefined,
+    code: null,
+    savedType: "assistant",
+    text: "Saved answer",
+    recover: true,
+  },
+  {
+    status: undefined,
+    code: "STREAM_GAP",
+    savedType: "assistant",
+    text: "Saved answer",
+    recover: true,
+  },
+  {
+    status: undefined,
+    code: null,
+    savedType: "assistant",
+    text: "",
+    recover: false,
+  },
+  {
+    status: undefined,
+    code: null,
+    savedType: "error",
+    text: "Partial answer",
+    recover: true,
+  },
+  {
+    status: undefined,
+    code: "RESPONSE_SAVE_ERROR",
+    savedType: "assistant",
+    text: "",
+    recover: false,
+  },
+  {
+    status: undefined,
+    code: "RESPONSE_SAVE_ERROR",
+    savedType: "assistant",
+    text: "Saved answer",
+    recover: true,
+  },
+  ...(
+    [null, "running", "suspended", "complete", "limit", "cancelled"] as const
+  ).map((status) => ({
+    code: "RESPONSE_SAVE_ERROR",
+    savedType: "assistant" as const,
+    text: "Response was terminated prior to completion, try regenerating.",
+    status,
+    recover:
+      status === "complete" || status === "limit" || status === "cancelled",
+  })),
+] as const)(
+  "recovery prefers successful saved answers and retains unresolved errors ($code, $savedType, $status, '$text')",
+  async ({ code, savedType, text, recover, status }) => {
+    const failed: Message = {
+      ...message(-2, "error", ""),
+      errorMessage: "Could not finish this response",
+      messageId: 42,
+      errorCode: code,
+      isRetryable: true,
+    };
+    const saved: Message = {
+      ...message(42, savedType, text),
+      responseStatus: status,
+      messageId: 42,
+      errorMessage: savedType === "error" ? "Saved refusal" : undefined,
+      packets: [
+        ...(code === "RESPONSE_SAVE_ERROR"
+          ? [
+              {
+                placement: { turn_index: 0 },
+                obj: {
+                  type: "reasoning_delta" as const,
+                  reasoning: "Partial reasoning",
+                },
+              },
+            ]
+          : []),
+        { placement: { turn_index: 0 }, obj: { type: "stop" } },
+      ],
+    };
+    useChatSessionStore.getState().updateSessionData("session", {
+      chatState: "unconfirmed",
+      uncaughtError: failed.errorMessage,
+      messageTree: new Map([[-2, failed]]),
+    });
+    jest.mocked(processRawChatHistory).mockReturnValue(new Map([[42, saved]]));
+    await settle("recovery");
+    const restored = useChatSessionStore
+      .getState()
+      .sessions.get("session")
+      ?.messageTree.get(42);
+    if (recover) {
+      expect(restored).toBe(saved);
+    } else {
+      expect(restored).toMatchObject({
+        type: "error",
+        errorMessage: failed.errorMessage,
+        errorCode: code,
+        isRetryable: true,
+        packets: [],
+      });
+    }
+    expect(
+      useChatSessionStore.getState().sessions.get("session")?.uncaughtError
+    ).toBeNull();
+  }
+);
+
+test("a late failed readiness check cannot change a newer request", async () => {
+  const idle = Promise.withResolvers<void>();
+  jest.mocked(waitForChatSessionIdle).mockReturnValue(idle.promise);
+  const pending = settle();
+  useChatSessionStore
+    .getState()
+    .setAbortController("session", new AbortController());
+  idle.reject(new Error("Old request failed"));
+  await pending;
+  expect(
+    useChatSessionStore.getState().sessions.get("session")?.chatState
+  ).toBe("cancelling");
+  expect(
+    useChatSessionStore.getState().sessions.get("session")?.uncaughtError
+  ).toBeNull();
+  expect(fetchSettledChatSession).not.toHaveBeenCalled();
+});
+
+test.each(["readiness", "history"])(
+  "a failed %s check preserves output and allows a later retry",
+  async (stage) => {
+    const log = jest.spyOn(console, "error").mockImplementation(() => {});
+    const tree = new Map([[42, message(42, "assistant", "Partial answer")]]);
+    useChatSessionStore.getState().updateSessionMessageTree("session", tree);
+    if (stage === "readiness") {
+      jest
+        .mocked(waitForChatSessionIdle)
+        .mockRejectedValueOnce(new Error("Offline"));
+    } else {
+      jest
+        .mocked(fetchSettledChatSession)
+        .mockRejectedValueOnce(new Error("Offline"));
+    }
+    try {
+      await settle();
+      expect(
+        useChatSessionStore.getState().sessions.get("session")
+      ).toMatchObject({
+        chatState: "unconfirmed",
+        queuedMessagesPaused: true,
+        uncaughtError: errorMessage,
+        messageTree: tree,
+      });
+      expect(processRawChatHistory).not.toHaveBeenCalled();
+
+      const saved = new Map([[42, message(42, "assistant", "Saved answer")]]);
+      jest.mocked(processRawChatHistory).mockReturnValue(saved);
+      await settle();
+      expect(
+        useChatSessionStore.getState().sessions.get("session")
+      ).toMatchObject({
+        chatState: "input",
+        uncaughtError: null,
+        messageTree: saved,
+      });
+    } finally {
+      log.mockRestore();
+    }
+  }
+);
+
+test("a stale successful history refresh cannot overwrite a newer turn", async () => {
+  const saved = await fetchSettledChatSession("session");
+  jest.mocked(fetchSettledChatSession).mockClear();
+  const history = Promise.withResolvers<BackendChatSession>();
+  const started = Promise.withResolvers<void>();
+  jest.mocked(fetchSettledChatSession).mockImplementation(() => {
+    started.resolve();
+    return history.promise;
+  });
+  const pending = settle();
+  await started.promise;
+  const tree = new Map([[99, message(99, "assistant", "New answer")]]);
+  const store = useChatSessionStore.getState();
+  store.setAbortController("session", new AbortController());
+  store.updateSessionMessageTree("session", tree);
+  store.updateChatState("session", "streaming");
+  history.resolve(saved);
+  await pending;
+  expect(processRawChatHistory).not.toHaveBeenCalled();
+  expect(useChatSessionStore.getState().sessions.get("session")).toMatchObject({
+    chatState: "streaming",
+    messageTree: tree,
+  });
+});
+
+test.each(["completion", "recovery"] as const)(
+  "%s keeps incognito content when saved rows contain only usage metadata",
+  async (mode) => {
+    const tree = new Map([
+      [1, message(1, "user", "Private question")],
+      [2, message(2, "assistant", "Private answer")],
+      [3, message(3, "user", "Next question")],
+      [4, message(4, "assistant", "Partial answer")],
+    ]);
+    const store = useChatSessionStore.getState();
+    store.updateSessionData("session", { incognito: true, messageTree: tree });
+    await settle(mode);
+    expect(waitForChatSessionIdle).toHaveBeenCalledWith("session");
+    expect(fetchSettledChatSession).toHaveBeenCalledWith("session");
+    expect(processRawChatHistory).not.toHaveBeenCalled();
+    expect(
+      useChatSessionStore.getState().sessions.get("session")
+    ).toMatchObject({
+      chatState: "input",
+      messageTree: tree,
+    });
+  }
+);
+
+test("an old rejected attempt does not hide the latest saved answer", async () => {
+  const user = {
+    ...message(1, "user", "Question"),
+    childrenNodeIds: [-2, 42],
+    latestChildNodeId: 42,
+  };
+  const rejected = {
+    ...message(-2, "error", ""),
+    errorMessage: "Rejected attempt",
+    parentNodeId: 1,
+  };
+  const partial = {
+    ...message(42, "assistant", "Partial"),
+    messageId: 42,
+    parentNodeId: 1,
+  };
+  useChatSessionStore.getState().updateSessionMessageTree(
+    "session",
+    new Map<number, Message>([
+      [1, user],
+      [-2, rejected],
+      [42, partial],
+    ])
+  );
+  const saved = new Map<number, Message>([
+    [1, user],
+    [42, { ...partial, message: "Complete saved answer" }],
+  ]);
+  jest.mocked(processRawChatHistory).mockReturnValue(saved);
+  await settle();
+  expect(
+    useChatSessionStore.getState().sessions.get("session")?.messageTree
+  ).toEqual(saved);
+});
+
+test.each([false, true])(
+  "recovery waits for final local packets before releasing input (aborted: %s)",
+  async (aborted) => {
+    const reader = Promise.withResolvers<void>();
+    const store = useChatSessionStore.getState();
+    const controller = store.sessions.get("session")!.abortController;
+    const acknowledgement = Promise.reject(new TypeError("Connection lost"));
+    store.updateSessionData("session", {
+      chatState: "unconfirmed",
+      incognito: true,
+      sendAcknowledged: acknowledgement,
+      readerFinished: reader.promise,
+    });
+    if (aborted) controller.abort();
+    const recovery = settle("recovery");
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(waitForChatSessionIdle).not.toHaveBeenCalled();
+    expect(store.sessions.get("session")?.chatState).not.toBe("input");
+    store.updateSessionMessageTree(
+      "session",
+      new Map([[42, message(42, "assistant", "Final local output")]])
+    );
+    reader.resolve();
+    await recovery;
+    expect(
+      useChatSessionStore.getState().sessions.get("session")
+    ).toMatchObject({
+      chatState: "input",
+      readerFinished: undefined,
+    });
+    expect(
+      useChatSessionStore
+        .getState()
+        .sessions.get("session")
+        ?.messageTree.get(42)?.message
+    ).toBe("Final local output");
+  }
+);
+
+test("an old reader finishing cannot release another request", async () => {
+  const reader = Promise.withResolvers<void>();
+  const store = useChatSessionStore.getState();
+  const controller = store.sessions.get("session")!.abortController;
+  store.updateSessionData("session", { readerFinished: reader.promise });
+  const settling = settle();
+  store.setAbortController("session", new AbortController());
+  controller.abort();
+  reader.resolve();
+  await settling;
+  expect(waitForChatSessionIdle).not.toHaveBeenCalled();
+  expect(
+    useChatSessionStore.getState().sessions.get("session")?.chatState
+  ).toBe("cancelling");
+});
+
+test("history replacement keeps the sources panel on the selected response", async () => {
+  const local = { ...message(-2, "assistant", "Answer"), messageId: 42 };
+  const saved = { ...local, nodeId: 42 };
+  useChatSessionStore.getState().updateSessionData("session", {
+    messageTree: new Map([[-2, local]]),
+    selectedNodeIdForDocDisplay: -2,
+    documentSidebarVisible: true,
+  });
+  jest.mocked(processRawChatHistory).mockReturnValue(new Map([[42, saved]]));
+  await settle();
+  expect(useChatSessionStore.getState().sessions.get("session")).toMatchObject({
+    selectedNodeIdForDocDisplay: 42,
+    documentSidebarVisible: true,
+  });
+});

@@ -46,14 +46,20 @@ def is_incognito_teardown_target(
     Ownership then rests on the per-user scope of the file marking.
     """
     row = db_session.execute(
-        select(ChatSession.user_id, ChatSession.incognito_record_mode).where(
-            ChatSession.id == chat_session_id
-        )
+        select(
+            ChatSession.user_id,
+            ChatSession.incognito_record_mode,
+            ChatSession.spawned_by_message_id,
+        ).where(ChatSession.id == chat_session_id)
     ).one_or_none()
     if row is None:
         return True
-    owner_id, record_mode = row
-    return owner_id in (user_id, None) and record_mode is not None
+    owner_id, record_mode, spawned_by_message_id = row
+    return (
+        spawned_by_message_id is None
+        and owner_id in (user_id, None)
+        and record_mode is not None
+    )
 
 
 def mark_user_files_deleting(db_session: Session, file_ids: Sequence[UUID]) -> None:
@@ -91,8 +97,9 @@ def _stale_upload_conditions() -> list[Any]:
     """Uploads old enough for a sweep to consider, whatever claims them."""
     cutoff = datetime.now(timezone.utc) - INCOGNITO_FILE_ORPHAN_AGE
     return [
-        # Matches ix_user_file_incognito_sweep's partial predicate.
-        UserFile.incognito.is_(True),
+        # Bare column, not .is_(True): Postgres matches only this form to
+        # ix_user_file_incognito_sweep's WHERE incognito.
+        UserFile.incognito,
         UserFile.status != UserFileStatus.DELETING,
         UserFile.last_accessed_at < cutoff,
     ]

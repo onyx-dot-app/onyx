@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import time
 from collections.abc import Generator
+from contextlib import closing
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -21,15 +22,17 @@ from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.build.configs import SSE_KEEPALIVE_INTERVAL
 from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.interactive_turns.executor import (
     start_interactive_turn_runner,
 )
-from onyx.server.features.build.interactive_turns.models import InteractiveTurnResponse
+from onyx.server.features.build.interactive_turns.models import (
+    InteractiveTurnCompletedPacket,
+    InteractiveTurnResponse,
+)
 from onyx.server.features.build.interactive_turns.state import (
-    TURN_STATUS_FAILED,
+    InteractiveTurn,
     get_active_turn,
     get_turn,
 )
@@ -46,6 +49,13 @@ TERMINAL_STREAM_EVENT_TYPES = frozenset(("prompt_response", "error"))
 # Throttle on runner-claim retries from the attach stream; must be well under
 # RUNNER_STALE_AFTER_SECONDS so a stolen turn restarts promptly.
 LIVE_STREAM_RUNNER_RETRY_SECONDS = 5.0
+
+# Catch completion when the agent ends just before the live subscription opens.
+LIVE_STREAM_KEEPALIVE_SECONDS = 1.0
+
+# Cache-only handoff after the agent stops; expiry falls back to stream reconnect.
+TURN_COMPLETION_CHECK_SECONDS = 0.2
+TURN_COMPLETION_WAIT_SECONDS = 30.0
 
 
 def _format_stream_error(detail: str) -> str:
@@ -73,36 +83,18 @@ def _stream_chunk_type(chunk: str) -> str | None:
     return None
 
 
-def _turn_state_for_stream(
-    *,
-    cache: CacheBackend,
-    turn_id: UUID,
-    session_id: UUID,
-    user_id: UUID,
-) -> tuple[bool, str | None]:
-    turn = get_active_turn(
-        cache=cache,
-        session_id=session_id,
-        user_id=user_id,
-    )
-    if turn is not None and turn.turn_id == turn_id:
-        return True, None
+def _owned_turn(
+    *, cache: CacheBackend, turn_id: UUID, session_id: UUID, user_id: UUID
+) -> InteractiveTurn | None:
     turn = get_turn(cache, turn_id)
     if turn is None or turn.session_id != session_id or turn.user_id != user_id:
-        return False, None
-    if turn.status != TURN_STATUS_FAILED:
-        return False, None
-    return False, turn.error_detail or "Interactive turn failed."
+        return None
+    return turn
 
 
-def _try_start_turn_runner(turn_id: UUID) -> None:
-    try:
-        start_interactive_turn_runner(turn_id)
-    except Exception:
-        logger.exception(
-            "Failed to start interactive turn runner for turn %s; will retry on attach",
-            turn_id,
-        )
+def _format_turn_completed(turn: InteractiveTurn) -> str:
+    packet = InteractiveTurnCompletedPacket.from_turn(turn)
+    return f"event: message\ndata: {packet.model_dump_json()}\n\n"
 
 
 @router.get("/sessions/{session_id}/turns/active", tags=PUBLIC_API_TAGS)
@@ -135,10 +127,13 @@ def get_interactive_turn(
     """Return a known turn's outcome, including terminal states."""
     if get_build_session(session_id, user.id, db_session) is None:
         raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND, "Session not found")
-    turn = get_turn(get_cache_backend(), turn_id)
-    if turn is None or turn.session_id != session_id or turn.user_id != user.id:
-        return None
-    return InteractiveTurnResponse.from_turn(turn)
+    turn = _owned_turn(
+        cache=get_cache_backend(),
+        turn_id=turn_id,
+        session_id=session_id,
+        user_id=user.id,
+    )
+    return InteractiveTurnResponse.from_turn(turn) if turn else None
 
 
 @router.get("/sessions/{session_id}/turns/{turn_id}/events", tags=PUBLIC_API_TAGS)
@@ -146,38 +141,21 @@ def get_interactive_turn_events(
     session_id: UUID,
     turn_id: UUID,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
-    db_session: Session = Depends(get_session),
 ) -> StreamingResponse:
-    """Attach to live opencode events for an active interactive turn."""
-    session = get_build_session(session_id, user.id, db_session)
-    if session is None:
-        raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND, "Session not found")
+    """Stream an owned turn through finalization, or replay its terminal outcome."""
+    user_id = user.id
+    with get_session_with_current_tenant() as db_session:
+        if get_build_session(session_id, user_id, db_session) is None:
+            raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND, "Session not found")
 
     cache = get_cache_backend()
-    turn = get_active_turn(
-        cache=cache,
-        session_id=session_id,
-        user_id=user.id,
+    requested_turn = _owned_turn(
+        cache=cache, turn_id=turn_id, session_id=session_id, user_id=user_id
     )
-    initial_error_detail: str | None = None
-    if turn is None or turn.turn_id != turn_id:
-        requested_turn = get_turn(cache, turn_id)
-        if (
-            requested_turn is None
-            or requested_turn.session_id != session_id
-            or requested_turn.user_id != user.id
-            or requested_turn.status != TURN_STATUS_FAILED
-        ):
-            raise OnyxError(OnyxErrorCode.CONFLICT, "Interactive turn is not running")
-        initial_error_detail = requested_turn.error_detail or "Interactive turn failed."
-
-    user_id = user.id
+    if requested_turn is None:
+        raise OnyxError(OnyxErrorCode.CONFLICT, "Interactive turn is unavailable")
 
     def stream_generator() -> Generator[str, None, None]:
-        if initial_error_detail is not None:
-            yield _format_stream_error(initial_error_detail)
-            return
-
         last_runner_start_attempt = 0.0
 
         def maybe_start_runner(*, force: bool = False) -> None:
@@ -189,80 +167,90 @@ def get_interactive_turn_events(
             ):
                 return
             last_runner_start_attempt = now
-            _try_start_turn_runner(turn_id)
+            try:
+                start_interactive_turn_runner(turn_id)
+            except Exception:
+                logger.exception(
+                    "Failed to start interactive turn runner for turn %s; will retry on attach",
+                    turn_id,
+                )
 
-        maybe_start_runner(force=True)
-        while True:
-            active, error_detail = _turn_state_for_stream(
-                cache=cache,
-                turn_id=turn_id,
-                session_id=session_id,
-                user_id=user_id,
+        def current_turn() -> InteractiveTurn | None:
+            return _owned_turn(
+                cache=cache, turn_id=turn_id, session_id=session_id, user_id=user_id
             )
-            if not active:
-                if error_detail:
-                    yield _format_stream_error(error_detail)
-                return
-
-            with get_session_with_current_tenant() as stream_db_session:
-                session = get_build_session(session_id, user_id, stream_db_session)
-                if session is None:
-                    yield _format_stream_error("Session not found")
-                    return
-                # The opencode session id outlives the pod that minted it, so
-                # after a reap it is set while nothing is listening — and the
-                # runner is concurrently waking the sandbox. Wait for both.
-                sandbox = get_sandbox_by_user_id(stream_db_session, user_id)
-                if (
-                    session.opencode_session_id
-                    and sandbox is not None
-                    and sandbox.status.is_active()
-                ):
-                    break
-
-            yield SSE_KEEPALIVE
-            maybe_start_runner()
-            time.sleep(POLL_INTERVAL_SECONDS)
 
         try:
+            turn = current_turn()
+            if turn is None:
+                return
+            if not turn.is_active:
+                yield _format_turn_completed(turn)
+                return
+            maybe_start_runner(force=True)
+            while True:
+                turn = current_turn()
+                if turn is None:
+                    return
+                if not turn.is_active:
+                    yield _format_turn_completed(turn)
+                    return
+                with get_session_with_current_tenant() as stream_db_session:
+                    session = get_build_session(session_id, user_id, stream_db_session)
+                    if session is None:
+                        yield _format_stream_error("Session not found")
+                        return
+                    sandbox = get_sandbox_by_user_id(stream_db_session, user_id)
+                    if (
+                        session.opencode_session_id
+                        and sandbox is not None
+                        and sandbox.status.is_active()
+                    ):
+                        break
+                yield SSE_KEEPALIVE
+                maybe_start_runner()
+                time.sleep(POLL_INTERVAL_SECONDS)
+
+            terminal_packet_seen = False
             with get_session_with_current_tenant() as stream_db_session:
                 session_manager = SessionManager(stream_db_session)
-                terminal_error_detail: str | None = None
-                for chunk in session_manager.subscribe_to_existing_session_events(
-                    session_id,
-                    user_id,
-                    keepalive_seconds=SSE_KEEPALIVE_INTERVAL,
-                ):
-                    yield chunk
-                    chunk_type = _stream_chunk_type(chunk)
-                    if chunk_type in TERMINAL_STREAM_EVENT_TYPES:
-                        return
-
-                    stream_db_session.expire_all()
-                    active, error_detail = _turn_state_for_stream(
-                        cache=cache,
-                        turn_id=turn_id,
-                        session_id=session_id,
-                        user_id=user_id,
+                with closing(
+                    session_manager.subscribe_to_existing_session_events(
+                        session_id,
+                        user_id,
+                        keepalive_seconds=LIVE_STREAM_KEEPALIVE_SECONDS,
                     )
-                    if not active:
-                        terminal_error_detail = error_detail or terminal_error_detail
-                        if chunk_type is None:
-                            if terminal_error_detail:
-                                yield _format_stream_error(terminal_error_detail)
+                ) as chunks:
+                    for chunk in chunks:
+                        turn = current_turn()
+                        if turn is None:
                             return
-                        # Keep draining already-queued live events until the
-                        # terminal packet arrives or a keepalive proves the
-                        # subscriber queue has gone idle.
-                        continue
-                    terminal_error_detail = None
-                    # Not redundant with the attach-time force start: a dead
-                    # runner's turn only becomes reclaimable
-                    # RUNNER_STALE_AFTER_SECONDS after its last heartbeat;
-                    # claim no-ops while the turn is healthy.
-                    maybe_start_runner()
-                if terminal_error_detail:
-                    yield _format_stream_error(terminal_error_detail)
+                        # The session stream can already contain a successor's events.
+                        # Saved history supplies any unrendered tail of this turn.
+                        if not turn.is_active:
+                            break
+                        chunk_type = _stream_chunk_type(chunk)
+                        if chunk_type in TERMINAL_STREAM_EVENT_TYPES:
+                            terminal_packet_seen = True
+                            break
+                        yield chunk
+                        maybe_start_runner()
+
+            # Release the live subscription and database connection before waiting.
+            deadline = time.monotonic() + TURN_COMPLETION_WAIT_SECONDS
+            while True:
+                turn = current_turn()
+                if turn is None:
+                    return
+                if not turn.is_active:
+                    yield _format_turn_completed(turn)
+                    return
+                if not terminal_packet_seen or time.monotonic() >= deadline:
+                    return
+                maybe_start_runner()
+                # Yield during the short tail so disconnects release the stream promptly.
+                yield SSE_KEEPALIVE
+                time.sleep(TURN_COMPLETION_CHECK_SECONDS)
         except GeneratorExit:
             logger.info(
                 "Interactive turn live stream disconnected for session %s turn %s",

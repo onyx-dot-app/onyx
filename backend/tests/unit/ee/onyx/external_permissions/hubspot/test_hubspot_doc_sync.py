@@ -82,7 +82,9 @@ def test_hubspot_is_registered_with_a_doc_sync_and_no_group_sync() -> None:
     cc_pair, fetch_docs, fetch_ids = MagicMock(), MagicMock(), MagicMock()
 
     # The registry holds a lazy wrapper, so call it to see its target.
+    doc_sync_func = config.doc_sync_config.doc_sync_func
+    assert doc_sync_func is not None
     with patch(f"{MODULE}.hubspot_doc_sync") as doc_sync:
-        config.doc_sync_config.doc_sync_func(cc_pair, fetch_docs, fetch_ids, None)
+        doc_sync_func(cc_pair, fetch_docs, fetch_ids, None)
 
     doc_sync.assert_called_once_with(cc_pair, fetch_docs, fetch_ids, None)

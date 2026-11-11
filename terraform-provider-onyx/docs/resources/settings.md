@@ -35,14 +35,20 @@ resource "onyx_settings" "workspace" {
 - `craft_default_enabled` (Boolean) Workspace default for Onyx Craft access (per-user overrides win).
 - `craft_instructions` (String) Workspace-wide instructions injected into every Craft agent (max 4000 chars).
 - `deep_research_enabled` (Boolean) Enable the Deep Research feature.
+- `default_language` (String) UI language for users who did not select a language: `en`, `es`, `pt`, `fr`, `de`, `ja`, `zh`, `ko`, or `ar`. Needs Onyx v5.0.0 or later.
 - `disable_default_assistant` (Boolean) Disable the built-in default assistant.
+- `embedding_rate_limit_period_seconds` (Number) Length of the window for `embedding_rate_limit_requests`, in seconds (1 to 86400). Onyx uses 60 by default. Needs Onyx v5.0.0 or later.
+- `embedding_rate_limit_requests` (Number) Maximum number of indexing embedding requests in each `embedding_rate_limit_period_seconds` window, for the whole deployment (1 to 100000). Onyx has no limit by default. Removing the attribute does not remove the limit. Needs Onyx v5.0.0 or later.
 - `file_token_count_threshold_k` (Number) File token threshold (thousands) before indexing instead of inlining.
-- `image_analysis_max_size_mb` (Number) Max image size for analysis, in MB.
+- `hide_provider_grouping` (Boolean) Show one flat model list in the model selector, without groups for each provider.
+- `image_analysis_max_size_mb` (Number, Deprecated) Deprecated: Onyx no longer has this setting, and the value has no effect.
 - `image_extraction_and_analysis_enabled` (Boolean) Extract and analyze images during indexing.
 - `invite_only_enabled` (Boolean) Restrict registration to invited users.
+- `llm_gateway_enabled` (Boolean) Allow direct model API access through the LLM gateway (`/api/gateway`) for external tools. A change needs the Business or Enterprise tier. Needs Onyx v5.0.0 or later.
 - `maximum_chat_retention_days` (Number) Days to retain chat history (Enterprise tier).
 - `multi_model_chat_enabled` (Boolean) Allow chatting with multiple models side by side.
 - `query_history_type` (String) Query history mode: `disabled`, `anonymized`, or `normal`.
+- `reasoning_override_enabled` (Boolean) Let users change the reasoning effort of reasoning models.
 - `search_ui_enabled` (Boolean) Enable Search Mode in the UI (Business+ tier).
 - `temperature_override_enabled` (Boolean) Let users override model temperature.
 - `user_file_max_upload_size_mb` (Number) Max user file upload size, in MB. Must be at least 1 — the backend treats 0 as unset and substitutes the deployment default.

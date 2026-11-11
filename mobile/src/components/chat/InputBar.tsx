@@ -52,7 +52,7 @@ export function InputBar({
   const insets = useSafeAreaInsets();
   const [pickerOpen, setPickerOpen] = useState(false);
 
-  const isBusy = chatState === "loading" || chatState === "streaming";
+  const isBusy = chatState !== "input" && chatState !== "uploading";
   const hasFiles = attachments.files.length > 0;
 
   const canSend =
@@ -122,7 +122,7 @@ export function InputBar({
         ) : null}
 
         <View className="min-h-40 flex-row items-center justify-between p-4">
-          {/* RN elements don't shrink by default, so a long forced-tool pill would push the send
+          {/* RN elements don't shrink by default, so a long preferred-tool pill would push the send
               button past the card's right edge without this. */}
           <View className="min-w-0 shrink flex-row items-center gap-8">
             <Button

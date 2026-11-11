@@ -22,7 +22,6 @@ from onyx.configs.constants import DocumentSource, OnyxCeleryQueues
 from onyx.connectors.capability_checks import draft_runs, runner
 from onyx.connectors.capability_checks.draft_runs import (
     DraftCheckRunSnapshot,
-    DraftCheckStateKind,
     DraftRerunMode,
     DraftRunStatus,
 )
@@ -30,6 +29,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
     CredentialCapability,
+    DraftCheckStateKind,
 )
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.slack.config import SlackConnectorConfig
@@ -61,6 +61,7 @@ class _FakeCheck(CapabilityCheck[SlackConnectorConfig]):
         capability: CredentialCapability = CredentialCapability.INDEXING,
         requires_fields: frozenset[str] = frozenset(),
         on_run: Callable[[], None] | None = None,
+        depends_on: tuple[str, ...] = (),
     ) -> None:
         super().__init__(
             capability=capability,
@@ -68,6 +69,7 @@ class _FakeCheck(CapabilityCheck[SlackConnectorConfig]):
             display_name=check_id,
             requires_connector_instance=False,
             requires_fields=requires_fields,
+            depends_on=depends_on,
         )
         self._runs = runs
         self._on_run = on_run
@@ -98,15 +100,20 @@ class _Harness:
 
     def checks(self, source: DocumentSource) -> list[CapabilityCheck[Any]]:
         assert source == DocumentSource.SLACK
+        # Like a real source, every check runs after sign-in.
         return [
             _FakeCheck(_TOKEN, self.runs, on_run=lambda: self._token_hook()),
             _FakeConfigCheck(
-                _CHANNELS, self.runs, requires_fields=frozenset({"channels"})
+                _CHANNELS,
+                self.runs,
+                requires_fields=frozenset({"channels"}),
+                depends_on=(_TOKEN,),
             ),
             _FakeCheck(
                 _PERM_SYNC,
                 self.runs,
                 capability=CredentialCapability.DOC_PERMISSION_SYNC,
+                depends_on=(_TOKEN,),
             ),
         ]
 
@@ -665,7 +672,7 @@ def test_latest_run_marker_lives_as_long_as_the_run(
 
 
 @pytest.mark.usefixtures("tenant_context")
-def test_draft_check_slower_than_the_cap_is_indeterminate(
+def test_draft_check_slower_than_the_cap_is_incomplete(
     db_session: Session,
     harness: _Harness,
     users: tuple[User, User],
@@ -685,4 +692,4 @@ def test_draft_check_slower_than_the_cap_is_indeterminate(
 
     done = get_draft_check_run(started.run_id, user=admin, db_session=db_session)
     assert done.status == DraftRunStatus.COMPLETED
-    assert _states(done)[_TOKEN] == DraftCheckStateKind.INDETERMINATE
+    assert _states(done)[_TOKEN] == DraftCheckStateKind.INCOMPLETE

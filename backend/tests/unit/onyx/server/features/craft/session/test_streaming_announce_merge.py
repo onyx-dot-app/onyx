@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from typing import Any
+from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
@@ -18,7 +19,9 @@ def test_drive_events_thread_inherits_caller_tenant(
     """The events-pump thread is spawned via the context-preserving helper, so
     lazy DB access inside the event iterator (e.g. event-bus creation) sees the
     caller's tenant contextvar instead of raising "Tenant ID is not set"."""
-    monkeypatch.setattr(streaming, "get_cache_backend", lambda **_: object())
+    monkeypatch.setattr(
+        streaming, "get_cache_backend", lambda **_: MagicMock(get=lambda _key: None)
+    )
     monkeypatch.setattr(
         streaming.approval_cache,
         "pop_announcement",

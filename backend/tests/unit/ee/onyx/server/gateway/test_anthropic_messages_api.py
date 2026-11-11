@@ -17,7 +17,6 @@ from ee.onyx.server.gateway.api import _MESSAGES_ADAPTER
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.exceptions import LLMRateLimitError, LLMTimeoutError
-from onyx.llm.interfaces import LLM
 from onyx.llm.model_request import (
     AssistantMessage,
     SystemMessage,
@@ -44,6 +43,7 @@ from onyx.llm.models import (
     ToolChoiceOptions,
     Usage,
 )
+from onyx.llm.multi_llm import LitellmLLM
 from onyx.server.gateway.models import (
     AnthropicCountTokensRequest,
     AnthropicMessageResponse,
@@ -494,7 +494,9 @@ def test_handle_anthropic_messages_rejects_invalid_upstream_tool_arguments() -> 
 
     with (
         patch.object(
-            gateway_api, "llm_from_provider", return_value=_InvokeLLM(response)
+            gateway_api,
+            "llm_from_provider",
+            return_value=_InvokeLLM(response),
         ),
         pytest.raises(OnyxError) as exc_info,
     ):
@@ -515,7 +517,9 @@ def test_handle_anthropic_messages_maps_provider_errors_to_onyx_codes(
 ) -> None:
     with (
         patch.object(
-            gateway_api, "llm_from_provider", return_value=_RaisingInvokeLLM(exc)
+            gateway_api,
+            "llm_from_provider",
+            return_value=_RaisingInvokeLLM(exc),
         ),
         pytest.raises(OnyxError) as exc_info,
     ):
@@ -541,7 +545,7 @@ def test_handle_anthropic_messages_sanitizes_generic_invoke_failure() -> None:
 
 
 def _anthropic_stream_events(
-    llm: LLM,
+    llm: LitellmLLM,
     *,
     tools: list[dict[str, Any]] | None = None,
     model: str = "1/test",

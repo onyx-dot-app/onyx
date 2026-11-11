@@ -410,3 +410,33 @@ describe("pushBoundedSnapshot", () => {
     expect(stack.length).toBe(MAX_UNDO_ENTRIES);
   });
 });
+
+describe("token deletion history", () => {
+  it("preserves redo when a stale token cannot be deleted", () => {
+    render(<Harness />);
+    act(() => api.setMessage("before"));
+    act(() => api.setMessage("after"));
+    undo();
+    expect(input().textContent).toBe("before");
+    act(() => {
+      expect(api.deleteBeforeToken("/stale")).toBe(false);
+    });
+    redo();
+    expect(input().textContent).toBe("after");
+  });
+
+  it("restores the pre-deletion text and caret on undo", () => {
+    render(<Harness />);
+    act(() => api.setMessage("Prompt /pptx"));
+    caretAtTextOffset(12);
+    act(() => {
+      expect(api.deleteBeforeToken("/pptx")).toBe(true);
+    });
+    expect(input().textContent).toBe("Prompt ");
+    undo();
+    expect(input().textContent).toBe("Prompt /pptx");
+    expect(flatCaret()).toBe(12);
+    redo();
+    expect(input().textContent).toBe("Prompt ");
+  });
+});

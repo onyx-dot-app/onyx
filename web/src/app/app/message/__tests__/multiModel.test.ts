@@ -1,4 +1,4 @@
-import { Message } from "@/app/app/interfaces";
+import { Message } from "@/app/app/types";
 import {
   chooseImplicitPreferred,
   getMultiModelChildren,
@@ -74,7 +74,7 @@ describe("getMultiModelChildren", () => {
   it("returns model-tagged assistant and error children in order", () => {
     const tree = new Map<number, Message>();
     const { userMessage, responses } = buildTurn(tree, [
-      "gpt-5",
+      "gpt-6-sol",
       { model: "claude-opus-5", type: "error" },
     ]);
     expect(getMultiModelChildren(userMessage, tree)).toEqual(responses);
@@ -98,7 +98,7 @@ describe("getUnresolvedMultiModelTurn", () => {
   it("finds the last turn when no preferred response is set", () => {
     const tree = new Map<number, Message>();
     const { userMessage, responses } = buildTurn(tree, [
-      "gpt-5",
+      "gpt-6-sol",
       "claude-opus-5",
     ]);
     const turn = getUnresolvedMultiModelTurn(chainOf(tree), tree);
@@ -108,15 +108,15 @@ describe("getUnresolvedMultiModelTurn", () => {
 
   it("returns null once a preferred response exists", () => {
     const tree = new Map<number, Message>();
-    buildTurn(tree, ["gpt-5", "claude-opus-5"], {
-      preferredModel: "gpt-5",
+    buildTurn(tree, ["gpt-6-sol", "claude-opus-5"], {
+      preferredModel: "gpt-6-sol",
     });
     expect(getUnresolvedMultiModelTurn(chainOf(tree), tree)).toBeNull();
   });
 
   it("returns null for single-model turns", () => {
     const tree = new Map<number, Message>();
-    buildTurn(tree, ["gpt-5"]);
+    buildTurn(tree, ["gpt-6-sol"]);
     expect(getUnresolvedMultiModelTurn(chainOf(tree), tree)).toBeNull();
   });
 });
@@ -124,10 +124,10 @@ describe("getUnresolvedMultiModelTurn", () => {
 describe("chooseImplicitPreferred", () => {
   it("keeps the model preferred in the previous turn", () => {
     const tree = new Map<number, Message>();
-    const first = buildTurn(tree, ["gemini-3", "gpt-5"], {
+    const first = buildTurn(tree, ["gemini-3", "gpt-6-sol"], {
       preferredModel: "gemini-3",
     });
-    const second = buildTurn(tree, ["gemini-3", "gpt-5"], {
+    const second = buildTurn(tree, ["gemini-3", "gpt-6-sol"], {
       parent: first.responses[0],
     });
     const turn = getUnresolvedMultiModelTurn(chainOf(tree), tree)!;
@@ -138,7 +138,7 @@ describe("chooseImplicitPreferred", () => {
 
   it("falls back to the first model (last child) without a prior preference", () => {
     const tree = new Map<number, Message>();
-    const { responses } = buildTurn(tree, ["gemini-3", "gpt-5"]);
+    const { responses } = buildTurn(tree, ["gemini-3", "gpt-6-sol"]);
     const turn = getUnresolvedMultiModelTurn(chainOf(tree), tree)!;
     expect(chooseImplicitPreferred(chainOf(tree), tree, turn)).toBe(
       responses[1]
@@ -147,10 +147,10 @@ describe("chooseImplicitPreferred", () => {
 
   it("falls back to the first model when the prior model did not answer this turn", () => {
     const tree = new Map<number, Message>();
-    const first = buildTurn(tree, ["gemini-3", "gpt-5"], {
+    const first = buildTurn(tree, ["gemini-3", "gpt-6-sol"], {
       preferredModel: "gemini-3",
     });
-    const second = buildTurn(tree, ["claude-opus-5", "gpt-5"], {
+    const second = buildTurn(tree, ["claude-opus-5", "gpt-6-sol"], {
       parent: first.responses[0],
     });
     const turn = getUnresolvedMultiModelTurn(chainOf(tree), tree)!;
@@ -161,10 +161,10 @@ describe("chooseImplicitPreferred", () => {
 
   it("prefers the response in view over the prior turn's model", () => {
     const tree = new Map<number, Message>();
-    const first = buildTurn(tree, ["gemini-3", "gpt-5"], {
+    const first = buildTurn(tree, ["gemini-3", "gpt-6-sol"], {
       preferredModel: "gemini-3",
     });
-    const second = buildTurn(tree, ["gemini-3", "gpt-5"], {
+    const second = buildTurn(tree, ["gemini-3", "gpt-6-sol"], {
       parent: first.responses[0],
     });
     const turn = getUnresolvedMultiModelTurn(chainOf(tree), tree)!;
@@ -180,7 +180,7 @@ describe("chooseImplicitPreferred", () => {
 
   it("ignores a visible id that matches no candidate", () => {
     const tree = new Map<number, Message>();
-    const { responses } = buildTurn(tree, ["gemini-3", "gpt-5"]);
+    const { responses } = buildTurn(tree, ["gemini-3", "gpt-6-sol"]);
     const turn = getUnresolvedMultiModelTurn(chainOf(tree), tree)!;
     expect(chooseImplicitPreferred(chainOf(tree), tree, turn, 999999)).toBe(
       responses[1]
@@ -191,7 +191,7 @@ describe("chooseImplicitPreferred", () => {
     const tree = new Map<number, Message>();
     const { responses } = buildTurn(tree, [
       "gemini-3",
-      { model: "gpt-5", type: "error" },
+      { model: "gpt-6-sol", type: "error" },
     ]);
     const turn = getUnresolvedMultiModelTurn(chainOf(tree), tree)!;
     expect(chooseImplicitPreferred(chainOf(tree), tree, turn)).toBe(
@@ -203,7 +203,7 @@ describe("chooseImplicitPreferred", () => {
     const tree = new Map<number, Message>();
     buildTurn(tree, [
       { model: "gemini-3", type: "error" },
-      { model: "gpt-5", type: "error" },
+      { model: "gpt-6-sol", type: "error" },
     ]);
     const turn = getUnresolvedMultiModelTurn(chainOf(tree), tree)!;
     expect(chooseImplicitPreferred(chainOf(tree), tree, turn)).toBeNull();

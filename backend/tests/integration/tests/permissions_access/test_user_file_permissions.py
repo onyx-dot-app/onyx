@@ -528,7 +528,7 @@ def test_connector_file_denied_for_users_without_access(
 
     api_key = APIKeyManager.create(user_performing_action=admin_user)
     private_cc_pair = CCPairManager.create_from_scratch(
-        access_type=AccessType.PRIVATE,
+        access_type=AccessType.PERSONAL,
         source=DocumentSource.INGESTION_API,
         user_performing_action=admin_user,
     )
@@ -658,7 +658,7 @@ def test_non_tabular_connector_file_denied_for_users_without_access(
     private_cc_pair = _seed_non_tabular_file_connector_cc_pair(
         admin_user=admin_user,
         file_id=file_id,
-        access_type=AccessType.PRIVATE,
+        access_type=AccessType.PERSONAL,
     )
     DocumentManager.seed_doc_with_content(
         cc_pair=private_cc_pair,

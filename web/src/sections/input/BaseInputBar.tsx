@@ -7,6 +7,7 @@ import {
   useCallback,
   useImperativeHandle,
   useRef,
+  useState,
   type ClipboardEvent,
   type KeyboardEvent,
   type ReactNode,
@@ -14,7 +15,7 @@ import {
 } from "react";
 import { useTranslations } from "next-intl";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
-import { deleteTokenBeforeCursor, getTextContent } from "@/lib/contentEditable";
+import { getTextContent } from "@/lib/contentEditable";
 import PasteTilePopover from "@/sections/input/PasteTilePopover";
 import { cn } from "@opal/utils";
 import { firstStrongTextDir } from "@/lib/rehypeDirection";
@@ -30,7 +31,7 @@ import {
   EMPTY_QUEUED_MESSAGES,
   MAX_QUEUED_MESSAGES,
   type QueuedMessage,
-} from "@/app/app/interfaces";
+} from "@/app/app/types";
 
 export interface BaseInputBarHandle {
   reset: () => void;
@@ -44,7 +45,7 @@ export interface BaseInputBarHandle {
 }
 
 export interface BaseInputBarProps {
-  onSubmit: (message: string) => void;
+  onSubmit: (message: string) => boolean | void | Promise<boolean | void>;
   isRunning: boolean;
   disabled?: boolean;
   placeholder?: string;
@@ -69,6 +70,7 @@ export interface BaseInputBarProps {
   /** Return true to consume the pasted text (skips pasteText). */
   onPasteText?: (text: string) => boolean;
   onPasteFiles?: (files: File[]) => void;
+  onContentChange?: (text: string) => void;
   onInputCallback?: () => void;
   onSelectionChange?: () => void;
 }
@@ -79,7 +81,7 @@ const BaseInputBar = memo(
       {
         onSubmit,
         isRunning,
-        disabled = false,
+        disabled: disabledProp = false,
         placeholder,
         noBottomRounding = false,
         pasteTilesEnabled = false,
@@ -95,11 +97,15 @@ const BaseInputBar = memo(
         bottomRightSlot,
         onPasteText,
         onPasteFiles,
+        onContentChange,
         onInputCallback,
         onSelectionChange,
       },
       ref
     ) => {
+      const [submitting, setSubmitting] = useState(false);
+      const submittingRef = useRef(false);
+      const disabled = disabledProp || submitting;
       const t = useTranslations("chat.input");
       const queueEnabled = !!onQueueMessage;
       const queue = queuedMessages ?? EMPTY_QUEUED_MESSAGES;
@@ -112,6 +118,7 @@ const BaseInputBar = memo(
         message,
         setMessage,
         clearMessage,
+        deleteBeforeToken,
         handleInput: onInput,
         handleCompositionStart,
         handleCompositionEnd,
@@ -129,6 +136,7 @@ const BaseInputBar = memo(
         expandTile,
       } = useContentEditable({
         wrapperRef: inputWrapperRef,
+        onContentChange,
         pasteTilesEnabled,
         disabled,
       });
@@ -180,11 +188,7 @@ const BaseInputBar = memo(
           }
           return rect;
         },
-        deleteBeforeToken: (token: string): boolean => {
-          const el = inputRef.current;
-          if (!el) return false;
-          return deleteTokenBeforeCursor(el, token);
-        },
+        deleteBeforeToken,
       }));
 
       const handlePaste = useCallback(
@@ -205,8 +209,14 @@ const BaseInputBar = memo(
         [disabled, onPasteFiles, onPasteText, pasteText]
       );
 
-      const handleSubmit = useCallback(() => {
-        if (disabled || submitBlocked || sandboxInitializing || isInterrupting)
+      const handleSubmit = useCallback(async () => {
+        if (
+          submittingRef.current ||
+          disabled ||
+          submitBlocked ||
+          sandboxInitializing ||
+          isInterrupting
+        )
           return;
         const text = message.trim();
         if (isRunning) {
@@ -216,8 +226,16 @@ const BaseInputBar = memo(
           return;
         }
         if (text) {
-          onSubmit(text);
-          clearMessage();
+          submittingRef.current = true;
+          setSubmitting(true);
+          try {
+            if ((await onSubmit(text)) !== false) clearMessage();
+          } catch (error) {
+            console.error("Message submission failed", error);
+          } finally {
+            submittingRef.current = false;
+            setSubmitting(false);
+          }
         }
       }, [
         message,

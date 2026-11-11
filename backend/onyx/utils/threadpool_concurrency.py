@@ -3,7 +3,10 @@ import collections.abc
 import concurrent.futures
 import contextvars
 import copy
+import heapq
+import itertools
 import threading
+import time
 import uuid
 from collections import deque
 from collections.abc import Callable, Coroutine, Iterator, MutableMapping, Sequence
@@ -14,6 +17,7 @@ from concurrent.futures import (
     as_completed,
     wait,
 )
+from contextlib import AbstractContextManager
 from typing import Any, Generic, Protocol, TypeVar, cast, overload
 
 from pydantic import GetCoreSchemaHandler
@@ -453,6 +457,61 @@ def run_async_sync_no_cancel(coro: Coroutine[Any, Any, T]) -> T:
         return future.result()
 
 
+class _Cancelled:
+    """The result of a call that its cancellation signal stopped."""
+
+
+def run_until_cancelled(
+    coro: Coroutine[Any, Any, T],
+    *,
+    is_cancelled: Callable[[], bool],
+    on_cancel: Callable[[Callable[[], None]], AbstractContextManager[None]],
+    cancellation_error: type[BaseException],
+) -> T:
+    """Run a coroutine on its own event loop and drain it on cancellation.
+
+    The caller supplies thread-safe cancellation callbacks and the exception to
+    raise. A completed result or error takes precedence over cancellation.
+    """
+    if is_cancelled():
+        coro.close()
+        raise cancellation_error()
+
+    async def until_cancelled() -> T | _Cancelled:
+        loop = asyncio.get_running_loop()
+        stopped = asyncio.Event()
+
+        async def run_if_active() -> T | _Cancelled:
+            if is_cancelled():
+                coro.close()
+                return _Cancelled()
+            return await coro
+
+        def stop_soon() -> None:
+            loop.call_soon_threadsafe(stopped.set)
+
+        with on_cancel(stop_soon):
+            work = asyncio.ensure_future(run_if_active())
+            stop = asyncio.ensure_future(stopped.wait())
+            await asyncio.wait({work, stop}, return_when=asyncio.FIRST_COMPLETED)
+            stop.cancel()
+        if work.done():
+            return work.result()
+        work.cancel()
+        try:
+            await work
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            logger.exception("Coroutine cleanup failed after cancellation")
+        return _Cancelled()
+
+    result = run_async_sync_no_cancel(until_cancelled())
+    if isinstance(result, _Cancelled):
+        raise cancellation_error()
+    return result
+
+
 def start_thread_with_context(
     target: Callable[..., Any],
     *,
@@ -478,7 +537,9 @@ def start_thread_with_context(
     return thread
 
 
-def start_thread_future[T](operation: Callable[[], T], *, name: str) -> Future[T]:
+def start_thread_future[T](
+    operation: Callable[[], T], *, name: str, daemon: bool = True
+) -> Future[T]:
     """Start independent work with the caller's context and an observable result."""
     result: Future[T] = Future()
     result.set_running_or_notify_cancel()
@@ -491,8 +552,67 @@ def start_thread_future[T](operation: Callable[[], T], *, name: str) -> Future[T
         else:
             result.set_result(value)
 
-    start_thread_with_context(run, name=name, daemon=True)
+    start_thread_with_context(run, name=name, daemon=daemon)
     return result
+
+
+class _Timers:
+    """Callbacks due at a time, run on one daemon thread for the whole process."""
+
+    def __init__(self) -> None:
+        self._ready = threading.Condition()
+        # (due time, id) in due order; a cancelled id has no callback left.
+        self._due: list[tuple[float, int]] = []
+        self._callbacks: dict[int, Callable[[], None]] = {}
+        self._ids = itertools.count()
+        self._thread: threading.Thread | None = None
+
+    def call_later(
+        self, delay: float, callback: Callable[[], None]
+    ) -> Callable[[], None]:
+        """Run `callback` with the caller's context after `delay` seconds; returns
+        a function that cancels it.
+
+        All callbacks share one daemon thread, so a timer costs no thread of its
+        own. Use it for short callbacks such as a watchdog; they run one at a
+        time, and an exception is logged.
+        """
+        context = contextvars.copy_context()
+        with self._ready:
+            timer_id = next(self._ids)
+            self._callbacks[timer_id] = lambda: context.run(callback)
+            heapq.heappush(self._due, (time.monotonic() + delay, timer_id))
+            # A forked child has the parent's thread object, but not the thread.
+            if self._thread is None or not self._thread.is_alive():
+                self._thread = start_thread_with_context(
+                    self._run, name="call-later", daemon=True
+                )
+            self._ready.notify()
+
+        def cancel() -> None:
+            with self._ready:
+                self._callbacks.pop(timer_id, None)
+
+        return cancel
+
+    def _run(self) -> None:
+        while True:
+            with self._ready:
+                while not self._due or self._due[0][0] > time.monotonic():
+                    self._ready.wait(
+                        self._due[0][0] - time.monotonic() if self._due else None
+                    )
+                _, timer_id = heapq.heappop(self._due)
+                callback = self._callbacks.pop(timer_id, None)
+            if callback is None:
+                continue
+            try:
+                callback()
+            except Exception:
+                logger.exception("Scheduled callback failed")
+
+
+call_later = _Timers().call_later
 
 
 class TimeoutThread(threading.Thread, Generic[R]):

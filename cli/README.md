@@ -82,6 +82,15 @@ onyx-cli agents
 onyx-cli agents --json
 ```
 
+### List document sets
+
+```shell
+onyx-cli document-sets
+onyx-cli document-sets --json
+```
+
+Pass the names to `onyx-cli search --document-set` to limit a search to those document sets.
+
 ### Serve over SSH
 
 ```shell
@@ -116,6 +125,7 @@ Useful hardening flags:
 | `chat` | Interactive | Launch the interactive chat TUI (requires terminal) |
 | `ask` | Agent / Script | Ask a question and print the answer to stdout |
 | `agents` | Agent / Script | List available agents (ID, name, description) |
+| `document-sets` | Agent / Script | List document sets you can search (ID, name, description) |
 | `validate-config` | Agent / Script | Check CLI configuration and server connectivity |
 | `install-skill` | Agent / Script | Install the Onyx CLI agent skill file |
 | `experiments` | Agent / Script | List experimental features and their status |
@@ -316,3 +326,19 @@ and in `tools/requirements/build-constraints.in`, and the compiled `build-constr
 ### Versioning
 
 Versions are derived from git tags with the `cli/` prefix (e.g. `cli/v0.1.0`). The tag is parsed by `internal/_version.py` and injected into the Go binary via `-ldflags` at build time.
+
+### Chat completion and cancellation
+
+The interactive client keeps the current request active until the server confirms that
+its session is idle. A STOP packet or a closed connection does not confirm a saved turn.
+Temporary readiness failures keep Send blocked and retry. Unsupported or denied requests
+stop polling and show an error. Session, agent, and model pickers remain available while Send is blocked.
+Reopening the active session preserves its live messages and readiness check.
+Failed drafts remain in the input.
+The `ask` command confirms idle before naming the saved conversation.
+
+Cancellation waits for the response ID before sending Stop. The request owns that ID,
+so a delayed Stop cannot cancel a later turn. If acknowledgement never arrives,
+cancellation closes delivery after ten seconds without sending an unscoped Stop.
+For acknowledged runs, delivery closes after the bounded Stop request completes.
+Session and response identities remain available after cancellation so the next message can continue from the cancelled turn.

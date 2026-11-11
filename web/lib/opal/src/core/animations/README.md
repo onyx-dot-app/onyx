@@ -25,6 +25,7 @@ Provides coordinated hover-state animations across a group of elements. A `Hover
 | --------- | ---------------------- | ----------- | ------------------------ |
 | `group`   | `string`               | `"default"` | Which group to listen to |
 | `variant` | `HoverableItemVariant` | `"fade"`    | Animation variant        |
+| `revealed` | `boolean`             | `false`     | Shows the item whatever the hover state, e.g. a toggle that stays visible while on. Keeps the tree's shape, so children keep their state and transitions |
 
 ## Usage
 

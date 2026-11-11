@@ -164,6 +164,40 @@ variable "restrict_storage_to_cluster" {
   default     = false
 }
 
+variable "enable_sandbox_archive_storage" {
+  type        = bool
+  description = "Create a storage account for Craft sandbox session archives, encrypted with its own Key Vault key. No identity gets a data role on it."
+  default     = false
+}
+
+variable "sandbox_archive_storage_account_name" {
+  type        = string
+  description = "Name of the sandbox archive storage account. Null derives one from the name, workspace and a short digest. The Key Vault is named kv-<first 13 characters of this name><8-character digest of it>."
+  default     = null
+}
+
+variable "sandbox_archive_expiration_days" {
+  type        = number
+  description = "Days after which sandbox archives are deleted. Blob soft delete keeps a deleted blob recoverable for 7 more days."
+  default     = 30
+
+  validation {
+    condition     = var.sandbox_archive_expiration_days >= 1
+    error_message = "sandbox_archive_expiration_days must be at least 1."
+  }
+}
+
+variable "sandbox_archive_noncurrent_expiration_days" {
+  type        = number
+  description = "Days to keep overwritten sandbox archive versions"
+  default     = 7
+
+  validation {
+    condition     = var.sandbox_archive_noncurrent_expiration_days >= 1
+    error_message = "sandbox_archive_noncurrent_expiration_days must be at least 1."
+  }
+}
+
 # --- Postgres ----------------------------------------------------------------
 
 variable "postgres_sku_name" {
@@ -373,6 +407,37 @@ variable "enable_sandbox_node_pool" {
   type        = bool
   description = "Create a tainted pool for Craft sandbox workloads"
   default     = false
+}
+
+# Defaults match the aks module's, so passing them through changes nothing.
+variable "sandbox_node_vm_size" {
+  type        = string
+  description = "VM size for the Craft sandbox pool"
+  default     = "Standard_D8ds_v5"
+}
+
+variable "sandbox_node_min_count" {
+  type        = number
+  description = "Minimum nodes in the Craft sandbox pool"
+  default     = 1
+}
+
+variable "sandbox_node_max_count" {
+  type        = number
+  description = "Maximum nodes in the Craft sandbox pool"
+  default     = 7
+}
+
+variable "sandbox_node_disk_size_gb" {
+  type        = number
+  description = "OS disk for Craft sandbox nodes. Each sandbox pod reserves about 5.5 GiB of ephemeral storage."
+  default     = 200
+}
+
+variable "craft_sandbox_runtime" {
+  type        = string
+  description = "Prepares the sandbox pool for Craft Firecracker: \"pod\" or \"firecracker\". Craft still runs sandboxes as pods until its Firecracker backend ships. See \"Craft sandboxes on Firecracker\" in the azure module README for the node requirements."
+  default     = "pod"
 }
 
 variable "log_analytics_workspace_id" {

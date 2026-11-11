@@ -1,8 +1,8 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import useSWR from "swr";
 import { useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
 import { Button } from "@opal/components";
 import {
   IllustrationContent,
@@ -15,14 +15,10 @@ import { SvgAlertCircle } from "@opal/icons";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
 import { isEditableSource } from "@/lib/connectors/edit/editable";
-import type { CCPairFullInfo } from "@/lib/connectors/types";
+import type { CCPairDataAccess, CCPairFullInfo } from "@/lib/connectors/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { usesDataAccessGroups } from "@/lib/connectors/edit/prefill";
 import { AddConnectorForm } from "@/views/admin/connectors/AddConnectorPage/components/AddConnectorWrapper";
-
-interface CCPairDataAccess {
-  groups: { id: number }[];
-}
 
 export interface EditConnectorPageProps {
   /** The source in the URL; it must match the pair's source. */
@@ -39,7 +35,7 @@ export default function EditConnectorPage({
   ccPairId,
 }: EditConnectorPageProps) {
   const t = useTranslations("admin.connectorEdit");
-  const router = useRouter();
+  const navigation = useNavigation();
   // No polling: the form keeps the values it was filled with.
   const { data: ccPair, error } = useSWR<CCPairFullInfo>(
     buildCCPairInfoUrl(ccPairId),
@@ -76,7 +72,7 @@ export default function EditConnectorPage({
             <Button
               key="back"
               prominence="secondary"
-              onClick={() => router.push(`/admin/connector/${ccPairId}`)}
+              onClick={() => navigation.go(`/admin/connector/${ccPairId}`)}
             >
               {t("loadError.backButton.label")}
             </Button>,

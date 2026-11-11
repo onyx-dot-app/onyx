@@ -1,0 +1,106 @@
+{{- if .Values.webhookServer.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "onyx.resourceName" (list . "webhook-server") }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    {{- with .Values.webhookServer.deploymentLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  replicas: {{ .Values.webhookServer.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "onyx.selectorLabels" . | nindent 6 }}
+      {{- if .Values.webhookServer.deploymentLabels }}
+      {{- toYaml .Values.webhookServer.deploymentLabels | nindent 6 }}
+      {{- end }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+      {{- with .Values.webhookServer.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "onyx.labels" . | nindent 8 }}
+        {{- with .Values.webhookServer.deploymentLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.webhookServer.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "onyx.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.webhookServer.podSecurityContext | nindent 8 }}
+      {{- with .Values.webhookServer.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.webhookServer.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.webhookServer.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: webhook-server
+          securityContext:
+            {{- include "onyx.containerSecurityContext" .Values.webhookServer.securityContext | nindent 12 }}
+          image: "{{ .Values.webhookServer.image.repository }}:{{ .Values.webhookServer.image.tag | default .Values.global.version }}"
+          imagePullPolicy: {{ .Values.global.pullPolicy }}
+          command: [{{ include "onyx.customCACerts.commandPrefix" . }}"python", "onyx/webhook_server_main.py"]
+          ports:
+            - name: webhook-port
+              # Matches WEBHOOK_SERVER_PORT in onyx/webhook_server_main.py.
+              containerPort: 8091
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: webhook-port
+            initialDelaySeconds: {{ .Values.webhookServer.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.webhookServer.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.webhookServer.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.webhookServer.livenessProbe.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: webhook-port
+            initialDelaySeconds: {{ .Values.webhookServer.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.webhookServer.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.webhookServer.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.webhookServer.readinessProbe.failureThreshold }}
+          resources:
+            {{- toYaml .Values.webhookServer.resources | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ .Values.config.envConfigMapName }}
+            {{- with .Values.extraEnvFromSecret }}
+            - secretRef:
+                name: {{ . }}
+            {{- end }}
+          env:
+            {{- include "onyx.envSecrets" . | nindent 12 }}
+            {{- include "onyx.metricsAuthEnv" . | nindent 12 }}
+            {{- with include "onyx.customCACerts.env" . }}
+            {{- . | nindent 12 }}
+            {{- end }}
+            {{- with .Values.webhookServer.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with include "onyx.volumeMountsWithCA" (dict "ctx" . "volumeMounts" .Values.webhookServer.volumeMounts) }}
+          {{- . | nindent 10 }}
+          {{- end }}
+      {{- with include "onyx.volumesWithCA" (dict "ctx" . "volumes" .Values.webhookServer.volumes) }}
+      {{- . | nindent 6 }}
+      {{- end }}
+{{- end }}

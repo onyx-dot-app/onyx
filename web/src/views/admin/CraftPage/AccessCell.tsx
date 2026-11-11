@@ -33,11 +33,6 @@ export default function AccessCell({
         [user.email],
         checked === defaultEnabled ? null : checked
       );
-      toast.success(
-        checked
-          ? t("accessCell.enabledSuccess.message")
-          : t("accessCell.disabledSuccess.message")
-      );
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : t("accessCell.error.message")

@@ -1,3 +1,4 @@
+import { fetchErrorFrom } from "@/lib/fetcher";
 import type {
   DraftCheckPlan,
   DraftCheckPlanRequest,
@@ -20,7 +21,11 @@ export async function startDraftCheckRun(
     body: JSON.stringify(request),
   });
   if (!response.ok) {
-    throw new Error(`Capability check run request failed: ${response.status}`);
+    // Its detail says why, e.g. a shared account the user may not use here.
+    throw await fetchErrorFrom(
+      response,
+      `Capability check run request failed: ${response.status}`
+    );
   }
   return response.json();
 }
@@ -42,7 +47,11 @@ export async function startPairEditCheckRun(
     }
   );
   if (!response.ok) {
-    throw new Error(`Capability check run request failed: ${response.status}`);
+    // Its detail says why, e.g. a shared account the user may not use here.
+    throw await fetchErrorFrom(
+      response,
+      `Capability check run request failed: ${response.status}`
+    );
   }
   return response.json();
 }

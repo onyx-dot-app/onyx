@@ -5,16 +5,24 @@ from sqlalchemy.orm import Session
 from onyx.configs.model_configs import (
     DEFAULT_DOCUMENT_ENCODER_MODEL,
     DOCUMENT_ENCODER_MODEL,
+    PREVIOUS_DEFAULT_DOCUMENT_ENCODER_MODEL,
 )
 from onyx.context.search.models import SavedSearchSettings
+from onyx.db.enums import (
+    ConnectorCredentialPairStatus,
+    IndexingStatus,
+)
 from onyx.db.llm import fetch_embedding_provider
 from onyx.db.models import (
     CloudEmbeddingProvider,
+    ConnectorCredentialPair,
     IndexAttempt,
     IndexModelStatus,
     IndexReclaimStatus,
     SearchSettings,
 )
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.manage.embedding.models import (
     CloudEmbeddingProvider as ServerCloudEmbeddingProvider,
 )
@@ -186,6 +194,80 @@ def get_search_settings_by_id(
     return db_session.get(SearchSettings, search_settings_id)
 
 
+def lock_search_settings_for_share(
+    db_session: Session, search_settings_id: int
+) -> SearchSettings | None:
+    """The row under a share lock (SELECT ... FOR SHARE) until the transaction ends.
+    A swap's status flip waits for every holder, so a caller that reads `status`
+    here either commits before the flip or sees the post-flip status. Readers do
+    not block each other. The row is refreshed from the locked read: sessions keep
+    loaded rows across commits, and a stale PRESENT would defeat the lock."""
+    return (
+        db_session.execute(
+            select(SearchSettings)
+            .where(SearchSettings.id == search_settings_id)
+            .with_for_update(read=True)
+            .execution_options(populate_existing=True)
+        )
+        .scalars()
+        .first()
+    )
+
+
+REINDEX_BLOCKS_FULL_RUN_MESSAGE = (
+    "A re-index of the search index is in progress. Full re-index and backfill "
+    "requests are blocked until it completes."
+)
+
+
+def port_reindex_in_progress(db_session: Session) -> bool:
+    """A port-flow reindex is building a FUTURE index. A full re-index or a
+    backfill must not run then: it would add documents with old timestamps that
+    FUTURE's incremental polls never fetch. INSTANT and legacy reindexes do not
+    count. A request that slips in anyway waits in the beat, untouched, until
+    the swap (see _kickoff_indexing_tasks)."""
+    return active_secondary_port_target(db_session) is not None
+
+
+def raise_if_port_reindex_in_progress(db_session: Session) -> None:
+    """Refuse a full re-index or backfill during a port-flow reindex."""
+    if port_reindex_in_progress(db_session):
+        raise OnyxError(OnyxErrorCode.CONFLICT, REINDEX_BLOCKS_FULL_RUN_MESSAGE)
+
+
+def cc_pairs_with_full_run_in_progress(
+    db_session: Session, present_search_settings_id: int
+) -> list[tuple[int, str]]:
+    """(id, name) of cc_pairs with a running or queued PRESENT attempt from the
+    beginning, or a backfill attempt. A reindex started now could never catch up
+    with them (their documents carry old source timestamps), so
+    `set_new_search_settings` refuses while any exist. A queued request (REINDEX
+    trigger, full re-index or prune-after-reindex request, pending backfill) does
+    not count: the beat holds it until the swap (see port_reindex_in_progress)."""
+    rows = db_session.execute(
+        select(ConnectorCredentialPair.id, ConnectorCredentialPair.name)
+        .join(
+            IndexAttempt,
+            IndexAttempt.connector_credential_pair_id == ConnectorCredentialPair.id,
+        )
+        .where(
+            ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING,
+            IndexAttempt.search_settings_id == present_search_settings_id,
+            IndexAttempt.is_synthetic_seed.is_(False),
+            or_(
+                IndexAttempt.from_beginning.is_(True),
+                IndexAttempt.is_backfill.is_(True),
+            ),
+            IndexAttempt.status.in_(
+                [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
+            ),
+        )
+        .distinct()
+        .order_by(ConnectorCredentialPair.id)
+    )
+    return [(cc_pair_id, name or f"CC pair {cc_pair_id}") for cc_pair_id, name in rows]
+
+
 def active_secondary_port_target(db_session: Session) -> SearchSettings | None:
     """The secondary index a reindex-port is populating (the dual-write target), or None.
     Pure — never unpins a drained INSTANT source (unlike _resolve_port_target_settings).
@@ -275,15 +357,30 @@ def update_secondary_search_settings(
     logger.info("Secondary search settings updated successfully")
 
 
-def update_search_settings_status(
+def update_search_settings_status__no_commit(
     search_settings: SearchSettings, new_status: IndexModelStatus, db_session: Session
 ) -> None:
     search_settings.status = new_status
+    # Flush now so callers control the UPDATE order: the unique PRESENT index rejects
+    # a new PRESENT row while the old one is still PRESENT.
+    db_session.flush()
+
+
+def update_search_settings_status(
+    search_settings: SearchSettings, new_status: IndexModelStatus, db_session: Session
+) -> None:
+    update_search_settings_status__no_commit(search_settings, new_status, db_session)
     db_session.commit()
 
 
 def user_has_overridden_embedding_model() -> bool:
-    return DOCUMENT_ENCODER_MODEL != DEFAULT_DOCUMENT_ENCODER_MODEL
+    """True if env DOCUMENT_ENCODER_MODEL names a non-default model, for the alembic
+    seed (dbaa756c2ccf). nomic, the previous default, counts as a default so that
+    DOCUMENT_ENCODER_MODEL=nomic seeds the same rows as an install before granite."""
+    return DOCUMENT_ENCODER_MODEL not in (
+        DEFAULT_DOCUMENT_ENCODER_MODEL,
+        PREVIOUS_DEFAULT_DOCUMENT_ENCODER_MODEL,
+    )
 
 
 # Old-index reclamation (post-reindex deletion of the now-PAST index).
@@ -296,6 +393,10 @@ _ACTIONABLE_RECLAIM_STATUSES = [
     IndexReclaimStatus.PENDING,
     IndexReclaimStatus.SOAKING,
     IndexReclaimStatus.DELETING,
+]
+# States whose index may still hold data.
+_NOT_RECLAIMED_STATUSES = [
+    status for status in IndexReclaimStatus if status != IndexReclaimStatus.RECLAIMED
 ]
 
 
@@ -428,13 +529,15 @@ def find_unreclaimed_past_by_index_name(
     and several generations can share one physical index.
 
     A NULL reclaim_status counts too — those are rows from before reclamation existed,
-    whose index was never deleted. Only RECLAIMED means the data is confirmed gone."""
+    whose index was never deleted. Only RECLAIMED means the data is confirmed gone.
+    RECLAIMED has two stored forms (see IndexReclaimStatusType), so this lists the
+    other statuses instead of comparing with RECLAIMED."""
     stmt = select(SearchSettings).where(
         SearchSettings.status == IndexModelStatus.PAST,
         SearchSettings.index_name == index_name,
         or_(
             SearchSettings.reclaim_status.is_(None),
-            SearchSettings.reclaim_status != IndexReclaimStatus.RECLAIMED,
+            SearchSettings.reclaim_status.in_(_NOT_RECLAIMED_STATUSES),
         ),
     )
     return list(db_session.scalars(stmt))

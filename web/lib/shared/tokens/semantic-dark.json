@@ -368,6 +368,74 @@
       "value": "{neon-magenta-90}",
       "type": "color"
     },
+    "chart-category-blue-1": {
+      "value": "{blue-45}",
+      "type": "color"
+    },
+    "chart-category-blue-1-20": {
+      "value": "{blue-45-a20}",
+      "type": "color"
+    },
+    "chart-category-blue-1-05": {
+      "value": "{blue-45-a05}",
+      "type": "color"
+    },
+    "chart-category-blue-2": {
+      "value": "{neon-sky-50}",
+      "type": "color"
+    },
+    "chart-category-cyan-1": {
+      "value": "{neon-cyan-50}",
+      "type": "color"
+    },
+    "chart-category-cyan-2": {
+      "value": "{neon-mint}",
+      "type": "color"
+    },
+    "chart-category-green-2": {
+      "value": "{neon-lime-60}",
+      "type": "color"
+    },
+    "chart-category-amber-1": {
+      "value": "{neon-amber}",
+      "type": "color"
+    },
+    "chart-category-amber-2": {
+      "value": "{neon-yellow-50}",
+      "type": "color"
+    },
+    "chart-category-orange-2": {
+      "value": "{neon-coral}",
+      "type": "color"
+    },
+    "chart-category-pink-1": {
+      "value": "{neon-rose}",
+      "type": "color"
+    },
+    "chart-category-pink-2": {
+      "value": "{neon-magenta-50}",
+      "type": "color"
+    },
+    "chart-category-purple-1": {
+      "value": "{purple-45}",
+      "type": "color"
+    },
+    "chart-category-purple-2": {
+      "value": "{neon-indigo}",
+      "type": "color"
+    },
+    "chart-sequential-mass-02-blue": {
+      "value": "{blue-90}",
+      "type": "color"
+    },
+    "chart-diverging-neg-10-red": {
+      "value": "{red-45}",
+      "type": "color"
+    },
+    "chart-diverging-neg-02-red": {
+      "value": "{red-85}",
+      "type": "color"
+    },
     "status-success-05": {
       "value": "{green-50}",
       "type": "color"

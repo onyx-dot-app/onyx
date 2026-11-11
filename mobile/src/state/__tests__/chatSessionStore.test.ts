@@ -67,7 +67,7 @@ describe("chatSessionStore", () => {
     expect(node?.type).toBe("assistant");
   });
 
-  it("abortSession aborts the controller and resets chat state", () => {
+  it("abortSession retains ownership until server settlement", () => {
     const store = useChatSessionStore.getState();
     store.ensureSession("a");
     const controller = new AbortController();
@@ -78,7 +78,7 @@ describe("chatSessionStore", () => {
 
     expect(controller.signal.aborted).toBe(true);
     const data = useChatSessionStore.getState().sessions.get("a");
-    expect(data?.abortController).toBeNull();
-    expect(data?.chatState).toBe("input");
+    expect(data?.abortController).toBe(controller);
+    expect(data?.chatState).toBe("streaming");
   });
 });

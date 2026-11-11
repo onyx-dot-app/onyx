@@ -19,10 +19,9 @@ export type Locale = (typeof SUPPORTED_LOCALES)[number];
 
 export const DEFAULT_LOCALE: Locale = "en";
 
-// Cookie the server layout reads to resolve the locale without a DB round
-// trip. The backend owns it: PATCH /user/language and GET /me set it from the
-// stored preference (NEXT_LOCALE_COOKIE_NAME in backend/onyx/configs/
-// constants.py). The client never writes it.
+// Cookie the server layout reads for the locale. The backend owns it: PATCH
+// /user/language and GET /me set it to the effective language (stored
+// preference, else Settings.default_language). The client never writes it.
 export const LOCALE_COOKIE_NAME = "NEXT_LOCALE";
 
 // Endonyms (each language named in itself) so users can always find their own
@@ -38,6 +37,13 @@ export const LOCALE_ENDONYMS = {
   ko: "한국어",
   ar: "العربية",
 } satisfies Record<Locale, string>;
+
+// Picker rows shared by the user and admin language selects.
+export const LOCALE_OPTIONS: { value: Locale; title: string }[] =
+  SUPPORTED_LOCALES.map((locale) => ({
+    value: locale,
+    title: LOCALE_ENDONYMS[locale],
+  }));
 
 export function isSupportedLocale(
   value: string | null | undefined
@@ -65,13 +71,13 @@ const NUMBERING_SYSTEMS: Partial<Record<Locale, string>> = { ar: "arab" };
 
 export type RuntimeLocale = Locale | `${Locale}-u-nu-${string}`;
 
-/** The locale handed to next-intl and Intl for a stored language. */
+/** The locale handed to next-intl and Intl for a UI language. */
 export function runtimeLocale(locale: Locale): RuntimeLocale {
   const system = NUMBERING_SYSTEMS[locale];
   return system ? `${locale}-u-nu-${system}` : locale;
 }
 
-/** The stored language behind a runtime tag ("ar-u-nu-arab" is "ar"). Unknown tags fall back to English. */
+/** The UI language behind a runtime tag ("ar-u-nu-arab" is "ar"). Unknown tags fall back to English. */
 export function messageLocale(locale: string): Locale {
   const base = locale.split("-u-")[0] ?? locale;
   return isSupportedLocale(base) ? base : DEFAULT_LOCALE;

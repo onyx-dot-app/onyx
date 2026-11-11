@@ -24,7 +24,6 @@ from onyx.connectors import factory
 from onyx.connectors.capability_checks import creation, runner
 from onyx.connectors.capability_checks.draft_runs import (
     DraftCheckRunSnapshot,
-    DraftCheckStateKind,
     StoredDraftRun,
     load_draft_run,
     read_draft_run_for_user,
@@ -35,12 +34,14 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckStatus,
     CapabilityVerdict,
     CheckAdvisory,
+    CheckErrorKind,
     CheckFinding,
     CheckFindingKey,
     CheckOutput,
     CountFinding,
     CredentialCapability,
     CredentialCapabilityReport,
+    DraftCheckStateKind,
     FindingOption,
     OptionsFinding,
 )
@@ -267,14 +268,14 @@ def test_failed_required_check_blocks_and_is_stored(
 
 
 @pytest.mark.usefixtures("tenant_context")
-def test_indeterminate_required_check_does_not_block(
+def test_incomplete_required_check_does_not_block(
     db_session: Session, harness: _Harness, slack_pair: ConnectorCredentialPair
 ) -> None:
     harness.errors[_TOKEN] = UnexpectedValidationError("rate limited")
 
     assert _validate(db_session, slack_pair, {"channels": ["a"]}) is True
 
-    assert _stored_statuses(db_session, slack_pair)[_TOKEN] == "indeterminate"
+    assert _stored_statuses(db_session, slack_pair)[_TOKEN] == "incomplete"
 
 
 @pytest.mark.usefixtures("tenant_context")
@@ -312,7 +313,7 @@ def test_fresh_draft_results_for_the_same_form_are_reused(
         form_values={"channels": ["a"]},
     )
     run_draft_capability_checks_task(**harness.send_task.call_args.kwargs["kwargs"])
-    assert harness.runs == [_TOKEN, _CHANNELS]
+    assert sorted(harness.runs) == sorted([_TOKEN, _CHANNELS])
     # A reused result counts as finished at once, also for a check that would
     # now be slow.
     harness.make_slow(_CHANNELS)
@@ -322,7 +323,7 @@ def test_fresh_draft_results_for_the_same_form_are_reused(
     assert _validate(db_session, slack_pair, {"channels": ["a"]}) is True
     assert time.monotonic() - started < creation.CREATION_BLOCKING_BUDGET_SECONDS
     # Nothing ran again, and the reused results are stored.
-    assert harness.runs == [_TOKEN, _CHANNELS]
+    assert sorted(harness.runs) == sorted([_TOKEN, _CHANNELS])
     harness.send_task.assert_not_called()
     harness.release_all()
     assert _stored_statuses(db_session, slack_pair) == {
@@ -333,7 +334,7 @@ def test_fresh_draft_results_for_the_same_form_are_reused(
 
     # Another form value changes only the config-reading check's key.
     assert _validate(db_session, slack_pair, {"channels": ["b"]}) is True
-    assert harness.runs == [_TOKEN, _CHANNELS, _CHANNELS]
+    assert sorted(harness.runs) == sorted([_TOKEN, _CHANNELS, _CHANNELS])
 
 
 @pytest.mark.usefixtures("tenant_context")
@@ -424,12 +425,14 @@ def test_a_draft_runs_discovery_last_and_creation_keeps_its_findings(
         form_values={"channels": ["a"]},
     )
     run_draft_capability_checks_task(**harness.send_task.call_args.kwargs["kwargs"])
-    assert harness.runs == [_TOKEN, _CHANNELS, _DISCOVERY]
+    assert sorted(harness.runs[:-1]) == sorted([_TOKEN, _CHANNELS])
+    assert harness.runs[-1] == _DISCOVERY
     harness.send_task.reset_mock()
 
     assert _validate(db_session, slack_pair, {"channels": ["a"]}) is True
 
-    assert harness.runs == [_TOKEN, _CHANNELS, _DISCOVERY]
+    assert sorted(harness.runs[:-1]) == sorted([_TOKEN, _CHANNELS])
+    assert harness.runs[-1] == _DISCOVERY
     db_session.expire_all()
     row = get_capability_report_row(
         db_session, slack_pair.credential_id, slack_pair.connector_id
@@ -578,6 +581,7 @@ def test_validation_replaces_a_run_in_flight(
         connector_id=slack_pair.connector_id,
         source=DocumentSource.SLACK,
         trigger=CapabilityCheckTrigger.MANUAL,
+        lease=timedelta(hours=1),
         active_within=timedelta(hours=1),
     )
     db_session.commit()
@@ -624,8 +628,18 @@ def test_fast_required_failure_blocks_while_another_check_is_slow(
     # The rejection stores the report; no background run starts.
     statuses = _stored_statuses(db_session, slack_pair)
     assert statuses[_CHANNELS] == "failed"
-    assert statuses[_TOKEN] == "indeterminate"
+    assert statuses[_TOKEN] == "incomplete"
     harness.send_task.assert_not_called()
+    # The unfinished check's result never arrives, so it is stored as timed out.
+    row = get_capability_report_row(
+        db_session, slack_pair.credential_id, slack_pair.connector_id
+    )
+    assert row is not None and row.report is not None
+    error_kinds = {
+        result["check_id"]: result["error_kind"]
+        for result in row.report["check_results"]
+    }
+    assert error_kinds[_TOKEN] == CheckErrorKind.TIMEOUT.value
 
 
 @pytest.mark.usefixtures("tenant_context")

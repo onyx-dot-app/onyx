@@ -2,7 +2,7 @@
 
 **Import:** `import { InputMultiComboBox, type InputMultiComboBoxProps } from "@opal/components";`
 
-Several picks from a set behind a text input: [InputTypeInTag](../../texts/input-type-in-tag/README.md)'s chips-in-input chrome over the family's dropdown. Typing filters the option set and opens the list, as does a click, Enter or ArrowDown (focus alone does not); the arrows and Tab walk the rows and wrap around, Enter picks, and a chosen option becomes a `Tag`. The pick-only sibling is [InputMultiSelect](../input-multi-select/README.md).
+Several picks from a set behind a text input: [InputTypeInTag](../../texts/input-type-in-tag/README.md)'s tags-in-input chrome over the family's dropdown. Typing filters the option set and opens the list, as does a click, Enter or ArrowDown (focus alone does not); the arrows and Tab walk the rows and wrap around, Enter picks, and a chosen option becomes a `Tag`. The pick-only sibling is [InputMultiSelect](../input-multi-select/README.md).
 
 Free tagging with no set to pick from is `InputTypeInTag` itself. `InputMultiComboBox` always has an option set, so `options` is required.
 
@@ -44,6 +44,7 @@ Every [InputTypeInTag](../../texts/input-type-in-tag/README.md) prop, plus:
 | `onSelectOption`    | `(option: SelectOption) => void`    | **(required)** | Called when an option is chosen                                    |
 | `mode`              | `"closed" \| "open"`                | `"closed"`     | Set openness, see above                                            |
 | `dropdownMaxHeight` | `string`                            | `"15rem"`      | Max height of the dropdown in CSS units                            |
+| `showTags`          | `boolean`                           | `true`         | `false` keeps the chosen options out of the field: they show only as selected rows in the list, for a caller that lists them elsewhere |
 
 `onAdd` is the create row's commit in `mode="open"`. In `mode="closed"` it never fires.
 

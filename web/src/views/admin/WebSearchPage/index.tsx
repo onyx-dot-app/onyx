@@ -6,7 +6,6 @@ import { SettingsLayouts, toast } from "@opal/layouts";
 import { Content } from "@opal/layouts";
 import ProviderCard from "@/sections/admin/ProviderCard";
 import { FetchError } from "@/lib/fetcher";
-import { PageLoader } from "@opal/loaders";
 import { useWebSearchProviders } from "@/lib/webSearch/hooks";
 import { useCreateModal } from "@opal/components";
 import { SvgGlobe } from "@opal/icons";
@@ -299,22 +298,6 @@ export default function WebSearchPage() {
     );
   }
 
-  if (isLoading) {
-    return (
-      <SettingsLayouts.Root>
-        <SettingsLayouts.Header
-          icon={route.icon}
-          title={t("header.title")}
-          description={t("header.description")}
-          divider
-        />
-        <SettingsLayouts.Body>
-          <PageLoader />
-        </SettingsLayouts.Body>
-      </SettingsLayouts.Root>
-    );
-  }
-
   async function handleActivateSearchProvider(providerId: number) {
     try {
       await activateSearchProvider(providerId);
@@ -366,7 +349,7 @@ export default function WebSearchPage() {
 
   return (
     <>
-      <SettingsLayouts.Root>
+      <SettingsLayouts.Root loading={isLoading}>
         <SettingsLayouts.Header
           icon={route.icon}
           title={t("header.title")}
@@ -377,10 +360,9 @@ export default function WebSearchPage() {
         <SettingsLayouts.Body>
           <div className="flex w-full flex-col gap-3">
             <Content
+              font="main-content-emphasis"
               title={t("searchEngine.title")}
               description={t("searchEngine.description")}
-              sizePreset="main-content"
-              variant="section"
             />
 
             {!hasActiveSearchProvider && (
@@ -489,10 +471,9 @@ export default function WebSearchPage() {
 
           <div className="flex w-full flex-col gap-3">
             <Content
+              font="main-content-emphasis"
               title={t("crawler.title")}
               description={t("crawler.description")}
-              sizePreset="main-content"
-              variant="section"
             />
 
             <div

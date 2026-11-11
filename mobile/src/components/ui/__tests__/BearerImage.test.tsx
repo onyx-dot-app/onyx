@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { render } from "@testing-library/react-native";
 
+import { AttachmentImage } from "@/components/chat/AttachmentImage";
 import { BearerImage } from "@/components/ui/BearerImage";
 
 // Mutable `mock*` variables (allowed out-of-scope in a jest.mock factory) drive the token and
@@ -39,5 +40,18 @@ describe("BearerImage", () => {
       headers: { Authorization: "Bearer tok" },
     });
     expect(mockImageProps?.cachePolicy).toBe("none");
+    expect(mockImageProps?.contentFit).toBe("cover");
+  });
+
+  it("can show the entire generated attachment without cropping its edges", () => {
+    mockToken = "tok";
+    render(
+      <AttachmentImage fileId="generated-1" size={160} contentFit="contain" />,
+    );
+    expect(mockImageProps?.contentFit).toBe("contain");
+    expect(mockImageProps?.source).toEqual({
+      uri: "https://x.test/api/chat/file/generated-1",
+      headers: { Authorization: "Bearer tok" },
+    });
   });
 });

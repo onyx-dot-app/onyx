@@ -1,8 +1,8 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { IconLoader } from "@opal/loaders";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import useSWR, { useSWRConfig } from "swr";
 import useGroupMemberCandidates from "./useGroupMemberCandidates";
@@ -14,9 +14,15 @@ import {
   MessageCard,
   InputSwitch,
   Table,
+  useCreateModal,
   type TableColumn,
 } from "@opal/components";
-import { IllustrationContent, InputHorizontal, toast } from "@opal/layouts";
+import {
+  IllustrationContent,
+  InputHorizontal,
+  toast,
+  Section,
+} from "@opal/layouts";
 import {
   SvgUsers,
   SvgTrash,
@@ -24,21 +30,23 @@ import {
   SvgPlusCircle,
   SvgUserShield,
 } from "@opal/icons";
-import { markdown } from "@opal/utils";
+import { markdown, richNodes } from "@opal/utils";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { SettingsLayouts } from "@opal/layouts";
-import { Section } from "@/layouts/general-layouts";
-import { InputTypeIn } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
+import { InputTypeIn, Text } from "@opal/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
-import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
+import {
+  errorHandlingFetcher,
+  isNotFoundError,
+  skipRetryOnAuthError,
+} from "@/lib/fetcher";
 import { AccountType } from "@/lib/types";
 import type { SecuritySettings, UserGroup } from "@/lib/types";
 import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
 import { Tier } from "@/lib/tiers/types";
 import { tierAtLeast } from "@/lib/tiers/utils";
-import type { MemberRow, TokenRateLimitDisplay } from "./types";
+import type { MemberRow } from "./types";
 import {
   makeBaseColumns,
   makeMemberTableColumns,
@@ -52,19 +60,16 @@ import {
   deleteGroup,
   updateAgentGroupSharing,
   updateDocSetGroupSharing,
-  saveTokenLimits,
   saveGroupPermissions,
   setGroupManager,
   refreshGroupLists,
 } from "./svc";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { userGroupUrl } from "@/hooks/useGroups";
 import SharedGroupResources from "@/views/admin/GroupsPage/SharedGroupResources";
 import GroupPermissionsSection from "./GroupPermissionsSection";
-import TokenLimitSection from "./TokenLimitSection";
-import type { TokenLimit } from "./TokenLimitSection";
+import GroupSpendingLimitsSection from "./GroupSpendingLimitsSection";
 import { can } from "@/lib/permissions/resource-actions";
-
-const HOURS_PER_DAY = 24;
 
 // ---------------------------------------------------------------------------
 // Component
@@ -76,7 +81,7 @@ interface EditGroupPageProps {
 
 function EditGroupPage({ groupId }: EditGroupPageProps) {
   const t = useTranslations("admin.groups");
-  const router = useRouter();
+  const navigation = useNavigation();
   const { mutate } = useSWRConfig();
   const settings = useSettings();
   const { user } = useUser();
@@ -87,24 +92,14 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   // Fetch the group data — poll every 5s while syncing so the UI updates
   // automatically when the backend finishes processing the previous edit.
   const {
-    data: groups,
+    data: groupData,
     isLoading: groupLoading,
     error: groupError,
-  } = useSWR<UserGroup[]>(
-    SWR_KEYS.adminUserGroupsWithDefault,
-    errorHandlingFetcher,
-    {
-      refreshInterval: (latestData) => {
-        const g = latestData?.find((g) => g.id === groupId);
-        return g && !g.is_up_to_date ? 5000 : 0;
-      },
-    }
-  );
-
-  const group = useMemo(
-    () => groups?.find((g) => g.id === groupId) ?? null,
-    [groups, groupId]
-  );
+  } = useSWR<UserGroup>(userGroupUrl(groupId), errorHandlingFetcher, {
+    refreshInterval: (latestData) =>
+      latestData && !latestData.is_up_to_date ? 5000 : 0,
+  });
+  const group = groupData ?? null;
 
   const canManage = can(group, "manage");
   const canManageMembers = can(group, "manage_members");
@@ -114,16 +109,6 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   const isDefaultGroup = group?.is_default ?? false;
 
   const isSyncing = group != null && !group.is_up_to_date;
-
-  // Gate on edit_token_limits so a non-manager (who'd 403 on the read) skips the fetch.
-  // Skip retry on tier-gated 402 so SWR doesn't churn isLoading.
-  const { data: tokenRateLimits, isLoading: tokenLimitsLoading } = useSWR<
-    TokenRateLimitDisplay[]
-  >(
-    canEditTokenLimits ? SWR_KEYS.userGroupTokenRateLimit(groupId) : null,
-    errorHandlingFetcher,
-    { onErrorRetry: skipRetryOnAuthError }
-  );
 
   // Fetch permissions for this group (admin only)
   const { data: groupPermissions, isLoading: permissionsLoading } = useSWR<
@@ -153,20 +138,11 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   const [selectedCcPairIds, setSelectedCcPairIds] = useState<number[]>([]);
   const [selectedDocSetIds, setSelectedDocSetIds] = useState<number[]>([]);
   const [selectedAgentIds, setSelectedAgentIds] = useState<number[]>([]);
-  const [tokenLimits, setTokenLimits] = useState<TokenLimit[]>([
-    {
-      tokenId: null,
-      enabled: true,
-      tokenBudget: null,
-      periodDays: null,
-      costBudgetDollars: null,
-    },
-  ]);
   const [enabledPermissions, setEnabledPermissions] = useState<Set<string>>(
     new Set()
   );
   const [incognitoEnabled, setIncognitoEnabled] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const deleteModal = useCreateModal();
   const [isDeleting, setIsDeleting] = useState(false);
   const [initialized, setInitialized] = useState(false);
   const [isAddingMembers, setIsAddingMembers] = useState(false);
@@ -180,12 +156,10 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     error: candidatesError,
   } = useGroupMemberCandidates();
 
-  const isLoading =
-    groupLoading ||
-    candidatesLoading ||
-    tokenLimitsLoading ||
-    permissionsLoading;
-  const error = groupError ?? candidatesError;
+  const isLoading = groupLoading || candidatesLoading || permissionsLoading;
+  // A missing or hidden group renders the not-found state, not a load error.
+  const error =
+    (isNotFoundError(groupError) ? undefined : groupError) ?? candidatesError;
 
   // Pre-populate form when group data loads
   useEffect(() => {
@@ -203,26 +177,6 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       setInitialized(true);
     }
   }, [group, initialized]);
-
-  // Pre-populate token limits once. Re-seeding on later revalidations (focus,
-  // reconnect, a concurrent edit) would silently discard unsaved edits.
-  const tokenLimitsSeededRef = useRef(false);
-  useEffect(() => {
-    if (!tokenRateLimits || tokenLimitsSeededRef.current) return;
-    tokenLimitsSeededRef.current = true;
-    // No saved limits — keep the blank starter row.
-    if (tokenRateLimits.length === 0) return;
-    setTokenLimits(
-      tokenRateLimits.map((trl) => ({
-        tokenId: trl.token_id,
-        enabled: trl.enabled,
-        tokenBudget: trl.token_budget,
-        periodDays: trl.period_hours / HOURS_PER_DAY,
-        costBudgetDollars:
-          trl.cost_budget_cents != null ? trl.cost_budget_cents / 100 : null,
-      }))
-    );
-  }, [tokenRateLimits]);
 
   // Pre-populate permissions once. Re-seeding on later revalidations (focus,
   // reconnect, a concurrent edit) would silently discard unsaved toggles.
@@ -282,11 +236,6 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       try {
         await setGroupManager(groupId, userId, makeManager);
         await refreshGroupLists(mutate);
-        toast.success(
-          makeManager
-            ? t("edit.toasts.managerAssigned")
-            : t("edit.toasts.managerRevoked")
-        );
       } catch (err) {
         console.error("Failed to update manager:", err);
         toast.error(
@@ -472,11 +421,13 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     }
 
     // Re-fetch group to check sync status before saving
-    const freshGroups: UserGroup[] = await fetch(
-      SWR_KEYS.adminUserGroupsWithDefault
-    ).then((r) => r.json());
-    const freshGroup = freshGroups.find((g: UserGroup) => g.id === groupId);
-    if (freshGroup && !freshGroup.is_up_to_date) {
+    const freshGroupResponse = await fetch(userGroupUrl(groupId));
+    if (!freshGroupResponse.ok) {
+      toast.error(t("edit.toasts.updateFailed"));
+      return;
+    }
+    const freshGroup: UserGroup = await freshGroupResponse.json();
+    if (!freshGroup.is_up_to_date) {
       toast.error(t("edit.toasts.syncing"));
       return;
     }
@@ -508,12 +459,6 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
         );
       }
 
-      // Group-scoped create/update/delete routes admit a group admin, so their full save
-      // (including PUT/DELETE of existing limits) is authorized.
-      if (isEnterpriseTier && canEditTokenLimits) {
-        await saveTokenLimits(groupId, tokenLimits, tokenRateLimits ?? []);
-      }
-
       // Bulk desired-state replace; FULL_ADMIN only.
       if (canEditPermissions) {
         await saveGroupPermissions(groupId, enabledPermissions);
@@ -530,14 +475,13 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       initialDocSetIdsRef.current = selectedDocSetIds;
 
       refreshGroupLists(mutate);
-      mutate(SWR_KEYS.userGroupTokenRateLimit(groupId));
       if (canEditPermissions) {
         mutate(SWR_KEYS.userGroupPermissions(groupId));
       }
       // Membership and the incognito flag both feed chat availability.
       mutate(SWR_KEYS.incognitoAvailability);
       toast.success(t("edit.toasts.updated", { name: trimmed }));
-      router.push("/admin/groups");
+      navigation.go("/admin/groups");
     } catch (e) {
       toast.error(
         e instanceof Error ? e.message : t("edit.toasts.updateFailed")
@@ -554,14 +498,14 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       await deleteGroup(groupId);
       refreshGroupLists(mutate);
       toast.success(t("edit.toasts.deleted", { name: group?.name ?? "" }));
-      router.push("/admin/groups");
+      navigation.go("/admin/groups");
     } catch (e) {
       toast.error(
         e instanceof Error ? e.message : t("edit.toasts.deleteFailed")
       );
     } finally {
       setIsDeleting(false);
-      setShowDeleteModal(false);
+      deleteModal.toggle(false);
     }
   }
 
@@ -605,25 +549,20 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
 
   return (
     <>
-      <SettingsLayouts.Root>
+      <SettingsLayouts.Root
+        loading={isLoading}
+        error={error ? t("edit.loadError.text") : false}
+      >
         <SettingsLayouts.Header
           icon={SvgUsers}
           title={t("edit.header.title")}
           divider
-          cancel={() => router.push("/admin/groups")}
+          cancel={() => navigation.go("/admin/groups")}
           actions={headerActions}
         />
 
         <SettingsLayouts.Body>
-          {isLoading && <IconLoader />}
-
-          {error && (
-            <Text as="p" secondaryBody text03>
-              {t("edit.loadError.text")}
-            </Text>
-          )}
-
-          {!isLoading && !error && group && (
+          {group && (
             <>
               {isDefaultGroup && (
                 <MessageCard
@@ -645,7 +584,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                 alignItems="stretch"
                 justifyContent="start"
               >
-                <Text mainUiBody text04>
+                <Text font="main-ui-body" color="text-04">
                   {t("form.name.label")}
                 </Text>
                 <InputTypeIn
@@ -682,7 +621,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                         ? t("members.searchUsers.placeholder")
                         : t("members.searchMembers.placeholder")
                     }
-                    searchIcon
+                    icon="search"
                   />
                   {isAddingMembers ? (
                     <Button
@@ -764,9 +703,8 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                     attachedAgents={group?.personas}
                   />
 
-                  <TokenLimitSection
-                    limits={tokenLimits}
-                    onLimitsChange={setTokenLimits}
+                  <GroupSpendingLimitsSection
+                    groupId={groupId}
                     disabled={!isEnterpriseTier || !canEditTokenLimits}
                     disabledTooltip={tokenLimitsDisabledTooltip}
                   />
@@ -803,7 +741,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                         variant="danger"
                         prominence="secondary"
                         icon={SvgTrash}
-                        onClick={() => setShowDeleteModal(true)}
+                        onClick={() => deleteModal.toggle(true)}
                       >
                         {t("edit.delete.button.label")}
                       </Button>
@@ -816,11 +754,11 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>
 
-      {showDeleteModal && (
+      <deleteModal.Provider>
         <ConfirmationModalLayout
           icon={SvgTrash}
           title={t("edit.deleteModal.title")}
-          onClose={() => setShowDeleteModal(false)}
+          onClose={() => deleteModal.toggle(false)}
           submit={
             <Button
               variant="danger"
@@ -833,18 +771,20 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
             </Button>
           }
         >
-          <Text as="p" text03>
-            {t.rich("edit.deleteModal.description", {
-              name: group?.name ?? "",
-              highlight: (chunks) => (
-                <Text as="span" text05>
-                  {chunks}
-                </Text>
-              ),
-            })}
+          <Text as="p" color="text-03">
+            {richNodes(
+              t.rich("edit.deleteModal.description", {
+                name: group?.name ?? "",
+                highlight: (chunks) => (
+                  <Text as="span" color="text-05">
+                    {richNodes(chunks)}
+                  </Text>
+                ),
+              })
+            )}
           </Text>
         </ConfirmationModalLayout>
-      )}
+      </deleteModal.Provider>
     </>
   );
 }

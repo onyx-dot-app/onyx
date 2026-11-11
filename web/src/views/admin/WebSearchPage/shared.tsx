@@ -1,6 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import { useField } from "formik";
 import { markdown } from "@opal/utils";
 import type { RichStr } from "@opal/types";
 import { InputVertical } from "@opal/layouts";
@@ -14,6 +15,8 @@ interface ApiKeyFieldProps {
 
 export function ApiKeyField({ providerLabel, apiKeyUrl }: ApiKeyFieldProps) {
   const t = useTranslations("admin.webSearch");
+  // On edit, the initial value is the stored masked key.
+  const [, meta] = useField<string>("api_key");
 
   return (
     <InputVertical
@@ -31,6 +34,7 @@ export function ApiKeyField({ providerLabel, apiKeyUrl }: ApiKeyFieldProps) {
       <PasswordInputTypeInField
         name="api_key"
         placeholder={t("apiKeyField.placeholder")}
+        existingValue={meta.initialValue}
       />
     </InputVertical>
   );

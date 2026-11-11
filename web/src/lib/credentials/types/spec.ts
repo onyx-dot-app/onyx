@@ -47,7 +47,17 @@ interface CredentialFieldBase extends CredentialFieldOptions {
   displayName: CredentialDisplayName;
 }
 
-export type CredentialTextKind = "text" | "email" | "url" | "secret";
+/**
+ * A string field. `jsonFile` is a JSON key file (a Google service-account
+ * key): uploaded or pasted, the field holds its text, which the account
+ * stores as it is.
+ */
+export type CredentialTextKind =
+  | "text"
+  | "email"
+  | "url"
+  | "secret"
+  | "jsonFile";
 
 /** One field of a credential spec. `kind` picks how it renders. */
 export type CredentialSpecField =
@@ -66,6 +76,21 @@ export interface CredentialSpecMethod<TKey extends string = string> {
   fields: readonly TKey[];
   /** Hides the "Auto Sync Permissions" access type for this method. */
   disablePermSync?: boolean;
+  /**
+   * The method sets the account up on its own (an OAuth sign-in that saves
+   * it), so the form saves no typed account for it. It names no fields.
+   */
+  ownSetup?: boolean;
+}
+
+/**
+ * Fields that replace a spec's own on the add-connector page while the
+ * connector form holds every value in `when`, e.g. Confluence Data Center
+ * signs in with a personal access token alone.
+ */
+export interface CredentialFormVariant {
+  when: Readonly<Record<string, string | boolean>>;
+  fields: CredentialSpecFields;
 }
 
 /** A source's credential: its fields and, optionally, its auth methods. */
@@ -76,6 +101,8 @@ export interface CredentialSpec {
   fields: CredentialSpecFields;
   /** Two or more ways to authenticate. The first is the default. */
   methods?: readonly CredentialSpecMethod[];
+  /** Field sets for some connector form values. The first match wins. */
+  formVariants?: readonly CredentialFormVariant[];
 }
 
 export type MethodsOf<TFields> = readonly CredentialSpecMethod<
@@ -90,6 +117,7 @@ export interface DefinedCredentialSpec<
   brandName: string;
   fields: TFields;
   methods: TMethods;
+  formVariants?: readonly CredentialFormVariant[];
 }
 
 // A file field is uploaded on its own; the stored JSON holds its content as a

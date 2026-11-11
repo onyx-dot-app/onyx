@@ -389,14 +389,14 @@ export function getSearchConfigField(
   if (providerType === "searxng") {
     return {
       title: t("configFields.searxngBaseUrl.label"),
-      placeholder: "https://your-searxng-instance.com",
+      placeholder: t("configFields.searxngBaseUrl.placeholder"),
       subDescription: markdown(t("configFields.searxngBaseUrl.description")),
     };
   }
   if (providerType === "firecrawl") {
     return {
       title: t("configFields.firecrawlBaseUrl.label"),
-      placeholder: "https://api.firecrawl.dev/v2/search",
+      placeholder: t("configFields.firecrawlBaseUrl.searchPlaceholder"),
       defaultValue: "https://api.firecrawl.dev/v2/search",
       subDescription: t("configFields.firecrawlBaseUrl.description"),
     };
@@ -411,7 +411,7 @@ export function getContentConfigField(
   if (providerType === "firecrawl") {
     return {
       title: t("configFields.firecrawlBaseUrl.label"),
-      placeholder: "https://api.firecrawl.dev/v2/scrape",
+      placeholder: t("configFields.firecrawlBaseUrl.scrapePlaceholder"),
       defaultValue: "https://api.firecrawl.dev/v2/scrape",
       subDescription: t("configFields.firecrawlBaseUrl.description"),
     };

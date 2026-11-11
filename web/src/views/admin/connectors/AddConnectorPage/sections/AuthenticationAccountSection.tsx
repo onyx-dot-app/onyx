@@ -2,24 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import {
-  Button,
-  Divider,
-  Fold,
-  InputTypeIn,
-  SelectCard,
-  Tabs,
-} from "@opal/components";
-import {
-  Content,
-  ContentAction,
-  InputVertical,
-  Section,
-  toast,
-} from "@opal/layouts";
+import { Button, Divider, Fold, SelectCard, Tabs } from "@opal/components";
+import { Content, ContentAction, Section, toast } from "@opal/layouts";
 import { Disabled } from "@opal/core";
 import { cn } from "@opal/utils";
-import { FormikField } from "@/refresh-components/form/FormikField";
 import { SvgExpand, SvgFold, SvgListTree, SvgPlusCircle } from "@opal/icons";
 import type {
   Credential,
@@ -34,7 +20,7 @@ import { useSettings } from "@/lib/settings/hooks";
 import CreateCredential from "@/lib/credentials/components/CreateCredential";
 import { CredentialFieldsRenderer } from "@/lib/credentials/components/CredentialFieldsRenderer";
 import { ShareAccountField } from "@/lib/credentials/components/ShareAccountField";
-import { updateCredentialSharing } from "@/lib/credentials/svc";
+import { AccountNameField } from "@/lib/credentials/components/AccountNameField";
 import { getIn, useFormikContext } from "formik";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/tiers/types";
@@ -46,11 +32,13 @@ import {
   type NewAccountValues,
 } from "@/views/admin/connectors/AddConnectorPage/newAccount";
 import { OAuthSignInRow } from "@/lib/credentials/components/OAuthSignInRow";
+import OwnAccountSetup from "@/views/admin/connectors/AddConnectorPage/form/OwnAccountSetup";
 import { CreateStdOAuthCredential } from "@/lib/credentials/components/CreateStdOAuthCredential";
 import {
   credentialMatchesBoundFields,
   getCredentialSpec,
   isDraftCredential,
+  isOwnSetupMethod,
   realmFields,
   shouldRedirectToOAuth,
   toCredentialRef,
@@ -83,6 +71,8 @@ interface AuthenticationAccountSectionProps {
   checksLocked: boolean;
   /** Set when the form edits this pair: the checks are dry runs of it. */
   editCCPairId?: number | null;
+  /** Each increment opens the checks card and scrolls it into view. */
+  expandChecksRequest?: number;
 }
 
 /**
@@ -100,9 +90,9 @@ export default function AuthenticationAccountSection({
   checkedCredential,
   checksLocked,
   editCCPairId = null,
+  expandChecksRequest = 0,
 }: AuthenticationAccountSectionProps) {
   const t = useTranslations("admin.connectorsList");
-  const tCreate = useTranslations("admin.credentials.create");
   const newAccountNameField = `${NEW_ACCOUNT_FIELD}.${NEW_ACCOUNT_NAME_FIELD}`;
   const settings = useSettings();
   const {
@@ -117,6 +107,7 @@ export default function AuthenticationAccountSection({
     selectMethod,
     close,
     remove,
+    saveSharing,
     refresh,
     authorize,
     isAuthorizing,
@@ -125,9 +116,21 @@ export default function AuthenticationAccountSection({
   // Expanded, the section lists every account. Folded, only the chosen one
   // (or the new-account card when nothing is chosen) stays.
   const [accountsExpanded, setAccountsExpanded] = useState<boolean>(true);
-  /** Folds the section. The new-account card closes too; expanding leaves it closed. */
+  const hasSavedAccounts: boolean = (credentials?.length ?? 0) > 0;
+  // With no saved account there is nothing to fold away, so the section
+  // stays expanded whatever folded it (starting the checks does).
+  const sectionExpanded: boolean = accountsExpanded || !hasSavedAccounts;
+  // The saved account whose details are open. One card is open at a time:
+  // opening a saved account's details closes the new account's card, and
+  // the reverse.
+  const [openDetailId, setOpenDetailId] = useState<number | null>(null);
+  /**
+   * Folds the section. Every card's details close too, the new account's
+   * form and each saved account's; expanding leaves them closed.
+   */
   function foldAccounts() {
     close();
+    setOpenDetailId(null);
     setAccountsExpanded(false);
   }
 
@@ -137,21 +140,26 @@ export default function AuthenticationAccountSection({
     source: displayName,
   });
   const selectedSavedId: number | null = currentCredential?.id ?? null;
-  // The source's fields when a new account is typed into this form; `null`
-  // when it saves through its own account form instead.
-  const typedSpec = typedAccountSpec(connector);
+  const { values, setFieldError, setFieldTouched, setFieldValue } =
+    useFormikContext<Record<string, unknown>>();
+  // The source's fields when a new account is typed into this form, as the
+  // connector form's values pick them; `null` when it saves through its own
+  // account form instead.
+  const typedSpec = typedAccountSpec(connector, values);
   const accountRealmFields = typedSpec ? realmFields(typedSpec) : [];
   const realmKeys: ReadonlySet<string> = new Set(
     accountRealmFields.map(([key]) => key)
   );
   const businessTier = useTierAtLeast(Tier.BUSINESS);
-  const { values, setFieldError, setFieldTouched, setFieldValue } =
-    useFormikContext<Record<string, unknown>>();
 
   const newAccountValues: NewAccountValues | undefined = getIn(
     values,
     NEW_ACCOUNT_FIELD
   );
+  const newAccountMethod: string | undefined =
+    typeof newAccountValues?.authentication_method === "string"
+      ? newAccountValues.authentication_method
+      : undefined;
 
   // The credential-bound fields filled in first above, such as the realm,
   // restrict the saved accounts to the ones that work with them.
@@ -258,42 +266,31 @@ export default function AuthenticationAccountSection({
             source={connector}
             spec={typedSpec}
             namePrefix={NEW_ACCOUNT_FIELD}
+            // Sent with the account's other values, as the draft holds it.
+            fileValues="base64"
             // Asked for above this section, first.
             exclude={realmKeys}
-            authMethod={
-              typeof newAccountValues?.authentication_method === "string"
-                ? newAccountValues.authentication_method
-                : undefined
-            }
+            authMethod={newAccountMethod}
+            renderOwnSetup={() => <OwnAccountSetup source={connector} />}
           />
-          <Divider paddingParallel={0} paddingPerpendicular={0} />
-          {/* Opens once the account's own fields are valid. */}
-          <Disabled disabled={!newAccountReady}>
-            <Section alignItems="stretch" gap={4}>
-              <InputVertical
-                withLabel={newAccountNameField}
-                title={tCreate("nameField.title")}
-                suffix="optional"
-              >
-                <FormikField<string>
-                  name={newAccountNameField}
-                  render={(formikField) => (
-                    <InputTypeIn
-                      {...formikField}
-                      id={newAccountNameField}
-                      value={formikField.value ?? ""}
-                      placeholder={tCreate("nameField.placeholder")}
-                    />
-                  )}
-                />
-              </InputVertical>
-              <ShareAccountField
-                namePrefix={NEW_ACCOUNT_FIELD}
-                disabled={!newAccountReady}
-                groupsLocked={!businessTier}
-              />
-            </Section>
-          </Disabled>
+          {/* A method that saves the account itself names and shares
+          nothing here. */}
+          {!isOwnSetupMethod(typedSpec, newAccountMethod) && (
+            <>
+              <Divider paddingParallel={0} paddingPerpendicular={0} />
+              {/* Opens once the account's own fields are valid. */}
+              <Disabled disabled={!newAccountReady}>
+                <Section alignItems="stretch" gap={4}>
+                  <AccountNameField name={newAccountNameField} />
+                  <ShareAccountField
+                    namePrefix={NEW_ACCOUNT_FIELD}
+                    disabled={!newAccountReady}
+                    groupsLocked={!businessTier}
+                  />
+                </Section>
+              </Disabled>
+            </>
+          )}
         </Section>
       );
     }
@@ -354,37 +351,37 @@ export default function AuthenticationAccountSection({
   }
 
   function renderSavedCard(credential: SimilarCredential) {
+    const selected: boolean = credential.id === selectedSavedId;
     return (
       <AuthenticationAccountCard
         key={credential.id}
         credential={credential}
         source={connector}
         sourceName={displayName}
-        selected={credential.id === selectedSavedId}
-        selectable={isSelectable(credential)}
+        selected={selected}
+        // A shared account the server would refuse here cannot be picked; an
+        // existing pick stays, so it can still be dropped.
+        selectable={isSelectable(credential) && (credential.usable || selected)}
         // Folded, the pick is the only card shown: it keeps a light look,
         // and a click opens the section rather than dropping the pick.
-        quietSelection={!accountsExpanded}
+        quietSelection={!sectionExpanded}
         onSelect={() => onSwap(credential)}
         onDeselect={() =>
-          accountsExpanded
-            ? onCredentialChange(null)
-            : setAccountsExpanded(true)
+          sectionExpanded ? onCredentialChange(null) : setAccountsExpanded(true)
         }
         onDelete={() => onDeleteCredential(credential)}
-        checkReport={checkReports.reportFor(credential.id)}
-        onRerunChecks={() => checkReports.rerun(credential.id)}
-        groupsLocked={!businessTier}
-        onUpdateSharing={async (sharing) => {
-          const response = await updateCredentialSharing(
-            credential.id,
-            sharing
-          );
-          if (!response.ok) throw new Error(await response.text());
-          const saved: SimilarCredential = await response.json();
-          refresh();
-          return saved;
+        detailsOpen={openDetailId === credential.id}
+        onDetailsOpenChange={(open) => {
+          if (open) {
+            close();
+            setOpenDetailId(credential.id);
+          } else {
+            setOpenDetailId((id) => (id === credential.id ? null : id));
+          }
         }}
+        checkReport={checkReports.reportFor(credential.id)}
+        groupsLocked={!businessTier}
+        onSaveAccount={(update) => saveSharing(credential.id, update)}
       />
     );
   }
@@ -455,7 +452,14 @@ export default function AuthenticationAccountSection({
           )}
         </div>
       }
-      onClick={() => (isCreating ? close() : selectMethod(defaultMethod))}
+      onClick={() => {
+        if (isCreating) {
+          close();
+        } else {
+          setOpenDetailId(null);
+          selectMethod(defaultMethod);
+        }
+      }}
     >
       {/* Closed, a usable new account shows its summary as the header. */}
       {!isCreating && chosenDraft ? (
@@ -463,11 +467,11 @@ export default function AuthenticationAccountSection({
       ) : (
         <Section padding={2} width="full">
           <Content
+            font="main-ui-body"
             icon={SvgPlusCircle}
             title={newAccountLabel}
-            sizePreset="main-ui"
-            variant="body"
-            color={isCreating ? "interactive" : "muted"}
+            color={isCreating ? "interactive" : "default"}
+            titleColor={isCreating ? undefined : "text-03"}
           />
         </Section>
       )}
@@ -475,112 +479,127 @@ export default function AuthenticationAccountSection({
   );
 
   return (
-    <Section gap={2} alignItems="stretch" width="full">
-      <ContentAction
-        title={t("add.credentialStep.title")}
-        description={t("add.credentialStep.description", {
-          appName: settings.appName,
-        })}
-        sizePreset="main-content"
-        variant="section"
-        padding={0}
-        rightChildren={
-          <Section flexDirection="row" alignItems="center" gap={0} width="fit">
-            <Section padding={2} width="fit">
-              <Content
-                icon={SvgListTree}
-                title={t("add.savedAccounts.label", {
-                  count: credentials?.length ?? 0,
-                })}
-                sizePreset="main-ui"
-                variant="body"
-                color="muted"
-                width="fit"
-              />
+    <>
+      <Section gap={2} alignItems="stretch" width="full">
+        <ContentAction
+          font="main-content-emphasis"
+          title={t("add.credentialStep.title")}
+          description={t("add.credentialStep.description", {
+            appName: settings.appName,
+          })}
+          padding={0}
+          rightChildren={
+            <Section
+              flexDirection="row"
+              alignItems="center"
+              gap={0}
+              width="fit"
+            >
+              <Section padding={2} width="fit">
+                <Content
+                  font="main-ui-body"
+                  icon={SvgListTree}
+                  title={t("add.savedAccounts.label", {
+                    count: credentials?.length ?? 0,
+                  })}
+                  titleColor="text-03"
+                  width="fit"
+                />
+              </Section>
+              {/* Folding hides the saved accounts that are not the pick; with
+              none, it would do nothing, so the button is left out. */}
+              {hasSavedAccounts && (
+                <Button
+                  icon={accountsExpanded ? SvgFold : SvgExpand}
+                  prominence="tertiary"
+                  aria-label={
+                    accountsExpanded
+                      ? t("add.savedAccounts.collapseButton.ariaLabel")
+                      : t("add.savedAccounts.expandButton.ariaLabel")
+                  }
+                  aria-expanded={accountsExpanded}
+                  onClick={() =>
+                    accountsExpanded
+                      ? foldAccounts()
+                      : setAccountsExpanded(true)
+                  }
+                />
+              )}
             </Section>
-            <Button
-              icon={accountsExpanded ? SvgFold : SvgExpand}
-              prominence="tertiary"
-              aria-label={
-                accountsExpanded
-                  ? t("add.savedAccounts.collapseButton.ariaLabel")
-                  : t("add.savedAccounts.expandButton.ariaLabel")
-              }
-              aria-expanded={accountsExpanded}
-              onClick={() =>
-                accountsExpanded ? foldAccounts() : setAccountsExpanded(true)
-              }
-            />
-          </Section>
-        }
-      />
+          }
+        />
 
-      {/* The page mounts this step only once the credentials have loaded,
-      and shows its own loader and error until then; the guard only keeps
-      the types honest. */}
-      {!credentials ? null : (
-        <Section gap={6} alignItems="stretch" width="full">
-          {/* One list in a fixed order. Folded, each card that is not the
-          chosen one fades, then its height collapses, so the chosen card
-          moves up on its own. Every item but the first is spaced from the
-          one above inside its fold, so a closed item takes no space. */}
-          <div className="flex flex-col">
-            {credentials.map((credential, index) => (
+        {/* The page mounts this step only once the credentials have loaded,
+        and shows its own loader and error until then; the guard only keeps
+        the types honest. */}
+        {!credentials ? null : (
+          <Section gap={6} alignItems="stretch" width="full">
+            {/* One list in a fixed order. Folded, each card that is not the
+            chosen one fades, then its height collapses, so the chosen card
+            moves up on its own. Every item but the first is spaced from the
+            one above inside its fold, so a closed item takes no space. */}
+            <div className="flex flex-col">
+              {credentials.map((credential, index) => (
+                <Fold
+                  key={credential.id}
+                  open={sectionExpanded || credential.id === selectedSavedId}
+                  keepMounted
+                >
+                  <div className={cn(index > 0 && "pt-2")}>
+                    {renderSavedCard(credential)}
+                  </div>
+                </Fold>
+              ))}
+              {canAuthorize && (
+                <Fold open={sectionExpanded} keepMounted>
+                  <div className={cn(credentials.length > 0 && "pt-2")}>
+                    <Section flexDirection="row" justifyContent="start" gap={1}>
+                      <Button
+                        disabled={isAuthorizing}
+                        variant="action"
+                        onClick={handleAuthorize}
+                      >
+                        {isAuthorizing
+                          ? t("add.authorizeButton.pendingLabel")
+                          : t("add.authorizeButton.label", {
+                              source: displayName,
+                            })}
+                      </Button>
+                    </Section>
+                  </div>
+                </Fold>
+              )}
+              {/* Shown unless a saved account is the pick. Its own fold (the
+              form) is independent of the section's. */}
               <Fold
-                key={credential.id}
-                open={accountsExpanded || credential.id === selectedSavedId}
+                open={sectionExpanded || selectedSavedId === null}
                 keepMounted
               >
-                <div className={cn(index > 0 && "pt-2")}>
-                  {renderSavedCard(credential)}
+                <div
+                  className={cn(
+                    (credentials.length > 0 || canAuthorize) && "pt-2"
+                  )}
+                >
+                  {newAccountCard}
                 </div>
               </Fold>
-            ))}
-            {canAuthorize && (
-              <Fold open={accountsExpanded} keepMounted>
-                <div className={cn(credentials.length > 0 && "pt-2")}>
-                  <Section flexDirection="row" justifyContent="start" gap={1}>
-                    <Button
-                      disabled={isAuthorizing}
-                      variant="action"
-                      onClick={handleAuthorize}
-                    >
-                      {isAuthorizing
-                        ? t("add.authorizeButton.pendingLabel")
-                        : t("add.authorizeButton.label", {
-                            source: displayName,
-                          })}
-                    </Button>
-                  </Section>
-                </div>
-              </Fold>
-            )}
-            {/* Shown unless a saved account is the pick. Its own fold (the
-            form) is independent of the section's. */}
-            <Fold
-              open={accountsExpanded || selectedSavedId === null}
-              keepMounted
-            >
-              <div
-                className={cn(
-                  (credentials.length > 0 || canAuthorize) && "pt-2"
-                )}
-              >
-                {newAccountCard}
-              </div>
-            </Fold>
-          </div>
-
-          <CredentialChecksCard
-            source={connector}
-            credential={toCredentialRef(checkedCredential)}
-            locked={checksLocked || !checkedCredential}
-            // Starting the checks completes the account step, so it folds.
-            onStart={foldAccounts}
-            ccPairId={editCCPairId}
-          />
-        </Section>
+            </div>
+          </Section>
+        )}
+      </Section>
+      {/* A sibling of the section, so it is a child of the form's column and
+      can stay pinned while the rest of the form scrolls by. */}
+      {credentials && (
+        <CredentialChecksCard
+          source={connector}
+          credential={toCredentialRef(checkedCredential)}
+          locked={checksLocked || !checkedCredential}
+          // Starting the checks completes the account step, so it folds.
+          onStart={foldAccounts}
+          ccPairId={editCCPairId}
+          expandRequest={expandChecksRequest}
+        />
       )}
-    </Section>
+    </>
   );
 }

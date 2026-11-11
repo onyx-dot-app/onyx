@@ -38,9 +38,6 @@ export async function testEmbedding({
   deploymentName,
   vertexConfig,
 }: TestEmbeddingArgs) {
-  const testModelName =
-    provider_type === "openai" ? "text-embedding-3-small" : modelName;
-
   return await fetch("/api/admin/embedding/test-embedding", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -48,7 +45,7 @@ export async function testEmbedding({
       provider_type: provider_type,
       api_key: apiKey,
       api_url: apiUrl,
-      model_name: testModelName,
+      model_name: modelName,
       api_version: apiVersion,
       deployment_name: deploymentName,
       vertex_config: vertexConfig,
@@ -67,13 +64,14 @@ export async function testEmbedding({
  *
  * Returns the vector length of the test embedding, or `null` when no test ran.
  * `alwaysTest` runs the test even when the stored key is kept, for providers
- * whose model is free text (Bifrost).
+ * whose model is free text (Bifrost). The test embeds with `modelName`, which
+ * must not be empty.
  */
 export async function connectEmbeddingProvider({
   providerType,
   apiKey,
   apiUrl,
-  modelName = "",
+  modelName,
   apiVersion,
   deploymentName,
   vertexConfig,
@@ -82,7 +80,7 @@ export async function connectEmbeddingProvider({
   providerType: string;
   apiKey: string | null;
   apiUrl: string;
-  modelName?: string;
+  modelName: string;
   apiVersion: string | null;
   deploymentName: string | null;
   vertexConfig?: VertexEmbeddingConfig | null;
@@ -229,9 +227,10 @@ export async function setNewSearchSettings({
   acknowledgedWontPortCcPairIds,
 }: SetNewSearchSettingsArgs): Promise<Response> {
   // The backend's EmbeddingProvider enum only contains cloud providers
-  // (openai/cohere/voyage/google/litellm/azure/bifrost). Self-hosted models live
-  // under the frontend's EmbeddingProviderName for UI grouping (icon,
-  // docs link), but the backend expects provider_type=null for them.
+  // (openai/cohere/voyage/google/litellm/azure/bifrost/openai_compatible).
+  // Self-hosted models live under the frontend's EmbeddingProviderName for UI
+  // grouping (icon, docs link), but the backend expects provider_type=null
+  // for them.
   const providerType = isCloudBased(providerName) ? providerName : null;
 
   return await fetch("/api/search-settings/set-new-search-settings", {
@@ -240,6 +239,7 @@ export async function setNewSearchSettings({
     body: JSON.stringify({
       model_name: model.modelName,
       model_dim: model.modelDim,
+      reduced_dimension: model.reducedDimension ?? null,
       normalize: model.normalize,
       query_prefix: model.queryPrefix,
       passage_prefix: model.passagePrefix,
@@ -258,8 +258,9 @@ export async function setNewSearchSettings({
 }
 
 /**
- * Switches the Contextual Retrieval LLM on the current index. Contextual
- * Retrieval must already be enabled; all other settings must stay unchanged.
+ * Changes Contextual Retrieval on the current index without a re-index: on
+ * with a model, a different model, or off. All other settings must stay
+ * unchanged.
  */
 export async function updateInferenceSettings(
   settings: SavedSearchSettings

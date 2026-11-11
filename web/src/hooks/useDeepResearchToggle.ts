@@ -1,10 +1,15 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 
 interface UseDeepResearchToggleProps {
   chatSessionId: string | null;
   agentId: number | undefined;
+  toolConfiguration: Pick<
+    ToolConfigurationHandle,
+    "preferredToolId" | "clearPreferredTool"
+  >;
 }
 
 /**
@@ -23,6 +28,7 @@ interface UseDeepResearchToggleProps {
 export default function useDeepResearchToggle({
   chatSessionId,
   agentId,
+  toolConfiguration,
 }: UseDeepResearchToggleProps) {
   const [deepResearchEnabled, setDeepResearchEnabled] = useState(false);
   const previousChatSessionId = useRef<string | null>(chatSessionId);
@@ -43,9 +49,15 @@ export default function useDeepResearchToggle({
     setDeepResearchEnabled(false);
   }, [agentId]);
 
+  useEffect(() => {
+    if (toolConfiguration.preferredToolId !== null)
+      setDeepResearchEnabled(false);
+  }, [toolConfiguration.preferredToolId]);
+
   const toggleDeepResearch = useCallback(() => {
+    if (!deepResearchEnabled) toolConfiguration.clearPreferredTool();
     setDeepResearchEnabled(!deepResearchEnabled);
-  }, [deepResearchEnabled]);
+  }, [deepResearchEnabled, toolConfiguration]);
 
   return {
     deepResearchEnabled,

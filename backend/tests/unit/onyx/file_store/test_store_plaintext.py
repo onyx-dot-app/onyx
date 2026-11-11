@@ -29,7 +29,7 @@ def test_store_plaintext_persists_empty_content(
 ) -> None:
     """Empty content must be cached too: it marks unprocessable files
     (e.g. .zip) so subsequent chat turns don't re-fetch and re-attempt
-    extraction. See _get_or_extract_plaintext in onyx/chat/chat_utils.py.
+    extraction. See _get_or_extract_plaintext in onyx/chat/files.py.
     """
     file_store = MagicMock()
     mock_get_file_store.return_value = file_store

@@ -1,4 +1,5 @@
 "use client";
+import { redirect } from "@opal/navigation";
 import React, { useState } from "react";
 import { forgotPassword } from "./utils";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
@@ -6,19 +7,18 @@ import Title from "@/components/ui/title";
 import { Text } from "@opal/components";
 import { markdown } from "@opal/utils";
 import { Spacer } from "@opal/components";
-import Link from "next/link";
 import { Button } from "@opal/components";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
 import { TextFormField } from "@/components/Field";
 import { toast } from "@opal/layouts";
 import { Spinner } from "@/components/Spinner";
-import { redirect } from "next/navigation";
 import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
 import { useTranslations } from "next-intl";
 
 const ForgotPasswordPage: React.FC = () => {
   const t = useTranslations("auth");
+  const tPlaceholders = useTranslations("common.placeholders");
   const [isWorking, setIsWorking] = useState(false);
 
   if (!NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED) {
@@ -66,7 +66,7 @@ const ForgotPasswordPage: React.FC = () => {
                 name="email"
                 label={t("forgotPassword.emailField.label")}
                 type="email"
-                placeholder="email@yourcompany.com"
+                placeholder={tPlaceholders("email")}
               />
 
               <div className="flex">

@@ -1,7 +1,24 @@
 # Plans the whole composition against mocked providers, so these run without an
 # Azure subscription. Run with `terraform test` from the module directory.
 
-mock_provider "azurerm" {}
+mock_provider "azurerm" {
+  # Key Vault access policies validate these as UUIDs.
+  override_data {
+    target = module.storage_sandbox_archive[0].data.azurerm_client_config.current
+    values = {
+      tenant_id = "00000000-0000-0000-0000-000000000001"
+      object_id = "00000000-0000-0000-0000-000000000002"
+    }
+  }
+
+  override_resource {
+    target = module.storage_sandbox_archive[0].azurerm_user_assigned_identity.cmk
+    values = {
+      tenant_id    = "00000000-0000-0000-0000-000000000001"
+      principal_id = "00000000-0000-0000-0000-000000000003"
+    }
+  }
+}
 mock_provider "kubernetes" {}
 
 variables {
@@ -417,4 +434,54 @@ run "managed_redis_can_still_be_asked_for" {
     condition     = length(module.redis) == 1
     error_message = "enable_redis should still create the cache for anyone who wants one."
   }
+}
+
+run "no_sandbox_archive_storage_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(module.storage_sandbox_archive) == 0 && output.sandbox_archive_storage_account_name == null
+    error_message = "The sandbox archive account must be opt-in."
+  }
+}
+
+run "the_sandbox_archive_storage_is_created_on_request" {
+  command = plan
+
+  variables {
+    name                           = "onyx-enterprise-production-deployment"
+    enable_sandbox_archive_storage = true
+  }
+
+  # Key, lifecycle and access behavior is covered by the storage module tests.
+  assert {
+    condition     = length(module.storage_sandbox_archive) == 1
+    error_message = "enable_sandbox_archive_storage should create the archive account."
+  }
+
+  assert {
+    condition     = output.sandbox_archive_storage_account_name == local.sandbox_archive_storage_account_name
+    error_message = "The archive account name should reach the output."
+  }
+
+  assert {
+    condition = (
+      can(regex("^[a-z0-9]{3,24}$", local.sandbox_archive_storage_account_name)) &&
+      endswith(local.sandbox_archive_storage_account_name, local.storage_name_digest) &&
+      !contains([local.storage_account_name, local.flow_log_storage_account_name], local.sandbox_archive_storage_account_name)
+    )
+    error_message = "The archive account name must be valid, keep the digest and differ from the other accounts."
+  }
+}
+
+run "rejects_an_archive_account_named_like_the_file_store" {
+  command = plan
+
+  variables {
+    enable_sandbox_archive_storage       = true
+    storage_account_name                 = "onyxfilesshared"
+    sandbox_archive_storage_account_name = "onyxfilesshared"
+  }
+
+  expect_failures = [terraform_data.sandbox_archive_storage_account_name_check]
 }

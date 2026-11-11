@@ -1,5 +1,5 @@
-import { TAG_COLORS } from "@opal/components/tag/colors";
-import type { TagColor } from "@opal/components/tag/colors";
+import { BADGE_COLORS, badgeTextClass } from "@opal/components/badge/colors";
+import type { StatusColor } from "@opal/types";
 
 /** Value stored in a tile's `data-tile-type` for slash-command skill tiles. */
 export const SKILL_TILE_TYPE = "skill";
@@ -60,15 +60,15 @@ interface IconSpec {
 }
 
 interface TileSpec {
-  /** Opal Tag tint sourcing the tile's fill/text colors (single source of truth). */
-  tagColor: TagColor;
+  /** Opal Badge tint sourcing the tile's fill/text colors (single source of truth). */
+  tagColor: StatusColor;
   icon: IconSpec;
 }
 
 // Spec per tile type. Keyed by RichTileConfig.type; falls back to "paste".
 const TILE_SPECS: Record<string, TileSpec> = {
   paste: {
-    tagColor: "gray",
+    tagColor: "default",
     icon: {
       paths: [CLIPBOARD_PATH],
       viewBox: "0 0 16 16",
@@ -78,7 +78,7 @@ const TILE_SPECS: Record<string, TileSpec> = {
     },
   },
   skill: {
-    tagColor: "blue",
+    tagColor: "info",
     icon: {
       paths: [SPARKLE_PATH],
       viewBox: "0 0 16 16",
@@ -138,7 +138,8 @@ export function createRichInputTileNode(
   }
   tile.className = "rich-input-tile";
   const spec = TILE_SPECS[config.type] ?? TILE_SPECS.paste!;
-  const tagColor = TAG_COLORS[spec.tagColor];
+  const tagColor = BADGE_COLORS[spec.tagColor];
+  const textClass = badgeTextClass(spec.tagColor);
   tile.classList.add(...tagColor.bg.split(" "));
   tile.title = isSkill
     ? config.preview
@@ -160,12 +161,12 @@ export function createRichInputTileNode(
     spec.icon.strokeLinecap
   );
   icon.classList.add("rich-input-tile-icon");
-  icon.classList.add(...tagColor.text.split(" "));
+  icon.classList.add(...textClass.split(" "));
   tile.appendChild(icon);
 
   const previewSpan = document.createElement("span");
   previewSpan.className = "rich-input-tile-preview";
-  previewSpan.classList.add(...tagColor.text.split(" "));
+  previewSpan.classList.add(...textClass.split(" "));
   previewSpan.textContent = config.preview;
   tile.appendChild(previewSpan);
 
@@ -173,7 +174,7 @@ export function createRichInputTileNode(
   if (config.meta) {
     const metaSpan = document.createElement("span");
     metaSpan.className = "rich-input-tile-meta";
-    metaSpan.classList.add(...tagColor.text.split(" "));
+    metaSpan.classList.add(...textClass.split(" "));
     metaSpan.textContent = config.meta;
     tile.appendChild(metaSpan);
   }

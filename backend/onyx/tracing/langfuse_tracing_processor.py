@@ -146,6 +146,7 @@ class LangfuseTracingProcessor(TracingProcessor):
 
             input_cents, output_cents = compute_cost_cents(
                 model=data.model,
+                served_model=data.routed_model,
                 provider=provider,
                 prompt_tokens=input_tokens,
                 completion_tokens=output_tokens,
@@ -355,7 +356,6 @@ class LangfuseTracingProcessor(TracingProcessor):
                     generation_metadata["tools"] = data.tools
                 if data.model_config is not None:
                     for key in [
-                        "prompt_cache_chat_history",
                         "cacheable_prefix_msgs",
                         "cacheable_prefix_tokens",
                         "history_msgs",
@@ -377,6 +377,7 @@ class LangfuseTracingProcessor(TracingProcessor):
                 langfuse_span.update(
                     input=self._mask_if_enabled(input_data),
                     output=self._mask_if_enabled(output_data),
+                    metadata=dict(data.metadata) if data.metadata else None,
                 )
 
             elif isinstance(data, AgentSpanData):

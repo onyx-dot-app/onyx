@@ -17,12 +17,13 @@ type Header struct {
 // means "leave unchanged" (backend/onyx/db/tools.py:252-268); the provider
 // always sends a complete object, so an update is a full replace.
 type CustomToolWrite struct {
-	Name            string         `json:"name"`
-	Description     string         `json:"description"`
-	Definition      map[string]any `json:"definition"`
-	CustomHeaders   []Header       `json:"custom_headers"`
-	PassthroughAuth bool           `json:"passthrough_auth"`
-	OAuthConfigID   *int64         `json:"oauth_config_id"`
+	DefaultChatEnabled bool           `json:"default_chat_enabled"`
+	Name               string         `json:"name"`
+	Description        string         `json:"description"`
+	Definition         map[string]any `json:"definition"`
+	CustomHeaders      []Header       `json:"custom_headers"`
+	PassthroughAuth    bool           `json:"passthrough_auth"`
+	OAuthConfigID      *int64         `json:"oauth_config_id"`
 }
 
 // CustomTool mirrors ToolSnapshot.
@@ -30,17 +31,18 @@ type CustomToolWrite struct {
 // CustomHeaders come back in full, values included. The whole snapshot is
 // therefore secret-bearing and the resource marks the attribute sensitive.
 type CustomTool struct {
-	CustomHeaders   []Header       `json:"custom_headers"`
-	Name            string         `json:"name"`
-	Description     string         `json:"description"`
-	DisplayName     string         `json:"display_name"`
-	ID              int64          `json:"id"`
-	Definition      map[string]any `json:"definition"`
-	InCodeToolID    *string        `json:"in_code_tool_id"`
-	MCPServerID     *int64         `json:"mcp_server_id"`
-	OAuthConfigID   *int64         `json:"oauth_config_id"`
-	PassthroughAuth bool           `json:"passthrough_auth"`
-	Enabled         bool           `json:"enabled"`
+	DefaultChatEnabled *bool          `json:"default_chat_enabled"`
+	CustomHeaders      []Header       `json:"custom_headers"`
+	Name               string         `json:"name"`
+	Description        string         `json:"description"`
+	DisplayName        string         `json:"display_name"`
+	ID                 int64          `json:"id"`
+	Definition         map[string]any `json:"definition"`
+	InCodeToolID       *string        `json:"in_code_tool_id"`
+	MCPServerID        *int64         `json:"mcp_server_id"`
+	OAuthConfigID      *int64         `json:"oauth_config_id"`
+	PassthroughAuth    bool           `json:"passthrough_auth"`
+	Enabled            bool           `json:"enabled"`
 }
 
 // MethodSpec is one operation the validate endpoint parsed out of a definition.
@@ -121,19 +123,6 @@ func (c *Client) ValidateCustomToolDefinition(ctx context.Context, definition ma
 		return nil, err
 	}
 	return resp.Methods, nil
-}
-
-type toolStatusUpdate struct {
-	ToolIDs []int64 `json:"tool_ids"`
-	Enabled bool    `json:"enabled"`
-}
-
-// SetCustomToolEnabled enables or disables a tool. A disabled tool stays
-// configured but no agent may call it. This is its own endpoint: neither
-// create nor update carries the flag.
-func (c *Client) SetCustomToolEnabled(ctx context.Context, id int64, enabled bool) error {
-	req := toolStatusUpdate{ToolIDs: []int64{id}, Enabled: enabled}
-	return c.doJSON(ctx, http.MethodPatch, "/admin/tool/status", req, nil)
 }
 
 // ListTools returns every action the caller can see, built-in ones included.

@@ -1,5 +1,7 @@
+import { useNavigation } from "@opal/navigation";
 import * as Yup from "yup";
 import { InputTypeIn, MessageCard } from "@opal/components";
+import { getSourceDisplayName } from "@/lib/connectors/utils";
 import { InputVertical, Section } from "@opal/layouts";
 import { Form, Formik, FormikHelpers } from "formik";
 import { useState } from "react";
@@ -9,7 +11,6 @@ import { getConnectorOauthRedirectUrl } from "@/lib/connectors/svc";
 import { ValidSources } from "@/lib/connectors/types/source";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { OAuthSignInRow } from "@/lib/credentials/components/OAuthSignInRow";
-import { getSourceDisplayName } from "@/lib/sources";
 
 type OAuthFormValues = Record<string, string>;
 
@@ -24,6 +25,7 @@ export function CreateStdOAuthCredential({
 }: CreateStdOAuthCredentialProps) {
   const t = useTranslations("admin");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const navigation = useNavigation();
 
   async function handleSubmit(
     values: OAuthFormValues,
@@ -42,7 +44,7 @@ export function CreateStdOAuthCredential({
         sourceType,
         values
       );
-      window.location.href = redirectUrl;
+      navigation.load(redirectUrl);
     } catch (error) {
       setErrorMessage(
         error instanceof Error

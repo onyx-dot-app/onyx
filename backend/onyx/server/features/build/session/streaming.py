@@ -83,7 +83,6 @@ logger = setup_logger()
 class BuildStreamingState:
     """Container for accumulating state during sandbox-event streaming.
 
-    Similar to ChatStateContainer but adapted for sandbox event packet types.
     Accumulates chunks and tracks pending tool calls until completion.
 
     Usage:
@@ -108,7 +107,7 @@ class BuildStreamingState:
         """
         self.turn_index = turn_index
 
-        # Accumulated text chunks (similar to answer_tokens in ChatStateContainer)
+        # Accumulated text chunks
         self.message_chunks: list[str] = []
         self.thought_chunks: list[str] = []
 
@@ -355,26 +354,39 @@ def merge_events_with_announces(
 
     def drive_connect_app_announces() -> None:
         cache = get_cache_backend(tenant_id=tenant_id)
+        restore_pending = True
+        seen_requests: set[str] = set()
         while not stop.is_set():
             try:
-                request = connect_app.pop_announcement(
-                    str(session_id), timeout_s=1, cache=cache
-                )
+                if restore_pending:
+                    requests = connect_app.list_pending_requests(str(session_id), cache)
+                    restore_pending = False
+                else:
+                    request = connect_app.pop_announcement(
+                        str(session_id), timeout_s=1, cache=cache
+                    )
+                    requests = [request] if request is not None else []
+                for request in requests:
+                    if request.request_id in seen_requests:
+                        continue
+                    pending = connect_app.load_pending(request.request_id, cache)
+                    if pending is None or pending.build_session_id != str(session_id):
+                        continue
+                    output.put(
+                        ConnectAppRequestPacket(
+                            request_id=request.request_id,
+                            external_app_id=request.external_app_id,
+                            reason=request.reason,
+                        )
+                    )
+                    seen_requests.add(request.request_id)
             except Exception:
+                # A failed read may follow a consumed announcement. Restore it on retry.
+                restore_pending = True
                 logger.exception(
                     "connect_app.announce_poll_failed session_id=%s", session_id
                 )
-                time.sleep(1)
-                continue
-            if request is None:
-                continue
-            output.put(
-                ConnectAppRequestPacket(
-                    request_id=request.request_id,
-                    external_app_id=request.external_app_id,
-                    reason=request.reason,
-                )
-            )
+                stop.wait(1)
 
     # Spawn via the context-preserving helper so the event iterator's lazy
     # tenant-scoped DB access (e.g. event-bus creation) sees the caller's

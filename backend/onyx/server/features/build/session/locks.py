@@ -29,7 +29,7 @@ def get_session_creation_lock(
 
 
 @contextmanager
-def session_creation_lock(user_id: UUID) -> Generator[None, None, None]:
+def session_creation_lock(user_id: UUID) -> Generator[RedisLock, None, None]:
     """Serialize session creation for one user in the current tenant."""
     redis_client = get_redis_client(tenant_id=get_current_tenant_id())
     lock = get_session_creation_lock(redis_client, user_id)
@@ -42,7 +42,7 @@ def session_creation_lock(user_id: UUID) -> Generator[None, None, None]:
         )
 
     try:
-        yield
+        yield lock
     finally:
         if lock.owned():
             lock.release()

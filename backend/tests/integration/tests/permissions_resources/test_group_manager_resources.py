@@ -739,11 +739,7 @@ def test_admin_cc_pair_detail_carries_permissions_map(env: _ScopedEnv) -> None:
 
 def test_manager_reads_detail_of_own_groupless_cc_pair(env: _ScopedEnv) -> None:
     """Every fetch the detail page makes, on a connector that lost its last group.
-
-    The page gates its whole render on the cc-pair AND the index-attempts fetch, and
-    usePaginatedFetch never clears isLoading on error — so a single 404 here is an
-    infinite spinner, not a visible failure.
-    """
+    A refused sub-resource leaves part of the page loading forever, not failed."""
     cc_pair = CCPairManager.create_from_scratch(
         user_performing_action=env.manager,
         access_type=AccessType.PRIVATE,
@@ -753,9 +749,9 @@ def test_manager_reads_detail_of_own_groupless_cc_pair(env: _ScopedEnv) -> None:
 
     for path in [
         f"/manage/admin/cc-pair/{cc_pair.id}",
-        f"/manage/admin/cc-pair/{cc_pair.id}/index-attempts?page_num=0&page_size=10",
+        f"/manage/admin/cc-pair/{cc_pair.id}/index-attempts?page_num=0&page_size=1",
         f"/manage/admin/cc-pair/{cc_pair.id}/last_pruned",
-        f"/manage/admin/cc-pair/{cc_pair.id}/permission-sync-attempts",
+        f"/manage/admin/cc-pair/{cc_pair.id}/runs?page_num=0&page_size=10",
         f"/manage/admin/cc-pair/{cc_pair.id}/errors?page_num=0&page_size=10",
         f"/manage/admin/cc-pair/{cc_pair.id}/get-docs-sync-status",
     ]:
@@ -859,6 +855,40 @@ def test_manager_doc_set_listing_stamps_groupless_as_editable(
     assert listed[doc_set.id]["permissions"]["edit"] is True
     assert listed[doc_set.id]["permissions"]["delete"] is True
     assert listed[doc_set.id]["permissions"]["publish"] is False
+
+
+def test_searchable_doc_set_listing_matches_search_access(env: _ScopedEnv) -> None:
+    """A creator can edit their groupless private set but cannot search it, so the
+    searchable listing that the CLI and MCP use must leave it out."""
+    cc_pair = CCPairManager.create_from_scratch(
+        user_performing_action=env.manager,
+        access_type=AccessType.PRIVATE,
+        groups=[env.managed_group.id],
+    )
+    mine = _create_synced_doc_set(
+        env, groups=[env.managed_group.id], cc_pair_ids=[cc_pair.id]
+    )
+    groupless = _create_synced_doc_set(
+        env, groups=[env.managed_group.id], cc_pair_ids=[cc_pair.id]
+    )
+    detach = _doc_set_body(
+        is_public=False, groups=[], cc_pair_ids=[cc_pair.id], doc_set_id=groupless.id
+    )
+    _patch_doc_set_ok(env, detach, groupless)
+
+    def listed_ids(path: str) -> set[int]:
+        resp = call_endpoint(
+            "GET", path, None, env.manager.headers, env.manager.cookies
+        )
+        assert resp.status_code == 200, resp.text
+        return {entry["id"] for entry in resp.json()}
+
+    full = listed_ids("/manage/document-set")
+    searchable = listed_ids("/manage/document-set?searchable_only=true")
+
+    assert {mine.id, groupless.id} <= full
+    assert mine.id in searchable, "searchable listing lost a set the manager can read"
+    assert groupless.id not in searchable, "searchable listing kept an unsearchable set"
 
 
 def test_manager_connector_listing_isolates_unmanaged_groups(

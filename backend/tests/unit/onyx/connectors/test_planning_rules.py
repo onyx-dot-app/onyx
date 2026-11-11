@@ -5,8 +5,8 @@ import pytest
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.config_diff import (
     ConfigFieldChange,
-    build_source_scoped_backfill_config,
-    classify_source_config_change,
+    build_scoped_backfill_config,
+    classify_config_change,
     source_change_override,
 )
 from onyx.connectors.field_policy import FieldClass, ScopeDirection
@@ -20,21 +20,28 @@ _BITBUCKET_WORKSPACE = {"workspace": "onyx"}
 _DRUPAL_SITE = {"base_url": "https://wiki.example.com"}
 _ASANA_WORKSPACE = {"asana_workspace_id": "w"}
 _JIRA_SITE = {"jira_base_url": "https://example.atlassian.net"}
+_NOTION_PAGE_ID = "17ab3186873d418fb899c3f6a43f68de"
 
 
 def _classify(
     source: DocumentSource, old: dict[str, Any], new: dict[str, Any]
 ) -> list[ConfigFieldChange]:
-    return classify_source_config_change(
-        source, old, new, source_change_override(source, old, new)
+    return classify_config_change(
+        CONNECTOR_CLASS_MAP[source].config_class,
+        old,
+        new,
+        source_change_override(source, old, new),
     )
 
 
 def _scoped_backfill_config(
     source: DocumentSource, old: dict[str, Any], new: dict[str, Any]
 ) -> dict[str, Any] | None:
-    return build_source_scoped_backfill_config(
-        source, old, new, source_change_override(source, old, new)
+    return build_scoped_backfill_config(
+        CONNECTOR_CLASS_MAP[source].config_class,
+        old,
+        new,
+        source_change_override(source, old, new),
     )
 
 
@@ -282,8 +289,8 @@ def test_every_rule_reads_the_config_class_of_its_source() -> None:
         # Notion: a root page is always followed recursively.
         (
             DocumentSource.NOTION,
-            {"root_page_id": "r", "recursive_index_enabled": False},
-            {"root_page_id": "r", "recursive_index_enabled": True},
+            {"root_page_id": _NOTION_PAGE_ID, "recursive_index_enabled": False},
+            {"root_page_id": _NOTION_PAGE_ID, "recursive_index_enabled": True},
             {},
         ),
         (
@@ -443,7 +450,9 @@ def test_outlook_roster_change_is_an_identity_change(
 ) -> None:
     """The walked mailboxes and folders decide each thread document's builder,
     content and readers, so no backfill or prune of part of them is correct."""
-    changes = classify_source_config_change(DocumentSource.OUTLOOK, old, new)
+    changes = classify_config_change(
+        CONNECTOR_CLASS_MAP[DocumentSource.OUTLOOK].config_class, old, new
+    )
 
     assert changes
     assert {change.field_class for change in changes} == {FieldClass.IDENTITY}

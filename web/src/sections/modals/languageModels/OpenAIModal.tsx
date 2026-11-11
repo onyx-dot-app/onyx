@@ -94,7 +94,7 @@ export default function OpenAIModal({
       )}
 
       <InputDivider />
-      <ModelSelectionField shouldShowAutoUpdateToggle={true} />
+      <ModelSelectionField shouldShowAutoUpdateToggle />
 
       {!isOnboarding && (
         <>

@@ -348,6 +348,153 @@ run "gvisor_can_be_turned_on" {
   }
 }
 
+run "the_sandbox_pool_runs_pods_by_default" {
+  command = plan
+
+  variables {
+    enable_sandbox_node_pool = true
+  }
+
+  assert {
+    condition     = length(google_container_node_pool.this["sandbox"].node_config[0].advanced_machine_features) == 0
+    error_message = "Nested virtualization stays off unless craft_sandbox_runtime asks for Firecracker."
+  }
+
+  assert {
+    condition     = length(google_container_node_pool.this["sandbox"].node_config[0].linux_node_config) == 0
+    error_message = "The default pool gets no sysctls."
+  }
+
+  assert {
+    condition     = contains(keys(google_container_node_pool.this["sandbox"].node_config[0].labels), "onyx.app/kvm") == false
+    error_message = "Only pools that can run Firecracker carry the onyx.app/kvm label."
+  }
+}
+
+run "firecracker_turns_on_nested_virtualization" {
+  command = plan
+
+  variables {
+    enable_sandbox_node_pool = true
+    craft_sandbox_runtime    = "firecracker"
+  }
+
+  assert {
+    condition     = one(google_container_node_pool.this["sandbox"].node_config[0].advanced_machine_features).enable_nested_virtualization == true
+    error_message = "Firecracker needs nested virtualization for /dev/kvm."
+  }
+
+  assert {
+    condition     = one(google_container_node_pool.this["sandbox"].node_config[0].linux_node_config).sysctls["vm.max_map_count"] == "1048576"
+    error_message = "COS ships vm.max_map_count 65530, which is too low for many guests."
+  }
+
+  assert {
+    condition     = google_container_node_pool.this["sandbox"].node_config[0].labels["onyx.app/kvm"] == "true"
+    error_message = "Nodes that can run Firecracker carry the onyx.app/kvm label."
+  }
+
+  assert {
+    condition     = google_container_node_pool.this["sandbox"].node_config[0].labels["onyx.app/workload"] == "sandbox"
+    error_message = "The chart's sandbox pods still select the pool by its workload label."
+  }
+
+  assert {
+    condition     = one(google_container_node_pool.this["sandbox"].node_config[0].shielded_instance_config).enable_secure_boot == true
+    error_message = "Secure boot stays on; GCP does not list it as a limit on nested virtualization."
+  }
+
+  assert {
+    condition     = length(google_container_node_pool.this["main"].node_config[0].advanced_machine_features) == 0
+    error_message = "Only the sandbox pool gets nested virtualization."
+  }
+}
+
+run "firecracker_accepts_c3" {
+  command = plan
+
+  variables {
+    enable_sandbox_node_pool  = true
+    craft_sandbox_runtime     = "firecracker"
+    sandbox_node_machine_type = "c3-standard-8"
+  }
+
+  assert {
+    condition     = google_container_node_pool.this["sandbox"].node_config[0].machine_type == "c3-standard-8"
+    error_message = "c3 is Intel and supports nested virtualization."
+  }
+}
+
+run "firecracker_rejects_amd" {
+  command = plan
+
+  variables {
+    enable_sandbox_node_pool  = true
+    craft_sandbox_runtime     = "firecracker"
+    sandbox_node_machine_type = "n2d-standard-8"
+  }
+
+  expect_failures = [var.craft_sandbox_runtime]
+}
+
+run "firecracker_rejects_amd_c3d" {
+  command = plan
+
+  variables {
+    enable_sandbox_node_pool  = true
+    craft_sandbox_runtime     = "firecracker"
+    sandbox_node_machine_type = "c3d-standard-8"
+  }
+
+  expect_failures = [var.craft_sandbox_runtime]
+}
+
+run "firecracker_rejects_arm" {
+  command = plan
+
+  variables {
+    enable_sandbox_node_pool  = true
+    craft_sandbox_runtime     = "firecracker"
+    sandbox_node_machine_type = "t2a-standard-8"
+  }
+
+  expect_failures = [var.craft_sandbox_runtime]
+}
+
+run "firecracker_rejects_e2" {
+  command = plan
+
+  variables {
+    enable_sandbox_node_pool  = true
+    craft_sandbox_runtime     = "firecracker"
+    sandbox_node_machine_type = "e2-standard-8"
+  }
+
+  expect_failures = [var.craft_sandbox_runtime]
+}
+
+run "firecracker_rejects_gvisor" {
+  command = plan
+
+  variables {
+    enable_sandbox_node_pool = true
+    craft_sandbox_runtime    = "firecracker"
+    sandbox_gvisor_enabled   = true
+  }
+
+  expect_failures = [var.craft_sandbox_runtime]
+}
+
+run "rejects_an_unknown_sandbox_runtime" {
+  command = plan
+
+  variables {
+    craft_sandbox_runtime = "kata"
+  }
+
+  expect_failures = [var.craft_sandbox_runtime]
+}
+
 run "the_gpu_pool_can_be_held_to_zones_that_stock_the_gpu" {
   command = plan
 
@@ -472,6 +619,93 @@ run "the_namespace_is_created_before_the_service_account" {
   assert {
     condition     = length(coalesce(kubernetes_service_account.workload[0].metadata[0].annotations, {})) == 0
     error_message = "The service account needs no workload identity annotation."
+  }
+}
+
+run "the_default_runtime_creates_no_google_service_account" {
+  command = plan
+
+  variables {
+    enable_sandbox_node_pool = true
+  }
+
+  assert {
+    condition     = length(google_service_account.workload) == 0
+    error_message = "The pod runtime keeps the direct principal and needs no Google service account."
+  }
+
+  assert {
+    condition     = output.workload_google_service_account_email == null
+    error_message = "There is no Google service account to name with the pod runtime."
+  }
+}
+
+run "firecracker_maps_the_workload_to_a_signing_service_account" {
+  command = plan
+
+  variables {
+    enable_sandbox_node_pool = true
+    craft_sandbox_runtime    = "firecracker"
+  }
+
+  override_resource {
+    target          = google_service_account.workload
+    override_during = plan
+    values = {
+      email = "onyx-workload@example-project.iam.gserviceaccount.com"
+      name  = "projects/example-project/serviceAccounts/onyx-workload@example-project.iam.gserviceaccount.com"
+    }
+  }
+
+  assert {
+    condition     = google_service_account.workload[0].account_id == "onyx-workload"
+    error_message = "The Google service account is named after the cluster."
+  }
+
+  assert {
+    condition     = kubernetes_service_account.workload[0].metadata[0].annotations["iam.gke.io/gcp-service-account"] == "onyx-workload@example-project.iam.gserviceaccount.com"
+    error_message = "GKE maps the Kubernetes service account to the Google one through this annotation."
+  }
+
+  assert {
+    condition     = google_service_account_iam_member.workload_identity_user[0].role == "roles/iam.workloadIdentityUser" && google_service_account_iam_member.workload_identity_user[0].member == "serviceAccount:example-project.svc.id.goog[onyx/onyx-workload-access]"
+    error_message = "Only the workload Kubernetes service account may act as the Google service account."
+  }
+
+  # signBlob on itself is what GCS V4 signing without a key file calls.
+  assert {
+    condition     = google_service_account_iam_member.workload_token_creator[0].role == "roles/iam.serviceAccountTokenCreator" && google_service_account_iam_member.workload_token_creator[0].member == "serviceAccount:onyx-workload@example-project.iam.gserviceaccount.com"
+    error_message = "The Google service account must be able to sign as itself."
+  }
+
+  assert {
+    condition     = output.workload_identity_principal == "serviceAccount:onyx-workload@example-project.iam.gserviceaccount.com"
+    error_message = "The pods act as the Google service account, so grants must go to it."
+  }
+
+  assert {
+    condition     = output.workload_google_service_account_email == "onyx-workload@example-project.iam.gserviceaccount.com"
+    error_message = "The output should name the Google service account."
+  }
+}
+
+run "a_long_cluster_name_gets_a_valid_workload_account_id" {
+  command = plan
+
+  variables {
+    name                     = "onyx-production-cluster-name-of-forty-c"
+    enable_sandbox_node_pool = true
+    craft_sandbox_runtime    = "firecracker"
+  }
+
+  assert {
+    condition     = can(regex("^[a-z][-a-z0-9]{4,28}[a-z0-9]$", google_service_account.workload[0].account_id))
+    error_message = "A service account ID is 6-30 characters, so a long cluster name must be shortened."
+  }
+
+  assert {
+    condition     = startswith(google_service_account.workload[0].account_id, "onyx-production") && endswith(google_service_account.workload[0].account_id, "-workload")
+    error_message = "The shortened ID should still read as this cluster's workload account."
   }
 }
 

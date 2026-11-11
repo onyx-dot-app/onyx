@@ -75,3 +75,31 @@ def test_catalog_filters_and_resolves_effective_gateway_capabilities() -> None:
     assert text_model.provider == "openai"
     assert text_model.capabilities.input_modalities == ("text",)
     assert text_model.capabilities.supports_reasoning is False
+
+
+def test_catalog_excludes_decision_only_models_but_keeps_dual_capability() -> None:
+    provider = _provider(
+        3,
+        "openrouter",
+        "OpenRouter",
+        [
+            ModelConfigurationView(
+                name="typesafe/system-one",
+                supports_chat=False,
+                supports_decisions=True,
+                is_visible=True,
+                supports_image_input=False,
+            ),
+            ModelConfigurationView(
+                name="openai/gpt-6-luna",
+                supports_chat=True,
+                supports_decisions=True,
+                is_visible=True,
+                supports_image_input=False,
+            ),
+        ],
+    )
+
+    assert [model.id for model in build_gateway_model_catalog([provider])] == [
+        "3/openai/gpt-6-luna"
+    ]

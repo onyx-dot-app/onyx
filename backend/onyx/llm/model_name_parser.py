@@ -136,7 +136,7 @@ def _generate_display_name_from_model(model_name: str) -> str:
         "gemini-2.5-pro-exp-03-25" → "Gemini 2.5 Pro"
         "claude-3-5-sonnet-20241022" → "Claude 3.5 Sonnet"
         "gpt-oss:120b" → "GPT-OSS 120B" (hyphenated exception)
-        "gpt-4o-mini" → "GPT-4o Mini" (GPT- brand prefix kept)
+        "gpt-6-luna" → "GPT-6 Luna" (GPT- brand prefix kept)
     """
     try:
         # Remove provider prefix if present
@@ -167,7 +167,7 @@ def _generate_display_name_from_model(model_name: str) -> str:
         cleaned = re.sub(r"-v\d+$", "", cleaned)
 
         # GPT models keep the "GPT-" brand prefix, with the hyphen bound to the
-        # version token (e.g., "gpt-4o-mini" → "GPT-4o Mini")
+        # version token (e.g., "gpt-6-luna" → "GPT-6 Luna")
         gpt_prefix = ""
         if base_name_lower.startswith("gpt-"):
             gpt_prefix = "GPT-"

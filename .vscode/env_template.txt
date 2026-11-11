@@ -21,6 +21,10 @@ LOG_ONYX_MODEL_INTERACTIONS=False
 LOG_LEVEL=debug
 
 
+# Code mode: the model calls tools from a Python program in the Monty sandbox.
+CODE_MODE_ENABLED=true
+
+
 # Useful if you want to toggle auth on/off (google_oauth/OIDC specifically).
 OAUTH_CLIENT_ID=<REPLACE THIS>
 OAUTH_CLIENT_SECRET=<REPLACE THIS>
@@ -37,8 +41,8 @@ REQUIRE_EMAIL_VERIFICATION=False
 # every time.
 GEN_AI_API_KEY=<REPLACE THIS>
 OPENAI_API_KEY=<REPLACE THIS>
-# If answer quality isn't important for dev, use gpt-4o-mini since it's cheaper.
-GEN_AI_MODEL_VERSION=gpt-4o
+# Default dev model; set another OpenAI model here if needed.
+GEN_AI_MODEL_VERSION=gpt-6-luna
 
 
 # Python stuff

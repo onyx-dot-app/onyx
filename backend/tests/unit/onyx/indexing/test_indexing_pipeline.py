@@ -4,6 +4,7 @@ import time
 from collections.abc import Callable
 from contextlib import nullcontext
 from datetime import datetime, timezone
+from io import BytesIO
 from types import SimpleNamespace
 from typing import Any, List, cast
 from unittest.mock import MagicMock, Mock, patch
@@ -11,12 +12,22 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 
 from onyx.access.models import ExternalAccess
+from onyx.connectors.cross_connector_utils.tabular_section_utils import (
+    CONTENT_SKIPPED_PLACEHOLDER,
+    tabular_file_to_sections,
+)
 from onyx.connectors.models import (
+    ConnectorFailure,
     Document,
+    DocumentFailure,
     DocumentSource,
     ImageSection,
     TabularSection,
     TextSection,
+)
+from onyx.db.enums import IndexModelStatus
+from onyx.document_index.chunk_content_enrichment import (
+    generate_enriched_content_for_chunk_embedding,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -24,6 +35,9 @@ from onyx.hooks.executor import HookSkipped, HookSoftFailed
 from onyx.hooks.points.document_ingestion import (
     DocumentIngestionResponse,
     DocumentIngestionSection,
+)
+from onyx.indexing.adapters.document_indexing_adapter import (
+    DocumentIndexingBatchAdapter,
 )
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import DefaultIndexingEmbedder
@@ -229,7 +243,7 @@ def test_contextual_rag(
 
     mock_llm = Mock()
     mock_llm.config.max_input_tokens = get_max_input_tokens(
-        model_provider=LlmProviderNames.OPENAI, model_name="gpt-4o"
+        model_provider=LlmProviderNames.OPENAI, model_name="gpt-6-sol"
     )
     mock_llm.invoke = mock_llm_invoke
 
@@ -286,7 +300,7 @@ def _contextual_chunks(
     tokenizer = embedder.embedding_model.tokenizer
     llm = Mock()
     llm.config.max_input_tokens = get_max_input_tokens(
-        model_provider=LlmProviderNames.OPENAI, model_name="gpt-4o"
+        model_provider=LlmProviderNames.OPENAI, model_name="gpt-6-sol"
     )
     llm.invoke = llm_invoke
     chunker = Chunker(
@@ -343,6 +357,7 @@ def _index_batch_with_handler(
         patch(f"{_PATCH_PREFIX}.sentry_sdk"),
     ):
         return index_doc_batch_with_handler(
+            written_search_settings_id=1,
             chunker=MagicMock(),
             embedder=MagicMock(),
             document_index=MagicMock(),
@@ -430,6 +445,7 @@ def test_index_batch_wraps_a_failed_document_push() -> None:
             return_value=([MagicMock(document_id="doc", already_existed=False)], []),
         ),
         patch(f"{_PATCH_PREFIX}.update_docs_content_hash__no_commit"),
+        patch(f"{_PATCH_PREFIX}.update_docs_source_info__no_commit"),
         patch(
             f"{_PATCH_PREFIX}._maybe_push_documents",
             side_effect=RuntimeError("sink down"),
@@ -437,6 +453,7 @@ def test_index_batch_wraps_a_failed_document_push() -> None:
         pytest.raises(DocumentPushFailure, match="sink down"),
     ):
         index_doc_batch(
+            written_search_settings_id=1,
             document_batch=[document],
             chunker=chunker,
             embedder=MagicMock(),
@@ -445,6 +462,91 @@ def test_index_batch_wraps_a_failed_document_push() -> None:
             tenant_id="tenant",
             adapter=adapter,
         )
+
+
+@pytest.mark.parametrize(
+    "skip_document_row_writes, index_to_secondary",
+    [(False, False), (True, False), (False, True)],
+)
+def test_index_batch_writes_source_info_only_for_documents_the_index_took(
+    skip_document_row_writes: bool,
+    index_to_secondary: bool,
+) -> None:
+    """A document whose index write failed keeps its stored type and size, so
+    the change gates still see the reported ones as new on the next sync. A
+    re-chunk that skips row writes rebuilt its documents without them and
+    writes none. A FUTURE write stamps none either, as with the content hash:
+    the row is shared, so the PRESENT poll would skip a document whose PRESENT
+    write failed."""
+    written = _make_doc("written")
+    failed = _make_doc("failed")
+    for doc in (written, failed):
+        doc.source_mime_type = "application/pdf"
+        doc.source_size_bytes = 2048
+    adapter = MagicMock()
+    adapter.connector_id = 1
+    adapter.credential_id = 2
+    adapter.index_attempt_metadata = None
+    adapter.prepare.return_value = DocumentBatchPrepareContext(
+        updatable_docs=[written, failed],
+        id_to_boost_map={},
+    )
+    adapter.lock_context.return_value = _make_ctx()
+    adapter.prepare_enrichment.return_value = MagicMock(
+        doc_id_to_previous_chunk_cnt={}, doc_id_to_new_chunk_cnt={}
+    )
+    chunker = MagicMock()
+    chunker.chunk.return_value = []
+    embedding_result = MagicMock(successful_chunk_ids=[], connector_failures=[])
+    chunk_store = MagicMock()
+    chunk_store.stream.return_value = iter([])
+    embed_ctx = _make_ctx()
+    embed_ctx.__enter__ = MagicMock(return_value=(embedding_result, chunk_store))
+
+    with (
+        patch(
+            f"{_PATCH_PREFIX}._apply_document_ingestion_hook",
+            side_effect=lambda documents: documents,
+        ),
+        patch(f"{_PATCH_PREFIX}.embed_and_stream", return_value=embed_ctx),
+        patch(
+            f"{_PATCH_PREFIX}.write_chunks_to_vector_db_with_backoff",
+            return_value=(
+                [MagicMock(document_id="written", already_existed=True)],
+                [
+                    ConnectorFailure(
+                        failed_document=DocumentFailure(document_id="failed"),
+                        failure_message="write failed",
+                    )
+                ],
+            ),
+        ),
+        patch(f"{_PATCH_PREFIX}.update_docs_content_hash__no_commit"),
+        patch(
+            f"{_PATCH_PREFIX}.update_docs_source_info__no_commit"
+        ) as update_source_info,
+        patch(f"{_PATCH_PREFIX}._maybe_push_documents"),
+    ):
+        index_doc_batch(
+            written_search_settings_id=1,
+            document_batch=[written, failed],
+            chunker=chunker,
+            embedder=MagicMock(),
+            document_index=MagicMock(),
+            request_id=None,
+            tenant_id="tenant",
+            adapter=adapter,
+            skip_document_row_writes=skip_document_row_writes,
+            index_to_secondary=index_to_secondary,
+        )
+
+    if skip_document_row_writes or index_to_secondary:
+        update_source_info.assert_not_called()
+        return
+    update_source_info.assert_called_once()
+    assert update_source_info.call_args.kwargs["ids_to_source_info"] == {
+        "written": ("application/pdf", 2048)
+    }
 
 
 def test_batch_handler_forces_only_the_documents_the_batch_prepared() -> None:
@@ -475,6 +577,7 @@ def test_batch_handler_forces_only_the_documents_the_batch_prepared() -> None:
         patch(f"{_PATCH_PREFIX}.sentry_sdk"),
     ):
         result = index_doc_batch_with_handler(
+            written_search_settings_id=1,
             chunker=chunker,
             embedder=MagicMock(),
             document_index=MagicMock(),
@@ -920,15 +1023,13 @@ _PATCH_PREFIX = "onyx.indexing.indexing_pipeline"
 
 def test_run_pipeline_owns_llm_enrichment_trace() -> None:
     search_settings = SimpleNamespace(enable_contextual_rag=False)
-    all_search_settings = SimpleNamespace(primary=search_settings, secondary=None)
     expected_result = MagicMock()
     vision_llm = MagicMock()
     document = _make_image_doc("image-doc", [ImageSection(image_file_id="1")])
 
     with (
         patch(
-            f"{_PATCH_PREFIX}.get_active_search_settings",
-            return_value=all_search_settings,
+            f"{_PATCH_PREFIX}.get_search_settings_by_id", return_value=search_settings
         ),
         patch(f"{_PATCH_PREFIX}.get_multipass_config"),
         patch(
@@ -947,6 +1048,7 @@ def test_run_pipeline_owns_llm_enrichment_trace() -> None:
         patch(f"{_PATCH_PREFIX}.ensure_trace", return_value=nullcontext()) as ensure,
     ):
         result = run_indexing_pipeline(
+            written_search_settings_id=1,
             document_batch=[document],
             request_id=None,
             embedder=MagicMock(),
@@ -1013,14 +1115,12 @@ def _make_image_doc(
 
 def test_unavailable_vision_llm_does_not_enable_spend_gate() -> None:
     search_settings = SimpleNamespace(enable_contextual_rag=False)
-    all_search_settings = SimpleNamespace(primary=search_settings, secondary=None)
     expected_result = MagicMock()
     document = _make_image_doc("image-doc", [ImageSection(image_file_id="1")])
 
     with (
         patch(
-            f"{_PATCH_PREFIX}.get_active_search_settings",
-            return_value=all_search_settings,
+            f"{_PATCH_PREFIX}.get_search_settings_by_id", return_value=search_settings
         ),
         patch(f"{_PATCH_PREFIX}.get_multipass_config"),
         patch(
@@ -1038,6 +1138,7 @@ def test_unavailable_vision_llm_does_not_enable_spend_gate() -> None:
         patch(f"{_PATCH_PREFIX}.ensure_trace") as ensure,
     ):
         result = run_indexing_pipeline(
+            written_search_settings_id=1,
             document_batch=[document],
             request_id=None,
             embedder=MagicMock(),
@@ -1136,6 +1237,7 @@ def test_index_batch_returns_spend_limit_failures_before_contextual_rag() -> Non
         ),
     ):
         result = index_doc_batch(
+            written_search_settings_id=1,
             document_batch=[document],
             chunker=chunker,
             embedder=MagicMock(),
@@ -1162,6 +1264,79 @@ def _make_tabular_doc(doc_id: str, section: TabularSection) -> Document:
         sections=[section],
         source=DocumentSource.FILE,
         metadata={},
+    )
+
+
+def test_index_batch_skips_tabular_sections_that_reach_it() -> None:
+    """A tabular section that reaches docprocessing (for example, in a batch
+    staged before the option was set) becomes one placeholder before the change
+    gate. Other sections and documents stay."""
+    workbook = Document(
+        id="workbook",
+        title="Budget.xlsx",
+        semantic_identifier="Budget.xlsx",
+        sections=[
+            TextSection(text="Notes", link="notes-link"),
+            TabularSection(csv_file_id="sheet-1", link="sheet-1-link"),
+            TabularSection(csv_file_id="sheet-2", link="sheet-2-link"),
+        ],
+        source=DocumentSource.GOOGLE_DRIVE,
+        metadata={},
+    )
+    text_doc = _make_doc("text-doc")
+    adapter = MagicMock()
+    adapter.index_attempt_metadata = None
+    adapter.prepare.return_value = None
+
+    with patch(
+        f"{_PATCH_PREFIX}._apply_document_ingestion_hook",
+        side_effect=lambda documents: documents,
+    ):
+        index_doc_batch(
+            written_search_settings_id=1,
+            document_batch=[workbook, text_doc],
+            chunker=MagicMock(),
+            embedder=MagicMock(),
+            document_index=MagicMock(),
+            request_id=None,
+            tenant_id="tenant",
+            adapter=adapter,
+            skip_spreadsheet_content=True,
+        )
+
+    prepared_workbook, prepared_text_doc = adapter.prepare.call_args.args[0]
+    assert prepared_workbook.sections == [
+        TextSection(text="Notes", link="notes-link"),
+        TextSection(text=CONTENT_SKIPPED_PLACEHOLDER, link="sheet-1-link"),
+    ]
+    assert prepared_text_doc == text_doc
+
+
+def test_skipped_spreadsheet_embeds_as_its_title(
+    embedder: DefaultIndexingEmbedder,
+) -> None:
+    workbook = Document(
+        id="workbook",
+        title="Budget.xlsx",
+        semantic_identifier="Budget.xlsx",
+        sections=tabular_file_to_sections(
+            BytesIO(b"unused"),
+            file_name="Budget.xlsx",
+            stage=lambda _content, _content_type: "unused",
+            skip_content=True,
+        ),
+        source=DocumentSource.GOOGLE_DRIVE,
+        metadata={},
+    )
+    chunker = Chunker(tokenizer=embedder.embedding_model.tokenizer)
+
+    chunks = chunker.chunk(process_image_sections([workbook]))
+
+    assert len(chunks) == 1
+    assert chunks[0].content == CONTENT_SKIPPED_PLACEHOLDER
+    assert chunks[0].title_prefix.startswith("Budget.xlsx")
+    assert generate_enriched_content_for_chunk_embedding(chunks[0]).startswith(
+        chunks[0].title_prefix + CONTENT_SKIPPED_PLACEHOLDER
     )
 
 
@@ -1509,11 +1684,15 @@ def _make_db_doc(
     doc_id: str,
     content_hash: str | None = None,
     doc_updated_at: datetime | None = None,
+    source_mime_type: str | None = None,
+    source_size_bytes: int | None = None,
 ) -> MagicMock:
     db_doc = MagicMock()
     db_doc.id = doc_id
     db_doc.content_hash = content_hash
     db_doc.doc_updated_at = doc_updated_at
+    db_doc.source_mime_type = source_mime_type
+    db_doc.source_size_bytes = source_size_bytes
     db_doc.external_user_emails = []
     db_doc.external_user_group_ids = []
     db_doc.is_public = False
@@ -1617,6 +1796,44 @@ def test_get_docs_to_update_permission_change_bypasses_deduplication() -> None:
     assert hashes == {"doc1": doc.content_hash()}
 
 
+def test_get_docs_to_update_new_source_info_bypasses_both_gates_once() -> None:
+    """A type or size the source newly reports is otherwise skipped forever by an
+    unchanged timestamp and hash. Matching or no longer reported values skip."""
+    updated_at = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    doc = _doc_with_text("Title", "unchanged content")
+    doc.id = "doc1"
+    doc.doc_updated_at = updated_at
+
+    def db_doc(mime_type: str | None, size_bytes: int | None) -> MagicMock:
+        return _make_db_doc(
+            "doc1",
+            content_hash=doc.content_hash(),
+            doc_updated_at=updated_at,
+            source_mime_type=mime_type,
+            source_size_bytes=size_bytes,
+        )
+
+    cases = [
+        # (incoming type, incoming size, stored type, stored size, updates)
+        ("application/pdf", 2048, None, None, True),
+        ("application/pdf", 2048, "application/pdf", None, True),
+        ("application/pdf", 4096, "application/pdf", 2048, True),
+        ("application/pdf", 2048, "application/pdf", 2048, False),
+        (None, None, "application/pdf", 2048, False),
+    ]
+    for ignore_timestamp_gate in (False, True):
+        for mime_type, size_bytes, stored_type, stored_size, updates in cases:
+            doc.source_mime_type = mime_type
+            doc.source_size_bytes = size_bytes
+            docs, hashes = get_docs_to_update(
+                [doc],
+                db_docs=[db_doc(stored_type, stored_size)],
+                ignore_timestamp_gate=ignore_timestamp_gate,
+            )
+            assert docs == ([doc] if updates else [])
+            assert hashes == ({"doc1": doc.content_hash()} if updates else {})
+
+
 def test_get_docs_to_update_mixed_batch() -> None:
     """Unchanged doc is skipped; changed doc is included."""
     doc_unchanged = _doc_with_text("T", "same")
@@ -1662,3 +1879,224 @@ def test_get_docs_to_update_secondary_build_ignores_content_hash_gate() -> None:
     assert len(future_docs) == 1
     assert future_docs[0].id == "doc1"
     assert "doc1" in future_hashes
+
+
+def test_post_index_leaves_chunk_count_alone_for_a_failed_write() -> None:
+    """A failed write left the old chunks in place, so the new count would
+    describe an index state that does not exist - and would hide the document
+    from any sweep that looks for an outdated chunk count."""
+    context = MagicMock()
+    context.updatable_docs = [
+        MagicMock(id="written", doc_updated_at=None, doc_created_at=None),
+        MagicMock(id="failed", doc_updated_at=None, doc_created_at=None),
+    ]
+    enrichment = MagicMock(doc_id_to_new_chunk_cnt={"written": 3, "failed": 3})
+
+    adapter = DocumentIndexingBatchAdapter(
+        connector_id=1,
+        credential_id=1,
+        tenant_id="t",
+        index_attempt_metadata=MagicMock(connector_id=1, credential_id=1),
+    )
+
+    module = "onyx.indexing.adapters.document_indexing_adapter"
+    with (
+        patch(f"{module}.update_docs_chunk_count__no_commit") as update_chunk_count,
+        patch(f"{module}.update_docs_updated_at__no_commit"),
+        patch(f"{module}.update_docs_created_at__no_commit"),
+        patch(f"{module}.update_docs_last_modified__no_commit"),
+        patch(f"{module}.mark_document_as_indexed_for_cc_pair__no_commit"),
+        patch(f"{module}.update_chunk_boost_components__no_commit"),
+    ):
+        adapter.post_index(
+            context=context,
+            updatable_chunk_data=[],
+            filtered_documents=[],
+            enrichment=enrichment,
+            db_session=MagicMock(),
+            index_to_secondary=False,
+            failed_document_ids={"failed"},
+        )
+
+    assert update_chunk_count.call_args.kwargs["document_ids"] == ["written"]
+
+
+def test_ancestors_come_from_the_raw_id_whenever_the_document_has_one() -> None:
+    """Docfetching resolves every connector document's node id, falling back to
+    the SOURCE node when the cache misses, and that fallback is indistinguishable
+    from a document that really sits at the root. Resolving the raw id refreshes
+    the cache and recovers the real ancestry, so it wins while it is there."""
+    adapter = DocumentIndexingBatchAdapter(
+        connector_id=1,
+        credential_id=1,
+        tenant_id="t",
+        index_attempt_metadata=MagicMock(connector_id=1, credential_id=1),
+    )
+    crawled = MagicMock(
+        id="crawled",
+        source=DocumentSource.GOOGLE_DRIVE,
+        parent_hierarchy_raw_node_id="folder-abc",
+        # What docfetching fell back to when the raw id missed the cache.
+        parent_hierarchy_node_id=1,
+    )
+    rebuilt = MagicMock(
+        id="rebuilt",
+        source=DocumentSource.GOOGLE_DRIVE,
+        parent_hierarchy_raw_node_id=None,
+        parent_hierarchy_node_id=42,
+    )
+
+    module = "onyx.indexing.adapters.document_indexing_adapter"
+    with (
+        patch(f"{module}.get_redis_client"),
+        patch(f"{module}.get_ancestors_from_raw_id", return_value=[7, 1]) as from_raw,
+        patch(f"{module}.get_ancestors_from_node_id", return_value=[42]) as from_node,
+    ):
+        ancestors = adapter._get_ancestor_ids_for_documents(
+            [crawled, rebuilt], "t", MagicMock()
+        )
+
+    assert ancestors == {"crawled": [7, 1], "rebuilt": [42]}
+    assert from_raw.call_args.kwargs["parent_hierarchy_raw_node_id"] == "folder-abc"
+    assert from_node.call_args.kwargs["node_id"] == 42
+
+
+def test_content_hash_is_blind_to_tabular_content() -> None:
+    """A tabular document's hash never moves when its sheets change.
+
+    content_hash() walks TextSections and ImageSections only, so two workbooks
+    with different staged CSVs hash the same. This is why the tabular re-chunk
+    migration has to pass force_update: without it the content-hash gate skips
+    every spreadsheet and the migration is a silent no-op.
+    """
+
+    def _tabular_doc(csv_file_id: str) -> Document:
+        return Document(
+            id="book",
+            title="Book",
+            semantic_identifier="book.xlsx",
+            sections=[TabularSection(csv_file_id=csv_file_id, link="l")],
+            source=DocumentSource.FILE,
+            metadata={},
+        )
+
+    assert (
+        _tabular_doc("csv-v1").content_hash() == _tabular_doc("csv-v2").content_hash()
+    )
+
+
+def _run_batch_to_stamp(
+    *, locked_status: IndexModelStatus | None, stamp_content_hash: bool = True
+) -> MagicMock:
+    """Runs one document through the real index_doc_batch with the vector write
+    mocked out and returns the content-hash stamp mock. `locked_status` is what
+    the share-locked settings row reports, None when the row is gone."""
+    document = _make_doc("doc")
+    adapter = MagicMock()
+    adapter.connector_id = 1
+    adapter.credential_id = 2
+    adapter.index_attempt_metadata = None
+    adapter.prepare.return_value = DocumentBatchPrepareContext(
+        updatable_docs=[document],
+        id_to_boost_map={},
+        doc_id_to_content_hash={"doc": "hash-1"},
+    )
+    adapter.lock_context.return_value = _make_ctx()
+    adapter.prepare_enrichment.return_value = MagicMock(
+        doc_id_to_previous_chunk_cnt={}, doc_id_to_new_chunk_cnt={}
+    )
+    chunker = MagicMock()
+    chunker.chunk.return_value = []
+    embedding_result = MagicMock(successful_chunk_ids=[], connector_failures=[])
+    chunk_store = MagicMock()
+    chunk_store.stream.return_value = iter([])
+    embed_ctx = _make_ctx()
+    embed_ctx.__enter__ = MagicMock(return_value=(embedding_result, chunk_store))
+    locked = None if locked_status is None else MagicMock(status=locked_status)
+
+    with (
+        patch(
+            f"{_PATCH_PREFIX}._apply_document_ingestion_hook",
+            side_effect=lambda documents: documents,
+        ),
+        patch(f"{_PATCH_PREFIX}.embed_and_stream", return_value=embed_ctx),
+        patch(
+            f"{_PATCH_PREFIX}.write_chunks_to_vector_db_with_backoff",
+            return_value=([MagicMock(document_id="doc", already_existed=False)], []),
+        ),
+        patch(
+            f"{_PATCH_PREFIX}.lock_search_settings_for_share", return_value=locked
+        ) as lock,
+        patch(f"{_PATCH_PREFIX}.update_docs_content_hash__no_commit") as stamp,
+        patch(f"{_PATCH_PREFIX}._maybe_push_documents"),
+    ):
+        index_doc_batch(
+            document_batch=[document],
+            chunker=chunker,
+            embedder=MagicMock(),
+            document_index=MagicMock(),
+            request_id=None,
+            tenant_id="tenant",
+            adapter=adapter,
+            written_search_settings_id=7,
+            stamp_content_hash=stamp_content_hash,
+        )
+    if stamp_content_hash:
+        # The lock is taken on the settings the batch wrote into, by id.
+        lock.assert_called_once()
+        assert lock.call_args.args[1] == 7
+    return stamp
+
+
+def test_hash_is_stamped_only_when_the_written_settings_are_present() -> None:
+    """The content hash describes what PRESENT holds. A batch whose settings are
+    PRESENT at commit stamps it; one whose settings were swapped out (PAST), are
+    still FUTURE, or are gone wrote into another index and leaves the row alone,
+    so the next poll re-indexes the document."""
+    stamp = _run_batch_to_stamp(locked_status=IndexModelStatus.PRESENT)
+    stamp.assert_called_once()
+    assert stamp.call_args.kwargs["ids_to_new_hash"] == {"doc": "hash-1"}
+
+    for status in (IndexModelStatus.PAST, IndexModelStatus.FUTURE, None):
+        stamp = _run_batch_to_stamp(locked_status=status)
+        stamp.assert_not_called()
+
+
+def test_pipeline_configures_from_the_written_settings() -> None:
+    """Chunking and enrichment follow the row whose index the batch writes,
+    looked up by the id the caller resolved, not by status."""
+    search_settings = SimpleNamespace(enable_contextual_rag=False)
+    with (
+        patch(
+            f"{_PATCH_PREFIX}.get_search_settings_by_id", return_value=search_settings
+        ) as lookup,
+        patch(f"{_PATCH_PREFIX}.get_multipass_config"),
+        patch(
+            f"{_PATCH_PREFIX}.get_image_extraction_and_analysis_enabled",
+            return_value=False,
+        ),
+        patch(f"{_PATCH_PREFIX}.index_doc_batch_with_handler") as handler,
+        patch(f"{_PATCH_PREFIX}.ensure_trace", return_value=nullcontext()),
+    ):
+        run_indexing_pipeline(
+            written_search_settings_id=7,
+            document_batch=[],
+            request_id=None,
+            embedder=MagicMock(),
+            document_index=MagicMock(),
+            db_session=MagicMock(),
+            tenant_id="tenant",
+            adapter=MagicMock(),
+            chunker=MagicMock(),
+        )
+    assert lookup.call_args.args[1] == 7
+    assert handler.call_args.kwargs["written_search_settings_id"] == 7
+
+
+def test_caller_can_skip_the_hash_stamp() -> None:
+    """A targeted re-index leaves the hash alone even on PRESENT, so a failed
+    FUTURE twin cannot make the post-swap poll skip the doc."""
+    stamp = _run_batch_to_stamp(
+        locked_status=IndexModelStatus.PRESENT, stamp_content_hash=False
+    )
+    stamp.assert_not_called()

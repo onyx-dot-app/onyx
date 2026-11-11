@@ -10,6 +10,10 @@ import {
 } from "@/types/api-types";
 import { TokenProvider } from "@/types/widget-types";
 
+const READINESS_REQUEST_TIMEOUT_MS = 10_000;
+
+class SessionUnavailableError extends Error {}
+
 export class ApiService {
   private maxRetries = 3;
   private retryDelay = 1000;
@@ -52,6 +56,87 @@ export class ApiService {
 
     const data = (await response.json()) as CreateSessionResponse;
     return data.chat_session_id;
+  }
+
+  async waitForSessionIdle(
+    sessionId: string,
+    signal: AbortSignal,
+    onUnconfirmed: () => void
+  ): Promise<void> {
+    let authenticationFailures = 0;
+    while (!signal.aborted) {
+      const controller = new AbortController();
+      const onAbort = () => controller.abort();
+      signal.addEventListener("abort", onAbort, { once: true });
+      const timeout = setTimeout(onAbort, READINESS_REQUEST_TIMEOUT_MS);
+      const aborted = new Promise<never>((_, reject) => {
+        controller.signal.addEventListener(
+          "abort",
+          () => reject(new DOMException("Request cancelled", "AbortError")),
+          { once: true }
+        );
+      });
+      try {
+        const response = await fetch(
+          `${this.backendUrl}/chat/chat-session/${sessionId}/status`,
+          {
+            headers: await Promise.race([this.getHeaders(), aborted]),
+            signal: controller.signal,
+          }
+        );
+        if (response.status === 401) {
+          authenticationFailures += 1;
+          if (authenticationFailures >= this.maxRetries) {
+            throw new SessionUnavailableError(
+              "Authentication failed. Reload the page to sign in again."
+            );
+          }
+        } else {
+          authenticationFailures = 0;
+        }
+        if (response.status === 405) {
+          throw new SessionUnavailableError(
+            "This server does not support chat readiness checks. Contact your administrator."
+          );
+        }
+        if (response.status === 403 || response.status === 404) {
+          throw new SessionUnavailableError(
+            "This conversation is no longer available. Start a new conversation."
+          );
+        }
+        if (!response.ok) throw new Error("Cannot confirm chat readiness");
+        const status: unknown = await response.json();
+        if (
+          typeof status !== "object" ||
+          status === null ||
+          !("is_processing" in status) ||
+          typeof status.is_processing !== "boolean"
+        ) {
+          throw new Error("Invalid chat readiness response");
+        }
+        if (!status.is_processing) return;
+      } catch (error) {
+        if (signal.aborted || error instanceof SessionUnavailableError)
+          throw error;
+        onUnconfirmed();
+      } finally {
+        clearTimeout(timeout);
+        signal.removeEventListener("abort", onAbort);
+      }
+      if (signal.aborted) break;
+      await new Promise<void>((resolve) => {
+        const onAbort = () => {
+          clearTimeout(timer);
+          resolve();
+        };
+        const timer = setTimeout(() => {
+          signal.removeEventListener("abort", onAbort);
+          resolve();
+        }, 1000);
+        signal.addEventListener("abort", onAbort, { once: true });
+      });
+    }
+    throw new DOMException("Request cancelled", "AbortError");
   }
 
   /**

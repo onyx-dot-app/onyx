@@ -1,4 +1,4 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound, redirect } from "@opal/navigation";
 import { loginPath } from "@/lib/auth/paths";
 import { getCurrentUserSS } from "@/lib/users/svcSS";
 import OAuthProviderConsent from "@/sections/oauth-provider/OAuthProviderConsent";

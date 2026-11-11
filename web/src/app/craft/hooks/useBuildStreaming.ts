@@ -7,6 +7,7 @@ import {
   Artifact,
   ArtifactType,
   BuildMessageAttachment,
+  type CompletedInteractiveTurn,
 } from "@/app/craft/types/streamingTypes";
 
 import {
@@ -45,7 +46,7 @@ import {
 const STREAM_RECONNECT_INTERVAL_MS = 1000;
 const stopRequests = new Map<string, Promise<void>>();
 
-/** Coalesce tool completions. Turn completion queues its final read immediately. */
+/** Coalesce live discovery; committed turn settlement owns the final inventory read. */
 function createOutputRefreshQueue(refresh: () => Promise<void>) {
   let timer: ReturnType<typeof setTimeout> | null = null;
   let pending: boolean = false;
@@ -87,13 +88,7 @@ function createOutputRefreshQueue(refresh: () => Promise<void>) {
     clearTimer();
   }
 
-  function finish(): Promise<void> {
-    // Replace pending tool reads with one final read, ahead of later focus reads.
-    cancel();
-    return refresh();
-  }
-
-  return { schedule, finish, cancel };
+  return { schedule, cancel };
 }
 
 function sleep(ms: number): Promise<void> {
@@ -287,6 +282,7 @@ export function useBuildStreaming({
         signal: AbortSignal;
         onPromptResponse?: () => void;
         onTerminalError: () => void;
+        onTurnCompleted?: (turn: CompletedInteractiveTurn) => void;
         expectedTurnId?: string;
       }
     ) => {
@@ -312,10 +308,6 @@ export function useBuildStreaming({
           return;
         await store.refreshOutputInventory(sessionId);
       });
-      let finalOutputs: Promise<void> | null = null;
-      // Terminal observations reconcile live discovery before passive focus reads.
-      const finalizeOutputs = (): Promise<void> =>
-        (finalOutputs ??= outputRefresh.finish());
       let needsTurnCompletionFileRefresh = currentItems.some(
         (item) =>
           item.type === "tool_call" &&
@@ -777,8 +769,18 @@ export function useBuildStreaming({
             break;
           }
 
+          case "turn_completed":
           case "prompt_response": {
-            void finalizeOutputs();
+            if (parsed.type === "turn_completed") {
+              if (
+                parsed.turn.session_id !== sessionId ||
+                parsed.turn.turn_id !== options.expectedTurnId
+              )
+                break;
+              if (parsed.turn.status === "FAILED")
+                appendErrorItem(parsed.turn.error_detail ?? "");
+            }
+            outputRefresh.cancel();
             if (needsTurnCompletionFileRefresh) {
               // Shell commands and scripts can mutate the workspace without
               // emitting structured file paths. Reconcile once when the turn ends.
@@ -816,7 +818,10 @@ export function useBuildStreaming({
                 type: "assistant",
                 content: textContent,
                 timestamp: new Date(),
-                turn_index: session.activeTurnIndex ?? undefined,
+                turn_index:
+                  parsed.type === "turn_completed"
+                    ? parsed.turn.turn_index
+                    : (session.activeTurnIndex ?? undefined),
                 message_metadata: {
                   streamItems: savedStreamItems,
                 },
@@ -824,12 +829,14 @@ export function useBuildStreaming({
             }
 
             updateSessionData(sessionId, { streamItems: [] });
-            options?.onPromptResponse?.();
+            if (parsed.type === "turn_completed")
+              options.onTurnCompleted?.(parsed.turn);
+            else options.onPromptResponse?.();
             break;
           }
 
           case "approval_requested": {
-            void globalMutate(SWR_KEYS.buildSessionLiveApprovals(sessionId));
+            void globalMutate(SWR_KEYS.buildSessionApprovals(sessionId));
             break;
           }
 
@@ -837,6 +844,13 @@ export function useBuildStreaming({
             // The `connect_app` tool is parked server-side; render the card
             // inline so resolving it can unblock the tool.
             if (!parsed.requestId) break;
+            if (
+              useBuildSessionStore
+                .getState()
+                .sessions.get(sessionId)
+                ?.streamItems.some((item) => item.id === parsed.requestId)
+            )
+              break;
             appendStreamItem(sessionId, {
               type: "connect_app_request",
               id: parsed.requestId,
@@ -873,7 +887,7 @@ export function useBuildStreaming({
             ) {
               break;
             }
-            void finalizeOutputs();
+            outputRefresh.cancel();
             appendErrorItem(parsed.message);
             options.onTerminalError();
             break;
@@ -885,7 +899,6 @@ export function useBuildStreaming({
       };
       return {
         processPacket,
-        finalizeOutputs,
         cancelOutputs: outputRefresh.cancel,
       };
     },
@@ -957,7 +970,9 @@ export function useBuildStreaming({
         );
       };
       let settledFromTerminalPacket = false;
-      const settleFromTerminalPacket = (): void => {
+      const settleFromTerminalPacket = (
+        completion?: CompletedInteractiveTurn
+      ): void => {
         settledFromTerminalPacket = true;
         const current = useBuildSessionStore.getState().sessions.get(sessionId);
         if (current && !current.isInterrupting)
@@ -966,7 +981,8 @@ export function useBuildStreaming({
             .beginTurnSettlement(
               sessionId,
               { kind: "interactive", turnId },
-              existingSession?.turnGeneration ?? 0
+              existingSession?.turnGeneration ?? 0,
+              completion
             );
         onSettled?.();
       };
@@ -975,6 +991,7 @@ export function useBuildStreaming({
         expectedTurnId: turnId,
         onPromptResponse: settleFromTerminalPacket,
         onTerminalError: settleFromTerminalPacket,
+        onTurnCompleted: settleFromTerminalPacket,
       });
 
       try {
@@ -1116,6 +1133,11 @@ export function useBuildStreaming({
           model,
           attachments
         );
+        // The accepted turn guarantees that the first message is persisted.
+        // Naming belongs to the store and survives navigation or unmount.
+        if (turn.turn_index === 0) {
+          void useBuildSessionStore.getState().nameBuildSession(sessionId);
+        }
         if (!ownsTurn()) return;
         if (queuedMessageId !== undefined) {
           appendMessageToSession(sessionId, {

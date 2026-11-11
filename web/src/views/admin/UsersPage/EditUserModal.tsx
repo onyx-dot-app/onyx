@@ -4,14 +4,13 @@ import { useState, useMemo, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { Button, Divider } from "@opal/components";
 import { SvgUsers, SvgUser, SvgLogOut } from "@opal/icons";
-import { ContentAction, toast } from "@opal/layouts";
+import { ContentAction, toast, Section } from "@opal/layouts";
 import { Modal } from "@opal/components";
 import { InputTypeIn } from "@opal/components";
 import { Dropdown } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { ShadowDiv } from "@opal/components";
 import { Tooltip } from "@opal/components";
-import { Section } from "@/layouts/general-layouts";
 import useGroups from "@/hooks/useGroups";
 import { addUserToGroup, removeUserFromGroup } from "./svc";
 import type { UserRow } from "./types";
@@ -38,7 +37,11 @@ export default function EditUserModal({
 }: EditUserModalProps) {
   const t = useTranslations("admin.users");
   // defaults included; backend rejects the unsafe removals (last admin, self)
-  const { data: allGroups, isLoading: groupsLoading } = useGroups(true);
+  const {
+    data: allGroups,
+    isLoading: groupsLoading,
+    refreshGroups,
+  } = useGroups(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [popoverOpen, setPopoverOpen] = useState(false);
@@ -116,10 +119,13 @@ export default function EditUserModal({
       }
 
       onMutate();
+      refreshGroups();
       toast.success(t("editModal.toasts.updated"));
       onClose();
     } catch (err) {
-      onMutate(); // refresh to show partially-applied state
+      // refresh to show partially-applied state
+      onMutate();
+      refreshGroups();
       toast.error(
         err instanceof Error ? err.message : t("editModal.toasts.error")
       );
@@ -174,7 +180,7 @@ export default function EditUserModal({
                       setPopoverOpen(true);
                     }}
                     placeholder={t("editModal.search.placeholder")}
-                    searchIcon
+                    icon="search"
                     aria-label={t("editModal.search.placeholder")}
                   />
                 </Dropdown.Trigger>

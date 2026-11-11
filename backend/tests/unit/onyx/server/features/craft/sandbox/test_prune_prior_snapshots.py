@@ -73,7 +73,7 @@ def test_prunes_blob_then_row_for_each_prior(monkeypatch: pytest.MonkeyPatch) ->
     assert created_snapshot.session_id == session_id
     assert created_snapshot.storage_path == "snap/new.tar.gz"
     assert created_snapshot.size_bytes == 123
-    db_session.commit.assert_called_once()
+    assert db_session.commit.call_count == 2
     assert snapshot_manager.delete_snapshot.call_count == 3
     snapshot_manager.delete_snapshot.assert_any_call(priors[0].storage_path)
     deleted_rows = [c.args[0] for c in db_session.delete.call_args_list]
@@ -131,7 +131,46 @@ def test_blob_delete_failure_keeps_that_row_but_continues(
     deleted_rows = [c.args[0] for c in db_session.delete.call_args_list]
     assert deleted_rows == [priors[0], priors[2]]
     assert priors[1] not in deleted_rows
-    db_session.commit.assert_called_once()
+    assert db_session.commit.call_count == 2
+
+
+def test_commit_failure_preserves_last_committed_archive(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db_session, manager, store = MagicMock(), MagicMock(), MagicMock()
+    prior = _snap()
+    session_id = prior.session_id
+    manager.create_snapshot.return_value = SnapshotResult(
+        storage_path="snap/new", size_bytes=12
+    )
+    _stub_prior_snapshots(monkeypatch, db_session, session_id, [prior])
+    _stub_snapshot_manager(monkeypatch, store)
+    db_session.commit.side_effect = RuntimeError("commit failed")
+    with pytest.raises(RuntimeError, match="commit failed"):
+        create_session_snapshot_keep_latest(
+            manager, db_session, uuid4(), session_id, "tenant-a"
+        )
+    store.delete_snapshot.assert_not_called()
+    db_session.delete.assert_not_called()
+
+
+def test_new_reference_commits_before_pruning(monkeypatch: pytest.MonkeyPatch) -> None:
+    db_session, manager, store = MagicMock(), MagicMock(), MagicMock()
+    prior = _snap()
+    manager.create_snapshot.return_value = SnapshotResult(
+        storage_path="snap/new", size_bytes=12
+    )
+    _stub_prior_snapshots(monkeypatch, db_session, prior.session_id, [prior])
+    _stub_snapshot_manager(monkeypatch, store)
+
+    def delete(_path: str) -> None:
+        db_session.commit.assert_called_once()
+
+    store.delete_snapshot.side_effect = delete
+    create_session_snapshot_keep_latest(
+        manager, db_session, uuid4(), prior.session_id, "tenant-a"
+    )
+    store.delete_snapshot.assert_called_once_with(prior.storage_path)
 
 
 def test_create_snapshot_does_not_prune_snapshots_created_during_archive(

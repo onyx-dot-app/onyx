@@ -1,3 +1,5 @@
+"use client";
+
 import { memo, useState } from "react";
 import { endOfDay, format, isSameDay, startOfDay, subDays } from "date-fns";
 import { Calendar } from "@opal/components/calendar/components";

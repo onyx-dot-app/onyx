@@ -7,8 +7,6 @@ import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.draft_runs import (
-    DraftCheckState,
-    DraftCheckStateKind,
     decide_draft_check_state,
     draft_result_cache_key,
 )
@@ -17,7 +15,10 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
     CredentialCapability,
+    DraftCheckState,
+    DraftCheckStateKind,
 )
+from onyx.connectors.github.capability_checks import build_github_indexing_checks
 from onyx.connectors.slack.config import SlackConnectorConfig
 from onyx.db.enums import AccessType
 
@@ -30,6 +31,7 @@ class _SlackCheck(CapabilityCheck[SlackConnectorConfig]):
         *,
         capability: CredentialCapability = CredentialCapability.INDEXING,
         requires_fields: frozenset[str] = frozenset(),
+        config_fields: frozenset[str] | None = None,
         requires_connector_config: bool = False,
         requires_connector_instance: bool = False,
         applies_to_regex: bool = True,
@@ -41,6 +43,7 @@ class _SlackCheck(CapabilityCheck[SlackConnectorConfig]):
             requires_connector_instance=requires_connector_instance,
             requires_connector_config=requires_connector_config,
             requires_fields=requires_fields,
+            config_fields=config_fields,
         )
         self._applies_to_regex = applies_to_regex
 
@@ -188,3 +191,52 @@ def test_cache_key_follows_form_edits_for_config_reading_checks() -> None:
 
     assert _key(check, {"channels": ["eng"]}) != _key(check, {"channels": ["ops"]})
     assert _key(check, {"channels": ["eng"]}) == _key(check, {"channels": ["eng"]})
+
+
+def test_cache_key_follows_only_the_declared_config_fields() -> None:
+    check = _SlackCheck(config_fields=frozenset({"channels"}))
+    base = {"channels": ["eng"], "channel_regex_enabled": False}
+
+    assert _key(check, {**base, "channel_regex_enabled": True}) == _key(check, base)
+    assert _key(check, {**base, "channels": ["ops"]}) != _key(check, base)
+
+
+def test_cache_key_ignores_form_edits_for_an_empty_declaration() -> None:
+    check = _SlackCheck(config_fields=frozenset())
+
+    assert _key(check, {"channels": ["eng"]}) == _key(check, {"channels": ["ops"]})
+
+
+def test_cache_key_still_follows_the_gateway_fields_of_a_declaration() -> None:
+    check = _SlackCheck(config_fields=frozenset())
+
+    assert _key(check, {"use_redis": False}) != _key(check, {"use_redis": True})
+
+
+def test_config_fields_must_include_the_required_fields() -> None:
+    with pytest.raises(ValueError):
+        _SlackCheck(requires_fields=frozenset({"channels"}), config_fields=frozenset())
+
+
+def test_github_cache_keys_follow_only_the_fields_each_check_reads() -> None:
+    base = {
+        "repo_owner": "onyx-dot-app",
+        "repositories": None,
+        "state_filter": "all",
+        "include_prs": True,
+        "include_issues": False,
+        "include_files": False,
+        "branch": None,
+    }
+
+    def changed(edit: dict[str, Any]) -> set[str]:
+        return {
+            check.check_id
+            for check in build_github_indexing_checks()
+            if _key(check, {**base, **edit}, DocumentSource.GITHUB)
+            != _key(check, base, DocumentSource.GITHUB)
+        }
+
+    assert changed({"include_prs": False}) == {"github_document_types"}
+    assert changed({"branch": "dev"}) == {"github_branch", "github_files"}
+    assert "github_auth" not in changed({"repositories": "onyx"})

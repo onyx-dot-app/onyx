@@ -1,12 +1,10 @@
 "use client";
 
+import { useNavigation, useSearchParams } from "@opal/navigation";
 import { useEffect, useState } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { mutate } from "swr";
-import { SettingsLayouts, toast } from "@opal/layouts";
-import { Section } from "@/layouts/general-layouts";
-import Text from "@/refresh-components/texts/Text";
+import { SettingsLayouts, toast, Section } from "@opal/layouts";
 import { SvgArrowUpCircle, SvgWallet } from "@opal/icons";
 import type { IconProps } from "@opal/types";
 import {
@@ -23,7 +21,7 @@ import {
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useUser } from "@/providers/UserProvider";
-import { LinkButton, MessageCard } from "@opal/components";
+import { Presence, LinkButton, MessageCard, Text } from "@opal/components";
 
 import PlansView from "./PlansView";
 import CheckoutView from "./CheckoutView";
@@ -75,7 +73,7 @@ function FooterLinks({
     <Section flexDirection="row" justifyContent="center" gap={4} height="auto">
       {onActivateLicense && !hideLicenseLink && (
         <>
-          <Text secondaryBody text03>
+          <Text font="secondary-body" color="text-03">
             {t("footer.licenseKeyPrompt.label")}
           </Text>
           <LinkButton onClick={onActivateLicense} external={false}>
@@ -97,17 +95,13 @@ function FooterLinks({
 
 export default function BillingPage() {
   const t = useTranslations("admin.billing");
-  const router = useRouter();
+  const navigation = useNavigation();
   const searchParams = useSearchParams();
   // Start with null view to prevent flash - will be set once data loads
   const [view, setView] = useState<BillingView | null>(null);
   const [showLicenseActivationInput, setShowLicenseActivationInput] =
     useState(false);
   const [licenseCardAutoOpened, setLicenseCardAutoOpened] = useState(false);
-  const [viewChangeId, setViewChangeId] = useState(0);
-  const [transitionType, setTransitionType] = useState<
-    "expand" | "collapse" | "fade"
-  >("fade");
   const [isActivating, setIsActivating] = useState<boolean>(false);
 
   const {
@@ -186,7 +180,7 @@ export default function BillingPage() {
 
     if (!sessionId && !portalReturn) return;
 
-    router.replace("/admin/billing", { scroll: false });
+    navigation.go("/admin/billing", { replace: true, scroll: false });
 
     let cancelled = false;
 
@@ -204,7 +198,7 @@ export default function BillingPage() {
             if (cancelled) return;
             refreshLicense();
             // Refresh settings so EE-gated UI (e.g. sidebar) updates immediately.
-            router.refresh();
+            navigation.refresh();
             mutate(SWR_KEYS.settings);
             mutate(SWR_KEYS.enterpriseSettings);
             // Navigate to billing details now that the license is active
@@ -243,7 +237,7 @@ export default function BillingPage() {
           await endTrial();
           if (!cancelled) {
             refreshBilling();
-            router.refresh();
+            navigation.refresh();
             mutate(SWR_KEYS.settings);
             mutate(SWR_KEYS.enterpriseSettings);
           }
@@ -257,7 +251,7 @@ export default function BillingPage() {
                 flow_type: StripePortalFlowType.PAYMENT_METHOD_UPDATE,
               });
               if (response.stripe_customer_portal_url) {
-                window.location.href = response.stripe_customer_portal_url;
+                navigation.load(response.stripe_customer_portal_url);
               }
             } catch (portalErr) {
               console.error("Failed to reopen portal after retry:", portalErr);
@@ -275,7 +269,7 @@ export default function BillingPage() {
     };
     // changeView intentionally omitted: it only calls stable state setters and the
     // effect runs at most once (when session_id/portal_return params are present).
-  }, [searchParams, router, refreshBilling, refreshLicense]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [searchParams, navigation, refreshBilling, refreshLicense]);
 
   // Poll every 15s while activating, up to 2 minutes, to detect when the license arrives.
   useEffect(() => {
@@ -301,7 +295,7 @@ export default function BillingPage() {
         refreshLicense();
         refreshBilling();
         // Refresh settings so EE-gated UI (e.g. sidebar) updates immediately.
-        router.refresh();
+        navigation.refresh();
         mutate(SWR_KEYS.settings);
         mutate(SWR_KEYS.enterpriseSettings);
         changeView("details");
@@ -315,7 +309,7 @@ export default function BillingPage() {
     }, 15_000);
 
     return () => clearInterval(intervalId);
-  }, [isActivating]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isActivating]);
 
   const handleRefresh = async () => {
     await Promise.all([
@@ -348,7 +342,7 @@ export default function BillingPage() {
         )
       )
       .finally(() => setIsGraceSyncing(false));
-  }, [isSelfHosted, graceSyncAttempted, licenseData?.expiry_warning_stage, t]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isSelfHosted, graceSyncAttempted, licenseData?.expiry_warning_stage, t]);
 
   // Hide license activation card when Stripe connection is restored (only if auto-opened)
   useEffect(() => {
@@ -377,7 +371,7 @@ export default function BillingPage() {
     refreshLicense();
     refreshBilling();
     // Refresh settings so EE-gated UI (e.g. sidebar) updates immediately.
-    router.refresh();
+    navigation.refresh();
     mutate(SWR_KEYS.settings);
     mutate(SWR_KEYS.enterpriseSettings);
     // Navigate to billing details now that the license is active
@@ -422,17 +416,8 @@ export default function BillingPage() {
 
   const viewConfig = getViewConfig();
 
-  // Handle view changes with transition
   const changeView = (newView: "plans" | "details" | "checkout") => {
     if (newView === view) return;
-    if (newView === "checkout" && view === "plans") {
-      setTransitionType("expand");
-    } else if (newView === "plans" && view === "checkout") {
-      setTransitionType("collapse");
-    } else {
-      setTransitionType("fade");
-    }
-    setViewChangeId((id) => id + 1);
     setView(newView);
   };
 
@@ -448,13 +433,6 @@ export default function BillingPage() {
 
   const renderContent = () => {
     if (isLoading || view === null) return null;
-
-    const animationClass =
-      transitionType === "expand"
-        ? "billing-view-expand"
-        : transitionType === "collapse"
-          ? "billing-view-collapse"
-          : "billing-view-enter";
 
     const views: Record<typeof view, React.ReactNode> = {
       checkout: <CheckoutView onAdjustPlan={() => changeView("plans")} />,
@@ -491,11 +469,7 @@ export default function BillingPage() {
       ),
     };
 
-    return (
-      <div key={viewChangeId} className={`w-full ${animationClass}`}>
-        {views[view]}
-      </div>
-    );
+    return <div className="w-full">{views[view]}</div>;
   };
 
   // Render footer
@@ -504,7 +478,7 @@ export default function BillingPage() {
     return (
       <>
         {showLicenseActivationInput && !isManualLicenseOnly && (
-          <div className="w-full billing-card-enter">
+          <Presence>
             <LicenseActivationCard
               isOpen={showLicenseActivationInput}
               onSuccess={handleLicenseActivated}
@@ -514,7 +488,7 @@ export default function BillingPage() {
                 setShowLicenseActivationInput(false);
               }}
             />
-          </div>
+          </Presence>
         )}
         <FooterLinks
           hasSubscription={!!hasSubscription || !!licenseData?.has_license}

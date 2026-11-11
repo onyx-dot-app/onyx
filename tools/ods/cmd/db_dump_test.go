@@ -73,7 +73,7 @@ func TestRunDBDump_reportsFailures(t *testing.T) {
 		// wantCleanup says whether the dump left in the container is removed.
 		wantCleanup bool
 	}{
-		{"pg_dump fails", `if [ "$1" = exec ]; then exit 2; fi`, "Failed to run pg_dump: exit status 2", 1, false},
+		{"pg_dump fails", `if [ "$1" = exec ]; then exit 2; fi`, "Failed to run pg_dump: exit status 2", 2, true},
 		{"copy fails", `if [ "$1" = cp ]; then exit 4; fi`, "Failed to copy dump file: exit status 4", 3, true},
 	}
 	for _, c := range cases {
@@ -116,6 +116,46 @@ func TestRunDBDump_failsWhenTheOutputDirectoryCannotBeCreated(t *testing.T) {
 	}
 	if execs := dbDockerExecs(calls()); len(execs) != 0 {
 		t.Fatalf("expected pg_dump not to run, got:\n%s", dbFormatCalls(execs))
+	}
+}
+
+func TestRunDBDump_rejectsFormatExtensionMismatchBeforeDocker(t *testing.T) {
+	for _, tc := range []struct{ format, name string }{
+		{"custom", "backup.sql"},
+		{"sql", "backup.dump"},
+		{"custom", "backup.SQL"},
+		{"sql", "backup.DUMP"},
+	} {
+		t.Run(tc.format+tc.name, func(t *testing.T) {
+			bin := dbSetup(t)
+			_, calls := dbFakeDocker(t, bin, "")
+			output := filepath.Join(t.TempDir(), "new", tc.name)
+			err := runDBDump(&DBDumpOptions{Format: tc.format, Output: output})
+			if err == nil || !strings.Contains(err.Error(), "extension") {
+				t.Fatalf("expected a format/extension mismatch, got %v", err)
+			}
+			if got := calls(); len(got) != 0 {
+				t.Fatalf("unexpected Docker calls: %v", got)
+			}
+			if _, err := os.Stat(filepath.Dir(output)); !os.IsNotExist(err) {
+				t.Fatalf("validation changed the output directory: %v", err)
+			}
+		})
+	}
+}
+
+func TestRunDBDump_preservesExtensionlessOutput(t *testing.T) {
+	bin := dbSetup(t)
+	_, calls := dbFakeDocker(t, bin, `if [ "$1" = cp ]; then printf 'dump-bytes' > "$3"; fi`)
+	output := filepath.Join(t.TempDir(), "backup")
+	if err := runDBDump(&DBDumpOptions{Format: "custom", Output: output}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(output); err != nil {
+		t.Fatalf("extensionless output missing: %v", err)
+	}
+	if len(dbDockerExecs(calls())) != 3 {
+		t.Fatalf("expected dump/copy/cleanup calls: %v", calls())
 	}
 }
 

@@ -39,8 +39,6 @@ from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX, OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_sqlalchemy_engine
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_delete import RedisConnectorDelete
-from onyx.redis.redis_connector_doc_perm_sync import RedisConnectorPermissionSync
-from onyx.redis.redis_connector_ext_group_sync import RedisConnectorExternalGroupSync
 from onyx.redis.redis_connector_prune import RedisConnectorPrune
 from onyx.redis.redis_document_set import RedisDocumentSet
 from onyx.redis.redis_pool import get_redis_client
@@ -51,6 +49,8 @@ from onyx.utils.logger import (
     ColoredFormatter,
     LoggerContextVars,
     PlainFormatter,
+    SkipFileLoggedFilter,
+    add_file_handlers,
     cap_third_party_log_levels,
     get_json_formatter,
     get_log_level_from_str,
@@ -238,22 +238,6 @@ def on_task_postrun(
         cc_pair_id = RedisConnector.get_id_from_task_id(task_id)
         if cc_pair_id is not None:
             RedisConnectorPrune.remove_from_taskset(int(cc_pair_id), task_id, r)
-        return
-
-    if task_id.startswith(RedisConnectorPermissionSync.SUBTASK_PREFIX):
-        cc_pair_id = RedisConnector.get_id_from_task_id(task_id)
-        if cc_pair_id is not None:
-            RedisConnectorPermissionSync.remove_from_taskset(
-                int(cc_pair_id), task_id, r
-            )
-        return
-
-    if task_id.startswith(RedisConnectorExternalGroupSync.SUBTASK_PREFIX):
-        cc_pair_id = RedisConnector.get_id_from_task_id(task_id)
-        if cc_pair_id is not None:
-            RedisConnectorExternalGroupSync.remove_from_taskset(
-                int(cc_pair_id), task_id, r
-            )
         return
 
 
@@ -552,6 +536,11 @@ def on_setup_logging(
     root_handler.setFormatter(root_formatter)
     root_logger.addHandler(root_handler)
 
+    root_file_formatter: logging.Formatter = (
+        get_json_formatter()
+        if JSON_LOGGING
+        else PlainFormatter(log_format, datefmt="%m/%d/%Y %I:%M:%S %p")
+    )
     if logfile:
         # Truncate log file if DEV_LOGGING_ENABLED (for clean dev experience)
         if DEV_LOGGING_ENABLED and os.path.exists(logfile):
@@ -561,13 +550,14 @@ def on_setup_logging(
                 pass  # Ignore errors, just proceed with normal logging
 
         root_file_handler = logging.FileHandler(logfile)
-        root_file_formatter: logging.Formatter = (
-            get_json_formatter()
-            if JSON_LOGGING
-            else PlainFormatter(log_format, datefmt="%m/%d/%Y %I:%M:%S %p")
-        )
         root_file_handler.setFormatter(root_file_formatter)
         root_logger.addHandler(root_file_handler)
+
+    # Also write to the onyx log files, which the admin log export collects; on
+    # Kubernetes nothing keeps stdout. setup_logger records are already there.
+    add_file_handlers(
+        root_logger, root_file_formatter, log_filter=SkipFileLoggedFilter()
+    )
 
     root_logger.setLevel(effective_loglevel)
 
@@ -599,17 +589,21 @@ def on_setup_logging(
     task_handler.setFormatter(task_formatter)
     task_logger.addHandler(task_handler)
 
+    task_file_formatter: logging.Formatter = (
+        CeleryTaskJsonFormatter()
+        if JSON_LOGGING
+        else CeleryTaskPlainFormatter(log_format, datefmt="%m/%d/%Y %I:%M:%S %p")
+    )
     if logfile:
         # No need to truncate again, already done above for root logger
         task_file_handler = logging.FileHandler(logfile)
         task_file_handler.addFilter(TenantContextFilter())
-        task_file_formatter: logging.Formatter = (
-            CeleryTaskJsonFormatter()
-            if JSON_LOGGING
-            else CeleryTaskPlainFormatter(log_format, datefmt="%m/%d/%Y %I:%M:%S %p")
-        )
         task_file_handler.setFormatter(task_file_formatter)
         task_logger.addHandler(task_file_handler)
+
+    add_file_handlers(
+        task_logger, task_file_formatter, log_filter=TenantContextFilter()
+    )
 
     task_logger.setLevel(effective_loglevel)
     task_logger.propagate = False
@@ -721,6 +715,7 @@ _VECTOR_DB_TASK_MODULES: set[str] = {
     "onyx.background.celery.tasks.pruning",
     "onyx.background.celery.tasks.vespa",
     "onyx.background.celery.tasks.cc_pair_ids_backfill",
+    "onyx.background.celery.tasks.tabular_rechunk",
     "onyx.background.celery.tasks.doc_permission_syncing",
     "onyx.background.celery.tasks.hierarchyfetching",
     # EE modules that are vector-DB-dependent

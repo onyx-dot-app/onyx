@@ -66,6 +66,8 @@ interface InteractiveStatelessProps
    */
   type?: ButtonType;
 
+  form?: string;
+
   /**
    * URL to navigate to when clicked. Passed through Slot to the child.
    */

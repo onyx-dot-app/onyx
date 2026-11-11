@@ -12,6 +12,7 @@ from onyx.evals.models import (
     EvalProvider,
     EvalToolResult,
     MultiTurnEvalResult,
+    evaluation_input,
 )
 from onyx.utils.logger import setup_logger
 
@@ -88,7 +89,8 @@ class LocalEvalProvider(EvalProvider):
         if data is None:
             raise ValueError("data is required for LocalEvalProvider")
 
-        total = len(data)
+        inputs = [evaluation_input(item.get("input", {}), item) for item in data]
+        total = len(inputs)
         # Use lists to allow mutation in helper function
         passed = [0]
         failed = [0]
@@ -97,17 +99,15 @@ class LocalEvalProvider(EvalProvider):
         print(f"\n{BOLD}Running {total} evaluation(s)...{RESET}\n")
         print("=" * 60)
 
-        for i, item in enumerate(data, 1):
-            input_data = item.get("input", {})
-
+        for i, input_data in enumerate(inputs, 1):
             # Check if this is a multi-turn eval (has 'messages' array)
             if "messages" in input_data:
                 self._run_multi_turn_eval(
-                    i, total, item, multi_turn_task, passed, failed, no_assertion
+                    i, total, input_data, multi_turn_task, passed, failed, no_assertion
                 )
             else:
                 self._run_single_turn_eval(
-                    i, total, item, task, passed, failed, no_assertion
+                    i, total, input_data, task, passed, failed, no_assertion
                 )
 
         # Summary
@@ -134,37 +134,21 @@ class LocalEvalProvider(EvalProvider):
         self,
         i: int,
         total: int,
-        item: dict[str, Any],
+        eval_input: dict[str, Any],
         task: Callable[[dict[str, Any]], EvalToolResult],
         passed: list[int],
         failed: list[int],
         no_assertion: list[int],
     ) -> None:
         """Run a single-turn evaluation."""
-        # Build input with tool and model config
-        eval_input = {
-            **item.get("input", {}),
-            # Tool configuration
-            "force_tools": item.get("force_tools", []),
-            "expected_tools": item.get("expected_tools", []),
-            "require_all_tools": item.get("require_all_tools", False),
-            # Model configuration
-            "model": item.get("model"),
-            "model_provider": item.get("model_provider"),
-            "temperature": item.get("temperature"),
-        }
 
         message = eval_input.get("message", "(no message)")
-        truncated_message = (
-            message[:50] + "..."  # ty: ignore[not-subscriptable]
-            if len(message) > 50  # ty: ignore[invalid-argument-type]
-            else message
-        )
+        truncated_message = message[:50] + "..." if len(message) > 50 else message
 
         # Show model if specified
         model_info = ""
-        if item.get("model"):
-            model_info = f" [{item.get('model')}]"
+        if eval_input.get("model"):
+            model_info = f" [{eval_input.get('model')}]"
 
         print(f'\n{BOLD}[{i}/{total}]{RESET} "{truncated_message}"{model_info}')
 
@@ -180,7 +164,7 @@ class LocalEvalProvider(EvalProvider):
         self,
         i: int,
         total: int,
-        item: dict[str, Any],
+        eval_input: dict[str, Any],
         multi_turn_task: Callable[[dict[str, Any]], MultiTurnEvalResult] | None,
         passed: list[int],
         failed: list[int],
@@ -194,8 +178,7 @@ class LocalEvalProvider(EvalProvider):
             failed[0] += 1
             return
 
-        input_data = item.get("input", {})
-        messages = input_data.get("messages", [])
+        messages = eval_input.get("messages", [])
         num_turns = len(messages)
 
         # Show first message as preview
@@ -208,8 +191,6 @@ class LocalEvalProvider(EvalProvider):
         print(f'  First: "{truncated_first}"')
 
         try:
-            # Pass the full input with messages
-            eval_input = {**input_data}
             result = multi_turn_task(eval_input)
 
             # Display each turn's result

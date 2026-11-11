@@ -10,17 +10,18 @@ These tests pin the contract that MCPTool.tool_definition() always returns
 a JSON-Schema-valid `parameters` dict with a `properties` key.
 """
 
-from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
+from mcp.types import CallToolResult, TextContent
 
+from onyx.agents.tools import ToolInvocation
 from onyx.db.enums import MCPAuthenticationType, MCPOAuthProviderMode
 from onyx.db.models import MCPServer
-from onyx.llm.models import ToolDefinition
-from onyx.server.query_and_chat.placement import Placement
+from onyx.llm.cancellation import CancellationSignal
+from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.tools.interface import Tool
-from onyx.tools.models import ToolResponse
+from onyx.tools.models import CodeModeExposure, ToolContext
 from onyx.tools.tool_constructor import _disambiguate_mcp_tool_names
 from onyx.tools.tool_implementations.mcp.mcp_tool import (
     MCPTool,
@@ -77,9 +78,8 @@ class TestNormalizeParametersSchema:
         assert _normalize_parameters_schema(schema) == schema
 
 
-class _StaticTool(Tool[None]):
+class _StaticTool(Tool):
     def __init__(self, name: str) -> None:
-        super().__init__(emitter=MagicMock())
         self._name = name
 
     @property
@@ -98,6 +98,10 @@ class _StaticTool(Tool[None]):
     def display_name(self) -> str:
         return self._name
 
+    @property
+    def code_mode_exposure(self) -> CodeModeExposure:
+        return CodeModeExposure.IMMEDIATE
+
     def tool_definition(self) -> ToolDefinition:
         return ToolDefinition(
             name=self._name,
@@ -105,15 +109,10 @@ class _StaticTool(Tool[None]):
             parameters={"type": "object", "properties": {}},
         )
 
-    def emit_start(self, placement: Placement) -> None:
+    def emit_start(self, invocation: ToolInvocation) -> None:
         pass
 
-    def run(
-        self,
-        placement: Placement,
-        override_kwargs: None = None,
-        **llm_kwargs: Any,
-    ) -> ToolResponse:
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
         raise NotImplementedError
 
 
@@ -130,12 +129,12 @@ def _make_tool(
         auth_type=auth_type,
         transport=None,
         oauth_provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY,
+        oauth_cimd_enabled=True,
         oauth_authorization_endpoint=None,
         oauth_token_endpoint=None,
     )
     return MCPTool(
         tool_id=1,
-        emitter=MagicMock(),
         mcp_server=mcp_server,
         tool_name=tool_name,
         tool_description="List AWS regions",
@@ -234,9 +233,19 @@ class TestMCPToolLLMNames:
 
         with patch(
             "onyx.tools.tool_implementations.mcp.mcp_tool.call_mcp_tool",
-            return_value={"ok": True},
+            return_value=CallToolResult(
+                content=[TextContent(type="text", text='{"ok": true}')]
+            ),
         ) as mock_call_mcp_tool:
-            mcp_tool.run(Placement(turn_index=0))
+            mcp_tool.run(
+                ToolInvocation(
+                    call_id="test",
+                    arguments={},
+                    cancellation=CancellationSignal(),
+                    update=lambda _progress: None,
+                ),
+                ToolContext(),
+            )
 
         mock_call_mcp_tool.assert_called_once()
         assert mock_call_mcp_tool.call_args.args[1] == "shared"
@@ -244,3 +253,13 @@ class TestMCPToolLLMNames:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-xv"])
+
+
+def test_external_schema_keeps_open_objects_and_non_strict_default() -> None:
+    schema = {
+        "type": "object",
+        "properties": {"metadata": {"type": "object", "properties": {}}},
+    }
+    definition = _make_tool(schema).tool_definition()
+    assert not definition.strict
+    assert definition.parameters == schema

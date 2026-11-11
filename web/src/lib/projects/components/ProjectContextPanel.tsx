@@ -132,11 +132,13 @@ export default function ProjectContextPanel({
 
       <div className="w-(--app-page-main-content-width) mx-auto flex flex-col gap-6 pb-6">
         <Content
+          font="heading-headline"
+          orientation="stacked"
           icon={SvgFolderOpen}
           title={projectName}
           editable
           onTitleChange={async (newName) => {
-            if (currentProjectId) {
+            if (currentProjectId && newName) {
               await renameProject(currentProjectId, newName);
             }
           }}
@@ -145,8 +147,7 @@ export default function ProjectContextPanel({
         <Divider paddingParallel={0} paddingPerpendicular={0} />
 
         <ContentAction
-          sizePreset="main-ui"
-          variant="section"
+          font="main-ui-action"
           title={t("projects.contextPanel.instructions.title")}
           description={
             isLoadingProjectDetails && !currentProjectDetails
@@ -174,8 +175,7 @@ export default function ProjectContextPanel({
           {...getRootProps({ onClick: (e) => e.stopPropagation() })}
         >
           <ContentAction
-            sizePreset="main-ui"
-            variant="section"
+            font="main-ui-action"
             title={t("projects.contextPanel.files.title")}
             description={t("projects.contextPanel.files.description")}
             padding={0}
@@ -221,8 +221,7 @@ export default function ProjectContextPanel({
               {/* Mobile / small screens: just show a button to view files */}
               <div className="sm:hidden">
                 <LineItemButton
-                  sizePreset="main-ui"
-                  variant="section"
+                  font="main-ui-action"
                   title={t("projects.contextPanel.viewFiles.label")}
                   description={fileCountLabel}
                   icon={SvgFiles}
@@ -248,8 +247,7 @@ export default function ProjectContextPanel({
 
                 {totalFiles > 4 && (
                   <LineItemButton
-                    sizePreset="main-ui"
-                    variant="section"
+                    font="main-ui-action"
                     title={t("projects.contextPanel.viewAll.label")}
                     description={fileCountLabel}
                     rightChildren={

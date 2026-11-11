@@ -40,3 +40,7 @@ SCIM_TOKEN_LENGTH = 48
 API_KEY_HEADER_NAME = "Authorization"
 API_KEY_HEADER_ALTERNATIVE_NAME = "X-Onyx-Authorization"
 BEARER_PREFIX = "Bearer "
+# Longest real token is 455 chars: `onyx_pat_` + a 63-char tenant ID URL-encoded
+# (worst case 189) + `.` + token_urlsafe(192) (256). Rejecting longer input
+# bounds hashing cost (`dn_` keys use sha256_crypt, which scales with length).
+MAX_BEARER_TOKEN_LENGTH = 512

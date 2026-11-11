@@ -1,7 +1,7 @@
 "use client";
 
+import { Section } from "@opal/layouts";
 import { memo, type ChangeEvent } from "react";
-import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
 import type { AgentAttachedDocument } from "@/lib/agents/types";
 import type {
@@ -120,7 +120,7 @@ export const KnowledgeTwoColumnView = memo(function KnowledgeTwoColumnView({
   searchNavigateNodeId,
 }: KnowledgeTwoColumnViewProps) {
   return (
-    <GeneralLayouts.Section gap={2} alignItems="stretch" height="auto">
+    <Section gap={2} alignItems="stretch" height="auto">
       {vectorDbEnabled && (
         <KnowledgeSearchBar
           query={searchQuery}
@@ -210,6 +210,6 @@ export const KnowledgeTwoColumnView = memo(function KnowledgeTwoColumnView({
           </TableLayouts.ContentColumn>
         </TableLayouts.TwoColumnLayout>
       )}
-    </GeneralLayouts.Section>
+    </Section>
   );
 });

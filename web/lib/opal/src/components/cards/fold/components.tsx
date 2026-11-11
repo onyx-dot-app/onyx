@@ -3,7 +3,7 @@
 import "@opal/components/cards/shared.css";
 import "@opal/components/cards/fold/styles.css";
 import { Fold } from "@opal/components/fold/components";
-import type { BorderVariants, StatusVariants } from "@opal/types";
+import type { BorderVariants, StatusColor } from "@opal/types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -26,7 +26,7 @@ interface CardFoldProps {
   radius: string;
 
   /** Status border colour, for hosts that have one. */
-  borderColor?: StatusVariants;
+  borderColor?: StatusColor;
 
   /**
    * Max-height constraint on the body.

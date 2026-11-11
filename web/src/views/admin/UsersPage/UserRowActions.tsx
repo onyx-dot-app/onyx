@@ -5,6 +5,8 @@ import { useTranslations } from "next-intl";
 import {
   Button,
   Dropdown,
+  Text,
+  useCreateModal,
   type DropdownMenuItem,
   type DropdownMenuRow,
 } from "@opal/components";
@@ -18,7 +20,6 @@ import {
   SvgKey,
   SvgUserManage,
 } from "@opal/icons";
-import Text from "@/refresh-components/texts/Text";
 import { AccountType, UserStatus } from "@/lib/types";
 import { toast } from "@opal/layouts";
 import { approveRequest, setUserAdminAccess } from "./svc";
@@ -61,16 +62,21 @@ export default function UserRowActions({
 }: UserRowActionsProps) {
   const t = useTranslations("admin.users");
   const [modal, setModal] = useState<Modal | null>(null);
+  const actionModal = useCreateModal();
   const [menuOpen, setMenuOpen] = useState(false);
   // below Business the group editor is empty, so don't offer it
   const canManageGroups = useCanManageGroups();
 
-  const openModal = (type: Modal) => setModal(type);
+  const openModal = (type: Modal) => {
+    setModal(type);
+    actionModal.toggle(true);
+  };
 
-  const closeModal = () => setModal(null);
+  // Keep `modal` set on close so the modal stays mounted while it animates out.
+  const closeModal = () => actionModal.toggle(false);
 
   const closeAndMutate = () => {
-    setModal(null);
+    actionModal.toggle(false);
     onMutate();
   };
 
@@ -158,9 +164,11 @@ export default function UserRowActions({
               disabled: true,
               render: ({ props }) => (
                 <div {...props}>
-                  <Text as="p" secondaryBody text03 className="px-3 py-1">
-                    {t("rowActions.scimNotice.description")}
-                  </Text>
+                  <div className="px-3 py-1">
+                    <Text as="p" font="secondary-body" color="text-03">
+                      {t("rowActions.scimNotice.description")}
+                    </Text>
+                  </div>
                 </div>
               ),
             },
@@ -284,49 +292,51 @@ export default function UserRowActions({
         />
       </Dropdown>
 
-      {modal === Modal.EDIT_GROUPS && user.id && (
-        <EditUserModal
-          user={user as UserRow & { id: string }}
-          onClose={closeModal}
-          onMutate={onMutate}
-        />
-      )}
+      <actionModal.Provider>
+        {modal === Modal.EDIT_GROUPS && user.id && (
+          <EditUserModal
+            user={user as UserRow & { id: string }}
+            onClose={closeModal}
+            onMutate={onMutate}
+          />
+        )}
 
-      {modal === Modal.CANCEL_INVITE && (
-        <CancelInviteModal
-          email={user.email}
-          onClose={closeModal}
-          onMutate={onMutate}
-        />
-      )}
+        {modal === Modal.CANCEL_INVITE && (
+          <CancelInviteModal
+            email={user.email}
+            onClose={closeModal}
+            onMutate={onMutate}
+          />
+        )}
 
-      {modal === Modal.DEACTIVATE && (
-        <DeactivateUserModal
-          email={user.email}
-          onClose={closeModal}
-          onMutate={onMutate}
-        />
-      )}
+        {modal === Modal.DEACTIVATE && (
+          <DeactivateUserModal
+            email={user.email}
+            onClose={closeModal}
+            onMutate={onMutate}
+          />
+        )}
 
-      {modal === Modal.ACTIVATE && (
-        <ActivateUserModal
-          email={user.email}
-          onClose={closeModal}
-          onMutate={onMutate}
-        />
-      )}
+        {modal === Modal.ACTIVATE && (
+          <ActivateUserModal
+            email={user.email}
+            onClose={closeModal}
+            onMutate={onMutate}
+          />
+        )}
 
-      {modal === Modal.DELETE && (
-        <DeleteUserModal
-          email={user.email}
-          onClose={closeModal}
-          onMutate={onMutate}
-        />
-      )}
+        {modal === Modal.DELETE && (
+          <DeleteUserModal
+            email={user.email}
+            onClose={closeModal}
+            onMutate={onMutate}
+          />
+        )}
 
-      {modal === Modal.RESET_PASSWORD && (
-        <ResetPasswordModal email={user.email} onClose={closeModal} />
-      )}
+        {modal === Modal.RESET_PASSWORD && (
+          <ResetPasswordModal email={user.email} onClose={closeModal} />
+        )}
+      </actionModal.Provider>
     </>
   );
 }

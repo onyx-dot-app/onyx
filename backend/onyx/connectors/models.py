@@ -6,12 +6,12 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Literal, cast
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import INDEX_SEPARATOR, RETURN_SEPARATOR, DocumentSource
 from onyx.db.enums import HierarchyNodeType, IndexModelStatus
-from onyx.utils.text_processing import make_url_compatible
+from onyx.utils.text_processing import make_url_compatible, shorten
 
 
 class InputType(str, Enum):
@@ -246,6 +246,11 @@ class DocumentBase(BaseModel):
 
     file_id: str | None = None
 
+    # The file's type and size as the source reports them, for the admin breakdown.
+    source_mime_type: str | None = None
+    # Bounded to what the BigInteger column holds.
+    source_size_bytes: int | None = Field(default=None, ge=0, le=2**63 - 1)
+
     def get_title_for_document_index(
         self,
     ) -> str | None:
@@ -420,6 +425,8 @@ class Document(DocumentBase):
             title=base.title,
             from_ingestion_api=base.from_ingestion_api,
             file_id=base.file_id,
+            source_mime_type=base.source_mime_type,
+            source_size_bytes=base.source_size_bytes,
         )
 
     def __sizeof__(self) -> int:
@@ -589,3 +596,30 @@ class DocIndexingContext(BaseModel):
     total_failures: int
     net_doc_change: int
     total_chunks: int
+
+
+# A check row's summary is this many characters or fewer.
+MAX_ROW_SUMMARY_LENGTH: int = 40
+
+
+class CheckRowText(BaseModel):
+    """The text a capability check's row shows, as on ``ValidationError``: a
+    ``summary`` line and up to three lines of ``description``."""
+
+    model_config = ConfigDict(frozen=True)
+
+    summary: str
+    description: str
+
+
+def counted(count: int | str, noun: str, plural: str) -> str:
+    """``count`` with its noun: "1 repository", "3 repositories", "100+
+    repositories"."""
+    return f"{count} {noun if str(count) == '1' else plural}"
+
+
+def fit_summary(prefix: str, name: str, suffix: str = "") -> str:
+    """``prefix``, ``name`` and ``suffix``, with the name cut to fit a row's
+    summary."""
+    room: int = MAX_ROW_SUMMARY_LENGTH - len(prefix) - len(suffix)
+    return f"{prefix}{shorten(name, room)}{suffix}"

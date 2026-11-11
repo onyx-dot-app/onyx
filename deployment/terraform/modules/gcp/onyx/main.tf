@@ -18,6 +18,14 @@ locals {
     "${substr(local.bucket_name_sanitized, 0, 54)}-${local.bucket_name_digest}",
   )
 
+  # Its own digest, so truncation can never make it equal the file store name.
+  sandbox_archive_bucket_digest    = substr(sha1("${var.project_id}-${var.name}-${local.workspace}-${var.region}-sandbox-archive"), 0, 8)
+  sandbox_archive_bucket_sanitized = replace(lower("${local.resource_prefix}-sandbox-archive"), "/[^a-z0-9-]/", "-")
+  sandbox_archive_bucket_name = coalesce(
+    var.sandbox_archive_bucket_name,
+    "${substr(local.sandbox_archive_bucket_sanitized, 0, 54)}-${local.sandbox_archive_bucket_digest}",
+  )
+
   project_apis = var.enable_project_apis ? setunion([
     "compute.googleapis.com",
     "container.googleapis.com",
@@ -30,7 +38,12 @@ locals {
     "iam.googleapis.com",
     # Project IAM grants for the node service account go through this API.
     "cloudresourcemanager.googleapis.com",
-  ], var.enable_l7_ingress ? ["certificatemanager.googleapis.com"] : []) : toset([])
+    ],
+    var.enable_l7_ingress ? ["certificatemanager.googleapis.com"] : [],
+    var.enable_sandbox_archive_bucket ? ["cloudkms.googleapis.com"] : [],
+    # GCS signed URLs without a key file sign through the IAM Credentials API.
+    var.enable_sandbox_node_pool && var.craft_sandbox_runtime == "firecracker" ? ["iamcredentials.googleapis.com"] : [],
+  ) : toset([])
 
   # T-shirt size defaults, chosen so each tier lands on the GCP machine closest
   # to what the AWS and Azure compositions pick. The index pool is
@@ -196,6 +209,7 @@ module "gke" {
   index_node_pool_enabled  = var.index_node_pool_enabled
   enable_gpu_node_pool     = var.enable_gpu_node_pool
   enable_sandbox_node_pool = var.enable_sandbox_node_pool
+  craft_sandbox_runtime    = var.craft_sandbox_runtime
 
   create_workload_namespace     = var.create_workload_namespace
   workload_namespace            = var.workload_namespace
@@ -215,6 +229,36 @@ module "gcs" {
   # Built from inputs inside the gke module, so it is known at plan and safe
   # as a for_each key there.
   object_admin_members = local.bucket_object_admin_members
+}
+
+# Craft sandbox session archives, encrypted with a key of their own. No
+# workload identity gets access: the api_server will hand out signed URLs.
+# The archive's expiry rules must never land on the file store bucket.
+resource "terraform_data" "sandbox_archive_bucket_name_check" {
+  count = var.enable_sandbox_archive_bucket ? 1 : 0
+
+  lifecycle {
+    precondition {
+      condition     = local.sandbox_archive_bucket_name != local.bucket_name
+      error_message = "sandbox_archive_bucket_name must differ from the file store bucket name. The archive expires objects after sandbox_archive_expiration_days."
+    }
+  }
+}
+
+module "gcs_sandbox_archive" {
+  source = "../gcs"
+  count  = var.enable_sandbox_archive_bucket ? 1 : 0
+
+  name                = local.sandbox_archive_bucket_name
+  project_id          = local.project_id
+  location            = upper(var.region)
+  force_destroy       = var.bucket_force_destroy
+  deletion_protection = local.deletion_protection.gcs
+  labels              = local.merged_labels
+
+  create_kms_key                    = true
+  expiration_days                   = var.sandbox_archive_expiration_days
+  noncurrent_version_retention_days = var.sandbox_archive_noncurrent_expiration_days
 }
 
 module "postgres" {

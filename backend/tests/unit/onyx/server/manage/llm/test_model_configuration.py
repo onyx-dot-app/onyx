@@ -1,10 +1,8 @@
-"""Tests for ModelConfigurationView.from_model and ModelConfigurationUpsertRequest.from_model.
+"""Tests for ModelConfigurationView.from_model.
 
 These tests verify the flow plumbing:
 - Stored flow takes precedence over the heuristic on the read path.
 - Heuristic fires correctly when no flow is stored (legacy / static providers).
-- ModelConfigurationUpsertRequest.from_model correctly derives supports_reasoning
-  from the stored flow.
 """
 
 from unittest.mock import MagicMock, patch
@@ -13,7 +11,6 @@ from onyx.db.enums import LLMModelFlowType
 from onyx.llm.models import ReasoningEffort
 from onyx.server.manage.llm.models import (
     LLMProviderDescriptor,
-    ModelConfigurationUpsertRequest,
     ModelConfigurationView,
 )
 
@@ -110,8 +107,8 @@ class TestModelConfigurationViewVisionFallback:
     def test_stored_vision_flow_wins(self) -> None:
         """Stored VISION flow → True without consulting the cost map."""
         mc = _make_model_config(
-            name="gpt-4o",
-            display_name="GPT-4o",
+            name="gpt-6-sol",
+            display_name="GPT-6 Sol",
             flow_types=[LLMModelFlowType.CHAT, LLMModelFlowType.VISION],
         )
 
@@ -122,8 +119,8 @@ class TestModelConfigurationViewVisionFallback:
     def test_custom_config_falls_back_to_cost_map(self) -> None:
         """No VISION flow but cost map knows the model → True (the fix)."""
         mc = _make_model_config(
-            name="gpt-4o",
-            display_name="GPT-4o",
+            name="gpt-6-sol",
+            display_name="GPT-6 Sol",
             flow_types=[LLMModelFlowType.CHAT],
         )
 
@@ -183,7 +180,7 @@ class TestModelConfigurationViewVisionFallback:
             mc,
             self.CUSTOM_CONFIG_PROVIDER,
             use_stored_display_name=True,
-            deployment_name="gpt-5.1",
+            deployment_name="gpt-6.1-sol",
         )
 
         assert view.supports_image_input is True
@@ -246,8 +243,8 @@ class TestModelConfigurationViewReasoningFallback:
     def test_false_when_no_flow_and_both_fallbacks_miss(self) -> None:
         """No REASONING flow, cost map unaware, generic name → False."""
         mc = _make_model_config(
-            name="openai/gpt-4o",
-            display_name="GPT-4o",
+            name="openai/gpt-6-sol",
+            display_name="GPT-6 Sol",
             flow_types=[LLMModelFlowType.CHAT],
         )
 
@@ -265,7 +262,7 @@ class TestModelConfigurationViewReasoningFallback:
         )
 
         view = ModelConfigurationView.from_model(
-            mc, self.DYNAMIC_PROVIDER, deployment_name="gpt-5.1"
+            mc, self.DYNAMIC_PROVIDER, deployment_name="gpt-6.1-sol"
         )
 
         assert view.supports_reasoning is True
@@ -301,14 +298,14 @@ class TestModelConfigurationViewFromModelStatic:
     def test_distinguishes_persisted_limit_from_capability_enrichment(self) -> None:
         persisted = self._patched_static_view(
             _make_model_config(
-                name="gpt-4o",
+                name="gpt-6-sol",
                 display_name=None,
                 max_input_tokens=90_000,
             )
         )
         inferred = self._patched_static_view(
             _make_model_config(
-                name="gpt-4o",
+                name="gpt-6-sol",
                 display_name=None,
                 max_input_tokens=None,
             )
@@ -353,7 +350,7 @@ class TestModelConfigurationViewFromModelStatic:
     ) -> None:
         """No stored flow and model_is_reasoning_model returns False → False."""
         mc = _make_model_config(
-            name="gpt-4o",
+            name="gpt-6-sol",
             display_name=None,
             flow_types=[LLMModelFlowType.CHAT],
         )
@@ -393,7 +390,7 @@ class TestModelConfigurationViewFromModelStatic:
             mock_parse.return_value = mock_parsed
 
             view = ModelConfigurationView.from_model(
-                mc, self.STATIC_PROVIDER, deployment_name="gpt-5.1"
+                mc, self.STATIC_PROVIDER, deployment_name="gpt-6.1-sol"
             )
 
         assert view.supports_reasoning is True
@@ -430,7 +427,7 @@ class TestModelConfigurationViewFromModelStatic:
             mock_parse.return_value = mock_parsed
 
             view = ModelConfigurationView.from_model(
-                mc, self.STATIC_PROVIDER, deployment_name="gpt-5.1"
+                mc, self.STATIC_PROVIDER, deployment_name="gpt-6.1-sol"
             )
 
         assert view.supports_image_input is True
@@ -508,36 +505,6 @@ class TestModelConfigurationViewFromModelStatic:
             return ModelConfigurationView.from_model(mc, self.STATIC_PROVIDER)
 
 
-# ModelConfigurationUpsertRequest.from_model
-
-
-class TestModelConfigurationUpsertRequestFromModel:
-    """Tests for ModelConfigurationUpsertRequest.from_model."""
-
-    def test_supports_reasoning_true_when_reasoning_flow_present(self) -> None:
-        """REASONING flow row present → supports_reasoning=True in upsert request."""
-        mc = _make_model_config(
-            flow_types=[
-                LLMModelFlowType.CHAT,
-                LLMModelFlowType.REASONING,
-            ],
-        )
-
-        req = ModelConfigurationUpsertRequest.from_model(mc)
-
-        assert req.supports_reasoning is True
-
-    def test_supports_reasoning_false_when_reasoning_flow_absent(self) -> None:
-        """No REASONING flow row → supports_reasoning=False in upsert request."""
-        mc = _make_model_config(
-            flow_types=[LLMModelFlowType.CHAT],
-        )
-
-        req = ModelConfigurationUpsertRequest.from_model(mc)
-
-        assert req.supports_reasoning is False
-
-
 # LLMProviderDescriptor.from_model — is_recommended_default marking
 #
 # This flag is the only signal the (non-admin) Craft model picker uses to badge
@@ -610,7 +577,7 @@ class TestLLMProviderDescriptorRecommendedDefault:
         # filter_model_configurations, or a model whose identity lives only
         # in that alias would silently lose its resolved reasoning efforts.
         provider_model = self._provider_model("azure")
-        provider_model.deployment_name = "gpt-5.1"
+        provider_model.deployment_name = "gpt-6.1-sol"
         provider_model.model_configurations = []
 
         with (
@@ -628,7 +595,7 @@ class TestLLMProviderDescriptorRecommendedDefault:
                 provider_model, provider_model.model_configurations, None
             )
 
-        assert mock_filter.call_args.kwargs["deployment_name"] == "gpt-5.1"
+        assert mock_filter.call_args.kwargs["deployment_name"] == "gpt-6.1-sol"
 
 
 class TestSupportedReasoningEfforts:
@@ -639,7 +606,7 @@ class TestSupportedReasoningEfforts:
         """Bifrost addresses models as "vendor/model". Reading the vendor off
         the name is what keeps xhigh available here."""
         view = ModelConfigurationView.from_model(
-            _make_model_config(name="openai/gpt-5.1", display_name="GPT-5.1"),
+            _make_model_config(name="openai/gpt-6.1-sol", display_name="GPT-6.1 Sol"),
             "bifrost",
             custom_config={"bifrost_api_mode": "chat_completions"},
         )
@@ -659,7 +626,7 @@ class TestSupportedReasoningEfforts:
     def test_static_provider_branch_populates_efforts(self) -> None:
         """The LiteLLM-enriched branch answers too, not just the dynamic one."""
         view = ModelConfigurationView.from_model(
-            _make_model_config(name="gpt-5.1", display_name=None), "openai"
+            _make_model_config(name="gpt-6.1-sol", display_name=None), "openai"
         )
 
         assert ReasoningEffort.XHIGH in view.supported_reasoning_efforts
@@ -672,7 +639,7 @@ class TestSupportedReasoningEfforts:
         view = ModelConfigurationView.from_model(
             _make_model_config(name="foundry-deploy-1", display_name="Deploy 1"),
             "azure",
-            deployment_name="gpt-5.1",
+            deployment_name="gpt-6.1-sol",
         )
 
         assert ReasoningEffort.XHIGH in view.supported_reasoning_efforts

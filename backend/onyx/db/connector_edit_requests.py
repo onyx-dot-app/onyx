@@ -19,6 +19,7 @@ from onyx.db.backfill_models import (
     PendingBackfill,
 )
 from onyx.db.connector_alerts import clear_connector_alerts__no_commit
+from onyx.db.connector_credential_pair import lock_connector_credential_pair_row
 from onyx.db.document import mark_cc_pair_documents_for_sync__no_commit
 from onyx.db.enums import (
     AccessType,
@@ -57,22 +58,10 @@ def request_retry_delay(failure_count: int) -> timedelta:
     )
 
 
-def _lock_cc_pair_row(
-    db_session: Session, cc_pair_id: int
-) -> ConnectorCredentialPair | None:
-    return db_session.execute(
-        select(ConnectorCredentialPair)
-        .where(ConnectorCredentialPair.id == cc_pair_id)
-        .with_for_update()
-        # Read the locked row, not a stale copy from the identity map.
-        .execution_options(populate_existing=True)
-    ).scalar_one_or_none()
-
-
 def _lock_cc_pair_for_request(
     db_session: Session, cc_pair_id: int
 ) -> ConnectorCredentialPair:
-    cc_pair = _lock_cc_pair_row(db_session, cc_pair_id)
+    cc_pair = lock_connector_credential_pair_row(db_session, cc_pair_id)
     if cc_pair is None:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND, f"Connector credential pair {cc_pair_id} not found"
@@ -104,6 +93,7 @@ def write_edited_pair_state__no_commit(
     name: str,
     refresh_freq: int | None,
     prune_freq: int | None,
+    check_freq: int | None,
 ) -> None:
     """Writes the edited config and settings. The config, indexing_start and
     frequencies live on the connector, which all its pairs share.
@@ -123,8 +113,10 @@ def write_edited_pair_state__no_commit(
     )
     connector.refresh_freq = refresh_freq
     connector.prune_freq = prune_freq
+    connector.check_freq = check_freq
     connector.validate_refresh_freq()
     connector.validate_prune_freq()
+    connector.validate_check_freq()
 
 
 def reactivate_invalid_cc_pair__no_commit(db_session: Session, cc_pair_id: int) -> bool:
@@ -300,7 +292,7 @@ def create_pending_backfill_attempt__no_commit(
     pending, the request is gone or has an attempt, or another attempt is
     active on these search settings. The caller commits, then sends the
     task."""
-    cc_pair = _lock_cc_pair_row(db_session, cc_pair_id)
+    cc_pair = lock_connector_credential_pair_row(db_session, cc_pair_id)
     if (
         cc_pair is None
         or cc_pair.status != ConnectorCredentialPairStatus.ACTIVE
@@ -570,8 +562,22 @@ def apply_access_change__no_commit(
     if data_access_group_ids and not has_data_access:
         raise ValueError(f"Access type {access_type} takes no data-access groups")
 
+    def set_groups() -> None:
+        fetch_ee_implementation_or_noop(
+            "onyx.db.cc_pair_data_access", "set_cc_pair_data_access_groups__no_commit"
+        )(
+            db_session,
+            cc_pair_id=cc_pair_id,
+            requested_group_ids=data_access_group_ids,
+            visible_group_ids=visible_group_ids if has_data_access else None,
+        )
+
     cc_pair = _lock_cc_pair_for_request(db_session, cc_pair_id)
     previous_access_type = cc_pair.access_type
+    # The group rows' foreign key carries the access type: leaving a group
+    # type removes them first, and entering one adds them after the type.
+    if not has_data_access:
+        set_groups()
     cc_pair.access_type = access_type
     if access_type.is_perm_synced() and not previous_access_type.is_perm_synced():
         cc_pair.last_time_perm_sync = None
@@ -585,15 +591,8 @@ def apply_access_change__no_commit(
     elif not access_type.is_perm_synced():
         cc_pair.perm_sync_pending_since = None
     db_session.flush()
-
-    fetch_ee_implementation_or_noop(
-        "onyx.db.cc_pair_data_access", "set_cc_pair_data_access_groups__no_commit"
-    )(
-        db_session,
-        cc_pair_id=cc_pair_id,
-        requested_group_ids=data_access_group_ids,
-        visible_group_ids=visible_group_ids if has_data_access else None,
-    )
+    if has_data_access:
+        set_groups()
     fetch_ee_implementation_or_noop(
         "onyx.db.cc_pair_data_access", "assert_restricted_cc_pairs_keep_a_group"
     )(db_session, [cc_pair_id])

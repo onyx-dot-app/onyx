@@ -3,9 +3,15 @@
 import { IconLoader } from "@opal/loaders";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
-import { Section } from "@/layouts/general-layouts";
-import { Content } from "@opal/layouts";
-import { Button, Text, EmptyMessageCard, Divider } from "@opal/components";
+import { Content, Section } from "@opal/layouts";
+import {
+  Button,
+  Collapsible,
+  Divider,
+  EmptyMessageCard,
+  Text,
+  Card,
+} from "@opal/components";
 import {
   SvgBarChart,
   SvgWallet,
@@ -14,12 +20,6 @@ import {
   SvgChevronRight,
   SvgChevronUp,
 } from "@opal/icons";
-import Card from "@/refresh-components/cards/Card";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/refresh-components/Collapsible";
 import { cn } from "@opal/utils";
 import {
   useUserUsage,
@@ -81,13 +81,12 @@ function WindowCostSection({ windowCostCents, rows }: WindowCostSectionProps) {
   return (
     <Section gap={0.75} justifyContent="start">
       <Content
+        font="main-content-emphasis"
         icon={SvgBarChart}
         title={t("usageThisPeriod.title")}
         description={t("usageThisPeriod.description", {
           amount: formatDollars(windowCostCents),
         })}
-        sizePreset="main-content"
-        variant="section"
         width="full"
       />
 
@@ -98,113 +97,119 @@ function WindowCostSection({ windowCostCents, rows }: WindowCostSectionProps) {
           description={t("empty.description")}
         />
       ) : (
-        <Card>
-          {displayedRows.map((row, index) => {
-            const isPreview = !showAll && index === COLLAPSED_USAGE_ROW_COUNT;
+        <Card border="solid" rounding={4}>
+          <Section alignItems="start" height="fit">
+            {displayedRows.map((row, index) => {
+              const isPreview = !showAll && index === COLLAPSED_USAGE_ROW_COUNT;
 
-            return (
-              <div
-                key={row.model}
-                data-testid={isPreview ? "usage-model-preview" : undefined}
-                aria-hidden={isPreview || undefined}
-                className={cn(
-                  isPreview &&
-                    "max-h-10 overflow-hidden [mask-image:linear-gradient(to_bottom,black_5%,transparent_75%)]"
-                )}
-              >
-                {index > 0 && <Divider />}
-                <Section gap={0.5} alignItems="start" justifyContent="start">
-                  <Section
-                    flexDirection="row"
-                    justifyContent="between"
-                    alignItems="center"
-                    width="full"
-                    gap={1}
-                  >
-                    <Section gap={0} alignItems="start" justifyContent="start">
-                      <Text font="main-ui-action" color="text-03">
-                        {row.model}
+              return (
+                <div
+                  key={row.model}
+                  data-testid={isPreview ? "usage-model-preview" : undefined}
+                  aria-hidden={isPreview || undefined}
+                  className={cn(
+                    isPreview &&
+                      "max-h-10 overflow-hidden [mask-image:linear-gradient(to_bottom,black_5%,transparent_75%)]"
+                  )}
+                >
+                  {index > 0 && <Divider />}
+                  <Section gap={0.5} alignItems="start" justifyContent="start">
+                    <Section
+                      flexDirection="row"
+                      justifyContent="between"
+                      alignItems="center"
+                      width="full"
+                      gap={1}
+                    >
+                      <Section
+                        gap={0}
+                        alignItems="start"
+                        justifyContent="start"
+                      >
+                        <Text font="main-ui-action" color="text-03">
+                          {row.model}
+                        </Text>
+                      </Section>
+                      <Text
+                        font="main-ui-action"
+                        color="text-03"
+                        wordWrap="whitespace-nowrap"
+                      >
+                        {formatDollars(row.cost_cents)}
                       </Text>
                     </Section>
+
+                    {/* Cost bar — proportional to the priciest row in the window. */}
+                    <div className="w-full h-1.5 rounded-full bg-background-neutral-03 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-theme-primary-05"
+                        style={{
+                          width:
+                            maxModelCost > 0
+                              ? `${Math.max(2, (row.cost_cents / maxModelCost) * 100)}%`
+                              : "0%",
+                        }}
+                      />
+                    </div>
+
                     <Text
-                      font="main-ui-action"
+                      font="secondary-body"
                       color="text-03"
-                      wordWrap="whitespace-nowrap"
+                      data-testid="usage-model-tokens"
                     >
-                      {formatDollars(row.cost_cents)}
+                      {[
+                        t("modelUsage.tokensIn.label", {
+                          count: formatTokens(row.input_tokens),
+                        }),
+                        t("modelUsage.tokensOut.label", {
+                          count: formatTokens(row.output_tokens),
+                        }),
+                        hasCache &&
+                          t("modelUsage.cacheReads.label", {
+                            count: formatTokens(row.cache_read_tokens),
+                          }),
+                        hasCacheWrites &&
+                          t("modelUsage.cacheWrites.label", {
+                            count: formatTokens(row.cache_creation_tokens),
+                          }),
+                      ]
+                        .filter((label): label is string => label !== false)
+                        // One pair message per join so translators own the separator.
+                        .reduce((first, rest) =>
+                          t("modelUsage.joined", { first, rest })
+                        )}
                     </Text>
                   </Section>
-
-                  {/* Cost bar — proportional to the priciest row in the window. */}
-                  <div className="w-full h-1.5 rounded-full bg-background-neutral-03 overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-theme-primary-05"
-                      style={{
-                        width:
-                          maxModelCost > 0
-                            ? `${Math.max(2, (row.cost_cents / maxModelCost) * 100)}%`
-                            : "0%",
-                      }}
-                    />
-                  </div>
-
-                  <Text
-                    font="secondary-body"
-                    color="text-03"
-                    data-testid="usage-model-tokens"
-                  >
-                    {[
-                      t("modelUsage.tokensIn.label", {
-                        count: formatTokens(row.input_tokens),
-                      }),
-                      t("modelUsage.tokensOut.label", {
-                        count: formatTokens(row.output_tokens),
-                      }),
-                      hasCache &&
-                        t("modelUsage.cacheReads.label", {
-                          count: formatTokens(row.cache_read_tokens),
-                        }),
-                      hasCacheWrites &&
-                        t("modelUsage.cacheWrites.label", {
-                          count: formatTokens(row.cache_creation_tokens),
-                        }),
-                    ]
-                      .filter((label): label is string => label !== false)
-                      // One pair message per join so translators own the separator.
-                      .reduce((first, rest) =>
-                        t("modelUsage.joined", { first, rest })
-                      )}
-                  </Text>
-                </Section>
-              </div>
-            );
-          })}
-          {isExpandable && (
-            <div
-              data-testid="usage-models-expander"
-              className={cn(
-                "relative z-10 -mx-4 -mb-4 flex self-stretch justify-center pb-1 pt-1",
-                showAll ? "mt-1" : "-mt-8"
-              )}
-            >
-              <Button
-                prominence="tertiary"
-                size="2xs"
-                rightIcon={showAll ? SvgChevronUp : SvgChevronDown}
-                aria-expanded={showAll}
-                aria-label={
-                  showAll
-                    ? t("showFewerModels.ariaLabel")
-                    : t("showMoreModels.ariaLabel", { count: hiddenRowCount })
-                }
-                onClick={() => setShowAll((value) => !value)}
+                </div>
+              );
+            })}
+            {isExpandable && (
+              <div
+                data-testid="usage-models-expander"
+                className={cn(
+                  "relative z-10 -mx-4 -mb-4 flex self-stretch justify-center pb-1 pt-1",
+                  showAll ? "mt-1" : "-mt-8"
+                )}
               >
-                {showAll
-                  ? t("showLess.label")
-                  : t("showMore.label", { count: hiddenRowCount })}
-              </Button>
-            </div>
-          )}
+                <Button
+                  prominence="tertiary"
+                  size="2xs"
+                  rightIcon={showAll ? SvgChevronUp : SvgChevronDown}
+                  aria-expanded={showAll}
+                  aria-label={
+                    showAll
+                      ? t("showFewerModels.ariaLabel")
+                      : t("showMoreModels.ariaLabel", { count: hiddenRowCount })
+                  }
+                  onClick={() => setShowAll((value) => !value)}
+                >
+                  {showAll
+                    ? t("showLess.label")
+                    : t("showMore.label", { count: hiddenRowCount })}
+                </Button>
+              </div>
+            )}
+          </Section>
         </Card>
       )}
     </Section>
@@ -224,11 +229,15 @@ function isSameModelPrice(
   price: ModelPrice,
   other: ModelPrice | null
 ): boolean {
-  return (
-    other !== null &&
-    price.model === other.model &&
-    price.provider === other.provider
-  );
+  if (other === null) return false;
+  // Two providers of one type can list the same model at different prices.
+  if (
+    price.model_configuration_id !== null &&
+    other.model_configuration_id !== null
+  ) {
+    return price.model_configuration_id === other.model_configuration_id;
+  }
+  return price.model === other.model && price.provider === other.provider;
 }
 
 // Every available model's price (USD/1M, input · output · cache), grouped into a
@@ -275,84 +284,84 @@ function ModelPriceSection({ prices, defaultPrice }: ModelPriceSectionProps) {
   return (
     <Section gap={0.75} justifyContent="start">
       <Content
+        font="main-content-emphasis"
         icon={SvgCreditCard}
         title={t("modelPrices.title")}
         description={t("modelPrices.description")}
-        sizePreset="main-content"
-        variant="section"
         width="full"
       />
-      <Card>
-        {groups.length === 0 ? (
-          <Text font="main-ui-body" color="text-01">
-            {t("modelPrices.unavailable")}
-          </Text>
-        ) : (
-          <Section gap={0.25} alignItems="stretch" justifyContent="start">
-            {groups.map(({ provider, models }) => {
-              const open = expanded.has(provider);
-              return (
-                <Collapsible
-                  key={provider}
-                  open={open}
-                  onOpenChange={() => toggle(provider)}
-                  className="flex flex-col"
-                >
-                  <CollapsibleTrigger className="flex flex-row items-center justify-between cursor-pointer select-none py-1.5">
-                    <Text font="main-ui-action" color="text-03">
-                      {provider}
-                    </Text>
-                    <SvgChevronRight
-                      className={cn(
-                        "w-4 h-4 text-text-03 transition-transform",
-                        open && "rotate-90"
-                      )}
-                    />
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <Section
-                      gap={0}
-                      alignItems="stretch"
-                      justifyContent="start"
-                    >
-                      {models.map((price) => (
-                        <div
-                          key={`${provider}-${price.model}`}
-                          className="flex flex-row items-center justify-between gap-2 py-1 ps-3"
-                        >
-                          <Text
-                            font="secondary-body"
-                            color="text-05"
-                            wordWrap="whitespace-nowrap"
+      <Card border="solid" rounding={4}>
+        <Section alignItems="start" height="fit">
+          {groups.length === 0 ? (
+            <Text font="main-ui-body" color="text-01">
+              {t("modelPrices.unavailable")}
+            </Text>
+          ) : (
+            <Section gap={0.25} alignItems="stretch" justifyContent="start">
+              {groups.map(({ provider, models }) => {
+                const open = expanded.has(provider);
+                return (
+                  <Collapsible.Root
+                    key={provider}
+                    open={open}
+                    onOpenChange={() => toggle(provider)}
+                  >
+                    <Collapsible.Trigger className="flex w-full flex-row items-center justify-between cursor-pointer select-none py-1.5">
+                      <Text font="main-ui-action" color="text-03">
+                        {provider}
+                      </Text>
+                      <SvgChevronRight
+                        className={cn(
+                          "w-4 h-4 text-text-03 transition-transform",
+                          open && "rotate-90"
+                        )}
+                      />
+                    </Collapsible.Trigger>
+                    <Collapsible.Content>
+                      <Section
+                        gap={0}
+                        alignItems="stretch"
+                        justifyContent="start"
+                      >
+                        {models.map((price) => (
+                          <div
+                            key={`${provider}-${price.model_configuration_id ?? price.model}`}
+                            className="flex flex-row items-center justify-between gap-2 py-1 ps-3"
                           >
-                            {isSameModelPrice(price, defaultPrice)
-                              ? t("modelPrices.defaultTag.label", {
-                                  model: price.model,
-                                })
-                              : price.model}
-                          </Text>
-                          <Text
-                            font="secondary-body"
-                            color="text-03"
-                            wordWrap="whitespace-nowrap"
-                          >
-                            {t("modelPrices.priceRow", {
-                              input: formatMtok(price.input_per_mtok),
-                              output: formatMtok(price.output_per_mtok),
-                              cache: formatMtok(
-                                price.cache_per_mtok ?? price.input_per_mtok
-                              ),
-                            })}
-                          </Text>
-                        </div>
-                      ))}
-                    </Section>
-                  </CollapsibleContent>
-                </Collapsible>
-              );
-            })}
-          </Section>
-        )}
+                            <Text
+                              font="secondary-body"
+                              color="text-05"
+                              wordWrap="whitespace-nowrap"
+                            >
+                              {isSameModelPrice(price, defaultPrice)
+                                ? t("modelPrices.defaultTag.label", {
+                                    model: price.model,
+                                  })
+                                : price.model}
+                            </Text>
+                            <Text
+                              font="secondary-body"
+                              color="text-03"
+                              wordWrap="whitespace-nowrap"
+                            >
+                              {t("modelPrices.priceRow", {
+                                input: formatMtok(price.input_per_mtok),
+                                output: formatMtok(price.output_per_mtok),
+                                cache: formatMtok(
+                                  price.cache_per_mtok ?? price.input_per_mtok
+                                ),
+                              })}
+                            </Text>
+                          </div>
+                        ))}
+                      </Section>
+                    </Collapsible.Content>
+                  </Collapsible.Root>
+                );
+              })}
+            </Section>
+          )}
+        </Section>
       </Card>
     </Section>
   );
@@ -386,47 +395,48 @@ function BudgetSection({
   return (
     <Section gap={0.75} justifyContent="start">
       <Content
+        font="main-content-emphasis"
         icon={SvgWallet}
         title={t("budget.title")}
-        sizePreset="main-content"
-        variant="section"
         width="full"
       />
-      <Card>
-        {hasBudget ? (
-          <Section gap={0.5} alignItems="start" justifyContent="start">
-            <div className="flex w-full flex-wrap items-baseline gap-x-4 gap-y-1">
-              <Text font="main-ui-body" color="text-03">
-                {t("budget.remaining", { amount: formatDollars(remaining) })}
-              </Text>
-            </div>
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-background-neutral-03">
-              <div
-                className={cn(
-                  "h-full rounded-full",
-                  usedFraction >= 1
-                    ? "bg-status-error-05"
-                    : "bg-theme-primary-05"
-                )}
-                style={{ width: `${usedFraction * 100}%` }}
-              />
-            </div>
-            <div className="flex w-full flex-wrap justify-between gap-x-4 gap-y-1">
-              {budgetReset && (
-                <Text font="secondary-body" color="text-03">
-                  {budgetReset}
+      <Card border="solid" rounding={4}>
+        <Section alignItems="start" height="fit">
+          {hasBudget ? (
+            <Section gap={0.5} alignItems="start" justifyContent="start">
+              <div className="flex w-full flex-wrap items-baseline gap-x-4 gap-y-1">
+                <Text font="main-ui-body" color="text-03">
+                  {t("budget.remaining", { amount: formatDollars(remaining) })}
                 </Text>
-              )}
-              <Text font="secondary-body" color="text-03">
-                {t("budget.limit", { amount: formatDollars(budgetCents) })}
-              </Text>
-            </div>
-          </Section>
-        ) : (
-          <Text font="main-ui-body" color="text-01">
-            {t("budget.none")}
-          </Text>
-        )}
+              </div>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-background-neutral-03">
+                <div
+                  className={cn(
+                    "h-full rounded-full",
+                    usedFraction >= 1
+                      ? "bg-status-error-05"
+                      : "bg-theme-primary-05"
+                  )}
+                  style={{ width: `${usedFraction * 100}%` }}
+                />
+              </div>
+              <div className="flex w-full flex-wrap justify-between gap-x-4 gap-y-1">
+                {budgetReset && (
+                  <Text font="secondary-body" color="text-03">
+                    {budgetReset}
+                  </Text>
+                )}
+                <Text font="secondary-body" color="text-03">
+                  {t("budget.limit", { amount: formatDollars(budgetCents) })}
+                </Text>
+              </div>
+            </Section>
+          ) : (
+            <Text font="main-ui-body" color="text-01">
+              {t("budget.none")}
+            </Text>
+          )}
+        </Section>
       </Card>
     </Section>
   );
@@ -447,7 +457,7 @@ export default function UsageSettings() {
     <Section gap={2}>
       <Section gap={0.75} justifyContent="start">
         <div className="flex w-full flex-wrap items-center justify-between gap-3">
-          <Text font="heading-h3">{t("header.title")}</Text>
+          <Text font="heading-section">{t("header.title")}</Text>
           <InputDateRangePicker
             value={dateRange}
             onValueChange={setDateRange}
@@ -456,14 +466,16 @@ export default function UsageSettings() {
         </div>
 
         {isLoading ? (
-          <Card>
-            <Section
-              flexDirection="row"
-              justifyContent="center"
-              alignItems="center"
-              width="full"
-            >
-              <IconLoader />
+          <Card border="solid" rounding={4}>
+            <Section alignItems="start" height="fit">
+              <Section
+                flexDirection="row"
+                justifyContent="center"
+                alignItems="center"
+                width="full"
+              >
+                <IconLoader />
+              </Section>
             </Section>
           </Card>
         ) : error || !data ? (

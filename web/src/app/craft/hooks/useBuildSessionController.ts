@@ -1,7 +1,7 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useEffect, useRef, useCallback } from "react";
-import { useRouter } from "next/navigation";
 import {
   canReuseSession,
   useBuildSessionStore,
@@ -39,7 +39,7 @@ interface UseBuildSessionControllerProps {
 export function useBuildSessionController({
   existingSessionId,
 }: UseBuildSessionControllerProps) {
-  const router = useRouter();
+  const navigation = useNavigation();
   useSandboxStatusReconciler();
 
   // Pre-provisioning gates only on having a visible configured model. When one
@@ -87,7 +87,7 @@ export function useBuildSessionController({
   const isLoading = useBuildSessionStore((state) => {
     if (!state.currentSessionId) return false;
     const session = state.sessions.get(state.currentSessionId);
-    return session ? !session.isLoaded && session.loadError === null : false;
+    return session ? !session.isLoaded && !session.loadError : false;
   });
 
   const isStreaming = useBuildSessionStore((state) => {
@@ -349,11 +349,11 @@ export function useBuildSessionController({
    */
   const navigateToSession = useCallback(
     (sessionId: string) => {
-      router.push(
+      navigation.go(
         `${CRAFT_PATH}?${CRAFT_SEARCH_PARAM_NAMES.SESSION_ID}=${sessionId}`
       );
     },
-    [router]
+    [navigation]
   );
 
   /**
@@ -362,8 +362,8 @@ export function useBuildSessionController({
    * allowing it to continue in the background.
    */
   const navigateToNewBuild = useCallback(() => {
-    router.push(CRAFT_PATH);
-  }, [router]);
+    navigation.go(CRAFT_PATH);
+  }, [navigation]);
 
   // Poll to verify pre-provisioned session is still valid (multi-tab support)
   // Only poll on welcome page (existingSessionId === null) - no point polling on session pages

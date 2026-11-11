@@ -1,13 +1,13 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { useUser } from "@/providers/UserProvider";
 import { useIsMultiTenant } from "@/lib/auth/hooks";
 import { AccountsAccessSettings } from "@/views/SettingsPage";
 
 export default function AccountsAccessPage() {
-  const router = useRouter();
+  const navigation = useNavigation();
   const { user } = useUser();
   const isMultiTenant = useIsMultiTenant();
 
@@ -20,9 +20,9 @@ export default function AccountsAccessPage() {
 
   useEffect(() => {
     if (isAuthTypeLoaded && !hasAccess) {
-      router.replace("/app/settings/general");
+      navigation.go("/app/settings/general", { replace: true });
     }
-  }, [isAuthTypeLoaded, hasAccess, router]);
+  }, [isAuthTypeLoaded, hasAccess, navigation]);
 
   // Don't render content until metadata has loaded and access is determined
   if (!isAuthTypeLoaded || !hasAccess) {

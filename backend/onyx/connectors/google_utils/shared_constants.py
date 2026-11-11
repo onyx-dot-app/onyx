@@ -26,6 +26,9 @@ GOOGLE_FAMILY_SCOPES = sorted(
     {scope for source_scopes in GOOGLE_SCOPES.values() for scope in source_scopes}
 )
 
+GOOGLE_AUTH_URI = "https://accounts.google.com/o/oauth2/auth"
+GOOGLE_TOKEN_URI = "https://oauth2.googleapis.com/token"
+
 # This is the Oauth token
 DB_CREDENTIALS_DICT_TOKEN_KEY = "google_tokens"
 # This is the service account key

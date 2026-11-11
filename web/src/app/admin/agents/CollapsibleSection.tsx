@@ -1,6 +1,6 @@
 "use client";
 import React, { ReactNode, useState } from "react";
-import { FiSettings } from "react-icons/fi";
+import { SvgSettings } from "@opal/icons";
 import { useTranslations } from "next-intl";
 import { clickOnKeyDown } from "@opal/utils";
 
@@ -53,7 +53,7 @@ const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
         {" "}
         {isCollapsed ? (
           <span className="collapse-toggle text-lg absolute start-0 top-0 text-sm flex items-center gap-x-3 cursor-pointer">
-            <FiSettings className="pointer-events-none my-auto" size={16} />
+            <SvgSettings className="pointer-events-none my-auto" size={16} />
             {prompt}{" "}
           </span>
         ) : (

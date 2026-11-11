@@ -132,10 +132,10 @@ export const VOICE_PROVIDER_DETAILS: Record<string, VoiceProviderDetail> = {
     },
   },
   zoom: {
-    label: "Zoom Scribe",
+    label: "Zoom AI Services",
     icon: SvgZoom,
-    apiKeyUrl: "https://developers.zoom.us/docs/ai-services/build-platform/",
-    docsUrl: "https://developers.zoom.us/docs/ai-services/scribe/",
+    apiKeyUrl: "https://developers.zoom.us/docs/ai-services/",
+    docsUrl: "https://developers.zoom.us/docs/ai-services/",
     sttModels: [{ id: "scribe-live", name: "Scribe Live" }],
     requiresApiSecret: true,
     sttLanguageOptions: [

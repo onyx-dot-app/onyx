@@ -22,7 +22,11 @@ import {
   groupElementId,
   rowKey,
 } from "@opal/components/dropdown/model";
-import { Row, targetTakesFocus } from "@opal/components/dropdown/rows";
+import {
+  Row,
+  selectsText,
+  targetTakesFocus,
+} from "@opal/components/dropdown/rows";
 import type {
   DropdownMode,
   DropdownRow,
@@ -36,6 +40,7 @@ interface DropdownListProps {
   mode: DropdownMode;
   container: HTMLElement | null | undefined;
   isOpen: boolean;
+  /** A disabled dropdown's list is closed, even if its `open` is held. */
   disabled: boolean;
   /** The list's accessible name. */
   label: string;
@@ -71,6 +76,11 @@ interface DropdownListProps {
   onToggleGroup: (group: RowGroup) => void;
   /** The pointer moved inside the list: the keyboard highlight yields. */
   onMouseMove: () => void;
+  /**
+   * Tab from the list's last control, or Shift+Tab from its first: focus
+   * would leave the list, so the trigger takes the key instead.
+   */
+  onTabOut: (event: React.KeyboardEvent<HTMLElement>) => void;
   create?: { text: string; onCreate: (text: string) => void };
   maxHeight?: string;
   noMatchText?: string;
@@ -90,6 +100,10 @@ interface DropdownListProps {
 
 const SCROLL_END_THRESHOLD_PX = 48;
 
+/** Controls that Tab stops on inside the list. */
+const TABBABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex="0"]';
+
 /**
  * The list in a portal: the positioned root and, inside it, the card with
  * the search field and the scrolling listbox or menu. The role sits on the
@@ -103,7 +117,7 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
       listId,
       mode,
       container,
-      isOpen,
+      isOpen: isOpenProp,
       disabled,
       label,
       floatingStyles,
@@ -122,6 +136,7 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
       onActivate,
       onToggleGroup,
       onMouseMove,
+      onTabOut,
       create,
       maxHeight,
       noMatchText,
@@ -131,6 +146,9 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
     ref
   ) => {
     const strings = useOpalStrings();
+    // Disabling closes the list even when a parent holds `open`; it then
+    // plays its exit like any close, rather than vanishing mid-animation.
+    const isOpen = isOpenProp && !disabled;
     // The list stays mounted one exit animation longer than `isOpen`, so it
     // can animate out without living in the tree while closed.
     const presence = usePresence(isOpen);
@@ -140,6 +158,9 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
     // and focus must follow every open, not only the first mount.
     const searchRef = useRef<HTMLInputElement>(null);
     const hasSearch = searchField !== undefined;
+    // What had focus when the pointer pressed in the list; the release
+    // gives focus back to it.
+    const focusBeforePressRef = useRef<HTMLElement | null>(null);
     useEffect(() => {
       // preventScroll: the field can be anywhere before floating-ui places
       // the list, and a focus scroll would move the page behind the portal.
@@ -258,7 +279,7 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
       };
     });
 
-    if (!presence.mounted || disabled || typeof document === "undefined") {
+    if (!presence.mounted || typeof document === "undefined") {
       return null;
     }
 
@@ -285,13 +306,31 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
         className="opal-dropdown"
         style={frozen?.styles ?? floatingStyles}
         onAnimationEnd={presence.onAnimationEnd}
-        onMouseDown={(e) => {
-          // Clicks on padding, gaps, or dividers must not steal focus from
-          // the trigger (the list is tabIndex={-1} for AT only). A control
-          // that needs focus keeps the default.
-          if (!targetTakesFocus(e)) e.preventDefault();
+        // A press keeps its default, so text in the list can be selected.
+        // Focus then goes back where it was (the trigger or the search
+        // field), so a pick never blurs it, unless the press selected text
+        // or went to a control that needs focus.
+        onMouseDown={() => {
+          const active = document.activeElement;
+          focusBeforePressRef.current =
+            active instanceof HTMLElement ? active : null;
+        }}
+        onMouseUp={(e) => {
+          const before = focusBeforePressRef.current;
+          focusBeforePressRef.current = null;
+          if (!before || targetTakesFocus(e) || selectsText()) return;
+          if (document.activeElement !== before) {
+            before.focus({ preventScroll: true });
+          }
         }}
         onKeyDown={(e) => {
+          if (e.key === "Tab" && !e.defaultPrevented) {
+            const controls = Array.from(
+              e.currentTarget.querySelectorAll<HTMLElement>(TABBABLE)
+            );
+            const edge = e.shiftKey ? controls[0] : controls.at(-1);
+            if (e.target === edge) onTabOut(e);
+          }
           // Keys typed into the list (its search field, a control in a
           // custom row) are the list's. React bubbles them through the
           // portal to the trigger's ancestors, where a row's drag handle or
@@ -489,17 +528,17 @@ function Card({
         <div
           role="presentation"
           className="opal-dropdown-search"
-          // The list root cancels mousedown to keep focus on the trigger;
-          // a click into the search field must focus it. The click is held
-          // too: React bubbles through the portal, and a trigger root's
-          // click would pull focus straight back.
+          // The list root gives focus back after a press; a press into the
+          // search field must keep focus there. The click is held too:
+          // React bubbles through the portal, and a trigger root's click
+          // would pull focus straight back.
           onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
         >
           <InputTypeIn
             {...fieldProps}
             ref={searchRef}
-            searchIcon
+            icon="search"
             variant="internal"
             placeholder={placeholder}
             aria-label={placeholder}
@@ -619,9 +658,8 @@ function Rows({
           interaction={highlightedIndex === 0 ? "hover" : "rest"}
           rounding={2}
           title={create.text}
-          sizePreset={sizePreset}
+          font={sizePreset === "secondary" ? "secondary-body" : "main-ui-body"}
           padding={sizePreset === "secondary" ? 0 : 0.5}
-          variant="body"
           rightChildren={<SvgPlus className="opal-dropdown-create-icon" />}
           id={createElementId(listId)}
           data-index={0}
@@ -635,9 +673,6 @@ function Rows({
           onClick={(e) => {
             e.stopPropagation();
             create.onCreate(create.text);
-          }}
-          onMouseDown={(e) => {
-            e.preventDefault();
           }}
         />
       )}
@@ -681,7 +716,7 @@ function Rows({
               key={group.key}
               role="group"
               aria-label={group.title}
-              className="opal-dropdown-group"
+              className="opal-dropdown-group opal-dropdown-titled"
             >
               <Divider
                 title={group.title}
@@ -711,7 +746,9 @@ function Rows({
         return (
           <React.Fragment key={group.key}>
             {group.title !== undefined ? (
-              <Divider title={group.title} />
+              <div className="opal-dropdown-titled">
+                <Divider title={group.title} />
+              </div>
             ) : (
               groupIndex > 0 && <Divider />
             )}

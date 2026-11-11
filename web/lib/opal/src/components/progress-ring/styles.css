@@ -1,0 +1,22 @@
+@reference "#reference.css";
+
+/* The arcs start at the top and run clockwise. */
+.opal-progress-ring {
+  @apply shrink-0 -rotate-90;
+}
+
+.opal-progress-ring-track {
+  stroke-opacity: 0.2;
+}
+
+.opal-progress-ring-arc {
+  transition:
+    stroke-dashoffset 0.5s ease-out,
+    stroke 0.5s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opal-progress-ring-arc {
+    transition: none;
+  }
+}

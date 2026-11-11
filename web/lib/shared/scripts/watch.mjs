@@ -46,5 +46,5 @@ watch(resolve(root, "tokens"), { recursive: true }, (_event, file) => {
 });
 
 console.log(
-  "[shared] watching src/ (tsc) + tokens/ (style-dictionary) — Ctrl-C to stop"
+  "[shared] watching src/ (tsc) + tokens/ (style-dictionary): Ctrl-C to stop"
 );

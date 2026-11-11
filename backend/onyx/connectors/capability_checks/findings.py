@@ -12,6 +12,7 @@ from onyx.connectors.capability_checks.models import (
     FindingOption,
     OptionsFinding,
 )
+from onyx.utils.text_processing import shorten
 
 _T = TypeVar("_T")
 
@@ -40,8 +41,12 @@ def bounded_options(
         options.append(
             FindingOption(
                 value=option_value,
-                label=_shorten(label(item)),
-                detail=_shorten(option_detail) if option_detail is not None else None,
+                label=shorten(label(item), MAX_FINDING_TEXT_LENGTH),
+                detail=(
+                    shorten(option_detail, MAX_FINDING_TEXT_LENGTH)
+                    if option_detail is not None
+                    else None
+                ),
             )
         )
     return OptionsFinding(
@@ -50,12 +55,6 @@ def bounded_options(
         options=options,
         truncated=len(taken) > MAX_FINDING_OPTIONS,
     )
-
-
-def _shorten(text: str) -> str:
-    if len(text) <= MAX_FINDING_TEXT_LENGTH:
-        return text
-    return text[: MAX_FINDING_TEXT_LENGTH - 1] + "\u2026"
 
 
 def bounded_count(

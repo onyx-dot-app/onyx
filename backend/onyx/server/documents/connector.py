@@ -6,7 +6,7 @@ import os
 import zipfile
 from datetime import datetime
 from io import BytesIO
-from typing import IO, Any, cast
+from typing import IO, Annotated, Any, cast
 
 from fastapi import (
     APIRouter,
@@ -39,6 +39,7 @@ from onyx.configs.app_configs import (
     EMAIL_CONFIGURED,
     ENABLED_CONNECTOR_TYPES,
     MOCK_CONNECTOR_FILE_PATH,
+    WEB_DOMAIN,
 )
 from onyx.configs.constants import (
     ONYX_METADATA_FILENAME,
@@ -53,13 +54,22 @@ from onyx.connectors.credential_families import (
     is_credential_usable_for_source,
     to_source_credential_json,
 )
+from onyx.connectors.event_inbox.models import WebhookSourceSpec
+from onyx.connectors.event_inbox.source_registry import (
+    registered_webhook_sources,
+    webhook_callback_url,
+)
+from onyx.connectors.event_inbox.sources import load_event_sources
 from onyx.connectors.exceptions import ConnectorValidationError, ValidationError
 from onyx.connectors.factory import (
     validate_ccpair_for_user,
     validate_connector_config,
     validate_connector_credential_bindings,
 )
-from onyx.connectors.google_utils.google_auth import get_google_oauth_creds
+from onyx.connectors.google_utils.google_auth import (
+    GoogleUnreachableError,
+    get_google_oauth_creds,
+)
 from onyx.connectors.google_utils.google_kv import (
     build_service_account_creds,
     get_auth_url,
@@ -96,6 +106,7 @@ from onyx.db.connector_credential_pair import (
     verify_user_can_edit_connector,
     verify_user_can_manage_all_cc_pairs,
 )
+from onyx.db.connector_event_inbox import get_active_event_cc_pairs
 from onyx.db.credentials import (
     create_credential,
     discard_credential_if_unpaired,
@@ -133,6 +144,7 @@ from onyx.db.models import (
     IndexingStatus,
     User,
 )
+from onyx.db.search_settings import raise_if_port_reindex_in_progress
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_processing.zip_limits import (
@@ -152,6 +164,9 @@ from onyx.file_store.file_store import (
 )
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
+from onyx.server.documents.capability_check_runs import (
+    start_capability_checks_for_new_credential,
+)
 from onyx.server.documents.cc_pair import authorize_pairing
 from onyx.server.documents.credential import (
     assert_credential_sharing_allowed,
@@ -177,6 +192,7 @@ from onyx.server.documents.models import (
     CredentialSharing,
     CredentialSnapshot,
     DocsCountOperator,
+    EventSourceSnapshot,
     FailedConnectorIndexingStatus,
     FileUploadResponse,
     GDriveCallback,
@@ -300,10 +316,14 @@ def check_drive_tokens(
     if DB_CREDENTIALS_DICT_TOKEN_KEY not in credential_json:
         return AuthStatus(authenticated=False)
     token_json_str = str(credential_json[DB_CREDENTIALS_DICT_TOKEN_KEY])
-    google_drive_creds = get_google_oauth_creds(
-        token_json_str=token_json_str,
-        source=DocumentSource.GOOGLE_DRIVE,
-    )
+    try:
+        google_drive_creds = get_google_oauth_creds(
+            token_json_str=token_json_str,
+            source=DocumentSource.GOOGLE_DRIVE,
+        )
+    except GoogleUnreachableError as e:
+        # No answer from Google says nothing about the token.
+        raise OnyxError(OnyxErrorCode.BAD_GATEWAY, str(e)) from e
     if google_drive_creds is None:
         return AuthStatus(authenticated=False)
     return AuthStatus(authenticated=True)
@@ -424,8 +444,8 @@ def upload_files(
 
                 # Validate the zip by opening it (catches corrupt/non-zip files)
                 with zipfile.ZipFile(file.file, "r") as zf:
+                    assert_zip_within_limits(zf, max_total_bytes=MAX_UNZIPPED_BYTES)
                     if unzip:
-                        assert_zip_within_limits(zf, max_total_bytes=MAX_UNZIPPED_BYTES)
                         unzipped_bytes: int
                         zip_metadata_file_id, unzipped_bytes = (
                             save_zip_metadata_to_file_store(
@@ -508,6 +528,11 @@ def upload_files(
     )
 
 
+# A page of the file list. The ceiling bounds the record lookup and the
+# legacy size backfill that resolving a page costs.
+_FILES_MAX_PAGE_SIZE = 200
+
+
 def _normalize_file_names_for_backwards_compatibility(
     file_locations: list[str], file_names: list[str]
 ) -> list[str]:
@@ -563,12 +588,19 @@ def upload_files_api(
 @router.get("/admin/connector/{connector_id}/files", tags=PUBLIC_API_TAGS)
 def list_connector_files(
     connector_id: int,
+    page_num: Annotated[int, Query(ge=0)] = 0,
+    page_size: Annotated[int | None, Query(ge=1, le=_FILES_MAX_PAGE_SIZE)] = None,
     user: User = Depends(
         require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
     ),
     db_session: Session = Depends(get_session),
 ) -> ConnectorFilesResponse:
-    """List all files in a file connector."""
+    """One page of a file connector's files, in config order.
+
+    ``total_items`` always counts every file. Without ``page_size`` the
+    response holds all of them, which is what callers of the unpaginated
+    endpoint still expect; a zip of thousands of files needs a page size.
+    """
     connector = fetch_connector_by_id(connector_id, db_session)
     if connector is None:
         raise HTTPException(status_code=404, detail="Connector not found")
@@ -587,13 +619,24 @@ def list_connector_files(
         access_level=CCPairAccessLevel.OPERATE,
     )
 
-    file_locations = connector.connector_specific_config.get("file_locations", [])
+    all_file_locations = connector.connector_specific_config.get("file_locations", [])
     file_names = connector.connector_specific_config.get("file_names", [])
 
     # Normalize file_names for backwards compatibility with legacy data
     file_names = _normalize_file_names_for_backwards_compatibility(
-        file_locations, file_names
+        all_file_locations, file_names
     )
+
+    # Only the page is resolved below, so the record query and the size
+    # backfill stay bounded however many files the connector holds.
+    total_items = len(all_file_locations)
+    if page_size is None:
+        page_start, page_end = 0, total_items
+    else:
+        page_start = page_num * page_size
+        page_end = page_start + page_size
+    file_locations = all_file_locations[page_start:page_end]
+    file_names = file_names[page_start:page_end]
 
     # Single batched query — per-file record + object-store size lookups made
     # this endpoint O(N) round-trips and unusably slow for large connectors.
@@ -678,7 +721,7 @@ def list_connector_files(
             )
         )
 
-    return ConnectorFilesResponse(files=files)
+    return ConnectorFilesResponse(files=files, total_items=total_items)
 
 
 @router.post("/admin/connector/{connector_id}/files/update", tags=PUBLIC_API_TAGS)
@@ -847,6 +890,7 @@ def update_connector_files(
         connector_specific_config=updated_config,
         refresh_freq=connector.refresh_freq,
         prune_freq=connector.prune_freq,
+        check_freq=connector.check_freq,
         indexing_start=connector.indexing_start,
     )
 
@@ -1525,6 +1569,9 @@ def _apply_connector_status_filters(
     # The "sync" filter covers restricted perm-synced pairs too.
     if AccessType.SYNC in access_type_filters:
         access_type_filters = [*access_type_filters, AccessType.SYNC_RESTRICTED]
+    # The "private" filter covers owner-only pairs too.
+    if AccessType.PRIVATE in access_type_filters:
+        access_type_filters = [*access_type_filters, AccessType.PERSONAL]
 
     for status in statuses:
         # Filter by access type
@@ -1875,6 +1922,10 @@ def create_connector_with_credential(
         )
         raise
 
+    if promoted_draft_id is not None:
+        # Draft runs write no reports, so the new account gets its own run.
+        start_capability_checks_for_new_credential(db_session, credential)
+
     maybe_mark_tenant_active(tenant_id, caller="cc_pair_lifecycle")
     client_app.send_task(
         OnyxCeleryTask.CHECK_FOR_INDEXING,
@@ -1997,6 +2048,7 @@ def update_connector_from_model(
         connector_specific_config=updated_connector.connector_specific_config,
         refresh_freq=updated_connector.refresh_freq,
         prune_freq=updated_connector.prune_freq,
+        check_freq=updated_connector.check_freq,
         credential_ids=[
             association.credential.id for association in updated_connector.credentials
         ],
@@ -2133,6 +2185,8 @@ def gmail_auth(
         key=_GMAIL_CREDENTIAL_ID_COOKIE_NAME,
         value=credential_id,
         httponly=True,
+        secure=WEB_DOMAIN.startswith("https"),
+        samesite="lax",
         max_age=600,
     )
     return AuthUrl(
@@ -2154,6 +2208,8 @@ def google_drive_auth(
         key=_GOOGLE_DRIVE_CREDENTIAL_ID_COOKIE_NAME,
         value=credential_id,
         httponly=True,
+        secure=WEB_DOMAIN.startswith("https"),
+        samesite="lax",
         max_age=600,
     )
     return AuthUrl(
@@ -2272,6 +2328,7 @@ def get_connector_by_id(
         connector_specific_config=connector.connector_specific_config,
         refresh_freq=connector.refresh_freq,
         prune_freq=connector.prune_freq,
+        check_freq=connector.check_freq,
         credential_ids=[
             association.credential.id for association in connector.credentials
         ],
@@ -2419,6 +2476,11 @@ def trigger_indexing_for_cc_pair(
             "Connector has no valid credentials, cannot create index attempts."
         )
 
+    # A crawl from the beginning cannot start while a reindex builds FUTURE; an
+    # incremental run can. Checked once, before any pair is marked.
+    if from_beginning:
+        raise_if_port_reindex_in_progress(db_session)
+
     # Prevents index attempts for cc pairs that already have an index attempt currently running
     skipped_credentials = [
         credential_id
@@ -2451,6 +2513,15 @@ def trigger_indexing_for_cc_pair(
             if from_beginning:
                 indexing_mode = IndexingMode.REINDEX
 
+            # A queued full run covers an update; do not downgrade it. It can
+            # sit for a while when a port-flow reindex holds it until the swap.
+            if (
+                indexing_mode == IndexingMode.UPDATE
+                and cc_pair.indexing_trigger == IndexingMode.REINDEX
+            ):
+                num_triggers += 1
+                continue
+
             mark_ccpair_with_indexing_trigger(cc_pair.id, indexing_mode, db_session)
             num_triggers += 1
 
@@ -2472,3 +2543,32 @@ def trigger_indexing_for_cc_pair(
     )
 
     return num_triggers
+
+
+@router.get("/admin/connector/event-sources")
+def get_event_sources(
+    _: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
+    db_session: Session = Depends(get_session),
+) -> list[EventSourceSnapshot]:
+    """The sources that can receive pushed events, and their endpoints."""
+    load_event_sources()
+    return [
+        EventSourceSnapshot(
+            source=spec.source,
+            callback_urls=[
+                webhook_callback_url(spec.slug, endpoint) for endpoint in spec.endpoints
+            ],
+            receiving=_is_receiving(
+                spec, len(get_active_event_cc_pairs(db_session, spec.source))
+            ),
+        )
+        for spec in registered_webhook_sources()
+    ]
+
+
+def _is_receiving(spec: WebhookSourceSpec, active_pairs: int) -> bool:
+    """An unsigned source refuses deliveries once several pairs are active,
+    since it cannot tell them apart."""
+    if spec.verifier is None:
+        return active_pairs == 1
+    return active_pairs > 0

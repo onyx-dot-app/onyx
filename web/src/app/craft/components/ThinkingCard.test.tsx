@@ -1,5 +1,5 @@
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import ThinkingCard from "@/app/craft/components/ThinkingCard";
 
 jest.mock("@/components/chat/MinimalMarkdown", () => ({
@@ -8,7 +8,7 @@ jest.mock("@/components/chat/MinimalMarkdown", () => ({
 }));
 
 describe("ThinkingCard", () => {
-  it("does not reset a manual disclosure choice when defaultOpen changes", () => {
+  it("does not reset a manual disclosure choice when defaultOpen changes", async () => {
     const { rerender } = render(
       <ThinkingCard
         content="Inspecting the stream."
@@ -20,9 +20,12 @@ describe("ThinkingCard", () => {
     expect(screen.getByText("Inspecting the stream.")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Thinking/ }));
-    expect(
-      screen.queryByText("Inspecting the stream.")
-    ).not.toBeInTheDocument();
+    // The body animates closed, then drops its content.
+    await waitFor(() =>
+      expect(
+        screen.queryByText("Inspecting the stream.")
+      ).not.toBeInTheDocument()
+    );
 
     rerender(
       <ThinkingCard

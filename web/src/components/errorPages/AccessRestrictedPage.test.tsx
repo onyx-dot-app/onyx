@@ -5,6 +5,13 @@ import AccessRestrictedPage from "@/components/errorPages/AccessRestrictedPage";
 
 const mockUseUser = jest.fn();
 
+jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
+  useRouter: () => ({ replace: jest.fn() }),
+}));
+
 jest.mock("@/providers/UserProvider", () => ({
   useUser: () => mockUseUser(),
 }));

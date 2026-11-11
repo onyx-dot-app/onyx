@@ -1,0 +1,223 @@
+---
+title: "Connect an Agent (MCP)"
+description: "Connect Claude Code, Cursor, Codex, or Onyx Craft to your wiki over MCP"
+icon: "plug"
+---
+
+Agent Wiki exposes itself as a [Model Context Protocol](https://modelcontextprotocol.io) server,
+so any MCP-capable agent can search, read, edit, and comment on wiki pages the same way you do.
+The wiki becomes shared memory for your agents: they load context from it before working,
+and write back what they learn.
+
+The agent acts **under your account, with your permissions**. It can reach exactly the pages you can reach.
+
+## Get your credentials
+
+Open **Agents & Actions** in the left sidebar.
+
+<Steps>
+  <Step title="Copy the MCP server URL">
+    The endpoint is your wiki's origin followed by `/api/mcp` — for example `https://wiki.example.com/api/mcp`.
+  </Step>
+
+  <Step title="Generate an API key">
+    Click **Generate API key** and name it for the device or agent that will use it (`claude-code-laptop`).
+    Copy the `mcp_…` value immediately.
+
+    <Warning>
+      The key is shown **once**. If you lose it, generate another and revoke the old one from the same page.
+    </Warning>
+  </Step>
+</Steps>
+
+## Connect your agent
+
+<Tabs>
+  <Tab title="Claude Code">
+    ```bash
+    claude mcp add --transport http agent-wiki \
+      https://wiki.example.com/api/mcp \
+      --header "Authorization: Bearer mcp_REPLACE_ME"
+    ```
+
+    <Warning>
+      **Argument order matters.** The URL must come directly after the name, and `--header` must come last.
+      `--header` is variadic, so a URL placed after it is swallowed as another header value and you get `error:
+      missing required argument 'commandOrUrl'`.
+    </Warning>
+
+    Add `-s user` to make the wiki available in every project.
+    Without it the server is registered only for the directory you ran the command in,
+    and `claude mcp get` from anywhere else reports "No MCP server found".
+
+    Confirm the connection with `claude mcp get agent-wiki` (or `/mcp` inside a session) — it should report `Status:
+    ✓ Connected`.
+
+    To share the connection with a repository instead, check in a `.mcp.json`:
+
+    ```json
+    {
+      "mcpServers": {
+        "agent-wiki": {
+          "type": "http",
+          "url": "https://wiki.example.com/api/mcp"
+        }
+      }
+    }
+    ```
+
+    Restart Claude Code or run `/mcp` after changing `.mcp.json`.
+  </Tab>
+
+  <Tab title="Cursor">
+    Add the server to `~/.cursor/mcp.json`:
+
+    ```json
+    {
+      "mcpServers": {
+        "agent-wiki": {
+          "url": "https://wiki.example.com/api/mcp",
+          "headers": { "Authorization": "Bearer mcp_REPLACE_ME" }
+        }
+      }
+    }
+    ```
+  </Tab>
+
+  <Tab title="Codex CLI">
+    Add the server to `~/.codex/config.toml`:
+
+    ```toml
+    [mcp_servers.agent-wiki]
+    url = "https://wiki.example.com/api/mcp"
+    headers = { Authorization = "Bearer mcp_REPLACE_ME" }
+    ```
+  </Tab>
+
+  <Tab title="Onyx Craft">
+    In Onyx, the agent that works with MCP servers is **Craft**. Connecting takes two parts:
+    an admin registers the wiki once for the organization, then each person connects their own key.
+
+    **Admin — register the wiki (once)**
+
+    <Steps>
+      <Step title="Add the MCP server">
+        In the Admin Panel, open **Plugins**, click **Add → MCP → Add custom MCP server**,
+        and enter your wiki's MCP URL. See [MCP plugins](/admins/plugins/mcp) for the full field reference.
+      </Step>
+
+      <Step title="Choose API Key authentication">
+        Select **API Key**, then choose a personal token so each person supplies their own `mcp_…` key.
+        That keeps each user's agent inside their own wiki permissions.
+        A shared token gives everyone the access of whichever account minted it.
+      </Step>
+
+      <Step title="Select the tools to expose">
+        Onyx lists the wiki's tools and lets you choose which are available to agents across the organization.
+      </Step>
+
+      <Step title="Turn it on for Craft">
+        Turn on **Enable for Craft** in the server's **Configuration** tab. Until this is on,
+        Craft cannot see the wiki at all. Set Craft approval policies in the **Tools** tab, under **Approval settings**.
+      </Step>
+    </Steps>
+
+    **Each user — connect (once)**
+
+    Open **Plugins** in the Chat or Craft sidebar, find the wiki, click **Connect**,
+    and paste your API key from **Agents & Actions**. The credential is shared across surfaces:
+    connect in Craft and you are connected in chat too, and vice versa.
+
+    <Note>
+      Craft tool calls are gated per tool at the sandbox boundary. By default the agent asks before each call;
+      admins can set a tool to **Auto-approve** or **Disabled** in **Admin Panel → Plugins**.
+    </Note>
+  </Tab>
+
+  <Tab title="Claude Desktop">
+    Claude Desktop is **not a validated setup path**.
+    `claude_desktop_config.json` accepts only local STDIO server entries (`command`, `args`, `env`)
+    — not remote HTTP entries with `url` and `headers`.
+
+    If you want to try it anyway,
+    bridge through `mcp-remote` and keep the bearer value in `env` to avoid header escaping problems on macOS:
+
+    ```json
+    {
+      "mcpServers": {
+        "agent-wiki": {
+          "command": "npx",
+          "args": [
+            "mcp-remote",
+            "https://wiki.example.com/api/mcp",
+            "--header",
+            "Authorization:${AGENT_WIKI_AUTH}"
+          ],
+          "env": { "AGENT_WIKI_AUTH": "Bearer mcp_REPLACE_ME" }
+        }
+      }
+    }
+    ```
+
+    Fully quit and relaunch Claude Desktop afterwards — closing the window is not enough,
+    since MCP configuration is only re-read on a full restart.
+
+    Claude.ai web **Custom Connectors** and Claude Desktop's built-in **Connectors** UI support only OAuth and expose no
+    static bearer-token field, so neither works with Agent Wiki today.
+  </Tab>
+</Tabs>
+
+## What the agent can do
+
+Once connected, the agent gets these tools:
+
+| Tool | What it does |
+| --- | --- |
+| `search_wiki` | Keyword search across pages you can read |
+| `ask_nl_question` | Ask a question in plain English and get an answer with sources |
+| `read_doc` | Read a page at the current version or any past commit |
+| `list_history` | Per-page commit log |
+| `search_comments` | Search discussion threads, with deep links |
+| `write_doc` | Create a page or replace its body |
+| `edit_doc` / `multi_edit` | Find-and-replace edits, single or batched atomically |
+| `apply_patch` | Apply a unified diff |
+| `update_doc_nl` | Hand the page to the wiki's own updater agent with an instruction |
+| `move_path` | Rename or move a page or folder |
+| `create_directory` | Create a folder |
+| `delete_doc` | Move a page to Trash, restorable for 30 days |
+| `add_comment` / `reply_comment` / `resolve_comment` | Take part in discussion threads |
+| `list_templates` | List the starter templates available for new pages |
+| `set_update_policy` | Set how the wiki may auto-update a page or folder |
+
+Edits are ordinary git commits attributed to you, so anything an agent does is visible in page history and reversible.
+
+## Permissions and safety
+
+- **The token inherits your permissions in full.** A key minted by an admin is an admin key. Generate keys from the
+  account whose access you actually want the agent to have.
+- **Deletes are recoverable.** `delete_doc` moves a page to Trash with a 30-day restore window, and it works on pages
+  only — folder deletion stays a human action.
+- **Keys are revocable.** Revoke from **Agents & Actions** at any time.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="missing required argument 'commandOrUrl'">
+    The URL came after `--header` in `claude mcp add`. Put the URL directly after the server name and `--header` last.
+  </Accordion>
+
+  <Accordion title="No MCP server found from another directory">
+    The server was added at local scope. Re-add it with `-s user` to make it available everywhere.
+  </Accordion>
+
+  <Accordion title="The connection drops or never establishes in local development">
+    Point the client at the backend directly (`http://localhost:8080/api/mcp`) rather than the Next.js dev server.
+    The dev server's `/api/:path*` rewrite buffers responses and breaks the transport when the client sends `Accept:
+    text/event-stream`.
+  </Accordion>
+
+  <Accordion title="Links in tool results point at the wrong host">
+    Tool results build absolute URLs from `PUBLIC_BASE_URL`. If it is wrong,
+    the links are wrong — see [Configuration](/agent-wiki/deployment/configuration).
+  </Accordion>
+</AccordionGroup>

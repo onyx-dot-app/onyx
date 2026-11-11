@@ -1,0 +1,11 @@
+defusedxml
+lxml
+matplotlib
+numpy
+openpyxl
+pandas
+pdfplumber
+pillow
+python-docx
+python-pptx
+requests

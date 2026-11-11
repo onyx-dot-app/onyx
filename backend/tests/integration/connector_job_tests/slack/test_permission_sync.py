@@ -114,7 +114,7 @@ def test_slack_permission_sync(
         channel=public_channel,
         message=public_message,
     )
-    SlackManager.add_message_to_channel(
+    private_doc_id = SlackManager.add_message_to_channel(
         slack_client=slack_client,
         channel=private_channel,
         message=private_message,
@@ -192,6 +192,7 @@ def test_slack_permission_sync(
         number_of_updated_docs=1,
         user_performing_action=admin_user,
         should_wait_for_group_sync=False,
+        doc_ids=[private_doc_id],
     )
 
     # Verify test_user_1 can no longer see private channel after removal

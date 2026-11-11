@@ -7,6 +7,7 @@ from uuid import uuid4
 import pytest
 from mcp.shared.auth import OAuthClientInformationFull
 
+from onyx.db import mcp as mcp_db
 from onyx.db.enums import (
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
@@ -19,6 +20,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.mcp import api
 from onyx.server.features.mcp.models import (
     MCPConnectionData,
+    MCPConnectionStatus,
     MCPToolCreateRequest,
     MCPUserOAuthConnectRequest,
 )
@@ -36,6 +38,7 @@ def _server() -> SimpleNamespace:
         auth_performer=MCPAuthenticationPerformer.PER_USER,
         transport=MCPTransport.STREAMABLE_HTTP,
         oauth_provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY,
+        oauth_cimd_enabled=True,
         oauth_authorization_endpoint=None,
         oauth_token_endpoint=None,
         oauth_scopes_override=None,
@@ -161,7 +164,11 @@ def test_token_expiry_controls_fast_path_without_dropping_oauth_state(
         api, "extract_connection_data", lambda *_args, **_kwargs: stored_data
     )
     monkeypatch.setattr(api, "update_connection_config", update_connection_config)
-    monkeypatch.setattr(api, "user_can_authenticate", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        api,
+        "user_connection_status",
+        lambda *_args, **_kwargs: MCPConnectionStatus.CONNECTED,
+    )
     monkeypatch.setattr(api, "start_auto_discovery_oauth_flow", start_flow)
 
     request = _request(server.id, force_reauthentication=force_reauthentication)
@@ -262,7 +269,7 @@ def test_server_url_change_invalidates_old_credentials_without_losing_new_client
         "delete_all_user_connection_configs_for_server_no_commit",
         delete_user_configs,
     )
-    monkeypatch.setattr(api, "delete_connection_config", delete_admin_config)
+    monkeypatch.setattr(mcp_db, "delete_connection_config", delete_admin_config)
     monkeypatch.setattr(api, "update_mcp_server__no_commit", update_server)
 
     def persist_admin_config(
@@ -289,3 +296,64 @@ def test_server_url_change_invalidates_old_credentials_without_losing_new_client
         assert persisted_client["client_secret"] == "replacement-secret"
     else:
         assert persisted_client is None
+
+
+def test_setup_mode_update_preserves_concurrently_refreshed_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OAuthClientInformationFull(
+        client_id="client-id",
+        client_secret="client-secret",
+        redirect_uris=["https://onyx.example.com/mcp/oauth/callback"],
+    )
+    initial_data = MCPConnectionData(
+        headers={},
+        client_info=client.model_dump(mode="json"),
+        tokens={"access_token": "old-token"},
+    )
+    refreshed_data = MCPConnectionData(
+        **initial_data,
+    )
+    refreshed_data["tokens"] = {"access_token": "new-token"}
+    refreshed_data["token_expires_at"] = 1234567890
+    server = _server()
+    server.admin_connection_config = SimpleNamespace(id=100)
+    locked_config = SimpleNamespace(id=100)
+    user = cast(User, SimpleNamespace(id=uuid4(), email="admin@example.com"))
+    request = MCPToolCreateRequest(
+        name=server.name,
+        server_url=server.server_url,
+        auth_type=MCPAuthenticationType.OAUTH,
+        auth_performer=MCPAuthenticationPerformer.PER_USER,
+        oauth_setup_mode="automatic",
+        transport=MCPTransport.STREAMABLE_HTTP,
+        existing_server_id=server.id,
+    )
+    lock_config = MagicMock(return_value=locked_config)
+    persist_config = MagicMock()
+    monkeypatch.setattr(api, "_validate_mcp_server_url", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(api, "get_mcp_server_by_id", lambda *_args: server)
+    monkeypatch.setattr(api, "_ensure_mcp_server_owner_or_admin", lambda *_args: None)
+    monkeypatch.setattr(
+        api,
+        "extract_connection_data",
+        lambda config, **_kwargs: (
+            refreshed_data if config is locked_config else initial_data
+        ),
+    )
+    monkeypatch.setattr(api, "get_connection_config_by_id", lock_config)
+    monkeypatch.setattr(api, "get_mcp_auth_template", lambda *_args: None)
+    monkeypatch.setattr(api, "get_user_connection_config", lambda *_args: None)
+    monkeypatch.setattr(api, "update_mcp_server__no_commit", lambda **_kwargs: server)
+    monkeypatch.setattr(api, "_persist_admin_connection_config", persist_config)
+    monkeypatch.setattr(api, "_hot_reload_craft_sessions", lambda *_args: None)
+    db_session = MagicMock()
+
+    api._upsert_mcp_server(request, db_session, user)
+
+    lock_config.assert_called_once_with(100, db_session, for_update=True)
+    saved_data = persist_config.call_args.args[1]
+    assert saved_data["oauth_setup_mode"] == "automatic"
+    assert saved_data["tokens"] == {"access_token": "new-token"}
+    assert saved_data["token_expires_at"] == 1234567890
+    assert saved_data["client_info"] == initial_data["client_info"]

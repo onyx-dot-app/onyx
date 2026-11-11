@@ -56,12 +56,12 @@ def test_masked_key_write_back_keeps_the_stored_key(db_session: Session) -> None
         CloudEmbeddingProviderCreationRequest(
             provider_type=EmbeddingProvider.VOYAGE,
             api_key=created.api_key,
-            api_url="https://api.voyageai.example.com/v1",
+            api_version="2024-01-01",
         ),
     )
 
     assert _stored_key(db_session) == _REAL_KEY
-    assert updated.api_url == "https://api.voyageai.example.com/v1"
+    assert updated.api_version == "2024-01-01"
 
 
 def test_a_real_key_still_replaces_the_stored_one(db_session: Session) -> None:
@@ -135,12 +135,12 @@ def test_a_placeholder_shaped_stored_key_survives_a_write_back(
         CloudEmbeddingProviderCreationRequest(
             provider_type=EmbeddingProvider.VOYAGE,
             api_key=mask_string(lookalike),
-            api_url="https://api.voyageai.example.com/v1",
+            api_version="2024-01-01",
         ),
     )
 
     assert _stored_key(db_session) == lookalike
-    assert updated.api_url == "https://api.voyageai.example.com/v1"
+    assert updated.api_version == "2024-01-01"
 
 
 def test_changed_flag_lands_a_rotation_that_collides_with_the_mask(
@@ -194,7 +194,7 @@ def test_changed_false_keeps_the_stored_key(db_session: Session) -> None:
             provider_type=EmbeddingProvider.VOYAGE,
             api_key="sk-something-else-entirely",
             api_key_changed=False,
-            api_url="https://api.voyageai.example.com/v1",
+            api_version="2024-01-01",
         ),
     )
 

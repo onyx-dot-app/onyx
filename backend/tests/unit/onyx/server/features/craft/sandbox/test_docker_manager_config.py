@@ -309,8 +309,10 @@ def _empty_byte_stream() -> Generator[bytes, None, int]:
     return 0
 
 
+@pytest.mark.parametrize("include_web", [False, True])
 def test_outputs_manifest_uses_trusted_cli(
     monkeypatch: pytest.MonkeyPatch,
+    include_web: bool,
 ) -> None:
     manager, _ = _bare_manager_with_image("onyxdotapp/sandbox:test")
     container = MagicMock()
@@ -318,7 +320,7 @@ def test_outputs_manifest_uses_trusted_cli(
     run = MagicMock(return_value=dsm.ExecResult(0, b'{"entries":[]}', b""))
     monkeypatch.setattr(dsm, "_run_in_container_as_sandbox_user", run)
 
-    result = manager.get_outputs_manifest(SANDBOX_ID, USER_ID)
+    result = manager.get_outputs_manifest(SANDBOX_ID, USER_ID, include_web=include_web)
 
     assert result.entries == []
     run.assert_called_once_with(
@@ -330,6 +332,7 @@ def test_outputs_manifest_uses_trusted_cli(
             "-m",
             "sandbox_daemon.outputs_manifest",
             str(USER_ID),
+            *(["--include-web"] if include_web else []),
         ],
         workdir="/opt",
     )

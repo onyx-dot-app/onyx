@@ -14,8 +14,7 @@ import {
 } from "@opal/components";
 import { noProp } from "@/lib/utils";
 import { formatDateTimeLog } from "@/lib/dateUtils";
-import { Content } from "@opal/layouts";
-import { Section } from "@/layouts/general-layouts";
+import { Content, Section } from "@opal/layouts";
 import {
   SvgAlertTriangle,
   SvgCheckCircle,
@@ -57,7 +56,7 @@ function ErrorLogRow({
           height="fit"
         >
           <span className="text-code-code">
-            <Text font="secondary-mono-label" color="inherit">
+            <Text font="secondary-mono" color="inherit">
               {formatDateTimeLog(log.created_at)}
             </Text>
           </span>
@@ -245,8 +244,7 @@ export default function HookStatusPopover({
               <>
                 <div className="p-1">
                   <Content
-                    sizePreset="secondary"
-                    variant="section"
+                    font="secondary-action"
                     icon={(props) => (
                       <SvgXOctagon
                         {...props}
@@ -283,9 +281,9 @@ export default function HookStatusPopover({
                 )}
 
                 <LineItemButton
-                  sizePreset="main-ui"
+                  font="main-ui-action"
                   rounding={2}
-                  color="muted"
+                  titleColor="text-03"
                   icon={SvgMaximize2}
                   onClick={noProp(() => {
                     handleOpenChange(false);
@@ -298,8 +296,7 @@ export default function HookStatusPopover({
               <>
                 <div className="p-1">
                   <Content
-                    sizePreset="secondary"
-                    variant="section"
+                    font="secondary-action"
                     icon={(props) => (
                       <SvgXOctagon
                         {...props}
@@ -339,9 +336,9 @@ export default function HookStatusPopover({
 
                 {/* View More Lines */}
                 <LineItemButton
-                  sizePreset="main-ui"
+                  font="main-ui-action"
                   rounding={2}
-                  color="muted"
+                  titleColor="text-03"
                   icon={SvgMaximize2}
                   onClick={noProp(() => {
                     handleOpenChange(false);
@@ -355,8 +352,7 @@ export default function HookStatusPopover({
               <>
                 <div className="p-1">
                   <Content
-                    sizePreset="secondary"
-                    variant="section"
+                    font="secondary-action"
                     icon={SvgCheckCircle}
                     title={t("status.noError.title")}
                     description={t("status.pastHour.description")}
@@ -367,9 +363,9 @@ export default function HookStatusPopover({
 
                 {/* View Older Errors */}
                 <LineItemButton
-                  sizePreset="main-ui"
+                  font="main-ui-action"
                   rounding={2}
-                  color="muted"
+                  titleColor="text-03"
                   icon={SvgMaximize2}
                   onClick={noProp(() => {
                     handleOpenChange(false);

@@ -1,4 +1,5 @@
 import {
+  bulkUpdateSkills,
   createCustomSkillFromEditor,
   importGitHubSkills,
   isSkillNameConflict,
@@ -96,5 +97,40 @@ describe("skills API", () => {
       )
     ).toBe(false);
     expect(isSkillNameConflict(new Error("No structured code"))).toBe(false);
+  });
+
+  it("keeps successful changes when a later batch fails", async () => {
+    const skillIds = Array.from(
+      { length: 501 },
+      (_, index) => `skill-${index}`
+    );
+    const succeeded = skillIds.slice(0, 500);
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ succeeded, failed: [] }),
+    });
+    fetchMock.mockRejectedValueOnce(new Error("Connection lost"));
+
+    const result = await bulkUpdateSkills({
+      action: "share",
+      skill_ids: skillIds,
+      sharing: { public_permission: "VIEWER" },
+    });
+
+    expect(result).toEqual({
+      succeeded,
+      failed: [{ skill_id: "skill-500", detail: "Connection lost" }],
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenLastCalledWith("/api/skills/bulk", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "share",
+        skill_ids: ["skill-500"],
+        sharing: { public_permission: "VIEWER" },
+      }),
+    });
   });
 });

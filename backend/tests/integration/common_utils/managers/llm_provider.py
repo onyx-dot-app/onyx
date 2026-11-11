@@ -8,6 +8,7 @@ from onyx.server.manage.llm.models import (
     LLMProviderView,
     ModelConfigurationUpsertRequest,
 )
+from tests.common.models import CI_OPENAI_MODEL
 from tests.integration.common_utils.constants import API_SERVER_URL, GENERAL_HEADERS
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestLLMProvider, DATestUser
@@ -54,7 +55,7 @@ class LLMProviderManager:
                         supports_image_input=True,
                     )
                     for model_name in [
-                        default_model_name or "gpt-4o-mini",
+                        default_model_name or CI_OPENAI_MODEL,
                         *(model_names or []),
                     ]
                 ),
@@ -86,7 +87,7 @@ class LLMProviderManager:
             name=response_data["name"],
             provider=response_data["provider"],
             api_key=response_data["api_key"],
-            default_model_name=default_model_name or "gpt-4o-mini",
+            default_model_name=default_model_name or CI_OPENAI_MODEL,
             is_public=response_data["is_public"],
             is_auto_mode=response_data.get("is_auto_mode", False),
             groups=response_data["groups"],
@@ -102,7 +103,7 @@ class LLMProviderManager:
 
         if set_as_default:
             if default_model_name is None:
-                default_model_name = "gpt-4o-mini"
+                default_model_name = CI_OPENAI_MODEL
             set_default_response = client.post(
                 f"{API_SERVER_URL}/admin/llm/default",
                 json={

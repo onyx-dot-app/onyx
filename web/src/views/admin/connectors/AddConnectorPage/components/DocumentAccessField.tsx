@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo } from "react";
+import { getSourceDisplayName } from "@/lib/connectors/utils";
 import { useField } from "formik";
 import { useTranslations } from "next-intl";
 import { InputSingleSelect, type SelectOption } from "@opal/components";
@@ -10,7 +11,7 @@ import {
   useTierLockedOptions,
 } from "@/lib/tiers/hooks";
 import { InputHorizontal, Section } from "@opal/layouts";
-import { SvgOrganization, SvgUserSync, SvgUsers } from "@opal/icons";
+import { SvgOrganization, SvgUser, SvgUserSync, SvgUsers } from "@opal/icons";
 import { AccessType, Permission } from "@/lib/types";
 import {
   ValidAutoSyncSource,
@@ -26,7 +27,6 @@ import type { CredentialValues } from "@/lib/credentials/types";
 import { getCredentialSpec } from "@/lib/credentials/utils";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { useSettings } from "@/lib/settings/hooks";
-import { getSourceDisplayName } from "@/lib/sources";
 
 function isValidAutoSyncSource(
   value: ConfigurableSources
@@ -58,7 +58,8 @@ export default function DocumentAccessField({
   const tRestriction = useTranslations("admin.connector.groupRestriction");
   const { appName } = useSettings();
   const plans = usePlans();
-  const [accessType, , accessTypeHelpers] = useField<AccessType>("access_type");
+  const [accessType, accessTypeMeta, accessTypeHelpers] =
+    useField<AccessType>("access_type");
   const { isScopedManager } = usePermissionAuthority(
     Permission.MANAGE_CONNECTORS
   );
@@ -88,7 +89,8 @@ export default function DocumentAccessField({
       ? "private"
       : "public";
 
-  // Auto Sync and Specific Groups need Business; Everyone is on every tier.
+  // Auto Sync, Specific Groups and Only Me need Business; Everyone is on every
+  // tier.
   const businessOptions = useMemo(() => {
     const built: SelectOption[] = [];
     if (isValidAutoSyncSource(connector)) {
@@ -109,6 +111,12 @@ export default function DocumentAccessField({
       title: t("specificGroups.title"),
       description: t("specificGroups.description"),
       icon: SvgUsers,
+    });
+    built.push({
+      value: "personal",
+      title: t("onlyMe.title"),
+      description: t("onlyMe.description"),
+      icon: SvgUser,
     });
     return built;
   }, [isSyncDisabledByAuth, connector, t, appName]);
@@ -137,22 +145,24 @@ export default function DocumentAccessField({
         : everyTierOptions,
     [businessTier, businessOptions, everyTierOptions]
   );
-  // What the list shows: every option in one order. Below Business they all
-  // sit locked under an upgrade link, Everyone selected.
+  // What the list shows: every option in one order, Sync first as in the
+  // mock. Below Business they all sit locked under an upgrade link, Everyone
+  // selected.
   const lockForBusiness = useTierLockedOptions(Tier.BUSINESS);
   const listedOptions = useMemo(
-    () => lockForBusiness([...everyTierOptions, ...businessOptions]),
+    () => lockForBusiness([...businessOptions, ...everyTierOptions]),
     [everyTierOptions, businessOptions, lockForBusiness]
   );
 
   // Sync is the default wherever it is offered and enabled, until the user
-  // picks an option themselves.
-  const userChoseRef = useRef(keepInitialAccess);
+  // picks an option themselves. The pick is kept as the field's Formik
+  // `touched` flag, so it survives a remount of this component.
+  const userChose: boolean = keepInitialAccess || accessTypeMeta.touched;
   const syncAvailable = showAutoSync && !isSyncDisabledByAuth;
   useEffect(() => {
-    if (userChoseRef.current || !syncAvailable) return;
+    if (userChose || !syncAvailable) return;
     if (accessType.value !== "sync") accessTypeHelpers.setValue("sync");
-  }, [syncAvailable, accessType.value, accessTypeHelpers]);
+  }, [userChose, syncAvailable, accessType.value, accessTypeHelpers]);
 
   // Move off an access type the user is not offered, or that is disabled.
   useEffect(() => {
@@ -194,8 +204,8 @@ export default function DocumentAccessField({
             // A re-pick emits "": the pick stands.
             const option = options.find((o) => o.value === value);
             if (!option) return;
-            userChoseRef.current = true;
-            accessTypeHelpers.setValue(option.value as AccessType);
+            void accessTypeHelpers.setTouched(true, false);
+            void accessTypeHelpers.setValue(option.value as AccessType);
           }}
           options={listedOptions}
           placeholder={t("title")}

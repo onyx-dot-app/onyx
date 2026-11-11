@@ -37,19 +37,36 @@ func TestUpsertEmbeddingProvider(t *testing.T) {
 	}
 }
 
-func TestGetEmbeddingProvider(t *testing.T) {
+func TestListEmbeddingProviders(t *testing.T) {
 	c, captured := newTestServer(t, http.StatusOK, embeddingProvidersJSON)
-	out, err := c.GetEmbeddingProvider(context.Background(), "cohere")
+	providers, err := c.ListEmbeddingProviders(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if captured.Method != http.MethodGet || captured.Path != "/admin/embedding/embedding-provider" {
 		t.Errorf("got %s %s, want GET /admin/embedding/embedding-provider", captured.Method, captured.Path)
 	}
+	if len(providers) != 2 || providers[1].ProviderType != "cohere" {
+		t.Errorf("unexpected providers: %+v", providers)
+	}
+}
+
+func TestGetEmbeddingProvider(t *testing.T) {
+	c, captured := newTestServer(t, http.StatusOK,
+		`{"provider_type": "cohere", "api_key": "co-****9999", "api_url": null}`)
+	out, err := c.GetEmbeddingProvider(context.Background(), "cohere")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if captured.Method != http.MethodGet || captured.Path != "/admin/embedding/embedding-provider/cohere" {
+		t.Errorf("got %s %s, want GET /admin/embedding/embedding-provider/cohere", captured.Method, captured.Path)
+	}
 	if out.APIKey == nil || *out.APIKey != "co-****9999" {
 		t.Errorf("unexpected provider: %+v", out)
 	}
 
+	c, _ = newTestServer(t, http.StatusNotFound,
+		`{"error_code": "NOT_FOUND", "detail": "Embedding provider 'voyage' is not configured"}`)
 	if _, err := c.GetEmbeddingProvider(context.Background(), "voyage"); !IsNotFound(err) {
 		t.Errorf("missing provider_type should return a 404 APIError, got %v", err)
 	}

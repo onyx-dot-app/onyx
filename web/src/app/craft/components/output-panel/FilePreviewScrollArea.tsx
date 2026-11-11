@@ -3,13 +3,17 @@
 import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { cn } from "@opal/utils";
 
-import type { FilePreviewScrollPosition } from "@/app/craft/components/output-panel/types";
+export interface FilePreviewScrollPosition {
+  initialScrollTop?: number;
+  onScrollTopChange?: (scrollTop: number) => void;
+  isActive?: boolean;
+}
 
 interface FilePreviewScrollAreaProps extends FilePreviewScrollPosition {
   children: ReactNode;
+  contentReady?: boolean;
   padding?: 0 | 4 | 6;
   paddingX?: 0 | 4 | 6;
-  fullHeight?: boolean;
 }
 
 /** Keeps a viewer's position through hidden tabs and bounded cache eviction. */
@@ -18,25 +22,25 @@ export function FilePreviewScrollArea({
   initialScrollTop = 0,
   onScrollTopChange,
   isActive = true,
+  contentReady = true,
   padding = 4,
   paddingX,
-  fullHeight = true,
 }: FilePreviewScrollAreaProps) {
   const element = useRef<HTMLDivElement>(null);
   const position = useRef(initialScrollTop);
   const restored = useRef(false);
   useLayoutEffect(() => {
-    if (isActive && element.current && !restored.current) {
+    if (!contentReady) restored.current = false;
+    if (isActive && contentReady && element.current && !restored.current) {
       element.current.scrollTop = position.current;
       restored.current = true;
     }
-  }, [isActive]);
+  }, [isActive, contentReady]);
   return (
     <div
       ref={element}
       className={cn(
-        "overflow-auto",
-        fullHeight && "h-full",
+        "h-full overflow-auto",
         padding === 6 ? "p-6" : padding === 4 ? "p-4" : "p-0",
         paddingX === 6
           ? "px-6"
@@ -45,7 +49,7 @@ export function FilePreviewScrollArea({
             : paddingX === 0 && "px-0"
       )}
       onScroll={(event) => {
-        if (!isActive) return;
+        if (!isActive || !contentReady) return;
         position.current = event.currentTarget.scrollTop;
         onScrollTopChange?.(position.current);
       }}

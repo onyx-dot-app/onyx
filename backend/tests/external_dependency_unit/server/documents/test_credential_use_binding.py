@@ -1,8 +1,9 @@
 """A user may use a credential only when they own it (or it has no owner and
-they are an admin), or when they can see it and the config keeps the
-credential-bound values of a pair that already uses it. Covers the rule and
+they are an admin), or when they can see it and either its source has no
+credential-bound fields or the config keeps the credential-bound values of a
+pair that already uses it. Covers the rule and
 each entry point: pairing, draft runs, capability-check overrides, cc-pair
-dry runs and edits."""
+dry runs and edits, and the binding check and account list that report it."""
 
 from collections.abc import Generator
 from dataclasses import dataclass
@@ -22,6 +23,7 @@ from onyx.connectors.edit_plan.state import (
     fetch_proposed_credential,
 )
 from onyx.connectors.factory import (
+    CredentialBindingFieldErrorKind,
     assert_user_can_use_credential,
     validate_ccpair_for_user,
 )
@@ -37,9 +39,13 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents import capability_check_runs
 from onyx.server.documents.capability_check_runs import start_cc_pair_draft_check_run
+from onyx.server.documents.credential import get_cc_source_full_info
 from onyx.server.documents.credential_capabilities import (
     CapabilityCheckRunRequest,
+    CredentialBindingCheckRequest,
+    CredentialBindingRejectionCode,
     DraftCheckRunRequest,
+    check_credential_binding,
     start_draft_check_run,
     trigger_capability_check,
 )
@@ -219,7 +225,56 @@ def test_visible_user_cannot_change_the_bound_values(
     )
 
 
-def test_visible_credential_without_a_pair_is_for_its_owner(
+def test_spellings_of_the_pairs_site_match(env: _Env, db_session: Session) -> None:
+    for wiki_base in (
+        f"{_SITE}/",
+        f"{_SITE}/wiki",
+        f"{_SITE}/wiki/",
+        "HTTPS://ACME.atlassian.net/wiki",
+    ):
+        _use(db_session, env.admin, env.shared, _config(wiki_base))
+    for wiki_base in (
+        "https://acme.atlassian.net.attacker.example.com/wiki",
+        "http://acme.atlassian.net",
+        # The connector gets the value as entered, and needs a scheme.
+        "acme.atlassian.net/wiki",
+        # Another path on the same host is another site.
+        f"{_SITE}/other",
+    ):
+        _refused(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            _use,
+            db_session,
+            env.admin,
+            env.shared,
+            _config(wiki_base),
+        )
+
+
+def test_unparseable_site_url_is_refused_and_reported(
+    env: _Env, db_session: Session
+) -> None:
+    broken = _config("https://[broken")
+    _refused(
+        OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+        _use,
+        db_session,
+        env.admin,
+        env.shared,
+        broken,
+    )
+    result = check_credential_binding(
+        env.shared.id,
+        CredentialBindingCheckRequest(source=_SOURCE, connector_specific_config=broken),
+        user=env.admin,
+        db_session=db_session,
+    )
+    assert result.field_errors["wiki_base"].kind == (
+        CredentialBindingFieldErrorKind.INVALID
+    )
+
+
+def test_bound_credential_without_a_pair_is_for_its_owner(
     env: _Env, db_session: Session
 ) -> None:
     unpaired = _credential(db_session, env.owner)
@@ -235,6 +290,55 @@ def test_visible_credential_without_a_pair_is_for_its_owner(
             unpaired,
             config,
         )
+
+
+# Linear has no binding model. Drive's only bound field is derived from the
+# credential. Neither has a setting that can send the secret elsewhere.
+@pytest.mark.parametrize(
+    "source, credential_json, config",
+    [
+        (DocumentSource.LINEAR, {"linear_api_key": "secret"}, {}),
+        (
+            DocumentSource.GOOGLE_DRIVE,
+            {"google_tokens": "{}"},
+            {"credential_kind": "oauth", "include_shared_drives": True},
+        ),
+    ],
+)
+def test_unbound_credential_without_a_pair_is_usable_by_a_visible_user(
+    env: _Env,
+    db_session: Session,
+    source: DocumentSource,
+    credential_json: dict[str, Any],
+    config: dict[str, Any],
+) -> None:
+    credential = Credential(
+        name=f"use-{uuid4().hex[:8]}",
+        source=source,
+        credential_json=credential_json,
+        user_id=env.owner.id,
+        admin_public=True,
+    )
+    db_session.add(credential)
+    db_session.commit()
+
+    for use_config in (config, None):
+        assert_user_can_use_credential(
+            db_session,
+            user=env.admin,
+            credential=credential,
+            source=source,
+            connector_specific_config=use_config,
+        )
+    _refused(
+        OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+        assert_user_can_use_credential,
+        db_session,
+        user=env.member,
+        credential=credential,
+        source=source,
+        connector_specific_config=config,
+    )
 
 
 def test_ownerless_credential_is_usable_by_an_admin(
@@ -483,3 +587,67 @@ def test_fields_derived_from_the_credential_are_not_compared(
             source=DocumentSource.GOOGLE_DRIVE,
             connector_specific_config={"credential_kind": kind},
         )
+
+
+# The reports of the rule
+
+
+def test_binding_check_reports_the_runs_refusal(env: _Env, db_session: Session) -> None:
+    def check(config: dict[str, Any]) -> CredentialBindingCheckRequest:
+        return CredentialBindingCheckRequest(
+            source=_SOURCE, connector_specific_config=config
+        )
+
+    with pytest.raises(OnyxError) as exc:
+        _use(db_session, env.admin, env.shared, _config(_OTHER_SITE))
+    result = check_credential_binding(
+        env.shared.id,
+        check(_config(_OTHER_SITE)),
+        user=env.admin,
+        db_session=db_session,
+    )
+    assert result.field_errors == {}
+    assert result.rejection is not None
+    assert (
+        result.rejection.code
+        == CredentialBindingRejectionCode.SHARED_CREDENTIAL_SETTINGS
+    )
+    assert result.rejection.detail == exc.value.detail
+
+    for user in (env.admin, env.owner):
+        assert (
+            check_credential_binding(
+                env.shared.id,
+                check(_config(f"{_SITE}/wiki")),
+                user=user,
+                db_session=db_session,
+            ).rejection
+            is None
+        )
+
+
+def test_account_list_marks_the_accounts_the_rule_refuses(
+    env: _Env, db_session: Session
+) -> None:
+    unpaired = _credential(db_session, env.owner)
+    db_session.commit()
+
+    def listed(user: User) -> dict[int, tuple[bool, str | None]]:
+        return {
+            snapshot.id: (snapshot.usable, snapshot.refusal_reason)
+            for snapshot in get_cc_source_full_info(
+                _SOURCE, user=user, db_session=db_session
+            )
+            if snapshot.id in (env.shared.id, unpaired.id)
+        }
+
+    admin_view = listed(env.admin)
+    assert admin_view[env.shared.id] == (True, None)
+    usable, reason = admin_view[unpaired.id]
+    assert not usable
+    assert reason is not None and "shared with you" in reason
+
+    assert listed(env.owner) == {
+        env.shared.id: (True, None),
+        unpaired.id: (True, None),
+    }

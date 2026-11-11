@@ -1,9 +1,9 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { PageSelector } from "@/components/PageSelector";
 import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   Table,
@@ -28,14 +28,14 @@ function ClickableTableRow({
   children: React.ReactNode;
   [key: string]: any;
 }) {
-  const router = useRouter();
+  const navigation = useNavigation();
 
   useEffect(() => {
-    router.prefetch(url);
-  }, [router, url]);
+    navigation.prefetch(url);
+  }, [navigation, url]);
 
   const navigate = () => {
-    router.push(url);
+    navigation.go(url);
   };
 
   return (

@@ -3,7 +3,7 @@
 import React, { RefObject, useState, useCallback, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { Packet, StreamingCitation } from "@/app/app/services/streamingModels";
-import { FeedbackType, Message } from "@/app/app/interfaces";
+import { FeedbackType, Message } from "@/app/app/types";
 import { OnyxDocument } from "@/lib/search/types";
 import { TooltipGroup } from "@/components/tooltip/CustomTooltip";
 import {
@@ -21,7 +21,7 @@ import MessageSwitcher from "@/app/app/message/MessageSwitcher";
 import { useIncognitoOptional } from "@/providers/IncognitoProvider";
 import SourceTag from "@/refresh-components/buttons/source-tag/SourceTag";
 import { citationsToSourceInfoArray } from "@/refresh-components/buttons/source-tag/sourceTagUtils";
-import { CopyButton, OpenButton, SelectButton } from "@opal/components";
+import { CopyButton, SelectButton } from "@opal/components";
 import ModelSelector from "@/sections/model-selector/ModelSelector";
 import { SvgRefreshCw, SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
 import { LlmManager } from "@/lib/hooks";
@@ -331,7 +331,8 @@ export default function MessageToolbar({
             {/* Read-only model label for the shared view: no llmManager to
                 power the interactive selector, so surface which model answered. */}
             {!llmManager && currentModelName && (
-              <OpenButton
+              <SelectButton
+                chevron
                 disabled
                 icon={getModelIcon(
                   currentModelProvider ?? "",
@@ -339,7 +340,7 @@ export default function MessageToolbar({
                 )}
               >
                 {currentModelName}
-              </OpenButton>
+              </SelectButton>
             )}
 
             {onRegenerate &&
@@ -382,13 +383,14 @@ export default function MessageToolbar({
                         );
                       const displayName = mc?.effectiveDisplayName ?? rawName;
                       return (
-                        <OpenButton
+                        <SelectButton
+                          chevron
                           icon={SvgRefreshCw}
                           tooltip={t("toolbar.regenerateButton.tooltip")}
                           foldable={distinctModelsUsed <= 1}
                         >
                           {displayName}
-                        </OpenButton>
+                        </SelectButton>
                       );
                     }}
                     onChange={(opt) => {

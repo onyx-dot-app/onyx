@@ -3,10 +3,10 @@
 import { useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
-import { Button, CopyButton, InputTypeIn } from "@opal/components";
+import { Button, CopyButton, InputTypeIn, Text } from "@opal/components";
+import { richNodes } from "@opal/utils";
 import { SvgUserPlus, SvgUserX, SvgXCircle, SvgKey } from "@opal/icons";
 import { ConfirmationModalLayout } from "@opal/layouts";
-import Text from "@/refresh-components/texts/Text";
 import { toast } from "@opal/layouts";
 import {
   deactivateUser,
@@ -42,8 +42,8 @@ async function runAction(
 /** Renders the email inside a confirmation sentence with emphasis. */
 function emailTag(chunks: ReactNode) {
   return (
-    <Text as="span" text05>
-      {chunks}
+    <Text as="span" color="text-05">
+      {richNodes(chunks)}
     </Text>
   );
 }
@@ -95,12 +95,14 @@ export function CancelInviteModal({
         </Button>
       }
     >
-      <Text as="p" text03>
-        {t.rich("cancelInviteModal.description", {
-          email,
-          strong: emailTag,
-          appName,
-        })}
+      <Text as="p" color="text-03">
+        {richNodes(
+          t.rich("cancelInviteModal.description", {
+            email,
+            strong: emailTag,
+            appName,
+          })
+        )}
       </Text>
     </ConfirmationModalLayout>
   );
@@ -153,12 +155,14 @@ export function DeactivateUserModal({
         </Button>
       }
     >
-      <Text as="p" text03>
-        {t.rich("deactivateModal.description", {
-          email,
-          strong: emailTag,
-          appName,
-        })}
+      <Text as="p" color="text-03">
+        {richNodes(
+          t.rich("deactivateModal.description", {
+            email,
+            strong: emailTag,
+            appName,
+          })
+        )}
       </Text>
     </ConfirmationModalLayout>
   );
@@ -208,12 +212,14 @@ export function ActivateUserModal({
         </Button>
       }
     >
-      <Text as="p" text03>
-        {t.rich("activateModal.description", {
-          email,
-          strong: emailTag,
-          appName,
-        })}
+      <Text as="p" color="text-03">
+        {richNodes(
+          t.rich("activateModal.description", {
+            email,
+            strong: emailTag,
+            appName,
+          })
+        )}
       </Text>
     </ConfirmationModalLayout>
   );
@@ -266,12 +272,14 @@ export function DeleteUserModal({
         </Button>
       }
     >
-      <Text as="p" text03>
-        {t.rich("deleteModal.description", {
-          email,
-          strong: emailTag,
-          appName,
-        })}
+      <Text as="p" color="text-03">
+        {richNodes(
+          t.rich("deleteModal.description", {
+            email,
+            strong: emailTag,
+            appName,
+          })
+        )}
       </Text>
     </ConfirmationModalLayout>
   );
@@ -294,10 +302,8 @@ export function ResetPasswordModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [newPassword, setNewPassword] = useState<string | null>(null);
 
-  const handleClose = () => {
-    onClose();
-    setNewPassword(null);
-  };
+  // Closing keeps `newPassword`, so the card fades out showing it; the modal
+  // unmounts after its exit, so the next open starts fresh.
 
   return (
     <ConfirmationModalLayout
@@ -307,10 +313,11 @@ export function ResetPasswordModal({
           ? t("resetPasswordModal.successTitle")
           : t("resetPasswordModal.title")
       }
-      onClose={isSubmitting ? undefined : handleClose}
+      onClose={isSubmitting ? undefined : onClose}
+      hideCancel={!!newPassword}
       submit={
         newPassword ? (
-          <Button onClick={handleClose}>
+          <Button onClick={onClose}>
             {t("resetPasswordModal.doneButton.label")}
           </Button>
         ) : (
@@ -340,11 +347,13 @@ export function ResetPasswordModal({
     >
       {newPassword ? (
         <div className="flex flex-col gap-2">
-          <Text as="p" text03>
-            {t.rich("resetPasswordModal.successDescription", {
-              email,
-              strong: emailTag,
-            })}
+          <Text as="p" color="text-03">
+            {richNodes(
+              t.rich("resetPasswordModal.successDescription", {
+                email,
+                strong: emailTag,
+              })
+            )}
           </Text>
           <div className="font-main-ui-mono relative">
             <InputTypeIn value={newPassword} variant="readOnly" />
@@ -360,11 +369,13 @@ export function ResetPasswordModal({
           </div>
         </div>
       ) : (
-        <Text as="p" text03>
-          {t.rich("resetPasswordModal.description", {
-            email,
-            strong: emailTag,
-          })}
+        <Text as="p" color="text-03">
+          {richNodes(
+            t.rich("resetPasswordModal.description", {
+              email,
+              strong: emailTag,
+            })
+          )}
         </Text>
       )}
     </ConfirmationModalLayout>

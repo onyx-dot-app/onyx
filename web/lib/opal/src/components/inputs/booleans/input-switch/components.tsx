@@ -59,6 +59,11 @@ function InputSwitch({
         type="button"
         role="switch"
         aria-checked={checked}
+        // Not the native `disabled`: callers disable the switch while a
+        // change saves, and a browser drops focus from a disabled button.
+        // A focused switch keeps focus; a disabled one is skipped by Tab.
+        aria-disabled={disabled || undefined}
+        tabIndex={disabled ? -1 : props.tabIndex}
         className={cn(
           "peer inline-flex h-4.5 w-8 shrink-0 cursor-pointer items-center rounded-full transition-colors focus-visible:outline-hidden",
           disabled
@@ -69,7 +74,6 @@ function InputSwitch({
               ? "switch-normal-checked"
               : "switch-normal"
         )}
-        disabled={disabled}
         onClick={handleClick}
       >
         <span

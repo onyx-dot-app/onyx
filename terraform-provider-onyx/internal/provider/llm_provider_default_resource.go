@@ -39,6 +39,50 @@ type llmProviderDefaultResourceModel struct {
 	VisionModelName      types.String `tfsdk:"vision_model_name"`
 	ChatNamingProviderID types.String `tfsdk:"chat_naming_provider_id"`
 	ChatNamingModelName  types.String `tfsdk:"chat_naming_model_name"`
+	CraftProviderID      types.String `tfsdk:"craft_provider_id"`
+	CraftModelName       types.String `tfsdk:"craft_model_name"`
+	// The search selection pair needs Onyx v5.0.0 or later.
+	SearchSelectionProviderID types.String `tfsdk:"search_selection_provider_id"`
+	SearchSelectionModelName  types.String `tfsdk:"search_selection_model_name"`
+}
+
+// clearableDefault is a default model pair that Onyx can also unset.
+type clearableDefault struct {
+	label      string
+	providerID func(*llmProviderDefaultResourceModel) *types.String
+	modelName  func(*llmProviderDefaultResourceModel) *types.String
+	remote     func(*client.LLMProviderList) *client.DefaultModel
+	set        func(*client.Client, context.Context, client.DefaultModel) error
+	clear      func(*client.Client, context.Context) error
+}
+
+// clearableDefaults are applied, read and cleared the same way: setting the
+// pair writes it, and removing a managed pair clears it.
+var clearableDefaults = []clearableDefault{
+	{
+		label:      "chat auto-naming model",
+		providerID: func(m *llmProviderDefaultResourceModel) *types.String { return &m.ChatNamingProviderID },
+		modelName:  func(m *llmProviderDefaultResourceModel) *types.String { return &m.ChatNamingModelName },
+		remote:     func(l *client.LLMProviderList) *client.DefaultModel { return l.DefaultChatNaming },
+		set:        (*client.Client).SetDefaultChatNamingModel,
+		clear:      (*client.Client).ClearDefaultChatNamingModel,
+	},
+	{
+		label:      "default Craft model",
+		providerID: func(m *llmProviderDefaultResourceModel) *types.String { return &m.CraftProviderID },
+		modelName:  func(m *llmProviderDefaultResourceModel) *types.String { return &m.CraftModelName },
+		remote:     func(l *client.LLMProviderList) *client.DefaultModel { return l.DefaultCraft },
+		set:        (*client.Client).SetDefaultCraftModel,
+		clear:      (*client.Client).ClearDefaultCraftModel,
+	},
+	{
+		label:      "default search selection model",
+		providerID: func(m *llmProviderDefaultResourceModel) *types.String { return &m.SearchSelectionProviderID },
+		modelName:  func(m *llmProviderDefaultResourceModel) *types.String { return &m.SearchSelectionModelName },
+		remote:     func(l *client.LLMProviderList) *client.DefaultModel { return l.DefaultSearchSelection },
+		set:        (*client.Client).SetDefaultSearchSelectionModel,
+		clear:      (*client.Client).ClearDefaultSearchSelectionModel,
+	},
 }
 
 func (r *llmProviderDefaultResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -48,11 +92,12 @@ func (r *llmProviderDefaultResource) Metadata(_ context.Context, req resource.Me
 func (r *llmProviderDefaultResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "The deployment-wide default LLM model — a singleton pointer at one " +
-			"provider + model pair (plus optional vision and chat auto-naming defaults). Managing it " +
+			"provider + model pair (plus optional vision, chat auto-naming, Craft and search selection " +
+			"defaults). Managing it " +
 			"as its own resource lets `depends_on` ordering repoint the default before the provider " +
 			"holding it is deleted or shrunk. Onyx has no unset API for the text and vision defaults, " +
-			"so destroying this resource leaves them in place; the chat-naming default is cleared when " +
-			"managed.",
+			"so destroying this resource leaves them in place. Destroy clears the chat-naming, Craft " +
+			"and search selection defaults that the resource manages.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:            true,
@@ -64,7 +109,7 @@ func (r *llmProviderDefaultResource) Schema(_ context.Context, _ resource.Schema
 			},
 			"model_name": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "Model name within that provider, e.g. `gpt-5-mini`. Must be one of its visible `model_configurations`.",
+				MarkdownDescription: "Model name within that provider, e.g. `gpt-6-luna`. Must be one of its visible `model_configurations`.",
 			},
 			"vision_provider_id": schema.StringAttribute{
 				Optional:            true,
@@ -95,6 +140,37 @@ func (r *llmProviderDefaultResource) Schema(_ context.Context, _ resource.Schema
 					stringvalidator.AlsoRequires(path.MatchRoot("chat_naming_provider_id")),
 				},
 			},
+			"craft_provider_id": schema.StringAttribute{
+				Optional: true,
+				MarkdownDescription: "Provider id for the default Onyx Craft model. Unset, Craft uses the " +
+					"default text model. Removing the pair clears the server value.",
+				Validators: []validator.String{
+					stringvalidator.AlsoRequires(path.MatchRoot("craft_model_name")),
+				},
+			},
+			"craft_model_name": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "Default Onyx Craft model name.",
+				Validators: []validator.String{
+					stringvalidator.AlsoRequires(path.MatchRoot("craft_provider_id")),
+				},
+			},
+			"search_selection_provider_id": schema.StringAttribute{
+				Optional: true,
+				MarkdownDescription: "Provider id for the model that selects search results. Unset, the " +
+					"session's model selects them. Removing the pair clears the server value. Needs Onyx " +
+					"v5.0.0 or later.",
+				Validators: []validator.String{
+					stringvalidator.AlsoRequires(path.MatchRoot("search_selection_model_name")),
+				},
+			},
+			"search_selection_model_name": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "Name of the model that selects search results. Needs Onyx v5.0.0 or later.",
+				Validators: []validator.String{
+					stringvalidator.AlsoRequires(path.MatchRoot("search_selection_provider_id")),
+				},
+			},
 		},
 	}
 }
@@ -103,10 +179,11 @@ func (r *llmProviderDefaultResource) Configure(_ context.Context, req resource.C
 	r.client = clientFromResourceConfigure(req, resp)
 }
 
-// apply makes up to three writes, overlaying each success onto base. On
+// apply writes each configured default, overlaying each success onto base.
+// It clears a clearable default that state manages and plan does not. On
 // failure it returns the partial result plus whether anything was written,
 // so callers persist exactly what changed server-side.
-func (r *llmProviderDefaultResource) apply(ctx context.Context, plan, base llmProviderDefaultResourceModel, clearChatNaming bool, diags *diag.Diagnostics) (llmProviderDefaultResourceModel, bool) {
+func (r *llmProviderDefaultResource) apply(ctx context.Context, plan, base llmProviderDefaultResourceModel, diags *diag.Diagnostics) (llmProviderDefaultResourceModel, bool) {
 	result := base
 	result.ID = types.StringValue(llmProviderDefaultResourceID)
 
@@ -144,33 +221,32 @@ func (r *llmProviderDefaultResource) apply(ctx context.Context, plan, base llmPr
 		result.VisionModelName = plan.VisionModelName
 	}
 
-	// Unlike text/vision, the chat-naming default has an unset endpoint, so
-	// removing the pair from configuration clears the server value.
-	switch {
-	case !plan.ChatNamingProviderID.IsNull():
-		chatNamingProviderID, ok := parseID(plan.ChatNamingProviderID, "LLM provider", diags)
-		if !ok {
-			return result, true
+	// Unlike text/vision, these defaults have an unset endpoint, so removing
+	// a pair from configuration clears the server value.
+	for _, d := range clearableDefaults {
+		planProvider, planModel := d.providerID(&plan), d.modelName(&plan)
+		resultProvider, resultModel := d.providerID(&result), d.modelName(&result)
+		switch {
+		case !planProvider.IsNull():
+			providerID, ok := parseID(*planProvider, "LLM provider", diags)
+			if !ok {
+				return result, true
+			}
+			if err := d.set(r.client, ctx, client.DefaultModel{
+				ProviderID: providerID,
+				ModelName:  planModel.ValueString(),
+			}); err != nil {
+				diags.AddError("Failed to set the "+d.label, err.Error())
+				return result, true
+			}
+			*resultProvider, *resultModel = *planProvider, *planModel
+		case !resultProvider.IsNull():
+			if err := d.clear(r.client, ctx); err != nil {
+				diags.AddError("Failed to clear the "+d.label, err.Error())
+				return result, true
+			}
+			*resultProvider, *resultModel = types.StringNull(), types.StringNull()
 		}
-		if err := r.client.SetDefaultChatNamingModel(ctx, client.DefaultModel{
-			ProviderID: chatNamingProviderID,
-			ModelName:  plan.ChatNamingModelName.ValueString(),
-		}); err != nil {
-			diags.AddError("Failed to set the chat auto-naming model", err.Error())
-			return result, true
-		}
-		result.ChatNamingProviderID = plan.ChatNamingProviderID
-		result.ChatNamingModelName = plan.ChatNamingModelName
-	case clearChatNaming:
-		if err := r.client.ClearDefaultChatNamingModel(ctx); err != nil {
-			diags.AddError("Failed to clear the chat auto-naming model", err.Error())
-			return result, true
-		}
-		result.ChatNamingProviderID = types.StringNull()
-		result.ChatNamingModelName = types.StringNull()
-	default:
-		result.ChatNamingProviderID = types.StringNull()
-		result.ChatNamingModelName = types.StringNull()
 	}
 	return result, true
 }
@@ -181,7 +257,7 @@ func (r *llmProviderDefaultResource) Create(ctx context.Context, req resource.Cr
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	model, wrote := r.apply(ctx, plan, llmProviderDefaultResourceModel{}, false, &resp.Diagnostics)
+	model, wrote := r.apply(ctx, plan, llmProviderDefaultResourceModel{}, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() && !wrote {
 		return
 	}
@@ -210,8 +286,8 @@ func (r *llmProviderDefaultResource) Read(ctx context.Context, req resource.Read
 	state.ProviderID = types.StringValue(strconv.FormatInt(list.DefaultText.ProviderID, 10))
 	state.ModelName = types.StringValue(list.DefaultText.ModelName)
 
-	// The vision and chat-naming defaults are only refreshed when managed
-	// (set in state): unmanaged, they stay null even if configured server-side.
+	// The optional defaults are only refreshed when managed (set in state):
+	// unmanaged, they stay null even if configured server-side.
 	if !state.VisionProviderID.IsNull() {
 		if list.DefaultVision == nil {
 			state.VisionProviderID = types.StringNull()
@@ -221,13 +297,16 @@ func (r *llmProviderDefaultResource) Read(ctx context.Context, req resource.Read
 			state.VisionModelName = types.StringValue(list.DefaultVision.ModelName)
 		}
 	}
-	if !state.ChatNamingProviderID.IsNull() {
-		if list.DefaultChatNaming == nil {
-			state.ChatNamingProviderID = types.StringNull()
-			state.ChatNamingModelName = types.StringNull()
+	for _, d := range clearableDefaults {
+		providerID, modelName := d.providerID(&state), d.modelName(&state)
+		if providerID.IsNull() {
+			continue
+		}
+		if remote := d.remote(list); remote == nil {
+			*providerID, *modelName = types.StringNull(), types.StringNull()
 		} else {
-			state.ChatNamingProviderID = types.StringValue(strconv.FormatInt(list.DefaultChatNaming.ProviderID, 10))
-			state.ChatNamingModelName = types.StringValue(list.DefaultChatNaming.ModelName)
+			*providerID = types.StringValue(strconv.FormatInt(remote.ProviderID, 10))
+			*modelName = types.StringValue(remote.ModelName)
 		}
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
@@ -240,8 +319,7 @@ func (r *llmProviderDefaultResource) Update(ctx context.Context, req resource.Up
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	clearChatNaming := plan.ChatNamingProviderID.IsNull() && !state.ChatNamingProviderID.IsNull()
-	model, wrote := r.apply(ctx, plan, state, clearChatNaming, &resp.Diagnostics)
+	model, wrote := r.apply(ctx, plan, state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() && !wrote {
 		return
 	}
@@ -256,12 +334,15 @@ func (r *llmProviderDefaultResource) Delete(ctx context.Context, req resource.De
 	}
 	detail := "onyx_llm_provider_default was removed from Terraform state, but Onyx has no API to " +
 		"unset the deployment default text/vision models, so they remain pointed at their current targets."
-	if !state.ChatNamingProviderID.IsNull() {
-		if err := r.client.ClearDefaultChatNamingModel(ctx); err != nil {
-			resp.Diagnostics.AddError("Failed to clear the chat auto-naming model", err.Error())
+	for _, d := range clearableDefaults {
+		if d.providerID(&state).IsNull() {
+			continue
+		}
+		if err := d.clear(r.client, ctx); err != nil {
+			resp.Diagnostics.AddError("Failed to clear the "+d.label, err.Error())
 			return
 		}
-		detail += " The managed chat-naming default was cleared."
+		detail += " The managed " + d.label + " was cleared."
 	}
 	resp.Diagnostics.AddWarning("Default LLM model left unchanged", detail)
 }
@@ -275,6 +356,6 @@ func (r *llmProviderDefaultResource) ImportState(ctx context.Context, req resour
 		return
 	}
 	// The follow-up Read always refreshes provider_id/model_name from the
-	// server; the vision and chat-naming pairs stay null until configured.
+	// server; the optional pairs stay null until configured.
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }

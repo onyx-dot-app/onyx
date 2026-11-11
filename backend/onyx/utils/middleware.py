@@ -1,13 +1,12 @@
 import base64
 import hashlib
-import logging
 import re
 import uuid
-from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request
 from fastapi.routing import APIRoute
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from shared_configs.contextvars import (
     CURRENT_ENDPOINT_CONTEXTVAR,
@@ -16,45 +15,42 @@ from shared_configs.contextvars import (
 )
 
 
-def add_onyx_tenant_id_middleware(
-    app: FastAPI,
-    logger: logging.LoggerAdapter,  # noqa: ARG001
-) -> None:
-    @app.middleware("http")
-    async def set_tenant_id(
-        request: Request, call_next: Callable[[Request], Awaitable[Response]]
-    ) -> Response:
-        """Captures and sets the context var for the tenant."""
+def tenant_header_middleware(app: ASGIApp) -> ASGIApp:
+    async def set_tenant_id(scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await app(scope, receive, send)
+            return
 
-        onyx_tenant_id = request.headers.get("X-Onyx-Tenant-ID")
-        if onyx_tenant_id:
-            CURRENT_TENANT_ID_CONTEXTVAR.set(onyx_tenant_id)
-        return await call_next(request)
+        onyx_tenant_id = Request(scope).headers.get("X-Onyx-Tenant-ID")
+        if not onyx_tenant_id:
+            await app(scope, receive, send)
+            return
+
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set(onyx_tenant_id)
+        try:
+            await app(scope, receive, send)
+        finally:
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
+    return set_tenant_id
 
 
-def add_onyx_request_id_middleware(
-    app: FastAPI,
-    prefix: str,
-    logger: logging.LoggerAdapter,  # noqa: ARG001
-) -> None:
-    @app.middleware("http")
-    async def set_request_id(
-        request: Request, call_next: Callable[[Request], Awaitable[Response]]
-    ) -> Response:
-        """Generate a request hash that can be used to track the lifecycle
-        of a request.  The hash is prefixed to help indicated where the request id
-        originated.
+def request_id_middleware(app: ASGIApp, *, prefix: str) -> ASGIApp:
+    async def set_request_id(scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await app(scope, receive, send)
+            return
 
-        Format is f"{PREFIX}:{ID}" where PREFIX is 3 chars and ID is 8 chars.
-        Total length is 12 chars.
-        """
+        request_id = Request(scope).headers.get("X-Onyx-Request-ID")
+        token = ONYX_REQUEST_ID_CONTEXTVAR.set(
+            request_id or make_randomized_onyx_request_id(prefix)
+        )
+        try:
+            await app(scope, receive, send)
+        finally:
+            ONYX_REQUEST_ID_CONTEXTVAR.reset(token)
 
-        onyx_request_id = request.headers.get("X-Onyx-Request-ID")
-        if not onyx_request_id:
-            onyx_request_id = make_randomized_onyx_request_id(prefix)
-
-        ONYX_REQUEST_ID_CONTEXTVAR.set(onyx_request_id)
-        return await call_next(request)
+    return set_request_id
 
 
 def make_randomized_onyx_request_id(prefix: str) -> str:
@@ -118,13 +114,21 @@ def add_endpoint_context_middleware(app: FastAPI) -> None:
     """
     route_map = _build_route_map(app)
 
-    @app.middleware("http")
-    async def set_endpoint_context(
-        request: Request, call_next: Callable[[Request], Awaitable[Response]]
-    ) -> Response:
-        handler = _match_route(route_map, request.url.path)
-        token = CURRENT_ENDPOINT_CONTEXTVAR.set(handler or "unmatched")
-        try:
-            return await call_next(request)
-        finally:
-            CURRENT_ENDPOINT_CONTEXTVAR.reset(token)
+    def endpoint_context_middleware(app: ASGIApp) -> ASGIApp:
+        async def set_endpoint_context(
+            scope: Scope, receive: Receive, send: Send
+        ) -> None:
+            if scope["type"] != "http":
+                await app(scope, receive, send)
+                return
+
+            handler = _match_route(route_map, Request(scope).url.path)
+            token = CURRENT_ENDPOINT_CONTEXTVAR.set(handler or "unmatched")
+            try:
+                await app(scope, receive, send)
+            finally:
+                CURRENT_ENDPOINT_CONTEXTVAR.reset(token)
+
+        return set_endpoint_context
+
+    app.add_middleware(endpoint_context_middleware)

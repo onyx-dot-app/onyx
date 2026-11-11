@@ -96,6 +96,7 @@ export default function UserCredentialsModal({
                     onChange={(e) =>
                       setValues((prev) => ({ ...prev, [key]: e.target.value }))
                     }
+                    existingValue={credentialValues[key]}
                     placeholder={key}
                   />
                 </div>

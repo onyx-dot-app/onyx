@@ -69,6 +69,9 @@ class RedisConnectorPrune:
     # it to record the prune FAILED instead of falsely advancing last_pruned.
     GENERATOR_FAILED_PREFIX = PREFIX + "_generator_failed"
 
+    # Number of documents whose cleanup still failed after its last retry.
+    FAILED_DOCS_PREFIX = PREFIX + "_failed_docs"
+
     def __init__(self, tenant_id: str, id: int, redis: TenantRedisClient) -> None:
         self.tenant_id: str = tenant_id
         self.id = id
@@ -85,6 +88,7 @@ class RedisConnectorPrune:
         self.active_key = f"{self.ACTIVE_PREFIX}_{id}"
         self.failure_backoff_key = f"{self.FAILURE_BACKOFF_PREFIX}_{id}"
         self.generator_failed_key = f"{self.GENERATOR_FAILED_PREFIX}_{id}"
+        self.failed_docs_key = f"{self.FAILED_DOCS_PREFIX}_{id}"
 
     def taskset_clear(self) -> None:
         self.redis.delete(self.taskset_key)
@@ -93,6 +97,7 @@ class RedisConnectorPrune:
         self.redis.delete(self.generator_progress_key)
         self.redis.delete(self.generator_complete_key)
         self.redis.delete(self.generator_failed_key)
+        self.redis.delete(self.failed_docs_key)
 
     def get_remaining(self) -> int:
         # todo: move into fence
@@ -169,6 +174,15 @@ class RedisConnectorPrune:
     def generator_failed(self) -> bool:
         return bool(self.redis.exists(self.generator_failed_key))
 
+    def increment_failed_docs(self) -> None:
+        self.redis.incr(self.failed_docs_key)
+        self.redis.expire(self.failed_docs_key, self.FENCE_TTL)
+
+    @property
+    def failed_docs(self) -> int:
+        value = self.redis.get(self.failed_docs_key)
+        return int(value) if value is not None else 0
+
     @property
     def generator_complete(self) -> int | None:
         """the fence payload is an int representing the starting number of
@@ -232,6 +246,7 @@ class RedisConnectorPrune:
                     "connector_id": cc_pair.connector_id,
                     "credential_id": cc_pair.credential_id,
                     "tenant_id": self.tenant_id,
+                    "prune_cc_pair_id": cc_pair.id,
                 },
                 queue=OnyxCeleryQueues.CONNECTOR_DELETION,
                 task_id=custom_task_id,
@@ -249,6 +264,7 @@ class RedisConnectorPrune:
         self.redis.delete(self.generator_progress_key)
         self.redis.delete(self.generator_complete_key)
         self.redis.delete(self.generator_failed_key)
+        self.redis.delete(self.failed_docs_key)
         self.redis.delete(self.taskset_key)
         self.redis.delete(self.fence_key)
 
@@ -280,4 +296,7 @@ class RedisConnectorPrune:
             r.delete(key)
 
         for key in r.scan_iter(RedisConnectorPrune.GENERATOR_FAILED_PREFIX + "*"):
+            r.delete(key)
+
+        for key in r.scan_iter(RedisConnectorPrune.FAILED_DOCS_PREFIX + "*"):
             r.delete(key)

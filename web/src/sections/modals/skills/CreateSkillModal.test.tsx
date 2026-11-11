@@ -7,29 +7,74 @@ import {
   waitFor,
 } from "@tests/setup/test-utils";
 import CreateSkillModal from "@/sections/modals/skills/CreateSkillModal";
+import type { SkillSharingDraft } from "@/lib/skills/sharing";
 import type { SkillBundleContents } from "@/lib/skills/types";
 
 const mockInspectSkillBundle = jest.fn();
+const mockUploadSkillBundles = jest.fn();
 
 jest.mock("@/lib/skills/api", () => ({
   ...jest.requireActual("@/lib/skills/api"),
   inspectSkillBundle: (...args: unknown[]) => mockInspectSkillBundle(...args),
+  uploadSkillBundles: (...args: unknown[]) => mockUploadSkillBundles(...args),
 }));
 
 jest.mock("@/sections/skills/SkillBundlePicker", () => ({
   __esModule: true,
-  default: ({ onChange }: { onChange: (bundle: object) => void }) => (
+  default: ({
+    onChange,
+    onBatchChange,
+  }: {
+    onChange: (bundle: object) => void;
+    onBatchChange?: (files: File[]) => void;
+  }) => (
+    <>
+      {onBatchChange && (
+        <button
+          onClick={() =>
+            onBatchChange([
+              new File(["zip"], "alpha.zip"),
+              new File(["zip"], "beta.zip"),
+            ])
+          }
+        >
+          Select multiple bundles
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={() =>
+          onChange({
+            file: new File(["bundle"], "skill.zip"),
+            displayName: "skill.zip",
+            source: "zip",
+          })
+        }
+      >
+        Select bundle
+      </button>
+    </>
+  ),
+}));
+
+jest.mock("@/sections/modals/skills/ShareSkillModal", () => ({
+  __esModule: true,
+  default: ({
+    draft,
+    onSaveDraft,
+    onClose,
+  }: {
+    draft: SkillSharingDraft;
+    onSaveDraft: (draft: SkillSharingDraft) => void;
+    onClose: () => void;
+  }) => (
     <button
-      type="button"
-      onClick={() =>
-        onChange({
-          file: new File(["bundle"], "skill.zip"),
-          displayName: "skill.zip",
-          source: "zip",
-        })
-      }
+      onClick={() => {
+        onSaveDraft({ ...draft, public_permission: "VIEWER" });
+        onClose();
+      }}
     >
-      Select bundle
+      Share uploaded skills with organization
     </button>
   ),
 }));
@@ -47,6 +92,7 @@ const inspectedContents: SkillBundleContents = {
 describe("CreateSkillModal", () => {
   beforeEach(() => {
     mockInspectSkillBundle.mockReset();
+    mockUploadSkillBundles.mockReset();
   });
 
   afterEach(() => jest.restoreAllMocks());
@@ -75,6 +121,90 @@ describe("CreateSkillModal", () => {
     expect(draft.upload.file).toBeInstanceOf(File);
     expect(mockInspectSkillBundle).toHaveBeenCalledWith(draft.upload.file);
     expect(screen.getByRole("button", { name: "Review skill" })).toBeDisabled();
+  });
+
+  it("uploads multiple bundles with one access configuration and reports failures", async () => {
+    const user = setupUser();
+    const onImported = jest.fn();
+    const onContinue = jest.fn();
+    mockUploadSkillBundles.mockResolvedValue({
+      imported: [
+        { skill: { id: "alpha", name: "alpha" }, disabled_reason: null },
+      ],
+      not_imported: [
+        { path: "beta.zip", name: "beta.zip", reason: "Invalid SKILL.md" },
+      ],
+    });
+    render(
+      <CreateSkillModal
+        open
+        onClose={jest.fn()}
+        onContinue={onContinue}
+        onImported={onImported}
+      />
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Select multiple bundles" })
+    );
+    await user.click(screen.getByRole("button", { name: "Configure access" }));
+    await user.click(
+      screen.getByRole("button", {
+        name: "Share uploaded skills with organization",
+      })
+    );
+    expect(
+      screen.getByText("Everyone in the organization can access these skills.")
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Import 2 skills" }));
+    await waitFor(() =>
+      expect(mockUploadSkillBundles).toHaveBeenCalledWith(
+        [
+          expect.objectContaining({ name: "alpha.zip" }),
+          expect.objectContaining({ name: "beta.zip" }),
+        ],
+        expect.objectContaining({
+          public_permission: "VIEWER",
+          user_shares: [],
+          group_shares: [],
+        })
+      )
+    );
+    expect(
+      await screen.findByText("1 skill imported. 1 failed.")
+    ).toBeInTheDocument();
+    expect(screen.getByText("beta.zip: Invalid SKILL.md")).toBeInTheDocument();
+    expect(onImported).toHaveBeenCalledTimes(1);
+    expect(onContinue).not.toHaveBeenCalled();
+    expect(mockInspectSkillBundle).not.toHaveBeenCalled();
+  });
+
+  it("starts a fresh batch when the dialog is reopened", async () => {
+    const user = setupUser();
+    mockUploadSkillBundles.mockResolvedValue({
+      imported: [
+        { skill: { id: "alpha", name: "alpha" }, disabled_reason: null },
+      ],
+      not_imported: [],
+    });
+    const props = {
+      onClose: jest.fn(),
+      onContinue: jest.fn(),
+      onImported: jest.fn(),
+    };
+    const { rerender } = render(<CreateSkillModal open {...props} />);
+    await user.click(
+      screen.getByRole("button", { name: "Select multiple bundles" })
+    );
+    await user.click(screen.getByRole("button", { name: "Import 2 skills" }));
+    await screen.findByRole("button", { name: "Done" });
+    rerender(<CreateSkillModal open={false} {...props} />);
+    rerender(<CreateSkillModal open {...props} />);
+    expect(
+      screen.getByRole("button", { name: "Select multiple bundles" })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Done" })
+    ).not.toBeInTheDocument();
   });
 
   it("keeps the modal open and reports inspection failures", async () => {

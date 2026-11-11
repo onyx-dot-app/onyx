@@ -25,11 +25,16 @@ from onyx.server.features.skill.models import (
     SkillResponse,
     SkillsList,
 )
-from onyx.skills.built_in import BUILT_IN_SKILLS
+from onyx.skills.built_in import (
+    BUILT_IN_SKILLS,
+    EXTERNAL_APP_SKILL_ID_TO_APP_TYPE,
+)
+from onyx.skills.bundle import SKILL_MD_NAME, strip_skill_md_frontmatter
 from onyx.skills.content import (
     read_builtin_skill_instructions,
     read_custom_skill_bundle_instructions,
 )
+from onyx.skills.rendering import render_external_app_files
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -203,9 +208,17 @@ def skill_preview_response(
         definition = BUILT_IN_SKILLS.get(skill.built_in_skill_id)
         if definition is None:
             raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+        app_type = EXTERNAL_APP_SKILL_ID_TO_APP_TYPE.get(definition.built_in_skill_id)
+        if app_type is not None and definition.has_template:
+            rendered = render_external_app_files(
+                db_session, skill, app_type, definition.source_dir
+            )
+            instructions = strip_skill_md_frontmatter(rendered[SKILL_MD_NAME])
+        else:
+            instructions = read_builtin_skill_instructions(definition)
         return SkillPreviewResponse.from_builtin(
             skill,
-            instructions_markdown=read_builtin_skill_instructions(definition),
+            instructions_markdown=instructions,
             external_app=external_app,
         )
 

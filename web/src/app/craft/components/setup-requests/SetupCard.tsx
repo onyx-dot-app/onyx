@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useNavigation } from "@opal/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
 
@@ -52,6 +53,8 @@ export default function SetupCard({
   userApp,
 }: SetupCardProps) {
   const t = useTranslations("craft.setupCard");
+  const tActionPolicies = useTranslations("craft.actionPolicies");
+  const navigation = useNavigation();
   const { mutate } = useSWRConfig();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,9 +62,12 @@ export default function SetupCard({
   const [decision, setDecision] = useState<ConnectAppDecision | null>(null);
 
   const mountedRef = useRef(true);
+  const resolvingRef = useRef(false);
+  const autoResolvedRef = useRef(false);
   // Tears down the in-flight OAuth poll/listener; run on finish and on unmount.
   const cleanupRef = useRef<(() => void) | null>(null);
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
       cleanupRef.current?.();
@@ -73,24 +79,40 @@ export default function SetupCard({
   const supportsOauth = userApp?.supports_oauth ?? false;
   const appLoading = userApp === undefined;
 
-  async function resolve(result: ConnectAppDecision) {
-    setError(null);
-    try {
-      await postConnectAppDecision(requestId, result);
-    } catch (e) {
-      // POST failed (network error, or already resolved on another device).
-      // Keep the card actionable so the user can retry.
-      console.error("Failed to resolve connect-app request:", e);
-      if (mountedRef.current) setError(t("error.generic"));
+  const resolve = useCallback(
+    async (result: ConnectAppDecision) => {
+      if (resolvingRef.current) return;
+      resolvingRef.current = true;
+      setBusy(true);
+      setError(null);
+      try {
+        await postConnectAppDecision(requestId, result);
+      } catch (e) {
+        // POST failed (network error, or already resolved on another device).
+        // Keep the card actionable so the user can retry.
+        console.error("Failed to resolve connect-app request:", e);
+        if (mountedRef.current) setError(t("error.generic"));
+        return;
+      } finally {
+        resolvingRef.current = false;
+        if (mountedRef.current) setBusy(false);
+      }
+      if (!mountedRef.current) return;
+      setDecision(result);
+      if (result === "connected") {
+        void mutate(SWR_KEYS.buildExternalApps);
+        void mutate(SWR_KEYS.userSkills);
+      }
+    },
+    [requestId, mutate, t]
+  );
+
+  useEffect(() => {
+    if (!userApp?.authenticated || decision !== null || autoResolvedRef.current)
       return;
-    }
-    if (!mountedRef.current) return;
-    setDecision(result);
-    if (result === "connected") {
-      void mutate(SWR_KEYS.buildExternalApps);
-      void mutate(SWR_KEYS.userSkills);
-    }
-  }
+    autoResolvedRef.current = true;
+    void resolve("connected");
+  }, [userApp?.authenticated, decision, resolve]);
 
   async function confirmConnected(): Promise<boolean> {
     try {
@@ -154,6 +176,10 @@ export default function SetupCard({
       setError(t("error.notConfigurable"));
       return;
     }
+    if (userApp.authenticated) {
+      await resolve("connected");
+      return;
+    }
     if (!supportsOauth) {
       // Lock the actions so "Not now" can't decline while the form is open.
       setBusy(true);
@@ -179,10 +205,8 @@ export default function SetupCard({
 
   const Logo = getAppTypeLogo(userApp?.app_type ?? "CUSTOM");
 
-  // `decision` is this session's click; `userApp.authenticated` is the durable
-  // truth, so a connected card stays connected after navigating away and back.
-  const connected =
-    decision === "connected" || (userApp?.authenticated ?? false);
+  // Stored credentials alone do not release the agent's pending request.
+  const connected = decision === "connected";
   const decided = connected || decision === "declined";
   // Comet travels while pending (info), then settles to the outcome tone.
   const tone = decided ? (connected ? "success" : "error") : "info";
@@ -198,16 +222,26 @@ export default function SetupCard({
           )}
         >
           <Content
-            sizePreset="secondary"
-            variant="body"
+            font="secondary-body"
             icon={Logo}
-            color={connected ? "muted" : "danger"}
+            color={connected ? "default" : "error"}
+            titleColor="text-03"
             title={
               connected
                 ? t("connected.title", { app: appName })
                 : t("skipped.title", { app: appName })
             }
           />
+          {connected && (
+            <Button
+              prominence="tertiary"
+              {...navigation.linkTo(
+                `/craft/v1/plugins?actionPolicies=app-${externalAppId}`
+              )}
+            >
+              {tActionPolicies("title")}
+            </Button>
+          )}
         </div>
       </CometEdge>
     );
@@ -220,8 +254,7 @@ export default function SetupCard({
         className="rounded-08 border border-status-info-03 bg-background-neutral-00 p-3 flex flex-col gap-2"
       >
         <Content
-          sizePreset="main-ui"
-          variant="section"
+          font="main-ui-action"
           icon={Logo}
           title={t("connect.title", { app: appName })}
           description={reason ?? t("reason.fallback", { app: appName })}

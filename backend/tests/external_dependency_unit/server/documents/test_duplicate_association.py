@@ -48,6 +48,7 @@ def test_duplicate_association_leaves_the_live_report_unchanged(
         connector_id=slack_pair.connector_id,
         source=DocumentSource.SLACK,
         trigger=CapabilityCheckTrigger.CC_PAIR_VALIDATION,
+        lease=timedelta(hours=1),
         active_within=timedelta(0),
     )
     assert running is not None

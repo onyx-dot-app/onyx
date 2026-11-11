@@ -1,13 +1,15 @@
 """Pure helpers for compiling, validating, and reasoning about schedules.
 
-Single source of truth for the cron semantics described in
-``docs/craft/features/scheduled-tasks/overview.md``:
+Single source of truth for cron semantics:
 
 - The DB stores a canonical 5-field cron string + ``editor_mode`` (UI hint).
   All three editor modes (interval, daily/weekly, advanced) compile to the
   same cron form on save.
 - ``compute_next_run_at`` returns UTC datetimes. Comparison happens in UTC,
   and cron expressions are evaluated in UTC.
+- A cron with no future fire is rejected at create and edit.
+- Pause sets ``next_run_at`` to NULL. Resume computes it forward from now, so
+  missed fires do not run. A past-due task fires once, then advances.
 - Editor payloads are strictly typed via the Pydantic models below. Anything
   reaching ``compile_to_cron`` has already been validated by Pydantic at the
   HTTP boundary, so the function is a pure transformation — no

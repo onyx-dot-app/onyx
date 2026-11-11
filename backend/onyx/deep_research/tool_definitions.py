@@ -15,8 +15,10 @@ THINK_TOOL_NAME = "think_tool"
 GENERATE_PLAN_TOOL_DESCRIPTION: ToolDefinition = ToolDefinition(
     name=GENERATE_PLAN_TOOL_NAME,
     description="No clarification needed, generate a research plan for the user's query.",
+    strict=True,
     parameters={
         "type": "object",
+        "additionalProperties": False,
         "properties": {},
         "required": [],
     },
@@ -26,8 +28,10 @@ GENERATE_PLAN_TOOL_DESCRIPTION: ToolDefinition = ToolDefinition(
 RESEARCH_AGENT_TOOL_DESCRIPTION: ToolDefinition = ToolDefinition(
     name=RESEARCH_AGENT_TOOL_NAME,
     description="Conduct research on a specific topic.",
+    strict=True,
     parameters={
         "type": "object",
+        "additionalProperties": False,
         "properties": {
             RESEARCH_AGENT_TASK_KEY: {
                 "type": "string",
@@ -42,8 +46,10 @@ RESEARCH_AGENT_TOOL_DESCRIPTION: ToolDefinition = ToolDefinition(
 GENERATE_REPORT_TOOL_DESCRIPTION: ToolDefinition = ToolDefinition(
     name=GENERATE_REPORT_TOOL_NAME,
     description="Generate the final research report from all of the findings. Should be called when all aspects of the user's query have been researched, or maximum cycles are reached.",
+    strict=True,
     parameters={
         "type": "object",
+        "additionalProperties": False,
         "properties": {},
         "required": [],
     },
@@ -53,8 +59,10 @@ GENERATE_REPORT_TOOL_DESCRIPTION: ToolDefinition = ToolDefinition(
 THINK_TOOL_DESCRIPTION: ToolDefinition = ToolDefinition(
     name=THINK_TOOL_NAME,
     description="Use this for reasoning between research_agent calls and before calling generate_report. Think deeply about key results, identify knowledge gaps, and plan next steps.",
+    strict=True,
     parameters={
         "type": "object",
+        "additionalProperties": False,
         "properties": {
             "reasoning": {
                 "type": "string",
@@ -69,8 +77,10 @@ THINK_TOOL_DESCRIPTION: ToolDefinition = ToolDefinition(
 RESEARCH_AGENT_THINK_TOOL_DESCRIPTION: ToolDefinition = ToolDefinition(
     name=THINK_TOOL_NAME,
     description="Use this for reasoning between research steps. Think deeply about key results, identify knowledge gaps, and plan next steps.",
+    strict=True,
     parameters={
         "type": "object",
+        "additionalProperties": False,
         "properties": {
             "reasoning": {
                 "type": "string",
@@ -85,8 +95,10 @@ RESEARCH_AGENT_THINK_TOOL_DESCRIPTION: ToolDefinition = ToolDefinition(
 RESEARCH_AGENT_GENERATE_REPORT_TOOL_DESCRIPTION: ToolDefinition = ToolDefinition(
     name=GENERATE_REPORT_TOOL_NAME,
     description="Generate the final research report from all findings. Should be called when research is complete.",
+    strict=True,
     parameters={
         "type": "object",
+        "additionalProperties": False,
         "properties": {},
         "required": [],
     },
@@ -94,7 +106,6 @@ RESEARCH_AGENT_GENERATE_REPORT_TOOL_DESCRIPTION: ToolDefinition = ToolDefinition
 
 
 THINK_TOOL_RESPONSE_MESSAGE = "Acknowledged, please continue."
-THINK_TOOL_RESPONSE_TOKEN_COUNT = 10
 
 
 def get_clarification_tool_definitions() -> list[ToolDefinition]:

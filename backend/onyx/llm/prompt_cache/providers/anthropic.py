@@ -1,35 +1,72 @@
 """Anthropic provider adapter for prompt caching."""
 
 from collections.abc import Sequence
+from functools import partial
 
-from onyx.llm.model_request import ChatCompletionMessage
+from onyx.llm.model_request import ChatCompletionMessage, UserMessage
 from onyx.llm.prompt_cache.models import CacheMetadata
 from onyx.llm.prompt_cache.providers.base import PromptCacheProvider
 from onyx.llm.prompt_cache.utils import prepare_messages_with_cacheable_transform
 
 
+def _count_cache_breakpoints(message: ChatCompletionMessage) -> int:
+    """Count caller markers at message and content-block levels."""
+    return int(message.cache_control is not None) + (
+        sum(part.cache_control is not None for part in message.content)
+        if isinstance(message.content, list)
+        else 0
+    )
+
+
 def _add_anthropic_cache_control(
     messages: Sequence[ChatCompletionMessage],
+    *,
+    available_breakpoints: int,
 ) -> Sequence[ChatCompletionMessage]:
-    """Add cache_control parameters to messages for Anthropic caching.
+    """Mark the head, context before the newest question, and the prefix tail.
 
-    Anthropic allows up to 4 cache breakpoints. We mark the last cacheable
-    message (tail of the prefix) and, when there is more than one, the first
-    (usually the system prompt): the head breakpoint keeps the stable prefix
-    readable when history truncation moves the tail breakpoint.
-
-    Args:
-        messages: Messages to transform
-
-    Returns:
-        Messages with cache_control added
+    The context breakpoint allows different questions to reuse shared files.
+    The tail also caches the question and tool rounds as the conversation grows.
+    Preserve caller markers and add boundaries only within the remaining budget.
     """
-    result: list[ChatCompletionMessage] = list(messages)
-    result[-1] = result[-1].model_copy(update={"cache_control": {"type": "ephemeral"}})
-    if len(result) > 1:
-        result[0] = result[0].model_copy(
-            update={"cache_control": {"type": "ephemeral"}}
-        )
+    result = list(messages)
+    remaining = available_breakpoints - sum(
+        _count_cache_breakpoints(message) for message in result
+    )
+    if not result or remaining <= 0:
+        return result
+    latest_user = next(
+        (
+            index
+            for index in range(len(result) - 1, -1, -1)
+            if isinstance(result[index], UserMessage)
+        ),
+        0,
+    )
+    # Prioritize growing history when caller markers leave limited space.
+    boundaries = [len(result) - 1, 0]
+    if latest_user > 0:
+        boundaries.append(latest_user - 1)
+    for index in dict.fromkeys(boundaries):
+        if remaining <= 0:
+            break
+        message = result[index]
+        if message.cache_control is not None:
+            continue
+        cache_control = {"type": "ephemeral"}
+        if isinstance(message.content, list):
+            if not message.content or message.content[-1].cache_control is not None:
+                continue
+            content = [
+                *message.content[:-1],
+                message.content[-1].model_copy(update={"cache_control": cache_control}),
+            ]
+            result[index] = message.model_copy(
+                update={"content": content, "cache_control": None}
+            )
+        else:
+            result[index] = message.model_copy(update={"cache_control": cache_control})
+        remaining -= 1
     return result
 
 
@@ -46,6 +83,11 @@ class AnthropicPromptCacheProvider(PromptCacheProvider):
         """Anthropic supports explicit prompt caching."""
         return True
 
+    def caches_leading_system_messages_separately(self) -> bool:
+        """The head breakpoint ends after the first system message, so the
+        shared system prompt caches across users."""
+        return True
+
     def prepare_messages_for_caching(
         self,
         cacheable_prefix: list[ChatCompletionMessage] | None,
@@ -56,7 +98,7 @@ class AnthropicPromptCacheProvider(PromptCacheProvider):
         """Prepare messages for Anthropic caching.
 
         Anthropic requires cache_control parameter on cacheable messages.
-        We add cache_control={"type": "ephemeral"} to all cacheable prefix messages.
+        We mark the head, context boundary, and tail of the cacheable prefix.
 
         Args:
             cacheable_prefix: Optional cacheable prefix
@@ -71,7 +113,11 @@ class AnthropicPromptCacheProvider(PromptCacheProvider):
             cacheable_prefix=cacheable_prefix,
             suffix=suffix,
             continuation=continuation,
-            transform_cacheable=_add_anthropic_cache_control,
+            transform_cacheable=partial(
+                _add_anthropic_cache_control,
+                available_breakpoints=4
+                - sum(_count_cache_breakpoints(message) for message in suffix),
+            ),
         )
 
     def extract_cache_metadata(

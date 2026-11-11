@@ -6,9 +6,7 @@ from onyx.configs.app_configs import (
     EXT_APP_GITHUB_CLIENT_ID,
     EXT_APP_GITHUB_CLIENT_SECRET,
 )
-from onyx.db.enums import EndpointPolicy, ExternalAppType
-from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import OnyxError
+from onyx.db.enums import ActionPolicy, ExternalAppType
 from onyx.external_apps.providers.actions import (
     EndpointSpec,
     ExternalAppAction,
@@ -61,7 +59,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(method="GET", path="/user"),
             GraphQLOp(operation_type="query", field="viewer"),
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=GitHubAction.REPOS_READ,
@@ -71,7 +69,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(method="GET", path="/user/repos"),
             RestRoute(method="GET", path="/repos/{owner}/{repo}"),
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=GitHubAction.ISSUES_READ,
@@ -84,7 +82,7 @@ _ENDPOINTS: list[EndpointSpec] = [
                 method="GET", path="/repos/{owner}/{repo}/issues/{number}/comments"
             ),
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=GitHubAction.PULLS_READ,
@@ -94,7 +92,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(method="GET", path="/repos/{owner}/{repo}/pulls"),
             RestRoute(method="GET", path="/repos/{owner}/{repo}/pulls/{number}"),
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=GitHubAction.SEARCH_READ,
@@ -105,7 +103,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(method="GET", path="/search/issues"),
             GraphQLOp(operation_type="query", field="search"),
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=GitHubAction.REPO_GRAPHQL_READ,
@@ -119,7 +117,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             GraphQLOp(operation_type="query", field="repository"),
             GraphQLOp(operation_type="query", field="repositoryOwner"),
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=GitHubAction.REFS_READ,
@@ -136,7 +134,7 @@ _ENDPOINTS: list[EndpointSpec] = [
                 method="GET", path="/repos/{owner}/{repo}/git/matching-refs/{ref...}"
             ),
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=GitHubAction.CONTENTS_READ,
@@ -148,7 +146,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(method="GET", path="/repos/{owner}/{repo}/readme"),
             RestRoute(method="GET", path="/repos/{owner}/{repo}/readme/{dir...}"),
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=GitHubAction.GIT_DATA_READ,
@@ -161,7 +159,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(method="GET", path="/repos/{owner}/{repo}/commits"),
             RestRoute(method="GET", path="/repos/{owner}/{repo}/commits/{ref...}"),
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=GitHubAction.RELEASES_READ,
@@ -171,7 +169,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(method="GET", path="/repos/{owner}/{repo}/releases"),
             RestRoute(method="GET", path="/repos/{owner}/{repo}/releases/{release...}"),
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=GitHubAction.ISSUES_CREATE,
@@ -233,6 +231,7 @@ class GitHubProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
             token_url="https://github.com/login/oauth/access_token",
             scope=" ".join(["repo", "read:org", "read:user"]),
             scope_param="scope",
+            supports_pkce=True,
         ),
         descriptor=AdminDescriptorSpec(
             upstream_url_patterns=["https://api\\.github\\.com/.*"],
@@ -287,23 +286,3 @@ class GitHubProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
         if isinstance(body, dict) and body.get("error"):
             return str(body["error"])
         return token_response_error(response, body)
-
-    def extract_credentials(self, response_data: dict[str, Any]) -> dict[str, Any]:
-        access_token = response_data.get("access_token")
-        if not access_token:
-            raise OnyxError(
-                OnyxErrorCode.BAD_GATEWAY,
-                "GitHub OAuth response did not contain an access token.",
-            )
-        creds: dict[str, Any] = {
-            "access_token": access_token,
-            "scope": response_data.get("scope"),
-            "token_type": response_data.get("token_type"),
-        }
-        # Present only when the OAuth app has expiring user tokens enabled
-        # (GitHub Apps); classic OAuth app tokens don't expire and omit these.
-        if response_data.get("refresh_token"):
-            creds["refresh_token"] = response_data["refresh_token"]
-        if response_data.get("expires_in"):
-            creds["expires_in"] = response_data["expires_in"]
-        return creds

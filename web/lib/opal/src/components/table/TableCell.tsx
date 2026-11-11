@@ -9,6 +9,8 @@ interface TableCellProps extends WithoutStyles<
   /** Explicit pixel width for the cell. */
   width?: number;
   alignment?: "left" | "center" | "right";
+  /** Content never widens the column; long content is cut off instead. */
+  truncate?: boolean;
 }
 
 const alignmentJustifyClass = {
@@ -20,6 +22,7 @@ const alignmentJustifyClass = {
 export default function TableCell({
   width,
   alignment = "left",
+  truncate = false,
   children,
   ...props
 }: TableCellProps) {
@@ -35,6 +38,9 @@ export default function TableCell({
         className={cn(
           "tbl-cell-inner",
           "flex items-center overflow-hidden",
+          // w-0 + min-w-full: content does not widen the column under
+          // `table-layout: auto`.
+          truncate && "w-0 min-w-full",
           alignmentJustifyClass[alignment]
         )}
         data-size={resolvedSize}

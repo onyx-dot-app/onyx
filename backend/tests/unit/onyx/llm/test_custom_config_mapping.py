@@ -239,3 +239,38 @@ def test_production_observed_key_sets_are_fully_supported() -> None:
         assert get_unsupported_custom_config_keys(provider, config) == set(), (
             f"{provider}: {sorted(config)} should be fully supported"
         )
+
+
+def test_bedrock_assume_role_keys_map_to_kwargs() -> None:
+    for provider in (LlmProviderNames.BEDROCK, LlmProviderNames.BEDROCK_CONVERSE):
+        mapping = map_custom_config_to_model_kwargs(
+            model_provider=provider,
+            custom_config={
+                "AWS_REGION_NAME": "us-east-1",
+                "AWS_ROLE_NAME": "arn:aws:iam::123456789012:role/bedrock",
+                "AWS_EXTERNAL_ID": "ext-id",
+            },
+            api_key=None,
+            api_base=None,
+        )
+        assert mapping.model_kwargs == {
+            "aws_region_name": "us-east-1",
+            "aws_role_name": "arn:aws:iam::123456789012:role/bedrock",
+            "aws_external_id": "ext-id",
+        }
+        assert (
+            get_unsupported_custom_config_keys(
+                provider, {"AWS_ROLE_NAME": "arn", "AWS_EXTERNAL_ID": "ext-id"}
+            )
+            == set()
+        )
+
+
+def test_bedrock_assume_role_lowercase_keys_not_mapped() -> None:
+    mapping = map_custom_config_to_model_kwargs(
+        model_provider=LlmProviderNames.BEDROCK,
+        custom_config={"aws_role_name": "arn", "aws_external_id": "ext-id"},
+        api_key=None,
+        api_base=None,
+    )
+    assert mapping.model_kwargs == {}

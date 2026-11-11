@@ -1,5 +1,12 @@
 import type { SpreadsheetSheet, SpreadsheetPreviewData } from "@/lib/types";
 
+export const SPREADSHEET_PREVIEW_LIMITS = {
+  maxRows: 1000,
+  maxColumns: 100,
+  maxCharacters: 2_000_000,
+  maxCells: 5000,
+};
+
 export interface CsvParseResult {
   rows: string[][];
   truncated: boolean;

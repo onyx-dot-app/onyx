@@ -1,0 +1,32 @@
+{{- if and .Values.ingress.enabled .Values.webhookServer.enabled -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "onyx.resourceName" (list . "ingress-webhook") }}
+  annotations:
+    {{- if not .Values.ingress.className }}
+    kubernetes.io/ingress.class: nginx
+    {{- end }}
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    cert-manager.io/cluster-issuer: {{ include "onyx.resourceName" (list . "letsencrypt") }}
+spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.api.host }}
+      http:
+        paths:
+          - path: {{ .Values.webhookServer.ingressPath }}(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: {{ include "onyx.resourceName" (list . "webhook-server-service") }}
+                port:
+                  number: {{ .Values.webhookServer.service.servicePort }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.api.host }}
+      secretName: {{ include "onyx.resourceName" (list . "ingress-api-tls") }}
+{{- end }}

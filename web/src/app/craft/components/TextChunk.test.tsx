@@ -30,8 +30,8 @@ it.each([false, true])(
       />
     );
     const state = () => useBuildSessionStore.getState();
-    expect(state().sessions.get("message-session")?.outputPanelOpen).toBe(
-      false
+    expect(state().sessions.get("message-session")?.outputPanelMode).toBe(
+      "closed"
     );
     const link = screen.getByRole("link", { name: "Scenic Route" });
     expect(link).toHaveAttribute(
@@ -40,11 +40,12 @@ it.each([false, true])(
     );
     fireEvent.click(link);
     expect(state().sessions.get("message-session")).toMatchObject({
-      outputPanelOpen: true,
+      outputPanelMode: "medium",
       activePanelTabId: "file:outputs/Scenic Route.pptx",
-      outputSelectionLocked: true,
     });
-    expect(state().sessions.get("other-session")?.outputPanelOpen).toBe(false);
+    expect(state().sessions.get("other-session")?.outputPanelMode).toBe(
+      "closed"
+    );
   }
 );
 
@@ -67,8 +68,8 @@ it.each([
   fireEvent.click(screen.getByText("Unsafe"));
   expect(
     useBuildSessionStore.getState().sessions.get("message-session")
-      ?.outputPanelOpen
-  ).toBe(false);
+      ?.outputPanelMode
+  ).toBe("closed");
 });
 
 it("preserves external links and never treats their path as a session output", () => {
@@ -88,8 +89,8 @@ it("preserves external links and never treats their path as a session output", (
   );
   expect(
     useBuildSessionStore.getState().sessions.get("message-session")
-      ?.outputPanelOpen
-  ).toBe(false);
+      ?.outputPanelMode
+  ).toBe("closed");
 });
 
 it("does not interpret raw HTML as an output control", () => {

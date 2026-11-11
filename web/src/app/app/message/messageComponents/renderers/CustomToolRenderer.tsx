@@ -9,14 +9,16 @@ import {
   CustomToolErrorInfo,
   SectionEnd,
 } from "../../../services/streamingModels";
-import { MessageRenderer, RenderType } from "../interfaces";
+import {
+  MessageRenderer,
+  RenderType,
+} from "@/app/app/message/messageComponents/types";
 import { buildImgUrl } from "../../../components/files/images/utils";
-import Text from "@/refresh-components/texts/Text";
+import { ShadowDiv, Text } from "@opal/components";
 import { SvgActions, SvgDownload, SvgExternalLink } from "@opal/icons";
 import { CodeBlock } from "@/app/app/message/CodeBlock";
 import hljs from "highlight.js/lib/core";
 import json from "highlight.js/lib/languages/json";
-import FadingEdgeContainer from "@/refresh-components/FadingEdgeContainer";
 import { IoBlockLabel } from "@/app/app/message/messageComponents/IoBlockLabel";
 
 // Lazy registration for hljs JSON language
@@ -120,6 +122,10 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
   const status = useMemo(() => {
     if (isComplete) {
       if (error) {
+        if (error.is_unreachable)
+          return t("customTool.unreachableStatus.text", { toolName });
+        if (error.status_code === null)
+          return t("customTool.blockedStatus.text", { toolName });
         return error.is_auth_error
           ? t("customTool.authFailedStatus.text", {
               toolName,
@@ -174,7 +180,7 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
                   style={{ animationDelay: "0.2s" }}
                 ></div>
               </div>
-              <Text text03 secondaryBody>
+              <Text font="secondary-body" color="text-03">
                 {t("customTool.waitingIndicator.text")}
               </Text>
             </div>
@@ -199,7 +205,7 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
         {/* Error display */}
         {error && (
           <div className="ps-(--timeline-common-text-padding)">
-            <Text text03 mainUiMuted>
+            <Text font="main-ui-muted" color="text-03">
               {error.message}
             </Text>
           </div>
@@ -210,7 +216,11 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
           <div className="text-sm text-text-03 flex flex-col gap-2">
             {fileIds.map((fid, idx) => (
               <div key={fid} className="flex items-center gap-2 flex-wrap">
-                <Text text03 secondaryBody className="whitespace-nowrap">
+                <Text
+                  font="secondary-body"
+                  color="text-03"
+                  wordWrap="whitespace-nowrap"
+                >
                   {t("customTool.fileItem.label", { index: idx + 1 })}
                 </Text>
                 <a
@@ -265,8 +275,8 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
     [toolArgsJson, dataJson, data, fileIds, error, isRunning, t]
   );
 
-  // Auth error: always render FULL with error surface
-  if (error?.is_auth_error) {
+  // Blocked, unreachable, or auth error: always render FULL with error surface
+  if (error && (error.status_code === null || error.is_auth_error)) {
     return children([
       {
         icon,
@@ -299,12 +309,14 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
       status,
       supportsCollapsible: true,
       content: (
-        <FadingEdgeContainer
-          direction="bottom"
+        <ShadowDiv
+          shadowDirection="bottom-only"
+          variant="mask"
+          shadowHeight={8}
           className="max-h-24 overflow-hidden"
         >
           {content}
-        </FadingEdgeContainer>
+        </ShadowDiv>
       ),
     },
   ]);

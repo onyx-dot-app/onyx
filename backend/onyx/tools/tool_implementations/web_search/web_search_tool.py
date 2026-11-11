@@ -4,27 +4,23 @@ from typing import Any
 from sqlalchemy.orm import Session
 from typing_extensions import override
 
-from onyx.chat.emitter import Emitter
+from onyx.agents.tools import ToolInvocation, ToolProgress
 from onyx.context.search.models import SearchDocsResponse
 from onyx.context.search.utils import convert_inference_sections_to_search_docs
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.web_search import fetch_active_web_search_provider
-from onyx.llm.models import ToolDefinition
-from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import (
-    Packet,
-    SearchToolDocumentsDelta,
-    SearchToolQueriesDelta,
-    SearchToolStart,
-)
+from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.tools.constants import WEB_SEARCH_TOOL_NAME
-from onyx.tools.interface import Tool
+from onyx.tools.interface import CITATIONS_PER_TOOL_CALL, Tool
 from onyx.tools.models import (
+    CodeModeExposure,
+    CodeModeResultSpec,
+    SearchResults,
     ToolCallException,
-    ToolResponse,
-    WebSearchToolOverrideKwargs,
+    ToolContext,
 )
 from onyx.tools.tool_implementations.utils import (
+    SEARCH_RESULTS_CODE_MODE_RESULT,
     convert_inference_sections_to_llm_string,
 )
 from onyx.tools.tool_implementations.web_search.models import (
@@ -84,13 +80,14 @@ def _normalize_queries_input(raw: Any) -> list[str]:
     return result
 
 
-class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
+class WebSearchTool(Tool):
+    merge_list_argument = QUERIES_FIELD
+
     NAME = WEB_SEARCH_TOOL_NAME
     DESCRIPTION = "Search the web for information."
     DISPLAY_NAME = "Web Search"
 
-    def __init__(self, tool_id: int, emitter: Emitter) -> None:
-        super().__init__(emitter=emitter)
+    def __init__(self, tool_id: int) -> None:
         self._id = tool_id
 
         # Get web search provider from database
@@ -122,6 +119,10 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
         return self._id
 
     @property
+    def code_mode_exposure(self) -> CodeModeExposure:
+        return CodeModeExposure.IMMEDIATE
+
+    @property
     def name(self) -> str:
         return self.NAME
 
@@ -132,6 +133,10 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
     @property
     def display_name(self) -> str:
         return self.DISPLAY_NAME
+
+    @property
+    def code_mode_result(self) -> CodeModeResultSpec:
+        return SEARCH_RESULTS_CODE_MODE_RESULT
 
     @property
     def supports_site_filter(self) -> bool:
@@ -150,8 +155,10 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
         return ToolDefinition(
             name=self.name,
             description="Search the web for information. Returns a list of search results with titles, metadata, and snippets.",
+            strict=True,
             parameters={
                 "type": "object",
+                "additionalProperties": False,
                 "properties": {
                     QUERIES_FIELD: {
                         "type": "array",
@@ -161,14 +168,6 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
                 },
                 "required": [QUERIES_FIELD],
             },
-        )
-
-    def emit_start(self, placement: Placement) -> None:
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=SearchToolStart(is_internet_search=True),
-            )
         )
 
     def _safe_execute_single_search(
@@ -194,14 +193,8 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
             logger.warning("Web search query '%s' failed: %s", query, error_msg)
             return (None, error_msg)
 
-    def run(
-        self,
-        placement: Placement,
-        override_kwargs: WebSearchToolOverrideKwargs,
-        **llm_kwargs: Any,
-    ) -> ToolResponse:
-        """Execute the web search tool with multiple queries in parallel"""
-        if QUERIES_FIELD not in llm_kwargs:
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
+        if QUERIES_FIELD not in invocation.arguments:
             raise ToolCallException(
                 message=f"Missing required '{QUERIES_FIELD}' parameter in web_search tool call",
                 llm_facing_message=(
@@ -210,7 +203,7 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
                     f'like: {{"queries": ["your search query here"]}}'
                 ),
             )
-        queries = _normalize_queries_input(llm_kwargs[QUERIES_FIELD])
+        queries = _normalize_queries_input(invocation.arguments[QUERIES_FIELD])
         if not queries:
             raise ToolCallException(
                 message=(
@@ -222,11 +215,11 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
                 ),
             )
 
-        # Emit queries
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=SearchToolQueriesDelta(queries=queries),
+        invocation.update(
+            ToolProgress(
+                details=SearchDocsResponse(
+                    search_docs=[], citation_mapping={}, queries=queries
+                )
             )
         )
 
@@ -320,36 +313,38 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
         search_docs = convert_inference_sections_to_search_docs(
             inference_sections, is_internet=True
         )
-
-        # Emit documents
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=SearchToolDocumentsDelta(documents=search_docs),
+        invocation.update(
+            ToolProgress(
+                details=SearchDocsResponse(
+                    search_docs=search_docs,
+                    citation_mapping={},
+                    queries=queries,
+                )
             )
         )
 
         # Format for LLM
         if not all_search_results:
-            docs_str = json.dumps(
-                {
-                    "results": [],
-                    "message": "The web search completed but returned no results for any of the queries. Do not search again.",
-                }
-            )
+            docs_str = SearchResults(
+                results=[],
+                message="The web search completed but returned no results for any of the queries. Do not search again.",
+            ).model_dump_json()
             citation_mapping: dict[int, str] = {}
         else:
             docs_str, citation_mapping = convert_inference_sections_to_llm_string(
                 top_sections=inference_sections,
-                citation_start=override_kwargs.starting_citation_num,
+                citation_start=context.next_citation_num
+                + CITATIONS_PER_TOOL_CALL * invocation.call_index,
                 limit=None,  # Already truncated
                 include_source_type=False,
                 include_link=True,
             )
 
-        return ToolResponse(
-            rich_response=SearchDocsResponse(
-                search_docs=search_docs, citation_mapping=citation_mapping
+        return ToolResult(
+            details=SearchDocsResponse(
+                search_docs=search_docs,
+                citation_mapping=citation_mapping,
+                queries=queries,
             ),
-            llm_facing_response=docs_str,
+            content=docs_str,
         )

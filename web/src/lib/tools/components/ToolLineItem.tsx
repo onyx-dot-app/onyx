@@ -1,8 +1,10 @@
 "use client";
 
+import { escapeMarkdown, markdown } from "@opal/utils";
+import { useNavigation } from "@opal/navigation";
+import { Section } from "@opal/layouts";
 import { Fragment, useMemo } from "react";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import type { Route } from "next";
 import { Button, LineItemButton } from "@opal/components";
@@ -10,7 +12,6 @@ import { Hoverable } from "@opal/core";
 import { SvgChevronRight, SvgKey, SvgSettings, SvgSlash } from "@opal/icons";
 import { getIconForAction } from "@/app/app/services/actionUtils";
 import useCCPairs from "@/hooks/useCCPairs";
-import { Section } from "@/layouts/general-layouts";
 import {
   useToolOAuthStatus,
   type ToolAuthStatus,
@@ -58,12 +59,12 @@ export interface ToolLineItemProps {
  */
 export default function ToolLineItem({ tool }: ToolLineItemProps) {
   const t = useTranslations("actions");
-  const router = useRouter();
+  const navigation = useNavigation();
   const {
     agent,
     toolConfiguration,
     sourceCounts,
-    toggleForced,
+    togglePreferred,
     toggleEnabled,
     openSources,
     close,
@@ -109,7 +110,7 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
     [t]
   );
 
-  const isForced = toolConfiguration.forcedToolId === tool.id;
+  const isPreferred = toolConfiguration.preferredToolId === tool.id;
   // Switched off for this chat. The row stays interactive: pressing it turns
   // the tool back on and pins it in one gesture.
   const isDisabled = toolConfiguration.disabledToolIds.includes(tool.id);
@@ -147,7 +148,7 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
   const sourcesNarrowed =
     ownsSources &&
     !needsConnectors &&
-    isForced &&
+    isPreferred &&
     sourceCounts.enabled > 0 &&
     sourceCounts.enabled < sourceCounts.total;
 
@@ -158,14 +159,14 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
 
   function handleClick() {
     if (isUnavailable) {
-      toggleForced(tool.id);
+      togglePreferred(tool.id);
       return;
     }
     if (isDisabled) toggleEnabled(tool.id);
-    toggleForced(tool.id);
+    togglePreferred(tool.id);
     // Pinning search is when its sources matter, so drill in rather than
     // dismissing. Releasing it just closes.
-    if (ownsSources && !isForced) openSources();
+    if (ownsSources && !isPreferred) openSources();
     else close();
   }
 
@@ -252,7 +253,7 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
             size="sm"
             tooltip={action.tooltip}
             onClick={() => {
-              router.push(action.href as Route);
+              navigation.go(action.href as Route);
               close();
             }}
           />
@@ -266,7 +267,7 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
             aria-label={connectorsLabel}
             tooltip={connectorsLabel}
             onClick={() => {
-              if (needsConnectors) router.push(ADMIN_ROUTES.CONNECTORS.path);
+              if (needsConnectors) navigation.go(ADMIN_ROUTES.CONNECTORS.path);
               else openSources();
             }}
           />
@@ -277,21 +278,40 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
   return (
     <Hoverable.Root group={HOVER_GROUP}>
       <LineItemButton
+        font="main-ui-action"
         title={label}
         icon={getIconForAction(tool)}
-        sizePreset="main-ui"
-        variant="section"
         rounding={2}
-        state={isForced ? "selected" : "empty"}
+        state={isPreferred ? "selected" : "empty"}
         strikethrough={isDisabled}
-        color={(isUnavailable && isForced) || isDisabled ? "muted" : undefined}
-        disabled={needsConnectors || (isUnavailable && !isForced)}
-        tooltip={getToolTooltip(
-          tool,
-          isConfigured,
-          canManageActions,
-          tooltipMessages
-        )}
+        color={
+          (isUnavailable && isPreferred) || isDisabled ? "default" : undefined
+        }
+        titleColor={
+          (isUnavailable && isPreferred) || isDisabled ? "text-03" : undefined
+        }
+        disabled={needsConnectors || (isUnavailable && !isPreferred)}
+        tooltip={
+          !isUnavailable
+            ? markdown(
+                t("actionLineItem.preference.tooltip", {
+                  description: escapeMarkdown(
+                    getToolTooltip(
+                      tool,
+                      isConfigured,
+                      canManageActions,
+                      tooltipMessages
+                    )
+                  ),
+                })
+              )
+            : getToolTooltip(
+                tool,
+                isConfigured,
+                canManageActions,
+                tooltipMessages
+              )
+        }
         onClick={handleClick}
         rightChildren={
           <Section gap={1} flexDirection="row">

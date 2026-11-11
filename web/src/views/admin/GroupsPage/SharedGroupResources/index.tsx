@@ -1,19 +1,17 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { getSourceMetadata } from "@/lib/connectors/utils";
 import { useTranslations } from "next-intl";
 import { SvgEmpty, SvgFiles, SvgXOctagon } from "@opal/icons";
-import { Content } from "@opal/layouts";
-import { Section } from "@/layouts/general-layouts";
-import Text from "@/refresh-components/texts/Text";
-import { LineItemButton } from "@opal/components";
+import { Content, Section } from "@opal/layouts";
+import { LineItemButton, Text } from "@opal/components";
 import { Card, Divider } from "@opal/components";
 import { Collapsible } from "@opal/components";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { useConnectorStatus } from "@/lib/hooks";
 import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
 import { useAdminAgents } from "@/lib/agents/hooks";
-import { getSourceMetadata } from "@/lib/sources";
 import type { Agent } from "@/lib/agents/types";
 import type { ValidSources } from "@/lib/connectors/types/source";
 import ResourceContent from "@/views/admin/GroupsPage/SharedGroupResources/ResourceContent";
@@ -42,7 +40,7 @@ const NO_ATTACHED_AGENTS: Agent[] = [];
 function SharedBadge() {
   const t = useTranslations("admin.groups");
   return (
-    <Text as="span" secondaryBody text03>
+    <Text as="span" font="secondary-body" color="text-03">
       {t("sharedResources.sharedBadge.label")}
     </Text>
   );
@@ -66,7 +64,7 @@ function SourceIconStack({ sources }: SourceIconStackProps) {
       width="auto"
       height="auto"
       gap={0}
-      className="shrink-0 p-0.5"
+      className="shrink-0"
     >
       {unique.map((s, i) => {
         const Icon = getSourceMetadata(s.source).icon;
@@ -170,10 +168,10 @@ function SharedGroupResources({
               : onCcPairIdsChange([...selectedCcPairIds, p.cc_pair_id]),
           render: (dimmed: boolean) => (
             <LineItemButton
+              font="main-ui-action"
               presentational
-              sizePreset="main-ui"
-              variant="section"
-              color={dimmed ? "muted" : undefined}
+              color={dimmed ? "default" : undefined}
+              titleColor={dimmed ? "text-03" : undefined}
               icon={getSourceMetadata(p.connector.source).icon}
               title={
                 p.name ??
@@ -206,10 +204,10 @@ function SharedGroupResources({
               : onDocSetIdsChange([...selectedDocSetIds, ds.id]),
           render: (dimmed: boolean) => (
             <LineItemButton
+              font="main-ui-action"
               presentational
-              sizePreset="main-ui"
-              variant="section"
-              color={dimmed ? "muted" : undefined}
+              color={dimmed ? "default" : undefined}
+              titleColor={dimmed ? "text-03" : undefined}
               icon={SvgFiles}
               title={ds.name}
               titleMaxLines={1}
@@ -269,10 +267,10 @@ function SharedGroupResources({
               : onAgentIdsChange([...selectedAgentIds, a.id]),
           render: (dimmed: boolean) => (
             <LineItemButton
+              font="main-ui-action"
               presentational
-              sizePreset="main-ui"
-              variant="section"
-              color={dimmed ? "muted" : undefined}
+              color={dimmed ? "default" : undefined}
+              titleColor={dimmed ? "text-03" : undefined}
               icon={(_props) => <AgentAvatar agent={a} size={16} />}
               title={a.name}
               titleMaxLines={1}
@@ -340,7 +338,7 @@ function SharedGroupResources({
                 alignItems="stretch"
                 justifyContent="start"
               >
-                <Text mainUiAction text04>
+                <Text font="main-ui-action" color="text-04">
                   {t("sharedResources.connectors.label")}
                 </Text>
                 <ResourcePopover
@@ -388,11 +386,10 @@ function SharedGroupResources({
                 </Section>
               ) : (
                 <Content
+                  font="secondary-action"
                   icon={SvgEmpty}
                   title={t("sharedResources.noConnectors.title")}
                   description={t("sharedResources.noConnectors.description")}
-                  sizePreset="secondary"
-                  variant="section"
                 />
               )}
             </Section>
@@ -412,7 +409,7 @@ function SharedGroupResources({
                 alignItems="stretch"
                 justifyContent="start"
               >
-                <Text mainUiAction text04>
+                <Text font="main-ui-action" color="text-04">
                   {t("sharedResources.agents.label")}
                 </Text>
                 <ResourcePopover
@@ -447,11 +444,10 @@ function SharedGroupResources({
                 </Section>
               ) : (
                 <Content
+                  font="secondary-action"
                   icon={SvgXOctagon}
                   title={t("sharedResources.noAgents.title")}
                   description={t("sharedResources.noAgents.description")}
-                  sizePreset="secondary"
-                  variant="section"
                 />
               )}
             </Section>

@@ -14,6 +14,8 @@ import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.blob.config import BlobStorageConnectorConfig
+from onyx.connectors.event_inbox.source_registry import registered_webhook_sources
+from onyx.connectors.event_inbox.sources import load_event_sources
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     UnexpectedValidationError,
@@ -218,6 +220,10 @@ class TestConnectorMappingIntegrity:
             DocumentSource.CRAFT_FILE,  # Direct S3 upload via API, no connector needed
             # Add other legitimately unmapped sources here if they exist
         }
+        # An event source is drained by EventInboxConnector, which the factory
+        # picks from the pair's input type. It has no class of its own.
+        load_event_sources()
+        expected_unmapped |= {spec.source for spec in registered_webhook_sources()}
 
         unmapped_sources = all_sources - mapped_sources - expected_unmapped
 

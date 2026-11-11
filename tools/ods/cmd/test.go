@@ -20,7 +20,7 @@ import (
 func NewTestCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "test [suite|path] [args...]",
-		Short: "Run the repo's test suites",
+		Short: "Run Go tests for ODS, CLI, or the Terraform provider",
 		Long:  testHelpDescription(),
 		Args:  cobra.ArbitraryArgs,
 		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
@@ -95,7 +95,9 @@ func runGoSuite(root string, suite *testsuite.Suite, suiteArgs []string) {
 }
 
 func testHelpDescription() string {
-	description := `Run the repo's test suites.
+	description := `Run Go tests for ODS, CLI, or the Terraform provider.
+
+For frontend tests, use ods web test. Run backend tests with pytest.
 
 The first argument is a suite name or a path inside a suite. A path picks the
 suite that covers it, so you can pass a file straight from an editor. Every

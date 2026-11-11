@@ -5,7 +5,7 @@ subcategory: ""
 description: |-
   A connector-credential pair: the object that actually indexes. It joins an onyx_connector to an onyx_credential and carries the access control for the documents they produce.
   Creating a pair starts indexing. Destroying one removes the indexed documents too, which runs in the background — Terraform waits for it to finish.
-  ~> Drift blind spot. Onyx does not report groups, auto_sync_options or processing_mode back on read, so Terraform cannot detect changes made to them elsewhere. They are recorded from the configuration at create time. After terraform import they are empty, and setting them then replaces the pair.
+  ~> Replacement re-indexes. Onyx has no update route for access_type, groups, auto_sync_options or processing_mode, so a change to one of them replaces the pair: Onyx deletes its documents and indexes them again. Terraform reads these attributes back, so a change made in the admin panel to an attribute in the configuration also shows as a replacement. An attribute left out of the configuration keeps the value Onyx reports.
 ---
 
 # onyx_cc_pair (Resource)
@@ -14,7 +14,7 @@ A connector-credential pair: the object that actually indexes. It joins an `onyx
 
 Creating a pair starts indexing. Destroying one removes the indexed documents too, which runs in the background — Terraform waits for it to finish.
 
-~> **Drift blind spot.** Onyx does not report `groups`, `auto_sync_options` or `processing_mode` back on read, so Terraform cannot detect changes made to them elsewhere. They are recorded from the configuration at create time. After `terraform import` they are empty, and setting them then replaces the pair.
+~> **Replacement re-indexes.** Onyx has no update route for `access_type`, `groups`, `auto_sync_options` or `processing_mode`, so a change to one of them replaces the pair: Onyx deletes its documents and indexes them again. Terraform reads these attributes back, so a change made in the admin panel to an attribute in the configuration also shows as a replacement. An attribute left out of the configuration keeps the value Onyx reports.
 
 ## Example Usage
 
@@ -29,6 +29,7 @@ resource "onyx_cc_pair" "confluence_wiki" {
 
   # Everyone can read the indexed documents. Use "private" with groups to
   # restrict them, or "sync" to mirror permissions from the source system.
+  # Onyx cannot change access in place, so a change here replaces the pair.
   access_type = "public"
 }
 
@@ -44,6 +45,17 @@ resource "onyx_cc_pair" "hr_handbook" {
 
   # Pause a pair to stop new index runs. It keeps the documents it has.
   paused = false
+}
+
+# A pair that mirrors source permissions, narrowed to members of one group.
+# Needs Onyx v5.0 or later and Enterprise Edition.
+resource "onyx_cc_pair" "restricted_drive" {
+  name          = "restricted-drive"
+  connector_id  = onyx_connector.drive.id
+  credential_id = onyx_credential.drive.id
+
+  access_type           = "sync_restricted"
+  data_access_group_ids = [onyx_user_group.finance.id]
 }
 
 # Destroying a pair also removes the documents it indexed, which Onyx does in
@@ -70,9 +82,10 @@ resource "onyx_cc_pair" "large_archive" {
 
 ### Optional
 
-- `access_type` (String) Who may read the indexed documents: `public` (everyone), `private` (the groups below), or `sync` (mirrored from the source system). `sync` needs a Business tier license and a source that supports permission sync.
-- `auto_sync_options` (String) Permission-sync settings as a JSON object. Only meaningful with `access_type = "sync"`.
-- `groups` (Set of Number) User group ids that may read the documents. Applies when `access_type = "private"`.
+- `access_type` (String) Who may read the indexed documents: `public` (everyone), `private` (the groups below), `sync` (mirrored from the source system), or `sync_restricted` (mirrored from the source system, and only for members of `data_access_group_ids`). `sync` and `sync_restricted` need a Business tier license and a source that supports permission sync. `sync_restricted` needs Onyx v5.0 or later: v4.9 knows the value but refuses to create such a pair. Unset means `public`, also after an import: set it to match an imported pair, or the next apply replaces the pair.
+- `auto_sync_options` (String) Permission-sync settings as a JSON object. Only meaningful with `access_type = "sync"` or `"sync_restricted"`.
+- `data_access_group_ids` (Set of Number) User group ids whose members may read the documents of a `private` or `sync_restricted` pair. Required for `sync_restricted`. Unset on create means the `groups` above. A change is applied in place. Needs Onyx v5.0 or later and Enterprise Edition; on other servers, apply fails rather than skip the setting. Terraform refreshes this attribute only while it is set. Removing it, or importing a pair, leaves the groups in Onyx as they are, and they can differ from `groups`.
+- `groups` (Set of Number) User group ids linked to the pair. With `access_type = "private"` their members may read the documents, unless `data_access_group_ids` names other groups. From Onyx v5.0 these groups also manage the pair.
 - `paused` (Boolean) Pause indexing. A paused pair keeps its documents but runs no new index attempts.
 - `processing_mode` (String) How fetched documents are processed. Defaults to `REGULAR`, the full index pipeline. `RAW_BINARY` stores the file without extracting text. `FILE_SYSTEM` is deprecated and produces documents that cannot be searched.
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
@@ -101,7 +114,7 @@ The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/c
 #!/bin/sh
 # Import by numeric connector-credential pair id.
 #
-# Onyx does not report groups, auto_sync_options or processing_mode, so they
-# are empty after an import. Setting them afterwards replaces the pair.
+# Onyx reports groups, auto_sync_options and processing_mode, so the import
+# reads them. A configuration that differs from them replaces the pair.
 terraform import onyx_cc_pair.confluence_wiki 12
 ```

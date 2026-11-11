@@ -17,6 +17,7 @@ from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
     CraftMCPServerConfig,
 )
+from onyx.server.gateway.configs import CRAFT_SESSION_HEADER
 
 # The gateway is an OpenAI-compatible endpoint, wired via opencode's
 # openai-compatible SDK package.
@@ -154,14 +155,23 @@ def _build_session_mcp_block(
 
 def _build_provider_block(
     llm_provider_config: CraftLLMProviderConfig,
+    session_id: str | None = None,
 ) -> dict[str, Any]:
     """The gateway is an openai-compatible provider with no models.dev entry, so
-    its baseURL goes in ``options`` and its model list must be explicit."""
+    its baseURL goes in ``options`` and its model list must be explicit.
+
+    With a ``session_id``, every LLM call carries ``CRAFT_SESSION_HEADER`` so
+    the gateway can attribute its traces to the session. opencode-serve is one
+    process for many sessions, so this header is the only per-session signal
+    on those calls; the gateway verifies the id belongs to the caller.
+    """
     options: dict[str, Any] = {}
     if llm_provider_config.api_key:
         options["apiKey"] = llm_provider_config.api_key
     if llm_provider_config.api_base:
         options["baseURL"] = llm_provider_config.api_base
+    if session_id is not None:
+        options["headers"] = {CRAFT_SESSION_HEADER: session_id}
     block: dict[str, Any] = {"npm": _OPENAI_COMPATIBLE_NPM, "options": options}
     if llm_provider_config.display_name:
         block["name"] = llm_provider_config.display_name
@@ -240,7 +250,9 @@ def build_provider_opencode_config(
         "$schema": "https://opencode.ai/config.json",
         "model": f"{llm_provider_config.provider}/{llm_provider_config.model_name}",
         "provider": {
-            llm_provider_config.provider: _build_provider_block(llm_provider_config)
+            llm_provider_config.provider: _build_provider_block(
+                llm_provider_config, session_id
+            )
         },
         "enabled_providers": [llm_provider_config.provider],
         "permission": _build_permissions(disabled_tools, dev_mode, mcp_servers),

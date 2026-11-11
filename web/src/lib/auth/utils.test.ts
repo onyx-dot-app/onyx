@@ -1,5 +1,13 @@
-import { shouldAutoStartSso } from "@/lib/auth/utils";
-import type { AuthTypeMetadata, SSOProviderOption } from "@/lib/auth/types";
+import {
+  isSessionEndedResponse,
+  sessionEndReasonFromErrorCode,
+  shouldAutoStartSso,
+} from "@/lib/auth/utils";
+import {
+  type AuthTypeMetadata,
+  SessionEndReason,
+  type SSOProviderOption,
+} from "@/lib/auth/types";
 
 function provider(name: string): SSOProviderOption {
   return {
@@ -75,5 +83,37 @@ describe("shouldAutoStartSso", () => {
 
   test("does nothing when the auth metadata failed to load", () => {
     expect(shouldAutoStartSso(null, true)).toBe(false);
+  });
+});
+
+describe("session rejection", () => {
+  test.each(Object.values(SessionEndReason))(
+    "a 403 with %s ends the session",
+    (errorCode) => {
+      expect(sessionEndReasonFromErrorCode(errorCode)).toBe(errorCode);
+      expect(isSessionEndedResponse(403, { error_code: errorCode })).toBe(true);
+    }
+  );
+
+  test("a permission 403 does not end the session", () => {
+    expect(isSessionEndedResponse(403, { error_code: "UNAUTHORIZED" })).toBe(
+      false
+    );
+    expect(isSessionEndedResponse(403, {})).toBe(false);
+    expect(isSessionEndedResponse(403, null)).toBe(false);
+  });
+
+  test("a session code on another status does not end the session", () => {
+    expect(
+      isSessionEndedResponse(401, {
+        error_code: SessionEndReason.TERMINATED,
+      })
+    ).toBe(false);
+  });
+
+  test("other codes are not session end reasons", () => {
+    expect(sessionEndReasonFromErrorCode(undefined)).toBeNull();
+    expect(sessionEndReasonFromErrorCode("")).toBeNull();
+    expect(sessionEndReasonFromErrorCode("UNAUTHORIZED")).toBeNull();
   });
 });

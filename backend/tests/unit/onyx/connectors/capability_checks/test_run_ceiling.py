@@ -1,4 +1,4 @@
-"""Unit tests for the derived capability-run ceilings."""
+"""Unit tests for the derived capability-run ceiling and lease."""
 
 from datetime import timedelta
 
@@ -47,10 +47,14 @@ def test_ceiling_sums_distinct_guards_once_plus_instantiation_slack(
 
     # Under test.
     ceiling = runner.capability_check_run_ceiling_seconds(DocumentSource.SLACK)
-    stale_after = runner.capability_check_run_stale_after(DocumentSource.SLACK)
+    lease = runner.capability_check_run_lease(DocumentSource.SLACK)
 
     # Postcondition.
     # One slack unit for instantiation, the mirrored guard counted once, and one
-    # default guard; staleness allows queue wait plus execution.
+    # default guard. The lease spans instantiation plus the slowest single
+    # check, not the sum.
     assert ceiling == 2 * runner.CAPABILITY_CHECK_TIMEOUT_SECONDS + 100
-    assert stale_after == timedelta(seconds=2 * ceiling)
+    assert lease == timedelta(
+        seconds=2 * runner.CAPABILITY_CHECK_TIMEOUT_SECONDS
+        + runner._THREAD_RETURN_SLACK_SECONDS
+    )

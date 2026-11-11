@@ -182,13 +182,14 @@ def test_transfer_rejects_unsupported_target_account_type(
     assert push_calls == []
 
 
-def test_admin_transfers_vacant_skill(
+def test_admin_transfers_vacant_public_skill(
     db_session: Session,
     push_calls: list[set[object]],
 ) -> None:
     admin = make_user(db_session, is_admin=True)
     target = make_user(db_session, standard_account=True)
-    skill = make_skill(db_session)
+    make_sandbox(db_session, target)
+    skill = make_skill(db_session, is_public=True)
 
     response = transfer_current_user_skill_ownership(
         skill.id,
@@ -201,7 +202,8 @@ def test_admin_transfers_vacant_skill(
     assert response.author_user_id == target.id
     assert skill.author_user_id == target.id
     assert _share_row(db_session, skill, admin) is None
-    assert push_calls == [set()]
+    assert len(push_calls) == 1
+    assert target.id in push_calls[0]
 
 
 def test_admin_cannot_transfer_owned_skill(

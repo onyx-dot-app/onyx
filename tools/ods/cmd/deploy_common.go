@@ -123,7 +123,11 @@ type workflowRun struct {
 	URL        string `json:"url"`
 	Event      string `json:"event"`
 	HeadBranch string `json:"headBranch"`
+	HeadSHA    string `json:"headSha"`
 }
+
+// workflowRunJSONFields are the `gh run` JSON fields that fill a workflowRun.
+const workflowRunJSONFields = "databaseId,status,conclusion,url,event,headBranch,headSha"
 
 // latestWorkflowRunID returns the highest databaseId for runs of the given
 // workflow filtered by event (and optional branch). Returns 0 if no runs
@@ -148,7 +152,7 @@ func listWorkflowRuns(repo, workflowFile, event, branch string, limit int) ([]wo
 		"-R", repo,
 		"--workflow", workflowFile,
 		"--limit", fmt.Sprintf("%d", limit),
-		"--json", "databaseId,status,conclusion,url,event,headBranch",
+		"--json", workflowRunJSONFields,
 	}
 	if event != "" {
 		args = append(args, "--event", event)
@@ -176,6 +180,23 @@ func listWorkflowRuns(repo, workflowFile, event, branch string, limit int) ([]wo
 // waitForNewRun polls until a workflow run with databaseId > priorRunID
 // appears, or the discovery timeout fires.
 func waitForNewRun(polling runPolling, repo, workflowFile, event, branch string, priorRunID int64) (*workflowRun, error) {
+	return waitForRun(polling, repo, workflowFile, event, branch, func(r workflowRun) bool {
+		return r.DatabaseID > priorRunID
+	})
+}
+
+// waitForRunAtCommit is waitForNewRun for a run that also built commit sha. A
+// tag name can point at other commits over time, so its newest run is not
+// always a build of the commit it points at now.
+func waitForRunAtCommit(polling runPolling, repo, workflowFile, event, branch, sha string, priorRunID int64) (*workflowRun, error) {
+	return waitForRun(polling, repo, workflowFile, event, branch, func(r workflowRun) bool {
+		return r.DatabaseID > priorRunID && r.HeadSHA == sha
+	})
+}
+
+// waitForRun polls the newest runs until one matches, or the discovery
+// timeout fires.
+func waitForRun(polling runPolling, repo, workflowFile, event, branch string, match func(workflowRun) bool) (*workflowRun, error) {
 	deadline := time.Now().Add(polling.discoveryTimeout)
 	for {
 		runs, err := listWorkflowRuns(repo, workflowFile, event, branch, 5)
@@ -183,12 +204,12 @@ func waitForNewRun(polling runPolling, repo, workflowFile, event, branch string,
 			return nil, err
 		}
 		for _, r := range runs {
-			if r.DatabaseID > priorRunID {
+			if match(r) {
 				return &r, nil
 			}
 		}
 		if time.Now().After(deadline) {
-			return nil, fmt.Errorf("no new run appeared within %s", polling.discoveryTimeout)
+			return nil, fmt.Errorf("no matching run appeared within %s", polling.discoveryTimeout)
 		}
 		time.Sleep(polling.discoveryInterval)
 	}
@@ -222,7 +243,7 @@ func getRun(repo string, runID int64) (*workflowRun, error) {
 	cmd := exec.Command(
 		"gh", "run", "view", fmt.Sprintf("%d", runID),
 		"-R", repo,
-		"--json", "databaseId,status,conclusion,url,event,headBranch",
+		"--json", workflowRunJSONFields,
 	)
 	output, err := cmd.Output()
 	if err != nil {

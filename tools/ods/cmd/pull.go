@@ -39,7 +39,11 @@ Examples:
 }
 
 func runComposePull(opts *PullOptions) error {
-	args := baseArgs("")
+	target, err := resolveRuntimeTarget()
+	if err != nil {
+		return err
+	}
+	args := baseArgs("", target.Project)
 	args = append(args, "pull")
 
 	log.Info("Pulling images...")

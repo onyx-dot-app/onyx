@@ -1,0 +1,20 @@
+import type { IconProps } from "@opal/types";
+const SvgExcelFile = ({ size, ...props }: IconProps) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 16 16"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    stroke="currentColor"
+    {...props}
+  >
+    <path
+      d="M5.5 5L8 8M8 8L10.5 11M8 8L10.5 5M8 8L5.5 11M2 12.67V3.33C2 2.59546 2.59546 2 3.33 2H12.67C13.4045 2 14 2.59546 14 3.33V12.67C14 13.4045 13.4045 14 12.67 14H3.33C2.59546 14 2 13.4045 2 12.67Z"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+export default SvgExcelFile;

@@ -4,26 +4,31 @@ import { ChangeEvent, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Button,
+  Dropdown,
+  type DropdownItem,
   InputTypeIn,
-  LineItemButton,
-  Tag,
   Text,
 } from "@opal/components";
-import { SvgBubbleText, SvgEdit, SvgUser, SvgUsers, SvgX } from "@opal/icons";
-import { cn } from "@opal/utils";
+import { SvgUser, SvgUsers, SvgX } from "@opal/icons";
 import type { MinimalUserSnapshot } from "@/lib/types";
 import type { MinimalUserGroupSnapshot } from "@/hooks/useShareableGroups";
+import { SharePermissionMenu } from "@/lib/permissions/components";
 import {
-  SharePermissionMenu,
-  type SharePermissionMenuOption,
-} from "@/lib/permissions/components";
-import type { ShareAccessPermission } from "@/sections/modals/shareAccessConstants";
+  type ShareAccessPermission,
+  useSharePermissionOptions,
+} from "@/sections/modals/shareAccessConstants";
 
 interface Suggestion {
   id: string;
   label: string;
   shared: boolean;
   type: "group" | "user";
+}
+
+const NO_SELECTION: ReadonlySet<string> = new Set();
+
+function suggestionValue(suggestion: Suggestion): string {
+  return `${suggestion.type}-${suggestion.id}`;
 }
 
 export interface AddPeoplePickerProps {
@@ -59,6 +64,7 @@ export function AddPeoplePicker({
 }: AddPeoplePickerProps) {
   const t = useTranslations("chat.modals.share");
   const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
 
   const stagedUserIds = useMemo(
     () => new Set(stagedUsers.map((user) => user.id)),
@@ -106,29 +112,27 @@ export function AddPeoplePicker({
     users,
   ]);
 
+  const suggestionItems = suggestions.map(
+    (suggestion): DropdownItem => ({
+      kind: "option",
+      value: suggestionValue(suggestion),
+      title: suggestion.label,
+      icon: suggestion.type === "group" ? SvgUsers : SvgUser,
+      description:
+        suggestion.type === "group"
+          ? t("addPeople.groupSuggestion.description")
+          : undefined,
+      disabled: suggestion.shared,
+      tag: suggestion.shared
+        ? { color: "default", title: t("addPeople.sharedTag.label") }
+        : undefined,
+    })
+  );
+
   const hasStagedItems = stagedUsers.length > 0 || stagedGroups.length > 0;
-  const permissionOptions: SharePermissionMenuOption<ShareAccessPermission>[] =
-    useMemo(
-      () => [
-        {
-          icon: SvgBubbleText,
-          label: t("permissionMenu.viewAndChat.label"),
-          value: "VIEWER",
-        },
-        {
-          icon: SvgEdit,
-          label: t("permissionMenu.edit.label"),
-          value: "EDITOR",
-        },
-      ],
-      [t]
-    );
+  const permissionOptions = useSharePermissionOptions();
 
   function handleSelectSuggestion(suggestion: Suggestion) {
-    if (suggestion.shared) {
-      return;
-    }
-
     if (suggestion.type === "user") {
       const user = users.find(
         (shareableUser) => shareableUser.id === suggestion.id
@@ -192,53 +196,37 @@ export function AddPeoplePicker({
 
       <div className="flex items-start gap-2">
         <div className="relative min-w-0 flex-1">
-          <InputTypeIn
-            clearButton
-            onChange={(event: ChangeEvent<HTMLInputElement>) =>
-              setQuery(event.target.value)
-            }
-            placeholder={t("addPeople.searchInput.placeholder")}
-            value={query}
-            variant={disabled ? "disabled" : "primary"}
-          />
-
-          {suggestions.length > 0 ? (
-            <div className="absolute start-0 end-0 top-[calc(100%+0.25rem)] z-20 rounded-12 border border-border-01 bg-background-tint-00 p-1 shadow-md">
-              <div className="flex flex-col gap-1">
-                {suggestions.map((suggestion) => (
-                  <div
-                    className={cn(suggestion.shared ? "opacity-60" : undefined)}
-                    key={`${suggestion.type}-${suggestion.id}`}
-                  >
-                    <LineItemButton
-                      description={
-                        suggestion.type === "group"
-                          ? t("addPeople.groupSuggestion.description")
-                          : undefined
-                      }
-                      icon={suggestion.type === "group" ? SvgUsers : SvgUser}
-                      onClick={() => handleSelectSuggestion(suggestion)}
-                      rightChildren={
-                        suggestion.shared ? (
-                          <Tag
-                            color="gray"
-                            title={t("addPeople.sharedTag.label")}
-                          />
-                        ) : null
-                      }
-                      rounding={3}
-                      selectVariant="select-heavy"
-                      sizePreset="main-ui"
-                      state={suggestion.shared ? "filled" : "empty"}
-                      title={suggestion.label}
-                      variant="section"
-                      width="full"
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
+          <Dropdown
+            open={open && suggestions.length > 0}
+            onOpenChange={setOpen}
+            disabled={disabled}
+          >
+            <Dropdown.Trigger asChild typeIn behavior="open">
+              <InputTypeIn
+                clearButton
+                onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                  setQuery(event.target.value);
+                  setOpen(true);
+                }}
+                placeholder={t("addPeople.searchInput.placeholder")}
+                aria-label={t("addPeople.searchInput.placeholder")}
+                value={query}
+                variant={disabled ? "disabled" : "primary"}
+              />
+            </Dropdown.Trigger>
+            <Dropdown.Data
+              label={t("addPeople.searchInput.placeholder")}
+              values={NO_SELECTION}
+              closeOnSelect
+              onSelect={(option) => {
+                const suggestion = suggestions.find(
+                  (candidate) => suggestionValue(candidate) === option.value
+                );
+                if (suggestion) handleSelectSuggestion(suggestion);
+              }}
+              items={suggestionItems}
+            />
+          </Dropdown>
         </div>
 
         {hasStagedItems ? (
@@ -248,7 +236,6 @@ export function AddPeoplePicker({
               onChange={onStagedPermissionChange}
               options={permissionOptions}
               value={stagedPermission}
-              width="full"
             />
           </div>
         ) : null}

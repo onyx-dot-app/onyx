@@ -5,6 +5,8 @@ are needed.  Verifies the generate -> verify round-trip, one-time-use
 semantics, TTL propagation, and error handling.
 """
 
+import builtins
+from collections.abc import Collection
 from unittest.mock import patch
 
 import pytest
@@ -23,6 +25,7 @@ class _MemoryCacheBackend(CacheBackend):
 
     def __init__(self) -> None:
         self._store: dict[str, bytes] = {}
+        self.sets: dict[str, set[bytes]] = {}
         self.set_calls: list[dict[str, object]] = []
 
     def get(self, key: str) -> bytes | None:
@@ -54,8 +57,43 @@ class _MemoryCacheBackend(CacheBackend):
         self.set(key, value, ex=ex)
         return True
 
+    def replace_if_value(
+        self,
+        key: str,  # noqa: ARG002
+        expected: bytes,  # noqa: ARG002
+        value: str | bytes | int | float,  # noqa: ARG002
+        ex: int | None = None,  # noqa: ARG002
+    ) -> bool:
+        raise NotImplementedError
+
+    def delete_if_value(self, key: str, expected: bytes) -> bool:  # noqa: ARG002
+        raise NotImplementedError
+
     def delete(self, key: str) -> None:
         self._store.pop(key, None)
+
+    def delete_prefix(self, prefix: str) -> None:
+        if not prefix:
+            raise ValueError("Cache deletion requires a nonempty prefix")
+        for key in list(self._store):
+            if key.startswith(prefix):
+                self.delete(key)
+
+    def exists_many(self, keys: Collection[str]) -> builtins.set[str]:
+        return {key for key in keys if key in self._store}
+
+    def set_add(self, key: str, member: str | bytes) -> None:
+        value = member if isinstance(member, bytes) else member.encode()
+        self.sets.setdefault(key, set()).add(value)
+
+    def set_remove(self, key: str, member: str | bytes) -> None:
+        value = member if isinstance(member, bytes) else member.encode()
+        self.sets.get(key, set()).discard(value)
+
+    def set_members(self, key: str, *, limit: int) -> list[bytes]:
+        if limit < 1:
+            raise ValueError("Cache set member limit must be positive")
+        return list(self.sets.get(key, set()))[:limit]
 
     def exists(self, key: str) -> bool:
         return key in self._store

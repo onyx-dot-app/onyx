@@ -3,9 +3,9 @@
 import { IconLoader } from "@opal/loaders";
 import React, { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Formik, Form, useFormikContext } from "formik";
+import { Formik, Form, getIn, useFormikContext } from "formik";
 import type { FormikConfig } from "formik";
-import { cn } from "@opal/utils";
+import { cn, countryCodeToFlag } from "@opal/utils";
 import { markdown } from "@opal/utils";
 import { Hoverable, Interactive } from "@opal/core";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
@@ -23,14 +23,10 @@ import { InputSingleComboBox } from "@opal/components";
 import { InputSingleSelect } from "@opal/components";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { InputSwitch } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
-// The file's unqualified `Text` is the legacy component, kept for its
-// existing call sites.
-import { Text as OpalText } from "@opal/components";
+import { Text } from "@opal/components";
 import { BaseLLMFormValues } from "@/sections/modals/languageModels/utils";
 import type { RichStr } from "@opal/types";
-import { Section } from "@/layouts/general-layouts";
 import {
   Content,
   InputDivider,
@@ -39,14 +35,19 @@ import {
   InputVertical,
   Section as OpalSection,
   toast,
+  Section,
 } from "@opal/layouts";
 import {
   ModelSettingsPopover,
   type ModelSettingsPatch,
 } from "@/sections/modals/languageModels/ModelSettingsPopover";
 import { setDefaultLlmModelAndRefresh } from "@/lib/languageModels/cache";
-import { getProvider, modelDisplayName } from "@/lib/languageModels/utils";
-import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
+import { getProvider } from "@/lib/languageModels/utils";
+import {
+  useAdminLanguageModels,
+  useModelDisplayName,
+} from "@/lib/languageModels/hooks";
+import { useProviderNames } from "@/lib/languageModels/useProviderNames";
 import { useSWRConfig } from "swr";
 import {
   SvgArrowExchange,
@@ -61,9 +62,10 @@ import {
   SvgX,
 } from "@opal/icons";
 import SvgOnyxLogo from "@opal/logos/onyx-logo";
-import { Card, EmptyMessageCard } from "@opal/components";
+import { Card, EmptyMessageCard, type BadgeProps } from "@opal/components";
+import { useModelTypeBadge } from "@/lib/badges/components";
 import { ContentAction } from "@opal/layouts";
-import type { ContentMdEditHandle } from "@opal/layouts/content/ContentMd";
+import type { ContentEditHandle } from "@opal/layouts";
 import { SvgEdit } from "@opal/icons";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import useUsers from "@/hooks/useUsers";
@@ -115,6 +117,11 @@ export function APIKeyField({
   subDescription,
 }: APIKeyFieldProps) {
   const t = useTranslations("admin.languageModels.modals");
+  const { initialValues } = useFormikContext<BaseLLMFormValues>();
+  // On edit, the initial value is the backend's masked stored key.
+  const storedValue: unknown = getIn(initialValues, name);
+  const existingValue =
+    typeof storedValue === "string" && storedValue ? storedValue : undefined;
   return (
     <InputPadder>
       <InputVertical
@@ -131,7 +138,7 @@ export function APIKeyField({
         }
         suffix={optional ? t("setup.optionalSuffix.label") : undefined}
       >
-        <PasswordInputTypeInField name={name} />
+        <PasswordInputTypeInField name={name} existingValue={existingValue} />
       </InputVertical>
     </InputPadder>
   );
@@ -174,10 +181,11 @@ export interface APIBaseFieldProps {
 export function APIBaseField({
   optional = false,
   subDescription,
-  placeholder = "https://",
+  placeholder,
   rightChildren,
 }: APIBaseFieldProps) {
   const t = useTranslations("admin.languageModels.modals");
+  const tPlaceholders = useTranslations("common.placeholders");
   return (
     <InputPadder>
       <InputVertical
@@ -188,7 +196,7 @@ export function APIBaseField({
       >
         <InputTypeInField
           name="api_base"
-          placeholder={placeholder}
+          placeholder={placeholder ?? tPlaceholders("url")}
           rightChildren={rightChildren}
         />
       </InputVertical>
@@ -327,15 +335,14 @@ export function ModelAccessField() {
 
             <Card color="background-tint-01" border="none" padding={2}>
               <ContentAction
+                font="main-ui-action"
                 icon={SvgUserManage}
                 title={t("access.admin.title")}
                 description={t("access.memberCount.label", {
                   count: adminCount,
                 })}
-                sizePreset="main-ui"
-                variant="section"
                 rightChildren={
-                  <Text secondaryBody text03>
+                  <Text font="secondary-body" color="text-03">
                     {t("access.admin.sharedNote")}
                   </Text>
                 }
@@ -346,7 +353,7 @@ export function ModelAccessField() {
               <div className="grid grid-cols-2 gap-1 w-full">
                 {selectedGroupIds.map((id) => {
                   const group = groupById.get(id);
-                  const memberCount = group?.users.length ?? 0;
+                  const memberCount = group?.member_count ?? 0;
                   return (
                     <div key={`group-${id}`} className="min-w-0">
                       <Card
@@ -355,13 +362,12 @@ export function ModelAccessField() {
                         padding={2}
                       >
                         <ContentAction
+                          font="main-ui-action"
                           icon={SvgUsers}
                           title={group?.name ?? t("access.group.name", { id })}
                           description={t("access.memberCount.label", {
                             count: memberCount,
                           })}
-                          sizePreset="main-ui"
-                          variant="section"
                           rightChildren={
                             <Button
                               size="sm"
@@ -394,6 +400,7 @@ export function ModelAccessField() {
                         padding={2}
                       >
                         <ContentAction
+                          font="main-ui-action"
                           icon={
                             agent
                               ? () => <AgentAvatar agent={agent} size={20} />
@@ -401,8 +408,6 @@ export function ModelAccessField() {
                           }
                           title={agent?.name ?? t("access.agent.name", { id })}
                           description={t("access.agentOption.description")}
-                          sizePreset="main-ui"
-                          variant="section"
                           rightChildren={
                             <Button
                               size="sm"
@@ -422,11 +427,10 @@ export function ModelAccessField() {
             ) : (
               <div className="w-full p-2">
                 <Content
+                  font="main-ui-action"
                   icon={SvgOnyxOctagon}
                   title={t("access.noAgents.title")}
                   description={t("access.noAgents.description")}
-                  variant="section"
-                  sizePreset="main-ui"
                 />
               </div>
             )}
@@ -446,7 +450,7 @@ export function ModelAccessField() {
 interface RefetchButtonProps {
   onRefetch: (signal: AbortSignal) => Promise<void> | void;
 }
-function RefetchButton({ onRefetch }: RefetchButtonProps) {
+export function RefetchButton({ onRefetch }: RefetchButtonProps) {
   const t = useTranslations("admin.languageModels.modals");
   const abortRef = useRef<AbortController | null>(null);
   const [isFetching, setIsFetching] = useState(false);
@@ -459,6 +463,8 @@ function RefetchButton({ onRefetch }: RefetchButtonProps) {
     <Button
       prominence="tertiary"
       icon={isFetching ? IconLoader : SvgRefreshCw}
+      aria-label={t("models.refetch.label")}
+      tooltip={t("models.refetch.label")}
       onClick={async () => {
         abortRef.current?.abort();
         const controller = new AbortController();
@@ -484,7 +490,8 @@ function RefetchButton({ onRefetch }: RefetchButtonProps) {
 
 // ─── ModelsField ─────────────────────────────────────────────────────
 
-const FOLD_THRESHOLD = 3;
+const FOLDED_MIN_MODELS = 3;
+const FOLDED_MAX_MODELS = 10;
 
 // ─── Model metadata helpers (Nebius TokenFactory picker) ────────────────────
 
@@ -498,21 +505,6 @@ function formatContextSize(tokens: number | null | undefined): string {
   return String(tokens);
 }
 
-// Common non-ISO-3166 codes the provider may report → the ISO alpha-2 code
-// whose regional-indicator sequence actually has a flag glyph.
-const COUNTRY_CODE_ALIASES: Record<string, string> = {
-  UK: "GB", // United Kingdom is "GB" in ISO 3166-1; "UK" has no flag glyph
-};
-
-function countryCodeToFlag(code: string | null | undefined): string {
-  if (!code || code.length !== 2) return "";
-  const upper = code.toUpperCase();
-  const normalized = COUNTRY_CODE_ALIASES[upper] ?? upper;
-  const first = 0x1f1e6 + normalized.charCodeAt(0) - 65;
-  const second = 0x1f1e6 + normalized.charCodeAt(1) - 65;
-  return String.fromCodePoint(first, second);
-}
-
 /** Models that ship extra picker metadata (e.g. Nebius TokenFactory). Most
  *  providers do not, and the row description then has no metadata. */
 function hasModelMetadata(model: ModelConfiguration): boolean {
@@ -523,11 +515,47 @@ function hasModelMetadata(model: ModelConfiguration): boolean {
   );
 }
 
+/** Selected models first. Providers that ship rich metadata (Nebius
+ *  TokenFactory) sort by id so refetches keep the order. */
+function inherentOrder(models: ModelConfiguration[]): string[] {
+  const sortByName = models.some((m) => hasModelMetadata(m));
+  return [...models]
+    .sort(
+      (a, b) =>
+        Number(b.is_visible) - Number(a.is_visible) ||
+        (sortByName ? a.name.localeCompare(b.name) : 0)
+    )
+    .map((m) => m.name);
+}
+
+interface ModelListLayout {
+  order: string[];
+  foldedCount: number;
+  sortedByName: boolean;
+}
+
+/** Rows only move on open, fold and unfold, never on a checkbox change. */
+function foldedLayout(models: ModelConfiguration[]): ModelListLayout {
+  const selected = models.filter((m) => m.is_visible).length;
+  return {
+    order: inherentOrder(models),
+    sortedByName: models.some((m) => hasModelMetadata(m)),
+    foldedCount: Math.min(
+      Math.max(selected, FOLDED_MIN_MODELS),
+      FOLDED_MAX_MODELS
+    ),
+  };
+}
+
 /** Row description. Several ids can share one title, so the model id comes
  *  first when the title is not the id. Metadata such as
  *  "128K · 🇫🇮 · fp8 · tools, reasoning" follows when the model has any. */
-function buildModelDescription(model: ModelConfiguration): string | undefined {
-  const id = modelDisplayName(model) === model.name ? undefined : model.name;
+
+function buildModelDescription(
+  model: ModelConfiguration,
+  displayName: string
+): string | undefined {
+  const id = displayName === model.name ? undefined : model.name;
   if (!hasModelMetadata(model)) return id;
   const parts: string[] = id ? [id] : [];
   const context = formatContextSize(model.max_input_tokens);
@@ -541,25 +569,11 @@ function buildModelDescription(model: ModelConfiguration): string | undefined {
   return parts.length > 0 ? parts.join("  ·  ") : undefined;
 }
 
-/** Eye marker for vision models, shown on the right of the picker row. */
-function modelRightChildren(
-  model: ModelConfiguration,
-  visionTitle: string
-): React.ReactNode {
-  if (!hasModelMetadata(model) || !model.supports_image_input) return undefined;
-  return (
-    <Text secondaryBody text03 title={visionTitle}>
-      👁
-    </Text>
-  );
-}
-
 interface ModelRowProps {
   model: ModelConfiguration;
-  isAutoMode: boolean;
   isDefaultModel: boolean;
   onToggleVisibility: (visible: boolean) => void;
-  onRename: (value: string | undefined) => void;
+  onRename: (value: string | null) => void;
   onSettingsChange: (patch: ModelSettingsPatch) => void;
   onSetDefaultModel?: () => void;
 }
@@ -578,7 +592,6 @@ interface ModelRowProps {
  */
 function ModelRow({
   model,
-  isAutoMode,
   isDefaultModel,
   onToggleVisibility,
   onRename,
@@ -586,33 +599,45 @@ function ModelRow({
   onSetDefaultModel,
 }: ModelRowProps) {
   const t = useTranslations("admin.languageModels.modals");
-  const editHandle = useRef<ContentMdEditHandle>(null);
+  const editHandle = useRef<ContentEditHandle>(null);
   // Keeps the hover-revealed actions visible while the settings popover,
   // which is portaled outside the row, is open.
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const displayName = modelDisplayName(model);
-  // In auto mode every model is shown, so the row is always "selected" and the
-  // visibility toggle is disabled.
-  const isSelected = isAutoMode || model.is_visible;
-  const toggleVisibility = isAutoMode
-    ? undefined
-    : () => onToggleVisibility(!model.is_visible);
+  const displayName = useModelDisplayName()(model);
+  const description = buildModelDescription(model, displayName);
+  const decisionBadge = useModelTypeBadge("decision");
+  const visionBadge = useModelTypeBadge("vision");
+  const modelTypeBadges: BadgeProps[] = [
+    ...(model.supports_decisions
+      ? [
+          {
+            ...decisionBadge,
+            tooltip: t(
+              model.supports_chat === false
+                ? "models.row.decisionTag.decisionOnly"
+                : "models.row.decisionTag.chatAndDecision"
+            ),
+          },
+        ]
+      : []),
+    ...(model.supports_image_input ? [visionBadge] : []),
+  ];
+  const isSelected = model.is_visible;
+  const toggleVisibility = () => onToggleVisibility(!model.is_visible);
   // A click that blurs and commits an inline rename reaches the row after the
   // edit input unmounts, so the input's presence is sampled at pointerdown.
   const renamingAtPointerDown = useRef(false);
   // The row is clickable, but it also hosts real buttons (rename, settings).
   // Their clicks, including ones the browser synthesizes from Enter, must not
   // toggle the model.
-  const toggleFromRow = toggleVisibility
-    ? (e: React.MouseEvent) => {
-        if (renamingAtPointerDown.current) return;
-        const interactive = (e.target as HTMLElement).closest(
-          'button, input, textarea, [contenteditable="true"]'
-        );
-        if (interactive) return;
-        toggleVisibility();
-      }
-    : undefined;
+  const toggleFromRow = (e: React.MouseEvent) => {
+    if (renamingAtPointerDown.current) return;
+    const interactive = (e.target as HTMLElement).closest(
+      'button, input, textarea, [contenteditable="true"]'
+    );
+    if (interactive) return;
+    toggleVisibility();
+  };
 
   return (
     <Hoverable.Root
@@ -626,37 +651,33 @@ function ModelRow({
         onPointerDownCapture={(e: React.PointerEvent) => {
           // Scoped to the title row: the checkbox also owns a hidden input.
           renamingAtPointerDown.current =
-            e.currentTarget.querySelector(".opal-content-md-title-row input") !=
+            e.currentTarget.querySelector(".opal-content-title-row input") !=
             null;
         }}
         onClick={toggleFromRow}
-        role={toggleVisibility ? "button" : undefined}
-        tabIndex={toggleVisibility ? 0 : undefined}
-        onKeyDown={
-          toggleVisibility
-            ? (e: React.KeyboardEvent) => {
-                // Only the row itself. React bubbles events from portaled
-                // children too, so a key inside the settings popover would
-                // otherwise toggle the model.
-                if (e.target !== e.currentTarget) return;
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  toggleVisibility();
-                }
-              }
-            : undefined
-        }
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e: React.KeyboardEvent) => {
+          // Only the row itself. React bubbles events from portaled
+          // children too, so a key inside the settings popover would
+          // otherwise toggle the model.
+          if (e.target !== e.currentTarget) return;
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            toggleVisibility();
+          }
+        }}
       >
         <Interactive.Container width="full" size="fit" rounding={3}>
-          <div className="w-full p-1.5">
+          <OpalSection alignItems="stretch" height="auto" padding={1.5}>
             <ContentAction
+              font="main-ui-action"
               color="interactive"
-              variant="section"
-              sizePreset="main-ui"
               center
               icon={() => <InputCheckbox checked={isSelected} />}
               title={displayName}
-              description={buildModelDescription(model)}
+              description={description}
+              badge={modelTypeBadges}
               rightChildren={
                 <OpalSection
                   flexDirection="row"
@@ -664,10 +685,6 @@ function ModelRow({
                   height="auto"
                   gap={1}
                 >
-                  {modelRightChildren(
-                    model,
-                    t("models.row.visionMarker.title")
-                  )}
                   <Hoverable.Item group="model-row" variant="appear-on-hover">
                     <OpalSection
                       flexDirection="row"
@@ -685,11 +702,13 @@ function ModelRow({
                           editHandle.current?.startEditing();
                         }}
                       />
-                      <ModelSettingsPopover
-                        model={model}
-                        onChange={onSettingsChange}
-                        onOpenChange={setSettingsOpen}
-                      />
+                      {model.supports_chat !== false && (
+                        <ModelSettingsPopover
+                          model={model}
+                          onChange={onSettingsChange}
+                          onOpenChange={setSettingsOpen}
+                        />
+                      )}
                       {!isDefaultModel && onSetDefaultModel && (
                         <Button
                           prominence="internal"
@@ -705,22 +724,25 @@ function ModelRow({
                     </OpalSection>
                   </Hoverable.Item>
                   {isDefaultModel && (
-                    <Text
-                      secondaryAction
-                      nowrap
-                      className="px-1.5 py-1 text-action-selection-05"
-                    >
-                      {t("models.row.defaultLabel")}
-                    </Text>
+                    <span className="px-1.5">
+                      <Text
+                        as="p"
+                        font="secondary-action"
+                        wordWrap="whitespace-nowrap"
+                        color="action-selection-05"
+                      >
+                        {t("models.row.defaultLabel")}
+                      </Text>
+                    </span>
                   )}
                 </OpalSection>
               }
               editable
               editHandle={editHandle}
-              onTitleChange={(newTitle) => onRename(newTitle || undefined)}
+              onTitleChange={(newTitle) => onRename(newTitle || null)}
               padding={0}
             />
-          </div>
+          </OpalSection>
         </Interactive.Container>
       </Interactive.Stateful>
     </Hoverable.Root>
@@ -745,32 +767,62 @@ export function ModelSelectionField({
   const formikProps = useFormikContext<BaseLLMFormValues>();
   const { mutate } = useSWRConfig();
   const { defaultText } = useAdminLanguageModels();
+  const resolveDisplayName = useModelDisplayName();
   const providerId = formikProps.values.id;
   const [newModelName, setNewModelName] = useState("");
   const [isExpanded, setIsExpanded] = useState(false);
-  // When the auto-update toggle is hidden, auto mode should have no effect —
-  // otherwise models can't be deselected and "Select All" stays disabled.
-  const isAutoMode =
-    shouldShowAutoUpdateToggle && formikProps.values.is_auto_mode;
   const models = formikProps.values.model_configurations;
-
-  // Snapshot the original model visibility so we can restore it when
-  // toggling auto mode back on.
-  const originalModelsRef = useRef(models);
+  const [layout, setLayout] = useState<ModelListLayout | null>(null);
+  // Models the admin types in stay where they appear; a refetch re-sorts.
+  const [typedNames, setTypedNames] = useState<Set<string>>(new Set());
   useEffect(() => {
-    if (originalModelsRef.current.length === 0 && models.length > 0) {
-      originalModelsRef.current = models;
+    if (models.length === 0) return;
+    const known = new Set(layout?.order);
+    if (
+      layout === null ||
+      layout.sortedByName !== models.some((m) => hasModelMetadata(m)) ||
+      models.some((m) => !known.has(m.name) && !typedNames.has(m.name))
+    ) {
+      setLayout(foldedLayout(models));
     }
-  }, [models]);
+  }, [models, layout, typedNames]);
 
-  // Automatically derive test_model_name from model_configurations.
-  // Any change to visibility or the model list syncs this automatically.
-  useEffect(() => {
-    const firstVisible = models.find((m) => m.is_visible)?.name;
-    if (firstVisible !== formikProps.values.test_model_name) {
-      formikProps.setFieldValue("test_model_name", firstVisible);
+  const addModel =
+    onAddModel &&
+    ((name: string) => {
+      setTypedNames((prev) => new Set(prev).add(name));
+      onAddModel(name);
+    });
+
+  function toggleExpanded() {
+    if (isExpanded) {
+      setLayout(foldedLayout(models));
+    } else if (layout) {
+      // Rows already on screen keep their place; the rest go below them.
+      const known = new Set(layout.order);
+      const shown = [
+        ...layout.order.slice(0, layout.foldedCount),
+        ...models.map((m) => m.name).filter((name) => !known.has(name)),
+      ];
+      const shownSet = new Set(shown);
+      setLayout({
+        order: [
+          ...shown,
+          ...inherentOrder(models).filter((name) => !shownSet.has(name)),
+        ],
+        foldedCount: layout.foldedCount,
+        sortedByName: layout.sortedByName,
+      });
     }
-  }, [models]); // eslint-disable-line react-hooks/exhaustive-deps
+    setIsExpanded(!isExpanded);
+  }
+
+  useEffect(() => {
+    const testModel = models.find((model) => model.is_visible)?.name;
+    if (testModel !== formikProps.values.test_model_name) {
+      formikProps.setFieldValue("test_model_name", testModel);
+    }
+  }, [models, formikProps.setFieldValue, formikProps.values.test_model_name]);
 
   function setVisibility(modelName: string, visible: boolean) {
     const updated = models.map((m) =>
@@ -791,33 +843,15 @@ export function ModelSelectionField({
     await setDefaultLlmModelAndRefresh(providerId, modelName, mutate);
   }
 
-  function setCustomDisplayName(modelName: string, value: string | undefined) {
-    const updated = models.map((m) =>
-      m.name === modelName
-        ? { ...m, custom_display_name: value || undefined }
-        : m
-    );
+  // A cleared name is null, as the API sends it, so clearing a new name is
+  // not a change.
+  function setCustomDisplayName(modelName: string, value: string | null) {
+    const updated = models.map((m) => {
+      if (m.name !== modelName) return m;
+      const renamed = { ...m, custom_display_name: value || null };
+      return { ...renamed, effectiveDisplayName: resolveDisplayName(renamed) };
+    });
     formikProps.setFieldValue("model_configurations", updated);
-  }
-
-  function handleToggleAutoMode(nextIsAutoMode: boolean) {
-    formikProps.setFieldValue("is_auto_mode", nextIsAutoMode);
-    if (nextIsAutoMode) {
-      // Auto mode restores only the snapshot's visibility. Unsaved edits and
-      // models discovered after mount survive the toggle.
-      const originalByName = new Map(
-        originalModelsRef.current.map((m) => [m.name, m])
-      );
-      formikProps.setFieldValue(
-        "model_configurations",
-        models.map((current) => {
-          const original = originalByName.get(current.name);
-          return original
-            ? { ...current, is_visible: original.is_visible }
-            : current;
-        })
-      );
-    }
   }
 
   const allSelected = models.length > 0 && models.every((m) => m.is_visible);
@@ -831,8 +865,6 @@ export function ModelSelectionField({
     formikProps.setFieldValue("model_configurations", updated);
   }
 
-  const visibleModels = models.filter((m) => m.is_visible);
-
   return (
     <Card color="background-tint-00" border="none" padding={2}>
       <Section gap={2}>
@@ -843,7 +875,7 @@ export function ModelSelectionField({
         >
           <Section flexDirection="row" gap={0}>
             <Button
-              disabled={isAutoMode || models.length === 0}
+              disabled={models.length === 0}
               prominence="tertiary"
               size="md"
               onClick={handleToggleSelectAll}
@@ -864,18 +896,19 @@ export function ModelSelectionField({
         ) : (
           <Section gap={1} alignItems="stretch">
             {(() => {
-              const baseModels = isAutoMode ? visibleModels : models;
-              // Sort alphabetically by id for providers that ship rich model
-              // metadata (Nebius TokenFactory) so the order is stable across
-              // refetches; otherwise keep the given order.
-              const displayModels = baseModels.some((m) => hasModelMetadata(m))
-                ? [...baseModels].sort((a, b) => a.name.localeCompare(b.name))
-                : baseModels;
-              const isFoldable = displayModels.length > FOLD_THRESHOLD;
-              const shownModels =
-                isFoldable && !isExpanded
-                  ? displayModels.slice(0, FOLD_THRESHOLD)
-                  : displayModels;
+              const { order, foldedCount } = layout ?? foldedLayout(models);
+              const byName = new Map(models.map((m) => [m.name, m]));
+              const ordered = order.flatMap((name) => byName.get(name) ?? []);
+              // Models added since the last re-sort, e.g. a custom model.
+              const known = new Set(order);
+              const added = models.filter((m) => !known.has(m.name));
+              const isFoldable = ordered.length > foldedCount;
+              const shownModels = [
+                ...(isFoldable && !isExpanded
+                  ? ordered.slice(0, foldedCount)
+                  : ordered),
+                ...added,
+              ];
               const defaultModelName =
                 providerId != null && defaultText?.provider_id === providerId
                   ? defaultText.model_name
@@ -887,7 +920,6 @@ export function ModelSelectionField({
                     <ModelRow
                       key={model.name}
                       model={model}
-                      isAutoMode={isAutoMode}
                       onToggleVisibility={(visible) =>
                         setVisibility(model.name, visible)
                       }
@@ -899,7 +931,9 @@ export function ModelSelectionField({
                       }
                       isDefaultModel={model.name === defaultModelName}
                       onSetDefaultModel={
-                        providerId != null && model.is_visible
+                        providerId != null &&
+                        model.is_visible &&
+                        model.supports_chat !== false
                           ? () => void setDefaultModel(model.name)
                           : undefined
                       }
@@ -908,12 +942,11 @@ export function ModelSelectionField({
                   {isFoldable && (
                     <Interactive.Stateless
                       prominence="tertiary"
-                      onClick={() => setIsExpanded(!isExpanded)}
+                      onClick={toggleExpanded}
                     >
                       <Interactive.Container type="button" width="full">
                         <Content
-                          sizePreset="secondary"
-                          variant="body"
+                          font="secondary-body"
                           title={
                             isExpanded
                               ? t("models.foldButton.label")
@@ -938,7 +971,7 @@ export function ModelSelectionField({
           </Section>
         )}
 
-        {onAddModel && !isAutoMode && (
+        {onAddModel && (
           <Section flexDirection="row" gap={2}>
             <div className="flex-1">
               <InputTypeIn
@@ -950,7 +983,7 @@ export function ModelSelectionField({
                     e.preventDefault();
                     const trimmed = newModelName.trim();
                     if (!models.some((m) => m.name === trimmed)) {
-                      onAddModel(trimmed);
+                      addModel?.(trimmed);
                       setNewModelName("");
                     }
                   }
@@ -968,7 +1001,7 @@ export function ModelSelectionField({
               onClick={() => {
                 const trimmed = newModelName.trim();
                 if (trimmed && !models.some((m) => m.name === trimmed)) {
-                  onAddModel(trimmed);
+                  addModel?.(trimmed);
                   setNewModelName("");
                 }
               }}
@@ -985,8 +1018,10 @@ export function ModelSelectionField({
             withLabel
           >
             <InputSwitch
-              checked={isAutoMode}
-              onCheckedChange={handleToggleAutoMode}
+              checked={formikProps.values.is_auto_mode}
+              onCheckedChange={(checked) =>
+                formikProps.setFieldValue("is_auto_mode", checked)
+              }
             />
           </InputHorizontal>
         )}
@@ -1072,7 +1107,7 @@ function ModalWrapperInner({
     ) {
       setFieldValue("model_configurations", modelConfigurations);
     }
-  }, [modelConfigurations]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [modelConfigurations, setFieldValue, values.model_configurations]);
 
   const isTesting = status?.isTesting === true;
   const busy = isTesting || isSubmitting;
@@ -1097,11 +1132,10 @@ function ModalWrapperInner({
         ? t("setup.submitButton.pristineTooltip")
         : undefined;
 
-  const {
-    icon: providerIcon,
-    companyName: providerDisplayName,
-    productName: providerProductName,
-  } = getProvider(providerName);
+  const providerEntry = getProvider(providerName);
+  const providerIcon = providerEntry.icon;
+  const { companyName: providerDisplayName, productName: providerProductName } =
+    useProviderNames()(providerEntry);
 
   const title = llmProvider
     ? markdown(
@@ -1134,9 +1168,9 @@ function ModalWrapperInner({
           </Modal.Body>
           <Modal.Footer>
             {saveIsSlow && (
-              <OpalText font="secondary-body" color="text-03">
+              <Text font="secondary-body" color="text-03">
                 {t("setup.slowSave.text")}
-              </OpalText>
+              </Text>
             )}
             <Button prominence="secondary" onClick={onClose} type="button">
               {t("setup.cancelButton.label")}

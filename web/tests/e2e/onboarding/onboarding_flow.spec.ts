@@ -88,9 +88,7 @@ test.describe("Onboarding Flow @exclusive", () => {
 
       const header = page.locator('[data-label="onboarding-header"]');
       await expect(header).toBeVisible();
-      await expect(
-        header.getByRole("button", { name: "Let's Go" })
-      ).toBeVisible();
+      await expect(header.getByRole("button", { name: "Next" })).toBeVisible();
 
       await expectElementScreenshot(header, {
         name: "onboarding-welcome-step",
@@ -127,7 +125,7 @@ test.describe("Onboarding Flow @exclusive", () => {
 
       const header = page.locator('[data-label="onboarding-header"]');
       await expect(header).toBeVisible({ timeout: 15000 });
-      await header.getByRole("button", { name: "Let's Go" }).click();
+      await header.getByRole("button", { name: "Next" }).click();
 
       const nameStep = page.locator('[aria-label="onboarding-name-step"]');
       await expect(nameStep).toBeVisible({ timeout: 10000 });

@@ -67,6 +67,10 @@ _checkout_timeout_total = Counter(
     "Total connection checkout timeouts",
     ["engine"],
 )
+# The timeout handler cannot tell which engine timed out. Export its only
+# series at 0 so the first timeout is an increase that rate() can see.
+_TIMEOUT_ENGINE_LABEL = "unknown"
+_checkout_timeout_total.labels(engine=_TIMEOUT_ENGINE_LABEL)
 
 # --- Per-endpoint attribution (event-driven) ---
 
@@ -88,7 +92,7 @@ def pool_timeout_handler(
     exc: Exception,
 ) -> JSONResponse:
     """Increment the checkout timeout counter and return 503."""
-    _checkout_timeout_total.labels(engine="unknown").inc()
+    _checkout_timeout_total.labels(engine=_TIMEOUT_ENGINE_LABEL).inc()
     return JSONResponse(
         status_code=503,
         content={

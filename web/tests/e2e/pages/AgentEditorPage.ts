@@ -127,6 +127,17 @@ export class AgentEditorPage {
     await expect(toggle).toHaveAttribute("aria-checked", "true");
   }
 
+  async enableOpenApiTool(toolId: number): Promise<void> {
+    const toggle = this.page.locator(
+      `button[role="switch"][name="openapi_tool_${toolId}"]`
+    );
+    await toggle.scrollIntoViewIfNeeded();
+    if ((await toggle.getAttribute("aria-checked")) !== "true") {
+      await toggle.click();
+    }
+    await expect(toggle).toHaveAttribute("aria-checked", "true");
+  }
+
   /** Submit the form and return the new agent's id (from the resulting URL). */
   async create(): Promise<number> {
     await this.createButton.click();

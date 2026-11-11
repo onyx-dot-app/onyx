@@ -130,7 +130,8 @@ async def prepare_from_fastapi_request(request: Request) -> dict[str, Any]:
     if request.query_params:
         rv["get_data"] = dict(request.query_params)
 
-    # Handle form data (for POST requests)
+    # A SAMLResponse is only read from a POST body: the redirect binding is not
+    # permitted for responses, and a query string lands in access logs.
     if request.method == "POST":
         form_data = await request.form()
         if "SAMLResponse" in form_data:
@@ -139,12 +140,6 @@ async def prepare_from_fastapi_request(request: Request) -> dict[str, Any]:
         if "RelayState" in form_data:
             RelayState = form_data["RelayState"]
             rv["post_data"]["RelayState"] = RelayState
-    else:
-        # For GET requests, check if SAMLResponse is in query params
-        if "SAMLResponse" in request.query_params:
-            rv["get_data"]["SAMLResponse"] = request.query_params["SAMLResponse"]
-        if "RelayState" in request.query_params:
-            rv["get_data"]["RelayState"] = request.query_params["RelayState"]
 
     return rv
 

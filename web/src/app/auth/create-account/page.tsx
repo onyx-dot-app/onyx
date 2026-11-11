@@ -1,9 +1,9 @@
 "use client";
 
+import { NavLink } from "@opal/navigation";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import { REGISTRATION_URL } from "@/lib/constants";
 import { Button } from "@opal/components";
-import Link from "next/link";
 import { SvgImport } from "@opal/icons";
 import { useTranslations } from "next-intl";
 
@@ -34,12 +34,12 @@ export default function Page() {
         </div>
         <p className="text-sm text-text-500 text-center">
           {t("createAccount.differentEmailPrompt.text")}{" "}
-          <Link
+          <NavLink
             href="/auth/login"
             className="text-action-selection-05 hover:underline"
           >
             {t("createAccount.signInLink.label")}
-          </Link>
+          </NavLink>
         </p>
       </div>
     </AuthFlowContainer>

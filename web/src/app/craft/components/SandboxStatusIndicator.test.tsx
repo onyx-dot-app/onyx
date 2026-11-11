@@ -13,7 +13,7 @@ describe("SandboxStatusIndicator", () => {
       sessions: new Map(),
       currentSessionId: null,
       preProvisioning: { status: "idle" },
-    } as never);
+    });
   });
 
   it("shows a loading state until an existing session has sandbox data", () => {
@@ -22,8 +22,18 @@ describe("SandboxStatusIndicator", () => {
 
     render(<SandboxStatusIndicator />);
 
-    expect(screen.getByText("Finding sandbox...")).toBeInTheDocument();
+    expect(screen.getByText("Finding sandbox")).toBeInTheDocument();
     expect(screen.queryByText("Sandbox running")).toBeNull();
+  });
+
+  it("does not show welcome readiness while an existing session is loading", () => {
+    useBuildSessionStore.setState({
+      currentSessionId: SESSION_ID,
+      preProvisioning: { status: "ready", sessionId: "welcome-session" },
+    });
+    render(<SandboxStatusIndicator />);
+    expect(screen.getByText("Finding sandbox")).toBeInTheDocument();
+    expect(screen.queryByText("Sandbox ready")).not.toBeInTheDocument();
   });
 
   it("shows the client-owned restoring state", () => {
@@ -40,7 +50,7 @@ describe("SandboxStatusIndicator", () => {
 
     render(<SandboxStatusIndicator />);
 
-    expect(screen.getByText("Restoring session...")).toBeInTheDocument();
+    expect(screen.getByText("Restoring session")).toBeInTheDocument();
   });
 
   it("shows pre-provisioning readiness before a session is consumed", () => {
@@ -49,7 +59,7 @@ describe("SandboxStatusIndicator", () => {
         status: "ready",
         sessionId: SESSION_ID,
       },
-    } as never);
+    });
 
     render(<SandboxStatusIndicator />);
 

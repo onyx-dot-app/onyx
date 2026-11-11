@@ -24,7 +24,6 @@ from onyx.connectors.capability_checks import creation, runner
 from onyx.connectors.capability_checks.creation import get_cc_pair_dry_run_results
 from onyx.connectors.capability_checks.draft_runs import (
     DraftCheckRunSnapshot,
-    DraftCheckStateKind,
     DraftRunStatus,
     read_draft_run_for_user,
 )
@@ -33,6 +32,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CapabilityCheckStatus,
     CredentialCapability,
+    DraftCheckStateKind,
 )
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.factory import (
@@ -62,12 +62,15 @@ _PROPOSED_CONFIG: dict[str, Any] = {"channels": ["proposed"]}
 
 
 class _FakeCheck(CapabilityCheck[SlackConnectorConfig]):
-    def __init__(self, harness: "_Harness", check_id: str) -> None:
+    def __init__(
+        self, harness: "_Harness", check_id: str, depends_on: tuple[str, ...] = ()
+    ) -> None:
         super().__init__(
             capability=CredentialCapability.INDEXING,
             check_id=check_id,
             display_name=f"{check_id} display",
             requires_connector_instance=False,
+            depends_on=depends_on,
         )
         self._harness = harness
 
@@ -113,7 +116,11 @@ class _Harness:
 
     def checks(self, source: DocumentSource) -> list[CapabilityCheck[Any]]:
         assert source == DocumentSource.SLACK
-        return [_FakeCheck(self, _TOKEN), _FakeConfigCheck(self, _CHANNELS)]
+        # Like a real source, the channels check runs after sign-in.
+        return [
+            _FakeCheck(self, _TOKEN),
+            _FakeConfigCheck(self, _CHANNELS, depends_on=(_TOKEN,)),
+        ]
 
     def run_last_task(self) -> None:
         run_draft_capability_checks_task(**self.send_task.call_args.kwargs["kwargs"])
@@ -317,6 +324,7 @@ def test_edit_validations_read_the_pairs_dry_run_results(
         source=DocumentSource.SLACK,
         access_type=AccessType.PUBLIC,
         connector_specific_config=_PROPOSED_CONFIG,
+        user_id=admin.id,
     )
     assert {result.check_id: result.status for result in results} == {
         _TOKEN: CapabilityCheckStatus.PASSED,
@@ -335,6 +343,7 @@ def test_edit_validations_read_the_pairs_dry_run_results(
         connector_specific_config=_PROPOSED_CONFIG,
         credential=slack_pair.credential,
         access_type=AccessType.PUBLIC,
+        user_id=admin.id,
     )
     assert harness.runs == [_CHANNELS]
     assert {result.check_id: result.status for result in validation.check_results} == {
@@ -357,6 +366,7 @@ def _validate_proposed_for_edit(
         access_type=AccessType.PUBLIC,
         enforce_creation=True,
         trigger=CapabilityCheckTrigger.CONNECTOR_CONFIG_UPDATE,
+        user_id=None,
     )
 
 

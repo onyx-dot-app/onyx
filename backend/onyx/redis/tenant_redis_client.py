@@ -810,6 +810,40 @@ class TenantRedisClient:
         """
         return cast(int, self._r.pttl(_prefix_key(self._prefix, name)))
 
+    def replace_if_value(
+        self,
+        name: KeyArg,
+        expected: bytes,
+        value: str | bytes | int | float,
+        ex: int | None,
+    ) -> bool:
+        """Set the current tenant's key only while it holds ``expected``."""
+        key = _prefix_key(self._prefix, name)
+        with self._r.pipeline() as pipeline:
+            try:
+                pipeline.watch(key)
+                if pipeline.get(key) != expected:
+                    return False
+                pipeline.multi()
+                pipeline.set(key, value, ex=ex)
+                return bool(pipeline.execute()[0])
+            except redis.WatchError:
+                return False
+
+    def delete_if_value(self, name: KeyArg, expected: bytes) -> bool:
+        """Delete the current tenant's key only while it holds ``expected``."""
+        key = _prefix_key(self._prefix, name)
+        with self._r.pipeline() as pipeline:
+            try:
+                pipeline.watch(key)
+                if pipeline.get(key) != expected:
+                    return False
+                pipeline.multi()
+                pipeline.delete(key)
+                return bool(pipeline.execute()[0])
+            except redis.WatchError:
+                return False
+
     def renew_if_value(self, name: KeyArg, expected: bytes, seconds: int) -> bool:
         """Renew only the current tenant's matching lease, without a lock wait."""
         key = _prefix_key(self._prefix, name)
@@ -1286,6 +1320,11 @@ class TenantRedisPipeline:
             ``self``, to allow chaining further pipeline commands.
         """
         self._p.delete(*(_prefix_key(self._prefix, n) for n in names))
+        return self
+
+    def exists(self, name: KeyArg) -> TenantRedisPipeline:
+        """Queue EXISTS for a tenant-prefixed key."""
+        self._p.exists(_prefix_key(self._prefix, name))
         return self
 
     def incr(self, name: KeyArg, amount: int = 1) -> TenantRedisPipeline:

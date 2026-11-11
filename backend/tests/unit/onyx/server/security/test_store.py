@@ -258,3 +258,19 @@ def test_seed_failure_never_raises(
     _set_jwt_env(monkeypatch, url="https://idp/keys")
     store.seed_jwt_settings_from_env()
     assert seed_seams["writes"] == 0
+
+
+@pytest.mark.parametrize("multi_tenant,tenant_id", [(False, None), (True, "public")])
+def test_strict_settings_require_tenant_context(
+    monkeypatch: pytest.MonkeyPatch, multi_tenant: bool, tenant_id: str | None
+) -> None:
+    from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+
+    monkeypatch.setattr(store, "MULTI_TENANT", multi_tenant)
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+    try:
+        assert store.get_security_settings() == store._build_env_defaults()
+        with pytest.raises(RuntimeError, match="Tenant context"):
+            store.get_security_settings(allow_fallback=False)
+    finally:
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)

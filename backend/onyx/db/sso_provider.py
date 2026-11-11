@@ -6,14 +6,17 @@ from typing import Any
 
 from email_validator import EmailNotValidError, validate_email
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import SAML_CONF_DIR, VALID_EMAIL_DOMAINS
+from onyx.configs.constants import KV_LEGACY_SAML_IMPORTED_KEY
 from onyx.db.enums import SSOProviderType
-from onyx.db.models import SSOProvider
+from onyx.db.models import OAuthAccount, SSOProvider, User
+from onyx.key_value_store.factory import get_kv_store
+from onyx.key_value_store.interface import KeyValueStore, KvKeyNotFoundError
 from onyx.utils.encryption import mask_string
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -287,8 +290,8 @@ def update_sso_provider(
 def set_sso_provider_enabled(
     db_session: Session, provider_id: int, enabled: bool
 ) -> SSOProvider:
-    """Providers are disabled, never hard-deleted, so linked login accounts
-    survive a re-enable."""
+    """Disabling keeps the provider's linked login accounts, so a re-enable
+    signs the same users back in."""
     provider = db_session.get(SSOProvider, provider_id)
     if provider is None:
         raise ValueError(f"SSO provider {provider_id} does not exist")
@@ -297,10 +300,77 @@ def set_sso_provider_enabled(
     return provider
 
 
+class SSOProviderLinkCounts(BaseModel):
+    linked_users: int
+    # Users whose address came from a rename. They need the renamed-account
+    # claim window to sign in through another provider.
+    renamed_users: int
+
+
+def count_sso_provider_links(db_session: Session, name: str) -> SSOProviderLinkCounts:
+    links = OAuthAccount.__table__.c
+    stmt = (
+        select(
+            func.count(func.distinct(links.user_id)),
+            func.count(func.distinct(links.user_id)).filter(
+                func.cardinality(User.prior_emails) > 0
+            ),
+        )
+        .select_from(OAuthAccount)
+        .join(User)
+        .where(links.oauth_name == name)
+    )
+    linked, renamed = db_session.execute(stmt).one()
+    return SSOProviderLinkCounts(linked_users=linked, renamed_users=renamed)
+
+
+async def lock_sso_provider_for_share(
+    db_session: AsyncSession, provider_id: int
+) -> bool:
+    """Share-lock the row until the session's transaction ends. A delete waits
+    behind it, and a row that is already gone returns False."""
+    stmt = (
+        select(SSOProvider.id)
+        .where(SSOProvider.id == provider_id)
+        .with_for_update(read=True)
+    )
+    return (await db_session.execute(stmt)).scalar_one_or_none() is not None
+
+
+def delete_sso_provider_row__no_commit(db_session: Session, provider_id: int) -> str:
+    """First half of a hard delete. Flushing the row delete waits for logins
+    holding its share lock, so everything they wrote is visible to the cleanup
+    that follows. Returns the name the links and catalog copies carry."""
+    provider = db_session.get(SSOProvider, provider_id)
+    if provider is None:
+        raise ValueError(f"SSO provider {provider_id} does not exist")
+    name = provider.name
+    db_session.delete(provider)
+    db_session.flush()
+    return name
+
+
+def delete_sso_provider_links__no_commit(db_session: Session, name: str) -> None:
+    """Second half: drop the login links. A row left unlinked and never renamed
+    is claimable by email, so its users sign in through a remaining provider
+    into the same account."""
+    db_session.execute(
+        delete(OAuthAccount).where(OAuthAccount.__table__.c.oauth_name == name)
+    )
+
+
+def _legacy_saml_imported(kv_store: KeyValueStore) -> bool:
+    try:
+        return kv_store.load(KV_LEGACY_SAML_IMPORTED_KEY) is True
+    except KvKeyNotFoundError:
+        return False
+
+
 def seed_saml_provider_from_conf_dir(db_session: Session) -> None:
     """Import a legacy single-config SAML_CONF_DIR/settings.json into a provider
     row on api_server startup (the api_server has the mount; the migration job
-    does not). Idempotent and safe under concurrent pods."""
+    does not). Runs once per deployment, so an admin who deletes the imported
+    row keeps it deleted. Safe under concurrent pods."""
     if MULTI_TENANT:
         logger.debug("Skipping legacy SAML seed because multi-tenant mode is enabled")
         return
@@ -311,11 +381,17 @@ def seed_saml_provider_from_conf_dir(db_session: Session) -> None:
         logger.debug("Skipping legacy SAML seed because auth type is not saml")
         return
 
+    kv_store = get_kv_store()
+    if _legacy_saml_imported(kv_store):
+        logger.debug("Skipping legacy SAML seed because it already ran")
+        return
+
     for provider in fetch_sso_providers(db_session):
         if provider.provider_type is SSOProviderType.SAML:
             logger.debug(
                 "Skipping legacy SAML seed because a SAML provider already exists"
             )
+            kv_store.store(KV_LEGACY_SAML_IMPORTED_KEY, True)
             return
 
     settings_path = Path(SAML_CONF_DIR) / "settings.json"
@@ -395,4 +471,4 @@ def seed_saml_provider_from_conf_dir(db_session: Session) -> None:
     except IntegrityError:
         db_session.rollback()
         logger.debug("Skipping legacy SAML seed because another pod created the row")
-        return
+    kv_store.store(KV_LEGACY_SAML_IMPORTED_KEY, True)

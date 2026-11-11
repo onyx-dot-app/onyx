@@ -111,10 +111,10 @@ def test_ladder_strips_reasoning_then_all_best_effort_kwargs() -> None:
             raise _bad_request("temperature is not supported with this model")
         return _SENTINEL
 
-    # gpt-5.4 sets both a reasoning kwarg and temperature, exercising the
+    # gpt-6.1-sol sets both a reasoning kwarg and temperature, exercising the
     # full three-attempt ladder.
     result = _run(
-        _make_llm(model_name="gpt-5.4", model_provider="openai"),
+        _make_llm(model_name="gpt-6.1-sol", model_provider="openai"),
         completion,
         ReasoningEffort.HIGH,
     )

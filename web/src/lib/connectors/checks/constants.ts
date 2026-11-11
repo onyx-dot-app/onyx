@@ -4,3 +4,6 @@
 // that the credential is broken; re-running it often settles it. While this is
 // false, a required indeterminate check blocks neither the form nor Create.
 export const INDETERMINATE_CHECKS_BLOCK: boolean = false;
+
+/** The results card's test id. */
+export const CHECKS_CARD_ID = "connector-checks-card";

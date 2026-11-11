@@ -1,4 +1,4 @@
-import { Image } from "expo-image";
+import { Image, type ImageProps } from "expo-image";
 import { useMemo } from "react";
 import { View } from "react-native";
 
@@ -10,6 +10,7 @@ interface BearerImageProps {
   path: string;
   size: number;
   radius?: number;
+  contentFit?: ImageProps["contentFit"];
 }
 
 // Auth'd image via expo-image. cachePolicy="none" because the URL isn't auth-keyed — a shared
@@ -19,6 +20,7 @@ export function BearerImage({
   path,
   size,
   radius = size / 2,
+  contentFit = "cover",
 }: BearerImageProps) {
   const token = useAuthToken();
   const baseUrl = getBaseUrl();
@@ -47,7 +49,7 @@ export function BearerImage({
     <Image
       source={source}
       style={dimension}
-      contentFit="cover"
+      contentFit={contentFit}
       cachePolicy="none"
     />
   );

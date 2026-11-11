@@ -153,6 +153,24 @@ class TestReadPdfFile:
         # Returned list is empty when callback is used
         assert images == []
 
+    def test_image_callback_failure_keeps_text(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A failing image store (e.g. S3 AccessDenied) must not discard the text."""
+        monkeypatch.setattr(
+            extract_file_text,
+            "iter_pdf_extracted_images",
+            lambda *_args: iter([(b"img", "page_1_image_0.png")]),
+        )
+
+        def callback(_data: bytes, _name: str) -> None:
+            raise PermissionError("AccessDenied")
+
+        text, _, _ = read_pdf_file(
+            _load("simple.pdf"), extract_images=True, image_callback=callback
+        )
+        assert "Hello World" in text
+
     def test_image_cap_skips_images_above_limit(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

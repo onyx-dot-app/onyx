@@ -5,13 +5,15 @@ from uuid import UUID
 
 from pydantic import BaseModel, model_validator
 
+from onyx.agents.models import RunStatus
 from onyx.configs.constants import DocumentSource, MessageType, SessionType
 from onyx.context.search.models import BaseFilters, SavedSearchDoc, SearchDoc, Tag
 from onyx.db.enums import ChatSessionSharedStatus
 from onyx.db.models import ChatSession
 from onyx.file_store.models import FileDescriptor
+from onyx.llm.models import GenerationRequestParams
 from onyx.llm.override_models import LLMOverride
-from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import Packet, StreamingError
 
 AUTO_PLACE_AFTER_LATEST_MESSAGE = -1
 
@@ -111,7 +113,17 @@ class SendMessageRequest(BaseModel):
     llm_overrides: list[LLMOverride] | None = None
 
     allowed_tool_ids: list[int] | None = None
-    forced_tool_id: int | None = None
+    preferred_tool_id: int | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_forced_action(cls, data: Any) -> Any:
+        if isinstance(data, dict) and data.get("forced_tool_id") is not None:
+            raise ValueError(
+                "forced_tool_id is no longer supported. Use preferred_tool_id for "
+                "an optional Action preference; invocation is not guaranteed."
+            )
+        return data
 
     file_descriptors: list[FileDescriptor] = []
 
@@ -150,6 +162,12 @@ class SendMessageRequest(BaseModel):
     # (not shown in chat history). Used e.g. by the Chrome extension to pass
     # the current tab URL when "Read this tab" is enabled.
     additional_context: str | None = None
+
+    @model_validator(mode="after")
+    def check_preference_supported(self) -> "SendMessageRequest":
+        if self.deep_research and self.preferred_tool_id is not None:
+            raise ValueError("preferred_tool_id is not supported with deep_research")
+        return self
 
     @model_validator(mode="after")
     def check_chat_session_id_or_info(self) -> "SendMessageRequest":
@@ -236,12 +254,14 @@ class ChatMessageDetail(BaseModel):
     time_sent: datetime
     files: list[FileDescriptor]
     error: str | None = None
+    error_info: StreamingError | None = None
+    response_status: RunStatus | None = None
     current_feedback: str | None = None  # "like" | "dislike" | null
     processing_duration_seconds: float | None = None
     preferred_response_id: int | None = None
     model_display_name: str | None = None
     # Absent on messages written before this was captured.
-    request_params: dict[str, Any] | None = None
+    request_params: GenerationRequestParams | None = None
 
     def model_dump(  # ty: ignore[invalid-method-override]
         self, *args: list, **kwargs: dict[str, Any]
@@ -266,6 +286,10 @@ class CurrentStreamInfo(BaseModel):
     stream_id: int
 
 
+class ChatSessionProcessingStatus(BaseModel):
+    is_processing: bool
+
+
 class ChatSessionDetailResponse(BaseModel):
     chat_session_id: UUID
     description: str | None
@@ -281,12 +305,15 @@ class ChatSessionDetailResponse(BaseModel):
     deleted: bool = False
     owner_name: str | None = None
     packets: list[list[Packet]]
-    # Set while a stream is in flight and resumable: cursor-0 replay+tail is
-    # available at /chat-session/{id}/resume-stream.
+    # The buffer also retains interrupted work until its cache TTL expires.
     current_stream: CurrentStreamInfo | None = None
+    # Readiness is independent of whether a stream can be replayed.
+    is_processing: bool = False
     # True for sessions pinned to an incognito record mode, so a reload can
     # restore the incognito UI state.
     incognito: bool = False
+    # Set on a paged load when the current branch has messages before the page.
+    has_older_messages: bool = False
 
 
 class AdminSearchRequest(BaseModel):

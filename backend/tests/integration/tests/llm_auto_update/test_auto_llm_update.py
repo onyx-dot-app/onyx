@@ -1,12 +1,11 @@
 """
 Integration tests for Auto LLM model update feature.
 
-These tests verify that LLM providers in Auto mode get their models
-automatically synced from the GitHub config via the celery background task.
+These tests verify that LLM providers with auto-update on get the models
+their lab releases via the celery background task.
 
 Environment variables for testing:
 - AUTO_LLM_UPDATE_INTERVAL_SECONDS: Set to a low value (e.g., 5) for faster tests
-- AUTO_LLM_CONFIG_URL: Points to the config file to sync from
 
 The celery beat scheduler will run the check_for_auto_llm_updates task
 at the configured interval.
@@ -14,16 +13,9 @@ at the configured interval.
 
 import time
 
-import pytest
-
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
-
-# How long to wait for the celery task to run and sync models
-# This should be longer than AUTO_LLM_UPDATE_INTERVAL_SECONDS
-MAX_WAIT_TIME_SECONDS = 120
-POLL_INTERVAL_SECONDS = 5
 
 
 def _create_provider_with_api(
@@ -75,144 +67,77 @@ def _get_provider_by_id(admin_user: DATestUser, provider_id: int) -> dict:
     raise ValueError(f"Provider with id {provider_id} not found")
 
 
-def get_auto_config(admin_user: DATestUser) -> dict | None:
-    """Get the current auto config from the API."""
+def _get_catalog_model_names(admin_user: DATestUser, provider_name: str) -> list[str]:
     response = client.get(
-        f"{API_SERVER_URL}/admin/llm/auto-config",
+        f"{API_SERVER_URL}/admin/llm/built-in/options/{provider_name}",
         headers=admin_user.headers,
     )
-    if response.status_code == 502:
-        return None
     response.raise_for_status()
-    return response.json()
+    return [m["name"] for m in response.json()["known_models"]]
 
 
-def wait_for_model_sync(
-    admin_user: DATestUser,
-    provider_id: int,
-    expected_model_names: set[str],
-    max_wait_seconds: int = MAX_WAIT_TIME_SECONDS,
-) -> dict:
-    """
-    Wait for the provider's models to match the expected set.
+def _wait_for_catalog_baseline(provider_id: int, timeout_seconds: float = 90) -> None:
+    """The first sync records the provider's catalog baseline."""
+    from onyx.key_value_store.factory import get_kv_store
+    from onyx.key_value_store.interface import KvKeyNotFoundError
 
-    Returns the provider data once models match, or raises an assertion error.
-    """
-    start_time = time.time()
-    last_provider: dict | None = None
-
-    while time.time() - start_time < max_wait_seconds:
-        provider = _get_provider_by_id(admin_user, provider_id)
-        last_provider = provider
-        current_models = {m["name"] for m in provider["model_configurations"]}
-
-        # Check if we have all expected models
-        if expected_model_names.issubset(current_models):
-            return provider
-
-        print(
-            f"Waiting for model sync... Current: {current_models}, Expected: {expected_model_names}"
-        )
-        time.sleep(POLL_INTERVAL_SECONDS)
-
-    # Timeout - return last state for debugging
-    current_models = (
-        {m["name"] for m in last_provider["model_configurations"]}
-        if last_provider
-        else set()
-    )
-    raise AssertionError(
-        f"Model sync timed out after {max_wait_seconds}s. Current models: {current_models}, Expected: {expected_model_names}"
-    )
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        try:
+            get_kv_store().load(
+                f"llm_auto_update_seen_models_{provider_id}", refresh_cache=True
+            )
+            return
+        except KvKeyNotFoundError:
+            time.sleep(2)
+    raise AssertionError("The auto-update sync did not run for the provider")
 
 
-def test_auto_mode_provider_gets_synced_from_github_config(
+def test_auto_update_keeps_the_admin_selection(
     reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
-    """
-    Test that a provider in Auto mode gets its models synced from GitHub config.
+    """The background sync does not reselect deselected models, add the
+    catalog models the admin left out at setup, or remove custom models."""
+    catalog = _get_catalog_model_names(admin_user, "openai")
+    assert len(catalog) >= 2
+    model_configurations = [
+        {"name": catalog[0], "is_visible": True},
+        {"name": catalog[1], "is_visible": False},
+        {"name": "my-custom-finetuned-model", "is_visible": True},
+    ]
 
-    This test:
-    1. Fetches the current GitHub config to know what models to expect
-    2. Creates an OpenAI provider in Auto mode with outdated/minimal models
-    3. Waits for the celery task to sync models from GitHub
-    4. Verifies the models match the GitHub config
-    """
-    # First, get the GitHub config to know what models we should expect
-    github_config = get_auto_config(admin_user)
-    if github_config is None:
-        pytest.fail("GitHub config not found")
-
-    # Get expected models for OpenAI from the config
-    if "openai" not in github_config.get("providers", {}):
-        pytest.fail("OpenAI not in GitHub config")
-
-    openai_config = github_config["providers"]["openai"]
-
-    # Build expected model names from default_model + additional_visible_models
-    expected_models: set[str] = set()
-
-    # Add default model
-    default_model = openai_config.get("default_model", {})
-    if isinstance(default_model, dict):
-        expected_models.add(default_model["name"])
-    elif isinstance(default_model, str):
-        expected_models.add(default_model)
-
-    # Add additional visible models
-    for model in openai_config.get("additional_visible_models", []):
-        if isinstance(model, dict):
-            expected_models.add(model["name"])
-        elif isinstance(model, str):
-            expected_models.add(model)
-
-    print(f"Expected models from GitHub config: {expected_models}")
-
-    # Create an OpenAI provider in Auto mode with a single outdated model
     provider = _create_provider_with_api(
         admin_user=admin_user,
         name="test-auto-sync-openai",
         provider_type="openai",
-        default_model="outdated-model-name",
+        default_model=catalog[0],
         is_auto_mode=True,
-        model_configurations=[
-            {"name": "outdated-model-name", "is_visible": True},
-        ],
+        model_configurations=model_configurations,
     )
-
     assert provider["is_auto_mode"] is True
-    print(f"Created provider {provider['id']} in Auto mode")
 
-    # Wait for the celery task to sync models
-    # The task runs at AUTO_LLM_UPDATE_INTERVAL_SECONDS interval
-    synced_provider = wait_for_model_sync(
+    _wait_for_catalog_baseline(provider["id"])
+
+    synced_provider = _get_provider_by_id(admin_user, provider["id"])
+    visibility = {
+        m["name"]: m["is_visible"] for m in synced_provider["model_configurations"]
+    }
+    assert visibility == {m["name"]: m["is_visible"] for m in model_configurations}
+
+
+def test_aggregator_provider_does_not_get_auto_update(
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+) -> None:
+    provider = _create_provider_with_api(
         admin_user=admin_user,
-        provider_id=provider["id"],
-        expected_model_names=expected_models,
+        name="test-auto-sync-openrouter",
+        provider_type="openrouter",
+        default_model="z-ai/glm-5.3",
+        is_auto_mode=True,
     )
-
-    # Verify the models were synced
-    synced_model_configs = synced_provider["model_configurations"]
-    synced_model_names = {m["name"] for m in synced_model_configs}
-    print(f"Synced models: {synced_model_names}")
-
-    assert expected_models.issubset(synced_model_names), (
-        f"Expected models {expected_models} not found in synced models {synced_model_names}"
-    )
-
-    # Verify the outdated model still exists but is not visible
-    # (Auto mode marks removed models as not visible, it doesn't delete them)
-    outdated_model = next(
-        (m for m in synced_model_configs if m["name"] == "outdated-model-name"),
-        None,
-    )
-    assert outdated_model is not None, (
-        "Outdated model should still exist after sync (marked invisible, not deleted)"
-    )
-    assert not outdated_model["is_visible"], (
-        "Outdated model should not be visible after sync"
-    )
+    assert provider["is_auto_mode"] is False
 
 
 def test_manual_mode_provider_not_affected_by_auto_sync(

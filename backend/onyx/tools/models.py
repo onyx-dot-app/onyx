@@ -1,36 +1,80 @@
 from __future__ import annotations
 
-import json
 from enum import Enum
-from typing import Any, Callable, Literal
+from typing import Annotated, Any, Callable, Literal, Self
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, JsonValue, model_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
-from onyx.chat.emitter import Emitter
-from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT, NUM_RETURNED_HITS
 from onyx.configs.constants import MessageType
-from onyx.context.search.models import (
-    PersonaSearchInfo,
-    SearchDoc,
-    SearchDocsResponse,
-)
-from onyx.db.memory import UserMemoryContext
+from onyx.context.models import UserMemoryContext
+from onyx.context.search.models import PersonaSearchInfo, SearchDoc
 from onyx.file_store.models import (
     install_lazy_content_loader,
     maybe_materialize_lazy_content,
 )
-from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import (
-    CustomToolErrorInfo,
-    GeneratedImage,
-)
-from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
-from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
+from onyx.tools.constants import FILE_READER_MAX_CHARS
+from onyx.tools.tool_implementations.search.models import SearchContext
 from onyx.utils.headers import HeaderItemDict
 
-TOOL_CALL_MSG_FUNC_NAME = "function_name"
-TOOL_CALL_MSG_ARGUMENTS = "arguments"
+
+class CustomToolErrorInfo(BaseModel):
+    is_unreachable: bool = False
+    is_auth_error: bool = False
+    status_code: int | None
+    message: str
+
+
+class GeneratedImage(BaseModel):
+    file_id: str
+    url: str
+    revised_prompt: str
+    shape: str | None = None
+
+
+class FileReaderArguments(BaseModel):
+    file_id: str
+    start_char: int = 0
+    num_chars: int = FILE_READER_MAX_CHARS
+
+    @model_validator(mode="before")
+    @classmethod
+    def null_uses_defaults(cls, value: object) -> object:
+        if not isinstance(value, dict):
+            return value
+        return {
+            key: item
+            for key, item in value.items()
+            if item is not None or key not in {"start_char", "num_chars"}
+        }
+
+
+class FileReadResult(BaseModel):
+    type: Literal["file_read_result"] = "file_read_result"
+    file_name: str
+    file_id: str
+    start_char: int
+    end_char: int
+    total_chars: int
+    preview_start: str = ""
+    preview_end: str = ""
+
+
+class MemoryOperation(str, Enum):
+    ADD = "add"
+    UPDATE = "update"
+
+
+class MemoryArguments(BaseModel):
+    memory: str
+
+
+class MemoryUpdated(BaseModel):
+    type: Literal["memory_result"] = "memory_result"
+    memory_text: str
+    operation: MemoryOperation
+    memory_id: int | None = None
+    index: int | None = None
 
 
 class ToolConfiguration(BaseModel):
@@ -44,6 +88,7 @@ class ToolConfiguration(BaseModel):
     enabled: bool
     openapi_schema: dict[str, JsonValue] | None
     mcp_input_schema: dict[str, JsonValue] | None
+    mcp_output_schema: dict[str, JsonValue] | None
     custom_headers: list[HeaderItemDict] | None
     passthrough_auth: bool
     mcp_server_id: int | None
@@ -70,12 +115,18 @@ class ToolCallException(Exception):
         self.llm_facing_message = llm_facing_message
 
 
+class ToolExecutionError(BaseModel):
+    """A tool failure that must also be shown to the user."""
+
+    type: Literal["tool_execution_error"] = "tool_execution_error"
+    message: str
+
+
 class ToolExecutionException(Exception):
-    """Exception raise for errors during tool execution."""
+    """Tool execution failed."""
 
-    def __init__(self, message: str, emit_error_packet: bool = False):
+    def __init__(self, message: str, emit_error_packet: bool = False) -> None:
         super().__init__(message)
-
         self.emit_error_packet = emit_error_packet
 
 
@@ -90,90 +141,25 @@ class CustomToolUserFileSnapshot(BaseModel):
 
 
 class CustomToolCallSummary(BaseModel):
+    type: Literal["custom_tool_result"] = "custom_tool_result"
     tool_name: str
     response_type: str  # e.g., 'json', 'image', 'csv', 'graph'
-    tool_result: CustomToolUserFileSnapshot | JsonValue
-    error: CustomToolErrorInfo | None = None
-
-
-class ToolCallKickoff(BaseModel):
-    tool_call_id: str
-    tool_name: str
-    tool_args: dict[str, Any]
-
-    placement: Placement
-
-    def to_msg_str(self) -> str:
-        return json.dumps(
-            {
-                TOOL_CALL_MSG_FUNC_NAME: self.tool_name,
-                TOOL_CALL_MSG_ARGUMENTS: self.tool_args,
-            }
-        )
-
-
-class ToolResponse(BaseModel):
-    # Rich response is for the objects that are returned but not directly used by the LLM
-    # these typically need to be saved to the database to load things in the UI (usually both)
-    rich_response: (
-        # This comes from image generation, image needs to be saved and the packet about it's location needs to be emitted
-        FinalImageGenerationResponse
-        # This comes from internal search / web search, search docs need to be saved, already emitted by the tool
-        | SearchDocsResponse
-        # This comes from the memory tool, memory needs to be persisted to the database
-        | MemoryToolResponse
-        # This comes from open url, web content needs to be saved, maybe this can be consolidated too
-        # | WebContentResponse
-        # This comes from custom tools, tool result needs to be saved
-        | CustomToolCallSummary
-        # This comes from code interpreter, carries generated files
-        | PythonToolRichResponse
-        # If the rich response is a string, this is what's saved to the tool call in the DB
-        | str
-        | None  # If nothing needs to be persisted outside of the string value passed to the LLM
+    # JSON field names alone cannot distinguish output from file references.
+    tool_result: JsonValue | CustomToolUserFileSnapshot = Field(
+        union_mode="left_to_right"
     )
-    # This is the final string that needs to be wrapped in a tool call response message and concatenated to the history
-    llm_facing_response: str
-    # The original tool call that triggered this response - set by tool_runner
-    # The response is first created by the tool runner, which does not need to be aware of things like the tool_call_id
-    # So this is set after the response is created by the tool runner
-    tool_call: ToolCallKickoff | None = None
-
-
-class ParallelToolCallResponse(BaseModel):
-    tool_responses: list[ToolResponse]
-    updated_citation_mapping: dict[int, str]
-
-
-class ToolRunnerResponse(BaseModel):
-    tool_run_kickoff: ToolCallKickoff | None = None
-    tool_response: ToolResponse | None = None
-    tool_message_content: str | list[str | dict[str, Any]] | None = None
+    error: CustomToolErrorInfo | None = None
+    # The server's structured content, which code mode programs receive in
+    # place of `tool_result`. Live only: not saved or streamed.
+    structured_result: dict[str, JsonValue] | None = Field(default=None, exclude=True)
 
     @model_validator(mode="after")
-    def validate_tool_runner_response(self) -> "ToolRunnerResponse":
-        fields = ["tool_response", "tool_message_content", "tool_run_kickoff"]
-        provided = sum(
-            1
-            for field in fields
-            if getattr(self, field) is not None  # ods: ignore[getattr]
-        )
-
-        if provided != 1:
-            raise ValueError(
-                "Exactly one of 'tool_response', 'tool_message_content', or 'tool_run_kickoff' must be provided"
+    def restore_file_references(self) -> Self:
+        if self.response_type in {"image", "csv"}:
+            self.tool_result = CustomToolUserFileSnapshot.model_validate(
+                self.tool_result
             )
-
         return self
-
-
-class ToolCallFinalResult(ToolCallKickoff):
-    tool_result: Any = (
-        None  # we would like to use JSON_ro, but can't due to its recursive nature
-    )
-    # agentic additions; only need to set during agentic tool calls
-    level: int | None = None
-    level_question_num: int | None = None
 
 
 class ChatMinimalTextMessage(BaseModel):
@@ -188,48 +174,12 @@ class DynamicSchemaInfo(BaseModel):
     user_email: str | None = None
 
 
-class WebSearchToolOverrideKwargs(BaseModel):
-    # To know what citation number to start at for constructing the string to the LLM
-    starting_citation_num: int
-
-
-class OpenURLToolOverrideKwargs(BaseModel):
-    # To know what citation number to start at for constructing the string to the LLM
-    starting_citation_num: int
-    citation_mapping: dict[str, int]
-    url_snippet_map: dict[str, str]
-    max_urls: int = 10
-
-
-# None indicates that the default value should be used
-class SearchToolOverrideKwargs(BaseModel):
-    # To know what citation number to start at for constructing the string to the LLM
-    starting_citation_num: int
-    # This is needed because the LLM won't be able to do a really detailed semantic query well
-    # without help and a specific custom prompt for this
-    original_query: str | None = None
-    message_history: list[ChatMinimalTextMessage] | None = None
-    user_memory_context: UserMemoryContext | None = None
-    user_info: str | None = None
-
-    # Used for tool calls after the first one but in the same chat turn. The reason for this is that if the initial pass through
-    # the custom flow did not yield good results, we don't want to go through it again. In that case, we defer entirely to the LLM
-    skip_query_expansion: bool = False
-
-    # Number of results to return in the richer object format so that it can be rendered in the UI
-    num_hits: int | None = NUM_RETURNED_HITS
-    # Number of chunks (token approx) to include in the string to the LLM
-    max_llm_chunks: int | None = MAX_CHUNKS_FED_TO_CHAT
-    include_link: bool = False
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-
 class ChatFile(BaseModel):
     """File from a chat session that can be passed to tools."""
 
     filename: str
     content: bytes
+    file_id: str | None = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -239,6 +189,7 @@ class ChatFile(BaseModel):
         *,
         filename: str,
         loader: Callable[[], bytes],
+        file_id: str | None = None,
     ) -> "ChatFile":
         """Construct a ChatFile whose ``content`` is loaded on first access.
 
@@ -246,7 +197,7 @@ class ChatFile(BaseModel):
         is unchanged. PythonTool's ``.content`` access transparently triggers
         the loader and memoizes the result.
         """
-        inst = cls(filename=filename, content=b"")
+        inst = cls(filename=filename, content=b"", file_id=file_id)
         install_lazy_content_loader(inst, loader)
         return inst
 
@@ -256,44 +207,29 @@ class ChatFile(BaseModel):
         return object.__getattribute__(self, name)
 
 
-class PythonToolRichResponse(BaseModel):
-    """Rich response from the Python tool carrying generated files."""
+class ToolContext(BaseModel):
+    """Application data available to each tool in an agent step."""
 
-    generated_files: list[PythonExecutionFile] = []
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
-
-class PythonToolOverrideKwargs(BaseModel):
-    """Override kwargs for the Python/Code Interpreter tool."""
-
-    chat_files: list[ChatFile] = []
-
-
-class SearchToolRunContext(BaseModel):
-    emitter: Emitter
-
-    model_config = {"arbitrary_types_allowed": True}
-
-
-class ImageGenerationToolRunContext(BaseModel):
-    emitter: Emitter
-
-    model_config = {"arbitrary_types_allowed": True}
-
-
-class CustomToolRunContext(BaseModel):
-    emitter: Emitter
-
-    model_config = {"arbitrary_types_allowed": True}
-
-
-class MemoryToolResponseSnapshot(BaseModel):
-    memory_text: str
-    operation: Literal["add", "update"]
-    memory_id: int | None = None
-    index: int | None = None
+    user_memory_context: UserMemoryContext | None = None
+    user_info: str | None = None
+    citation_mapping: dict[int, str] = Field(default_factory=dict)
+    next_citation_num: int = 1
+    # On repeat searches, defer to the model's new queries instead of repeating
+    # the expansion flow that may have produced poor results on the first pass.
+    skip_search_query_expansion: bool = False
+    search_context: SearchContext = Field(default_factory=SearchContext)
+    chat_files: list[ChatFile] = Field(default_factory=list)
+    url_snippet_map: dict[str, str] = Field(default_factory=dict)
+    # When False, don't pass memory context to search tools for query expansion
+    # (but still pass it to the memory tool for persistence)
+    inject_memories_in_prompt: bool = True
 
 
 class ToolCallInfo(BaseModel):
+    message_id: str
+    parent_message_id: str | None = None
     # The parent_tool_call_id is the actual generated tool call id
     # It is NOT the DB ID which often does not exist yet when the ToolCallInfo is created
     # None if attached to the Chat Message directly
@@ -302,7 +238,8 @@ class ToolCallInfo(BaseModel):
     tab_index: int
     tool_name: str
     tool_call_id: str
-    tool_id: int
+    # None for a tool that has no tool row, such as code mode.
+    tool_id: int | None
     reasoning_tokens: str | None
     tool_call_arguments: dict[str, Any]
     tool_call_response: str
@@ -311,6 +248,18 @@ class ToolCallInfo(BaseModel):
     generated_files: list[PythonExecutionFile] | None = None
     # File-store ids of blobs custom tools saved during the call.
     generated_file_ids: list[str] | None = None
+
+    @property
+    def execution_key(self) -> tuple[str, str]:
+        return self.message_id, self.tool_call_id
+
+    @property
+    def parent_execution_key(self) -> tuple[str, str] | None:
+        if self.parent_tool_call_id is None:
+            return None
+        if self.parent_message_id is None:
+            raise ValueError("Child tool has no parent message identity")
+        return self.parent_message_id, self.parent_tool_call_id
 
 
 CHAT_SESSION_ID_PLACEHOLDER = "CHAT_SESSION_ID"
@@ -352,11 +301,22 @@ class LlmOpenUrlResult(BaseCiteableToolResult):
     content: str
 
 
+class PythonArguments(BaseModel):
+    code: str
+
+
 class PythonExecutionFile(BaseModel):
     """File generated during Python execution"""
 
     filename: str
     file_link: str
+
+
+class PythonExecutionDelta(BaseModel):
+    """New process output from Python execution."""
+
+    stdout: str = ""
+    stderr: str = ""
 
 
 class LlmPythonExecutionResult(BaseModel):
@@ -372,3 +332,122 @@ class LlmPythonExecutionResult(BaseModel):
     error: str | None = None
     # Set when some session files are absent
     staging_notice: str | None = None
+
+
+class BashArguments(BaseModel):
+    cmd: str
+
+
+class LlmBashExecutionResult(BaseModel):
+    type: Literal["bash_execution"] = "bash_execution"
+    stdout: str
+    stderr: str
+    exit_code: int | None
+    timed_out: bool
+    error: str | None = None
+
+
+def _is_none(value: object) -> bool:
+    return value is None
+
+
+# A key that the JSON leaves out when it has no value.
+_OMITTED_WHEN_NONE = Field(exclude_if=_is_none)
+
+
+class SearchResult(BaseModel):
+    """One document of a search-like tool result, as the model and code mode
+    programs read it."""
+
+    document: int = Field(description="Citation number. Cite it in the answer as [n].")
+    title: str
+    updated_at: Annotated[str | None, _OMITTED_WHEN_NONE] = None
+    authors: Annotated[list[str] | None, _OMITTED_WHEN_NONE] = None
+    source_type: Annotated[str | None, _OMITTED_WHEN_NONE] = None
+    url: Annotated[str | None, _OMITTED_WHEN_NONE] = None
+    document_identifier: Annotated[str | None, _OMITTED_WHEN_NONE] = None
+    file_name: Annotated[str | None, _OMITTED_WHEN_NONE] = None
+    content: str
+    metadata: Annotated[str | None, _OMITTED_WHEN_NONE] = Field(
+        default=None, description="JSON-encoded metadata of the document."
+    )
+
+
+class SearchResults(BaseModel):
+    """The content of internal search, web search, and open URL results."""
+
+    results: list[SearchResult]
+    note: Annotated[str | None, _OMITTED_WHEN_NONE] = None
+    message: Annotated[str | None, _OMITTED_WHEN_NONE] = None
+
+
+class CodeModeExposure(str, Enum):
+    """How code mode offers a tool to the model."""
+
+    # Its own tool beside `execute_code`, never a function inside programs. Tools
+    # that wait for child runs must use this: a program cannot wait for them.
+    DIRECT = "direct"
+    # A function whose stub the `execute_code` description lists.
+    IMMEDIATE = "immediate"
+    # A function that programs can call but the description does not list; the
+    # model finds it with `tool_search`.
+    DEFERRED = "deferred"
+
+
+class CodeModeFunctionName(BaseModel):
+    """A tool's code mode function name before it becomes a Python identifier:
+    `<namespace>__<name>`, or `name` without a namespace."""
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str
+    # A group of tools, such as the MCP server of an MCP tool.
+    namespace: str | None = None
+
+    @property
+    def qualified(self) -> str:
+        return self.name if self.namespace is None else f"{self.namespace}__{self.name}"
+
+
+class CodeModeResultKind(str, Enum):
+    """How a code mode program receives a tool's result content."""
+
+    # The content is a JSON object; anything else is raised as an error.
+    JSON_OBJECT = "json_object"
+    # The content is passed to the program as a string.
+    TEXT = "text"
+    # JSON when the content parses, else the string.
+    AUTO = "auto"
+    # An MCP result envelope `{"tool_result": value}`; the program gets the value.
+    MCP = "mcp"
+
+
+class CodeModeResultSpec(BaseModel):
+    """The value a tool returns to a code mode program, and its stub type."""
+
+    model_config = ConfigDict(frozen=True)
+
+    kind: CodeModeResultKind
+    # The stub's return annotation; the model's name when unset, else Any.
+    annotation: str | None = None
+    # The model whose JSON the content is. The stub module declares it, and the
+    # models of its fields, as TypedDicts of the same names.
+    model: type[BaseModel] | None = None
+    # JSON Schema of the value, from the tool's server. The stub types the value
+    # from it, and declares a top-level object as a TypedDict.
+    output_schema: dict[str, JsonValue] | None = None
+    # Docstring note on the returned value.
+    returns: str | None = None
+    # Docstring note on how a program should call the tool, such as batching.
+    usage: str | None = None
+    # The tool numbers its results for citation and needs a citation block.
+    cites: bool = False
+
+    @property
+    def type_annotation(self) -> str:
+        if self.annotation is not None:
+            return self.annotation
+        return self.model.__name__ if self.model is not None else "Any"
+
+
+DEFAULT_CODE_MODE_RESULT = CodeModeResultSpec(kind=CodeModeResultKind.AUTO)

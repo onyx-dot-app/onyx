@@ -35,7 +35,8 @@ func TestRootCommand_flagsReachTheAudit(t *testing.T) {
 	restoreLogger(t)
 	logs := captureLog(t)
 	bin := fakeBinDir(t)
-	chdirNewRepo(t)
+	root := chdirNewRepo(t)
+	writeFixture(t, root, "pyproject.toml", "")
 	fakeDependabot(t, bin, criticalAlert)
 	allowlist := writeFixture(t, t.TempDir(), "ignores.json", `{"ignores":[{"id":"GHSA-aaaa-bbbb-cccc","reason":"accepted"}]}`)
 

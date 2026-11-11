@@ -11,8 +11,7 @@ import { useTranslations } from "next-intl";
 import { Hoverable } from "@opal/core";
 import { clickOnKeyDown } from "@opal/utils";
 import { SvgEdit } from "@opal/icons";
-import { Button, Tag } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
+import { Button, Badge, Text, useCreateModal } from "@opal/components";
 import { Tooltip } from "@opal/components";
 import EditUserModal from "./EditUserModal";
 import { useCanManageGroups } from "@/lib/permissions/hooks";
@@ -25,7 +24,7 @@ interface GroupsCellProps {
 }
 
 /**
- * Measures how many Tag pills fit in the container, accounting for a "+N"
+ * Measures how many Badge pills fit in the container, accounting for a "+N"
  * overflow counter when not all tags are visible. Uses a two-phase render:
  * first renders all tags (clipped by overflow:hidden) for measurement, then
  * re-renders with only the visible subset + "+N".
@@ -39,7 +38,7 @@ export default function GroupsCell({
   onMutate,
 }: GroupsCellProps) {
   const t = useTranslations("admin.users");
-  const [showModal, setShowModal] = useState(false);
+  const editModal = useCreateModal();
   const [visibleCount, setVisibleCount] = useState<number | null>(null);
   // below Business the editor is empty, so show pills but don't open it
   const canManageGroups = useCanManageGroups();
@@ -58,7 +57,7 @@ export default function GroupsCell({
 
     const containerWidth = container.clientWidth;
     const gap = 4; // gap-1
-    const counterWidth = 32; // "+N" Tag approximate width
+    const counterWidth = 32; // "+N" Badge approximate width
 
     let used = 0;
     let count = 0;
@@ -120,7 +119,7 @@ export default function GroupsCell({
     <div className="flex flex-wrap gap-1 max-w-56">
       {groups.map((g) => (
         <div key={g.id} className="max-w-40">
-          <Tag title={g.name} size="md" />
+          <Badge title={g.name} size={6} />
         </div>
       ))}
     </div>
@@ -130,14 +129,14 @@ export default function GroupsCell({
     <>
       {(isMeasuring ? groups : groups.slice(0, effectiveVisible)).map((g) => (
         <div key={g.id} data-group-tag className="shrink-0">
-          <Tag title={g.name} size="md" />
+          <Badge title={g.name} size={6} />
         </div>
       ))}
       {hasOverflow && (
         <div className="shrink-0">
-          <Tag
+          <Badge
             title={t("groupsCell.overflow.label", { count: overflowCount })}
-            size="md"
+            size={6}
           />
         </div>
       )}
@@ -158,8 +157,8 @@ export default function GroupsCell({
                 role: "button" as const,
                 tabIndex: 0,
                 "aria-label": t("groupsCell.editCell.ariaLabel"),
-                onClick: () => setShowModal(true),
-                onKeyDown: clickOnKeyDown(() => setShowModal(true)),
+                onClick: () => editModal.toggle(true),
+                onKeyDown: clickOnKeyDown(() => editModal.toggle(true)),
               }
             : {})}
         >
@@ -168,7 +167,7 @@ export default function GroupsCell({
               ref={containerRef}
               className="flex items-center gap-1 overflow-hidden flex-nowrap min-w-0 -me-7"
             >
-              <Text as="span" secondaryBody text03>
+              <Text as="span" font="secondary-body" color="text-03">
                 —
               </Text>
             </div>
@@ -199,20 +198,22 @@ export default function GroupsCell({
                 tooltipSide="start"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setShowModal(true);
+                  editModal.toggle(true);
                 }}
               />
             </Hoverable.Item>
           )}
         </div>
       </Hoverable.Root>
-      {showModal && user.id != null && (
-        <EditUserModal
-          user={{ ...user, id: user.id }}
-          onClose={() => setShowModal(false)}
-          onMutate={onMutate}
-        />
-      )}
+      <editModal.Provider>
+        {user.id != null && (
+          <EditUserModal
+            user={{ ...user, id: user.id }}
+            onClose={() => editModal.toggle(false)}
+            onMutate={onMutate}
+          />
+        )}
+      </editModal.Provider>
     </>
   );
 }

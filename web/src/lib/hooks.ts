@@ -8,7 +8,8 @@ import {
   ConnectorIndexingStatusLiteResponse,
   IndexingStatusRequest,
 } from "@/lib/types";
-import { ValidSources } from "@/lib/connectors/types/source";
+import { getConfiguredSources } from "@/lib/connectors/utils";
+import { SourceMetadata, ValidSources } from "@/lib/connectors/types/source";
 import useSWR, { mutate, useSWRConfig } from "swr";
 import { errorHandlingFetcher } from "./fetcher";
 import {
@@ -20,12 +21,11 @@ import {
   useState,
 } from "react";
 import { InputDateRangePickerValue } from "@opal/components";
-import { SourceMetadata } from "@/lib/search/types";
 import {
   getProviderOverrideForAgent,
   parseLlmDescriptor,
 } from "@/lib/languageModels/utils";
-import { ChatSession } from "@/app/app/interfaces";
+import { ChatSession } from "@/app/app/types";
 import { useSettings } from "@/lib/settings/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
 import {
@@ -35,7 +35,6 @@ import {
   ReasoningEffortOverride,
 } from "@/lib/languageModels/types";
 import { isAnthropic } from "@/lib/languageModels/svc";
-import { getConfiguredSources } from "@/lib/sources";
 import { DEFAULT_AGENT_ID, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
 import { useUser } from "@/providers/UserProvider";
 import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
@@ -48,6 +47,7 @@ import {
   useLanguageModelsForAgent,
 } from "@/lib/languageModels/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { userGroupListUrl } from "@/hooks/useGroups";
 
 const buildReactedDocsUrl = (ascending: boolean, limit: number) => {
   return `/api/manage/admin/doc-boosts?ascending=${ascending}&limit=${limit}`;
@@ -375,7 +375,7 @@ export function getValidLlmDescriptorForProviders(
 
     // If we have parsed provider info, try to find that specific provider.
     // This ensures we don't incorrectly match a model to the wrong provider
-    // when the same model name exists across multiple providers (e.g., gpt-5 in Azure and OpenAI)
+    // when the same model name exists across multiple providers (e.g., gpt-6-sol in Azure and OpenAI)
     if (model.provider && model.provider.length > 0) {
       const hasModel = (p: LLMProviderDescriptor) =>
         p.model_configurations.some((mc) => mc.name === model.modelName);
@@ -883,7 +883,10 @@ export function useLlmManager(
 EE Only APIs
 */
 
-/** `enabled: false` skips the request, e.g. below the plan groups need. */
+/**
+ * Groups without member lists; read `member_count`. `enabled: false` skips the
+ * request, e.g. below the plan groups need.
+ */
 export const useUserGroups = (
   enabled: boolean = true
 ): {
@@ -897,12 +900,21 @@ export const useUserGroups = (
   const isPaidEnterpriseFeaturesEnabled =
     enabled && !isLoading && settings.enterprise !== null;
 
+  const url = userGroupListUrl({
+    includeDefault: false,
+    includeMembers: false,
+  });
   const swrResponse = useSWR<UserGroup[]>(
-    isPaidEnterpriseFeaturesEnabled ? SWR_KEYS.adminUserGroups : null,
+    isPaidEnterpriseFeaturesEnabled ? url : null,
     errorHandlingFetcher
   );
 
-  const refreshUserGroups = () => mutate(SWR_KEYS.adminUserGroups);
+  // Every variant, the same as useGroups' refreshGroups.
+  const refreshUserGroups = () =>
+    mutate(
+      (key) =>
+        typeof key === "string" && key.startsWith(SWR_KEYS.adminUserGroups)
+    );
 
   if (isLoading) {
     return {

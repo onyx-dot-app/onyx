@@ -10,7 +10,7 @@ import {
   ProgressBar,
   Text,
 } from "@opal/components";
-import { toast } from "@opal/layouts";
+import { InputHorizontal, Section, toast } from "@opal/layouts";
 import { CardLoader } from "@opal/loaders";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useCCPairIdsBackfillStatus } from "@/lib/searchSettings/hooks";
@@ -96,7 +96,6 @@ function AccessModeSelect({ status }: BackfillStatusProps) {
       await mutate(SWR_KEYS.ccPairIdsBackfillProgress, updated, {
         revalidate: false,
       });
-      toast.success(t("toasts.success", { mode: t(`options.${value}.title`) }));
     } catch (error) {
       toast.error(
         error instanceof Error && error.message
@@ -109,21 +108,14 @@ function AccessModeSelect({ status }: BackfillStatusProps) {
   }
 
   return (
-    <div className="flex flex-row flex-wrap items-center justify-between gap-2">
-      <div className="flex flex-col">
-        <Text font="main-ui-action" color="text-04">
-          {t("label")}
-        </Text>
-        <Text font="secondary-body" color="text-03">
-          {t("description")}
-        </Text>
-        {status.enforce_requested && !status.completed && (
-          <Text font="secondary-body" color="text-03">
-            {t("enforcePending")}
-          </Text>
-        )}
-      </div>
-      <div className="w-56">
+    <Section gap={1} alignItems="start" height="auto">
+      <InputHorizontal
+        title={t("label")}
+        description={t("description")}
+        withLabel
+        center
+        fillInput
+      >
         <InputSingleSelect
           value={status.access_mode}
           onValueChange={handleChange}
@@ -140,8 +132,13 @@ function AccessModeSelect({ status }: BackfillStatusProps) {
                 : undefined,
           }))}
         />
-      </div>
-    </div>
+      </InputHorizontal>
+      {status.enforce_requested && !status.completed && (
+        <Text font="secondary-body" color="text-03">
+          {t("enforcePending")}
+        </Text>
+      )}
+    </Section>
   );
 }
 
@@ -175,7 +172,11 @@ export default function CCPairIdsBackfillCard() {
         title={t("complete.title")}
         description={markdown(t(`complete.description.${status.access_mode}`))}
         bottomChildren={
-          modeSelect ? <div className="px-2 py-1">{modeSelect}</div> : undefined
+          modeSelect ? (
+            <Section padding={2} alignItems="stretch" height="auto">
+              {modeSelect}
+            </Section>
+          ) : undefined
         }
       />
     );
@@ -190,10 +191,10 @@ export default function CCPairIdsBackfillCard() {
       )}
       bottomChildren={
         status.started || modeSelect ? (
-          <div className="flex flex-col gap-4 px-2 py-1">
+          <Section padding={2} alignItems="stretch" height="auto">
             {status.started && <BackfillDetails status={status} />}
             {modeSelect}
-          </div>
+          </Section>
         ) : undefined
       }
     />

@@ -11,6 +11,7 @@ const embeddingModelResponse: EmbeddingModelResponse = {
   api_key: null,
   api_url: null,
   index_name: null,
+  reduced_dimension: null,
 };
 
 describe("secondaryRefreshInterval", () => {

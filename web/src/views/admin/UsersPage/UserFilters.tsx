@@ -3,7 +3,7 @@
 import { useTranslations } from "next-intl";
 import { SvgSlack, SvgUser, SvgGlobe, SvgKey, SvgUsers } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
-import { Dropdown, FilterButton, type DropdownItem } from "@opal/components";
+import { Dropdown, SelectButton, type DropdownItem } from "@opal/components";
 import { AccountType, UserStatus } from "@/lib/types";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import type { GroupOption, StatusFilter, StatusCountMap } from "./types";
@@ -202,14 +202,17 @@ export default function UserFilters({
       {/* Account type filter */}
       <Dropdown>
         <Dropdown.Trigger asChild>
-          <FilterButton
+          <SelectButton
+            variant="select-filter"
+            chevron
+            labelFont="main-ui-action"
             aria-label={t("filters.accountType.button.ariaLabel")}
             icon={SvgUsers}
-            active={hasTypeFilter}
+            state={hasTypeFilter ? "selected" : "empty"}
             onClear={() => onAccountTypesChange([])}
           >
             {typeLabel}
-          </FilterButton>
+          </SelectButton>
         </Dropdown.Trigger>
         <Dropdown.Data
           label={t("filters.accountType.button.ariaLabel")}
@@ -230,14 +233,17 @@ export default function UserFilters({
       {/* Groups filter */}
       <Dropdown>
         <Dropdown.Trigger asChild>
-          <FilterButton
+          <SelectButton
+            variant="select-filter"
+            chevron
+            labelFont="main-ui-action"
             aria-label={t("filters.group.button.ariaLabel")}
             icon={SvgUsers}
-            active={hasGroupFilter}
+            state={hasGroupFilter ? "selected" : "empty"}
             onClear={() => onGroupsChange([])}
           >
             {groupLabel}
-          </FilterButton>
+          </SelectButton>
         </Dropdown.Trigger>
         <Dropdown.Data
           label={t("filters.group.button.ariaLabel")}
@@ -255,14 +261,17 @@ export default function UserFilters({
       {/* Status filter */}
       <Dropdown>
         <Dropdown.Trigger asChild>
-          <FilterButton
+          <SelectButton
+            variant="select-filter"
+            chevron
+            labelFont="main-ui-action"
             aria-label={t("filters.status.button.ariaLabel")}
             icon={SvgUsers}
-            active={hasStatusFilter}
+            state={hasStatusFilter ? "selected" : "empty"}
             onClear={() => onStatusesChange([])}
           >
             {statusLabel}
-          </FilterButton>
+          </SelectButton>
         </Dropdown.Trigger>
         <Dropdown.Data
           label={t("filters.status.button.ariaLabel")}

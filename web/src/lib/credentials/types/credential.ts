@@ -1,4 +1,8 @@
 import type { SWRResponse } from "swr";
+import type {
+  CapabilityCheckResult,
+  DraftCheckState,
+} from "@/lib/connectors/checks/types";
 import type { CredentialSpec } from "@/lib/credentials/types/spec";
 import type { ValidSources } from "@/lib/connectors/types/source";
 import type { TypedFile } from "@/lib/connectors/fileTypes";
@@ -70,6 +74,10 @@ export interface CredentialUsage {
  */
 export interface SimilarCredential extends AnyCredential {
   usages: CredentialUsage[];
+  /** The current user may use it with no specific connector settings. */
+  usable: boolean;
+  /** Why it is not `usable`, for the user; `null` when it is. */
+  refusal_reason: string | null;
 }
 
 /**
@@ -137,6 +145,11 @@ export interface CredentialSetup {
     credential: AnyCredential,
     failureMessage: string
   ) => Promise<string | null>;
+  /** Saves a credential's sharing (and name when given), then refetches. Rejects when the save fails. */
+  saveSharing: (
+    credentialId: number,
+    update: Pick<CredentialSharing, "admin_public" | "groups" | "name">
+  ) => Promise<SimilarCredential>;
   /** Refetches the credential list. */
   refresh: () => void;
   /** Opens the hosted OAuth popup. `invalidUrlMessage` is the caller's copy. */
@@ -176,7 +189,16 @@ export interface CredentialCheckReport {
   connector_id: number | null;
   run_status: CredentialCheckRunStatus;
   run_started_at: string | null;
-  report: { checked_at: string } | null;
+  report: {
+    checked_at: string;
+    check_results: CapabilityCheckResult[];
+  } | null;
+  /** The running run's checks so far; null unless `run_status` is running. */
+  progress: {
+    check_results: CapabilityCheckResult[];
+    /** In run order: the first running, the rest queued. */
+    open_checks: DraftCheckState[];
+  } | null;
   time_updated: string;
 }
 
@@ -194,7 +216,7 @@ export interface CredentialSharing {
  */
 export interface DraftCredential {
   source: ValidSources;
-  /** The values as typed. */
+  /** The values as typed, with text trimmed. */
   credential_json: Record<string, unknown>;
   sharing: CredentialSharing;
 }

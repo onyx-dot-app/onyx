@@ -154,6 +154,7 @@ func (p *onyxProvider) Resources(_ context.Context) []func() resource.Resource {
 		NewAgentResource,
 		NewMCPServerResource,
 		NewUserGroupResource,
+		NewAgentLabelResource,
 	}
 }
 
@@ -163,6 +164,8 @@ func (p *onyxProvider) DataSources(_ context.Context) []func() datasource.DataSo
 		NewEmbeddingProvidersDataSource,
 		NewSettingsDataSource,
 		NewConnectorsDataSource,
+		NewUserGroupsDataSource,
+		NewToolsDataSource,
 	}
 }
 

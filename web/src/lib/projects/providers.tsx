@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "@opal/navigation";
 import {
   createContext,
   useCallback,
@@ -41,10 +42,9 @@ import {
   unlinkFileFromProject as svcUnlinkFileFromProject,
   linkFileToProject as svcLinkFileToProject,
 } from "@/lib/projects/svc";
-import { useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
-import { useAppPosition } from "@/lib/position/hooks";
-import { ChatFileType } from "@/app/app/interfaces";
+import { useAppPosition } from "@/lib/navigation/hooks";
+import { ChatFileType } from "@/app/app/types";
 import { toast } from "@opal/layouts";
 import { useProjects } from "@/lib/projects/hooks";
 import { useSettings } from "@/lib/settings/hooks";

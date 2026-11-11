@@ -2,14 +2,12 @@
 
 import { Fragment, useState, useRef, useEffect, useCallback } from "react";
 import { useTranslations } from "next-intl";
-import { Modal } from "@opal/components";
-import { Section } from "@/layouts/general-layouts";
+import { Text, Modal } from "@opal/components";
 import { InputTextArea, InputTypeIn } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
 import { Button, Divider } from "@opal/components";
 import CharacterCount from "@/refresh-components/CharacterCount";
 import TextSeparator from "@/refresh-components/TextSeparator";
-import { toast } from "@opal/layouts";
+import { toast, Section } from "@opal/layouts";
 import { useModalClose } from "@opal/components";
 import { SvgAddLines, SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
 import {
@@ -192,7 +190,6 @@ export default function MemoriesModal({
       void refreshUser();
     }
     // Only run on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const internalSaveMemories = useCallback(
@@ -255,7 +252,6 @@ export default function MemoriesModal({
     if (id !== null && focusNewLine) {
       setFocusMemoryId(id);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const onAddLine = () => {
@@ -267,7 +263,7 @@ export default function MemoriesModal({
 
   return (
     <Modal open onOpenChange={(open) => !open && close?.()}>
-      <Modal.Content width="sm" height="lg" position="top">
+      <Modal.Content width="sm" height="lg">
         <Modal.Header
           icon={SvgAddLines}
           title={t("title")}
@@ -279,7 +275,7 @@ export default function MemoriesModal({
               placeholder={t("modal.searchPlaceholder")}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              searchIcon
+              icon="search"
             />
             <Button
               disabled={!canAddMemory}
@@ -300,7 +296,7 @@ export default function MemoriesModal({
         <Modal.Body padding={2}>
           {filteredMemories.length === 0 ? (
             <Section alignItems="center" padding={8}>
-              <Text secondaryBody text03>
+              <Text font="secondary-body" color="text-03">
                 {searchQuery.trim()
                   ? t("empty.noMatches")
                   : t("empty.getStarted")}

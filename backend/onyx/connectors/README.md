@@ -109,13 +109,14 @@ indexing them by following the shared convention:
 
 #### Frontend Changes
 
-- Add the new Connector definition to the `SOURCE_METADATA_MAP` [here](https://github.com/onyx-dot-app/onyx/blob/main/web/src/lib/sources.ts#L59).
+- Add the new Connector definition to the `SOURCE_METADATA_MAP` in [`web/src/lib/connectors/constants.ts`](https://github.com/onyx-dot-app/onyx/blob/main/web/src/lib/connectors/constants.ts).
 - Add the definition for the new Form to the `connectorConfigs` object [here](https://github.com/onyx-dot-app/onyx/blob/main/web/src/lib/connectors/connectors.ts#L79).
 
 #### Docs Changes
 
 Create the new connector page (with guiding images!) with how to get the connector credentials and how to set up the
-connector in Onyx. Then create a Pull Request in [https://github.com/onyx-dot-app/documentation](https://github.com/onyx-dot-app/documentation).
+connector in Onyx. Add it under `documentation/admins/connectors/official/` in the same PR as the connector, list it in
+`documentation/docs.json`, and map its logo in `documentation/scripts/generated_assets.json`. See `documentation/AGENTS.md`.
 
 ### Before opening PR
 

@@ -5,16 +5,20 @@ import threading
 import time
 import uuid
 from collections.abc import Callable, Generator, Iterator
+from contextvars import ContextVar
 from enum import Enum
 from functools import wraps
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.utils.fleet_telemetry import emit_telemetry, error_category
+from onyx.utils.fleet_telemetry import emit_telemetry, error_category, fingerprint
+from shared_configs.contextvars import get_current_tenant_id
 
 if TYPE_CHECKING:
-    from onyx.chat.models import AnswerStreamPart, StreamingError
+    from onyx.chat.models import AnswerStreamPart
+    from onyx.server.query_and_chat.models import MessageOrigin
+    from onyx.server.query_and_chat.streaming_models import Packet, StreamingError
 
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -43,12 +47,36 @@ _CHAT_ERROR_CATEGORIES: dict[str, str] = {
 }
 
 
+class QueryMode(str, Enum):
+    CHAT = "chat"
+    SEARCH = "search"
+    # Runs its own orchestration, so the fleet keeps its latency apart from chat.
+    DEEP_RESEARCH = "deep_research"
+
+
+def _origin_channel(origin: "MessageOrigin") -> str:
+    # The origin enum is set by the caller, not user text.
+    return _ORIGIN_CHANNELS.get(origin.value.lower(), "web")
+
+
 def _channel(kwargs: dict[str, Any]) -> str:
     request = kwargs.get("new_msg_req")
     if request is None:
         return "web"
-    # The origin enum is part of SendMessageRequest, not user text.
-    return _ORIGIN_CHANNELS.get(request.origin.value.lower(), "web")
+    return _origin_channel(request.origin)
+
+
+def _mode(kwargs: dict[str, Any]) -> QueryMode:
+    request = kwargs.get("new_msg_req")
+    if request is not None and request.deep_research:
+        return QueryMode.DEEP_RESEARCH
+    return QueryMode.CHAT
+
+
+def _is_answer_text(packet: "Packet") -> bool:
+    from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
+
+    return isinstance(packet.obj, AgentResponseDelta) and bool(packet.obj.content)
 
 
 class QueryToolUsage(str, Enum):
@@ -59,10 +87,10 @@ class QueryToolUsage(str, Enum):
 
 
 class QueryObservation:
-    def __init__(self, *, channel: str, mode: str) -> None:
+    def __init__(self, *, channel: str, mode: QueryMode) -> None:
         self.started: float = time.monotonic()
         self.channel: str = channel
-        self.mode: str = mode
+        self.mode: QueryMode = mode
         self.first_answer_ms: float | None = None
         self.time_to_results_ms: float | None = None
         # None: the request was rejected before it ran, so there is no query to report.
@@ -72,7 +100,37 @@ class QueryObservation:
         self._lock = threading.Lock()
         self._used_search = False
         self._used_other_tool = False
+        # Chat-loop LLM calls per model index; model comparisons share one observation.
+        self._llm_steps: dict[int, int] = {}
+        # Each model's count when it queued its first answer text.
+        self._answer_llm_steps: dict[int, int] = {}
+        self._answer_model: int | None = None
         self._finished = False
+
+    def llm_step_started(self, *, model_idx: int) -> None:
+        with self._lock:
+            if self._finished:
+                return
+            self._llm_steps[model_idx] = self._llm_steps.get(model_idx, 0) + 1
+
+    def packet_queued(self, packet: "Packet", *, model_idx: int) -> None:
+        """Runs in the model's worker thread before the writer can read the packet,
+        so a first answer keeps the count of the call that produced it."""
+        if not _is_answer_text(packet):
+            return
+        with self._lock:
+            if not self._finished:
+                self._answer_llm_steps.setdefault(
+                    model_idx, self._llm_steps.get(model_idx, 0)
+                )
+
+    def _llm_cycles(self) -> int | None:
+        """The first answering model's LLM calls up to its first answer text, which
+        can come before a tool call; None if that text bypassed the emitter. With no
+        answer, the most calls one model made: comparison models run in parallel."""
+        if self._answer_model is None:
+            return max(self._llm_steps.values(), default=0)
+        return self._answer_llm_steps.get(self._answer_model)
 
     def tool_started(self, *, is_search: bool) -> None:
         with self._lock:
@@ -96,16 +154,15 @@ class QueryObservation:
         )
 
     def observe_packet(self, packet: "AnswerStreamPart") -> None:
-        from onyx.chat.models import StreamingError
         from onyx.server.query_and_chat.streaming_models import (
-            AgentResponseDelta,
             OverallStop,
             Packet,
+            StreamingError,
         )
 
         if isinstance(packet, Packet):
-            if isinstance(packet.obj, AgentResponseDelta) and packet.obj.content:
-                self.answer()
+            if _is_answer_text(packet):
+                self.answer(model_idx=packet.placement.model_index or 0)
             elif isinstance(packet.obj, OverallStop):
                 stop_outcome = _STOP_OUTCOMES.get(packet.obj.stop_reason or "")
                 if stop_outcome is not None:
@@ -113,9 +170,11 @@ class QueryObservation:
         elif isinstance(packet, StreamingError):
             self.error_packet(packet)
 
-    def answer(self) -> None:
+    def answer(self, *, model_idx: int) -> None:
         if self.first_answer_ms is None:
             self.first_answer_ms = max(0, (time.monotonic() - self.started) * 1000)
+            with self._lock:
+                self._answer_model = model_idx
 
     def results(self) -> None:
         if self.time_to_results_ms is None:
@@ -151,7 +210,8 @@ class QueryObservation:
             if self._finished:
                 return
             self._finished = True
-            tool_usage = self._tool_usage() if self.mode == "chat" else None
+            tool_usage = self._tool_usage() if self.mode != QueryMode.SEARCH else None
+            llm_cycles = self._llm_cycles() if self.mode == QueryMode.CHAT else None
         if self.outcome is None:
             return
         # emit_telemetry never raises, so a stream always finishes normally.
@@ -166,6 +226,7 @@ class QueryObservation:
                 "time_to_results_ms": self.time_to_results_ms,
                 "error_code": self.error_code,
                 "tool_usage": tool_usage,
+                "llm_cycles": llm_cycles,
             },
         )
 
@@ -176,7 +237,7 @@ def observe_chat_packets(
     channel: str,
     observation: QueryObservation | None = None,
 ) -> Iterator[Any]:
-    observation = observation or QueryObservation(channel=channel, mode="chat")
+    observation = observation or QueryObservation(channel=channel, mode=QueryMode.CHAT)
     try:
         for packet in packets:
             if not observation.writer_owned:
@@ -207,7 +268,7 @@ def telemetry_chat(function: F) -> F:
             channel = _channel(kwargs)
         except Exception:
             channel = "web"
-        observation = QueryObservation(channel=channel, mode="chat")
+        observation = QueryObservation(channel=channel, mode=_mode(kwargs))
         yield from observe_chat_packets(
             function(*args, **kwargs, query_observation=observation),
             channel=channel,
@@ -217,7 +278,7 @@ def telemetry_chat(function: F) -> F:
     return cast(F, stream)
 
 
-def telemetry_query(*, mode: str) -> Callable[[F], F]:
+def telemetry_query(*, mode: QueryMode) -> Callable[[F], F]:
     """Decorator for search functions/generators; preserve the callable signature."""
 
     def decorate(function: F) -> F:
@@ -262,3 +323,24 @@ def telemetry_query(*, mode: str) -> Callable[[F], F]:
         return cast(F, run)
 
     return decorate
+
+
+def emit_feedback(
+    chat_message_id: int, positive: bool, *, origin: "MessageOrigin"
+) -> None:
+    """Report one thumbs up or down. The id is a digest of the message id: stable
+    across re-votes on one answer, never the answer itself."""
+    emit_telemetry(
+        "feedback",
+        {
+            "feedback_id": fingerprint(f"{get_current_tenant_id()}:{chat_message_id}"),
+            "positive": positive,
+            "channel": _origin_channel(origin),
+        },
+    )
+
+
+# Copied into agent and tool workers; never serialized into saved run state.
+CURRENT_QUERY_OBSERVATION: ContextVar[QueryObservation | None] = ContextVar(
+    "current_query_observation", default=None
+)

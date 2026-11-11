@@ -1194,31 +1194,6 @@
       "structured_output": true,
       "tool_call": true
     },
-    "grok-code-fast-1": {
-      "cost": {
-        "cache_read": 0.19999999999999998,
-        "input": 1.0,
-        "output": 2.0
-      },
-      "limit": {
-        "context": 256000,
-        "output": 256000
-      },
-      "modalities": {
-        "input": [
-          "text",
-          "image"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "grok-code-fast-1",
-      "reasoning": true,
-      "structured_output": true,
-      "tool_call": true
-    },
     "grok-code-fast-1-0825": {
       "cost": {
         "cache_read": 0.19999999999999998,
@@ -1257,12 +1232,10 @@
       "modalities": {
         "input": [
           "text",
-          "image",
-          "pdf"
+          "image"
         ],
         "output": [
-          "image",
-          "pdf"
+          "image"
         ]
       },
       "mode": "image_generation",
@@ -1292,50 +1265,32 @@
         "image_input": 0.05
       },
       "mode": "image_generation",
-      "name": "grok-imagine-image-pro"
+      "name": "grok-imagine-image-pro",
+      "status": "deprecated"
     },
     "grok-imagine-image-quality": {
-      "attachment": true,
       "cost": {
         "image_input": 0.05
       },
-      "family": "grok",
-      "limit": {
-        "context": 16000,
-        "output": 0
-      },
-      "modalities": {
-        "input": [
-          "text",
-          "image",
-          "pdf"
-        ],
-        "output": [
-          "image",
-          "pdf"
-        ]
-      },
       "mode": "image_generation",
-      "name": "Grok Imagine Image Quality",
-      "open_weights": false,
-      "reasoning": false,
-      "release_date": "2026-04-03",
-      "temperature": false,
-      "tool_call": false
+      "name": "grok-imagine-image-quality",
+      "status": "deprecated"
     },
     "grok-imagine-image-quality-20260403": {
       "cost": {
         "image_input": 0.05
       },
       "mode": "image_generation",
-      "name": "grok-imagine-image-quality-20260403"
+      "name": "grok-imagine-image-quality-20260403",
+      "status": "deprecated"
     },
     "grok-imagine-image-quality-latest": {
       "cost": {
         "image_input": 0.05
       },
       "mode": "image_generation",
-      "name": "grok-imagine-image-quality-latest"
+      "name": "grok-imagine-image-quality-latest",
+      "status": "deprecated"
     },
     "grok-imagine-video": {
       "attachment": true,
@@ -1352,8 +1307,7 @@
         "input": [
           "text",
           "image",
-          "video",
-          "pdf"
+          "video"
         ],
         "output": [
           "video"
@@ -1382,8 +1336,7 @@
         "input": [
           "text",
           "image",
-          "audio",
-          "pdf"
+          "audio"
         ],
         "output": [
           "video"
@@ -1419,8 +1372,7 @@
       "modalities": {
         "input": [
           "text",
-          "image",
-          "pdf"
+          "image"
         ],
         "output": [
           "video"
@@ -1442,13 +1394,35 @@
       "mode": "video_generation",
       "name": "grok-imagine-video-1.5-preview"
     },
+    "grok-voice-2.0": {
+      "cost": {
+        "second_input": 0.001333333333333
+      },
+      "mode": "realtime",
+      "name": "grok-voice-2.0"
+    },
+    "grok-voice-3.0": {
+      "cost": {
+        "second_input": 0.001333333333333
+      },
+      "mode": "realtime",
+      "name": "grok-voice-3.0"
+    },
+    "grok-voice-latest": {
+      "cost": {
+        "second_input": 0.001333333333333
+      },
+      "mode": "realtime",
+      "name": "grok-voice-latest"
+    },
     "grok-voice-transcribe-1.0": {
       "cost": {
         "second": 0.0,
         "second_input": 2.778e-05
       },
       "mode": "audio_transcription",
-      "name": "grok-voice-transcribe-1.0"
+      "name": "grok-voice-transcribe-1.0",
+      "status": "deprecated"
     },
     "grok-voice-transcribe-2.0": {
       "cost": {

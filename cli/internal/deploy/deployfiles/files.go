@@ -116,6 +116,28 @@ var (
 		DestRel:   "data/nginx/run-nginx.sh",
 		Mode:      0755,
 	}
+	// run-nginx.sh renders the MCP templates into the includes both app.conf
+	// templates load when MCP_SERVER_ENABLED is true.
+	NginxMcpConf = File{
+		EmbedPath: "embedded/data/nginx/mcp.conf.inc.template",
+		RepoPath:  "deployment/data/nginx/mcp.conf.inc.template",
+		DestRel:   "data/nginx/mcp.conf.inc.template",
+		Mode:      0644,
+	}
+	NginxMcpUpstreamConf = File{
+		EmbedPath: "embedded/data/nginx/mcp_upstream.conf.inc.template",
+		RepoPath:  "deployment/data/nginx/mcp_upstream.conf.inc.template",
+		DestRel:   "data/nginx/mcp_upstream.conf.inc.template",
+		Mode:      0644,
+	}
+	// Not a template: the routes name their upstream in a variable, so both
+	// app.conf templates include this file unconditionally.
+	NginxWebhookConf = File{
+		EmbedPath: "embedded/data/nginx/webhook.conf.inc",
+		RepoPath:  "deployment/data/nginx/webhook.conf.inc",
+		DestRel:   "data/nginx/webhook.conf.inc",
+		Mode:      0644,
+	}
 )
 
 // OverrideNames lists the user-owned compose override, in the precedence
@@ -146,4 +168,7 @@ var All = []File{
 	NginxAppConf,
 	NginxAppConfProd,
 	NginxRunScript,
+	NginxMcpConf,
+	NginxMcpUpstreamConf,
+	NginxWebhookConf,
 }

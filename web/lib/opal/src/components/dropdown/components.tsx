@@ -65,7 +65,7 @@ interface DropdownProps {
   /** Controlled open state. */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-  /** A disabled dropdown never opens and renders no list. */
+  /** A disabled dropdown never opens; disabling an open one closes it. */
   disabled?: boolean;
   /**
    * Prefix for the list's and the rows' element ids, so a form field can
@@ -967,6 +967,17 @@ function DropdownData(props: DropdownDataProps) {
             setIsKeyboardNav(false);
             setHighlightedIndex(-1);
           }
+        }}
+        // Focus would leave the list from a control inside it: hand the key
+        // to the trigger, so Tab walks on and wraps, or closes the list, as
+        // it does from the trigger.
+        onTabOut={(event) => {
+          focusTrigger();
+          handleKeyDown(event, {
+            typeIn: false,
+            typeAhead: false,
+            textField: false,
+          });
         }}
         searchField={
           search

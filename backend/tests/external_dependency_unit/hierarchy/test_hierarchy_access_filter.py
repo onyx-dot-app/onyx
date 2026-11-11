@@ -203,6 +203,7 @@ def connector_access_seed(
             UserGroup__CCPairDataAccess(
                 user_group_id=group.id,
                 cc_pair_id=cc_pair.id,
+                access_type=cc_pair.access_type,
             ),
         ]
     )

@@ -33,6 +33,7 @@ def search_chat_sessions(
         stmt = (
             select(ChatSession)
             .where(ChatSession.onyxbot_flow.is_(False))
+            .where(ChatSession.spawned_by_message_id.is_(None))
             .where(ChatSession.incognito_record_mode.is_(None))
             .order_by(desc(ChatSession.time_created))
             .offset(offset_val)
@@ -59,6 +60,7 @@ def search_chat_sessions(
     # through a message body when its description does not match.
     base_conditions: list[ColumnElement[bool]] = [
         ChatSession.onyxbot_flow.is_(False),
+        ChatSession.spawned_by_message_id.is_(None),
         ChatSession.incognito_record_mode.is_(None),
     ]
     if user_id is not None:

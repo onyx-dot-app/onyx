@@ -170,7 +170,6 @@ function LogStreamPane({ open }: LogStreamPaneProps) {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buf = "";
-        // eslint-disable-next-line no-constant-condition
         while (true) {
           const { done, value } = await reader.read();
           if (done) {
@@ -410,7 +409,7 @@ function StatusBar({
 
       <div className="flex-1 min-w-0">
         <InputTypeIn
-          searchIcon
+          icon="search"
           placeholder={t("filter.placeholder")}
           value={filter}
           onChange={(e) => onFilterChange(e.target.value)}

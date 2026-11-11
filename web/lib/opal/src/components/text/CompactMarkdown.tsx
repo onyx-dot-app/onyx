@@ -1,7 +1,7 @@
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
-import Link from "next/link";
+import { NavLink } from "@opal/navigation/components";
 import type { Route } from "next";
 
 import { cn } from "@opal/utils";
@@ -113,13 +113,13 @@ const DEFAULT_COMPONENTS = {
     const isRelative = href.startsWith("/") || href.startsWith("#");
     if (isRelative) {
       return (
-        <Link
+        <NavLink
           href={href as Route}
           className="text-link hover:text-link-hover underline underline-offset-2"
           {...props}
         >
           {children}
-        </Link>
+        </NavLink>
       );
     }
     const isHttp = /^https?:/i.test(href);

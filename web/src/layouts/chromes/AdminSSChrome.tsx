@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+import { redirect } from "@opal/navigation";
 import type { Route } from "next";
 import { requireAdminAuth } from "@/lib/auth/svcSS";
 import AdminChrome from "@/layouts/chromes/AdminChrome";

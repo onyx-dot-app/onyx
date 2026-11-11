@@ -6,10 +6,12 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import ExternalAppType, SkillSharePermission
+from onyx.db.enums import ExternalAppType, SkillInstallationPolicy, SkillSharePermission
 from onyx.db.external_app import (
     associate_custom_skill_with_external_app__no_commit,
     create_external_app,
+    delete_external_app,
+    disconnect_external_app_for_user,
     get_external_app_by_skill_id,
     get_skills_for_external_app,
     replace_custom_skill_associations__no_commit,
@@ -409,3 +411,30 @@ def test_editor_app_context_requires_an_admin_before_writing_skill_content(
 
     assert exc_info.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
     assert set(db_session.scalars(select(Skill.id))) == skill_ids_before
+
+
+def test_disconnect_preserves_opt_out_and_app_deletion_resets_policy(
+    db_session: Session,
+) -> None:
+    user = make_user(db_session)
+    skill = make_skill(db_session, is_public=True)
+    skill.installation_policy = SkillInstallationPolicy.DEFAULT
+    app_id = _make_app(db_session)
+    associate_custom_skill_with_external_app__no_commit(
+        db_session, external_app_id=app_id, skill_id=skill.id
+    )
+    preference = UserSkillPreference(
+        user_id=user.id, skill_id=skill.id, name=skill.name, enabled=False
+    )
+    db_session.add(preference)
+    db_session.flush()
+    disconnect_external_app_for_user(
+        db_session, external_app_id=app_id, user_id=user.id
+    )
+    db_session.expire_all()
+    saved = db_session.get(UserSkillPreference, (user.id, skill.id))
+    assert saved is not None and not saved.enabled
+    delete_external_app(db_session, app_id)
+    db_session.flush()
+    db_session.refresh(skill)
+    assert skill.installation_policy == SkillInstallationPolicy.AVAILABLE

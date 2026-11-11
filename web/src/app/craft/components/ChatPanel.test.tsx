@@ -21,7 +21,10 @@ const streamMessage = jest.fn().mockResolvedValue(undefined);
 const retryQueuedMessage = jest.fn().mockResolvedValue(undefined);
 const idle = jest.fn();
 jest.mock("next/navigation", () => ({
-  useRouter: () => ({ push: jest.fn() }),
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
+  useRouter: () => ({ replace: jest.fn() }),
 }));
 jest.mock("@/lib/analytics/utils", () => ({
   track: jest.fn(),
@@ -147,9 +150,18 @@ jest.mock("@/app/craft/components/BuildMessageList", () => ({
   __esModule: true,
   default: () => <div>Saved history</div>,
 }));
+const mockSubmitResult = jest.fn();
 jest.mock("@/app/craft/components/BuildWelcome", () => ({
   __esModule: true,
-  default: () => null,
+  default: ({ onSubmit }: Pick<CraftInputBarProps, "onSubmit">) => (
+    <button
+      onClick={async () =>
+        mockSubmitResult(await onSubmit("welcome prompt", []))
+      }
+    >
+      Send welcome
+    </button>
+  ),
 }));
 jest.mock("@/app/craft/components/AgentSwitcher", () => ({
   __esModule: true,
@@ -171,7 +183,7 @@ jest.mock("@/app/craft/components/SkillsStaleNotice", () => ({
   __esModule: true,
   default: () => null,
 }));
-jest.mock("@/app/craft/components/approvals/LiveApprovalsRegion", () => ({
+jest.mock("@/app/craft/components/approvals/SessionApprovalsRegion", () => ({
   __esModule: true,
   default: () => null,
 }));
@@ -245,7 +257,7 @@ it.each([
   ).toHaveLength(1);
 });
 
-it("shows a failed metadata load and retries the session explicitly", async () => {
+it("blocks submission after a failed session load and offers an explicit retry", async () => {
   const original = useBuildSessionStore.getState().loadSession;
   const loadSession = jest.fn().mockResolvedValue(undefined);
   useBuildSessionStore.setState({ loadSession });
@@ -255,6 +267,8 @@ it("shows a failed metadata load and retries the session explicitly", async () =
   try {
     render(<BuildChatPanel existingSessionId={SESSION_ID} />);
     expect(screen.getByRole("alert")).toHaveTextContent("Runtime unavailable");
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Queue" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(loadSession).toHaveBeenCalledWith(SESSION_ID, { force: true });
   } finally {
@@ -433,7 +447,9 @@ it("retains a draft on rerender and starts fresh after chat unmounts", async () 
   const first = render(<BuildChatPanel existingSessionId={SESSION_ID} />);
   fireEvent.click(screen.getByRole("button", { name: "Attach draft" }));
   await waitFor(() => expect(upload).toHaveBeenCalledTimes(1));
-  first.rerender(<BuildChatPanel existingSessionId={SESSION_ID} />);
+  first.rerender(
+    <BuildChatPanel existingSessionId={SESSION_ID} headerControlWidth={100} />
+  );
   expect(screen.getByTestId("draft-count")).toHaveTextContent("1");
   first.unmount();
   render(<BuildChatPanel existingSessionId={SESSION_ID} />);
@@ -620,6 +636,40 @@ it.each(["active", "failed"] as const)(
       expect(streamMessage).toHaveBeenCalledTimes(1);
     } finally {
       useBuildSessionStore.setState({ loadSession: original });
+    }
+  }
+);
+
+it.each([true, false])(
+  "reports welcome handoff acceptance with sandbox ready: %s",
+  async (ready) => {
+    const pendingStream = deferred<void>();
+    streamMessage.mockReturnValueOnce(pendingStream.promise);
+    useBuildSessionStore.setState({
+      currentSessionId: null,
+      preProvisioning: ready
+        ? { status: "ready", sessionId: "welcome" }
+        : { status: "idle" },
+    });
+    const error = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      render(<BuildChatPanel />);
+      await act(async () =>
+        fireEvent.click(screen.getByRole("button", { name: "Send welcome" }))
+      );
+      expect(mockSubmitResult).toHaveBeenCalledWith(ready);
+      if (ready)
+        expect(streamMessage).toHaveBeenCalledWith(
+          "welcome",
+          "welcome prompt",
+          expect.anything(),
+          []
+        );
+      else expect(streamMessage).not.toHaveBeenCalled();
+    } finally {
+      error.mockRestore();
+      await act(async () => pendingStream.resolve());
+      streamMessage.mockReset().mockResolvedValue(undefined);
     }
   }
 );

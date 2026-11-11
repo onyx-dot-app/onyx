@@ -380,10 +380,35 @@ variable "sandbox_gvisor_enabled" {
   default     = false
 }
 
+variable "craft_sandbox_runtime" {
+  type        = string
+  description = "Prepares the sandbox pool for Craft Firecracker: \"pod\" or \"firecracker\". \"firecracker\" turns on nested virtualization and needs an Intel n2 or c3 machine type. Craft still runs sandboxes as pods until its Firecracker backend ships. \"firecracker\" also maps the workload service account to a Google service account that can sign GCS URLs. See \"Craft sandboxes on Firecracker\" in the gcp module README."
+  default     = "pod"
+
+  validation {
+    condition     = contains(["pod", "firecracker"], var.craft_sandbox_runtime)
+    error_message = "craft_sandbox_runtime must be \"pod\" or \"firecracker\"."
+  }
+
+  # GCP offers nested virtualization on Intel types only. n2d, c2d, t2d and
+  # t2a (AMD and Arm) and e2 have none, and c3d is AMD.
+  validation {
+    condition     = var.craft_sandbox_runtime != "firecracker" || can(regex("^(n2|c3)-", var.sandbox_node_machine_type))
+    error_message = "craft_sandbox_runtime = \"firecracker\" needs an Intel n2 or c3 sandbox_node_machine_type, such as n2-standard-8. Other types have no /dev/kvm; keep craft_sandbox_runtime = \"pod\" on them."
+  }
+
+  # A gVisor pool runs pods under its own kernel, which gives them no /dev/kvm.
+  validation {
+    condition     = var.craft_sandbox_runtime != "firecracker" || !var.sandbox_gvisor_enabled
+    error_message = "craft_sandbox_runtime = \"firecracker\" cannot be used with sandbox_gvisor_enabled. Turn one of them off."
+  }
+}
+
 # --- Workload identity -------------------------------------------------------
-# GKE federates a Kubernetes service account straight to IAM, so there is no
-# Google service account to impersonate. Grant roles to the
-# workload_identity_principal output instead.
+# GKE federates a Kubernetes service account straight to IAM, so by default
+# there is no Google service account to impersonate. The Firecracker runtime
+# adds one, because GCS signed URLs need it. Either way, grant roles to the
+# workload_identity_principal output.
 
 variable "workload_namespace" {
   type        = string
@@ -418,7 +443,7 @@ variable "create_workload_namespace" {
 
 variable "create_workload_service_account" {
   type        = bool
-  description = "Create the service account named by workload_service_account_name. Turn this off when the Helm chart already creates it; the principal output still names it."
+  description = "Create the service account named by workload_service_account_name. Turn this off when the Helm chart already creates it; the principal output still names it. With craft_sandbox_runtime = \"firecracker\", the chart must then add the iam.gke.io/gcp-service-account annotation from the workload_google_service_account_email output."
   default     = true
 }
 

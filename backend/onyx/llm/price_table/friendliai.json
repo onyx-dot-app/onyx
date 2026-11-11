@@ -1,62 +1,6 @@
 {
   "aliases": {},
   "models": {
-    "MiniMaxAI/MiniMax-M2.5": {
-      "attachment": false,
-      "cost": {
-        "cache_read": 0.06,
-        "input": 0.3,
-        "output": 1.2
-      },
-      "family": "minimax",
-      "limit": {
-        "context": 196608,
-        "output": 131072
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "MiniMax-M2.5",
-      "open_weights": true,
-      "reasoning": true,
-      "release_date": "2026-02-12",
-      "structured_output": true,
-      "temperature": true,
-      "tool_call": true
-    },
-    "deepseek-ai/DeepSeek-V3.2": {
-      "attachment": false,
-      "cost": {
-        "cache_read": 0.25,
-        "input": 0.5,
-        "output": 1.5
-      },
-      "family": "deepseek",
-      "limit": {
-        "context": 163840,
-        "output": 64000
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "DeepSeek V3.2",
-      "open_weights": true,
-      "reasoning": true,
-      "release_date": "2025-12-01",
-      "structured_output": true,
-      "temperature": true,
-      "tool_call": true
-    },
     "google/gemma-4-31B-it": {
       "attachment": true,
       "cost": {

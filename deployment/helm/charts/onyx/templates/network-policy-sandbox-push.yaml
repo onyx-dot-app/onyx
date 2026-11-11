@@ -61,7 +61,8 @@ spec:
     # requests are dropped → connect timeout → NO snapshots are created →
     # reopened sessions restore nothing ("agent starts fresh"). Long-term, move
     # the `sandbox` queue to a dedicated craft worker and grant that worker here
-    # instead of heavy (see docs/craft/infra/sandbox-worker-network-policy.md).
+    # instead of heavy. The heavy worker also needs the sandbox push key
+    # (auth.sandboxPushSecret); see celery-worker-heavy.yaml.
     - from:
         - namespaceSelector:
             matchLabels:

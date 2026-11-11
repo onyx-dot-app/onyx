@@ -17,8 +17,8 @@ from typing import Any
 from onyx.connectors.capability_checks.models import CapabilityCheckStatus
 from onyx.connectors.config_diff import (
     ConfigFieldChange,
-    build_source_scoped_backfill_config,
-    classify_source_config_change,
+    build_scoped_backfill_config,
+    classify_config_change,
     source_change_override,
 )
 from onyx.connectors.edit_plan.models import (
@@ -52,6 +52,7 @@ _EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 _NAME_SETTING = "name"
 _REFRESH_FREQ_SETTING = "refresh_freq"
 _PRUNE_FREQ_SETTING = "prune_freq"
+_CHECK_FREQ_SETTING = "check_freq"
 
 _STEP_ORDER: tuple[EditStepKind, ...] = (
     EditStepKind.ACCESS_GROUPS,
@@ -192,8 +193,8 @@ def _widen_steps(
     source can run a window and the change has a delta config; otherwise a
     full re-index."""
     delta_config = (
-        build_source_scoped_backfill_config(
-            current.source,
+        build_scoped_backfill_config(
+            CONNECTOR_CLASS_MAP[current.source].config_class,
             current.connector_specific_config,
             proposed.connector_specific_config,
             override,
@@ -536,6 +537,7 @@ def _changed_settings(current: PairState, proposed: ProposedPairState) -> list[s
         _NAME_SETTING: (current.name, proposed.name),
         _REFRESH_FREQ_SETTING: (current.refresh_freq, proposed.refresh_freq),
         _PRUNE_FREQ_SETTING: (current.prune_freq, proposed.prune_freq),
+        _CHECK_FREQ_SETTING: (current.check_freq, proposed.check_freq),
     }
     return [name for name, (old, new) in settings.items() if old != new]
 
@@ -584,8 +586,8 @@ def compute_edit_plan(
         else None
     )
     field_changes: list[ConfigFieldChange] = (
-        classify_source_config_change(
-            current.source,
+        classify_config_change(
+            CONNECTOR_CLASS_MAP[current.source].config_class,
             current.connector_specific_config,
             proposed.connector_specific_config,
             override,

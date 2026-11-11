@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
 	"github.com/onyx-dot-app/onyx/cli/internal/exitcodes"
@@ -185,9 +186,6 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 			}
 
 			if ctx.Err() != nil {
-				if sessionID != "" {
-					client.StopChatSession(context.Background(), sessionID)
-				}
 				return nil
 			}
 
@@ -196,6 +194,13 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 			}
 			if !gotStop {
 				return exitcodes.New(exitcodes.General, "stream ended unexpectedly")
+			}
+			if sessionID != "" {
+				readyCtx, readyCancel := context.WithTimeout(ctx, 30*time.Second)
+				defer readyCancel()
+				if err := api.WaitForChatSessionIdle(readyCtx, client, sessionID); err != nil {
+					return fmt.Errorf("cannot confirm conversation readiness: %w", err)
+				}
 			}
 			nameChatSession(ctx, ios, client, sessionID)
 			return nil

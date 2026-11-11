@@ -3,6 +3,12 @@ locals {
   # separately from every other pool.
   main_pool = var.node_pools["main"]
 
+  sandbox_firecracker = var.enable_sandbox_node_pool && var.craft_sandbox_runtime == "firecracker"
+  sandbox_node_labels = merge(
+    { "onyx.app/workload" = "sandbox" },
+    local.sandbox_firecracker ? { "onyx.app/kvm" = "true" } : {},
+  )
+
   gpu_node_pool = var.enable_gpu_node_pool ? {
     gpu = {
       vm_size         = var.gpu_node_vm_size
@@ -24,7 +30,7 @@ locals {
       max_count       = var.sandbox_node_max_count
       os_disk_size_gb = var.sandbox_node_disk_size_gb
       os_disk_type    = "Managed"
-      node_labels     = { "onyx.app/workload" = "sandbox" }
+      node_labels     = local.sandbox_node_labels
       node_taints     = ["workload=sandbox:NoSchedule"]
       zones           = []
       mode            = "User"
@@ -192,6 +198,12 @@ resource "azurerm_kubernetes_cluster_node_pool" "this" {
   node_taints     = each.value.node_taints
   zones           = each.value.zones
   vnet_subnet_id  = var.subnet_id
+
+  # Firecracker was tested on AKS Ubuntu 24.04, which already sets
+  # vm.max_map_count to 1048576. azurerm caps linux_os_config at 262144, so
+  # the module pins the image rather than set a lower value. The sandbox pool
+  # names "Ubuntu" for "pod": a null os_sku keeps the old value from state.
+  os_sku = each.key == "sandbox" ? (local.sandbox_firecracker ? "Ubuntu2404" : "Ubuntu") : null
 
   temporary_name_for_rotation = local.rotation_names[each.key]
 

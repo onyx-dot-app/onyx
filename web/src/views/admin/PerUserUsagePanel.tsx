@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { Card, MessageCard, Text } from "@opal/components";
+import { Card, MessageCard, Text, useCreateModal } from "@opal/components";
 import { SvgX } from "@opal/icons";
 import { Section } from "@opal/layouts";
 import { PageLoader } from "@opal/loaders";
@@ -32,7 +32,7 @@ function SummaryMetric({
         {label}
       </Text>
       <span className="tabular-nums">
-        <Text font="heading-h3">{value}</Text>
+        <Text font="heading-section">{value}</Text>
       </span>
       <span className="block min-w-0 truncate" title={detail}>
         <Text font="secondary-body" color="text-03">
@@ -54,6 +54,8 @@ export default function PerUserUsagePanel({
   const locale = useLocale();
   const { usage, isLoading, error } = useUsageExport(timeRange);
   const [selectedEmail, setSelectedEmail] = useState<string | null>(null);
+  // `selectedEmail` stays set on close so the modal can animate out.
+  const detailModal = useCreateModal();
 
   const users = usage?.users ?? [];
   const selectedUser =
@@ -97,7 +99,7 @@ export default function PerUserUsagePanel({
       width="full"
       height="fit"
     >
-      <Text font="heading-h3">{t("panel.title")}</Text>
+      <Text font="heading-section">{t("panel.title")}</Text>
       {/* Holds the selected period, so visual tests mask it. */}
       <Text
         font="secondary-body"
@@ -213,7 +215,7 @@ export default function PerUserUsagePanel({
           width="full"
           height="fit"
         >
-          <Text font="heading-h3">{t("users.title")}</Text>
+          <Text font="heading-section">{t("users.title")}</Text>
           <Text font="secondary-body" color="text-03">
             {t("users.description")}
           </Text>
@@ -226,23 +228,31 @@ export default function PerUserUsagePanel({
             </Text>
           </Card>
         ) : (
-          <SpendByUserTable users={users} onSelectUser={setSelectedEmail} />
+          <SpendByUserTable
+            users={users}
+            onSelectUser={(email) => {
+              setSelectedEmail(email);
+              detailModal.toggle(true);
+            }}
+          />
         )}
       </Section>
 
-      {selectedUser && (
-        <UserUsageDetailModal
-          user={selectedUser}
-          periodLabel={
-            usage
-              ? `${formatDate(usage.start, locale)} – ${formatDate(usage.end, locale)}`
-              : undefined
-          }
-          onOpenChange={(open) => {
-            if (!open) setSelectedEmail(null);
-          }}
-        />
-      )}
+      <detailModal.Provider>
+        {selectedUser && (
+          <UserUsageDetailModal
+            user={selectedUser}
+            periodLabel={
+              usage
+                ? `${formatDate(usage.start, locale)} – ${formatDate(usage.end, locale)}`
+                : undefined
+            }
+            onOpenChange={(open) => {
+              if (!open) detailModal.toggle(false);
+            }}
+          />
+        )}
+      </detailModal.Provider>
     </Section>
   );
 }

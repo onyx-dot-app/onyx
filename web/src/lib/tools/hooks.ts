@@ -12,7 +12,7 @@ import type {
 } from "@/lib/tools/types";
 export type { ChatSearchFilters } from "@/lib/tools/types";
 import type { Tag } from "@/lib/types";
-import { useAppPosition } from "@/lib/position/hooks";
+import { useAppPosition } from "@/lib/navigation/hooks";
 import { useActiveAgent } from "@/lib/agents/hooks";
 import {
   CODING_AGENT_TOOL_ID,
@@ -63,14 +63,8 @@ export function useAvailableTools() {
   };
 }
 
-// # NOTE (@raunakab):
-// ## The tool configuration
-//
-// What a message is sent with — the tool it must use, the tools it may not —
-// belongs to the chat it was chosen in, and returning any of it to neutral is
-// always something the user does. Nothing below is exported: a configuration
-// is only reachable through `useToolConfiguration`, so the two rules that hold
-// it together cannot be worked around by building one somewhere else.
+// Tool preferences, permissions, and source filters belong to the chat.
+// Sending a message preserves the selection.
 
 type ToolConfiguration = Readonly<Record<number, ToolState>>;
 
@@ -120,8 +114,8 @@ function isChatKey(key: string): boolean {
 }
 
 /**
- * Applies the one rule a map cannot state: a single tool is forced at a time,
- * because a message carries a single `forced_tool_id`. That a tool is forced,
+ * Applies the one rule a map cannot state: a single tool is preferred at a time,
+ * because a message carries a single `preferred_tool_id`. That a tool is preferred,
  * disabled or neutral and never two of those comes free, since a key holds one
  * value.
  *
@@ -141,8 +135,8 @@ function withToolState(
   for (const key of Object.keys(configuration)) {
     const id = Number(key);
     if (id === toolId) continue;
-    // Forcing this tool releases whatever was forced before it.
-    if (next === "forced" && configuration[id] === "forced") continue;
+    // Preferring this tool releases whatever was preferred before it.
+    if (next === "preferred" && configuration[id] === "preferred") continue;
     updated[id] = configuration[id]!;
   }
   if (next !== null) updated[toolId] = next;
@@ -211,7 +205,7 @@ function parseFilters(entries: Record<string, unknown>): ChatSearchFilters {
 /** The tool half of {@link parseConfiguration}, on an already-checked object. */
 function parseTools(entries: Record<string, unknown>): ToolConfiguration {
   const configuration: Record<number, ToolState> = {};
-  let hasForced = false;
+  let hasPreferred = false;
   for (const key of Object.keys(entries)) {
     const toolId = Number(key);
     if (!Number.isInteger(toolId)) continue;
@@ -219,9 +213,9 @@ function parseTools(entries: Record<string, unknown>): ToolConfiguration {
     const state = entries[key];
     if (state === "disabled") {
       configuration[toolId] = "disabled";
-    } else if (state === "forced" && !hasForced) {
-      hasForced = true;
-      configuration[toolId] = "forced";
+    } else if (state === "preferred" && !hasPreferred) {
+      hasPreferred = true;
+      configuration[toolId] = "preferred";
     }
   }
   return configuration;
@@ -232,7 +226,7 @@ function parseTools(entries: Record<string, unknown>): ToolConfiguration {
  *
  * The rules are applied again rather than assumed: storage can be edited by
  * hand, and an older build may have written a shape this one does not know. So
- * text claiming two forced tools keeps one, and anything unrecognised is
+ * text claiming two preferred tools keeps one, and anything unrecognised is
  * dropped instead of carried through.
  *
  * A build before the filters moved in wrote the tool map bare. That shape is
@@ -256,7 +250,10 @@ function parseConfiguration(raw: string): ChatConfiguration {
         : NEUTRAL_FILTERS,
     };
   }
-  return { tools: parseTools(value), filters: NEUTRAL_FILTERS };
+  return {
+    tools: parseTools(value),
+    filters: NEUTRAL_FILTERS,
+  };
 }
 
 /** Session storage throws outright rather than degrading when it is blocked. */
@@ -311,8 +308,8 @@ export interface ToolConfigurationHandle {
   /** What this chat has been told about one tool, or null for neutral. */
   stateOf: (toolId: number) => ToolState | null;
   /**
-   * The only way to change a tool's state. Forcing a tool releases whatever
-   * was forced; a tool returned to neutral is forgotten rather than recorded.
+   * The only way to change a tool's state. Preferring a tool releases whatever
+   * was preferred; a tool returned to neutral is forgotten rather than recorded.
    */
   setToolState: (
     toolId: number,
@@ -330,14 +327,13 @@ export interface ToolConfigurationHandle {
   toggleToolState: (toolId: number, state: ToolState) => void;
 
   /**
-   * Releases whatever is forced, for the callers that want no forced tool
+   * Releases whatever is preferred, for the callers that want no preferred tool
    * without caring which one is. Still goes through `setToolState`, so the
    * rules hold.
    */
-  clearForcedTool: () => void;
-
-  /** The tool every message in this chat is made to use, if any. */
-  forcedToolId: number | null;
+  clearPreferredTool: () => void;
+  /** The preferred tool for this chat, if any. */
+  preferredToolId: number | null;
   /** The tools the model may not use in this chat. */
   disabledToolIds: number[];
 
@@ -375,7 +371,7 @@ export interface ToolConfigurationHandle {
    * agent viewer, which hands off to `/app` rather than sending in place.
    * Leaves the configuration where that page will find it, once.
    */
-  handOffToNewChatWith: (agentId: number) => void;
+  handOffToNewChatWith: (agentId: number, projectId?: number | null) => void;
 }
 
 /**
@@ -510,24 +506,33 @@ export function useToolConfiguration(
   );
 
   const handOffToNewChatWith = useCallback(
-    (agentId: number) =>
-      writeConfiguration(`${STORAGE_PREFIX}:new:${agentId}`, configuration),
+    (agentId: number, projectId: number | null = null) =>
+      writeConfiguration(
+        projectId === null
+          ? `${STORAGE_PREFIX}:new:${agentId}`
+          : `${STORAGE_PREFIX}:new:${agentId}:${projectId}`,
+        configuration
+      ),
     [configuration]
   );
 
   return useMemo(() => {
     const ids = Object.keys(configuration.tools).map(Number);
-    const forcedToolId =
-      ids.find((toolId) => configuration.tools[toolId] === "forced") ?? null;
+    const preferredToolId =
+      ids.find((toolId) => configuration.tools[toolId] === "preferred") ?? null;
     return {
       stateOf: (toolId: number) => configuration.tools[toolId] ?? null,
       setToolState,
       toggleToolState: (toolId: number, state: ToolState) =>
         setToolState(toolId, (current) => (current === state ? null : state)),
-      clearForcedTool: () => {
-        if (forcedToolId !== null) setToolState(forcedToolId, () => null);
+      clearPreferredTool: () => {
+        if (preferredToolId !== null) {
+          setToolState(preferredToolId, (current) =>
+            current === "preferred" ? null : current
+          );
+        }
       },
-      forcedToolId,
+      preferredToolId,
       disabledToolIds: ids.filter(
         (toolId) => configuration.tools[toolId] === "disabled"
       ),

@@ -20,10 +20,10 @@ handles GATED_ACCESS, seat limits, and the billing/auth allowlist.
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable
 
-from fastapi import FastAPI, Request, Response
+from fastapi import Request
 from fastapi.responses import JSONResponse
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from ee.onyx.configs.license_enforcement_config import (
     LICENSE_ENFORCEMENT_ALLOWED_PREFIXES,
@@ -58,24 +58,29 @@ def _required_tier(path: str) -> Tier | None:
     return None
 
 
-def add_tier_gate_middleware(app: FastAPI, logger: logging.LoggerAdapter) -> None:
+def tier_gate_middleware(app: ASGIApp, logger: logging.LoggerAdapter) -> ASGIApp:
     logger.info("Tier gate middleware registered (entries=%d)", len(_SORTED_GATES))
 
-    @app.middleware("http")
-    async def enforce_tier_gate(
-        request: Request, call_next: Callable[[Request], Awaitable[Response]]
-    ) -> Response:
+    async def middleware(scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await app(scope, receive, send)
+            return
+
+        request = Request(scope)
         if not _SORTED_GATES:
-            return await call_next(request)
+            await app(scope, receive, send)
+            return
 
         path = strip_api_prefix(request.url.path)
 
         if _is_allowed_path(path):
-            return await call_next(request)
+            await app(scope, receive, send)
+            return
 
         required = _required_tier(path)
         if required is None:
-            return await call_next(request)
+            await app(scope, receive, send)
+            return
 
         # `get_tier` is sync: Redis read on every request, plus a blocking
         # CP round-trip on cache miss. Offload to a worker so the event loop
@@ -94,7 +99,8 @@ def add_tier_gate_middleware(app: FastAPI, logger: logging.LoggerAdapter) -> Non
             current_tier = Tier.COMMUNITY
 
         if tier_at_least(current_tier, required):
-            return await call_next(request)
+            await app(scope, receive, send)
+            return
 
         logger.info(
             "[tier_gate] Blocking %s: required=%s",
@@ -105,7 +111,10 @@ def add_tier_gate_middleware(app: FastAPI, logger: logging.LoggerAdapter) -> Non
             f"This feature requires the {required.value.title()} plan."
         )
         payload["required_tier"] = required.value
-        return JSONResponse(
+        response = JSONResponse(
             status_code=OnyxErrorCode.FEATURE_NOT_AVAILABLE.status_code,
             content=payload,
         )
+        await response(scope, receive, send)
+
+    return middleware

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.db.enums import ActionPolicy, ExternalAppType
 from onyx.external_apps.matching.request import MatchContext, ProxiedRequest
 from onyx.external_apps.matching.rules import rule_matches
 from onyx.external_apps.providers.notion import NotionAction
@@ -93,29 +93,27 @@ def test_page_update_and_block_children_do_not_collide() -> None:
 @pytest.mark.parametrize(
     "action, expected_policy",
     [
-        (NotionAction.USERS_READ, EndpointPolicy.ALWAYS),
-        (NotionAction.SEARCH, EndpointPolicy.ALWAYS),
-        (NotionAction.PAGES_READ, EndpointPolicy.ALWAYS),
-        (NotionAction.BLOCKS_READ, EndpointPolicy.ALWAYS),
-        (NotionAction.DATABASES_READ, EndpointPolicy.ALWAYS),
-        (NotionAction.DATA_SOURCES_READ, EndpointPolicy.ALWAYS),
-        (NotionAction.DATA_SOURCES_QUERY, EndpointPolicy.ALWAYS),
-        (NotionAction.COMMENTS_READ, EndpointPolicy.ALWAYS),
+        (NotionAction.USERS_READ, ActionPolicy.ALWAYS),
+        (NotionAction.SEARCH, ActionPolicy.ALWAYS),
+        (NotionAction.PAGES_READ, ActionPolicy.ALWAYS),
+        (NotionAction.BLOCKS_READ, ActionPolicy.ALWAYS),
+        (NotionAction.DATABASES_READ, ActionPolicy.ALWAYS),
+        (NotionAction.DATA_SOURCES_READ, ActionPolicy.ALWAYS),
+        (NotionAction.DATA_SOURCES_QUERY, ActionPolicy.ALWAYS),
+        (NotionAction.COMMENTS_READ, ActionPolicy.ALWAYS),
         # Writes require approval out of the box.
-        (NotionAction.PAGES_CREATE, EndpointPolicy.ASK),
-        (NotionAction.PAGES_UPDATE, EndpointPolicy.ASK),
-        (NotionAction.BLOCKS_APPEND, EndpointPolicy.ASK),
-        (NotionAction.BLOCKS_UPDATE, EndpointPolicy.ASK),
-        (NotionAction.BLOCKS_DELETE, EndpointPolicy.ASK),
-        (NotionAction.DATABASES_CREATE, EndpointPolicy.ASK),
-        (NotionAction.DATABASES_UPDATE, EndpointPolicy.ASK),
-        (NotionAction.DATA_SOURCES_CREATE, EndpointPolicy.ASK),
-        (NotionAction.DATA_SOURCES_UPDATE, EndpointPolicy.ASK),
-        (NotionAction.COMMENTS_CREATE, EndpointPolicy.ASK),
+        (NotionAction.PAGES_CREATE, ActionPolicy.ASK),
+        (NotionAction.PAGES_UPDATE, ActionPolicy.ASK),
+        (NotionAction.BLOCKS_APPEND, ActionPolicy.ASK),
+        (NotionAction.BLOCKS_UPDATE, ActionPolicy.ASK),
+        (NotionAction.BLOCKS_DELETE, ActionPolicy.ASK),
+        (NotionAction.DATABASES_CREATE, ActionPolicy.ASK),
+        (NotionAction.DATABASES_UPDATE, ActionPolicy.ASK),
+        (NotionAction.DATA_SOURCES_CREATE, ActionPolicy.ASK),
+        (NotionAction.DATA_SOURCES_UPDATE, ActionPolicy.ASK),
+        (NotionAction.COMMENTS_CREATE, ActionPolicy.ASK),
     ],
 )
-def test_default_policies(
-    action: NotionAction, expected_policy: EndpointPolicy
-) -> None:
+def test_default_policies(action: NotionAction, expected_policy: ActionPolicy) -> None:
     by_id = {endpoint.id: endpoint for endpoint in _CATALOG}
     assert by_id[action].default_policy == expected_policy

@@ -43,7 +43,7 @@ def test_nonexistent_project_error_during_indexing(
 ) -> None:
     """Test that a non-existent project error during indexing is properly handled."""
     mock_source_operations.search_issues.side_effect = JiraApiError(
-        "error", status_code=400, text=_MISSING_PROJECT_TEXT
+        "error", status_code=400, body=_MISSING_PROJECT_TEXT
     )
 
     with pytest.raises(ConnectorValidationError) as excinfo:
@@ -63,7 +63,7 @@ def test_invalid_jql_error_during_indexing(
     mock_source_operations.search_issues.side_effect = JiraApiError(
         "error",
         status_code=400,
-        text='{"errorMessages":["Error in the JQL Query: Expecting \')\' before the end of the query."],"errors":{}}',
+        body='{"errorMessages":["Error in the JQL Query: Expecting \')\' before the end of the query."],"errors":{}}',
     )
 
     with pytest.raises(ConnectorValidationError) as excinfo:
@@ -80,7 +80,7 @@ def test_credential_expired_error_during_indexing(
 ) -> None:
     """Test that expired credentials during indexing are properly handled."""
     mock_source_operations.search_issues.side_effect = JiraApiError(
-        "error", status_code=401, text=None
+        "error", status_code=401, body=None
     )
 
     with pytest.raises(CredentialExpiredError) as excinfo:
@@ -97,7 +97,7 @@ def test_insufficient_permissions_error_during_indexing(
 ) -> None:
     """Test that insufficient permissions during indexing are properly handled."""
     mock_source_operations.search_issues.side_effect = JiraApiError(
-        "error", status_code=403, text=None
+        "error", status_code=403, body=None
     )
 
     with pytest.raises(InsufficientPermissionsError) as excinfo:
@@ -115,7 +115,7 @@ def test_cloud_nonexistent_project_error_during_indexing(
     """Test that a non-existent project error for Jira Cloud is properly handled."""
     mock_source_operations._is_cloud.return_value = True
     mock_source_operations.search_issue_ids.side_effect = JiraApiError(
-        "400 Client Error: Bad Request", status_code=400, text=_MISSING_PROJECT_TEXT
+        "400 Client Error: Bad Request", status_code=400, body=_MISSING_PROJECT_TEXT
     )
 
     with pytest.raises(ConnectorValidationError) as excinfo:

@@ -25,13 +25,13 @@ resource "onyx_llm_provider" "openai" {
   # The complete set of enabled models: anything omitted here is
   # removed from the provider on apply.
   model_configurations = [
-    { name = "gpt-5" },
+    { name = "gpt-6-sol" },
     {
-      name                = "gpt-5-mini"
-      custom_display_name = "GPT-5 Mini (cheap tier)"
+      name                = "gpt-6-luna"
+      custom_display_name = "GPT-6 Luna (cheap tier)"
     },
     {
-      name       = "gpt-5-nano"
+      name       = "gpt-6-astra"
       is_visible = false
     },
   ]
@@ -60,7 +60,7 @@ resource "onyx_llm_provider" "openai" {
 - `custom_config_wo` (Map of String, Sensitive, [Write-only](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments)) Provider-specific config key/values, held only in configuration. Terraform sends them on every apply and stores nothing, so they never reach state. Pair with `custom_config_wo_version` to rotate them. Needs Terraform 1.11 or later.
 - `custom_config_wo_version` (Number) Rotation counter for `custom_config_wo`. Terraform never stores a write-only value and so cannot tell that the secret changed; raise this number to make the next apply send the current one. Do not derive it from the secret itself — unlike the secret, this number is kept in state.
 - `deployment_name` (String) Deployment name (Azure).
-- `force_delete` (Boolean) Allow destroying this provider even while it holds the deployment default model. Defaults to false, where such a destroy fails.
+- `force_delete` (Boolean) Allow destroying this provider even while it holds the deployment default model. Defaults to false, where such a destroy fails. It does not override the decision model: a provider that holds it cannot be destroyed until the decision model is cleared.
 - `groups` (Set of Number) User group ids the provider is restricted to (EE).
 - `is_auto_mode` (Boolean) Onyx Auto mode: the model list is managed by Onyx. When enabled, the server owns `model_configurations`: Terraform stops drift-checking the list, and updates re-assert the server's current models instead of the configured ones, so registry-managed models are never removed.
 - `is_public` (Boolean) Whether the provider is available to all users.
@@ -75,7 +75,7 @@ resource "onyx_llm_provider" "openai" {
 
 Required:
 
-- `name` (String) Model name as known to the provider, e.g. `gpt-5-mini`.
+- `name` (String) Model name as known to the provider, e.g. `gpt-6-luna`.
 
 Optional:
 
@@ -83,8 +83,11 @@ Optional:
 - `display_name` (String) Source-API display name (dynamic providers such as OpenRouter/Ollama).
 - `is_visible` (Boolean) Whether the model is selectable in the UI.
 - `max_input_tokens` (Number) Override for the model's max input tokens; unset uses the model's known default.
+- `reasoning_effort_default` (String) Reasoning effort for this model when the user does not select one. Must not be higher than `reasoning_effort_max`. Same values. Unset, Onyx keeps the stored value.
+- `reasoning_effort_max` (String) Highest reasoning effort users can select for this model: `off`, `low`, `medium`, `high`, or `xhigh`. Unset, Onyx keeps the stored value.
 - `supports_image_input` (Boolean) Override for image-input support; unset lets Onyx infer it.
 - `supports_reasoning` (Boolean) Override for reasoning-model classification; unset lets Onyx infer it.
+- `temperature_default` (Number) Temperature for this model when the user does not set one, 0 to 2. Unset, Onyx keeps the stored value.
 
 ## Import
 

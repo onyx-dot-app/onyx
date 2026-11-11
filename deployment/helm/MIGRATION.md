@@ -71,10 +71,35 @@ including files uploaded after the upgrade, because 0.9.x writes to both
 stores. The `<fullname>-object-store` PVC stays, and the next upgrade continues
 the move.
 
-One exception: a file written or deleted while MinIO was unavailable reaches
-MinIO only when the copy Job next runs. If MinIO had an outage after the Job
-completed, delete the Job and upgrade again before you roll back, and wait for
-it to complete.
+`helm rollback` does not change the database schema. A 0.8.x API server fails
+to start on the 0.9.x schema with `Can't locate revision`. Only the 0.9.x image
+has the migrations to downgrade it. Roll back in this order:
+
+1. If MinIO had an outage after the copy Job completed, delete the Job and
+   upgrade again, and wait for it to complete. A file written or deleted while
+   MinIO was unavailable reaches MinIO only when the copy Job runs.
+2. Downgrade the schema from a 0.9.x pod. This deletes data that only 0.9.x
+   stores, such as child chat sessions, OAuth grants and tokens that Onyx
+   issued, and personal MCP and OpenAPI tool preferences.
+
+   ```bash
+   kubectl exec -n <namespace> deploy/<fullname>-api-server -- \
+     alembic downgrade 25053020dd5a
+   ```
+
+   `25053020dd5a` is the last migration of Onyx v4.9. For another release, get
+   it with `docker run --rm onyxdotapp/onyx-backend:<version> alembic heads`.
+3. Roll back immediately. The app returns errors until the 0.8.x pods are
+   ready. A 0.9.x API pod that restarts before then upgrades the schema again.
+
+   ```bash
+   helm rollback -n <namespace> <release> <revision>
+   ```
+
+If you ran `helm rollback` first, the 0.8.x API pod restarts in a loop. The
+0.9.x pod keeps serving without the object store, so file reads fail. Run the
+step 2 command. `kubectl exec` picks the ready pod, which is the 0.9.x one.
+The 0.8.x pod starts on its next restart.
 
 ### Retire MinIO
 
@@ -94,18 +119,23 @@ since.
    running, so it fails and MinIO stays in use. Otherwise it writes a marker to
    the object store, and within a minute every pod stops writing to MinIO,
    with no restart.
-2. Make sure Helm keeps the MinIO PVC. Chart 0.9.0 marks it
-   `helm.sh/resource-policy: keep`, but an upgrade with `--reuse-values` keeps
-   the old values, which lack that annotation. Check it, and add it if it is
-   missing:
+2. Set `minio.enabled: false` and `objectStore.enabled: true`, then upgrade.
+   MinIO stops and the app pods roll out without downtime. From chart 0.9.21,
+   the upgrade keeps the MinIO PVC and marks it
+   `helm.sh/resource-policy: keep`, also with `--reuse-values`. On an earlier
+   0.9.x chart, add the annotation by hand before this upgrade, or Helm deletes
+   the PVC:
 
    ```bash
    kubectl annotate pvc -n <namespace> <fullname>-minio \
      helm.sh/resource-policy=keep --overwrite
    ```
-3. Set `minio.enabled: false` and `objectStore.enabled: true`, then upgrade.
-   MinIO stops and the app pods roll out without downtime. The MinIO PVC
-   stays. Delete it when you no longer need that data.
+3. Delete the MinIO PVC when you no longer need that data. Helm does not delete
+   it, and `helm uninstall` leaves it too:
+
+   ```bash
+   kubectl delete pvc -n <namespace> <fullname>-minio
+   ```
 
 New installs set `minio.enabled: false` and `objectStore.enabled: true`.
 

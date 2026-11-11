@@ -46,10 +46,15 @@ func TestCreateConnector(t *testing.T) {
 		t.Errorf("unexpected body: %s", captured.Body)
 	}
 	// Omitting these deletes the schedule server-side, so they are always sent.
-	for _, field := range []string{"refresh_freq", "prune_freq", "indexing_start"} {
+	for _, field := range []string{"refresh_freq", "indexing_start"} {
 		if v, present := body[field]; !present || v != nil {
 			t.Errorf("%s should be explicitly null, body: %s", field, captured.Body)
 		}
+	}
+	// An unset prune_freq is omitted: null would turn pruning off, and
+	// omitted takes the server's default.
+	if _, present := body["prune_freq"]; present {
+		t.Errorf("an unset prune_freq should be omitted, body: %s", captured.Body)
 	}
 }
 
@@ -87,8 +92,8 @@ func TestUpdateConnector(t *testing.T) {
 	if captured.Method != http.MethodPatch || captured.Path != "/manage/admin/connector/5" {
 		t.Errorf("got %s %s, want PATCH /manage/admin/connector/5", captured.Method, captured.Path)
 	}
-	// The server rewrites an unset prune_freq to its default, so the response
-	// is the source of truth.
+	// An unset prune_freq is not sent; the server defaults or keeps it, so
+	// the response is the source of truth.
 	if remote.PruneFreq == nil || *remote.PruneFreq != 604800 {
 		t.Errorf("update must return the stored prune_freq, got %+v", remote.PruneFreq)
 	}

@@ -31,6 +31,7 @@ func TestRun_combinesBackendsAndAppliesTheAllowlist(t *testing.T) {
 	root := chdirNewRepo(t)
 	// An empty lockfile scans cleanly without querying OSV.dev.
 	writeFixture(t, root, "uv.lock", "")
+	writeFixture(t, root, "pyproject.toml", "")
 	ghArgs := fakeDependabot(t, bin, dependabotFixture)
 	allowlist := writeFixture(t, t.TempDir(), "ignores.json", `{"ignores":[{"id":"GHSA-dddd","reason":"not reachable"}]}`)
 
@@ -79,7 +80,7 @@ func TestRun_combinesBackendsAndAppliesTheAllowlist(t *testing.T) {
 
 func TestRun_unavailableAllowlistStillBlocks(t *testing.T) {
 	bin := fakeBinDir(t)
-	chdirNewRepo(t)
+	writeFixture(t, chdirNewRepo(t), "pyproject.toml", "")
 	fakeDependabot(t, bin, dependabotFixture)
 
 	var stdout bytes.Buffer

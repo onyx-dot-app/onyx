@@ -1,6 +1,10 @@
 import json
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 
+import requests
+from google.auth.exceptions import RefreshError, TransportError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials as OAuthCredentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
@@ -16,11 +20,44 @@ from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_TOKEN_KEY,
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
     GOOGLE_SCOPES,
+    GOOGLE_TOKEN_URI,
     GoogleOAuthAuthenticationMethod,
 )
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+# A token request that got no answer from Google.
+_TOKEN_CONNECTION_ERRORS: tuple[type[Exception], ...] = (
+    TransportError,
+    requests.ConnectionError,
+    requests.Timeout,
+    ConnectionError,
+    TimeoutError,
+)
+
+
+class GoogleUnreachableError(ConnectionError):
+    """A token refresh got no answer from Google, or only a server error, so
+    the credential's state is unknown. The original error is the cause."""
+
+
+@contextmanager
+def _token_request() -> Iterator[None]:
+    try:
+        yield
+    except _TOKEN_CONNECTION_ERRORS as e:
+        raise GoogleUnreachableError(
+            f"Onyx cannot reach Google to refresh the token: {e}"
+        ) from e
+    except RefreshError as e:
+        # google-auth marks a 5xx that outlasted its retries as retryable: the
+        # token endpoint failed, it did not reject the credential.
+        if not e.retryable:
+            raise
+        raise GoogleUnreachableError(
+            f"Google's token endpoint failed to refresh the token: {e}"
+        ) from e
 
 
 def sanitize_oauth_credentials(oauth_creds: OAuthCredentials) -> str:
@@ -48,6 +85,9 @@ def get_google_oauth_creds(
     expiry and token are optional ... however, if passing in expiry, token
     should also be passed in or else we may not return any creds.
     (probably a sign we should refactor the function)
+
+    Returns None when Google rejects the refresh. Raises
+    ``GoogleUnreachableError`` when the refresh gets no answer.
     """
     creds_json = json.loads(token_json_str)
     creds = OAuthCredentials.from_authorized_user_info(
@@ -59,10 +99,13 @@ def get_google_oauth_creds(
 
     if creds.expired and creds.refresh_token:
         try:
-            creds.refresh(Request())
+            with _token_request():
+                creds.refresh(Request())
             if creds.valid:
                 logger.notice("Refreshed Google Drive tokens.")
                 return creds
+        except GoogleUnreachableError:
+            raise
         except Exception:
             logger.exception("Failed to refresh google drive access token")
             return None
@@ -84,6 +127,9 @@ def get_google_creds(
         The first element is the requested credentials
         The second element is a new credentials dict that the caller should write back
         to the db. This happens if token rotation occurs while loading credentials.
+
+    Raises ``GoogleUnreachableError`` when a token refresh gets no answer, and
+    ``PermissionError`` when Google rejects the credential.
     """
     oauth_creds = None
     service_creds = None
@@ -147,13 +193,15 @@ def get_google_creds(
             DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY
         ]
         service_account_key = json.loads(service_account_key_json_str)
+        service_account_key["token_uri"] = GOOGLE_TOKEN_URI
 
         service_creds = ServiceAccountCredentials.from_service_account_info(
             service_account_key, scopes=GOOGLE_SCOPES[source]
         )
 
         if not service_creds.valid or not service_creds.expired:
-            service_creds.refresh(Request())
+            with _token_request():
+                service_creds.refresh(Request())
 
         if not service_creds.valid:
             raise PermissionError(

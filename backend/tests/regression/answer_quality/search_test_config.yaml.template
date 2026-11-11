@@ -46,7 +46,7 @@ llm:
   api_key: "PUT_API_KEY_HERE"
   
   # Default model name to use
-  default_model_name: "gpt-4o"
+  default_model_name: "gpt-6-luna"
   
   # List of model names to use for testing
-  model_names: ["gpt-4o"]
+  model_names: ["gpt-6-luna"]

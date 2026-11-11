@@ -17,7 +17,7 @@ from slack_sdk.models.blocks import (
 from slack_sdk.models.blocks.basic_components import MarkdownTextObject
 from slack_sdk.models.blocks.block_elements import ImageElement
 
-from onyx.chat.models import ChatBasicResponse
+from onyx.chat.models import ChatBasicResponse, ChatFullResponse
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import DocumentSource, SearchFeedbackType
 from onyx.configs.onyxbot_configs import ONYX_BOT_NUM_DOCS_TO_DISPLAY
@@ -319,7 +319,7 @@ def _build_sources_blocks(
 
 
 def _build_citations_blocks(
-    answer: ChatBasicResponse,
+    answer: ChatBasicResponse | ChatFullResponse,
 ) -> list[Block]:
     top_docs = answer.top_documents
     citations = answer.citation_info or []
@@ -338,7 +338,7 @@ def _build_citations_blocks(
 
 
 def _build_main_response_blocks(
-    answer: ChatBasicResponse,
+    answer: ChatBasicResponse | ChatFullResponse,
 ) -> list[Block]:
     # TODO: add back in later when auto-filtering is implemented
     # if (
@@ -446,7 +446,7 @@ def build_follow_up_resolved_blocks(
 
 
 def build_slack_response_blocks(
-    answer: ChatBasicResponse,
+    answer: ChatBasicResponse | ChatFullResponse,
     message_info: SlackMessageInfo,
     channel_conf: ChannelConfig | None,
     feedback_reminder_id: str | None,

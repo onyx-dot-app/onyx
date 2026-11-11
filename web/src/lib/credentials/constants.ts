@@ -3,7 +3,7 @@ import { FileTypeCategory } from "@/lib/connectors/types/fileTypes";
 import type {
   CredentialDisplayName,
   CredentialFieldOptions,
-  CredentialHint,
+  CredentialFormVariant,
   CredentialJsonOf,
   CredentialMethodDescription,
   CredentialMethodLabel,
@@ -22,6 +22,7 @@ function defineCredentialSpec<
   brandName: string;
   fields: TFields;
   methods?: TMethods;
+  formVariants?: readonly CredentialFormVariant[];
 }): DefinedCredentialSpec<TFields, TMethods> {
   // SAFETY: an omitted `methods` leaves TMethods at its `undefined` default.
   return { ...spec, methods: spec.methods as TMethods };
@@ -66,6 +67,13 @@ function secret<const TOptions extends CredentialFieldOptions = {}>(
   return textField("secret", displayName, options);
 }
 
+function jsonFile<const TOptions extends CredentialFieldOptions = {}>(
+  displayName: CredentialDisplayName,
+  options?: TOptions
+) {
+  return textField("jsonFile", displayName, options);
+}
+
 function toggle(displayName: CredentialDisplayName) {
   return { kind: "toggle", displayName } as const;
 }
@@ -108,7 +116,6 @@ interface MicrosoftAppSpecOptions {
   brandName: string;
   fileType: FileTypeCategory;
   privateKeyDisplayName: CredentialDisplayName;
-  privateKeyHint?: CredentialHint;
   certificateLabel: CredentialMethodLabel;
   descriptions?: {
     clientSecret: CredentialMethodDescription;
@@ -119,9 +126,9 @@ interface MicrosoftAppSpecOptions {
 }
 
 /**
- * A Microsoft app registration (SharePoint, OneDrive, Outlook, Teams): a
- * client id and directory id, plus either a client secret or a PFX
- * certificate. Keys take the source's prefix, like `sp_client_id`.
+ * A Microsoft app registration (SharePoint, OneDrive, Outlook, Teams, Azure
+ * Data Lake): a client id and directory id, plus either a client secret or a
+ * PFX certificate. Keys take the source's prefix, like `sp_client_id`.
  */
 function microsoftAppSpec<const TPrefix extends string>(
   prefix: TPrefix,
@@ -142,7 +149,8 @@ function microsoftAppSpec<const TPrefix extends string>(
     [key("private_key")]: file(
       options.privateKeyDisplayName,
       options.fileType,
-      options.privateKeyHint ? { hint: options.privateKeyHint } : {}
+      // Every Microsoft source takes the same .pfx certificate.
+      { hint: { key: "pfxFile" } }
     ),
   } as MicrosoftAppFields<TPrefix>;
 
@@ -171,6 +179,66 @@ function microsoftAppSpec<const TPrefix extends string>(
     ],
   };
 }
+
+const AZURE_DATALAKE_APP_SPEC = microsoftAppSpec("adls", {
+  brandName: "Azure Data Lake Storage",
+  fileType: FileTypeCategory.SHAREPOINT_PFX_FILE,
+  privateKeyDisplayName: "privateKey",
+  certificateLabel: "certificateAuthentication",
+  descriptions: {
+    clientSecret: "azureDatalakeClientSecret",
+    certificate: "azureDatalakeCertificate",
+  },
+});
+
+/**
+ * Azure Data Lake Storage: a Microsoft app registration, or a storage account
+ * key. An account key opens one storage account only, so it names that account.
+ */
+const AZURE_DATALAKE_SPEC = defineCredentialSpec({
+  brandName: AZURE_DATALAKE_APP_SPEC.brandName,
+  fields: {
+    ...AZURE_DATALAKE_APP_SPEC.fields,
+    adls_account_name: text("storageAccountName"),
+    adls_account_key: secret("accountKey", {
+      hint: { key: "azureDatalakeAccountKey" },
+    }),
+  },
+  methods: [
+    ...AZURE_DATALAKE_APP_SPEC.methods,
+    {
+      value: "account_key",
+      label: "accountKey",
+      description: "azureDatalakeAccountKey",
+      fields: ["adls_account_name", "adls_account_key"],
+      // An account key cannot read role assignments or Entra groups.
+      disablePermSync: true,
+    },
+  ],
+});
+
+/**
+ * A Google account (Gmail, Google Drive): a service account typed in, or an
+ * OAuth sign-in, which saves the account itself.
+ */
+const GOOGLE_ACCOUNT_SPEC = defineCredentialSpec({
+  brandName: "Google",
+  fields: {
+    google_primary_admin: email("primaryAdminEmail"),
+    google_service_account_key: jsonFile("serviceAccountKey", {
+      hint: { key: "googleServiceAccountKey" },
+    }),
+  },
+  methods: [
+    {
+      // The stored value for an uploaded key.
+      value: "uploaded",
+      label: "serviceAccount",
+      fields: ["google_primary_admin", "google_service_account_key"],
+    },
+    { value: "oauth", label: "oauth", fields: [], ownSetup: true },
+  ],
+});
 
 /**
  * The credential each source asks for. Field keys are the exact
@@ -205,6 +273,12 @@ export const CREDENTIAL_SPECS = {
       lumapps_service_user: email("serviceUserEmail", {
         hint: { key: "lumappsServiceUser" },
       }),
+    },
+  }),
+  youtrack: defineCredentialSpec({
+    brandName: "YouTrack",
+    fields: {
+      youtrack_token: secret("apiToken", { hint: { key: "youtrackToken" } }),
     },
   }),
   bitbucket: defineCredentialSpec({
@@ -242,6 +316,17 @@ export const CREDENTIAL_SPECS = {
       confluence_username: email("accountEmail"),
       confluence_access_token: secret("apiToken"),
     },
+    // Data Center signs in with a personal access token alone.
+    formVariants: [
+      {
+        when: { is_cloud: false },
+        fields: {
+          confluence_access_token: secret("personalAccessToken", {
+            hint: { key: "confluencePersonalAccessToken" },
+          }),
+        },
+      },
+    ],
   }),
   jira: defineCredentialSpec({
     brandName: "Jira",
@@ -370,7 +455,6 @@ export const CREDENTIAL_SPECS = {
     brandName: "Microsoft Teams",
     fileType: FileTypeCategory.SHAREPOINT_PFX_FILE,
     privateKeyDisplayName: "privateKey",
-    privateKeyHint: { key: "pfxFile" },
     certificateLabel: "certificateAuthentication",
     descriptions: {
       clientSecret: "teamsClientSecret",
@@ -381,13 +465,13 @@ export const CREDENTIAL_SPECS = {
     brandName: "Microsoft Outlook",
     fileType: FileTypeCategory.SHAREPOINT_PFX_FILE,
     privateKeyDisplayName: "privateKey",
-    privateKeyHint: { key: "pfxFile" },
     certificateLabel: "certificateAuthentication",
     descriptions: {
       clientSecret: "outlookClientSecret",
       certificate: "outlookCertificate",
     },
   }),
+  azure_datalake: AZURE_DATALAKE_SPEC,
   zendesk: defineCredentialSpec({
     brandName: "Zendesk",
     fields: {
@@ -526,15 +610,8 @@ export const CREDENTIAL_SPECS = {
     brandName: "Discord",
     fields: { discord_bot_token: secret("botToken") },
   }),
-  // Gmail and Google Drive set up their credentials on their own pages.
-  google_drive: defineCredentialSpec({
-    brandName: "Google",
-    fields: { google_tokens: secret("oauthTokens") },
-  }),
-  gmail: defineCredentialSpec({
-    brandName: "Google",
-    fields: { google_tokens: secret("oauthTokens") },
-  }),
+  google_drive: GOOGLE_ACCOUNT_SPEC,
+  gmail: GOOGLE_ACCOUNT_SPEC,
   gitbook: defineCredentialSpec({
     brandName: "GitBook",
     fields: { gitbook_api_key: secret("apiToken") },

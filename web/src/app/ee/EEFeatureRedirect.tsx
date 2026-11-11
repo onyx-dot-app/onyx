@@ -1,18 +1,18 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "@opal/layouts";
 
 export default function EEFeatureRedirect() {
-  const router = useRouter();
+  const navigation = useNavigation();
 
   useEffect(() => {
     toast.error(
       "This feature requires a license. Please upgrade your plan to access."
     );
-    router.replace("/app");
-  }, [router]);
+    navigation.go("/app", { replace: true });
+  }, [navigation]);
 
   return null;
 }

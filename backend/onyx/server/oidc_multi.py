@@ -464,6 +464,7 @@ async def oidc_login_callback_for_provider(
             client = await _get_oauth_client(provider, config)
             redirect_uri = _callback_uri(provider, config)
             allowed_email_domains = list(provider.allowed_email_domains)
+            provider_id = provider.id
             # A tenant-controlled OIDC IdP can assert any address, so its login
             # may only vouch for a domain the workspace has verified. Google
             # cannot assert a domain it does not own, so it is trusted as-is.
@@ -506,6 +507,7 @@ async def oidc_login_callback_for_provider(
             is_verified_by_default=True,
             allowed_email_domains_override=allowed_email_domains,
             enforce_verified_domain=enforce_verified_domain,
+            sso_provider_id=provider_id,
         )
 
     if use_pkce:

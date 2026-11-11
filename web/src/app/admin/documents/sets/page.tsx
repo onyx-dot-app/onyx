@@ -1,10 +1,19 @@
 "use client";
 
+import { useNavigation, NavLink } from "@opal/navigation";
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useTranslations } from "next-intl";
 import { PageLoader } from "@opal/loaders";
 import { PageSelector } from "@/components/PageSelector";
-import { SvgInfo, SvgPlusCircle } from "@opal/icons";
+import {
+  SvgAlertTriangle,
+  SvgCheckCircle,
+  SvgClock,
+  SvgEdit,
+  SvgInfo,
+  SvgLock,
+  SvgPlusCircle,
+} from "@opal/icons";
 import {
   Table,
   TableHead,
@@ -12,38 +21,43 @@ import {
   TableBody,
   TableCell,
 } from "@/components/ui/table";
-import { Button, Divider, Text } from "@opal/components";
+import { Button, Divider, InputTypeIn, Text } from "@opal/components";
 import { escapeMarkdown, markdown } from "@opal/utils";
 import { Spacer } from "@opal/components";
-import Title from "@/components/ui/title";
-import { DocumentSetSummary } from "@/lib/types";
+import { DocumentSetSummary, Permission } from "@/lib/types";
 import { useState } from "react";
 import { useDocumentSets } from "./hooks";
+import useFilter from "@/hooks/useFilter";
 import { can } from "@/lib/permissions/resource-actions";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
 import { deleteDocumentSet } from "./lib";
-import { SettingsLayouts, toast } from "@opal/layouts";
+import { IllustrationContent, SettingsLayouts, toast } from "@opal/layouts";
+import SvgNoResult from "@opal/illustrations/no-result";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import {
-  FiAlertTriangle,
-  FiCheckCircle,
-  FiClock,
-  FiEdit2,
-  FiLock,
-  FiUnlock,
-} from "react-icons/fi";
+import { FiUnlock } from "react-icons/fi";
 import { DeleteButton } from "@/components/DeleteButton";
-import { useRouter } from "next/navigation";
 import { TableHeader } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip } from "@opal/components";
 import { SourceIcon } from "@/components/SourceIcon";
-import Link from "next/link";
 import { useSettings } from "@/lib/settings/hooks";
 
 const route = ADMIN_ROUTES.DOCUMENT_SETS;
 
 const numToDisplay = 50;
+
+// Search covers the set name and its connector names. Joining with "\n" keeps a
+// match inside one field, since a single-line search input cannot contain one.
+function documentSetSearchText(documentSet: DocumentSetSummary): string {
+  return [
+    documentSet.name,
+    ...documentSet.cc_pair_summaries.map((ccPair) => ccPair.name),
+    ...documentSet.federated_connector_summaries.map(
+      (federatedConnector) => federatedConnector.name
+    ),
+  ].join("\n");
+}
 
 // Component to display federated connectors with consistent styling
 const FederatedConnectorTitle = ({
@@ -74,12 +88,12 @@ const FederatedConnectorTitle = ({
   return (
     <div className="my-auto max-w-full">
       {isLink ? (
-        <Link
+        <NavLink
           className={mainSectionClassName}
           href={`/admin/federated/${federatedConnector.id}`}
         >
           {mainDisplay}
-        </Link>
+        </NavLink>
       ) : (
         <div className={mainSectionClassName}>{mainDisplay}</div>
       )}
@@ -111,7 +125,7 @@ const EditRow = ({
   isEditable: boolean;
 }) => {
   const t = useTranslations("admin.documents");
-  const router = useRouter();
+  const navigation = useNavigation();
 
   if (!isEditable) {
     return (
@@ -142,10 +156,10 @@ const EditRow = ({
           aria-disabled={!documentSet.is_up_to_date}
           onClick={() => {
             if (!documentSet.is_up_to_date) return;
-            router.push(`/admin/documents/sets/${documentSet.id}`);
+            navigation.go(`/admin/documents/sets/${documentSet.id}`);
           }}
         >
-          <FiEdit2 className="me-2 shrink-0" />
+          <SvgEdit className="me-2 shrink-0" size={16} />
           <span className="font-medium">{documentSet.name}</span>
         </button>
       </Tooltip>
@@ -153,17 +167,25 @@ const EditRow = ({
   );
 };
 
-interface DocumentFeedbackTableProps {
+interface DocumentSetTableProps {
   documentSets: DocumentSetSummary[];
+  page: number;
+  onPageChange: (page: number) => void;
   refresh: () => void;
 }
 
 const DocumentSetTable = ({
   documentSets,
+  page,
+  onPageChange,
   refresh,
-}: DocumentFeedbackTableProps) => {
+}: DocumentSetTableProps) => {
   const t = useTranslations("admin.documents");
-  const [page, setPage] = useState(1);
+  // The federated connector page's writes need global MANAGE_CONNECTORS, which a
+  // document-set manager may not hold.
+  const { isGlobalHolder: canManageConnectors } = usePermissionAuthority(
+    Permission.MANAGE_CONNECTORS
+  );
 
   // editable rows first, then by name — editability now rides on each row's
   // permissions map, so no second fetch + set-diff is needed.
@@ -174,7 +196,6 @@ const DocumentSetTable = ({
 
   return (
     <div>
-      <Title>{t("sets.table.title")}</Title>
       <Table className="overflow-visible mt-2">
         <TableHeader>
           <TableRow>
@@ -254,6 +275,7 @@ const DocumentSetTable = ({
                                     <FederatedConnectorTitle
                                       federatedConnector={federatedConnector}
                                       showMetadata={true}
+                                      isLink={canManageConnectors}
                                     />
                                   </div>
                                 );
@@ -265,18 +287,18 @@ const DocumentSetTable = ({
                   </TableCell>
                   <TableCell>
                     {documentSet.is_up_to_date ? (
-                      <Badge variant="success" icon={FiCheckCircle}>
+                      <Badge variant="success" icon={SvgCheckCircle}>
                         {t("sets.status.upToDate.label")}
                       </Badge>
                     ) : documentSet.cc_pair_summaries.length > 0 ||
                       (documentSet.federated_connector_summaries &&
                         documentSet.federated_connector_summaries.length >
                           0) ? (
-                      <Badge variant="in_progress" icon={FiClock}>
+                      <Badge variant="in_progress" icon={SvgClock}>
                         {t("sets.status.syncing.label")}
                       </Badge>
                     ) : (
-                      <Badge variant="destructive" icon={FiAlertTriangle}>
+                      <Badge variant="destructive" icon={SvgAlertTriangle}>
                         {t("sets.status.deleting.label")}
                       </Badge>
                     )}
@@ -292,7 +314,7 @@ const DocumentSetTable = ({
                     ) : (
                       <Badge
                         variant={isEditable ? "private" : "default"}
-                        icon={FiLock}
+                        icon={SvgLock}
                       >
                         {t("sets.access.private.label")}
                       </Badge>
@@ -335,7 +357,7 @@ const DocumentSetTable = ({
           <PageSelector
             totalPages={Math.ceil(sortedDocumentSets.length / numToDisplay)}
             currentPage={page}
-            onPageChange={(newPage) => setPage(newPage)}
+            onPageChange={onPageChange}
           />
         </div>
       </div>
@@ -345,13 +367,22 @@ const DocumentSetTable = ({
 
 function Main() {
   const t = useTranslations("admin.documents");
+  const navigation = useNavigation();
   const { appName } = useSettings();
+  const [page, setPage] = useState(1);
   const {
     data: documentSets,
     isLoading: isDocumentSetsLoading,
     error: documentSetsError,
     refreshDocumentSets,
   } = useDocumentSets();
+  // The listing returns every set the user can see in one response, so this
+  // filter covers all pages; the table paginates the filtered result.
+  const {
+    query: searchQuery,
+    setQuery: setSearchQuery,
+    filtered: filteredDocumentSets,
+  } = useFilter(documentSets ?? [], documentSetSearchText);
 
   if (isDocumentSetsLoading) {
     return (
@@ -369,6 +400,18 @@ function Main() {
     );
   }
 
+  // A delete or a background refresh can shrink the list below the current page.
+  // Store the clamped page, not just render it, so a later refresh that grows the
+  // list again does not jump back to the old page. Setting state during render
+  // makes React re-render before the table sees the stale page.
+  const lastPage = Math.max(
+    1,
+    Math.ceil(filteredDocumentSets.length / numToDisplay)
+  );
+  if (page > lastPage) {
+    setPage(lastPage);
+  }
+
   return (
     <div className="mb-8">
       <Text as="p">
@@ -382,7 +425,7 @@ function Main() {
         <Button
           icon={SvgPlusCircle}
           prominence="secondary"
-          href="/admin/documents/sets/new"
+          {...navigation.linkTo("/admin/documents/sets/new")}
         >
           {t("sets.newButton.label")}
         </Button>
@@ -391,10 +434,35 @@ function Main() {
       {documentSets.length > 0 && (
         <>
           <Divider />
-          <DocumentSetTable
-            documentSets={documentSets}
-            refresh={refreshDocumentSets}
+          <Text as="h1" font="heading-section-muted" color="text-05">
+            {t("sets.table.title")}
+          </Text>
+          <Spacer rem={0.5} />
+          <InputTypeIn
+            icon="search"
+            placeholder={t("sets.search.placeholder")}
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setPage(1);
+            }}
           />
+          {filteredDocumentSets.length > 0 ? (
+            <DocumentSetTable
+              documentSets={filteredDocumentSets}
+              page={page}
+              onPageChange={setPage}
+              refresh={refreshDocumentSets}
+            />
+          ) : (
+            <IllustrationContent
+              illustration={SvgNoResult}
+              title={t("sets.noResults.title")}
+              description={t("sets.noResults.description", {
+                query: searchQuery,
+              })}
+            />
+          )}
         </>
       )}
     </div>

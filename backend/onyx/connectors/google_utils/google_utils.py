@@ -42,6 +42,18 @@ def _is_rate_limit_error(error: HttpError) -> bool:
 # This is no longer necessary due to checkpointing.
 add_retries = retry_builder(tries=5, max_delay=10)
 
+# Connection-level drops (broken pipe, reset, TLS EOF, timeout) on a reused
+# socket. Narrow SSL to SSLEOFError so permanent SSL errors still fail fast.
+TRANSIENT_CONNECTION_ERRORS = (
+    TimeoutError,
+    socket.timeout,
+    ConnectionError,
+    ssl.SSLEOFError,
+)
+retry_transient_connection_errors = retry_builder(
+    tries=5, max_delay=10, exceptions=TRANSIENT_CONNECTION_ERRORS
+)
+
 NEXT_PAGE_TOKEN_KEY = "nextPageToken"
 PAGE_TOKEN_KEY = "pageToken"
 ORDER_BY_KEY = "orderBy"
@@ -70,7 +82,7 @@ def _execute_with_retry(request: Any) -> Any:
         # 3. The retry-after has a maximum and we've already hit the limit for the day
         # or it's something else...
         try:
-            return request.execute()
+            return retry_transient_connection_errors(request.execute)()
         except HttpError as error:
             attempt += 1
 
@@ -204,11 +216,8 @@ def _execute_single_retrieval(
         else:
             logger.exception("Error executing request:")
             raise e
-    except (TimeoutError, socket.timeout, ConnectionError, ssl.SSLEOFError) as error:
-        # Connection-level drops (broken pipe, reset, TLS EOF) hit mid-crawl on
-        # long parallel Drive paginations. Retry the page instead of failing the
-        # whole attempt. Narrow SSL to SSLEOFError so permanent SSL errors
-        # (cert/version) still fail fast.
+    except TRANSIENT_CONNECTION_ERRORS as error:
+        # Retry the page instead of failing the whole attempt
         logger.warning(
             "Transient network error executing Google API request; retrying with backoff. Details: %s",
             error,

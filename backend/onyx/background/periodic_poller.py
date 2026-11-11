@@ -51,11 +51,11 @@ def _run_auto_llm_update() -> None:
 
     from onyx.db.engine.sql_engine import get_session_with_current_tenant
     from onyx.llm.well_known_providers.auto_update_service import (
-        sync_llm_models_from_github,
+        sync_auto_update_providers,
     )
 
     with get_session_with_current_tenant() as db_session:
-        sync_llm_models_from_github(db_session)
+        sync_auto_update_providers(db_session)
 
 
 def _run_cache_cleanup() -> None:

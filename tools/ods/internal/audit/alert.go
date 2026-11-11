@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
@@ -57,6 +58,9 @@ type Advisory struct {
 	Title    string   `json:"title,omitempty"`
 	URL      string   `json:"url,omitempty"`
 	FixedIn  string   `json:"fixed_in,omitempty"`
+	// Images names the scanned images the advisory surfaced in. An advisory
+	// found only in the lockfiles has none.
+	Images []string `json:"images,omitempty"`
 	// lendsNames marks a record from a non-blocking finding, kept only while
 	// grouping to carry its names into a blocking advisory.
 	lendsNames bool
@@ -104,12 +108,14 @@ type alertPlan struct {
 	// announcement. All three get announced.
 	Create []Alert
 	Update []Alert
-	Retry  []Alert
+	// Known holds alerts with an open issue and nothing new to announce.
+	Known []Alert
+	Retry []Alert
 	// Close holds issues whose package no longer blocks.
 	Close []trackedIssue
 }
 
-// SyncAlertsOptions configures SyncAlerts.
+// SyncAlertsOptions configures Sync.
 type SyncAlertsOptions struct {
 	// ResultFiles are JSON results written by `ods audit --format=json` or
 	// `ods audit image --format=json`. Together they must cover every scan, or
@@ -129,31 +135,43 @@ type SyncAlertsOptions struct {
 	DryRun   bool
 }
 
-// SyncAlerts keeps one open issue per package with an unsuppressed blocking
-// finding, and returns the alerts to announce: new, grown, or still pending.
-// After a failed issue change it still returns the alerts it could record,
-// with the error.
-func SyncAlerts(opts SyncAlertsOptions) ([]Alert, error) {
+// SyncResult is what a sync found and recorded.
+type SyncResult struct {
+	// Announce holds the alerts to announce: new, grown, or still pending.
+	Announce []Alert
+	// Failing holds every alert with an unsuppressed blocking finding in this
+	// run, announced or not, with its issue when it has one.
+	Failing []Alert
+}
+
+// Sync keeps one open issue per package with an unsuppressed blocking
+// finding. After a failed issue change it still returns the alerts it could
+// record, with the error.
+func Sync(opts SyncAlertsOptions) (SyncResult, error) {
 	var blocking, scanned []Finding
 	for _, path := range opts.ResultFiles {
 		res, err := readResult(path)
 		if err != nil {
-			return nil, err
+			return SyncResult{}, err
 		}
-		blocking = append(blocking, res.Blocking...)
+		image := resultImage(path)
+		for _, f := range res.Blocking {
+			f.image = image
+			blocking = append(blocking, f)
+		}
 		scanned = append(scanned, res.Findings...)
 		scanned = append(scanned, res.Ignored...)
 	}
 	ignores, err := FetchIgnores(opts.IgnoreURL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch the allowlist from %s: %w", opts.IgnoreURL, err)
+		return SyncResult{}, fmt.Errorf("failed to fetch the allowlist from %s: %w", opts.IgnoreURL, err)
 	}
 	scope := cmp.Or(opts.Scope, mainScope)
 	alerts := suppressAlerts(groupAlerts(blocking, scanned, scope), ignores, time.Now())
 
 	open, err := listAlertIssues(scope)
 	if err != nil {
-		return nil, err
+		return SyncResult{}, err
 	}
 	covered := map[string]bool{}
 	if !opts.KeepOpen {
@@ -163,9 +181,36 @@ func SyncAlerts(opts SyncAlertsOptions) ([]Alert, error) {
 
 	if opts.DryRun {
 		logPlan(plan)
-		return slices.Concat(plan.Create, plan.Update, plan.Retry), nil
+		announce := slices.Concat(plan.Create, plan.Update, plan.Retry)
+		return SyncResult{Announce: announce, Failing: failingAlerts(announce, plan)}, nil
 	}
-	return applyPlan(plan, scope)
+	announce, err := applyPlan(plan, scope)
+	return SyncResult{Announce: announce, Failing: failingAlerts(announce, plan)}, err
+}
+
+// failingAlerts lists every planned alert once, preferring the announced copy,
+// which carries the issue a create opened.
+func failingAlerts(announced []Alert, plan alertPlan) []Alert {
+	seen := map[string]bool{}
+	var failing []Alert
+	for _, a := range slices.Concat(announced, plan.Create, plan.Update, plan.Retry, plan.Known) {
+		if !seen[a.Key] {
+			seen[a.Key] = true
+			failing = append(failing, a)
+		}
+	}
+	sort.Slice(failing, func(i, j int) bool { return failing[i].Key < failing[j].Key })
+	return failing
+}
+
+// resultImage names the image a result file covers. The workflow writes
+// image-<component>.json per image and deps.json for the lockfiles.
+func resultImage(path string) string {
+	image, ok := strings.CutPrefix(strings.TrimSuffix(filepath.Base(path), ".json"), "image-")
+	if !ok {
+		return ""
+	}
+	return image
 }
 
 // suppressAlerts drops the advisories the allowlist covers, matching each by
@@ -300,6 +345,7 @@ func groupAlerts(blocking, scanned []Finding, scope string) []Alert {
 			Title:    f.Title,
 			URL:      f.URL,
 			FixedIn:  f.FixedIn,
+			Images:   appendUnique(nil, f.image),
 		})
 		a.Versions = appendUnique(a.Versions, f.Version)
 		a.Manifests = appendUnique(a.Manifests, f.Manifest)
@@ -317,6 +363,9 @@ func groupAlerts(blocking, scanned []Finding, scope string) []Alert {
 		a.Advisories = mergeLinked(a.Advisories)
 		sort.Strings(a.Versions)
 		sort.Strings(a.Manifests)
+		for i := range a.Advisories {
+			sort.Strings(a.Advisories[i].Images)
+		}
 		sort.Slice(a.Advisories, func(i, j int) bool { return a.Advisories[i].ID < a.Advisories[j].ID })
 		alerts = append(alerts, *a)
 	}
@@ -381,6 +430,7 @@ func unionAdvisory(a, b Advisory) Advisory {
 	a.Title = cmp.Or(a.Title, b.Title)
 	a.URL = cmp.Or(a.URL, b.URL)
 	a.FixedIn = cmp.Or(a.FixedIn, b.FixedIn)
+	a.Images = appendUnique(a.Images, b.Images...)
 	return a
 }
 
@@ -410,6 +460,8 @@ func planAlerts(alerts []Alert, open []trackedIssue, covered map[string]bool) al
 		case is.Pending:
 			a.Reason = AlertRetry
 			plan.Retry = append(plan.Retry, a)
+		default:
+			plan.Known = append(plan.Known, a)
 		}
 	}
 	for _, is := range open {

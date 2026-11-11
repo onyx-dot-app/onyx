@@ -19,6 +19,12 @@ If it is unclear which tool to use, consider using multiple in parallel to be ef
 """.lstrip()
 
 
+CODE_MODE_GUIDANCE = """
+## execute_code
+Call tools from Python programs with `execute_code`; its description lists the functions. Batch independent calls in one `execute_code` with `asyncio.gather`, and inspect every result. Keep dependent or judgment-based follow-ups in a later call. Avoid unnecessary output.
+""".lstrip()
+
+
 INTERNAL_SEARCH_GUIDANCE = """
 ## internal_search
 Use the `internal_search` tool to search connected applications for information. Some examples of when to use `internal_search` include:
@@ -26,8 +32,18 @@ Use the `internal_search` tool to search connected applications for information.
 - Niche/Specific information: information that is likely not found in public sources, things specific to a project or product, team, process, etc.
 - Keyword Queries: queries that are heavily keyword based are often internal document search queries.
 - Ambiguity: questions about something that is not widely known or understood.
-Never provide more than 3 queries at once to `internal_search`.
 """.lstrip()
+
+# The internal_search stub's note in code mode: each call runs its own retrieval
+# pipeline.
+CODE_MODE_SEARCH_USAGE = (
+    "Each call runs a full retrieval pipeline with several model calls, so it is "
+    "expensive. Pass the queries for one information need in one call, for example "
+    '`await internal_search(queries=["first phrasing", "second phrasing"])`. Do not '
+    "split them into one call per query, and do not `asyncio.gather` single-query "
+    "calls. Search again when earlier results are insufficient or when a follow-up "
+    "depends on them."
+)
 
 
 WEB_SEARCH_GUIDANCE = """

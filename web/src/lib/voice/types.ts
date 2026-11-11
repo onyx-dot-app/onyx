@@ -55,6 +55,7 @@ export interface VoiceFormValues {
 
 /** Request body for creating or updating a voice provider configuration. */
 export interface VoiceProviderUpsertRequest {
+  validation_mode?: "voice" | "decision";
   id?: number;
   name: string;
   provider_type: string;

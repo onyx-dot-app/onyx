@@ -1,19 +1,20 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { IconLoader } from "@opal/loaders";
 import { useCallback, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import useSWR, { mutate, useSWRConfig } from "swr";
-import { Button, Card, Tag, Text } from "@opal/components";
+import { Button, Card, Badge, Text, useCreateModal } from "@opal/components";
 import {
   IllustrationContent,
   InputVertical,
   SettingsLayouts,
   toast,
+  Section,
 } from "@opal/layouts";
 import { SvgArrowUpRight, SvgRefreshCw } from "@opal/icons";
 import SvgNoResult from "@opal/illustrations/no-result";
-import { Section } from "@/layouts/general-layouts";
 import { InputTextArea } from "@opal/components";
 import { Collapsible } from "@opal/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
@@ -69,13 +70,14 @@ function BaseInstructionsPreview() {
 
 export default function CraftPreferencesPage() {
   const t = useTranslations("admin.craftPreferences");
+  const navigation = useNavigation();
   const settings = useSettings();
   const craftAvailable = settings?.onyx_craft_available === true;
   const savedInstructions = settings?.craft_instructions ?? "";
 
   const [draft, setDraft] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+  const resetModal = useCreateModal();
 
   // null until the user edits — render the saved value until then.
   const value = draft ?? savedInstructions;
@@ -155,7 +157,6 @@ export default function CraftPreferencesPage() {
     try {
       await setDefaultCraftModel(selection.providerId, selection.modelName);
       await refreshLlmProviderCaches(mutateScoped);
-      toast.success(t("defaultModel.saveSuccess.message"));
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : t("defaultModel.saveError.message")
@@ -170,7 +171,6 @@ export default function CraftPreferencesPage() {
     try {
       await deleteDefaultCraftModel();
       await refreshLlmProviderCaches(mutateScoped);
-      toast.success(t("defaultModel.resetSuccess.message"));
     } catch (err) {
       toast.error(
         err instanceof Error
@@ -192,7 +192,7 @@ export default function CraftPreferencesPage() {
           ? [
               <Button
                 key="try"
-                href="/craft"
+                {...navigation.linkTo("/craft")}
                 prominence="secondary"
                 rightIcon={SvgArrowUpRight}
               >
@@ -214,26 +214,7 @@ export default function CraftPreferencesPage() {
 
   // useSettings returns a default object while loading (and on error), which
   // lacks onyx_craft_available — don't misreport Craft as unavailable.
-  if (settings.isLoading || settings.error) {
-    return (
-      <SettingsLayouts.Root>
-        {header}
-        <SettingsLayouts.Body>
-          {settings.error ? (
-            <Text as="p" font="secondary-body" color="text-03">
-              {t("settingsLoadError.description")}
-            </Text>
-          ) : (
-            <div className="flex justify-center py-12">
-              <IconLoader className="h-6 w-6" />
-            </div>
-          )}
-        </SettingsLayouts.Body>
-      </SettingsLayouts.Root>
-    );
-  }
-
-  if (!craftAvailable) {
+  if (!settings.isLoading && !settings.error && !craftAvailable) {
     return (
       <SettingsLayouts.Root>
         {header}
@@ -249,7 +230,10 @@ export default function CraftPreferencesPage() {
   }
 
   return (
-    <SettingsLayouts.Root>
+    <SettingsLayouts.Root
+      loading={settings.isLoading}
+      error={settings.error ? t("settingsLoadError.description") : false}
+    >
       {header}
       <SettingsLayouts.Body>
         <Card border="solid" rounding={4}>
@@ -266,7 +250,7 @@ export default function CraftPreferencesPage() {
                   placeholder={t("defaultModel.placeholder")}
                 />
                 {isInherited && (
-                  <Tag title={t("defaultModel.inheritedTag.label")} />
+                  <Badge title={t("defaultModel.inheritedTag.label")} />
                 )}
                 {configuredSelection && (
                   <Button
@@ -292,7 +276,7 @@ export default function CraftPreferencesPage() {
           <Section alignItems="stretch" gap={1}>
             <InputVertical
               title={t("instructions.label")}
-              topRight={t("instructions.charCount.label", {
+              rightChildren={t("instructions.charCount.label", {
                 count: value.length,
                 max: MAX_INSTRUCTIONS_LENGTH,
               })}
@@ -318,7 +302,7 @@ export default function CraftPreferencesPage() {
                     prominence="tertiary"
                     size="sm"
                     disabled={isSaving}
-                    onClick={() => setResetConfirmOpen(true)}
+                    onClick={() => resetModal.toggle(true)}
                   >
                     {t("resetButton.label")}
                   </Button>
@@ -337,18 +321,18 @@ export default function CraftPreferencesPage() {
         </Collapsible>
       </SettingsLayouts.Body>
 
-      {resetConfirmOpen && (
+      <resetModal.Provider>
         <ConfirmationModalLayout
           icon={ADMIN_ROUTES.CRAFT_PREFERENCES.icon}
           title={t("resetModal.header.title")}
-          onClose={isSaving ? undefined : () => setResetConfirmOpen(false)}
+          onClose={isSaving ? undefined : () => resetModal.toggle(false)}
           submit={
             <Button
               variant="danger"
               disabled={isSaving}
               onClick={async () => {
                 if (await save("")) {
-                  setResetConfirmOpen(false);
+                  resetModal.toggle(false);
                 }
               }}
             >
@@ -360,7 +344,7 @@ export default function CraftPreferencesPage() {
         >
           {t("resetModal.body.description")}
         </ConfirmationModalLayout>
-      )}
+      </resetModal.Provider>
       <UnsavedChangesModal
         open={unsavedChanges.confirmationOpen}
         onCancel={unsavedChanges.cancelLeave}

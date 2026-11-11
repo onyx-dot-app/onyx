@@ -43,6 +43,7 @@ from ee.onyx.server.license.models import (
     LicenseUploadResponse,
     SeatUsageResponse,
 )
+from ee.onyx.server.settings.api import is_access_gated
 from ee.onyx.utils.license import (
     LicenseNotStoredError,
     LicenseRejectedError,
@@ -297,14 +298,20 @@ def downgrade_to_community(
 
     Every connector becomes public, permissions synced from the sources stop
     applying, user groups are removed with what they shared made public, the
-    other paid features are switched off, and the license is removed. Lives
-    under /license so it stays reachable while an expired license gates the
-    rest of the API.
+    other paid features are switched off, and the license is removed. Allowed
+    only while the deployment is gated, as in the UI: a license in its grace
+    period can still be renewed. Lives under /license so it stays reachable
+    while an expired license gates the rest of the API.
     """
     if MULTI_TENANT:
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR,
             "Downgrading is only available for self-hosted deployments",
+        )
+    if not is_access_gated(get_license_metadata(db_session)):
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "Downgrading is only available while access is restricted",
         )
 
     # The license goes last: a failure before it leaves a licensed deployment

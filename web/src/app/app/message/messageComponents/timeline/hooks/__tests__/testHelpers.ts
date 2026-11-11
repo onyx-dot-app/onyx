@@ -68,10 +68,11 @@ export function createCitationPacket(
 // Image generation packet
 export function createImageDeltaPacket(
   imageCount: number,
-  placement: Partial<Placement> = {}
+  placement: Partial<Placement> = {},
+  fileIdPrefix: string = "file"
 ): Packet {
   const images = Array.from({ length: imageCount }, (_, i) => ({
-    file_id: `file-${i}`,
+    file_id: `${fileIdPrefix}-${i}`,
     url: `https://example.com/image-${i}.png`,
     revised_prompt: `Image ${i}`,
   }));

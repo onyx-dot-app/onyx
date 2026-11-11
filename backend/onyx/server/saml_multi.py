@@ -1,17 +1,22 @@
 import base64
+import hashlib
+import secrets
+import time
 import uuid
 from typing import Any, NoReturn, TypedDict
 
 from fastapi import APIRouter, Depends, Request, Response
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi_users.authentication import Strategy
 from onelogin.saml2.auth import OneLogin_Saml2_Auth
 from onelogin.saml2.xml_utils import OneLogin_Saml2_XML
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.auth.login_claims_capture import capture_saml_login_claims
 from onyx.auth.sso_web_error import redirect_sso_errors_to_web
 from onyx.auth.users import UserManager, auth_backend, fastapi_users, get_user_manager
+from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import REQUIRE_EMAIL_VERIFICATION, WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import SSOProviderType
@@ -36,12 +41,29 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+_AUTHN_REQUEST_KEY_PREFIX = "saml:authn_request:v1"
+_ASSERTION_KEY_PREFIX = "saml:assertion:v1"
+_LOGIN_TICKET_KEY_PREFIX = "saml:login_ticket:v1"
+_LOGIN_COOKIE_PREFIX = "samllogin"
+_LOGIN_COOKIE_PATH = "/auth/saml"
+_COOKIE_SECURE = WEB_DOMAIN.startswith("https")
+# Bounds how long an unanswered AuthnRequest stays consumable. A login round
+# trip through the IdP finishes well inside this.
+_AUTHN_REQUEST_TTL_SECONDS = 10 * 60
+# Replay window for an assertion whose SubjectConfirmationData carries no
+# NotOnOrAfter, so the one-time-use record cannot expire before the assertion.
+_ASSERTION_FALLBACK_TTL_SECONDS = 10 * 60
+# Covers the one redirect between the validated callback and /complete.
+_LOGIN_TICKET_TTL_SECONDS = 60
+_NO_PENDING_REQUEST_MESSAGE = (
+    "Access denied. SAML response does not answer a pending sign-in request."
+)
+
 
 def _reject_if_unsupported() -> None:
     """SAML resolves a login by scanning provider rows for the assertion's
-    issuer, and an IdP-initiated assertion carries no state Onyx signed. Neither
-    can name a workspace on a deployment that has more than one, so the whole
-    router is closed there rather than failing deeper in."""
+    issuer, which cannot name a workspace on a deployment that has more than
+    one, so the whole router is closed there rather than failing deeper in."""
     if not sso_provider_type_supported(SSOProviderType.SAML):
         raise OnyxError(
             OnyxErrorCode.SINGLE_TENANT_ONLY,
@@ -156,10 +178,16 @@ def _resolve_saml_provider_by_issuer(
     raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "unrecognized SAML issuer")
 
 
-def _extract_issuer_from_saml_response(encoded_response: str) -> str:
-    """Read the unverified issuer to select which provider's cert to validate
-    against. Safe because process_response still checks the signature against the
-    resolved cert, so an attacker only picks which cert they fail against."""
+class _SamlResponseHeader(BaseModel):
+    issuer: str
+    in_response_to: str | None
+
+
+def _read_saml_response_header(encoded_response: str) -> _SamlResponseHeader:
+    """Read the unverified issuer and InResponseTo. The issuer selects which
+    provider's cert to validate against, which is safe because process_response
+    still checks the signature, so an attacker only picks the cert they fail
+    against. InResponseTo names the AuthnRequest the callback must find."""
     try:
         decoded = base64.b64decode(encoded_response)
         dom = OneLogin_Saml2_XML.to_etree(decoded)
@@ -171,12 +199,108 @@ def _extract_issuer_from_saml_response(encoded_response: str) -> str:
         "/samlp:Response/saml:Assertion/saml:Issuer",
     ):
         nodes = OneLogin_Saml2_XML.query(dom, xpath)
-        if nodes:
-            issuer = OneLogin_Saml2_XML.element_text(nodes[0])
-            if issuer:
-                return issuer
+        if not nodes:
+            continue
+        issuer = OneLogin_Saml2_XML.element_text(nodes[0])
+        if issuer:
+            return _SamlResponseHeader(
+                issuer=issuer, in_response_to=dom.get("InResponseTo") or None
+            )
 
     raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "SAML response missing issuer")
+
+
+def _sha256(value: str) -> str:
+    return hashlib.sha256(value.encode()).hexdigest()
+
+
+def _cache_key(prefix: str, identifier: str) -> str:
+    # Hashed because the identifier is IdP or attacker supplied.
+    return f"{prefix}:{_sha256(identifier)}"
+
+
+def _login_cookie_name(request_id: str) -> str:
+    return f"{_LOGIN_COOKIE_PREFIX}_{_sha256(request_id)}"
+
+
+class _PendingSamlRequest(BaseModel):
+    idp_entity_id: str
+    browser_secret_hash: str
+
+
+class _SamlLoginTicket(BaseModel):
+    """A validated SAML response, parked between the IdP's cross-site POST and
+    the same-site GET that carries the login cookie."""
+
+    request_id: str
+    email: str
+    provider_name: str
+    browser_secret_hash: str
+    attributes: dict[str, list[str]]
+    next_path: str | None
+
+
+def _remember_authn_request(request_id: str, idp_entity_id: str) -> str:
+    """Record the AuthnRequest and return the secret that ties it to the browser
+    that started sign-in, so a response captured from one browser cannot log
+    another browser in (login CSRF)."""
+    browser_secret = secrets.token_urlsafe(32)
+    pending = _PendingSamlRequest(
+        idp_entity_id=idp_entity_id, browser_secret_hash=_sha256(browser_secret)
+    )
+    get_cache_backend().set(
+        _cache_key(_AUTHN_REQUEST_KEY_PREFIX, request_id),
+        pending.model_dump_json(),
+        ex=_AUTHN_REQUEST_TTL_SECONDS,
+    )
+    return browser_secret
+
+
+def _consume_authn_request(in_response_to: str, issuer: str) -> _PendingSamlRequest:
+    """One-time use: the id is removed as it is read, so a second response
+    carrying the same InResponseTo, replayed or forged, finds nothing."""
+    stored = get_cache_backend().getdel(
+        _cache_key(_AUTHN_REQUEST_KEY_PREFIX, in_response_to)
+    )
+    if stored is None:
+        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, _NO_PENDING_REQUEST_MESSAGE)
+    pending = _PendingSamlRequest.model_validate_json(stored)
+    if pending.idp_entity_id != issuer:
+        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, _NO_PENDING_REQUEST_MESSAGE)
+    return pending
+
+
+def _require_login_cookie(request: Request, login: _SamlLoginTicket) -> str:
+    """The cookie set on /authorize must come back on /complete, so a response
+    captured in one browser cannot sign another browser in."""
+    cookie_name = _login_cookie_name(login.request_id)
+    browser_secret = request.cookies.get(cookie_name)
+    if browser_secret is None or not secrets.compare_digest(
+        login.browser_secret_hash, _sha256(browser_secret)
+    ):
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHORIZED,
+            "Access denied. Sign-in must finish in the browser that started it.",
+        )
+    return cookie_name
+
+
+def _reject_replayed_assertion(auth: OneLogin_Saml2_Auth) -> None:
+    not_on_or_after = auth.get_last_assertion_not_on_or_after()
+    ttl_seconds = (
+        max(int(not_on_or_after - time.time()), 1)
+        if not_on_or_after is not None
+        else _ASSERTION_FALLBACK_TTL_SECONDS
+    )
+    stored = get_cache_backend().set_if_absent(
+        _cache_key(_ASSERTION_KEY_PREFIX, auth.get_last_assertion_id()),
+        b"1",
+        ex=ttl_seconds,
+    )
+    if not stored:
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHORIZED, "Access denied. SAML assertion already used."
+        )
 
 
 async def _build_saml_auth(
@@ -256,29 +380,34 @@ def _enforce_allowed_email_domain(provider: SSOProvider, email: str) -> None:
 async def saml_login(
     request: Request,
     db_session: Session = Depends(get_session),
-) -> SAMLAuthorizeResponse:
+) -> Response:
     _provider, config = _resolve_saml_provider(db_session, "saml")
+    return await _start_saml_login(request, config)
+
+
+async def _start_saml_login(request: Request, config: SAMLProviderConfig) -> Response:
     settings = build_saml_settings(config)
     auth = await _build_saml_auth(request, settings)
     return_to = _sanitize_relay_state(request.query_params.get("next"))
     callback_url = auth.login(return_to=return_to)
-    return SAMLAuthorizeResponse(authorization_url=callback_url)
+    request_id = auth.get_last_request_id()
+    browser_secret = _remember_authn_request(request_id, config.idp_entity_id)
 
-
-@router.get("/callback")
-@redirect_sso_errors_to_web
-async def saml_login_callback_get(
-    request: Request,
-    db_session: Session = Depends(get_session),
-    strategy: Strategy[User, uuid.UUID] = Depends(auth_backend.get_strategy),
-    user_manager: UserManager = Depends(get_user_manager),
-) -> Response:
-    return await _process_saml_callback(
-        request,
-        db_session,
-        strategy,
-        user_manager,
+    response = JSONResponse(
+        content=SAMLAuthorizeResponse(authorization_url=callback_url).model_dump()
     )
+    # Lax: the cookie is read on the same-site GET to /complete, never on the
+    # IdP's cross-site POST, so it needs neither SameSite=None nor https.
+    response.set_cookie(
+        key=_login_cookie_name(request_id),
+        value=browser_secret,
+        max_age=_AUTHN_REQUEST_TTL_SECONDS,
+        path=_LOGIN_COOKIE_PATH,
+        secure=_COOKIE_SECURE,
+        httponly=True,
+        samesite="lax",
+    )
+    return response
 
 
 @router.post("/callback")
@@ -286,14 +415,21 @@ async def saml_login_callback_get(
 async def saml_login_callback_post(
     request: Request,
     db_session: Session = Depends(get_session),
+) -> Response:
+    return await _process_saml_callback(request, db_session)
+
+
+@router.get("/complete")
+@redirect_sso_errors_to_web
+async def saml_login_complete(
+    request: Request,
+    ticket: str,
+    db_session: Session = Depends(get_session),
     strategy: Strategy[User, uuid.UUID] = Depends(auth_backend.get_strategy),
     user_manager: UserManager = Depends(get_user_manager),
 ) -> Response:
-    return await _process_saml_callback(
-        request,
-        db_session,
-        strategy,
-        user_manager,
+    return await _complete_saml_login(
+        request, ticket, db_session, strategy, user_manager
     )
 
 
@@ -302,34 +438,34 @@ async def saml_login_for_provider(
     provider_name: str,
     request: Request,
     db_session: Session = Depends(get_session),
-) -> SAMLAuthorizeResponse:
-    _provider, config = _resolve_saml_provider(db_session, provider_name)
-    settings = build_saml_settings(config)
-    auth = await _build_saml_auth(request, settings)
-    return_to = _sanitize_relay_state(request.query_params.get("next"))
-    callback_url = auth.login(return_to=return_to)
-    return SAMLAuthorizeResponse(authorization_url=callback_url)
-
-
-async def _process_saml_callback(
-    request: Request,
-    db_session: Session,
-    strategy: Strategy[User, uuid.UUID],
-    user_manager: UserManager,
 ) -> Response:
+    _provider, config = _resolve_saml_provider(db_session, provider_name)
+    return await _start_saml_login(request, config)
+
+
+async def _process_saml_callback(request: Request, db_session: Session) -> Response:
+    """Validate the IdP's POST and park the result behind a one-time ticket.
+    The browser follows a redirect to /complete, a same-site GET on which its
+    login cookie arrives, which the cross-site POST cannot carry."""
     req = await prepare_from_fastapi_request(request)
-    encoded_response = req["post_data"].get("SAMLResponse") or req["get_data"].get(
-        "SAMLResponse"
-    )
+    encoded_response = req["post_data"].get("SAMLResponse")
     if not isinstance(encoded_response, str) or not encoded_response:
         raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "missing SAML response")
 
-    issuer = _extract_issuer_from_saml_response(encoded_response)
-    provider, config = _resolve_saml_provider_by_issuer(db_session, issuer)
+    header = _read_saml_response_header(encoded_response)
+    # The library only compares InResponseTo when the response carries one, so
+    # unsolicited and IdP-initiated responses are refused here.
+    if header.in_response_to is None:
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHORIZED,
+            "Access denied. SAML response does not answer a sign-in request.",
+        )
+    pending = _consume_authn_request(header.in_response_to, header.issuer)
+    provider, config = _resolve_saml_provider_by_issuer(db_session, header.issuer)
     settings = build_saml_settings(config)
 
     auth = OneLogin_Saml2_Auth(req, old_settings=settings)
-    auth.process_response()
+    auth.process_response(request_id=header.in_response_to)
 
     errors = auth.get_errors()
     if errors:
@@ -338,10 +474,51 @@ async def _process_saml_callback(
     if not auth.is_authenticated():
         _raise_saml_access_denied(auth, "Access denied. User was not authenticated.")
 
+    _reject_replayed_assertion(auth)
     user_email = _extract_user_email(auth, config)
     _enforce_allowed_email_domain(provider, user_email)
 
-    user = await upsert_saml_user(email=user_email)
+    relay_state = req["post_data"].get("RelayState")
+    login = _SamlLoginTicket(
+        request_id=header.in_response_to,
+        email=user_email,
+        provider_name=provider.name or "saml",
+        browser_secret_hash=pending.browser_secret_hash,
+        attributes=auth.get_attributes(),
+        next_path=_sanitize_relay_state(
+            relay_state if isinstance(relay_state, str) else None
+        ),
+    )
+    ticket = secrets.token_urlsafe(32)
+    get_cache_backend().set(
+        _cache_key(_LOGIN_TICKET_KEY_PREFIX, ticket),
+        login.model_dump_json(),
+        ex=_LOGIN_TICKET_TTL_SECONDS,
+    )
+    return RedirectResponse(
+        f"{WEB_DOMAIN}/auth/saml/complete?ticket={ticket}", status_code=303
+    )
+
+
+async def _complete_saml_login(
+    request: Request,
+    ticket: str,
+    db_session: Session,
+    strategy: Strategy[User, uuid.UUID],
+    user_manager: UserManager,
+) -> Response:
+    stored = get_cache_backend().getdel(_cache_key(_LOGIN_TICKET_KEY_PREFIX, ticket))
+    if stored is None:
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHORIZED, "Access denied. Sign-in expired, try again."
+        )
+    login = _SamlLoginTicket.model_validate_json(stored)
+    login_cookie_name = _require_login_cookie(request, login)
+    # The provider may have been disabled or deleted since the callback ran.
+    provider, _config = _resolve_saml_provider(db_session, login.provider_name)
+    _enforce_allowed_email_domain(provider, login.email)
+
+    user = await upsert_saml_user(email=login.email)
     # A deactivated account must not receive a session. The OIDC path gates this
     # in complete_login_flow. SAML gates it here since it logs the user in
     # directly.
@@ -351,10 +528,23 @@ async def _process_saml_callback(
             "Your account is deactivated. Contact your workspace admin.",
         )
     # Best-effort directory-profile capture from the SAML assertion attributes.
-    await capture_saml_login_claims(
-        user_email, auth.get_attributes(), provider.name or "saml"
+    await capture_saml_login_claims(login.email, login.attributes, login.provider_name)
+
+    # auth_backend.login() answers a bare 204 meant for a JS caller. This is a
+    # browser navigation, so carry its session cookie on a redirect instead.
+    login_response = await auth_backend.login(strategy, user)
+    response = RedirectResponse(
+        f"{WEB_DOMAIN}{login.next_path or '/'}", status_code=302
     )
-    response = await auth_backend.login(strategy, user)
+    for cookie in login_response.headers.getlist("set-cookie"):
+        response.headers.append("set-cookie", cookie)
+    response.delete_cookie(
+        key=login_cookie_name,
+        path=_LOGIN_COOKIE_PATH,
+        secure=_COOKIE_SECURE,
+        httponly=True,
+        samesite="lax",
+    )
     await user_manager.on_after_login(user, request, response)
     return response
 

@@ -1,5 +1,5 @@
-import { Message } from "@/app/app/interfaces";
-import { MultiModelResponse } from "@/app/app/message/interfaces";
+import { Message } from "@/app/app/types";
+import { MultiModelResponse } from "@/app/app/message/types";
 
 // The model that produced a message. Error responses carry the model that
 // failed, so they count for attribution too.
@@ -57,7 +57,7 @@ export function getMultiModelResponses(
       messageId: msg.messageId,
       currentFeedback: msg.currentFeedback,
       isGenerating: msg.is_generating || false,
-      errorMessage: isError ? msg.message : null,
+      errorMessage: isError ? msg.errorMessage : null,
       errorCode: isError ? msg.errorCode : null,
       isRetryable: isError ? msg.isRetryable : undefined,
       errorStackTrace: isError ? msg.stackTrace : null,

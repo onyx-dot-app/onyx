@@ -1,6 +1,7 @@
-import { PacketType } from "@/app/app/services/lib";
+import type { StreamCursor } from "@/app/app/services/streamingModels";
+import type { PacketType } from "@/app/app/services/lib";
 
-export async function* handleSSEStream<T extends PacketType>(
+export async function* handleSSEStream<T extends PacketType | StreamCursor>(
   streamingResponse: Response,
   signal?: AbortSignal
 ): AsyncGenerator<T, void, unknown> {

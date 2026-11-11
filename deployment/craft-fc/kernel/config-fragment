@@ -1,0 +1,14 @@
+# Changes on top of Firecracker's microvm-kernel-ci-x86_64-6.18.config.
+# Dockerfile.artifacts merges this file and fails if a line does not apply.
+
+# The base config builds the AL FIPS140 module in, but TRIM_UNUSED_KSYMS=y
+# removes the symbols it links against, so the guest panics at boot
+# ("FIPS140 loader: module loading error"). Craft does not use FIPS mode.
+# CONFIG_CRYPTO_FIPS140_EXTMOD is not set
+
+# The misc cgroup controller. Container runtimes inside the guest expect it.
+CONFIG_CGROUP_MISC=y
+
+# Expose the running config at /proc/config.gz for debugging and support.
+CONFIG_IKCONFIG=y
+CONFIG_IKCONFIG_PROC=y

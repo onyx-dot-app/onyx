@@ -3,6 +3,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 from onyx.configs.constants import DocumentSource, MessageType
+from onyx.context.search.models import SearchCycle
 from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import (
     AssistantMessage,
@@ -10,7 +11,7 @@ from onyx.llm.models import (
     TextContent,
     UserMessage,
 )
-from onyx.secondary_llm_flows.source_filter import SearchCycle, decide_search_scope
+from onyx.secondary_llm_flows.source_filter import decide_search_scope
 from onyx.tools.models import ChatMinimalTextMessage
 from onyx.tracing.flows import LLMFlow
 

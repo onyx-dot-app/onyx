@@ -65,6 +65,53 @@ def test_generator_reader_propagates_tar_failure_read_all() -> None:
         reader.read(-1)
 
 
+@pytest.mark.parametrize(
+    "probe", [ExecError("exec failed"), SimpleNamespace(stdout_text="")]
+)
+def test_snapshot_probe_failure_is_not_an_empty_checkpoint(
+    probe: object,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manager = object.__new__(dsm.DockerSandboxManager)
+    monkeypatch.setattr(manager, "_get_container", lambda _id: MagicMock())
+    run = (
+        MagicMock(side_effect=probe)
+        if isinstance(probe, ExecError)
+        else MagicMock(return_value=probe)
+    )
+    monkeypatch.setattr(dsm, "_run_in_container_as_sandbox_user", run)
+    with pytest.raises(RuntimeError, match="snapshot discovery|Snapshot discovery"):
+        manager.create_snapshot(uuid4(), uuid4(), "public")
+
+
+def test_snapshot_requires_a_present_container(monkeypatch: pytest.MonkeyPatch) -> None:
+    manager = object.__new__(dsm.DockerSandboxManager)
+    monkeypatch.setattr(manager, "_get_container", lambda _id: None)
+    with pytest.raises(RuntimeError, match="missing sandbox"):
+        manager.create_snapshot(uuid4(), uuid4(), "public")
+
+
+@pytest.mark.parametrize("volume_exists", [False, True])
+def test_storage_check_preserves_detached_volume(
+    volume_exists: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sandbox_id = uuid4()
+    manager = object.__new__(dsm.DockerSandboxManager)
+    manager._docker = MagicMock()
+    monkeypatch.setattr(manager, "_get_container", lambda _id: None)
+    if volume_exists:
+        manager._docker.volumes.get.return_value.attrs = {
+            "CreatedAt": "2026-10-21T00:00:00Z",
+            "Labels": {
+                dsm.LABEL_SANDBOX_ID: str(sandbox_id),
+                dsm.LABEL_TENANT_ID: "public",
+            },
+        }
+    else:
+        manager._docker.volumes.get.side_effect = dsm.NotFound("missing")
+    assert manager.workspace_storage_exists(sandbox_id, "public") == volume_exists
+
+
 def test_docker_archive_excludes_output_thumbnail_cache(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

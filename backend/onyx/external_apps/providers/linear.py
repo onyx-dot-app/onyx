@@ -4,7 +4,7 @@ from onyx.configs.app_configs import (
     EXT_APP_LINEAR_CLIENT_ID,
     EXT_APP_LINEAR_CLIENT_SECRET,
 )
-from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.db.enums import ActionPolicy, ExternalAppType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.actions import (
@@ -43,14 +43,14 @@ _ENDPOINTS: list[EndpointSpec] = [
         normalised_name="Read the connected user",
         description="Read the authenticated user's profile (viewer).",
         matches=(GraphQLOp(operation_type="query", field="viewer"),),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=LinearAction.TEAMS_READ,
         normalised_name="Read teams",
         description="List the workspace's teams.",
         matches=(GraphQLOp(operation_type="query", field="teams"),),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=LinearAction.ISSUES_READ,
@@ -61,14 +61,14 @@ _ENDPOINTS: list[EndpointSpec] = [
             GraphQLOp(operation_type="query", field="issue"),
             GraphQLOp(operation_type="query", field="issueSearch"),
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=LinearAction.PROJECTS_READ,
         normalised_name="Read projects",
         description="List projects.",
         matches=(GraphQLOp(operation_type="query", field="projects"),),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=LinearAction.ISSUES_CREATE,
@@ -106,10 +106,10 @@ class LinearProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
             token_url="https://api.linear.app/oauth/token",
             scope="read,write",
             scope_param="scope",
+            supports_pkce=True,
             # actor=user is Linear's default but explicit — actor=application
             # would mint an app-acting token instead of user-acting.
             extra_authorize_params={
-                "response_type": "code",
                 "actor": "user",
             },
         ),

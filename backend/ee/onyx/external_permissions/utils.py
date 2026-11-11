@@ -18,6 +18,10 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+# Past this share of failed users or groups the cause is the credential or the
+# source, not one entity, so a group sync fails whole instead of skipping them.
+MAX_FAILED_ENTITY_FRACTION = 0.5
+
 
 def credential_json(cc_pair: ConnectorCredentialPair) -> dict[str, Any]:
     """The pair's credential JSON in its connector's own keys."""

@@ -12,9 +12,11 @@ from onyx.configs.constants import (
     OnyxCeleryTask,
 )
 from onyx.connectors.capability_checks.indexing_hold import get_first_indexing_hold
+from onyx.db.connector_credential_pair import lock_connector_credential_pair_row
 from onyx.db.connector_edit_requests import (
     create_pending_backfill_attempt__no_commit,
 )
+from onyx.db.document import has_secondary_only_sync_pending_documents
 from onyx.db.enums import ConnectorCredentialPairStatus, IndexModelStatus
 from onyx.db.index_attempt import (
     claim_waiting_index_attempt,
@@ -22,11 +24,23 @@ from onyx.db.index_attempt import (
 )
 from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.db.models import ConnectorCredentialPair, SearchSettings
+from onyx.db.port_attempt import reindex_finalizing
+from onyx.db.search_settings import get_secondary_search_settings
 from onyx.redis.tenant_redis_client import TenantRedisClient
 
 _LOCK_TIMEOUT = 30
 # Serializes attempt creation (beat or API) and the dispatch of waiting attempts.
 _CREATION_LOCK_NAME = DANSWER_REDIS_FUNCTION_LOCK_PREFIX + "try_creating_indexing_task"
+
+
+def _release_locks(db_session: Session, lock: RedisLock) -> None:
+    """Commits what the creation left open, which releases the pair's row
+    lock, then releases the creation lock."""
+    try:
+        db_session.commit()
+    finally:
+        if lock.owned():
+            lock.release()
 
 
 def _new_docfetching_task_id(
@@ -50,6 +64,29 @@ def _skips_indexing(
     return False
 
 
+def docfetching_priority(
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+    search_settings: SearchSettings,
+) -> OnyxCeleryPriority:
+    """First-time indexing goes before refreshes of indexed connectors. While a
+    port-flow reindex finalizes, FUTURE attempts go before PRESENT refreshes, and
+    FUTURE attempts of connectors with docs pending for FUTURE go first: the swap
+    waits on them. Priority only orders the queue, it does not interrupt a running
+    attempt."""
+    if cc_pair.last_successful_index_time is None:
+        return OnyxCeleryPriority.HIGH
+    if search_settings.status == IndexModelStatus.FUTURE:
+        if not reindex_finalizing(db_session, search_settings):
+            return OnyxCeleryPriority.MEDIUM
+        if has_secondary_only_sync_pending_documents(db_session, cc_pair.id):
+            return OnyxCeleryPriority.HIGH
+        return OnyxCeleryPriority.MEDIUM
+    if reindex_finalizing(db_session, get_secondary_search_settings(db_session)):
+        return OnyxCeleryPriority.LOW
+    return OnyxCeleryPriority.MEDIUM
+
+
 def _send_docfetching_task(
     celery_app: Celery,
     *,
@@ -58,14 +95,8 @@ def _send_docfetching_task(
     index_attempt_id: int,
     custom_task_id: str,
     tenant_id: str,
+    priority: OnyxCeleryPriority,
 ) -> None:
-    # Use higher priority for first-time indexing to ensure new connectors
-    # get processed before re-indexing of existing connectors
-    has_successful_attempt = cc_pair.last_successful_index_time is not None
-    priority = (
-        OnyxCeleryPriority.MEDIUM if has_successful_attempt else OnyxCeleryPriority.HIGH
-    )
-
     # No expires=: a docfetching task can wait in the queue for hours under
     # load, and the NOT_STARTED scan in the indexing watchdog fails an attempt
     # whose task is lost.
@@ -141,8 +172,10 @@ def try_creating_pending_backfill_attempt(
 
     committed_attempt_id: int | None = None
     try:
-        db_session.refresh(cc_pair)
-        if _skips_indexing(cc_pair, search_settings):
+        # Held until the attempt commits, so a pause or a delete runs before
+        # or after this creation, never in between.
+        locked = lock_connector_credential_pair_row(db_session, cc_pair.id)
+        if locked is None or _skips_indexing(locked, search_settings):
             return None
         # A backfill never waits: until the first full run is sent, it has
         # nothing to add to.
@@ -175,6 +208,7 @@ def try_creating_pending_backfill_attempt(
             index_attempt_id=index_attempt_id,
             custom_task_id=custom_task_id,
             tenant_id=tenant_id,
+            priority=docfetching_priority(db_session, cc_pair, search_settings),
         )
         return index_attempt_id
     except Exception:
@@ -188,8 +222,7 @@ def try_creating_pending_backfill_attempt(
             mark_attempt_failed(committed_attempt_id, db_session)
         return None
     finally:
-        if lock.owned():
-            lock.release()
+        _release_locks(db_session, lock)
 
 
 def _try_creating_attempt(
@@ -215,10 +248,12 @@ def _try_creating_attempt(
 
     index_attempt_id = None
     try:
-        # Basic status checks
-        db_session.refresh(cc_pair)
-        # A pause that commits after the beat read the pair ends here.
-        if _skips_indexing(cc_pair, search_settings):
+        # Held until the attempt commits (try_create_index_attempt commits), so
+        # a pause or a delete runs before or after this creation, never in
+        # between: a pause that commits first ends here, and a pause that
+        # comes later finds the attempt and cancels it.
+        locked = lock_connector_credential_pair_row(db_session, cc_pair.id)
+        if locked is None or _skips_indexing(locked, search_settings):
             return None
 
         # A first attempt that waits for the capability checks is created
@@ -258,6 +293,7 @@ def _try_creating_attempt(
             index_attempt_id=index_attempt_id,
             custom_task_id=custom_task_id,
             tenant_id=tenant_id,
+            priority=docfetching_priority(db_session, cc_pair, search_settings),
         )
         return index_attempt_id
 
@@ -266,14 +302,14 @@ def _try_creating_attempt(
             f"try_creating_indexing_task - Unexpected exception: cc_pair={cc_pair.id} search_settings={search_settings.id}"
         )
 
+        db_session.rollback()
         # Clean up on failure
         if index_attempt_id is not None:
             mark_attempt_failed(index_attempt_id, db_session)
 
         return None
     finally:
-        if lock.owned():
-            lock.release()
+        _release_locks(db_session, lock)
 
     return index_attempt_id
 
@@ -302,8 +338,9 @@ def try_dispatching_waiting_attempt(
 
     claimed = False
     try:
-        db_session.refresh(cc_pair)
-        if _skips_indexing(cc_pair, search_settings):
+        # Held until the claim commits, so a pause sees the claimed task id.
+        locked = lock_connector_credential_pair_row(db_session, cc_pair.id)
+        if locked is None or _skips_indexing(locked, search_settings):
             return False
         if get_first_indexing_hold(db_session, cc_pair) is not None:
             return False
@@ -321,6 +358,7 @@ def try_dispatching_waiting_attempt(
             index_attempt_id=index_attempt_id,
             custom_task_id=custom_task_id,
             tenant_id=tenant_id,
+            priority=docfetching_priority(db_session, cc_pair, search_settings),
         )
         return True
     except Exception:
@@ -328,9 +366,9 @@ def try_dispatching_waiting_attempt(
             f"try_dispatching_waiting_attempt - Unexpected exception: "
             f"cc_pair={cc_pair.id} attempt_id={index_attempt_id}"
         )
+        db_session.rollback()
         if claimed:
             mark_attempt_failed(index_attempt_id, db_session)
         return False
     finally:
-        if lock.owned():
-            lock.release()
+        _release_locks(db_session, lock)

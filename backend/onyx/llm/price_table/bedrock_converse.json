@@ -19,7 +19,8 @@
         "context": 2600
       },
       "mode": "image_generation",
-      "name": "1024-x-1024/50-steps/bedrock/amazon.nova-canvas-v1:0"
+      "name": "1024-x-1024/50-steps/bedrock/amazon.nova-canvas-v1:0",
+      "status": "deprecated"
     },
     "1024-x-1024/50-steps/stability.stable-diffusion-xl-v1": {
       "cost": {
@@ -66,6 +67,10 @@
         "input": 0.33,
         "output": 2.75
       },
+      "limit": {
+        "context": 256000,
+        "output": 64000
+      },
       "mode": "realtime",
       "name": "amazon.nova-2-5-sonic"
     },
@@ -97,6 +102,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-12-02",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -117,6 +123,10 @@
         "input": 0.33,
         "output": 2.75
       },
+      "limit": {
+        "context": 1000000,
+        "output": 64000
+      },
       "mode": "realtime",
       "name": "amazon.nova-2-sonic-v1:0"
     },
@@ -128,7 +138,8 @@
         "context": 2600
       },
       "mode": "image_generation",
-      "name": "amazon.nova-canvas-v1:0"
+      "name": "amazon.nova-canvas-v1:0",
+      "status": "deprecated"
     },
     "amazon.nova-lite-v1:0": {
       "attachment": true,
@@ -291,7 +302,8 @@
         "image_input": 0.0
       },
       "mode": "image_generation",
-      "name": "amazon.titan-image-generator-v2"
+      "name": "amazon.titan-image-generator-v2",
+      "status": "deprecated"
     },
     "amazon.titan-image-generator-v2:0": {
       "cost": {
@@ -299,7 +311,8 @@
         "image_input": 0.0
       },
       "mode": "image_generation",
-      "name": "amazon.titan-image-generator-v2:0"
+      "name": "amazon.titan-image-generator-v2:0",
+      "status": "deprecated"
     },
     "anthropic.claude-fable-5": {
       "attachment": true,
@@ -328,6 +341,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-06-09",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -358,6 +372,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-09-01",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -431,7 +446,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-10-07",
-      "structured_output": false,
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -492,7 +507,7 @@
       "name": "Claude Opus 4.5",
       "open_weights": false,
       "reasoning": true,
-      "release_date": "2025-11-01",
+      "release_date": "2025-11-24",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -555,6 +570,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-04-16",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -585,6 +601,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-05-28",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -615,6 +632,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-07-24",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -645,6 +663,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-09-22",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -675,6 +694,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-09-29",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -737,7 +757,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-06-30",
-      "structured_output": false,
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -768,7 +788,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-09-28",
-      "structured_output": false,
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -800,6 +820,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2024-12-03",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -828,6 +849,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2024-12-03",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -859,6 +881,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2024-12-03",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -963,7 +986,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-10-07",
-      "structured_output": false,
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -1025,6 +1048,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-04-16",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -1055,6 +1079,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-05-28",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -1085,6 +1110,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-07-24",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -1115,6 +1141,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-09-22",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -1145,6 +1172,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-09-29",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -1207,7 +1235,38 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-06-30",
-      "structured_output": false,
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "au.anthropic.claude-sonnet-5-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.11,
+        "cache_write": 2.75,
+        "input": 2.2,
+        "output": 11
+      },
+      "family": "claude-sonnet",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Sonnet 5.5 (AU)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-28",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -1239,6 +1298,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2024-12-03",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -1310,6 +1370,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2025-01-20",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": false
     },
@@ -1336,6 +1397,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2025-08-21",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -1395,6 +1457,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-12-02",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -1426,6 +1489,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2024-12-03",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -1454,6 +1518,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2024-12-03",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -1485,6 +1550,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2024-12-03",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -1515,6 +1581,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-06-09",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -1588,7 +1655,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-10-07",
-      "structured_output": false,
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -1618,7 +1685,7 @@
       "name": "Claude Opus 4.5 (EU)",
       "open_weights": false,
       "reasoning": true,
-      "release_date": "2025-11-01",
+      "release_date": "2025-11-24",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -1681,6 +1748,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-04-16",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -1711,6 +1779,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-05-28",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -1741,6 +1810,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-07-24",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -1771,6 +1841,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-09-22",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -1832,6 +1903,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-09-29",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -1894,7 +1966,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-06-30",
-      "structured_output": false,
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -1925,7 +1997,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-09-28",
-      "structured_output": false,
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -1953,6 +2025,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2025-04-08",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -2006,6 +2079,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-12-02",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -2036,6 +2110,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-06-09",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -2066,6 +2141,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-09-01",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -2139,7 +2215,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-10-07",
-      "structured_output": false,
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -2169,7 +2245,7 @@
       "name": "Claude Opus 4.5 (Global)",
       "open_weights": false,
       "reasoning": true,
-      "release_date": "2025-11-01",
+      "release_date": "2025-11-24",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -2232,6 +2308,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-04-16",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -2262,6 +2339,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-05-28",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -2292,6 +2370,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-07-24",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -2322,6 +2401,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-09-22",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -2383,6 +2463,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-09-29",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -2445,7 +2526,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-06-30",
-      "structured_output": false,
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -2476,7 +2557,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-09-28",
-      "structured_output": false,
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -2615,7 +2696,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-07-09",
-      "structured_output": false,
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -2664,7 +2745,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-07-09",
-      "structured_output": false,
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -2864,6 +2945,55 @@
       "temperature": false,
       "tool_call": true
     },
+    "global.openai.gpt-6.1-terra": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.05,
+        "cache_write": 1.25,
+        "context_over_200k": {
+          "cache_read": 0.1,
+          "cache_write": 2.5,
+          "input": 2,
+          "output": 7.5
+        },
+        "input": 1,
+        "output": 5,
+        "tiers": [
+          {
+            "cache_read": 0.1,
+            "cache_write": 2.5,
+            "input": 2,
+            "output": 7.5,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-terra",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-6.1 Terra (Global)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-26",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
     "global.xai.grok-4.6": {
       "attachment": true,
       "cost": {
@@ -2976,6 +3106,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2025-03-12",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": false
@@ -3004,6 +3135,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2025-03-12",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": false
@@ -3032,6 +3164,8 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2025-03-12",
+      "status": "deprecated",
+      "structured_output": false,
       "temperature": true,
       "tool_call": false
     },
@@ -3185,6 +3319,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-07-24",
+      "structured_output": false,
       "temperature": false,
       "tool_call": true
     },
@@ -3315,7 +3450,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-07-09",
-      "structured_output": false,
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -3347,6 +3482,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-12-02",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -3420,7 +3556,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-10-07",
-      "structured_output": false,
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -3451,6 +3587,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-04-16",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -3481,6 +3618,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-05-28",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -3511,6 +3649,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-07-24",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -3541,6 +3680,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-09-22",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -3571,6 +3711,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-09-29",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -3633,7 +3774,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-06-30",
-      "structured_output": false,
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -3681,6 +3822,8 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2024-07-23",
+      "status": "deprecated",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -3708,6 +3851,8 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2024-07-23",
+      "status": "deprecated",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -3734,6 +3879,8 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2024-12-06",
+      "status": "deprecated",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -3761,6 +3908,8 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2025-04-05",
+      "status": "deprecated",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -3788,6 +3937,8 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2025-04-05",
+      "status": "deprecated",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -3814,6 +3965,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2025-10-27",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -3841,6 +3993,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2025-12-23",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -3895,6 +4048,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2025-12-09",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -4063,6 +4217,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2025-04-08",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -4090,6 +4245,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2025-07-15",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -4118,6 +4274,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2025-07-15",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -4145,6 +4302,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2025-11-06",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -4202,6 +4360,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2025-10-28",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -4256,6 +4415,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2025-08-18",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -4697,6 +4857,56 @@
       "temperature": false,
       "tool_call": true
     },
+    "openai.gpt-6.1-terra": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.055,
+        "cache_write": 1.375,
+        "context_over_200k": {
+          "cache_read": 0.11,
+          "cache_write": 2.75,
+          "input": 2.2,
+          "output": 8.25
+        },
+        "input": 1.1,
+        "output": 5.5,
+        "tiers": [
+          {
+            "cache_read": 0.11,
+            "cache_write": 2.75,
+            "input": 2.2,
+            "output": 8.25,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-terra",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-6.1 Terra",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-26",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
     "openai.gpt-oss-120b": {
       "attachment": false,
       "cost": {
@@ -4908,7 +5118,7 @@
       "name": "Qwen3 32B",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2025-04",
+      "release_date": "2025-04-28",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -4936,6 +5146,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2025-07-31",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -4963,6 +5174,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2025-07-23",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -5274,7 +5486,7 @@
     },
     "us-gov-east-1/amazon.titan-embed-text-v2:0": {
       "cost": {
-        "input": 0.19999999999999998,
+        "input": 0.03,
         "output": 0.0
       },
       "limit": {
@@ -5399,6 +5611,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-12-02",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -5410,7 +5623,8 @@
         "context": 2600
       },
       "mode": "image_generation",
-      "name": "us.amazon.nova-canvas-v1:0"
+      "name": "us.amazon.nova-canvas-v1:0",
+      "status": "deprecated"
     },
     "us.amazon.nova-lite-v1:0": {
       "attachment": true,
@@ -5440,6 +5654,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2024-12-03",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -5468,6 +5683,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2024-12-03",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -5532,6 +5748,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2024-12-03",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -5562,6 +5779,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-06-09",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -5592,6 +5810,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-09-01",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -5665,7 +5884,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-10-07",
-      "structured_output": false,
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -5726,7 +5945,7 @@
       "name": "Claude Opus 4.5 (US)",
       "open_weights": false,
       "reasoning": true,
-      "release_date": "2025-11-01",
+      "release_date": "2025-11-24",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -5789,6 +6008,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-04-16",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -5819,6 +6039,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-05-28",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -5849,6 +6070,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-07-24",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -5879,6 +6101,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-09-22",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -5940,6 +6163,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-09-29",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -6002,7 +6226,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-06-30",
-      "structured_output": false,
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -6033,7 +6257,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-09-28",
-      "structured_output": false,
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -6071,6 +6295,8 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2025-01-20",
+      "status": "deprecated",
+      "structured_output": false,
       "temperature": true,
       "tool_call": false
     },
@@ -6098,6 +6324,8 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2024-07-23",
+      "status": "deprecated",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -6125,6 +6353,8 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2024-07-23",
+      "status": "deprecated",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -6151,6 +6381,8 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2024-12-06",
+      "status": "deprecated",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -6178,6 +6410,8 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2025-04-05",
+      "status": "deprecated",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -6205,6 +6439,8 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2025-04-05",
+      "status": "deprecated",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -6232,6 +6468,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2025-04-08",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -6359,7 +6596,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-07-09",
-      "structured_output": false,
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -6408,7 +6645,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-07-09",
-      "structured_output": false,
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -6608,6 +6845,185 @@
       "temperature": false,
       "tool_call": true
     },
+    "us.openai.gpt-6.1-terra": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.055,
+        "cache_write": 1.375,
+        "context_over_200k": {
+          "cache_read": 0.11,
+          "cache_write": 2.75,
+          "input": 2.2,
+          "output": 8.25
+        },
+        "input": 1.1,
+        "output": 5.5,
+        "tiers": [
+          {
+            "cache_read": 0.11,
+            "cache_write": 2.75,
+            "input": 2.2,
+            "output": 8.25,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-terra",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-6.1 Terra (US)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-26",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "us.stability.stable-conservative-upscale-v1:0": {
+      "cost": {
+        "image": 0.4
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_edit",
+      "name": "us.stability.stable-conservative-upscale-v1:0"
+    },
+    "us.stability.stable-creative-upscale-v1:0": {
+      "cost": {
+        "image": 0.6
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_edit",
+      "name": "us.stability.stable-creative-upscale-v1:0"
+    },
+    "us.stability.stable-fast-upscale-v1:0": {
+      "cost": {
+        "image": 0.03
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_edit",
+      "name": "us.stability.stable-fast-upscale-v1:0"
+    },
+    "us.stability.stable-image-control-sketch-v1:0": {
+      "cost": {
+        "image": 0.07
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_edit",
+      "name": "us.stability.stable-image-control-sketch-v1:0"
+    },
+    "us.stability.stable-image-control-structure-v1:0": {
+      "cost": {
+        "image": 0.07
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_edit",
+      "name": "us.stability.stable-image-control-structure-v1:0"
+    },
+    "us.stability.stable-image-erase-object-v1:0": {
+      "cost": {
+        "image": 0.07
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_edit",
+      "name": "us.stability.stable-image-erase-object-v1:0"
+    },
+    "us.stability.stable-image-inpaint-v1:0": {
+      "cost": {
+        "image": 0.07
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_edit",
+      "name": "us.stability.stable-image-inpaint-v1:0"
+    },
+    "us.stability.stable-image-remove-background-v1:0": {
+      "cost": {
+        "image": 0.07
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_edit",
+      "name": "us.stability.stable-image-remove-background-v1:0"
+    },
+    "us.stability.stable-image-search-recolor-v1:0": {
+      "cost": {
+        "image": 0.07
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_edit",
+      "name": "us.stability.stable-image-search-recolor-v1:0"
+    },
+    "us.stability.stable-image-search-replace-v1:0": {
+      "cost": {
+        "image": 0.07
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_edit",
+      "name": "us.stability.stable-image-search-replace-v1:0"
+    },
+    "us.stability.stable-image-style-guide-v1:0": {
+      "cost": {
+        "image": 0.07
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_edit",
+      "name": "us.stability.stable-image-style-guide-v1:0"
+    },
+    "us.stability.stable-outpaint-v1:0": {
+      "cost": {
+        "image": 0.06
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_edit",
+      "name": "us.stability.stable-outpaint-v1:0"
+    },
+    "us.stability.stable-style-transfer-v1:0": {
+      "cost": {
+        "image": 0.08
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_edit",
+      "name": "us.stability.stable-style-transfer-v1:0"
+    },
     "us.twelvelabs.marengo-embed-2-7-v1:0": {
       "cost": {
         "image_input": 0.0001,
@@ -6653,6 +7069,8 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2024-10-09",
+      "status": "deprecated",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -6680,6 +7098,8 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-04-28",
+      "status": "deprecated",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -6794,6 +7214,8 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2024-10-09",
+      "status": "deprecated",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -6821,6 +7243,8 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-04-28",
+      "status": "deprecated",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -6905,6 +7329,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2025-12-22",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -6932,6 +7357,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-01-19",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true

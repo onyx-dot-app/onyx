@@ -15,6 +15,47 @@ locals {
   }
 }
 
+locals {
+  kms_key_name = var.create_kms_key ? google_kms_crypto_key.this[0].id : var.kms_key_name
+  # Key ring and key IDs allow no dots and at most 63 characters.
+  kms_resource_name = substr(replace(var.name, ".", "-"), 0, 63)
+}
+
+# A key owned by this bucket alone. Cloud KMS key rings cannot be deleted, so a
+# destroy leaves the ring behind and schedules the key versions for
+# destruction. Only the project's GCS service agent may use the key.
+resource "google_kms_key_ring" "this" {
+  count = var.create_kms_key ? 1 : 0
+
+  name     = local.kms_resource_name
+  project  = var.project_id
+  location = lower(var.location)
+}
+
+resource "google_kms_crypto_key" "this" {
+  count = var.create_kms_key ? 1 : 0
+
+  name            = local.kms_resource_name
+  key_ring        = google_kms_key_ring.this[0].id
+  purpose         = "ENCRYPT_DECRYPT"
+  rotation_period = var.kms_key_rotation_period
+  labels          = var.labels
+}
+
+data "google_storage_project_service_account" "this" {
+  count = var.create_kms_key ? 1 : 0
+
+  project = var.project_id
+}
+
+resource "google_kms_crypto_key_iam_member" "gcs_service_agent" {
+  count = var.create_kms_key ? 1 : 0
+
+  crypto_key_id = google_kms_crypto_key.this[0].id
+  role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+  member        = data.google_storage_project_service_account.this[0].member
+}
+
 resource "google_storage_bucket" "this" {
   name     = var.name
   project  = var.project_id
@@ -38,9 +79,22 @@ resource "google_storage_bucket" "this" {
   }
 
   dynamic "encryption" {
-    for_each = var.kms_key_name == null ? [] : [1]
+    for_each = var.create_kms_key || var.kms_key_name != null ? [1] : []
     content {
-      default_kms_key_name = var.kms_key_name
+      default_kms_key_name = local.kms_key_name
+    }
+  }
+
+  dynamic "lifecycle_rule" {
+    for_each = var.expiration_days == null ? [] : [1]
+    content {
+      action {
+        type = "Delete"
+      }
+      condition {
+        age        = var.expiration_days
+        with_state = "LIVE"
+      }
     }
   }
 
@@ -73,6 +127,9 @@ resource "google_storage_bucket" "this" {
       }
     }
   }
+
+  # GCS checks the key on create, so the service agent grant must land first.
+  depends_on = [google_kms_crypto_key_iam_member.gcs_service_agent]
 }
 
 resource "google_storage_bucket_iam_member" "members" {

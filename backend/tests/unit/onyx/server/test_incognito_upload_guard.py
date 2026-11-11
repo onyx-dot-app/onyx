@@ -12,7 +12,6 @@ from uuid import uuid4
 
 from fastapi import BackgroundTasks
 
-from onyx.chat.incognito_context import _TOMBSTONE
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.projects.api import upload_user_files
@@ -20,7 +19,7 @@ from onyx.server.features.projects.api import upload_user_files
 MODULE = "onyx.server.features.projects.api"
 CONTEXT_MODULE = "onyx.chat.incognito_context"
 # No context key exists until the first message of a session is sent.
-NO_CONTEXT_YET = None
+NO_TOMBSTONE = False
 
 
 @dataclass
@@ -34,21 +33,21 @@ class Attempt:
 
 def _upload(
     *,
-    stored: list[bytes | None],
+    stored: list[bool],
     allowed: bool = True,
     upload_fails: bool = False,
 ) -> Attempt:
     """Run the endpoint against a fresh incognito session id.
 
-    *stored* is what Redis holds for the context key on the pre-check and then
+    *stored* is whether the cache holds a teardown marker on the pre-check and then
     the post-check, which is the only thing separating an ordinary upload from
     one racing a teardown.
     """
-    redis_client = MagicMock()
-    redis_client.get.side_effect = list(stored)
+    cache = MagicMock()
+    cache.exists.side_effect = list(stored)
     with (
         patch(f"{MODULE}.incognito_allowed_for_user", return_value=allowed),
-        patch(f"{CONTEXT_MODULE}.get_redis_client", return_value=redis_client),
+        patch(f"{CONTEXT_MODULE}._cache", return_value=cache),
         patch(
             f"{MODULE}.upload_files_to_user_files_with_indexing",
             side_effect=ConnectionError("indexing hand-off failed")
@@ -81,7 +80,7 @@ def _upload(
 def test_a_session_that_has_sent_no_message_yet_accepts_the_upload() -> None:
     """The case that rejected the first attachment of every new incognito
     chat: no message sent, so no context key exists."""
-    attempt = _upload(stored=[NO_CONTEXT_YET, NO_CONTEXT_YET])
+    attempt = _upload(stored=[NO_TOMBSTONE, NO_TOMBSTONE])
 
     assert attempt.error is None
     assert attempt.wrote_rows
@@ -89,7 +88,7 @@ def test_a_session_that_has_sent_no_message_yet_accepts_the_upload() -> None:
 
 
 def test_an_upload_racing_teardown_is_queued_for_deletion() -> None:
-    attempt = _upload(stored=[NO_CONTEXT_YET, _TOMBSTONE])
+    attempt = _upload(stored=[NO_TOMBSTONE, True])
 
     assert attempt.claimed_rows
 
@@ -97,14 +96,14 @@ def test_an_upload_racing_teardown_is_queued_for_deletion() -> None:
 def test_an_upload_that_fails_after_writing_still_claims_its_rows() -> None:
     """Rows are committed before the indexing hand-off, which can still fail,
     so a torn-down session's files must not be left stored and unmarked."""
-    attempt = _upload(stored=[NO_CONTEXT_YET, _TOMBSTONE], upload_fails=True)
+    attempt = _upload(stored=[NO_TOMBSTONE, True], upload_fails=True)
 
     assert attempt.error is not None
     assert attempt.claimed_rows
 
 
 def test_an_upload_into_an_ended_session_never_writes_a_row() -> None:
-    attempt = _upload(stored=[_TOMBSTONE])
+    attempt = _upload(stored=[True])
 
     assert isinstance(attempt.error, OnyxError)
     assert attempt.error.error_code is OnyxErrorCode.INVALID_INPUT

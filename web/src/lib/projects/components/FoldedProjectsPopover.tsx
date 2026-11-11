@@ -18,7 +18,7 @@ import {
 } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { SvgFolder, SvgFolderPlus } from "@opal/icons";
-import { useAppPosition } from "@/lib/position/hooks";
+import { useAppPosition } from "@/lib/navigation/hooks";
 import { noProp } from "@/lib/utils";
 import { UNNAMED_CHAT } from "@/lib/constants";
 import { usePinChatAgent } from "@/lib/agents/hooks";
@@ -97,10 +97,11 @@ function ProjectPopoverRow({
               // `nested` supplies the indent that lines a chat up under its
               // project, so the row needs no icon of its own.
               nested
-              href={`/app?chatId=${chatSession.id}`}
+              href={appPosition.linkToChat(chatSession.id).href}
               // Opening a chat pins its agent, the same as the sidebar's own
               // rows — the popover is another way in, not a different one.
-              onClick={() => {
+              onClick={(event) => {
+                appPosition.linkToChat(chatSession.id).onClick(event);
                 pinChatAgent(chatSession);
                 onNavigate();
               }}

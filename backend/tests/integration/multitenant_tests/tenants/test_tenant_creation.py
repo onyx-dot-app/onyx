@@ -98,7 +98,7 @@ def test_admin_can_create_and_verify_cc_pair(
         connector_id=test_connector.id,
         credential_id=test_credential.id,
         name="admin_test_cc_pair",
-        access_type=AccessType.PRIVATE,
+        access_type=AccessType.PERSONAL,
         user_performing_action=test_user,
     )
     assert test_cc_pair is not None
@@ -141,5 +141,5 @@ def test_image_gen_config_created_on_tenant_provision(
 
     # Verify expected properties
     default_config = default_configs[0]
-    assert default_config.image_provider_id == "openai_gpt_image_1"
-    assert default_config.model_name == "gpt-image-1"
+    assert default_config.image_provider_id == "openai_gpt_image_2_5_flare"
+    assert default_config.model_name == "gpt-image-2.5-flare"

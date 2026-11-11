@@ -1,0 +1,39 @@
+---
+title: "Code Interpreter"
+description: "Safe and sandboxed Python runtime available to the LLM"
+icon: "code"
+---
+
+The **Code Interpreter** action lets the LLM write and run Python code. Use it for complex calculations,
+data analysis on uploaded files, and creating or changing documents.
+
+<Tip>
+  Code Interpreter is available in all editions.
+  The default Docker Compose deployment includes the Code Interpreter service, so no extra setup is needed.
+</Tip>
+
+<img className="rounded-image" src="/assets/overview/core_features/code_interpreter.webp" alt="Code Interpreter"/>
+
+<Info>
+  The LLM decides when to use Code Interpreter based on your message. To force or block it for one chat,
+  open the actions menu in the input bar and toggle **Code Interpreter**.
+  You can also add it as an action on a custom [Agent](/overview/core_features/agents).
+</Info>
+
+## Features
+
+Code Interpreter runs in an isolated sandbox.
+The sandbox has no network access and cannot read files outside of its own workspace.
+
+- **Libraries**: Common data libraries such as numpy, pandas, scipy, and matplotlib are pre-installed.
+- **File input**: Files you attach to the chat or a Project are available to the code.
+- **File output**: The code can create files. Onyx returns them to you in the chat.
+- **Charts**: The [Chat UI](/overview/core_features/chat) renders charts and other visualizations in the conversation.
+
+## Configuration
+
+Admins can check the service status at **Admin Panel → Code Interpreter**. If the status is not **Connected**,
+or an admin turned the action off, Code Interpreter does not appear in the actions menu.
+The [Coding Agent](/overview/core_features/coding_agent) uses the same service.
+
+For setup and troubleshooting, see the [admin configuration guide](/admins/actions/code_interpreter).

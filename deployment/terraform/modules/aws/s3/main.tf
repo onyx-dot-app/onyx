@@ -19,6 +19,29 @@ moved {
   to   = aws_s3_bucket_policy.anonymous_read[0]
 }
 
+locals {
+  kms_key_id = var.create_kms_key ? aws_kms_key.this[0].arn : var.kms_key_id
+}
+
+# A key owned by this bucket alone, so access to its objects can be revoked or
+# audited without touching any other data. The default key policy defers to
+# IAM in the account; nothing here grants a role use of the key.
+resource "aws_kms_key" "this" {
+  count = var.create_kms_key ? 1 : 0
+
+  description             = "Encrypts objects in s3://${var.bucket_name}"
+  enable_key_rotation     = true
+  deletion_window_in_days = var.kms_key_deletion_window_days
+  tags                    = var.tags
+}
+
+resource "aws_kms_alias" "this" {
+  count = var.create_kms_key ? 1 : 0
+
+  name          = "alias/${replace(var.bucket_name, ".", "-")}"
+  target_key_id = aws_kms_key.this[0].key_id
+}
+
 resource "aws_s3_bucket" "this" {
   bucket        = var.bucket_name
   force_destroy = var.force_destroy
@@ -39,8 +62,11 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "this" {
     apply_server_side_encryption_by_default {
       # KMS encryption requires SigV4 signing, which anonymous requests can't provide
       sse_algorithm     = var.allow_anonymous_read ? "AES256" : "aws:kms"
-      kms_master_key_id = var.allow_anonymous_read ? null : var.kms_key_id
+      kms_master_key_id = var.allow_anonymous_read ? null : local.kms_key_id
     }
+    # Null keeps existing buckets unchanged. A dedicated key gets bucket keys,
+    # which cut KMS request charges.
+    bucket_key_enabled = var.create_kms_key ? true : null
   }
 }
 
@@ -73,6 +99,18 @@ resource "aws_s3_bucket_lifecycle_configuration" "this" {
 
       expiration {
         days = var.expiration_days
+      }
+    }
+  }
+
+  dynamic "rule" {
+    for_each = var.abort_incomplete_multipart_upload_days > 0 ? [1] : []
+    content {
+      id     = "abort-incomplete-multipart-upload"
+      status = "Enabled"
+
+      abort_incomplete_multipart_upload {
+        days_after_initiation = var.abort_incomplete_multipart_upload_days
       }
     }
   }

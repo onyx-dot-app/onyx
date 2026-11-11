@@ -1,12 +1,21 @@
 {
-  "version": "1.17",
-  "updated_at": "2026-10-12T00:00:00Z",
+  "version": "1.26",
+  "updated_at": "2026-11-09T00:00:00Z",
   "providers": {
     "openai": {
       "default_model": "gpt-6.1-sol",
       "additional_visible_models": [
         {
           "name": "gpt-6.1-sol"
+        },
+        {
+          "name": "gpt-6.1-terra"
+        },
+        {
+          "name": "gpt-6-luna"
+        },
+        {
+          "name": "gpt-6-astra"
         }
       ]
     },
@@ -24,19 +33,15 @@
         {
           "name": "claude-haiku-5-5",
           "display_name": "Claude Haiku 5.5"
-        },
-        {
-          "name": "claude-fable-5-1",
-          "display_name": "Claude Fable 5.1"
         }
       ]
     },
     "vertex_ai": {
-      "default_model": "gemini-3.1-pro-preview",
+      "default_model": "gemini-4-argon",
       "additional_visible_models": [
         {
-          "name": "gemini-3.1-pro-preview",
-          "display_name": "Gemini 3.1 Pro"
+          "name": "gemini-4-argon",
+          "display_name": "Gemini 4 Argon"
         },
         {
           "name": "gemini-3.8-flash",
@@ -44,7 +49,7 @@
         },
         {
           "name": "gemini-3.5-flash-lite",
-          "display_name": "Gemini 3.5 Flash Lite"
+          "display_name": "Gemini 3.5 Flash-Lite"
         }
       ]
     },
@@ -60,16 +65,16 @@
           "display_name": "GLM 5.3 Flash"
         },
         {
-          "name": "deepseek/deepseek-v4.1-flash",
-          "display_name": "DeepSeek V4.1 Flash"
+          "name": "deepseek/deepseek-v4.1-flash-1017",
+          "display_name": "DeepSeek V4.1 Flash 1017"
         },
         {
-          "name": "qwen/qwen3.8-max-0902",
-          "display_name": "Qwen3.8 Max 0902"
+          "name": "qwen/qwen3.8-flash",
+          "display_name": "Qwen3.8 Flash"
         },
         {
-          "name": "moonshotai/kimi-k3",
-          "display_name": "Kimi K3"
+          "name": "moonshotai/kimi-k3.1-pro",
+          "display_name": "Kimi K3.1 Pro"
         }
       ]
     }

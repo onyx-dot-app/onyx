@@ -7,9 +7,13 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT, DocumentSource
+from onyx.connectors.models import InputType
+from onyx.db.cc_pair_run_resolution import get_resolution_times
 from onyx.db.connector_edit_requests import get_reindex_request_backoff
+from onyx.db.connector_event_inbox import event_pair_has_work
 from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.enums import (
+    CCPairRunKind,
     ConnectorCredentialPairStatus,
     IndexingStatus,
     IndexModelStatus,
@@ -18,7 +22,12 @@ from onyx.db.index_attempt import (
     get_last_attempt_for_cc_pair,
     get_recent_attempts_for_cc_pair,
 )
-from onyx.db.models import ConnectorCredentialPair, SearchSettings
+from onyx.db.models import (
+    Connector,
+    ConnectorCredentialPair,
+    IndexAttempt,
+    SearchSettings,
+)
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_pool import redis_lock_dump
@@ -28,6 +37,8 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 NUM_REPEAT_ERRORS_BEFORE_REPEATED_ERROR_STATE = 5
+# How long an event pair waits after a failed attempt before the next run.
+EVENT_PAIR_RETRY_AFTER_FAILURES_SECONDS = 300
 
 
 class IndexingCallbackBase(IndexingHeartbeatInterface):
@@ -147,29 +158,63 @@ class IndexingCallback(IndexingHeartbeatInterface):
 # handled by validate_active_indexing_attempts in the main indexing tasks module.
 
 
-def is_in_repeated_error_state(
-    cc_pair: ConnectorCredentialPair, search_settings_id: int, db_session: Session
-) -> bool:
-    """Checks if the cc pair / search setting combination is in a repeated error state."""
-    # if the connector doesn't have a refresh_freq, a single failed attempt is enough
-    number_of_failed_attempts_in_a_row_needed = (
-        NUM_REPEAT_ERRORS_BEFORE_REPEATED_ERROR_STATE
-        if cc_pair.connector.refresh_freq is not None
-        else 1
+def failures_before_repeated_error_state(connector: Connector) -> int:
+    """How many failed attempts in a row flag a pair. A connector without a
+    refresh_freq does not retry on its own, so one failure is enough."""
+    if connector.refresh_freq is None:
+        return 1
+    return NUM_REPEAT_ERRORS_BEFORE_REPEATED_ERROR_STATE
+
+
+def repeated_error_alert(
+    connector_name: str, source: str, failures_needed: int
+) -> tuple[str, str]:
+    """The flagged connector alert's title and description."""
+    if failures_needed == 1:
+        return (
+            f"Connector '{connector_name}' has failed",
+            f"The {source} connector failed and has been flagged. "
+            "Check its indexing history and credentials.",
+        )
+    return (
+        f"Connector '{connector_name}' has entered repeated error state",
+        f"The {source} connector has failed repeatedly and has been flagged. "
+        "Check its indexing history and credentials.",
     )
 
+
+def _failed_streak(
+    cc_pair: ConnectorCredentialPair, search_settings_id: int, db_session: Session
+) -> list[IndexAttempt]:
+    """The pair's latest attempts under the search settings when enough of them
+    in a row failed to flag it, else none."""
+    failures_needed = failures_before_repeated_error_state(cc_pair.connector)
     most_recent_index_attempts = get_recent_attempts_for_cc_pair(
         cc_pair_id=cc_pair.id,
         search_settings_id=search_settings_id,
-        limit=number_of_failed_attempts_in_a_row_needed,
+        limit=failures_needed,
         db_session=db_session,
     )
-    return len(
-        most_recent_index_attempts
-    ) >= number_of_failed_attempts_in_a_row_needed and all(
-        attempt.status == IndexingStatus.FAILED
+    if len(most_recent_index_attempts) < failures_needed or any(
+        attempt.status != IndexingStatus.FAILED
         for attempt in most_recent_index_attempts
+    ):
+        return []
+    return most_recent_index_attempts
+
+
+def is_in_repeated_error_state(
+    cc_pair: ConnectorCredentialPair, search_settings_id: int, db_session: Session
+) -> bool:
+    """Whether the beat flags the pair: its failed streak holds no failure an
+    admin resolved, so resolving the latest one keeps the flag down."""
+    streak = _failed_streak(cc_pair, search_settings_id, db_session)
+    if not streak:
+        return False
+    resolved = get_resolution_times(
+        db_session, [(CCPairRunKind.INDEXING, attempt.id) for attempt in streak]
     )
+    return not resolved
 
 
 def _is_reindex_request_due(
@@ -189,6 +234,21 @@ def _is_reindex_request_due(
         backoff.failure_count,
     )
     return True
+
+
+def _event_pair_is_due(
+    cc_pair: ConnectorCredentialPair,
+    last_index_attempt: IndexAttempt,
+    db_session: Session,
+) -> bool:
+    """An event pair runs when its inbox has work, not on a poll interval.
+    After a failed attempt it waits a fixed backoff before the next run."""
+    if not event_pair_has_work(db_session, cc_pair.id):
+        return False
+    if last_index_attempt.status != IndexingStatus.FAILED:
+        return True
+    since_last = get_db_current_time(db_session) - last_index_attempt.time_updated
+    return since_last.total_seconds() >= EVENT_PAIR_RETRY_AFTER_FAILURES_SECONDS
 
 
 def should_index(
@@ -211,10 +271,9 @@ def should_index(
         search_settings_id=search_settings_instance.id,
         db_session=db_session,
     )
-    all_recent_errored = is_in_repeated_error_state(
-        cc_pair=cc_pair,
-        search_settings_id=search_settings_instance.id,
-        db_session=db_session,
+    # Retries back off on the raw failed streak, so a resolve does not speed them up.
+    all_recent_errored = bool(
+        _failed_streak(cc_pair, search_settings_instance.id, db_session)
     )
 
     # uncomment for debugging
@@ -314,6 +373,9 @@ def should_index(
     # if no attempt has ever occurred, we should index regardless of refresh_freq
     if not last_index_attempt:
         return True
+
+    if connector.input_type == InputType.EVENT:
+        return _event_pair_is_due(cc_pair, last_index_attempt, db_session)
 
     if connector.refresh_freq is None:
         # print(f"Not indexing cc_pair={cc_pair.id}: refresh_freq is None")

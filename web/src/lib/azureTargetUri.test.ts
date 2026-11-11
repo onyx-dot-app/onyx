@@ -50,16 +50,58 @@ describe("buildTargetUri", () => {
   it("round-trips a provider that has an explicit deployment_name", () => {
     const provider: LLMProviderView = {
       ...baseProvider,
-      deployment_name: "gpt-4o",
+      deployment_name: "gpt-6-sol",
     };
     const uri = buildTargetUri(provider);
 
-    expect(uri).toContain("/openai/deployments/gpt-4o/chat/completions");
+    expect(uri).toContain("/openai/deployments/gpt-6-sol/chat/completions");
     expect(isValidAzureTargetUri(uri)).toBe(true);
 
     const parsed = parseAzureTargetUri(uri);
-    expect(parsed.deploymentName).toBe("gpt-4o");
+    expect(parsed.deploymentName).toBe("gpt-6-sol");
     expect(parsed.apiVersion).toBe("2025-01-01-preview");
     expect(parsed.url.origin).toBe("https://my-resource.openai.azure.com");
+  });
+});
+
+describe("Azure v1 target URIs", () => {
+  it.each([
+    "https://my-resource.openai.azure.com/openai/v1/",
+    "https://my-resource.openai.azure.com/openai/v1",
+    "https://my-resource.openai.azure.com/openai/v1/chat/completions",
+  ])("accepts %s and defaults api_version to v1", (uri) => {
+    expect(isValidAzureTargetUri(uri)).toBe(true);
+
+    const parsed = parseAzureTargetUri(uri);
+    expect(parsed.apiVersion).toBe("v1");
+    expect(parsed.deploymentName).toBe("");
+    expect(parsed.url.origin).toBe("https://my-resource.openai.azure.com");
+  });
+
+  it("keeps an explicit api-version on a v1 URL", () => {
+    const parsed = parseAzureTargetUri(
+      "https://my-resource.openai.azure.com/openai/v1/?api-version=preview"
+    );
+    expect(parsed.apiVersion).toBe("preview");
+  });
+
+  it("still rejects other paths without an api-version", () => {
+    expect(
+      isValidAzureTargetUri("https://my-resource.openai.azure.com/openai/v10/")
+    ).toBe(false);
+    expect(
+      isValidAzureTargetUri(
+        "https://my-resource.openai.azure.com/openai/responses"
+      )
+    ).toBe(false);
+  });
+
+  it("round-trips a provider saved with api_version v1", () => {
+    const uri = buildTargetUri({ ...baseProvider, api_version: "v1" });
+
+    expect(uri).toBe("https://my-resource.openai.azure.com/openai/v1/");
+    const parsed = parseAzureTargetUri(uri);
+    expect(parsed.apiVersion).toBe("v1");
+    expect(parsed.deploymentName).toBe("");
   });
 });

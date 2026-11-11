@@ -38,7 +38,6 @@ from onyx.db.models import (
     Skill__UserGroup,
     StandardAnswer,
     TokenRateLimit,
-    TokenRateLimit__UserGroup,
     User,
     User__ExternalUserGroupId,
     User__UserGroup,
@@ -64,7 +63,6 @@ _UNCASCADED_GROUP_LINKS = (
     DocumentSet__UserGroup,
     Credential__UserGroup,
     MCPServer__UserGroup,
-    TokenRateLimit__UserGroup,
 )
 
 
@@ -88,6 +86,9 @@ def make_all_cc_pairs_public__no_commit(db_session: Session) -> list[int]:
             .with_for_update(key_share=True)
         )
     )
+    # Group rows first: their foreign key rejects a pair leaving a group type
+    # while it still has them.
+    db_session.execute(delete(UserGroup__CCPairDataAccess))
     if cc_pair_ids:
         db_session.execute(
             update(ConnectorCredentialPair)
@@ -107,7 +108,6 @@ def make_all_cc_pairs_public__no_commit(db_session: Session) -> list[int]:
     # Not scoped to the changed pairs: with every pair public, nothing may keep a
     # data-access group or a synced permission, whichever pair wrote it. A sync
     # already in flight can still write some back, which grants nothing on a public pair.
-    db_session.execute(delete(UserGroup__CCPairDataAccess))
     db_session.execute(delete(User__ExternalUserGroupId))
     db_session.execute(delete(PublicExternalUserGroup))
     db_session.execute(
@@ -315,19 +315,8 @@ def remove_custom_user_groups__no_commit(db_session: Session) -> int:
     ]
     _keep_members_in_default_groups__no_commit(db_session, group_ids, member_ids)
 
-    # A group's limit means nothing without the group.
-    group_rate_limit_ids: list[int] = list(
-        db_session.scalars(
-            select(TokenRateLimit__UserGroup.rate_limit_id).where(
-                TokenRateLimit__UserGroup.user_group_id.in_(group_ids)
-            )
-        )
-    )
     for link in _UNCASCADED_GROUP_LINKS:
         db_session.execute(delete(link).where(link.user_group_id.in_(group_ids)))
-    db_session.execute(
-        delete(TokenRateLimit).where(TokenRateLimit.id.in_(group_rate_limit_ids))
-    )
     db_session.execute(delete(UserGroup).where(UserGroup.id.in_(group_ids)))
 
     recompute_user_permissions__no_commit(member_ids, db_session)
@@ -338,7 +327,6 @@ def disable_paid_features__no_commit(db_session: Session) -> None:
     """Switches off the paid features whose leftover rows keep taking effect.
     Their admin routes are refused below their tier, so a row left active could
     not be turned off afterwards. Each one gets what its own delete does."""
-    db_session.execute(delete(TokenRateLimit__UserGroup))
     db_session.execute(delete(TokenRateLimit))
     db_session.execute(
         update(Hook)

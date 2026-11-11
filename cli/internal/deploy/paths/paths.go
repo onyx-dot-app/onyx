@@ -124,25 +124,32 @@ func resolveSymlinks(p string) string {
 // Resolve picks the install root. Precedence: --dir flag, ONYX_DEPLOYMENT_DIR,
 // legacy INSTALL_PREFIX, an existing legacy ./onyx_data install, then the
 // XDG-style default (which need not exist yet — it is the target for fresh
-// installs).
-func Resolve(dirFlag string) InstallRoot {
+// installs). A ./onyx_data that another user could have planted is an error,
+// not an install: the deploy verbs run its compose files.
+func Resolve(dirFlag string) (InstallRoot, error) {
 	if dirFlag != "" {
-		return InstallRoot{Dir: dirFlag, Source: SourceFlag}
+		return InstallRoot{Dir: dirFlag, Source: SourceFlag}, nil
 	}
 	if dir := os.Getenv("ONYX_DEPLOYMENT_DIR"); dir != "" {
-		return InstallRoot{Dir: dir, Source: SourceEnvDeploymentDir}
+		return InstallRoot{Dir: dir, Source: SourceEnvDeploymentDir}, nil
 	}
 	if dir := os.Getenv("INSTALL_PREFIX"); dir != "" {
-		return InstallRoot{Dir: dir, Source: SourceEnvInstallPrefix}
+		return InstallRoot{Dir: dir, Source: SourceEnvInstallPrefix}, nil
 	}
 
 	defaultDir := DefaultDir()
 	if IsInstall(legacyDirName) {
+		for _, dir := range []string{legacyDirName, filepath.Join(legacyDirName, "deployment")} {
+			if err := checkOwnedByUser(dir); err != nil {
+				return InstallRoot{}, fmt.Errorf(
+					"not using ./%s: %w; pass --dir %s if you trust it", legacyDirName, err, legacyDirName)
+			}
+		}
 		root := InstallRoot{Dir: legacyDirName, Source: SourceLegacyCwd}
 		if IsInstall(defaultDir) {
 			root.Ambiguous = []string{defaultDir}
 		}
-		return root
+		return root, nil
 	}
-	return InstallRoot{Dir: defaultDir, Source: SourceDefault}
+	return InstallRoot{Dir: defaultDir, Source: SourceDefault}, nil
 }

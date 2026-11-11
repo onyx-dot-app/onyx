@@ -1,0 +1,81 @@
+---
+title: "Discord"
+description: "Index messages and threads from your Discord servers"
+---
+
+## How it works
+
+The Discord connector indexes messages from the text channels of the servers (guilds) your bot is in.
+You can limit it to specific servers and channels.
+
+Each message becomes one document. Messages in active and archived threads are indexed too,
+with the thread name kept as metadata. Only standard messages are indexed; system messages and joins are skipped.
+
+Onyx pulls new messages every 30 minutes by default. You can change this under **Schedule**.
+
+**Sync with Discord** is not offered.
+The access type can only be **Everyone in Your Organization** or **Specific Groups**.
+
+## Setting up a bot user
+
+<Steps>
+  <Step title="Create an application">
+    Log in to the [Discord developer portal](https://discord.com/developers/applications), click **New Application**,
+    name it, and click **Create**.
+  </Step>
+
+  <Step title="Enable the Message Content intent">
+    Open the **Bot** tab. Under **Privileged Gateway Intents**, enable **Message Content Intent**.
+  </Step>
+
+  <Step title="Copy the bot token">
+    Click **Reset Token**, then copy the token. You enter it in Onyx later.
+  </Step>
+</Steps>
+
+## Inviting the bot to your servers
+
+<Steps>
+  <Step title="Enable Guild Install">
+    Open your application's **Installation** tab. Under **Installation Contexts**, enable **Guild Install**.
+  </Step>
+
+  <Step title="Set the scope and permissions">
+    Under **Default Install Settings → Guild Install**, add the `bot` scope. Under **Permissions**,
+    add **View Channels** and **Read Message History**.
+  </Step>
+
+  <Step title="Install the bot">
+    Open the **Discord Provided Link** in your browser and add the bot to each server you want to index.
+    You need **Manage Server** permission on that server.
+  </Step>
+</Steps>
+
+## Indexing
+
+<Steps>
+  <Step title="Connect the bot">
+    In Onyx, go to **Admin Panel → Connectors** and select **Discord**. Under **Authentication Account**,
+    select **New Discord Account** and paste the token into **Discord Bot Token**.
+  </Step>
+
+  <Step title="Choose the servers and channels">
+    These settings are under **Advanced**. Leave them empty to index every channel of every server the bot is in.
+
+    - **Server IDs**: Only channels inside these servers are indexed.
+    To find a server ID, right-click the server name in Discord and click **Copy Server ID**.
+    Developer Mode must be on in **User Settings → Advanced**.
+    - **Channels**: Channel names to index, without the `#`. For example, `support` indexes only `#support`.
+    - **Start Date**: Only messages after this date are indexed. Use the format `YYYY-MM-DD`.
+  </Step>
+
+  <Step title="Choose who can see the messages">
+    Under **Document Access**, select **Everyone in Your Organization** or **Specific Groups**.
+    **Specific Groups** is available on Onyx Cloud and Enterprise Edition.
+  </Step>
+
+  <Step title="Create the connector">
+    Select **Create Connector**. Onyx checks the bot token before it saves the connector.
+    Open **Admin Panel → Indexing Status**, select the connector, and confirm its first indexing attempt completes.
+  </Step>
+</Steps>

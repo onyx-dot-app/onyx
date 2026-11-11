@@ -87,7 +87,7 @@ const [open, setOpen] = useState(false);
   onClick={() => setOpen((value) => !value)}
   expandedContent={<div className="p-4">…</div>}
 >
-  <ContentAction icon={SvgPlusCircle} title="New account" />
+  <ContentAction font="heading-headline" orientation="stacked" icon={SvgPlusCircle} title="New account" />
 </SelectCard>;
 ```
 
@@ -143,8 +143,7 @@ import { CardHeaderLayout } from "@opal/layouts";
     icon={SvgGlobe}
     title="Google"
     description="Search engine"
-    sizePreset="main-ui"
-    variant="section"
+    font="main-ui-action"
     rightChildren={
       <Button icon={SvgCheckSquare} variant="action" prominence="tertiary">
         Current Default
@@ -165,8 +164,7 @@ import { CardHeaderLayout } from "@opal/layouts";
     icon={SvgCloud}
     title="OpenAI"
     description="Not configured"
-    sizePreset="main-ui"
-    variant="section"
+    font="main-ui-action"
     rightChildren={
       <Button rightIcon={SvgArrowExchange} prominence="tertiary">
         Connect
@@ -184,8 +182,7 @@ import { CardHeaderLayout } from "@opal/layouts";
     icon={SvgCloud}
     title="OpenAI"
     description="Connected"
-    sizePreset="main-ui"
-    variant="section"
+    font="main-ui-action"
     rightChildren={
       <div className="interactive-foldable-host flex items-center">
         <Interactive.Foldable>

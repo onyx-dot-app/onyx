@@ -1,6 +1,16 @@
+import csv
+import io
+import os
+import subprocess
+import sys
+from collections.abc import Iterator
+
 import pytest
 
 from onyx.utils.csv_utils import (
+    csv_reader,
+    parse_csv_stream,
+    read_csv_header,
     sanitize_csv_cell,
     sanitize_csv_cell_or_none,
     sanitize_csv_row,
@@ -61,3 +71,60 @@ def test_sanitize_csv_row_keys_unchanged() -> None:
     # Keys come from our own model fields, not user input — only values are
     # sanitized.
     assert sanitize_csv_row(row) == {"=key": "value"}
+
+
+# --- The field size limit is process-global ---------------------------------
+
+_LONG_FIELD = "x" * 200_000
+_CSV_WITH_LONG_FIELD = f'name,notes\na,"{_LONG_FIELD}"\n'
+
+
+@pytest.fixture
+def lowered_field_size_limit() -> Iterator[None]:
+    """Put the csv limit back where Python starts it, as if nothing had raised
+    it yet. Reading must work regardless of what ran before."""
+    previous = csv.field_size_limit(131_072)
+    try:
+        yield
+    finally:
+        csv.field_size_limit(previous)
+
+
+@pytest.mark.usefixtures("lowered_field_size_limit")
+def test_csv_reader_reads_a_field_longer_than_the_default_limit() -> None:
+    rows = list(csv_reader(io.StringIO(_CSV_WITH_LONG_FIELD)))
+
+    assert rows[1][1] == _LONG_FIELD
+
+
+@pytest.mark.usefixtures("lowered_field_size_limit")
+def test_read_csv_header_survives_a_long_field() -> None:
+    assert read_csv_header(_CSV_WITH_LONG_FIELD) == ["name", "notes"]
+
+
+@pytest.mark.usefixtures("lowered_field_size_limit")
+def test_parse_csv_stream_survives_a_long_field() -> None:
+    rows = list(parse_csv_stream(io.StringIO(_CSV_WITH_LONG_FIELD)))
+
+    assert rows[0].row[1] == _LONG_FIELD
+
+
+def test_importing_the_module_does_not_raise_the_limit() -> None:
+    # The limit belongs at the point of use. Checking that needs a process
+    # where the import has not happened yet, so run one.
+    source = (
+        "import csv;"
+        "before = csv.field_size_limit();"
+        "import onyx.utils.csv_utils;"
+        "print(before, csv.field_size_limit())"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", source],
+        capture_output=True,
+        text=True,
+        check=True,
+        env={**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)},
+    )
+    before, after = result.stdout.split()
+
+    assert before == after

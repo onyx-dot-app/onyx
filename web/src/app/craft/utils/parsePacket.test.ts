@@ -1,6 +1,47 @@
 import { parsePacket } from "@/app/craft/utils/parsePacket";
 
 describe("parsePacket", () => {
+  describe("committed turn completion", () => {
+    const event = {
+      type: "turn_completed",
+      session_id: "session",
+      turn_id: "turn",
+      turn_index: 2,
+      status: "SUCCEEDED",
+      error_detail: null,
+    };
+
+    it.each(["SUCCEEDED", "FAILED", "CANCELLED"])(
+      "accepts the terminal %s outcome",
+      (status) => {
+        expect(parsePacket({ ...event, status })).toEqual({
+          type: "turn_completed",
+          turn: {
+            session_id: "session",
+            turn_id: "turn",
+            turn_index: 2,
+            status,
+            error_detail: null,
+          },
+        });
+      }
+    );
+
+    it.each([
+      { status: "RUNNING" },
+      { status: "QUEUED" },
+      { session_id: "" },
+      { turn_id: null },
+      { turn_index: -1 },
+      { turn_index: 1.5 },
+      { error_detail: 404 },
+    ])("ignores malformed or nonterminal completion %j", (invalid) => {
+      expect(parsePacket({ ...event, ...invalid })).toEqual({
+        type: "unknown",
+      });
+    });
+  });
+
   it("parses raw opencode thought chunks that carry the event type in sessionUpdate", () => {
     expect(
       parsePacket({

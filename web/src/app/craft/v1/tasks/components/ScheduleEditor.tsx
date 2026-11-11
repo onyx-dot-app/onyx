@@ -1,21 +1,24 @@
 "use client";
 
-import { useMemo } from "react";
 import { useTranslations } from "next-intl";
-import { InputTypeIn, Tabs, Text } from "@opal/components";
-import { InputSingleSelect } from "@opal/components";
-import { Section } from "@/layouts/general-layouts";
-import { cn } from "@opal/utils";
+import {
+  Card,
+  InputSingleSelect,
+  InputTypeIn,
+  SelectButton,
+  Tabs,
+  Text,
+} from "@opal/components";
+import { Section } from "@opal/layouts";
+import { SvgCalendar, SvgClock, SvgRefreshCw } from "@opal/icons";
 import type {
   DailyWeeklyPayload,
   EditorMode,
   EditorPayload,
   IntervalPayload,
   IntervalUnit,
-} from "@/app/craft/v1/tasks/interfaces";
+} from "@/app/craft/v1/tasks/types";
 
-// 0=Sun..6=Sat (cron convention). Short labels come from the
-// craft.tasks.scheduleEditor.weekdays message namespace.
 const WEEKDAY_LABELS = [
   { value: 0, key: "sun" },
   { value: 1, key: "mon" },
@@ -27,13 +30,17 @@ const WEEKDAY_LABELS = [
 ] as const;
 
 const INTERVAL_UNITS: ReadonlyArray<IntervalUnit> = ["minutes", "hours"];
+const DEFAULT_INTERVAL: IntervalPayload = { unit: "hours", every: 1 };
+const DEFAULT_DAILY_WEEKLY: DailyWeeklyPayload = {
+  time_of_day: "09:00",
+  weekdays: [1, 2, 3, 4, 5],
+};
 
 export interface ScheduleEditorProps {
   mode: EditorMode;
   onModeChange: (mode: EditorMode) => void;
   payload: EditorPayload;
   onPayloadChange: (payload: EditorPayload) => void;
-  /** Error message to display below the editor. */
   error?: string | null;
 }
 
@@ -45,74 +52,44 @@ export default function ScheduleEditor({
   error,
 }: ScheduleEditorProps) {
   const t = useTranslations("craft.tasks.scheduleEditor");
-  // Cache the active payload per mode so flipping tabs back and forth doesn't
-  // wipe out a partially-filled form on the other tab.
-  const tabContent = useMemo(
-    () => ({
-      interval: {
-        name: t("tabs.interval"),
-        content: (
-          <IntervalEditor
-            payload={
-              mode === "interval"
-                ? (payload as IntervalPayload)
-                : DEFAULT_INTERVAL
-            }
-            onChange={onPayloadChange}
-          />
-        ),
-      },
-      daily_weekly: {
-        name: t("tabs.dailyWeekly"),
-        content: (
-          <DailyWeeklyEditor
-            payload={
-              mode === "daily_weekly"
-                ? (payload as DailyWeeklyPayload)
-                : DEFAULT_DAILY_WEEKLY
-            }
-            onChange={onPayloadChange}
-          />
-        ),
-      },
-    }),
-    [mode, payload, onPayloadChange, t]
-  );
-
-  const tabEntries = Object.entries(tabContent);
-
   return (
-    <Section gap={2}>
-      <Tabs
-        value={mode}
-        onValueChange={(value) => {
-          const next = value as EditorMode;
-          onModeChange(next);
-          // Reset to defaults if switching modes (only when current payload
-          // doesn't match the target mode shape).
-          if (next === "interval" && !isIntervalPayload(payload)) {
-            onPayloadChange(DEFAULT_INTERVAL);
-          } else if (
-            next === "daily_weekly" &&
-            !isDailyWeeklyPayload(payload)
-          ) {
-            onPayloadChange(DEFAULT_DAILY_WEEKLY);
-          }
-        }}
-      >
-        <Tabs.List>
-          {tabEntries.map(([key, tab]) => (
-            <Tabs.Trigger key={key} value={key}>
-              {tab.name}
+    <Section height="auto" alignItems="stretch" gap={3}>
+      <Card padding={5} border="solid" rounding={4}>
+        <Tabs
+          value={mode}
+          gap={6}
+          onValueChange={(next) => {
+            if (next !== "interval" && next !== "daily_weekly") return;
+            onModeChange(next);
+            if (next === "interval" && !("unit" in payload)) {
+              onPayloadChange(DEFAULT_INTERVAL);
+            } else if (next === "daily_weekly" && !("weekdays" in payload)) {
+              onPayloadChange(DEFAULT_DAILY_WEEKLY);
+            }
+          }}
+        >
+          <Tabs.List>
+            <Tabs.Trigger value="interval" icon={SvgRefreshCw}>
+              {t("tabs.interval")}
             </Tabs.Trigger>
-          ))}
-        </Tabs.List>
-        {tabEntries.map(([key, tab]) => (
-          <Tabs.Content key={key} value={key}>
-            {tab.content}
+            <Tabs.Trigger value="daily_weekly" icon={SvgCalendar}>
+              {t("tabs.dailyWeekly")}
+            </Tabs.Trigger>
+          </Tabs.List>
+          <Tabs.Content value="interval">
+            <IntervalEditor
+              payload={"unit" in payload ? payload : DEFAULT_INTERVAL}
+              onChange={onPayloadChange}
+            />
           </Tabs.Content>
-        ))}
-      </Tabs>
+          <Tabs.Content value="daily_weekly">
+            <DailyWeeklyEditor
+              payload={"weekdays" in payload ? payload : DEFAULT_DAILY_WEEKLY}
+              onChange={onPayloadChange}
+            />
+          </Tabs.Content>
+        </Tabs>
+      </Card>
       {error && (
         <Text font="main-ui-body" color="status-error-05">
           {error}
@@ -121,31 +98,6 @@ export default function ScheduleEditor({
     </Section>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Defaults / type-guards
-// ---------------------------------------------------------------------------
-
-const DEFAULT_INTERVAL: IntervalPayload = { unit: "hours", every: 1 };
-const DEFAULT_DAILY_WEEKLY: DailyWeeklyPayload = {
-  time_of_day: "09:00",
-  weekdays: [1, 2, 3, 4, 5],
-};
-
-function isIntervalPayload(p: EditorPayload): p is IntervalPayload {
-  return (
-    typeof (p as IntervalPayload).unit === "string" &&
-    typeof (p as IntervalPayload).every !== "undefined"
-  );
-}
-
-function isDailyWeeklyPayload(p: EditorPayload): p is DailyWeeklyPayload {
-  return Array.isArray((p as DailyWeeklyPayload).weekdays);
-}
-
-// ---------------------------------------------------------------------------
-// Interval
-// ---------------------------------------------------------------------------
 
 interface IntervalEditorProps {
   payload: IntervalPayload;
@@ -156,28 +108,36 @@ function IntervalEditor({ payload, onChange }: IntervalEditorProps) {
   const t = useTranslations("craft.tasks.scheduleEditor");
   const tInputSelect = useTranslations("common.inputSelect");
   return (
-    <Section gap={2}>
-      <div className="flex items-center gap-2 flex-wrap">
-        <Text font="main-ui-body" color="text-05">
-          {t("interval.everyLabel")}
-        </Text>
-        <div className="w-28">
+    <Section height="auto" alignItems="start" gap={3}>
+      <Text font="secondary-action" color="text-03">
+        {t("interval.everyLabel")}
+      </Text>
+      <Section
+        height="auto"
+        flexDirection="row"
+        justifyContent="start"
+        gap={3}
+        wrap
+      >
+        <Section width={7} height="auto" gap={0}>
           <InputTypeIn
             type="number"
             min={1}
+            aria-label={t("interval.everyLabel")}
             value={String(payload.every ?? 1)}
             onChange={(e) =>
               onChange({ ...payload, every: Number(e.target.value) || 1 })
             }
             data-testid="interval-every"
           />
-        </div>
-        <div className="w-32">
+        </Section>
+        <Section width={9} height="auto" gap={0}>
           <InputSingleSelect
             value={payload.unit}
-            onValueChange={(value) =>
-              onChange({ ...payload, unit: value as IntervalUnit })
-            }
+            onValueChange={(unit) => {
+              if (unit === "minutes" || unit === "hours")
+                onChange({ ...payload, unit });
+            }}
             defaultOption={INTERVAL_UNITS[0]}
             placeholder={tInputSelect("placeholder.fallback")}
             options={INTERVAL_UNITS.map((unit) => ({
@@ -185,15 +145,11 @@ function IntervalEditor({ payload, onChange }: IntervalEditorProps) {
               title: t(`intervalUnits.${unit}`),
             }))}
           />
-        </div>
-      </div>
+        </Section>
+      </Section>
     </Section>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Daily / Weekly
-// ---------------------------------------------------------------------------
 
 interface DailyWeeklyEditorProps {
   payload: DailyWeeklyPayload;
@@ -203,41 +159,35 @@ interface DailyWeeklyEditorProps {
 function DailyWeeklyEditor({ payload, onChange }: DailyWeeklyEditorProps) {
   const t = useTranslations("craft.tasks.scheduleEditor");
   const weekdaySet = new Set(payload.weekdays ?? []);
-  const selectedDays = WEEKDAY_LABELS.filter((d) =>
-    weekdaySet.has(d.value)
-  ).map((d) => t(`weekdays.${d.key}`));
+  const selectedDays = WEEKDAY_LABELS.filter((day) =>
+    weekdaySet.has(day.value)
+  ).map((day) => t(`weekdays.${day.key}`));
   const scheduleNote =
-    selectedDays.length === 0
+    selectedDays.length === 0 || selectedDays.length === 7
       ? t("dailyWeekly.runsEveryDay")
       : t("dailyWeekly.runsOn", { days: selectedDays.join(", ") });
   return (
-    <Section gap={2}>
-      <div className="flex items-center gap-2">
-        <Text font="main-ui-body" color="text-05">
-          {t("dailyWeekly.atLabel")}
-        </Text>
-        <div className="w-44">
-          <InputTypeIn
-            type="time"
-            value={payload.time_of_day ?? "09:00"}
-            onChange={(e) =>
-              onChange({ ...payload, time_of_day: e.target.value })
-            }
-            data-testid="daily-weekly-time"
-          />
-        </div>
-      </div>
-      <div className="flex flex-col gap-1">
-        <Text font="secondary-body" color="text-03">
+    <Section height="auto" alignItems="stretch" gap={5}>
+      <Section height="auto" alignItems="start" gap={3}>
+        <Text font="secondary-action" color="text-03">
           {t("dailyWeekly.daysLabel")}
         </Text>
-        <div className="flex items-center gap-1 flex-wrap">
+        <Section
+          height="auto"
+          flexDirection="row"
+          justifyContent="start"
+          gap={2}
+          wrap
+          role="group"
+          aria-label={t("dailyWeekly.daysLabel")}
+        >
           {WEEKDAY_LABELS.map((day) => {
             const selected = weekdaySet.has(day.value);
             return (
-              <button
-                type="button"
+              <SelectButton
                 key={day.value}
+                size="md"
+                state={selected ? "selected" : "empty"}
                 onClick={() => {
                   const next = new Set(weekdaySet);
                   if (selected) next.delete(day.value);
@@ -249,22 +199,45 @@ function DailyWeeklyEditor({ payload, onChange }: DailyWeeklyEditorProps) {
                 }}
                 data-testid={`weekday-${day.value}`}
                 aria-pressed={selected}
-                className={cn(
-                  "px-3 py-1 rounded-08 border text-sm transition-colors",
-                  selected
-                    ? "bg-action-selection-01 border-action-selection-03 text-text-05"
-                    : "bg-background-neutral-00 border-border-02 text-text-03 hover:bg-background-tint-01"
-                )}
               >
                 {t(`weekdays.${day.key}`)}
-              </button>
+              </SelectButton>
             );
           })}
-        </div>
-        <Text font="secondary-body" color="text-03">
-          {scheduleNote}
+        </Section>
+      </Section>
+      <Section height="auto" alignItems="start" gap={3}>
+        <Text font="secondary-action" color="text-03">
+          {t("dailyWeekly.atLabel")}
         </Text>
-      </div>
+        <Section width={11} height="auto" gap={0}>
+          <InputTypeIn
+            type="time"
+            aria-label={t("dailyWeekly.atLabel")}
+            value={payload.time_of_day ?? "09:00"}
+            onChange={(e) =>
+              onChange({ ...payload, time_of_day: e.target.value })
+            }
+            data-testid="daily-weekly-time"
+          />
+        </Section>
+        <Text font="secondary-body" color="text-03">
+          {t("localTimeHint")}
+        </Text>
+      </Section>
+      <Card padding={3} color="background-tint-01">
+        <Section
+          height="auto"
+          flexDirection="row"
+          justifyContent="start"
+          gap={2}
+        >
+          <SvgClock size={16} className="text-text-03" />
+          <Text font="secondary-body" color="text-03">
+            {scheduleNote}
+          </Text>
+        </Section>
+      </Card>
     </Section>
   );
 }

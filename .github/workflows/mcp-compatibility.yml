@@ -2,7 +2,8 @@ name: MCP Compatibility
 
 on:
   pull_request:
-  merge_group:
+    paths-ignore:
+      - "documentation/**"
   workflow_dispatch:
     inputs:
       test_alert:

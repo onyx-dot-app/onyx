@@ -28,7 +28,7 @@ func NewTypeCoverageCommand() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:       "type-coverage <checker>",
-		Short:     "Type-check, then hold type coverage against a baseline",
+		Short:     "Type-check web TypeScript and check type coverage",
 		Long:      typeCoverageHelpDescription(),
 		Args:      cobra.ExactArgs(1),
 		ValidArgs: []string{"typescript", "ts"},
@@ -105,7 +105,7 @@ func runTypeCoverage(checker string, opts *TypeCoverageOptions) int {
 }
 
 func typeCoverageHelpDescription() string {
-	return `Type-check, measure type coverage, and hold it against a committed baseline.
+	return `Type-check web TypeScript, measure type coverage, and compare it with a committed baseline.
 
 Type coverage is the share of identifiers whose type is not ` + "`any`" + `. Each report
 row is a directory, at most three names deep, e.g. src/app/admin.

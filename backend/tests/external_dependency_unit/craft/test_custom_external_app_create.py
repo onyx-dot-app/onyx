@@ -40,12 +40,14 @@ def _create(
     test_user: User,
     *,
     name: str = "My Custom App",
+    enabled: bool = True,
     auth_template: dict[str, str] | None = None,
     organization_credentials: dict[str, str] | None = None,
 ) -> ExternalAppAdminResponse:
     return create_custom_external_app(
         request=CreateCustomExternalAppRequest(
             name=name,
+            enabled=enabled,
             upstream_url_patterns=_UPSTREAM,
             auth_template=_AUTH_TEMPLATE if auth_template is None else auth_template,
             organization_credentials=(
@@ -66,6 +68,20 @@ def _delete_app(db_session: Session, app_id: int) -> None:
 
 def _skill_ids(db_session: Session) -> set[UUID]:
     return set(db_session.scalars(select(Skill.id)))
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+def test_create_persists_workspace_availability(
+    db_session: Session, test_user: User, enabled: bool
+) -> None:
+    response = _create(db_session, test_user, enabled=enabled)
+    try:
+        app = db_session.get(ExternalApp, response.id)
+        assert app is not None
+        assert app.enabled is enabled
+        assert response.enabled is enabled
+    finally:
+        _delete_app(db_session, response.id)
 
 
 def test_create_persists_gateway_without_creating_skill_content(

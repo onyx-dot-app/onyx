@@ -61,6 +61,8 @@ export default function CredentialBoundFields({
           values={values}
           connector={connector}
           currentCredential={currentCredential}
+          // A bound field is read before the checks run, so no listing.
+          reportScope={null}
         />
         {error && (
           <Text font="secondary-body" color="status-error-05" role="alert">

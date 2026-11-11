@@ -4,7 +4,7 @@ import { SearchToolPacket } from "@/app/app/services/streamingModels";
 import {
   MessageRenderer,
   RenderType,
-} from "@/app/app/message/messageComponents/interfaces";
+} from "@/app/app/message/messageComponents/types";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { OnyxDocument } from "@/lib/search/types";
 import { ValidSources } from "@/lib/connectors/types/source";
@@ -18,7 +18,7 @@ import {
   RESULTS_PER_EXPANSION,
   getMetadataTags,
 } from "./searchStateUtils";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 
 const queryToSourceInfo = (query: string, index: number): SourceInfo => ({
   id: `query-${index}`,
@@ -103,9 +103,11 @@ export const InternalSearchToolRenderer: MessageRenderer<
         timelineLayout: "content",
         content: (
           <div className="flex flex-col">
-            <Text as="p" text04 mainUiMuted className="mb-1">
-              {queriesHeader}
-            </Text>
+            <div className="mb-1">
+              <Text as="p" font="main-ui-muted" color="text-04">
+                {queriesHeader}
+              </Text>
+            </div>
             <SearchChipList
               items={results}
               initialCount={INITIAL_RESULTS_TO_SHOW}
@@ -123,7 +125,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
                 !isComplete ? (
                   <BlinkingBar />
                 ) : (
-                  <Text as="p" text04 mainUiMuted>
+                  <Text as="p" font="main-ui-muted" color="text-04">
                     {t("internalSearch.noResults.text")}
                   </Text>
                 )
@@ -186,7 +188,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
               !isComplete ? (
                 <BlinkingBar />
               ) : (
-                <Text as="p" text04 mainUiMuted>
+                <Text as="p" font="main-ui-muted" color="text-04">
                   {t("internalSearch.noResults.text")}
                 </Text>
               )
@@ -222,7 +224,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
           {(results.length > 0 || queries.length > 0) && (
             <>
               {!isCompact && (
-                <Text as="p" mainUiMuted text04>
+                <Text as="p" font="main-ui-muted" color="text-04">
                   {t("internalSearch.reading.status")}
                 </Text>
               )}
@@ -243,7 +245,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
                   !isComplete ? (
                     <BlinkingBar />
                   ) : (
-                    <Text as="p" text03 mainUiMuted>
+                    <Text as="p" font="main-ui-muted" color="text-03">
                       {t("internalSearch.noResults.text")}
                     </Text>
                   )

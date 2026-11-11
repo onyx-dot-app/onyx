@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
 import { Text } from "@opal/components";
@@ -33,6 +34,7 @@ export default function ConnectDataBanner({
   className,
 }: ConnectDataBannerProps) {
   const t = useTranslations("craft.connectDataBanner");
+  const navigation = useNavigation();
   const { permissions } = useUser();
   const canManageConnectors = hasPermission(
     permissions,
@@ -46,7 +48,7 @@ export default function ConnectDataBanner({
   }
 
   const handleClick = () => {
-    window.location.href = "/admin/indexing-status";
+    navigation.load("/admin/indexing-status");
   };
 
   return (

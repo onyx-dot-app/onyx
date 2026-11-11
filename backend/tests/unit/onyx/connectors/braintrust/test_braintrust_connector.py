@@ -28,7 +28,7 @@ _PROMPT = {
     "description": "Resolves merge conflicts",
     "created": "2026-06-01T00:00:00Z",
     "prompt_data": {
-        "options": {"model": "gpt-5"},
+        "options": {"model": "gpt-6-sol"},
         "prompt": {
             "messages": [{"role": "system", "content": "You resolve conflicts."}]
         },

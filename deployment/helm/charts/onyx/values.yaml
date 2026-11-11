@@ -5,7 +5,7 @@
 # Overlays:
 #   - values-lite.yaml: minimal deployment without vector DB, Redis, or model servers.
 #   - ../../dev/values-localdev.yaml: local Kubernetes development (source repository only).
-#     See /docs/craft/dev/local-kubernetes.md.
+#     See deployment/helm/dev/README.md.
 
 global:
   # Global version for all Onyx components (overrides .Chart.AppVersion)
@@ -35,7 +35,8 @@ global:
 #   - The Craft sandbox proxy runs non-root on a read-only root filesystem. An
 #     init container builds an additive bundle in its writable confdir and
 #     configures mitmproxy through SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA
-#     to use that bundle for upstream TLS verification.
+#     to use that bundle for upstream TLS verification. SSL_CERT_FILE points
+#     HTTPX OAuth requests at the same bundle.
 # Version coupling: chart >= 0.7.0 pairs with the distroless model-server image
 # and can't run older ones — the model servers now run nonroot (1001, see their
 # securityContext below) and read ONYX_CUSTOM_CA_CERTS_DIR. Upgrade the chart and
@@ -201,6 +202,19 @@ autoscaling:
 
 inferenceCapability:
   extraEnv: []
+  # Optional Hugging Face cache volume. Without one, a model that the image
+  # does not bundle (only the default model is bundled; nomic is not) downloads
+  # again on every pod start. At startup, the model server copies the bundled
+  # model into the volume. The chart does not create the claim. With a
+  # ReadWriteOnce claim, keep replicaCount at 1 and set strategy.type: Recreate.
+  # Give indexCapability its own claim.
+  # volumes:
+  #   - name: hf-cache
+  #     persistentVolumeClaim:
+  #       claimName: onyx-inference-model-hf-cache
+  # volumeMounts:
+  #   - name: hf-cache
+  #     mountPath: /app/.cache/huggingface
   volumes: []
   volumeMounts: []
   service:
@@ -278,6 +292,7 @@ inferenceCapability:
 
 indexCapability:
   extraEnv: []
+  # Optional Hugging Face cache volume: see inferenceCapability.volumes.
   volumes: []
   volumeMounts: []
   service:
@@ -394,6 +409,23 @@ serviceAccount:
   # If not set and create is true, a name is generated using the fullname template
   name: ""
 
+logExport:
+  kubernetes:
+    # Off by default. When on, the api-server runs as its own service account
+    # (<release>-api-server) with get/list on pods, pods/log, and events in the
+    # release namespace. The admin log export then collects stdout from every
+    # Onyx pod, the logs of crashed containers, pod status, and events. The
+    # other Onyx pods keep the service account above and get no such access.
+    # When off, the export collects log files from one replica per worker type.
+    #
+    # The new service account gets serviceAccount.annotations plus the
+    # annotations below. If the api-server uses IRSA or Workload Identity, add
+    # the role annotation here when it is not in serviceAccount.annotations,
+    # and allow the new service account name in the IAM trust policy.
+    enabled: false
+    serviceAccount:
+      annotations: {}
+
 nginx:
   enabled: true
   # Nginx proxy timeout settings (in seconds)
@@ -412,7 +444,7 @@ nginx:
     # The ingress-nginx subchart doesn't auto-detect our custom ConfigMap changes.
     # Workaround: Helm upgrade will restart if the following annotation value changes.
     podAnnotations:
-      onyx.app/nginx-config-version: "9"
+      onyx.app/nginx-config-version: "11"
 
     # Propagate DOMAIN into nginx so server_name continues to use the same env var
     extraEnvs:
@@ -624,10 +656,21 @@ api:
   # every replica at once, and a lone not-ready pod leaves the Service empty.
   # Do NOT put /health/ready on the liveness probe.
   #
-  # Liveness and startup probes stay opt-in. Size a startupProbe for the longest
-  # migration you expect, or it kills the pod mid-migration.
+  # Liveness and startup probes stay opt-in. /health answers only after startup:
+  # the migrations, then the wait for the model server to load a self-hosted
+  # embedding model, with a download if it is not cached (up to
+  # LOCAL_EMBEDDING_MODEL_STARTUP_TIMEOUT, 1800 s by default). A livenessProbe
+  # with no startupProbe therefore restarts the pod during a download. Size the
+  # startupProbe (periodSeconds x failureThreshold) for the longest migration
+  # you expect plus that timeout.
   #
   # Example:
+  # startupProbe:
+  #   httpGet:
+  #     path: /health
+  #     port: api-server-port
+  #   periodSeconds: 10
+  #   failureThreshold: 200  # 2000 s
   # readinessProbe:
   #   httpGet:
   #     path: /health/ready
@@ -1156,7 +1199,7 @@ slackbot:
 # Allows LLMs to use Onyx like invoking tools or accessing resources
 mcpServer:
   extraEnv: []
-  enabled: false  # Disabled by default
+  enabled: true  # Set to false to disable the MCP server and its routes
   replicaCount: 1
   image:
     repository: onyxdotapp/onyx-backend
@@ -1185,6 +1228,59 @@ mcpServer:
   resources:
     requests:
       cpu: "250m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+  livenessProbe:
+    initialDelaySeconds: 10
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readinessProbe:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  volumes: []
+  volumeMounts: []
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+webhookServer:
+  extraEnv: []
+  # Runs the webhook server. It serves health and metrics only; the route that
+  # receives connector events comes later. Creates the deployment; the service
+  # always exists so nginx can name it. The ingress and servicemonitor also
+  # need `ingress.enabled` and `monitoring.serviceMonitors.enabled`. With
+  # ingress.enabled=false the bundled nginx routes /webhook instead.
+  enabled: false
+  replicaCount: 1
+  image:
+    repository: onyxdotapp/onyx-backend
+    tag: ""  # Overrides the image tag whose default is the chart appVersion.
+  # Prefix the ingress routes here, stripped before the app sees it.
+  ingressPath: /webhook
+  podAnnotations: {}
+  podLabels:
+    scope: onyx-backend
+  deploymentLabels:
+    app: webhook-server
+  service:
+    type: ClusterIP
+    servicePort: 8091
+    targetPort: webhook-port
+    portName: webhook-port
+  # Hardening defaults merge with your overrides; set a key to null to drop it.
+  podSecurityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+  resources:
+    requests:
+      cpu: "100m"
       memory: "256Mi"
     limits:
       cpu: "500m"
@@ -1635,6 +1731,18 @@ auth:
       ONYX_SANDBOX_PUSH_PRIVATE_KEY: private_key
     values:
       private_key: ""
+  # Shared credential that Craft Firecracker host agents send to register
+  # their node signing key (craft.sandboxRuntime=firecracker). The api_server
+  # rejects every registration while it is unset.
+  sandboxNodeRegistration:
+    enabled: false
+    allPods: false  # Restricted: only the API server checks it (plus the other restricted pods)
+    secretName: 'onyx-sandbox-node-registration'
+    existingSecret: ""
+    secretKeys:
+      SANDBOX_NODE_REGISTRATION_SECRET: sandbox_node_registration_secret
+    values:
+      sandbox_node_registration_secret: ""
 
 # NetworkPolicy for the per-sandbox push daemon (port 8731).
 # In prod the strict default is correct: only api_server pods can push.
@@ -1755,6 +1863,10 @@ configMap:
   ASYM_PASSAGE_PREFIX: ""
   DISABLE_RERANK_FOR_STREAMING: ""
   MODEL_SERVER_PORT: ""
+  # Seconds the API server waits on startup for the model server to load a
+  # self-hosted embedding model, including a download if it is not cached;
+  # "" = 1800. Startup fails when the wait runs out. "0" disables the wait.
+  LOCAL_EMBEDDING_MODEL_STARTUP_TIMEOUT: ""
   MIN_THREADS_ML_MODELS: ""
   # Indexing Configs
   NUM_INDEXING_WORKERS: ""
@@ -1763,6 +1875,13 @@ configMap:
   INDEXING_WORKER_MEMORY_LIMIT_MB: ""
   INDEXING_WORKER_TRACEMALLOC: ""
   DISABLE_INDEX_UPDATE_ON_SWAP: ""
+  # Index spreadsheets and other tabular files (xlsx, Google Sheets, CSV, TSV)
+  # by title only, with "<content-skipped>" as their content; "" = false
+  SKIP_SPREADSHEET_CONTENT: ""
+  # Re-chunk tabular documents indexed by an older chunking strategy, in place
+  # and without re-crawling the source; "" = false. Only arms the migration: a
+  # stored record stops it once done, so it is safe to leave set.
+  TABULAR_RECHUNK_ENABLED: ""
   # OpenSearch Point-In-Time keep-alive for the reindex/port scan (default 5m)
   PIT_KEEP_ALIVE: ""
   CONTINUE_ON_CONNECTOR_FAILURE: ""
@@ -1789,6 +1908,11 @@ configMap:
   ZOOM_PERMISSION_DOC_SYNC_FREQUENCY: ""
   LINEAR_PERMISSION_GROUP_SYNC_FREQUENCY: ""
   LINEAR_PERMISSION_DOC_SYNC_FREQUENCY: ""
+  YOUTRACK_PERMISSION_GROUP_SYNC_FREQUENCY: ""
+  YOUTRACK_PERMISSION_DOC_SYNC_FREQUENCY: ""
+  AZURE_DATALAKE_PERMISSION_DOC_SYNC_FREQUENCY: ""
+  AZURE_DATALAKE_PERMISSION_GROUP_SYNC_FREQUENCY: ""
+  AZURE_DATALAKE_ACL_READ_CONCURRENCY: ""
   HUBSPOT_PERMISSION_DOC_SYNC_FREQUENCY: ""
   NOTION_CONNECTOR_DISABLE_RECURSIVE_PAGE_LOOKUP: ""
   # Push every successfully indexed public-connector document to an external
@@ -1803,13 +1927,10 @@ configMap:
   CELERY_WORKER_LIGHT_CONCURRENCY: ""
   CELERY_WORKER_LIGHT_PREFETCH_MULTIPLIER: ""
   CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY: ""
-  # Per-connector external group sync lock TTL in seconds (default 300); raise
-  # toward the 6h crawl deadline if group syncs run long, so periodic
-  # re-dispatches can't start concurrent duplicate syncs.
-  CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT: ""
-  # Per-connector document permission sync lock TTL in seconds (default 3600);
-  # raise it if a sync loses its lock mid-run ("lock that's no longer owned").
-  CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT: ""
+  # Time limit in seconds for one group sync (default: JOB_TIMEOUT_SECONDS, 6h);
+  # raise it for a source whose group sync takes longer. A doc permission sync
+  # has no time limit. It stops after an hour without progress.
+  PERMISSION_SYNC_TIMEOUT_SECONDS: ""
   # Document-index sync beat lock TTL in seconds (default 120); raise it if the
   # sync pass aborts with "no longer owned" or "Lock not owned on completion".
   CELERY_DOCUMENT_SYNC_BEAT_LOCK_TIMEOUT: ""
@@ -1817,11 +1938,21 @@ configMap:
   ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER: ""
   ONYX_BOT_DISPLAY_ERROR_MSGS: ""
   NOTIFY_SLACKBOT_NO_ANSWER: ""
+  # Slack cloud for all Slack features: the bot, the connector, federated
+  # search, Slack OAuth and the Craft Slack app. Default
+  # https://slack.com/api/. Set to https://slack-gov.com/api/ for GovSlack.
+  SLACK_API_URL: ""
   DISCORD_BOT_TOKEN: ""
   DISCORD_BOT_INVOKE_CHAR: ""
   # Logging
   # Optional Telemetry, please keep it on (nothing sensitive is collected)? <3
   DISABLE_TELEMETRY: ""
+  # Limits for the admin log export through the Kubernetes API
+  # (logExport.kubernetes.enabled). Empty uses the defaults: last 100000 lines
+  # per container log, 25 MiB per container log, 500 MiB per export.
+  LOG_EXPORT_KUBERNETES_TAIL_LINES: ""
+  LOG_EXPORT_KUBERNETES_MAX_BYTES_PER_STREAM: ""
+  LOG_EXPORT_KUBERNETES_MAX_TOTAL_BYTES: ""
   # LOG_LEVEL is the global knob for log verbosity across every Onyx process —
   # api_server, model_server, slack/discord bots, AND all Celery workers. Empty
   # (default) -> Python falls back to "info" for the api/model/etc processes;
@@ -1839,19 +1970,23 @@ configMap:
   HARD_DELETE_CHATS: ""
   MAX_ALLOWED_UPLOAD_SIZE_MB: ""
   DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB: ""
+  # Code mode: "true" makes most chat tools Python functions. The model calls them
+  # from programs that it runs with execute_code and wait_code. It applies to
+  # every chat in the deployment.
+  CODE_MODE_ENABLED: ""
   # Sandbox config — always "kubernetes" for Helm deployments
   SANDBOX_BACKEND: "kubernetes"
   SANDBOX_NAMESPACE: "onyx-sandboxes"
   SANDBOX_SERVICE_ACCOUNT_NAME: "sandbox"
-  # ONYX_SERVER_URL must be the full API base URL, path prefix included — e.g.
-  # "https://onyx.example/api" through the public proxy, or
-  # "http://<release>-api-service.<ns>.svc.cluster.local:8080" directly at the
-  # API service (no prefix). It is required when ENABLE_CRAFT=true.
+  # ONYX_SERVER_URL defaults to the chart's internal API Service when Craft is enabled.
+  # Set an explicit full API base URL, including any path prefix, to override it:
+  # ONYX_SERVER_URL: "https://onyx.example/api"
   SANDBOX_PROXY_CA_SECRET: "sandbox-proxy-ca"
   SANDBOX_PROXY_CA_CONFIGMAP: "sandbox-proxy-ca-bundle"
 # -- Craft sandbox RBAC (rendered when configMap.ENABLE_CRAFT=true).
 craft:
   # Extra SAs (release ns) to also grant sandbox RBAC, e.g. a separate worker SA.
+  # The chart's service account and the api-server's (see logExport) are always bound.
   extraBoundServiceAccounts: []
   # CIDR(s) of any non-pod cluster DNS listener the sandbox must reach for firewall-init.sh's
   # proxy-FQDN getent lookup. A NodeLocal DNS cache is a hostNetwork endpoint (its listen IP is
@@ -1870,10 +2005,172 @@ craft:
   # Empty (default) = the chart-deployed proxy, covered by the podSelector (incl. the
   # SANDBOX_PROXY_NAMESPACE shared-proxy path); leave empty unless you point at a non-pod proxy.
   proxyExtraCIDRs: []
+  # Opt-in check that sandbox nodes can run Firecracker. Runs one pod per
+  # sandbox node (sandboxPod.nodeSelector + tolerations) and writes
+  # PASS/FAIL/WARN lines to the pod log. See README "Check your nodes for
+  # Craft Firecracker". Does not need ENABLE_CRAFT.
+  firecrackerPreflight:
+    enabled: false
+    # Image with POSIX sh, awk, grep and GNU coreutils. Empty = the sandbox
+    # image. The prepuller only caches it when Craft and sandboxImagePrepull
+    # are on; otherwise the first preflight pod pulls it.
+    image: ""
+    # Extended resource of a KVM device plugin (for example
+    # "devices.kubevirt.io/kvm"). Set it to run the check unprivileged.
+    # Empty = privileged, because the container device cgroup blocks
+    # /dev/kvm otherwise.
+    kvmDeviceResource: ""
+    # Node directory on the filesystem that will hold sandbox data. The
+    # filesystem type, XFS reflink and free disk checks run here.
+    scratchHostPath: /var/lib/onyx-craft-fc-preflight
+    # Free disk below this is a WARN.
+    minFreeDiskGi: 50
+  # How Craft sandboxes run: "pod" (default) or "firecracker". Mirrors the
+  # Terraform craft_sandbox_runtime of the sandbox node pool. "firecracker"
+  # sets SANDBOX_RUNTIME=firecracker for the backend and sandbox-proxy, deploys
+  # the host agent below, and lets the agent pods reach sandbox-proxy. Needs
+  # ENABLE_CRAFT and auth.sandboxNodeRegistration. Not usable yet: the backend
+  # Firecracker sandbox manager is not released.
+  sandboxRuntime: pod
+  # Craft Firecracker host agent: a privileged DaemonSet with hostPID on the
+  # Firecracker sandbox nodes. Rendered only with sandboxRuntime=firecracker.
+  # Flags: microvm/README.md.
+  hostAgent:
+    # Own namespace, with Pod Security "privileged". It must differ from the
+    # release namespace and configMap.SANDBOX_NAMESPACE.
+    namespace: onyx-sandbox-runtime
+    # false: you create the namespace (with the Pod Security labels).
+    createNamespace: true
+    image:
+      repository: onyxdotapp/craft-fc-host-agent
+      # Required. No default until the image is published.
+      tag: ""
+      pullPolicy: IfNotPresent
+    # Pull secrets for a private agent image, for example [{name: regcred}].
+    # They must exist in the agent namespace: the release imagePullSecrets
+    # are not used here (Secrets are namespaced).
+    imagePullSecrets: []
+    # Empty = sandboxPod.nodeSelector (or onyx.app/workload=sandbox) plus
+    # onyx.app/kvm=true, the label Terraform puts on Firecracker node pools.
+    nodeSelector: {}
+    # Empty = sandboxPod.tolerations (or the workload=sandbox taint).
+    tolerations: []
+    # Same path on the node and in the container. Must be on XFS with reflink.
+    dataDir: /var/lib/craft-fc
+    # Jailer UID/GID range, one per VM. Keep it clear of node users.
+    uidBase: 1000000
+    uidCount: 65536
+    # mTLS listener for the api_server.
+    listenPort: 7443
+    # Guest vsock ports that Dial allows (app preview). The agent always refuses the daemon port.
+    dialPorts: "3010"
+    # Most open egress relay connections per VM; the agent closes new ones
+    # over the cap.
+    relayMaxConns: 256
+    # Most open Dial streams per VM; more fail with DIAL_LIMIT.
+    dialMaxStreams: 64
+    # Comma-separated DNS or URI SANs; the client certificate must have one.
+    # Empty = any certificate that tls ca.crt signed.
+    clientAllowedSans: ""
+    # host:port the agent clients dial, sent with the node key registration.
+    # Empty = the pod IP and listenPort.
+    advertiseAddress: ""
+    # Empty = the in-cluster api_server URL (the sandbox callback URL).
+    apiServerUrl: ""
+    tls:
+      # Required. A Secret in the agent namespace with tls.crt and tls.key (the
+      # agent certificate) and ca.crt (the CA of the api_server client
+      # certificates). The chart does not make certificates.
+      existingSecret: ""
+    # The agent clients: api_server, and the heavy and scheduled-tasks workers.
+    client:
+      # Required. A Secret in the release namespace with tls.crt and tls.key
+      # (the client certificate, signed by the CA in tls ca.crt) and ca.crt
+      # (the CA of the agent certificates).
+      existingSecret: ""
+      # Name to verify in the agent certificate. The clients dial pod IPs, so
+      # set this unless the agent certificates carry the pod IPs.
+      tlsServerName: ""
+    # Secret in the agent namespace with the registration key: the key name
+    # in auth.sandboxNodeRegistration.secretKeys.SANDBOX_NODE_REGISTRATION_SECRET
+    # (default sandbox_node_registration_secret). Empty = the chart copies
+    # auth.sandboxNodeRegistration.values into the agent namespace.
+    registrationExistingSecret: ""
+    # VMs run in a host systemd slice, outside this container's limits. The
+    # agent itself serves the API and relays VM egress.
+    resources:
+      requests:
+        cpu: 250m
+        memory: 256Mi
+      limits:
+        memory: 1Gi
+    priorityClassName: ""
+    terminationGracePeriodSeconds: 30
+    # Drain: the agent reads its own Node and refuses new VMs while the Node
+    # has one of these taint keys (kubectl cordon and kubectl drain set
+    # node.kubernetes.io/unschedulable). The api_server then saves and
+    # stops the VMs on the node. The chart gives the agent a ServiceAccount
+    # with "get" on nodes. false: no RBAC; only the manual drain (SetDrain).
+    drainWatch:
+      enabled: true
+      # Comma-separated taint keys.
+      taints: "node.kubernetes.io/unschedulable"
+      pollInterval: 10s
+    # Root drive of the VMs (ENG-4648). With a tag, an init container copies
+    # the drive into <dataDir>/rootfs and the agent builds its node template
+    # from it at start (--rootfs-dir). Empty tag = no template, and Create
+    # fails with TEMPLATE_MISSING. Publish a tag with
+    # .github/workflows/craft-fc-rootfs.yml, for example rootfs-0.1.0. Pin it.
+    rootfs:
+      image:
+        repository: onyxdotapp/craft-fc-artifacts
+        tag: ""
+        pullPolicy: IfNotPresent
+      # The init container copies about 4 GiB once per drive version.
+      resources: {}
+    # Egress CA (ENG-4648). The root drive has no CA. The agent reads the
+    # sandbox-proxy CA from this ConfigMap at each Create (cached 30s) and
+    # the guest daemon installs it at Init. The chart gives the agent "get"
+    # on that one ConfigMap. false: VMs trust only a CA built into the drive.
+    egressCA:
+      enabled: true
+      # Empty = configMap.SANDBOX_NAMESPACE, where sandbox-proxy writes it.
+      namespace: ""
+      # Empty = configMap.SANDBOX_PROXY_CA_CONFIGMAP (sandbox-proxy-ca-bundle).
+      configMapName: ""
+      key: ca.crt
+    # Extra host-agent flags, for example ["--max-scratch-gib=200"].
+    extraArgs: []
+    # Prometheus metrics on a plain HTTP port (--metrics-listen). With
+    # monitoring.serviceMonitors.enabled the chart also makes a ServiceMonitor
+    # in the agent namespace. Auth is the api_server /metrics auth: the
+    # auth.metricsAuth token, or none with configMap.DISABLE_METRICS_AUTH=true.
+    # With neither, every scrape gets 401.
+    metrics:
+      enabled: false
+      port: 9464
+      # Secret in the agent namespace with the auth.metricsAuth token, under
+      # the key in auth.metricsAuth.secretKeys.METRICS_AUTH_TOKEN. Empty = the
+      # chart copies auth.metricsAuth.values into the agent namespace.
+      # Required when auth.metricsAuth uses existingSecret.
+      authExistingSecret: ""
+      # NetworkPolicy sources for the metrics port. Empty = Prometheus
+      # Operator pods (app.kubernetes.io/name=prometheus) in the release
+      # namespace. Set it if Prometheus runs in another namespace.
+      networkPolicyFrom: []
 
 # -- Sandbox Pod scheduling (rendered into the sandbox-pod PodTemplate).
 # Image/resources/ports come from the configMap.SANDBOX_* keys.
 sandboxPod:
+  # Onyx tests the default runtime with NET_ADMIN and iptables enabled.
+  # If you change either setting, verify sandbox isolation and network restrictions.
+  # Allow proxy traffic; block direct internet, DNS, internal services, nodes,
+  # and cloud metadata over IPv4 and IPv6.
+  # Optional, cluster-provided RuntimeClass (for example gvisor or kata).
+  runtimeClassName: ""
+  # Install firewall rules using NET_ADMIN. If false, the cluster must enforce
+  # proxy-only access from pod creation. Runtime isolation alone is not enough.
+  netAdminLockdown: true
   # Shared OpenCode, sidecar, and preview listener. Set to "::" for IPv6-only pods.
   listenHost: "0.0.0.0"
   nodeSelector:

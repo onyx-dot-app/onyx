@@ -1,0 +1,139 @@
+---
+title: "OneDrive"
+description: "Index files from users' OneDrive accounts and mirror their Microsoft 365 access"
+---
+
+The OneDrive connector indexes files from users' OneDrive for Business accounts in your Microsoft 365 tenant.
+It preserves the folder hierarchy, reads changes after the first run,
+and can mirror each file's access with **Sync with OneDrive**.
+
+The connector signs in as an app registration set up in [Microsoft 365
+Setup](/admins/connectors/official/microsoft-365/setup).
+
+## How it works
+
+| Area | Behavior |
+| ---- | -------- |
+| Users | Index every eligible user, or list specific user principal names or primary email addresses. Disabled users and guests are skipped. |
+| Files | Each supported file becomes one document. Folders become the hierarchy shown in Onyx. |
+| Refreshes | The first run walks each drive. Later runs use Microsoft Graph delta updates to read only changes. |
+| Deletions | Pruning removes files and folders that no longer exist or are no longer in scope. |
+| Permissions | Optional, on paid plans. Each file keeps its owner, direct user access, group access, and sharing-link access. |
+
+## Before you begin
+
+You need a Microsoft 365 tenant with OneDrive for Business and the roles listed in [Microsoft 365
+Setup](/admins/connectors/official/microsoft-365/setup#before-you-begin).
+Each user must open OneDrive once before Microsoft provisions their personal drive.
+Personal Microsoft accounts are not supported.
+
+Complete [Microsoft 365 Setup](/admins/connectors/official/microsoft-365/setup)
+with the OneDrive rows of its [permission table](/admins/connectors/official/microsoft-365/setup#permissions).
+Both client secret and certificate credentials support indexing and permission sync.
+
+## Configure Onyx
+
+<Steps>
+  <Step title="Select or create a credential">
+    In Onyx, go to **Admin Panel → Connectors** and select **OneDrive**.
+    Select an existing OneDrive credential or create one as described in [Microsoft 365
+    Setup](/admins/connectors/official/microsoft-365/setup#enter-the-credential-in-onyx).
+  </Step>
+
+  <Step title="Choose the users">
+    Select **General** to index every enabled, non-guest user with a user principal name.
+    Select **Specific** to list user principal names or primary email addresses.
+  </Step>
+
+  <Step title="Adjust the advanced settings">
+    Add glob patterns to **Excluded Paths** if needed. For example, `*.tmp` skips that file type at every depth,
+    and `Archive/*` skips files under that path.
+  </Step>
+
+  <Step title="Choose the access type">
+    Under **Document Access**, select **Everyone in Your Organization**, **Specific Groups**, or **Sync with OneDrive**.
+    **Sync with OneDrive** mirrors OneDrive access and is the default where available.
+
+    **Specific Groups** and **Sync with OneDrive** need the Business or Enterprise tier on Onyx Cloud,
+    or the Enterprise Edition when self-hosted.
+  </Step>
+
+  <Step title="Set an indexing start date">
+    Under **Schedule**, set **Index Documents After** unless you need every file.
+    Onyx indexes files created or changed on or after that date.
+    See [Advanced Configuration](/admins/connectors/overview#advanced-configuration).
+  </Step>
+
+  <Step title="Connect and verify">
+    Select **Create Connector**. Onyx checks sign-in, user listing, drive access, and change access.
+    With permission sync, it also checks file permissions and Entra group membership.
+
+    Open **Admin Panel → Indexing Status**, select the connector,
+    and confirm the first indexing attempt finishes with the expected document count.
+  </Step>
+</Steps>
+
+## Connector settings
+
+| Setting | Default | Purpose |
+| ------- | ------- | ------- |
+| Indexing scope | General | **General** covers every eligible user. **Specific** covers only the listed users. |
+| Users | empty | User principal names or primary email addresses used by **Specific** scope. |
+| Excluded Paths | empty | Glob patterns matched against the relative path and filename. |
+| Treat Organization Links as Public | off | With permission sync, makes files shared to the organization visible to every Onyx user. Anonymous links are always public. |
+| Authority Host | `https://login.microsoftonline.com` | Microsoft identity endpoint. See [National clouds](/admins/connectors/official/microsoft-365/setup#national-clouds). |
+| Graph API Host | `https://graph.microsoft.com` | Microsoft Graph endpoint. See [National clouds](/admins/connectors/official/microsoft-365/setup#national-clouds). |
+
+## Sync with OneDrive
+
+With **Sync with OneDrive**, Onyx grants file access to:
+
+- The OneDrive owner
+- Users with direct access
+- Members of Entra groups with access
+- Every Onyx user when the file has an anonymous sharing link
+- Every Onyx user when the file has an organization-wide link and
+  **Treat Organization Links as Public** is on
+
+A Microsoft 365 email address or user principal name must match the user's email in Onyx.
+Onyx expands nested Entra groups. Grant **Member.Read.Hidden** if your tenant uses groups with hidden membership.
+
+The document sync runs every 30 minutes. The group sync runs every 5 minutes.
+Self-hosted deployments can change the intervals with `ONEDRIVE_PERMISSION_DOC_SYNC_FREQUENCY` and
+`ONEDRIVE_PERMISSION_GROUP_SYNC_FREQUENCY`, in seconds.
+
+With **Sites.Selected**, grant the app `read` access to every personal site in scope.
+General scope can discover all users, but it can index only the personal sites granted to the app.
+See [Limiting the app to specific
+sites](/admins/connectors/official/microsoft-365/setup#limiting-the-app-to-specific-sites).
+
+## Limits
+
+| Limit | Value | Notes |
+| ----- | ----- | ----- |
+| File size | 20 MB | Onyx skips larger files. Self-hosted deployments can change this with `SHAREPOINT_CONNECTOR_SIZE_THRESHOLD`, in bytes. |
+| Empty or unsupported files | Skipped | Onyx keeps only file types that its file processor supports. |
+| Scope | Personal drives | Use the [SharePoint connector](/admins/connectors/official/microsoft-365/sharepoint) for team sites and site pages. |
+
+## SharePoint overlap
+
+A personal OneDrive is backed by a SharePoint personal site. If both connectors index the same file,
+Onyx keeps one document with both source types when Microsoft Graph returns the same drive item ID.
+
+Avoid listing personal-site URLs in a new SharePoint connector unless you need this overlap.
+Microsoft can assign different item IDs to copies in different drives, and Onyx indexes those copies separately.
+
+## Troubleshooting
+
+See [Microsoft 365 Setup](/admins/connectors/official/microsoft-365/setup#troubleshooting) for credential, consent,
+certificate, and national-cloud problems.
+
+| Message or symptom | Cause and fix |
+| ------------------ | ------------- |
+| The app cannot list tenant users | Grant **User.Read.All** as a Microsoft Graph application permission and grant admin consent. |
+| No user matches an entry | Use an enabled member user's user principal name or primary email address. Guests and disabled users are not eligible. |
+| No readable OneDrive was found | Grant **Sites.Read.All**, or grant `read` access to the user's personal site with **Sites.Selected**. Confirm that the user has a provisioned OneDrive. |
+| The app cannot read OneDrive changes | The app can resolve the user but cannot read the drive. Check the site grant and wait for new consent to apply. |
+| The app cannot read OneDrive permissions | The personal-site grant is missing or does not cover the file. Grant **Sites.Read.All** or a selected-site `read` grant. |
+| The app cannot list or expand Entra groups | Grant **GroupMember.ReadBasic.All**. Add **Member.Read.Hidden** for groups with hidden membership. |
+| Some users produce a failure while the run continues | Those users have no provisioned OneDrive or the app cannot access their personal sites. Other readable drives continue to index. |

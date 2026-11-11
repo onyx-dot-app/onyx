@@ -11,6 +11,10 @@ const LOCALES = [
   { endonym: "日本語", lang: "ja", marker: "外観" },
 ] as const;
 
+// A fresh user has no language override, so the picker shows the Global
+// Default row.
+const WORKSPACE_DEFAULT_OPTION = "Global Default";
+
 for (const { endonym, lang, marker } of LOCALES) {
   // Uses a fresh random user: changing the language mutates the user row, and
   // doing that to the shared admin fixture would leak a non-English UI into
@@ -23,7 +27,7 @@ for (const { endonym, lang, marker } of LOCALES) {
     const settingsPage = new SettingsGeneralPage(page);
     await settingsPage.goto();
 
-    await settingsPage.switchLanguage("English", endonym);
+    await settingsPage.switchLanguage(WORKSPACE_DEFAULT_OPTION, endonym);
     // router.refresh() re-renders the server layout with the new locale.
     await settingsPage.expectLocale(lang, marker);
 

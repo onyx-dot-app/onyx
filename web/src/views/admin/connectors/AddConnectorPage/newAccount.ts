@@ -1,5 +1,5 @@
 import { getIn } from "formik";
-import { ValidSources } from "@/lib/connectors/types/source";
+import type { ValidSources } from "@/lib/connectors/types/source";
 import type {
   CredentialSpec,
   CredentialValidationMessages,
@@ -9,7 +9,9 @@ import {
   createValidationSchema,
   getCredentialSpec,
   initialCredentialValues,
+  isOwnSetupMethod,
   realmFields,
+  specForConnectorValues,
 } from "@/lib/credentials/utils";
 import {
   DEFAULT_SHARE_AUDIENCE,
@@ -23,6 +25,12 @@ import {
  */
 export const NEW_ACCOUNT_FIELD = "new_account";
 
+/**
+ * The add-connector form's key for the picked saved account. A form control,
+ * never connector config: Create sends the account as the pair's credential.
+ */
+export const SAVED_ACCOUNT_FIELD = "saved_account";
+
 /** The new account's display name, kept apart from its credential values. */
 export const NEW_ACCOUNT_NAME_FIELD = "name";
 
@@ -33,26 +41,19 @@ export type NewAccountValues = ShareAccountFormValues & {
 
 export type NewAccountSchema = ReturnType<typeof createValidationSchema>;
 
-/** Sources with their own account setup instead of typed fields. */
-const OWN_ACCOUNT_SETUP: ReadonlySet<ValidSources> = new Set([
-  ValidSources.GoogleDrive,
-  ValidSources.Gmail,
-]);
-
 /**
  * The source's credential spec when a new account is typed into the form;
- * `null` when it is not: Google Drive and Gmail set accounts up their own
- * way, and a file field (a key file) cannot be sent as typed values yet, so
- * those still save an account through the account form.
+ * `null` for a source with no credential. A file field is typed in too: a
+ * .pfx certificate as the file's base64 text, a Google key as its JSON text.
+ * The connector form's values pick a form variant, e.g. Confluence Data
+ * Center's token-only account.
  */
-export function typedAccountSpec(source: ValidSources): CredentialSpec | null {
-  if (OWN_ACCOUNT_SETUP.has(source)) return null;
+export function typedAccountSpec(
+  source: ValidSources,
+  connectorValues: Readonly<Record<string, unknown>> = {}
+): CredentialSpec | null {
   const spec = getCredentialSpec(source);
-  if (!spec) return null;
-  const hasFile = Object.values(spec.fields).some(
-    (field) => field.kind === "file"
-  );
-  return hasFile ? null : spec;
+  return spec ? specForConnectorValues(spec, connectorValues) : null;
 }
 
 /**
@@ -104,11 +105,17 @@ export function typedDraft(
     formValues,
     NEW_ACCOUNT_FIELD
   );
-  const spec = typedAccountSpec(source);
+  const spec = typedAccountSpec(source, formValues);
   if (
     spec === null ||
     schema === null ||
     values === undefined ||
+    isOwnSetupMethod(
+      spec,
+      typeof values.authentication_method === "string"
+        ? values.authentication_method
+        : undefined
+    ) ||
     !schema.isValidSync(values)
   ) {
     return null;
@@ -126,10 +133,21 @@ export function typedDraft(
   return {
     source,
     credential_json: {
+      // Only the shown fields: a field another variant asked for stays out.
+      // Text is trimmed: a pasted token often carries a trailing space or
+      // newline, which the schema's trim only ignores while validating.
       ...Object.fromEntries(
-        Object.entries(fields).filter(
-          ([, value]) => value !== null && value !== ""
-        )
+        Object.entries(fields)
+          .map(([key, value]): [string, unknown] => [
+            key,
+            typeof value === "string" ? value.trim() : value,
+          ])
+          .filter(
+            ([key, value]) =>
+              (key in spec.fields || key === "authentication_method") &&
+              value !== null &&
+              value !== ""
+          )
       ),
       ...realm,
     },

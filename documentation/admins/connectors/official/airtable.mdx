@@ -1,0 +1,88 @@
+---
+title: "Airtable"
+description: "Index records and attachments from Airtable bases"
+---
+
+## How it works
+
+The Airtable connector indexes records from your Airtable bases. Each record becomes one document in Onyx.
+The record's field names and values are kept.
+
+You can index **Everything** the API token can read, or one **Specific Table** by pasting its URL.
+
+Fields such as dates, selects, checkboxes, collaborators, numbers, and formulas become filterable metadata.
+Long text fields become the document text. Attachments are downloaded and their text is extracted.
+An attachment larger than 10 MB is skipped.
+
+Onyx pulls changes every 24 hours by default. You can change this under **Schedule** when you create the connector.
+
+**Sync with Airtable** is not offered.
+The access type can only be **Everyone in Your Organization** or **Specific Groups**.
+
+## Setting up
+
+### 1. Create a Personal Access Token
+
+<Steps>
+  <Step title="Go to Personal Access Tokens">
+    In Airtable, open **Builder Hub → Personal access tokens** and click **Create new token**.
+  </Step>
+
+  <Step title="Configure scopes">
+    Give the token a name, such as `Onyx`, and add these scopes:
+
+    - `data.records:read`
+    - `data.recordComments:read`
+    - `schema.bases:read`
+    - `user.email:read` (for collaborator fields)
+  </Step>
+
+  <Step title="Grant access to your bases">
+    Under **Access**, grant the token access to every base you want Onyx to index.
+  </Step>
+
+  <Step title="Create and copy the token">
+    Click **Create token** and copy it. Airtable does not show it again.
+  </Step>
+</Steps>
+
+### 2. Add the connector in Onyx
+
+<Steps>
+  <Step title="Connect an Airtable account">
+    In Onyx, go to **Admin Panel → Connectors** and select **Airtable**. Under **Authentication Account**,
+    select **New Airtable Account** and paste the Personal Access Token into **API Token**.
+  </Step>
+
+  <Step title="Choose what to index">
+    Under **Airtable Content to Index**, pick one tab:
+
+    **Everything** — Onyx finds and indexes every base and table that the token can read.
+
+    **Specific Table** — Onyx indexes one table. Paste the table's URL,
+    such as `https://airtable.com/appXXX/tblYYY/viwZZZ`, into **Airtable URL**. Onyx reads the base ID, table ID,
+    and view ID from the URL.
+  </Step>
+
+  <Step title="Choose who can see the records">
+    Under **Document Access**, select **Everyone in Your Organization** or **Specific Groups**.
+    **Specific Groups** is available on Onyx Cloud and Enterprise Edition.
+  </Step>
+
+  <Step title="Create the connector">
+    Select **Create Connector**. Onyx checks that the token can list at least one base,
+    or can open the table you pasted, and refuses the connector if it cannot.
+
+    Open **Admin Panel → Indexing Status**, select the connector, and confirm its first indexing attempt completes.
+  </Step>
+</Steps>
+
+### Options
+
+- **Treat All Fields Except Attachments as Metadata** — When enabled, text fields such as "Title" or "Description"
+  are stored as metadata key-value pairs instead of searchable document text.
+  Only the content of attachments becomes the body of the document.
+  Use this when the content you care about is in file attachments, and the other columns are labels or categories.
+
+- **Share ID** (Specific Table only) — If you want record links in Onyx to open a shared view, enter the share ID
+  here, such as `shrkfjEzDmLaDtK83`. You can find it by creating a shared view in Airtable.

@@ -13,6 +13,7 @@ export async function refreshLlmProviderCaches(
     mutate(SWR_KEYS.adminLlmProvidersPaged),
     mutate(SWR_KEYS.llmProviders),
     mutate(SWR_KEYS.llmRouterModels),
+    mutate(SWR_KEYS.decisionModel),
     mutate(
       (key) =>
         typeof key === "string" &&
@@ -30,7 +31,6 @@ export async function setDefaultLlmModelAndRefresh(
   try {
     await setDefaultLlmModel(providerId, modelName);
     await refreshLlmProviderCaches(mutate);
-    toast.success("Default model updated successfully!");
   } catch (e) {
     const message = e instanceof Error ? e.message : "Unknown error";
     toast.error(`Failed to set default model: ${message}`);

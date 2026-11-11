@@ -17,6 +17,7 @@ const MOCK_CUSTOM_PROVIDER_OPTIONS = [
   { value: "anthropic", label: "Anthropic" },
   { value: "cloudflare", label: "Cloudflare" },
   { value: "openai", label: "OpenAI" },
+  { value: "typesafe", label: "TypeSafe" },
 ];
 jest.mock("swr", () => {
   const actual = jest.requireActual("swr");
@@ -439,6 +440,7 @@ describe("Custom LLM Provider Configuration Workflow", () => {
         id: 5,
         name: "New Default Provider",
         provider: "openai",
+        model_configurations: [{ name: "gpt-4", supports_chat: true }],
       }),
     } as Response);
 
@@ -475,6 +477,47 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       expect(body.provider_id).toBe(5);
       expect(body).toHaveProperty("model_name");
     });
+  });
+
+  test("never makes a decision-only provider the chat default", async () => {
+    const user = setupUser({
+      pointerEventsCheck: PointerEventsCheckLevel.Never,
+    });
+    fetchSpy.mockResolvedValueOnce(new Response("{}"));
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          id: 5,
+          name: "Decisions",
+          provider: "typesafe",
+          model_configurations: [
+            {
+              name: "system-one",
+              supports_chat: false,
+              supports_decisions: true,
+            },
+          ],
+        })
+      )
+    );
+    const onSuccess = jest.fn();
+    render(
+      <CustomModal
+        shouldMarkAsDefault={true}
+        onOpenChange={() => {}}
+        onSuccess={onSuccess}
+      />
+    );
+    await fillBasicFields(user, {
+      name: "Decisions",
+      provider: "typesafe",
+      modelName: "system-one",
+    });
+    await user.click(screen.getByRole("button", { name: /connect/i }));
+    await waitFor(() => expect(onSuccess).toHaveBeenCalled());
+    expect(
+      fetchSpy.mock.calls.some(([url]) => url === "/api/admin/llm/default")
+    ).toBe(false);
   });
 
   test("shows error when provider creation fails", async () => {

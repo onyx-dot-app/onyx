@@ -34,12 +34,14 @@ from onyx.db.models import (
     Persona,
     Persona__User,
     SamlAccount,
+    Skill,
     User,
     User__ExternalUserGroupId,
     User__UserGroup,
     UserGroup,
 )
 from onyx.db.permissions import recompute_user_permissions__no_commit
+from onyx.db.utils import is_check_violation
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.models import UserGroupInfo
@@ -951,6 +953,22 @@ def delete_user_from_db__no_commit(
     user_to_delete: User,
     db_session: Session,
 ) -> None:
+    if (
+        db_session.scalar(
+            select(Skill.id)
+            .where(
+                Skill.author_user_id == user_to_delete.id,
+                Skill.built_in_skill_id.is_(None),
+                Skill.public_permission.is_(None),
+            )
+            .limit(1)
+        )
+        is not None
+    ):
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "Transfer or delete this user's private skills before deleting the user.",
+        )
     for oauth_account in user_to_delete.oauth_accounts:
         db_session.delete(oauth_account)
 
@@ -981,6 +999,15 @@ def delete_user_from_db__no_commit(
         User__UserGroup.user_id == user_to_delete.id
     ).delete()
     db_session.delete(user_to_delete)
+    try:
+        db_session.flush()
+    except IntegrityError as exc:
+        if not is_check_violation(exc, "ck_private_skill_has_owner"):
+            raise
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "Transfer or delete this user's private skills before deleting the user.",
+        ) from exc
 
 
 def delete_user_from_db(

@@ -40,7 +40,7 @@ export default function ConnectorGroupRestrictionPicker() {
     .map((group) => ({
       value: String(group.id),
       title: group.name,
-      description: t("memberCount", { count: group.users.length }),
+      description: t("memberCount", { count: group.member_count }),
     }));
 
   function addGroup(value: string) {
@@ -90,13 +90,12 @@ export default function ConnectorGroupRestrictionPicker() {
               {selectedGroups.map((group) => (
                 <Card key={group.id} color="background-tint-01" padding={2}>
                   <ContentAction
+                    font="main-content-emphasis"
                     icon={SvgUsers}
                     title={group.name}
                     description={t("memberCount", {
-                      count: group.users.length,
+                      count: group.member_count,
                     })}
-                    sizePreset="main-content"
-                    variant="section"
                     rightChildren={
                       <Button
                         icon={SvgX}

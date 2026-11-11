@@ -175,7 +175,7 @@ async function promoteToAdmin(
     if (!groupsRes.ok()) {
       const body = await groupsRes.text();
       throw new Error(
-        `[global-setup] Cannot fetch user groups — the primary admin account ` +
+        `[global-setup] Cannot fetch user groups. The primary admin account ` +
           `(${TEST_ADMIN_CREDENTIALS.email}) may not have admin privileges ` +
           `(status ${groupsRes.status()}).\n\n` +
           `This usually happens when running tests against a non-fresh database ` +
@@ -220,7 +220,7 @@ async function promoteToAdmin(
     );
     if (!target) {
       throw new Error(
-        `[global-setup] User ${email} not found — cannot add to Admin group`
+        `[global-setup] User ${email} not found. Cannot add to Admin group`
       );
     }
 

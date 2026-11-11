@@ -174,6 +174,8 @@ def test_blob_s3_cross_region_and_citation_link(
     assert len(all_docs) == 1
     doc = all_docs[0]
     assert doc.semantic_identifier == "Chapter 6.pdf"
+    assert doc.source_mime_type == "application/pdf"
+    assert doc.source_size_bytes is not None and doc.source_size_bytes > 0
 
     # Validate link
     assert len(doc.sections) >= 1

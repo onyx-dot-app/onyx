@@ -4,6 +4,7 @@
     "gpt-oss-120b": {
       "attachment": false,
       "cost": {
+        "cache_read": 0.35,
         "input": 0.35,
         "output": 0.75
       },

@@ -13,6 +13,7 @@ from onyx.connectors.capability_checks.runner import run_capability_checks
 from onyx.connectors.jira.capability_checks import (
     build_jira_doc_permission_sync_checks,
     build_jira_group_sync_checks,
+    build_jira_indexing_checks,
 )
 from onyx.connectors.jira.models import JiraGroupPage, JiraIssueIdPage
 from onyx.connectors.jira.source_operations import JiraApiError, JiraSourceOperations
@@ -77,7 +78,7 @@ def _run(
 
 
 def _api_error(status: int, text: str | None = None) -> JiraApiError:
-    return JiraApiError(f"HTTP {status}", status_code=status, text=text)
+    return JiraApiError(f"HTTP {status}", status_code=status, body=text)
 
 
 def _advisories(result: CapabilityCheckResult) -> list[str]:
@@ -131,7 +132,9 @@ def test_permission_scheme_read_probes_the_first_project_without_a_project() -> 
 
     _run("jira_permission_scheme_read", gateway, {**_CONFIG, "project_key": ""})
 
-    gateway.get_project_permission_scheme.assert_called_once_with(project_key="AS")
+    gateway.get_project_permission_scheme.assert_called_once_with(
+        project_key="AS", fast=True
+    )
 
 
 def test_permission_scheme_read_probes_the_project_of_a_jql_match() -> None:
@@ -150,14 +153,16 @@ def test_permission_scheme_read_probes_the_project_of_a_jql_match() -> None:
         {**_CONFIG, "project_key": "", "jql_query": 'project = "AS"'},
     )
 
-    gateway.get_project_permission_scheme.assert_called_once_with(project_key="AS")
+    gateway.get_project_permission_scheme.assert_called_once_with(
+        project_key="AS", fast=True
+    )
 
 
 @pytest.mark.parametrize(
     "check_id",
     [check.check_id for check in build_jira_doc_permission_sync_checks()],
 )
-def test_doc_perm_sync_checks_pass_with_an_advisory_when_the_jql_matches_nothing(
+def test_doc_perm_sync_checks_skip_when_the_jql_matches_nothing(
     check_id: str,
 ) -> None:
     gateway = _gateway()
@@ -171,13 +176,14 @@ def test_doc_perm_sync_checks_pass_with_an_advisory_when_the_jql_matches_nothing
         {**_CONFIG, "project_key": "", "jql_query": 'project = "EMPTY"'},
     )
 
-    assert result.status == CapabilityCheckStatus.PASSED
-    (advisory,) = _advisories(result)
-    assert "JQL query matched no issue" in advisory
+    # Nothing to check yet. The JQL check fails on its own row, and the
+    # dependency rule stops these checks on a full run.
+    assert result.status != CapabilityCheckStatus.PASSED
+    assert "JQL query matched no issue" in result.message
     gateway.get_project_permission_scheme.assert_not_called()
 
 
-def test_permission_scheme_read_is_indeterminate_for_an_issue_without_project() -> None:
+def test_permission_scheme_read_is_incomplete_for_an_issue_without_project() -> None:
     gateway = _gateway()
     gateway.search_issue_ids.return_value = JiraIssueIdPage(
         issue_ids=["1"], next_page_token=None
@@ -190,7 +196,7 @@ def test_permission_scheme_read_is_indeterminate_for_an_issue_without_project() 
         {**_CONFIG, "project_key": "", "jql_query": 'project = "AS"'},
     )
 
-    assert result.status == CapabilityCheckStatus.INDETERMINATE
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
     gateway.get_project_permission_scheme.assert_not_called()
 
 
@@ -231,7 +237,7 @@ def test_project_roles_read_fails_when_roles_are_hidden() -> None:
     assert result.status == CapabilityCheckStatus.FAILED
 
 
-def test_project_roles_read_passes_without_role_grants() -> None:
+def test_project_roles_read_skips_without_role_grants() -> None:
     gateway = _gateway()
     gateway.get_project_permission_scheme.return_value = {
         "permissions": [_browse({"type": "group", "parameter": "devs"})]
@@ -239,7 +245,8 @@ def test_project_roles_read_passes_without_role_grants() -> None:
 
     result = _run("jira_project_roles_read", gateway)
 
-    assert result.status == CapabilityCheckStatus.PASSED
+    assert result.status == CapabilityCheckStatus.SKIPPED
+    assert result.summary == "No role grants to test"
     gateway.get_project_role.assert_not_called()
 
 
@@ -252,7 +259,7 @@ def test_dependent_checks_defer_to_the_scheme_check() -> None:
         "jira_project_roles_read",
         "jira_permission_user_emails",
     ):
-        assert _run(check_id, gateway).status == CapabilityCheckStatus.INDETERMINATE
+        assert _run(check_id, gateway).status == CapabilityCheckStatus.INCOMPLETE
 
 
 # --- jira_permission_user_emails ---
@@ -277,7 +284,7 @@ def test_permission_user_emails_fails_when_emails_are_hidden() -> None:
     ],
     ids=["application-role", "anyone", "group"],
 )
-def test_permission_user_emails_passes_for_public_or_group_grants(
+def test_permission_user_emails_skips_public_or_group_grants(
     extra_holder: dict[str, Any],
 ) -> None:
     """Public grants sync without reading users; group grants give access
@@ -293,11 +300,12 @@ def test_permission_user_emails_passes_for_public_or_group_grants(
 
     result = _run("jira_permission_user_emails", gateway)
 
-    assert result.status == CapabilityCheckStatus.PASSED
+    assert result.status == CapabilityCheckStatus.SKIPPED
+    assert result.applicable
     gateway.get_user.assert_not_called()
 
 
-def test_permission_user_emails_passes_when_a_role_holds_a_group() -> None:
+def test_permission_user_emails_skips_when_a_role_holds_a_group() -> None:
     gateway = _gateway()
     gateway.get_project_role.return_value = {
         "actors": [
@@ -309,7 +317,8 @@ def test_permission_user_emails_passes_when_a_role_holds_a_group() -> None:
 
     result = _run("jira_permission_user_emails", gateway)
 
-    assert result.status == CapabilityCheckStatus.PASSED
+    assert result.status == CapabilityCheckStatus.SKIPPED
+    assert result.summary == "Access comes through groups"
 
 
 def test_permission_user_emails_skips_app_accounts() -> None:
@@ -357,7 +366,7 @@ def test_permission_user_emails_fails_when_no_user_would_get_access(
     assert "no user would get access" in result.message
 
 
-def test_permission_user_emails_is_indeterminate_for_partial_app_sample() -> None:
+def test_permission_user_emails_is_incomplete_for_partial_app_sample() -> None:
     gateway = _gateway()
     gateway.get_project_role.return_value = {
         "actors": [{"actorUser": {"accountId": f"app-{i}"}} for i in range(6)]
@@ -366,7 +375,7 @@ def test_permission_user_emails_is_indeterminate_for_partial_app_sample() -> Non
 
     result = _run("jira_permission_user_emails", gateway)
 
-    assert result.status == CapabilityCheckStatus.INDETERMINATE
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
 
 
 def test_permission_user_emails_looks_up_data_center_users_by_name() -> None:
@@ -378,7 +387,7 @@ def test_permission_user_emails_looks_up_data_center_users_by_name() -> None:
     result = _run("jira_permission_user_emails", gateway)
 
     assert result.status == CapabilityCheckStatus.PASSED
-    gateway.get_user.assert_called_once_with(user_id="jdoe")
+    gateway.get_user.assert_called_once_with(user_id="jdoe", fast=True)
 
 
 def test_permission_user_emails_reads_direct_user_grants() -> None:
@@ -395,7 +404,49 @@ def test_permission_user_emails_reads_direct_user_grants() -> None:
     gateway.get_user.assert_not_called()
 
 
-def test_permission_user_emails_is_indeterminate_for_a_partial_sample() -> None:
+@pytest.mark.parametrize(
+    "email,status",
+    [
+        ("", CapabilityCheckStatus.FAILED),
+        ("dev@example.com", CapabilityCheckStatus.PASSED),
+    ],
+    ids=["hidden", "visible"],
+)
+def test_full_run_checks_direct_user_emails_without_role_grants(
+    email: str, status: CapabilityCheckStatus
+) -> None:
+    gateway = _gateway()
+    gateway.get_project_permission_scheme.return_value = {
+        "permissions": [
+            _browse({"type": "user", "value": "acc-2", "user": {"emailAddress": email}})
+        ]
+    }
+    gateway.search_issue_ids.return_value = JiraIssueIdPage(
+        issue_ids=["1"], next_page_token=None
+    )
+    gateway.bulk_fetch_issues.return_value = [{"id": "1", "key": "AS-1", "fields": {}}]
+    context = CapabilityCheckContext(
+        source=DocumentSource.JIRA,
+        credential_json={"jira_user_email": "bot@example.com", "jira_api_token": "t"},
+        connector_specific_config=_CONFIG,
+        access_type=AccessType.SYNC,
+        source_operations=gateway,
+    )
+
+    checks = (
+        build_jira_indexing_checks()
+        + build_jira_doc_permission_sync_checks()
+        + build_jira_group_sync_checks()
+    )
+
+    results = run_capability_checks(checks, context)
+
+    by_id = {result.check_id: result for result in results}
+    assert by_id["jira_project_roles_read"].status == CapabilityCheckStatus.SKIPPED
+    assert by_id["jira_permission_user_emails"].status == status
+
+
+def test_permission_user_emails_is_incomplete_for_a_partial_sample() -> None:
     """Sync reads every role user; hidden emails in a sample prove nothing."""
     gateway = _gateway()
     gateway.get_project_role.return_value = {
@@ -405,7 +456,7 @@ def test_permission_user_emails_is_indeterminate_for_a_partial_sample() -> None:
 
     result = _run("jira_permission_user_emails", gateway)
 
-    assert result.status == CapabilityCheckStatus.INDETERMINATE
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
 
 
 def test_permission_user_emails_reads_every_role_up_to_the_sample() -> None:
@@ -421,7 +472,7 @@ def test_permission_user_emails_reads_every_role_up_to_the_sample() -> None:
     result = _run("jira_permission_user_emails", gateway)
 
     assert gateway.get_project_role.call_count == 3
-    assert result.status == CapabilityCheckStatus.INDETERMINATE
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
 
 
 def test_project_roles_read_skips_public_projects() -> None:
@@ -436,8 +487,218 @@ def test_project_roles_read_skips_public_projects() -> None:
 
     result = _run("jira_project_roles_read", gateway)
 
-    assert result.status == CapabilityCheckStatus.PASSED
+    assert result.status == CapabilityCheckStatus.SKIPPED
+    assert result.summary == "AS is open to all users"
     gateway.get_project_role.assert_not_called()
+
+
+# --- sampling several projects ---
+
+_ALL_PROJECTS = {**_CONFIG, "project_key": ""}
+_OPEN_SCHEME = {"permissions": [_browse({"type": "applicationRole"})]}
+_GROUP_SCHEME = {"permissions": [_browse({"type": "group", "parameter": "devs"})]}
+_ROLE_SCHEME = {"permissions": [_browse({"type": "projectRole", "value": "10003"})]}
+_SAMPLE_CHECK_IDS = ["jira_project_roles_read", "jira_permission_user_emails"]
+
+
+def _schemes_by_project(gateway: MagicMock, schemes: dict[str, dict[str, Any]]) -> None:
+    gateway.list_projects.return_value = [{"key": key} for key in schemes]
+
+    def _scheme(*, project_key: str, **_: bool) -> dict[str, Any]:
+        return schemes[project_key]
+
+    gateway.get_project_permission_scheme.side_effect = _scheme
+
+
+@pytest.mark.parametrize("check_id", _SAMPLE_CHECK_IDS)
+def test_sampled_checks_move_past_an_open_project(check_id: str) -> None:
+    gateway = _gateway()
+    _schemes_by_project(gateway, {"OPEN": _OPEN_SCHEME, "ROLE": _ROLE_SCHEME})
+
+    result = _run(check_id, gateway, _ALL_PROJECTS)
+
+    assert result.status == CapabilityCheckStatus.PASSED, result
+    gateway.get_project_role.assert_called_with(
+        project_key="ROLE", role_id="10003", fast=True
+    )
+
+
+@pytest.mark.parametrize("check_id", _SAMPLE_CHECK_IDS)
+def test_sampled_checks_move_past_an_open_project_of_a_jql_scope(
+    check_id: str,
+) -> None:
+    gateway = _gateway()
+    _schemes_by_project(gateway, {"OPEN": _OPEN_SCHEME, "ROLE": _ROLE_SCHEME})
+    gateway.search_issue_ids.return_value = JiraIssueIdPage(
+        issue_ids=["1", "2", "3"], next_page_token=None
+    )
+    gateway.bulk_fetch_issues.return_value = [
+        {"fields": {"project": {"key": key}}} for key in ("OPEN", "OPEN", "ROLE")
+    ]
+
+    result = _run(check_id, gateway, {**_ALL_PROJECTS, "jql_query": "type = Bug"})
+
+    assert result.status == CapabilityCheckStatus.PASSED, result
+    assert gateway.get_project_permission_scheme.call_count == 2
+
+
+def _jql_issues(*project_keys: str) -> list[dict[str, Any]]:
+    return [{"fields": {"project": {"key": key}}} for key in project_keys]
+
+
+@pytest.mark.parametrize("check_id", _SAMPLE_CHECK_IDS)
+def test_sampled_checks_are_incomplete_when_the_jql_matches_more_cloud_issues(
+    check_id: str,
+) -> None:
+    gateway = _gateway()
+    _schemes_by_project(gateway, {"OPEN": _OPEN_SCHEME, "TEAM": _GROUP_SCHEME})
+    gateway.search_issue_ids.return_value = JiraIssueIdPage(
+        issue_ids=["1", "2"], next_page_token="next"
+    )
+    gateway.bulk_fetch_issues.return_value = _jql_issues("OPEN", "TEAM")
+
+    result = _run(check_id, gateway, {**_ALL_PROJECTS, "jql_query": "type = Bug"})
+
+    assert result.status == CapabilityCheckStatus.INCOMPLETE, result
+    assert result.description is not None
+    assert result.description.startswith(
+        "Checked 2 projects, and the JQL query matches more"
+    )
+
+
+@pytest.mark.parametrize(
+    ("next_offset_issues", "expected"),
+    [
+        ([], CapabilityCheckStatus.SKIPPED),
+        # Jira returned a short page, but more issues match.
+        (_jql_issues("ROLE"), CapabilityCheckStatus.INCOMPLETE),
+    ],
+)
+@pytest.mark.parametrize("check_id", _SAMPLE_CHECK_IDS)
+def test_sampled_checks_of_a_data_center_jql_scope(
+    check_id: str,
+    next_offset_issues: list[dict[str, Any]],
+    expected: CapabilityCheckStatus,
+) -> None:
+    gateway = _gateway(is_cloud=False)
+    _schemes_by_project(gateway, {"OPEN": _OPEN_SCHEME, "TEAM": _GROUP_SCHEME})
+    pages: list[list[dict[str, Any]]] = [
+        _jql_issues("OPEN", "TEAM"),
+        next_offset_issues,
+    ]
+    gateway.search_issues.side_effect = pages
+
+    result = _run(check_id, gateway, {**_ALL_PROJECTS, "jql_query": "type = Bug"})
+
+    assert result.status == expected, result
+    assert gateway.search_issues.call_args.kwargs["start_at"] == 2
+
+
+@pytest.mark.parametrize("check_id", _SAMPLE_CHECK_IDS)
+def test_sampled_checks_are_incomplete_when_more_projects_exist(
+    check_id: str,
+) -> None:
+    gateway = _gateway()
+    _schemes_by_project(
+        gateway,
+        {
+            f"P{index}": _OPEN_SCHEME if index % 2 else _GROUP_SCHEME
+            for index in range(8)
+        },
+    )
+
+    result = _run(check_id, gateway, _ALL_PROJECTS)
+
+    assert result.status == CapabilityCheckStatus.INCOMPLETE, result
+    assert result.description is not None
+    assert result.description.startswith("Checked 5 of 8 projects")
+    assert gateway.get_project_permission_scheme.call_count == 5
+
+
+@pytest.mark.parametrize("check_id", _SAMPLE_CHECK_IDS)
+def test_sampled_checks_skip_when_every_project_was_read(check_id: str) -> None:
+    gateway = _gateway()
+    _schemes_by_project(gateway, {"OPEN": _OPEN_SCHEME, "TEAM": _GROUP_SCHEME})
+
+    result = _run(check_id, gateway, _ALL_PROJECTS)
+
+    assert result.status == CapabilityCheckStatus.SKIPPED, result
+
+
+@pytest.mark.parametrize("check_id", _SAMPLE_CHECK_IDS)
+def test_sampled_checks_leave_out_an_unreadable_later_project(check_id: str) -> None:
+    gateway = _gateway()
+    _schemes_by_project(
+        gateway, {"OPEN": _OPEN_SCHEME, "HIDDEN": {}, "ROLE": _ROLE_SCHEME}
+    )
+    schemes_or_errors: list[dict[str, Any] | JiraApiError] = [
+        _OPEN_SCHEME,
+        _api_error(403),
+        _ROLE_SCHEME,
+    ]
+    gateway.get_project_permission_scheme.side_effect = schemes_or_errors
+
+    result = _run(check_id, gateway, _ALL_PROJECTS)
+
+    assert result.status == CapabilityCheckStatus.PASSED, result
+
+
+@pytest.mark.parametrize("check_id", _SAMPLE_CHECK_IDS)
+def test_sampled_checks_are_incomplete_when_a_project_cannot_be_read(
+    check_id: str,
+) -> None:
+    gateway = _gateway()
+    _schemes_by_project(gateway, {"OPEN": _OPEN_SCHEME, "HIDDEN": {}})
+    schemes_or_errors: list[dict[str, Any] | JiraApiError] = [
+        _OPEN_SCHEME,
+        _api_error(403),
+    ]
+    gateway.get_project_permission_scheme.side_effect = schemes_or_errors
+
+    result = _run(check_id, gateway, _ALL_PROJECTS)
+
+    assert result.status == CapabilityCheckStatus.INCOMPLETE, result
+    assert result.description is not None
+    assert result.description.startswith(
+        "Checked 1 of 2 projects (1 more could not be read)"
+    )
+
+
+@pytest.mark.parametrize("check_id", _SAMPLE_CHECK_IDS)
+def test_sampled_checks_stop_when_jira_rate_limits_a_later_project(
+    check_id: str,
+) -> None:
+    gateway = _gateway()
+    _schemes_by_project(
+        gateway, {"OPEN": _OPEN_SCHEME, "BUSY": {}, "ROLE": _ROLE_SCHEME}
+    )
+    schemes_or_errors: list[dict[str, Any] | JiraApiError] = [
+        _OPEN_SCHEME,
+        _api_error(429),
+        _ROLE_SCHEME,
+    ]
+    gateway.get_project_permission_scheme.side_effect = schemes_or_errors
+
+    result = _run(check_id, gateway, _ALL_PROJECTS)
+
+    assert result.status == CapabilityCheckStatus.INCOMPLETE, result
+    assert result.summary == "Rate limited by Jira"
+    assert gateway.get_project_permission_scheme.call_count == 2
+
+
+@pytest.mark.parametrize("check_id", _SAMPLE_CHECK_IDS)
+def test_sampled_checks_skip_an_open_configured_project(check_id: str) -> None:
+    gateway = _gateway()
+    gateway.list_projects.return_value = [{"key": "OTHER"}]
+    gateway.get_project_permission_scheme.return_value = _OPEN_SCHEME
+
+    result = _run(check_id, gateway)
+
+    assert result.status == CapabilityCheckStatus.SKIPPED, result
+    assert result.summary == "AS is open to all users"
+    gateway.get_project_permission_scheme.assert_called_once_with(
+        project_key="AS", fast=True
+    )
 
 
 # --- group sync ---
@@ -489,20 +750,20 @@ def test_group_membership_skips_a_deleted_group() -> None:
     result = _run("jira_group_membership", gateway)
 
     assert result.status == CapabilityCheckStatus.PASSED
+    assert result.summary == "Read 1 members in 1 groups"
 
 
-def test_group_membership_passes_with_an_advisory_for_empty_groups() -> None:
+def test_group_membership_is_incomplete_for_empty_groups() -> None:
     gateway = _gateway()
     gateway.get_group_members_page.return_value = {"values": [], "isLast": True}
 
     result = _run("jira_group_membership", gateway)
 
-    assert result.status == CapabilityCheckStatus.PASSED
-    (advisory,) = _advisories(result)
-    assert "no members" in advisory
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
+    assert result.summary == "No members found to test"
 
 
-def test_group_member_emails_passes_with_an_advisory_without_user_members() -> None:
+def test_group_member_emails_is_incomplete_without_user_members() -> None:
     gateway = _gateway()
     gateway.get_group_members_page.return_value = {
         "values": [{"accountType": "app", "displayName": "Automation"}],
@@ -511,9 +772,8 @@ def test_group_member_emails_passes_with_an_advisory_without_user_members() -> N
 
     result = _run("jira_group_member_emails", gateway)
 
-    assert result.status == CapabilityCheckStatus.PASSED
-    (advisory,) = _advisories(result)
-    assert "no user members" in advisory
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
+    assert result.summary == "No user members found to test"
 
 
 def test_group_membership_fails_without_the_group_member_api() -> None:
@@ -541,7 +801,7 @@ def test_group_member_emails_fails_when_emails_are_hidden() -> None:
     [(["devs"], False), (["a", "b", "c", "d"], True)],
     ids=["more-pages", "more-groups"],
 )
-def test_group_member_emails_is_indeterminate_for_a_partial_sample(
+def test_group_member_emails_is_incomplete_for_a_partial_sample(
     group_names: list[str], is_last: bool
 ) -> None:
     gateway = _gateway(is_cloud=False)
@@ -555,4 +815,4 @@ def test_group_member_emails_is_indeterminate_for_a_partial_sample(
 
     result = _run("jira_group_member_emails", gateway)
 
-    assert result.status == CapabilityCheckStatus.INDETERMINATE
+    assert result.status == CapabilityCheckStatus.INCOMPLETE

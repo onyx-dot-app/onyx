@@ -4,7 +4,11 @@ Single import point for the typed events Onyx's sandbox layer emits and
 consumes. Currently re-exports from the `agent-client-protocol` PyPI
 package; the wrapper exists so consumers don't need to know that, and so
 a future inlining of these types (or swap to a different upstream)
-touches only this file. See docs/craft/drop-acp-layer.md.
+touches only this file.
+
+If you replace the re-exports with local models, keep the
+``model_dump(by_alias=True)`` output byte-identical. ``BuildMessage.message_metadata``
+stores tool-call and plan events in that shape, and saved rows are not migrated.
 """
 
 from typing import NotRequired, TypedDict

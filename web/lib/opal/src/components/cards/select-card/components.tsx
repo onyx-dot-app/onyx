@@ -152,7 +152,7 @@ type SelectCardProps = SelectCardPlainProps | SelectCardExpandableProps;
  * @example Plain
  * ```tsx
  * <SelectCard state="selected" onClick={handleClick}>
- *   <ContentAction icon={SvgGlobe} title="Google" description="Search engine" />
+ *   <ContentAction font="heading-headline" orientation="stacked" icon={SvgGlobe} title="Google" description="Search engine" />
  * </SelectCard>
  * ```
  *
@@ -166,7 +166,7 @@ type SelectCardProps = SelectCardPlainProps | SelectCardExpandableProps;
  *   state="empty"
  *   onClick={() => setOpen((value) => !value)}
  * >
- *   <ContentAction icon={SvgPlusCircle} title="New account" />
+ *   <ContentAction font="heading-headline" orientation="stacked" icon={SvgPlusCircle} title="New account" />
  * </SelectCard>
  * ```
  */

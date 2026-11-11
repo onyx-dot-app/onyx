@@ -1,6 +1,5 @@
 """HTTP client for ``opencode serve`` — the only transport Onyx Craft
-uses to drive in-sandbox agent turns. Design lives in
-``docs/craft/features/opencode-serve-client.md``.
+uses to drive in-sandbox agent turns.
 
 Public surface:
 
@@ -8,6 +7,31 @@ Public surface:
 - :class:`ClientTimeouts`
 
 Sandbox-event types come from :mod:`onyx.server.features.build.sandbox.event_schema`.
+
+Event-stream rules. Each rule prevents a bug that this translator had:
+
+1. A turn has many steps. opencode sets ``time.completed`` on the
+   ``message.updated`` of EVERY step (tool-call step, answer step, ...). Only
+   ``session.idle`` or ``session.status`` with ``status.type == "idle"`` ends
+   the turn. ``message.updated`` only caches role, finish reason, and errors.
+2. ``session.status.status`` is a tagged union (``idle``/``busy``/``retry``).
+   Compare ``status["type"]``, not ``status``. Build test fixtures from
+   captured payloads, not hand-typed shapes.
+3. ``message.part.delta`` can arrive up to ~300 ms before the
+   ``message.updated`` that gives its role. ``_is_assistant_message``
+   REST-fetches an unknown message once (``get_message``) and caches the
+   result. Do not buffer deltas until metadata arrives: a stream drop would
+   lose them.
+4. ``/event`` does not support ``Last-Event-ID``. After a reconnect, the
+   cumulative ``part.text`` on the next ``message.part.updated`` fills the gap
+   (``_reconcile_part_text``).
+5. The stream is a hint; opencode's REST state is the truth. When the stream
+   is ambiguous, read REST state. Do not add compensating stream logic.
+
+``permission.asked`` for ``connect_app`` drives the connect-card flow. Every
+other category is auto-allowed with a WARN log: production ``opencode.json``
+allows all categories, so an ask means the config is missing a category.
+The HTTP Basic username is ``OPENCODE_SERVER_USERNAME`` (``"opencode"``).
 """
 
 from __future__ import annotations
@@ -23,6 +47,7 @@ from uuid import uuid4
 import httpx
 
 from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CacheBackend
 from onyx.server.features.build import connect_app
 from onyx.server.features.build.configs import (
     OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS,
@@ -153,6 +178,7 @@ class _TurnState:
     # decision endpoint answers directly); reject an undecided request for a clean
     # decline. A late reject after the user answered is a harmless no-op.
     pending_connect_app_deadlines: dict[str, float] = field(default_factory=dict)
+    connect_app_request_ids: set[str] = field(default_factory=set)
     # Set from BOTH message.updated and hydration — text deltas race ahead of message.updated.
     summary_message_ids: set[str] = field(default_factory=set)
 
@@ -974,8 +1000,7 @@ class OpencodeServeClient:
     sourcing the per-pod password, resolving the pod IP, and choosing the
     LLM model live in the sandbox manager. This client just speaks HTTP.
 
-    See ``docs/craft/features/opencode-serve-client.md`` for the full
-    design.
+    See the module docstring for the event-stream rules.
     """
 
     def __init__(
@@ -1457,6 +1482,13 @@ class OpencodeServeClient:
             raise
         finally:
             self._event_bus.unsubscribe(sub)
+            if state.connect_app_request_ids:
+                try:
+                    cache = get_cache_backend(tenant_id=get_current_tenant_id())
+                    for request_id in state.connect_app_request_ids:
+                        connect_app.clear_pending(request_id, cache)
+                except Exception:
+                    logger.exception("connect_app cleanup failed for ended turn")
 
     def _wait_for_event_stream_ready(
         self,
@@ -1798,7 +1830,14 @@ class OpencodeServeClient:
 
         build_session_id = directory.rstrip("/").rsplit("/", 1)[-1]
         request_id = str(uuid4())
+        deadline = time.monotonic() + SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
+        cache: CacheBackend | None = None
         try:
+            request = connect_app.ConnectAppRequest(
+                request_id=request_id,
+                external_app_id=external_app_id,
+                reason=meta.get("reason") or None,
+            )
             cache = get_cache_backend(tenant_id=get_current_tenant_id())
             connect_app.stash_pending(
                 request_id,
@@ -1807,30 +1846,32 @@ class OpencodeServeClient:
                     opencode_session_id=state.session_id,
                     perm_id=perm_id,
                     directory=directory,
+                    request=request,
+                    expires_at=time.time() + SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS,
                 ),
                 cache,
             )
+            state.connect_app_request_ids.add(request_id)
             connect_app.announce_request(
                 build_session_id,
-                connect_app.ConnectAppRequest(
-                    request_id=request_id,
-                    external_app_id=external_app_id,
-                    reason=meta.get("reason") or None,
-                ),
+                request,
                 cache,
             )
         except Exception:
             logger.exception(
                 "connect_app announce failed for app=%s; denying", external_app_id
             )
+            if cache is not None:
+                try:
+                    connect_app.clear_pending(request_id, cache)
+                except Exception:
+                    logger.exception("connect_app cleanup failed for %s", request_id)
             self.answer_permission(
                 state.session_id, perm_id, allow=False, directory=directory
             )
             return
 
-        state.pending_connect_app_deadlines[perm_id] = (
-            time.monotonic() + SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
-        )
+        state.pending_connect_app_deadlines[perm_id] = deadline
 
     def _reject_expired_connect_app_permissions(
         self, state: _TurnState, now: float, *, directory: str

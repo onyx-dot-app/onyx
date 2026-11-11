@@ -45,6 +45,7 @@ def fetch_current_pair_state(db_session: Session, cc_pair_id: int) -> CurrentPai
         name=cc_pair.name,
         refresh_freq=connector.refresh_freq,
         prune_freq=connector.prune_freq,
+        check_freq=connector.check_freq,
     )
 
 

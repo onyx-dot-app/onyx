@@ -45,7 +45,7 @@ export interface UseDraftReturn<T> {
   // Distinguishes "not read yet" from "read, nothing there".
   loaded: boolean;
   hasDraft: boolean;
-  // Debounced; empty values remove the key.
+  // Debounced unless debounceMs is zero; empty values remove the key.
   save: (value: T) => void;
   // Removes immediately and cancels any pending write.
   clear: () => void;
@@ -96,7 +96,7 @@ export function useDraft<T>({
   const save = useCallback(
     (value: T) => {
       if (timerRef.current !== null) clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(() => {
+      const write = () => {
         timerRef.current = null;
         const storage = getStorage();
         if (!storage) return;
@@ -109,7 +109,9 @@ export function useDraft<T>({
         } catch {
           // ignore
         }
-      }, debounceMs);
+      };
+      if (debounceMs === 0) write();
+      else timerRef.current = setTimeout(write, debounceMs);
     },
     [key, debounceMs]
   );

@@ -1,15 +1,16 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useRef, useCallback, useEffect, useMemo, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { getSourceMetadata } from "@/lib/connectors/utils";
 import { useTranslations } from "next-intl";
-import { Section } from "@/layouts/general-layouts";
 import {
   Content,
   ContentAction,
   InputHorizontal,
   InputVertical,
   toast,
+  Section,
 } from "@opal/layouts";
 import { copyText, markdown } from "@opal/utils";
 import { Formik, Form } from "formik";
@@ -23,7 +24,6 @@ import {
   SvgTrash,
   SvgUnplug,
 } from "@opal/icons";
-import { getSourceMetadata } from "@/lib/sources";
 import {
   Card,
   InputTextArea,
@@ -35,12 +35,8 @@ import { InputSwitch } from "@opal/components";
 import { useUser } from "@/providers/UserProvider";
 import { useTheme } from "next-themes";
 import { MemoryItem, Permission, ThemePreference } from "@/lib/types";
-import {
-  DEFAULT_LOCALE,
-  LOCALE_ENDONYMS,
-  SUPPORTED_LOCALES,
-  type Locale,
-} from "@/i18n/config";
+import { type Locale } from "@/i18n/config";
+import { LanguageSelect } from "@/lib/app/components";
 import useUserPersonalization from "@/hooks/useUserPersonalization";
 import { SimpleModelSelector } from "@/lib/languageModels/components";
 import { structureValue } from "@/lib/languageModels/utils";
@@ -64,10 +60,10 @@ import useCCPairs from "@/hooks/useCCPairs";
 import { ValidSources } from "@/lib/connectors/types/source";
 import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
 import { ConfirmationModalLayout } from "@opal/layouts";
-import { BasicModalFooter, Modal } from "@opal/components";
+import { BasicModalFooter, Modal, useCreateModal } from "@opal/components";
 import { Code, CopyButton } from "@opal/components";
 import CharacterCount from "@/refresh-components/CharacterCount";
-import { InputPrompt } from "@/app/app/interfaces";
+import { InputPrompt } from "@/app/app/types";
 import usePromptShortcuts from "@/hooks/usePromptShortcuts";
 import ColorSwatch from "@/refresh-components/ColorSwatch";
 import { EmptyMessageCard } from "@opal/components";
@@ -440,7 +436,7 @@ function usePATCreation({
   onCreateSuccess,
 }: UsePATCreationOptions = {}) {
   const t = useTranslations("settings");
-  const [showCreateModal, setShowCreateModal] = useState(false);
+  const createModal = useCreateModal();
   const [isCreating, setIsCreating] = useState(false);
   const [newTokenName, setNewTokenName] = useState(defaultName);
   const [expirationDays, setExpirationDays] = useState<string>("30");
@@ -467,13 +463,14 @@ function usePATCreation({
 
   const openTokenModal = useCallback(() => {
     reset();
-    setShowCreateModal(true);
-  }, [reset]);
+    createModal.toggle(true);
+  }, [reset, createModal.toggle]);
 
+  // The next open resets the draft, so the modal keeps its content while it
+  // animates out.
   const closeTokenModal = useCallback(() => {
-    setShowCreateModal(false);
-    reset();
-  }, [reset]);
+    createModal.toggle(false);
+  }, [createModal.toggle]);
 
   const createPAT = useCallback(async () => {
     if (!newTokenName.trim()) {
@@ -501,7 +498,6 @@ function usePATCreation({
           token: data.token,
           name: newTokenName,
         });
-        toast.success(t("apiKeys.toasts.created"));
         await onCreateSuccess?.();
       } else {
         const errorData: ErrorResponseBody = await response.json();
@@ -523,7 +519,8 @@ function usePATCreation({
   ]);
 
   return {
-    showCreateModal,
+    showCreateModal: createModal.isOpen,
+    CreateModalProvider: createModal.Provider,
     isCreating,
     newTokenName,
     setNewTokenName,
@@ -552,7 +549,7 @@ function GeneralSettings() {
     updateUserLanguage,
   } = useUser();
   const { theme, setTheme, systemTheme } = useTheme();
-  const currentLanguage = user?.preferences?.language ?? DEFAULT_LOCALE;
+  const workspaceLanguage: Locale = useSettings().default_language;
 
   const tBg = useTranslations("common.chatBackgrounds");
   const bgLabels: Record<string, string> = {
@@ -581,17 +578,14 @@ function GeneralSettings() {
     [updateUserChatBackground, setTheme, updateUserThemePreference]
   );
   const { refreshChatSessions } = useChatSessions();
-  const router = useRouter();
-  const pathname = usePathname();
   const [isDeleting, setIsDeleting] = useState(false);
-  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const deleteAllChatsModal = useCreateModal();
 
   const {
     personalizationValues,
     updatePersonalizationField,
     handleSavePersonalization,
   } = useUserPersonalization(user, updateUserPersonalization, {
-    onSuccess: () => toast.success(t("profile.toasts.updated")),
     onError: () => toast.error(t("profile.toasts.updateFailed")),
   });
 
@@ -610,9 +604,8 @@ function GeneralSettings() {
     try {
       const response = await deleteAllChatSessions();
       if (response.ok) {
-        toast.success(t("dangerZone.deleteAllChats.toasts.deleted"));
         await refreshChatSessions();
-        setShowDeleteConfirmation(false);
+        deleteAllChatsModal.toggle(false);
       } else {
         throw new Error("Failed to delete all chat sessions");
       }
@@ -621,15 +614,15 @@ function GeneralSettings() {
     } finally {
       setIsDeleting(false);
     }
-  }, [pathname, router, refreshChatSessions, t]);
+  }, [refreshChatSessions, deleteAllChatsModal.toggle, t]);
 
   return (
     <>
-      {showDeleteConfirmation && (
+      <deleteAllChatsModal.Provider>
         <ConfirmationModalLayout
           icon={SvgTrash}
           title={t("dangerZone.deleteAllChats.confirm.title")}
-          onClose={() => setShowDeleteConfirmation(false)}
+          onClose={() => deleteAllChatsModal.toggle(false)}
           submit={
             <Button
               disabled={isDeleting}
@@ -653,14 +646,13 @@ function GeneralSettings() {
             </Text>
           </Section>
         </ConfirmationModalLayout>
-      )}
+      </deleteAllChatsModal.Provider>
 
       <Section gap={8}>
         <Section gap={3}>
           <Content
+            font="main-content-emphasis"
             title={t("profile.title")}
-            sizePreset="main-content"
-            variant="section"
             width="full"
           />
           <Card border="solid" rounding={4}>
@@ -670,6 +662,7 @@ function GeneralSettings() {
                 description={t("profile.fullName.description")}
                 center
                 withLabel
+                fillInput
                 responsive
               >
                 <InputTypeIn
@@ -697,6 +690,7 @@ function GeneralSettings() {
                 description={t("profile.workRole.description")}
                 center
                 withLabel
+                fillInput
                 responsive
               >
                 <InputTypeIn
@@ -725,9 +719,8 @@ function GeneralSettings() {
 
         <Section gap={3}>
           <Content
+            font="main-content-emphasis"
             title={t("appearance.title")}
-            sizePreset="main-content"
-            variant="section"
             width="full"
           />
           <Card border="solid" rounding={4}>
@@ -737,6 +730,7 @@ function GeneralSettings() {
                 description={t("appearance.colorMode.description")}
                 center
                 withLabel
+                fillInput
               >
                 <InputSingleSelect
                   value={theme ?? ""}
@@ -838,9 +832,8 @@ function GeneralSettings() {
 
         <Section gap={3}>
           <Content
+            font="main-content-emphasis"
             title={t("language.title")}
-            sizePreset="main-content"
-            variant="section"
             width="full"
           />
           <Card border="solid" rounding={4}>
@@ -850,22 +843,16 @@ function GeneralSettings() {
                 description={t("language.displayLanguage.description")}
                 center
                 withLabel
+                fillInput
               >
-                <InputSingleSelect
-                  value={currentLanguage}
-                  onValueChange={(value) => {
-                    // SAFETY: the options below only carry SUPPORTED_LOCALES
-                    // values, so the select can't emit anything else.
-                    updateUserLanguage(value as Locale).catch(() => {
+                <LanguageSelect
+                  value={user?.preferences?.language ?? null}
+                  globalDefault={workspaceLanguage}
+                  onChange={(language) => {
+                    updateUserLanguage(language).catch(() => {
                       toast.error(t("language.toasts.updateFailed"));
                     });
                   }}
-                  defaultOption={DEFAULT_LOCALE}
-                  placeholder={tInputSelect("placeholder.fallback")}
-                  options={SUPPORTED_LOCALES.map((locale) => ({
-                    value: locale,
-                    title: LOCALE_ENDONYMS[locale],
-                  }))}
                 />
               </InputHorizontal>
             </Section>
@@ -876,9 +863,8 @@ function GeneralSettings() {
 
         <Section gap={3}>
           <Content
+            font="main-content-emphasis"
             title={t("dangerZone.title")}
-            sizePreset="main-content"
-            variant="section"
             width="full"
           />
           <Card border="solid" rounding={4}>
@@ -891,9 +877,9 @@ function GeneralSettings() {
                 <Button
                   variant="danger"
                   prominence="secondary"
-                  onClick={() => setShowDeleteConfirmation(true)}
+                  onClick={() => deleteAllChatsModal.toggle(true)}
                   icon={SvgTrash}
-                  interaction={showDeleteConfirmation ? "hover" : "rest"}
+                  interaction={deleteAllChatsModal.isOpen ? "hover" : "rest"}
                 >
                   {t("dangerZone.deleteAllChats.button")}
                 </Button>
@@ -1020,7 +1006,6 @@ function PromptShortcuts() {
         if (response.ok) {
           setShortcuts((prev) => prev.filter((_, i) => i !== index));
           await refresh();
-          toast.success(t("promptShortcuts.toasts.deleted"));
         } else {
           throw new Error("Failed to delete shortcut");
         }
@@ -1055,7 +1040,6 @@ function PromptShortcuts() {
 
           if (response.ok) {
             await refresh();
-            toast.success(t("promptShortcuts.toasts.created"));
           } else {
             throw new Error("Failed to create shortcut");
           }
@@ -1074,7 +1058,6 @@ function PromptShortcuts() {
 
           if (response.ok) {
             await refresh();
-            toast.success(t("promptShortcuts.toasts.updated"));
           } else {
             throw new Error("Failed to update shortcut");
           }
@@ -1125,7 +1108,11 @@ function PromptShortcuts() {
                 className="w-full grid grid-cols-[1fr_min-content] gap-x-1 gap-y-1"
               >
                 <InputTypeIn
-                  prefixText="/"
+                  leftChildren={
+                    <Text font="main-ui-body" color="text-02">
+                      /
+                    </Text>
+                  }
                   placeholder={t("promptShortcuts.row.promptPlaceholder")}
                   value={shortcut.prompt}
                   onChange={(e) =>
@@ -1219,7 +1206,6 @@ function ChatPreferencesSettings() {
     updateUserPreferences,
     handleSavePersonalization,
   } = useUserPersonalization(user, updateUserPersonalization, {
-    onSuccess: () => toast.success(t("chats.toasts.saved")),
     onError: () => toast.error(t("chats.toasts.saveFailed")),
   });
   const [draftVoicePlaybackSpeed, setDraftVoicePlaybackSpeed] = useState(
@@ -1238,7 +1224,6 @@ function ChatPreferencesSettings() {
     }) => {
       try {
         await updateUserVoiceSettings(settings);
-        toast.success(t("chats.toasts.saved"));
       } catch {
         toast.error(t("chats.toasts.saveFailed"));
       }
@@ -1282,7 +1267,6 @@ function ChatPreferencesSettings() {
     async (value: number): Promise<void> => {
       try {
         await updateUserTemperatureDefault(value);
-        toast.success(t("chats.toasts.saved"));
       } catch {
         toast.error(t("chats.toasts.saveFailed"));
       }
@@ -1296,7 +1280,6 @@ function ChatPreferencesSettings() {
         await updateUserReasoningEffortDefault(
           ALL_REASONING_STOPS[effortStop] ?? null
         );
-        toast.success(t("chats.toasts.saved"));
       } catch {
         toast.error(t("chats.toasts.saveFailed"));
       }
@@ -1334,9 +1317,8 @@ function ChatPreferencesSettings() {
     <Section gap={8}>
       <Section gap={3}>
         <Content
+          font="main-content-emphasis"
           title={t("chats.title")}
-          sizePreset="main-content"
-          variant="section"
           width="full"
         />
         <Card border="solid" rounding={4}>
@@ -1347,6 +1329,7 @@ function ChatPreferencesSettings() {
                 appName: settings.appName,
               })}
               withLabel
+              fillInput
             >
               <SimpleModelSelector
                 nullable
@@ -1517,6 +1500,7 @@ function ChatPreferencesSettings() {
                   center
                   disabled={!searchUiEnabled}
                   withLabel
+                  fillInput
                 >
                   <InputSingleSelect
                     value={user?.preferences.default_app_mode ?? "CHAT"}
@@ -1566,9 +1550,8 @@ function ChatPreferencesSettings() {
           />
         </InputVertical>
         <Content
+          font="main-content-emphasis"
           title={t("memory.title")}
-          sizePreset="main-content"
-          variant="section"
           width="full"
         />
         <Card border="solid" rounding={4}>
@@ -1620,9 +1603,8 @@ function ChatPreferencesSettings() {
 
       <Section gap={3}>
         <Content
+          font="main-content-emphasis"
           title={t("promptShortcuts.title")}
-          sizePreset="main-content"
-          variant="section"
           width="full"
         />
         <Card border="solid" rounding={4}>
@@ -1647,9 +1629,8 @@ function ChatPreferencesSettings() {
 
       <Section gap={3}>
         <Content
+          font="main-content-emphasis"
           title={t("voice.title")}
-          sizePreset="main-content"
-          variant="section"
           width="full"
         />
         <Card border="solid" rounding={4}>
@@ -1811,10 +1792,9 @@ function GatewayAccessSection({
   return (
     <Section gap={3}>
       <ContentAction
+        font="main-content-emphasis"
         title={t("gateway.title")}
         description={t("gateway.description", { appName })}
-        sizePreset="main-content"
-        variant="section"
         width="full"
         center
         rightChildren={
@@ -1842,12 +1822,11 @@ function GatewayAccessSection({
 
           <Section gap={2} alignItems="start">
             <Content
+              font="main-ui-action"
               title={t("gateway.models.title")}
               description={t("gateway.models.description", {
                 count: availableModelCount,
               })}
-              sizePreset="main-ui"
-              variant="section"
             />
 
             <Section gap={2} alignItems="start">
@@ -1938,7 +1917,7 @@ function LLMGatewaySettings() {
 
   return (
     <>
-      {tokenCreation.showCreateModal && (
+      <tokenCreation.CreateModalProvider>
         <PATModal
           isCreating={tokenCreation.isCreating}
           newTokenName={tokenCreation.newTokenName}
@@ -1956,7 +1935,7 @@ function LLMGatewaySettings() {
           onCreate={tokenCreation.createPAT}
           createdToken={tokenCreation.newlyCreatedToken}
         />
-      )}
+      </tokenCreation.CreateModalProvider>
 
       <GatewayAccessSection
         canCreateToken={canCreateGatewayToken}
@@ -1968,9 +1947,10 @@ function LLMGatewaySettings() {
 
 function AccountsAccessSettings() {
   const t = useTranslations("settings");
+  const navigation = useNavigation();
   const { user, authTypeMetadata, permissions } = useUser();
   const isMultiTenant = useIsMultiTenant();
-  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const passwordModal = useCreateModal();
 
   // TODO(auth-refresh): only passwordMinLength is enforced here; the remaining
   // constraints (max length, uppercase, lowercase, digit, special char) will be
@@ -1996,6 +1976,7 @@ function AccountsAccessSettings() {
   });
 
   const [tokenToDelete, setTokenToDelete] = useState<PAT | null>(null);
+  const revokeModal = useCreateModal();
 
   const canCreateTokens = useCloudSubscription();
   const canCreatePAT = hasPermission(
@@ -2091,8 +2072,7 @@ function AccountsAccessSettings() {
             tokenCreation.closeTokenModal();
           }
           await mutate();
-          toast.success(t("apiKeys.toasts.deleted"));
-          setTokenToDelete(null);
+          revokeModal.toggle(false);
         } else {
           toast.error(t("apiKeys.toasts.deleteFailed"));
         }
@@ -2100,7 +2080,7 @@ function AccountsAccessSettings() {
         toast.error(t("apiKeys.toasts.deleteNetworkError"));
       }
     },
-    [mutate, tokenCreation, t]
+    [mutate, revokeModal.toggle, tokenCreation, t]
   );
 
   const handleChangePassword = useCallback(
@@ -2122,8 +2102,10 @@ function AccountsAccessSettings() {
         });
 
         if (response.ok) {
-          toast.success(t("accounts.passwordModal.toasts.updated"));
-          setShowPasswordModal(false);
+          passwordModal.toggle(false);
+          // The server revoked every token. Clear the cached list first so
+          // a failed refetch cannot show revoked tokens.
+          await mutate([], { revalidate: true });
         } else {
           const errorData: ErrorResponseBody = await response.json();
           toast.error(
@@ -2134,12 +2116,12 @@ function AccountsAccessSettings() {
         toast.error(t("accounts.passwordModal.toasts.networkError"));
       }
     },
-    [t]
+    [mutate, passwordModal.toggle, t]
   );
 
   return (
     <>
-      {tokenCreation.showCreateModal && (
+      <tokenCreation.CreateModalProvider>
         <PATModal
           isCreating={tokenCreation.isCreating}
           newTokenName={tokenCreation.newTokenName}
@@ -2157,36 +2139,38 @@ function AccountsAccessSettings() {
           onCreate={tokenCreation.createPAT}
           createdToken={tokenCreation.newlyCreatedToken}
         />
-      )}
+      </tokenCreation.CreateModalProvider>
 
-      {tokenToDelete && (
-        <ConfirmationModalLayout
-          icon={SvgTrash}
-          title={t("apiKeys.revokeModal.title")}
-          onClose={() => setTokenToDelete(null)}
-          submit={
-            <Button
-              variant="danger"
-              onClick={() => deletePAT(tokenToDelete.id)}
-            >
-              {t("apiKeys.revokeModal.submit")}
-            </Button>
-          }
-        >
-          <Section gap={2} alignItems="start">
-            <Text color="text-05">
-              {t("apiKeys.revokeModal.description", {
-                name: tokenToDelete.name,
-                tokenDisplay: tokenToDelete.token_display,
-                appName,
-              })}
-            </Text>
-            <Text color="text-05">{t("apiKeys.revokeModal.question")}</Text>
-          </Section>
-        </ConfirmationModalLayout>
-      )}
+      <revokeModal.Provider>
+        {tokenToDelete && (
+          <ConfirmationModalLayout
+            icon={SvgTrash}
+            title={t("apiKeys.revokeModal.title")}
+            onClose={() => revokeModal.toggle(false)}
+            submit={
+              <Button
+                variant="danger"
+                onClick={() => deletePAT(tokenToDelete.id)}
+              >
+                {t("apiKeys.revokeModal.submit")}
+              </Button>
+            }
+          >
+            <Section gap={2} alignItems="start">
+              <Text color="text-05">
+                {t("apiKeys.revokeModal.description", {
+                  name: tokenToDelete.name,
+                  tokenDisplay: tokenToDelete.token_display,
+                  appName,
+                })}
+              </Text>
+              <Text color="text-05">{t("apiKeys.revokeModal.question")}</Text>
+            </Section>
+          </ConfirmationModalLayout>
+        )}
+      </revokeModal.Provider>
 
-      {showPasswordModal && (
+      <passwordModal.Provider>
         <Formik
           initialValues={{
             currentPassword: "",
@@ -2213,6 +2197,7 @@ function AccountsAccessSettings() {
               <ConfirmationModalLayout
                 icon={SvgLock}
                 title={t("accounts.passwordModal.title")}
+                description={t("accounts.passwordModal.description")}
                 submit={
                   <Button
                     disabled={isSubmitting || !dirty || !isValid}
@@ -2231,7 +2216,7 @@ function AccountsAccessSettings() {
                   </Button>
                 }
                 onClose={() => {
-                  setShowPasswordModal(false);
+                  passwordModal.toggle(false);
                 }}
               >
                 <Section gap={4}>
@@ -2286,14 +2271,13 @@ function AccountsAccessSettings() {
             </Form>
           )}
         </Formik>
-      )}
+      </passwordModal.Provider>
 
       <Section gap={8}>
         <Section gap={3}>
           <Content
+            font="main-content-emphasis"
             title={t("accounts.title")}
-            sizePreset="main-content"
-            variant="section"
             width="full"
           />
           <Card border="solid" rounding={4}>
@@ -2317,8 +2301,8 @@ function AccountsAccessSettings() {
                   <Button
                     prominence="secondary"
                     icon={SvgLock}
-                    onClick={() => setShowPasswordModal(true)}
-                    interaction={showPasswordModal ? "hover" : "rest"}
+                    onClick={() => passwordModal.toggle(true)}
+                    interaction={passwordModal.isOpen ? "hover" : "rest"}
                   >
                     {t("accounts.password.changeButton")}
                   </Button>
@@ -2331,9 +2315,8 @@ function AccountsAccessSettings() {
         {showTokensSection && (
           <Section gap={3}>
             <Content
+              font="main-content-emphasis"
               title={t("apiKeys.section.title")}
-              sizePreset="main-content"
-              variant="section"
               width="full"
             />
             {canCreateTokens ? (
@@ -2358,7 +2341,7 @@ function AccountsAccessSettings() {
                           placeholder={t("apiKeys.list.searchPlaceholder")}
                           value={query}
                           onChange={(e) => setQuery(e.target.value)}
-                          searchIcon
+                          icon="search"
                           variant="internal"
                         />
                       )}
@@ -2447,7 +2430,10 @@ function AccountsAccessSettings() {
                             rightChildren={
                               <Button
                                 icon={SvgTrash}
-                                onClick={() => setTokenToDelete(pat)}
+                                onClick={() => {
+                                  setTokenToDelete(pat);
+                                  revokeModal.toggle(true);
+                                }}
                                 prominence="tertiary"
                                 size="sm"
                                 aria-label={t(
@@ -2470,7 +2456,10 @@ function AccountsAccessSettings() {
                     <Text font="secondary-body" color="text-03">
                       {t("apiKeys.upsell.description")}
                     </Text>
-                    <Button prominence="secondary" href="/admin/billing">
+                    <Button
+                      prominence="secondary"
+                      {...navigation.linkTo("/admin/billing")}
+                    >
                       {t("apiKeys.upsell.upgradeButton")}
                     </Button>
                   </Section>
@@ -2498,6 +2487,7 @@ function IndexedConnectorCard({ source, isActive }: IndexedConnectorCardProps) {
     <Card border="solid" rounding={4}>
       <Section alignItems="start" height="fit">
         <Content
+          font="main-content-emphasis"
           icon={sourceMetadata.icon}
           title={sourceMetadata.displayName}
           description={
@@ -2505,8 +2495,6 @@ function IndexedConnectorCard({ source, isActive }: IndexedConnectorCardProps) {
               ? t("connectors.status.connected")
               : t("connectors.status.paused")
           }
-          sizePreset="main-content"
-          variant="section"
         />
       </Section>
     </Card>
@@ -2525,8 +2513,7 @@ function FederatedConnectorCard({
   const t = useTranslations("settings");
   const { appName } = useSettings();
   const [isDisconnecting, setIsDisconnecting] = useState(false);
-  const [showDisconnectConfirmation, setShowDisconnectConfirmation] =
-    useState(false);
+  const disconnectModal = useCreateModal();
   const sourceMetadata = getSourceMetadata(connector.source as ValidSources);
 
   const handleDisconnect = useCallback(async () => {
@@ -2538,8 +2525,7 @@ function FederatedConnectorCard({
       );
 
       if (response.ok) {
-        toast.success(t("connectors.toasts.disconnected"));
-        setShowDisconnectConfirmation(false);
+        disconnectModal.toggle(false);
         onDisconnectSuccess();
       } else {
         throw new Error("Failed to disconnect");
@@ -2549,11 +2535,16 @@ function FederatedConnectorCard({
     } finally {
       setIsDisconnecting(false);
     }
-  }, [connector.federated_connector_id, onDisconnectSuccess, t]);
+  }, [
+    connector.federated_connector_id,
+    disconnectModal.toggle,
+    onDisconnectSuccess,
+    t,
+  ]);
 
   return (
     <>
-      {showDisconnectConfirmation && (
+      <disconnectModal.Provider>
         <ConfirmationModalLayout
           icon={SvgUnplug}
           title={markdown(
@@ -2561,7 +2552,7 @@ function FederatedConnectorCard({
               name: sourceMetadata.displayName,
             })
           )}
-          onClose={() => setShowDisconnectConfirmation(false)}
+          onClose={() => disconnectModal.toggle(false)}
           submit={
             <Button
               disabled={isDisconnecting}
@@ -2588,11 +2579,12 @@ function FederatedConnectorCard({
             </Text>
           </Section>
         </ConfirmationModalLayout>
-      )}
+      </disconnectModal.Provider>
 
       <Card border="solid" padding={2} rounding={4}>
         <Section alignItems="start" height="fit">
           <ContentAction
+            font="main-content-emphasis"
             icon={sourceMetadata.icon}
             title={sourceMetadata.displayName}
             description={
@@ -2600,8 +2592,6 @@ function FederatedConnectorCard({
                 ? t("connectors.status.connected")
                 : t("connectors.status.notConnected")
             }
-            sizePreset="main-content"
-            variant="section"
             padding={1}
             rightChildren={
               connector.has_oauth_token ? (
@@ -2610,7 +2600,7 @@ function FederatedConnectorCard({
                   icon={SvgUnplug}
                   prominence="tertiary"
                   size="sm"
-                  onClick={() => setShowDisconnectConfirmation(true)}
+                  onClick={() => disconnectModal.toggle(true)}
                 />
               ) : connector.authorize_url ? (
                 <Button
@@ -2667,9 +2657,8 @@ function ConnectorsSettings() {
     <Section gap={8}>
       <Section gap={3} justifyContent="start">
         <Content
+          font="main-content-emphasis"
           title={t("connectors.title")}
-          sizePreset="main-content"
-          variant="section"
           width="full"
         />
         {hasConnectors ? (

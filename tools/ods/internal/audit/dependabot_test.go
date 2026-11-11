@@ -1,6 +1,9 @@
 package audit
 
 import (
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -157,4 +160,70 @@ func TestAuditDependabot_failures(t *testing.T) {
 			t.Fatalf("expected a gh failure, got %v", err)
 		}
 	})
+}
+
+func TestDropMissingManifests(t *testing.T) {
+	root := t.TempDir()
+	for _, rel := range []string{"uv.lock", "web/bun.lock"} {
+		path := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A directory is not a manifest.
+	if err := os.MkdirAll(filepath.Join(root, "loadtest"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		name     string
+		manifest string
+		keep     bool
+	}{
+		{name: "root lockfile exists", manifest: "uv.lock", keep: true},
+		{name: "nested lockfile exists", manifest: "web/bun.lock", keep: true},
+		{name: "lockfile of a removed project", manifest: "loadtest/uv.lock", keep: false},
+		{name: "path is a directory", manifest: "loadtest", keep: false},
+		{name: "alert with no manifest", manifest: "", keep: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := dropMissingManifests([]Finding{{ID: "GHSA-x", Manifest: tc.manifest}}, root)
+			if kept := len(got) == 1; kept != tc.keep {
+				t.Errorf("kept = %v, want %v", kept, tc.keep)
+			}
+		})
+	}
+}
+
+func TestAuditDependabot_dropsAlertsForMissingManifests(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "uv.lock"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("git", "init", "-q", root)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v: %s", err, out)
+	}
+	t.Chdir(root)
+
+	const alerts = `[
+	  {"state": "open", "dependency": {"package": {"ecosystem": "pip", "name": "pillow"}, "manifest_path": "/uv.lock"},
+	   "security_advisory": {"ghsa_id": "GHSA-live", "severity": "critical"}, "security_vulnerability": {"severity": "critical"}},
+	  {"state": "open", "dependency": {"package": {"ecosystem": "pip", "name": "certifi"}, "manifest_path": "/loadtest/uv.lock"},
+	   "security_advisory": {"ghsa_id": "GHSA-stale", "severity": "critical"}, "security_vulnerability": {"severity": "critical"}}
+	]`
+	bin := fakeBinDir(t)
+	writeFakeCommand(t, bin, "gh", "cat <<'EOF'\n"+alerts+"\nEOF")
+
+	findings, err := auditDependabot()
+	if err != nil {
+		t.Fatalf("auditDependabot: %v", err)
+	}
+	if len(findings) != 1 || findings[0].ID != "GHSA-live" {
+		t.Errorf("want only the alert whose manifest exists, got %+v", findings)
+	}
 }

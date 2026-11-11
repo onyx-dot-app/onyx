@@ -112,7 +112,7 @@ async function handleRequest(request: NextRequest, path: string[]) {
       body: request.body,
       signal: request.signal,
       redirect: "manual",
-      // @ts-ignore
+      // @ts-expect-error -- RequestInit lacks `duplex`; Node fetch needs it to stream the request body.
       duplex: "half",
     });
 

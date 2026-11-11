@@ -2,7 +2,7 @@ from onyx.configs.app_configs import (
     EXT_APP_GOOGLE_CALENDAR_CLIENT_ID,
     EXT_APP_GOOGLE_CALENDAR_CLIENT_SECRET,
 )
-from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.db.enums import ActionPolicy, ExternalAppType
 from onyx.external_apps.providers.actions import (
     EndpointSpec,
     ExternalAppAction,
@@ -37,7 +37,7 @@ _ENDPOINTS: list[EndpointSpec] = [
         matches=(
             RestRoute(method="GET", path="/calendar/v3/users/{userId}/calendarList"),
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=GoogleCalendarAction.EVENTS_READ,
@@ -47,14 +47,14 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(method="GET", path=_EVENTS_COLLECTION),
             RestRoute(method="GET", path=_EVENT_ITEM),
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=GoogleCalendarAction.FREEBUSY_READ,
         normalised_name="Query free/busy",
         description="Query busy intervals across calendars.",
         matches=(RestRoute(method="POST", path="/calendar/v3/freeBusy"),),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=GoogleCalendarAction.EVENTS_CREATE,

@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from onyx.tools.fake_tools import coding_agent
+from onyx.coding_agent import agent as coding_agent
 
 
 def test_coding_agent_downloads_and_extracts_repo_with_existing_policy() -> None:
@@ -22,7 +22,7 @@ def test_coding_agent_downloads_and_extracts_repo_with_existing_policy() -> None
             return_value=b"repository archive",
         ) as download_archive,
         patch.object(coding_agent, "CodeInterpreterClient", return_value=client),
-        coding_agent._setup_session(
+        coding_agent.coding_sandbox_session(
             repo="git@github.com:onyx-dot-app/onyx.git",
             github_token="secret",
         ) as session_id,

@@ -7,7 +7,8 @@ import {
 } from "@/lib/settings/types";
 import { CUSTOM_ANALYTICS_ENABLED, HOST_URL } from "@/lib/constants";
 import { fetchSS } from "@/lib/utilsSS";
-import { getWebVersion } from "@/lib/version";
+import { DEFAULT_LOCALE } from "@/i18n/config";
+import { getWebVersion } from "@/lib/app/utils";
 
 export async function fetchStandardSettingsSS(): Promise<Settings | null> {
   try {
@@ -71,6 +72,7 @@ export async function fetchSettingsSS(): Promise<CombinedSettings | null> {
           temperature_override_enabled: true,
           reasoning_override_enabled: true,
           query_history_type: QueryHistoryType.NORMAL,
+          default_language: DEFAULT_LOCALE,
         };
       } else {
         throw new Error(

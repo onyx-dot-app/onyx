@@ -1,0 +1,151 @@
+{{/*
+Opt-in check that sandbox nodes can run Craft Firecracker. Render tests in
+backend/tests/external_dependency_unit/craft_helm/test_craft_fc_preflight.py.
+
+- A DaemonSet, not a Job: a Job cannot place one pod on each node, and a
+  DaemonSet also checks nodes that join later. The script runs once at pod
+  start, then idles so the log stays readable.
+- No readiness probe tied to the result. A failing node must not make
+  `helm upgrade --wait` hang. Read the RESULT line in the pod log.
+- Scheduling follows sandboxPod.nodeSelector and tolerations, but NOT
+  sandboxPod.runtimeClassName: gVisor or Kata hides the host /dev/kvm.
+- Lives in the release namespace, not the sandbox namespace, so the
+  privileged pod is not next to user sandboxes and a Pod Security label on the
+  sandbox namespace does not block it.
+- Privilege: runc's device cgroup denies /dev/kvm to a non-privileged
+  container, even with a hostPath mount. So the pod is privileged unless
+  kvmDeviceResource names a device plugin resource, which adds /dev/kvm to the
+  device cgroup. Both modes run as uid 0 (/dev/kvm is root:kvm 0660) with all
+  capabilities dropped where the mode allows it.
+- The only host mount is scratchHostPath. CPU, kernel, sysctl and cgroup data
+  are visible from inside the container.
+*/}}
+{{- $preflight := (.Values.craft | default dict).firecrackerPreflight | default dict }}
+{{- if $preflight.enabled }}
+{{- $sandboxPod := .Values.sandboxPod | default dict }}
+{{- $name := include "onyx.resourceName" (list . "craft-fc-preflight") }}
+{{- $image := $preflight.image | default (include "onyx.sandboxImage" .) }}
+{{- $scratchHostPath := $preflight.scratchHostPath | default "/var/lib/onyx-craft-fc-preflight" }}
+{{- $kvmResource := $preflight.kvmDeviceResource }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: craft-fc-preflight
+data:
+  craft-fc-preflight.sh: |
+    {{- .Files.Get "scripts/craft-fc-preflight.sh" | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: craft-fc-preflight
+spec:
+  selector:
+    matchLabels:
+      {{- include "onyx.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: craft-fc-preflight
+  template:
+    metadata:
+      labels:
+        {{- include "onyx.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: craft-fc-preflight
+      annotations:
+        checksum/script: {{ .Files.Get "scripts/craft-fc-preflight.sh" | sha256sum }}
+    spec:
+      nodeSelector:
+        {{- (index $sandboxPod "nodeSelector" | default (dict "onyx.app/workload" "sandbox")) | toYaml | nindent 8 }}
+      tolerations:
+        {{- (index $sandboxPod "tolerations" | default (list (dict "key" "workload" "operator" "Equal" "value" "sandbox" "effect" "NoSchedule"))) | toYaml | nindent 8 }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 0
+      containers:
+        - name: preflight
+          image: {{ $image }}
+          imagePullPolicy: {{ include "onyx.sandboxImagePullPolicy" . }}
+          command:
+            - sh
+            - -c
+            - sh /preflight/craft-fc-preflight.sh; while :; do sleep 86400; done
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: SCRATCH_DIR
+              value: /scratch
+            - name: SCRATCH_HOST_PATH
+              value: {{ $scratchHostPath | quote }}
+            - name: MIN_FREE_DISK_GIB
+              value: {{ $preflight.minFreeDiskGi | default 50 | quote }}
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+              ephemeral-storage: 16Mi
+              {{- with $kvmResource }}
+              {{ . }}: "1"
+              {{- end }}
+            limits:
+              cpu: 100m
+              memory: 64Mi
+              ephemeral-storage: 16Mi
+              {{- with $kvmResource }}
+              {{ . }}: "1"
+              {{- end }}
+          securityContext:
+            runAsUser: 0
+            runAsNonRoot: false
+            readOnlyRootFilesystem: true
+            {{- if $kvmResource }}
+            privileged: false
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+            {{- else }}
+            # Required to open /dev/kvm without a device plugin. See the
+            # header comment.
+            privileged: true
+            {{- end }}
+          volumeMounts:
+            - name: script
+              mountPath: /preflight
+              readOnly: true
+            - name: scratch
+              mountPath: /scratch
+      volumes:
+        - name: script
+          configMap:
+            name: {{ $name }}
+        - name: scratch
+          hostPath:
+            path: {{ $scratchHostPath }}
+            type: DirectoryOrCreate
+---
+{{- /* The pod needs no network. Listing a policyType with no rules is deny-all. */}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: craft-fc-preflight
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "onyx.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: craft-fc-preflight
+  policyTypes: [Ingress, Egress]
+{{- end }}

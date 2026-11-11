@@ -1,6 +1,6 @@
 "use client";
 
-import "@opal/components/inputs/shared.css";
+import { InputContainer } from "@opal/components/inputs/container";
 import React from "react";
 import type { InputVariants } from "@opal/types";
 import { Button } from "@opal/components";
@@ -168,7 +168,6 @@ function InputTime({
     // that recreate an equal value don't clobber in-progress typing. The
     // string form keeps distinct triples distinct (a second count would
     // collapse 01:00:00 and 00:60:00).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [valueKey]);
 
   function commit(next: TimeSegments) {
@@ -188,19 +187,14 @@ function InputTime({
   const handleSegmentKeyDown = makeSegmentKeyDownHandler(segments, commit);
 
   // Commit when focus leaves the whole field, not on intra-field tabbing.
-  function handleRootBlur(e: React.FocusEvent<HTMLDivElement>) {
-    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
-    commit(segments);
-  }
-
   const separator = <SegmentSeparator>:</SegmentSeparator>;
 
   return (
     <div className="opal-input-segmented-root">
-      <div
-        className="opal-input opal-input-segmented"
-        data-variant={variant}
-        onBlur={handleRootBlur}
+      <InputContainer
+        className="opal-input-segmented"
+        variant={variant}
+        onFieldBlur={() => commit(segments)}
       >
         <div
           className="opal-input-segmented-content"
@@ -216,7 +210,13 @@ function InputTime({
                 disabled={disabled}
                 ref={segmentRefs[part]}
                 id={part === "hours" ? id : undefined}
-                aria-label={strings[part]}
+                // With an id, the field's <label> names the hours segment; an
+                // aria-label would override that name.
+                aria-label={
+                  part === "hours" && id !== undefined
+                    ? undefined
+                    : strings[part]
+                }
                 placeholder={SEGMENT_PLACEHOLDERS[part]}
                 maxLength={2}
                 value={segments[part]}
@@ -229,7 +229,10 @@ function InputTime({
                 )}
                 onKeyDown={handleSegmentKeyDown(
                   part,
-                  i > 0 ? segmentRefs[segmentParts[i - 1]!] : null
+                  i > 0 ? segmentRefs[segmentParts[i - 1]!] : null,
+                  i < segmentParts.length - 1
+                    ? segmentRefs[segmentParts[i + 1]!]
+                    : null
                 )}
               />
             </React.Fragment>
@@ -237,17 +240,25 @@ function InputTime({
         </div>
 
         {clearable && value && !disabled && (
-          <div className="opal-input-segmented-actions">
+          <div
+            role="presentation"
+            className="opal-input-segmented-actions"
+            // Escape on an action returns focus to the field's first segment.
+            onKeyDown={(event) => {
+              if (event.key === "Escape") hoursRef.current?.focus();
+            }}
+          >
             <Button
               icon={SvgX}
-              prominence="internal"
+              prominence="tertiary"
               size="sm"
               tooltip={strings.clear}
+              aria-label={strings.clear}
               onClick={() => onChange(null)}
             />
           </div>
         )}
-      </div>
+      </InputContainer>
     </div>
   );
 }

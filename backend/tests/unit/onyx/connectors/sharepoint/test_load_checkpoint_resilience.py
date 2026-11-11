@@ -12,6 +12,7 @@ from onyx.connectors.microsoft_utils.drive_delta import (
     DriveDeltaPage,
 )
 from onyx.connectors.microsoft_utils.drive_items import DriveFolderReference
+from onyx.connectors.microsoft_utils.graph_errors import MicrosoftGraphError
 from onyx.connectors.models import (
     ConnectorFailure,
     Document,
@@ -267,6 +268,37 @@ def test_drive_init_failure_yields_the_next_site_node(
     assert [node.raw_node_id for node in site_nodes] == [next_site_url]
     assert final_checkpoint.current_site_descriptor is not None
     assert final_checkpoint.current_site_descriptor.url == next_site_url
+
+
+@pytest.mark.parametrize(
+    ("status", "code"),
+    [(429, "activityLimitReached"), (503, "serviceNotAvailable")],
+)
+def test_drive_init_throttling_fails_the_attempt(
+    monkeypatch: pytest.MonkeyPatch, status: int, code: str
+) -> None:
+    """Graph still throttles after the gateway's retries: the attempt fails
+    and resumes from its checkpoint, instead of skipping the site."""
+    connector = _setup_connector()
+
+    def throttled_get_drives(_site_url: str) -> list[SiteDrive]:
+        raise MicrosoftGraphError(status, code, "throttled")
+
+    monkeypatch.setattr(connector, "_get_drives_for_site", throttled_get_drives)
+    checkpoint = SharepointConnectorCheckpoint(has_more=True)
+    checkpoint.cached_site_descriptors = deque()
+    checkpoint.current_site_descriptor = SiteDescriptor(
+        url=SITE_URL, drive_name=None, folder_path=None
+    )
+
+    with pytest.raises(MicrosoftGraphError) as raised:
+        _consume_generator(
+            connector._load_from_checkpoint(
+                _EPOCH_START, _END_TS, checkpoint, include_permissions=False
+            )
+        )
+
+    assert raised.value.status == status
 
 
 # ---------------------------------------------------------------------------

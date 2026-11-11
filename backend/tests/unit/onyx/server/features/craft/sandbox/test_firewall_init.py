@@ -102,6 +102,7 @@ def firewall_commands(tmp_path: Path) -> dict[str, str]:
         "DNS_V4": "",
         "DNS_V6": "",
         "MISSING_RULE": "",
+        "SANDBOX_NET_ADMIN_LOCKDOWN": "true",
     }
 
 
@@ -175,6 +176,50 @@ def test_dns_failure_stops_before_firewall_changes(
     assert run.process.returncode != 0
     assert "could not resolve proxy host" in run.process.stderr
     assert not any(call[0] in ("iptables", "ip6tables") for call in run.calls)
+
+
+def test_disabled_firewall_preserves_ca_bootstrap_without_network_tools(
+    firewall_commands: dict[str, str], tmp_path: Path
+) -> None:
+    firewall_commands["SANDBOX_NET_ADMIN_LOCKDOWN"] = "false"
+    for name in ("iptables", "ip6tables", "getent"):
+        (tmp_path / name).unlink()
+    run = _run(firewall_commands)
+    assert run.process.returncode == 0, run.process.stderr
+    assert any(call[0] == "update-ca-certificates" for call in run.calls)
+    assert any(call[0] == "install" for call in run.calls)
+    assert not any(call[0] in ("iptables", "ip6tables", "getent") for call in run.calls)
+    assert "cluster must enforce proxy-only egress" in run.process.stderr
+
+
+@pytest.mark.parametrize("value", ["", "False", "0", "invalid"])
+def test_invalid_firewall_switch_fails_before_bootstrap(
+    firewall_commands: dict[str, str], value: str
+) -> None:
+    firewall_commands["SANDBOX_NET_ADMIN_LOCKDOWN"] = value
+    run = _run(firewall_commands)
+    assert run.process.returncode != 0
+    assert "SANDBOX_NET_ADMIN_LOCKDOWN must be true or false" in run.process.stderr
+    assert run.calls == []
+
+
+def test_docker_cannot_disable_firewall(firewall_commands: dict[str, str]) -> None:
+    firewall_commands["SANDBOX_NET_ADMIN_LOCKDOWN"] = "false"
+    firewall_commands["SANDBOX_PROXY_BOOTSTRAP_MODE"] = "entrypoint"
+    run = _run(firewall_commands)
+    assert run.process.returncode != 0
+    assert "requires Kubernetes network enforcement" in run.process.stderr
+
+
+def test_absent_firewall_switch_keeps_lockdown(
+    firewall_commands: dict[str, str],
+) -> None:
+    firewall_commands.pop("SANDBOX_NET_ADMIN_LOCKDOWN")
+    firewall_commands["SANDBOX_PROXY_HOST"] = "10.96.0.2"
+    run = _run(firewall_commands)
+    assert run.process.returncode == 0, run.process.stderr
+    for family in ("iptables", "ip6tables"):
+        assert [family, "-P", "OUTPUT", "DROP"] in run.calls
 
 
 @pytest.mark.parametrize(

@@ -54,7 +54,7 @@ class BuiltLogZip(BaseModel):
 def get_default_log_directories() -> list[Path]:
     """Returns the directories this process writes file logs to.
 
-    Mirrors the path selection in ``onyx.utils.logger._add_file_handlers``:
+    Mirrors the path selection in ``onyx.utils.logger.add_file_handlers``:
     containers log under ``/var/log/onyx``, dev processes under ``./log``.
     """
     if is_running_in_container():

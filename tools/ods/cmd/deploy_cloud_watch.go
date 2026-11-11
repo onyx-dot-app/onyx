@@ -10,10 +10,10 @@ import (
 )
 
 const (
-	// Mirrors the CLOUD_DEPLOYMENT_REPO repo variable that deployment.yml's
-	// dispatch-cloud-deployment job sends the new-cloud-image dispatch to.
-	cloudDeploymentRepo = "onyx-dot-app/onyx-infra"
-	// The workflow in cloudDeploymentRepo that opens the version bump PR.
+	// Overrides the internal infra repo (owner/name) that the bump PR is
+	// looked up in; see resolveInternalRepo.
+	cloudDeploymentRepoEnv = "ODS_CLOUD_DEPLOYMENT_REPO"
+	// The workflow in the internal infra repo that opens the version bump PR.
 	bumpWorkflowFile = "bump-cloud-version.yml"
 	// The bump workflow opens its PR from the branch bump-version/<tag>.
 	bumpPRBranchPrefix = "bump-version/"
@@ -62,7 +62,12 @@ func watchCloudRelease(polling runPolling, tag string) error {
 			return buildErr
 		}
 		log.Info("The bump dispatch succeeded; waiting for the bump PR...")
-		pr, err := waitForBumpPR(polling, tag)
+		deployRepo, err := resolveInternalRepo(cloudDeploymentRepoEnv)
+		if err != nil {
+			log.Warnf("Could not resolve the internal infra repo: %v", err)
+			return buildErr
+		}
+		pr, err := waitForBumpPR(polling, deployRepo, tag)
 		if err != nil {
 			log.Warnf("Bump PR lookup failed: %v", err)
 			return buildErr
@@ -73,9 +78,14 @@ func watchCloudRelease(polling runPolling, tag string) error {
 	}
 
 	log.Info("Build completed; waiting for the bump PR...")
-	pr, err := waitForBumpPR(polling, tag)
+	// Resolved this late so a lookup failure never hides the build progress.
+	deployRepo, err := resolveInternalRepo(cloudDeploymentRepoEnv)
 	if err != nil {
-		return fmt.Errorf("%w; check https://github.com/%s/actions/workflows/%s", err, cloudDeploymentRepo, bumpWorkflowFile)
+		return err
+	}
+	pr, err := waitForBumpPR(polling, deployRepo, tag)
+	if err != nil {
+		return fmt.Errorf("%w; check https://github.com/%s/actions/workflows/%s", err, deployRepo, bumpWorkflowFile)
 	}
 	announceBumpPR(pr)
 	return nil
@@ -97,10 +107,10 @@ func announceBumpPR(pr *pullRequest) {
 
 // waitForBumpPR polls until the bump PR for tag exists or the discovery timeout
 // fires.
-func waitForBumpPR(polling runPolling, tag string) (*pullRequest, error) {
+func waitForBumpPR(polling runPolling, deployRepo, tag string) (*pullRequest, error) {
 	deadline := time.Now().Add(polling.bumpPRTimeout)
 	for {
-		pr, err := findBumpPR(tag)
+		pr, err := findBumpPR(deployRepo, tag)
 		if err != nil {
 			return nil, err
 		}
@@ -154,13 +164,13 @@ type pullRequest struct {
 	URL    string `json:"url"`
 }
 
-// findBumpPR returns the bump PR for tag, or nil when none exists yet. Bump
-// branches are bot-owned with one branch per tag, so the head-branch filter
-// identifies the PR exactly.
-func findBumpPR(tag string) (*pullRequest, error) {
+// findBumpPR returns the bump PR for tag in deployRepo, or nil when none exists
+// yet. Bump branches are bot-owned with one branch per tag, so the head-branch
+// filter identifies the PR exactly.
+func findBumpPR(deployRepo, tag string) (*pullRequest, error) {
 	cmd := exec.Command(
 		"gh", "pr", "list",
-		"-R", cloudDeploymentRepo,
+		"-R", deployRepo,
 		"--head", bumpPRBranchPrefix+tag,
 		"--state", "all",
 		"--json", "number,state,url",

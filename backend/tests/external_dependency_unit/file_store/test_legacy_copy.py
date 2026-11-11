@@ -293,8 +293,9 @@ def test_copy_keeps_a_file_saved_again_after_a_delete_during_the_copy(
 
     def save_again_then_delete(**kwargs: Any) -> Any:
         # The app saves the same bytes again between the copy's record check
-        # and its cleanup delete.
-        if kwargs["Key"] == key:
+        # and its cleanup delete. Only the copy's cleanup passes IfMatch; the
+        # app's delete_file holds the record lock, so a save there would wait.
+        if kwargs["Key"] == key and "IfMatch" in kwargs:
             save(new_release, b"same bytes", file_id)
         return real_delete(**kwargs)
 

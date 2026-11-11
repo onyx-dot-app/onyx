@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.db.enums import ActionPolicy, ExternalAppType
 from onyx.external_apps.matching.request import MatchContext, ProxiedRequest
 from onyx.external_apps.matching.rules import rule_matches
 from onyx.external_apps.providers.hubspot import HubspotAction
@@ -70,19 +70,17 @@ def test_uncatalogued_route_matches_nothing() -> None:
 @pytest.mark.parametrize(
     "action, expected_policy",
     [
-        (HubspotAction.OWNERS_READ, EndpointPolicy.ALWAYS),
-        (HubspotAction.CONTACTS_READ, EndpointPolicy.ALWAYS),
-        (HubspotAction.COMPANIES_READ, EndpointPolicy.ALWAYS),
-        (HubspotAction.DEALS_READ, EndpointPolicy.ALWAYS),
-        (HubspotAction.CRM_SEARCH, EndpointPolicy.ALWAYS),
+        (HubspotAction.OWNERS_READ, ActionPolicy.ALWAYS),
+        (HubspotAction.CONTACTS_READ, ActionPolicy.ALWAYS),
+        (HubspotAction.COMPANIES_READ, ActionPolicy.ALWAYS),
+        (HubspotAction.DEALS_READ, ActionPolicy.ALWAYS),
+        (HubspotAction.CRM_SEARCH, ActionPolicy.ALWAYS),
         # Writes require approval out of the box.
-        (HubspotAction.CONTACTS_WRITE, EndpointPolicy.ASK),
-        (HubspotAction.COMPANIES_WRITE, EndpointPolicy.ASK),
-        (HubspotAction.DEALS_WRITE, EndpointPolicy.ASK),
+        (HubspotAction.CONTACTS_WRITE, ActionPolicy.ASK),
+        (HubspotAction.COMPANIES_WRITE, ActionPolicy.ASK),
+        (HubspotAction.DEALS_WRITE, ActionPolicy.ASK),
     ],
 )
-def test_default_policies(
-    action: HubspotAction, expected_policy: EndpointPolicy
-) -> None:
+def test_default_policies(action: HubspotAction, expected_policy: ActionPolicy) -> None:
     by_id = {endpoint.id: endpoint for endpoint in _CATALOG}
     assert by_id[action].default_policy == expected_policy

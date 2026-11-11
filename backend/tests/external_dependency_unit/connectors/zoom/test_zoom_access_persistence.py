@@ -23,6 +23,7 @@ from onyx.connectors.models import Document, IndexAttemptMetadata
 from onyx.connectors.zoom.client import ZoomClient
 from onyx.connectors.zoom.connector import ZoomConnector, ZoomConnectorCheckpoint
 from onyx.connectors.zoom.models import ZoomSessionOccurrence
+from onyx.db.enums import AccessType
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_pipeline import index_doc_batch_prepare
 from tests.external_dependency_unit.indexing_helpers import (
@@ -61,6 +62,8 @@ def cc_pair(
     tenant_context: None,  # noqa: ARG001
 ) -> Generator[ConnectorCredentialPair, None, None]:
     pair = make_cc_pair(db_session, source=DocumentSource.ZOOM)
+    pair.access_type = AccessType.SYNC
+    db_session.commit()
     try:
         yield pair
     finally:

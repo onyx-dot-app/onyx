@@ -1,3 +1,4 @@
+import threading
 import time
 from collections.abc import Callable
 from functools import wraps
@@ -25,7 +26,8 @@ class _RateLimitDecorator:
     Implementation inspired by the `ratelimit` library:
     https://github.com/tomasbasham/ratelimit.
 
-    NOTE: is not thread safe.
+    Thread safe: a lock guards the call history, and the wrapped call runs
+    outside the lock.
     """
 
     def __init__(
@@ -44,33 +46,36 @@ class _RateLimitDecorator:
 
         self.call_history: list[float] = []
         self.curr_calls = 0
+        self._lock = threading.Lock()
 
     def __call__(self, func: F) -> F:
         @wraps(func)
         def wrapped_func(*args: list, **kwargs: dict[str, Any]) -> Any:
-            # cleanup calls which are no longer relevant
-            self._cleanup()
-
-            # check if we've exceeded the rate limit
-            sleep_cnt = 0
-            while len(self.call_history) == self.max_calls:
-                sleep_time = self.sleep_time * (self.sleep_backoff**sleep_cnt)
-                logger.notice(
-                    "Rate limit exceeded for function %s. Waiting %s seconds before retrying.",
-                    func.__name__,  # ty: ignore[unresolved-attribute]
-                    sleep_time,
-                )
-                time.sleep(sleep_time)
-                sleep_cnt += 1
-                if self.max_num_sleep != 0 and sleep_cnt >= self.max_num_sleep:
-                    raise RateLimitTriedTooManyTimesError(
-                        f"Exceeded '{self.max_num_sleep}' retries for function '{func.__name__}'"  # ty: ignore[unresolved-attribute]
-                    )
-
+            # A waiting caller holds the lock, so the others queue behind it.
+            with self._lock:
+                # cleanup calls which are no longer relevant
                 self._cleanup()
 
-            # add the current call to the call history
-            self.call_history.append(time.monotonic())
+                # check if we've exceeded the rate limit
+                sleep_cnt = 0
+                while len(self.call_history) >= self.max_calls:
+                    sleep_time = self.sleep_time * (self.sleep_backoff**sleep_cnt)
+                    logger.notice(
+                        "Rate limit exceeded for function %s. Waiting %s seconds before retrying.",
+                        func.__name__,  # ty: ignore[unresolved-attribute]
+                        sleep_time,
+                    )
+                    time.sleep(sleep_time)
+                    sleep_cnt += 1
+                    if self.max_num_sleep != 0 and sleep_cnt >= self.max_num_sleep:
+                        raise RateLimitTriedTooManyTimesError(
+                            f"Exceeded '{self.max_num_sleep}' retries for function '{func.__name__}'"  # ty: ignore[unresolved-attribute]
+                        )
+
+                    self._cleanup()
+
+                # add the current call to the call history
+                self.call_history.append(time.monotonic())
             return func(*args, **kwargs)
 
         return cast(F, wrapped_func)

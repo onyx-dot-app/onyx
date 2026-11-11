@@ -2,145 +2,135 @@
 
 **Import:** `import { Content, type ContentProps } from "@opal/layouts";`
 
-A two-axis layout component for displaying icon + title + description rows. Routes to an internal layout based on the `sizePreset` and `variant` combination.
+An icon beside (or above) a title, with an optional description. One component: the title `font`
+sets every size, and `orientation` places the icon.
 
-## Two-Axis Architecture
+## Structure
 
-### `sizePreset` — controls sizing (icon, padding, gap, font)
+```
+root            0.25rem gap inline; no gap stacked or with a secondary-* / figure-* title
+├─ icon row     icon (+ moreIcon1, moreIcon2 when stacked)
+└─ text         no gap
+   ├─ title row title, suffix, aux icon, badge, edit pencil
+   └─ description
+```
 
-#### ContentXl presets (variant="heading")
+## Rules
 
-| Preset     | Icon          | Icon padding  | moreIcon1      | mI1 padding   | moreIcon2     | mI2 padding   | Title font        | Line-height    |
-| ---------- | ------------- | ------------- | -------------- | ------------- | ------------- | ------------- | ----------------- | -------------- |
-| `headline` | 2rem (32px)   | `p-0.5` (2px) | 1rem (16px)    | `p-0.5` (2px) | 2rem (32px)   | `p-0.5` (2px) | `font-heading-h2` | 2.25rem (36px) |
-| `section`  | 1.5rem (24px) | `p-0.5` (2px) | 0.75rem (12px) | `p-0.5` (2px) | 1.5rem (24px) | `p-0.5` (2px) | `font-heading-h3` | 1.75rem (28px) |
-
-#### ContentLg presets (variant="section")
-
-| Preset     | Icon           | Icon padding  | Gap           | Title font              | Line-height    |
-| ---------- | -------------- | ------------- | ------------- | ----------------------- | -------------- |
-| `headline` | 2rem (32px)    | `p-0.5` (2px) | 0.25rem (4px) | `font-heading-h2`       | 2.25rem (36px) |
-| `section`  | 1.25rem (20px) | `p-1` (4px)   | 0rem          | `font-heading-h3-muted` | 1.75rem (28px) |
-
-#### ContentMd presets
-
-| Preset         | Icon           | Icon padding  | Icon color | Gap            | Title font                   | Line-height    |
-| -------------- | -------------- | ------------- | ---------- | -------------- | ---------------------------- | -------------- |
-| `main-content` | 1rem (16px)    | `p-1` (4px)   | `text-04`  | 0.125rem (2px) | `font-main-content-emphasis` | 1.5rem (24px)  |
-| `main-ui`      | 1rem (16px)    | `p-0.5` (2px) | `text-03`  | 0.25rem (4px)  | `font-main-ui-action`        | 1.25rem (20px) |
-| `secondary`    | 0.75rem (12px) | `p-0.5` (2px) | `text-04`  | 0.125rem (2px) | `font-secondary-action`      | 1rem (16px)    |
-
-> Icon container height (icon + 2 x padding) always equals the title line-height.
-
-> In the inline layouts (`body` and `section` variants), the icon slot can hold a small control, such
-> as a checkbox left of the title; `heading` puts the icon above the title instead. Pass a component
-> with a stable identity (create it once per field, e.g. with `useMemo`), or React remounts the
-> control on every render and it loses focus. The icon sits on the title's first line.
-
-### `variant` — controls structure / layout
-
-| variant   | Description                                         |
-| --------- | --------------------------------------------------- |
-| `heading` | Icon on **top** (flex-col) — ContentXl              |
-| `section` | Icon **inline** (flex-row) — ContentLg or ContentMd |
-| `body`    | Body text layout — ContentSm                        |
-
-### Valid Combinations -> Internal Routing
-
-| sizePreset                               | variant   | Routes to                   |
-| ---------------------------------------- | --------- | --------------------------- |
-| `headline` / `section`                   | `heading` | **ContentXl** (icon on top) |
-| `headline` / `section`                   | `section` | **ContentLg** (icon inline) |
-| `main-content` / `main-ui` / `secondary` | `section` | **ContentMd**               |
-| `main-content` / `main-ui` / `secondary` | `body`    | **ContentSm**               |
-
-Invalid combinations (e.g. `sizePreset="headline" + variant="body"`) are excluded at the type level.
+- **The title font drives everything.** An icon box is a square one title line tall (`1lh` of the
+  title font), with 2px padding, so the glyph is the line height less 4px. A `secondary-*` title
+  (16px line) has a 12px icon; a `heading-headline` title (36px line) has a 32px icon.
+  A `figure-*` title is too small for that: its icon box has 1px padding.
+- **The icon gap** is 0.25rem, except with a `secondary-*` or `figure-*` title, where the icon sits
+  flush against the text. `ContentIndent`, `ContentAction`'s responsive description and
+  `ReverseContent` follow the same rule.
+- **The description** is always `secondary-body` in `text-03`, so a `figure-*` title (smaller than
+  `secondary`) takes none.
+- **`moreIcon1` / `moreIcon2`** sit in the stacked icon row, so they take a `heading-*` title font
+  with `orientation="stacked"` only.
+- **The extras beside the title** (`suffix`, `auxIcon`, `badge`) take a `main-ui-*`,
+  `main-content-*` or `secondary-*` title font only; the types reject them with a heading, mono or
+  figure font.
 
 ## Props
 
-| Prop            | Type                            | Default        | Description                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| --------------- | ------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `sizePreset`    | `SizePreset`                    | `"headline"`   | Size preset (see tables above)                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `variant`       | `ContentVariant`                | `"heading"`    | Layout variant (see table above)                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| `icon`          | `IconFunctionComponent`         | —              | Optional icon component                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `title`         | `string`                        | **(required)** | Main title text                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `description`   | `string`                        | —              | Optional description below the title                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `descriptionMaxLines` | `number` | — | Clamp the description to N lines. A clamped description that is cut shows in full in a tooltip on hover (`OverflowText`). Unset, it wraps without a limit. |
-| `editable`      | `boolean`                       | `false`        | Enable inline editing of the title                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `onTitleChange` | `(newTitle: string) => void`    | —              | Called when user commits an edit                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| `moreIcon1`     | `IconFunctionComponent`         | —              | Secondary icon in icon row (ContentXl only); colored with the secondary foreground (`text-03`)                                                                                                                                                                                                                                                                                                                                                   |
-| `moreIcon2`     | `IconFunctionComponent`         | —              | Tertiary icon in icon row (ContentXl only); boxed and sized exactly like `icon`                                                                                                                                                                                                                                                                                                                                                                  |
-| `color`         | `ColorTypes`                    | `"default"`    | Icon and title color pair. `"success"` / `"warning"` / `"danger"` color only the icon and leave the text at `text-03`                                                                                                                                                                                                                                                                                                                            |
-| `titleColor`    | `Exclude<TextColor, "inherit">` | per `color`    | Overrides the title colour only; `color` still picks the icon and description. Unset, the title takes its mode's tone: `text-04` for `default` and `interactive`, `text-03` for the rest, and the surface's foreground for `interactive` inside one. Inside an interactive surface an override holds at rest and yields to hover, pressed, selected and disabled. Display only: an editable title being edited keeps the input's standard colour |
-| `strikethrough` | `boolean`                       | `false`        | Strike the title through, for a title whose option is switched off                                                                                                                                                                                                                                                                                                                                                                               |
+| Prop                   | Type                                                 | Default            | Description                                                                                                                                                                                            |
+| ---------------------- | ---------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `font`                 | `TextFont`                                           | `"main-ui-action"` | The title's font; sets every size                                                                                                                                                                      |
+| `orientation`          | `"inline" \| "stacked"`                              | `"inline"`         | Icon before the title, or above it. For an icon after the title, use [`ReverseContent`](../reverse-content/README.md)                                                                                  |
+| `icon`                 | `IconFunctionComponent`                              | —                  | Leading icon                                                                                                                                                                                           |
+| `enlargedIcon`         | `boolean`                                            | `false`            | Drop the icon box's 2px padding, so `icon` and `moreIcon2` are as tall as the title line. The box keeps its size. Use it where a page wants larger icons, such as the connector catalog's logos        |
+| `title`                | `string \| RichStr`                                  | **(required)**     | The title                                                                                                                                                                                              |
+| `description`          | `string \| RichStr`                                  | —                  | Text below the title                                                                                                                                                                                   |
+| `titleMaxLines`        | `number`                                             | —                  | Clamp the title; a cut title shows in full in a tooltip                                                                                                                                                |
+| `titleTooltip`         | `string \| RichStr`                                  | —                  | Shown on every hover of the title, in place of the full title                                                                                                                                          |
+| `titleOverflowTooltip` | `boolean`                                            | `true`             | With `titleMaxLines`: show a cut title in full in a tooltip. Turn it off when a host wraps the content in its own tooltip                                                                              |
+| `descriptionMaxLines`  | `number`                                             | —                  | Clamp the description; a cut one shows in full in a tooltip                                                                                                                                            |
+| `strikethrough`        | `boolean`                                            | `false`            | Strike the title through, for an option that is switched off                                                                                                                                           |
+| `suffix`               | `"optional" \| string`                               | —                  | Muted text beside the title, in the title's size and lighter weight; `"optional"` is the translated "(Optional)"                                                                                       |
+| `auxIcon`              | `"info-gray" \| "info-blue" \| "warning" \| "error"` | —                  | A status icon beside the title: a 16px box with a 12px glyph at every title size, centred on the title line                                                                                            |
+| `badge`                | `BadgeProps \| BadgeProps[]`                         | —                  | One badge, or a list of badges in order, beside the title                                                                                                                                              |
+| `role`                 | `string`                                             | —                  | ARIA role on the title element                                                                                                                                                                         |
+| `moreIcon1`            | `IconFunctionComponent`                              | —                  | Stacked only: a connector icon after the icon, in `text-03`; its box is 12px smaller than the icon box (2px padding)                                                                                   |
+| `moreIcon2`            | `IconFunctionComponent`                              | —                  | Stacked only: a peer of the icon, the same size                                                                                                                                                        |
+| `editable`             | `boolean`                                            | `false`            | Edit the title in place. Clicks on the title, pencil and field stay inside, so a clickable parent does not also fire.                                                                                  |
+| `onTitleChange`        | `(newTitle: string) => void`                         | —                  | Called with the new, trimmed title when an edit is committed. An empty title is passed on; the caller decides whether it resets or is ignored                                                          |
+| `editTooltip`          | `string`                                             | `"Edit"`           | Tooltip and accessible name of the pencil                                                                                                                                                              |
+| `editButton`           | `"hover" \| "rest"`                                  | `"hover"`          | When the pencil shows: on hover of the content, or at rest too                                                                                                                                         |
+| `editHandle`           | `Ref<ContentEditHandle>`                             | —                  | Starts an edit from an outside control; hides the built-in pencil                                                                                                                                      |
+| `width`                | `"fit" \| "full"`                                    | `"full"`           | Shrink-wrap or fill the parent                                                                                                                                                                         |
+| `color`                | `StatusColor \| "interactive"`                       | `"default"`        | The content's colour (see Colours below). A status tints the title and the icon; `"interactive"` follows the surrounding interactive surface                                                           |
+| `titleColor`           | `Exclude<TextColor, "inherit">`                      | per `color`        | Overrides the title colour only; the icon keeps `color`'s, except on `"default"`, where it follows. Inside an interactive surface it holds at rest and yields to hover, pressed, selected and disabled |
 
-## Internal Layouts
+## Colours
 
-### ContentXl
+`Content` owns the status text colours (`CONTENT_STATUS_COLORS` in `content/colors.ts`); `Badge`
+and `Tag` take theirs from it.
 
-For `headline` / `section` presets with `variant="heading"`. Icon row on top (flex-col), supports `moreIcon1` and `moreIcon2` in the icon row. Description is always `font-secondary-body text-text-03`.
+| `color`       | Title and icon                                |
+| ------------- | --------------------------------------------- |
+| `default`     | `text-04`; the icon follows `titleColor`      |
+| `info`        | `theme-blue-05`                               |
+| `success`     | `theme-green-05`                              |
+| `warning`     | `status-warning-05`                           |
+| `pending`     | `theme-amber-05`                              |
+| `queued`      | `theme-purple-05`                             |
+| `error`       | `status-error-05`                             |
+| `interactive` | the surrounding interactive surface's colours |
 
-### ContentLg
+- A muted row: `titleColor="text-03"` (the default's icon follows).
+- A status icon beside a neutral title: `color="success" titleColor="text-03"`.
+- The description is always `text-03`.
 
-For `headline` / `section` presets with `variant="section"`. Always inline (flex-row). Description is always `font-secondary-body text-text-03`.
+For a control beside the content (a button, an input), use [`ContentAction`](../content-action/README.md).
 
-### ContentMd
+## ContentIndent
 
-For `main-content` / `main-ui` / `secondary` presets. Always inline. Both `icon` and `description` are optional. Description is always `font-secondary-body text-text-03`.
+`<ContentIndent font={…}>` lines its children up under a `Content`'s title and description: it
+indents them by one icon box (the title font's line height) and the icon gap (0.25rem, or none for
+`secondary-*` and `figure-*` titles). Use it for a row
+that continues a `Content` with an icon, such as a docs link or a detail line, instead of a
+hand-written inset that drifts when `Content` changes.
 
-## Usage Examples
+```tsx
+import { LinkButton } from "@opal/components";
+import { Content, ContentIndent } from "@opal/layouts";
+import { SvgGlobe } from "@opal/icons";
+
+<Content font="main-ui-action" icon={SvgGlobe} title="Web search" description="Searches the web" />
+<ContentIndent font="main-ui-action">
+  <LinkButton href={docsUrl}>Documentation</LinkButton>
+</ContentIndent>
+```
+
+## Usage
 
 ```tsx
 import { Content } from "@opal/layouts";
 import SvgSearch from "@opal/icons/search";
 
-// ContentXl — headline, icon on top
+// A page heading, icon on top
 <Content
+  font="heading-headline"
+  orientation="stacked"
   icon={SvgSearch}
-  sizePreset="headline"
-  variant="heading"
   title="Agent Settings"
   description="Configure your agent's behavior"
 />
 
-// ContentXl — with more icons
+// A row label
 <Content
+  font="main-ui-action"
   icon={SvgSearch}
-  sizePreset="headline"
-  variant="heading"
-  title="Agent Settings"
-  moreIcon1={SvgStar}
-  moreIcon2={SvgLock}
-/>
-
-// ContentLg — section, icon inline
-<Content
-  icon={SvgSearch}
-  sizePreset="section"
-  variant="section"
-  title="Data Sources"
-  description="Connected integrations"
-/>
-
-// ContentMd — with icon and description
-<Content
-  icon={SvgSearch}
-  sizePreset="main-ui"
   title="Instructions"
   description="Agent system prompt"
-/>
-
-// ContentMd — title only (no icon, no description)
-<Content
-  sizePreset="main-content"
-  title="Featured Agent"
+  suffix="optional"
 />
 
 // Editable title
 <Content
+  font="heading-section"
   icon={SvgSearch}
-  sizePreset="headline"
-  variant="heading"
   title="My Agent"
   editable
   onTitleChange={(newTitle) => save(newTitle)}
