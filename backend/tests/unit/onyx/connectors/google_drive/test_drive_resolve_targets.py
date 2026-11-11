@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_drive.doc_conversion import MAX_RETRIEVER_EMAILS
-from onyx.connectors.google_drive.models import DriveListingPayload
+from onyx.connectors.google_drive.models import DriveBatchResult, DriveListingPayload
 from onyx.connectors.google_drive.source_operations import (
     GoogleDriveSourceOperations,
 )
@@ -132,15 +132,114 @@ def test_reader_list_stays_under_the_retriever_limit() -> None:
     assert calls[0][-2:] == ["lister@example.com", "admin@example.com"]
 
 
-def test_listed_file_without_permissions_goes_through_reindex() -> None:
+def _permission_batch(
+    files: dict[str, dict[str, object]], errors: dict[str, Exception] | None = None
+) -> DriveBatchResult:
+    return DriveBatchResult(files=files, errors=errors or {})
+
+
+def test_permissions_are_read_for_the_batch_not_through_reindex() -> None:
+    """The listing has no permission fields. Conversion reads them with one
+    batch request for each listing user, and converts from the payload."""
     connector = _make_connector()
+    ops = cast(MagicMock, connector.ops)
+    ops.batch_get_files.return_value = _permission_batch(
+        {
+            "file-a": {"id": "file-a", "permissionIds": ["p1"]},
+            "file-b": {"id": "file-b", "permissionIds": ["p2"]},
+        }
+    )
+    converted: list[dict[str, object]] = []
+
+    def convert(*args: object, **_kwargs: object) -> Document:
+        drive_file = cast(dict[str, object], args[5])
+        converted.append(drive_file)
+        return _doc(str(drive_file["id"]))
+
     with (
-        patch(f"{_CONN_MODULE}.convert_drive_item_to_document") as convert,
+        patch(f"{_CONN_MODULE}.convert_drive_item_to_document", side_effect=convert),
+        patch.object(connector, "reindex", return_value=iter([])) as reindex,
+    ):
+        results = list(
+            connector.resolve_targets(
+                [_target("file-a", []), _target("file-b", [])],
+                include_permissions=True,
+            )
+        )
+
+    assert len(results) == 2
+    reindex.assert_not_called()
+    ops.batch_get_files.assert_called_once()
+    assert ops.batch_get_files.call_args.kwargs["user_email"] == "lister@example.com"
+    assert sorted(ops.batch_get_files.call_args.kwargs["file_ids_by_key"]) == [
+        "file-a",
+        "file-b",
+    ]
+    assert {str(f["id"]): f["permissionIds"] for f in converted} == {
+        "file-a": ["p1"],
+        "file-b": ["p2"],
+    }
+
+
+def test_no_permission_read_without_permission_sync() -> None:
+    connector = _make_connector()
+    with patch(
+        f"{_CONN_MODULE}.convert_drive_item_to_document", return_value=_doc("file-a")
+    ):
+        list(connector.resolve_targets([_target("file-a", [])]))
+
+    cast(MagicMock, connector.ops).batch_get_files.assert_not_called()
+
+
+def test_a_file_whose_permissions_cannot_be_read_goes_through_reindex() -> None:
+    connector = _make_connector()
+    cast(MagicMock, connector.ops).batch_get_files.return_value = _permission_batch(
+        {"file-a": {"id": "file-a", "permissionIds": []}},
+        {"file-b": RuntimeError("forbidden")},
+    )
+    with (
+        patch(
+            f"{_CONN_MODULE}.convert_drive_item_to_document",
+            return_value=_doc("file-a"),
+        ) as convert,
         patch.object(connector, "reindex", return_value=iter([])) as reindex,
     ):
         list(
-            connector.resolve_targets([_target("file-p", [])], include_permissions=True)
+            connector.resolve_targets(
+                [_target("file-a", []), _target("file-b", [])],
+                include_permissions=True,
+            )
         )
 
-    convert.assert_not_called()
+    assert convert.call_count == 1
     reindex.assert_called_once()
+    (failures, _include_permissions), _ = reindex.call_args
+    assert [f.failed_document.document_id for f in failures] == [
+        "https://docs.google.com/document/d/file-b"
+    ]
+
+
+def test_the_link_only_filter_applies_at_conversion() -> None:
+    """With exclude_domain_link_only, the listing no longer asks for
+    permissions, so conversion drops a file that is shared by link only."""
+    connector = _make_connector()
+    connector.exclude_domain_link_only = True
+    cast(MagicMock, connector.ops).batch_get_files.return_value = _permission_batch(
+        {
+            "file-a": {
+                "id": "file-a",
+                "permissions": [{"type": "anyone", "allowFileDiscovery": False}],
+            },
+            "file-b": {"id": "file-b", "permissions": [{"type": "user"}]},
+        }
+    )
+    with patch(
+        f"{_CONN_MODULE}.convert_drive_item_to_document", return_value=_doc("file-b")
+    ) as convert:
+        results = list(
+            connector.resolve_targets([_target("file-a", []), _target("file-b", [])])
+        )
+
+    assert len(results) == 1
+    assert convert.call_count == 1
+    assert convert.call_args.args[5]["id"] == "file-b"
