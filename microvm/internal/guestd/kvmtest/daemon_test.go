@@ -423,6 +423,13 @@ func testEgressRelay(kctx context.Context, t *testing.T, v *vm, c pb.SandboxdCli
 	}
 	relayID, relayPID := rs.GetStarted().GetExecutionId(), rs.GetStarted().GetPid()
 	defer func() { _, _ = c.Cancel(kctx, &pb.CancelRequest{ExecutionId: relayID}) }()
+	// relayLog stops the relay and returns its log.
+	relayLog := func() string {
+		_, _ = c.Cancel(kctx, &pb.CancelRequest{ExecutionId: relayID})
+		s, _ := c.Stream(kctx, &pb.StreamRequest{ExecutionId: relayID})
+		lr, _ := collect(s)
+		return strings.TrimSpace(lr.stderr)
+	}
 
 	script := fmt.Sprintf(`import os, signal, socket, time
 for i in range(200):
@@ -444,15 +451,12 @@ c2 = socket.create_connection(("127.0.0.1", 13128)); c2.sendall(b"again"); print
 		t.Fatal(err)
 	}
 	if r.stdout != "ping-relay\nafter-hup: reset\nagain\n" {
-		t.Fatalf("relay client: %q %q", r.stdout, r.stderr)
+		t.Fatalf("relay client: %q %q\nrelay log: %s", r.stdout, r.stderr, relayLog())
 	}
 	select {
 	case <-upEnded:
 	case <-time.After(5 * time.Second):
 		t.Fatal("host side of the reset connection stayed open")
 	}
-	_, _ = c.Cancel(kctx, &pb.CancelRequest{ExecutionId: relayID})
-	s2, _ := c.Stream(kctx, &pb.StreamRequest{ExecutionId: relayID})
-	lr, _ := collect(s2)
-	t.Logf("relay log: %s", strings.TrimSpace(lr.stderr))
+	t.Logf("relay log: %s", relayLog())
 }
