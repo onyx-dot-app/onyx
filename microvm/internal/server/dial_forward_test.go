@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -54,9 +55,12 @@ func TestCreateSendsDialPorts(t *testing.T) {
 		_, _ = io.WriteString(w, "preview-ok")
 	}))
 	defer web.Close()
+	var mu sync.Mutex
 	var dialed []uint32
 	fwd := &guestd.Forwards{Reserved: DefaultDaemonPort, Dial: func(ctx context.Context, port uint32) (net.Conn, error) {
+		mu.Lock()
 		dialed = append(dialed, port)
+		mu.Unlock()
 		var d net.Dialer
 		return d.DialContext(ctx, "tcp", web.Listener.Addr().String())
 	}}
@@ -79,11 +83,20 @@ func TestCreateSendsDialPorts(t *testing.T) {
 		t.Fatal("the guest listens on a port that Dial does not allow")
 	}
 
-	page, err := dialAll(ctx, ha, 3010, "GET / HTTP/1.0\r\nHost: localhost\r\n\r\n")
+	// Retry: a guest TCP connect that fails ends the stream with no bytes.
+	var page string
+	for range 50 {
+		if page, err = dialAll(ctx, ha, 3010, "GET / HTTP/1.0\r\nHost: localhost\r\n\r\n"); err != nil || page != "" {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 	if err != nil || !strings.HasPrefix(page, "HTTP/1.0 200") || !strings.HasSuffix(page, "preview-ok") {
 		t.Fatalf("dial 3010: %q %v", page, err)
 	}
-	if !slices.Equal(dialed, []uint32{3010}) {
+	mu.Lock()
+	defer mu.Unlock()
+	if len(dialed) == 0 || slices.ContainsFunc(dialed, func(p uint32) bool { return p != 3010 }) {
 		t.Fatalf("guest dialed %v", dialed)
 	}
 	if _, err := dialAll(ctx, ha, 3011, ""); apierr.FromStatus(err) != pb.ErrorReason_PORT_NOT_ALLOWED {
