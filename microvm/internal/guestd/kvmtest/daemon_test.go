@@ -423,11 +423,19 @@ func testEgressRelay(kctx context.Context, t *testing.T, v *vm, c pb.SandboxdCli
 	}
 	relayID, relayPID := rs.GetStarted().GetExecutionId(), rs.GetStarted().GetPid()
 	defer func() { _, _ = c.Cancel(kctx, &pb.CancelRequest{ExecutionId: relayID}) }()
-	// relayLog stops the relay and returns its log.
+	// relayLog stops the relay and returns its log, or why it has none.
 	relayLog := func() string {
-		_, _ = c.Cancel(kctx, &pb.CancelRequest{ExecutionId: relayID})
-		s, _ := c.Stream(kctx, &pb.StreamRequest{ExecutionId: relayID})
-		lr, _ := collect(s)
+		lctx, cancel := context.WithTimeout(kctx, 10*time.Second)
+		defer cancel()
+		_, _ = c.Cancel(lctx, &pb.CancelRequest{ExecutionId: relayID})
+		s, err := c.Stream(lctx, &pb.StreamRequest{ExecutionId: relayID})
+		if err != nil {
+			return fmt.Sprintf("(no relay log: %v)", err)
+		}
+		lr, err := collect(s)
+		if err != nil {
+			return fmt.Sprintf("%s (relay log incomplete: %v)", strings.TrimSpace(lr.stderr), err)
+		}
 		return strings.TrimSpace(lr.stderr)
 	}
 
