@@ -16,8 +16,10 @@ that user's sessions. Each session has its own session workspace, a directory
 inside the sandbox. The user never manages the sandbox.
 
 After an idle period (`SANDBOX_IDLE_TIMEOUT_SECONDS`, one hour by default) the
-sandbox sleeps: the platform saves each session's outputs, attachments and the
-agent's chat history, then removes the container. The next message wakes a new
+sandbox sleeps. App preview requests count as activity
+(`server/features/build/preview_activity.py`). On sleep the platform saves
+each session's outputs, attachments and the agent's chat history, then
+removes the container. The next message wakes a new
 container and restores the session, with a short delay. Work that only lives
 outside `outputs/` and `attachments/`, such as installed packages or browser
 logins, is not kept.

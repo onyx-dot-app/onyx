@@ -22,11 +22,16 @@ from sqlalchemy.orm import Session
 
 from onyx.background.celery.tasks.build import tasks as tasks_module
 from onyx.background.celery.tasks.build.tasks import cleanup_idle_sandboxes_task
+from onyx.cache.factory import get_cache_backend
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.enums import BuildSessionStatus, SandboxStatus
 from onyx.db.models import BuildSession, Sandbox, Snapshot, User
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.db.build_session import session_runtime_stale
+from onyx.server.features.build.preview_activity import (
+    _preview_activity_key,
+    mark_preview_activity,
+)
 from onyx.server.features.build.sandbox.models import SnapshotResult
 from onyx.server.features.build.session import (
     sandbox_lifecycle as sandbox_lifecycle_module,
@@ -837,3 +842,72 @@ def test_task_holds_redis_lock_for_duration(
             external_lock.release()
     finally:
         CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
+
+def _make_preview_session(db_session: Session, user: User) -> BuildSession:
+    session_row = BuildSession(
+        user_id=user.id,
+        name="preview-session",
+        status=BuildSessionStatus.ACTIVE,
+        nextjs_port=3010,
+    )
+    db_session.add(session_row)
+    db_session.commit()
+    db_session.refresh(session_row)
+    return session_row
+
+
+def test_recent_preview_activity_keeps_sandbox_running(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+    stubbed_cleanup: StubSandboxManager,
+    short_idle_threshold: int,
+) -> None:
+    """App preview requests count as activity: the reaper moves the heartbeat
+    forward instead of putting the sandbox to sleep."""
+    user = make_user(db_session)
+    sandbox = make_sandbox(db_session, user)
+    session_row = _make_preview_session(db_session, user)
+    _backdate_heartbeat(db_session, sandbox, seconds_ago=short_idle_threshold * 4)
+    old_heartbeat = sandbox.last_heartbeat
+    stubbed_cleanup.list_session_workspaces_returns = []
+    stubbed_cleanup.terminate_silent = True
+
+    mark_preview_activity(session_row.id)
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)  # ty: ignore[invalid-argument-type]
+
+    db_session.expire_all()
+    refreshed = db_session.get(Sandbox, sandbox.id)
+    assert refreshed is not None
+    assert refreshed.status == SandboxStatus.RUNNING
+    assert old_heartbeat is not None and refreshed.last_heartbeat is not None
+    assert refreshed.last_heartbeat > old_heartbeat
+    assert stubbed_cleanup.terminate_count == 0
+
+
+def test_stale_preview_activity_does_not_keep_sandbox_running(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+    stubbed_cleanup: StubSandboxManager,
+    short_idle_threshold: int,
+) -> None:
+    """A preview request older than the idle timeout does not stop the sleep."""
+    user = make_user(db_session)
+    sandbox = make_sandbox(db_session, user)
+    session_row = _make_preview_session(db_session, user)
+    _backdate_heartbeat(db_session, sandbox, seconds_ago=short_idle_threshold * 4)
+    stubbed_cleanup.list_session_workspaces_returns = []
+    stubbed_cleanup.terminate_silent = True
+
+    stale = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+        seconds=short_idle_threshold * 2
+    )
+    get_cache_backend().set(
+        _preview_activity_key(session_row.id), str(stale.timestamp()), ex=60
+    )
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)  # ty: ignore[invalid-argument-type]
+
+    db_session.expire_all()
+    refreshed = db_session.get(Sandbox, sandbox.id)
+    assert refreshed is not None
+    assert refreshed.status == SandboxStatus.SLEEPING

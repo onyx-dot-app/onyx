@@ -40,9 +40,11 @@ from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
 from onyx.server.features.build.db.build_session import (
     clear_nextjs_ports_for_user,
     get_orphan_build_session_ids,
+    get_webapp_session_ids,
     mark_user_sessions_idle__no_commit,
 )
 from onyx.server.features.build.db.sandbox import (
+    advance_sandbox_heartbeat__no_commit,
     begin_provisioning_attempt__no_commit,
     begin_recovery_attempt__no_commit,
     create_sandbox__no_commit,
@@ -60,6 +62,7 @@ from onyx.server.features.build.db.sandbox import (
     set_sandbox_skills_hashes__no_commit,
     sleep_running_sandbox__no_commit,
 )
+from onyx.server.features.build.preview_activity import latest_preview_activity
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.locks import sandbox_provision_lock
 from onyx.server.features.build.sandbox.models import (
@@ -780,6 +783,24 @@ def is_sandbox_idle(sandbox: Sandbox, now: datetime) -> bool:
     created_at so legacy/edge-case rows don't sit RUNNING forever)."""
     reference = sandbox.last_heartbeat or sandbox.created_at
     return reference < now - timedelta(seconds=SANDBOX_IDLE_TIMEOUT_SECONDS)
+
+
+def is_sandbox_idle_after_preview_activity(
+    db_session: DBSession, sandbox: Sandbox, now: datetime
+) -> bool:
+    """``is_sandbox_idle`` that first counts app preview requests: a newer
+    preview request moves the heartbeat forward."""
+    if not is_sandbox_idle(sandbox, now):
+        return False
+    preview_at = latest_preview_activity(
+        get_webapp_session_ids(db_session, sandbox.user_id)
+    )
+    if preview_at is None:
+        return True
+    if advance_sandbox_heartbeat__no_commit(db_session, sandbox.id, preview_at):
+        db_session.commit()
+        db_session.refresh(sandbox)
+    return is_sandbox_idle(sandbox, now)
 
 
 def list_snapshotable_session_workspaces(
