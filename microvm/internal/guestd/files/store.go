@@ -298,8 +298,8 @@ func (s *Store) openVMEntry(p string, mkParents bool) (*os.Root, string, string,
 	}
 	parent, name := path.Dir(abs), path.Base(abs)
 	if mkParents {
-		if err := os.MkdirAll(parent, 0o755); err != nil {
-			return nil, "", "", fsErr(err)
+		if err := s.mkdirVM(parent); err != nil {
+			return nil, "", "", err
 		}
 	}
 	real, err := s.resolveVM(parent)
@@ -314,6 +314,26 @@ func (s *Store) openVMEntry(p string, mkParents bool) (*os.Root, string, string,
 		return nil, "", "", fsErr(err)
 	}
 	return r, name, abs, nil
+}
+
+// mkdirVM makes dir and its missing parents. It checks the deepest existing
+// parent first, so a link into a denied path gets no new directories.
+func (s *Store) mkdirVM(dir string) error {
+	existing := dir
+	for existing != "/" {
+		if _, err := os.Lstat(existing); err == nil {
+			break
+		}
+		existing = path.Dir(existing)
+	}
+	real, err := s.resolveVM(existing)
+	if err != nil {
+		return err
+	}
+	if err := s.checkVMPath(path.Join(real, strings.TrimPrefix(dir, existing))); err != nil {
+		return err
+	}
+	return fsErr(os.MkdirAll(dir, 0o755))
 }
 
 // ValidSessionID applies the Init rules for a session ID.

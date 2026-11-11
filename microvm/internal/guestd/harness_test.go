@@ -246,6 +246,19 @@ func TestFileCallsWithoutSession(t *testing.T) {
 	if _, err := ws.CloseAndRecv(); reason(err) != "INVALID_ARGUMENT" {
 		t.Errorf("write into the state dir: %v", err)
 	}
+	// make_parents through a link into the state dir makes nothing there.
+	if err := os.Symlink(state, filepath.Join(root, "statelink")); err != nil {
+		t.Fatal(err)
+	}
+	ws, _ = c.WriteFile(ctx)
+	_ = ws.Send(&pb.WriteFileRequest{Part: &pb.WriteFileRequest_Header{Header: &pb.WriteFileHeader{
+		Path: filepath.Join(root, "statelink", "made", "f"), Size: 0, MakeParents: true}}})
+	if _, err := ws.CloseAndRecv(); reason(err) != "INVALID_ARGUMENT" {
+		t.Errorf("make_parents into the state dir: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(state, "made")); !os.IsNotExist(err) {
+		t.Errorf("a directory was made in the state dir: %v", err)
+	}
 	// Uploads and saves still need a session.
 	us, _ := c.UploadFile(ctx)
 	_ = us.Send(&pb.UploadFileRequest{Part: &pb.UploadFileRequest_Header{Header: &pb.UploadFileHeader{FileName: "a.txt", Size: 0}}})
