@@ -14,13 +14,14 @@ REDIS_HOST, MULTI_TENANT=false), HARNESS_PROXY_PORT, HARNESS_CONFDIR.
 import asyncio
 import logging
 import os
-from typing import Any
 from uuid import UUID
 
+from mitmproxy import http
 from mitmproxy.options import Options
 from mitmproxy.tools.dump import DumpMaster
 
 from onyx.cache.factory import get_cache_backend, get_shared_cache_backend
+from onyx.cache.interface import CacheBackend
 from onyx.microvm.registry import (
     get_sandbox_placement,
 )
@@ -32,6 +33,7 @@ from onyx.sandbox_proxy.destination_policy import (
 )
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
 from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox
+from onyx.sandbox_proxy.sandbox_identity.resolution import SandboxIdentityResolver
 from onyx.sandbox_proxy.sandbox_identity.signed import (
     SandboxClaims,
     SignedIdentityVerifier,
@@ -68,16 +70,26 @@ class PlacementNoDB(CacheSandboxPlacementLookup):
         return OWNER if ok else None
 
 
-class NoPodIdentity:
+class NoPodIdentity(SandboxIdentityResolver):
     def resolve_sandbox(self, src_ip: str) -> ResolvedSandbox | None:  # noqa: ARG002
         return None
 
-    def resolve_session_by_id(self, *_a: Any, **_k: Any) -> None:
+    def resolve_session_by_id(
+        self,
+        session_id: UUID,  # noqa: ARG002
+        user_id: UUID,  # noqa: ARG002
+        tenant_id: str,  # noqa: ARG002
+    ) -> UUID | None:
         return None
 
 
 class NoMatch(RequestEvaluator):
-    def evaluate(self, request: Any, tenant_id: str, user_id: UUID) -> None:  # noqa: ARG002
+    def evaluate(
+        self,
+        request: http.Request,  # noqa: ARG002
+        tenant_id: str,  # noqa: ARG002
+        user_id: UUID,  # noqa: ARG002
+    ) -> None:
         return None
 
 
@@ -88,7 +100,7 @@ def main() -> None:
     for noisy in ("hpack", "asyncio", "urllib3", "mitmproxy"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
-    def cache_factory(tenant_id: str) -> Any:
+    def cache_factory(tenant_id: str) -> CacheBackend:
         return get_cache_backend(tenant_id=tenant_id)
 
     verifier = SignedIdentityVerifier(
@@ -97,7 +109,7 @@ def main() -> None:
         replay_guard=CacheReplayGuard(cache_factory),
     )
     gate = GateAddon(
-        identity=NoPodIdentity(),  # type: ignore[arg-type]
+        identity=NoPodIdentity(),
         request_evaluator=NoMatch(),
         destination_policy=parse_destination_policy(""),
         cache_factory=cache_factory,

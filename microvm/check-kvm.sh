@@ -46,6 +46,25 @@ if [ "${lane}" = full ]; then
     echo "the full lane needs KVM_PYTHON (a Python with backend/requirements/default.txt)" >&2
     exit 1
   }
+  # Absolute, but not resolved: a venv python is a symlink.
+  KVM_PYTHON="$(cd "$(dirname "${KVM_PYTHON}")" && pwd)/$(basename "${KVM_PYTHON}")"
+  export KVM_PYTHON
+fi
+tests="TestCoreKVM TestDialKVM TestRestartKVM"
+if [ "${lane}" = full ]; then
+  tests="${tests} TestEgressKVM TestPassthroughKVM TestSavesKVM TestTemplateBuildKVM TestManagedSwapKVM"
+  tests="${tests} TestMemAdmissionKVM TestMemOOMKVM TestRootfsDeliveryKVM"
+fi
+if [ -n "${KVM_ONLY:-}" ]; then
+  selected=""
+  for test in ${tests}; do
+    if [[ "${test}" =~ ${KVM_ONLY} ]]; then selected="${selected} ${test}"; fi
+  done
+  [ -n "${selected}" ] || {
+    echo "KVM_ONLY=${KVM_ONLY} selects no test of the ${lane} lane" >&2
+    exit 2
+  }
+  tests="${selected}"
 fi
 here="$(cd "$(dirname "$0")" && pwd)"
 repo="$(cd "${here}/.." && pwd)"
@@ -71,8 +90,10 @@ cleanup_vms() {
     case "$(readlink "${proc}/root" 2>/dev/null)" in "${xfs}"/*) kill -KILL "${proc#/proc/}" 2>/dev/null || true ;; esac
   done
 }
+test_pid=""
 cleanup() {
   result=$?
+  if [ -n "${test_pid}" ]; then kill -KILL -- "-${test_pid}" 2>/dev/null || true; fi
   cleanup_vms
   if [ "${KVM_KEEP_WORK:-}" != 1 ]; then
     umount "${xfs}" 2>/dev/null || true
@@ -81,6 +102,7 @@ cleanup() {
   exit "${result}"
 }
 trap cleanup EXIT
+trap 'exit 130' INT TERM
 step() { echo "== $(date -u +%H:%M:%S) $*"; }
 # show_logs DIR: the tails of the test and guest console logs under DIR.
 show_logs() {
@@ -150,10 +172,7 @@ export KVM_ARTIFACTS_DIR="${artifacts}" KVM_IMG_DIR="${img}" KVM_VMS="${vms}" \
   KVM_LOG_DIR="${work}/logs" KVM_AGENT_BIN="${work}/bin/host-agent" KVM_AGENT_IMAGE=craft-fc-kvm-agent:local \
   KVM_PR_BACKEND="${repo}/backend" KVM_HARNESS_DIR="${testdata}/harness"
 
-tests="TestCoreKVM TestDialKVM TestRestartKVM"
 if [ "${lane}" = full ]; then
-  tests="${tests} TestEgressKVM TestPassthroughKVM TestSavesKVM TestTemplateBuildKVM TestManagedSwapKVM"
-  tests="${tests} TestMemAdmissionKVM TestMemOOMKVM TestRootfsDeliveryKVM"
   pull_as library/redis:7-alpine redis:7-alpine
   (cd "${repo}/backend" && SANDBOX_RUNTIME=firecracker CACHE_BACKEND=redis MULTI_TENANT=false "${KVM_PYTHON}" -c \
     'import onyx.sandbox_proxy.addons.gate, onyx.server.features.microvm.api, onyx.microvm.registry')
@@ -202,7 +221,6 @@ fi
 
 failed=""
 for test in ${tests}; do
-  if [ -n "${KVM_ONLY:-}" ] && ! [[ "${test}" =~ ${KVM_ONLY} ]]; then continue; fi
   extra=()
   case "${test}" in
     TestPassthroughKVM | TestSavesKVM) extra=("KVM_IMG_DIR=${pt_img}" "KVM_CERT_DIR=${work}/certs-pt") ;;
@@ -223,6 +241,7 @@ for test in ${tests}; do
   test_pid=$!
   wait "${test_pid}" || rc=$?
   kill -KILL -- "-${test_pid}" 2>/dev/null || true
+  test_pid=""
   echo "RESULT ${test} rc=${rc} seconds=$(($(date +%s) - t0))"
   cleanup_vms
   if [ "${rc}" -ne 0 ]; then

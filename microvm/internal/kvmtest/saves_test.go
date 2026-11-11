@@ -39,13 +39,23 @@ const savesScratchGiB = 8
 func startSavesAgent(t *testing.T, e env, name, certDir string, certs *testcerts.Set) {
 	t.Helper()
 	bin := getenv("KVM_AGENT_BIN", "/opt/agent/host-agent")
-	ca := getenv("KVM_CA_BUNDLE", "/etc/pki/tls/certs/ca-bundle.crt")
+	// The host CA bundle: AL2023, else Debian and Ubuntu.
+	ca := os.Getenv("KVM_CA_BUNDLE")
+	if ca == "" {
+		ca = "/etc/pki/tls/certs/ca-bundle.crt"
+		if _, err := os.Stat(ca); err != nil {
+			ca = "/etc/ssl/certs/ca-certificates.crt"
+		}
+	}
+	// The proxy CA, which the daemon installs at Init.
+	confdir := getenv("KVM_PROXY_CONFDIR", "/opt/proxy/confdir")
 	args := []string{"run", "-d", "--name", name, "--privileged", "--pid=host", "--cgroupns=private", "--network=host",
 		"-v", e.DataDir + ":" + e.DataDir, "-v", certDir + ":" + certDir + ":ro",
 		"-v", e.ArtifactsDir + ":" + e.ArtifactsDir + ":ro", "-v", filepath.Dir(bin) + ":" + filepath.Dir(bin) + ":ro",
-		"-v", ca + ":/etc/ssl/certs/ca-certificates.crt:ro",
+		"-v", ca + ":/etc/ssl/certs/ca-certificates.crt:ro", "-v", confdir + ":" + confdir + ":ro",
 		getenv("KVM_AGENT_IMAGE", "debian:trixie-slim"), bin,
 		"--data-dir", e.DataDir, "--artifacts-dir", e.ArtifactsDir,
+		"--egress-ca", filepath.Join(confdir, "mitmproxy-ca-cert.pem"),
 		"--listen", ptListen, "--tls-cert", certs.ServerCert, "--tls-key", certs.ServerKey, "--client-ca", certs.ClientCA,
 		"--transfer-parallel", getenv("KVM_TRANSFER_PARALLEL", "8")}
 	if out, err := exec.Command("docker", args...).CombinedOutput(); err != nil {
