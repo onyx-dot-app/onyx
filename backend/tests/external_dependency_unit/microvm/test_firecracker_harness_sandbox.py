@@ -34,7 +34,10 @@ from onyx.server.features.build.sandbox.firecracker.harness_sandbox import (
     ManagedBundleSource,
     session_relative_path,
 )
-from onyx.server.features.build.sandbox.firecracker.models import ExecSessionRecord
+from onyx.server.features.build.sandbox.firecracker.models import (
+    ExecSessionRecord,
+    ExecSessionTable,
+)
 from onyx.server.features.build.sandbox.harness_base import (
     EXEC_DEFAULT_ENV,
     MAX_EXEC_SESSIONS_PER_SANDBOX,
@@ -549,6 +552,11 @@ def test_the_output_buffer_keeps_head_and_tail_bytes() -> None:
     mixed.add(OutputStream.STDERR, b"err")
     mixed.add(OutputStream.STDOUT, "é".encode()[1:])
     assert mixed.text() == "erré"
+    # A command that ends inside a character still shows the bytes.
+    cut = ExecOutputBuffer()
+    cut.add(OutputStream.STDOUT, b"ok\xc3")
+    assert cut.finish() == "\ufffd"
+    assert cut.text() == "ok\ufffd"
     boundary = ExecOutputBuffer(max_bytes=4)
     boundary.add(OutputStream.STDOUT, "aé".encode())
     assert not boundary.truncated and boundary.text() == "aé"
@@ -805,10 +813,16 @@ def test_a_failed_registration_stops_the_started_command(
     assert node.agent.cancel_calls == [command.execution_id]
 
 
-def test_a_record_of_an_older_vm_never_replaces_newer_records(
-    tenant_cache: CacheBackend, new_ref: NewRef
+@pytest.mark.usefixtures("node")
+def test_records_follow_the_placed_vm_not_attempt_order(
+    tenant_cache: CacheBackend,
+    sandbox: FirecrackerHarnessSandbox,
+    new_ref: NewRef,
 ) -> None:
     ref = new_ref()
+    sandbox.ensure_running(ref)
+    placement = get_sandbox_placement(tenant_cache, ref.sandbox_id)
+    assert placement is not None
 
     def record(attempt: int, generation: int) -> ExecSessionRecord:
         return ExecSessionRecord(
@@ -820,28 +834,29 @@ def test_a_record_of_an_older_vm_never_replaces_newer_records(
             last_used=time.time(),
         )
 
-    newer = record(2, 7)
-    assert (
-        harness_state.add_exec_session(
-            tenant_cache,
-            ref.sandbox_id,
-            newer,
-            max_sessions=64,
-            ended_execution_ids=set(),
+    def add(r: ExecSessionRecord) -> list[ExecSessionRecord] | None:
+        return harness_state.add_exec_session(
+            tenant_cache, ref.sandbox_id, r, max_sessions=64, ended_execution_ids=set()
         )
-        == []
+
+    # A record of a later attempt left over from a VM that was stopped.
+    assert add(record(placement.attempt + 5, 1)) is None
+    tenant_cache.set(
+        harness_state._EXEC_SESSIONS_PREFIX + str(ref.sandbox_id),
+        ExecSessionTable(
+            sessions={
+                "old": record(placement.attempt + 5, 1).model_copy(
+                    update={"exec_session_id": "old"}
+                )
+            }
+        ).model_dump_json(),
     )
-    assert (
-        harness_state.add_exec_session(
-            tenant_cache,
-            ref.sandbox_id,
-            record(1, 5),
-            max_sessions=64,
-            ended_execution_ids=set(),
-        )
-        is None
-    )
-    assert harness_state.list_exec_sessions(tenant_cache, ref.sandbox_id) == [newer]
+    # The placed VM (lower attempt) still gets new records.
+    current = record(placement.attempt, placement.generation)
+    assert add(current) == []
+    assert harness_state.list_exec_sessions(tenant_cache, ref.sandbox_id) == [current]
+    _, result = _run(sandbox.exec_command(ref, "sleep 60", yield_time_ms=250))
+    assert result.exec_session_id is not None
 
 
 def test_ctrl_c_is_not_held_back_by_a_long_poll(

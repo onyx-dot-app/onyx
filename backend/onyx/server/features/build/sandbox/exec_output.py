@@ -87,6 +87,14 @@ class ExecOutputBuffer:
             self._tail_bytes -= removed
             self._dropped += removed
 
+    def finish(self) -> str:
+        """The command ended: flush the bytes of an incomplete character.
+        Returns the part to stream, as `add` does."""
+        return "".join(
+            self._add_text(decoder.decode(b"", final=True))
+            for decoder in self._decoders.values()
+        )
+
     @property
     def truncated(self) -> bool:
         return self._dropped > 0

@@ -896,6 +896,8 @@ class FirecrackerHarnessSandbox(HarnessSandbox):
             )
         else:
             self._forget(tenant_cache, ref, record)
+        if result is not None and (text := buffer.finish()):
+            yield ExecOutputDelta(text=text)
         full = buffer.text()
         output, cut = cut_to_tokens(full, max_output_tokens)
         yield ExecCommandResult(

@@ -22,6 +22,7 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from onyx.cache.interface import CacheBackend
+from onyx.microvm.registry import get_sandbox_placement
 from onyx.server.features.build.sandbox.firecracker.models import (
     ExecSessionRecord,
     ExecSessionTable,
@@ -100,16 +101,18 @@ def add_exec_session(
     max_sessions: int,
     ended_execution_ids: set[str],
 ) -> list[ExecSessionRecord] | None:
-    """Store a new exec session. Drops the records of older VM instances,
+    """Store a new exec session. Drops the records of other VM instances,
     then evicts down to `max_sessions`. Returns the evicted records (their
-    commands may still run), or None when a newer VM instance already has
-    records: the record's VM is gone, and nothing is stored."""
+    commands may still run), or None when the placement record no longer
+    names the record's VM: the VM is gone, and nothing is stored."""
     fence = (record.attempt, record.generation)
 
     def change(
         state: ExecSessionTable,
     ) -> tuple[ExecSessionTable | None, list[ExecSessionRecord] | None]:
-        if any((r.attempt, r.generation) > fence for r in state.sessions.values()):
+        # The placement record, not attempt order, says which VM is current:
+        # a VM placed after an idle stop can start at a lower attempt.
+        if placed_instance(cache, sandbox_id) != fence:
             return state, None
         sessions = {
             sid: r
@@ -125,6 +128,12 @@ def add_exec_session(
         return ExecSessionTable(sessions=sessions), evicted
 
     return _update(cache, _sessions_key(sandbox_id), _parse_sessions, change)
+
+
+def placed_instance(cache: CacheBackend, sandbox_id: UUID) -> tuple[int, int] | None:
+    """(attempt, generation) of the sandbox's placed VM, from its record."""
+    placement = get_sandbox_placement(cache, sandbox_id)
+    return None if placement is None else placement.fence()
 
 
 def get_exec_session(
