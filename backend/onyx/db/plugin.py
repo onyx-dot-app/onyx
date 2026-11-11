@@ -362,43 +362,10 @@ def add_plugin_version__no_commit(
     return version
 
 
-def get_current_version_ids(
-    plugin_ids: Iterable[UUID], db_session: Session
-) -> dict[UUID, UUID]:
-    ids = set(plugin_ids)
-    if not ids:
-        return {}
-    rows = db_session.execute(
-        select(Plugin.id, Plugin.current_version_id).where(Plugin.id.in_(ids))
-    ).tuples()
-    return dict(rows.all())
-
-
 def delete_plugin__no_commit(plugin_id: UUID, db_session: Session) -> None:
     """Delete a plugin with its versions, skills, shares and choices. Bundle
     blobs are left for the cleanup task."""
     db_session.execute(delete(Plugin).where(Plugin.id == plugin_id))
-
-
-def delete_user_upload_plugins__no_commit(db_session: Session, user_id: UUID) -> None:
-    """Delete the plugins in the user's "My uploads" before a user delete.
-
-    Until reads move to the plugin tables, the legacy skill rows are the source
-    of truth and the user-delete guard checks only them. A plugin copied there
-    can outlive its skill (delete, transfer, publish) and would block the
-    marketplace cascade. The re-sync migrations rebuild any plugin that a live
-    skill still needs.
-    """
-    db_session.execute(
-        delete(Plugin).where(
-            Plugin.marketplace_id.in_(
-                select(Marketplace.id).where(
-                    Marketplace.kind == MarketplaceKind.USER_UPLOADS,
-                    Marketplace.owner_user_id == user_id,
-                )
-            )
-        )
-    )
 
 
 def persist_plugin_version_validity__no_commit(
