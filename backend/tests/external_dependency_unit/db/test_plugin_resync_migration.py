@@ -54,8 +54,8 @@ def _migration_ops(db_session: Session) -> Iterator[None]:
         yield
 
 
-def _account_uploads_id(user_id: UUID) -> UUID:
-    return UUID(hashlib.md5(f"account_uploads:{user_id}".encode()).hexdigest())
+def _user_uploads_id(user_id: UUID) -> UUID:
+    return UUID(hashlib.md5(f"user_uploads:{user_id}".encode()).hexdigest())
 
 
 def _resync_version_id(plugin_id: UUID, bundle_file_id: str) -> UUID:
@@ -110,7 +110,7 @@ def _plugin_rows(db_session: Session, skill_ids: list[UUID]) -> dict[str, Any]:
         ).all(),
         "skills": db_session.execute(
             text(
-                "SELECT ps.id, ps.plugin_version_id, ps.path, ps.name "
+                "SELECT ps.id, ps.plugin_version_id, ps.path, ps.frontmatter "
                 "FROM plugin_skill ps JOIN plugin_version v "
                 "ON v.id = ps.plugin_version_id WHERE v.plugin_id = ANY(:ids) "
                 "ORDER BY ps.id"
@@ -163,10 +163,8 @@ def _content(name: str, bundle_file_id: str) -> PluginVersionContent:
         skills=[
             PluginSkillContent(
                 path="",
-                name=name,
-                description="written by new code",
                 skill_md="---\n",
-                frontmatter={"name": name},
+                frontmatter={"name": name, "description": "written by new code"},
             )
         ],
     )
@@ -297,7 +295,7 @@ def test_resync_matches_plugin_rows_to_skill_rows(db_session: Session) -> None:
     fresh_plugin = _plugin(db_session, fresh.id)
     assert fresh_plugin is not None
     assert fresh_plugin.current_version_id == fresh.id
-    assert fresh_plugin.marketplace_id == _account_uploads_id(owner.id)
+    assert fresh_plugin.marketplace_id == _user_uploads_id(owner.id)
     assert _plugin(db_session, gone.id) is None
 
     # A changed bundle gets a new version, published in the library.
@@ -320,13 +318,10 @@ def test_resync_matches_plugin_rows_to_skill_rows(db_session: Session) -> None:
         None,
         edited.updated_at,
     )
-    assert (
-        db_session.execute(
-            text("SELECT name FROM plugin_skill WHERE plugin_version_id = :id"),
-            {"id": new_version_id},
-        ).scalar_one()
-        == edited.name
-    )
+    assert db_session.execute(
+        text("SELECT frontmatter FROM plugin_skill WHERE plugin_version_id = :id"),
+        {"id": new_version_id},
+    ).scalar_one() == {"name": edited.name, "description": edited.description}
 
     # A version from new code stays current: its bundle is the skill bundle.
     new_code_plugin = _plugin(db_session, new_code.id)
@@ -357,12 +352,12 @@ def test_resync_matches_plugin_rows_to_skill_rows(db_session: Session) -> None:
     assert published_plugin.published_version_id == published.id
     assert published_plugin.installation_policy == "DEFAULT"
     unpublished_plugin = _plugin(db_session, unpublished.id)
-    assert unpublished_plugin.marketplace_id == _account_uploads_id(owner.id)
+    assert unpublished_plugin.marketplace_id == _user_uploads_id(owner.id)
     assert unpublished_plugin.published_version_id is None
     assert unpublished_plugin.name == f"{unpublished.name}-2"
     moved_plugin = _plugin(db_session, moved.id)
     assert moved_plugin.author_user_id == new_owner.id
-    assert moved_plugin.marketplace_id == _account_uploads_id(new_owner.id)
+    assert moved_plugin.marketplace_id == _user_uploads_id(new_owner.id)
     assert moved_plugin.name == moved.name
     kept_plugin = _plugin(db_session, kept.id)
     assert kept_plugin.current_version_id == kept.id

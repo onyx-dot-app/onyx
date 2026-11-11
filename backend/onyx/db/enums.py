@@ -1012,16 +1012,9 @@ class MarketplaceKind(str, PyEnum):
     """Where a plugin comes from. A marketplace grants no access."""
 
     # One "My uploads" for each user.
-    ACCOUNT_UPLOADS = "account_uploads"
+    USER_UPLOADS = "user_uploads"
     # One for each tenant. A plugin here is published to the organization.
     ORGANIZATION_LIBRARY = "organization_library"
-
-
-class PluginKind(str, PyEnum):
-    # One skill, with SKILL.md at the root of the bundle.
-    SKILL = "skill"
-    # Zero or more skills in skills/<name>/.
-    PLUGIN = "plugin"
 
 
 class PluginInstallationPolicy(str, PyEnum):

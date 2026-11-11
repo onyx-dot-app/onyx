@@ -293,7 +293,11 @@ The library preview of an external-app skill calls the same renderer
     `skills/bundle.py:normalize_stored_bundle`, so a saved bundle over the ZIP-size
     or file-count limit stays editable. Merges that add files keep the upload
     limits, so repeated merges cannot pass them. A full-replacement upload in the
-    editor does not read the current bundle. Only direct uploads return 413. Batch uploads report
+    editor does not read the current bundle. One limit applies to every new
+    version, edits included: `skills/bundle.py:check_skill_md_size` refuses a
+    SKILL.md over `SKILL_MD_MAX_BYTES` (256 KiB), because each version stores
+    the text. `skills/ingest.py:ingest_skill_bundle` and the GitHub preview call
+    it. Only direct uploads return 413. Batch uploads report
     `not_imported` and GitHub previews mark the Skill unavailable.
 18. `bundle-file-list-memory` **ZIP metadata memory has a fixed bound.**
     Every Skill ZIP opens through `skills/bundle.py:open_bundle_zip`, which uses
@@ -319,10 +323,15 @@ The library preview of an external-app skill calls the same renderer
     Public and author-less skills go to the Organization library, published.
     Other skills go to the author's "My uploads". A duplicate name in one
     marketplace gets the first free `-N` suffix on `plugin.name` only
-    (`db/plugin.py:free_plugin_name` in app code). Creates, bundle changes and
+    (`db/plugin.py:free_plugin_name` in app code). The skill name lives only
+    in `plugin_skill.frontmatter` (NOT NULL, a check requires a string
+    `name`); the backfill seeds it with the name and description of the
+    legacy row. No column stores the kind (skill or plugin):
+    `db/plugin.py:plugin_version_kind` reads it from the layout of each
+    version. Creates, bundle changes and
     deletes write the plugin rows ([[#bundle-change-adds-version]]). A user
     delete removes the plugins in that user's "My uploads"
-    (`db/plugin.py:delete_account_upload_plugins__no_commit`), because a stale
+    (`db/plugin.py:delete_user_upload_plugins__no_commit`), because a stale
     copy there would block the delete. So a live skill can have no plugin
     row; the next write makes one from the legacy rows first
     (`db/plugin.py:lock_skill_plugin__no_commit`), with its shares and
@@ -346,9 +355,10 @@ The library preview of an external-app skill calls the same renderer
     the edit gets 409 `PLUGIN_VERSION_STALE`. Routes no longer delete the
     previous bundle, because older versions still point at it; a skill delete
     removes only the current bundle, so earlier blobs stay until a cleanup
-    task exists. `plugin_skill.skill_md` is empty above 256 KiB, and
-    `plugin_skill.frontmatter` is empty when JSONB cannot hold a value
-    (`skills/metadata.py:frontmatter_for_jsonb`).
+    task exists. Each new version stores `plugin_skill.skill_md`
+    ([[#bundle-size-limits]]). `skills/metadata.py:frontmatter_for_jsonb`
+    drops a frontmatter value that JSONB cannot hold and keeps every other
+    key; name and description are always the validated strings.
 
 ---
 

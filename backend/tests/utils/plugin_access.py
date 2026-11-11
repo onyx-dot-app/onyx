@@ -15,8 +15,8 @@ from sqlalchemy.orm import Session
 ORGANIZATION_LIBRARY_ID = UUID("00000000-0000-4000-8000-00000000011b")
 
 
-def account_uploads_id(user_id: UUID | str) -> UUID:
-    return UUID(hashlib.md5(f"account_uploads:{user_id}".encode()).hexdigest())
+def user_uploads_id(user_id: UUID | str) -> UUID:
+    return UUID(hashlib.md5(f"user_uploads:{user_id}".encode()).hexdigest())
 
 
 def _rows(
@@ -84,7 +84,7 @@ def plugin_access_mismatches(
             if plugin.published_version_id != plugin.current_version_id:
                 problems.append(f"{skill_id}: published version is not current")
         else:
-            if plugin.marketplace_id != account_uploads_id(skill.author_user_id):
+            if plugin.marketplace_id != user_uploads_id(skill.author_user_id):
                 problems.append(f"{skill_id}: private skill is not in My uploads")
             if plugin.published_version_id is not None:
                 problems.append(f"{skill_id}: private skill has a published version")

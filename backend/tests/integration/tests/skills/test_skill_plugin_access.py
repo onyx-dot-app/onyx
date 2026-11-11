@@ -36,8 +36,8 @@ from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestUser
 from tests.utils.plugin_access import (
     ORGANIZATION_LIBRARY_ID,
-    account_uploads_id,
     plugin_access_mismatches,
+    user_uploads_id,
 )
 
 
@@ -271,7 +271,7 @@ def test_bulk_share_writes_plugin_rows(admin_user: DATestUser) -> None:
 def test_publish_moves_plugin_to_organization_library(owner: DATestUser) -> None:
     skill = SkillManager.create_custom(owner, name=_name("publish"))
     before = _plugin(skill.id)
-    assert before.marketplace_id == account_uploads_id(owner.id)
+    assert before.marketplace_id == user_uploads_id(owner.id)
     assert before.published_version_id is None
 
     published = _publish(owner, skill)
@@ -305,7 +305,7 @@ def test_publish_with_a_used_name_returns_conflict(owner: DATestUser) -> None:
     assert response.json()["error_code"] == "CONFLICT"
     assert name in response.json()["detail"]
     assert SkillManager.get_for_user(str(second.id), owner).public_permission is None
-    assert _plugin(second.id).marketplace_id == account_uploads_id(owner.id)
+    assert _plugin(second.id).marketplace_id == user_uploads_id(owner.id)
     _assert_rows_match(first.id, second.id)
 
 
@@ -470,7 +470,7 @@ def test_transfer_moves_private_plugin_to_new_owner(owner: DATestUser) -> None:
     _transfer(owner, skill.id, new_owner.id).raise_for_status()
     plugin = _plugin(skill.id)
     assert plugin.author_user_id == UUID(new_owner.id)
-    assert plugin.marketplace_id == account_uploads_id(new_owner.id)
+    assert plugin.marketplace_id == user_uploads_id(new_owner.id)
     assert plugin.name == skill.name
     # The new owner's share goes; the previous owner keeps EDITOR.
     assert _user_share_created_at(skill.id, new_owner.id) is None
@@ -491,7 +491,7 @@ def test_transfer_with_a_used_name_returns_conflict(owner: DATestUser) -> None:
     assert SkillManager.get_for_user(str(skill.id), owner).owner is not None
     plugin = _plugin(skill.id)
     assert plugin.author_user_id == UUID(owner.id)
-    assert plugin.marketplace_id == account_uploads_id(owner.id)
+    assert plugin.marketplace_id == user_uploads_id(owner.id)
     _assert_rows_match(skill.id)
 
 

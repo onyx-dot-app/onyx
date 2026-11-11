@@ -46,7 +46,7 @@ _UNSYNCED_CUSTOM_SKILLS = f"""
         CASE
             WHEN s.public_permission IS NOT NULL OR s.author_user_id IS NULL
                 THEN '{ORGANIZATION_LIBRARY_ID}'::uuid
-            ELSE md5('account_uploads:' || s.author_user_id::text)::uuid
+            ELSE md5('user_uploads:' || s.author_user_id::text)::uuid
         END AS marketplace_id,
         NULLIF(s.installation_policy, 'AVAILABLE') AS installation_policy,
         CASE
@@ -72,12 +72,12 @@ _INSERT_ORGANIZATION_LIBRARY = f"""
     ON CONFLICT DO NOTHING
 """
 
-_INSERT_ACCOUNT_UPLOADS = """
+_INSERT_USER_UPLOADS = """
     INSERT INTO plugin_marketplace
         (id, kind, name, owner_user_id, default_installation_policy, created_at)
     SELECT
-        md5('account_uploads:' || s.author_user_id::text)::uuid,
-        'account_uploads',
+        md5('user_uploads:' || s.author_user_id::text)::uuid,
+        'user_uploads',
         'My uploads',
         s.author_user_id,
         'AVAILABLE',
@@ -92,12 +92,12 @@ _INSERT_ACCOUNT_UPLOADS = """
 # the name, unless a plugin there has it already.
 _INSERT_PLUGINS_KEEPING_NAME = f"""
     INSERT INTO plugin (
-        id, name, description, kind, marketplace_id, author_user_id,
+        id, name, description, marketplace_id, author_user_id,
         installation_policy, current_version_id, published_version_id,
         created_at, updated_at
     )
     SELECT
-        id, name, description, 'skill', marketplace_id, author_user_id,
+        id, name, description, marketplace_id, author_user_id,
         installation_policy, id, published_version_id, created_at, updated_at
     FROM (
         SELECT
@@ -113,8 +113,8 @@ _INSERT_PLUGINS_KEEPING_NAME = f"""
 
 # Each other skill takes the first free name <name>-2, <name>-3, ... in its
 # marketplace, counting every plugin there. The base is cut so the name fits
-# in 64 characters. Only plugin.name changes: plugin_skill.name and the legacy
-# skill.name keep the skill name.
+# in 64 characters. Only plugin.name changes: the plugin_skill frontmatter and
+# the legacy skill.name keep the skill name.
 _INSERT_PLUGINS_WITH_FREE_NAME = f"""
     DO $$
     DECLARE
@@ -138,12 +138,12 @@ _INSERT_PLUGINS_WITH_FREE_NAME = f"""
                     || '-' || suffix::text;
             END LOOP;
             INSERT INTO plugin (
-                id, name, description, kind, marketplace_id, author_user_id,
+                id, name, description, marketplace_id, author_user_id,
                 installation_policy, current_version_id, published_version_id,
                 created_at, updated_at
             )
             VALUES (
-                pending.id, candidate, pending.description, 'skill',
+                pending.id, candidate, pending.description,
                 pending.marketplace_id, pending.author_user_id,
                 pending.installation_policy, pending.id,
                 pending.published_version_id, pending.created_at,
@@ -154,8 +154,8 @@ _INSERT_PLUGINS_WITH_FREE_NAME = f"""
     $$
 """
 
-# Version 1 holds the skill's current bundle. The file list, sizes, SKILL.md
-# text and frontmatter stay NULL until the repair task reads the bundle.
+# Version 1 holds the skill's current bundle. The file list, sizes and SKILL.md
+# text stay NULL until the repair task reads the bundle.
 _INSERT_VERSIONS = """
     INSERT INTO plugin_version (
         id, plugin_id, version_number, bundle_file_id, bundle_sha256, is_valid,
@@ -171,9 +171,13 @@ _INSERT_VERSIONS = """
     ON CONFLICT DO NOTHING
 """
 
+# The frontmatter starts with the name and description of the legacy row. The
+# repair task replaces it with the parsed SKILL.md.
 _INSERT_PLUGIN_SKILLS = """
-    INSERT INTO plugin_skill (id, plugin_version_id, path, name)
-    SELECT s.id, s.id, '', s.name
+    INSERT INTO plugin_skill (id, plugin_version_id, path, frontmatter)
+    SELECT
+        s.id, s.id, '',
+        jsonb_build_object('name', s.name, 'description', s.description)
     FROM skill s
     JOIN plugin_version v ON v.id = s.id
     WHERE s.built_in_skill_id IS NULL
@@ -218,7 +222,7 @@ def backfill_plugins_from_skills() -> None:
     Deterministic: ids come from skill ids or fixed literals."""
     for statement in (
         _INSERT_ORGANIZATION_LIBRARY,
-        _INSERT_ACCOUNT_UPLOADS,
+        _INSERT_USER_UPLOADS,
         _INSERT_PLUGINS_KEEPING_NAME,
         _INSERT_PLUGINS_WITH_FREE_NAME,
         _INSERT_VERSIONS,
@@ -232,18 +236,24 @@ def backfill_plugins_from_skills() -> None:
 
 # --- Re-sync. Every statement is deterministic and safe to run twice. ---
 
+# A plugin whose current version is a skill (one plugin_skill row, at the
+# bundle root) and whose legacy skill row is gone.
 _DELETE_PLUGINS_WITHOUT_SKILL = """
     DELETE FROM plugin p
-    WHERE p.kind = 'skill'
-      AND NOT EXISTS (
+    WHERE NOT EXISTS (
           SELECT 1 FROM skill s
           WHERE s.id = p.id AND s.built_in_skill_id IS NULL
       )
+      AND (
+          SELECT array_agg(ps.path) FROM plugin_skill ps
+          WHERE ps.plugin_version_id = p.current_version_id
+      ) = ARRAY['']::varchar[]
 """
 
 # A skill whose bundle is not the bundle of its plugin's current version gets
 # a new version with that bundle. Like version 1 of the backfill, it has no
-# file list, SKILL.md text or frontmatter until the repair task reads it.
+# file list or SKILL.md text until the repair task reads it, and its
+# frontmatter holds the name and description of the legacy row.
 _CHANGED_BUNDLE_VERSION_ID = "md5(p.id::text || s.bundle_file_id)::uuid"
 
 _CHANGED_BUNDLES = """
@@ -279,8 +289,12 @@ _INSERT_CHANGED_BUNDLE_VERSIONS = f"""
 """
 
 _INSERT_CHANGED_BUNDLE_SKILLS = f"""
-    INSERT INTO plugin_skill (id, plugin_version_id, path, name)
-    SELECT {_CHANGED_BUNDLE_VERSION_ID}, {_CHANGED_BUNDLE_VERSION_ID}, '', s.name
+    INSERT INTO plugin_skill (id, plugin_version_id, path, frontmatter)
+    SELECT
+        {_CHANGED_BUNDLE_VERSION_ID},
+        {_CHANGED_BUNDLE_VERSION_ID},
+        '',
+        jsonb_build_object('name', s.name, 'description', s.description)
     {_CHANGED_BUNDLES}
     ON CONFLICT DO NOTHING
 """
@@ -307,7 +321,7 @@ _TARGET_MARKETPLACE = f"""
     CASE
         WHEN s.public_permission IS NOT NULL OR s.author_user_id IS NULL
             THEN '{ORGANIZATION_LIBRARY_ID}'::uuid
-        ELSE md5('account_uploads:' || s.author_user_id::text)::uuid
+        ELSE md5('user_uploads:' || s.author_user_id::text)::uuid
     END
 """
 

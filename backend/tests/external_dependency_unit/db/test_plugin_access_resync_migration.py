@@ -23,8 +23,8 @@ from tests.external_dependency_unit.db.test_plugin_resync_migration import (
 )
 from tests.utils.plugin_access import (
     ORGANIZATION_LIBRARY_ID,
-    account_uploads_id,
     plugin_access_mismatches,
+    user_uploads_id,
 )
 
 
@@ -128,9 +128,7 @@ def test_access_resync_matches_plugin_rows_to_skill_rows(db_session: Session) ->
     assert _plugin(db_session, published.id).marketplace_id == ORGANIZATION_LIBRARY_ID
     # The unpublished plugin goes back to "My uploads", where clash has its name.
     assert _plugin(db_session, unpublished.id).name == f"{unpublished.name}-2"
-    assert _plugin(db_session, moved.id).marketplace_id == account_uploads_id(
-        new_owner.id
-    )
+    assert _plugin(db_session, moved.id).marketplace_id == user_uploads_id(new_owner.id)
     assert _version_count(db_session, edited.id) == 2
 
     # A second run changes nothing.

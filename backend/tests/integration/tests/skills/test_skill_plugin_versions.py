@@ -19,6 +19,8 @@ from sqlalchemy import select
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.db.enums import MarketplaceKind
 from onyx.db.models import Marketplace, Plugin, PluginSkill, PluginVersion, Skill
+from onyx.db.plugin import get_plugin_version_kind
+from onyx.skills.bundle import SKILL_MD_MAX_BYTES
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -194,7 +196,8 @@ class _Version:
     file_count: int | None
     created_by_user_id: UUID | None
     created_by_email: str | None
-    skills: list[tuple[str, str, str | None, dict[str, Any] | None]]
+    # (path, frontmatter name, skill_md, frontmatter) of each skill.
+    skills: list[tuple[str, str, str | None, dict[str, Any]]]
 
 
 @dataclass(frozen=True)
@@ -234,7 +237,7 @@ def _state(skill_id: str | UUID) -> _State:
             .order_by(PluginVersion.version_number)
         ):
             skills = [
-                (row.path, row.name, row.skill_md, row.frontmatter)
+                (row.path, row.frontmatter["name"], row.skill_md, row.frontmatter)
                 for row in db_session.scalars(
                     select(PluginSkill).where(
                         PluginSkill.plugin_version_id == version.id
@@ -259,7 +262,7 @@ def _state(skill_id: str | UUID) -> _State:
         return _State(
             plugin_name=plugin.name,
             plugin_description=plugin.description,
-            kind=plugin.kind.value,
+            kind=get_plugin_version_kind(plugin.current_version_id, db_session),
             marketplace_id=plugin.marketplace_id,
             marketplace_kind=marketplace.kind,
             author_user_id=plugin.author_user_id,
@@ -274,8 +277,8 @@ def _state(skill_id: str | UUID) -> _State:
         )
 
 
-def _account_uploads_id(user_id: str) -> UUID:
-    return UUID(hashlib.md5(f"account_uploads:{user_id}".encode()).hexdigest())
+def _user_uploads_id(user_id: str) -> UUID:
+    return UUID(hashlib.md5(f"user_uploads:{user_id}".encode()).hexdigest())
 
 
 def _assert_legacy_matches_current(state: _State) -> None:
@@ -302,8 +305,8 @@ def test_upload_creates_plugin_version_1(user: DATestUser) -> None:
     assert state.kind == "skill"
     assert state.plugin_name == name
     assert state.plugin_description == "Uploaded description"
-    assert state.marketplace_id == _account_uploads_id(user.id)
-    assert state.marketplace_kind == MarketplaceKind.ACCOUNT_UPLOADS
+    assert state.marketplace_id == _user_uploads_id(user.id)
+    assert state.marketplace_kind == MarketplaceKind.USER_UPLOADS
     assert state.author_user_id == UUID(user.id)
     assert state.published_version_id is None
     assert [v.number for v in state.versions] == [1]
@@ -359,7 +362,7 @@ def test_editor_and_batch_create_make_plugins(user: DATestUser) -> None:
     for item in imported:
         batch_state = _state(item["skill"]["id"])
         assert [v.number for v in batch_state.versions] == [1]
-        assert batch_state.marketplace_id == _account_uploads_id(user.id)
+        assert batch_state.marketplace_id == _user_uploads_id(user.id)
         _assert_legacy_matches_current(batch_state)
 
 
@@ -501,15 +504,45 @@ def test_save_on_private_plugin_keeps_published_pointer(user: DATestUser) -> Non
     assert state.published_version_id is None
 
 
-def test_large_skill_md_is_not_stored(user: DATestUser) -> None:
-    name = f"large-{uuid4().hex[:8]}"
-    body = "x" * (256 * 1024 + 1)
-    skill_md = _skill_md(name, "Large", body)
-    skill = _upload(user, _bundle({"SKILL.md": skill_md}), name=name)
+def _assert_skill_md_refused(response: Any) -> None:
+    assert response.status_code == 413
+    body = response.json()
+    assert body["limit"] == "skill_md_bytes"
+    assert body["limit_value"] == SKILL_MD_MAX_BYTES
+    assert "Split it into several files" in body["detail"]
 
-    current = _state(skill["id"]).current
-    assert current.skills == [("", name, None, {"name": name, "description": "Large"})]
-    assert current.file_manifest == _manifest({"SKILL.md": skill_md})
+
+def test_skill_md_over_limit_is_refused(user: DATestUser) -> None:
+    name = f"large-{uuid4().hex[:8]}"
+    large_body = "x" * SKILL_MD_MAX_BYTES
+    large_bundle = _bundle({"SKILL.md": _skill_md(name, "Large", large_body)})
+
+    upload = client.post(
+        f"{API_SERVER_URL}/skills/custom",
+        files={"bundle": (f"{name}.zip", io.BytesIO(large_bundle), "application/zip")},
+        headers=_multipart_headers(user),
+    )
+    _assert_skill_md_refused(upload)
+
+    batch = client.post(
+        f"{API_SERVER_URL}/skills/custom/batch",
+        files=[
+            ("bundles", (f"{name}.zip", io.BytesIO(large_bundle), "application/zip"))
+        ],
+        headers=_multipart_headers(user),
+    )
+    batch.raise_for_status()
+    assert batch.json()["imported"] == []
+    [not_imported] = batch.json()["not_imported"]
+    assert "Split it into several files" in not_imported["reason"]
+
+    # Edits of a saved skill are refused too and add no version.
+    skill = _upload(user, _bundle({"SKILL.md": _skill_md(name, "Small")}), name=name)
+    _assert_skill_md_refused(
+        _patch(user, skill["id"], {"instructions_markdown": large_body})
+    )
+    _assert_skill_md_refused(_replace(user, skill["id"], large_bundle))
+    assert [v.number for v in _state(skill["id"]).versions] == [1]
 
 
 def test_frontmatter_matches_skill_md(user: DATestUser) -> None:
@@ -539,21 +572,25 @@ def test_frontmatter_matches_skill_md(user: DATestUser) -> None:
         "big: " + "9" * 5000,
     ],
 )
-def test_frontmatter_jsonb_cannot_hold_is_left_empty(
+def test_frontmatter_value_jsonb_cannot_hold_is_dropped(
     user: DATestUser, extra: str
 ) -> None:
     name = f"unsafe-{uuid4().hex[:8]}"
-    skill_md = f"---\nname: {name}\ndescription: Unsafe\n{extra}\n---\n\nBody.\n"
+    skill_md = (
+        f"---\nname: {name}\ndescription: Unsafe\nallowed-tools: Bash\n{extra}\n"
+        "---\n\nBody.\n"
+    )
     skill = _upload(user, _bundle({"SKILL.md": skill_md}), name=name)
 
     current = _state(skill["id"]).current
-    assert current.skills == [("", name, skill_md, None)]
+    kept = {"name": name, "description": "Unsafe", "allowed-tools": "Bash"}
+    assert current.skills == [("", name, skill_md, kept)]
 
     # The editor rewrites the frontmatter and still saves.
     _patch(user, skill["id"], {"description": "Edited"}).raise_for_status()
     edited = _state(skill["id"]).current
     assert edited.number == 2
-    assert edited.skills[0][3] is None
+    assert edited.skills[0][3] == {**kept, "description": "Edited"}
 
 
 def test_new_version_with_another_skill_name_is_refused(user: DATestUser) -> None:
@@ -612,12 +649,12 @@ def test_concurrent_first_uploads_share_my_uploads() -> None:
 
     assert not errors
     marketplace_ids = {_state(skill["id"]).marketplace_id for skill in results.values()}
-    assert marketplace_ids == {_account_uploads_id(user.id)}
+    assert marketplace_ids == {_user_uploads_id(user.id)}
     with get_session_with_current_tenant() as db_session:
         owned = db_session.scalars(
             select(Marketplace.id).where(
                 Marketplace.owner_user_id == UUID(user.id),
-                Marketplace.kind == MarketplaceKind.ACCOUNT_UPLOADS,
+                Marketplace.kind == MarketplaceKind.USER_UPLOADS,
             )
         ).all()
     assert len(owned) == 1
@@ -681,7 +718,7 @@ def test_save_on_skill_without_plugin_row_converges(
     assert state.current_version_id == new_version.id
     assert new_version.file_manifest is not None
     assert response.json()["current_version_id"] == str(new_version.id)
-    assert state.marketplace_id == _account_uploads_id(user.id)
+    assert state.marketplace_id == _user_uploads_id(user.id)
     _assert_legacy_matches_current(state)
 
 

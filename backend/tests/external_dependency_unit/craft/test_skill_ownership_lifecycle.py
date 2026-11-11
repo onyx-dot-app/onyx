@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from ee.onyx.server.tenants.team_membership_api import leave_organization
 from onyx.auth.users import UserManager
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
-from onyx.db.enums import MarketplaceKind, PluginKind, SkillSharePermission
+from onyx.db.enums import MarketplaceKind, SkillSharePermission
 from onyx.db.models import (
     Marketplace,
     Plugin,
@@ -56,11 +56,11 @@ def test_owner_must_transfer_private_skills_before_deletion(
     assert skill.author_user_id == successor.id
 
 
-def _copy_to_account_uploads(db_session: Session, skill: Skill, owner: User) -> None:
+def _copy_to_user_uploads(db_session: Session, skill: Skill, owner: User) -> None:
     """Copy a private skill into the owner's "My uploads", as the backfill does."""
     marketplace = Marketplace(
         id=uuid4(),
-        kind=MarketplaceKind.ACCOUNT_UPLOADS,
+        kind=MarketplaceKind.USER_UPLOADS,
         name="My uploads",
         owner_user_id=owner.id,
     )
@@ -72,7 +72,6 @@ def _copy_to_account_uploads(db_session: Session, skill: Skill, owner: User) -> 
                 id=skill.id,
                 name=skill.name,
                 description=skill.description,
-                kind=PluginKind.SKILL,
                 marketplace_id=marketplace.id,
                 author_user_id=owner.id,
                 current_version_id=skill.id,
@@ -94,7 +93,7 @@ def test_copied_plugin_does_not_block_deletion_of_former_owner(
     successor = make_user(db_session, standard_account=True)
     skill = make_skill(db_session, author_user_id=owner.id)
     plugin_id = skill.id
-    _copy_to_account_uploads(db_session, skill, owner)
+    _copy_to_user_uploads(db_session, skill, owner)
 
     if change == "transfer":
         transfer_skill_ownership(

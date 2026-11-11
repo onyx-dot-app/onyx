@@ -569,10 +569,8 @@ def test_installation_policies_preserve_choices_through_updates(
                 skills=[
                     PluginSkillContent(
                         path="",
-                        name=skill.name,
-                        description="Updated",
                         skill_md=None,
-                        frontmatter=None,
+                        frontmatter={"name": skill.name, "description": "Updated"},
                     )
                 ],
             ),
