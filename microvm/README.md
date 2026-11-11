@@ -77,7 +77,7 @@ with `--listen`, on an mTLS TCP listener for the api_server (D2):
 running VM, for example the app preview (3010). Only the ports in `--dial-ports` (default `3010`) are
 allowed (`PORT_NOT_ALLOWED`). Dial always refuses the guest daemon port (`--daemon-port`) with
 `PORT_NOT_ALLOWED`, also if `--dial-ports` names it: use the pass-through. The agent does not start with
-an empty `--dial-ports`, with a port above 65535, or with more than 64 ports. Create sends the list (without `--daemon-port`) to the
+an empty `--dial-ports`, with a port above 65535, or with no port or more than 64 ports besides `--daemon-port`. Create sends the list (without `--daemon-port`) to the
 guest daemon with `SetKey`, and the daemon forwards each port to TCP `127.0.0.1:<port>` in the guest. So
 the guest listens on no other port, and a VM made without `sandboxd_key` forwards no port. If nothing in the VM accepts the connection, the call fails with
 `GUEST_UNREACHABLE`. A `generation` other than 0 must match the running VM, else the call fails with
