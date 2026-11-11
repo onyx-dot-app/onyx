@@ -213,17 +213,9 @@ func TestNodeReportAndKeyRegistration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	last := func(name string) float64 {
-		t.Helper()
-		g := m.nodeReportLast
-		if name == "key" {
-			g = m.keyRegLast
-		}
-		return testutil.ToFloat64(g)
-	}
 	m.NodeReport(statusErr(503))
 	m.KeyRegistration(statusErr(401))
-	if last("report") != 0 || last("key") != 0 {
+	if testutil.ToFloat64(m.nodeReportLast) != 0 || testutil.ToFloat64(m.keyRegLast) != 0 {
 		t.Fatal("a failure set the last success time")
 	}
 	before := float64(time.Now().Unix())
@@ -231,8 +223,8 @@ func TestNodeReportAndKeyRegistration(t *testing.T) {
 	m.NodeReport(nil)
 	m.NodeReport(errors.New("timeout"))
 	m.KeyRegistration(nil)
-	if last("report") < before || last("key") < before {
-		t.Fatalf("last success %v %v, want >= %v", last("report"), last("key"), before)
+	if r, k := testutil.ToFloat64(m.nodeReportLast), testutil.ToFloat64(m.keyRegLast); r < before || k < before {
+		t.Fatalf("last success %v %v, want >= %v", r, k, before)
 	}
 	if err := testutil.GatherAndCompare(m.Registry(), strings.NewReader(`
 # HELP craft_fc_host_agent_node_reports_total Node state reports to the api_server. result: success, rejected (HTTP 4xx), server_error (other HTTP), failed (no reply, or over the caps).
