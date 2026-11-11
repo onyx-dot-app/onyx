@@ -1241,6 +1241,10 @@ def _get_onedrive_permission_owned_doc_ids(
 
     Kept as a separate query: a correlated subquery in the ON CONFLICT SET clause
     renders its FROM tables without the tenant schema and does not correlate.
+
+    Not serialized with OneDrive marking its relationship indexed, so an overlapping
+    SharePoint write can land on a OneDrive-owned row. OneDrive's next permission
+    sync takes ownership back.
     """
     stmt = (
         select(DocumentByConnectorCredentialPair.id)
