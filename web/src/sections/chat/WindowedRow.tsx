@@ -3,44 +3,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useOptionalScrollContainer } from "@/sections/chat/ScrollContainerContext";
 
-/** How far beyond the viewport, above and below, a row stays mounted. */
-const OVERSCAN_VIEWPORTS = 2;
-
-/**
- * Reports whether `target` is within `OVERSCAN_VIEWPORTS` viewport heights of
- * the chat scroll container `root`, above or below. The margin follows the
- * root's height, which can change after the target mounts. Returns a function
- * that stops observing.
- */
-export function observeNearViewport(
-  root: HTMLElement,
-  target: Element,
-  onChange: (near: boolean) => void
-): () => void {
-  let height = root.clientHeight;
-  // In pixels, because browsers do not agree on what a percentage of the root is.
-  const observe = () => {
-    const observer = new IntersectionObserver(
-      ([entry]) => onChange(entry?.isIntersecting ?? false),
-      { root, rootMargin: `${height * OVERSCAN_VIEWPORTS}px 0px` }
-    );
-    observer.observe(target);
-    return observer;
-  };
-  let observer = observe();
-  const resizeObserver = new ResizeObserver(() => {
-    if (root.clientHeight === height) return;
-    height = root.clientHeight;
-    observer.disconnect();
-    observer = observe();
-  });
-  resizeObserver.observe(root);
-  return () => {
-    resizeObserver.disconnect();
-    observer.disconnect();
-  };
-}
-
 /** Placeholder height of a row that has never been measured. */
 const ESTIMATED_ROW_HEIGHT_PX = 320;
 
@@ -59,7 +21,7 @@ export interface WindowedRowProps {
 
 /**
  * A row of a long scrolling list that mounts its content only while the row
- * is within `OVERSCAN_VIEWPORTS` viewport heights of the scroll container's viewport. Away from
+ * is near the scroll container's viewport (see `observeNearViewport`). Away from
  * it, the row is an empty placeholder at its last measured height.
  *
  * When a row above the viewport changes height (a placeholder mounts, or
@@ -80,6 +42,7 @@ export default function WindowedRow({
 }: WindowedRowProps) {
   const scrollContainer = useOptionalScrollContainer();
   const scrollContainerRef = scrollContainer?.scrollContainerRef;
+  const observeNearViewport = scrollContainer?.observeNearViewport;
   const rowRef = useRef<HTMLDivElement>(null);
   const hasFocusRef = useRef(false);
   const isIntersectingRef = useRef(initiallyMounted);
@@ -88,16 +51,15 @@ export default function WindowedRow({
   const mounted = !scrollContainer || pinned || nearViewport;
 
   useEffect(() => {
-    const root = scrollContainerRef?.current;
     const row = rowRef.current;
-    if (!root || !row) return;
+    if (!observeNearViewport || !row) return;
 
-    return observeNearViewport(root, row, (near) => {
+    return observeNearViewport(row, (near) => {
       isIntersectingRef.current = near;
       if (near) setNearViewport(true);
       else if (!hasFocusRef.current) setNearViewport(false);
     });
-  }, [scrollContainerRef]);
+  }, [observeNearViewport]);
 
   useEffect(() => {
     const root = scrollContainerRef?.current;

@@ -11,7 +11,6 @@ import {
   useIsLoadingOlderMessages,
 } from "@/app/app/stores/useChatSessionStore";
 import { loadOlderChatMessages } from "@/lib/chat/pagedSession";
-import { observeNearViewport } from "@/sections/chat/WindowedRow";
 
 export interface OlderMessagesLoaderProps {
   className?: string;
@@ -29,23 +28,22 @@ export default function OlderMessagesLoader({
   className,
 }: OlderMessagesLoaderProps) {
   const t = useTranslations("chat.app");
-  const scrollContainerRef = useOptionalScrollContainer()?.scrollContainerRef;
+  const observeNearViewport = useOptionalScrollContainer()?.observeNearViewport;
   const loaderRef = useRef<HTMLDivElement>(null);
   const isLoading = useIsLoadingOlderMessages();
 
   // Observed again after each page: a loader still in range loads the next.
   useEffect(() => {
-    const root = scrollContainerRef?.current;
     const loader = loaderRef.current;
-    if (!root || !loader || isLoading) return;
+    if (!observeNearViewport || !loader || isLoading) return;
 
-    return observeNearViewport(root, loader, (near) => {
+    return observeNearViewport(loader, (near) => {
       const sessionId = useChatSessionStore.getState().currentSessionId;
       if (near && sessionId) {
         void loadOlderChatMessages(sessionId);
       }
     });
-  }, [scrollContainerRef, isLoading]);
+  }, [observeNearViewport, isLoading]);
 
   return (
     <div

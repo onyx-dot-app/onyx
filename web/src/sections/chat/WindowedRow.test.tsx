@@ -7,11 +7,15 @@ import { ScrollContainerProvider } from "@/sections/chat/ScrollContainerContext"
 const ROW_DISTANCE_PX = 400;
 
 const resizeCallbacks = new Map<Element, () => void>();
+const resizeTargets: Element[] = [];
+let intersectionObservers = 0;
 const originalIntersectionObserver = global.IntersectionObserver;
 const originalResizeObserver = global.ResizeObserver;
 
 beforeEach(() => {
   resizeCallbacks.clear();
+  resizeTargets.length = 0;
+  intersectionObservers = 0;
   // Native scroll anchoring, so rows make no scroll corrections.
   Object.defineProperty(window, "CSS", {
     value: { supports: () => true },
@@ -22,7 +26,9 @@ beforeEach(() => {
     constructor(
       private readonly callback: IntersectionObserverCallback,
       private readonly options?: IntersectionObserverInit
-    ) {}
+    ) {
+      intersectionObservers++;
+    }
     observe(target: Element) {
       const margin = Number.parseFloat(this.options?.rootMargin ?? "0");
       this.callback(
@@ -35,11 +41,13 @@ beforeEach(() => {
         this as unknown as IntersectionObserver
       );
     }
+    unobserve() {}
     disconnect() {}
   } as unknown as typeof IntersectionObserver;
   global.ResizeObserver = class {
     constructor(private readonly callback: ResizeObserverCallback) {}
     observe(target: Element) {
+      resizeTargets.push(target);
       resizeCallbacks.set(target, () =>
         this.callback([], this as unknown as ResizeObserver)
       );
@@ -66,6 +74,9 @@ function Chat({ root }: { root: HTMLDivElement }) {
       <WindowedRow id="message-1" initiallyMounted heightCache={new Map()}>
         First message
       </WindowedRow>
+      <WindowedRow id="message-2" initiallyMounted heightCache={new Map()}>
+        Second message
+      </WindowedRow>
     </ScrollContainerProvider>
   );
 }
@@ -76,8 +87,13 @@ test("a row mounted while the chat was short stays mounted once the chat grows",
   Object.defineProperty(root, "clientHeight", { get: () => height });
   render(<Chat root={root} />);
   expect(screen.queryByText("First message")).not.toBeInTheDocument();
+  // The rows share one observer of the container.
+  expect(intersectionObservers).toBe(1);
+  expect(resizeTargets.filter((target) => target === root)).toHaveLength(1);
 
   height = 720;
   act(() => resizeCallbacks.get(root)?.());
   expect(screen.getByText("First message")).toBeInTheDocument();
+  expect(screen.getByText("Second message")).toBeInTheDocument();
+  expect(intersectionObservers).toBe(2);
 });
