@@ -231,7 +231,9 @@ the stored token on each request, so a new token takes effect at once.
   zip; session-relative, or absolute VM paths with no session). Every call but Health sends `x-sandboxd-key`. No caller
   uses exec or files yet.
 - `backend/onyx/microvm/placement.py`: one VM per sandbox, best of K nodes on
-  free memory, `SANDBOX_CAPACITY_UNAVAILABLE` with the reason. Wake is an
+  free memory (a node at its `max_vms` cap is skipped),
+  `SANDBOX_CAPACITY_UNAVAILABLE` with the reason. When every node refuses,
+  placement deletes the attempt's daemon key. Wake is an
   idempotent ensure: it reads the durable placement record and asks that
   node's agent whether the VM runs. Before Create it takes the sandbox's
   reservation (attempt, node) atomically; a Create with no known outcome

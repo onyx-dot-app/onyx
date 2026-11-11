@@ -480,6 +480,14 @@ def _rank(
                     ),
                 )
             )
+        elif info.max_vms and info.vm_count >= info.max_vms:
+            refusals.append(
+                NodeRefusal(
+                    node_id=node.node_id,
+                    reason=HostAgentErrorReason.CAPACITY_VM_SLOTS.value,
+                    detail=f"{info.vm_count} VMs, the node cap is {info.max_vms}",
+                )
+            )
         else:
             eligible.append((node, info))
     return sorted(eligible, key=lambda pair: pair[1].mem_available_mib, reverse=True)
@@ -687,6 +695,20 @@ def _key_for_attempt(tenant_cache: CacheBackend, request: VmRequest) -> SecretSt
     return key
 
 
+def _release_refused(
+    tenant_cache: CacheBackend, request: VmRequest, reservation: _Reservation
+) -> None:
+    """Every node refused, so no VM of this attempt runs: delete its key, then
+    the reservation. The key stays when another placement took over the
+    reservation, as that placement may send the same key."""
+    found = get_sandbox_reservation(tenant_cache, request.sandbox_id)
+    if found is not None and found[1] == reservation.raw:
+        clear_sandbox_daemon_key(
+            tenant_cache, request.sandbox_id, attempt=request.attempt
+        )
+    reservation.release(tenant_cache)
+
+
 def discard_unusable_vm(
     shared_cache: CacheBackend,
     tenant_cache: CacheBackend,
@@ -845,7 +867,7 @@ def place_sandbox_vm(
                 pinned = None
                 continue
             if placed is None:
-                reservation.release(tenant_cache)
+                _release_refused(tenant_cache, request, reservation)
                 raise capacity_unavailable_error(refusals)
             if not record_placement(
                 shared_cache,

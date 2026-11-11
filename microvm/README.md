@@ -578,6 +578,14 @@ guests free. The check runs under the agent lock, so two Creates never take the 
 `mem_available_mib`, `mem_needed_mib`, `vm_mem_mib`, `mem_starting_mib`, `mem_reserve_mib`. `NodeInfo`
 returns `mem_reserve_mib` and `mem_starting_mib`.
 
+**VM cap.** `--max-vms` (default 0, no cap) caps the Firecracker processes of the node: VMs that are not
+exited (starting VMs too), template build VMs and processes in doubt. Over it, Create and template builds
+fail with `CAPACITY_VM_SLOTS` (metadata `vm_count`, `max_vms`), and placement tries the next node. A repeat
+Create of a VM on the node is never refused. On nested virtualization (m8i.4xlarge), more than 64 VMs of
+2 vCPU make random running VMs exit with `KVM_EXIT_FAIL_ENTRY`, while memory and CPU are far from their
+limits. The Helm chart sets 60 (`craft.hostAgent.maxVms`); raise it or set 0 on bare metal. `NodeInfo`
+returns `max_vms`, and placement skips a node whose `vm_count` is at its cap.
+
 **Drain.** The node drains while the manual flag is set (`SetDrain`, kept in `<data-dir>/drain.json`
 across restarts) or while its Node has a taint from `--drain-taints` (default
 `node.kubernetes.io/unschedulable`, which `kubectl cordon` and `kubectl drain` set). With

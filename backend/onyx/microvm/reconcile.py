@@ -425,6 +425,14 @@ class _Pass:
             # A placement in progress writes the record itself.
             if lock is None:
                 return
+            # A placement that ended after the report read its state wrote
+            # the record and released the reservation: nothing to adopt.
+            record = get_sandbox_placement(tenant_cache, sandbox_id)
+            found = get_sandbox_reservation(tenant_cache, sandbox_id)
+            if (record is not None and record.attempt >= vm.attempt) or (
+                found is None or found[1] != adoption.reservation_raw
+            ):
+                return
             try:
                 installed = self.install_key(vm, adoption.key)
             except _OutOfTime as e:

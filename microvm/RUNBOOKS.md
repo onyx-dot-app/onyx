@@ -147,7 +147,7 @@ nodes are full. The reasons in this rule:
 |---|---|
 | `CAPACITY_MEMORY` | `MemAvailable` < starting VMs + the new VM + `--min-free-mem-mib`, or the agent cannot read node memory |
 | `CAPACITY_DISK` | The data disk has less free space than `--min-free-disk-gib`, or the agent cannot read it |
-| `CAPACITY_VM_SLOTS` | No free jailer UID, or the process scan failed at start-up |
+| `CAPACITY_VM_SLOTS` | The node runs `--max-vms` VMs (metadata `vm_count`, `max_vms`), no free jailer UID, or the process scan failed at start-up |
 | `EGRESS_CA_UNAVAILABLE` | The agent cannot read the sandbox-proxy CA ConfigMap |
 | `SANDBOX_IN_DOUBT` | The agent keeps a Firecracker process that it cannot verify |
 

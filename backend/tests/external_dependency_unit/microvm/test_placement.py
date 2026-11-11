@@ -124,6 +124,93 @@ def test_refusal_moves_to_next_node(
     assert placed.node.node_id == second_id
 
 
+def test_node_at_its_vm_cap_is_skipped(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
+) -> None:
+    full_id = _node("capped")
+    full = add_node(full_id, FakeHostAgent(mem_available_mib=32_768))
+    full.agent.max_vms = 1
+    full.agent.add_vm(sandbox_id=str(uuid4()), tenant_id=TENANT_ID, attempt=1)
+    other_id = _node("other")
+    add_node(other_id, FakeHostAgent(mem_available_mib=8192))
+
+    placed = place_sandbox_vm(
+        shared_cache, tenant_cache, client_factory, _request(new_sandbox_id())
+    )
+
+    assert placed.node.node_id == other_id
+    assert full.agent.create_calls == 0
+
+
+def test_refused_placement_deletes_its_daemon_key(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
+) -> None:
+    node_id = _node("full")
+    add_node(node_id).agent.refuse_create = HostAgentErrorReason.CAPACITY_VM_SLOTS
+    sandbox_id = new_sandbox_id()
+
+    with pytest.raises(OnyxError) as exc:
+        place_sandbox_vm(
+            shared_cache, tenant_cache, client_factory, _request(sandbox_id)
+        )
+
+    assert exc.value.extra == {
+        "reason": "CAPACITY_VM_SLOTS",
+        "nodes": {node_id: "CAPACITY_VM_SLOTS"},
+    }
+    assert tenant_cache.get(registry._DAEMON_KEY_PREFIX + str(sandbox_id)) is None
+    assert get_sandbox_reservation(tenant_cache, sandbox_id) is None
+
+
+def test_refused_placement_keeps_the_key_of_a_placement_that_took_over(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    add_node(_node("full")).agent.refuse_create = HostAgentErrorReason.CAPACITY_MEMORY
+    sandbox_id = new_sandbox_id()
+    real_place_new = placement._place_new
+    taken: list[bytes] = []
+
+    def refused_then_taken_over(*args: Any, **kwargs: Any) -> PlacedVm | None:
+        placed = real_place_new(*args, **kwargs)
+        # After a lock lease expired, another placement resumed the same
+        # attempt; it sends the same key.
+        found = get_sandbox_reservation(tenant_cache, sandbox_id)
+        assert found is not None
+        raw = reserve_sandbox(
+            tenant_cache,
+            sandbox_id,
+            found[0].model_copy(update={"owner": "other"}),
+            replaces=found[1],
+        )
+        assert raw is not None
+        taken.append(raw)
+        return placed
+
+    monkeypatch.setattr(placement, "_place_new", refused_then_taken_over)
+
+    with pytest.raises(OnyxError):
+        place_sandbox_vm(
+            shared_cache, tenant_cache, client_factory, _request(sandbox_id)
+        )
+
+    assert tenant_cache.get(registry._DAEMON_KEY_PREFIX + str(sandbox_id)) is not None
+    found = get_sandbox_reservation(tenant_cache, sandbox_id)
+    assert found is not None and found[1] == taken[0]
+
+
 def test_one_vm_per_sandbox(
     shared_cache: CacheBackend,
     tenant_cache: CacheBackend,
