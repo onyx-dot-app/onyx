@@ -125,6 +125,14 @@ def _render_template(
     )
 
 
+def _resolved_size(name: str, skill_md: bytes) -> int:
+    """Size of a root ``SKILL.md`` after ``${CLAUDE_SKILL_DIR}`` resolution."""
+    placeholder = CLAUDE_SKILL_DIR_PLACEHOLDER.encode()
+    return len(skill_md) + skill_md.count(placeholder) * (
+        len(f"{SKILLS_MOUNT_PATH}/{name}".encode()) - len(placeholder)
+    )
+
+
 def _add_bundle_bytes(files: FileSet, skill: Skill, bundle_bytes: bytes) -> None:
     try:
         bundle_files: FileSet = {}
@@ -143,6 +151,19 @@ def _add_bundle_bytes(files: FileSet, skill: Skill, bundle_bytes: bytes) -> None
                 return
             for info in infos:
                 bundle_files[f"{skill.name}/{info.filename}"] = zf.read(info)
+        skill_md = bundle_files.get(f"{skill.name}/{SKILL_MD_NAME}", b"")
+        resolved = _resolved_size(skill.name, skill_md)
+        # Count the resolved instructions now, so a Skill that resolution would
+        # drop does not push later Skills over the total.
+        if (
+            resolved > min(DEFAULT_PER_FILE_MAX_BYTES, MAX_FILE_BYTES)
+            or total - len(skill_md) + resolved > MAX_BUNDLE_BYTES
+        ):
+            logger.warning(
+                "Skipping skill %s: resolved instructions exceed a sandbox size limit",
+                skill.name,
+            )
+            return
         files.update(bundle_files)
     except Exception:
         logger.warning(
@@ -165,9 +186,7 @@ def _resolve_skill_dirs(files: FileSet, skill_names: Iterable[str]) -> None:
         if content is None or placeholder not in content:
             continue
         skill_dir = f"{SKILLS_MOUNT_PATH}/{name}"
-        resolved_size = len(content) + content.count(placeholder) * (
-            len(skill_dir.encode()) - len(placeholder)
-        )
+        resolved_size = _resolved_size(name, content)
         resolved_total = total - len(content) + resolved_size
         if resolved_size > file_limit or resolved_total > MAX_BUNDLE_BYTES:
             logger.warning(
