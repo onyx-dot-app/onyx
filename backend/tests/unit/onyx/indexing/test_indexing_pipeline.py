@@ -23,6 +23,7 @@ from onyx.connectors.models import (
     TabularSection,
     TextSection,
 )
+from onyx.db.enums import IndexModelStatus
 from onyx.document_index.chunk_content_enrichment import (
     generate_enriched_content_for_chunk_embedding,
 )
@@ -354,6 +355,7 @@ def _index_batch_with_handler(
         patch(f"{_PATCH_PREFIX}.sentry_sdk"),
     ):
         return index_doc_batch_with_handler(
+            written_search_settings_id=1,
             chunker=MagicMock(),
             embedder=MagicMock(),
             document_index=MagicMock(),
@@ -448,6 +450,7 @@ def test_index_batch_wraps_a_failed_document_push() -> None:
         pytest.raises(DocumentPushFailure, match="sink down"),
     ):
         index_doc_batch(
+            written_search_settings_id=1,
             document_batch=[document],
             chunker=chunker,
             embedder=MagicMock(),
@@ -486,6 +489,7 @@ def test_batch_handler_forces_only_the_documents_the_batch_prepared() -> None:
         patch(f"{_PATCH_PREFIX}.sentry_sdk"),
     ):
         result = index_doc_batch_with_handler(
+            written_search_settings_id=1,
             chunker=chunker,
             embedder=MagicMock(),
             document_index=MagicMock(),
@@ -931,15 +935,13 @@ _PATCH_PREFIX = "onyx.indexing.indexing_pipeline"
 
 def test_run_pipeline_owns_llm_enrichment_trace() -> None:
     search_settings = SimpleNamespace(enable_contextual_rag=False)
-    all_search_settings = SimpleNamespace(primary=search_settings, secondary=None)
     expected_result = MagicMock()
     vision_llm = MagicMock()
     document = _make_image_doc("image-doc", [ImageSection(image_file_id="1")])
 
     with (
         patch(
-            f"{_PATCH_PREFIX}.get_active_search_settings",
-            return_value=all_search_settings,
+            f"{_PATCH_PREFIX}.get_search_settings_by_id", return_value=search_settings
         ),
         patch(f"{_PATCH_PREFIX}.get_multipass_config"),
         patch(
@@ -958,6 +960,7 @@ def test_run_pipeline_owns_llm_enrichment_trace() -> None:
         patch(f"{_PATCH_PREFIX}.ensure_trace", return_value=nullcontext()) as ensure,
     ):
         result = run_indexing_pipeline(
+            written_search_settings_id=1,
             document_batch=[document],
             request_id=None,
             embedder=MagicMock(),
@@ -1024,14 +1027,12 @@ def _make_image_doc(
 
 def test_unavailable_vision_llm_does_not_enable_spend_gate() -> None:
     search_settings = SimpleNamespace(enable_contextual_rag=False)
-    all_search_settings = SimpleNamespace(primary=search_settings, secondary=None)
     expected_result = MagicMock()
     document = _make_image_doc("image-doc", [ImageSection(image_file_id="1")])
 
     with (
         patch(
-            f"{_PATCH_PREFIX}.get_active_search_settings",
-            return_value=all_search_settings,
+            f"{_PATCH_PREFIX}.get_search_settings_by_id", return_value=search_settings
         ),
         patch(f"{_PATCH_PREFIX}.get_multipass_config"),
         patch(
@@ -1049,6 +1050,7 @@ def test_unavailable_vision_llm_does_not_enable_spend_gate() -> None:
         patch(f"{_PATCH_PREFIX}.ensure_trace") as ensure,
     ):
         result = run_indexing_pipeline(
+            written_search_settings_id=1,
             document_batch=[document],
             request_id=None,
             embedder=MagicMock(),
@@ -1147,6 +1149,7 @@ def test_index_batch_returns_spend_limit_failures_before_contextual_rag() -> Non
         ),
     ):
         result = index_doc_batch(
+            written_search_settings_id=1,
             document_batch=[document],
             chunker=chunker,
             embedder=MagicMock(),
@@ -1202,6 +1205,7 @@ def test_index_batch_skips_tabular_sections_that_reach_it() -> None:
         side_effect=lambda documents: documents,
     ):
         index_doc_batch(
+            written_search_settings_id=1,
             document_batch=[workbook, text_doc],
             chunker=MagicMock(),
             embedder=MagicMock(),
@@ -1849,3 +1853,120 @@ def test_content_hash_is_blind_to_tabular_content() -> None:
     assert (
         _tabular_doc("csv-v1").content_hash() == _tabular_doc("csv-v2").content_hash()
     )
+
+
+def _run_batch_to_stamp(
+    *, locked_status: IndexModelStatus | None, stamp_content_hash: bool = True
+) -> MagicMock:
+    """Runs one document through the real index_doc_batch with the vector write
+    mocked out and returns the content-hash stamp mock. `locked_status` is what
+    the share-locked settings row reports, None when the row is gone."""
+    document = _make_doc("doc")
+    adapter = MagicMock()
+    adapter.connector_id = 1
+    adapter.credential_id = 2
+    adapter.index_attempt_metadata = None
+    adapter.prepare.return_value = DocumentBatchPrepareContext(
+        updatable_docs=[document],
+        id_to_boost_map={},
+        doc_id_to_content_hash={"doc": "hash-1"},
+    )
+    adapter.lock_context.return_value = _make_ctx()
+    adapter.prepare_enrichment.return_value = MagicMock(
+        doc_id_to_previous_chunk_cnt={}, doc_id_to_new_chunk_cnt={}
+    )
+    chunker = MagicMock()
+    chunker.chunk.return_value = []
+    embedding_result = MagicMock(successful_chunk_ids=[], connector_failures=[])
+    chunk_store = MagicMock()
+    chunk_store.stream.return_value = iter([])
+    embed_ctx = _make_ctx()
+    embed_ctx.__enter__ = MagicMock(return_value=(embedding_result, chunk_store))
+    locked = None if locked_status is None else MagicMock(status=locked_status)
+
+    with (
+        patch(
+            f"{_PATCH_PREFIX}._apply_document_ingestion_hook",
+            side_effect=lambda documents: documents,
+        ),
+        patch(f"{_PATCH_PREFIX}.embed_and_stream", return_value=embed_ctx),
+        patch(
+            f"{_PATCH_PREFIX}.write_chunks_to_vector_db_with_backoff",
+            return_value=([MagicMock(document_id="doc", already_existed=False)], []),
+        ),
+        patch(
+            f"{_PATCH_PREFIX}.lock_search_settings_for_share", return_value=locked
+        ) as lock,
+        patch(f"{_PATCH_PREFIX}.update_docs_content_hash__no_commit") as stamp,
+        patch(f"{_PATCH_PREFIX}._maybe_push_documents"),
+    ):
+        index_doc_batch(
+            document_batch=[document],
+            chunker=chunker,
+            embedder=MagicMock(),
+            document_index=MagicMock(),
+            request_id=None,
+            tenant_id="tenant",
+            adapter=adapter,
+            written_search_settings_id=7,
+            stamp_content_hash=stamp_content_hash,
+        )
+    if stamp_content_hash:
+        # The lock is taken on the settings the batch wrote into, by id.
+        lock.assert_called_once()
+        assert lock.call_args.args[1] == 7
+    return stamp
+
+
+def test_hash_is_stamped_only_when_the_written_settings_are_present() -> None:
+    """The content hash describes what PRESENT holds. A batch whose settings are
+    PRESENT at commit stamps it; one whose settings were swapped out (PAST), are
+    still FUTURE, or are gone wrote into another index and leaves the row alone,
+    so the next poll re-indexes the document."""
+    stamp = _run_batch_to_stamp(locked_status=IndexModelStatus.PRESENT)
+    stamp.assert_called_once()
+    assert stamp.call_args.kwargs["ids_to_new_hash"] == {"doc": "hash-1"}
+
+    for status in (IndexModelStatus.PAST, IndexModelStatus.FUTURE, None):
+        stamp = _run_batch_to_stamp(locked_status=status)
+        stamp.assert_not_called()
+
+
+def test_pipeline_configures_from_the_written_settings() -> None:
+    """Chunking and enrichment follow the row whose index the batch writes,
+    looked up by the id the caller resolved, not by status."""
+    search_settings = SimpleNamespace(enable_contextual_rag=False)
+    with (
+        patch(
+            f"{_PATCH_PREFIX}.get_search_settings_by_id", return_value=search_settings
+        ) as lookup,
+        patch(f"{_PATCH_PREFIX}.get_multipass_config"),
+        patch(
+            f"{_PATCH_PREFIX}.get_image_extraction_and_analysis_enabled",
+            return_value=False,
+        ),
+        patch(f"{_PATCH_PREFIX}.index_doc_batch_with_handler") as handler,
+        patch(f"{_PATCH_PREFIX}.ensure_trace", return_value=nullcontext()),
+    ):
+        run_indexing_pipeline(
+            written_search_settings_id=7,
+            document_batch=[],
+            request_id=None,
+            embedder=MagicMock(),
+            document_index=MagicMock(),
+            db_session=MagicMock(),
+            tenant_id="tenant",
+            adapter=MagicMock(),
+            chunker=MagicMock(),
+        )
+    assert lookup.call_args.args[1] == 7
+    assert handler.call_args.kwargs["written_search_settings_id"] == 7
+
+
+def test_caller_can_skip_the_hash_stamp() -> None:
+    """A targeted re-index leaves the hash alone even on PRESENT, so a failed
+    FUTURE twin cannot make the post-swap poll skip the doc."""
+    stamp = _run_batch_to_stamp(
+        locked_status=IndexModelStatus.PRESENT, stamp_content_hash=False
+    )
+    stamp.assert_not_called()
