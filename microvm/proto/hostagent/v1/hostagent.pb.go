@@ -1964,7 +1964,7 @@ type NodeInfoResponse struct {
 	AgentVersion  string              `protobuf:"bytes,8,opt,name=agent_version,json=agentVersion,proto3" json:"agent_version,omitempty"`
 	DiskFreeMib   uint64              `protobuf:"varint,9,opt,name=disk_free_mib,json=diskFreeMib,proto3" json:"disk_free_mib,omitempty"`
 	ManagedImages []*ManagedImageInfo `protobuf:"bytes,10,rep,name=managed_images,json=managedImages,proto3" json:"managed_images,omitempty"`
-	// Memory admission and drain (ENG-4569). Create needs
+	// Memory admission and drain. Create needs
 	// mem_available_mib >= mem_starting_mib + mem_mib + mem_reserve_mib.
 	// The memory reserve (--min-free-mem-mib).
 	MemReserveMib uint64 `protobuf:"varint,11,opt,name=mem_reserve_mib,json=memReserveMib,proto3" json:"mem_reserve_mib,omitempty"`
@@ -2292,7 +2292,7 @@ type TemplateInfo struct {
 	// swap the managed drive) or 1.
 	ManagedSlots uint32 `protobuf:"varint,14,opt,name=managed_slots,json=managedSlots,proto3" json:"managed_slots,omitempty"`
 	// True when the template VMs have the balloon device with free page
-	// reporting (layout 4 and later, ENG-4569): the guest returns free
+	// reporting (layout 4 and later): the guest returns free
 	// memory to the node.
 	Balloon       bool `protobuf:"varint,15,opt,name=balloon,proto3" json:"balloon,omitempty"`
 	unknownFields protoimpl.UnknownFields

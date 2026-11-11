@@ -92,7 +92,7 @@ SANDBOX_FC_ORPHAN_STOPS_PER_REPORT = _fc_env_int(
     "SANDBOX_FC_ORPHAN_STOPS_PER_REPORT", 8, minimum=1
 )
 # P4: the idle evictor stops a VM after this long without activity in its
-# placement record. The stop needs session saves (ENG-4580): until then
+# placement record. The stop needs session saves: until then
 # NoCheckpointSupport keeps every VM.
 SANDBOX_FC_IDLE_TIMEOUT_SECONDS = _fc_env_int(
     "SANDBOX_FC_IDLE_TIMEOUT_SECONDS", 1800, minimum=1

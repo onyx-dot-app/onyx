@@ -174,7 +174,7 @@ def dispatch_due_scheduled_tasks(self: Task, *, tenant_id: str) -> int:
     # Post-commit enqueues. If we crash between commit and enqueue, the
     # stuck-run sweeper picks the QUEUED rows up after ~15 min.
     for run_id in to_enqueue:
-        # Firecracker only: spread the VM starts of one tick (ENG-4577).
+        # Firecracker only: spread the VM starts of one tick.
         delay = scheduled_run_jitter_seconds()
         jitter = {"countdown": delay} if delay > 0 else {}
         try:

@@ -128,11 +128,11 @@ service Sandboxd {
   // nothing. A capture and a restore of one session never run at once.
   rpc RestoreSession(stream RestoreSessionRequest) returns (RestoreSessionResponse);
 
-  // Reserved for ENG-4573 (browser). They return UNIMPLEMENTED.
+  // Reserved for the browser. They return UNIMPLEMENTED.
   rpc BrowserStart(BrowserStartRequest) returns (BrowserStartResponse);
   rpc BrowserStop(BrowserStopRequest) returns (BrowserStopResponse);
 
-  // Managed drive slots (ENG-4614). The node agent calls these during a
+  // Managed drive slots. The node agent calls these during a
   // managed drive swap (HostAgent SwapManaged), with the VM's key. Slot A
   // is /dev/vdc and slot B is /dev/vdf (the image's MANAGED_DEV and
   // MANAGED_DEV_B).
@@ -251,7 +251,7 @@ message InitRequest {
   reserved "key";
   // Base env for every command. Per-command env overrides it.
   map<string, string> env = 4;
-  // Sessions of this sandbox (used by ENG-4572 capture/restore).
+  // Sessions of this sandbox (used by capture/restore).
   repeated string session_ids = 5;
   // Node agent VM generation and sandbox ID, for Health and logs.
   uint64 generation = 6;

@@ -76,7 +76,7 @@ class AgentVm(BaseModel):
 
     sandbox_id: str
     attempt: int
-    # Host-side boot ID of this VM instance (ENG-4606).
+    # Host-side boot ID of this VM instance.
     generation: int
     template: str
     vcpus: int

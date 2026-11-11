@@ -37,7 +37,7 @@ trap cleanup EXIT
   CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath -o "$work/egress-relay" ./cmd/egress-relay
 )
 # No --ca: the published root drive has no egress CA. The guest daemon
-# installs the deployment CA at Init (ENG-4648).
+# installs the deployment CA at Init.
 # The production builder requires a pulled image digest. Keep this check local.
 registry="$(docker run --rm -d -p 127.0.0.1::5000 \
   "${BASE_IMAGE_REGISTRY:-docker.io}/library/registry:2")"

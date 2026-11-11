@@ -1,5 +1,5 @@
 // Package egressca reads and checks the deployment egress CA: the public
-// certificate of the sandbox-proxy CA that VMs must trust (ENG-4648).
+// certificate of the sandbox-proxy CA that VMs must trust.
 //
 // The root drive has no CA. The agent reads the CA at each Create and sends
 // it to the guest daemon with SetKey; the daemon installs it at Init.

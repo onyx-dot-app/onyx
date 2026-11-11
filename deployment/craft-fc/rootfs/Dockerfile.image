@@ -1,4 +1,4 @@
-# Root drive image: onyxdotapp/craft-fc-artifacts:rootfs-<version> (ENG-4648).
+# Root drive image: onyxdotapp/craft-fc-artifacts:rootfs-<version>.
 #
 # Files only, like the artifacts image. The Helm chart runs it as an init
 # container of the host agent DaemonSet, which copies the root drive into

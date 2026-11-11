@@ -80,7 +80,7 @@ func newOrderFixture(t *testing.T) (*fixture, *steps, *orderLauncher, *orderEgre
 
 // TestStopReleasesIdentityBeforeCIDAndUID: Stop removes the relay identity
 // and the daemon connection before it kills the VM (freeing its vsock
-// socket) and frees the jailer UID (ENG-4606).
+// socket) and frees the jailer UID.
 func TestStopReleasesIdentityBeforeCIDAndUID(t *testing.T) {
 	f, s, l, _ := newOrderFixture(t)
 	ctx := context.Background()

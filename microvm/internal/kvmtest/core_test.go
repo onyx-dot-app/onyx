@@ -230,7 +230,7 @@ func TestCoreKVM(t *testing.T) {
 	// a write past the cap fails.
 	v0 := lay.HostPath(ids[0], template.VsockUDS)
 	sctx, scancel := context.WithTimeout(ctx, 3*time.Minute)
-	// The daemon (ENG-4571) will do this in Init. EXT4_IOC_RESIZE_FS is the
+	// The daemon will do this in Init. EXT4_IOC_RESIZE_FS is the
 	// online grow that resize2fs uses; it needs no e2fsprogs in the image.
 	out, err := guestRun(sctx, v0, "root", `echo dev_bytes=$(( $(cat /sys/block/vdb/size) * 512 ));
 python3 - <<'EOF'

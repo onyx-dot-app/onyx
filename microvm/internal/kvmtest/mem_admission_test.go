@@ -131,7 +131,7 @@ func reasonMetadata(err error) map[string]string {
 	return nil
 }
 
-// TestMemAdmissionKVM checks ENG-4569 through the agent binary: a layout 4
+// TestMemAdmissionKVM checks memory admission and drain through the agent binary: a layout 4
 // template with the balloon (free page reporting) and its restores, the
 // guest daemon's page reporting order and idle reclaim, the per-VM cgroup
 // limits, memory admission up to the refusal, and the manual drain.

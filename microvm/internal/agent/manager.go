@@ -233,7 +233,7 @@ func (m *Manager) OnRelease(f func(VM)) { m.releases = append(m.releases, f) }
 // and relay connections, then the OnRelease users (the daemon pass-through).
 // Callers kill the process (which frees the vsock socket) and free the UID
 // only after release returns, so a reused UID or socket path never carries
-// the old identity (ENG-4606).
+// the old identity.
 func (m *Manager) release(vm VM) {
 	if m.egress != nil {
 		m.egress.Detach(vm.SandboxID)

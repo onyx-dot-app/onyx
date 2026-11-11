@@ -64,7 +64,7 @@ func loadEnv(t *testing.T) env {
 	return env{
 		FCBin: get("KVM_FC_BIN", "/opt/craft-fc/firecracker"), ImgDir: get("KVM_IMG_DIR", "/opt/craft-fc-test/img"),
 		WorkDir: get("KVM_WORK_DIR", "/var/lib/guestd-kvm"), VMs: n, RestoreGap: gap,
-		// The ENG-4574 root drive (deployment/craft-fc/rootfs).
+		// The Craft root drive (deployment/craft-fc/rootfs).
 		BootArgs:     get("KVM_BOOT_ARGS", "console=ttyS0 reboot=k panic=1 pci=off init=/sbin/craft-init"),
 		TemplateArgs: get("KVM_TEMPLATE_ARGS", "craft.scratch=defer"),
 	}

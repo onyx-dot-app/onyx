@@ -1,4 +1,4 @@
-"""Reconcile one node's VMs against the durable placement records (ENG-4576).
+"""Reconcile one node's VMs against the durable placement records.
 
 Each node agent pushes its full state every `--state-report-interval` (20 s):
 `vms` (its `List`: live and exited VMs) and `ended` (VM instances that ended

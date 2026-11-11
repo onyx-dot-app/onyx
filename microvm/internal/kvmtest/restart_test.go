@@ -37,7 +37,7 @@ func getenv(k, def string) string {
 }
 
 // startContainer runs the agent binary in a privileged container with the
-// host PID and cgroup namespaces, as the DaemonSet will (ENG-4583).
+// host PID and cgroup namespaces, as the DaemonSet does.
 func startContainer(t *testing.T, e env, name string) {
 	t.Helper()
 	bin := getenv("KVM_AGENT_BIN", "/opt/agent/host-agent")

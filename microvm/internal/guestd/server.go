@@ -1,4 +1,4 @@
-// Package guestd serves the Sandboxd gRPC API of the guest daemon (ENG-4571).
+// Package guestd serves the Sandboxd gRPC API of the guest daemon.
 package guestd
 
 import (

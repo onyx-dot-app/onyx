@@ -231,8 +231,7 @@ func logLine(logs, substr string) (int, string) {
 }
 
 // TestPassthroughKVM runs the guest daemon API end to end through the node
-// agent pass-through over mTLS, with the agent in a private cgroup namespace
-// (ENG-4571, ENG-4606, ENG-4610).
+// agent pass-through over mTLS, with the agent in a private cgroup namespace.
 func TestPassthroughKVM(t *testing.T) {
 	e := loadEnv()
 	if e.VMs < 2 {

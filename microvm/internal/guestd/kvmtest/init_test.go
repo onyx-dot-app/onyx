@@ -140,7 +140,7 @@ func TestInitKVM(t *testing.T) {
 		}
 	})
 
-	// ENG-4648: the root drive has no CA. SetKey carries the deployment CA,
+	// The root drive has no CA. SetKey carries the deployment CA,
 	// Init installs it, and a later SetKey + Init replaces it (a CA rotation).
 	t.Run("egress_ca_from_set_key", func(t *testing.T) {
 		testEgressCA(ctx, t, v, c, key)

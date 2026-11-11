@@ -1,4 +1,4 @@
-"""VM lifecycle against Redis and fake host agents (ENG-4576): wake is an
+"""VM lifecycle against Redis and fake host agents: wake is an
 idempotent ensure, idle eviction only when nothing runs, and stop only after
 a saved checkpoint and a fresh liveness check."""
 
@@ -345,7 +345,7 @@ def test_idle_sleep_rules(
     assert sleep(saver, False, ACTIVE) is VmStopOutcome.NOT_IDLE
     # P7: idle, but something runs.
     assert sleep(saver, True, IDLE) is VmStopOutcome.KEPT_BUSY
-    # Idle, but no checkpoint support (until ENG-4580): decide and keep.
+    # Idle, but no checkpoint support (until session saves): decide and keep.
     assert sleep(NoCheckpointSupport(), False, IDLE) is VmStopOutcome.KEPT_NO_CHECKPOINT
     assert node.agent.stop_calls == []
     assert saver.saved == []

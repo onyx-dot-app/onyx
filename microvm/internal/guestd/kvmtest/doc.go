@@ -5,7 +5,7 @@
 //	GOOS=linux GOARCH=amd64 go test -c -tags kvm -o guestd-kvm.test ./internal/guestd/kvmtest
 //	sudo ./guestd-kvm.test -test.v
 //
-// Environment: KVM_FC_BIN (firecracker), KVM_IMG_DIR (vmlinux, the ENG-4574
+// Environment: KVM_FC_BIN (firecracker), KVM_IMG_DIR (vmlinux, the Craft
 // rootfs.ext4 with the daemon, scratch-empty.ext4, managed-empty.ext4),
 // KVM_WORK_DIR, KVM_VMS (default 20), KVM_RESTORE_GAP (default 20s),
 // KVM_BOOT_ARGS, KVM_TEMPLATE_ARGS, KVM_RELAY_BIN (egress-relay binary).
