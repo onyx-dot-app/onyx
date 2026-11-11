@@ -15,6 +15,7 @@ from onyx.file_store.file_store import FileStore, get_default_file_store
 from onyx.server.features.build.sandbox.snapshot_manager import (
     SNAPSHOT_FILE_TYPE,
     SnapshotManager,
+    delete_sandbox_blobs_best_effort,
 )
 from shared_configs.contextvars import get_current_tenant_id
 from tests.external_dependency_unit.craft.db_helpers import make_sandbox, make_user
@@ -63,17 +64,27 @@ def test_delete_user_removes_sandbox_blobs(
 ) -> None:
     file_store = get_default_file_store()
     file_store.initialize()
-    deleted_user = make_user(db_session, standard_account=True)
-    other_user = make_user(db_session, standard_account=True)
-    db_session.commit()
-    deleted_paths = _seed_user_blobs(db_session, file_store, deleted_user)
-    other_paths = _seed_user_blobs(db_session, file_store, other_user)
+    users: list[User] = []
+    seeded_paths: list[str] = []
     try:
-        assert all(_has_blob(file_store, p) for p in deleted_paths + other_paths)
+        deleted_user = make_user(db_session, standard_account=True)
+        users.append(deleted_user)
+        other_user = make_user(db_session, standard_account=True)
+        users.append(other_user)
+        db_session.commit()
+        deleted_paths = _seed_user_blobs(db_session, file_store, deleted_user)
+        seeded_paths += deleted_paths
+        other_paths = _seed_user_blobs(db_session, file_store, other_user)
+        seeded_paths += other_paths
+        assert all(_has_blob(file_store, p) for p in seeded_paths)
 
         delete_user_from_db(deleted_user, db_session)
+        users.remove(deleted_user)
 
         assert not any(_has_blob(file_store, p) for p in deleted_paths)
         assert all(_has_blob(file_store, p) for p in other_paths)
     finally:
-        delete_user_from_db(other_user, db_session)
+        db_session.rollback()
+        for user in users:
+            delete_user_from_db(user, db_session)
+        delete_sandbox_blobs_best_effort(seeded_paths)

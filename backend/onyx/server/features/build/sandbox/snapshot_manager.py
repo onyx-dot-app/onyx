@@ -266,7 +266,15 @@ def delete_sandbox_blobs_best_effort(storage_paths: list[str]) -> None:
     """Delete snapshot blobs; log failures instead of raising."""
     if not storage_paths:
         return
-    snapshot_manager = SnapshotManager(get_default_file_store())
+    try:
+        snapshot_manager = SnapshotManager(get_default_file_store())
+    except Exception:
+        logger.warning(
+            "Failed to open the file store; %d sandbox blobs not deleted",
+            len(storage_paths),
+            exc_info=True,
+        )
+        return
     for storage_path in storage_paths:
         try:
             snapshot_manager.delete_snapshot(storage_path)
