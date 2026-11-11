@@ -356,14 +356,30 @@ Postgres cache backend. The chart's bundled Redis uses `allkeys-lru`.
   | `craft_fc_host_agent_vms` | gauge | `state`: starting, running, exited |
   | `craft_fc_host_agent_vm_memory_allocated_bytes`, `_vm_vcpus_allocated` | gauge | |
   | `craft_fc_host_agent_node_memory_total_bytes`, `_node_memory_available_bytes`, `_node_disk_free_bytes` | gauge | |
-  | `craft_fc_host_agent_node_stats_errors` | gauge | `stat`: memory, disk |
+  | `craft_fc_host_agent_vm_memory_private_bytes` | gauge | |
+  | `craft_fc_host_agent_node_stats_errors` | gauge | `stat`: memory, disk, vm_memory |
   | `craft_fc_host_agent_rpc_requests_total` | counter | `method` (HostAgent method, else `unknown`), `code` (gRPC) |
   | `craft_fc_host_agent_rpc_duration_seconds` | histogram | `method` |
+  | `craft_fc_host_agent_transfer_duration_seconds` | histogram (0.5 s to 600 s) | `method`: CaptureSession, UploadCapture, RestoreSession |
   | `craft_fc_host_agent_passthrough_calls_total` | counter | `method` (daemon method, else `unknown`), `code` |
   | `craft_fc_host_agent_relay_open_connections` | gauge | |
   | `craft_fc_host_agent_relay_connections_total` | counter | `result`: accepted, over_cap, upstream_failed |
   | `craft_fc_host_agent_dial_open_streams` | gauge | |
   | `craft_fc_host_agent_guest_log_bytes_total`, `_guest_log_dropped_bytes_total` | counter | `stream`: console, firecracker |
+  | `craft_fc_host_agent_node_reports_total`, `_key_registrations_total` | counter | `result`: success, rejected (HTTP 4xx), server_error (other HTTP), failed (no reply; for reports also over the caps) |
+  | `craft_fc_host_agent_node_report_last_success_timestamp_seconds`, `_key_registration_last_success_timestamp_seconds` | gauge | |
+  | `craft_fc_host_agent_template_builds_total` | counter | `result`: built, existing, failed |
+  | `craft_fc_host_agent_template_build_duration_seconds` | histogram | `result` |
+  | `craft_fc_host_agent_template_ready` | gauge | |
+
+  `vm_memory_private_bytes` is the sum of `Anonymous` in `/proc/<pid>/smaps_rollup` of the Firecracker
+  processes: the copy-on-write pages that each VM holds on the node. Template pages that the VMs share
+  are not in it. Balloon free page reporting and the guest daemon's idle reclaim (`--reclaim-idle`)
+  lower it, so `vm_memory_allocated_bytes - vm_memory_private_bytes` is the guest memory that the node
+  does not hold. `rpc_duration_seconds` keeps the default buckets (up to 10 s); use
+  `transfer_duration_seconds` for session saves and restores. The template metrics count the start-up
+  build and each `BuildTemplate` call from `--rootfs-dir`; `template_ready` is 0 before the first build
+  and after a failed one.
 
   The Go runtime and process collectors are on the same registry.
 - **Guest logs.** The agent tails each VM's serial console (`console.log`, Firecracker's stdout and

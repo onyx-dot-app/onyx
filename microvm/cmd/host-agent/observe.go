@@ -15,6 +15,7 @@ import (
 
 	"github.com/onyx-dot-app/onyx/microvm/internal/agent"
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestlog"
+	"github.com/onyx-dot-app/onyx/microvm/internal/hostinfo"
 	"github.com/onyx-dot-app/onyx/microvm/internal/jailer"
 	"github.com/onyx-dot-app/onyx/microvm/internal/metrics"
 	"github.com/onyx-dot-app/onyx/microvm/internal/relay"
@@ -75,7 +76,7 @@ func newObservability(f obsFlags, m *agent.Manager, lay jailer.Layout, stats age
 		return nil, err
 	}
 	o := &observability{f: f, log: log}
-	src := metrics.Source{VMs: m.List, Stats: stats, DialStreams: func() int {
+	src := metrics.Source{VMs: m.List, Stats: stats, PrivateMem: hostinfo.PrivateMemoryBytes, DialStreams: func() int {
 		if o.dials == nil {
 			return 0
 		}

@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -363,5 +364,35 @@ func TestSendReportsHTTPErrors(t *testing.T) {
 	}
 	if err := r.Send(t.Context()); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestRunObservesEachResult(t *testing.T) {
+	rec := &recorder{got: make(chan struct{}, 64), signer: newSigner(t), fail: 1}
+	ready := make(chan struct{})
+	close(ready)
+	r, _ := newReporter(t, rec, ready)
+	results := make(chan error, 64)
+	r.Observe = func(err error) { results <- err }
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan struct{})
+	go func() { r.Run(ctx); close(done) }()
+	var got []error
+	for len(got) < 2 {
+		select {
+		case err := <-results:
+			got = append(got, err)
+		case <-time.After(5 * time.Second):
+			t.Fatalf("result %d did not arrive", len(got)+1)
+		}
+	}
+	cancel()
+	<-done
+	var h *relay.HTTPStatusError
+	if !errors.As(got[0], &h) || h.HTTPStatus() != http.StatusServiceUnavailable {
+		t.Fatalf("first result %v", got[0])
+	}
+	if got[1] != nil {
+		t.Fatalf("second result %v", got[1])
 	}
 }
