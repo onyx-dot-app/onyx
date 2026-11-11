@@ -33,6 +33,7 @@ from onyx.db.models import (
     Persona,
     Persona__UserFile,
     Persona__UserGroup,
+    Plugin,
     Skill,
     Skill__UserGroup,
     TokenRateLimit,
@@ -42,11 +43,16 @@ from onyx.db.models import (
     UserGroup,
 )
 from onyx.db.permissions import recompute_user_permissions__no_commit
+from onyx.db.skill import set_skill_public_permission
 from onyx.db.users import (
     DEFAULT_ADMIN_GROUP_NAME,
     DEFAULT_BASIC_GROUP_NAME,
     assign_user_to_default_groups__no_commit,
     fetch_default_group,
+)
+from tests.utils.plugin_access import (
+    ORGANIZATION_LIBRARY_ID,
+    plugin_access_mismatches,
 )
 
 
@@ -299,6 +305,51 @@ def _make_skill(db_session: Session, author: User) -> Skill:
     )
     db_session.add(skill)
     return skill
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_group_shared_skill_is_published_with_a_free_name_on_a_clash(
+    db_session: Session,
+) -> None:
+    """The downgrade cannot stop, so a plugin whose name the Organization
+    library has takes the next free name. The skill keeps its name."""
+    try:
+        owner = _make_user(db_session, in_basic=True)
+        other = _make_user(db_session, in_basic=True)
+        group = _make_group(db_session, [owner])
+        published = _make_skill(db_session, other)
+        shared = _make_skill(db_session, owner)
+        shared.name = published.name
+        db_session.flush()
+        set_skill_public_permission(
+            skill=published,
+            public_permission=SkillSharePermission.VIEWER,
+            db_session=db_session,
+        )
+        # The shared skill has no plugin yet, as if an older server made it.
+        db_session.add(
+            Skill__UserGroup(
+                skill_id=shared.id,
+                user_group_id=group.id,
+                permission=SkillSharePermission.VIEWER,
+            )
+        )
+        db_session.flush()
+
+        remove_custom_user_groups__no_commit(db_session)
+
+        db_session.refresh(shared)
+        assert shared.public_permission == SkillSharePermission.VIEWER
+        assert shared.name == published.name
+        plugin = db_session.get(Plugin, shared.id)
+        assert plugin is not None
+        db_session.refresh(plugin)
+        assert plugin.marketplace_id == ORGANIZATION_LIBRARY_ID
+        assert plugin.name == f"{published.name}-2"
+        assert plugin.published_version_id == plugin.current_version_id
+        assert plugin_access_mismatches(db_session, [published.id, shared.id]) == []
+    finally:
+        db_session.rollback()
 
 
 @pytest.mark.usefixtures("tenant_context")

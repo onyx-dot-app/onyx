@@ -254,12 +254,14 @@ def test_unlink_retains_skill_visibility_content_and_preferences(
         )
         is not None
     )
-    set_skill_public_permission(
-        skill=unlinked,
-        public_permission=None,
-        db_session=db_session,
-    )
-    assert unlinked.public_permission is None
+    # Publishing is one-way: an unlinked skill stays published.
+    with pytest.raises(OnyxError, match="cannot be made private"):
+        set_skill_public_permission(
+            skill=unlinked,
+            public_permission=None,
+            db_session=db_session,
+        )
+    assert unlinked.public_permission == SkillSharePermission.VIEWER
 
 
 def test_replacing_custom_associations_preserves_provider_skill(

@@ -848,11 +848,11 @@ def test_creation_serializes_with_toggle_preference_writes(db_session: Session) 
         assert error.value.error_code == OnyxErrorCode.SKILL_NAME_CONFLICT
 
 
-def test_ownerless_public_skill_requires_owner_before_becoming_private(
+def test_ownerless_public_skill_stays_published(
     db_session: Session,
 ) -> None:
     skill = make_skill(db_session, is_public=True)
-    with pytest.raises(OnyxError, match="Assign an owner"):
+    with pytest.raises(OnyxError, match="cannot be made private"):
         set_skill_public_permission(
             skill=skill, public_permission=None, db_session=db_session
         )

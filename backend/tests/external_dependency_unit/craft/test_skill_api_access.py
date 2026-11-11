@@ -454,18 +454,18 @@ def test_required_skill_owner_cannot_delete_but_can_change_audience(
     db_session: Session,
 ) -> None:
     owner = make_user(db_session, standard_account=True)
-    skill = make_skill(db_session, is_public=True, author_user_id=owner.id)
+    skill = make_skill(db_session, is_public=False, author_user_id=owner.id)
     skill.installation_policy = SkillInstallationPolicy.REQUIRED
     db_session.flush()
     with pytest.raises(OnyxError):
         delete_current_user_skill(skill.id, user=owner, db_session=db_session)
     response = patch_current_user_skill(
         skill.id,
-        SkillPatchRequest(public_permission=None),
+        SkillPatchRequest(public_permission=SkillSharePermission.VIEWER),
         user=owner,
         db_session=db_session,
     )
-    assert response.public_permission is None
+    assert response.public_permission == SkillSharePermission.VIEWER
     assert response.installation_policy == SkillInstallationPolicy.REQUIRED
 
 
