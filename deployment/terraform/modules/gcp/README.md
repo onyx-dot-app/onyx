@@ -652,9 +652,15 @@ With `"firecracker"`, the `gke` module:
 
 - turns on nested virtualization for the sandbox pool;
 - sets `vm.max_map_count` to `1048576` (COS ships `65530`);
-- adds the label `onyx.app/kvm=true`;
+- adds the label `onyx.app/kvm=true` and the taint `onyx.app/kvm=true:NoSchedule`;
 - keeps Shielded VM secure boot on;
 - creates a Google service account for the Onyx workloads (see below).
+
+Kubelet does not count microVM memory, so only the Firecracker host agent and
+the preflight check tolerate the `onyx.app/kvm` taint. Pod sandboxes and the
+sandbox image prepuller do not run on the sandbox pool. To keep pod sandboxes,
+add a pool in `node_pools` with the label `onyx.app/workload=sandbox` and the
+taint `workload=sandbox:NO_SCHEDULE` only.
 
 ### Signed GCS URLs
 

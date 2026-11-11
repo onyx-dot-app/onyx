@@ -369,6 +369,13 @@ run "the_sandbox_pool_runs_pods_by_default" {
     condition     = contains(keys(google_container_node_pool.this["sandbox"].node_config[0].labels), "onyx.app/kvm") == false
     error_message = "Only pools that can run Firecracker carry the onyx.app/kvm label."
   }
+
+  assert {
+    condition = [for t in google_container_node_pool.this["sandbox"].node_config[0].taint : "${t.key}=${t.value}:${t.effect}"] == [
+      "workload=sandbox:NO_SCHEDULE",
+    ]
+    error_message = "Pod-runtime sandbox pools carry only the workload taint, so pod sandboxes still land there."
+  }
 }
 
 run "firecracker_turns_on_nested_virtualization" {
@@ -397,6 +404,14 @@ run "firecracker_turns_on_nested_virtualization" {
   assert {
     condition     = google_container_node_pool.this["sandbox"].node_config[0].labels["onyx.app/workload"] == "sandbox"
     error_message = "The chart's sandbox pods still select the pool by its workload label."
+  }
+
+  assert {
+    condition = [for t in google_container_node_pool.this["sandbox"].node_config[0].taint : "${t.key}=${t.value}:${t.effect}"] == [
+      "workload=sandbox:NO_SCHEDULE",
+      "onyx.app/kvm=true:NO_SCHEDULE",
+    ]
+    error_message = "Firecracker pools must add the onyx.app/kvm taint, so pod sandboxes and the prepuller stay off."
   }
 
   assert {

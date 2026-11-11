@@ -301,6 +301,12 @@ module "eks" {
   craft_sandbox_node_disk_throughput = var.craft_sandbox_node_disk_throughput
   craft_sandbox_runtime              = var.craft_sandbox_runtime
 
+  enable_craft_pod_sandbox_node_group   = var.enable_craft_pod_sandbox_node_group
+  craft_pod_sandbox_node_instance_types = var.craft_pod_sandbox_node_instance_types
+  craft_pod_sandbox_node_min_size       = var.craft_pod_sandbox_node_min_size
+  craft_pod_sandbox_node_max_size       = var.craft_pod_sandbox_node_max_size
+  craft_pod_sandbox_node_desired_size   = var.craft_pod_sandbox_node_desired_size
+
   # Control plane logging
   cluster_enabled_log_types              = var.eks_cluster_enabled_log_types
   cloudwatch_log_group_retention_in_days = var.eks_cloudwatch_log_group_retention_in_days

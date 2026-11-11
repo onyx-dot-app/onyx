@@ -231,7 +231,11 @@ With `firecracker`, the chart:
 - sets `SANDBOX_RUNTIME=firecracker` for the backend and sandbox-proxy;
 - deploys the host agent (`onyxdotapp/craft-fc-host-agent`), a privileged
   DaemonSet with `hostPID` and `/dev/kvm`, on the sandbox nodes that have the
-  label `onyx.app/kvm=true`;
+  label `onyx.app/kvm=true`. The agent and the preflight tolerate the taint
+  `onyx.app/kvm=true:NoSchedule` that Terraform puts on these nodes. Pod
+  sandboxes and the image prepuller do not, so they need a sandbox node pool
+  without that taint. The chart refuses `sandboxPod.tolerations` that tolerate
+  it;
 - puts the agent in its own namespace (`craft.hostAgent.namespace`) with Pod
   Security `privileged`;
 - adds a headless Service for the agent port (7443);
