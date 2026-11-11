@@ -513,6 +513,25 @@ func (s *Store) GC(keep int, inUse func() map[string]bool) ([]string, error) {
 	return removed, nil
 }
 
+// RemoveUnused removes image id unless it is pinned, in inUse(), or a Put of
+// it runs. It returns false if the image is kept or missing.
+func (s *Store) RemoveUnused(id string, inUse func() map[string]bool) (bool, error) {
+	if !ValidID(id) {
+		return false, fmt.Errorf("invalid managed image id %q", id)
+	}
+	s.gcMu.Lock()
+	defer s.gcMu.Unlock()
+	if s.pins[id] > 0 || inUse()[id] || !s.Has(id) {
+		return false, nil
+	}
+	unlock, ok := s.tryLockID(id)
+	if !ok {
+		return false, nil
+	}
+	defer unlock()
+	return true, s.remove(id)
+}
+
 // tryLockID takes the Put lock of id if no Put of id runs.
 func (s *Store) tryLockID(id string) (func(), bool) {
 	s.mu.Lock()

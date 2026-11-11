@@ -148,7 +148,12 @@ func Body(nodeID string, vms []VM, ended []EndedVM) ([]byte, error) {
 
 // Token returns the report token for body.
 func (r *Reporter) Token(body []byte) (string, error) {
-	h, err := json.Marshal(tokenHeader{Alg: "EdDSA", Typ: "JWT", Kid: r.Signer.KeyID})
+	return signToken(r.Signer, Audience, body, r.now())
+}
+
+// signToken returns a node token for aud over body.
+func signToken(s *relay.Signer, aud string, body []byte, now time.Time) (string, error) {
+	h, err := json.Marshal(tokenHeader{Alg: "EdDSA", Typ: "JWT", Kid: s.KeyID})
 	if err != nil {
 		return "", err
 	}
@@ -156,16 +161,15 @@ func (r *Reporter) Token(body []byte) (string, error) {
 	if _, err := rand.Read(jti[:]); err != nil {
 		return "", err
 	}
-	now := r.now()
 	sum := sha256.Sum256(body)
 	c, err := json.Marshal(tokenClaims{
-		Node: r.Signer.NodeID, Iat: now.Unix(), Exp: now.Add(TokenLifetime).Unix(),
-		Jti: hex.EncodeToString(jti[:]), Aud: Audience, BodySHA256: hex.EncodeToString(sum[:]),
+		Node: s.NodeID, Iat: now.Unix(), Exp: now.Add(TokenLifetime).Unix(),
+		Jti: hex.EncodeToString(jti[:]), Aud: aud, BodySHA256: hex.EncodeToString(sum[:]),
 	})
 	if err != nil {
 		return "", err
 	}
-	return r.Signer.SignRaw(h, c), nil
+	return s.SignRaw(h, c), nil
 }
 
 func (r *Reporter) now() time.Time {
@@ -273,4 +277,51 @@ func (r *Reporter) Run(ctx context.Context) {
 		}
 		timer.Reset(Backoff(r.Interval, maxBackoff, failures))
 	}
+}
+
+// DeregisterPath is the api_server route that ends a node's registration.
+const DeregisterPath = "/microvm/node/deregister"
+
+// DeregisterAudience is the aud claim of a deregistration token.
+const DeregisterAudience = "onyx-api-server-node-deregister"
+
+// Deregister ends the node's registration on the api_server, so placement
+// and the node list drop the node at once. It is for an agent that stops on
+// a draining node. False: the api_server had nothing to end (already gone,
+// or a later agent registered on the node).
+func Deregister(ctx context.Context, c *http.Client, baseURL string, s *relay.Signer) (bool, error) {
+	body, err := json.Marshal(struct {
+		NodeID string `json:"node_id"`
+	}{s.NodeID})
+	if err != nil {
+		return false, err
+	}
+	token, err := signToken(s, DeregisterAudience, body, time.Now())
+	if err != nil {
+		return false, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(baseURL, "/")+DeregisterPath, bytes.NewReader(body))
+	if err != nil {
+		return false, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	if c == nil {
+		c = &http.Client{Timeout: 10 * time.Second}
+	}
+	resp, err := c.Do(req)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode/100 != 2 {
+		return false, relay.NewHTTPStatusError("node deregistration", resp)
+	}
+	var out struct {
+		Deregistered bool `json:"deregistered"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<10)).Decode(&out); err != nil {
+		return false, fmt.Errorf("node deregistration reply: %w", err)
+	}
+	return out.Deregistered, nil
 }

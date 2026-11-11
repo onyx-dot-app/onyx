@@ -252,3 +252,32 @@ craft_fc_host_agent_admissions_total{reason="VMM_FAILED",result="failed"} 1
 		t.Error(err)
 	}
 }
+
+func TestAuditNamesTheVMOfACapture(t *testing.T) {
+	buf := &syncBuf{}
+	vm := CaptureVM{SandboxID: sandbox, TenantID: "public", Attempt: 2, Generation: 7}
+	o := &Observer{Log: slog.New(slog.NewJSONHandler(buf, nil)), Capture: func(id string) (CaptureVM, bool) {
+		return vm, id == "c1"
+	}}
+	// The call deletes the spool; the lookup must run before it.
+	h := func(context.Context, any) (any, error) { vm = CaptureVM{}; return &pb.UploadCaptureResponse{}, nil }
+	info := func(m string) *grpc.UnaryServerInfo {
+		return &grpc.UnaryServerInfo{FullMethod: "/" + pb.HostAgent_ServiceDesc.ServiceName + "/" + m}
+	}
+	ctx := context.Background()
+	_, _ = o.unary(ctx, &pb.UploadCaptureRequest{CaptureId: "c1"}, info("UploadCapture"), h)
+	_, _ = o.unary(ctx, &pb.DiscardCaptureRequest{CaptureId: "gone"}, info("DiscardCapture"), h)
+
+	lines := buf.lines(t)
+	if len(lines) != 2 {
+		t.Fatalf("lines %v", lines)
+	}
+	first, second := lines[0], lines[1]
+	if first["method"] != "UploadCapture" || first["sandbox_id"] != sandbox || first["tenant_id"] != "public" ||
+		first["attempt"] != float64(2) || first["generation"] != float64(7) {
+		t.Errorf("upload line %v", first)
+	}
+	if second["method"] != "DiscardCapture" || second["sandbox_id"] != "" || second["tenant_id"] != "" {
+		t.Errorf("unknown capture line %v", second)
+	}
+}

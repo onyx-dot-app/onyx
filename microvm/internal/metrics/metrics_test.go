@@ -40,6 +40,7 @@ func TestRegistrationAndNames(t *testing.T) {
 	m.NodeReport(nil)
 	m.KeyRegistration(nil)
 	m.TemplateBuild(time.Second, TemplateBuilt)
+	m.ImageGCRemoved("managed")
 	fams, err := m.Registry().Gather()
 	if err != nil {
 		t.Fatal(err)
@@ -57,7 +58,7 @@ func TestRegistrationAndNames(t *testing.T) {
 		"craft_fc_host_agent_node_report_last_success_timestamp_seconds", "craft_fc_host_agent_key_registrations_total",
 		"craft_fc_host_agent_key_registration_last_success_timestamp_seconds", "craft_fc_host_agent_template_builds_total",
 		"craft_fc_host_agent_template_build_duration_seconds", "craft_fc_host_agent_template_ready",
-		"go_goroutines",
+		"craft_fc_host_agent_image_gc_removed_total", "go_goroutines",
 	} {
 		if !got[n] {
 			t.Errorf("%s is not registered", n)
@@ -169,6 +170,7 @@ func TestNilMetricsIsSafe(t *testing.T) {
 	m.NodeReport(nil)
 	m.KeyRegistration(nil)
 	m.TemplateBuild(0, TemplateFailed)
+	m.ImageGCRemoved("template")
 }
 
 func TestHandlerServesText(t *testing.T) {

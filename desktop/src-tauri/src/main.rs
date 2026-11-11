@@ -145,14 +145,6 @@ fn setup_app(app: &tauri::AppHandle) {
         debug_log::log_backend_error(app, &format!("Failed to apply vibrancy effect: {e}"));
     }
 
-    if let Ok(url) = window.url() {
-        let mut base_url = url;
-        base_url.set_query(None);
-        base_url.set_fragment(None);
-        base_url.set_path("/");
-        app.state::<ConfigState>().set_app_base_url(Some(base_url));
-    }
-
     #[cfg(target_os = "macos")]
     window::inject_titlebar(window.clone());
 
@@ -257,6 +249,8 @@ fn main() {
             menu::MENU_RELOAD_ID => menu::handle_reload(app),
             menu::MENU_GO_BACK_ID => menu::handle_go_back(app),
             menu::MENU_GO_FORWARD_ID => menu::handle_go_forward(app),
+            #[cfg(not(target_os = "macos"))]
+            menu::MENU_QUIT_ID => app.exit(0),
             menu::MENU_SHOW_MENU_BAR_ID => menu::handle_menu_bar_toggle(app),
             #[cfg(target_os = "linux")]
             menu::MENU_HIDE_DECORATIONS_ID => menu::handle_decorations_toggle(app),

@@ -423,8 +423,8 @@ func TestLayout2StillRestores(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "old", ManagedBFile)); err == nil {
 		t.Error("a layout 2 template has a slot B file")
 	}
-	if d := DrivesFor(LayoutVersion); d[len(d)-1].ID != ManagedBDriveID || len(d) != 6 {
-		t.Errorf("slot B must be the last drive (vdf): %+v", d)
+	if d := DrivesFor(3); d[len(d)-1].ID != ManagedBDriveID || len(d) != 6 {
+		t.Errorf("slot B must be the last drive (vdf) of layout 3: %+v", d)
 	}
 	for i, d := range DrivesFor(2) {
 		if DrivesFor(LayoutVersion)[i] != d {
@@ -441,13 +441,10 @@ func TestLayout2StillRestores(t *testing.T) {
 // Layout 4 adds only the balloon: same drives and files as layout 3, so the
 // guest devices do not move. Layout 3 templates still restore, without it.
 func TestLayout4Balloon(t *testing.T) {
-	if LayoutVersion != 4 {
-		t.Fatalf("LayoutVersion %d", LayoutVersion)
-	}
 	if !slices.Equal(DrivesFor(4), DrivesFor(3)) || !slices.Equal(FilesFor(4), FilesFor(3)) {
 		t.Error("layout 4 changed the drives or files of layout 3")
 	}
-	for layout, want := range map[int]bool{2: false, 3: false, 4: true, 5: false} {
+	for layout, want := range map[int]bool{2: false, 3: false, 4: true, 5: true, 6: false} {
 		if got := BalloonFor(layout) != nil; got != want {
 			t.Errorf("layout %d balloon %v, want %v", layout, got, want)
 		}
@@ -465,7 +462,7 @@ func TestLayout4Balloon(t *testing.T) {
 	if _, err := WriteFakeLayout(dir, "l3", testKey, 3); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := WriteFake(dir, "l4", testKey); err != nil {
+	if _, err := WriteFakeLayout(dir, "l4", testKey, 4); err != nil {
 		t.Fatal(err)
 	}
 	s := &Store{Dir: dir}
@@ -480,5 +477,57 @@ func TestLayout4Balloon(t *testing.T) {
 		if tpl.HasBalloon() != want || tpl.ManagedSlots() != 2 {
 			t.Errorf("%s: balloon %v slots %d", name, tpl.HasBalloon(), tpl.ManagedSlots())
 		}
+	}
+}
+
+// Layout 5 adds two slots each for the user-uploads and spaces mounts after
+// the layout 4 drives, so no older guest device moves (vdg to vdj).
+func TestLayout5ManagedMounts(t *testing.T) {
+	if LayoutVersion != 5 {
+		t.Fatalf("LayoutVersion %d", LayoutVersion)
+	}
+	l4, l5 := DrivesFor(4), DrivesFor(5)
+	if len(l5) != len(l4)+4 || !slices.Equal(l5[:len(l4)], l4) {
+		t.Fatalf("layout 5 drives %+v", l5)
+	}
+	want := []string{UserUploadsADriveID, UserUploadsBDriveID, SpacesADriveID, SpacesBDriveID}
+	for i, id := range want {
+		if d := l5[len(l4)+i]; d.ID != id || !d.ReadOnly {
+			t.Errorf("drive %d (/dev/vd%c) is %+v, want %s read-only", len(l4)+i, 'a'+len(l4)+i, d, id)
+		}
+	}
+	for layout, mounts := range map[int][]string{
+		2: nil, 3: {SkillsMount}, 4: {SkillsMount}, 5: {SkillsMount, "user-uploads", "spaces"},
+	} {
+		if got := SwapMounts(layout); !slices.Equal(got, mounts) {
+			t.Errorf("layout %d mounts %v, want %v", layout, got, mounts)
+		}
+	}
+	if m, ok := MountDrivesOf("spaces"); !ok || m.A.ID != SpacesADriveID || m.B.File != SpacesBFile {
+		t.Errorf("spaces drives %+v %v", m, ok)
+	}
+	if _, ok := MountDrivesOf("other"); ok {
+		t.Error("unknown mount found")
+	}
+	// A root drive whose daemon serves only skills (an older build).
+	old := &Template{Manifest: Manifest{Key: Key{LayoutVersion: 5}}}
+	if got := old.ManagedMounts(); !slices.Equal(got, []string{SkillsMount}) {
+		t.Errorf("older guest: %v", got)
+	}
+	some := &Template{Manifest: Manifest{Key: Key{LayoutVersion: 5}, GuestMounts: []string{"spaces"}}}
+	if got := some.ManagedMounts(); !slices.Equal(got, []string{SkillsMount, "spaces"}) {
+		t.Errorf("guest with spaces: %v", got)
+	}
+
+	dir := t.TempDir()
+	if _, err := WriteFake(dir, "l5", testKey); err != nil {
+		t.Fatal(err)
+	}
+	tpl, err := (&Store{Dir: dir}).Get("l5")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := tpl.ManagedMounts(); len(got) != 3 || !tpl.HasBalloon() || tpl.ManagedSlots() != 2 {
+		t.Errorf("template mounts %v balloon %v slots %d", got, tpl.HasBalloon(), tpl.ManagedSlots())
 	}
 }

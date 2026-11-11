@@ -1,4 +1,4 @@
-{{- /* ServiceMonitor for the Craft Firecracker host agent metrics (ENG-4570).
+{{- /* ServiceMonitor for the Craft Firecracker host agent metrics.
 Needs craft.sandboxRuntime=firecracker, craft.hostAgent.metrics.enabled and
 monitoring.serviceMonitors.enabled. Same auth as the api_server
 ServiceMonitor: with auth.metricsAuth, Prometheus sends the token from the

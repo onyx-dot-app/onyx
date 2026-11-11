@@ -78,9 +78,12 @@ new integrated harness. Existing Craft keeps its current sandbox image and
 skills. The new image is an input to `deployment/craft-fc/rootfs/build-rootfs.sh`. It includes execution tools and
 assets, without OpenCode or the current Python sidecar. The existing converter
 adds init, the static Go daemon and relay, overlays, and the rootfs manifest.
-Managed skills mount at `/workspace/managed/skills` on a read-only, noexec
-drive; scripts run through interpreters. Publishing the userspace image does
-not change the current pod/Docker image settings.
+In a Firecracker VM, managed content mounts on read-only, noexec drives at
+`/mnt/skills`, `/mnt/user-uploads` and `/mnt/spaces` (each swappable with the
+same A/B slot mechanism); scripts run through interpreters. Each session has
+`/home/onyx/workspaces/<session-id>`, the default working directory of its
+commands; commands can still reach any path in the VM. Publishing the
+userspace image does not change the current pod/Docker image settings.
 
 Rootfs delivery (Firecracker only): `.github/workflows/craft-fc-rootfs.yml` converts a
 `craft-runtime` tag with no egress CA and publishes
@@ -221,8 +224,9 @@ the stored token on each request, so a new token takes effect at once.
   `microvm/proto` (`regenerate.sh --check`).
 - `backend/onyx/microvm/daemon_client.py`: the guest daemon client, through
   the agent pass-through: Health, Init, exec (run, start, stream by offsets,
-  interact, cancel, inspect, list) and session files (read, write, upload,
-  list, delete, zip). Every call but Health sends `x-sandboxd-key`. No caller
+  interact, cancel with an optional SIGINT/SIGTERM, inspect, list; at most 64
+  tracked executions per VM) and files (read, write, upload, list, delete,
+  zip; session-relative, or absolute VM paths with no session). Every call but Health sends `x-sandboxd-key`. No caller
   uses exec or files yet.
 - `backend/onyx/microvm/placement.py`: one VM per sandbox, best of K nodes on
   free memory, `SANDBOX_CAPACITY_UNAVAILABLE` with the reason. Wake is an
@@ -233,8 +237,9 @@ the stored token on each request, so a new token takes effect at once.
   stored encrypted in the tenant cache before Create. A rejected or lost key,
   an exited VM, or a dead node creates the next attempt; the caller must
   store the returned attempt. A node is dead when its registration expired
-  or its last state report is older than
-  `SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS` (60 s).
+  or ended (an agent that stops on a drained node calls
+  `POST /microvm/node/deregister`), or its last state report is older than
+  `SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS` (180 s).
 - `backend/onyx/microvm/registry.py`: placement records, reservations and
   daemon keys have no TTL. Record writes are fenced on (attempt, generation)
   with `CacheBackend.replace_if_value` / `delete_if_value`. Redis must use a
