@@ -343,10 +343,18 @@ craft_fc_host_agent_node_stats_errors{stat="vm_memory"} ` + failed + `
 	if err := testutil.GatherAndCompare(m.Registry(), strings.NewReader(want("3.4603008e+07", "0")), names...); err != nil {
 		t.Error(err)
 	}
-	// A VM that exits during the scrape is skipped; another error is flagged.
+	// A VM that exits during the scrape is skipped.
 	read[10] = fs.ErrNotExist
+	if err := testutil.GatherAndCompare(m.Registry(), strings.NewReader(want("2.4117248e+07", "0")), names...); err != nil {
+		t.Error(err)
+	}
+	// Another error is flagged and the partial sum is not reported.
 	read[11] = errors.New("permission denied")
-	if err := testutil.GatherAndCompare(m.Registry(), strings.NewReader(want("1.2582912e+07", "1")), names...); err != nil {
+	if err := testutil.GatherAndCompare(m.Registry(), strings.NewReader(`
+# HELP craft_fc_host_agent_node_stats_errors 1 if the last scrape could not read node memory, disk, or the private memory of a VM.
+# TYPE craft_fc_host_agent_node_stats_errors gauge
+craft_fc_host_agent_node_stats_errors{stat="vm_memory"} 1
+`), names...); err != nil {
 		t.Error(err)
 	}
 }

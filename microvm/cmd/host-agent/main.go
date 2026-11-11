@@ -20,6 +20,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -328,7 +329,12 @@ func run(f flags, log *slog.Logger) error {
 		log.Warn("no --egress-ca or --egress-ca-configmap: VMs trust only a CA built into the root drive")
 	}
 	if f.rootfsDir != "" {
+		// Held over the build and its metrics, so template_ready shows the
+		// last build to finish.
+		var buildMu sync.Mutex
 		svc.Builder = func(ctx context.Context) (tplbuild.Result, error) {
+			buildMu.Lock()
+			defer buildMu.Unlock()
 			t0 := time.Now()
 			r, err := buildTemplate(ctx, builder, f.rootfsDir)
 			obs.metrics.TemplateBuild(time.Since(t0), templateResult(r, err))

@@ -396,7 +396,10 @@ func (c *stateCollector) Collect(ch chan<- prometheus.Metric) {
 		gauge(c.memAlloc, float64(mem))
 		gauge(c.vcpuAlloc, float64(vcpus))
 		if c.src.PrivateMem != nil {
-			gauge(c.memPrivate, float64(private))
+			// A partial sum would look like reclaimed memory.
+			if !privateFailed {
+				gauge(c.memPrivate, float64(private))
+			}
 			gauge(c.statsFailed, boolFloat(privateFailed), "vm_memory")
 		}
 	}
