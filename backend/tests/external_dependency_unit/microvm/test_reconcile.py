@@ -464,7 +464,10 @@ def test_vm_whose_guest_never_answers_is_stopped_in_the_end(
     _report(shared_cache, client_factory, node_id, now=give_up + grace + 1)
     assert node.agent.create_calls == tries + 1
 
-    def no_answer(self: SandboxDaemonClient) -> None:  # noqa: ARG001
+    def no_answer(
+        self: SandboxDaemonClient,  # noqa: ARG001
+        timeout: float | None = None,  # noqa: ARG001
+    ) -> None:
         raise SandboxDaemonError(
             grpc.StatusCode.UNAVAILABLE,
             "no answer",
@@ -588,6 +591,57 @@ def test_key_install_ends_by_the_pass_deadline(
     assert third.adopted == [str(slow)] and third.orphans_marked == []
     record = get_sandbox_placement(tenant_cache, slow)
     assert record is not None and record.names(node_id, 1, vms[slow].generation)
+
+
+def test_orphan_stop_ends_by_the_pass_deadline(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
+) -> None:
+    node_id = _node("stopcut")
+    node = add_node(node_id)
+    stale = new_sandbox_id()
+    _vm(node, stale)
+    _elsewhere(tenant_cache, stale, attempt=2)
+    # Slower than the time left in the pass, faster than the Stop timeout.
+    node.agent.stop_delay_seconds = 4.0
+    registered = _registered(shared_cache, node_id)
+
+    started = time.monotonic()
+    with pytest.raises(TimeoutError):
+        reconcile_node(
+            shared_cache,
+            client_factory,
+            NoCheckpointSupport(),
+            UnknownActivity(),
+            node=registered,
+            vms=client_factory.client(registered.address).list_vms(),
+            now=NOW,
+            deadline=started + 2.0,
+        )
+    assert time.monotonic() - started < 3.5
+
+    # Too little time left: the pass ends before the Stop call.
+    with pytest.raises(TimeoutError):
+        reconcile_node(
+            shared_cache,
+            client_factory,
+            NoCheckpointSupport(),
+            UnknownActivity(),
+            node=registered,
+            vms=client_factory.client(registered.address).list_vms(),
+            now=NOW,
+            deadline=time.monotonic() + 0.5,
+        )
+    calls = len(node.agent.stop_calls)
+
+    # The next report stops the orphan.
+    node.agent.stop_delay_seconds = 0.0
+    report = _report(shared_cache, client_factory, node_id)
+    assert report.orphans_stopped == [str(stale)]
+    assert len(node.agent.stop_calls) == calls + 1
 
 
 def test_least_recently_tried_adoption_runs_first(

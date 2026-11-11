@@ -35,7 +35,8 @@ fresh `List` over mTLS, read under the sandbox lock (the report may predate a
 new VM). If a `List` fails, the record stays, and the pass reads no more.
 Orphan stops run at most `SANDBOX_FC_ORPHAN_STOPS_PER_REPORT` per pass, with
 no checkpoint: a stale, unknown or unusable VM has no session that anyone can
-use.
+use. Orphan stops and their last Health also end by the pass deadline; a cut
+call ends the pass, and the next report finds the orphan again.
 """
 
 import time
@@ -222,6 +223,11 @@ class _Pass:
                 self.check_lease()
             except Exception as e:
                 raise _PassEnded(e) from e
+
+    def _cut(self, default: float) -> tuple[float, bool]:
+        """`call_timeout(default)` and whether the deadline cut it."""
+        timeout = self.call_timeout(default)
+        return timeout, timeout < default
 
     def call_timeout(self, default: float) -> float:
         """`default`, cut to the time left before the pass deadline. Raises
@@ -469,13 +475,11 @@ class _Pass:
         client = self.client_factory.client(self.node.address)
         cut = False
         try:
-            timeout = self.call_timeout(SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS)
-            cut = timeout < SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS
+            timeout, cut = self._cut(SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS)
             SandboxDaemonClient(
                 client.channel, sandbox_id=vm.sandbox_id, sandboxd_key=key
             ).health(timeout=timeout)
-            timeout = self.call_timeout(SANDBOX_FC_AGENT_CREATE_TIMEOUT_SECONDS)
-            cut = timeout < SANDBOX_FC_AGENT_CREATE_TIMEOUT_SECONDS
+            timeout, cut = self._cut(SANDBOX_FC_AGENT_CREATE_TIMEOUT_SECONDS)
             result = client.create(
                 sandbox_id=vm.sandbox_id,
                 attempt=vm.attempt,
@@ -625,16 +629,26 @@ class _Pass:
         if key is None:
             return False
         client = self.client_factory.client(self.node.address)
+        timeout, cut = self._cut(SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS)
         try:
             SandboxDaemonClient(
                 client.channel, sandbox_id=vm.sandbox_id, sandboxd_key=key
-            ).health()
-        except (HostAgentError, SandboxDaemonError):
+            ).health(timeout=timeout)
+        except (HostAgentError, SandboxDaemonError) as e:
+            if cut and e.code is grpc.StatusCode.DEADLINE_EXCEEDED:
+                raise _OutOfTime() from e
             return False
         self.shared_cache.delete(self._adopt_wait_key(vm))
         return True
 
     def stop_orphan(self, stop: _OrphanStop) -> None:
+        try:
+            self._stop_orphan(stop)
+        except _OutOfTime as e:
+            # The next report finds the orphan again.
+            raise _PassEnded(TimeoutError("node report deadline exceeded")) from e
+
+    def _stop_orphan(self, stop: _OrphanStop) -> None:
         vm, sandbox_id = stop.vm, stop.sandbox_id
         tenant_cache = get_cache_backend(tenant_id=vm.tenant_id)
         with sandbox_placement_lock(tenant_cache, sandbox_id, blocking=False) as lock:
@@ -655,13 +669,17 @@ class _Pass:
                     stop, tenant_cache
                 ):
                     return
+            timeout, cut = self._cut(SANDBOX_FC_AGENT_CREATE_TIMEOUT_SECONDS)
             try:
                 self.client_factory.client(self.node.address).stop(
                     sandbox_id=vm.sandbox_id,
                     attempt=vm.attempt,
                     generation=vm.generation,
+                    timeout=timeout,
                 )
             except HostAgentError as e:
+                if cut and e.code is grpc.StatusCode.DEADLINE_EXCEEDED:
+                    raise _OutOfTime() from e
                 if e.reason in (
                     HostAgentErrorReason.SANDBOX_NOT_FOUND,
                     HostAgentErrorReason.INSTANCE_MISMATCH,

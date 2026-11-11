@@ -274,7 +274,14 @@ class HostAgentClient:
             raise _error_from_rpc(e) from e
         return CreateResult(vm=_vm_from_proto(response.vm), created=response.created)
 
-    def stop(self, *, sandbox_id: str, attempt: int, generation: int) -> bool:
+    def stop(
+        self,
+        *,
+        sandbox_id: str,
+        attempt: int,
+        generation: int,
+        timeout: float | None = None,
+    ) -> bool:
         """Stop one VM instance. Returns True when it was already stopped."""
         request = hostagent_pb2.StopRequest(
             sandbox_id=sandbox_id, attempt=attempt, generation=generation
@@ -282,7 +289,12 @@ class HostAgentClient:
         try:
             # Stop waits for the VM exit (the agent's --stop-timeout is 30 s).
             response: hostagent_pb2.StopResponse = self._stub.Stop(
-                request, timeout=SANDBOX_FC_AGENT_CREATE_TIMEOUT_SECONDS
+                request,
+                timeout=(
+                    SANDBOX_FC_AGENT_CREATE_TIMEOUT_SECONDS
+                    if timeout is None
+                    else timeout
+                ),
             )
         except grpc.RpcError as e:
             raise _error_from_rpc(e) from e
