@@ -20,9 +20,10 @@ Per reported VM:
   record write, or a Create whose key install timed out, leaves this state.
   Adoptions run after the orphan stops, so a guest that does not answer
   cannot hold up cleanup. A pending key install waits `_ADOPT_RETRY_SECONDS`
-  before the next try, so other adoptions get a turn. The key install calls
-  end by the pass deadline; a cut call ends the pass and waits like a
-  pending install.
+  before the next try, and the least recently tried adoption runs first, so
+  other adoptions get a turn. The key install calls end by the pass
+  deadline; a cut call ends the pass and waits like a pending install, but
+  does not start the give-up time.
 - The reservation names it but its key is lost, the guest rejects the key,
   or the guest did not answer for `_ADOPT_GIVE_UP_SECONDS`: nothing can use
   it. It is an orphan after the grace period below.
@@ -152,6 +153,7 @@ class _Adoption(BaseModel):
     sandbox_id: UUID
     key: SecretStr
     reservation_raw: bytes
+    last_try: int = 0
 
 
 def orphan_first_seen(
@@ -306,7 +308,7 @@ class _Pass:
                 partial(self.record, indexed.tenant_id, indexed.sandbox_id, reported),
             )
         self.run_stops()
-        for adoption in self.adoptions:
+        for adoption in sorted(self.adoptions, key=lambda a: a.last_try):
             self.step(
                 f"adopt {self.node.node_id}/{adoption.vm.sandbox_id}",
                 partial(self.adopt, adoption),
@@ -349,12 +351,20 @@ class _Pass:
             wait = self.adopt_wait(vm)
             if key is None:
                 self.stop_after_grace(vm, sandbox_id, "key_lost")
-            elif wait is not None and self.now - wait[0] >= _ADOPT_GIVE_UP_SECONDS:
+            elif (
+                wait is not None
+                and wait[0]
+                and self.now - wait[0] >= _ADOPT_GIVE_UP_SECONDS
+            ):
                 self.stop_after_grace(vm, sandbox_id, "guest_unreachable")
             elif wait is None or self.now - wait[1] >= _ADOPT_RETRY_SECONDS:
                 self.adoptions.append(
                     _Adoption(
-                        vm=vm, sandbox_id=sandbox_id, key=key, reservation_raw=found[1]
+                        vm=vm,
+                        sandbox_id=sandbox_id,
+                        key=key,
+                        reservation_raw=found[1],
+                        last_try=0 if wait is None else wait[1],
                     )
                 )
             return
@@ -378,7 +388,8 @@ class _Pass:
         )
 
     def adopt_wait(self, vm: AgentVm) -> tuple[int, int] | None:
-        """(first, last) time of the pending key installs of this VM."""
+        """(first failed, last) time of the pending key installs of this VM.
+        First is 0 while only the pass deadline cut the tries."""
         raw = self.shared_cache.get(self._adopt_wait_key(vm))
         if raw is None:
             return None
@@ -388,9 +399,11 @@ class _Pass:
         except ValueError:
             return None
 
-    def mark_adopt_wait(self, vm: AgentVm) -> None:
+    def mark_adopt_wait(self, vm: AgentVm, *, failed: bool) -> None:
         wait = self.adopt_wait(vm)
-        first = self.now if wait is None else wait[0]
+        first = wait[0] if wait is not None and wait[0] else 0
+        if failed and not first:
+            first = self.now
         self.shared_cache.set(
             self._adopt_wait_key(vm),
             f"{first}:{self.now}",
@@ -409,13 +422,13 @@ class _Pass:
             try:
                 installed = self.install_key(vm, adoption.key)
             except _OutOfTime as e:
-                # Wait like a pending install, so other adoptions get a turn.
-                self.mark_adopt_wait(vm)
+                # Not a guest failure: the give-up time does not start.
+                self.mark_adopt_wait(vm, failed=False)
                 raise _PassEnded(TimeoutError("node report deadline exceeded")) from e
             if installed is None:
                 # Keep the VM and the reservation: a later report or a wake
                 # tries again.
-                self.mark_adopt_wait(vm)
+                self.mark_adopt_wait(vm, failed=True)
                 return
             if not installed:
                 # The guest holds another key: nothing can use the VM.

@@ -577,16 +577,61 @@ def test_key_install_ends_by_the_pass_deadline(
     # The cut adoption waits, so the next pass adopts the other VM.
     second = _report(shared_cache, client_factory, node_id, vms=ordered)
     assert second.adopted == [str(ready)]
+    # A cut is not a guest failure: the give-up time has not started.
     third = _report(
         shared_cache,
         client_factory,
         node_id,
         vms=ordered,
-        now=NOW + reconcile._ADOPT_RETRY_SECONDS,
+        now=NOW + reconcile._ADOPT_GIVE_UP_SECONDS,
     )
-    assert third.adopted == [str(slow)]
+    assert third.adopted == [str(slow)] and third.orphans_marked == []
     record = get_sandbox_placement(tenant_cache, slow)
     assert record is not None and record.names(node_id, 1, vms[slow].generation)
+
+
+def test_least_recently_tried_adoption_runs_first(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
+) -> None:
+    node_id = _node("rotate")
+    node = add_node(node_id)
+    recent, older = new_sandbox_id(), new_sandbox_id()
+    for sandbox_id, last_try in ((recent, NOW - 60), (older, NOW - 120)):
+        reserve_sandbox(
+            tenant_cache,
+            sandbox_id,
+            SandboxReservation(attempt=1, node_id=node_id, owner="timed-out"),
+            replaces=None,
+        )
+        set_sandbox_daemon_key(
+            tenant_cache, sandbox_id, attempt=1, key=new_sandboxd_key()
+        )
+        vm = _vm(node, sandbox_id)
+        shared_cache.set(
+            f"{reconcile._ADOPT_WAIT_PREFIX}{node_id}:{sandbox_id}:{vm.generation}",
+            f"{last_try}:{last_try}",
+            ex=60,
+        )
+    listed = {
+        vm.sandbox_id: vm
+        for vm in client_factory.client(
+            _registered(shared_cache, node_id).address
+        ).list_vms()
+    }
+
+    report = _report(
+        shared_cache,
+        client_factory,
+        node_id,
+        vms=[listed[str(recent)], listed[str(older)]],
+    )
+
+    assert report.adopted == [str(older), str(recent)]
+    assert [r[0] for r in node.agent.create_requests] == [str(older), str(recent)]
 
 
 def test_stale_write_never_replaces_a_newer_record(
