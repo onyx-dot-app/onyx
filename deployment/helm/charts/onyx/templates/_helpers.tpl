@@ -479,8 +479,8 @@ invisible (the DaemonSet looks healthy while every sandbox still cold-pulls).
 - { name: HTTP_PROXY, value: "{{ $proxyUrl }}" }
 - { name: https_proxy, value: "{{ $proxyUrl }}" }
 - { name: http_proxy, value: "{{ $proxyUrl }}" }
-- { name: NO_PROXY, value: "127.0.0.1,localhost,::1" }
-- { name: no_proxy, value: "127.0.0.1,localhost,::1" }
+- { name: NO_PROXY, value: "127.0.0.1,localhost,::1,[::1]" }
+- { name: no_proxy, value: "127.0.0.1,localhost,::1,[::1]" }
 - { name: NODE_USE_ENV_PROXY, value: "1" }
 - { name: NODE_EXTRA_CA_CERTS, value: "{{ .caBundleFile }}" }
 - { name: REQUESTS_CA_BUNDLE, value: "{{ .caBundleFile }}" }

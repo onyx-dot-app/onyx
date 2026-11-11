@@ -22,7 +22,8 @@ annotations:
   artifacthub.io/changes: |
     - kind: fixed
       description: Craft sandbox pods set NODE_USE_ENV_PROXY=1, so Node's
-        built-in fetch uses the sandbox egress proxy.
+        built-in fetch uses the sandbox egress proxy. NO_PROXY also lists
+        "[::1]", the IPv6 loopback form that Node matches.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it
