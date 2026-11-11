@@ -6,9 +6,11 @@ task that must send next is gone, stub batches wait and no task runs. The
 watchdog must start the chain again, not fail the attempt. It fails the
 attempt only when a restart sends nothing in two runs in a row."""
 
+import base64
 import json
 from collections.abc import Generator
 from datetime import datetime, timedelta, timezone
+from typing import Any
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
@@ -16,6 +18,7 @@ import pytest
 from redis import Redis
 from sqlalchemy.orm import Session
 
+from onyx.background.celery.configs.base import CELERY_SEPARATOR
 from onyx.background.celery.tasks.docprocessing import tasks as docprocessing_tasks
 from onyx.background.celery.tasks.docprocessing.tasks import (
     validate_active_indexing_attempts,
@@ -104,6 +107,36 @@ class _Run:
 
     def queue_task(self, task_id: str, queue: str) -> None:
         self.broker.lpush(queue, json.dumps({"headers": {"id": task_id}}))
+
+    def conversion_message(
+        self, index_attempt_id: int, tenant_id: str | None = None
+    ) -> dict[str, Any]:
+        """A conversion task message as kombu stores it in Redis."""
+        kwargs = {
+            "index_attempt_id": index_attempt_id,
+            "tenant_id": tenant_id or self.tenant_id,
+            "batch_num": 0,
+        }
+        body = [[], kwargs, {}]
+        return {
+            "body": base64.b64encode(json.dumps(body).encode()).decode(),
+            "content-encoding": "utf-8",
+            "content-type": "application/json",
+            "headers": {
+                "id": uuid4().hex,
+                "task": OnyxCeleryTask.DOCCONVERSION_TASK,
+            },
+            "properties": {"body_encoding": "base64"},
+        }
+
+    def hold_unacked(self, message: dict[str, Any]) -> None:
+        """A worker took the task and did not ack it."""
+        queue = OnyxCeleryQueues.DOCCONVERSION
+        self.broker.hset(
+            "unacked",
+            message["headers"]["id"],
+            json.dumps([message, queue, queue]),
+        )
 
     def watchdog(self) -> None:
         with (
@@ -282,6 +315,59 @@ def test_a_pending_count_with_an_empty_queue_does_not_block_a_restart(
     assert run.chain_state() == ConversionChainState.RECOVERED
 
     assert run.sent_batch_nums(OnyxCeleryTask.DOCCONVERSION_TASK) == [0]
+
+
+def test_an_unacked_task_of_another_attempt_does_not_block_a_restart(
+    run: _Run,
+) -> None:
+    """A killed worker left a conversion task of another attempt unacked.
+    The task of this attempt is gone, so the watchdog sends the batch again."""
+    run.store_stub_batch(0)
+    assert run.claim("a conversion task that is gone") == [0]
+    RedisDocprocessing(
+        run.attempt_id, get_redis_client(), BatchStage.DOCCONVERSION
+    ).incr_pending()
+    run.hold_unacked(run.conversion_message(run.attempt_id + 100_000))
+    # The same attempt id in another tenant is another attempt.
+    run.hold_unacked(run.conversion_message(run.attempt_id, "another_tenant"))
+
+    assert run.chain_state() == ConversionChainState.RECOVERED
+
+    assert run.sent_batch_nums(OnyxCeleryTask.DOCCONVERSION_TASK) == [0]
+
+
+def test_a_task_of_the_attempt_in_the_queue_keeps_the_watchdog_away(
+    run: _Run,
+) -> None:
+    run.store_stub_batch(0)
+    run.store_stub_batch(1)
+    assert run.claim("a conversion task") == [0, 1]
+    RedisDocprocessing(
+        run.attempt_id, get_redis_client(), BatchStage.DOCCONVERSION
+    ).incr_pending()
+    run.broker.lpush(
+        f"{OnyxCeleryQueues.DOCCONVERSION}{CELERY_SEPARATOR}2",
+        json.dumps(run.conversion_message(run.attempt_id)),
+    )
+
+    assert run.chain_state() == ConversionChainState.BUSY
+
+    assert run.app.send_task.call_count == 0
+
+
+def test_an_unacked_task_of_the_attempt_keeps_the_watchdog_away(
+    run: _Run,
+) -> None:
+    run.store_stub_batch(0)
+    assert run.claim("a conversion task") == [0]
+    RedisDocprocessing(
+        run.attempt_id, get_redis_client(), BatchStage.DOCCONVERSION
+    ).incr_pending()
+    run.hold_unacked(run.conversion_message(run.attempt_id))
+
+    assert run.chain_state() == ConversionChainState.BUSY
+
+    assert run.app.send_task.call_count == 0
 
 
 def test_a_recent_dispatch_is_healthy(run: _Run) -> None:
