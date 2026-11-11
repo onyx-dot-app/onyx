@@ -205,6 +205,11 @@ jobs:
             --daemon-bin "${RUNNER_TEMP}/bin/guest-daemon" --relay-bin "${RUNNER_TEMP}/bin/egress-relay" --out "${out}"
           bash "${ROOTFS_DIR}/check-image.sh" --context-from "${out}" "${RUNNER_TEMP}/context"
 
+      # The KVM check and the build run as root and leave root-owned files in
+      # the Docker config (buildx state). The push runs as the runner user.
+      - name: Give the Docker config back to the runner user
+        run: sudo chown -R "$(id -u):$(id -g)" "${DOCKER_CONFIG:-$HOME/.docker}"
+
       - name: Push the root drive image by digest
         id: push
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
