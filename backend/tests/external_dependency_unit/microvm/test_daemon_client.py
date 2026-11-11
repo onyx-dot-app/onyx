@@ -100,6 +100,31 @@ def test_run_streams_started_output_and_result(guest: Guest) -> None:
     assert result.finished_at is not None
 
 
+def test_run_streams_until_a_running_command_ends(guest: Guest) -> None:
+    events = guest.daemon.run(ExecCommand(argv=["cat"], stdin=True))
+    started = next(events)
+    assert isinstance(started, ExecStarted)
+
+    guest.daemon.interact(started.execution_id, data=b"late", close_stdin=True)
+
+    rest = list(events)
+    assert _stdout(rest) == b"late"
+    assert isinstance(rest[-1], ExecResult)
+
+
+def test_closing_a_run_keeps_the_command_running(guest: Guest) -> None:
+    unread = guest.daemon.run(ExecCommand(argv=["echo", "never"]))
+    events = guest.daemon.run(ExecCommand(argv=["sleep", "60"]))
+    started = next(events)
+    assert isinstance(started, ExecStarted)
+    events.close()
+
+    [record] = guest.daemon.list_executions()
+    assert record.execution_id == started.execution_id
+    assert record.state is ExecState.RUNNING
+    del unread  # an unread run never starts its command
+
+
 def test_run_of_a_missing_program_raises_start_failed(guest: Guest) -> None:
     with pytest.raises(SandboxDaemonError) as exc:
         list(guest.daemon.run(ExecCommand(argv=["nope"])))
@@ -283,6 +308,17 @@ def test_list_files_one_directory_or_the_tree(guest: Guest) -> None:
     cut = guest.daemon.list_files(session_id=SESSION, recursive=True, max_entries=1)
     assert cut.truncated and len(cut.entries) == 1
 
+    guest.daemon.write_file(session_id=SESSION, path="outputs/.hidden", data=b"x")
+    shallow = guest.daemon.list_files(
+        session_id=SESSION,
+        path="outputs",
+        recursive=True,
+        max_depth=1,
+        skip_hidden=True,
+    )
+    assert [e.path for e in shallow.entries] == ["outputs/sub", "outputs/a.txt"]
+    assert shallow.truncated
+
 
 def test_list_files_with_dotdot_raises_invalid_argument(guest: Guest) -> None:
     with pytest.raises(SandboxDaemonError) as exc:
@@ -314,9 +350,16 @@ def _drain_zip(gen: Generator[bytes, None, ZipSummary]) -> tuple[bytes, ZipSumma
 def test_zip_files_streams_a_zip_and_returns_the_summary(guest: Guest) -> None:
     guest.daemon.write_file(session_id=SESSION, path="outputs/a.txt", data=b"aa")
     guest.daemon.write_file(session_id=SESSION, path="outputs/b/c.txt", data=b"c")
+    guest.daemon.write_file(session_id=SESSION, path="outputs/.git/x", data=b"g")
+    guest.daemon.write_file(session_id=SESSION, path="outputs/dist/y", data=b"d")
 
     data, summary = _drain_zip(
-        guest.daemon.zip_files(session_id=SESSION, path="outputs")
+        guest.daemon.zip_files(
+            session_id=SESSION,
+            path="outputs",
+            exclude_names=["dist"],
+            skip_hidden=True,
+        )
     )
 
     with zipfile.ZipFile(io.BytesIO(data)) as zf:

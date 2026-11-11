@@ -10,7 +10,6 @@ import zipfile
 from collections.abc import Iterator
 from concurrent import futures
 from dataclasses import dataclass, field
-from typing import Any
 
 import grpc
 from google.rpc import error_details_pb2, status_pb2
@@ -101,6 +100,8 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         template_mem_mib: int = 2048,
     ) -> None:
         self.lock = threading.Lock()
+        # Notified when an execution ends.
+        self.ended = threading.Condition(self.lock)
         self.mem_available_mib = mem_available_mib
         self.templates = [
             hostagent_pb2.TemplateInfo(
@@ -224,6 +225,7 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
             # A new VM boots a new daemon with no key and no Init.
             self.daemon_keys.pop(request.sandbox_id, None)
             self.daemon_inits.pop(request.sandbox_id, None)
+            self._drop_guest_state(request.sandbox_id)
             if self.lost_create_answers > 0:
                 self.lost_create_answers -= 1
                 self.daemon_keys[request.sandbox_id] = request.sandboxd_key
@@ -268,6 +270,7 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
             del self.vms[request.sandbox_id]
             self.daemon_keys.pop(request.sandbox_id, None)
             self.daemon_inits.pop(request.sandbox_id, None)
+            self._drop_guest_state(request.sandbox_id)
             self.mem_available_mib += vm.mem_mib
             return hostagent_pb2.StopResponse(already_stopped=False)
 
@@ -307,6 +310,13 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
     def next_id(self, prefix: str) -> str:
         return f"{prefix}-{next(self._ids)}"
 
+    def _drop_guest_state(self, sandbox_id: str) -> None:
+        """A new or stopped VM has none of the old guest's executions or files."""
+        self.executions.pop(sandbox_id, None)
+        self.managed_active.pop(sandbox_id, None)
+        for key in [k for k in self.files if k[0] == sandbox_id]:
+            del self.files[key]
+
     def _check_instance(
         self,
         context: grpc.ServicerContext,
@@ -342,12 +352,18 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
                 request.sandboxd_key,
             )
             roots = list(request.roots) or ["attachments"]
-            members = {
+            exclude = set(request.exclude_names) or {"node_modules"}
+            selected = {
                 path: data
                 for (sid, session, path), data in self.files.items()
                 if sid == request.sandbox_id
                 and session == request.session_id
                 and path.split("/", 1)[0] in roots
+            }
+            members = {
+                path: data
+                for path, data in selected.items()
+                if not _skipped(path, exclude, skip_hidden=False)
             }
             archive = _zip(members)
             capture_id = self.next_id("cap")
@@ -358,6 +374,7 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
                 sha256=hashlib.sha256(archive).hexdigest(),
                 files=len(members),
                 expanded_bytes=sum(len(d) for d in members.values()),
+                excluded=len(selected) - len(members),
                 roots=sorted({p.split("/", 1)[0] for p in members}),
             )
             response.expires_at.GetCurrentTime()
@@ -376,6 +393,13 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
             if request.request.method != "PUT":
                 abort_with_reason(
                     context, HostAgentErrorReason.TRANSFER_FAILED, "not a PUT"
+                )
+            length = {k.lower(): v for k, v in request.request.headers.items()}.get(
+                "content-length"
+            )
+            if length is not None and length != str(len(archive)):
+                abort_with_reason(
+                    context, HostAgentErrorReason.ARCHIVE_MISMATCH, "Content-Length"
                 )
             self.objects[request.request.url] = archive
             self.upload_headers.append(dict(request.request.headers))
@@ -423,6 +447,14 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
                     context, HostAgentErrorReason.ARCHIVE_MISMATCH, "other archive"
                 )
             members = _unzip(archive)
+            roots = {p.split("/", 1)[0] for p in members}
+            for key in [
+                k
+                for k in self.files
+                if k[:2] == (request.sandbox_id, request.session_id)
+                and k[2].split("/", 1)[0] in roots
+            ]:
+                del self.files[key]
             for path, data in members.items():
                 self.files[(request.sandbox_id, request.session_id, path)] = data
             return hostagent_pb2.RestoreSessionResponse(
@@ -436,14 +468,22 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         request_iterator: Iterator[hostagent_pb2.PutManagedImageRequest],
         context: grpc.ServicerContext,
     ) -> hostagent_pb2.PutManagedImageResponse:
-        header, data = _header_and_data(request_iterator)
+        first = next(request_iterator)
+        header = first.header
+        data = b"".join(r.data for r in request_iterator)
+        try:
+            files = _unzip(data)
+        except zipfile.BadZipFile:
+            files = None
         if (
-            len(data) != header.size_bytes
+            files is None
+            or len(data) != header.size_bytes
             or hashlib.sha256(data).hexdigest() != header.sha256
         ):
             abort_with_reason(
-                context, HostAgentErrorReason.MANAGED_BUNDLE_INVALID, "bad bytes"
+                context, HostAgentErrorReason.MANAGED_BUNDLE_INVALID, "bad bundle"
             )
+            raise AssertionError("unreachable")
         with self.lock:
             built = header.sha256 not in self.managed_images
             self.managed_images[header.sha256] = data
@@ -451,7 +491,7 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
                 image_id=header.sha256,
                 size_bytes=len(data),
                 fs_uuid="00000000-0000-4000-8000-000000000000",
-                files=len(_unzip(data)),
+                files=len(files),
             )
             return hostagent_pb2.PutManagedImageResponse(image=image, built=built)
 
@@ -476,6 +516,16 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
                             ok=False,
                             reason=hostagent_pb2.INSTANCE_MISMATCH,
                             message="other instance",
+                        )
+                    )
+                    continue
+                if self.daemon_keys.get(t.sandbox_id) != t.sandboxd_key:
+                    results.append(
+                        hostagent_pb2.SwapResult(
+                            sandbox_id=t.sandbox_id,
+                            ok=False,
+                            reason=hostagent_pb2.GUEST_KEY_REJECTED,
+                            message="guest daemon: bad key",
                         )
                     )
                     continue
@@ -548,11 +598,11 @@ def _unzip(data: bytes) -> dict[str, bytes]:
         return {name: zf.read(name) for name in zf.namelist()}
 
 
-def _header_and_data(requests: Iterator[Any]) -> tuple[Any, bytes]:
-    """The header and the joined data of a header-then-bytes client stream."""
-    header = next(requests).header
-    data = b"".join(r.data for r in requests)
-    return header, data
+def _skipped(path: str, exclude: set[str], *, skip_hidden: bool) -> bool:
+    parts = path.split("/")
+    return bool(exclude & set(parts)) or (
+        skip_hidden and any(p.startswith(".") for p in parts)
+    )
 
 
 class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
@@ -721,8 +771,24 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
                 execution_id=execution.execution_id, pid=77
             )
             started.started_at.GetCurrentTime()
-            events = [sandboxd_pb2.ExecEvent(started=started)]
-            events += self._events(execution, 0, 0)
+        yield sandboxd_pb2.ExecEvent(started=started)
+        yield from self._until_ended(context, execution, 0, 0)
+
+    def _until_ended(
+        self,
+        context: grpc.ServicerContext,
+        execution: FakeExecution,
+        stdout_offset: int,
+        stderr_offset: int,
+    ) -> Iterator[sandboxd_pb2.ExecEvent]:
+        """Like the daemon: the stream stays open until the result. A client
+        that goes away ends the stream, not the command."""
+        with self.agent.lock:
+            while execution.result is None and context.is_active():
+                self.agent.ended.wait(timeout=0.05)
+            if execution.result is None:
+                return
+            events = self._events(execution, stdout_offset, stderr_offset)
         yield from events
 
     def Start(  # noqa: N802
@@ -741,10 +807,9 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
     ) -> Iterator[sandboxd_pb2.ExecEvent]:
         with self.agent.lock:
             execution = self._execution(context, request.execution_id)
-            events = self._events(
-                execution, request.stdout_offset, request.stderr_offset
-            )
-        yield from events
+        yield from self._until_ended(
+            context, execution, request.stdout_offset, request.stderr_offset
+        )
 
     def Interact(  # noqa: N802
         self, request: sandboxd_pb2.InteractRequest, context: grpc.ServicerContext
@@ -762,6 +827,7 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
                 # cat: echo stdin, exit at EOF.
                 execution.stdout = bytes(execution.stdin_data)
                 execution.end(sandboxd_pb2.EXITED, 0)
+                self.agent.ended.notify_all()
             return sandboxd_pb2.InteractResponse(written=len(request.data))
 
     def Cancel(  # noqa: N802
@@ -772,6 +838,7 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
             already_ended = execution.result is not None
             if not already_ended:
                 execution.end(sandboxd_pb2.CANCELED)
+                self.agent.ended.notify_all()
             assert execution.result is not None
             return sandboxd_pb2.CancelResponse(
                 result=execution.result, already_ended=already_ended
@@ -850,7 +917,7 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
         session_id: str,
         path: str,
         data: bytes,
-        header: Any,
+        header: sandboxd_pb2.WriteFileHeader | sandboxd_pb2.UploadFileHeader,
     ) -> str:
         if len(data) != header.size or (
             header.sha256 and hashlib.sha256(data).hexdigest() != header.sha256
@@ -866,7 +933,8 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
         request_iterator: Iterator[sandboxd_pb2.WriteFileRequest],
         context: grpc.ServicerContext,
     ) -> sandboxd_pb2.WriteFileResponse:
-        header, data = _header_and_data(request_iterator)
+        header = next(request_iterator).header
+        data = b"".join(r.data for r in request_iterator)
         with self.agent.lock:
             sandbox_id = self._ready(context)
             path = self._check_path(context, header.path)
@@ -885,7 +953,8 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
         request_iterator: Iterator[sandboxd_pb2.UploadFileRequest],
         context: grpc.ServicerContext,
     ) -> sandboxd_pb2.UploadFileResponse:
-        header, data = _header_and_data(request_iterator)
+        header = next(request_iterator).header
+        data = b"".join(r.data for r in request_iterator)
         with self.agent.lock:
             sandbox_id = self._ready(context)
             if "/" in header.file_name or not header.file_name:
@@ -917,23 +986,27 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
         under = {p: d for p, d in files.items() if p.startswith(prefix)}
         if base and not under:
             abort_daemon(context, SandboxDaemonErrorReason.FILE_NOT_FOUND, base)
-        excluded = set(request.exclude_names)
+        exclude = set(request.exclude_names)
+        # Entries at depth <= max_depth (1 = the directory itself).
+        max_depth = (request.max_depth or 64) if request.recursive else 1
+        depth_cut = False
         dirs: set[str] = set()
         entries: list[sandboxd_pb2.FileInfo] = []
         for path, data in sorted(under.items()):
-            parts = path[len(prefix) :].split("/")
-            if excluded & set(parts):
+            rel = path[len(prefix) :]
+            if _skipped(rel, exclude, skip_hidden=request.skip_hidden):
                 continue
-            if not request.recursive and len(parts) > 1:
-                dirs.add(prefix + parts[0])
-                continue
-            for i in range(1, len(parts)):
+            parts = rel.split("/")
+            for i in range(1, min(len(parts), max_depth + 1)):
                 dirs.add(prefix + "/".join(parts[:i]))
+            if len(parts) > max_depth:
+                depth_cut = depth_cut or request.recursive
+                continue
             entries.append(self._info(path, len(data)))
         listing = [self._info(d, 0, directory=True) for d in sorted(dirs)] + entries
         limit = request.max_entries or 10_000
         return sandboxd_pb2.ListFilesResponse(
-            entries=listing[:limit], truncated=len(listing) > limit
+            entries=listing[:limit], truncated=len(listing) > limit or depth_cut
         )
 
     def DeleteFile(  # noqa: N802
@@ -967,8 +1040,12 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
             files = self._session_files(sandbox_id, request.session_id)
             limit = self.agent.zip_max_input_bytes
         prefix = f"{base}/" if base else ""
+        exclude = set(request.exclude_names)
         members = {
-            p[len(prefix) :]: d for p, d in files.items() if p.startswith(prefix)
+            p[len(prefix) :]: d
+            for p, d in files.items()
+            if p.startswith(prefix)
+            and not _skipped(p[len(prefix) :], exclude, skip_hidden=request.skip_hidden)
         }
         if base and not members:
             abort_daemon(context, SandboxDaemonErrorReason.FILE_NOT_FOUND, base)

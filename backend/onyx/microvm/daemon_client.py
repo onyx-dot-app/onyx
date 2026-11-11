@@ -16,7 +16,7 @@ import secrets
 from collections.abc import Generator, Iterator
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any
+from typing import Protocol, TypeVar
 
 import grpc
 from pydantic import SecretStr
@@ -260,6 +260,20 @@ def _chunks(data: bytes) -> Iterator[bytes]:
         yield data[start : start + _WRITE_CHUNK_BYTES]
 
 
+_Msg_co = TypeVar("_Msg_co", covariant=True)
+
+
+class _ResponseStream(Protocol[_Msg_co]):
+    """A server-streaming gRPC call: an iterator of messages that can be
+    cancelled. Dropping it also cancels the call."""
+
+    def __iter__(self) -> Iterator[_Msg_co]: ...
+
+    def __next__(self) -> _Msg_co: ...
+
+    def cancel(self) -> bool: ...
+
+
 class SandboxDaemonClient:
     """The guest daemon of one VM. Shares the agent's channel; never closes it."""
 
@@ -335,9 +349,9 @@ class SandboxDaemonClient:
 
     # Exec. A command that ends in any way is an ExecResult, not an error.
 
-    def _exec_events(self, call: Any) -> Iterator[ExecEvent]:
-        """Map a Run/Stream response stream. Closing the iterator early
-        cancels the stream, not the command."""
+    def _exec_events(
+        self, call: _ResponseStream[sandboxd_pb2.ExecEvent]
+    ) -> Generator[ExecEvent, None, None]:
         try:
             for msg in call:
                 event = _exec_event(msg)
@@ -352,21 +366,22 @@ class SandboxDaemonClient:
             call.cancel()
         raise _protocol_error("the exec stream ended without a result")
 
-    def run(self, command: ExecCommand) -> Iterator[ExecEvent]:
+    def run(self, command: ExecCommand) -> Generator[ExecEvent, None, None]:
         """Run a command and stream its events: ExecStarted, output and gaps,
         then the ExecResult.
 
-        If the stream breaks, the command keeps running: resume with
-        `stream()` and the execution ID of the first event. Errors (for
-        example START_FAILED) raise when the iterator is read.
+        The command starts when the iterator is first read. If the stream
+        breaks or the iterator is closed, the command keeps running: resume
+        with `stream()` and the execution ID of the first event. Errors (for
+        example START_FAILED) raise from the iterator.
         """
         deadline = command.deadline_seconds or _DEFAULT_EXEC_DEADLINE_SECONDS
-        call = self._stub.Run(
+        call: _ResponseStream[sandboxd_pb2.ExecEvent] = self._stub.Run(
             sandboxd_pb2.RunRequest(command=_command_proto(command)),
             metadata=self._authed(),
             timeout=deadline + _STREAM_MARGIN_SECONDS,
         )
-        return self._exec_events(call)
+        yield from self._exec_events(call)
 
     def start(self, command: ExecCommand) -> ExecStarted:
         """Start a command in the background."""
@@ -388,11 +403,12 @@ class SandboxDaemonClient:
         stderr_offset: int = 0,
         timeout_seconds: float = _DEFAULT_EXEC_DEADLINE_SECONDS
         + _STREAM_MARGIN_SECONDS,
-    ) -> Iterator[ExecEvent]:
+    ) -> Generator[ExecEvent, None, None]:
         """Stream an execution's output from the offsets, then its result.
         Works while it runs and after it ended. A gap event marks bytes the
-        daemon no longer keeps."""
-        call = self._stub.Stream(
+        daemon no longer keeps. The call starts when the iterator is first
+        read."""
+        call: _ResponseStream[sandboxd_pb2.ExecEvent] = self._stub.Stream(
             sandboxd_pb2.StreamRequest(
                 execution_id=execution_id,
                 stdout_offset=stdout_offset,
@@ -401,7 +417,7 @@ class SandboxDaemonClient:
             metadata=self._authed(),
             timeout=timeout_seconds,
         )
-        return self._exec_events(call)
+        yield from self._exec_events(call)
 
     def interact(
         self, execution_id: str, *, data: bytes = b"", close_stdin: bool = False
@@ -464,8 +480,9 @@ class SandboxDaemonClient:
         self, *, session_id: str, path: str, offset: int = 0, length: int = 0
     ) -> tuple[FileEntry, Iterator[bytes]]:
         """The file's info and its bytes from `offset` (length 0 = to the
-        end), in chunks of at most 64 KiB. FILE_NOT_FOUND raises here."""
-        call = self._stub.ReadFile(
+        end), in chunks of at most 64 KiB. FILE_NOT_FOUND raises here.
+        Closing or dropping the chunk iterator cancels the stream."""
+        call: _ResponseStream[sandboxd_pb2.ReadFileResponse] = self._stub.ReadFile(
             sandboxd_pb2.ReadFileRequest(
                 session_id=session_id, path=path, offset=offset, length=length
             ),
@@ -484,7 +501,9 @@ class SandboxDaemonClient:
             raise _protocol_error("ReadFile did not start with the file info")
         return _file_entry(first.info), self._read_chunks(call)
 
-    def _read_chunks(self, call: Any) -> Iterator[bytes]:
+    def _read_chunks(
+        self, call: _ResponseStream[sandboxd_pb2.ReadFileResponse]
+    ) -> Iterator[bytes]:
         try:
             for msg in call:
                 if msg.WhichOneof("part") == "data":
@@ -616,7 +635,7 @@ class SandboxDaemonClient:
         """Yield the bytes of a deflate zip of the regular files under
         `path`; the generator returns the summary. On an error (for example
         LIMIT_EXCEEDED) drop the bytes received so far."""
-        call = self._stub.ZipFiles(
+        call: _ResponseStream[sandboxd_pb2.ZipFilesResponse] = self._stub.ZipFiles(
             sandboxd_pb2.ZipFilesRequest(
                 session_id=session_id,
                 path=path,
