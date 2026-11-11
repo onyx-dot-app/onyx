@@ -107,6 +107,7 @@ from onyx.redis.redis_hierarchy import (
     resolve_parent_node_ids,
 )
 from onyx.redis.redis_pool import get_redis_client
+from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.fleet_telemetry import emit_stage_counter
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import (
@@ -963,33 +964,13 @@ def connector_document_extraction(
                 # Resolve parent_hierarchy_raw_node_id to parent_hierarchy_node_id
                 # using the Redis cache (just populated from hierarchy nodes
                 # batch). A parent not stored yet gets a STUB node.
-                raw_parent_ids = [
-                    doc.parent_hierarchy_raw_node_id
-                    for doc in doc_batch_cleaned
-                    if doc.parent_hierarchy_raw_node_id is not None
-                ]
-                parent_node_ids: dict[str, int] = {}
-                with get_session_with_current_tenant() as db_session_tmp:
-                    source_node_id = get_source_node_id_from_cache(
-                        redis_client, db_session_tmp, db_connector.source
-                    )
-                    if source_node_id is not None and raw_parent_ids:
-                        parent_node_ids = resolve_parent_node_ids(
-                            redis_client=redis_client,
-                            db_session=db_session_tmp,
-                            source=db_connector.source,
-                            source_node_id=source_node_id,
-                            raw_parent_ids=raw_parent_ids,
-                            connector_id=db_connector.id,
-                            credential_id=db_credential.id,
-                        )
-                for doc in doc_batch_cleaned:
-                    raw_parent_id = doc.parent_hierarchy_raw_node_id
-                    doc.parent_hierarchy_node_id = (
-                        parent_node_ids.get(raw_parent_id, source_node_id)
-                        if raw_parent_id is not None
-                        else source_node_id
-                    )
+                set_document_parent_node_ids(
+                    redis_client,
+                    doc_batch_cleaned,
+                    source=db_connector.source,
+                    connector_id=db_connector.id,
+                    credential_id=db_credential.id,
+                )
 
                 batch_description = []
 
@@ -1022,36 +1003,16 @@ def connector_document_extraction(
                 # Create processing task data. ``enqueue_time_ms`` is captured
                 # right before send so QUEUE_WAIT measures the broker latency
                 # and any docprocessing scheduling delay (not our own bookkeeping).
-                processing_batch_data = {
-                    "index_attempt_id": index_attempt_id,
-                    "cc_pair_id": cc_pair_id,
-                    "tenant_id": tenant_id,
-                    "batch_num": batch_num,  # 0-indexed
-                    "enqueue_time_ms": int(time.time() * 1000),
-                }
-                # Sent only when set, so a worker from before backfills still
-                # accepts normal batches during a rolling upgrade.
-                if is_backfill:
-                    processing_batch_data["is_backfill"] = True
-
                 # Queue document processing task
                 with time_stage(IndexAttemptStage.DOC_BATCH_ENQUEUE, index_attempt_id):
-                    try:
-                        RedisDocprocessing(
-                            index_attempt_id,
-                            get_redis_client(tenant_id=tenant_id),
-                        ).incr_pending()
-                    except Exception:
-                        logger.debug(
-                            "Failed to increment pending counter for attempt %s",
-                            index_attempt_id,
-                            exc_info=True,
-                        )
-                    app.send_task(
-                        OnyxCeleryTask.DOCPROCESSING_TASK,
-                        kwargs=processing_batch_data,
-                        queue=OnyxCeleryQueues.DOCPROCESSING,
+                    send_docprocessing_batch(
+                        app,
+                        index_attempt_id=index_attempt_id,
+                        cc_pair_id=cc_pair_id,
+                        tenant_id=tenant_id,
+                        batch_num=batch_num,
                         priority=docprocessing_priority,
+                        is_backfill=is_backfill,
                     )
 
                 batch_num += 1
@@ -1194,6 +1155,88 @@ def connector_document_extraction(
 
     finally:
         memory_tracer.stop()
+
+
+def set_document_parent_node_ids(
+    redis_client: TenantRedisClient,
+    documents: list[Document],
+    *,
+    source: DocumentSource,
+    connector_id: int,
+    credential_id: int,
+) -> None:
+    """Sets each document's parent hierarchy node id from its raw parent id,
+    with the hierarchy cache. A parent that is not stored yet gets a STUB
+    node. A document with no parent goes under the source root."""
+    raw_parent_ids = [
+        doc.parent_hierarchy_raw_node_id
+        for doc in documents
+        if doc.parent_hierarchy_raw_node_id is not None
+    ]
+    parent_node_ids: dict[str, int] = {}
+    with get_session_with_current_tenant() as db_session:
+        source_node_id = get_source_node_id_from_cache(redis_client, db_session, source)
+        if source_node_id is not None and raw_parent_ids:
+            parent_node_ids = resolve_parent_node_ids(
+                redis_client=redis_client,
+                db_session=db_session,
+                source=source,
+                source_node_id=source_node_id,
+                raw_parent_ids=raw_parent_ids,
+                connector_id=connector_id,
+                credential_id=credential_id,
+            )
+    for doc in documents:
+        raw_parent_id = doc.parent_hierarchy_raw_node_id
+        doc.parent_hierarchy_node_id = (
+            parent_node_ids.get(raw_parent_id, source_node_id)
+            if raw_parent_id is not None
+            else source_node_id
+        )
+
+
+def send_docprocessing_batch(
+    app: Celery,
+    *,
+    index_attempt_id: int,
+    cc_pair_id: int,
+    tenant_id: str,
+    batch_num: int,
+    priority: OnyxCeleryPriority,
+    is_backfill: bool,
+    expires: int | None = None,
+) -> None:
+    """Counts a stored document batch as pending and sends its docprocessing
+    task. ``enqueue_time_ms`` is taken right before the send, so QUEUE_WAIT
+    measures the broker and the wait for a docprocessing slot."""
+    processing_batch_data: dict[str, Any] = {
+        "index_attempt_id": index_attempt_id,
+        "cc_pair_id": cc_pair_id,
+        "tenant_id": tenant_id,
+        "batch_num": batch_num,  # 0-indexed
+        "enqueue_time_ms": int(time.time() * 1000),
+    }
+    # Sent only when set, so a worker from before backfills still accepts
+    # normal batches during a rolling upgrade.
+    if is_backfill:
+        processing_batch_data["is_backfill"] = True
+    try:
+        RedisDocprocessing(
+            index_attempt_id, get_redis_client(tenant_id=tenant_id)
+        ).incr_pending()
+    except Exception:
+        logger.debug(
+            "Failed to increment pending counter for attempt %s",
+            index_attempt_id,
+            exc_info=True,
+        )
+    app.send_task(
+        OnyxCeleryTask.DOCPROCESSING_TASK,
+        kwargs=processing_batch_data,
+        queue=OnyxCeleryQueues.DOCPROCESSING,
+        priority=priority,
+        expires=expires,
+    )
 
 
 def cache_and_upsert_hierarchy_nodes(
