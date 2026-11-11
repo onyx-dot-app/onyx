@@ -233,7 +233,8 @@ the stored token on each request, so a new token takes effect at once.
 - `backend/onyx/microvm/placement.py`: one VM per sandbox, best of K nodes on
   free memory (a node at its `max_vms` cap is skipped),
   `SANDBOX_CAPACITY_UNAVAILABLE` with the reason. When every node refuses,
-  placement deletes the attempt's daemon key. Wake is an
+  placement deletes the attempt's daemon key, unless it skipped the pinned
+  node (no template there) without a Create. Wake is an
   idempotent ensure: it reads the durable placement record and asks that
   node's agent whether the VM runs. Before Create it takes the sandbox's
   reservation (attempt, node) atomically; a Create with no known outcome
