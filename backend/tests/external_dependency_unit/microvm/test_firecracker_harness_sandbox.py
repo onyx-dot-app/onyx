@@ -7,8 +7,10 @@ import threading
 import time
 import zipfile
 from collections.abc import Callable, Generator, Iterator
+from typing import Protocol
 from uuid import UUID, uuid4
 
+import grpc
 import pytest
 
 from onyx.cache.interface import CacheBackend
@@ -17,6 +19,11 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.microvm import registry
 from onyx.microvm.agent_client import HostAgentErrorReason
+from onyx.microvm.daemon_client import (
+    SandboxDaemonClient,
+    SandboxDaemonError,
+    SandboxDaemonErrorReason,
+)
 from onyx.microvm.generated.hostagent.v1 import hostagent_pb2
 from onyx.microvm.models import OutputStream
 from onyx.microvm.registry import get_sandbox_daemon_key, get_sandbox_placement
@@ -64,7 +71,17 @@ from tests.external_dependency_unit.microvm.fake_agent import (
     RunningFakeAgent,
 )
 
-MakeSandbox = Callable[..., FirecrackerHarnessSandbox]
+
+class MakeSandbox(Protocol):
+    def __call__(
+        self,
+        *,
+        managed_bundle: ManagedBundleSource | None = None,
+        max_exec_sessions: int = MAX_EXEC_SESSIONS_PER_SANDBOX,
+        wake_retry_seconds: float = 10.0,
+    ) -> FirecrackerHarnessSandbox: ...
+
+
 NewRef = Callable[[], HarnessSandboxRef]
 
 
@@ -557,6 +574,12 @@ def test_the_output_buffer_keeps_head_and_tail_bytes() -> None:
     cut.add(OutputStream.STDOUT, b"ok\xc3")
     assert cut.finish() == "\ufffd"
     assert cut.text() == "ok\ufffd"
+    # Bytes on each side of a gap never join into one character.
+    gap = ExecOutputBuffer()
+    gap.add(OutputStream.STDOUT, "é".encode()[:1])
+    gap.add_gap(OutputStream.STDOUT, 5)
+    gap.add(OutputStream.STDOUT, "é".encode()[1:])
+    assert "é" not in gap.text() and "5 bytes of stdout lost" in gap.text()
     boundary = ExecOutputBuffer(max_bytes=4)
     boundary.add(OutputStream.STDOUT, "aé".encode())
     assert not boundary.truncated and boundary.text() == "aé"
@@ -883,3 +906,59 @@ def test_ctrl_c_is_not_held_back_by_a_long_poll(
     assert interrupted.completion == "canceled"
     assert interrupted.exec_session_id is None
     assert len(node.agent.cancel_calls) == 1
+
+
+@pytest.mark.usefixtures("node")
+def test_ctrl_c_on_an_ended_command_reports_its_exit(
+    monkeypatch: pytest.MonkeyPatch,
+    tenant_cache: CacheBackend,
+    sandbox: FirecrackerHarnessSandbox,
+    new_ref: NewRef,
+) -> None:
+    monkeypatch.setattr(harness_sandbox, "_EXEC_LOCK_WAIT_SECONDS", 0.2)
+    ref = new_ref()
+    _, result = _run(sandbox.exec_command(ref, "cat", yield_time_ms=250))
+    session = result.exec_session_id
+    assert session is not None
+    record = harness_state.get_exec_session(tenant_cache, ref.sandbox_id, session)
+    assert record is not None
+    sandbox._daemon(sandbox._place(ref)).interact(
+        record.execution_id, data=b"", close_stdin=True
+    )
+    held = tenant_cache.lock(
+        f"{harness_sandbox._EXEC_LOCK_PREFIX}{ref.sandbox_id}:{session}", timeout=30
+    )
+    assert held.acquire(blocking=False)
+    try:
+        _, interrupted = _run(sandbox.write_stdin(ref, session, "\x03"))
+    finally:
+        held.release()
+    assert interrupted.completion == "exited" and interrupted.exit_code == 0
+
+
+@pytest.mark.usefixtures("node")
+def test_a_failed_eviction_cancel_keeps_the_record(
+    monkeypatch: pytest.MonkeyPatch,
+    tenant_cache: CacheBackend,
+    make_sandbox: MakeSandbox,
+    new_ref: NewRef,
+) -> None:
+    sandbox = make_sandbox(max_exec_sessions=1)
+    ref = new_ref()
+    _, result = _run(sandbox.exec_command(ref, "sleep 60", yield_time_ms=250))
+    assert result.exec_session_id is not None
+
+    def fail(*_args: object, **_kwargs: object) -> None:
+        raise SandboxDaemonError(
+            grpc.StatusCode.UNAVAILABLE, "down", SandboxDaemonErrorReason.INTERNAL
+        )
+
+    monkeypatch.setattr(SandboxDaemonClient, "cancel", fail)
+    placed = sandbox._place(ref)
+    sandbox._make_room(tenant_cache, sandbox._daemon(placed), placed, ref.sandbox_id)
+    assert (
+        harness_state.get_exec_session(
+            tenant_cache, ref.sandbox_id, result.exec_session_id
+        )
+        is not None
+    )

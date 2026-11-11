@@ -51,8 +51,12 @@ class ExecOutputBuffer:
         return self._add_text(self._decoders[stream].decode(data))
 
     def add_gap(self, stream: OutputStream, count: int) -> str:
-        """The daemon dropped `count` bytes of a stream before we read them."""
-        return self._add_text(
+        """The daemon dropped `count` bytes of a stream before we read them.
+        Bytes on each side of the gap are not one character: flush the
+        decoder and start a new one."""
+        pending = self._add_text(self._decoders[stream].decode(b"", final=True))
+        self._decoders[stream] = codecs.getincrementaldecoder("utf-8")(errors="replace")
+        return pending + self._add_text(
             f"\n[... {count} bytes of {stream.value.lower()} lost ...]\n"
         )
 

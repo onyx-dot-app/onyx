@@ -33,6 +33,7 @@ from onyx.microvm.agent_client import (
     MtlsHostAgentClientFactory,
 )
 from onyx.microvm.configs import (
+    SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS,
     SANDBOX_FC_APPROVAL_PARK_SECONDS,
     SANDBOX_FC_EXEC_DEADLINE_SECONDS,
     SANDBOX_FC_PUBLISH_MAX_BYTES,
@@ -138,8 +139,9 @@ _EXEC_LOCK_MARGIN_SECONDS = 30.0
 _WAKE_RETRY_FIRST_DELAY_SECONDS = 0.25
 _WAKE_RETRY_MAX_DELAY_SECONDS = 2.0
 _INIT_LOCK_PREFIX = "sandbox_fc:init_lock:"
-# Covers one daemon Init (attach drives, grow the scratch file system).
-_INIT_LOCK_SECONDS = 90.0
+# Covers Health, CloseConnections and one daemon Init (attach drives, grow
+# the scratch file system), each at its RPC deadline.
+_INIT_LOCK_SECONDS = 3 * max(SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS, 60.0) + 30.0
 # Session directories this process remembers as made.
 _PREPARED_MAX = 10_000
 
@@ -169,12 +171,21 @@ def _clamp_ms(value: int | None, default: int, low: int, high: int) -> float:
     return min(max(ms, low), high) / 1000.0
 
 
-def _interrupted_result(started_at: float) -> ExecCommandResult:
+def _interrupted_result(
+    started_at: float, result: ExecResult | None
+) -> ExecCommandResult:
+    """The result of a Ctrl-C when another call reads the output: the
+    command's own result if it had already ended."""
+    completion = result.completion if result is not None else ExecCompletion.CANCELED
     return ExecCommandResult(
         output="",
         exec_session_id=None,
-        exit_code=None,
-        completion=_COMPLETION_NAMES[ExecCompletion.CANCELED],
+        exit_code=(
+            result.exit_code
+            if result is not None and completion is ExecCompletion.EXITED
+            else None
+        ),
+        completion=_COMPLETION_NAMES.get(completion, "unknown"),
         wall_time_seconds=time.monotonic() - started_at,
         original_token_count=0,
         truncated=False,
@@ -607,8 +618,11 @@ class FirecrackerHarnessSandbox(HarnessSandbox):
         ended = self._ended_executions(daemon)
         for session_id in eviction_order(live, ended)[:excess]:
             victim = live[session_id]
-            if victim.execution_id not in ended:
-                self._cancel_evicted(daemon, [victim])
+            if victim.execution_id not in ended and not self._cancel_evicted(
+                daemon, [victim]
+            ):
+                # Keep a record of a command that may still run.
+                continue
             remove_exec_session(
                 tenant_cache,
                 sandbox_id,
@@ -618,16 +632,20 @@ class FirecrackerHarnessSandbox(HarnessSandbox):
 
     def _cancel_evicted(
         self, daemon: SandboxDaemonClient, evicted: list[ExecSessionRecord]
-    ) -> None:
+    ) -> bool:
+        """Cancel the commands; False when a Cancel failed."""
+        ok = True
         for record in evicted:
             try:
                 daemon.cancel(record.execution_id)
             except (HostAgentError, SandboxDaemonError):
+                ok = False
                 logger.warning(
                     "sandbox_fc_exec_evict_cancel_failed execution=%s",
                     record.execution_id,
                     exc_info=True,
                 )
+        return ok
 
     def exec_command(
         self,
@@ -775,11 +793,12 @@ class FirecrackerHarnessSandbox(HarnessSandbox):
         # Write and interrupt before the read lock: a long poll by another
         # call must not hold back a Ctrl-C.
         text, interrupt, _ = chars.partition(INTERRUPT_CHAR)
+        canceled: ExecResult | None = None
         try:
             if text:
                 daemon.interact(record.execution_id, data=text.encode())
             if interrupt:
-                daemon.cancel(record.execution_id)
+                canceled = daemon.cancel(record.execution_id).result
         except SandboxDaemonError as e:
             if e.reason is SandboxDaemonErrorReason.EXECUTION_NOT_FOUND:
                 self._forget(tenant_cache, ref, record)
@@ -794,7 +813,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox):
         if not lock.acquire(blocking_timeout=_EXEC_LOCK_WAIT_SECONDS):
             if interrupt:
                 # Another call reads the output; the interrupt is done.
-                yield _interrupted_result(started_at)
+                yield _interrupted_result(started_at, canceled)
                 return
             raise CacheLockAcquisitionError(exec_session_id)
         try:
@@ -803,7 +822,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox):
             if current is None or current.execution_id != record.execution_id:
                 if interrupt:
                     # Another call already reported the end.
-                    yield _interrupted_result(started_at)
+                    yield _interrupted_result(started_at, canceled)
                     return
                 raise ExecSessionNotFoundError(exec_session_id)
             yield from self._collect(
