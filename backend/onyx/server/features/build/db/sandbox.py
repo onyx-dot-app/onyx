@@ -12,7 +12,9 @@ from onyx.db.enums import BuildSessionStatus, PatType, Permission, SandboxStatus
 from onyx.db.models import BuildSession, PersonalAccessToken, Sandbox, Snapshot, User
 from onyx.db.pat import create_pat, revoke_pat
 from onyx.server.features.build.sandbox.models import SandboxCleanupCheckpoint
+from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -483,3 +485,22 @@ def get_sandbox_user_map(user_ids: list[UUID], db_session: Session) -> dict[UUID
         .where(Sandbox.status == SandboxStatus.RUNNING)
     )
     return {row.Sandbox.id: row.User for row in db_session.execute(stmt).unique()}
+
+
+def get_user_sandbox_blob_paths(db_session: Session, user_id: UUID) -> list[str]:
+    """File store paths of a user's session snapshots and opencode history."""
+    paths = list(
+        db_session.scalars(
+            select(Snapshot.storage_path)
+            .join(BuildSession, Snapshot.session_id == BuildSession.id)
+            .where(BuildSession.user_id == user_id)
+        ).all()
+    )
+    sandbox_id = db_session.scalar(select(Sandbox.id).where(Sandbox.user_id == user_id))
+    if sandbox_id is not None:
+        paths.append(
+            SnapshotManager.opencode_history_storage_path(
+                get_current_tenant_id(), str(sandbox_id)
+            )
+        )
+    return paths
