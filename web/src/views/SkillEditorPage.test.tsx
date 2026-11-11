@@ -15,6 +15,7 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 const mockCreateCustomSkillFromEditor = jest.fn();
 const mockDeleteUserSkill = jest.fn();
 const mockPatchUserSkill = jest.fn();
+const mockRemoveUserSkillFile = jest.fn();
 const mockRouterReplace = jest.fn();
 const mockGetSkillCreationDraft = jest.fn();
 const mockDiscardSkillCreationDraft = jest.fn();
@@ -117,6 +118,7 @@ jest.mock("@/lib/skills/api", () => ({
     mockCreateCustomSkillFromEditor(...args),
   deleteUserSkill: (...args: unknown[]) => mockDeleteUserSkill(...args),
   patchUserSkill: (...args: unknown[]) => mockPatchUserSkill(...args),
+  removeUserSkillFile: (...args: unknown[]) => mockRemoveUserSkillFile(...args),
 }));
 
 jest.mock("@/sections/skills/SkillFilesPicker", () => ({
@@ -130,6 +132,7 @@ describe("SkillEditorPage", () => {
     mockDeleteUserSkill.mockReset();
     mockDeleteUserSkill.mockResolvedValue(undefined);
     mockPatchUserSkill.mockReset();
+    mockRemoveUserSkillFile.mockReset();
     mockRouterReplace.mockReset();
     window.history.replaceState(null, "", "/");
     mockGetSkillCreationDraft.mockReset();
@@ -448,6 +451,78 @@ describe("SkillEditorPage", () => {
       instructions_markdown: skill.instructions_markdown,
       base_version_id: "version-1",
     });
+  });
+
+  it("takes the fields and version that a save reloads", async () => {
+    const user = setupUser();
+    const skill = existingSkill();
+    mockUseSWR.mockReturnValue({
+      data: skill,
+      error: undefined,
+      isLoading: false,
+      mutate: mockRefreshSkill,
+    });
+    mockPatchUserSkill.mockResolvedValue({
+      ...skill,
+      description: "Saved by someone else",
+      current_version_id: "version-3",
+    });
+    // Another save committed after this one, before the response.
+    const newer = existingSkill({
+      description: "Saved by someone else",
+      instructions_markdown: "Their instructions.",
+      current_version_id: "version-3",
+    });
+    mockRefreshSkill.mockResolvedValue(newer);
+
+    render(<SkillEditorPage skillId={skill.id} />);
+    const description = screen.getByPlaceholderText(
+      "What does this skill help with?"
+    );
+    await user.clear(description);
+    await user.type(description, "My edit");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(description).toHaveValue("Saved by someone else")
+    );
+    expect(
+      screen.getByPlaceholderText("Write the skill instructions.")
+    ).toHaveValue("Their instructions.");
+  });
+
+  it("takes the fields of the version a file removal returns", async () => {
+    const user = setupUser();
+    const skill = existingSkill({
+      files: [{ path: "notes.txt", size: 5 }],
+    });
+    mockUseSWR.mockReturnValue({
+      data: skill,
+      error: undefined,
+      isLoading: false,
+      mutate: mockRefreshSkill,
+    });
+    mockRemoveUserSkillFile.mockResolvedValue(
+      existingSkill({
+        description: "Saved by someone else",
+        current_version_id: "version-3",
+      })
+    );
+    mockPatchUserSkill.mockResolvedValue(skill);
+
+    render(<SkillEditorPage skillId={skill.id} />);
+    await user.click(screen.getByRole("button", { name: "Remove notes.txt" }));
+    expect(mockRemoveUserSkillFile).toHaveBeenCalledWith(
+      skill.id,
+      "notes.txt",
+      "version-1"
+    );
+    const description = screen.getByPlaceholderText(
+      "What does this skill help with?"
+    );
+    await waitFor(() =>
+      expect(description).toHaveValue("Saved by someone else")
+    );
   });
 
   it("confirms before leaving an existing skill with unsaved changes", async () => {
