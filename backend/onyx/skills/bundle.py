@@ -22,12 +22,21 @@ from onyx.file_processing.zip_limits import (
 )
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.metadata import (
+    frontmatter_for_jsonb,
     parse_skill_document,
     parse_skill_md_frontmatter,
     serialize_skill_md,
     split_skill_md,
 )
-from onyx.skills.models import CustomSkillBundleContents, SkillBundleFile
+from onyx.skills.models import (
+    PLUGIN_SKILL_MD_MAX_BYTES,
+    CustomSkillBundleContents,
+    PluginFileEntry,
+    PluginSkillContent,
+    PluginVersionContent,
+    SkillBundleFile,
+    SkillDocument,
+)
 
 _MIB: Final[int] = 1024 * 1024
 
@@ -760,3 +769,63 @@ def compute_bundle_sha256(zip_bytes: bytes) -> str:
     with identical contents but different timestamps still hash differently.
     """
     return hashlib.sha256(zip_bytes).hexdigest()
+
+
+def compute_bundle_manifest(zip_bytes: bytes) -> list[PluginFileEntry]:
+    """Path, size and SHA-256 of each file in a normalized bundle, by path.
+
+    Two bundles with the same manifest hold the same files, also when their
+    ZIP bytes differ (timestamps, compression)."""
+    entries: list[PluginFileEntry] = []
+    with open_bundle_zip(zip_bytes) as bundle_zip:
+        for info in bundle_zip.infolist():
+            if info.is_dir():
+                continue
+            digest = hashlib.sha256()
+            size = 0
+            with bundle_zip.open(info, mode="r") as source:
+                while chunk := source.read(64 * 1024):
+                    digest.update(chunk)
+                    size += len(chunk)
+            entries.append(
+                PluginFileEntry(
+                    path=_validated_bundle_path(info),
+                    size=size,
+                    sha256=digest.hexdigest(),
+                )
+            )
+    return sorted(entries, key=lambda entry: entry.path)
+
+
+def build_skill_version_content(
+    normalized_bytes: bytes,
+    *,
+    bundle_file_id: str,
+    bundle_sha256: str,
+    raw_skill_md: bytes,
+    document: SkillDocument,
+) -> PluginVersionContent:
+    """The content of one version of a plugin of kind skill: the bundle's file
+    list and its one root SKILL.md, from the parse that validated it."""
+    manifest = compute_bundle_manifest(normalized_bytes)
+    return PluginVersionContent(
+        bundle_file_id=bundle_file_id,
+        bundle_sha256=bundle_sha256,
+        is_valid=True,
+        file_manifest=manifest,
+        unpacked_size_bytes=sum(entry.size for entry in manifest),
+        file_count=len(manifest),
+        skills=[
+            PluginSkillContent(
+                path="",
+                name=document.metadata.name,
+                description=document.metadata.description,
+                skill_md=(
+                    raw_skill_md.decode("utf-8")
+                    if len(raw_skill_md) <= PLUGIN_SKILL_MD_MAX_BYTES
+                    else None
+                ),
+                frontmatter=frontmatter_for_jsonb(document.frontmatter),
+            )
+        ],
+    )

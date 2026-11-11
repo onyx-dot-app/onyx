@@ -1,5 +1,5 @@
 import re
-from typing import Final
+from typing import Any, Final
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -61,6 +61,8 @@ class SkillDocument(BaseModel):
 
     metadata: SkillMetadata
     instructions_markdown: str
+    # The parsed YAML mapping that metadata was validated from.
+    frontmatter: dict[str, Any]
 
 
 class SkillBundleFile(BaseModel):
@@ -68,6 +70,56 @@ class SkillBundleFile(BaseModel):
 
     path: str
     size: int
+
+
+# Larger SKILL.md text is not stored on plugin_skill; readers open the bundle.
+PLUGIN_SKILL_MD_MAX_BYTES: Final[int] = 256 * 1024
+
+
+class PluginFileEntry(BaseModel):
+    """One file of a plugin version's bundle, as stored in file_manifest."""
+
+    model_config = ConfigDict(frozen=True)
+
+    path: str
+    size: int
+    sha256: str
+
+
+class PluginSkillContent(BaseModel):
+    """One skill in a plugin version, as written to a plugin_skill row."""
+
+    model_config = ConfigDict(frozen=True)
+
+    # Folder in the bundle; empty for a SKILL.md at the root.
+    path: str
+    name: str
+    # Validated frontmatter description. Copied to plugin.description for a
+    # plugin of kind skill; plugin_skill has no column for it.
+    description: str
+    # None when SKILL.md is larger than PLUGIN_SKILL_MD_MAX_BYTES.
+    skill_md: str | None
+    # None when a frontmatter value cannot be stored in JSONB.
+    frontmatter: dict[str, Any] | None
+
+
+class PluginVersionContent(BaseModel):
+    """Everything one new plugin version stores, built from the normalized
+    bundle bytes that the file store holds."""
+
+    model_config = ConfigDict(frozen=True)
+
+    bundle_file_id: str
+    # None only for a legacy row that never had a hash or a classification.
+    bundle_sha256: str | None
+    is_valid: bool | None
+    # Sorted by path. Covers every file in the bundle, SKILL.md included.
+    # None for a version copied from a legacy skill row, whose bundle was not
+    # read; the repair task fills it.
+    file_manifest: list[PluginFileEntry] | None
+    unpacked_size_bytes: int | None
+    file_count: int | None
+    skills: list[PluginSkillContent]
 
 
 class CustomSkillBundleContents(BaseModel):

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import datetime
+import json
+import math
 import re
 from collections.abc import Mapping
 from typing import Any, Final
@@ -10,7 +13,7 @@ import yaml
 from pydantic import ValidationError
 from yaml.constructor import ConstructorError
 from yaml.events import AliasEvent
-from yaml.nodes import MappingNode, Node
+from yaml.nodes import MappingNode, Node, ScalarNode
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -22,6 +25,22 @@ _FRONTMATTER_REGEX: Final[re.Pattern[str]] = re.compile(
 )
 
 _MAX_FRONTMATTER_CHARS: Final[int] = 64 * 1024
+
+
+class OversizedYamlInt:
+    """A YAML integer with more digits than Python converts from text. It is
+    kept as its text, so a save stays possible and the value round-trips."""
+
+    __slots__ = ("text",)
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, OversizedYamlInt) and other.text == self.text
+
+    def __hash__(self) -> int:
+        return hash(self.text)
 
 
 class _UniqueKeySafeLoader(yaml.SafeLoader):
@@ -62,6 +81,30 @@ class _UniqueKeySafeLoader(yaml.SafeLoader):
                 )
             mapping[key] = self.construct_object(value_node, deep=deep)
         return mapping
+
+
+def _construct_int(loader: yaml.SafeLoader, node: Node) -> int | OversizedYamlInt:
+    if not isinstance(node, ScalarNode):
+        raise ConstructorError(None, None, "expected a scalar integer", node.start_mark)
+    try:
+        return loader.construct_yaml_int(node)
+    except ValueError:
+        # Python refuses to convert integers longer than 4300 digits.
+        return OversizedYamlInt(str(node.value))
+
+
+_UniqueKeySafeLoader.add_constructor("tag:yaml.org,2002:int", _construct_int)
+
+
+class _SkillMdDumper(yaml.SafeDumper):
+    pass
+
+
+def _represent_oversized_int(dumper: yaml.SafeDumper, data: OversizedYamlInt) -> Node:
+    return dumper.represent_scalar("tag:yaml.org,2002:int", data.text)
+
+
+_SkillMdDumper.add_representer(OversizedYamlInt, _represent_oversized_int)
 
 
 def split_skill_md(raw: bytes) -> tuple[str, str]:
@@ -144,15 +187,65 @@ def parse_skill_document(
     return SkillDocument(
         metadata=metadata,
         instructions_markdown=instructions_markdown.strip(),
+        frontmatter=frontmatter,
     )
+
+
+class _NotJsonbSafe(Exception):
+    pass
+
+
+def _jsonb_value(value: Any) -> Any:
+    if value is None or isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise _NotJsonbSafe
+        return value
+    if isinstance(value, str):
+        if "\x00" in value:
+            raise _NotJsonbSafe
+        try:
+            value.encode("utf-8")
+        except UnicodeEncodeError as exc:
+            raise _NotJsonbSafe from exc
+        return value
+    # datetime is a subclass of date, so both take this branch.
+    if isinstance(value, datetime.date):
+        return value.isoformat()
+    if isinstance(value, list):
+        return [_jsonb_value(item) for item in value]
+    if isinstance(value, dict):
+        converted: dict[str, Any] = {}
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise _NotJsonbSafe
+            converted[_jsonb_value(key)] = _jsonb_value(item)
+        return converted
+    # bytes, sets, OversizedYamlInt and other YAML types JSON cannot hold.
+    raise _NotJsonbSafe
+
+
+def frontmatter_for_jsonb(frontmatter: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Return a copy of parsed frontmatter that a JSONB column can hold, with
+    dates as ISO strings, or None when any value cannot be stored."""
+    try:
+        converted = _jsonb_value(dict(frontmatter))
+        json.dumps(converted, allow_nan=False)
+    except (_NotJsonbSafe, ValueError, TypeError, RecursionError):
+        return None
+    return converted
 
 
 def serialize_skill_md(
     frontmatter: Mapping[str, Any],
     instructions_markdown: str,
 ) -> str:
-    serialized_frontmatter = yaml.safe_dump(
+    serialized_frontmatter = yaml.dump(
         dict(frontmatter),
+        Dumper=_SkillMdDumper,
         sort_keys=False,
         allow_unicode=True,
     ).strip()
