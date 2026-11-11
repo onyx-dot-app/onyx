@@ -79,9 +79,16 @@ function findTexSource(node: Element): string | null {
   return null;
 }
 
+/** Images have no children, so their alt text stands in for them. */
+function imageAlt(node: Element): string {
+  const alt = node.properties?.alt;
+  return typeof alt === "string" ? alt : "";
+}
+
 function plainText(node: ElementContent): string {
   if (node.type === "text") return node.value;
   if (node.type !== "element") return "";
+  if (node.tagName === "img") return imageAlt(node);
   return node.children.map(plainText).join("");
 }
 
@@ -118,6 +125,11 @@ function contentFragment(
   if (hasClass(node, "katex")) {
     const tex = findTexSource(node) ?? "";
     return { html: escapeHtml(tex), text: tex };
+  }
+
+  if (node.tagName === "img") {
+    const alt = imageAlt(node);
+    return { html: escapeHtml(alt), text: alt };
   }
 
   if (node.tagName === "a") {

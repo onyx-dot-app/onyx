@@ -283,34 +283,18 @@ for (const theme of THEMES) {
         await sendMessage(page, "Show me a wide table");
         await chat.expectAnswerTable(WIDE_TABLE_COLUMNS, 2);
 
-        const aiMessage = page.getByTestId("onyx-ai-message").first();
-        const card = aiMessage.locator(".markdown-table-card");
-        const [cardBox, answerBox, scrollBox] = await Promise.all([
-          card.boundingBox(),
-          aiMessage.boundingBox(),
-          page.getByTestId("chat-scroll-container").boundingBox(),
-        ]);
-        if (!cardBox || !answerBox || !scrollBox) {
-          throw new Error("Expected table, answer and scroll boxes");
-        }
-        expect(cardBox.width).toBeGreaterThan(answerBox.width);
-        expect(cardBox.x).toBeGreaterThanOrEqual(scrollBox.x);
-        expect(cardBox.x + cardBox.width).toBeLessThanOrEqual(
-          scrollBox.x + scrollBox.width
-        );
+        await chat.expectAnswerTableBrokenOut();
 
-        await card.hover();
-        await aiMessage.getByTestId("markdown-table-copy-button").click();
-        const copied = await page.evaluate(() =>
-          navigator.clipboard.readText()
-        );
-        expect(copied.split("\n")).toEqual([
-          WIDE_TABLE_COLUMNS.join("\t"),
+        await chat.copyAnswerTable();
+        await chat.expectClipboardText(
           [
-            "Onyx (https://onyx.app)",
-            ...WIDE_TABLE_COLUMNS.slice(1).map((_, i) => `value ${i + 2}`),
-          ].join("\t"),
-        ]);
+            WIDE_TABLE_COLUMNS.join("\t"),
+            [
+              "Onyx (https://onyx.app)",
+              ...WIDE_TABLE_COLUMNS.slice(1).map((_, i) => `value ${i + 2}`),
+            ].join("\t"),
+          ].join("\n")
+        );
       });
 
       test("AI response with LaTeX math renders correctly", async ({

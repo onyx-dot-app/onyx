@@ -141,4 +141,28 @@ describe("tableToCopyContent", () => {
     expect(html).not.toContain("<b>");
     expect(tsv).toContain("\tx^2");
   });
+
+  it("copies image alt text for standalone and linked images", () => {
+    const table = parseTable(
+      [
+        "| Logo | Linked |",
+        "| --- | --- |",
+        "| ![Onyx logo](https://onyx.app/logo.png) | [![Docs badge](https://onyx.app/badge.svg)](https://docs.onyx.app) |",
+        "| ![Inline chart](data:image/png;base64,AAAA) | [![Local](/api/chat/file/img)](/api/chat/file/img) |",
+      ].join("\n")
+    );
+
+    const { html, tsv } = tableToCopyContent(table, resolveCitation);
+
+    expect(tsv).toBe(
+      "Logo\tLinked\n" +
+        "Onyx logo\tDocs badge (https://docs.onyx.app)\n" +
+        "Inline chart\tLocal"
+    );
+    expect(html).toContain("<td>Onyx logo</td>");
+    expect(html).toContain('<a href="https://docs.onyx.app">Docs badge</a>');
+    expect(html).not.toContain("<img");
+    expect(html).not.toContain("data:");
+    expect(html).not.toContain("/api/chat/file");
+  });
 });
