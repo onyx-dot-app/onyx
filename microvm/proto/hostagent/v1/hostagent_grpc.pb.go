@@ -48,7 +48,9 @@ type HostAgentClient interface {
 	// sandbox that has a VM on this node returns ATTEMPT_CONFLICT. With
 	// sandboxd_key set, Create installs that key in the guest daemon (its
 	// SetKey, over vsock) before it returns a running VM; a repeat call
-	// installs it again (the daemon accepts the same key).
+	// installs it again (the daemon accepts the same key). SetKey also carries
+	// the deployment egress CA (--egress-ca or --egress-ca-configmap), which
+	// the daemon installs at Init.
 	Create(ctx context.Context, in *CreateRequest, opts ...grpc.CallOption) (*CreateResponse, error)
 	// Stop stops the VM only if sandbox_id, attempt and generation all match
 	// it. A repeat Stop of the same instance succeeds.
@@ -226,7 +228,9 @@ type HostAgentServer interface {
 	// sandbox that has a VM on this node returns ATTEMPT_CONFLICT. With
 	// sandboxd_key set, Create installs that key in the guest daemon (its
 	// SetKey, over vsock) before it returns a running VM; a repeat call
-	// installs it again (the daemon accepts the same key).
+	// installs it again (the daemon accepts the same key). SetKey also carries
+	// the deployment egress CA (--egress-ca or --egress-ca-configmap), which
+	// the daemon installs at Init.
 	Create(context.Context, *CreateRequest) (*CreateResponse, error)
 	// Stop stops the VM only if sandbox_id, attempt and generation all match
 	// it. A repeat Stop of the same instance succeeds.

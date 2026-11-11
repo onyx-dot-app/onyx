@@ -199,7 +199,8 @@ type Key struct {
 	FirecrackerVersion string `json:"firecracker_version"`
 	CPUModel           string `json:"cpu_model"`
 	HostKernel         string `json:"host_kernel"`
-	// SHA256 fingerprint of the egress CA in the root drive.
+	// SHA256 fingerprint of the egress CA in the root drive. Empty: the root
+	// drive has no CA (the guest daemon installs it at Init).
 	CAFingerprint string `json:"ca_fingerprint"`
 	LayoutVersion int    `json:"layout_version"`
 	BootArgs      string `json:"boot_args"`
@@ -226,7 +227,14 @@ type NodeKey struct {
 	GuestKernelSHA256  string
 	// CAFingerprint is the egress CA of this deployment. Empty: not checked.
 	CAFingerprint string
+	// RootfsCARequired: the agent has no CA source, so a template whose root
+	// drive has no CA does not fit (its VMs would trust no egress CA).
+	RootfsCARequired bool
 }
+
+// NoCAError is the reason that a CA-free root drive does not fit an agent
+// with no CA source.
+const NoCAError = "egress CA: the root drive has none and the agent has no --egress-ca or --egress-ca-configmap"
 
 // CheckNode returns TEMPLATE_INCOMPATIBLE if the key does not fit node n.
 func (k Key) CheckNode(n NodeKey) error {
@@ -243,8 +251,12 @@ func (k Key) CheckNode(n NodeKey) error {
 	add("cpu model", k.CPUModel, n.CPUModel)
 	add("host kernel", k.HostKernel, n.HostKernel)
 	add("guest kernel sha256", k.GuestKernelSHA256, n.GuestKernelSHA256)
-	if n.CAFingerprint != "" {
+	// A template with no CA in its root drive fits every CA.
+	if n.CAFingerprint != "" && k.CAFingerprint != "" {
 		add("egress CA", k.CAFingerprint, n.CAFingerprint)
+	}
+	if n.RootfsCARequired && k.CAFingerprint == "" {
+		bad = append(bad, NoCAError)
 	}
 	if len(bad) > 0 {
 		return apierr.New(pb.ErrorReason_TEMPLATE_INCOMPATIBLE, "template does not fit this node: %s", strings.Join(bad, ", "))

@@ -43,8 +43,9 @@ service Sandboxd {
   // is handed out. In order: set the wall clock, add host entropy to the
   // kernel RNG, attach the per-VM drives (the image's attach script: scratch,
   // overlays, managed drive; a no-op when init already ran it), grow the
-  // scratch file system, send SIGHUP to the in-guest egress relay (it resets
-  // every live connection), then install the env and session list. Before Init after a restore, the
+  // scratch file system, install the SetKey egress CA (if any), send SIGHUP
+  // to the in-guest egress relay (it resets every live connection), then
+  // install the env and session list. Before Init after a restore, the
   // caller must also close the VM's host-side relay connections (node agent
   // CloseConnections).
   rpc Init(InitRequest) returns (InitResponse);
@@ -129,7 +130,8 @@ enum ErrorReason {
   START_FAILED = 7;
   // Too many running commands.
   TOO_MANY_EXECUTIONS = 8;
-  // Init could not set the clock, add entropy or grow a file system.
+  // Init could not set the clock, add entropy, grow a file system or
+  // install the egress CA.
   INIT_FAILED = 9;
   // Any other error.
   INTERNAL = 10;
@@ -172,6 +174,12 @@ message SetKeyRequest {
   // random bytes, for example the hex or base64url of 32 bytes from
   // os.urandom. Any other key fails with INVALID_ARGUMENT.
   string key = 1;
+  // Public PEM certificate of the deployment egress CA (one CA certificate,
+  // no key, at most 16 KiB). Empty: no CA. The daemon keeps the last CA it
+  // got (also on a repeat call with the same key) and installs it at Init,
+  // after attach, into the guest trust stores. This replaces any CA that an
+  // earlier Init installed.
+  bytes egress_ca_pem = 2;
 }
 
 message SetKeyResponse {
@@ -214,6 +222,8 @@ message InitResponse {
   bool attached = 5;
   // True if the egress relay got SIGHUP. False if it was not running.
   bool relay_reset = 6;
+  // True if Init installed the SetKey egress CA in the system trust store.
+  bool egress_ca_installed = 7;
 }
 
 message GrownFS {

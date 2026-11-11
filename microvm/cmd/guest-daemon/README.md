@@ -28,7 +28,8 @@ Code: `cmd/guest-daemon/` (main), `internal/guestd/` (API, Init, auth), `interna
 | Managed slots | Slot A `/dev/vdc` (`MANAGED_DEV`, mounted by attach) and slot B `/dev/vdf` (`MANAGED_DEV_B`, never mounted by attach) on `/workspace/managed`. `MountManaged` changes the drive there (ENG-4614). Needs a guest kernel with `MOVE_MOUNT_BENEATH` (6.5+). |
 | Egress relay | Init sends SIGHUP to the PID in `/run/craft-fc/egress-relay.pid`. |
 | Scratch disk | ext4 on `/mnt/scratch`. Init grows it to the device size, and fails if the device is still smaller than `scratch_bytes` after about 1 s. |
-| Init state | `/run/craft-fc/guest-daemon-init.json` (mode 0600, tmpfs). A restarted daemon keeps its key, env and session list. |
+| Init state | `/run/craft-fc/guest-daemon-init.json` (mode 0600, tmpfs). A restarted daemon keeps its key, egress CA, env and session list. |
+| Egress CA | `SetKey` can carry the deployment egress CA (`egress_ca_pem`). `Init` installs it after attach: `--ca-anchor`, `--ca-bundle` (old egress CA removed, new one added) and `--ca-nssdb` (`certutil` as the database owner, never root; a failure is only logged). |
 | Logs | stderr, text. |
 
 Flags (defaults in brackets): `--port` (52), `--attach-cmd` (`/craft-fc/lib/attach`; empty to skip),
@@ -36,7 +37,10 @@ Flags (defaults in brackets): `--port` (52), `--attach-cmd` (`/craft-fc/lib/atta
 (`/sys/fs/cgroup/guestd`), `--state-file`, `--grow-fs` (`/mnt/scratch`), `--default-deadline` (30m),
 `--max-deadline` (24h), `--output-bytes` (4 MiB per stream), `--output-budget` (256 MiB for all
 executions), `--max-running` (64), `--managed-mount` (`/workspace/managed`; empty turns the managed calls
-off), `--managed-dev-a` (`/dev/vdc`), `--managed-dev-b` (`/dev/vdf`), `--listen`
+off), `--managed-dev-a` (`/dev/vdc`), `--managed-dev-b` (`/dev/vdf`), `--ca-anchor`
+(`/usr/local/share/ca-certificates/craft-egress-ca.crt`), `--ca-bundle` (`/etc/ssl/certs/ca-certificates.crt`;
+empty turns the CA install off), `--ca-nssdb` (`/home/sandbox/.pki/nssdb`; empty to skip), `--certutil`
+(`/usr/bin/certutil`), `--listen`
 (`unix:<path>` instead of vsock, for tests; mode 0600), `--log-level`. The daemon has no TCP listener:
 the API is plaintext with a bearer key, so it is served only on vsock, through the node agent. The
 container fallback (TCP with mTLS) is not in v1.
@@ -77,8 +81,8 @@ agent, every call also carries `x-sandbox-id`.
 | Call | What it does |
 |---|---|
 | `Health` | Answers before Init, with no key. Initialized and key-set flags, version, guest time, generation, running count. |
-| `SetKey` | Node agent only (the pass-through refuses it). Installs the per-VM key once. Before it, every call but `Health` fails with `KEY_NOT_SET`. |
-| `Init` | Needs the key. Sets `CLOCK_REALTIME`, adds the entropy with `RNDADDENTROPY` (credited) and `RNDRESEEDCRNG`, runs attach, grows `--grow-fs` mounts (`EXT4_IOC_RESIZE_FS`) after a device size check, resets the egress relay, stores env and sessions. Other calls fail with `NOT_INITIALIZED` until it succeeds. |
+| `SetKey` | Node agent only (the pass-through refuses it). Installs the per-VM key once, and keeps the egress CA (`egress_ca_pem`) for `Init`; a repeat call with the same key can replace the CA. Before it, every call but `Health` fails with `KEY_NOT_SET`. |
+| `Init` | Needs the key. Sets `CLOCK_REALTIME`, adds the entropy with `RNDADDENTROPY` (credited) and `RNDRESEEDCRNG`, runs attach, grows `--grow-fs` mounts (`EXT4_IOC_RESIZE_FS`) after a device size check, installs the `SetKey` egress CA, resets the egress relay, stores env and sessions. Other calls fail with `NOT_INITIALIZED` until it succeeds. |
 | `Run` | Starts a command and streams `started`, output chunks (with byte offsets) and the result. |
 | `Start` | Starts a command and returns its execution ID at once. |
 | `Stream` | Output of an execution from given offsets, then the result. Works after a dropped client. |

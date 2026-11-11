@@ -135,9 +135,14 @@ func (b *Builder) now() time.Time {
 func (b *Builder) Build(ctx context.Context, r *Rootfs) (Result, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if b.Node.CAFingerprint != "" && r.CAFingerprint() != b.Node.CAFingerprint {
+	// A root drive with no CA fits every deployment: the daemon installs the
+	// CA at Init. A root drive with a CA must have this deployment's CA.
+	if b.Node.CAFingerprint != "" && r.CAFingerprint() != "" && r.CAFingerprint() != b.Node.CAFingerprint {
 		return Result{}, apierr.New(pb.ErrorReason_TEMPLATE_INCOMPATIBLE,
 			"the root drive trusts egress CA %s, this deployment uses %s; build the root drive again", r.CAFingerprint(), b.Node.CAFingerprint)
+	}
+	if b.Node.RootfsCARequired && r.CAFingerprint() == "" {
+		return Result{}, apierr.New(pb.ErrorReason_TEMPLATE_INCOMPATIBLE, "%s", template.NoCAError)
 	}
 	key := b.Key(r)
 	name := Name(key.ImageRef, key.Hash())

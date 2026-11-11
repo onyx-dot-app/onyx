@@ -105,6 +105,10 @@ const (
 	// node drain taint). Create the VM on another node. A repeat Create of a
 	// VM that already runs here still returns it.
 	ErrorReason_NODE_DRAINING ErrorReason = 28
+	// Create: the agent has an egress CA source (--egress-ca or
+	// --egress-ca-configmap) but cannot read a valid CA from it. No VM
+	// starts. Retry later; sandbox-proxy writes the CA at its first start.
+	ErrorReason_EGRESS_CA_UNAVAILABLE ErrorReason = 29
 )
 
 // Enum value maps for ErrorReason.
@@ -139,6 +143,7 @@ var (
 		26: "MANAGED_SLOT_BUSY",
 		27: "MANAGED_MOUNT_FAILED",
 		28: "NODE_DRAINING",
+		29: "EGRESS_CA_UNAVAILABLE",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED": 0,
@@ -170,6 +175,7 @@ var (
 		"MANAGED_SLOT_BUSY":        26,
 		"MANAGED_MOUNT_FAILED":     27,
 		"NODE_DRAINING":            28,
+		"EGRESS_CA_UNAVAILABLE":    29,
 	}
 )
 
@@ -2509,7 +2515,7 @@ const file_hostagent_v1_hostagent_proto_rawDesc = "" +
 	"\x06active\x18\x05 \x01(\x0e2\x1f.craft.hostagent.v1.ManagedSlotR\x06active\x12\x18\n" +
 	"\achanged\x18\x06 \x01(\bR\achanged\x12\x0e\n" +
 	"\x02ms\x18\a \x01(\x04R\x02ms\x12&\n" +
-	"\x0fprevious_in_use\x18\b \x01(\bR\rpreviousInUse*\xa1\x05\n" +
+	"\x0fprevious_in_use\x18\b \x01(\bR\rpreviousInUse*\xbc\x05\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10INVALID_ARGUMENT\x10\x01\x12\x14\n" +
@@ -2542,7 +2548,8 @@ const file_hostagent_v1_hostagent_proto_rawDesc = "" +
 	"\x18MANAGED_SWAP_UNSUPPORTED\x10\x19\x12\x15\n" +
 	"\x11MANAGED_SLOT_BUSY\x10\x1a\x12\x18\n" +
 	"\x14MANAGED_MOUNT_FAILED\x10\x1b\x12\x11\n" +
-	"\rNODE_DRAINING\x10\x1c*t\n" +
+	"\rNODE_DRAINING\x10\x1c\x12\x19\n" +
+	"\x15EGRESS_CA_UNAVAILABLE\x10\x1d*t\n" +
 	"\n" +
 	"DrainState\x12\x1b\n" +
 	"\x17DRAIN_STATE_UNSPECIFIED\x10\x00\x12\x16\n" +
