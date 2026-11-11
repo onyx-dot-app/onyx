@@ -104,7 +104,9 @@ session start: sandbox_lifecycle.py:build_managed_content_payload
 
 **Two data models.** Each custom skill is also a plugin with the same id
 (`db/plugin.py`). Every write goes to the legacy skill rows and the plugin
-rows in one transaction; every read still uses the skill rows. Each access
+rows in one transaction. Access reads of custom skills use the plugin rows
+(`db/plugin_access.py`, [[#plugin-tables]]); the sandbox push and the bundle
+reads still use the skill rows, and built-in skills have no plugin. Each access
 write in `db/skill.py`, `db/external_app.py` and
 `ee/onyx/db/community_downgrade.py` calls one `db/plugin.py` helper that
 mirrors it. Lock order: the skill row, then the plugin row; many in id order.
