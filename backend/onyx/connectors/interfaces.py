@@ -12,6 +12,7 @@ from onyx.connectors.models import (
     Document,
     DocumentFailure,
     HierarchyNode,
+    ListingCounts,
     ListingPayload,
     ResolveTarget,
     SlimDocument,
@@ -386,6 +387,11 @@ class CheckpointedSlimConnector(BaseConnector[CT]):
     @abc.abstractmethod
     def validate_checkpoint_json(self, checkpoint_json: str) -> CT:
         raise NotImplementedError
+
+    def listing_counts(self, checkpoint: CT) -> ListingCounts | None:  # noqa: ARG002
+        """Optional. What the listing behind ``checkpoint`` found, by document
+        type. None when the connector keeps no count."""
+        return None
 
 
 class Resolver(BaseConnector):

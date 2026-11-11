@@ -37,7 +37,9 @@ from onyx.connectors.models import (
     ConnectorCheckpoint,
     ConnectorFailure,
     Document,
+    DocumentTypeLabel,
     HierarchyNode,
+    ListingCounts,
     ListingPayload,
     ResolveTarget,
     SlimDocument,
@@ -60,6 +62,7 @@ from onyx.kg.models import KGStage
 from onyx.redis.redis_docprocessing import RedisDocprocessing
 from onyx.redis.redis_hierarchy import invalidate_hierarchy_cache_for_source
 from onyx.redis.redis_pool import get_redis_client
+from onyx.server.documents.models import IndexAttemptSnapshot
 from shared_configs.contextvars import get_current_tenant_id
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,
@@ -136,6 +139,16 @@ class _FakeLister(
 
     def build_dummy_checkpoint(self) -> ConnectorCheckpoint:
         return ConnectorCheckpoint(has_more=True)
+
+    def listing_counts(
+        self,
+        checkpoint: ConnectorCheckpoint,  # noqa: ARG002
+    ) -> ListingCounts | None:
+        return ListingCounts(
+            docs_by_type={DocumentTypeLabel.DOCUMENT: self.listed},
+            bytes_by_type={DocumentTypeLabel.DOCUMENT: self.listed * _SIZE},
+            partial=True,
+        )
 
     def validate_checkpoint_json(self, checkpoint_json: str) -> ConnectorCheckpoint:
         return ConnectorCheckpoint.model_validate_json(checkpoint_json)
@@ -566,3 +579,50 @@ def test_a_document_of_another_cc_pair_is_not_dropped(
     finally:
         db_session.rollback()
         cleanup_cc_pair(db_session, other_pair)
+
+
+def test_the_lister_sends_the_corpus_count_when_the_listing_ends(run: _Run) -> None:
+    attempt = run.add_attempt(IndexingStatus.IN_PROGRESS, _WINDOW_END)
+
+    with (
+        patch.object(run_docfetching, "ENABLE_CONVERSION_STAGE", True),
+        patch.object(run_docfetching, "emit_corpus_count") as emit,
+    ):
+        run.extract(attempt.id)
+
+    emit.assert_called_once()
+    assert emit.call_args.args[:2] == (attempt.id, run.pair.id)
+    # The fake lister counts in steps of three.
+    assert emit.call_args.kwargs["docs_by_type"] == {DocumentTypeLabel.DOCUMENT: 6}
+    assert emit.call_args.kwargs["partial"] is True
+
+
+def test_the_snapshot_reports_the_progress_of_a_conversion_attempt(run: _Run) -> None:
+    attempt = run.add_attempt(IndexingStatus.IN_PROGRESS, _WINDOW_END)
+    assert (
+        IndexAttemptSnapshot.from_index_attempt_db_model(attempt, 0, 0, 0).progress
+        is None
+    ), "an attempt without the conversion stage has no progress"
+
+    with patch.object(run_docfetching, "ENABLE_CONVERSION_STAGE", True):
+        run.extract(attempt.id)
+    run.convert(attempt.id, 0)
+    row = run.attempt(attempt.id)
+    row.time_started = datetime.now(timezone.utc) - timedelta(seconds=100)
+    row.completed_batches = 1
+    row.total_docs_indexed = 2
+    run.db_session.commit()
+
+    progress = IndexAttemptSnapshot.from_index_attempt_db_model(
+        run.attempt(attempt.id), 1, 0, 0
+    ).progress
+
+    assert progress is not None
+    assert progress.listing_done is True
+    assert (progress.docs_listed, progress.docs_skipped) == (5, 0)
+    assert (progress.docs_indexed, progress.docs_failed) == (2, 1)
+    assert progress.batches_total == 3
+    assert (progress.batches_listed, progress.batches_converted) == (3, 1)
+    assert progress.batches_indexed == 1
+    # One of three batches in about 100 seconds: two more need about 200.
+    assert progress.eta_seconds is not None and 195 <= progress.eta_seconds <= 210
