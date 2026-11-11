@@ -230,13 +230,17 @@ class EgnyteSourceOperations(SourceOperations):
         capabilities=(CredentialCapability.INDEXING,),
         consumes=OperationConsumes.CREDENTIAL,
     )
-    def download_file(self, *, file_path: str) -> BytesIO:
+    def download_file(self, *, file_path: str, max_bytes: int | None = None) -> BytesIO:
         """The latest version of a file, streamed into one buffer so a large
-        file is held in memory once."""
+        file is held in memory once. With ``max_bytes``, only the start of
+        the file is read."""
         buffer = BytesIO()
+        chunk_size = min(max_bytes or _DOWNLOAD_CHUNK_BYTES, _DOWNLOAD_CHUNK_BYTES)
         response = self._get(f"/fs-content/{_fs_path(file_path)}", stream=True)
         with response:
-            for chunk in response.iter_content(chunk_size=_DOWNLOAD_CHUNK_BYTES):
+            for chunk in response.iter_content(chunk_size=chunk_size):
                 buffer.write(chunk)
+                if max_bytes is not None and buffer.tell() >= max_bytes:
+                    break
         buffer.seek(0)
         return buffer

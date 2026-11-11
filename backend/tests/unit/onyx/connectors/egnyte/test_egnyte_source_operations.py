@@ -144,3 +144,11 @@ def test_domain_that_is_not_one_label_is_refused() -> None:
             _gateway("evil.example.com/x").download_file(file_path="/a.txt")
 
     get.assert_not_called()
+
+
+def test_download_reads_only_the_start_when_bounded() -> None:
+    response = _response(200, b"x" * 10_000)
+    with patch.object(requests.Session, "get", MagicMock(return_value=response)):
+        content = _gateway().download_file(file_path="/Shared/big.txt", max_bytes=100)
+
+    assert content.getvalue() == b"x" * 100

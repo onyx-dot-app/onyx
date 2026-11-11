@@ -19,7 +19,7 @@ from onyx.connectors.capability_checks.models import (
     sign_in_timeout_text,
 )
 from onyx.connectors.egnyte.config import EgnyteConnectorConfig
-from onyx.connectors.egnyte.connector import normalize_folder_path
+from onyx.connectors.egnyte.connector import is_indexable, normalize_folder_path
 from onyx.connectors.egnyte.models import EgnyteFile
 from onyx.connectors.egnyte.source_operations import (
     EgnyteApiError,
@@ -38,6 +38,8 @@ _FILES_CHECK_ID: str = "egnyte_files"
 # Folders listed while looking for a file to download.
 _MAX_PROBE_FOLDERS: int = 5
 _PROBE_PAGE_SIZE: int = 20
+# Reading the start of a file proves read access without holding a large file.
+_PROBE_BYTES: int = 64 * 1024
 
 
 def gateway_from_context(context: CapabilityCheckContext) -> EgnyteSourceOperations:
@@ -68,7 +70,8 @@ def probe(action: Callable[[], T], denied: str) -> T:
 def find_sample_file(
     gateway: EgnyteSourceOperations, folder_path: str
 ) -> EgnyteFile | None:
-    """The first file in a short breadth-first walk from the folder."""
+    """The first file indexing would read, in a short breadth-first walk from
+    the folder."""
     queue: list[str] = [folder_path]
     for _ in range(_MAX_PROBE_FOLDERS):
         if not queue:
@@ -76,8 +79,9 @@ def find_sample_file(
         page = gateway.list_folder_page(
             folder_path=queue.pop(0), offset=0, page_size=_PROBE_PAGE_SIZE
         )
-        if page.files:
-            return page.files[0]
+        sample = next((file for file in page.files if is_indexable(file)), None)
+        if sample is not None:
+            return sample
         queue.extend(folder.path for folder in page.folders)
     return None
 
@@ -160,7 +164,7 @@ class _FilesCheck(CapabilityCheck[EgnyteConnectorConfig]):
             sample: EgnyteFile | None = find_sample_file(gateway, folder_path)
             if sample is None:
                 return False
-            gateway.download_file(file_path=sample.path)
+            gateway.download_file(file_path=sample.path, max_bytes=_PROBE_BYTES)
             return True
 
         if probe(download_sample, f"Onyx could not read files in {folder_path}."):

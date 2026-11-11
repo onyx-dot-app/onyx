@@ -75,6 +75,11 @@ def egnyte_document_id(group_id: str) -> str:
     return f"{_DOCUMENT_ID_PREFIX}{group_id}"
 
 
+def same_path(left: str, right: str) -> bool:
+    """Egnyte paths are case-insensitive."""
+    return left.lower() == right.lower()
+
+
 def normalize_folder_path(folder_path: str | None) -> str:
     """Egnyte paths start with "/", so "Shared/Docs" names "/Shared/Docs"."""
     return "/" + (folder_path or "").strip("/")
@@ -103,7 +108,7 @@ def _in_time_window(
     return True
 
 
-def _is_indexable(file: EgnyteFile) -> bool:
+def is_indexable(file: EgnyteFile) -> bool:
     """Shared by indexing and the slim listing, so pruning never keeps a
     document for a file indexing skips."""
     # TODO(wenxi-onyx): consider allowing images
@@ -300,7 +305,7 @@ class EgnyteConnector(
             raw_node_id=folder.folder_id,
             # The configured folder is the top of this connector's tree.
             raw_parent_id=(
-                None if folder.path == self.folder_path else folder.parent_id
+                None if same_path(folder.path, self.folder_path) else folder.parent_id
             ),
             display_name=folder.name or folder.path,
             link=f"{_app_base(self.domain)}/navigate/folder/{folder.folder_id}",
@@ -386,7 +391,7 @@ class EgnyteConnector(
         for file in page.files:
             if file.path in previous:
                 continue
-            if not _is_indexable(file) or not _in_time_window(file, start, end):
+            if not is_indexable(file) or not _in_time_window(file, start, end):
                 continue
             if slim:
                 yield SlimDocument(

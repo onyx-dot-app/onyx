@@ -61,7 +61,11 @@ class _FakeEgnyte:
     ) -> EgnyteFolderPage:
         if self.on_list is not None:
             self.on_list(folder_path, offset)
-        if folder_path not in self.tree:
+        # Egnyte matches paths case-insensitively and answers in its own case.
+        folder_path = next(
+            (path for path in self.tree if path.lower() == folder_path.lower()), ""
+        )
+        if not folder_path:
             raise EgnyteApiError("missing", status_code=404)
         parent = folder_path.rsplit("/", 1)[0] or "/"
         children = sorted(self.tree[folder_path])[offset : offset + page_size]
@@ -122,7 +126,7 @@ def test_walk_yields_folder_nodes_and_documents_under_them() -> None:
         }
     )
 
-    items = _run(_connector(fake, folder_path="Shared/"))
+    items = _run(_connector(fake, folder_path="shared/"))
 
     nodes = [item for item in items if isinstance(item, HierarchyNode)]
     assert [(n.raw_node_id, n.raw_parent_id) for n in nodes] == [
