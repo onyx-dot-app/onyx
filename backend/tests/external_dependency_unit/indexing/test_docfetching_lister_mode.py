@@ -345,7 +345,9 @@ def test_with_the_switch_on_docfetching_lists_and_conversion_makes_the_documents
 def test_with_the_switch_off_docfetching_fetches_the_documents(run: _Run) -> None:
     attempt = run.add_attempt(IndexingStatus.IN_PROGRESS, _WINDOW_END)
 
-    run.extract(attempt.id)
+    # Off here even when the environment turns the switch on.
+    with patch.object(run_docfetching, "ENABLE_CONVERSION_STAGE", False):
+        run.extract(attempt.id)
 
     row = run.attempt(attempt.id)
     assert row.uses_conversion_stage is False
