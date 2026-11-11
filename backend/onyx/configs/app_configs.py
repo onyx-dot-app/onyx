@@ -1137,6 +1137,17 @@ except ValueError:
         _CELERY_WORKER_DOCFETCHING_CONCURRENCY_DEFAULT
     )
 
+# Threads of one docconversion worker. Each thread converts one stub batch,
+# and a conversion parses on one core, so scale with pods, not with threads.
+CELERY_WORKER_DOCCONVERSION_CONCURRENCY = max(
+    1, int(os.environ.get("CELERY_WORKER_DOCCONVERSION_CONCURRENCY") or 2)
+)
+# The most stub batches of one index attempt that are sent to conversion and
+# not converted yet. It bounds the conversion queue for each attempt.
+DOCCONVERSION_WINDOW_BATCHES = max(
+    1, int(os.environ.get("DOCCONVERSION_WINDOW_BATCHES") or 32)
+)
+
 CELERY_WORKER_PRIMARY_CONCURRENCY = int(
     os.environ.get("CELERY_WORKER_PRIMARY_CONCURRENCY") or 4
 )
