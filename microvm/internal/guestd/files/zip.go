@@ -87,6 +87,10 @@ func (s *Store) Zip(ctx context.Context, sessionID string, spec ZipSpec, w io.Wr
 			if arc != "" {
 				carc = arc + "/" + name
 			}
+			if t.denied(child) {
+				sum.Skipped++
+				continue
+			}
 			info, err := e.Info()
 			if err != nil {
 				sum.Skipped++

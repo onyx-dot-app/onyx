@@ -73,6 +73,7 @@ type Saves struct {
 
 type spooled struct {
 	id, path, sandboxID string
+	vm                  CaptureVM
 	size                int64
 	sha                 string
 	expires             time.Time
@@ -228,6 +229,8 @@ func (s *Saves) Capture(ctx context.Context, r *pb.CaptureSessionRequest) (*pb.C
 	if err != nil {
 		return nil, err
 	}
+	// Read now: the VM can stop or be replaced while the archive streams.
+	vm := CaptureVM{SandboxID: r.GetSandboxId(), TenantID: s.M.Tenant(r.GetSandboxId()), Attempt: r.GetAttempt(), Generation: r.GetGeneration()}
 	if err := s.reserve(maxBytes); err != nil {
 		return nil, err
 	}
@@ -296,7 +299,7 @@ func (s *Saves) Capture(ctx context.Context, r *pb.CaptureSessionRequest) (*pb.C
 		return nil, apierr.New(pb.ErrorReason_INTERNAL, "spool: %v", err)
 	}
 	ok = true
-	sp := &spooled{id: id, path: final, sandboxID: r.GetSandboxId(), size: hw.n, sha: got, expires: time.Now().Add(s.TTL)}
+	sp := &spooled{id: id, path: final, sandboxID: r.GetSandboxId(), vm: vm, size: hw.n, sha: got, expires: time.Now().Add(s.TTL)}
 	s.mu.Lock()
 	s.caps[id] = sp
 	sp.timer = time.AfterFunc(s.TTL, func() { s.expire(id) })
@@ -339,6 +342,23 @@ func (s *Saves) drop(sp *spooled) {
 		sp.timer.Stop()
 	}
 	_ = os.Remove(sp.path)
+}
+
+// CaptureVM is the VM instance a spooled capture came from.
+type CaptureVM struct {
+	SandboxID, TenantID string
+	Attempt, Generation uint64
+}
+
+// CaptureVM returns the VM of a spooled capture, for the audit line.
+func (s *Saves) CaptureVM(captureID string) (CaptureVM, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sp := s.caps[captureID]
+	if sp == nil {
+		return CaptureVM{}, false
+	}
+	return sp.vm, true
 }
 
 // Upload runs UploadCapture.

@@ -356,6 +356,7 @@ def _cleanup_node(node_id: str, key_ids: list[str]) -> None:
         cache.delete(f"sandbox_fc:signing_key:{key_id}")
     cache.delete(f"sandbox_fc:node_kids:{node_id}")
     cache.delete(f"sandbox_fc:node_address:{node_id}")
+    cache.delete(f"sandbox_fc:node_address_key:{node_id}")
     cache.set_remove("sandbox_fc:nodes", node_id)
 
 
@@ -380,6 +381,10 @@ def test_registration_records_agent_address() -> None:
         assert get_registered_node(cache, node_id) == node
         assert node in list_registered_nodes(cache)
         assert get_registered_node(cache, other_id) is None
+        # The address names the registration that sent it.
+        assert cache.get(registry._NODE_ADDRESS_KEY_PREFIX + node_id) == (
+            f"{node_id}-1".encode()
+        )
 
         # A rejected registration does not move the node.
         with pytest.raises(OnyxError):

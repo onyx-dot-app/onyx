@@ -149,11 +149,11 @@ ARM64 Lima runs use a test-only image variant; they do not validate the publishe
 
 ## Skills and user state
 
-Skills and other managed content arrive through the read-only drive at `/workspace/managed`.
-Use `/workspace/managed/skills` for harness-supplied skill bundles.
+Skills and other managed content arrive on read-only drives: `/mnt/skills`, `/mnt/user-uploads` and `/mnt/spaces`.
 Managed drives use `noexec`; invoke scripts through interpreters, such as `node icon.js` or `python script.py`.
 The managed-drive hot-swap work owns updates to these files.
-This image leaves the mount point empty and does not install or synchronize skill bundles.
+The rootfs converter makes the mount points and `/home/onyx/workspaces`, the parent of the session directories.
+This image does not install or synchronize skill bundles.
 
 The rootfs converter owns scratch overlays for `/etc`, `/home`, `/root`, `/opt`, `/srv`, `/usr`, `/var`, and `/workspace`.
 It makes the sandbox user's empty NSS database. The guest daemon adds the proxy CA to it at `Init`.

@@ -56,7 +56,16 @@ def test_preflight_schedules_like_sandbox_pods_without_runtime_class() -> None:
 
     assert preflight["nodeSelector"] == {"onyx.app/workload": "sandbox"}
     assert preflight["nodeSelector"] == sandbox["nodeSelector"]
-    assert preflight["tolerations"] == sandbox["tolerations"]
+    # Also the Firecracker nodes, which Terraform taints onyx.app/kvm.
+    assert preflight["tolerations"] == [
+        *sandbox["tolerations"],
+        {
+            "key": "onyx.app/kvm",
+            "operator": "Equal",
+            "value": "true",
+            "effect": "NoSchedule",
+        },
+    ]
     assert "runtimeClassName" not in preflight
 
 

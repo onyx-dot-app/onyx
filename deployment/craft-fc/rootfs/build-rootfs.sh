@@ -232,10 +232,12 @@ RUN chown -R root:root /craft-fc \\
  && chmod 0644 /craft-fc/etc/init.conf /craft-fc/etc/guest.env \\
  && printf 'Acquire::http::Proxy "${proxy}";\nAcquire::https::Proxy "${proxy}";\n' >/etc/apt/apt.conf.d/80craft-egress-proxy \\
  && printf 'while IFS= read -r l; do case "\$l" in ""|"#"*) ;; *=*) export "\$l" ;; esac; done < /craft-fc/etc/guest.env\n' >/etc/profile.d/craft-guest-env.sh \\
- && install -d -m 0755 -o root -g root /workspace/managed /mnt/scratch \\
+ && install -d -m 0755 -o root -g root /mnt/scratch /mnt/skills /mnt/user-uploads /mnt/spaces \\
+ && install -d -m 0755 -o sandbox -g sandbox /home/onyx /home/onyx/workspaces \\
  && dpkg-query -W libreoffice-writer zstd xvfb \\
  && for p in iptables gosu; do if dpkg -s "\$p" >/dev/null 2>&1; then echo "\$p is still installed"; exit 1; fi; done \\
- && [ ! -e /workspace/firewall-init.sh ] && [ ! -e /workspace/sidecar-entrypoint.sh ]
+ && [ ! -e /workspace/firewall-init.sh ] && [ ! -e /workspace/sidecar-entrypoint.sh ] \\
+ && [ "\$(stat -c %U:%G /home/onyx /home/onyx/workspaces | sort -u)" = sandbox:sandbox ]
 EOF
 
 log "convert"
@@ -404,11 +406,18 @@ manifest = {
         "drives": [
             {"drive_id": "rootfs", "guest_dev": "/dev/vda", "is_root_device": True, "is_read_only": True},
             {"drive_id": "scratch", "guest_dev": "/dev/vdb", "is_read_only": False, "fs": "ext4", "mount": "/mnt/scratch"},
-            {"drive_id": "managed", "guest_dev": "/dev/vdc", "is_read_only": True, "fs": "ext4", "mount": "/workspace/managed"},
+            {"drive_id": "managed", "guest_dev": "/dev/vdc", "is_read_only": True, "fs": "ext4", "mount": "/mnt/skills"},
         ],
-        # attach mounts slot A. B is optional, the last drive, and stays
-        # unmounted until a skills update (MANAGED_DEV_B in init.conf).
+        # Skills slots. attach mounts slot A; B stays unmounted until an update.
         "managed_slots": {"a": "/dev/vdc", "b": "/dev/vdf"},
+        # Every managed mount (MANAGED_MOUNTS in init.conf), read-only and
+        # noexec. Devices that a template lacks get an empty tmpfs.
+        "managed_mounts": [
+            {"name": "skills", "mount": "/mnt/skills", "a": "/dev/vdc", "b": "/dev/vdf"},
+            {"name": "user-uploads", "mount": "/mnt/user-uploads", "a": "/dev/vdg", "b": "/dev/vdh"},
+            {"name": "spaces", "mount": "/mnt/spaces", "a": "/dev/vdi", "b": "/dev/vdj"},
+        ],
+        "sessions_root": "/home/onyx/workspaces",
         "overlay_dirs": ["/etc", "/home", "/root", "/opt", "/srv", "/usr", "/var", "/workspace"],
         "scratch_layout_version": 1,
     },

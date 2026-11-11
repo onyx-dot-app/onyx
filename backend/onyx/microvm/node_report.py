@@ -33,6 +33,7 @@ from onyx.microvm.registry import (
 )
 from onyx.sandbox_proxy.sandbox_identity.signed import (
     CLOCK_SKEW_SECONDS,
+    NodeSigningKey,
     NodeSigningKeyLookup,
     SignedIdentityError,
     check_token_times,
@@ -43,6 +44,8 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 NODE_REPORT_AUDIENCE = "onyx-api-server-node-report"
+# A deregistration token never passes as a report token, and the reverse.
+NODE_DEREGISTER_AUDIENCE = "onyx-api-server-node-deregister"
 _REQUIRED_CLAIMS = ["node", "iat", "exp", "jti", "aud", "body_sha256"]
 # One report pass ends after this long; the agent's next report starts again.
 NODE_REPORT_DEADLINE_SECONDS = 20.0
@@ -66,11 +69,32 @@ def verify_node_report_token(
     clock: Callable[[], float] = time.time,
 ) -> str:
     """The reporting node's id. Raises `NodeReportAuthError`."""
+    return verify_node_token(
+        token,
+        body,
+        audience=NODE_REPORT_AUDIENCE,
+        signing_keys=signing_keys,
+        shared_cache=shared_cache,
+        clock=clock,
+    ).node_id
+
+
+def verify_node_token(
+    token: str,
+    body: bytes,
+    *,
+    audience: str,
+    signing_keys: NodeSigningKeyLookup,
+    shared_cache: CacheBackend,
+    clock: Callable[[], float] = time.time,
+) -> NodeSigningKey:
+    """The registered key that signed a node request for `audience` over
+    `body`. Raises `NodeReportAuthError`."""
     try:
         payload, signing_key = decode_node_token(
             token,
             signing_keys,
-            audience=NODE_REPORT_AUDIENCE,
+            audience=audience,
             required_claims=_REQUIRED_CLAIMS,
         )
         issued_at, expires_at = payload["iat"], payload["exp"]
@@ -108,7 +132,7 @@ def verify_node_report_token(
         shared_cache, node_id=node_id, jti=jti, ttl_seconds=ttl
     ):
         raise NodeReportAuthError("replayed")
-    return node_id
+    return signing_key
 
 
 def _check_lease(lease: CacheLock, deadline: float) -> None:

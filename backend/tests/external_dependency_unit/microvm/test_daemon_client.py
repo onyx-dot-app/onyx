@@ -23,6 +23,7 @@ from onyx.microvm.daemon_client import (
 from onyx.microvm.generated.hostagent.v1 import hostagent_pb2
 from onyx.microvm.generated.sandboxd.v1 import sandboxd_pb2
 from onyx.microvm.models import (
+    CancelSignal,
     ExecCommand,
     ExecCompletion,
     ExecEvent,
@@ -210,16 +211,34 @@ def test_cancel_returns_canceled_then_the_same_result(guest: Guest) -> None:
     assert guest.daemon.health().running_executions == 1
 
     canceled = guest.daemon.cancel(started.execution_id)
+    assert canceled.result is not None
     assert canceled.result.completion is ExecCompletion.CANCELED
     assert not canceled.already_ended
+    assert not canceled.signaled
 
     again = guest.daemon.cancel(started.execution_id)
     assert again.already_ended
+    assert again.result is not None
     assert again.result.completion is ExecCompletion.CANCELED
 
     with pytest.raises(SandboxDaemonError) as exc:
         guest.daemon.interact(started.execution_id, data=b"x")
     assert exc.value.reason is SandboxDaemonErrorReason.EXECUTION_ENDED
+
+
+def test_cancel_with_sigint_signals_and_returns_no_result(guest: Guest) -> None:
+    started = guest.daemon.start(
+        ExecCommand(argv=["sleep", "60"], session_id="s-1", cwd="sub")
+    )
+    [execution] = guest.agent.executions[SANDBOX_ID].values()
+    assert execution.session_id == "s-1"
+
+    sent = guest.daemon.cancel(started.execution_id, CancelSignal.SIGINT)
+    assert sent.signaled
+    assert sent.result is None
+    assert not sent.already_ended
+    assert execution.signaled == sandboxd_pb2.CANCEL_SIGNAL_SIGINT
+    assert execution.result is None
 
 
 def test_cancel_of_an_unknown_execution_raises_not_found(guest: Guest) -> None:
