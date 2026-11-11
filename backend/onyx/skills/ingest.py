@@ -1,14 +1,14 @@
 import datetime
 import io
 import math
-import zipfile
-from collections.abc import Iterator, Mapping
+from collections.abc import Container, Iterator, Mapping
 from contextlib import contextmanager
 from typing import Any, NamedTuple
 
 from onyx.configs.constants import FileOrigin
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_processing.zip_index import ZipIndex
 from onyx.file_store.file_store import FileStore
 from onyx.file_store.models import BundleMetadata
 from onyx.skills.built_in import BUILT_IN_SKILLS
@@ -119,7 +119,7 @@ def skill_md_record(
 def bundle_skill_md_record(bundle_bytes: bytes) -> SkillMdRecord:
     """Raises when the bundle has no root SKILL.md. Invalid frontmatter keeps
     the raw file and leaves `frontmatter` empty."""
-    with zipfile.ZipFile(io.BytesIO(bundle_bytes)) as archive:
+    with ZipIndex(bundle_bytes) as archive:
         raw_skill_md = archive.read(SKILL_MD_NAME)
     try:
         frontmatter: dict[Any, Any] | None = parse_skill_md_frontmatter(raw_skill_md)[0]
@@ -158,6 +158,7 @@ def ingest_skill_bundle(
     *,
     expected_name: str | None = None,
     stored: bool = False,
+    uncapped_paths: Container[str] | None = None,
 ) -> IngestedBundle:
     """Validate, parse, hash, and store a custom skill bundle.
 
@@ -171,6 +172,7 @@ def ingest_skill_bundle(
     Prefer ``ingested_skill_bundle`` when the stored blob should be cleaned up
     automatically if the caller's transaction fails.
     Only retained version restores may use stored-data admission.
+    ``uncapped_paths`` skips the path caps for paths an edit kept unchanged.
     """
     is_standalone_skill_md = filename is not None and filename.lower() == "skill.md"
     if is_standalone_skill_md:
@@ -180,8 +182,9 @@ def ingest_skill_bundle(
         bundle_bytes,
         zip_max_bytes=DEFAULT_STORED_ZIP_MAX_BYTES if stored else DEFAULT_ZIP_MAX_BYTES,
         max_file_count=None if stored else DEFAULT_MAX_FILE_COUNT,
+        uncapped_paths=uncapped_paths,
     )
-    with zipfile.ZipFile(io.BytesIO(normalized.content)) as bundle_zip:
+    with ZipIndex(normalized.content) as bundle_zip:
         raw_skill_md = bundle_zip.read(SKILL_MD_NAME)
     document = parse_skill_document(
         raw_skill_md,

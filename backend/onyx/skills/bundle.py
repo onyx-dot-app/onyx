@@ -4,18 +4,24 @@ from __future__ import annotations
 
 import hashlib
 import io
+import sqlite3
 import stat
 import sys
 import zipfile
-from collections.abc import Callable
+from collections.abc import Callable, Container, Iterator
 from contextlib import ExitStack
 from copy import copy
 from dataclasses import dataclass
+from functools import wraps
 from typing import IO, Final, Literal
 
 from onyx.configs.constants import positive_int_from_env
+from onyx.db.zip_metadata import DiskPathSet
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_processing.zip_index import IndexedZipInfo, ZipIndex
+from onyx.file_processing.zip_limits import ZipMetadataLimitError
+from onyx.file_processing.zip_writer import SpooledZipWriter
 from onyx.file_store.models import BundleLimits
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.metadata import (
@@ -80,12 +86,25 @@ STORED_BUNDLE_LIMITS = BundleLimits(
     max_total_bytes=DEFAULT_TOTAL_MAX_BYTES,
 )
 
-SkillBundleLimit = Literal["zip_bytes", "file_count", "file_bytes", "total_bytes"]
+# New uploads hold at most 500 files, so their central directory has a cap.
+# Stored bundles have none: ZipIndex reads them in bounded memory.
+ZIP_METADATA_MAX_BYTES: Final[int] = 1024 * 1024
+
+SkillBundleLimit = Literal[
+    "zip_bytes", "zip_metadata_bytes", "file_count", "file_bytes", "total_bytes"
+]
 
 SKILL_MD_NAME: Final[str] = "SKILL.md"
 TEMPLATE_SUFFIX: Final[str] = ".template"
 
 _ZIP_UNIX_CREATE_SYSTEM: Final[int] = 3
+# Common filesystem limits for new writes. Parent directories are tracked per
+# level, so depth bounds that work for each path.
+_MAX_PATH_BYTES: Final[int] = 4096
+_MAX_PATH_SEGMENT_BYTES: Final[int] = 255
+_MAX_PATH_DEPTH: Final[int] = 64
+# Stored reads skip the path caps; this budget bounds the parent-path set instead.
+STORED_PARENT_PATH_MAX_BYTES: Final[int] = 256 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -110,11 +129,74 @@ def _bundle_limit_error(
 
 
 def _zip_too_large_error(max_bytes: int) -> OnyxError:
-    return _bundle_limit_error(
-        "zip_bytes",
-        max_bytes,
-        f"Skill bundle zip exceeds the {max_bytes // (1024 * 1024)} MiB limit.",
+    label = (
+        f"{max_bytes // (1024 * 1024)} MiB"
+        if max_bytes % (1024 * 1024) == 0
+        else f"{max_bytes:,} bytes"
     )
+    return _bundle_limit_error(
+        "zip_bytes", max_bytes, f"Skill bundle zip exceeds the {label} limit."
+    )
+
+
+def _open_bundle_index(zip_bytes: bytes, max_metadata_bytes: int | None) -> ZipIndex:
+    try:
+        return ZipIndex(zip_bytes, max_metadata_bytes=max_metadata_bytes)
+    except ZipMetadataLimitError as exc:
+        limit = max_metadata_bytes or 0
+        raise _bundle_limit_error(
+            "zip_metadata_bytes",
+            limit,
+            f"Skill bundle zip file list exceeds the {limit // (1024 * 1024)} MiB limit.",
+        ) from exc
+    except sqlite3.Error as exc:
+        raise _temporary_space_error() from exc
+
+
+def _temporary_space_error() -> OnyxError:
+    # ZIP metadata and path sets live in temporary SQLite files; running out of
+    # space is not a property of the bundle.
+    return OnyxError(
+        OnyxErrorCode.SERVICE_UNAVAILABLE,
+        "Not enough temporary space to process the skill bundle.",
+    )
+
+
+def _map_temporary_space_errors[**P, R](func: Callable[P, R]) -> Callable[P, R]:
+    @wraps(func)
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        try:
+            return func(*args, **kwargs)
+        except sqlite3.Error as exc:
+            raise _temporary_space_error() from exc
+
+    return wrapper
+
+
+def _check_rewritten_metadata(content: bytes, *, rewritten: bool, capped: bool) -> None:
+    """A rewrite stores names as UTF-8, which can grow a CP437 file list past
+    the cap that later edits apply to the saved bundle."""
+    if rewritten and capped:
+        with _open_bundle_index(content, ZIP_METADATA_MAX_BYTES):
+            pass
+
+
+def _parent_path_bytes(path: str) -> int:
+    """UTF-8 bytes the parent-path set stores for one path, without building them."""
+    encoded = path.encode("utf-8")
+    total = 0
+    index = encoded.find(b"/")
+    while index >= 0:
+        total += index
+        index = encoded.find(b"/", index + 1)
+    return total
+
+
+def _parent_paths(path: str) -> Iterator[str]:
+    start = 0
+    while (index := path.find("/", start)) >= 0:
+        yield path[:index]
+        start = index + 1
 
 
 def read_bundle_file(
@@ -162,31 +244,31 @@ def strip_skill_md_frontmatter(content: str) -> str:
     return instructions_markdown.strip()
 
 
-def inspect_custom_bundle(zip_bytes: bytes) -> CustomSkillBundleContents:
+def _read_stored_bundle(zip_bytes: bytes, files: list[SkillBundleFile] | None) -> str:
     try:
-        zf = zipfile.ZipFile(io.BytesIO(zip_bytes))
+        index = ZipIndex(zip_bytes)
     except zipfile.BadZipFile as exc:
         raise OnyxError(
             OnyxErrorCode.INTERNAL_ERROR,
             "Stored skill bundle is not a valid zip.",
         ) from exc
 
-    with zf:
+    with index:
         try:
-            raw_skill_md = zf.read(SKILL_MD_NAME)
+            raw_skill_md = index.read(SKILL_MD_NAME)
         except KeyError as exc:
             raise OnyxError(
                 OnyxErrorCode.INTERNAL_ERROR,
                 "Stored skill bundle is missing SKILL.md.",
             ) from exc
-        files: list[SkillBundleFile] = []
-        for info in zf.infolist():
+        for info in index.infos():
             if info.is_dir():
                 continue
-            normalized = _validated_bundle_path(info)
+            normalized = _validated_bundle_path(info, path_limits=False)
             if normalized == SKILL_MD_NAME or _is_ignored_bundle_path(normalized):
                 continue
-            files.append(SkillBundleFile(path=normalized, size=info.file_size))
+            if files is not None:
+                files.append(SkillBundleFile(path=normalized, size=info.file_size))
 
     try:
         skill_md = raw_skill_md.decode("utf-8")
@@ -195,16 +277,21 @@ def inspect_custom_bundle(zip_bytes: bytes) -> CustomSkillBundleContents:
             OnyxErrorCode.INTERNAL_ERROR,
             "Stored skill bundle SKILL.md must be UTF-8 encoded.",
         ) from exc
+    return strip_skill_md_frontmatter(skill_md)
 
+
+def inspect_custom_bundle(zip_bytes: bytes) -> CustomSkillBundleContents:
+    """The listing holds each file's path and size; nothing else per entry."""
+    files: list[SkillBundleFile] = []
+    instructions_markdown = _read_stored_bundle(zip_bytes, files)
     sorted_files = sorted(files, key=lambda entry: entry.path)
     return CustomSkillBundleContents(
-        instructions_markdown=strip_skill_md_frontmatter(skill_md),
-        files=sorted_files,
+        instructions_markdown=instructions_markdown, files=sorted_files
     )
 
 
 def read_custom_bundle_instructions(zip_bytes: bytes) -> str:
-    return inspect_custom_bundle(zip_bytes).instructions_markdown
+    return _read_stored_bundle(zip_bytes, None)
 
 
 def build_skill_md(
@@ -280,7 +367,7 @@ def rewrite_custom_bundle_skill_md(
         )
 
     try:
-        source_zip = zipfile.ZipFile(io.BytesIO(zip_bytes))
+        source_zip = ZipIndex(zip_bytes)
     except zipfile.BadZipFile as exc:
         raise OnyxError(
             OnyxErrorCode.INTERNAL_ERROR,
@@ -289,15 +376,10 @@ def rewrite_custom_bundle_skill_md(
 
     output = io.BytesIO()
     saw_skill_md = False
-    with (
-        source_zip,
-        zipfile.ZipFile(
-            output, mode="w", compression=zipfile.ZIP_DEFLATED
-        ) as target_zip,
-    ):
-        for info in source_zip.infolist():
+    with source_zip, SpooledZipWriter(output) as target_zip:
+        for info in source_zip.infos():
             try:
-                normalized = _validated_bundle_path(info)
+                normalized = _validated_bundle_path(info, path_limits=False)
             except OnyxError as exc:
                 raise OnyxError(
                     OnyxErrorCode.INTERNAL_ERROR,
@@ -308,7 +390,8 @@ def rewrite_custom_bundle_skill_md(
                 if saw_skill_md:
                     continue
                 try:
-                    original_skill_md = source_zip.read(info)
+                    with source_zip.open(info) as source:
+                        original_skill_md = source.read()
                 except Exception as exc:
                     raise OnyxError(
                         OnyxErrorCode.INTERNAL_ERROR,
@@ -338,7 +421,8 @@ def rewrite_custom_bundle_skill_md(
                 target_zip.writestr(info, b"")
             else:
                 try:
-                    target_zip.writestr(info, source_zip.read(info))
+                    with source_zip.open(info) as source:
+                        target_zip.writestr(info, source.read())
                 except Exception as exc:
                     raise OnyxError(
                         OnyxErrorCode.INTERNAL_ERROR,
@@ -352,11 +436,14 @@ def rewrite_custom_bundle_skill_md(
         )
 
     rewritten = output.getvalue()
-    return normalize_custom_bundle(rewritten).content
+    # Every entry except the new SKILL.md is copied unchanged from storage.
+    return normalize_custom_bundle(rewritten, uncapped_paths=EVERY_PATH).content
 
 
-def _validated_bundle_path(info: zipfile.ZipInfo) -> str:
-    """Return the normalized bundle path, rejecting traversal and symlinks."""
+def _validated_bundle_path(info: zipfile.ZipInfo, *, path_limits: bool = True) -> str:
+    """Return the normalized bundle path, rejecting traversal and symlinks.
+
+    ``path_limits`` applies the length and depth caps; stored reads skip them."""
     name = info.filename
     trimmed = name.rstrip("/")
     if not trimmed:
@@ -375,6 +462,15 @@ def _validated_bundle_path(info: zipfile.ZipInfo) -> str:
             OnyxErrorCode.INVALID_INPUT,
             f"bundle entry escapes root: '{name}'",
         )
+    if path_limits and (
+        len(trimmed.encode()) > _MAX_PATH_BYTES
+        or len(parts) > _MAX_PATH_DEPTH
+        or any(len(p.encode()) > _MAX_PATH_SEGMENT_BYTES for p in parts)
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"bundle entry path is too long or too deep: '{trimmed[:200]}'",
+        )
     unix_mode = (info.external_attr >> 16) & 0xFFFF
     if info.create_system == _ZIP_UNIX_CREATE_SYSTEM and stat.S_ISLNK(unix_mode):
         raise OnyxError(
@@ -384,57 +480,80 @@ def _validated_bundle_path(info: zipfile.ZipInfo) -> str:
     return trimmed
 
 
-def _bundle_wrapper_prefix(file_paths: list[str]) -> str | None:
-    """Identify an optional single directory wrapped around a skill bundle."""
-    meaningful_paths = [
-        path for path in file_paths if not _is_ignored_bundle_path(path)
-    ]
-    if SKILL_MD_NAME in meaningful_paths:
-        return None
+@dataclass
+class _BundleShape:
+    """What the wrapper checks need, gathered one file at a time."""
 
-    wrapped_skill_md_paths = [
-        path
-        for path in meaningful_paths
-        if len(path.split("/")) == 2 and path.endswith(f"/{SKILL_MD_NAME}")
-    ]
-    if len(wrapped_skill_md_paths) != 1:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "SKILL.md missing at bundle root or directly inside one "
-            "top-level directory",
-        )
+    file_count: int = 0
+    has_ignored: bool = False
+    has_root_skill_md: bool = False
+    all_nested: bool = True
+    # At most two distinct values: callers only ask whether there is one.
+    roots: set[str] | None = None
+    wrapped_skill_md: list[str] | None = None
 
-    wrapper_prefix = wrapped_skill_md_paths[0].split("/", maxsplit=1)[0]
-    unexpected_paths = [
-        path for path in meaningful_paths if not path.startswith(f"{wrapper_prefix}/")
-    ]
-    if unexpected_paths:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "bundle contains files outside the directory containing SKILL.md",
-        )
-    return wrapper_prefix
+    def add(self, path: str) -> None:
+        self.file_count += 1
+        if _is_ignored_bundle_path(path):
+            self.has_ignored = True
+            return
+        root, slash, rest = path.partition("/")
+        self.has_root_skill_md |= path == SKILL_MD_NAME
+        self.all_nested &= bool(slash)
+        self.roots = _add_capped(self.roots, root)
+        if rest == SKILL_MD_NAME:
+            wrapped = self.wrapped_skill_md or []
+            self.wrapped_skill_md = (wrapped + [path])[:2]
+
+    def wrapper_prefix(self) -> str | None:
+        """Identify an optional single directory wrapped around a skill bundle."""
+        roots = self.roots or set()
+        if self.has_root_skill_md:
+            return None
+        wrapped = self.wrapped_skill_md or []
+        if len(wrapped) != 1:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "SKILL.md missing at bundle root or directly inside one "
+                "top-level directory",
+            )
+        wrapper_prefix = wrapped[0].split("/", maxsplit=1)[0]
+        if not self.all_nested or roots != {wrapper_prefix}:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "bundle contains files outside the directory containing SKILL.md",
+            )
+        return wrapper_prefix
+
+
+def _add_capped(values: set[str] | None, value: str) -> set[str]:
+    values = values or set()
+    if len(values) < 2:
+        values.add(value)
+    return values
 
 
 def _copy_validated_bundle_file(
     *,
-    source_zip: zipfile.ZipFile,
-    source_info: zipfile.ZipInfo,
+    source_zip: ZipIndex,
+    source_info: IndexedZipInfo,
     source_path: str,
     output_path: str,
-    target_zip: zipfile.ZipFile | None,
+    target_zip: SpooledZipWriter | None,
     per_file_max_bytes: int,
     total_bytes_before_file: int,
     total_max_bytes: int,
 ) -> int:
-    target: IO[bytes] | None = None
+    target: IO[bytes] | io.BufferedIOBase | None = None
     size = 0
     try:
-        with source_zip.open(source_info, mode="r") as source:
+        with source_zip.open(source_info) as source:
             if target_zip is not None:
                 target_info = copy(source_info)
                 target_info.filename = output_path
-                target_info.orig_filename = output_path
+                # A Unicode-path extra field could override the renamed path.
+                target_info.extra = b""
+                target_info.comment = b""
                 target_info.compress_type = zipfile.ZIP_DEFLATED
                 target = target_zip.open(target_info, mode="w")
 
@@ -459,7 +578,7 @@ def _copy_validated_bundle_file(
                     )
                 if target is not None:
                     target.write(chunk)
-    except OnyxError:
+    except (OnyxError, sqlite3.Error):
         raise
     except Exception as exc:
         raise OnyxError(
@@ -471,6 +590,9 @@ def _copy_validated_bundle_file(
             active_exception = sys.exception()
             try:
                 target.close()
+            except sqlite3.Error:
+                if active_exception is None:
+                    raise
             except Exception as exc:
                 if active_exception is None:
                     raise OnyxError(
@@ -480,6 +602,90 @@ def _copy_validated_bundle_file(
     return size
 
 
+class _EveryPath:
+    """Container holding every path: all entries come unchanged from storage."""
+
+    def __contains__(self, path: object) -> bool:
+        return True
+
+
+# For bundles that an edit function already checked: the edit applied the caps
+# to the paths it added, and the other paths come unchanged from storage.
+EVERY_PATH: Final[Container[str]] = _EveryPath()
+
+
+@dataclass(frozen=True)
+class _PathCaps:
+    """Which entries the length and depth caps apply to.
+
+    A stored read skips them for every entry. An edit skips them for
+    ``uncapped_paths``, the stored paths it keeps unchanged, so a legacy path
+    over the caps does not block edits elsewhere in the bundle."""
+
+    stored_read: bool = False
+    uncapped_paths: Container[str] | None = None
+
+    @property
+    def parent_path_budget(self) -> bool:
+        return self.stored_read or self.uncapped_paths is not None
+
+    def path(self, info: zipfile.ZipInfo) -> str:
+        if self.stored_read:
+            return _validated_bundle_path(info, path_limits=False)
+        if self.uncapped_paths is None:
+            return _validated_bundle_path(info)
+        path = _validated_bundle_path(info, path_limits=False)
+        if path not in self.uncapped_paths:
+            _validated_bundle_path(info)
+        return path
+
+
+def _add_output_directories(
+    source_zip: ZipIndex,
+    wrapper_prefix: str | None,
+    output_directories: DiskPathSet,
+    *,
+    caps: _PathCaps,
+) -> None:
+    for info in source_zip.infos():
+        normalized = caps.path(info)
+        if not info.is_dir() or _is_ignored_bundle_path(normalized):
+            continue
+
+        output_directory_path = normalized
+        if wrapper_prefix is not None:
+            if normalized == wrapper_prefix:
+                continue
+            wrapper_path_prefix = f"{wrapper_prefix}/"
+            if not normalized.startswith(wrapper_path_prefix):
+                continue
+            output_directory_path = normalized.removeprefix(wrapper_path_prefix)
+
+        output_directories.add(output_directory_path)
+        for parent_path in _parent_paths(output_directory_path):
+            output_directories.add(parent_path)
+
+
+def _add_output_path(
+    output_path: str, output_paths: DiskPathSet, output_directories: DiskPathSet
+) -> None:
+    if output_path in output_paths:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"bundle contains duplicate path '{output_path}'",
+        )
+    if output_path in output_directories or any(
+        parent_path in output_paths for parent_path in _parent_paths(output_path)
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"bundle contains conflicting path '{output_path}'",
+        )
+    output_paths.add(output_path)
+    for parent_path in _parent_paths(output_path):
+        output_directories.add(parent_path)
+
+
 def normalize_custom_bundle(
     zip_bytes: bytes,
     *,
@@ -487,6 +693,8 @@ def normalize_custom_bundle(
     max_file_count: int | None = DEFAULT_MAX_FILE_COUNT,
     per_file_max_bytes: int = DEFAULT_PER_FILE_MAX_BYTES,
     total_max_bytes: int = DEFAULT_TOTAL_MAX_BYTES,
+    stored_read: bool = False,
+    uncapped_paths: Container[str] | None = None,
 ) -> NormalizedSkillBundle:
     """Validate a custom bundle and remove one optional wrapper directory.
 
@@ -496,118 +704,107 @@ def normalize_custom_bundle(
 
     Each limit is checked on its own and the first one that fails raises a
     413. ``None`` skips the zip size or file count check; reads of bundles
-    stored before those limits existed use it.
+    stored before those limits existed use it, and then the central directory
+    has no size cap either. Path sets live in SQLite, so memory does not grow
+    with the number of entries.
+
+    ``stored_read`` reads a bundle that is already saved: path length and depth
+    caps do not apply, and a parent-path byte budget bounds the path sets.
+    ``uncapped_paths`` are stored paths that an edit keeps unchanged; the caps
+    apply only to the other paths, and the parent-path budget applies too.
     """
+    caps = _PathCaps(stored_read=stored_read, uncapped_paths=uncapped_paths)
     assert_skill_bundle_settings_valid()
     if zip_max_bytes is not None and len(zip_bytes) > zip_max_bytes:
         raise _zip_too_large_error(zip_max_bytes)
     try:
-        source_zip = zipfile.ZipFile(io.BytesIO(zip_bytes))
+        source_zip = _open_bundle_index(
+            zip_bytes, None if max_file_count is None else ZIP_METADATA_MAX_BYTES
+        )
     except zipfile.BadZipFile:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "bundle is not a valid zip")
 
-    with source_zip:
-        normalized_infos = [
-            (info, _validated_bundle_path(info)) for info in source_zip.infolist()
-        ]
-        file_paths = [
-            normalized for info, normalized in normalized_infos if not info.is_dir()
-        ]
-        _check_bundle_file_count(len(file_paths), max_file_count)
-        wrapper_prefix = _bundle_wrapper_prefix(file_paths)
-        needs_rewrite = wrapper_prefix is not None or any(
-            _is_ignored_bundle_path(path) for path in file_paths
-        )
+    output = io.BytesIO()
+    try:
+        with (
+            source_zip,
+            DiskPathSet() as output_paths,
+            DiskPathSet() as output_directories,
+        ):
+            shape = _BundleShape()
+            parent_path_bytes = 0
+            for info in source_zip.infos():
+                normalized = caps.path(info)
+                if not info.is_dir():
+                    shape.add(normalized)
+                if caps.parent_path_budget:
+                    parent_path_bytes += _parent_path_bytes(normalized)
+                    if parent_path_bytes > STORED_PARENT_PATH_MAX_BYTES:
+                        raise _bundle_limit_error(
+                            "zip_metadata_bytes",
+                            STORED_PARENT_PATH_MAX_BYTES,
+                            "Stored skill bundle folder paths exceed the read limit.",
+                        )
+            _check_bundle_file_count(shape.file_count, max_file_count)
+            wrapper_prefix = shape.wrapper_prefix()
+            needs_rewrite = wrapper_prefix is not None or shape.has_ignored
 
-        output = io.BytesIO()
-        target_zip = (
-            zipfile.ZipFile(output, mode="w", compression=zipfile.ZIP_DEFLATED)
-            if needs_rewrite
-            else None
-        )
-        total = 0
-        output_paths: set[str] = set()
-        output_directory_paths: set[str] = set()
-        saw_skill_md = False
-
-        for info, normalized in normalized_infos:
-            if not info.is_dir() or _is_ignored_bundle_path(normalized):
-                continue
-
-            output_directory_path = normalized
-            if wrapper_prefix is not None:
-                if normalized == wrapper_prefix:
-                    continue
-                wrapper_path_prefix = f"{wrapper_prefix}/"
-                if not normalized.startswith(wrapper_path_prefix):
-                    continue
-                output_directory_path = normalized.removeprefix(wrapper_path_prefix)
-
-            directory_parts = output_directory_path.split("/")
-            output_directory_paths.add(output_directory_path)
-            output_directory_paths.update(
-                "/".join(directory_parts[:index])
-                for index in range(1, len(directory_parts))
+            _add_output_directories(
+                source_zip,
+                wrapper_prefix,
+                output_directories,
+                caps=caps,
             )
+            target_zip = SpooledZipWriter(output) if needs_rewrite else None
+            total = 0
+            saw_skill_md = False
+            try:
+                for info in source_zip.infos():
+                    normalized = caps.path(info)
+                    if info.is_dir() or _is_ignored_bundle_path(normalized):
+                        continue
 
-        try:
-            for info, normalized in normalized_infos:
-                if info.is_dir() or _is_ignored_bundle_path(normalized):
-                    continue
+                    output_path = normalized
+                    if wrapper_prefix is not None:
+                        output_path = normalized.removeprefix(f"{wrapper_prefix}/")
 
-                output_path = normalized
-                if wrapper_prefix is not None:
-                    output_path = normalized.removeprefix(f"{wrapper_prefix}/")
+                    _add_output_path(output_path, output_paths, output_directories)
 
-                if output_path in output_paths:
-                    raise OnyxError(
-                        OnyxErrorCode.INVALID_INPUT,
-                        f"bundle contains duplicate path '{output_path}'",
-                    )
-                path_parts = output_path.split("/")
-                parent_paths = {
-                    "/".join(path_parts[:index]) for index in range(1, len(path_parts))
-                }
-                if output_path in output_directory_paths or output_paths.intersection(
-                    parent_paths
-                ):
-                    raise OnyxError(
-                        OnyxErrorCode.INVALID_INPUT,
-                        f"bundle contains conflicting path '{output_path}'",
-                    )
-                output_paths.add(output_path)
-                output_directory_paths.update(parent_paths)
-
-                if output_path.endswith(TEMPLATE_SUFFIX):
-                    raise OnyxError(
-                        OnyxErrorCode.INVALID_INPUT,
-                        "custom skills cannot ship templates",
-                    )
-
-                total += _copy_validated_bundle_file(
-                    source_zip=source_zip,
-                    source_info=info,
-                    source_path=normalized,
-                    output_path=output_path,
-                    target_zip=target_zip,
-                    per_file_max_bytes=per_file_max_bytes,
-                    total_bytes_before_file=total,
-                    total_max_bytes=total_max_bytes,
-                )
-
-                if output_path == SKILL_MD_NAME:
-                    saw_skill_md = True
-        finally:
-            if target_zip is not None:
-                active_exception = sys.exception()
-                try:
-                    target_zip.close()
-                except Exception as exc:
-                    if active_exception is None:
+                    if output_path.endswith(TEMPLATE_SUFFIX):
                         raise OnyxError(
                             OnyxErrorCode.INVALID_INPUT,
-                            f"cannot finish normalized bundle: {exc}",
-                        ) from exc
+                            "custom skills cannot ship templates",
+                        )
+
+                    total += _copy_validated_bundle_file(
+                        source_zip=source_zip,
+                        source_info=info,
+                        source_path=normalized,
+                        output_path=output_path,
+                        target_zip=target_zip,
+                        per_file_max_bytes=per_file_max_bytes,
+                        total_bytes_before_file=total,
+                        total_max_bytes=total_max_bytes,
+                    )
+
+                    if output_path == SKILL_MD_NAME:
+                        saw_skill_md = True
+            finally:
+                if target_zip is not None:
+                    active_exception = sys.exception()
+                    try:
+                        target_zip.close()
+                    except sqlite3.Error:
+                        if active_exception is None:
+                            raise
+                    except Exception as exc:
+                        if active_exception is None:
+                            raise OnyxError(
+                                OnyxErrorCode.INVALID_INPUT,
+                                f"cannot finish normalized bundle: {exc}",
+                            ) from exc
+    except sqlite3.Error as exc:
+        raise _temporary_space_error() from exc
 
     if not saw_skill_md:
         raise OnyxError(
@@ -618,9 +815,13 @@ def normalize_custom_bundle(
     content = output.getvalue() if needs_rewrite else zip_bytes
     if zip_max_bytes is not None and len(content) > zip_max_bytes:
         raise _zip_too_large_error(zip_max_bytes)
+    _check_rewritten_metadata(
+        content, rewritten=needs_rewrite, capped=max_file_count is not None
+    )
     return NormalizedSkillBundle(content=content, source_directory=wrapper_prefix)
 
 
+@_map_temporary_space_errors
 def update_custom_bundle_files(
     existing_zip_bytes: bytes | Callable[[], bytes],
     upload_bytes: bytes | None = None,
@@ -650,8 +851,7 @@ def update_custom_bundle_files(
 
     output = io.BytesIO()
     with ExitStack() as archives:
-        upload_zip: zipfile.ZipFile | None = None
-        upload_infos: list[tuple[zipfile.ZipInfo, str]] = []
+        upload_zip: ZipIndex | None = None
         changed_paths: set[str]
         if upload_bytes is not None:
             assert filename is not None
@@ -672,24 +872,26 @@ def update_custom_bundle_files(
             )
             try:
                 upload_zip = archives.enter_context(
-                    zipfile.ZipFile(io.BytesIO(upload_archive_bytes))
+                    _open_bundle_index(upload_archive_bytes, ZIP_METADATA_MAX_BYTES)
                 )
             except zipfile.BadZipFile as exc:
                 raise OnyxError(
                     OnyxErrorCode.INVALID_INPUT, "upload is not a valid zip"
                 ) from exc
 
+            # The metadata cap bounds this list of upload paths.
             upload_infos = [
-                (info, _validated_bundle_path(info)) for info in upload_zip.infolist()
+                (info.is_dir(), _validated_bundle_path(info))
+                for info in upload_zip.infos()
             ]
             _check_bundle_file_count(
-                sum(not info.is_dir() for info, _ in upload_infos),
+                sum(not is_dir for is_dir, _ in upload_infos),
                 DEFAULT_MAX_FILE_COUNT,
             )
             upload_file_paths = [
                 path
-                for info, path in upload_infos
-                if not info.is_dir() and not _is_ignored_bundle_path(path)
+                for is_dir, path in upload_infos
+                if not is_dir and not _is_ignored_bundle_path(path)
             ]
             if any(
                 path.split("/")[-1].lower() == SKILL_MD_NAME.lower()
@@ -714,8 +916,9 @@ def update_custom_bundle_files(
             changed_paths = set(upload_file_paths)
         else:
             assert remove_path is not None
+            # A stored path over the caps must stay removable.
             normalized_remove_path = _validated_bundle_path(
-                zipfile.ZipInfo(remove_path)
+                zipfile.ZipInfo(remove_path), path_limits=False
             )
             if normalized_remove_path == SKILL_MD_NAME:
                 raise OnyxError(
@@ -729,36 +932,38 @@ def update_custom_bundle_files(
             else existing_zip_bytes()
         )
         try:
-            existing_zip = archives.enter_context(
-                zipfile.ZipFile(io.BytesIO(existing_bytes))
-            )
+            existing_zip = archives.enter_context(ZipIndex(existing_bytes))
         except zipfile.BadZipFile as exc:
             raise OnyxError(
                 OnyxErrorCode.INTERNAL_ERROR,
                 "Stored skill bundle is not a valid zip.",
             ) from exc
 
-        existing_infos = [
-            (info, _validated_bundle_path(info)) for info in existing_zip.infolist()
-        ]
-        if remove_path is not None and not any(
-            not info.is_dir() and path in changed_paths for info, path in existing_infos
-        ):
+        found_remove_path = False
+        for info in existing_zip.infos():
+            path = _validated_bundle_path(info, path_limits=False)
+            found_remove_path |= not info.is_dir() and path in changed_paths
+        if remove_path is not None and not found_remove_path:
             raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill file not found")
 
+        kept_paths = archives.enter_context(DiskPathSet())
         total = 0
-        with zipfile.ZipFile(
-            output, mode="w", compression=zipfile.ZIP_DEFLATED
-        ) as target_zip:
-            sources = [(existing_zip, existing_infos)]
+        with SpooledZipWriter(output) as target_zip:
+            sources = [existing_zip]
             if upload_zip is not None:
-                sources.append((upload_zip, upload_infos))
-            for source_zip, source_infos in sources:
-                for info, path in source_infos:
+                sources.append(upload_zip)
+            for source_zip in sources:
+                for info in source_zip.infos():
+                    # The final normalization applies the write caps.
+                    path = _validated_bundle_path(
+                        info, path_limits=source_zip is not existing_zip
+                    )
                     if source_zip is existing_zip and path in changed_paths:
                         continue
                     if info.is_dir() or _is_ignored_bundle_path(path):
                         continue
+                    if source_zip is existing_zip:
+                        kept_paths.add(path)
                     total += _copy_validated_bundle_file(
                         source_zip=source_zip,
                         source_info=info,
@@ -770,11 +975,12 @@ def update_custom_bundle_files(
                         total_max_bytes=total_max_bytes,
                     )
 
-    return normalize_custom_bundle(
-        output.getvalue(),
-        per_file_max_bytes=per_file_max_bytes,
-        total_max_bytes=total_max_bytes,
-    ).content
+        return normalize_custom_bundle(
+            output.getvalue(),
+            per_file_max_bytes=per_file_max_bytes,
+            total_max_bytes=total_max_bytes,
+            uncapped_paths=kept_paths,
+        ).content
 
 
 def compute_bundle_sha256(zip_bytes: bytes) -> str:

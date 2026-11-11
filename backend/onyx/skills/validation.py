@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import io
 import zipfile
 from dataclasses import dataclass
 from typing import Final
@@ -11,6 +10,7 @@ from onyx.db.models import Skill
 from onyx.db.skill_version import is_missing_bundle_error
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_processing.zip_index import ZipIndex
 from onyx.file_store.file_store import FileStore
 from onyx.file_store.models import FileSizeLimitExceeded
 from onyx.skills.built_in import BUILT_IN_SKILLS
@@ -65,7 +65,7 @@ def load_stored_custom_skill_bundle(
     finally:
         bundle_stream.close()
     return normalize_custom_bundle(
-        bundle_bytes, zip_max_bytes=None, max_file_count=None
+        bundle_bytes, zip_max_bytes=None, max_file_count=None, stored_read=True
     )
 
 
@@ -133,7 +133,7 @@ def validate_stored_custom_skill(
         )
 
     try:
-        with zipfile.ZipFile(io.BytesIO(normalized.content)) as bundle_zip:
+        with ZipIndex(normalized.content) as bundle_zip:
             raw_skill_md = bundle_zip.read(SKILL_MD_NAME)
         document = parse_skill_document(
             raw_skill_md,

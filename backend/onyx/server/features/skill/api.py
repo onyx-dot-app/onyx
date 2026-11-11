@@ -1,6 +1,4 @@
-import io
-import zipfile
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Container, Iterator
 from contextlib import contextmanager
 from typing import Annotated, NamedTuple
 from uuid import UUID
@@ -57,6 +55,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.credentials import resolve_injection_headers
 from onyx.external_apps.token_refresh import ensure_fresh_credentials
+from onyx.file_processing.zip_index import ZipIndex
 from onyx.file_store.file_store import FileStore, get_default_file_store
 from onyx.server.features.skill.models import (
     GitHubImportedSkill,
@@ -89,6 +88,7 @@ from onyx.server.features.skill.response_helpers import (
 )
 from onyx.server.models import MinimalUserSnapshot
 from onyx.skills.bundle import (
+    EVERY_PATH,
     SKILL_MD_NAME,
     build_single_file_bundle,
     build_skill_md,
@@ -266,10 +266,16 @@ def _commit_skill_bundle(
     *,
     expected_name: str | None = None,
     stored: bool = False,
+    uncapped_paths: Container[str] | None = None,
 ) -> Iterator[IngestedBundle]:
     """Commit references before cleanup; uncertain commits leave blobs for the sweep."""
     ingested = ingest_skill_bundle(
-        bundle_bytes, filename, file_store, expected_name=expected_name, stored=stored
+        bundle_bytes,
+        filename,
+        file_store,
+        expected_name=expected_name,
+        stored=stored,
+        uncapped_paths=uncapped_paths,
     )
     commit_attempted = False
     try:
@@ -318,7 +324,10 @@ def _replace_skill_bundle_from_editor(
     stored: bool = False,
     expected_content: SkillContentSnapshot | None = None,
     restored_version: tuple[UUID, str | None] | None = None,
+    edited: bool = False,
 ) -> SkillEditableDetailResponse:
+    """``edited`` marks bundles from update_custom_bundle_files, which already
+    applied the path caps to the paths the edit added."""
     file_store = get_default_file_store()
     with _commit_skill_bundle(
         bundle_bytes,
@@ -327,6 +336,7 @@ def _replace_skill_bundle_from_editor(
         db_session,
         expected_name=skill.name,
         stored=stored,
+        uncapped_paths=EVERY_PATH if edited else None,
     ) as ingested:
         skill, user = _lock_skill_after_storage(
             skill.id, user, db_session, expected_content
@@ -767,11 +777,13 @@ def _inspect_skill_bundle(
     bundle_bytes: bytes, *, stored: bool = False
 ) -> SkillBundleInspectResponse:
     normalized = (
-        normalize_custom_bundle(bundle_bytes, zip_max_bytes=None, max_file_count=None)
+        normalize_custom_bundle(
+            bundle_bytes, zip_max_bytes=None, max_file_count=None, stored_read=True
+        )
         if stored
         else normalize_custom_bundle(bundle_bytes)
     )
-    with zipfile.ZipFile(io.BytesIO(normalized.content)) as bundle_zip:
+    with ZipIndex(normalized.content) as bundle_zip:
         document = parse_skill_document(
             bundle_zip.read(SKILL_MD_NAME),
             directory_name=normalized.source_directory,
@@ -942,6 +954,7 @@ def upload_current_user_skill_files(
         user,
         db_session,
         expected_content=observed[0] if observed else None,
+        edited=True,
     )
 
 
@@ -969,7 +982,12 @@ def remove_current_user_skill_file(
         remove_path=path,
     )
     return _replace_skill_bundle_from_editor(
-        skill, updated_bundle_bytes, user, db_session, expected_content=expected_content
+        skill,
+        updated_bundle_bytes,
+        user,
+        db_session,
+        expected_content=expected_content,
+        edited=True,
     )
 
 
@@ -1031,6 +1049,8 @@ def patch_current_user_skill(
                 f"{skill.name}.zip",
                 file_store,
                 expected_name=skill.name,
+                # The SKILL.md rewrite keeps every other stored path unchanged.
+                uncapped_paths=EVERY_PATH,
             )
             new_bundle_file_id = ingested.bundle_file_id
             skill, user = _lock_skill_after_storage(

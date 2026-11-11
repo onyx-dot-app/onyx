@@ -1,3 +1,4 @@
+import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -272,6 +273,9 @@ def repair_version_metadata(
     except FileSizeLimitExceeded:
         logger.warning("Version bundle exceeds expanded limits: %s", version.id)
         return False
+    except sqlite3.Error:
+        # Temporary ZIP index storage failed; a later pass retries.
+        raise
     except Exception:
         logger.warning("Version bundle cannot be decoded: %s", version.id)
         version.metadata_unrepairable = True
@@ -280,6 +284,8 @@ def repair_version_metadata(
     try:
         # The expanded limits above already bound SKILL.md.
         record = bundle_skill_md_record(bundle_bytes)
+    except sqlite3.Error:
+        raise
     except Exception:
         logger.warning("Version bundle has no root SKILL.md: %s", version.id)
         version.metadata_unrepairable = True

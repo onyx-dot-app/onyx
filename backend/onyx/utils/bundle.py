@@ -1,9 +1,8 @@
 """Size metadata for resource bundles with caller-owned expansion limits."""
 
-import io
-import zipfile
 from typing import Final
 
+from onyx.file_processing.zip_index import ZipIndex
 from onyx.file_store.models import BundleLimits, BundleMetadata, FileSizeLimitExceeded
 
 _IGNORED_BUNDLE_FILE_NAMES: Final[frozenset[str]] = frozenset(
@@ -27,8 +26,9 @@ def compute_bundle_metadata(
 ) -> BundleMetadata:
     total = 0
     count = 0
-    with zipfile.ZipFile(io.BytesIO(bundle_bytes)) as archive:
-        for info in sorted(archive.infolist(), key=lambda entry: entry.filename):
+    # ZipIndex sorts on disk, so memory does not grow with the entry count.
+    with ZipIndex(bundle_bytes) as archive:
+        for info in archive.sorted_infos():
             if info.is_dir() or is_ignored_bundle_path(info.filename):
                 continue
             size = 0

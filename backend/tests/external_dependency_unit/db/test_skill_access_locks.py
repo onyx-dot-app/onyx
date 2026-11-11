@@ -2,6 +2,7 @@
 
 import json
 import time
+from collections.abc import Container
 from concurrent.futures import ThreadPoolExecutor
 from queue import Queue
 from typing import IO
@@ -124,10 +125,16 @@ def test_content_storage_does_not_hold_membership(
         *,
         expected_name: str | None = None,
         stored: bool = False,
+        uncapped_paths: Container[str] | None = None,
     ) -> IngestedBundle:
         check_lock()
         return original_ingest(
-            content, filename, file_store, expected_name=expected_name, stored=stored
+            content,
+            filename,
+            file_store,
+            expected_name=expected_name,
+            stored=stored,
+            uncapped_paths=uncapped_paths,
         )
 
     def delete(file_store: FileStore, file_id: str) -> None:
@@ -238,6 +245,7 @@ def test_staged_patch_rechecks_content_and_access(
         *,
         expected_name: str | None = None,
         stored: bool = False,
+        uncapped_paths: Container[str] | None = None,
     ) -> IngestedBundle:
         nonlocal raced, before
         if not raced:
@@ -283,7 +291,12 @@ def test_staged_patch_rechecks_content_and_access(
                     other.commit()
                 before = stored_bundles(other)
         return ingest(
-            content, filename, file_store, expected_name=expected_name, stored=stored
+            content,
+            filename,
+            file_store,
+            expected_name=expected_name,
+            stored=stored,
+            uncapped_paths=uncapped_paths,
         )
 
     try:

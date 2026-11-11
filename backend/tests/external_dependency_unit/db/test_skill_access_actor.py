@@ -1,5 +1,6 @@
 """Access writes use current database authority, not the earlier auth snapshot."""
 
+from collections.abc import Container
 from typing import Literal
 from unittest.mock import patch
 from uuid import UUID, uuid4
@@ -176,9 +177,15 @@ def test_creation_rechecks_authority_after_storage(
         *,
         expected_name: str | None = None,
         stored: bool = False,
+        uncapped_paths: Container[str] | None = None,
     ) -> IngestedBundle:
         result = original_ingest(
-            content, filename, file_store, expected_name=expected_name, stored=stored
+            content,
+            filename,
+            file_store,
+            expected_name=expected_name,
+            stored=stored,
+            uncapped_paths=uncapped_paths,
         )
         staged.append(result.bundle_file_id)
         revoke(actor_id, revocation)
