@@ -9,6 +9,7 @@ per-second 429, and fails at once when the daily quota is used up, since that
 import re
 import threading
 import time
+from io import BytesIO
 from typing import Any
 from urllib.parse import quote
 
@@ -229,8 +230,13 @@ class EgnyteSourceOperations(SourceOperations):
         capabilities=(CredentialCapability.INDEXING,),
         consumes=OperationConsumes.CREDENTIAL,
     )
-    def download_file(self, *, file_path: str) -> bytes:
-        """The latest version of a file."""
+    def download_file(self, *, file_path: str) -> BytesIO:
+        """The latest version of a file, streamed into one buffer so a large
+        file is held in memory once."""
+        buffer = BytesIO()
         response = self._get(f"/fs-content/{_fs_path(file_path)}", stream=True)
         with response:
-            return b"".join(response.iter_content(chunk_size=_DOWNLOAD_CHUNK_BYTES))
+            for chunk in response.iter_content(chunk_size=_DOWNLOAD_CHUNK_BYTES):
+                buffer.write(chunk)
+        buffer.seek(0)
+        return buffer

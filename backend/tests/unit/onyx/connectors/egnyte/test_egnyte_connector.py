@@ -4,6 +4,7 @@ resume from a serialized checkpoint, per-item failures, and a slim listing
 that matches indexing and raises instead of stopping short."""
 
 from collections.abc import Callable
+from io import BytesIO
 from unittest.mock import MagicMock
 
 import pytest
@@ -74,9 +75,9 @@ class _FakeEgnyte:
             files=[_file(child) for child in children if child not in self.tree],
         )
 
-    def download_file(self, *, file_path: str) -> bytes:
+    def download_file(self, *, file_path: str) -> BytesIO:
         self.downloads.append(file_path)
-        return f"text of {file_path}".encode()
+        return BytesIO(f"text of {file_path}".encode())
 
 
 def _connector(fake: object, folder_path: str = "/Shared") -> EgnyteConnector:
@@ -175,12 +176,12 @@ def test_failures_are_per_item_and_the_walk_goes_on() -> None:
         if folder_path == "/Shared/Locked":
             raise EgnyteApiError("boom", status_code=500)
 
-    def download_file(*, file_path: str) -> bytes:
+    def download_file(*, file_path: str) -> BytesIO:
         if file_path == "/Shared/bad.txt":
             raise EgnyteApiError("boom", status_code=500)
         if file_path == "/Shared/deleted.txt":
             raise EgnyteApiError("gone", status_code=404)
-        return b"ok"
+        return BytesIO(b"ok")
 
     fake.on_list = fail_locked
     ops = MagicMock(list_folder_page=fake.list_folder_page, download_file=download_file)

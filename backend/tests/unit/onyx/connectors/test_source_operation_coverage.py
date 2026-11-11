@@ -8,6 +8,7 @@ a gateway is picked up here automatically; it cannot forget to wire the test.
 
 from collections.abc import Callable
 from datetime import datetime, timezone
+from io import BytesIO
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -422,7 +423,7 @@ def _configure_egnyte_spy(spy: MagicMock) -> None:
             )
         ],
     )
-    spy.download_file.return_value = b"text"
+    spy.download_file.return_value = BytesIO(b"text")
 
 
 # A unit is covered when the checks exercise it under any one configuration:

@@ -98,7 +98,7 @@ def test_per_second_rate_limit_is_waited_out(no_sleep: MagicMock) -> None:
     with patch.object(requests.Session, "get", get):
         content = _gateway().download_file(file_path="/Shared/Docs/a.txt")
 
-    assert content == b"text"
+    assert content.getvalue() == b"text"
     no_sleep.assert_any_call(1.0)
 
 

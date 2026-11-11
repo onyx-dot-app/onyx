@@ -110,8 +110,7 @@ def _is_indexable(file: EgnyteFile) -> bool:
     return get_file_ext(file.name) in OnyxFileExtensions.TEXT_AND_DOCUMENT_EXTENSIONS
 
 
-def _extract_text(file: EgnyteFile, content: bytes) -> str:
-    file_content = BytesIO(content)
+def _extract_text(file: EgnyteFile, file_content: BytesIO) -> str:
     if get_file_ext(file.name) in OnyxFileExtensions.PLAIN_TEXT_EXTENSIONS:
         text, _ = read_text_file(
             file_content,
