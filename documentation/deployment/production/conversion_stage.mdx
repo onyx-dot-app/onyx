@@ -40,10 +40,16 @@ celery_worker_docconversion:
 
 ### Docker Compose
 
-Set the variable in your `.env` file, then restart the `background` container.
+Set the variable in your `.env` file.
 
 ```bash .env
 ENABLE_CONVERSION_STAGE=true
+```
+
+Then recreate the `background` container. A `docker compose restart` does not read the `.env` file again.
+
+```bash
+docker compose up -d --force-recreate background
 ```
 
 The `background` container starts the `docconversion` worker only when the variable is `true`.
@@ -95,6 +101,6 @@ celery_worker_docconversion:
 ## Turn off the conversion stage
 
 Wait until the Google Drive indexing runs finish. Then set `celery_worker_docconversion.enabled` to `false`,
-or remove `ENABLE_CONVERSION_STAGE` from your `.env` file.
+or remove `ENABLE_CONVERSION_STAGE` from your `.env` file and recreate the `background` container.
 
 If a run did not finish before the change, the next run starts its listing again from the start of its time range.
