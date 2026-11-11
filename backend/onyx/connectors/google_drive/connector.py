@@ -114,6 +114,7 @@ from onyx.connectors.models import (
     DocumentFailure,
     EntityFailure,
     HierarchyNode,
+    ListingCounts,
     ResolveTarget,
     SlimDocument,
 )
@@ -2362,6 +2363,17 @@ class GoogleDriveConnector(
             raise ConnectorValidationError(
                 f"Unexpected error during Google Workspace directory API probe: {e}"
             )
+
+    @override
+    def listing_counts(self, checkpoint: GoogleDriveCheckpoint) -> ListingCounts | None:
+        state = checkpoint.listing
+        if state is None:
+            return None
+        return ListingCounts(
+            docs_by_type=state.docs_by_type,
+            bytes_by_type=state.bytes_by_type,
+            partial=bool(checkpoint.incomplete_drive_ids),
+        )
 
     @override
     def build_dummy_checkpoint(self) -> GoogleDriveCheckpoint:
