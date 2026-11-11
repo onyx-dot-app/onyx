@@ -1,5 +1,6 @@
 "use client";
 
+import { isImeComposing } from "@opal/utils";
 import React from "react";
 import { Text } from "@opal/components";
 
@@ -110,7 +111,7 @@ export function makeSegmentKeyDownHandler<S extends { [K in keyof S]: string }>(
     nextRef: React.RefObject<HTMLInputElement | null> | null = null
   ) =>
     (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === "Enter") {
+      if (e.key === "Enter" && !isImeComposing(e)) {
         // Commit the draft, and stop the keystroke there: inside a <form>,
         // an unhandled Enter on an input is a native form submission.
         e.preventDefault();

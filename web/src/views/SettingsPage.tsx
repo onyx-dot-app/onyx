@@ -12,7 +12,7 @@ import {
   toast,
   Section,
 } from "@opal/layouts";
-import { copyText, markdown } from "@opal/utils";
+import { copyText, markdown, isImeComposing } from "@opal/utils";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import {
@@ -672,7 +672,7 @@ function GeneralSettings() {
                     updatePersonalizationField("name", e.target.value)
                   }
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") {
+                    if (e.key === "Enter" && !isImeComposing(e)) {
                       e.currentTarget.blur();
                     }
                   }}
@@ -700,7 +700,7 @@ function GeneralSettings() {
                     updatePersonalizationField("role", e.target.value)
                   }
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") {
+                    if (e.key === "Enter" && !isImeComposing(e)) {
                       e.currentTarget.blur();
                     }
                   }}

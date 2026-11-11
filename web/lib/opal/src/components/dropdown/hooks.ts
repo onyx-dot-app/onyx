@@ -1,3 +1,4 @@
+import { isImeComposing } from "@opal/utils";
 import {
   useCallback,
   useEffect,
@@ -366,6 +367,7 @@ export function useDropdownKeyboard({
           setHighlightedIndex(e.shiftKey ? previous : next);
           break;
         case "Enter": {
+          if (isImeComposing(e)) break;
           if (!isOpen) {
             e.preventDefault();
             setIsOpen(true);

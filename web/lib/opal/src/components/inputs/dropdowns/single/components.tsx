@@ -27,6 +27,7 @@
  * With no options a ComboBox degrades to a plain input.
  */
 
+import { isImeComposing } from "@opal/utils";
 import "@opal/components/inputs/dropdowns/single/styles.css";
 import React, {
   useCallback,
@@ -386,6 +387,7 @@ function SingleSelectFieldInner({
               if (
                 typeIn &&
                 event.key === "Enter" &&
+                !isImeComposing(event) &&
                 strict &&
                 isOpen &&
                 highlightedIndex < 0 &&

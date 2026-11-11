@@ -27,7 +27,7 @@ import {
   Text,
   type TagItem,
 } from "@opal/components";
-import { markdown } from "@opal/utils";
+import { markdown, isImeComposing } from "@opal/utils";
 import { useSettings } from "@/lib/settings/hooks";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { Settings, toSettings } from "@/lib/settings/types";
@@ -148,7 +148,7 @@ function JwtTextRow({
           setRevision((r) => r + 1);
         }}
         onKeyDown={(e) => {
-          if (e.key === "Enter") e.currentTarget.blur();
+          if (e.key === "Enter" && !isImeComposing(e)) e.currentTarget.blur();
         }}
       />
     </InputVertical>

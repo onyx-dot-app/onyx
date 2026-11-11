@@ -128,6 +128,21 @@ export function clickOnKeyDown(
 }
 
 /**
+ * True when a keydown belongs to an IME composition, such as the Enter that
+ * confirms a Japanese, Chinese or Korean candidate. Check it before a custom
+ * Enter action. Safari can clear `isComposing` before that Enter, but it still
+ * sends keyCode 229. Mobile keyboards send 229 for other keys too, so only
+ * Enter uses the keyCode check.
+ */
+export function isImeComposing(
+  event: KeyboardEvent | React.KeyboardEvent<Element>
+): boolean {
+  const native = "nativeEvent" in event ? event.nativeEvent : event;
+  if (native.isComposing) return true;
+  return native.key === "Enter" && native.keyCode === 229;
+}
+
+/**
  * Wraps a click handler so the event stops at this element — for controls
  * nested inside a larger click surface (an input's action button, a card's
  * inner control) that must not also trigger the surface.

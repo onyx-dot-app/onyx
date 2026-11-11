@@ -1,5 +1,6 @@
 "use client";
 
+import { isImeComposing } from "@opal/utils";
 import "@opal/components/inputs/shared.css";
 // The inner field reuses InputTypeIn's .opal-input-field styling.
 import "@opal/components/inputs/texts/input-type-in/styles.css";
@@ -238,7 +239,7 @@ function TagField({
   function handleInputKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     // During IME composition, Enter confirms the candidate and Backspace
     // edits the composition. Neither may add or arm tags.
-    if (event.nativeEvent.isComposing) return;
+    if (isImeComposing(event)) return;
 
     onInputKeyDown?.(event);
     if (event.defaultPrevented) return;

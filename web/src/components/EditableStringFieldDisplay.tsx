@@ -3,7 +3,7 @@ import { Button } from "@opal/components";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
-import { cn } from "@opal/utils";
+import { cn, isImeComposing } from "@opal/utils";
 import { SvgCheck, SvgX } from "@opal/icons";
 interface EditableStringFieldDisplayProps {
   value: string;
@@ -66,7 +66,7 @@ export function EditableStringFieldDisplay({
   const handleKeyDown = (
     e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
-    if (e.key === "Enter") {
+    if (e.key === "Enter" && !isImeComposing(e)) {
       handleUpdate();
     }
   };

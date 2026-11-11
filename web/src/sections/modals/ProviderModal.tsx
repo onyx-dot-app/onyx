@@ -1,3 +1,4 @@
+import { isImeComposing } from "@opal/utils";
 import React from "react";
 import { useTranslations } from "next-intl";
 import { Button } from "@opal/components";
@@ -56,7 +57,13 @@ export default function ProviderModal({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && onSubmit && !submitDisabled && !isSubmitting) {
+    if (
+      e.key === "Enter" &&
+      !isImeComposing(e) &&
+      onSubmit &&
+      !submitDisabled &&
+      !isSubmitting
+    ) {
       // Check if the target is not a textarea (allow Enter in textareas)
       if ((e.target as HTMLElement).tagName !== "TEXTAREA") {
         e.preventDefault();

@@ -5,7 +5,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Formik, Form, getIn, useFormikContext } from "formik";
 import type { FormikConfig } from "formik";
-import { cn, countryCodeToFlag } from "@opal/utils";
+import { cn, countryCodeToFlag, isImeComposing } from "@opal/utils";
 import { markdown } from "@opal/utils";
 import { Hoverable, Interactive } from "@opal/core";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
@@ -979,7 +979,11 @@ export function ModelSelectionField({
                 value={newModelName}
                 onChange={(e) => setNewModelName(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && newModelName.trim()) {
+                  if (
+                    e.key === "Enter" &&
+                    !isImeComposing(e) &&
+                    newModelName.trim()
+                  ) {
                     e.preventDefault();
                     const trimmed = newModelName.trim();
                     if (!models.some((m) => m.name === trimmed)) {

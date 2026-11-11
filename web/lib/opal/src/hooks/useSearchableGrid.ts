@@ -1,5 +1,6 @@
 "use client";
 
+import { isImeComposing } from "@opal/utils";
 import { useCallback, useRef } from "react";
 import useFocusOnMount from "@opal/hooks/useFocusOnMount";
 import useGridNavigation from "@opal/hooks/useGridNavigation";
@@ -81,7 +82,7 @@ export default function useSearchableGrid({
 
   function onSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     // Keys that build or cancel an IME composition belong to the IME.
-    if (event.nativeEvent.isComposing) return;
+    if (isImeComposing(event)) return;
     if (event.key === "Escape") {
       event.preventDefault();
       if (query !== "") setQuery("");

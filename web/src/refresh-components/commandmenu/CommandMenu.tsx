@@ -14,7 +14,7 @@ import { useTranslations } from "next-intl";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 import useContainerCenter from "@/hooks/useContainerCenter";
-import { cn } from "@opal/utils";
+import { cn, isImeComposing } from "@opal/utils";
 import { Text, InputTypeIn, Divider } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Tag from "@/refresh-components/buttons/Tag";
@@ -269,6 +269,7 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
           break;
         }
         case "Enter": {
+          if (isImeComposing(e)) break;
           // A focused filter header already handled its own Enter. The search
           // input also prevents Enter, so match on the item, not the flag.
           if (
@@ -443,6 +444,7 @@ function CommandMenuHeader({
   // The actual handling happens in Root's centralized handler via event bubbling
   const handleInputKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (isImeComposing(e)) return;
       if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Enter") {
         e.preventDefault();
       }

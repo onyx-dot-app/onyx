@@ -1,5 +1,6 @@
 "use client";
 
+import { isImeComposing } from "@opal/utils";
 import { Section } from "@opal/layouts";
 import React from "react";
 import { useFormatter, useTranslations } from "next-intl";
@@ -53,7 +54,7 @@ export function KnowledgeSearchBar({
   const t = useTranslations("knowledge");
 
   function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Enter") onSubmit();
+    if (e.key === "Enter" && !isImeComposing(e)) onSubmit();
     if (e.key === "Escape" && isSearchMode) onBack();
   }
 

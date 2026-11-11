@@ -15,7 +15,7 @@ import {
 } from "@/app/craft/services/apiServices";
 import { LibraryEntry } from "@/app/craft/types/user-library";
 import { Modal, useCreateModal } from "@opal/components";
-import { cn, clickOnKeyDown } from "@opal/utils";
+import { cn, clickOnKeyDown, isImeComposing } from "@opal/utils";
 import {
   SvgFolder,
   SvgFolderOpen,
@@ -458,7 +458,11 @@ export default function UserLibraryModal({
                 onChange={(e) => setNewFolderName(e.target.value)}
                 placeholder={t("newFolder.namePlaceholder")}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && newFolderName.trim()) {
+                  if (
+                    e.key === "Enter" &&
+                    !isImeComposing(e) &&
+                    newFolderName.trim()
+                  ) {
                     handleCreateDirectory();
                   }
                 }}
