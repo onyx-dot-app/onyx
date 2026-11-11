@@ -17,7 +17,7 @@ from onyx.skills.bundle import (
     DEFAULT_TOTAL_MAX_BYTES,
     SKILL_MD_NAME,
     NormalizedSkillBundle,
-    normalize_custom_bundle,
+    normalize_stored_bundle,
     read_bundle_file,
 )
 from onyx.skills.metadata import parse_skill_document
@@ -41,9 +41,7 @@ def load_stored_custom_skill_bundle(
     file_store: FileStore,
 ) -> NormalizedSkillBundle:
     bundle_bytes = read_stored_bundle_bytes(bundle_file_id, file_store)
-    return normalize_custom_bundle(
-        bundle_bytes, zip_max_bytes=None, max_file_count=None
-    )
+    return normalize_stored_bundle(bundle_bytes)
 
 
 def _is_missing_file_error(exc: Exception) -> bool:

@@ -145,7 +145,8 @@ Each Skill from a GitHub repository must also pass these limits.
 Single-bundle uploads over a limit return HTTP 413 with `limit` and `limit_value`.
 Batch uploads and GitHub imports can return HTTP 200 with rejected Skills in `not_imported`,
 with a `reason` for each refusal. Skills saved before the ZIP-size and file-count limits keep working.
-Onyx applies those limits when you save the Skill again.
+You can edit their description and instructions and remove their files.
+Adding files or replacing the bundle applies the limits.
 
 If your reverse proxy sets a request size limit, allow space for the bundle and multipart form data.
 

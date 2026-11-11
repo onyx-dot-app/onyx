@@ -293,7 +293,7 @@ def rewrite_custom_bundle_skill_md(
         )
 
     rewritten = output.getvalue()
-    return normalize_custom_bundle(rewritten).content
+    return normalize_stored_bundle(rewritten).content
 
 
 def _validated_bundle_path(info: zipfile.ZipInfo) -> str:
@@ -571,6 +571,15 @@ def normalize_custom_bundle(
     return NormalizedSkillBundle(content=content, source_directory=wrapper_prefix)
 
 
+def normalize_stored_bundle(zip_bytes: bytes) -> NormalizedSkillBundle:
+    """Normalize a saved bundle, or an edit that cannot add files to one.
+
+    Saved bundles can predate the ZIP-size and file-count limits, so these
+    limits do not apply. The per-file and expanded-total limits still do.
+    """
+    return normalize_custom_bundle(zip_bytes, zip_max_bytes=None, max_file_count=None)
+
+
 def update_custom_bundle_files(
     existing_zip_bytes: bytes | Callable[[], bytes],
     upload_bytes: bytes | None = None,
@@ -719,6 +728,8 @@ def update_custom_bundle_files(
                         total_max_bytes=total_max_bytes,
                     )
 
+    if remove_path is not None:
+        return normalize_stored_bundle(output.getvalue()).content
     return normalize_custom_bundle(
         output.getvalue(),
         per_file_max_bytes=per_file_max_bytes,

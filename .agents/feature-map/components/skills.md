@@ -267,8 +267,12 @@ The library preview of an external-app skill calls the same renderer
     limit and skip the ZIP-size
     and file-count limits. `skills/validation.py:validate_stored_custom_skill`
     returns `is_valid=None` for `PAYLOAD_TOO_LARGE`, so the push skips the Skill
-    without saving it invalid. A full-replacement upload in the editor does not
-    read the current bundle. Only direct uploads return 413. Batch uploads report
+    without saving it invalid. Edits that cannot add files (a SKILL.md rewrite, a
+    file removal) and the editor's re-ingest use
+    `skills/bundle.py:normalize_stored_bundle`, so a saved bundle over the ZIP-size
+    or file-count limit stays editable. Merges that add files keep the upload
+    limits, so repeated merges cannot pass them. A full-replacement upload in the
+    editor does not read the current bundle. Only direct uploads return 413. Batch uploads report
     `not_imported` and GitHub previews mark the Skill unavailable.
 
 ---
