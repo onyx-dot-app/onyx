@@ -925,6 +925,63 @@ celery_worker_docprocessing:
     enabled: false
     maxUnavailable: 1
 
+# The conversion stage of indexing. When enabled, docfetching only lists a
+# source that supports it (Google Drive), and this worker fetches and parses
+# the documents. Enabling it also sets ENABLE_CONVERSION_STAGE on docfetching
+# and on this worker. Scale it with replicas: a conversion parses on one core.
+celery_worker_docconversion:
+  enabled: false
+  # Threads for each pod (the worker's --concurrency).
+  concurrency: 2
+  extraEnv: []
+  replicaCount: 1
+  # Per-worker log level override. Empty (default) means use the global
+  # LOG_LEVEL env var. Set to INFO/DEBUG/WARNING/etc. to override LOG_LEVEL for
+  # this worker only — this becomes `--loglevel=<value>` on the celery worker
+  # command and takes precedence over LOG_LEVEL inside the worker process.
+  logLevel: ""
+  autoscaling:
+    enabled: false
+    # With the keda engine and a queue trigger, 0 stops the worker when no
+    # conversion waits. The hpa engine needs 1 or more. Example trigger:
+    #   customTriggers:
+    #     - type: prometheus
+    #       metadata:
+    #         serverAddress: http://prometheus-operated.monitoring.svc:9090
+    #         query: max(onyx_queue_depth{queue="docconversion"})
+    #         threshold: "8"
+    minReplicas: 1
+    maxReplicas: 20
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
+    # KEDA specific configurations (only used when autoscaling.engine is set to 'keda')
+    pollingInterval: 30  # seconds
+    cooldownPeriod: 300  # seconds
+    failureThreshold: 3  # number of failures before fallback
+    fallbackReplicas: 1  # replicas to maintain on failure
+    # Custom triggers for advanced KEDA configurations
+    customTriggers: []
+  podAnnotations: {}
+  podLabels:
+    scope: onyx-backend-celery
+  deploymentLabels:
+    app: celery-worker-docconversion
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      cpu: 1000m
+      memory: 4Gi
+  volumes: []  # Additional volumes on the output Deployment definition.
+  volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podDisruptionBudget:
+    enabled: false
+    maxUnavailable: 1
+
 celery_worker_light:
   extraEnv: []
   replicaCount: 1
@@ -1940,6 +1997,12 @@ configMap:
   DOCUMENT_PUSH_TIMEOUT_SECONDS: ""
   # Worker Parallelism
   CELERY_WORKER_DOCPROCESSING_CONCURRENCY: ""
+  # Conversion stage (see celery_worker_docconversion). The chart sets
+  # ENABLE_CONVERSION_STAGE on the workers that need it; do not set it here.
+  # The most stub batches of one index attempt in conversion at one time.
+  DOCCONVERSION_WINDOW_BATCHES: ""
+  # Seconds with no dispatch before the watchdog checks a conversion chain.
+  DOCCONVERSION_STALL_SECONDS: ""
   CELERY_WORKER_LIGHT_CONCURRENCY: ""
   CELERY_WORKER_LIGHT_PREFETCH_MULTIPLIER: ""
   CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY: ""
