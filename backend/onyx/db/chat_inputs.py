@@ -6,7 +6,19 @@ A row is pending until a step or a new run consumes it; consuming deletes it.
 from collections.abc import Collection, Iterable
 from uuid import UUID, uuid4
 
-from sqlalchemy import Select, and_, delete, func, or_, select
+from sqlalchemy import (
+    Integer,
+    Select,
+    and_,
+    cast,
+    delete,
+    func,
+    or_,
+    select,
+    true,
+    type_coerce,
+)
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -24,6 +36,7 @@ from onyx.agents.models import (
 from onyx.chat.models import (
     AgentInboxWork,
     AgentResultState,
+    AgentWaitState,
     ChatBranch,
     ChatInbox,
     PendingChatMessage,
@@ -122,15 +135,27 @@ def wakes_for_results(
     results: Iterable[AgentResultState],
     *,
     queue_paused: bool,
+    waits: Collection[AgentWaitState] = (),
 ) -> bool:
-    """Whether unread finished results start an idle recipient's next run."""
-    return (
-        latest_status is not None
-        and latest_status.is_terminal
-        and latest_status != RunStatus.ERROR
-        and not queue_paused
-        and any(result.wakes_recipient for result in results)
-    )
+    """Whether unread finished results start an idle recipient's next run.
+
+    A result of a run that no wait names starts it. A wait holds the results of
+    its runs until all of them finish; then they start one run together.
+    """
+    if (
+        latest_status is None
+        or not latest_status.is_terminal
+        or latest_status == RunStatus.ERROR
+        or queue_paused
+    ):
+        return False
+    for result in results:
+        if not result.wakes_recipient:
+            continue
+        naming = [wait for wait in waits if result.response_id in wait.run_statuses]
+        if not naming or any(wait.finished for wait in naming):
+            return True
+    return False
 
 
 def get_human_input_session(
@@ -334,8 +359,9 @@ def next_queued_turn(
 ) -> QueuedChatTurn | None:
     """Read the next root turn on the selected branch from `get_selected_branch`.
 
-    `results` are the branch's unread child results; those for the root wake it.
-    Acceptance rechecks the turn under the session lock.
+    `results` are the branch's unread child results; those for the root wake it,
+    subject to the root's waits. Acceptance rechecks the turn under the session
+    lock.
     """
     if selected is None and len(branch.message_ids) > 1:
         # Only the root message, or a response, can precede the next question.
@@ -366,10 +392,14 @@ def next_queued_turn(
             parent_response_id=parent_response_id,
             message=_pending_human_message(row),
         )
-    if wakes_for_results(
+    root_results = [
+        result for result in results if result.recipient_id == chat_session_id
+    ]
+    if root_results and wakes_for_results(
         status,
-        (result for result in results if result.recipient_id == chat_session_id),
+        root_results,
         queue_paused=paused,
+        waits=agent_waits(session, chat_session_id, branch.message_ids),
     ):
         return QueuedChatTurn(parent_response_id=parent_response_id, message=None)
     return None
@@ -544,6 +574,48 @@ def agent_result_states(
         AgentResultState.model_validate(row)
         for row in session.execute(query).mappings()
     ]
+
+
+def agent_waits(
+    session: Session, chat_session_id: UUID, branch_ids: Collection[int]
+) -> list[AgentWaitState]:
+    """The root's `wait_agents` calls on the branch that unread results can end.
+
+    The saved call is the only record of a wait. A call can name only runs of its
+    own or earlier root responses, so calls before the oldest unread result's
+    root response are skipped. One query reads the calls and their runs' statuses.
+    """
+    oldest_result_root = (
+        select(func.min(ChatInput.root_response_id))
+        .where(
+            ChatInput.recipient_session_id == chat_session_id,
+            _results_on_branch(branch_ids),
+        )
+        .scalar_subquery()
+    )
+    details = type_coerce(ToolCall.result, JSONB)["details"]
+    run = (
+        func.jsonb_array_elements_text(details["run_ids"])
+        .table_valued("value")
+        .lateral("awaited_run")
+    )
+    rows = session.execute(
+        select(ToolCall.id, ChatMessage.id, ChatMessage.response_status)
+        .select_from(ToolCall)
+        .join(run, true())
+        .join(ChatMessage, ChatMessage.id == cast(run.c.value, Integer))
+        .where(
+            ToolCall.chat_session_id == chat_session_id,
+            ToolCall.parent_chat_message_id.in_(branch_ids),
+            ToolCall.parent_chat_message_id >= oldest_result_root,
+            details["type"].astext == "agent_wait",
+            ChatMessage.response_status.is_not(None),
+        )
+    ).all()
+    waits: dict[int, dict[int, RunStatus]] = {}
+    for wait_id, run_id, status in rows:
+        waits.setdefault(wait_id, {})[run_id] = status
+    return [AgentWaitState(run_statuses=statuses) for statuses in waits.values()]
 
 
 def active_agent_response_ids(

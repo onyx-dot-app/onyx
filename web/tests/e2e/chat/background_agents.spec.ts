@@ -207,3 +207,104 @@ test("Stop subagents ends background work @code-mode", async ({
     if (sessionId) await api.deleteChatSession(sessionId);
   }
 });
+
+test("a root that waits for its agents answers their results once @code-mode", async ({
+  api,
+  chatPage,
+  page,
+}) => {
+  const nonce = mockLlmNonce();
+  const gateId = mockLlmNonce();
+  const secondGateId = mockLlmNonce();
+  const question = `Research and verify, then answer once. ${nonce}`;
+  const childTask = `Find the answer. ${gateId}`;
+  const secondChildTask = `Verify the answer. ${secondGateId}`;
+  const status = "Both agents are working; I will answer when they finish.";
+  const finalAnswer = "Combined answer: forty-two, verified.";
+  await addMockLlmConversation({
+    name: nonce,
+    conditions: { prompt_contains: [question] },
+    replies: [
+      {
+        tool_calls: [
+          {
+            id: "spawn-research",
+            name: "spawn_agent",
+            arguments: { name: "research", instruction: childTask },
+          },
+          {
+            id: "spawn-verification",
+            name: "spawn_agent",
+            arguments: { name: "verification", instruction: secondChildTask },
+          },
+        ],
+      },
+      {
+        text: status,
+        tool_calls: [{ id: "wait", name: "wait_agents", arguments: {} }],
+        conditions: {
+          has_results_for: ["spawn-research", "spawn-verification"],
+        },
+      },
+      {
+        text: finalAnswer,
+        conditions: {
+          prompt_contains: [
+            "Private child result: forty-two.",
+            "Private child result: verified.",
+          ],
+        },
+      },
+    ],
+  });
+  for (const child of [
+    {
+      gate: gateId,
+      task: childTask,
+      result: "Private child result: forty-two.",
+    },
+    {
+      gate: secondGateId,
+      task: secondChildTask,
+      result: "Private child result: verified.",
+    },
+  ]) {
+    await addMockLlmConversation({
+      name: child.gate,
+      conditions: { prompt_contains: [child.task] },
+      replies: [{ text: child.result, pause_after_first_chunk: child.gate }],
+    });
+  }
+  let sessionId: string | null = null;
+  try {
+    await chatPage.goto();
+    await chatPage.inputBar.fill(question);
+    const created = page.waitForResponse((response) =>
+      response.url().endsWith("/chat/create-chat-session")
+    );
+    await chatPage.inputBar.send();
+    const session: { chat_session_id: string } = await (await created).json();
+    sessionId = session.chat_session_id;
+    // The wait ends the turn with the status; the agents keep working.
+    await chatPage.expectAnswerParagraph(status);
+    await expect(chatPage.inputBar.subagentActivity).toHaveText(
+      "Subagents working"
+    );
+    await releaseMockLlmGate(gateId);
+    await expect(chatPage.inputBar.subagentActivity).toBeVisible();
+    await expect(chatPage.agentResultsDividers).toHaveCount(0);
+    await releaseMockLlmGate(secondGateId);
+    await chatPage.expectAnswerParagraph(finalAnswer);
+    await expect(chatPage.inputBar.subagentActivity).toBeHidden();
+    await expect(chatPage.agentResultsDividers).toHaveCount(1);
+    await chatPage.reload();
+    await chatPage.expectAnswerParagraph(status);
+    await chatPage.expectAnswerParagraph(finalAnswer);
+    await expect(chatPage.agentResultsDividers).toHaveCount(1);
+    expect((await getMockLlmConversationRequests(nonce)).length).toBe(3);
+  } finally {
+    await releaseMockLlmGate(gateId);
+    await releaseMockLlmGate(secondGateId);
+    if (sessionId) await api.deleteChatSession(sessionId);
+  }
+});

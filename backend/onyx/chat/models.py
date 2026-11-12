@@ -252,6 +252,16 @@ class AgentResultState(BaseModel):
         return not self.status.is_terminal
 
 
+class AgentWaitState(BaseModel):
+    """A root's `wait_agents` call on a branch, with the statuses of its runs."""
+
+    run_statuses: dict[int, RunStatus]
+
+    @property
+    def finished(self) -> bool:
+        return all(status.is_terminal for status in self.run_statuses.values())
+
+
 class AgentInboxWork(BaseModel):
     """An idle child's next run: a queued message, or its unread results when None."""
 

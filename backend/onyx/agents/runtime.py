@@ -2001,8 +2001,8 @@ def _complete_step(run: Run) -> None:
             if (execution := step.tools.get(call.id)) is not None
             and execution.result is not None
         ]
-        should_continue = bool(calls) and not (
-            results and all(result.terminate for result in results)
+        should_continue = bool(calls) and not any(
+            result.terminate for result in results
         )
     cancellation_signal.check()
     has_delegated_work = run.coordination is not None and bool(

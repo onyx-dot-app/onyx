@@ -64,7 +64,11 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
-from onyx.prompts.chat_prompts import ADDITIONAL_CONTEXT_PROMPT
+from onyx.prompts.chat_prompts import (
+    ADDITIONAL_CONTEXT_PROMPT,
+    ROOT_AGENT_INSTRUCTIONS,
+    SUBAGENT_INSTRUCTIONS,
+)
 from onyx.tools.constants import PYTHON_TOOL_NAME
 from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles
 from onyx.tools.interface import Tool
@@ -80,6 +84,7 @@ from onyx.tools.tool_implementations.subagents.subagent_tools import (
     ListAgentsTool,
     SendMessageTool,
     SpawnAgentTool,
+    WaitAgentsTool,
 )
 from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
 from onyx.tracing.flows import LLMFlow
@@ -116,7 +121,15 @@ class ChatAgent(Agent, RestorableFeature):
         create_subagent: Callable[[], Agent] | None = None,
         can_spawn: bool = True,
     ) -> None:
-        self.is_subagent = is_subagent
+        # The fixed system block for the agent's role: a subagent, or a root
+        # that can start agents.
+        self.agent_instructions = (
+            SUBAGENT_INSTRUCTIONS
+            if is_subagent
+            else ROOT_AGENT_INSTRUCTIONS
+            if create_subagent is not None
+            else None
+        )
         self.custom_agent_prompt = custom_agent_prompt
         self.additional_context = additional_context
         self.context_files = context_files.model_copy(deep=True)
@@ -188,6 +201,8 @@ class ChatAgent(Agent, RestorableFeature):
                 ListAgentsTool(),
                 InterruptAgentTool(),
                 SendMessageTool(max_steps=self.max_steps),
+                # Subagents wait for their children before they finish.
+                *([] if is_subagent else [WaitAgentsTool()]),
             ]
         super().__init__(
             llm,
@@ -363,7 +378,7 @@ class ChatAgent(Agent, RestorableFeature):
             ),
             assemble_messages=partial(
                 prepare_prompt,
-                is_subagent=self.is_subagent,
+                agent_instructions=self.agent_instructions,
                 system_prompt=prompt.system_prompt,
                 user_info_prompt=prompt.user_info_prompt,
                 custom_agent_prompt=prompt.custom_prompt,
@@ -398,8 +413,8 @@ class ChatAgent(Agent, RestorableFeature):
         self._update_tool_context(result.tool_results)
         if not result.message.tool_calls or result.step.is_last:
             self._validate_answer(result)
-        return bool(result.message.tool_calls) and not (
-            result.tool_results and all(item.terminate for item in result.tool_results)
+        return bool(result.message.tool_calls) and not any(
+            item.terminate for item in result.tool_results
         )
 
     def _finalize_tool(

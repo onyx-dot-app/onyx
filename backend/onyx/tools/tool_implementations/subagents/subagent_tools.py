@@ -11,7 +11,11 @@ from onyx.agents.tools import AgentLifetime, ToolInvocation
 from onyx.configs.chat_configs import CHAT_EXECUTION_TIMEOUT_S
 from onyx.db.chat_inputs import MAX_PENDING_MESSAGE_BYTES
 from onyx.llm.models import ToolDefinition, ToolResult, UserMessage
-from onyx.tools.constants import SEND_MESSAGE_TOOL_NAME, SPAWN_AGENT_TOOL_NAME
+from onyx.tools.constants import (
+    SEND_MESSAGE_TOOL_NAME,
+    SPAWN_AGENT_TOOL_NAME,
+    WAIT_AGENTS_TOOL_NAME,
+)
 from onyx.tools.interface import Tool, parse_tool_arguments
 from onyx.tools.models import (
     CodeModeExposure,
@@ -20,10 +24,12 @@ from onyx.tools.models import (
 )
 from onyx.tools.tool_implementations.subagents.models import (
     AgentMessageInput,
+    AgentWaitDetails,
     ChatConfiguration,
     ListAgentsInput,
     SpawnAgentInput,
     SubagentSelection,
+    WaitAgentsInput,
 )
 
 # An agent name is a path segment shown in agent lists and the UI.
@@ -50,9 +56,10 @@ class SpawnAgentTool(_SubagentTool):
     name = SPAWN_AGENT_TOOL_NAME
     display_name = "Start agent"
     description = (
-        "Start a background agent with this chat's tools. Returns immediately; its "
-        "result arrives before a later step. It cannot see this conversation, so give "
-        "complete instructions."
+        "Start a background agent with this chat's tools. Returns immediately, while "
+        "the agent works. Its result arrives at your next step if you are running, "
+        "or starts a new response if you are not. It cannot see this conversation, "
+        "so give complete instructions."
     )
     input_model = SpawnAgentInput
 
@@ -93,24 +100,47 @@ class ListAgentsTool(_SubagentTool):
     name = "list_agents"
     display_name = "List agents"
     description = (
-        "List the agent tree, including the root: path, agent_id, parent, status. "
-        "[you] marks you."
+        "List agents: path, agent_id, parent, status. [you] marks you. By default, "
+        "lists the root, running agents, and agents started in this turn. Not a "
+        "way to wait: results arrive without it."
     )
     input_model = ListAgentsInput
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
         request = parse_tool_arguments(ListAgentsInput, invocation.arguments)
         control = invocation.agents
-        agents = sorted(
+        discovered = control.discover_agents()
+        # Chat run IDs are response IDs, which increase: a run newer than the
+        # root's latest run started in this turn.
+        turn_start = next(
+            (
+                int(agent.latest_run_id)
+                for agent in discovered
+                if agent.parent_id is None and agent.latest_run_id is not None
+            ),
+            None,
+        )
+        matching = sorted(
             (
                 agent
-                for agent in control.discover_agents()
+                for agent in discovered
                 if request.path_prefix is None
                 or agent.path.startswith(request.path_prefix)
             ),
             key=lambda agent: agent.path,
         )
-        if not agents:
+        agents = [
+            agent
+            for agent in matching
+            if request.include_finished
+            or agent.status is None
+            or not agent.status.is_terminal
+            or agent.latest_run_id is None
+            or turn_start is None
+            or int(agent.latest_run_id) >= turn_start
+        ]
+        hidden = len(matching) - len(agents)
+        if not agents and not hidden:
             return ToolResult(content="No agents match on this chat branch.")
         lines: list[str] = []
         for agent in agents:
@@ -126,6 +156,11 @@ class ListAgentsTool(_SubagentTool):
             if agent.id == control.agent_id:
                 line += " [you]"
             lines.append(line)
+        if hidden:
+            lines.append(
+                f"Not shown: {hidden} finished agents from earlier turns. "
+                "Use include_finished to list them."
+            )
         return ToolResult(content="\n".join(lines))
 
 
@@ -135,7 +170,7 @@ class SendMessageTool(_SubagentTool):
     description = (
         "Message another agent. A running agent reads it at its next step; an idle "
         "agent starts a new run. queue: run after normal completion. Results go to the "
-        "recipient's spawner. A message never starts a root run."
+        "recipient's spawner, as for spawn_agent. A message never starts a root run."
     )
     input_model = AgentMessageInput
 
@@ -178,3 +213,65 @@ class InterruptAgentTool(_SubagentTool):
                 "chat branch. Use list_agents to find agents.",
             )
         return ToolResult(content=f"Interruption requested for {agent.path}.")
+
+
+class WaitAgentsTool(_SubagentTool):
+    name = WAIT_AGENTS_TOOL_NAME
+    display_name = "Wait for agents"
+    description = (
+        "End your response and wait for agents that you started. Call it in a step "
+        "after spawn_agent returns. Without agent_ids, waits for all of them. When "
+        "all of them finish, a new response starts with their results. Results of "
+        "other agents still arrive when they finish."
+    )
+    input_model = WaitAgentsInput
+
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+        request = parse_tool_arguments(WaitAgentsInput, invocation.arguments)
+        control = invocation.agents
+        children = {
+            agent.id: agent
+            for agent in control.discover_agents()
+            if agent.parent_id == control.agent_id
+        }
+        if request.agent_ids is None:
+            selected = list(children.values())
+        else:
+            unknown = [
+                agent_id for agent_id in request.agent_ids if agent_id not in children
+            ]
+            if unknown:
+                raise ToolCallException(
+                    "Agents to wait for are not the caller's agents.",
+                    f"You did not start these agents: {', '.join(unknown)}. "
+                    "Use list_agents to find the agents that you started.",
+                )
+            selected = [children[agent_id] for agent_id in request.agent_ids]
+        running = sorted(
+            (
+                agent
+                for agent in selected
+                if agent.latest_run_id is not None
+                and agent.status is not None
+                and not agent.status.is_terminal
+            ),
+            key=lambda agent: agent.path,
+        )
+        if not running:
+            return ToolResult(
+                content="None of these agents is running. Their results are in "
+                "this conversation, or arrive before your next step."
+            )
+        return ToolResult(
+            content=f"Waiting for {', '.join(agent.path for agent in running)}. "
+            "Your response ends now. When all of them finish, a new response "
+            "starts with their results.",
+            details=AgentWaitDetails(
+                run_ids=[
+                    agent.latest_run_id
+                    for agent in running
+                    if agent.latest_run_id is not None
+                ]
+            ),
+            terminate=True,
+        )

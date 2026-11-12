@@ -214,7 +214,12 @@ any terminal response; ordinary queued turns wait while Stop paused the queue
 (`db/chat_inputs.py:can_start_input`, shared with child inboxes). Unread
 finished results wake a recipient only while its queue is not paused and its
 latest run did not fail; an agent's queue pauses when its latest run was
-stopped (`db/chat_inputs.py:wakes_for_results`).
+stopped (`db/chat_inputs.py:wakes_for_results`). A root `wait_agents` call holds
+the results of the runs it names until all of those runs finish; then they wake
+the root together. No column stores a wait: `db/chat_inputs.py:agent_waits` reads
+the `AgentWaitDetails` of the branch's saved `tool_call` rows from the oldest
+unread result's root response on, with their runs' statuses, in one query.
+The follow-up consumes the results, so a wait wakes the root at most once.
 Inbox writers lock the recipient session before the response. The session lock
 uses `NO KEY UPDATE` so response and tool foreign-key checks can proceed.
 Pending text is limited to `db/chat_inputs.py:MAX_PENDING_MESSAGE_BYTES` per
