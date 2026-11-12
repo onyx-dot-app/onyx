@@ -7,8 +7,13 @@ from sqlalchemy.orm import Session
 
 from onyx.chat.process_message import prepare_chat_turn
 from onyx.configs.constants import DEFAULT_PERSONA_ID
-from onyx.context.search.models import BaseFilters
-from onyx.db.chat import create_chat_session, set_chat_session_tool_selection__no_commit
+from onyx.context.search.models import BaseFilters, Tag
+from onyx.db.chat import (
+    MAX_TOOL_SELECTION_BYTES,
+    MAX_TOOL_SELECTION_ITEMS,
+    create_chat_session,
+    set_chat_session_tool_selection__no_commit,
+)
 from onyx.db.enums import IncognitoRecordMode
 from onyx.db.models import ChatSession, User
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -148,6 +153,29 @@ def test_filters_naming_an_inaccessible_document_set_are_rejected(
             db_session,
         )
     assert raised.value.error_code is OnyxErrorCode.INSUFFICIENT_PERMISSIONS
+    db_session.rollback()
+    assert _stored(db_session, chat_session) is None
+
+
+@pytest.mark.parametrize(
+    "selection",
+    [
+        ChatToolSelection(allowed_tool_ids=list(range(MAX_TOOL_SELECTION_ITEMS + 1))),
+        ChatToolSelection(
+            internal_search_filters=BaseFilters(
+                tags=[Tag(tag_key="team", tag_value="x" * MAX_TOOL_SELECTION_BYTES)]
+            )
+        ),
+    ],
+    ids=["too_many_items", "too_many_bytes"],
+)
+def test_an_oversized_selection_is_rejected_before_it_is_stored(
+    db_session: Session, owner: User, selection: ChatToolSelection
+) -> None:
+    chat_session = _chat(db_session, owner)
+    with pytest.raises(OnyxError) as raised:
+        update_chat_tool_selection(chat_session.id, selection, owner, db_session)
+    assert raised.value.error_code is OnyxErrorCode.PAYLOAD_TOO_LARGE
     db_session.rollback()
     assert _stored(db_session, chat_session) is None
 

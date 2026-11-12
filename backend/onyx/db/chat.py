@@ -933,6 +933,12 @@ def reserve_chat_response_ids(
     return [message.id for message in reserved]
 
 
+# A selection is user input stored on the chat and loaded with it, so its size
+# is bounded before anything reads or stores it.
+MAX_TOOL_SELECTION_ITEMS = 1000
+MAX_TOOL_SELECTION_BYTES = 64 * 1024
+
+
 def set_chat_session_tool_selection__no_commit(
     db_session: Session,
     chat_session_id: UUID,
@@ -951,6 +957,20 @@ def set_chat_session_tool_selection__no_commit(
     ):
         return None
     filters = tool_selection.internal_search_filters
+    item_lists = [
+        tool_selection.allowed_tool_ids,
+        filters.source_type if filters else None,
+        filters.document_set if filters else None,
+        filters.tags if filters else None,
+    ]
+    if (
+        any(len(items) > MAX_TOOL_SELECTION_ITEMS for items in item_lists if items)
+        or len(tool_selection.model_dump_json().encode()) > MAX_TOOL_SELECTION_BYTES
+    ):
+        raise OnyxError(
+            OnyxErrorCode.PAYLOAD_TOO_LARGE,
+            "The tool selection is too large to save",
+        )
     require_document_set_access(
         db_session, filters.document_set if filters else None, user
     )
