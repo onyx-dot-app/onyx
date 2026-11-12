@@ -64,6 +64,7 @@ from onyx.llm.models import (
     TextDeltaEvent,
     UserMessage,
 )
+from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat import chat_backend
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.server.query_and_chat.streaming_models import UserMessagePacket
@@ -1569,3 +1570,27 @@ def test_a_queued_message_starts_its_turn_as_deep_research(
     assert queued.json()["deep_research"] is True
     assert chat_turn_work.wait_idle(timeout=30)
     assert [request.deep_research for request in started] == [True]
+
+
+def test_a_queued_message_starts_its_turn_with_the_model_it_was_sent_with(
+    client: TestClient, chat: ChatSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    started: list[SendMessageRequest] = []
+
+    def prepare(*, new_msg_req: SendMessageRequest, **_kwargs: Any) -> None:
+        started.append(new_msg_req)
+        raise OnyxError(OnyxErrorCode.CONFLICT, "Recorded the queued turn")
+
+    monkeypatch.setattr("onyx.chat.process_message.prepare_chat_turn", prepare)
+    chosen = LLMOverride(model_provider="Provider", model_version="picked-model")
+    queued = client.post(
+        f"/chat/chat-session/{chat.id}/pending-messages",
+        json={
+            "message": "Answer with the new model",
+            "delivery": "queue",
+            "llm_override": chosen.model_dump(),
+        },
+    )
+    assert queued.status_code == 200, queued.text
+    assert chat_turn_work.wait_idle(timeout=30)
+    assert [request.llm_override for request in started] == [chosen]

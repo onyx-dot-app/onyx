@@ -40,6 +40,7 @@ from onyx.db.models import (
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.models import UserMessage
+from onyx.llm.override_models import LLMOverride
 from onyx.utils.postgres_sanitization import sanitize_string
 
 MAX_PENDING_MESSAGES = 64
@@ -149,6 +150,7 @@ def _pending_human_message(row: ChatInput) -> PendingChatMessage:
         delivery=row.delivery,
         target_response_id=row.target_response_id,
         deep_research=row.deep_research,
+        llm_override=row.llm_override,
     )
 
 
@@ -175,6 +177,7 @@ def submit_human_message__no_commit(
     target_response_id: int | None,
     turn_preparing: bool,
     deep_research: bool = False,
+    llm_override: LLMOverride | None = None,
 ) -> PendingChatMessage:
     """Store text after authorization. Only `send` binds to a running response.
 
@@ -237,6 +240,7 @@ def submit_human_message__no_commit(
         delivery=delivery,
         content=_pending_content(message),
         deep_research=deep_research,
+        llm_override=llm_override,
     )
     session.add(row)
     session.flush()

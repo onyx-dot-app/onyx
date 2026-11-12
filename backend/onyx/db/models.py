@@ -3864,6 +3864,10 @@ class ChatInput(Base):
     deep_research: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false"
     )
+    # The model the composer showed when a queued or interrupting message was sent.
+    llm_override: Mapped[LLMOverride | None] = mapped_column(
+        PydanticType(LLMOverride), nullable=True
+    )
 
 
 # Tool result details that saved responses, checkpoints and temporary chats keep,

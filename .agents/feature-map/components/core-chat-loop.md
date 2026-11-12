@@ -200,7 +200,11 @@ model. Tools work the same way: each user send and the
 current when it starts. NULL means
 the agent's tools. Deep Research is a choice of each message, not of the chat:
 a queued or interrupting message stores `chat_input.deep_research`, and its
-turn starts as Deep Research when it is set. Child agents keep their own tool configuration. If the queue head changes before acceptance, preparation ends with a
+turn starts as Deep Research when it is set. The model works the same way, as
+the web saves it only with a sent message: `chat_input.llm_override` holds the
+model the picker showed (NULL for a multi-model comparison, which uses the
+chat's saved model), and the turn saves it as the chat's model when it starts.
+Child agents keep their own tool configuration. If the queue head changes before acceptance, preparation ends with a
 conflict, and the next trigger dispatches again. Consuming the inbox row
 prevents delivery twice. If automatic preparation fails, a saved error response
 prevents repeated startup attempts. Withdrawal removes pending text atomically;

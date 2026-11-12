@@ -212,6 +212,14 @@ class PendingChatMessageRequest(BaseModel):
             "interrupts. A send into a running response ignores it."
         ),
     )
+    llm_override: LLMOverride | None = Field(
+        default=None,
+        description=(
+            "The model that a queued or interrupting message's turn uses. Omit it "
+            "to use the chat's saved model. A send into a running response "
+            "ignores it."
+        ),
+    )
 
     @field_validator("message")
     @classmethod

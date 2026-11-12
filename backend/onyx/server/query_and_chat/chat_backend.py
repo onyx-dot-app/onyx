@@ -1549,6 +1549,7 @@ def submit_pending_chat_message(
         turn_preparing=is_chat_session_processing(session_id, cache)
         and get_processing_stream_id(session_id, cache) is None,
         deep_research=body.deep_research,
+        llm_override=body.llm_override,
     )
     # The interrupt stops the turn running at commit, never the turn it starts.
     interrupted = current_turn_owner(session_id, cache)

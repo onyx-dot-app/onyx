@@ -408,12 +408,13 @@ def prepare_chat_turn(
                     },
                 )
                 db_session.commit()
-            elif (
+            if (
                 not llm_overrides
                 and new_msg_req.llm_override is not None
                 and new_msg_req.llm_override != chat_session.llm_override
             ):
-                # Later turns that name no model use the model the user last chose.
+                # Later turns that name no model use the model the user last
+                # chose, including the model a queued message was sent with.
                 set_chat_session_llm_override__no_commit(
                     db_session, chat_session.id, new_msg_req.llm_override
                 )
@@ -751,6 +752,7 @@ def dispatch_pending_chat_messages(
                         chat_session_id=chat_session_id,
                         parent_message_id=queued_turn.parent_response_id,
                         deep_research=queued_turn.message.deep_research,
+                        llm_override=queued_turn.message.llm_override,
                     ),
                     user=user,
                     llm_overrides=None,
