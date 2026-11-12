@@ -100,6 +100,70 @@ func TestLoadCorruptFile(t *testing.T) {
 	}
 }
 
+func TestLoadFromDiskDiscardsPartiallyDecodedConfig(t *testing.T) {
+	cases := []struct {
+		name string
+		data string
+	}{
+		{
+			name: "invalid server URL type",
+			data: `{"server_url": 123, "api_key": "fixture-key", "default_persona_id": 5, "features": {"stream_markdown": false}}`,
+		},
+		{
+			name: "invalid agent ID type",
+			data: `{"server_url": "https://onyx.example", "api_key": "fixture-key", "default_persona_id": "five", "features": {"stream_markdown": false}}`,
+		},
+		{
+			name: "invalid feature type",
+			data: `{"server_url": "https://onyx.example", "api_key": "fixture-key", "default_persona_id": 5, "features": {"stream_markdown": "false"}}`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			t.Setenv("XDG_CONFIG_HOME", dir)
+			writeConfig(t, dir, []byte(tc.data))
+
+			got := LoadFromDisk()
+			want := OnyxCliConfig{ServerURL: "https://cloud.onyx.app"}
+			if got != want {
+				t.Errorf("malformed config must use defaults, got %+v", got)
+			}
+		})
+	}
+}
+
+func TestLoadAppliesEnvAfterDiscardingMalformedConfig(t *testing.T) {
+	clearEnvVars(t)
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	writeConfig(t, dir, []byte(`{"server_url": "https://file.example", "api_key": "fixture-key", "default_persona_id": "five"}`))
+	t.Setenv(EnvServerURL, "https://env.example")
+	t.Setenv(EnvAgentID, "42")
+
+	got := Load()
+	want := OnyxCliConfig{ServerURL: "https://env.example", DefaultAgentID: 42}
+	if got != want {
+		t.Errorf("environment must override defaults, not partial file values: got %+v", got)
+	}
+}
+
+func TestLoadFromDiskKeepsValidPartialConfig(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	writeConfig(t, dir, []byte(`{"api_key": "fixture-key", "default_persona_id": 5}`))
+
+	got := LoadFromDisk()
+	want := OnyxCliConfig{
+		ServerURL:      "https://cloud.onyx.app",
+		APIKey:         "fixture-key",
+		DefaultAgentID: 5,
+	}
+	if got != want {
+		t.Errorf("valid partial config must retain its values, got %+v", got)
+	}
+}
+
 func TestEnvOverrideServerURL(t *testing.T) {
 	clearEnvVars(t)
 	dir := t.TempDir()
