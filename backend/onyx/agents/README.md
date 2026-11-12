@@ -601,7 +601,7 @@ streamed. Instructions that cannot fit after compaction fail the run. Public wai
 The SDK owns synchronous execution, typed events, safe suspension, and resumption.
 Tools return a result or a pending request. They do not manage checkpoint storage or ownership.
 Approval policies, question forms, and their HTTP endpoints are future product work.
-The SDK does not accept new user messages during a run. Steering remains future work.
+The SDK accepts new user messages between model steps through `RunOwnership.receive_inputs`; the feature decides how each step uses them.
 
 A chat request follows this path:
 
@@ -706,7 +706,7 @@ Coding's temporary sandbox has no cross-process reconstruction factory.
 
 ### Delivery and failure boundaries
 
-There is no durable generic control ledger. The store does not accept approval answers or steering messages.
+There is no durable generic control ledger. The store does not accept approval answers. Human messages sent to a running response are stored in `chat_input`, as described above.
 SDK tests exercise pending requests and early answers directly. Future product adapters must persist decisions before acknowledging them.
 The existing chat Stop route keeps its cache signal; child Stop requests also use tenant-scoped cache state.
 An expired owner is reported as interrupted when its response is inspected. Uncertain external work is never automatically replayed.
