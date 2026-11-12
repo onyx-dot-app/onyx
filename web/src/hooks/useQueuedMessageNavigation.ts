@@ -46,11 +46,14 @@ export function useQueuedMessageNavigation({
   const [selectedId, setHighlightedId] = useState<QueuedItem["id"] | null>(
     null
   );
+  // Text in the composer, however it arrived, ends navigation, so its keys
+  // edit and send that text. Clearing the text later does not restore it.
+  if (!inputIsEmpty && selectedId !== null) {
+    setHighlightedId(null);
+  }
   const highlightedIndex = messages.findIndex(
     (message) => message.id === selectedId
   );
-  // Text in the composer, however it arrived, ends navigation, so its keys
-  // edit and send that text.
   const highlightedId =
     highlightedIndex === -1 || !inputIsEmpty ? null : selectedId;
 
