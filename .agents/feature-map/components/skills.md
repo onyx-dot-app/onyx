@@ -108,6 +108,9 @@ rows in one transaction; every read still uses the skill rows. Each access
 write in `db/skill.py`, `db/external_app.py` and
 `ee/onyx/db/community_downgrade.py` calls one `db/plugin.py` helper that
 mirrors it. Lock order: the skill row, then the plugin row; many in id order.
+A skill switch locks its target skill `FOR NO KEY UPDATE`: another user's
+switch inserts a preference for that skill while it holds a plugin lock, and
+a `FOR UPDATE` blocks that foreign-key check into a deadlock.
 
 **The runtime gate.** `db/skill.py:list_runtime_skills_for_user` decides what
 a sandbox gets. It combines visibility (`skill_visible_to_user`), enablement
