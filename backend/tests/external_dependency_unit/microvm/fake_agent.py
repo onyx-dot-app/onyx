@@ -116,6 +116,9 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         ]
         self.vms: dict[str, hostagent_pb2.VM] = {}
         self.refuse_create: HostAgentErrorReason | None = None
+        self.max_vms = 0
+        # Slots of template builds and processes in doubt.
+        self.other_slots = 0
         self.next_generation = 1_000
         self.create_calls = 0
         self.stop_calls: list[tuple[str, int, int]] = []
@@ -306,6 +309,8 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
                 host_kernel="6.18",
                 agent_version="test",
                 disk_free_mib=100_000,
+                max_vms=self.max_vms,
+                vm_slots_used=len(self.vms) + self.other_slots,
             )
 
     def CloseConnections(  # noqa: N802

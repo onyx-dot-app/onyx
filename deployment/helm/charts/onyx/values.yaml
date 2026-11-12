@@ -2084,6 +2084,12 @@ craft:
     relayMaxConns: 256
     # Most open Dial streams per VM; more fail with DIAL_LIMIT.
     dialMaxStreams: 64
+    # Most VMs per node, template build VMs included (--max-vms). Over it,
+    # Create refuses with CAPACITY_VM_SLOTS and placement tries the next node.
+    # On nested virtualization (for example m8i.4xlarge), more than 64 VMs of
+    # 2 vCPU make random running VMs fail, so the default is 60. On bare
+    # metal, raise it or set 0 (no cap).
+    maxVms: 60
     # Comma-separated DNS or URI SANs; the client certificate must have one.
     # Empty = any certificate that tls ca.crt signed.
     clientAllowedSans: ""

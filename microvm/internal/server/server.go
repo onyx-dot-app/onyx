@@ -156,6 +156,7 @@ func (s *Service) NodeInfo(context.Context, *pb.NodeInfoRequest) (*pb.NodeInfoRe
 		VmCount: uint32(n.VMCount), CpuModel: n.Versions.CPUModel, FirecrackerVersion: n.Versions.Firecracker,
 		HostKernel: n.Versions.HostKernel, AgentVersion: n.Versions.Agent,
 		MemReserveMib: n.MemReserveMiB, MemStartingMib: n.MemStartingMiB, Drain: toDrainStatus(n.Drain),
+		MaxVms: uint32(n.MaxVMs), VmSlotsUsed: uint32(n.VMSlotsUsed),
 	}
 	for _, t := range n.Templates {
 		out.Templates = append(out.Templates, toTemplateInfo(t, n.Versions.NodeKey()))

@@ -85,7 +85,7 @@ func TestStateCollectorReadsAtScrape(t *testing.T) {
 	}
 	m, err := New(Source{
 		VMs: func() []agent.VM { return vms }, Stats: fakeStats{diskErr: errors.New("statfs")},
-		RelayConns: func() int { return 7 }, DialStreams: func() int { return 3 },
+		RelayConns: func() int { return 7 }, DialStreams: func() int { return 3 }, MaxVMs: 60,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -115,8 +115,12 @@ craft_fc_host_agent_relay_open_connections 7
 # HELP craft_fc_host_agent_dial_open_streams Open Dial streams.
 # TYPE craft_fc_host_agent_dial_open_streams gauge
 craft_fc_host_agent_dial_open_streams 3
+# HELP craft_fc_host_agent_max_vms The VM cap (--max-vms); 0 is no cap.
+# TYPE craft_fc_host_agent_max_vms gauge
+craft_fc_host_agent_max_vms 60
 `
 	names := []string{
+		"craft_fc_host_agent_max_vms",
 		"craft_fc_host_agent_vms", "craft_fc_host_agent_vm_memory_allocated_bytes", "craft_fc_host_agent_vm_vcpus_allocated",
 		"craft_fc_host_agent_node_memory_available_bytes", "craft_fc_host_agent_node_stats_errors",
 		"craft_fc_host_agent_relay_open_connections", "craft_fc_host_agent_dial_open_streams",
