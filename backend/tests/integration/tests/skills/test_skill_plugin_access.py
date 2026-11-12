@@ -10,6 +10,7 @@ from collections.abc import Generator
 from typing import Any
 from uuid import UUID, uuid4
 
+import httpx
 import pytest
 from sqlalchemy import select
 
@@ -22,6 +23,7 @@ from onyx.db.models import (
     UserPluginPreference,
 )
 from onyx.server.features.skill.models import (
+    SkillBulkResponse,
     SkillGroupShareRequest,
     SkillResponse,
     SkillUserShareRequest,
@@ -70,7 +72,9 @@ def _name(prefix: str) -> str:
 # --- Requests ----------------------------------------------------------------
 
 
-def _share(user: DATestUser, skill_id: UUID | str, body: dict[str, Any]) -> Any:
+def _share(
+    user: DATestUser, skill_id: UUID | str, body: dict[str, Any]
+) -> httpx.Response:
     return client.patch(
         f"{API_SERVER_URL}/skills/custom/{skill_id}/share",
         json=body,
@@ -78,7 +82,9 @@ def _share(user: DATestUser, skill_id: UUID | str, body: dict[str, Any]) -> Any:
     )
 
 
-def _patch(user: DATestUser, skill_id: UUID | str, body: dict[str, Any]) -> Any:
+def _patch(
+    user: DATestUser, skill_id: UUID | str, body: dict[str, Any]
+) -> httpx.Response:
     return client.patch(
         f"{API_SERVER_URL}/skills/custom/{skill_id}",
         json=body,
@@ -86,15 +92,17 @@ def _patch(user: DATestUser, skill_id: UUID | str, body: dict[str, Any]) -> Any:
     )
 
 
-def _bulk(user: DATestUser, body: dict[str, Any]) -> dict[str, Any]:
+def _bulk(user: DATestUser, body: dict[str, Any]) -> SkillBulkResponse:
     response = client.post(
         f"{API_SERVER_URL}/skills/bulk", json=body, headers=user.headers
     )
     response.raise_for_status()
-    return response.json()
+    return SkillBulkResponse.model_validate(response.json())
 
 
-def _transfer(user: DATestUser, skill_id: UUID | str, new_owner_id: str) -> Any:
+def _transfer(
+    user: DATestUser, skill_id: UUID | str, new_owner_id: str
+) -> httpx.Response:
     return client.post(
         f"{API_SERVER_URL}/skills/custom/{skill_id}/transfer-ownership",
         json={"new_owner_user_id": new_owner_id},
@@ -102,7 +110,7 @@ def _transfer(user: DATestUser, skill_id: UUID | str, new_owner_id: str) -> Any:
     )
 
 
-def _delete(user: DATestUser, skill_id: UUID | str) -> Any:
+def _delete(user: DATestUser, skill_id: UUID | str) -> httpx.Response:
     return client.delete(
         f"{API_SERVER_URL}/skills/custom/{skill_id}", headers=user.headers
     )
@@ -258,7 +266,7 @@ def test_bulk_share_writes_plugin_rows(admin_user: DATestUser) -> None:
             },
         },
     )
-    assert result["failed"] == []
+    assert result.failed == []
     _assert_rows_match(first.id, second.id)
     for skill in (first, second):
         plugin = _plugin(skill.id)
@@ -359,8 +367,8 @@ def test_published_skill_cannot_be_made_private(owner: DATestUser) -> None:
             "sharing": {"public_permission": None},
         },
     )
-    assert bulk["succeeded"] == []
-    assert "cannot be made private" in bulk["failed"][0]["detail"]
+    assert bulk.succeeded == []
+    assert "cannot be made private" in bulk.failed[0].detail
 
     assert (
         SkillManager.get_for_user(str(skill.id), owner).public_permission
@@ -390,9 +398,9 @@ def test_organization_editor_is_refused(owner: DATestUser) -> None:
             "sharing": {"public_permission": "EDITOR"},
         },
     )
-    assert bulk["succeeded"] == []
-    assert len(bulk["failed"]) == 2
-    assert all("edit access" in failure["detail"] for failure in bulk["failed"])
+    assert bulk.succeeded == []
+    assert len(bulk.failed) == 2
+    assert all("edit access" in failure.detail for failure in bulk.failed)
 
     assert SkillManager.get_for_user(str(private.id), owner).public_permission is None
     assert (
@@ -429,7 +437,7 @@ def test_install_setting_writes_plugin_policy(
             "sharing": {"installation_policy": policy},
         },
     )
-    assert result["failed"] == []
+    assert result.failed == []
 
     for skill in (single, bulk):
         policy_value = _plugin(skill.id).installation_policy
@@ -459,10 +467,10 @@ def test_enable_and_disable_write_the_user_choice(owner: DATestUser) -> None:
     _assert_rows_match(skill.id)
 
     result = _bulk(owner, {"action": "disable", "skill_ids": [str(skill.id)]})
-    assert result["failed"] == []
+    assert result.failed == []
     assert _choice(skill.id, owner.id) == (False, enabled[1])
     result = _bulk(owner, {"action": "enable", "skill_ids": [str(skill.id)]})
-    assert result["failed"] == []
+    assert result.failed == []
     bulk_enabled = _choice(skill.id, owner.id)
     assert bulk_enabled is not None and bulk_enabled[0] is True
     assert bulk_enabled[1] is not None and bulk_enabled[1] > enabled[1]
@@ -556,8 +564,8 @@ def test_only_a_manager_can_delete_a_published_skill(
     assert response.status_code == 403
     assert "Only an admin" in response.json()["detail"]
     result = _bulk(owner, {"action": "delete", "skill_ids": [str(bulk.id)]})
-    assert result["succeeded"] == []
-    assert "Only an admin" in result["failed"][0]["detail"]
+    assert result.succeeded == []
+    assert "Only an admin" in result.failed[0].detail
     assert _plugin_or_none(single.id) is not None
     assert _plugin_or_none(bulk.id) is not None
 
@@ -567,7 +575,7 @@ def test_only_a_manager_can_delete_a_published_skill(
 
     _delete(admin_user, single.id).raise_for_status()
     result = _bulk(admin_user, {"action": "delete", "skill_ids": [str(bulk.id)]})
-    assert result["succeeded"] == [str(bulk.id)]
+    assert result.succeeded == [bulk.id]
     assert _plugin_or_none(single.id) is None
     assert _plugin_or_none(bulk.id) is None
 

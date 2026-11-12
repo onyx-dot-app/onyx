@@ -316,6 +316,20 @@ _MOVE_CURRENT_TO_CHANGED_BUNDLE = f"""
       )
 """
 
+# Old code can classify a skill (is_valid was NULL) and keep its bundle. Copy
+# that to the unclassified versions that hold the bundle, as the validity
+# writer does.
+_SYNC_UNCLASSIFIED_VALIDITY = """
+    UPDATE plugin_version v
+    SET is_valid = s.is_valid
+    FROM skill s
+    WHERE s.id = v.plugin_id
+      AND s.built_in_skill_id IS NULL
+      AND s.is_valid IS NOT NULL
+      AND v.is_valid IS NULL
+      AND v.bundle_file_id = s.bundle_file_id
+"""
+
 # The marketplace each skill's plugin belongs in, by the backfill rule.
 _TARGET_MARKETPLACE = f"""
     CASE
@@ -459,6 +473,7 @@ def resync_plugins_from_skills() -> None:
         _INSERT_CHANGED_BUNDLE_VERSIONS,
         _INSERT_CHANGED_BUNDLE_SKILLS,
         _MOVE_CURRENT_TO_CHANGED_BUNDLE,
+        _SYNC_UNCLASSIFIED_VALIDITY,
         _MOVE_PLUGINS_TO_TARGET_MARKETPLACE,
         _SYNC_OWNER_POLICY_AND_PUBLISHED,
         _DELETE_STALE_USER_SHARES,

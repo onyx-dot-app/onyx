@@ -26,43 +26,6 @@ Open **Craft → Skills** to manage your own library.
 New custom Skills start private unless you configure access during creation or import. Share Skills with people, groups,
 or the organization when others should use them.
 
-## Manage several Skills
-
-<Steps>
-  <Step title="Select the Skills">
-    Open **Admin Panel → Skills** and use the checkboxes on the custom Skill cards.
-    Use the checkbox beside **Select skills** to select all visible custom Skills. Search first to limit the selection.
-  </Step>
-
-  <Step title="Configure access and installation">
-    Select **Share**. Choose **Everyone in the organization** to publish all selected Skills to your staff.
-    Publishing cannot be undone. You can also add specific people or groups.
-    People and groups you list get the chosen permission. Other existing grants remain in place.
-    Settings left at **Keep unchanged** retain their current values.
-  </Step>
-
-  <Step title="Apply the changes">
-    Select **Apply** to update the selected Skills.
-    Onyx reports failures separately and keeps failed Skills selected so you can retry them.
-  </Step>
-</Steps>
-
-**Enable for me** and **Disable for me** change your personal library only.
-Use **Installed by default** or **Required** under **Installation** to deploy Skills to people with access.
-Open **More actions** for personal enablement and deletion. **Delete** removes selected Skills for everyone with access.
-Only an admin can delete a Skill that is published to the organization.
-This needs the organization-wide `manage:plugins` permission.
-The confirmation lists each selected Skill before deletion.
-
-### Set access during import
-
-In the GitHub import dialog, select **Configure access** before importing the selected Skills.
-The access settings apply to the full selection. For example,
-select 80 Skills and configure organization access to share all 80 during import.
-
-You can also select several ZIP files in **Upload a skill**. Each ZIP must contain one Skill.
-Configure access once before importing the batch. Onyx reports invalid bundles separately.
-
 ### Built-in Skills
 
 | Skill                | Availability                                                                                     |
@@ -280,6 +243,43 @@ Every custom Skill has one owner. The owner can transfer it to another active st
 If ownership becomes vacant because the owner is inactive, an Admin can open the Skill and transfer it.
 
 Do not transfer ownership to bots, service accounts, limited accounts, or inactive users.
+
+## Manage several Skills
+
+<Steps>
+  <Step title="Select the Skills">
+    Open **Admin Panel → Skills** and use the checkboxes on the custom Skill cards.
+    Use the checkbox beside **Select skills** to select all visible custom Skills. Search first to limit the selection.
+  </Step>
+
+  <Step title="Configure access and installation">
+    Select **Share**. Choose **Everyone in the organization** to publish all selected Skills to your staff.
+    Publishing cannot be undone. You can also add specific people or groups.
+    People and groups you list get the chosen permission. Other existing grants remain in place.
+    Settings left at **Keep unchanged** retain their current values.
+  </Step>
+
+  <Step title="Apply the changes">
+    Select **Apply** to update the selected Skills.
+    Onyx reports failures separately and keeps failed Skills selected so you can retry them.
+  </Step>
+</Steps>
+
+**Enable for me** and **Disable for me** change your personal library only.
+Use **Installed by default** or **Required** under **Installation** to deploy Skills to people with access.
+Open **More actions** for personal enablement and deletion. **Delete** removes selected Skills for everyone with access.
+Only an admin can delete a Skill that is published to the organization.
+This needs the organization-wide `manage:plugins` permission.
+The confirmation lists each selected Skill before deletion.
+
+### Set access during import
+
+In the GitHub import dialog, select **Configure access** before importing the selected Skills.
+The access settings apply to the full selection. For example,
+select 80 Skills and configure organization access to share all 80 during import.
+
+You can also select several ZIP files in **Upload a skill**. Each ZIP must contain one Skill.
+Configure access once before importing the batch. Onyx reports invalid bundles separately.
 
 ## Troubleshooting
 

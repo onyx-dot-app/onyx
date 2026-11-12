@@ -278,6 +278,9 @@ def _replace_skill_bundle_from_editor(
             base_version_id=base_version_id,
             user=user,
             skip_if_unchanged=True,
+            previous_manifest=lambda: compute_bundle_manifest(
+                _bundle_to_edit(skill, db_session)
+            ),
             db_session=db_session,
         )
         db_session.commit()
