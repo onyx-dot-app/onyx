@@ -1,3 +1,4 @@
+import type { RateLimitDetails } from "@/app/app/types";
 import type { AcpSessionUpdate, AcpStopReason } from "@/lib/timeline/acp";
 
 /**
@@ -28,5 +29,5 @@ export type TimelineEvent =
   | { type: "ext"; notification: OnyxNotification }
   /** The turn ended, with the reason from ACP's prompt response. */
   | { type: "stop"; stopReason: AcpStopReason }
-  /** The turn failed. */
-  | { type: "error"; message: string };
+  /** The turn failed. A usage-limit failure carries its limit details. */
+  | { type: "error"; message: string; rateLimit?: RateLimitDetails };
