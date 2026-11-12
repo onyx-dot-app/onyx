@@ -38,6 +38,7 @@ export type AcpTimelinePayload =
 /** Notices render inline, in arrival order, outside the steps. */
 export type TimelineNotice =
   | { type: "compaction"; summary: string | null }
+  | { type: "timed_out" }
   | {
       type: "connect_app_request";
       requestId: string;
@@ -285,6 +286,11 @@ function appendNotification(
           type: "compaction",
           summary: notification.params.summary,
         }),
+      ];
+    case "_onyx/timed_out":
+      return [
+        ...settled,
+        noticeEntry(`timed-out-${entries.length}`, { type: "timed_out" }),
       ];
     case "_onyx/connect_app_request": {
       // A request is shown once, even when the stream repeats it.

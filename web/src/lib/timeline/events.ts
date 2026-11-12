@@ -8,6 +8,8 @@ import type { AcpSessionUpdate, AcpStopReason } from "@/lib/timeline/acp";
 export type OnyxNotification =
   /** The agent compacted its context to continue. */
   | { method: "_onyx/compaction"; params: { summary: string | null } }
+  /** The turn reached its time limit. ACP has no stop reason for this. */
+  | { method: "_onyx/timed_out"; params: Record<string, never> }
   /** A tool waits until the user connects an external app. */
   | {
       method: "_onyx/connect_app_request";
