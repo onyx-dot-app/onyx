@@ -15,8 +15,10 @@ from onyx.cache.factory import get_cache_backend, get_shared_cache_backend
 from onyx.cache.interface import CacheBackend
 from onyx.microvm import placement, registry
 from onyx.microvm.configs import SANDBOX_FC_IDLE_TIMEOUT_SECONDS
+from onyx.microvm.generated.hostagent.v1 import hostagent_pb2
 from onyx.microvm.lifecycle import (
     NoCheckpointSupport,
+    UnknownActivity,
     VmStopOutcome,
     evict_idle_sandbox_vm,
 )
@@ -24,7 +26,9 @@ from onyx.microvm.models import PresignedRequest
 from onyx.microvm.registry import get_sandbox_placement
 from onyx.server.features.build.sandbox import harness_factory
 from onyx.server.features.build.sandbox.firecracker import (
+    harness_sandbox,
     harness_state,
+    session_saves,
 )
 from onyx.server.features.build.sandbox.firecracker.harness_sandbox import (
     FirecrackerHarnessSandbox,
@@ -35,6 +39,7 @@ from onyx.server.features.build.sandbox.firecracker.session_saves import (
 )
 from onyx.server.features.build.sandbox.harness_base import (
     ExecSessionEndedError,
+    HarnessSandboxError,
     HarnessSandboxRef,
     collect_exec_result,
 )
@@ -186,6 +191,8 @@ def test_sleep_saves_the_session_and_the_next_use_restores_it(
     sandbox.write_file(ref, "src/app.py", b"print(1)\n")
     sandbox.write_file(ref, "out/report.md", b"# Report\n")
     sandbox.write_file(ref, "node_modules/x/index.js", b"dependency")
+    sandbox.write_file(ref, ".pytest_cache/v/cache", b"cache")
+    sandbox.write_file(ref, "env-3.12/pyvenv.cfg", b"home = /usr/bin\n")
     result = collect_exec_result(
         sandbox.exec_command(ref, "sleep 60", yield_time_ms=250)
     )
@@ -373,6 +380,87 @@ def test_the_eviction_policy_is_off_without_harness_sandboxes(
     monkeypatch.setattr(harness_factory, "FIRECRACKER_ENABLED", False)
     checkpointer, _ = harness_factory.get_eviction_policy()
     assert isinstance(checkpointer, NoCheckpointSupport)
+
+
+def test_a_session_is_not_recorded_on_a_vm_that_stopped_during_its_setup(
+    monkeypatch: pytest.MonkeyPatch,
+    tenant_cache: CacheBackend,
+    make_sandbox: MakeSandbox,
+    node: RunningFakeAgent,
+    ref: HarnessSandboxRef,
+) -> None:
+    sandbox = make_sandbox()
+    sandbox.ensure_running(ref)
+    real_restore = harness_sandbox.restore_session
+
+    def stopped_meanwhile(*args: object, **kwargs: object) -> None:  # noqa: ARG001
+        # An idle stop saved and stopped the VM during the restore.
+        node.agent.vms[str(ref.sandbox_id)].state = hostagent_pb2.VM_STATE_EXITED
+        registry.clear_sandbox_placement(tenant_cache, ref.sandbox_id)
+
+    monkeypatch.setattr(harness_sandbox, "restore_session", stopped_meanwhile)
+    with pytest.raises(HarnessSandboxError, match="stopped while this session"):
+        sandbox.read_file(ref, "a.txt", max_bytes=10)
+    assert (
+        harness_state.sessions_on_instance(tenant_cache, ref.sandbox_id, (1, 1001))
+        == []
+    )
+
+    # The next call wakes a new VM and sets the session up there.
+    monkeypatch.setattr(harness_sandbox, "restore_session", real_restore)
+    sandbox.write_file(ref, "a.txt", b"x")
+    placement = get_sandbox_placement(tenant_cache, ref.sandbox_id)
+    assert placement is not None
+    instance = (placement.attempt, placement.generation)
+    assert harness_state.sessions_on_instance(
+        tenant_cache, ref.sandbox_id, instance
+    ) == [ref.session_id]
+    # The setup made the session directory with a command of the session.
+    assert any(
+        e.argv == ["true"] and e.session_id == str(ref.session_id)
+        for e in node.agent.executions[str(ref.sandbox_id)].values()
+    )
+
+
+def test_a_file_store_config_error_turns_eviction_off(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def broken() -> None:
+        raise RuntimeError("bad file store config")
+
+    monkeypatch.setattr(harness_factory, "_instance", None)
+    monkeypatch.setattr(harness_factory, "_eviction_error_logged", False)
+    monkeypatch.setattr(harness_factory, "FIRECRACKER_ENABLED", True)
+    monkeypatch.setattr(harness_factory, "SANDBOX_FC_TEMPLATE", "tpl-1")
+    monkeypatch.setattr(session_saves, "default_archive_store", broken)
+    for _ in range(2):
+        checkpointer, activity = harness_factory.get_eviction_policy()
+        assert isinstance(checkpointer, NoCheckpointSupport)
+        assert isinstance(activity, UnknownActivity)
+    assert harness_factory._eviction_error_logged
+
+
+def test_record_attempt_never_lowers_the_stored_attempt(
+    monkeypatch: pytest.MonkeyPatch, tenant_cache: CacheBackend
+) -> None:
+    sandbox_id = uuid4()
+    key = harness_state.LAST_ATTEMPT_PREFIX + str(sandbox_id)
+    try:
+        harness_state.record_attempt(tenant_cache, sandbox_id, 3)
+        harness_state.record_attempt(tenant_cache, sandbox_id, 2)
+        assert harness_state.last_attempt(tenant_cache, sandbox_id) == 3
+
+        # A pod read attempt 1 before another pod stored 3.
+        real_get = tenant_cache.get
+        stale = iter([b"1"])
+        monkeypatch.setattr(
+            tenant_cache, "get", lambda k: next(stale, None) or real_get(k)
+        )
+        harness_state.record_attempt(tenant_cache, sandbox_id, 2)
+        monkeypatch.setattr(tenant_cache, "get", real_get)
+        assert harness_state.last_attempt(tenant_cache, sandbox_id) == 3
+    finally:
+        tenant_cache.delete(key)
 
 
 def test_a_wake_after_sleep_starts_past_the_stopped_attempt(

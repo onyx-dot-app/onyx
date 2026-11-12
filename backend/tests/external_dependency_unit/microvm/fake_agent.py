@@ -761,7 +761,14 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
         script = argv
         if argv[:2] == ["bash", "-c"] and len(argv) == 3:
             script = shlex.split(argv[2])
-        if not script or script[0] not in ("echo", "fail", "cat", "sleep", "mkdir"):
+        if not script or script[0] not in (
+            "echo",
+            "fail",
+            "cat",
+            "sleep",
+            "mkdir",
+            "true",
+        ):
             abort_daemon(context, SandboxDaemonErrorReason.START_FAILED, "no program")
         running = [
             e
@@ -780,7 +787,7 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
             env=dict(command.env),
         )
         argv = script
-        if argv[0] == "mkdir":
+        if argv[0] in ("mkdir", "true"):
             execution.end(sandboxd_pb2.EXITED, 0)
         elif argv[0] == "echo":
             execution.stdout = (" ".join(argv[1:]) + "\n").encode()

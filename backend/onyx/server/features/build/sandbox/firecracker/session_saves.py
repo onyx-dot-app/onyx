@@ -27,7 +27,11 @@ from onyx.configs.constants import FileOrigin
 from onyx.file_store.file_store import PresignableFileStore, get_default_file_store
 from onyx.file_store.models import PresignedRequest as FileStorePresignedRequest
 from onyx.microvm.agent_client import HostAgentClient, HostAgentClientFactory
-from onyx.microvm.daemon_client import SandboxDaemonClient
+from onyx.microvm.daemon_client import (
+    SandboxDaemonClient,
+    SandboxDaemonError,
+    SandboxDaemonErrorReason,
+)
 from onyx.microvm.lifecycle import (
     SandboxActivityProbe,
     SandboxCheckpointer,
@@ -54,7 +58,23 @@ logger = setup_logger()
 # Top-level directories never saved. The daemon also skips its own excludes
 # (node_modules, venvs, caches) at any depth inside each root.
 SAVE_EXCLUDED_ROOTS: frozenset[str] = frozenset(
-    {"node_modules", ".venv", "venv", "__pycache__", ".cache", ".npm", ".next"}
+    {
+        "node_modules",
+        ".venv",
+        "venv",
+        "__pycache__",
+        ".next",
+        ".cache",
+        ".npm",
+        ".pnpm-store",
+        ".yarn",
+        ".bun",
+        ".pytest_cache",
+        ".mypy_cache",
+        ".ruff_cache",
+        ".turbo",
+        ".parcel-cache",
+    }
 )
 # A stop saves every session of the VM within this time.
 SESSION_SAVE_MAX_SECONDS = 30 * 60.0
@@ -144,6 +164,22 @@ def tenant_scope(tenant_id: str) -> Iterator[None]:
         CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
+def _is_virtualenv(daemon: SandboxDaemonClient, session_id: UUID, root: str) -> bool:
+    """A top-level directory with pyvenv.cfg: the daemon skips these only
+    below a capture root."""
+    try:
+        _, chunks = daemon.read_file(
+            session_id=str(session_id), path=f"{root}/pyvenv.cfg", length=1
+        )
+    except SandboxDaemonError as e:
+        if e.reason is SandboxDaemonErrorReason.FILE_NOT_FOUND:
+            return False
+        raise
+    for _ in chunks:
+        pass
+    return True
+
+
 def save_session(
     cache: CacheBackend,
     agent: HostAgentClient,
@@ -166,6 +202,7 @@ def save_session(
         if e.type is FileType.DIRECTORY
         and e.name not in SAVE_EXCLUDED_ROOTS
         and not e.name.startswith(".craft-")
+        and not _is_virtualenv(daemon, session_id, e.name)
     )
     save = SessionSave(
         file_id=None, size_bytes=0, sha256="", roots=[], saved_at=time.time()

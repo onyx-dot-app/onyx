@@ -171,5 +171,13 @@ def last_attempt(cache: CacheBackend, sandbox_id: UUID) -> int:
 
 
 def record_attempt(cache: CacheBackend, sandbox_id: UUID, attempt: int) -> None:
-    if attempt > last_attempt(cache, sandbox_id):
-        cache.set(LAST_ATTEMPT_PREFIX + str(sandbox_id), str(attempt))
+    """Raise the stored attempt to `attempt`; it never decreases."""
+    key = LAST_ATTEMPT_PREFIX + str(sandbox_id)
+    for _ in range(_CAS_TRIES):
+        raw = cache.get(key)
+        if raw is None:
+            if cache.set_if_absent(key, str(attempt)):
+                return
+        elif int(raw) >= attempt or cache.replace_if_value(key, raw, str(attempt)):
+            return
+    raise StateContentionError(key)

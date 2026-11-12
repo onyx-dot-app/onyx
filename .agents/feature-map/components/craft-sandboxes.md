@@ -300,7 +300,9 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   old archive. A busy sandbox (running command, turn, parked approval) or a
   failed save keeps the VM. A session's first use on a new VM instance
   restores its last save, once across pods (cache lock + session-instance
-  record).
+  record). The record is written under the placement lock only while the
+  placement is still that instance. A configuration error in the eviction
+  policy turns idle eviction off; it never fails the node report.
 
 ---
 

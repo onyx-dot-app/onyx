@@ -59,7 +59,7 @@ from onyx.microvm.models import (
     VmInstance,
     VmRequest,
 )
-from onyx.microvm.placement import find_vm
+from onyx.microvm.placement import find_vm, sandbox_placement_lock
 from onyx.microvm.registry import (
     get_registered_node,
     get_sandbox_daemon_key,
@@ -106,6 +106,7 @@ from onyx.server.features.build.sandbox.harness_base import (
     ExecSessionEndedError,
     ExecSessionNotFoundError,
     HarnessSandbox,
+    HarnessSandboxError,
     SandboxFileTooLargeError,
     SandboxPathError,
     session_workspace,
@@ -378,9 +379,8 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
     def _session_vm(
         self, ref: HarnessSandboxRef
     ) -> tuple[PlacedVm, SandboxDaemonClient]:
-        """The running VM and its daemon, with the session's last save
-        restored once per VM instance. The daemon makes the session
-        directory on first use."""
+        """The running VM and its daemon, with the session directory made
+        and its last save restored, once per VM instance."""
         placed = self._place(ref)
         daemon = sandbox_daemon(self._client_factory, placed)
         tenant_cache = get_cache_backend(tenant_id=ref.tenant_id)
@@ -399,6 +399,15 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         ):
             if set_up():
                 return placed, daemon
+            # A command with the session makes its directory, so an idle
+            # stop can list it even when no call wrote a file.
+            made = list(
+                daemon.run(ExecCommand(argv=["true"], session_id=str(ref.session_id)))
+            )
+            if not isinstance(made[-1], ExecResult) or made[-1].exit_code != 0:
+                raise HarnessSandboxError(
+                    f"could not create {session_workspace(ref.session_id)}"
+                )
             if self._archive_store is not None:
                 try:
                     with tenant_scope(ref.tenant_id):
@@ -418,9 +427,25 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                     raise SessionSaveError(
                         f"could not restore the saved files of this session: {e}"
                     ) from e
-            mark_session_on_instance(
-                tenant_cache, ref.sandbox_id, ref.session_id, instance
-            )
+            # An idle stop that ran meanwhile has saved and stopped this
+            # instance: do not record the session on it.
+            with sandbox_placement_lock(tenant_cache, ref.sandbox_id, blocking=True):
+                placement = get_sandbox_placement(tenant_cache, ref.sandbox_id)
+                if (
+                    placement is None
+                    or (
+                        placement.attempt,
+                        placement.generation,
+                    )
+                    != instance
+                ):
+                    raise HarnessSandboxError(
+                        "The sandbox stopped while this session was set up. "
+                        "Run the call again."
+                    )
+                mark_session_on_instance(
+                    tenant_cache, ref.sandbox_id, ref.session_id, instance
+                )
         return placed, daemon
 
     # Idle stop

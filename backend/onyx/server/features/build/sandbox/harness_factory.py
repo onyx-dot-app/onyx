@@ -16,14 +16,18 @@ from onyx.microvm.lifecycle import (
     UnknownActivity,
 )
 from onyx.server.features.build.sandbox.harness_base import HarnessSandbox
+from onyx.utils.logger import setup_logger
 
 if TYPE_CHECKING:
     from onyx.server.features.build.sandbox.firecracker.harness_sandbox import (
         FirecrackerHarnessSandbox,
     )
 
+logger = setup_logger()
+
 _lock = threading.Lock()
 _instance: "FirecrackerHarnessSandbox | None" = None
+_eviction_error_logged = False
 
 
 class HarnessSandboxUnavailableError(Exception):
@@ -59,8 +63,15 @@ def get_harness_sandbox() -> HarnessSandbox:
 def get_eviction_policy() -> tuple[SandboxCheckpointer, SandboxActivityProbe]:
     """The node-report idle evictor's save and busy checks. Firecracker VMs
     serve only the harness: without harness sandboxes no VM is stopped
-    automatically."""
+    automatically. A configuration error (for example the file store) turns
+    eviction off; it never fails the node report."""
+    global _eviction_error_logged
     try:
         return _firecracker_sandbox().eviction_policy()
     except HarnessSandboxUnavailableError:
+        return NoCheckpointSupport(), UnknownActivity()
+    except Exception:
+        if not _eviction_error_logged:
+            _eviction_error_logged = True
+            logger.exception("sandbox_fc_eviction_policy_failed; idle eviction is off")
         return NoCheckpointSupport(), UnknownActivity()
