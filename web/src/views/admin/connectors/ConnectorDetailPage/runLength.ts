@@ -3,7 +3,7 @@ import type { useFormatter } from "next-intl";
 /** A run's length in its two largest units in short form, such as "16 sec", "4 min 12 sec" or "1 hr 5 min". */
 export function formatRunLength(
   format: ReturnType<typeof useFormatter>,
-  ms: number,
+  ms: number
 ): string {
   const total = Math.max(0, Math.round(ms / 1000));
   const units = [
@@ -19,8 +19,8 @@ export function formatRunLength(
       .slice(from, from + 2)
       .filter((part, index) => index === 0 || part.value > 0)
       .map(({ unit, value }) =>
-        format.number(value, { style: "unit", unit, unitDisplay: "short" }),
+        format.number(value, { style: "unit", unit, unitDisplay: "short" })
       ),
-    { type: "unit", style: "narrow" },
+    { type: "unit", style: "narrow" }
   );
 }
