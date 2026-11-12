@@ -130,7 +130,9 @@ class JiraSmConnector(
             clauses.append(f"project = {self.jira_project}")
         else:
             # Default: restrict to service-desk (JSM) projects only
-            clauses.append("project in (select projectkey from "com.atlassian.jira.project.type" where type = 'service_desk')")
+            clauses.append(
+                "project in (select projectkey from 'com.atlassian.jira.project.type' where type = 'service_desk')"
+            )
 
         if start:
             clauses.append(f"updated >= '{start.strftime('%Y-%m-%d %H:%M:%S')}'")
