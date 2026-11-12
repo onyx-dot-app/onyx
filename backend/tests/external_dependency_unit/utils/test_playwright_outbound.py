@@ -1,9 +1,14 @@
 import gzip
+import time
+from collections.abc import Iterator
+from contextlib import ExitStack
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from threading import Thread
+from threading import BoundedSemaphore, Lock, Thread
+from typing import Any
 from unittest.mock import patch
 from urllib.parse import urlsplit
 
+import psutil
 import pytest
 
 from onyx.connectors.web.connector import ScrapeSessionContext, WebConnector
@@ -256,3 +261,122 @@ def test_web_connector_limits_bearer_to_crawl_origin(redirect: bool) -> None:
         server.shutdown()
         server.server_close()
         thread.join()
+
+
+_HOSTILE_PAGES = {
+    "/flood": "<script>let n=0;(function go(){for(let i=0;i<50;i++){fetch('/r?'+n++).catch(()=>{})}setTimeout(go,0)})()</script>",
+    "/spin": "<script>setTimeout(()=>{while(true){}},50)</script>",
+    "/grow": "<script>const a=[];for(let i=0;i<32;i++)a.push(new Uint8Array(64<<20).fill(1))</script>",
+    "/slow": "<p>slow</p><script>setTimeout(()=>{},0)</script>",
+}
+
+
+@pytest.fixture
+def hostile_source() -> Iterator[str]:
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            body = _HOSTILE_PAGES.get(urlsplit(self.path).path, "ok").encode()
+            if self.path == "/slow":
+                time.sleep(1)
+            self.send_response(
+                403 if self.path in ("/flood", "/spin", "/grow") else 200
+            )
+            self.send_header("Content-Type", "text/html")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, format: str, *args: object) -> None:
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    source = f"http://127.0.0.1:{server.server_port}"
+
+    def validate_target(url: str, **kwargs: bool) -> str:
+        if urlsplit(url).netloc == urlsplit(source).netloc:
+            return url
+        return validate_outbound_http_url(url, **kwargs)
+
+    try:
+        with patch.object(
+            playwright_fetch, "validate_outbound_http_url", side_effect=validate_target
+        ):
+            yield source
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+
+def _render_within(url: str, seconds: float) -> bool:
+    """Run one fallback render; True if it returned None within `seconds`."""
+    result: list[playwright_fetch.RenderedPage | None] = []
+    worker = Thread(target=lambda: result.append(fetch_rendered_html(url)), daemon=True)
+    worker.start()
+    worker.join(seconds)
+    return not worker.is_alive() and result == [None]
+
+
+def _render_browsers() -> list[psutil.Process]:
+    browsers = []
+    for proc in psutil.Process().children(recursive=True):
+        try:
+            if any(arg.startswith("--onyx-render-id=") for arg in proc.cmdline()):
+                browsers.append(proc)
+        except psutil.Error:
+            continue
+    return browsers
+
+
+@pytest.mark.parametrize(
+    ("page", "limits"),
+    [
+        ("flood", {"MAX_FALLBACK_PAUSED_REQUESTS": 200}),
+        ("spin", {"OPEN_URL_PLAYWRIGHT_TIMEOUT_SECONDS": 8}),
+        ("grow", {"OPEN_URL_PLAYWRIGHT_MAX_MEMORY_MB": 1024}),
+    ],
+)
+def test_fallback_kills_browser_past_limit(
+    hostile_source: str, page: str, limits: dict[str, int]
+) -> None:
+    with ExitStack() as stack:
+        for name, value in limits.items():
+            stack.enter_context(patch.object(playwright_fetch, name, value))
+        assert _render_within(f"{hostile_source}/{page}", 30)
+    assert _render_browsers() == []
+
+
+def test_fallback_limits_concurrent_renders(hostile_source: str) -> None:
+    active = 0
+    peak = 0
+    lock = Lock()
+    render_page = playwright_fetch._render_page
+
+    def counting_render(
+        *args: Any, **kwargs: Any
+    ) -> playwright_fetch.RenderedPage | None:
+        nonlocal active, peak
+        with lock:
+            active += 1
+            peak = max(peak, active)
+        try:
+            return render_page(*args, **kwargs)
+        finally:
+            with lock:
+                active -= 1
+
+    with (
+        patch.object(playwright_fetch, "_fallback_slots", BoundedSemaphore(2)),
+        patch.object(playwright_fetch, "_render_page", side_effect=counting_render),
+    ):
+        workers = [
+            Thread(target=fetch_rendered_html, args=(f"{hostile_source}/slow",))
+            for _ in range(5)
+        ]
+        for worker in workers:
+            worker.start()
+        for worker in workers:
+            worker.join(60)
+    assert peak == 2

@@ -1208,6 +1208,17 @@ WEB_CONNECTOR_OAUTH_TOKEN_URL = os.environ.get("WEB_CONNECTOR_OAUTH_TOKEN_URL")
 OPEN_URL_PLAYWRIGHT_FALLBACK_ENABLED = (
     os.environ.get("OPEN_URL_PLAYWRIGHT_FALLBACK_ENABLED", "true").lower() == "true"
 )
+# The fallback browser runs inside the calling process. When a render passes the
+# time or memory limit, Onyx kills its browser. 0 turns off the memory limit.
+OPEN_URL_PLAYWRIGHT_TIMEOUT_SECONDS = max(
+    1, _non_negative_int_env("OPEN_URL_PLAYWRIGHT_TIMEOUT_SECONDS", 60)
+)
+OPEN_URL_PLAYWRIGHT_MAX_MEMORY_MB = _non_negative_int_env(
+    "OPEN_URL_PLAYWRIGHT_MAX_MEMORY_MB", 2048
+)
+OPEN_URL_PLAYWRIGHT_MAX_CONCURRENCY = max(
+    1, _non_negative_int_env("OPEN_URL_PLAYWRIGHT_MAX_CONCURRENCY", 3)
+)
 
 # Limits for the built-in open_url crawler. The body read stops at the larger
 # of the HTML and PDF caps (decoded bytes); each type is then checked on its own.
