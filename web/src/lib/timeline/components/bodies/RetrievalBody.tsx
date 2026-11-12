@@ -6,6 +6,7 @@ import { Section } from "@opal/layouts";
 import { SvgSearch } from "@opal/icons";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { ValidSources } from "@/lib/connectors/types/source";
+import { openExternalLink } from "@/lib/search/utils";
 import {
   SearchChipList,
   type SourceInfo,
@@ -28,8 +29,11 @@ export function queryToSourceInfo(query: string, index: number): SourceInfo {
 interface RetrievalBodyProps {
   /** What the step searched for, shown as query chips. */
   queries: string[];
-  /** What the step read, shown as source chips under "Reading". */
-  results: SourceInfo[];
+  /**
+   * What the step read, shown as source chips under "Reading". `null` for a
+   * step that only searches; another step reads its results.
+   */
+  results: SourceInfo[] | null;
   /** A finished step with no results says so; a running one shows a cursor. */
   isComplete: boolean;
   /** Show only the results, without queries or the "Reading" label. */
@@ -63,36 +67,35 @@ export function RetrievalBody({
         />
       )}
 
-      {(results.length > 0 || queries.length > 0) && (
-        <>
-          {!compact && (
-            <Text as="p" font="main-ui-muted" color="text-04">
-              {t("internalSearch.reading.status")}
-            </Text>
-          )}
-          <SearchChipList
-            items={results}
-            initialCount={INITIAL_RESULTS_TO_SHOW}
-            expansionCount={RESULTS_PER_EXPANSION}
-            getKey={(source) => source.id}
-            toSourceInfo={(source) => source}
-            onClick={(source) => {
-              if (source.sourceUrl) {
-                window.open(source.sourceUrl, "_blank", "noopener,noreferrer");
+      {results !== null &&
+        (compact || results.length > 0 || queries.length > 0) && (
+          <>
+            {!compact && (
+              <Text as="p" font="main-ui-muted" color="text-04">
+                {t("internalSearch.reading.status")}
+              </Text>
+            )}
+            <SearchChipList
+              items={results}
+              initialCount={INITIAL_RESULTS_TO_SHOW}
+              expansionCount={RESULTS_PER_EXPANSION}
+              getKey={(source) => source.id}
+              toSourceInfo={(source) => source}
+              onClick={(source) => {
+                if (source.sourceUrl) openExternalLink(source.sourceUrl);
+              }}
+              emptyState={
+                !isComplete ? (
+                  <BlinkingBar />
+                ) : (
+                  <Text as="p" font="main-ui-muted" color="text-03">
+                    {t("internalSearch.noResults.text")}
+                  </Text>
+                )
               }
-            }}
-            emptyState={
-              !isComplete ? (
-                <BlinkingBar />
-              ) : (
-                <Text as="p" font="main-ui-muted" color="text-03">
-                  {t("internalSearch.noResults.text")}
-                </Text>
-              )
-            }
-          />
-        </>
-      )}
+            />
+          </>
+        )}
     </Section>
   );
 }
