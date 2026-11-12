@@ -201,3 +201,33 @@ def test_shortcut_connector_poll_source() -> None:
     assert len(polled_docs) == 2
     assert polled_docs[0].id == "shortcut_epic_10"
     assert polled_docs[1].id == "shortcut_story_201"
+
+
+def test_shortcut_connector_poll_source_includes_epic_without_timestamp() -> None:
+    connector = ShortcutConnector(batch_size=10)
+    connector.load_credentials({"shortcut_api_token": "valid_token"})
+
+    # Epic with no created_at or updated_at should be included as fallback
+    mock_epics = [ShortcutEpic(id=50, name="Undated Epic")]
+    mock_stories = []
+
+    assert connector.client is not None
+    connector.client.get_epics = MagicMock(return_value=mock_epics)  # type: ignore
+    connector.client.paginate_stories = MagicMock(return_value=iter(mock_stories))  # type: ignore
+
+    batches = list(connector.poll_source(start=1000, end=2000))
+    polled_docs = [doc for batch in batches for doc in batch]
+
+    assert len(polled_docs) == 1
+    assert polled_docs[0].id == "shortcut_epic_50"
+
+
+def test_shortcut_connector_poll_source_propagates_epic_error() -> None:
+    connector = ShortcutConnector(batch_size=10)
+    connector.load_credentials({"shortcut_api_token": "valid_token"})
+
+    assert connector.client is not None
+    connector.client.get_epics = MagicMock(side_effect=RuntimeError("Shortcut API down"))  # type: ignore
+
+    with pytest.raises(RuntimeError, match="Shortcut API down"):
+        list(connector.poll_source(start=1000, end=2000))

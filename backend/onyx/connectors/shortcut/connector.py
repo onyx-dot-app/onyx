@@ -208,31 +208,30 @@ class ShortcutConnector(LoadConnector, PollConnector, CredentialsConnector):
         batch: list[Document] = []
 
         # 1. Epics
-        try:
-            epics = client.get_epics()
-            for epic in epics:
-                if self.epic_ids and epic.id not in self.epic_ids:
-                    continue
-                ts = None
-                if epic.updated_at:
-                    try:
-                        ts = time_str_to_utc(epic.updated_at).timestamp()
-                    except Exception:
-                        pass
-                elif epic.created_at:
-                    try:
-                        ts = time_str_to_utc(epic.created_at).timestamp()
-                    except Exception:
-                        pass
+        epics = client.get_epics()
+        for epic in epics:
+            if self.epic_ids and epic.id not in self.epic_ids:
+                continue
+            ts = None
+            if epic.updated_at:
+                try:
+                    ts = time_str_to_utc(epic.updated_at).timestamp()
+                except Exception:
+                    pass
+            elif epic.created_at:
+                try:
+                    ts = time_str_to_utc(epic.created_at).timestamp()
+                except Exception:
+                    pass
 
-                if ts is not None and start <= ts <= end:
-                    doc = _epic_to_document(epic)
-                    batch.append(doc)
-                    if len(batch) >= self.batch_size:
-                        yield batch
-                        batch = []
-        except Exception as e:
-            logger.warning("Error polling Shortcut epics: %s", e)
+            if ts is not None and not (start <= ts <= end):
+                continue
+
+            doc = _epic_to_document(epic)
+            batch.append(doc)
+            if len(batch) >= self.batch_size:
+                yield batch
+                batch = []
 
         # 2. Stories
         for story in client.paginate_stories(
