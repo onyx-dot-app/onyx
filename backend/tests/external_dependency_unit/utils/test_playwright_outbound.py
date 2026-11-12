@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 
 import psutil
 import pytest
+from playwright.sync_api import Error as PlaywrightError
 
 from onyx.connectors.web.connector import ScrapeSessionContext, WebConnector
 from onyx.server.security.models import SSRFProtectionLevel
@@ -403,3 +404,21 @@ def test_fallback_limits_concurrent_renders(hostile_source: str) -> None:
             worker.join(60)
     assert not any(worker.is_alive() for worker in workers)
     assert peak == 2
+
+
+def _playwright_drivers() -> set[int]:
+    drivers = set()
+    for proc in psutil.Process().children(recursive=True):
+        try:
+            if "run-driver" in proc.cmdline():
+                drivers.add(proc.pid)
+        except psutil.Error:
+            continue
+    return drivers
+
+
+def test_start_playwright_stops_driver_when_launch_fails() -> None:
+    before = _playwright_drivers()
+    with pytest.raises(PlaywrightError):
+        playwright_fetch.start_playwright(launch_timeout_ms=1)
+    assert _playwright_drivers() - before == set()

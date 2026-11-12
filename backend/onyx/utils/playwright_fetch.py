@@ -104,7 +104,20 @@ def start_playwright(
     `context.close()` + `playwright.stop()` when done.
     """
     playwright = sync_playwright().start()
+    try:
+        context = _launch_context(playwright, extra_browser_args, launch_timeout_ms)
+    except BaseException:
+        # The caller never receives `playwright`, so stop its driver here.
+        playwright.stop()
+        raise
+    return playwright, context
 
+
+def _launch_context(
+    playwright: Playwright,
+    extra_browser_args: Sequence[str],
+    launch_timeout_ms: float | None,
+) -> BrowserContext:
     browser = playwright.chromium.launch(
         headless=True,
         args=[
@@ -156,7 +169,7 @@ def start_playwright(
         });
     """)
 
-    return playwright, context
+    return context
 
 
 def get_connector_oauth_header() -> str | None:
@@ -302,6 +315,8 @@ def _ssrf_allows_within(
     try:
         return future.result(timeout=seconds)
     except FutureTimeoutError:
+        # Drop the lookup if it is still queued behind stalled ones.
+        future.cancel()
         return False
 
 
