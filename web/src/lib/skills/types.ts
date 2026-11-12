@@ -62,6 +62,7 @@ export interface Skill {
   /** Newest plugin version of a custom skill. Edits send it back as
    * `base_version_id`, so a save over a newer version gets a 409. */
   current_version_id: string | null;
+  current_version_number: number | null;
 }
 
 export type BuiltinSkill = Skill & {
@@ -89,6 +90,34 @@ export interface SkillPreview {
 }
 
 export type SkillEditableDetail = CustomSkill & {
+  instructions_markdown: string;
+  files: SkillBundleFile[];
+};
+
+export type SkillVersionReviewStatus =
+  | "draft"
+  | "pending"
+  | "published"
+  | "denied"
+  | "superseded";
+
+export interface SkillVersion {
+  id: string;
+  version_number: number;
+  created_at: string;
+  created_by_user_id: string | null;
+  created_by_email: string | null;
+  file_count: number | null;
+  unpacked_size_bytes: number | null;
+  /** False when retention removed the files; the version cannot be restored. */
+  bundle_kept: boolean;
+  is_current: boolean;
+  review_status: SkillVersionReviewStatus;
+}
+
+export type SkillVersionPreview = SkillVersion & {
+  name: string;
+  description: string;
   instructions_markdown: string;
   files: SkillBundleFile[];
 };

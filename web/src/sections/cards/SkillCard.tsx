@@ -175,6 +175,7 @@ export default function SkillCard({
   return (
     <Tooltip tooltip={tooltip} side="top">
       <Card
+        data-testid="SkillCard"
         onClick={handleClick}
         className="group/SkillCard cursor-pointer"
         disabled={
@@ -364,6 +365,16 @@ export default function SkillCard({
             ) : dependency ? (
               <Badge title={t("skill.tags.appSkill.label")} color="info" />
             ) : null}
+            {canEdit && item.skill.current_version_number !== null && (
+              <Badge
+                title={t("skill.tags.version.label", {
+                  number: item.skill.current_version_number,
+                })}
+                tooltip={t("skill.tags.version.tooltip", {
+                  number: item.skill.current_version_number,
+                })}
+              />
+            )}
             {item.source === "custom" && (
               <Badge
                 title={t(

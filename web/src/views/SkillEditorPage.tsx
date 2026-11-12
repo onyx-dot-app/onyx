@@ -355,6 +355,11 @@ export default function SkillEditorPage({
     await refreshSkillList();
   }
 
+  function handleVersionRestored(restored: SkillEditableDetail) {
+    void refreshSkill(restored, { revalidate: false });
+    syncEditableFields(restored);
+  }
+
   async function applyFilesUpload(upload: PreparedSkillFilesUpload) {
     if (isCreating) {
       if (!upload.containsSkillMd) {
@@ -886,6 +891,8 @@ export default function SkillEditorPage({
           open={shareOpen}
           onClose={() => setShareOpen(false)}
           onSaved={handleSharingSaved}
+          onVersionRestored={handleVersionRestored}
+          restoreBlocked={isDirty}
         />
       ) : null}
 

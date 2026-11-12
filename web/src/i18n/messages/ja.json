@@ -12143,6 +12143,10 @@
         },
         "organization": {
           "label": "組織"
+        },
+        "version": {
+          "label": "v{number}",
+          "tooltip": "現在のバージョン: {number}"
         }
       },
       "toggle": {
@@ -17392,7 +17396,47 @@
       },
       "tabs": {
         "details": "詳細",
-        "sharing": "共有"
+        "sharing": "共有",
+        "versions": "バージョン"
+      },
+      "versions": {
+        "tableLabel": "スキルのバージョン",
+        "columns": {
+          "version": "バージョン",
+          "madeBy": "作成者",
+          "date": "日付"
+        },
+        "versionLabel": "バージョン {number}",
+        "currentBadge": "現在",
+        "unknownAuthor": "不明",
+        "previewRow": {
+          "ariaLabel": "バージョン {number} をプレビュー"
+        },
+        "showOlder": {
+          "label": "以前のバージョンを表示"
+        },
+        "restore": {
+          "label": "復元",
+          "ariaLabel": "バージョン {number} を復元",
+          "successToast": "バージョン {number} をバージョン {newNumber} として復元しました。",
+          "unchangedToast": "バージョン {number} のファイルは現在のバージョンと同じです。",
+          "failedToast": "このバージョンを復元できませんでした。",
+          "unsavedChanges": {
+            "title": "先に変更を保存してください",
+            "description": "バージョンを復元する前に、エディターの変更を保存するか破棄してください。"
+          }
+        },
+        "loadError": {
+          "title": "バージョンを読み込めませんでした",
+          "description": "後でもう一度お試しください。"
+        },
+        "preview": {
+          "back": "すべてのバージョン",
+          "loadError": {
+            "title": "このバージョンを読み込めませんでした",
+            "description": "後でもう一度お試しください。"
+          }
+        }
       }
     },
     "page": {

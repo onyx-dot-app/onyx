@@ -285,6 +285,61 @@ describe("ShareSkillModal", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("shows the version history to an owner in the Versions tab", async () => {
+    mockLoadSkill.mockImplementation(async (url: string) =>
+      url.endsWith("/versions")
+        ? [
+            {
+              id: "version-2",
+              version_number: 2,
+              created_at: "2026-11-01T10:00:00Z",
+              created_by_user_id: null,
+              created_by_email: "owner@example.com",
+              file_count: 1,
+              unpacked_size_bytes: 10,
+              bundle_kept: true,
+              is_current: true,
+              review_status: "draft",
+            },
+          ]
+        : customFixture({ user_permission: "OWNER" })
+    );
+    const user = setupUser();
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        open
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+      />
+    );
+    await user.click(await screen.findByRole("tab", { name: "Versions" }));
+    expect(await screen.findByText("Version 2")).toBeVisible();
+    expect(mockLoadSkill).toHaveBeenCalledWith(
+      "/api/skills/custom/custom-1/versions"
+    );
+  });
+
+  it("hides the Versions tab from a viewer", async () => {
+    mockLoadSkill.mockResolvedValue(
+      customFixture({ user_permission: "VIEWER" })
+    );
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        open
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+      />
+    );
+    expect(await screen.findByRole("tab", { name: "Sharing" })).toBeVisible();
+    expect(
+      screen.queryByRole("tab", { name: "Versions" })
+    ).not.toBeInTheDocument();
+  });
+
   it("warns that publishing cannot be undone before a private skill is published", async () => {
     mockLoadSkill.mockResolvedValue(
       customFixture({ user_permission: "OWNER", public_permission: null })

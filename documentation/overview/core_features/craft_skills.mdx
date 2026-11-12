@@ -179,6 +179,25 @@ If another person saves the Skill while you edit it, Onyx does not save your cha
 The editor shows **This skill changed since you opened it**. Select **Reload** to get the newest version,
 then make your change again. Reload discards your unsaved changes.
 
+### Version history
+
+Each save of a custom Skill makes a new version. The Skill card shows the current version number, for example **v4**.
+
+To see earlier versions, open the Skill and select the **Versions** tab. The author, editors,
+and admins with the organization-wide `manage:plugins` permission can see this tab. Each row shows the version number,
+who made it, and when. **Current** marks the version that is in use now.
+
+- Select a row to preview the description and instructions of that version.
+- Select **Restore** to copy that version into a new version. The old versions stay in the list.
+  If the restored files are the same as the current files, Onyx makes no new version.
+- If the Skill editor has unsaved changes, save or discard them before you restore a version.
+
+Onyx keeps the files of the current version and the nine newest older versions.
+The published version and a version that waits for review also keep their files,
+so more than ten versions can have files. A version without its files still shows in the list and in the preview,
+but it has no **Restore** button. If another person saves the Skill while you restore a version,
+Onyx shows **This skill changed since you opened it**. Select **Reload**, then try again.
+
 ### Share a Skill
 
 Custom Skill cards show **Personal**, **Shared**, or **Organization** access.

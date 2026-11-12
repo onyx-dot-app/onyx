@@ -12143,6 +12143,10 @@
         },
         "organization": {
           "label": "المؤسسة"
+        },
+        "version": {
+          "label": "v{number}",
+          "tooltip": "الإصدار الحالي: {number}"
         }
       },
       "toggle": {
@@ -17392,7 +17396,47 @@
       },
       "tabs": {
         "details": "التفاصيل",
-        "sharing": "المشاركة"
+        "sharing": "المشاركة",
+        "versions": "الإصدارات"
+      },
+      "versions": {
+        "tableLabel": "إصدارات المهارة",
+        "columns": {
+          "version": "الإصدار",
+          "madeBy": "أنشأها",
+          "date": "التاريخ"
+        },
+        "versionLabel": "الإصدار {number}",
+        "currentBadge": "الحالي",
+        "unknownAuthor": "غير معروف",
+        "previewRow": {
+          "ariaLabel": "معاينة الإصدار {number}"
+        },
+        "showOlder": {
+          "label": "عرض الإصدارات الأقدم"
+        },
+        "restore": {
+          "label": "استعادة",
+          "ariaLabel": "استعادة الإصدار {number}",
+          "successToast": "تمت استعادة الإصدار {number} بصفته الإصدار {newNumber}.",
+          "unchangedToast": "الإصدار {number} له نفس ملفات الإصدار الحالي.",
+          "failedToast": "تعذّرت استعادة هذا الإصدار.",
+          "unsavedChanges": {
+            "title": "احفظ تغييراتك أولاً",
+            "description": "احفظ التغييرات في المحرر أو تجاهلها قبل استعادة إصدار."
+          }
+        },
+        "loadError": {
+          "title": "تعذّر تحميل الإصدارات",
+          "description": "حاول مرة أخرى لاحقًا."
+        },
+        "preview": {
+          "back": "كل الإصدارات",
+          "loadError": {
+            "title": "تعذّر تحميل هذا الإصدار",
+            "description": "حاول مرة أخرى لاحقًا."
+          }
+        }
       }
     },
     "page": {

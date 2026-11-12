@@ -63,6 +63,7 @@ function custom(overrides: Partial<CustomSkill> = {}): CustomSkillCardItem {
     user_permission: "OWNER",
     external_app: null,
     current_version_id: null,
+    current_version_number: null,
     ...overrides,
   };
   return {
@@ -228,6 +229,28 @@ describe("SkillCard", () => {
     await user.click(screen.getByRole("button", { name: "Edit sharing" }));
     expect(onShare).toHaveBeenCalledWith(item);
     expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it("shows the current version number of a custom skill", () => {
+    const { rerender } = render(
+      <SkillCard item={custom({ current_version_number: 7 })} />
+    );
+    expect(screen.getByText("v7")).toBeInTheDocument();
+    rerender(<SkillCard item={custom({ current_version_number: null })} />);
+    expect(screen.queryByText(/^v\d+$/)).not.toBeInTheDocument();
+  });
+
+  it("hides the version number from viewers, who may run the published version", () => {
+    render(
+      <SkillCard
+        item={custom({
+          public_permission: "VIEWER",
+          user_permission: "VIEWER",
+          current_version_number: 3,
+        })}
+      />
+    );
+    expect(screen.queryByText(/^v\d+$/)).not.toBeInTheDocument();
   });
 
   it("hides sharing controls from viewers", () => {

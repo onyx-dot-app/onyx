@@ -471,7 +471,12 @@ The library preview of an external-app skill calls the same renderer
     version when the files equal the current files, and the new version
     prunes like any save ([[#bundle-retention]]). A version with no bundle
     gets 404 `skills/content.py:VERSION_FILES_NOT_KEPT`. Skill responses carry
-    `current_version_number`.
+    `current_version_number`. The UI is the **Versions** tab of the skill
+    dialog (`web/src/sections/modals/skills/SkillVersionsTab.tsx`, inside
+    `ShareSkillModal` for OWNER or EDITOR). Restore sends the listed current
+    version as `base_version_id` and shows the editor's stale message on 409;
+    it is hidden for the current version and a version with no bundle.
+    `SkillCard` shows `v{current_version_number}`.
 23. `publishing-review` **The Publishing setting governs every publish by
     authors.** Only the author or a user with global `MANAGE_PLUGINS`
     publishes or publishes an update (`ensure_can_edit_org_visibility`); an

@@ -12143,6 +12143,10 @@
         },
         "organization": {
           "label": "Organisation"
+        },
+        "version": {
+          "label": "v{number}",
+          "tooltip": "Aktuelle Version: {number}"
         }
       },
       "toggle": {
@@ -17392,7 +17396,47 @@
       },
       "tabs": {
         "details": "Details",
-        "sharing": "Freigabe"
+        "sharing": "Freigabe",
+        "versions": "Versionen"
+      },
+      "versions": {
+        "tableLabel": "Skill-Versionen",
+        "columns": {
+          "version": "Version",
+          "madeBy": "Erstellt von",
+          "date": "Datum"
+        },
+        "versionLabel": "Version {number}",
+        "currentBadge": "Aktuell",
+        "unknownAuthor": "Unbekannt",
+        "previewRow": {
+          "ariaLabel": "Vorschau von Version {number}"
+        },
+        "showOlder": {
+          "label": "Ältere Versionen anzeigen"
+        },
+        "restore": {
+          "label": "Wiederherstellen",
+          "ariaLabel": "Version {number} wiederherstellen",
+          "successToast": "Version {number} als Version {newNumber} wiederhergestellt.",
+          "unchangedToast": "Version {number} hat dieselben Dateien wie die aktuelle Version.",
+          "failedToast": "Diese Version konnte nicht wiederhergestellt werden.",
+          "unsavedChanges": {
+            "title": "Speichern Sie zuerst Ihre Änderungen",
+            "description": "Speichern oder verwerfen Sie die Änderungen im Editor, bevor Sie eine Version wiederherstellen."
+          }
+        },
+        "loadError": {
+          "title": "Versionen konnten nicht geladen werden",
+          "description": "Versuchen Sie es später erneut."
+        },
+        "preview": {
+          "back": "Alle Versionen",
+          "loadError": {
+            "title": "Diese Version konnte nicht geladen werden",
+            "description": "Versuchen Sie es später erneut."
+          }
+        }
       }
     },
     "page": {

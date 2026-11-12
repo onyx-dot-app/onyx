@@ -286,6 +286,22 @@ export async function transferSkillOwnership(
   return handle<CustomSkill>(res);
 }
 
+export async function restoreSkillVersion(
+  skillId: string,
+  versionId: string,
+  baseVersionId: string
+): Promise<SkillEditableDetail> {
+  const res = await fetch(
+    `/api/skills/custom/${skillId}/versions/${versionId}/restore`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ base_version_id: baseVersionId }),
+    }
+  );
+  return handle<SkillEditableDetail>(res);
+}
+
 export async function deleteUserSkill(skillId: string): Promise<void> {
   const res = await fetch(`/api/skills/custom/${skillId}`, {
     method: "DELETE",
