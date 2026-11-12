@@ -191,7 +191,7 @@ test("Stop subagents ends background work @code-mode", async ({
     const stopped = page.waitForResponse((response) =>
       response.url().endsWith(`/chat-session/${sessionId}/stop-subagents`)
     );
-    await chatPage.inputBar.stopSubagentsButton.click();
+    await chatPage.inputBar.stopSubagents();
     expect((await stopped).ok()).toBe(true);
     // The released child can finish its reply; Stop must still drop its result.
     await releaseMockLlmGate(gateId);

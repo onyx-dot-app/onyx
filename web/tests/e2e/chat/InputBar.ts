@@ -182,6 +182,10 @@ export class InputBar {
   // Submission
   // ---------------------------------------------------------------------------
 
+  async stopSubagents(): Promise<void> {
+    await this.stopSubagentsButton.click();
+  }
+
   async send(): Promise<void> {
     await this.page.keyboard.press("Enter");
   }
