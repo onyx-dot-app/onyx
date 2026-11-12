@@ -62,32 +62,13 @@ class SkillManager:
     def list_versions(
         skill_id: UUID,
         user_performing_action: DATestUser,
-        before_version: int | None = None,
     ) -> list[SkillVersionResponse]:
         response = client.get(
             f"{API_SERVER_URL}/skills/custom/{skill_id}/versions",
             headers=user_performing_action.headers,
-            params=(
-                {"before_version": before_version}
-                if before_version is not None
-                else None
-            ),
         )
         response.raise_for_status()
         return [SkillVersionResponse.model_validate(item) for item in response.json()]
-
-    @staticmethod
-    def list_all_versions(
-        skill_id: UUID, user_performing_action: DATestUser
-    ) -> list[SkillVersionResponse]:
-        versions: list[SkillVersionResponse] = []
-        before_version: int | None = None
-        while page := SkillManager.list_versions(
-            skill_id, user_performing_action, before_version
-        ):
-            versions.extend(page)
-            before_version = page[-1].version_number
-        return versions
 
     @staticmethod
     def preview_version(

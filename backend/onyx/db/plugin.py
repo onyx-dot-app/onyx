@@ -23,7 +23,6 @@ Functions here flush and never commit.
 import hashlib
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
-from datetime import datetime
 from enum import Enum
 from typing import Literal
 from uuid import UUID, uuid4
@@ -450,86 +449,34 @@ def add_plugin_version__no_commit(
     )
 
 
-@dataclass(frozen=True)
-class PluginVersionSummary:
-    id: UUID
-    version_number: int
-    created_at: datetime
-    created_by_user_id: UUID | None
-    created_by_email: str | None
-    # None for a version copied from a legacy skill row.
-    file_count: int | None
-    unpacked_size_bytes: int | None
-    # False after retention pruned the bundle.
-    bundle_kept: bool
-    is_current: bool
-
-
-PLUGIN_VERSION_PAGE_SIZE = 50
-
-
-def _plugin_version_summaries(
-    plugin_id: UUID,
-    db_session: Session,
-    *,
-    version_id: UUID | None = None,
-    before_version: int | None = None,
-) -> list[PluginVersionSummary]:
-    stmt = (
-        select(
-            PluginVersion.id,
-            PluginVersion.version_number,
-            PluginVersion.created_at,
-            PluginVersion.created_by_user_id,
-            PluginVersion.created_by_email,
-            PluginVersion.file_count,
-            PluginVersion.unpacked_size_bytes,
-            PluginVersion.bundle_file_id.is_not(None),
-            PluginVersion.id == Plugin.current_version_id,
-        )
-        .join(Plugin, Plugin.id == PluginVersion.plugin_id)
-        .where(PluginVersion.plugin_id == plugin_id)
-        .order_by(PluginVersion.version_number.desc())
-        .limit(PLUGIN_VERSION_PAGE_SIZE)
-    )
-    if version_id is not None:
-        stmt = stmt.where(PluginVersion.id == version_id)
-    if before_version is not None:
-        stmt = stmt.where(PluginVersion.version_number < before_version)
+def list_plugin_versions(
+    plugin_id: UUID, db_session: Session
+) -> list[tuple[PluginVersion, bool]]:
+    """Every version of a plugin, newest first, with whether it is the current
+    version."""
     return [
-        PluginVersionSummary(
-            id=row[0],
-            version_number=row[1],
-            created_at=row[2],
-            created_by_user_id=row[3],
-            created_by_email=row[4],
-            file_count=row[5],
-            unpacked_size_bytes=row[6],
-            bundle_kept=bool(row[7]),
-            is_current=bool(row[8]),
-        )
-        for row in db_session.execute(stmt)
+        (version, bool(is_current))
+        for version, is_current in db_session.execute(
+            select(PluginVersion, PluginVersion.id == Plugin.current_version_id)
+            .join(Plugin, Plugin.id == PluginVersion.plugin_id)
+            .where(PluginVersion.plugin_id == plugin_id)
+            .order_by(PluginVersion.version_number.desc())
+        ).tuples()
     ]
 
 
-def list_plugin_versions(
-    plugin_id: UUID, db_session: Session, *, before_version: int | None = None
-) -> list[PluginVersionSummary]:
-    """Up to ``PLUGIN_VERSION_PAGE_SIZE`` versions of a plugin, newest first.
-    Pass the last version number as ``before_version`` to read older ones."""
-    return _plugin_version_summaries(
-        plugin_id, db_session, before_version=before_version
-    )
-
-
-def get_plugin_version_summary(
+def get_plugin_version(
     plugin_id: UUID, version_id: UUID, db_session: Session
-) -> PluginVersionSummary:
+) -> PluginVersion:
     """One version of the plugin. A version of another plugin is not found."""
-    rows = _plugin_version_summaries(plugin_id, db_session, version_id=version_id)
-    if not rows:
+    version = db_session.scalar(
+        select(PluginVersion).where(
+            PluginVersion.id == version_id, PluginVersion.plugin_id == plugin_id
+        )
+    )
+    if version is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill version not found.")
-    return rows[0]
+    return version
 
 
 @dataclass(frozen=True)

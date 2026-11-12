@@ -23,9 +23,8 @@ from onyx.db.external_app import (
 from onyx.db.models import Skill, User
 from onyx.db.plugin import (
     AddedPluginVersion,
-    check_base_version,
     get_plugin_current_version_id,
-    get_plugin_version_summary,
+    get_plugin_version,
     list_plugin_versions,
     lock_skill_plugin__no_commit,
 )
@@ -722,12 +721,10 @@ def inspect_custom_skill_bundle_upload(
 @user_router.get("/custom/{skill_id}/versions")
 def list_custom_skill_versions(
     skill_id: UUID,
-    before_version: Annotated[int | None, Query(ge=1)] = None,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[SkillVersionResponse]:
-    """Up to 50 versions, newest first. Pass the last version number as
-    ``before_version`` to read older ones."""
+    """Every version, newest first."""
     skill = fetch_skill(
         skill_id,
         policy=SkillManagementPolicy.EDIT,
@@ -737,10 +734,15 @@ def list_custom_skill_versions(
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
     return [
-        SkillVersionResponse.from_summary(summary)
-        for summary in list_plugin_versions(
-            skill.id, db_session, before_version=before_version
+        SkillVersionResponse(
+            id=version.id,
+            version_number=version.version_number,
+            created_at=version.created_at,
+            created_by_email=version.created_by_email,
+            bundle_kept=version.bundle_file_id is not None,
+            is_current=is_current,
         )
+        for version, is_current in list_plugin_versions(skill.id, db_session)
     ]
 
 
@@ -759,14 +761,12 @@ def preview_custom_skill_version(
     )
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
-    summary = get_plugin_version_summary(skill.id, version_id, db_session)
+    version = get_plugin_version(skill.id, version_id, db_session)
     stored, contents = read_version_preview(version_id, db_session)
     return SkillVersionPreviewResponse(
-        **SkillVersionResponse.from_summary(summary).model_dump(),
-        name=stored.name or skill.name,
+        version_number=version.version_number,
         description=stored.description or "",
         instructions_markdown=contents.instructions_markdown,
-        files=contents.files,
     )
 
 
@@ -789,10 +789,7 @@ def restore_custom_skill_version(
     )
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
-    check_base_version(
-        lock_skill_plugin__no_commit(skill, db_session), request.base_version_id
-    )
-    get_plugin_version_summary(skill.id, version_id, db_session)
+    get_plugin_version(skill.id, version_id, db_session)
     return _replace_skill_bundle_from_editor(
         skill,
         read_version_bundle_bytes(version_id, db_session),
