@@ -140,13 +140,35 @@ def list_pages_for_site(
             )
         )
 
+    _warn_if_skipped(site, crawl)
+    return list(all_urls)
+
+
+def list_pages_for_sitemap(
+    sitemap_url: str,
+    allow_private_network: bool = False,
+    allow_loopback: bool = False,
+) -> list[str]:
+    """Get the list of pages a sitemap or sitemap index lists, following
+    nested sitemap indexes."""
+    crawl = _SitemapCrawl()
+    urls = _extract_urls_from_sitemap(
+        sitemap_url,
+        crawl,
+        allow_private_network,
+        allow_loopback=allow_loopback,
+    )
+    _warn_if_skipped(sitemap_url, crawl)
+    return list(urls)
+
+
+def _warn_if_skipped(source: str, crawl: _SitemapCrawl) -> None:
     if crawl.skipped:
         logger.warning(
             "Sitemap discovery for %s skipped %d sitemap(s) after reaching its "
             "limits (depth %d, %d fetched); some pages may not be indexed",
-            site,
+            source,
             crawl.skipped,
             MAX_SITEMAP_INDEX_DEPTH,
             MAX_SITEMAPS_FETCHED,
         )
-    return list(all_urls)
