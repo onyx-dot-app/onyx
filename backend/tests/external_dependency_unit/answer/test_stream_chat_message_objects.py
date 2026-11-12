@@ -1,3 +1,4 @@
+import json
 import uuid
 from unittest.mock import patch
 
@@ -21,8 +22,10 @@ def test_stream_chat_message_objects_without_web_search(
     full_deployment_setup: None,  # noqa: ARG001
     default_llm_provider: None,  # noqa: ARG001
     mock_external_deps: None,  # noqa: ARG001
+    code_mode: bool,
 ) -> None:
-    """An assistant without web search excludes it from model requests."""
+    """An assistant without web search excludes it from model requests, also from
+    the functions of `execute_code` programs."""
 
     test_user: User = create_test_user(db_session, email_prefix="test_web_search")
 
@@ -59,8 +62,9 @@ def test_stream_chat_message_objects_without_web_search(
     llm = ScriptedLLM([Delta(content="Web search is unavailable for this assistant.")])
     with patch("onyx.chat.process_message.get_llm_for_persona", return_value=llm):
         raw = list(response_generator)
-    assert "web_search" not in {
-        tool["function"]["name"] for tool in llm.requests[0]["tools"]
-    }
+    tools = llm.requests[0]["tools"]
+    # The user's memory tool keeps code mode in effect.
+    assert ("execute_code" in {tool["function"]["name"] for tool in tools}) == code_mode
+    assert "web_search" not in json.dumps(tools)
     assert final_answer(raw)
     assert any(isinstance(part, MessageResponseIDInfo) for part in raw)

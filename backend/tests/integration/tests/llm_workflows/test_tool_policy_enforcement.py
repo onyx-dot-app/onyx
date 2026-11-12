@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from onyx.configs import app_configs
@@ -6,7 +8,11 @@ from onyx.tools.constants import SEARCH_TOOL_ID
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
-from tests.integration.common_utils.managers.mock_llm import MockLLMScript
+from tests.integration.common_utils.managers.mock_llm import (
+    MockLLMScript,
+    requires_code_mode,
+    tool_call_reply,
+)
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.managers.project import ProjectManager
 from tests.integration.common_utils.managers.tool import ToolManager
@@ -55,18 +61,13 @@ def _script_preferred_search(mock_llm: MockLLMScript, query: str) -> None:
     """The preferred search remains optional while definitions stay stable."""
     mock_llm.conversation(
         "chat",
-        Reply(
-            tool_calls=[
-                ToolCall(
-                    id=_SEARCH_CALL_ID,
-                    name="internal_search",
-                    arguments={"queries": [query]},
-                )
-            ],
-            conditions=RequestConditions(
-                offers=["internal_search"],
-                tool_choice="auto",
+        tool_call_reply(
+            ToolCall(
+                id=_SEARCH_CALL_ID,
+                name="internal_search",
+                arguments={"queries": [query]},
             ),
+            tool_choice="auto",
         ),
         Reply(
             text=_ANSWER,
@@ -101,9 +102,13 @@ def test_preferred_tool_executes_when_available(
     assert any(
         tool.tool_name == ToolName.INTERNAL_SEARCH for tool in response.used_tools
     )
-    assert len(response.tool_call_debug) == 1
-    assert response.tool_call_debug[0].tool_name == "internal_search"
-    assert response.tool_call_debug[0].tool_args == {"queries": ["alpha"]}
+    # Code mode also reports the `execute_code` call that ran the search.
+    [search] = [
+        entry
+        for entry in response.tool_call_debug
+        if entry.tool_name == "internal_search"
+    ]
+    assert search.tool_args == {"queries": ["alpha"]}
 
 
 @pytest.mark.parametrize("allow_search", [True, False])
@@ -158,9 +163,11 @@ def test_search_preference_uses_inline_project_files(
     assert response.error is None, f"Unexpected stream error: {response.error}"
     assert response.full_message == "The code is HARBOR-5729."
     assert not response.used_tools
-    requests = mock_llm.requests_in("inline-project")
-    assert len(requests) == 1
-    assert "The user selected these operations" not in requests[0].prompt_text
+    [request] = mock_llm.requests_in("inline-project")
+    # In code mode, an offered search is a function in the execute_code
+    # description rather than a tool of its own.
+    assert "internal_search" not in json.dumps(request.body.get("tools", []))
+    assert "The user selected these operations" not in request.prompt_text
 
 
 def test_preferred_tool_rejected_when_not_in_persona_tools(
@@ -220,6 +227,8 @@ def test_allowed_tool_ids_excludes_tools_outside_allowlist(
     assert response.error is None, f"Unexpected stream error: {response.error}"
     assert response.used_tools == []
     assert response.tool_call_debug == []
+    [request] = mock_llm.requests_in("chat")
+    assert "internal_search" not in json.dumps(request.body.get("tools", []))
 
 
 def test_preferred_and_allowlist_conflict_returns_validation_error(
@@ -285,8 +294,9 @@ def test_preference_is_optional_and_does_not_leak_into_followup(
     assert first.error is second.error is None
     assert first.used_tools == second.used_tools == []
     first_request, second_request = mock_llm.requests_in("chat")
+    # Code mode names the search as a function of execute_code programs.
     assert (
-        "The user selected these operations for this request: internal_search."
+        "The user selected these operations for this request: internal_search"
         in str(first_request.body["messages"])
     )
     assert "The user selected these operations" not in str(
@@ -296,6 +306,7 @@ def test_preference_is_optional_and_does_not_leak_into_followup(
     mock_llm.verify()
 
 
+@requires_code_mode(False)
 def test_parallel_tool_calls_each_get_a_debug_entry(
     admin_user: DATestUser, mock_llm: MockLLMScript
 ) -> None:
@@ -349,6 +360,7 @@ def test_parallel_tool_calls_each_get_a_debug_entry(
     assert [entry.tool_call_id for entry in response.tool_call_debug] == call_ids
 
 
+@requires_code_mode(False)
 def test_preferred_tool_call_written_as_xml_executes(
     admin_user: DATestUser, mock_llm: MockLLMScript
 ) -> None:

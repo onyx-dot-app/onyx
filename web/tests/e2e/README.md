@@ -130,3 +130,10 @@ default mode captures images without checking them.
 Incognito currently ends its ephemeral context on `pagehide`, including reloads,
 and its history endpoint reads redacted database rows;
 live reload recovery is not a supported contract for usage-only incognito chats.
+
+## 4. Code mode
+
+CI runs the specs tagged `@code-mode` a second time, in the `code-mode` project, against a backend with
+`CODE_MODE_ENABLED=true`. The model then calls most tools from `execute_code` programs, so a scripted native tool call
+does not match. Tag a spec when its backend flow or rendering differs in code mode. Branch on `CODE_MODE_ENABLED` from
+`tests/e2e/utils/mockLlm.ts`, which reads the variable that CI also sets for the runner. Set it the same way locally.

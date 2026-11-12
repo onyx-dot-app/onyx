@@ -1,7 +1,9 @@
 from uuid import uuid4
 
 import httpx
+import pytest
 
+from onyx.configs.chat_configs import CODE_MODE_ENABLED
 from onyx.llm.constants import LlmProviderNames
 from onyx.server.manage.llm.models import (
     DefaultModel,
@@ -19,12 +21,52 @@ from tests.integration.mock_services.mock_llm_server.models import (
     RequestConditions,
     Script,
     ScriptState,
+    ToolCall,
 )
 
 # Onyx special-cases some model names (claude, qwen, gpt-6-sol.x, catalog models).
 MOCK_LLM_MODEL_NAME = "mock-model"
 # Deep Research needs at least 50000.
 MOCK_LLM_MAX_INPUT_TOKENS = 200000
+
+
+def requires_code_mode(enabled: bool) -> pytest.MarkDecorator:
+    """Run the test only when the server's code mode (CODE_MODE_ENABLED) is
+    `enabled`. CI runs the chat suites once in each mode."""
+    return pytest.mark.skipif(
+        CODE_MODE_ENABLED != enabled,
+        reason=f"needs CODE_MODE_ENABLED={str(enabled).lower()}",
+    )
+
+
+def tool_call_reply(
+    *calls: ToolCall, tool_choice: str | None = None, required: bool = True
+) -> Reply:
+    """A reply that calls built-in tools the way the server offers them: native
+    tool calls, or with code mode on, one `execute_code` program that awaits
+    each call in order. The program call takes the first call's id, so a later
+    reply can wait for `has_results_for=[calls[0].id]` in both modes."""
+    if not CODE_MODE_ENABLED:
+        return Reply(
+            tool_calls=list(calls),
+            conditions=RequestConditions(
+                offers=[call.name for call in calls], tool_choice=tool_choice
+            ),
+            required=required,
+        )
+    program = "\n".join(
+        f"await {call.name}("
+        + ", ".join(f"{name}={value!r}" for name, value in call.arguments.items())
+        + ")"
+        for call in calls
+    )
+    return Reply(
+        tool_calls=[
+            ToolCall(id=calls[0].id, name="execute_code", arguments={"code": program})
+        ],
+        conditions=RequestConditions(offers=["execute_code"], tool_choice=tool_choice),
+        required=required,
+    )
 
 
 class MockLLMScript:

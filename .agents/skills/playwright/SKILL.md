@@ -65,6 +65,7 @@ bunx playwright test tests/e2e/chat/welcome_page.spec.ts \
 |---------|-------------|-------------|
 | `admin` | Standard tests (excludes `@exclusive`) | Parallel |
 | `exclusive` | Serial, slower tests (tagged `@exclusive`) | 1 worker |
+| `code-mode` | Tests tagged `@code-mode`, against a backend with `CODE_MODE_ENABLED=true` | Parallel |
 
 All tests use `admin_auth.json` storage state by default (pre-authenticated admin session).
 
