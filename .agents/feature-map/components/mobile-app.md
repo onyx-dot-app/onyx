@@ -174,10 +174,11 @@ the sources.
    apart from web. [[streaming-protocol]] owns the list of mirrors that a new
    packet type must update.
 10. `stream-end-is-not-idle` **The end of a stream does not enable Send.**
-    `chat/execution.py` releases the session admission lease only after
-    delivery finishes and child-run work drains. A send before the release
-    fails with a `CONFLICT` `StreamingError`, so only the status poll in `chat/sessionReadiness.ts:waitForSessionIdle` returns the session
-    to `input`. A transient failure keeps polling. An auth error or a 404
+    `chat/execution.py` releases the session admission lease after the
+    turn's saves drain, before the stream ends. The app still returns the
+    session to `input` only through the status poll in
+    `chat/sessionReadiness.ts:waitForSessionIdle`, which also covers a send
+    that another client started. A transient failure keeps polling. An auth error or a 404
     stops the poll and leaves the state `unconfirmed`. A server without the
     status route answers 404, so a new app on an older server cannot send a
     second message in a session. Keep each `stillOurs` guard in

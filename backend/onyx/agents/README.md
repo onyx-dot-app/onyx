@@ -654,7 +654,7 @@ Stream-status refresh failures log and retry. Active session admission expires a
 Preparation renews its 120-second lease between stages. If one stage exceeds the lease, preparation fails at its next ownership check.
 Ownership is checked before accepting the user message, reserving responses, and publishing the stream.
 A process crash can block a new send until the last lease expires.
-Chat releases session admission after workers, saves, and delivery finish. Save-timeout warnings do not release admission.
+Chat releases session admission after workers and saves finish, before delivery finishes, so a client that sees the stream end can send at once. Save-timeout warnings do not release admission.
 Admission is claimed before loading history. Another tab or pod cannot start a turn while that claim remains active.
 The browser checks session readiness after stream errors and reloads; stream closure alone does not confirm completion.
 Execution leases remain separate and retain ownership until work drains or is explicitly transferred.
