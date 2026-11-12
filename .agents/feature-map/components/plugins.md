@@ -96,11 +96,16 @@ Default Chat when the user's preference turns it off.
 **Tool selection of an existing chat.** The server owns it.
 `lib/tools/hooks.ts:useToolConfiguration` reads it from the chat-session detail
 (`tool_selection`, held in the chat session store). When a signed-in user
-changes tools or filters in an existing chat, it PATCHes
-`/api/chat/chat-session/{id}/tool-selection` with the full selection a send
-would carry, debounced by 300 ms and ordered per chat. The response is the
-stored selection, or null for a chat that stores no content, whose only copy
-stays in the tab. A send that creates a chat hands its selection to that chat's
+changes tools or filters in an existing chat, the store keeps the change as
+an unconfirmed edit, and the chat's save loop PATCHes
+`/api/chat/chat-session/{id}/tool-selection` at once with only the changed
+part: the tool fields or `internal_search_filters`. One request runs at a time
+per chat; later edits go out together in the next one. The server merges the
+fields that the body sets. The response is the stored selection, or null for a
+chat that stores no content, whose only copy stays in the tab. A chat load that
+started before a save was confirmed does not replace the saved copy.
+`flushToolSelection` resolves when the chat's save loop ends, so a caller can
+wait for the saved choice. A send that creates a chat hands its selection to that chat's
 composer, which saves it. Session storage keeps only the selection of a chat
 that does not exist yet.
 

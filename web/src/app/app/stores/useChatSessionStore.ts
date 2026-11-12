@@ -56,6 +56,9 @@ interface ChatSessionData {
   // The user's changes to that selection that the server has not confirmed;
   // the composer shows them over the server's copy.
   toolSelectionEdits?: Partial<ChatToolSelection>;
+  // Counts the server's confirmations of that selection; a chat load that
+  // started before the latest one carries an older copy.
+  toolSelectionVersion?: number;
 
   // Streaming duration tracking
   streamingStartTime?: number;
@@ -186,7 +189,8 @@ interface ChatSessionStore {
   // Utilities
   initializeSession: (
     sessionId: string,
-    backendSession?: BackendChatSession
+    backendSession?: BackendChatSession,
+    toolSelectionVersion?: number
   ) => void;
   cleanupOldSessions: (maxSessions?: number) => void;
 }
@@ -636,19 +640,24 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
   // Utilities
   initializeSession: (
     sessionId: string,
-    backendSession?: BackendChatSession
+    backendSession?: BackendChatSession,
+    toolSelectionVersion: number = 0
   ) => {
+    const existingSession = get().sessions.get(sessionId);
+    // A load that started before a save was confirmed holds a stale selection.
+    const selectionIsCurrent =
+      (existingSession?.toolSelectionVersion ?? 0) === toolSelectionVersion;
     const initialData: Partial<ChatSessionData> = {
       isLoaded: true,
       description: backendSession?.description,
       personaId: backendSession?.persona_id,
       incognito: backendSession?.incognito ?? false,
-      ...(backendSession && {
-        toolSelection: backendSession.tool_selection ?? null,
-      }),
+      ...(backendSession &&
+        selectionIsCurrent && {
+          toolSelection: backendSession.tool_selection ?? null,
+        }),
     };
 
-    const existingSession = get().sessions.get(sessionId);
     if (existingSession) {
       get().updateSessionData(sessionId, initialData);
     } else {

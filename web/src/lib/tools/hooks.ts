@@ -452,6 +452,7 @@ function settleToolSelectionSave(
         ...session?.toolSelection,
         ...sent,
       },
+      toolSelectionVersion: (session?.toolSelectionVersion ?? 0) + 1,
     }),
   });
 }

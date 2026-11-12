@@ -9,6 +9,10 @@ import type { MinimalAgent } from "@/lib/agents/types";
 import type { ChatToolSelection, ToolSnapshot } from "@/lib/tools/types";
 import type { User } from "@/lib/types";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
+import {
+  ChatSessionSharedStatus,
+  type BackendChatSession,
+} from "@/app/app/types";
 import { toast } from "@opal/layouts";
 import {
   selectedSourcesFrom,
@@ -129,6 +133,25 @@ function openSavedChats(
       .getState()
       .createSession(chatSessionId, { incognito, toolSelection });
   }
+}
+
+/** A chat detail as the server returns it, with no saved selection. */
+function staleChatDetail(chatSessionId: string): BackendChatSession {
+  return {
+    chat_session_id: chatSessionId,
+    description: "Chat",
+    persona_id: AGENT.id,
+    persona_name: AGENT.name,
+    messages: [],
+    time_created: "2026-01-01T00:00:00Z",
+    time_updated: "2026-01-01T00:00:00Z",
+    shared_status: ChatSessionSharedStatus.Private,
+    current_temperature_override: null,
+    current_reasoning_effort_override: null,
+    owner_name: null,
+    packets: [],
+    tool_selection: null,
+  };
 }
 
 /** Answers each PATCH with the selection it sent, as a chat that keeps content does. */
@@ -584,6 +607,27 @@ test("a choice whose save is running survives a chat switch and a later edit", a
     allowed_tool_ids: [1],
     preferred_tool_id: 1,
   });
+});
+
+test("a chat load that started before a save finished keeps the saved choice", async () => {
+  openSavedChats();
+  echoSaves();
+  const store = useChatSessionStore.getState();
+  // A chat load reads the selection before the save below is confirmed.
+  const loadStartedAt = store.sessions.get("abc")?.toolSelectionVersion ?? 0;
+  const { result } = renderHook(() => useToolConfiguration());
+  act(() => result.current.toggleToolState(2, "disabled"));
+  await act(async () => {
+    await Promise.resolve();
+  });
+  await act(() => flushToolSelection("abc"));
+
+  act(() =>
+    useChatSessionStore
+      .getState()
+      .initializeSession("abc", staleChatDetail("abc"), loadStartedAt)
+  );
+  expect(result.current.disabledToolIds).toEqual([2]);
 });
 
 test("a flush resolves once the chat's selection is saved", async () => {
