@@ -1,10 +1,13 @@
-import { renderHook, act } from "@testing-library/react";
+import { renderHook, act, waitFor } from "@testing-library/react";
 import {
   type SourceMetadata,
   ValidSources,
 } from "@/lib/connectors/types/source";
 import { useToolConfiguration } from "@/lib/tools/hooks";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
+import type { MinimalAgent } from "@/lib/agents/types";
+import type { ToolSnapshot } from "@/lib/tools/types";
+import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import {
   selectedSourcesFrom,
   buildFilters,
@@ -26,8 +29,9 @@ jest.mock("@/lib/navigation/hooks", () => ({
   }),
 }));
 
+let mockActiveAgent: MinimalAgent | undefined;
 jest.mock("@/lib/agents/hooks", () => ({
-  useActiveAgent: () => undefined,
+  useActiveAgent: () => mockActiveAgent,
 }));
 
 let mockIncognitoEnabled = false;
@@ -39,6 +43,7 @@ beforeEach(() => {
   sessionStorage.clear();
   mockChatId = "abc";
   mockIncognitoEnabled = false;
+  mockActiveAgent = undefined;
 });
 
 function source(internalName: ValidSources, uniqueKey: string): SourceMetadata {
@@ -298,4 +303,33 @@ test("incognito masks Deep Research and leaving incognito restores it", () => {
   mockIncognitoEnabled = false;
   rerender();
   expect(result.current.deepResearchEnabled).toBe(true);
+});
+
+test("a tool change in an existing chat saves the chat's tool selection once", async () => {
+  const tool = (id: number) =>
+    ({ id, in_code_tool_id: null, mcp_server_id: null }) as ToolSnapshot;
+  mockActiveAgent = { id: 7, tools: [tool(1), tool(2)] } as MinimalAgent;
+  useChatSessionStore.setState({ sessions: new Map(), currentSessionId: null });
+  useChatSessionStore.getState().createSession("abc", { incognito: false });
+  const fetchSpy = jest
+    .spyOn(global, "fetch")
+    .mockImplementation(async () => new Response(JSON.stringify([])));
+  const patches = () =>
+    fetchSpy.mock.calls.filter(([, init]) => init?.method === "PATCH");
+  try {
+    const { result } = renderHook(() => useToolConfiguration());
+    await waitFor(() => expect(result.current.ready).toBe(true));
+
+    act(() => result.current.toggleToolState(2, "disabled"));
+    act(() => result.current.toggleToolState(1, "preferred"));
+    await waitFor(() => expect(patches()).toHaveLength(1));
+    const [url, init] = patches()[0]!;
+    expect(url).toBe("/api/chat/chat-session/abc/tool-selection");
+    expect(JSON.parse(String(init?.body))).toEqual({
+      allowed_tool_ids: [1],
+      preferred_tool_id: 1,
+    });
+  } finally {
+    fetchSpy.mockRestore();
+  }
 });

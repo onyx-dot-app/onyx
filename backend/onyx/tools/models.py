@@ -104,6 +104,15 @@ class PersonaToolConfiguration(BaseModel):
     search: PersonaSearchInfo
 
 
+class ChatToolSelection(BaseModel):
+    """The tools the user selected for a chat; every later turn uses them."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    allowed_tool_ids: list[int] | None = None
+    preferred_tool_id: int | None = None
+
+
 class ToolCallException(Exception):
     """Exception raised for errors during tool calls."""
 

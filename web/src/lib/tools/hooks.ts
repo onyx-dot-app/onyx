@@ -2,7 +2,7 @@
 
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import type {
@@ -14,6 +14,13 @@ export type { ChatSearchFilters } from "@/lib/tools/types";
 import type { Tag } from "@/lib/types";
 import { useAppPosition } from "@/lib/navigation/hooks";
 import { useActiveAgent } from "@/lib/agents/hooks";
+import { useMemberPlugins } from "@/lib/plugins/member";
+import {
+  effectiveChatPreferredToolId,
+  enabledChatToolIds,
+} from "@/lib/plugins/chat";
+import { useUser } from "@/providers/UserProvider";
+import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import {
   CODING_AGENT_TOOL_ID,
   FILE_READER_TOOL_ID,
@@ -103,6 +110,7 @@ function isNeutralConfiguration(configuration: ChatConfiguration): boolean {
 }
 
 const STORAGE_PREFIX = "onyx:tools";
+const TOOL_SELECTION_SYNC_MS = 300;
 
 function chatKey(chatSessionId: string): string {
   return `${STORAGE_PREFIX}:chat:${chatSessionId}`;
@@ -516,7 +524,7 @@ export function useToolConfiguration(
     [configuration]
   );
 
-  return useMemo(() => {
+  const handle = useMemo(() => {
     const ids = Object.keys(configuration.tools).map(Number);
     const preferredToolId =
       ids.find((toolId) => configuration.tools[toolId] === "preferred") ?? null;
@@ -550,6 +558,83 @@ export function useToolConfiguration(
     handOffTo,
     handOffToNewChatWith,
   ]);
+
+  // Turns the server starts for an existing chat use the tool selection saved
+  // on the chat. A new chat saves it on its first send; incognito and
+  // anonymous chats keep nothing.
+  const { user } = useUser();
+  const { plugins } = useMemberPlugins({
+    agentId: activeAgent?.id,
+    surface: "chat",
+  });
+  const chatSessionId =
+    newChatWithAgentId === undefined ? appPosition.chat() : null;
+  const incognito = useChatSessionStore((state) =>
+    chatSessionId === null
+      ? undefined
+      : state.sessions.get(chatSessionId)?.incognito
+  );
+  // The fields a normal send carries, built the same way.
+  const toolSelection =
+    ready &&
+    chatSessionId !== null &&
+    activeAgent !== undefined &&
+    incognito === false &&
+    !user?.is_anonymous_user
+      ? JSON.stringify({
+          allowed_tool_ids:
+            enabledChatToolIds(activeAgent.tools, handle) ?? null,
+          preferred_tool_id: effectiveChatPreferredToolId({
+            requestedToolId: handle.preferredToolId,
+            agent: activeAgent,
+            plugins,
+          }),
+        })
+      : null;
+  const savedSelection = useRef<{
+    chatSessionId: string | null;
+    body: string | null;
+  }>({ chatSessionId: null, body: null });
+  const pendingSave = useRef<{
+    url: string;
+    timer: ReturnType<typeof setTimeout>;
+    send: () => void;
+  } | null>(null);
+  useEffect(() => {
+    if (toolSelection === null) return;
+    const previous = savedSelection.current;
+    savedSelection.current = { chatSessionId, body: toolSelection };
+    // The first selection read for a chat is the one it already has.
+    if (
+      previous.chatSessionId !== chatSessionId ||
+      previous.body === toolSelection
+    )
+      return;
+    const url = `/api/chat/chat-session/${chatSessionId}/tool-selection`;
+    const pending = pendingSave.current;
+    if (pending) {
+      clearTimeout(pending.timer);
+      // A change for another chat is not superseded by this one.
+      if (pending.url !== url) pending.send();
+    }
+    const send = () => {
+      if (pendingSave.current?.url === url) pendingSave.current = null;
+      void fetch(url, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: toolSelection,
+      }).catch((error: unknown) =>
+        console.error("Could not save the chat's tool selection", error)
+      );
+    };
+    pendingSave.current = {
+      url,
+      timer: setTimeout(send, TOOL_SELECTION_SYNC_MS),
+      send,
+    };
+  }, [chatSessionId, toolSelection]);
+
+  return handle;
 }
 
 /**
