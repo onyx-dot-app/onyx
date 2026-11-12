@@ -2002,20 +2002,22 @@ jobs:
               $images
           fi
 
-  dispatch-cloud-deployment:
+  dispatch-deployment:
     needs:
       - determine-builds
+      - merge-web
       - merge-web-cloud
       - merge-backend
       - merge-model-server
       - merge-sandbox
     if: >-
       always()
-      && needs.merge-web-cloud.result == 'success'
       && needs.merge-backend.result == 'success'
       && needs.merge-model-server.result == 'success'
       && needs.merge-sandbox.result == 'success'
-      && needs.determine-builds.outputs.is-cloud-tag == 'true'
+      && !cancelled()
+      && ((needs.determine-builds.outputs.is-cloud-tag == 'true' && needs.merge-web-cloud.result == 'success')
+          || (github.event_name == 'push' && startsWith(github.ref_name, 'nightly-latest-') && needs.merge-web.result == 'success'))
       && needs.determine-builds.outputs.is-test-run != 'true'
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-slim
@@ -2045,15 +2047,21 @@ jobs:
           repositories: ${{ steps.target.outputs.repo }}
           permission-contents: write
 
-      - name: Trigger new-cloud-image dispatch
+      - name: Dispatch published images
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           CLOUD_DEPLOYMENT_REPO: ${{ vars.CLOUD_DEPLOYMENT_REPO }}
           VERSION: ${{ github.ref_name }}
+          RUN_ID: ${{ github.run_id }}
+          EVENT_TYPE: ${{ needs.determine-builds.outputs.is-cloud-tag == 'true' && 'new-cloud-image' || 'st-dev-images-ready' }}
         run: |
+          if [ "$EVENT_TYPE" = st-dev-images-ready ]; then
+            [[ "$VERSION" =~ ^nightly-latest-[0-9]{8}$ ]] || exit 1
+          fi
           gh api "repos/${CLOUD_DEPLOYMENT_REPO}/dispatches" \
-            -f event_type=new-cloud-image \
-            -F "client_payload[version]=${VERSION}"
+            -f "event_type=${EVENT_TYPE}" \
+            -f "client_payload[version]=${VERSION}" \
+            -f "client_payload[run_id]=${RUN_ID}"
 
   # Production docs follow the latest stable release (see docs-publish.yml).
   publish-docs:
@@ -2123,7 +2131,8 @@ jobs:
       - build-sandbox-amd64
       - build-sandbox-arm64
       - merge-sandbox
-    if: always() && (needs.audit-gate.result == 'failure' || needs.create-release.result == 'failure' || needs.build-desktop.result == 'failure' || needs.build-web-amd64.result == 'failure' || needs.build-web-arm64.result == 'failure' || needs.merge-web.result == 'failure' || needs.build-web-cloud-amd64.result == 'failure' || needs.build-web-cloud-arm64.result == 'failure' || needs.merge-web-cloud.result == 'failure' || needs.build-backend-amd64.result == 'failure' || needs.build-backend-arm64.result == 'failure' || needs.merge-backend.result == 'failure' || needs.build-model-server-amd64.result == 'failure' || needs.build-model-server-arm64.result == 'failure' || needs.merge-model-server.result == 'failure' || needs.prepare-sandbox.result == 'failure' || needs.build-sandbox-amd64.result == 'failure' || needs.build-sandbox-arm64.result == 'failure' || needs.merge-sandbox.result == 'failure') && needs.determine-builds.outputs.is-test-run != 'true'
+      - dispatch-deployment
+    if: always() && (needs.dispatch-deployment.result == 'failure' || needs.audit-gate.result == 'failure' || needs.create-release.result == 'failure' || needs.build-desktop.result == 'failure' || needs.build-web-amd64.result == 'failure' || needs.build-web-arm64.result == 'failure' || needs.merge-web.result == 'failure' || needs.build-web-cloud-amd64.result == 'failure' || needs.build-web-cloud-arm64.result == 'failure' || needs.merge-web-cloud.result == 'failure' || needs.build-backend-amd64.result == 'failure' || needs.build-backend-arm64.result == 'failure' || needs.merge-backend.result == 'failure' || needs.build-model-server-amd64.result == 'failure' || needs.build-model-server-arm64.result == 'failure' || needs.merge-model-server.result == 'failure' || needs.prepare-sandbox.result == 'failure' || needs.build-sandbox-amd64.result == 'failure' || needs.build-sandbox-arm64.result == 'failure' || needs.merge-sandbox.result == 'failure') && needs.determine-builds.outputs.is-test-run != 'true'
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-slim
     timeout-minutes: 90
@@ -2139,6 +2148,9 @@ jobs:
         shell: bash
         run: |
           FAILED_JOBS=""
+          if [ "$NEEDS_DISPATCH_RESULT" == failure ]; then
+            FAILED_JOBS="${FAILED_JOBS}• dispatch-deployment\\n"
+          fi
           if [ "${NEEDS_AUDIT_GATE_RESULT}" == "failure" ]; then
             FAILED_JOBS="${FAILED_JOBS}• audit-gate\\n"
           fi
@@ -2200,6 +2212,7 @@ jobs:
           FAILED_JOBS=$(printf '%s' "$FAILED_JOBS" | sed 's/\\n$//')
           echo "jobs=$FAILED_JOBS" >> "$GITHUB_OUTPUT"
         env:
+          NEEDS_DISPATCH_RESULT: ${{ needs.dispatch-deployment.result }}
           NEEDS_AUDIT_GATE_RESULT: ${{ needs.audit-gate.result }}
           NEEDS_CREATE_RELEASE_RESULT: ${{ needs.create-release.result }}
           NEEDS_BUILD_DESKTOP_RESULT: ${{ needs.build-desktop.result }}
