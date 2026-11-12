@@ -434,7 +434,10 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory):
             )
         completed = [
             result.response_id for result in results if result.status.is_terminal
-        ][:MAX_AGENT_COMPLETIONS_PER_STEP]
+        ]
+        # The last step answers with every finished result; it has no later step.
+        if not run.on_final_step:
+            completed = completed[:MAX_AGENT_COMPLETIONS_PER_STEP]
         if not completed:
             return messages
         with get_session_with_tenant(tenant_id=self.tenant_id) as session:

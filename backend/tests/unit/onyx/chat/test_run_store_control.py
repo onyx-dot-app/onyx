@@ -1,17 +1,18 @@
 """Synchronous ownership checks reject expired leases and retry transient cache failures."""
 
 import threading
+from contextlib import nullcontext
 from typing import Literal
 from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
 
-from onyx.agents.models import RunState, RunStatus
+from onyx.agents.models import AgentCompletion, RunProgress, RunState, RunStatus
 from onyx.agents.runtime import Run
 from onyx.cache.interface import CacheBackend
 from onyx.chat import run_store
-from onyx.chat.models import ResponseOwner
+from onyx.chat.models import AgentResultState, ResponseOwner
 from onyx.chat.run_store import ChatRunStore, _OwnedRun, _OwnerLease
 
 
@@ -199,3 +200,61 @@ def test_saved_child_responses_label_tool_calls_with_display_names(
     with pytest.raises(RuntimeError, match="projected"):
         store._save_output(_OwnedRun(run, lease), snapshot)
     assert labels == [{"mcp__3__my__srv__create_issue": "create_issue"}]
+
+
+@pytest.mark.parametrize("final_step", [False, True])
+def test_the_final_step_receives_every_finished_child_result(
+    monkeypatch: pytest.MonkeyPatch, final_step: bool
+) -> None:
+    cache = MagicMock(spec=CacheBackend)
+    chat_id = uuid4()
+    store = ChatRunStore(
+        tenant_id="tenant",
+        chat_session_id=chat_id,
+        response_id=1,
+        visible_response_ids=[],
+        cache=cache,
+        follow_up_steps=4,
+        control_cache=cache,
+    )
+    finished = [
+        AgentResultState(
+            recipient_id=chat_id, response_id=index, status=RunStatus.COMPLETE
+        )
+        for index in range(2, 2 + run_store.MAX_AGENT_COMPLETIONS_PER_STEP + 1)
+    ]
+    monkeypatch.setattr(
+        run_store, "get_session_with_tenant", lambda **_: nullcontext(MagicMock())
+    )
+    monkeypatch.setattr(run_store, "read_run_inputs", lambda *_: ([], finished))
+    monkeypatch.setattr(
+        run_store,
+        "read_agent_completions",
+        lambda _session, ids: [
+            AgentCompletion(
+                agent_id="child",
+                agent_path="/root/child",
+                run_id=str(response_id),
+                status=RunStatus.COMPLETE,
+            )
+            for response_id in ids
+        ],
+    )
+    run = Run.from_snapshot(
+        RunState(
+            run_id="1",
+            agent_id="parent",
+            status=RunStatus.COMPLETE,
+            progress=RunProgress(
+                step_index=3 if final_step else 2,
+                step_limit=4,
+                tool_configuration_digest="",
+            ),
+        )
+    )
+
+    received = store.receive_inputs(run)
+
+    assert len(received) == (
+        len(finished) if final_step else run_store.MAX_AGENT_COMPLETIONS_PER_STEP
+    )
