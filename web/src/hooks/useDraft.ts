@@ -34,6 +34,18 @@ function defaultIsEmpty<T>(value: T): boolean {
   return false;
 }
 
+/** Reads a draft now, also for a page that is not open. */
+export function readDraft<T>(key: string): T | null {
+  const storage = getStorage();
+  if (!storage) return null;
+  try {
+    const raw = storage.getItem(key);
+    return raw === null ? null : (JSON.parse(raw) as T);
+  } catch {
+    return null;
+  }
+}
+
 /** Writes a draft now, also for a page that is not open. Empty values remove the key. */
 export function writeDraft<T>(
   key: string,
@@ -89,17 +101,7 @@ export function useDraft<T>({
   }, [isEmpty]);
 
   useEffect(() => {
-    const storage = getStorage();
-    if (!storage) {
-      setEntry({ key, draft: null });
-      return;
-    }
-    try {
-      const raw = storage.getItem(key);
-      setEntry({ key, draft: raw === null ? null : (JSON.parse(raw) as T) });
-    } catch {
-      setEntry({ key, draft: null });
-    }
+    setEntry({ key, draft: readDraft<T>(key) });
   }, [key]);
 
   // Cancel a pending write on key change/unmount so it can't land under the old

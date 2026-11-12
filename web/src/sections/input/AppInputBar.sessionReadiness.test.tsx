@@ -90,6 +90,7 @@ jest.mock("@/hooks/usePromptShortcuts", () => ({
 jest.mock("@/hooks/useDraft", () => ({
   draftKey: () => "draft",
   writeDraft: (...args: unknown[]) => mockWriteDraft(...args),
+  readDraft: () => null,
   useDraft: () => ({
     loaded: true,
     draft: undefined,
@@ -422,6 +423,30 @@ test("a failed submission returns its text to the composer", async () => {
   await waitFor(() => expect(textbox).toHaveTextContent("Keep this draft"));
   expect(screen.getAllByTestId("queued-message-bar")).toHaveLength(1);
   expect(pending).toHaveLength(1);
+});
+
+test("a failed submission keeps text typed while it was pending", async () => {
+  const user = setupUser();
+  const submission = deferred<Response>();
+  fetchSpy.mockImplementation(async (_url, init) =>
+    init?.method === "POST"
+      ? submission.promise
+      : new Response(JSON.stringify(pending))
+  );
+  render(<ChatInput {...props("streaming")} />);
+  const textbox = screen.getByRole("textbox", { name: "Message input" });
+  await user.click(textbox);
+  await user.keyboard("{Control>}{Enter}{/Control}more");
+  await act(async () =>
+    submission.resolve(
+      new Response(JSON.stringify({ detail: "Queue is full" }), {
+        status: 409,
+      })
+    )
+  );
+  await waitFor(() =>
+    expect(textbox).toHaveTextContent(/^Keep this draft\s*more$/)
+  );
 });
 
 test("an accepted message cannot be edited into a duplicate instruction", async () => {
