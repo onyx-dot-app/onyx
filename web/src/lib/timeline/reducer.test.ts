@@ -216,6 +216,35 @@ describe("reduceTimeline", () => {
     ]);
   });
 
+  it("adds notices and errors between steps, in arrival order", () => {
+    const connect: TimelineEvent = {
+      type: "ext",
+      notification: {
+        method: "_onyx/connect_app_request",
+        params: { requestId: "r1", externalAppId: 7, reason: null },
+      },
+    };
+    const state = reduceTimelineEvents([
+      update({ sessionUpdate: "tool_call", toolCallId: "t1", title: "Run" }),
+      connect,
+      connect,
+      {
+        type: "ext",
+        notification: { method: "_onyx/compaction", params: { summary: null } },
+      },
+      { type: "error", message: "Rate limited" },
+    ]);
+
+    expect(
+      state.entries.map((entry) => [entry.id, entry.status, entry.payload.kind])
+    ).toEqual([
+      ["t1", "streaming", "tool"],
+      ["connect:r1", "done", "notice"],
+      ["compaction-2", "done", "notice"],
+      ["error-3", "error", "notice"],
+    ]);
+  });
+
   it("replaces the plan on each plan update", () => {
     const state = reduceTimelineEvents([
       update({

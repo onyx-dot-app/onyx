@@ -160,6 +160,43 @@ describe("craftPacketToEvents", () => {
     ).toEqual([{ type: "error", message: "Rate limited" }]);
   });
 
+  it("maps compaction and connect-app requests to Onyx notifications", () => {
+    expect(
+      craftPacketToEvents({ type: "compaction", summary: "Trimmed" })
+    ).toEqual([
+      {
+        type: "ext",
+        notification: {
+          method: "_onyx/compaction",
+          params: { summary: "Trimmed" },
+        },
+      },
+    ]);
+    expect(
+      craftPacketToEvents({
+        type: "connect_app_request",
+        request_id: "r1",
+        external_app_id: 7,
+        reason: "Needs Linear",
+      })
+    ).toEqual([
+      {
+        type: "ext",
+        notification: {
+          method: "_onyx/connect_app_request",
+          params: { requestId: "r1", externalAppId: 7, reason: "Needs Linear" },
+        },
+      },
+    ]);
+    expect(
+      craftPacketToEvents({
+        type: "connect_app_request",
+        request_id: "r2",
+        external_app_id: -1,
+      })
+    ).toEqual([]);
+  });
+
   it("returns no events for packets the timeline does not show", () => {
     expect(craftPacketToEvents({ type: "context_usage", used: 10 })).toEqual(
       []
