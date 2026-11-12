@@ -1,9 +1,9 @@
 "use client";
 
 import { useMemo } from "react";
-import { cn } from "@opal/utils";
 import { Text } from "@opal/components";
-import { SvgGlobe } from "@opal/icons";
+import { ValidSources } from "@/lib/connectors/types/source";
+import { RetrievalBody } from "@/lib/timeline/components/bodies/RetrievalBody";
 import ToolCardSurface, {
   ToolCardSection,
 } from "@/lib/timeline/craft/components/tool-cards/ToolCardSurface";
@@ -65,71 +65,39 @@ function domainFromUrl(url: string): string {
 }
 
 /**
- * WebSearchBody - Result cards for the websearch tool.
- *
- * Falls back to a single block of raw output when no structured results can
- * be parsed.
+ * WebSearchBody - The websearch tool's query and the results it read, in the
+ * shared retrieval layout. Raw output shows when no result can be parsed.
  */
 export default function WebSearchBody({ toolCall }: ToolCardBodyProps) {
   const results = useMemo(
     () => parseResults(toolCall.rawOutput),
     [toolCall.rawOutput]
   );
-
-  if (results.length === 0) {
-    return (
-      <ToolCardSurface>
-        <ToolCardSection className="whitespace-pre-wrap wrap-break-word">
-          <Text as="p" font="secondary-mono" color="text-03">
-            {toolCall.rawOutput || "No results"}
-          </Text>
-        </ToolCardSection>
-      </ToolCardSurface>
-    );
-  }
+  const isComplete =
+    toolCall.status !== "pending" && toolCall.status !== "in_progress";
 
   return (
-    <ToolCardSurface>
-      <div className="divide-y divide-border-01">
-        {results.map((result, idx) => (
-          <div
-            key={idx}
-            className={cn(
-              "py-2 px-3 flex flex-col gap-1",
-              "hover:bg-background-tint-01 transition-colors"
-            )}
-          >
-            <div className="flex items-center gap-2 min-w-0">
-              <SvgGlobe className="size-3.5 stroke-text-03 shrink-0" />
-              <span className="truncate min-w-0">
-                <Text
-                  font="main-ui-action"
-                  color="text-04"
-                  wordWrap="whitespace-nowrap"
-                >
-                  {result.title ?? domainFromUrl(result.url)}
-                </Text>
-              </span>
-            </div>
-            <div className="ps-5 truncate">
-              <Text
-                font="secondary-mono"
-                color="text-02"
-                wordWrap="whitespace-nowrap"
-              >
-                {result.url}
-              </Text>
-            </div>
-            {result.snippet && (
-              <div className="ps-5">
-                <Text font="secondary-body" color="text-03">
-                  {result.snippet}
-                </Text>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-    </ToolCardSurface>
+    <>
+      <RetrievalBody
+        queries={toolCall.description ? [toolCall.description] : []}
+        results={results.map((result) => ({
+          id: result.url,
+          title: result.title ?? domainFromUrl(result.url),
+          sourceType: ValidSources.Web,
+          sourceUrl: result.url,
+          description: result.snippet,
+        }))}
+        isComplete={isComplete}
+      />
+      {results.length === 0 && toolCall.rawOutput && (
+        <ToolCardSurface>
+          <ToolCardSection className="whitespace-pre-wrap wrap-break-word">
+            <Text as="p" font="secondary-mono" color="text-03">
+              {toolCall.rawOutput}
+            </Text>
+          </ToolCardSection>
+        </ToolCardSurface>
+      )}
+    </>
   );
 }

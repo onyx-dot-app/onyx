@@ -25,10 +25,12 @@ export const getMetadataTags = (metadata?: {
   return tags.length > 0 ? tags : undefined;
 };
 
-export const INITIAL_QUERIES_TO_SHOW = 3;
-export const QUERIES_PER_EXPANSION = 5;
-export const INITIAL_RESULTS_TO_SHOW = 3;
-export const RESULTS_PER_EXPANSION = 10;
+export {
+  INITIAL_QUERIES_TO_SHOW,
+  QUERIES_PER_EXPANSION,
+  INITIAL_RESULTS_TO_SHOW,
+  RESULTS_PER_EXPANSION,
+} from "@/lib/timeline/components/bodies/RetrievalBody";
 
 // Applied time window; null == no time filter, either bound may be open-ended.
 export interface TimeFilter {
