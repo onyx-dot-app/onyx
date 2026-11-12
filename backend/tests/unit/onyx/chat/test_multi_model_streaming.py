@@ -2481,7 +2481,7 @@ def test_rejected_turn_finishes_when_cleanup_worker_cannot_start(
     with (
         patch("onyx.chat.execution.start_thread_future", side_effect=start_job),
         patch.object(
-            turn.setup.admission, "release", side_effect=released.set
+            turn.setup.admission, "release", side_effect=lambda **_: released.set()
         ) as release_admission,
         patch("onyx.chat.history_store.save_chat_response_to_db") as save,
     ):
@@ -2524,7 +2524,7 @@ def test_rejection_returns_while_processing_status_cleanup_is_blocked(
         patch.object(
             turn.setup.admission,
             "release",
-            side_effect=lambda: processing_status(value=False),
+            side_effect=lambda **_: processing_status(value=False),
         ),
         ThreadPoolExecutor(max_workers=1) as executor,
     ):
@@ -2834,7 +2834,7 @@ def test_processing_marker_clears_after_inflight_refresh() -> None:
         patch.object(
             turn.setup.admission,
             "release",
-            side_effect=lambda: processing_status(value=False),
+            side_effect=lambda **_: processing_status(value=False),
         ),
     ):
         control = start_thread_future(turn.run, name="test-chat-control")
@@ -2959,7 +2959,7 @@ def test_save_timeout_retains_processing_status_until_worker_drains(
         patch.object(
             turn.setup.admission,
             "release",
-            side_effect=lambda: processing_status(value=False),
+            side_effect=lambda **_: processing_status(value=False),
         ),
     ):
         _launch_turn(turn)
@@ -3186,7 +3186,7 @@ def test_stream_start_failure_releases_admission_once(construction_fails: bool) 
     setup = _make_setup()
 
     released = threading.Event()
-    setup.admission.release.side_effect = released.set
+    setup.admission.release.side_effect = lambda **_: released.set()
     constructor = (
         patch(
             "onyx.chat.execution.ChatTurnExecution", side_effect=RuntimeError("failed")

@@ -691,7 +691,7 @@ test("Stop targets a reloaded multi-model stream without replay", async () => {
   const stopping = stopChatSession("session", "Check failed");
   await waitFor(() =>
     expect(global.fetch).toHaveBeenCalledWith(
-      "/api/chat/stop-chat-session/session?stream_id=41",
+      "/api/chat/stop-chat-session/session",
       expect.objectContaining({ method: "POST" })
     )
   );
@@ -747,7 +747,7 @@ test("Stop targets the replay response and waits for its incognito tail", async 
   const stopping = stopChatSession("session", "Check failed");
   await waitFor(() =>
     expect(global.fetch).toHaveBeenCalledWith(
-      "/api/chat/stop-chat-session/session?stream_id=42",
+      "/api/chat/stop-chat-session/session",
       expect.objectContaining({ method: "POST" })
     )
   );

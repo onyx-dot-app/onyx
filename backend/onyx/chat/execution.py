@@ -411,28 +411,29 @@ class ChatTurnExecution:
             del self._response_workers[worker]
 
     def _clear_processing_status(self) -> bool:
-        try:
-            # A Stop that arrives after the answer finished still pauses the queue.
-            if self._stopped_by_user or is_stop_requested(
-                self.setup.chat_session_id,
-                self.setup.admission.cache,
-                stream_id=self.setup.stream_id,
+        def save_late_stop() -> None:
+            # A Stop that arrived after the answer finished still pauses the queue.
+            if not (
+                self._stopped_by_user
+                or is_stop_requested(
+                    self.setup.chat_session_id,
+                    self.setup.admission.cache,
+                    stream_id=self.setup.stream_id,
+                )
             ):
-                self._stopped_by_user = True
-                try:
-                    self.setup.admission.check_owner(self.setup.chat_session_id)
-                except CacheLockLostError:
-                    logger.debug("Chat admission changed before Stop was saved")
-                else:
-                    # Saves have drained, so no writer can replace this status.
-                    with get_session_with_current_tenant() as session:
-                        cancel_completed_responses__no_commit(
-                            session,
-                            self.setup.chat_session_id,
-                            [response.message_id for response in self.setup.responses],
-                        )
-                        session.commit()
-            self.setup.admission.release()
+                return
+            self._stopped_by_user = True
+            # Saves have drained, so no writer can replace this status.
+            with get_session_with_current_tenant() as session:
+                cancel_completed_responses__no_commit(
+                    session,
+                    self.setup.chat_session_id,
+                    [response.message_id for response in self.setup.responses],
+                )
+                session.commit()
+
+        try:
+            self.setup.admission.release(settle=save_late_stop)
         except Exception:
             logger.exception("Failed to clear chat processing status; will retry")
             return False

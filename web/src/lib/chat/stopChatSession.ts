@@ -3,7 +3,7 @@ import { settleChatSession } from "@/lib/chat/settleChatSession";
 
 export const STOP_BEFORE_DISPATCH = Symbol("stop-before-dispatch");
 
-/** Stop only after a dispatched send has reached backend admission. */
+/** Stop the chat's current turn after a dispatched send has reached backend admission. */
 export async function stopChatSession(
   sessionId: string,
   errorMessage: string
@@ -34,10 +34,13 @@ export async function stopChatSession(
     streamId = await sendAcknowledged;
     if (!ownsStop()) return;
     if (typeof streamId === "number") {
-      const response = await fetch(
-        `/api/chat/stop-chat-session/${sessionId}?stream_id=${streamId}`,
-        { method: "POST", signal: AbortSignal.timeout(10_000) }
-      );
+      // The accepted stream can end before Stop arrives, and a queued turn can
+      // follow it. Stop targets the chat's current turn: the server stops it,
+      // or pauses the queue when no turn is running.
+      const response = await fetch(`/api/chat/stop-chat-session/${sessionId}`, {
+        method: "POST",
+        signal: AbortSignal.timeout(10_000),
+      });
       if (!response.ok)
         throw new Error(`Failed to stop chat session: ${response.statusText}`);
     }

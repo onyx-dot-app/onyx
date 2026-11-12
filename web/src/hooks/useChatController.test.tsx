@@ -279,7 +279,7 @@ test("Stop drains multi-model packets and finishes every panel before releasing 
   });
   await waitFor(() =>
     expect(global.fetch).toHaveBeenCalledWith(
-      "/api/chat/stop-chat-session/session?stream_id=11",
+      "/api/chat/stop-chat-session/session",
       expect.objectContaining({ method: "POST" })
     )
   );

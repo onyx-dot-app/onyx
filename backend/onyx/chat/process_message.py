@@ -716,8 +716,16 @@ def read_repaired_chat_inbox(chat_session_id: UUID, cache: CacheBackend) -> Chat
     return inbox
 
 
-def dispatch_pending_chat_messages(chat_session_id: UUID, user_id: UUID) -> None:
-    """Start the selected branch's next queued turn through chat admission."""
+def dispatch_pending_chat_messages(
+    chat_session_id: UUID,
+    user_id: UUID,
+    litellm_additional_headers: dict[str, str] | None = None,
+    custom_tool_additional_headers: dict[str, str] | None = None,
+) -> None:
+    """Start the selected branch's next queued turn through chat admission.
+
+    The turn uses the pass-through headers of the request that led to it.
+    """
     try:
         cache = get_cache_backend(operation_timeout_s=ADMISSION_CACHE_TIMEOUT_S)
         if is_chat_session_processing(chat_session_id, cache):
@@ -745,13 +753,19 @@ def dispatch_pending_chat_messages(chat_session_id: UUID, user_id: UUID) -> None
                     ),
                     user=user,
                     llm_overrides=None,
+                    litellm_additional_headers=litellm_additional_headers,
+                    custom_tool_additional_headers=custom_tool_additional_headers,
                     queued_turn=queued_turn,
                 )
                 stream = start_chat_turn(
                     setup,
                     user,
                     dispatch_pending_messages=partial(
-                        dispatch_pending_chat_messages, chat_session_id, user_id
+                        dispatch_pending_chat_messages,
+                        chat_session_id,
+                        user_id,
+                        litellm_additional_headers,
+                        custom_tool_additional_headers,
                     ),
                 )
                 # Delivery and persistence continue without a browser reader.
@@ -817,7 +831,11 @@ def _stream_chat_turn(
             response_future,
             query_observation=query_observation,
             dispatch_pending_messages=partial(
-                dispatch_pending_chat_messages, setup.chat_session_id, user.id
+                dispatch_pending_chat_messages,
+                setup.chat_session_id,
+                user.id,
+                litellm_additional_headers,
+                custom_tool_additional_headers,
             )
             if delivers_follow_ups and setup.incognito_record_mode is None
             else None,
