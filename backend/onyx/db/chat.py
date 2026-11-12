@@ -1871,6 +1871,7 @@ def _response_ancestry_select() -> Select:
             ChatSession.spawned_by_message_id,
             spawning_response.chat_session_id.label("parent_session_id"),
             ToolCall.parent_chat_message_id.label("parent_response_id"),
+            question.parent_message_id.label("previous_response_id"),
         )
         .join(ChatSession, ChatSession.id == ChatMessage.chat_session_id)
         .outerjoin(question, question.id == ChatMessage.parent_message_id)
@@ -1914,18 +1915,61 @@ def response_invocation_chain(
     return rows
 
 
+def ownership_root_id(db_session: Session, response_id: int) -> int | None:
+    """The newest turn root that the response's run depends on.
+
+    A child run depends on the turn whose tool call started it and on the turns
+    of its previous runs. Another turn can continue an agent, so a previous run
+    can belong to a later turn than the invocation. All of these roots are on
+    one branch, so the newest is the latest. None when the response is missing.
+    """
+    question = aliased(ChatMessage)
+    nodes = (
+        select(
+            ChatMessage.id.label("message_id"),
+            ChatSession.spawned_by_message_id,
+            ToolCall.parent_chat_message_id.label("invoker_id"),
+            question.parent_message_id.label("previous_id"),
+        )
+        .join(ChatSession, ChatSession.id == ChatMessage.chat_session_id)
+        .outerjoin(question, question.id == ChatMessage.parent_message_id)
+        .outerjoin(ToolCall, ToolCall.id == question.invoking_tool_call_id)
+    )
+    walk = nodes.where(ChatMessage.id == response_id).cte(
+        "ownership_root_walk", recursive=True
+    )
+    # Each step goes to an older response, so the walk ends.
+    walk = walk.union(
+        nodes.join(
+            walk,
+            or_(
+                ChatMessage.id == walk.c.invoker_id,
+                ChatMessage.id == walk.c.previous_id,
+            ),
+        ).where(
+            walk.c.spawned_by_message_id.is_not(None),
+            ChatMessage.id < walk.c.message_id,
+        )
+    )
+    return db_session.scalar(
+        select(func.max(walk.c.message_id)).where(
+            walk.c.spawned_by_message_id.is_(None)
+        )
+    )
+
+
 def root_response_id(db_session: Session, response: ChatMessage) -> int:
-    """The root response of the turn whose tool call started this response."""
-    chain = response_invocation_chain(db_session, response.id)
-    if not chain:
+    """The newest turn root of the response's run; see `ownership_root_id`."""
+    root_id = ownership_root_id(db_session, response.id)
+    if root_id is None:
         raise ValueError("Response is unavailable")
-    return chain[-1].message_id
+    return root_id
 
 
 def response_on_branch(
     db_session: Session, response: ChatMessage, branch_ids: Collection[int]
 ) -> bool:
-    """Whether the turn that started the response is on the branch.
+    """Whether the turns that the response's run depends on are on the branch.
 
     A child run belongs to every later turn of the branch that started it.
     """

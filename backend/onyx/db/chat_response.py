@@ -42,6 +42,7 @@ from onyx.db.chat import (
     configure_response_transaction__no_commit,
     create_db_search_doc,
     find_summary_for_ancestry,
+    ownership_root_id,
     parent_session_id,
     response_invocation,
     response_invocation_chain,
@@ -1107,9 +1108,21 @@ def read_response_status__no_commit(
             str(ancestor.id)
             for ancestor in agent_ancestor_chain(response.session_id, ancestors)[1:]
         ]
+    # A continued run can belong to a later turn than its invocation.
+    root_message_id = (
+        ownership_root_id(session, response_id)
+        if any(
+            row.spawned_by_message_id is not None
+            and row.previous_response_id is not None
+            for row in chain
+        )
+        else root.message_id
+    )
+    if root_message_id is None:
+        return None
     return ResponseStatus(
         message_id=response.message_id,
-        root_message_id=root.message_id,
+        root_message_id=root_message_id,
         root_session_id=root.session_id,
         ancestor_agent_ids=ancestor_agent_ids,
         status=response.status,

@@ -221,6 +221,8 @@ class ResponseAncestry(BaseModel):
     spawned_by_message_id: int | None
     parent_session_id: UUID | None
     parent_response_id: int | None
+    # For a child run, the agent's previous run; it can belong to a later turn.
+    previous_response_id: int | None = None
 
 
 class AgentResultState(BaseModel):
