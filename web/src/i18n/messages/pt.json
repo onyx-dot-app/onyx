@@ -17408,17 +17408,13 @@
         "columns": {
           "version": "Versão",
           "madeBy": "Criada por",
-          "date": "Data",
-          "status": "Status"
+          "date": "Data"
         },
         "versionLabel": "Versão {number}",
         "currentBadge": "Atual",
         "unknownAuthor": "Desconhecido",
         "previewRow": {
           "ariaLabel": "Pré-visualizar a versão {number}"
-        },
-        "showOlder": {
-          "label": "Mostrar versões anteriores"
         },
         "restore": {
           "label": "Restaurar",
@@ -17443,11 +17439,9 @@
           }
         },
         "status": {
-          "draft": "Rascunho",
           "pending": "Revisão pendente",
           "published": "Publicada",
-          "denied": "Recusada",
-          "superseded": "Substituída"
+          "denied": "Recusada"
         },
         "unpublishedBadge": "Alterações não publicadas",
         "organizationRuns": "A organização usa a versão {number}.",

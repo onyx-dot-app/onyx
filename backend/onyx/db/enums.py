@@ -1029,15 +1029,13 @@ class MarketplaceKind(str, PyEnum):
 
 
 class PluginReviewStatus(str, PyEnum):
-    """Publishing state of one plugin version. At most one version of a
-    plugin is pending."""
+    """Stored review state of one plugin version. At most one version of a
+    plugin is pending. A version is published when ``plugin.published_version_id``
+    points at it."""
 
     DRAFT = "draft"
     PENDING = "pending"
-    PUBLISHED = "published"
     DENIED = "denied"
-    # Was published or pending, and a newer version took its place.
-    SUPERSEDED = "superseded"
 
 
 class PluginPublishingPolicy(str, PyEnum):

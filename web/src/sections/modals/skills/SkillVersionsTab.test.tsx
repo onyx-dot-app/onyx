@@ -47,10 +47,7 @@ function version(overrides: Partial<SkillVersion> = {}): SkillVersion {
     id: "version-1",
     version_number: 1,
     created_at: "2026-11-01T10:00:00Z",
-    created_by_user_id: "user-1",
     created_by_email: "owner@example.com",
-    file_count: 1,
-    unpacked_size_bytes: 100,
     bundle_kept: true,
     is_current: false,
     review_status: "draft",
@@ -97,11 +94,9 @@ describe("SkillVersionsTab", () => {
       if (url === "/api/skills/custom/skill-1/versions") return VERSIONS;
       if (url === "/api/skills/custom/skill-1/versions/version-2") {
         return {
-          ...VERSIONS[1],
-          name: "report-writer",
+          version_number: 2,
           description: "Older description",
           instructions_markdown: "Older instructions.",
-          files: [],
         };
       }
       throw new Error(`unexpected ${url}`);
@@ -196,11 +191,9 @@ describe("SkillVersionsTab", () => {
       if (url === "/api/skills/custom/skill-1/versions") return pruned;
       if (url === "/api/skills/custom/skill-1/versions/version-2") {
         return {
-          ...pruned[1],
-          name: "report-writer",
+          version_number: 2,
           description: "Older description",
           instructions_markdown: "Older instructions.",
-          files: [],
         };
       }
       throw new Error(`unexpected ${url}`);
@@ -241,7 +234,7 @@ describe("SkillVersionsTab", () => {
     expect(await screen.findByText("Version 3")).toBeVisible();
   });
 
-  it("shows each version's review state and hides Restore on a denied version", async () => {
+  it("shows the current, in-review, denied and published states as badges on the version", async () => {
     mockFetch.mockResolvedValue([
       version({ id: "v4", version_number: 4, is_current: true }),
       version({ id: "v3", version_number: 3, review_status: "pending" }),
@@ -253,12 +246,10 @@ describe("SkillVersionsTab", () => {
     expect(await screen.findByText("Pending review")).toBeVisible();
     expect(screen.getByText("Denied")).toBeVisible();
     expect(screen.getByText("Published")).toBeVisible();
-    expect(screen.getByText("Draft")).toBeVisible();
+    expect(screen.getByText("Current")).toBeVisible();
+    expect(screen.queryByText("Draft")).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Restore version 2" })
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Restore version 3" })
+      screen.getByRole("button", { name: "Restore version 2" })
     ).toBeVisible();
   });
 

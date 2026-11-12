@@ -1,4 +1,3 @@
-import time
 from collections.abc import Callable
 from typing import IO, Any
 
@@ -89,20 +88,15 @@ def build_tracking_raw_file_callback(
 def delete_files_best_effort(
     file_ids: list[str],
     context: str = "document cleanup",
-    deadline: float | None = None,
 ) -> int:
     """Delete a list of files from the file store, logging individual
-    failures rather than raising. Stops before the next file once
-    ``time.monotonic()`` passes ``deadline``. Returns the count successfully
-    removed.
+    failures rather than raising. Returns the count successfully removed.
     """
     if not file_ids:
         return 0
     file_store = get_default_file_store()
     deleted = 0
     for file_id in file_ids:
-        if deadline is not None and time.monotonic() >= deadline:
-            break
         try:
             file_store.delete_file(file_id, error_on_missing=False)
             deleted += 1

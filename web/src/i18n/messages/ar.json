@@ -17408,17 +17408,13 @@
         "columns": {
           "version": "الإصدار",
           "madeBy": "أنشأها",
-          "date": "التاريخ",
-          "status": "الحالة"
+          "date": "التاريخ"
         },
         "versionLabel": "الإصدار {number}",
         "currentBadge": "الحالي",
         "unknownAuthor": "غير معروف",
         "previewRow": {
           "ariaLabel": "معاينة الإصدار {number}"
-        },
-        "showOlder": {
-          "label": "عرض الإصدارات الأقدم"
         },
         "restore": {
           "label": "استعادة",
@@ -17443,11 +17439,9 @@
           }
         },
         "status": {
-          "draft": "مسودة",
           "pending": "بانتظار المراجعة",
           "published": "منشور",
-          "denied": "مرفوض",
-          "superseded": "مستبدل"
+          "denied": "مرفوض"
         },
         "unpublishedBadge": "تغييرات غير منشورة",
         "organizationRuns": "تستخدم المؤسسة الإصدار {number}.",

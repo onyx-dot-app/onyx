@@ -76,7 +76,6 @@ test("@exclusive a save waits for the author's Publish update", async ({
     created.current_version_number,
     "Published"
   );
-  await authorSkills.expectVersionStatus(saved.current_version_number, "Draft");
   await authorSkills.publishUpdate();
 
   await authorSkills.expectToast(
@@ -86,10 +85,6 @@ test("@exclusive a save waits for the author's Publish update", async ({
   await authorSkills.expectVersionStatus(
     saved.current_version_number,
     "Published"
-  );
-  await authorSkills.expectVersionStatus(
-    created.current_version_number,
-    "Superseded"
   );
   await authorSkills.closeDialog();
   await authorSkills.expectCardUnpublishedChanges(name, false);

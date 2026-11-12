@@ -17408,17 +17408,13 @@
         "columns": {
           "version": "版本",
           "madeBy": "创建者",
-          "date": "日期",
-          "status": "状态"
+          "date": "日期"
         },
         "versionLabel": "版本 {number}",
         "currentBadge": "当前",
         "unknownAuthor": "未知",
         "previewRow": {
           "ariaLabel": "预览版本 {number}"
-        },
-        "showOlder": {
-          "label": "显示更早的版本"
         },
         "restore": {
           "label": "恢复",
@@ -17443,11 +17439,9 @@
           }
         },
         "status": {
-          "draft": "草稿",
           "pending": "待审核",
           "published": "已发布",
-          "denied": "已拒绝",
-          "superseded": "已替换"
+          "denied": "已拒绝"
         },
         "unpublishedBadge": "未发布的更改",
         "organizationRuns": "组织使用版本 {number}。",

@@ -102,29 +102,24 @@ export type SkillVersionReviewStatus =
   | "draft"
   | "pending"
   | "published"
-  | "denied"
-  | "superseded";
+  | "denied";
 
 export interface SkillVersion {
   id: string;
   version_number: number;
   created_at: string;
-  created_by_user_id: string | null;
   created_by_email: string | null;
-  file_count: number | null;
-  unpacked_size_bytes: number | null;
   /** False when retention removed the files; the version cannot be restored. */
   bundle_kept: boolean;
   is_current: boolean;
   review_status: SkillVersionReviewStatus;
 }
 
-export type SkillVersionPreview = SkillVersion & {
-  name: string;
+export interface SkillVersionPreview {
+  version_number: number;
   description: string;
   instructions_markdown: string;
-  files: SkillBundleFile[];
-};
+}
 
 export interface SkillBundleFile {
   path: string;

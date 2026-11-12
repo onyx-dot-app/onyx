@@ -158,19 +158,6 @@ beat_task_templates: list[dict] = [
         },
     },
     {
-        "name": "check-for-orphan-skill-bundle-cleanup",
-        "task": OnyxCeleryTask.CHECK_FOR_ORPHAN_SKILL_BUNDLE_CLEANUP,
-        "schedule": timedelta(hours=1),
-        "options": {
-            "queue": OnyxCeleryQueues.PRIMARY,
-            "priority": OnyxCeleryPriority.LOW,
-            "expires": BEAT_EXPIRES_DEFAULT,
-            # Gated tenants may still hold skill bundles to delete.
-            "skip_gated": False,
-            "work_gated": True,
-        },
-    },
-    {
         # Runs monthly (x8 in cloud, with the beat multiplier) because it rarely
         # has work. It selects by age, so the cadence does not decide what is stale.
         "name": "cleanup-stale-draft-credentials",
