@@ -23,9 +23,8 @@ from onyx.db.external_app import (
 from onyx.db.models import Skill, User
 from onyx.db.plugin import (
     AddedPluginVersion,
-    check_base_version,
     get_plugin_current_version_id,
-    get_plugin_version_summary,
+    get_plugin_version,
     list_plugin_versions,
     lock_skill_plugin__no_commit,
 )
@@ -235,8 +234,8 @@ def _github_authorization_header(user: User) -> str | None:
 
 
 def _delete_bundle_blobs(file_store: FileStore, file_ids: list[str]) -> None:
-    """Delete bundles after the commit that stopped using them. The orphan
-    bundle cleanup task deletes one that fails here."""
+    """Delete bundles after the commit that stopped using them. A failed
+    delete only logs."""
     for file_id in file_ids:
         delete_bundle_blob(file_store, file_id)
 
@@ -401,7 +400,15 @@ def list_skill_review_requests(
     db_session: Session = Depends(get_session),
 ) -> list[SkillReviewRequestResponse]:
     return [
-        SkillReviewRequestResponse.from_request(request)
+        SkillReviewRequestResponse(
+            skill_id=request.plugin_id,
+            name=request.name,
+            version_id=request.version_id,
+            version_number=request.version_number,
+            published_version_number=request.published_version_number,
+            requested_by_email=request.requested_by_email,
+            requested_at=request.requested_at,
+        )
         for request in list_review_requests(db_session)
     ]
 
@@ -739,12 +746,10 @@ def inspect_custom_skill_bundle_upload(
 @user_router.get("/custom/{skill_id}/versions")
 def list_custom_skill_versions(
     skill_id: UUID,
-    before_version: Annotated[int | None, Query(ge=1)] = None,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[SkillVersionResponse]:
-    """Up to 50 versions, newest first. Pass the last version number as
-    ``before_version`` to read older ones."""
+    """Every version, newest first."""
     skill = fetch_skill(
         skill_id,
         policy=SkillManagementPolicy.EDIT,
@@ -754,9 +759,17 @@ def list_custom_skill_versions(
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
     return [
-        SkillVersionResponse.from_summary(summary)
-        for summary in list_plugin_versions(
-            skill.id, db_session, before_version=before_version
+        SkillVersionResponse(
+            id=version.id,
+            version_number=version.version_number,
+            created_at=version.created_at,
+            created_by_email=version.created_by_email,
+            bundle_kept=version.bundle_file_id is not None,
+            is_current=is_current,
+            review_status="published" if is_published else version.review_status.value,
+        )
+        for version, is_current, is_published in list_plugin_versions(
+            skill.id, db_session
         )
     ]
 
@@ -776,14 +789,12 @@ def preview_custom_skill_version(
     )
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
-    summary = get_plugin_version_summary(skill.id, version_id, db_session)
+    version = get_plugin_version(skill.id, version_id, db_session)
     stored, contents = read_version_preview(version_id, db_session)
     return SkillVersionPreviewResponse(
-        **SkillVersionResponse.from_summary(summary).model_dump(),
-        name=stored.name or skill.name,
+        version_number=version.version_number,
         description=stored.description or "",
         instructions_markdown=contents.instructions_markdown,
-        files=contents.files,
     )
 
 
@@ -806,10 +817,7 @@ def restore_custom_skill_version(
     )
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
-    check_base_version(
-        lock_skill_plugin__no_commit(skill, db_session), request.base_version_id
-    )
-    get_plugin_version_summary(skill.id, version_id, db_session)
+    get_plugin_version(skill.id, version_id, db_session)
     return _replace_skill_bundle_from_editor(
         skill,
         read_version_bundle_bytes(version_id, db_session),
