@@ -135,7 +135,11 @@ test("separate background results reach an idle chat and survive reload @code-mo
   }
 });
 
-test("Stop subagents ends background work", async ({ api, chatPage, page }) => {
+test("Stop subagents ends background work @code-mode", async ({
+  api,
+  chatPage,
+  page,
+}) => {
   const nonce = mockLlmNonce();
   const gateId = mockLlmNonce();
   const question = `Research in the background. ${nonce}`;
