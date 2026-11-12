@@ -826,9 +826,40 @@ class AgentCoordinator:
             self._state.agents[agent.id] = _LoadedAgent(agent, self._view_id)
             return info
 
+    def _has_agent_room_locked(self, agent_id: str) -> bool:
+        """Make room to restore `agent_id`; evict the oldest idle child agent when full.
+
+        An idle child has no attached run, so a later use restores it from history.
+        New spawns still count every loaded agent against the bound.
+        """
+        if (
+            agent_id in self._state.agents
+            or len(self._state.agents) < MAX_LOADED_AGENTS
+        ):
+            return True
+        attached = {
+            tracked.coordination.run.agent_id
+            for tracked in self._state.tracked_runs.values()
+            if tracked.coordination is not None
+        }
+        idle = next(
+            (
+                loaded_id
+                for loaded_id in self._state.agents
+                if loaded_id not in attached
+                and (info := self._state.registrations.get(loaded_id)) is not None
+                and info.parent_id is not None
+            ),
+            None,
+        )
+        if idle is None:
+            return False
+        del self._state.agents[idle]
+        return True
+
     def unregister_child(self, agent_id: str) -> None:
         with self._state.lock:
-            self._state.agents.pop(agent_id)
+            self._state.agents.pop(agent_id, None)
             self._state.registrations.pop(agent_id)
             self._visible_agents.pop(agent_id, None)
 
@@ -930,10 +961,7 @@ class AgentCoordinator:
         if cached is not None:
             return cached
         with self._state.lock:
-            if (
-                agent_id not in self._state.agents
-                and len(self._state.agents) >= MAX_LOADED_AGENTS
-            ):
+            if not self._has_agent_room_locked(agent_id):
                 raise AgentBusy("Loaded agent limit exceeded")
         if self._directory is None:
             raise ValueError("Agent restoration is unavailable")
@@ -953,10 +981,7 @@ class AgentCoordinator:
                 if tracked.coordination is not None
             ):
                 raise AgentBusy("Agent is already running or draining")
-            if (
-                agent_id not in self._state.agents
-                and len(self._state.agents) >= MAX_LOADED_AGENTS
-            ):
+            if not self._has_agent_room_locked(agent_id):
                 raise AgentBusy("Loaded agent limit exceeded")
             self._state.agents[agent_id] = _LoadedAgent(restored, self._view_id)
         return restored
