@@ -93,6 +93,15 @@ URL and headers by `MULTI_TENANT`. The web client picks `/api/tenants` on cloud
 and `/api/admin/billing` on self-hosted
 (`web/src/lib/billing/svc.ts:getBillingBaseUrl`).
 
+**Playground.** A cloud deployment with `IS_PLAYGROUND` set has no Stripe.
+`backend/ee/onyx/server/tenants/api.py:build_tenants_router` does not mount the
+`/tenants/*` billing routes or `/proxy/*`, and `backend/ee/onyx/main.py` does not
+mount `/admin/billing/*`, so they 404. The routes the control plane calls
+(`backend/ee/onyx/server/tenants/control_plane_api.py`: product gating, tier
+update) stay mounted. The admin sidebar hides Plans & Billing and Upgrade Plan
+when `settings.is_playground` is set (`web/src/lib/admin-routes.ts`,
+`web/src/lib/admin-sidebar-utils.ts:buildItems`).
+
 **License lifecycle (self-hosted).** The `License` table holds one signed blob.
 `backend/ee/onyx/utils/license.py:verify_and_store_license` checks the RSA
 signature before it stores, and it discards a blob issued before the one already

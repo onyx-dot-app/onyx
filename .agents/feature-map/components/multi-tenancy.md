@@ -128,8 +128,9 @@ migrates only the catalog tables (`PublicBase`) in `public`.
    tables only.
 2. `tenant-from-auth-only` **The request's tenant comes from authenticated
    context, never from client input.** Some routes take a tenant id in the
-   body, such as the control-plane routes behind `control_plane_dep` and the
-   request to join a workspace (`ee/onyx/server/tenants/user_invitations_api.py`).
+   body, such as the control-plane routes behind `control_plane_dep`
+   (`ee/onyx/server/tenants/control_plane_api.py`) and the request to join a
+   workspace (`ee/onyx/server/tenants/user_invitations_api.py`).
    They name a target and never set the request's own tenant from it.
    `db/engine/sql_engine.py:is_valid_schema_name` and
    `db/engine/tenant_utils.py:TENANT_ID_PATTERN` check every tenant id before
