@@ -5,9 +5,8 @@ Reuses the Jira source-operations gateway and document-building utilities,
 scoping queries to service-desk projects by default.
 """
 
-import json
 from collections.abc import Generator, Iterable
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 from typing import Any
 
 from more_itertools import chunked
@@ -15,10 +14,11 @@ from typing_extensions import override
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
-    InsufficientPermissionsError,
+    UnexpectedValidationError,
 )
 from onyx.connectors.interfaces import (
     CheckpointedConnectorWithPermSync,
@@ -29,16 +29,16 @@ from onyx.connectors.interfaces import (
     SlimConnector,
     SlimConnectorWithPermSync,
 )
-from onyx.connectors.jira.config import JiraConnectorConfig
+from onyx.connectors.jira.atlassian_query import has_order_by
 from onyx.connectors.jira.models import JiraIssueIdPage
 from onyx.connectors.jira.source_operations import (
     JiraApiError,
     JiraSourceOperations,
+    is_cloud_gateway,
 )
 from onyx.connectors.jira.utils import (
     build_jira_url,
     get_comment_strs,
-    get_issue_field,
     get_named_field,
     rich_text,
 )
@@ -52,7 +52,6 @@ from onyx.connectors.models import (
     SlimDocument,
     TextSection,
 )
-from onyx.connectors.source_operations import OperationConsumes, SourceOperations
 from onyx.db.enums import HierarchyNodeType
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
@@ -61,6 +60,10 @@ logger = setup_logger()
 
 ONE_HOUR = 3600
 _JSM_PAGE_SIZE = 50
+
+JSM_ORDER_BY_ERROR = (
+    "Unsupported clause: ORDER BY. Jira does not allow it inside the sync filter."
+)
 
 
 class JiraSmConnector(
@@ -77,22 +80,41 @@ class JiraSmConnector(
 
     def __init__(
         self,
+        jira_base_url: str = "",
         project_key: str | None = None,
         jql_query: str | None = None,
         batch_size: int = INDEX_BATCH_SIZE,
         include_attachments: bool = False,
+        scoped_token: bool = False,
     ) -> None:
-        self._project_key = project_key
-        self._jql_query = jql_query
+        self.jira_base = jira_base_url.rstrip("/") if jira_base_url else ""
+        self.jira_project = (project_key or "").strip() or None
+        self.jql_query = (jql_query or "").strip() or None
         self._batch_size = batch_size
         self._include_attachments = include_attachments
-        self._jira_ops: JiraSourceOperations | None = None
+        self.scoped_token = scoped_token
+        self._source_operations: JiraSourceOperations | None = None
 
     # ── Credential handling ──────────────────────────────────────────
 
     @override
-    def load_credentials(self, credentials: dict[str, Any]) -> None:
-        self._jira_ops = JiraSourceOperations(credentials)
+    def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
+        self._source_operations = JiraSourceOperations(
+            credentials_provider=OnyxStaticCredentialsProvider(
+                None, DocumentSource.JIRA_SM.value, credentials
+            ),
+            connector_specific_config={
+                "jira_base_url": self.jira_base,
+                "scoped_token": self.scoped_token,
+            },
+        )
+        return None
+
+    @property
+    def source_operations(self) -> JiraSourceOperations:
+        if self._source_operations is None:
+            raise ConnectorMissingCredentialError(self.source_type)
+        return self._source_operations
 
     # ── JQL construction ─────────────────────────────────────────────
 
@@ -100,13 +122,15 @@ class JiraSmConnector(
         """Build the JQL query scoped to the JSM project."""
         clauses: list[str] = []
 
-        if self._jql_query:
-            clauses.append(f"({self._jql_query})")
-        elif self._project_key:
-            clauses.append(f"project = {self._project_key}")
+        if self.jql_query:
+            if has_order_by(self.jql_query):
+                raise ConnectorValidationError(JSM_ORDER_BY_ERROR)
+            clauses.append(f"({self.jql_query})")
+        elif self.jira_project:
+            clauses.append(f"project = {self.jira_project}")
         else:
-            # Default: all open JSM requests
-            clauses.append("project in (select project from project where projectType = 'service_desk')")
+            # Default: all projects (user should specify a project for JSM)
+            clauses.append("project is not EMPTY")
 
         if start:
             clauses.append(f"updated >= '{start.strftime('%Y-%m-%d %H:%M:%S')}'")
@@ -119,20 +143,21 @@ class JiraSmConnector(
 
     @override
     def load_from_state(self) -> Generator[Iterable[Document] | CheckpointOutput, None, None]:
-        if not self._jira_ops:
-            raise ConnectorMissingCredentialError(self.source_type)
-
         jql = self._build_jql()
         logger.info(f"JSM load: JQL = {jql}")
 
         try:
-            issue_ids = self._fetch_all_issue_ids(jql)
+            issue_keys = self._fetch_all_issue_keys(jql)
         except JiraApiError as e:
             if e.status_code in (401, 403):
                 raise CredentialExpiredError(str(e))
-            raise ConnectorFailure(f"JSM load failed: {e}")
+            yield ConnectorFailure(
+                failure_message=f"JSM load failed: {e}",
+                connector_id=None,
+            )
+            return
 
-        for batch in chunked(issue_ids, self._batch_size):
+        for batch in chunked(issue_keys, self._batch_size):
             docs = self._build_documents(batch)
             if docs:
                 yield docs
@@ -143,94 +168,147 @@ class JiraSmConnector(
     def poll_source(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
     ) -> Generator[Iterable[Document] | CheckpointOutput, None, None]:
-        if not self._jira_ops:
-            raise ConnectorMissingCredentialError(self.source_type)
-
-        start_dt = datetime.fromtimestamp(start, tz=datetime.utcnow())
-        end_dt = datetime.fromtimestamp(end, tz=datetime.utcnow())
+        start_dt = datetime.fromtimestamp(start, tz=timezone.utc)
+        end_dt = datetime.fromtimestamp(end, tz=timezone.utc)
         jql = self._build_jql(start=start_dt, end=end_dt)
         logger.info(f"JSM poll: JQL = {jql}")
 
         try:
-            issue_ids = self._fetch_all_issue_ids(jql)
+            issue_keys = self._fetch_all_issue_keys(jql)
         except JiraApiError as e:
             if e.status_code in (401, 403):
                 raise CredentialExpiredError(str(e))
-            raise ConnectorFailure(f"JSM poll failed: {e}")
+            yield ConnectorFailure(
+                failure_message=f"JSM poll failed: {e}",
+                connector_id=None,
+            )
+            return
 
-        for batch in chunked(issue_ids, self._batch_size):
+        for batch in chunked(issue_keys, self._batch_size):
             docs = self._build_documents(batch)
             if docs:
                 yield docs
+
+    # ── Checkpoint + PermSync ────────────────────────────────────────
+
+    @override
+    def load_from_checkpoint_with_perm_sync(
+        self, checkpoint: ConnectorCheckpoint | None
+    ) -> Generator[Iterable[Document] | CheckpointOutput, None, None]:
+        # JSM does not support checkpointed loading; fall through to full load.
+        yield from self.load_from_state()
 
     # ── Slim (pruning / perm sync) ───────────────────────────────────
 
     @override
     def generate_slim_documents(self) -> Generator[GenerateSlimDocumentOutput, None, None]:
-        if not self._jira_ops:
-            raise ConnectorMissingCredentialError(self.source_type)
-
         jql = self._build_jql()
         try:
-            issue_ids = self._fetch_all_issue_ids(jql)
+            issue_keys = self._fetch_all_issue_keys(jql)
         except JiraApiError as e:
             if e.status_code in (401, 403):
                 raise CredentialExpiredError(str(e))
-            raise ConnectorFailure(f"JSM slim failed: {e}")
+            return
 
-        for batch in chunked(issue_ids, self._batch_size):
-            slim_docs = []
-            for issue_key in batch:
-                doc_id = self._make_doc_id(issue_key)
-                slim_docs.append(SlimDocument(doc_id=doc_id))
+        for batch in chunked(issue_keys, self._batch_size):
+            slim_docs = [SlimDocument(id=self._make_doc_id(key)) for key in batch]
             yield GenerateSlimDocumentOutput(slim_documents=slim_docs)
+
+    @override
+    def retrieve_all_slim_docs_perm_sync(self) -> Generator[GenerateSlimDocumentOutput, None, None]:
+        yield from self.generate_slim_documents()
 
     # ── Permission sync ──────────────────────────────────────────────
 
     @override
     def get_permissions(self, doc_id: str) -> list[str]:
-        if not self._jira_ops:
-            raise ConnectorMissingCredentialError(self.source_type)
         return []
 
     # ── Internal helpers ─────────────────────────────────────────────
 
-    def _fetch_all_issue_ids(self, jql: str) -> list[str]:
+    def _fetch_all_issue_keys(self, jql: str) -> list[str]:
         """Fetch all issue keys matching the JQL query."""
-        assert self._jira_ops is not None
+        ops = self.source_operations
         issue_keys: list[str] = []
-        start_at = 0
 
-        while True:
-            page = self._jira_ops.search_issues(jql, start=start_at, limit=_JSM_PAGE_SIZE)
-            issues = page.get("issues", [])
-            for issue in issues:
-                key = issue.get("key")
-                if key:
-                    issue_keys.append(key)
+        if is_cloud_gateway(ops):
+            # Cloud: use enhanced JQL search (search_issue_ids) + bulk fetch
+            next_page_token: str | None = None
+            all_ids: list[str] = []
+            while True:
+                page: JiraIssueIdPage = ops.search_issue_ids(
+                    jql=jql,
+                    next_page_token=next_page_token,
+                    max_results=_JSM_PAGE_SIZE,
+                )
+                all_ids.extend(page.issue_ids)
+                next_page_token = page.next_page_token
+                if not next_page_token:
+                    break
 
-            total = page.get("total", 0)
-            start_at += len(issues)
-            if not issues or start_at >= total:
-                break
+            # Convert numeric IDs to keys via bulk fetch
+            for id_batch in chunked(all_ids, 100):
+                issues = ops.bulk_fetch_issues(issue_ids=list(id_batch))
+                for issue in issues:
+                    key = issue.get("key")
+                    if key:
+                        issue_keys.append(key)
+        else:
+            # Server / Data Center: use offset-based search_issues
+            start_at = 0
+            while True:
+                issues = ops.search_issues(
+                    jql=jql,
+                    start_at=start_at,
+                    max_results=_JSM_PAGE_SIZE,
+                )
+                for issue in issues:
+                    key = issue.get("key")
+                    if key:
+                        issue_keys.append(key)
+                start_at += len(issues)
+                if not issues or start_at >= len(issues) * 10:
+                    break
 
         return issue_keys
 
     def _build_documents(self, issue_keys: list[str]) -> list[Document]:
         """Build Document objects from a batch of issue keys."""
-        assert self._jira_ops is not None
+        ops = self.source_operations
         documents: list[Document] = []
 
-        for issue_key in issue_keys:
-            try:
-                issue = self._jira_ops.get_issue(issue_key)
-            except JiraApiError as e:
-                logger.warning(f"Failed to fetch JSM issue {issue_key}: {e}")
-                continue
-
-            doc = self._issue_to_document(issue)
-            if doc:
-                documents.append(doc)
+        # Fetch full issue data
+        if is_cloud_gateway(ops):
+            # Cloud: need to fetch by ID, so we re-search to get full issues
+            # For simplicity, use search_issues with a key-based JQL
+            for issue_key in issue_keys:
+                try:
+                    issues = ops.search_issues(
+                        jql=f"key = {issue_key}",
+                        start_at=0,
+                        max_results=1,
+                    )
+                    if issues:
+                        doc = self._issue_to_document(issues[0])
+                        if doc:
+                            documents.append(doc)
+                except JiraApiError as e:
+                    logger.warning(f"Failed to fetch JSM issue {issue_key}: {e}")
+        else:
+            # Server: search_issues returns full issues
+            for issue_key in issue_keys:
+                try:
+                    issues = ops.search_issues(
+                        jql=f"key = {issue_key}",
+                        start_at=0,
+                        max_results=1,
+                    )
+                    if issues:
+                        doc = self._issue_to_document(issues[0])
+                        if doc:
+                            documents.append(doc)
+                except JiraApiError as e:
+                    logger.warning(f"Failed to fetch JSM issue {issue_key}: {e}")
 
         return documents
 
@@ -243,13 +321,13 @@ class JiraSmConnector(
         fields = issue.get("fields", {})
         summary = fields.get("summary", "")
         description = rich_text(fields.get("description", ""))
-        status = get_named_field(fields, "status")
-        priority = get_named_field(fields, "priority")
-        assignee = get_named_field(fields, "assignee")
-        reporter = get_named_field(fields, "reporter")
+        status = get_named_field(issue, "status")
+        priority = get_named_field(issue, "priority")
+        assignee = get_named_field(issue, "assignee")
+        reporter = get_named_field(issue, "reporter")
         created = fields.get("created", "")
         updated = fields.get("updated", "")
-        issue_type = get_named_field(fields, "issuetype")
+        issue_type = get_named_field(issue, "issuetype")
 
         # Build sections
         sections: list[TextSection] = []
@@ -259,7 +337,7 @@ class JiraSmConnector(
 
         # Add comments
         comments_raw = fields.get("comment", {})
-        comments = get_comment_strs(comments_raw)
+        comments = get_comment_strs(issue)
         for comment in comments:
             sections.append(TextSection(text=comment))
 
@@ -282,15 +360,17 @@ class JiraSmConnector(
             name=title,
             body=summary + "\n\n" + "\n\n".join(s.text for s in sections),
             doc_type="jira_sm_ticket",
+            source=self.source_type,
             source_metadata={
                 "source_type": self.source_type,
                 "issue_key": key,
-                "url": build_jira_url(key, self._jira_ops.credentials if self._jira_ops else {}),
+                "url": build_jira_url(self.jira_base, key),
                 **metadata,
             },
             sections=sections,
         )
 
     def _make_doc_id(self, issue_key: str) -> str:
-        """Create a stable document ID for a JSM issue."""
-        return f"jira_sm_{issue_key}"
+        """Create a stable document ID for a JSM issue, including site for uniqueness."""
+        site = self.jira_base.replace("https://", "").replace("http://", "")
+        return f"jira_sm_{site}_{issue_key}"
