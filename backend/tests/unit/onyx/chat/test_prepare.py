@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from threading import Event
 from typing import cast
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 from uuid import UUID, uuid4
 
 import pytest
@@ -49,8 +49,9 @@ from onyx.llm.models import (
     TextContent,
     UserMessage,
 )
+from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat.models import SendMessageRequest
-from onyx.tools.models import PersonaToolConfiguration
+from onyx.tools.models import ChatToolSelection, PersonaToolConfiguration
 from tests.unit.fakes import FakeCache
 from tests.unit.onyx.agents.fakes import ScriptedLLM
 
@@ -235,6 +236,10 @@ def _mock_chat_preparation(
         "onyx.chat.process_message.execute_hook",
         lambda **_kwargs: QueryProcessingResponse(query="Accepted"),
     )
+    monkeypatch.setattr(
+        "onyx.chat.process_message.set_chat_session_tool_selection__no_commit",
+        lambda *_args: None,
+    )
     tokenizer = MagicMock()
     tokenizer.encode.return_value = [1]
     monkeypatch.setattr(
@@ -407,7 +412,6 @@ def test_attachment_loading_releases_preparation_session_before_reservation_fail
 
 
 def test_admission_precedes_model_setup_and_releases_after_setup_failure() -> None:
-    from types import SimpleNamespace
     from unittest.mock import MagicMock
     from uuid import uuid4
 
@@ -428,7 +432,7 @@ def test_admission_precedes_model_setup_and_releases_after_setup_failure() -> No
         patch("onyx.chat.process_message.get_session_with_current_tenant"),
         patch(
             "onyx.chat.process_message._load_session",
-            return_value=SimpleNamespace(id=session_id, persona=None),
+            return_value=ChatSession(id=session_id, persona=None),
         ),
         patch("onyx.chat.process_message._select_models", side_effect=fail_model_setup),
         pytest.raises(RuntimeError, match="model setup failed"),
@@ -438,7 +442,6 @@ def test_admission_precedes_model_setup_and_releases_after_setup_failure() -> No
 
 
 def test_busy_session_rejects_before_model_or_history_setup() -> None:
-    from types import SimpleNamespace
     from unittest.mock import MagicMock
     from uuid import uuid4
 
@@ -459,7 +462,7 @@ def test_busy_session_rejects_before_model_or_history_setup() -> None:
         patch("onyx.chat.process_message.get_session_with_current_tenant"),
         patch(
             "onyx.chat.process_message._load_session",
-            return_value=SimpleNamespace(id=session_id, persona=None),
+            return_value=ChatSession(id=session_id, persona=None),
         ),
         patch("onyx.chat.process_message._select_models") as select_models,
         patch("onyx.chat.process_message.load_message_branch") as load_branch,
@@ -553,6 +556,39 @@ def test_invalid_deep_research_is_rejected_before_the_question_is_saved(
     assert raised.value.error_code == OnyxErrorCode.BAD_REQUEST
     assert raised.value.detail == detail
     create_message.assert_not_called()
+
+
+def test_a_sent_turn_saves_its_tool_selection_and_model_choice(
+    chat_session: ChatSession,
+    _mock_chat_preparation: None,
+) -> None:
+    override = LLMOverride(model_provider="Provider", model_version="chosen-model")
+    with (
+        patch(
+            "onyx.chat.process_message.set_chat_session_tool_selection__no_commit"
+        ) as save_tools,
+        patch(
+            "onyx.chat.process_message.set_chat_session_llm_override__no_commit"
+        ) as save_model,
+    ):
+        setup = prepare_chat_turn(
+            SendMessageRequest(
+                message="Question",
+                chat_session_id=chat_session.id,
+                allowed_tool_ids=[3],
+                preferred_tool_id=3,
+                llm_override=override,
+            ),
+            User(id=uuid4(), email="reader@example.com"),
+            llm_overrides=None,
+        )
+    save_tools.assert_called_once_with(
+        ANY,
+        chat_session.id,
+        ChatToolSelection(allowed_tool_ids=[3], preferred_tool_id=3),
+    )
+    save_model.assert_called_once_with(ANY, chat_session.id, override)
+    setup.admission.release()
 
 
 def test_regeneration_reuses_user_message_without_writing(

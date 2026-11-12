@@ -153,6 +153,7 @@ from onyx.llm.override_models import LLMOverride, PromptOverride
 from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfigDict
 from onyx.server.security.models import IncognitoAvailability, SSRFProtectionLevel
 from onyx.tools.models import (
+    ChatToolSelection,
     CustomToolCallSummary,
     FileReadResult,
     LlmBashExecutionResult,
@@ -3522,12 +3523,9 @@ class ChatSession(Base):
         "UserProject", back_populates="chat_sessions", foreign_keys=[project_id]
     )
 
-    # the latest "overrides" specified by the user. These take precedence over
-    # the attached persona. However, overrides specified directly in the
-    # `send-message` call will take precedence over these.
-    # NOTE: currently only used by the chat seeding flow, will be used in the
-    # future once we allow users to override default values via the Chat UI
-    # itself
+    # The latest model override the user chose: set by chat seeding and by each
+    # single-model turn the user sends. It takes precedence over the persona.
+    # Overrides in a `send-message` call take precedence over it.
     llm_override: Mapped[LLMOverride | None] = mapped_column(
         PydanticType(LLMOverride), nullable=True
     )
@@ -3546,6 +3544,10 @@ class ChatSession(Base):
 
     prompt_override: Mapped[PromptOverride | None] = mapped_column(
         PydanticType(PromptOverride), nullable=True
+    )
+    # The tools the user last selected; NULL means the agent's tools.
+    tool_selection: Mapped[ChatToolSelection | None] = mapped_column(
+        PydanticType(ChatToolSelection), nullable=True
     )
     time_updated: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),

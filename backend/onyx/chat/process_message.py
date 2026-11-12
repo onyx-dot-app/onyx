@@ -66,6 +66,8 @@ from onyx.db.chat import (
     get_chat_session_by_id,
     load_message_branch,
     reserve_chat_response_ids,
+    set_chat_session_llm_override__no_commit,
+    set_chat_session_tool_selection__no_commit,
 )
 from onyx.db.document_set import filter_document_set_names_by_user_access
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -106,7 +108,7 @@ from onyx.server.query_and_chat.streaming_models import (
 from onyx.server.query_and_chat.token_limit import check_model_spend_limits
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.tools.constants import FILE_READER_TOOL_ID, SEARCH_TOOL_ID
-from onyx.tools.models import SearchToolUsage
+from onyx.tools.models import ChatToolSelection, SearchToolUsage
 from onyx.utils.fleet_query_telemetry import QueryObservation, telemetry_chat
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
@@ -273,6 +275,15 @@ def prepare_chat_turn(
             chat_session = _load_session(new_msg_req, user, db_session)
             # Reserve the session before model setup or changes to its message tree.
             admission.claim(chat_session.id)
+            selection = ChatToolSelection(
+                allowed_tool_ids=new_msg_req.allowed_tool_ids,
+                preferred_tool_id=new_msg_req.preferred_tool_id,
+            )
+            if selection != chat_session.tool_selection:
+                set_chat_session_tool_selection__no_commit(
+                    db_session, chat_session.id, selection
+                )
+                db_session.commit()
             selected_models = _select_models(
                 new_msg_req,
                 chat_session,
@@ -301,6 +312,16 @@ def prepare_chat_turn(
                         OnyxErrorCode.BAD_REQUEST,
                         "Deep research requires a model with at least 50,000 input tokens",
                     )
+            if (
+                not llm_overrides
+                and new_msg_req.llm_override is not None
+                and new_msg_req.llm_override != chat_session.llm_override
+            ):
+                # Later turns that name no model use the model the user last chose.
+                set_chat_session_llm_override__no_commit(
+                    db_session, chat_session.id, new_msg_req.llm_override
+                )
+                db_session.commit()
             token_counter = get_llm_token_counter(selected_models[0][0])
             chat_history, parent_message = load_message_branch(
                 chat_session.id, new_msg_req.parent_message_id, db_session
