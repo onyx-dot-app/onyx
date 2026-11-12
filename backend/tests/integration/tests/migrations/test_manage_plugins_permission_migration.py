@@ -24,10 +24,9 @@ from onyx.db.engine.sql_engine import SYNC_DB_API, build_connection_string
 from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.db.permissions import parse_permission_values
-from onyx.utils.variable_functionality import global_version
 from tests.integration.common_utils.reset import downgrade_postgres, upgrade_postgres
 
-PREVIOUS_REVISION = "fdaeeca238a1"
+PREVIOUS_REVISION = "55bf66dd54dd"
 RENAME_REVISION = "7b154e670bd8"
 OLD_VALUE = "manage:skills"
 NEW_VALUE = "manage:plugins"
@@ -181,6 +180,7 @@ def _pat_scopes(engine: Engine, pat_id: int) -> list[str]:
         ).scalar_one()
 
 
+@pytest.mark.usefixtures("enable_ee")
 def test_upgrade_renames_and_keeps_access(engine: Engine, seeded: _Seeded) -> None:
     _migrate("upgrade", RENAME_REVISION)
 
@@ -194,20 +194,16 @@ def test_upgrade_renames_and_keeps_access(engine: Engine, seeded: _Seeded) -> No
     scopes = _pat_scopes(engine, seeded.pat_id)
     assert scopes == ["read:chat", NEW_VALUE]
 
-    global_version.set_ee()
-    try:
-        user = User(effective_permissions=stored_permissions, is_group_manager=False)
-        assert has_global_permission(user, Permission.MANAGE_PLUGINS)
-        request = cast(
-            Request,
-            SimpleNamespace(
-                state=SimpleNamespace(token_scopes=parse_permission_values(scopes))
-            ),
-        )
-        dep = require_permission(Permission.MANAGE_PLUGINS)
-        assert asyncio.run(dep(request=request, user=user)) is user
-    finally:
-        global_version.unset_ee()
+    user = User(effective_permissions=stored_permissions, is_group_manager=False)
+    assert has_global_permission(user, Permission.MANAGE_PLUGINS)
+    request = cast(
+        Request,
+        SimpleNamespace(
+            state=SimpleNamespace(token_scopes=parse_permission_values(scopes))
+        ),
+    )
+    dep = require_permission(Permission.MANAGE_PLUGINS)
+    assert asyncio.run(dep(request=request, user=user)) is user
 
 
 def test_downgrade_restores_old_value(engine: Engine, seeded: _Seeded) -> None:

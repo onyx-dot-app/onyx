@@ -628,14 +628,9 @@ class TestApiSurfaceScopeRegistration:
         }
 
 
+@pytest.mark.usefixtures("enable_ee")
 class TestLegacyManageSkillsAlias:
     """manage:skills reads as manage:plugins for one release."""
-
-    def setup_method(self) -> None:
-        global_version.set_ee()
-
-    def teardown_method(self) -> None:
-        global_version.unset_ee()
 
     def test_old_value_parses_to_manage_plugins(self) -> None:
         assert Permission("manage:skills") is Permission.MANAGE_PLUGINS
