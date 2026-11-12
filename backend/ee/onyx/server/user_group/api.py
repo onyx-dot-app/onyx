@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -30,6 +32,10 @@ from ee.onyx.db.user_group import (
     update_user_group,
 )
 from ee.onyx.db.user_group import delete_user_group as db_delete_user_group
+from ee.onyx.db.user_group_plugin import (
+    list_user_group_plugins,
+    set_user_group_plugin_setting__no_commit,
+)
 from ee.onyx.server.user_group.models import (
     AddUsersToUserGroupRequest,
     BulkSetPermissionsRequest,
@@ -44,6 +50,8 @@ from ee.onyx.server.user_group.models import (
     UserGroupDataAccessCCPairs,
     UserGroupIncognitoUpdate,
     UserGroupMemberCounts,
+    UserGroupPlugin,
+    UserGroupPluginUpdate,
     UserGroupRename,
     UserGroupUpdate,
 )
@@ -63,6 +71,7 @@ from onyx.auth.scoped_permissions import (
     get_scoped_groups,
     get_visible_user_group_ids,
     manages_group,
+    within_scope,
 )
 from onyx.background.celery.tasks.beat_schedule import BEAT_EXPIRES_DEFAULT
 from onyx.background.celery.versioned_apps.client import app as client_app
@@ -85,7 +94,7 @@ from onyx.db.user_group import (
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.security.store import get_security_settings
-from onyx.skills.push import push_skills_after_membership_change
+from onyx.skills.push import push_skills_after_membership_change, push_skills_for_users
 from onyx.utils.audit import (
     AuditAction,
     AuditOutcome,
@@ -814,3 +823,62 @@ def set_group_manager(
             "is_manager": request.is_manager,
         },
     )
+
+
+def _assert_reads_group_plugins(
+    user: User, user_group_id: int, db_session: Session
+) -> None:
+    """Organization-wide MANAGE_PLUGINS reads every group; a scoped manager
+    reads only groups they manage."""
+    if not within_scope(
+        user,
+        db_session,
+        permission=Permission.MANAGE_PLUGINS,
+        current_group_ids=[user_group_id],
+        requested_group_ids=[],
+        is_non_public=True,
+    ):
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User group not found")
+    if fetch_user_group(db_session, user_group_id) is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User group not found")
+
+
+@router.get("/admin/user-group/{user_group_id}/plugins")
+def get_user_group_plugins(
+    user_group_id: int,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_PLUGINS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> list[UserGroupPlugin]:
+    """The plugins shared with the group or with a group install setting."""
+    _assert_reads_group_plugins(user, user_group_id, db_session)
+    return [
+        UserGroupPlugin.from_row(row)
+        for row in list_user_group_plugins(user_group_id, user, db_session)
+    ]
+
+
+@router.put("/admin/user-group/{user_group_id}/plugins/{plugin_id}")
+def set_user_group_plugin_installation_policy(
+    user_group_id: int,
+    plugin_id: UUID,
+    update: UserGroupPluginUpdate,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_PLUGINS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> list[UserGroupPlugin]:
+    """Set or remove the group's install setting of a plugin. A private
+    plugin that the group does not have yet is shared with it as viewer."""
+    _assert_reads_group_plugins(user, user_group_id, db_session)
+    affected = set_user_group_plugin_setting__no_commit(
+        user_group_id, plugin_id, update.installation_policy, user, db_session
+    )
+    db_session.commit()
+    push_skills_for_users(affected, db_session)
+    db_session.commit()
+    return [
+        UserGroupPlugin.from_row(row)
+        for row in list_user_group_plugins(user_group_id, user, db_session)
+    ]

@@ -283,6 +283,21 @@ Admins set how a shared Skill is installed for everyone with access:
 
 The policy follows the current audience; changing who can access the Skill does not reset it.
 
+### Set a policy for a group
+
+By default, every group uses the organization setting.
+A group policy replaces the organization setting for the members of that group, also when it is stricter.
+A member in several groups gets the most open policy, in this order: **Required**, **Installed by default**,
+**Available**, **Not available**. Groups give access. They are not a security boundary:
+a person with a direct share still sees the Skill.
+
+A published Skill can have a group policy without a share. A group with **Can edit** cannot get **Not available**.
+Only users with the organization-wide `manage:plugins` permission set a group policy on a published Skill.
+A Group Manager sets the policy only for their groups, on a private Skill that is shared only within those groups.
+To set a group policy through the API,
+see [Set User Group Plugin Installation
+Policy](/developers/api_reference/user_groups/set_user_group_plugin_installation_policy).
+
 ### Two Skills with the same name
 
 A Craft session can use only one Skill for each name. If two Skills that a user has on have the same name,

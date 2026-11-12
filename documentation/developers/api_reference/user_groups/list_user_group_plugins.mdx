@@ -1,0 +1,19 @@
+---
+title: "List User Group Plugins"
+openapi: "GET /manage/admin/user-group/{user_group_id}/plugins"
+---
+
+import BusinessEditionInfo from "/snippets/business-edition-info.mdx";
+
+<BusinessEditionInfo />
+
+<Info>
+  **Required permission:** Manage Plugins (`manage:plugins`). A **Group Manager** can also call this,
+  limited to the groups they manage.
+</Info>
+
+The response has one row for each Skill that is shared with the group or that has a group installation policy.
+A row with a `null` `permission` holds only the group installation policy and gives the group no access.
+
+A `null` `installation_policy` means that the group uses `company_installation_policy`, the organization setting.
+`can_edit` shows whether you can change the group installation policy of the row.

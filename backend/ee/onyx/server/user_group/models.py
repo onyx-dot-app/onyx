@@ -1,10 +1,15 @@
-from typing import NamedTuple
+from typing import Literal, NamedTuple
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
+from ee.onyx.db.user_group_plugin import UserGroupPluginRow
 from onyx.auth.permissions import Permission
-from onyx.db.enums import ConnectorManageRole
+from onyx.db.enums import (
+    ConnectorManageRole,
+    PluginInstallationPolicy,
+    SkillSharePermission,
+)
 from onyx.db.models import UserGroup as UserGroupModel
 from onyx.server.documents.models import (
     ConnectorCredentialPairDescriptor,
@@ -213,3 +218,40 @@ class BulkSetPermissionsRequest(BaseModel):
 
 class UserGroupDataAccessCCPairs(BaseModel):
     cc_pair_ids: list[int]
+
+
+class UserGroupPlugin(BaseModel):
+    """One plugin of a group. A plugin of kind skill shows as its skill."""
+
+    plugin_id: UUID
+    kind: Literal["skill", "plugin"]
+    name: str
+    description: str
+    published: bool
+    # None: the row holds only a group install setting and gives no access.
+    permission: SkillSharePermission | None
+    # None: the group uses company_installation_policy.
+    installation_policy: PluginInstallationPolicy | None
+    # The plugin's own setting, else its marketplace default.
+    company_installation_policy: PluginInstallationPolicy
+    can_edit: bool
+
+    @classmethod
+    def from_row(cls, item: UserGroupPluginRow) -> "UserGroupPlugin":
+        row = item.row
+        return cls(
+            plugin_id=row.plugin_id,
+            kind=row.kind,
+            name=row.name,
+            description=row.description,
+            published=row.published,
+            permission=row.permission,
+            installation_policy=row.installation_policy,
+            company_installation_policy=row.company_installation_policy,
+            can_edit=item.can_edit,
+        )
+
+
+class UserGroupPluginUpdate(BaseModel):
+    # None removes the group setting, so the group uses the company setting.
+    installation_policy: PluginInstallationPolicy | None

@@ -55,7 +55,11 @@ from onyx.db.models import (
     UserPluginPreference,
     UserSkillPreference,
 )
-from onyx.db.plugin_access import affected_user_ids_for_plugins
+from onyx.db.plugin_access import (
+    PluginKind,
+    affected_user_ids_for_plugins,
+    plugin_version_kind,
+)
 from onyx.db.plugin_review import publish_action_for, request_review__no_commit
 from onyx.db.scoped_permissions import (
     fetch_managed_group_ids,
@@ -94,18 +98,8 @@ BUNDLES_KEPT = 100
 NameClashAction = Literal["raise", "rename"]
 _RENAME_ATTEMPTS = 3
 
-PluginVersionKind = Literal["skill", "plugin"]
 
-
-def plugin_version_kind(skill_paths: Iterable[str]) -> PluginVersionKind:
-    """The kind of a version, from the paths of its plugin_skill rows. A
-    version is a skill when it holds exactly one skill, with SKILL.md at the
-    bundle root; otherwise it is a plugin. No column stores the result, so a
-    later version can change it."""
-    return "skill" if list(skill_paths) == [""] else "plugin"
-
-
-def get_plugin_version_kind(version_id: UUID, db_session: Session) -> PluginVersionKind:
+def get_plugin_version_kind(version_id: UUID, db_session: Session) -> PluginKind:
     return plugin_version_kind(
         db_session.scalars(
             select(PluginSkill.path).where(PluginSkill.plugin_version_id == version_id)
@@ -1148,16 +1142,28 @@ class PluginGroupGrant:
 
 
 @dataclass(frozen=True)
+class PluginGroupSetting:
+    """A group install setting with no change to the group's share. A group
+    with no row gets a setting-only row. None removes the setting, and a row
+    with no permission is then deleted."""
+
+    group_id: int
+    installation_policy: PluginInstallationPolicy | None
+
+
+@dataclass(frozen=True)
 class PluginAccessChange:
     """One access change for one or more plugins. A field at its default does
     not change anything.
 
     ``company_installation_policy``: UNSET keeps it, None means "use the
-    marketplace default", and a value sets that value. ``on_name_clash``
-    applies when ``publish`` moves a plugin to the Organization library."""
+    marketplace default", and a value sets that value. ``group_settings`` apply
+    after ``group_grants``. ``on_name_clash`` applies when ``publish`` moves a
+    plugin to the Organization library."""
 
     user_grants: tuple[PluginUserGrant, ...] | None = None
     group_grants: tuple[PluginGroupGrant, ...] | None = None
+    group_settings: tuple[PluginGroupSetting, ...] | None = None
     publish: bool = False
     on_name_clash: NameClashAction = "raise"
     company_installation_policy: PluginInstallationPolicy | None | UnsetType = UNSET
@@ -1287,30 +1293,43 @@ def _new_group_rows(
     locked: _LockedPlugin, change: PluginAccessChange
 ) -> dict[int, PluginGroupRow] | None:
     """The group rows after the change, or None when they do not change. A
-    group keeps its install setting unless the grant sets one. On REPLACE, a
-    group left out loses its permission but keeps its row if it has a
-    setting."""
-    if change.group_grants is None:
+    group keeps its install setting unless the grant or a group setting sets
+    one. On REPLACE, a group left out of the grants loses its permission but
+    keeps its row if it has a setting. A row with neither is deleted."""
+    if change.group_grants is None and change.group_settings is None:
         return None
     rows: dict[int, PluginGroupRow] = {}
-    for group_id, row in locked.group_rows.items():
-        if change.mode == PluginAccessMode.ADD_ONLY:
-            rows[group_id] = row
-        elif row.installation_policy is not None:
-            rows[group_id] = PluginGroupRow(
-                permission=None, installation_policy=row.installation_policy
+    if change.group_grants is None:
+        rows = dict(locked.group_rows)
+    else:
+        for group_id, row in locked.group_rows.items():
+            if change.mode == PluginAccessMode.ADD_ONLY:
+                rows[group_id] = row
+            elif row.installation_policy is not None:
+                rows[group_id] = PluginGroupRow(
+                    permission=None, installation_policy=row.installation_policy
+                )
+        for grant in change.group_grants:
+            current = locked.group_rows.get(grant.group_id)
+            rows[grant.group_id] = PluginGroupRow(
+                permission=grant.permission,
+                installation_policy=(
+                    grant.installation_policy
+                    if is_set(grant.installation_policy)
+                    else (current.installation_policy if current is not None else None)
+                ),
             )
-    for grant in change.group_grants:
-        current = locked.group_rows.get(grant.group_id)
-        rows[grant.group_id] = PluginGroupRow(
-            permission=grant.permission,
-            installation_policy=(
-                grant.installation_policy
-                if is_set(grant.installation_policy)
-                else (current.installation_policy if current is not None else None)
-            ),
+    for setting in change.group_settings or ():
+        current = rows.get(setting.group_id)
+        rows[setting.group_id] = PluginGroupRow(
+            permission=current.permission if current is not None else None,
+            installation_policy=setting.installation_policy,
         )
-    return rows
+    return {
+        group_id: row
+        for group_id, row in rows.items()
+        if row.permission is not None or row.installation_policy is not None
+    }
 
 
 def _group_shares(
@@ -1350,6 +1369,63 @@ def _check_sharing_setting(
         )
 
 
+def _shared_only_within(
+    group_ids: Iterable[int],
+    user_ids: Iterable[UUID],
+    managed_group_ids: set[int],
+    member_ids: set[UUID],
+) -> bool:
+    return set(group_ids) <= managed_group_ids and set(user_ids) <= member_ids
+
+
+def group_setting_editable_plugin_ids(
+    plugin_ids: Iterable[UUID], actor: User, db_session: Session
+) -> set[UUID]:
+    """The plugins whose group install settings the actor can change, by the
+    rule of ``_check_scoped_group_setting``: all of them for an
+    organization-wide manager; for a scoped manager, a private plugin whose
+    group and user shares all stay within their groups."""
+    ids = sorted(set(plugin_ids))
+    if has_global_permission(actor, Permission.MANAGE_PLUGINS):
+        return set(ids)
+    managed = fetch_managed_group_ids(actor, db_session)
+    if not ids or not managed:
+        return set()
+    private = set(
+        db_session.scalars(
+            select(Plugin.id)
+            .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
+            .where(
+                Plugin.id.in_(ids),
+                Marketplace.kind != MarketplaceKind.ORGANIZATION_LIBRARY,
+            )
+        )
+    )
+    groups: dict[UUID, set[int]] = {}
+    for plugin_id, group_id in db_session.execute(
+        select(Plugin__UserGroup.plugin_id, Plugin__UserGroup.user_group_id).where(
+            Plugin__UserGroup.plugin_id.in_(private),
+            Plugin__UserGroup.permission.is_not(None),
+        )
+    ):
+        groups.setdefault(plugin_id, set()).add(group_id)
+    users: dict[UUID, set[UUID]] = {}
+    for plugin_id, user_id in db_session.execute(
+        select(Plugin__User.plugin_id, Plugin__User.user_id).where(
+            Plugin__User.plugin_id.in_(private)
+        )
+    ):
+        users.setdefault(plugin_id, set()).add(user_id)
+    members = fetch_managed_group_member_ids(actor, db_session)
+    return {
+        plugin_id
+        for plugin_id in private
+        if _shared_only_within(
+            groups.get(plugin_id, ()), users.get(plugin_id, ()), managed, members
+        )
+    }
+
+
 def _check_scoped_group_setting(
     plugins: Mapping[UUID, _LockedPlugin],
     change: PluginAccessChange,
@@ -1384,7 +1460,7 @@ def _check_scoped_group_setting(
             group_rows if group_rows is not None else locked.group_rows
         )
         users = user_grants if user_grants is not None else locked.user_grants
-        if not set(groups) <= managed or not set(users) <= members:
+        if not _shared_only_within(groups, users, managed, members):
             raise OnyxError(
                 OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
                 "This skill is shared outside the groups you manage. Only an "
@@ -1414,10 +1490,22 @@ def _check_access_change(
         )
     if actor is not None and not is_global_manager:
         _check_sharing_setting(plugins, change)
-    if change.group_grants is None:
+    if change.group_grants is None and change.group_settings is None:
         return
-    requested_group_ids = sorted({grant.group_id for grant in change.group_grants})
-    assert_not_shared_with_default_group(db_session, requested_group_ids)
+    requested_group_ids = sorted(
+        {grant.group_id for grant in change.group_grants or ()}
+    )
+    setting_group_ids = sorted(
+        {
+            grant.group_id
+            for grant in change.group_grants or ()
+            if is_set(grant.installation_policy)
+        }
+        | {setting.group_id for setting in change.group_settings or ()}
+    )
+    assert_not_shared_with_default_group(
+        db_session, sorted(set(requested_group_ids) | set(setting_group_ids))
+    )
     for locked in plugins.values():
         for row in (_new_group_rows(locked, change) or {}).values():
             if (
@@ -1430,13 +1518,6 @@ def _check_access_change(
                     "be an editor.",
                 )
 
-    setting_group_ids = sorted(
-        {
-            grant.group_id
-            for grant in change.group_grants
-            if is_set(grant.installation_policy)
-        }
-    )
     if setting_group_ids and actor is not None and not is_global_manager:
         _check_scoped_group_setting(
             plugins, change, actor, setting_group_ids, db_session
@@ -1643,7 +1724,8 @@ def apply_plugin_access_change__no_commit(
     after the writes. The caller commits, then pushes once.
 
     Rules: a company install setting needs organization-wide MANAGE_PLUGINS. A
-    group install setting needs organization-wide MANAGE_PLUGINS, or
+    group install setting, with a grant or alone (``group_settings``), needs
+    organization-wide MANAGE_PLUGINS, or
     MANAGE_PLUGINS for that group on a private plugin shared only within the
     actor's groups. A group row cannot be EDITOR with NOT_AVAILABLE. A change
     to group shares must stay within the actor's managed scope. With the admin
@@ -1668,3 +1750,43 @@ def apply_plugin_access_change__no_commit(
             failures[plugin_id] = exc
     after = affected_user_ids_for_plugins(plugins, db_session)
     return PluginAccessResult(affected_user_ids=before | after, failures=failures)
+
+
+def set_group_install_setting__no_commit(
+    plugin_id: UUID,
+    group_id: int,
+    policy: PluginInstallationPolicy | None,
+    actor: User,
+    db_session: Session,
+) -> PluginAccessResult:
+    """The group page write. A private plugin that the group does not have
+    yet is shared with it as VIEWER, with ``policy``. Otherwise only the
+    group's install setting changes: a published plugin gets a setting-only
+    row, and None removes the setting (and a row with no permission). The
+    caller checks that the actor can edit a private plugin."""
+    plugins, missing = _lock_for_access_change([plugin_id], db_session)
+    if plugin_id in missing:
+        raise missing[plugin_id]
+    locked = plugins[plugin_id]
+    if group_id not in locked.group_rows and not locked.published:
+        change = PluginAccessChange(
+            group_grants=(
+                PluginGroupGrant(
+                    group_id=group_id,
+                    permission=SkillSharePermission.VIEWER,
+                    installation_policy=policy,
+                ),
+            ),
+            mode=PluginAccessMode.ADD_ONLY,
+        )
+    else:
+        change = PluginAccessChange(
+            group_settings=(
+                PluginGroupSetting(group_id=group_id, installation_policy=policy),
+            )
+        )
+    result = apply_plugin_access_change__no_commit(
+        [plugin_id], change, actor, db_session
+    )
+    result.raise_first_failure()
+    return result

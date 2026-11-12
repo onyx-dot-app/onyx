@@ -30,7 +30,11 @@
   organization-wide `MANAGE_PLUGINS`, which only admins hold today. A group
   setting (`SkillGroupShareRequest.installation_policy`) replaces it for that
   group's members; a group manager sets it only for their groups, on a private
-  skill shared only within them. Only organization-wide `MANAGE_PLUGINS`
+  skill shared only within them. The group page reads and writes these
+  settings through `GET /manage/admin/user-group/{id}/plugins` and
+  `PUT .../plugins/{plugin_id}` (EE, `ee/onyx/server/user_group/api.py`): a
+  published skill gets a setting-only row; a private skill the group does not
+  have yet is shared as viewer. Only organization-wide `MANAGE_PLUGINS`
   deletes a skill that is required for anyone.
 - **Admin skill policies** on Admin Panel → Craft → Preferences: Skill
   Publishing ([[#publishing-review]]), **Default Access** (the Organization
@@ -291,8 +295,10 @@ The library preview of an external-app skill calls the same renderer
 12. `sharing-single-entry` **Every share, publish and install setting change
     goes through `db/plugin.py:apply_plugin_access_change__no_commit`.** It
     takes a set of plugin ids, a `PluginAccessChange` (user and group grants,
-    `publish`, a three-state company install setting, and a mode: replace or
-    add-only) and the actor. A skill has no access of its own: the skills API
+    group settings with no share change (`PluginGroupSetting`: creates a
+    setting-only row; None removes the setting and deletes a row with no
+    permission), `publish`, a three-state company install setting, and a mode:
+    replace or add-only) and the actor. A skill has no access of its own: the skills API
     passes the plugin with the skill's id. The function locks the legacy skill
     rows, then the plugins, in id order; checks the rules once for the set;
     writes each plugin and its legacy rows in a savepoint, so one failure rolls
@@ -300,7 +306,10 @@ The library preview of an external-app skill calls the same renderer
     before and after. The routes then commit and push once. The skills layer
     calls it through `db/skill.py:share_skill__no_commit` (share route, editor
     create, patch visibility, imports with access settings) and
-    `db/skill.py:bulk_share_skills__no_commit` (bulk, add-only shares).
+    `db/skill.py:bulk_share_skills__no_commit` (bulk, add-only shares). The
+    group page calls it through `db/plugin.py:set_group_install_setting__no_commit`
+    (`ee/onyx/db/user_group_plugin.py` first checks that a scoped manager can
+    edit a private plugin, because A1 does not check edit access).
     `db/skill.py:replace_skill_shares`, `set_skill_installation_policy`,
     `set_skill_public_permission` and `transfer_skill_ownership` are thin
     callers with no actor, so they skip the permission checks. Do not write
