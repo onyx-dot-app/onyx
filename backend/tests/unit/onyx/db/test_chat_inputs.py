@@ -144,6 +144,12 @@ _DONE, _RUNNING = RunStatus.COMPLETE, RunStatus.RUNNING
         ([_result(_ALPHA, _DONE)], [_wait({_ALPHA, _BETA})], True),
         # A queued message to a held agent will start a run.
         ([_result(_ALPHA, _DONE)], [_wait(None, queued=True)], False),
+        # A result wakes the root only when every wait that holds it is released.
+        (
+            [_result(_ALPHA, _DONE), _result(_BETA, _RUNNING)],
+            [_wait({_ALPHA}), _wait(None)],
+            False,
+        ),
         # Stopped runs wake nobody, with or without a wait.
         ([_result(_ALPHA, RunStatus.CANCELLED, stopped=True)], [_wait(None)], False),
     ],
@@ -154,6 +160,7 @@ _DONE, _RUNNING = RunStatus.COMPLETE, RunStatus.RUNNING
         "failed",
         "interrupted",
         "queued",
+        "overlapping",
         "stopped",
     ],
 )

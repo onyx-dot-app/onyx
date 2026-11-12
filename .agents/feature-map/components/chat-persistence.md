@@ -216,16 +216,19 @@ finished results wake a recipient only while its queue is not paused and its
 latest run did not fail; an agent's queue pauses when its latest run was
 stopped (`db/chat_inputs.py:wakes_for_results`).
 
-The root's `wait_agents` call ends its turn when a named agent, or any agent, still runs.
+The root's `wait_agents` call ends its turn when it is the step's only call and a named
+agent, or any agent, still runs.
 Its saved `tool_call` result (`AgentWaitDetails`) is the only record of the wait. It holds
 the root's unread results from those agents' runs that belong to its root response or an
 earlier one. `wakes_for_results` applies one rule to an idle root: a finished result that no
 wait holds wakes it at once; held results wake it together once none of their wait's runs is
-active and no message to its agents is queued. Interrupted runs leave no result, so they count
+active and no message that dispatch would start (`can_start_input`) is queued for its agents.
+A result held by several waits wakes the root only when all of them are released. Interrupted runs leave no result, so they count
 as finished; a wait whose runs left only stopped results wakes nobody. The follow-up reads the
 results, so a wait wakes the root once, and interim follow-ups leave its unfinished runs unread.
 `agent_waits` reads waits only when results would wake the root, from the oldest unread
-result's root response on. Dispatch evaluates the rule, mainly from a child's release.
+result's root response on. The existing dispatch callers evaluate the rule: a child's
+release, the turn's own release, the agent host, and `/status`.
 A pod crash while awaited runs are active, with no browser open, delays the wake until
 `/status` or a run store repairs the orphaned runs.
 A user turn reads the root's unread results at its first step, so it ends a wait whose wake was lost.

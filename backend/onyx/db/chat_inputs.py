@@ -130,8 +130,9 @@ def wakes_for_results(
     """Whether unread finished results start an idle recipient's next run.
 
     A finished result that no wait holds starts it. A wait holds its results
-    until none of its runs is active and no message for its agents is queued;
-    then they start one run together.
+    until none of its runs is active and no message that dispatch would start
+    is queued for its agents; a result starts the run once every wait that
+    holds it is released.
     """
     if (
         latest_status is None
@@ -149,7 +150,7 @@ def wakes_for_results(
             for wait in waits
             if wait.holds(result.agent_id, result.root_response_id)
         ]
-        if not holding or any(
+        if all(
             not wait.queued
             and not any(
                 other.is_active and wait.holds(other.agent_id, other.root_response_id)
@@ -405,7 +406,7 @@ def next_queued_turn(
         status,
         root_results,
         queue_paused=paused,
-        waits=agent_waits(session, chat_session_id, branch.message_ids),
+        waits=agent_waits(session, chat_session_id, branch),
     ):
         return QueuedChatTurn(parent_response_id=parent_response_id, message=None)
     return None
@@ -585,7 +586,7 @@ def agent_result_states(
 
 
 def agent_waits(
-    session: Session, chat_session_id: UUID, branch_ids: Collection[int]
+    session: Session, chat_session_id: UUID, branch: ChatBranch
 ) -> list[AgentWait]:
     """The root's `wait_agents` calls on the branch that can hold unread results.
 
@@ -597,14 +598,14 @@ def agent_waits(
         select(func.min(ChatInput.root_response_id))
         .where(
             ChatInput.recipient_session_id == chat_session_id,
-            _results_on_branch(branch_ids),
+            _results_on_branch(branch.message_ids),
         )
         .scalar_subquery()
     )
     calls = session.execute(
         select(ToolCall.parent_chat_message_id, ToolCall.result).where(
             ToolCall.chat_session_id == chat_session_id,
-            ToolCall.parent_chat_message_id.in_(branch_ids),
+            ToolCall.parent_chat_message_id.in_(branch.message_ids),
             ToolCall.parent_chat_message_id >= oldest_result_root,
             type_coerce(ToolCall.result, JSONB)["details"]["type"].astext
             == AgentWaitDetails.model_fields["type"].default,
@@ -612,18 +613,34 @@ def agent_waits(
     ).all()
     if not calls:
         return []
-    # Messages to the root's agents that have not started a run yet.
+    # Messages to the root's agents; those that dispatch would start hold a wait.
     spawner = aliased(ChatMessage)
-    queued = session.execute(
-        select(ChatInput.recipient_session_id, ChatInput.root_response_id)
+    messages = session.execute(
+        select(
+            ChatInput.recipient_session_id,
+            ChatInput.root_response_id,
+            ChatInput.delivery,
+            ChatInput.target_response_id,
+        )
         .join(ChatSession, ChatSession.id == ChatInput.recipient_session_id)
         .join(spawner, spawner.id == ChatSession.spawned_by_message_id)
         .where(
             ChatInput.source == InputSource.AGENT,
-            ChatInput.root_response_id.in_(branch_ids),
+            ChatInput.root_response_id.in_(branch.message_ids),
             spawner.chat_session_id == chat_session_id,
         )
     ).all()
+    latest = latest_agent_responses(
+        session, branch, {str(recipient) for recipient, *_ in messages}
+    )
+    starting: list[tuple[UUID, int]] = []
+    for recipient, root_id, delivery, target_id in messages:
+        recipient_latest = latest.get(str(recipient))
+        status = recipient_latest.response_status if recipient_latest else None
+        if root_id is not None and can_start_input(
+            delivery, target_id, status, queue_paused=agent_queue_paused(status)
+        ):
+            starting.append((recipient, root_id))
     waits: list[AgentWait] = []
     for response_id, result in calls:
         if (
@@ -632,17 +649,23 @@ def agent_waits(
             or not isinstance(result.details, AgentWaitDetails)
         ):
             raise ValueError("A wait_agents call has no saved wait")
-        agent_ids = (
-            frozenset(UUID(agent_id) for agent_id in result.details.agent_ids)
+        scope = AgentWait(
+            response_id=response_id,
+            agent_ids=frozenset(UUID(agent_id) for agent_id in result.details.agent_ids)
             if result.details.agent_ids is not None
-            else None
+            else None,
+            queued=False,
         )
-        wait = AgentWait(response_id=response_id, agent_ids=agent_ids, queued=False)
-        wait.queued = any(
-            root_id is not None and wait.holds(recipient, root_id)
-            for recipient, root_id in queued
+        waits.append(
+            scope.model_copy(
+                update={
+                    "queued": any(
+                        scope.holds(recipient, root_id)
+                        for recipient, root_id in starting
+                    )
+                }
+            )
         )
-        waits.append(wait)
     return waits
 
 

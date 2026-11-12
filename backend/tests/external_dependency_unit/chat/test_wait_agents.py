@@ -17,15 +17,29 @@ from fastapi import BackgroundTasks, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from onyx.agents.models import InputSource, RunStatus
+from onyx.agents.models import InputSource, MessageDelivery, RunStatus
 from onyx.cache.factory import get_cache_backend
 from onyx.chat import execution
 from onyx.chat.execution import chat_turn_work
 from onyx.chat.process_message import handle_stream_message_objects
-from onyx.chat.run_store import RESPONSE_OWNER_KEY_PREFIX
+from onyx.chat.run_store import RESPONSE_OWNER_KEY_PREFIX, stop_response
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
-from onyx.db.chat_inputs import read_chat_inbox
-from onyx.db.models import ChatMessage, ChatResponseItem, ChatSession, User
+from onyx.db.chat import get_selected_branch
+from onyx.db.chat_inputs import (
+    agent_waits,
+    read_chat_inbox,
+    withdraw_agent_result__no_commit,
+)
+from onyx.db.chat_subagents import load_session_agent_metadata
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.models import (
+    ChatInput,
+    ChatMessage,
+    ChatResponseItem,
+    ChatSession,
+    User,
+)
+from onyx.db.models import ToolCall as ToolCallRow
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.models import (
@@ -38,6 +52,7 @@ from onyx.llm.models import (
 from onyx.server.query_and_chat import chat_backend
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.tools.constants import SPAWN_AGENT_TOOL_NAME, WAIT_AGENTS_TOOL_NAME
+from shared_configs.contextvars import get_current_tenant_id
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.unit.onyx.agents.fakes import FakeModelClient
 
@@ -298,6 +313,56 @@ def _settled(db_session: Session, chat_id: UUID, answers: int) -> None:
     _wait_until(done, f"the root has {answers} finished answers")
 
 
+def _message_agent(
+    db_session: Session,
+    chat: ChatSession,
+    worker: ChatMessage,
+    delivery: MessageDelivery,
+) -> ChatInput:
+    """Store a root message for a worker's run, as `send_message` does."""
+    spawn = db_session.scalar(
+        select(ToolCallRow).where(
+            ToolCallRow.chat_session_id == chat.id,
+            ToolCallRow.tool_call_id.like("spawn-%"),
+        )
+    )
+    assert spawn is not None and spawn.parent_chat_message_id is not None
+    row = ChatInput(
+        recipient_session_id=worker.chat_session_id,
+        message_id=str(uuid4()),
+        source=InputSource.AGENT,
+        invoking_tool_call_id=spawn.id,
+        source_response_id=spawn.parent_chat_message_id,
+        target_response_id=worker.id,
+        root_response_id=spawn.parent_chat_message_id,
+        delivery=delivery,
+        content="More work",
+        max_steps=3,
+    )
+    db_session.add(row)
+    db_session.commit()
+    return row
+
+
+def _interrupt(db_session: Session, chat: ChatSession, name: str) -> ChatMessage:
+    """The same steps as interrupt_agent: withdraw the result, then cancel."""
+    worker = _worker_responses(db_session, chat.id)[name]
+    with get_session_with_current_tenant() as session:
+        withdraw_agent_result__no_commit(session, worker.id)
+        session.commit()
+    stop_response(get_cache_backend(), get_current_tenant_id(), worker.id)
+    cache = get_cache_backend()
+
+    def released() -> bool:
+        db_session.refresh(worker)
+        return worker.response_status == RunStatus.CANCELLED and not cache.exists(
+            f"{RESPONSE_OWNER_KEY_PREFIX}{worker.id}"
+        )
+
+    _wait_until(released, f"{name} is interrupted")
+    return worker
+
+
 class _DroppedDispatches:
     """Lose the release events of chosen runs, as when their host pod is gone."""
 
@@ -470,3 +535,97 @@ def test_a_user_turn_reads_awaited_results_whose_wake_never_fired(
     assert read_chat_inbox(db_session, chat.id).next_turn is None
     assert chat_turn_work.wait_idle(timeout=WAIT_TIMEOUT_S)
     assert _follow_ups(db_session, chat.id) == []
+
+
+@pytest.mark.usefixtures("idle_turn_work")
+def test_a_message_that_can_no_longer_start_does_not_hold_the_wait(
+    chat: ChatSession,
+    owner: User,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A send to a run that then fails never starts a run, so it holds nothing."""
+    workers = Workers(("alpha",), failing=frozenset({"alpha"}))
+    _start(chat, owner, workers, monkeypatch)
+    alpha = _worker_responses(db_session, chat.id)["alpha"]
+    _message_agent(db_session, chat, alpha, MessageDelivery.SEND)
+    alpha = _finish(db_session, chat, workers, "alpha")
+    assert alpha.response_status == RunStatus.ERROR
+    _settled(db_session, chat.id, 2)
+    [follow_up] = _follow_ups(db_session, chat.id)
+    assert _accepted_results(db_session, follow_up) == [alpha.id]
+
+
+@pytest.mark.usefixtures("idle_turn_work")
+def test_a_message_queued_behind_an_interrupt_does_not_hold_the_wait(
+    chat: ChatSession,
+    owner: User,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An interrupt pauses the agent's queue, so its queued message waits for an
+    explicit send and holds nothing; the interrupted run reports nothing."""
+    workers = Workers(("alpha", "beta"))
+    _start(chat, owner, workers, monkeypatch)
+    alpha = _worker_responses(db_session, chat.id)["alpha"]
+    _message_agent(db_session, chat, alpha, MessageDelivery.QUEUE)
+    _interrupt(db_session, chat, "alpha")
+    beta = _finish(db_session, chat, workers, "beta")
+    _settled(db_session, chat.id, 2)
+    [follow_up] = _follow_ups(db_session, chat.id)
+    assert _accepted_results(db_session, follow_up) == [beta.id]
+
+
+@pytest.mark.usefixtures("idle_turn_work")
+def test_a_message_that_will_start_a_run_holds_the_wait(
+    chat: ChatSession,
+    owner: User,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workers = Workers(("alpha",))
+    dropped = _drop_dispatches(monkeypatch)
+    _start(chat, owner, workers, monkeypatch)
+    alpha = dropped.drop_next(lambda: _finish(db_session, chat, workers, "alpha"))
+    # Nothing scans once every run has released.
+    assert chat_turn_work.wait_idle(timeout=WAIT_TIMEOUT_S)
+    assert read_chat_inbox(db_session, chat.id).next_turn is not None
+    queued = _message_agent(db_session, chat, alpha, MessageDelivery.QUEUE)
+    _, branch = get_selected_branch(db_session, chat.id)
+    [wait] = agent_waits(db_session, chat.id, branch)
+    assert wait.queued
+    assert read_chat_inbox(db_session, chat.id).next_turn is None
+    db_session.delete(queued)
+    db_session.commit()
+    assert read_chat_inbox(db_session, chat.id).next_turn is not None
+
+
+def test_agents_of_the_current_user_turn(
+    chat: ChatSession,
+    owner: User,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workers = Workers(("alpha", "beta"))
+    _start(chat, owner, workers, monkeypatch)
+    [waiting] = _root_answers(db_session, chat.id)
+
+    def current() -> dict[str, bool]:
+        latest = _root_answers(db_session, chat.id)[-1]
+        return {
+            agent.path: agent.current_turn
+            for agent in load_session_agent_metadata(latest.id)
+        }
+
+    assert current() == {"/root": True, "/root/alpha": True, "/root/beta": True}
+    for name in workers.names:
+        _finish(db_session, chat, workers, name)
+    _settled(db_session, chat.id, 2)
+    # The follow-up still belongs to the user turn that started the agents.
+    assert current() == {"/root": True, "/root/alpha": True, "/root/beta": True}
+    assert chat_turn_work.wait_idle(timeout=WAIT_TIMEOUT_S)
+    _send(chat, owner, "Next question")
+    _settled(db_session, chat.id, 3)
+    assert current() == {"/root": True, "/root/alpha": False, "/root/beta": False}
+    assert waiting.id < _root_answers(db_session, chat.id)[-1].id
+    assert chat_turn_work.wait_idle(timeout=WAIT_TIMEOUT_S)

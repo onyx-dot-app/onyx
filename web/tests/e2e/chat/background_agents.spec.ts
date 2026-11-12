@@ -257,24 +257,35 @@ test("a root that waits for its agents answers their results once @code-mode", a
       },
     ],
   });
-  for (const child of [
-    {
-      gate: gateId,
-      task: childTask,
-      result: "Private child result: forty-two.",
-    },
-    {
-      gate: secondGateId,
-      task: secondChildTask,
-      result: "Private child result: verified.",
-    },
-  ]) {
-    await addMockLlmConversation({
-      name: child.gate,
-      conditions: { prompt_contains: [child.task] },
-      replies: [{ text: child.result, pause_after_first_chunk: child.gate }],
-    });
-  }
+  // The researcher lists agents before it answers, so the test can see it
+  // reach its last step.
+  await addMockLlmConversation({
+    name: gateId,
+    conditions: { prompt_contains: [childTask] },
+    replies: [
+      {
+        text: "Checking the team.",
+        tool_calls: [
+          { id: "research-list", name: "list_agents", arguments: {} },
+        ],
+        pause_after_first_chunk: gateId,
+      },
+      {
+        text: "Private child result: forty-two.",
+        conditions: { has_results_for: ["research-list"] },
+      },
+    ],
+  });
+  await addMockLlmConversation({
+    name: secondGateId,
+    conditions: { prompt_contains: [secondChildTask] },
+    replies: [
+      {
+        text: "Private child result: verified.",
+        pause_after_first_chunk: secondGateId,
+      },
+    ],
+  });
   let sessionId: string | null = null;
   try {
     await chatPage.goto();
@@ -291,6 +302,12 @@ test("a root that waits for its agents answers their results once @code-mode", a
       "Subagents working"
     );
     await releaseMockLlmGate(gateId);
+    await expect
+      .poll(async () => (await getMockLlmConversationRequests(gateId)).length)
+      .toBe(2);
+    // The researcher has answered; the wait holds its result for verification.
+    await expect(chatPage.inputBar.subagentActivity).toBeVisible();
+    await expect(chatPage.agentResultsDividers).toHaveCount(0);
     await releaseMockLlmGate(secondGateId);
     await chatPage.expectAnswerParagraph(finalAnswer);
     await expect(chatPage.inputBar.subagentActivity).toBeHidden();

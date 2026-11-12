@@ -186,7 +186,7 @@ result wakes no agent; the root reads it at its next step.
 The controls stay direct in code mode. Each child inherits code mode but owns
 its own code cells.
 `list_agents` shows running and suspended agents, and agents whose latest run belongs to the
-current user turn (`AgentInfo.turn_id`); `include_finished` adds the rest. It marks the caller
+current user turn (`AgentInfo.current_turn`); `include_finished` adds the rest. It marks the caller
 and accepts a `path_prefix` filter. An agent can message
 any other agent in the tree. `send_message` reaches the next model step or starts an idle agent
 with fresh limits; a message to the root waits for the root's next run and never starts one.

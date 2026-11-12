@@ -5,7 +5,7 @@ from typing import ClassVar
 
 from pydantic import BaseModel
 
-from onyx.agents.models import MessageDelivery, RunFailureKind, RunStatus
+from onyx.agents.models import MessageDelivery, RunFailureKind
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentLifetime, ToolInvocation
 from onyx.configs.chat_configs import CHAT_EXECUTION_TIMEOUT_S
@@ -121,7 +121,7 @@ class ListAgentsTool(_SubagentTool):
             for agent in matching
             if request.include_finished
             or agent.current_turn
-            or agent.status in (RunStatus.RUNNING, RunStatus.SUSPENDED)
+            or (agent.status is not None and not agent.status.is_terminal)
         ]
         hidden = len(matching) - len(agents)
         if not agents and not hidden:
@@ -239,16 +239,19 @@ class WaitAgentsTool(_SubagentTool):
         running = sorted(
             children[agent_id].path
             for agent_id in request.agent_ids or children
-            if children[agent_id].status in (RunStatus.RUNNING, RunStatus.SUSPENDED)
+            if (status := children[agent_id].status) is not None
+            and not status.is_terminal
         )
-        # The saved details also hold agents that this step starts, which the
-        # list above can miss. Without a running agent the run goes on, and
-        # finished results arrive at the next step.
+        # The saved details also hold agents that this turn starts later, from
+        # this step's spawns or queued messages. Without a running agent the
+        # run goes on.
         return ToolResult(
-            content=f"Waiting for {len(running)} agents: {', '.join(running)}."
+            content=f"Waiting for {len(running)} "
+            f"{'agent' if len(running) == 1 else 'agents'}: {', '.join(running)}."
             if running
-            else "None of these agents is running. Their results are in this "
-            "conversation, or arrive before your next step.",
+            else "Wait recorded, but none of these agents is running yet. Agents "
+            "that start in this turn, from spawns or queued messages, are part of "
+            "the wait. Finished results arrive before your next step.",
             details=AgentWaitDetails(agent_ids=request.agent_ids),
             terminate=bool(running),
         )
