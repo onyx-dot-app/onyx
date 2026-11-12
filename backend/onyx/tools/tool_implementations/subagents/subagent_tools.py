@@ -5,7 +5,7 @@ from typing import ClassVar
 
 from pydantic import BaseModel
 
-from onyx.agents.models import MessageDelivery
+from onyx.agents.models import MessageDelivery, RunFailureKind
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentLifetime, ToolInvocation
 from onyx.configs.chat_configs import CHAT_EXECUTION_TIMEOUT_S
@@ -114,7 +114,13 @@ class ListAgentsTool(_SubagentTool):
             return ToolResult(content="No agents match on this chat branch.")
         lines: list[str] = []
         for agent in agents:
-            status = agent.status.value if agent.status is not None else "not started"
+            status = (
+                "stopped by the user"
+                if agent.failure_kind == RunFailureKind.STOPPED_BY_USER
+                else agent.status.value
+                if agent.status is not None
+                else "not started"
+            )
             parent = f"parent {agent.parent_id}" if agent.parent_id else "root"
             line = f"{agent.path} (agent_id: {agent.id}; {parent}): {status}"
             if agent.id == control.agent_id:

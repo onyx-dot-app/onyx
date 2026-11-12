@@ -72,6 +72,7 @@ from onyx.agents.models import (
     ToolCallContext,
     ToolExecutionRecord,
     ToolResultAmendment,
+    cancellation_failure,
     messages_from_steps,
 )
 from onyx.agents.tool_execution import ToolBatch
@@ -1266,15 +1267,10 @@ class Run:
                         execution.status = ExecutionStatus(outcome.value)
             # After partial messages end, so live events keep the saved order.
             self._apply_amendments(amendments)
-            if (
-                outcome == RunStatus.CANCELLED
-                and self._state.failure is None
-                and self.cancellation_signal.reason == "deadline"
-            ):
-                logger.warning("Agent run %s was stopped at its deadline", self.id)
-                self._state.failure = RunFailure(
-                    kind=RunFailureKind.DEADLINE,
-                    message="The run was stopped at its deadline.",
+            if outcome == RunStatus.CANCELLED and self._state.failure is None:
+                # Deadlines and user stops are reported; a plain request is not.
+                self._state.failure = cancellation_failure(
+                    self.cancellation_signal.reason or "requested"
                 )
             self._state.status = outcome
             if self.event_delivery:

@@ -640,11 +640,19 @@ class AgentCoordinator:
                 )
         if active is not None and active_visible:
             info = info.model_copy(
-                update={"latest_run_id": active.id, "status": active.status}
+                update={
+                    "latest_run_id": active.id,
+                    "status": active.status,
+                    "failure_kind": None,
+                }
             )
         elif saved is not None and saved_visible:
             info = info.model_copy(
-                update={"latest_run_id": saved.run_id, "status": saved.status}
+                update={
+                    "latest_run_id": saved.run_id,
+                    "status": saved.status,
+                    "failure_kind": saved.failure.kind if saved.failure else None,
+                }
             )
         elif (
             self._directory is not None
@@ -800,12 +808,7 @@ class AgentCoordinator:
         with self._state.lock:
             self.check_open()
             parent = self._state.registrations[parent_id]
-            ancestor = parent
-            depth = 0
-            while ancestor.parent_id is not None:
-                depth += 1
-                ancestor = self._state.registrations[ancestor.parent_id]
-            if depth >= MAX_CHILD_DEPTH:
+            if parent.depth >= MAX_CHILD_DEPTH:
                 raise ValueError(
                     f"Agent nesting limit reached: agents {MAX_CHILD_DEPTH} levels "
                     "below the root cannot start agents"
@@ -910,10 +913,12 @@ class AgentCoordinator:
                 self._state.latest[run.agent_id] = snapshot
             info = self._visible_agents.get(run.agent_id)
             if info is not None and status != RunStatus.RUNNING:
+                failure = snapshot.failure if snapshot is not None else None
                 self._visible_agents[run.agent_id] = info.model_copy(
                     update={
                         "latest_run_id": run.id,
                         "status": status,
+                        "failure_kind": failure.kind if failure else None,
                     }
                 )
 

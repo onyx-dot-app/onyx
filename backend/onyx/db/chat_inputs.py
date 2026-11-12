@@ -129,7 +129,7 @@ def wakes_for_results(
         and latest_status.is_terminal
         and latest_status != RunStatus.ERROR
         and not queue_paused
-        and any(result.status.is_terminal for result in results)
+        and any(result.wakes_recipient for result in results)
     )
 
 
@@ -521,28 +521,6 @@ def _results_on_branch(branch_ids: Collection[int]) -> ColumnElement[bool]:
     )
 
 
-def count_running_agents(session: Session, branch_ids: Collection[int]) -> int:
-    """Count the branch's unfinished background agent runs.
-
-    Each such run has an unread result row from its reservation. A suspended
-    run counts: it resumes without another capacity check.
-    """
-    return (
-        session.scalar(
-            select(func.count())
-            .select_from(ChatInput)
-            .join(ChatMessage, ChatMessage.id == ChatInput.source_response_id)
-            .where(
-                _results_on_branch(branch_ids),
-                ChatMessage.response_status.in_(
-                    (RunStatus.RUNNING, RunStatus.SUSPENDED)
-                ),
-            )
-        )
-        or 0
-    )
-
-
 def agent_result_states(
     session: Session,
     visible_ids: Collection[int],
@@ -554,6 +532,7 @@ def agent_result_states(
             ChatInput.recipient_session_id.label("recipient_id"),
             ChatMessage.id.label("response_id"),
             ChatMessage.response_status.label("status"),
+            ChatMessage.response_failure.label("failure"),
         )
         .join(ChatMessage, ChatMessage.id == ChatInput.source_response_id)
         .where(_results_on_branch(visible_ids))
@@ -565,6 +544,33 @@ def agent_result_states(
         AgentResultState.model_validate(row)
         for row in session.execute(query).mappings()
     ]
+
+
+def active_agent_response_ids(
+    session: Session, branch_ids: Collection[int]
+) -> list[int]:
+    """The branch's active background agents, as `AgentResultState.is_active` defines them."""
+    return [
+        result.response_id
+        for result in agent_result_states(session, branch_ids)
+        if result.is_active
+    ]
+
+
+def drop_agent_work__no_commit(session: Session, branch: ChatBranch) -> None:
+    """Delete the branch's pending work for agents below the root.
+
+    Their queued messages and unread child results would start runs after a
+    Stop. Results for the root stay; the root reads them at its next step.
+    Caller holds the chat lock.
+    """
+    session.execute(
+        delete(ChatInput).where(
+            ChatInput.root_response_id.in_(branch.message_ids),
+            ChatInput.recipient_session_id != branch.chat_session_id,
+            ChatInput.source.in_((InputSource.AGENT, InputSource.AGENT_RESULT)),
+        )
+    )
 
 
 def withdraw_agent_result__no_commit(session: Session, response_id: int) -> None:

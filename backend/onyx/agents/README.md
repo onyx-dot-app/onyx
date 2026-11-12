@@ -315,10 +315,17 @@ A successful completion callback marks those child failures as handled.
 
 Spawning returns an `agent_id` for later messages and a `run_id` for that execution.
 Agents nest at most `MAX_CHILD_DEPTH` levels below the root: the root, its children, and their children.
-Chat runs at most `MAX_RUNNING_AGENTS` background agents on a branch at a time, counting suspended agents, which resume without another check; a spawn beyond that is a tool error, and inbox work for an idle agent waits until a run finishes.
+An agent at that depth is built without `spawn_agent`; it keeps the tools that reach existing agents.
+An active background agent is an unfinished run (running or suspended) with a result row; only `spawn_agent` runs have one.
+Chat runs at most `MAX_RUNNING_AGENTS` active background agents on a branch; a spawn beyond that is a tool error,
+and inbox work for an idle agent waits until a run finishes.
 Every run checks the chat owner's token rate limits: a user's turn when it is sent or leaves the queue,
-and a run that an agent starts when the run store reserves it.
-`POST /chat/chat-session/{session_id}/stop-subagents` interrupts every running or suspended agent on the selected branch except the root.
+and a run that an agent starts when the run store reserves it. Inbox work checks capacity first, so it waits while the branch is full;
+work over the limit becomes a failed run that its sender sees.
+`POST /chat/chat-session/{session_id}/stop-subagents` takes the chat lock, drops pending work for agents below the root,
+and stops every active background agent on the selected branch. The root turn and its foreground workers keep running.
+A parent's Stop blocks its later spawns. A stopped run records `RunFailureKind.STOPPED_BY_USER`:
+`list_agents` shows "stopped by the user", and its result wakes no agent; the root reads it as a notice at its next step.
 Return `ChildRunWait` to wait for results without holding a tool thread.
 Paths are readable labels and may repeat.
 

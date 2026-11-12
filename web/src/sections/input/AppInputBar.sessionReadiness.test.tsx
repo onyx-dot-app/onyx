@@ -1023,9 +1023,10 @@ test("Stop subagents interrupts background work and refreshes the status", async
   });
   const user = setupUser();
   render(<ChatInput {...props("input")} initialMessage="" />);
-  await user.click(
-    await screen.findByRole("button", { name: "Stop subagents" })
-  );
+  const stop = await screen.findByRole("button", { name: "Stop subagents" });
+  // Screen readers announce the status text without the control inside it.
+  expect(screen.getByRole("status")).not.toContainElement(stop);
+  await user.click(stop);
   await waitFor(() =>
     expect(screen.queryByTestId("subagent-activity")).not.toBeInTheDocument()
   );

@@ -26,6 +26,7 @@ from onyx.agents.execution_records import run_input_message_id
 from onyx.agents.models import (
     AgentCompletion,
     AgentInfo,
+    RunFailure,
     RunStatus,
     messages_from_steps,
 )
@@ -175,22 +176,6 @@ def selected_responses(branch: ChatBranch) -> CTE:
     )
 
 
-def unfinished_agent_response_ids(db_session: Session, branch: ChatBranch) -> list[int]:
-    """The branch's running or suspended agent runs, without the root's runs.
-
-    A suspended run waits for its children and resumes when they finish.
-    """
-    selected = selected_responses(branch)
-    return list(
-        db_session.scalars(
-            select(selected.c.id).where(
-                selected.c.chat_session_id != branch.chat_session_id,
-                selected.c.status.in_((RunStatus.RUNNING, RunStatus.SUSPENDED)),
-            )
-        )
-    )
-
-
 def latest_agent_responses(
     db_session: Session, branch: ChatBranch, agent_ids: Collection[str]
 ) -> dict[str, ChatMessage]:
@@ -211,6 +196,7 @@ def latest_agent_responses(
                 ChatMessage.id,
                 ChatMessage.chat_session_id,
                 ChatMessage.response_status,
+                ChatMessage.response_failure,
             )
         )
     )
@@ -554,6 +540,7 @@ def agent_metadata(
     ancestors: dict[UUID, SessionAncestor],
     latest_response_id: int | None,
     status: RunStatus | None,
+    failure: RunFailure | None = None,
 ) -> AgentInfo:
     parent_id = ancestors[agent.id].parent_id
     return AgentInfo(
@@ -566,6 +553,7 @@ def agent_metadata(
         if latest_response_id is not None
         else None,
         status=status,
+        failure_kind=failure.kind if failure is not None else None,
     )
 
 
@@ -637,11 +625,15 @@ def load_session_agent_metadata(
                 latest_id, status = (
                     latest_root if latest_root is not None else (None, None)
                 )
+                failure = None
             else:
                 latest = latest_by_agent.get(str(agent.id))
                 latest_id = latest.id if latest else None
                 status = latest.response_status if latest else None
-            metadata.append(agent_metadata(agent, ancestors, latest_id, status))
+                failure = latest.response_failure if latest else None
+            metadata.append(
+                agent_metadata(agent, ancestors, latest_id, status, failure)
+            )
         return metadata
 
 
@@ -668,4 +660,5 @@ def lookup_session_agent(
             ancestors,
             latest.id if latest else None,
             latest.response_status if latest else None,
+            latest.response_failure if latest else None,
         )

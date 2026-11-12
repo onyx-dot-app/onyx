@@ -32,6 +32,7 @@ from onyx.agents.models import (
     RunState,
     RunStatus,
     StepRecord,
+    cancellation_failure,
 )
 from onyx.agents.runtime import Agent, AgentBusy, Run, RunNotTransferable
 from onyx.cache.factory import get_cache_backend
@@ -60,9 +61,9 @@ from onyx.db.chat_checkpoint import (
     release_checkpoint_claim__no_commit,
 )
 from onyx.db.chat_inputs import (
+    active_agent_response_ids,
     agent_result_states,
     consume_inputs__no_commit,
-    count_running_agents,
     enqueue_message,
     fail_inbox_start__no_commit,
     fail_response_start__no_commit,
@@ -91,6 +92,7 @@ from onyx.db.chat_subagents import (
 )
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.models import User
+from onyx.llm.cancellation import CancelReason
 from onyx.llm.models import Message, UserMessage
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.tools.constants import SPAWN_AGENT_TOOL_NAME
@@ -168,29 +170,32 @@ def _stop_key(response_id: int) -> str:
     return f"chat_response_stop:{response_id}"
 
 
-def stop_response(cache: CacheBackend, tenant_id: str, response_id: int) -> None:
+def request_response_stop(
+    cache: CacheBackend, response_id: int, reason: CancelReason = "requested"
+) -> None:
+    """Ask the run's owner to cancel it; the reason travels with the request."""
+    cache.set(_stop_key(response_id), reason, ex=STOP_TTL_SECONDS)
+
+
+def stop_response(
+    cache: CacheBackend,
+    tenant_id: str,
+    response_id: int,
+    reason: CancelReason = "requested",
+) -> None:
     """Request Stop of a run; save it as cancelled when no owner remains."""
-    cache.set(_stop_key(response_id), 1, ex=STOP_TTL_SECONDS)
+    request_response_stop(cache, response_id, reason)
     with _ownership_lock(cache, response_id):
         if cache.exists(_owner_key(response_id)):
             return
         with get_session_with_tenant(tenant_id=tenant_id) as session:
-            interrupt_response__no_commit(session, response_id, cancelled=True)
+            interrupt_response__no_commit(
+                session,
+                response_id,
+                cancelled=True,
+                failure=cancellation_failure(reason),
+            )
             session.commit()
-
-
-def interrupt_agent_runs(
-    cache: CacheBackend, tenant_id: str, response_ids: Collection[int]
-) -> None:
-    """Interrupt agent runs: drop their results, then stop them.
-
-    The results go first, so an interrupted run wakes no agent.
-    """
-    for response_id in response_ids:
-        with get_session_with_tenant(tenant_id=tenant_id) as session:
-            withdraw_agent_result__no_commit(session, response_id)
-            session.commit()
-        stop_response(cache, tenant_id, response_id)
 
 
 def agent_result_message(completion: AgentCompletion) -> UserMessage:
@@ -267,7 +272,7 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory):
         cache: CacheBackend,
         follow_up_steps: int,
         user: User,
-        restore_subagent: Callable[[SavedAgentContext], Agent] | None = None,
+        restore_subagent: Callable[[SavedAgentContext, int], Agent] | None = None,
         root_response: RunStore | None = None,
         control_cache: CacheBackend | None = None,
         on_child_released: Callable[[], None] | None = None,
@@ -423,7 +428,9 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory):
             raise ValueError("Subagent restoration is unavailable")
         # Restoration must use the conversation's tenant, not the worker's context.
         return self._with_tenant(
-            lambda: restore_subagent(load_agent_history(self._input_branch, saved.id))
+            lambda: restore_subagent(
+                load_agent_history(self._input_branch, saved.id), saved.depth
+            )
         )
 
     def submit_message(self, request: AgentMessageRequest) -> AgentMessageReceipt:
@@ -765,7 +772,7 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory):
             get_selected_branch(session, self.chat_session_id)[1]
         )
         return (
-            count_running_agents(session, self._input_branch.message_ids)
+            len(active_agent_response_ids(session, self._input_branch.message_ids))
             < MAX_RUNNING_AGENTS
         )
 
@@ -779,10 +786,6 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory):
         parent_message_id: str | None,
         parent_tool_call_id: str | None,
     ) -> str:
-        if agent.id != str(self.chat_session_id):
-            # Runs that agents start count against the chat owner's limits. Root
-            # turns check them when they are sent or accepted from the queue.
-            check_token_rate_limits(self._user)
         if previous_run_id is not None and agent.id != str(self.chat_session_id):
             # An idle child's next run comes from its inbox.
             instruction = messages[0] if messages else None
@@ -800,6 +803,10 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory):
                 if not self._lock_background_capacity(session):
                     # The work stays in the inbox; a later scan starts it.
                     raise _MessageChanged("The chat runs its maximum of agents")
+                # Runs that agents start count against the chat owner's limits.
+                # Work over the limit becomes a failed run that its sender sees,
+                # so it does not retry for the whole budget window.
+                check_token_rate_limits(self._user)
                 reserved = reserve_inbox_run__no_commit(
                     session,
                     self._input_branch,
@@ -832,6 +839,9 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory):
             raise ValueError("A saved child response requires one user instruction")
         if parent_message_id is None or parent_tool_call_id is None:
             raise ValueError("Child instruction has no parent invocation")
+        # Runs that agents start count against the chat owner's limits. Root
+        # turns check them when they are sent or accepted from the queue.
+        check_token_rate_limits(self._user)
         parent_response_id = int(parent_run_id)
         with self._lock:
             parent = self._owned.get(parent_response_id)
@@ -855,6 +865,10 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory):
                         "this chat. Wait for one to finish, or interrupt one, "
                         "before you start another."
                     )
+                # A Stop sets the key before it releases the chat lock, so a
+                # stopped parent cannot start a child that the Stop missed.
+                if self.cache.exists(_stop_key(parent_response_id)):
+                    raise ValueError("This agent was stopped; it cannot start agents.")
                 check_checkpoint_owner__no_commit(
                     session, parent_response_id, parent.owner.ownership_version
                 )
@@ -1034,6 +1048,7 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory):
             if not lease.lock.acquire(blocking=False):
                 continue
             stopped = False
+            reason: CancelReason = "requested"
             try:
                 if lease.released:
                     continue
@@ -1061,7 +1076,10 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory):
                 lease.expire_if_due()
                 if lease.error is None:
                     try:
-                        stopped = self.control_cache.exists(_stop_key(response_id))
+                        requested = self.control_cache.get(_stop_key(response_id))
+                        stopped = requested is not None
+                        if requested == b"user":
+                            reason = "user"
                     except Exception:
                         logger.exception(
                             "Failed to read agent Stop request; will retry"
@@ -1075,7 +1093,7 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory):
             with self._lock:
                 owned = self._owned.get(response_id)
             if owned is not None:
-                owned.run.cancel()
+                owned.run.cancel(reason)
         self._dispatch_messages()
 
     def handoff(self, run_id: str) -> None:

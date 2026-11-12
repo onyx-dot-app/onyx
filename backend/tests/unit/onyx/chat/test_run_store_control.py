@@ -47,6 +47,7 @@ def ownership(
     monkeypatch.setattr(run_store, "time", clock)
     cache = MagicMock(spec=CacheBackend)
     cache.exists.return_value = False
+    cache.get.return_value = None
     cache.renew_if_value.return_value = True
     store = ChatRunStore(
         tenant_id="tenant",
@@ -105,25 +106,25 @@ def test_slow_cache_response_cannot_revive_expired_ownership(
         clock.now = 55
         return True
 
-    def read_stop(_key: str) -> bool:
+    def read_stop(_key: str) -> bytes | None:
         clock.now = 55
-        return False
+        return None
 
     if operation == "renewal":
         cache.renew_if_value.side_effect = renew
         clock.now = 10
     else:
-        cache.exists.side_effect = read_stop
+        cache.get.side_effect = read_stop
     store.poll_control()
     assert isinstance(lease.error, TimeoutError)
     assert lease.refreshed == 0
     run.cancel.assert_called_once()
-    reads = cache.exists.call_count
+    reads = cache.get.call_count
     renewals = cache.renew_if_value.call_count
     clock.now = 56
     store.poll_control()
     assert lease.refreshed == 0
-    assert cache.exists.call_count == reads
+    assert cache.get.call_count == reads
     assert cache.renew_if_value.call_count == renewals
 
 
@@ -147,7 +148,7 @@ def test_stop_read_failure_retries_without_invalidating_lease(
     ownership: tuple[ChatRunStore, _OwnerLease, MagicMock, MagicMock, Clock],
 ) -> None:
     store, lease, run, cache, _ = ownership
-    cache.exists.side_effect = [ConnectionError("offline"), True, False]
+    cache.get.side_effect = [ConnectionError("offline"), b"requested", None]
     store.poll_control()
     assert lease.error is None
     run.cancel.assert_not_called()
@@ -167,17 +168,17 @@ def test_root_and_child_control_calls_use_the_callers_thread(
     checks: list[str] = []
     renewals: list[str] = []
 
-    def read_stop(key: str) -> bool:
+    def read_stop(key: str) -> bytes | None:
         assert threading.current_thread() is calling_thread
         checks.append(key)
-        return key == run_store._stop_key(2)
+        return b"requested" if key == run_store._stop_key(2) else None
 
     def renew(key: str, _value: bytes, _ttl: int) -> bool:
         assert threading.current_thread() is calling_thread
         renewals.append(key)
         return True
 
-    cache.exists.side_effect = read_stop
+    cache.get.side_effect = read_stop
     cache.renew_if_value.side_effect = renew
     clock.now = 10
     store.poll_control()
@@ -302,7 +303,6 @@ def test_every_step_receives_a_bounded_number_of_child_results(
     assert len(received) == run_store.MAX_AGENT_COMPLETIONS_PER_STEP
 
 
-
 def test_the_agent_cap_counts_runs_of_a_later_turn_on_the_branch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -321,15 +321,15 @@ def test_the_agent_cap_counts_runs_of_a_later_turn_on_the_branch(
     later = ChatBranch(chat_session_id=chat_id, message_ids=[3, 1])
     counted: list[list[int]] = []
 
-    def count(_session: object, message_ids: list[int]) -> int:
+    def active(_session: object, message_ids: list[int]) -> list[int]:
         counted.append(list(message_ids))
-        return run_store.MAX_RUNNING_AGENTS
+        return list(range(run_store.MAX_RUNNING_AGENTS))
 
     monkeypatch.setattr(run_store, "lock_agent", lambda *_: None)
     monkeypatch.setattr(
         run_store, "get_selected_branch", lambda *_: (MagicMock(), later)
     )
-    monkeypatch.setattr(run_store, "count_running_agents", count)
+    monkeypatch.setattr(run_store, "active_agent_response_ids", active)
 
     assert not store._lock_background_capacity(MagicMock())
     assert counted == [[3, 1]]

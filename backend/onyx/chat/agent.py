@@ -4,6 +4,7 @@ from functools import partial
 
 from pydantic import JsonValue
 
+from onyx.agents.agent_coordination import MAX_CHILD_DEPTH
 from onyx.agents.models import (
     AgentState,
     CompactionCheckpoint,
@@ -113,6 +114,7 @@ class ChatAgent(Agent, RestorableFeature):
         code_mode: bool = False,
         is_subagent: bool = False,
         create_subagent: Callable[[], Agent] | None = None,
+        can_spawn: bool = True,
     ) -> None:
         self.is_subagent = is_subagent
         self.custom_agent_prompt = custom_agent_prompt
@@ -175,9 +177,14 @@ class ChatAgent(Agent, RestorableFeature):
 
         if create_subagent is not None:
             # A new list: code mode can return the configured tools themselves.
+            # An agent at the nesting limit keeps the tools that reach existing agents.
             self.application_tools = [
                 *self.application_tools,
-                SpawnAgentTool(create_subagent, max_steps=self.max_steps),
+                *(
+                    [SpawnAgentTool(create_subagent, max_steps=self.max_steps)]
+                    if can_spawn
+                    else []
+                ),
                 ListAgentsTool(),
                 InterruptAgentTool(),
                 SendMessageTool(max_steps=self.max_steps),
@@ -476,18 +483,25 @@ def build_chat_agent(
     preferred_tool_id: int | None = None,
     additional_context: str | None = None,
     is_subagent: bool = False,
+    depth: int = 0,
 ) -> ChatAgent:
     """Build a chat conversation independently of the current root's feature.
 
     `with_subagents` adds the agent tools. Only callers that deliver follow-up
-    responses, such as the web chat, enable them.
+    responses, such as the web chat, enable them. `depth` counts levels below
+    the root; an agent at `MAX_CHILD_DEPTH` cannot start agents.
     """
     return ChatAgent(
         create_subagent=chat_subagent_factory(
-            setup=setup, llm=llm, tools=tools, inject_memories=inject_memories
+            setup=setup,
+            llm=llm,
+            tools=tools,
+            inject_memories=inject_memories,
+            depth=depth + 1,
         )
         if with_subagents
         else None,
+        can_spawn=depth < MAX_CHILD_DEPTH,
         agent_id=agent_id,
         is_subagent=is_subagent,
         messages=state.messages,
@@ -514,9 +528,14 @@ def build_chat_agent(
 
 
 def chat_subagent_factory(
-    *, setup: ChatTurnSetup, llm: LLM, tools: list[Tool], inject_memories: bool
+    *,
+    setup: ChatTurnSetup,
+    llm: LLM,
+    tools: list[Tool],
+    inject_memories: bool,
+    depth: int,
 ) -> Callable[[], ChatAgent]:
-    """Build children as saved children are restored; children can start children."""
+    """Build children at `depth` as saved children are restored; children can start children."""
     return partial(
         build_chat_agent,
         AgentState(),
@@ -528,4 +547,5 @@ def chat_subagent_factory(
         inject_memories=inject_memories,
         with_subagents=True,
         is_subagent=True,
+        depth=depth,
     )

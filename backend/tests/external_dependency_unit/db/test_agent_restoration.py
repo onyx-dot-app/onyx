@@ -259,7 +259,7 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
         branch = load_chat_branch(response_id)
         identity = LLMUserIdentity()
 
-        def restore_research(history: SavedAgentContext) -> ResearchAgent:
+        def restore_research(history: SavedAgentContext, _depth: int) -> ResearchAgent:
             configuration = history.configuration
             assert isinstance(configuration, ResearchConfiguration)
             return ResearchAgent(

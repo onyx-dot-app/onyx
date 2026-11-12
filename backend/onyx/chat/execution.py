@@ -685,7 +685,11 @@ def bind_run_store(
             tools=tools,
             user_identity=setup.user_identity,
             create_subagent=chat_subagent_factory(
-                setup=setup, llm=llm, tools=tools, inject_memories=user.use_memories
+                setup=setup,
+                llm=llm,
+                tools=tools,
+                inject_memories=user.use_memories,
+                depth=1,
             )
             if with_subagents
             else None,

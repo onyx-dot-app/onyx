@@ -242,7 +242,9 @@ unread results arrive, including nested parents
 consumes them. Each run of a child delivers its own result to the child's spawner,
 whichever agent's message started it, except a run that `interrupt_agent` stops:
 its row is deleted first (`db/chat_inputs.py:withdraw_agent_result__no_commit`),
-so it wakes no agent. Agent messages to the root have no target run; a root run
+so it wakes no agent. A run that Stop subagents stops keeps its row for the root
+but records `STOPPED_BY_USER`, so it wakes no agent either; the root reads it as a
+notice at its next step. Agent messages to the root have no target run; a root run
 reads them at its next step, and dispatch never starts a root run for them. The runtime suspends a subagent before
 completion while its unread results include running children
 (`RunOwnership.delegated_runs`).

@@ -20,6 +20,7 @@ from onyx.agents.models import (
     InputMessageMetadata,
     InputSource,
     MessageDelivery,
+    RunFailureKind,
     RunStatus,
     agent_result_message_id,
 )
@@ -2152,37 +2153,13 @@ def _stream_turn(
     assert chat_turn_work.wait_idle(timeout=30)
 
 
-def _root_result_count(db_session: Session, chat_id: UUID) -> int:
-    db_session.expire_all()
-    return len(
-        db_session.scalars(
-            select(ChatMessage).where(
-                ChatMessage.chat_session_id == chat_id,
-                ChatMessage.message_type == MessageType.AGENT_RESULTS,
-            )
-        ).all()
-    )
-
-
-@pytest.mark.parametrize(
-    "host_event", ["none", "over_budget", "stop", "release_while_scanning"]
-)
-def test_status_starts_child_work_when_no_turn_hosts_it(
+def _idle_worker_with_queued_message(
     chat: ChatSession,
     owner: User,
     db_session: Session,
     monkeypatch: pytest.MonkeyPatch,
-    host_event: str,
-) -> None:
-    """Child work that becomes startable after every run store exited still starts.
-
-    Status counts it as active agent work, and its dispatch hosts the run. When
-    the owner is over budget, the work becomes a visible failed run instead of
-    failing silently on every poll. A Stop while the host holds chat admission
-    pauses the queue, so a message queued then waits after the host ends. A
-    child that finishes during the host's first scan still wakes the root.
-    """
-    over_budget = host_event == "over_budget"
+) -> ChatSession:
+    """Spawn a worker that finishes, then queue a message for it from a store that exited."""
 
     def generate(
         request: GenerationRequest, _signal: CancellationSignal
@@ -2245,6 +2222,41 @@ def test_status_starts_child_work_when_no_turn_hosts_it(
         )
     )
     db_session.commit()
+    return worker
+
+
+def _root_result_count(db_session: Session, chat_id: UUID) -> int:
+    db_session.expire_all()
+    return len(
+        db_session.scalars(
+            select(ChatMessage).where(
+                ChatMessage.chat_session_id == chat_id,
+                ChatMessage.message_type == MessageType.AGENT_RESULTS,
+            )
+        ).all()
+    )
+
+
+@pytest.mark.parametrize(
+    "host_event", ["none", "over_budget", "stop", "release_while_scanning"]
+)
+def test_status_starts_child_work_when_no_turn_hosts_it(
+    chat: ChatSession,
+    owner: User,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+    host_event: str,
+) -> None:
+    """Child work that becomes startable after every run store exited still starts.
+
+    Status counts it as active agent work, and its dispatch hosts the run. When
+    the owner is over budget, the work becomes a visible failed run instead of
+    failing silently on every poll. A Stop while the host holds chat admission
+    pauses the queue, so a message queued then waits after the host ends. A
+    child that finishes during the host's first scan still wakes the root.
+    """
+    over_budget = host_event == "over_budget"
+    worker = _idle_worker_with_queued_message(chat, owner, db_session, monkeypatch)
 
     if over_budget:
 
@@ -2390,6 +2402,29 @@ def test_one_shot_turns_offer_no_agent_tools(
     assert SPAWN_AGENT_TOOL_NAME not in unshown
 
 
+def test_stop_subagents_drops_work_queued_for_agents(
+    client: TestClient,
+    chat: ChatSession,
+    owner: User,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Queued messages and results for agents below the root do not start after Stop."""
+    worker = _idle_worker_with_queued_message(chat, owner, db_session, monkeypatch)
+    assert read_chat_inbox(db_session, chat.id).child_work
+
+    stopped = client.post(f"/chat/chat-session/{chat.id}/stop-subagents")
+    assert stopped.status_code == 200, stopped.text
+    db_session.expire_all()
+    assert not read_chat_inbox(db_session, chat.id).child_work
+    assert (
+        db_session.scalar(
+            select(ChatInput.id).where(ChatInput.recipient_session_id == worker.id)
+        )
+        is None
+    )
+
+
 def test_stop_subagents_interrupts_unfinished_agents_without_waking_the_root(
     client: TestClient,
     chat: ChatSession,
@@ -2398,11 +2433,15 @@ def test_stop_subagents_interrupts_unfinished_agents_without_waking_the_root(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     started, release = Event(), Event()
+    seen: list[str] = []
 
     def generate(
         request: GenerationRequest, signal: CancellationSignal
     ) -> AssistantMessage:
         texts = [message.text for message in request.messages]
+        if "What happened?" in texts:
+            seen.extend(texts)
+            return AssistantMessage(content=[TextContent(text="Noted")])
         if "Long task" in texts:
             started.set()
             # The worker runs until its Stop arrives.
@@ -2456,7 +2495,9 @@ def test_stop_subagents_interrupts_unfinished_agents_without_waking_the_root(
     )
     assert worker is not None
     assert worker.response_status == RunStatus.CANCELLED
-    # The interrupted run reports no result, so the root gets no follow-up.
+    assert worker.response_failure is not None
+    assert worker.response_failure.kind == RunFailureKind.STOPPED_BY_USER
+    # The stopped run wakes no agent, so the root gets no follow-up.
     assert (
         db_session.scalar(
             select(ChatMessage.id).where(
@@ -2466,6 +2507,7 @@ def test_stop_subagents_interrupts_unfinished_agents_without_waking_the_root(
         )
         is None
     )
+    assert read_chat_inbox(db_session, chat.id).next_turn is None
     assert client.post(f"/chat/chat-session/{chat.id}/stop-subagents").json() == {
         "stopped_count": 0
     }
@@ -2477,3 +2519,6 @@ def test_stop_subagents_interrupts_unfinished_agents_without_waking_the_root(
     }
     db_session.expire_all()
     assert worker.response_status == RunStatus.CANCELLED
+    # The root's next step reads the stop as a notice.
+    _stream_turn(chat, owner, "What happened?")
+    assert any("The user stopped this agent." in text for text in seen)

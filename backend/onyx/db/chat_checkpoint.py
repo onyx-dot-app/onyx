@@ -109,16 +109,26 @@ def release_checkpoint_claim__no_commit(
 
 
 def interrupt_response__no_commit(
-    session: Session, message_id: int, *, cancelled: bool = False
+    session: Session,
+    message_id: int,
+    *,
+    cancelled: bool = False,
+    failure: RunFailure | None = None,
 ) -> None:
-    """Caller holds the response's cache lock and has verified that no owner remains."""
+    """Caller holds the response's cache lock and has verified that no owner remains.
+
+    A cancelled response keeps `failure`, the reason its Stop gave, if any.
+    """
     response = _lock_response(session, message_id)
     if response.response_status is None or response.response_status.is_terminal:
         return
     response.response_status = RunStatus.CANCELLED if cancelled else RunStatus.ERROR
-    if not cancelled:
-        response.response_failure = RunFailure(
+    response.response_failure = (
+        failure
+        if cancelled
+        else RunFailure(
             kind=RunFailureKind.EXECUTION,
             message="The response owner stopped reporting progress",
         )
+    )
     finish_checkpoint__no_commit(session, message_id)

@@ -58,7 +58,11 @@ from onyx.chat.process_message import (
     run_chat_turn,
 )
 from onyx.chat.prompt_utils import get_default_base_system_prompt
-from onyx.chat.run_store import interrupt_agent_runs, ownerless_response_ids
+from onyx.chat.run_store import (
+    ownerless_response_ids,
+    request_response_stop,
+    stop_response,
+)
 from onyx.chat.stop_signal_checker import request_stop
 from onyx.chat.stream_buffer import has_stream_buffer, read_stream_chunks
 from onyx.configs.app_configs import WEB_DOMAIN
@@ -95,16 +99,18 @@ from onyx.db.chat import (
     update_chat_session,
 )
 from onyx.db.chat_inputs import (
+    active_agent_response_ids,
+    drop_agent_work__no_commit,
     get_human_input_session,
     interrupt_human_message__no_commit,
     list_human_messages,
+    lock_agent,
     pause_chat_queue__no_commit,
     read_chat_inbox,
     submit_human_message__no_commit,
     withdraw_human_message__no_commit,
 )
 from onyx.db.chat_search import search_chat_sessions
-from onyx.db.chat_subagents import unfinished_agent_response_ids
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import LLMModelFlowType, Permission, record_mode_persists_content
 from onyx.db.feedback import create_chat_message_feedback, remove_chat_message_feedback
@@ -1664,15 +1670,25 @@ def stop_chat_subagents(
     user: User = Depends(require_permission(Permission.WRITE_CHAT)),
     db_session: Session = Depends(get_session),
 ) -> StopSubagentsResponse:
-    """Interrupt every unfinished agent on the selected branch; the root keeps running.
+    """Stop every active background agent on the selected branch.
 
-    Interrupted runs report no result, so they wake no agent.
+    The root turn and its foreground workers keep running. Pending work for
+    agents below the root is dropped. A stopped agent's result wakes no agent;
+    the root reads it as a notice at its next step.
     """
     get_human_input_session(db_session, session_id, user)
+    cache = get_cache_backend()
+    lock_agent(db_session, str(session_id))
     _, branch = get_selected_branch(db_session, session_id)
-    unfinished = unfinished_agent_response_ids(db_session, branch)
-    interrupt_agent_runs(get_cache_backend(), get_current_tenant_id(), unfinished)
-    return StopSubagentsResponse(stopped_count=len(unfinished))
+    stopped = active_agent_response_ids(db_session, branch.message_ids)
+    drop_agent_work__no_commit(db_session, branch)
+    # Spawns check their parent's Stop after the chat lock, so the keys go first.
+    for response_id in stopped:
+        request_response_stop(cache, response_id, "user")
+    db_session.commit()
+    for response_id in stopped:
+        stop_response(cache, get_current_tenant_id(), response_id, "user")
+    return StopSubagentsResponse(stopped_count=len(stopped))
 
 
 @router.post("/stop-chat-session/{chat_session_id}", tags=PUBLIC_API_TAGS)

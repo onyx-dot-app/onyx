@@ -1765,7 +1765,7 @@ def test_later_turn_sends_to_chat_child_through_another_coordinator(
 
         llm = FakeModelClient(later_reply)
 
-        def restore_child(history: SavedAgentContext) -> ChatAgent:
+        def restore_child(history: SavedAgentContext, _depth: int) -> ChatAgent:
             restored_ids.append(history.agent_id)
             assert history.previous_run_id == child.run_id
             return make_agent(
@@ -1881,7 +1881,7 @@ def test_message_from_an_earlier_turn_continues_the_recipients_latest_run(
             tools=[SendMessageTool(max_steps=2).bind(ToolContext)],
         )
 
-    def restore_child(history: SavedAgentContext) -> Agent:
+    def restore_child(history: SavedAgentContext, _depth: int) -> Agent:
         return child(
             AgentState(messages=history.messages, checkpoint=history.checkpoint),
             history.agent_id,
@@ -2028,7 +2028,7 @@ def test_queued_reservation_failure_is_durable_and_explicit_send_recovers(
         return text("Child answer")
 
     llm = FakeModelClient(reply)
-    owner._restore_subagent = lambda history: chat_agent(
+    owner._restore_subagent = lambda history, _depth: chat_agent(
         llm,
         state=AgentState(messages=history.messages, checkpoint=history.checkpoint),
         agent_id=history.agent_id,
@@ -3188,6 +3188,33 @@ def test_spawn_takes_the_chat_lock_before_its_parent_response(
         assert coordinator.close(timeout=30)
 
 
+def test_a_stopped_parent_cannot_start_an_agent(
+    branch: tuple[UUID, int], user_message: UserMessage
+) -> None:
+    """A spawn checks its parent's Stop under the parent's ownership lock."""
+    owner = unpolled_store(branch)
+    coordinator = AgentCoordinator()
+    root = spawning_root(
+        branch,
+        lambda: fake_agent(lambda *_: text("Done")),
+        name="worker",
+        instruction="Task",
+        answer="Started",
+    )
+    view = owner.bind(coordinator, build_agent=never_restore("No restore expected"))
+    # The Stop arrives before the parent's control poll cancels it.
+    run_store.request_response_stop(owner.cache, branch[1], "user")
+    try:
+        run = root.start(messages=[user_message], max_steps=3, coordinator=view)
+        assert run.result(timeout=30).output.text == "Started"
+        spawned = run.snapshot().steps[0].tools["worker"].result
+        assert spawned is not None and spawned.is_error
+        assert "stopped" in spawned.content
+    finally:
+        owner.cache.delete(f"chat_response_stop:{branch[1]}")
+        assert coordinator.close(timeout=30)
+
+
 def test_inbox_work_waits_while_the_branch_runs_the_agent_cap(
     branch: tuple[UUID, int],
     db_session: Session,
@@ -3237,8 +3264,8 @@ def test_inbox_work_waits_while_the_branch_runs_the_agent_cap(
         assert run.wait_for_idle(timeout=10)
         coordinator.completion(run.id).result(timeout=10)
         with patch(
-            "onyx.chat.run_store.count_running_agents",
-            return_value=run_store.MAX_RUNNING_AGENTS,
+            "onyx.chat.run_store.active_agent_response_ids",
+            return_value=list(range(run_store.MAX_RUNNING_AGENTS)),
         ):
             owner.poll_control()
         child = next(
