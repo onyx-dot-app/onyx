@@ -5,7 +5,7 @@ import {
   PacketType,
 } from "@/app/app/services/streamingModels";
 
-interface AuthError {
+export interface AuthError {
   turnIndex: number;
   toolName: string;
   toolId: number | null;
@@ -20,10 +20,15 @@ export function useAuthErrors(rawPackets: Packet[]): AuthError[] {
 function computeAuthErrors(rawPackets: Packet[]): AuthError[] {
   const errors: AuthError[] = [];
   // Labels can repeat across tools, so deduplicate on the tool ID or the
-  // qualified tool name.
+  // qualified tool name within each section.
   const seen = new Set<string>();
 
   for (const packet of rawPackets) {
+    // Each accepted user message starts a section with its own auth cards.
+    if (packet.obj.type === PacketType.USER_MESSAGE) {
+      seen.clear();
+      continue;
+    }
     if (packet.obj.type !== PacketType.CUSTOM_TOOL_DELTA) {
       continue;
     }
