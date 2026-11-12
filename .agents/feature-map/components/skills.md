@@ -219,8 +219,9 @@ The library preview of an external-app skill calls the same renderer
    Other `.template` files in an app skill get only `{{APP:...}}` values and no
    such check.
 10. `app-skill-org-visible` **An app skill stays visible to the
-    organization.** `db/skill.py:_publish_requested` accepts only `VIEWER` for a
-    skill linked to an external app. The app link
+    organization.** `db/skill.py:_ensure_external_app_skill_stays_public`
+    accepts only `VIEWER` for a custom or built-in skill linked to an external
+    app. The app link
     (`db/external_app.py:associate_custom_skill_with_external_app__no_commit`,
     `replace_custom_skill_associations__no_commit`) publishes the skill through
     `db/plugin.py:publish_plugin__no_commit`, and a name clash in the
