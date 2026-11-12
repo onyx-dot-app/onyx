@@ -97,6 +97,7 @@ from onyx.server.features.build.sandbox.models import (
     SandboxProvisionContentionError,
 )
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
 
@@ -116,6 +117,20 @@ PUBLISH_MAX_BYTES = 100 << 20
 # connections that a command of the first may already use.
 _INIT_LOCK_PREFIX = "sandbox_fc_harness_init:"
 _INIT_LOCK_SECONDS = 30.0
+# Client token on each started command, to find it when Start gets no answer.
+_START_LABEL = "onyx_start_id"
+
+
+def _find_started(
+    daemon: SandboxDaemonClient, start_label: dict[str, str]
+) -> str | None:
+    """The execution of a Start whose response was lost, if it started."""
+    try:
+        found = daemon.list_executions(start_label)
+    except (HostAgentError, SandboxDaemonError):
+        logger.warning("sandbox_fc_start_reconcile_failed", exc_info=True)
+        return None
+    return found[0].execution_id if found else None
 
 
 def _clamp_ms(value: int | None, default: int, low: int, high: int) -> float:
@@ -336,25 +351,32 @@ class FirecrackerHarnessSandbox(HarnessSandbox):
         )
         placed = self._place(ref)
         daemon = sandbox_daemon(self._client_factory, placed)
+        start_label = {_START_LABEL: secrets.token_hex(16)}
         try:
             # The daemon makes the session directory, the default cwd.
-            started = daemon.start(
+            execution_id = daemon.start(
                 ExecCommand(
                     argv=["bash", "-c", cmd],
                     cwd=workdir or "",
                     stdin=True,
                     deadline_seconds=EXEC_DEADLINE_SECONDS,
+                    labels=start_label,
                     session_id=str(ref.session_id),
                 )
-            )
+            ).execution_id
         except SandboxDaemonError as e:
             if e.reason is SandboxDaemonErrorReason.EXECUTION_CAP_REACHED:
                 raise ExecCapReachedError() from e
             raise
+        except HostAgentError:
+            # No answer: the command may run. Adopt it by its label.
+            execution_id = _find_started(daemon, start_label)
+            if execution_id is None:
+                raise
         record = ExecSessionRecord(
             exec_session_id=secrets.token_hex(4),
             chat_session_id=str(ref.session_id),
-            execution_id=started.execution_id,
+            execution_id=execution_id,
             attempt=placed.vm.attempt,
             generation=placed.vm.generation,
             last_used=time.time(),
@@ -549,14 +571,19 @@ class FirecrackerHarnessSandbox(HarnessSandbox):
         rel = session_relative_path(ref, path)
         data = self.read_file(ref, rel, max_bytes=PUBLISH_MAX_BYTES)
         name = display_name or posixpath.basename(rel)
-        return get_default_file_store().save_file(
-            content=BytesIO(data),
-            display_name=name,
-            file_origin=FileOrigin.OTHER,
-            file_type=mimetypes.guess_type(name)[0] or "application/octet-stream",
-            file_metadata={
-                "source": "craft_sandbox",
-                "session_id": str(ref.session_id),
-                "path": rel,
-            },
-        )
+        # The file store keys and records the file under the context tenant.
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set(ref.tenant_id)
+        try:
+            return get_default_file_store().save_file(
+                content=BytesIO(data),
+                display_name=name,
+                file_origin=FileOrigin.OTHER,
+                file_type=mimetypes.guess_type(name)[0] or "application/octet-stream",
+                file_metadata={
+                    "source": "craft_sandbox",
+                    "session_id": str(ref.session_id),
+                    "path": rel,
+                },
+            )
+        finally:
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)

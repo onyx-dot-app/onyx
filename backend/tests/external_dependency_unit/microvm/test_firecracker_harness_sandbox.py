@@ -7,6 +7,7 @@ from collections.abc import Callable, Generator, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
 
+import grpc
 import pytest
 
 from onyx.cache.interface import CacheBackend
@@ -14,14 +15,15 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.microvm import registry
-from onyx.microvm.agent_client import HostAgentErrorReason
+from onyx.microvm.agent_client import HostAgentError, HostAgentErrorReason
 from onyx.microvm.daemon_client import (
+    SandboxDaemonClient,
     SandboxDaemonError,
 )
 from onyx.microvm.generated.hostagent.v1 import hostagent_pb2
 from onyx.microvm.generated.sandboxd.v1 import sandboxd_pb2
 from onyx.microvm.lifecycle import sandbox_daemon
-from onyx.microvm.models import OutputStream
+from onyx.microvm.models import ExecCommand, ExecStarted, OutputStream
 from onyx.microvm.registry import get_sandbox_placement
 from onyx.server.features.build.sandbox import harness_base, harness_factory
 from onyx.server.features.build.sandbox.exec_output import (
@@ -51,6 +53,10 @@ from onyx.server.features.build.sandbox.models import (
     ExecEvent,
     ExecOutputDelta,
     HarnessSandboxRef,
+)
+from shared_configs.contextvars import (
+    CURRENT_TENANT_ID_CONTEXTVAR,
+    get_current_tenant_id,
 )
 from tests.external_dependency_unit.microvm.conftest import (
     TENANT_ID,
@@ -589,6 +595,31 @@ def test_publish_artifact_copies_a_session_file_to_the_file_store(
         store.delete_file(file_id)
 
 
+@pytest.mark.usefixtures("node")
+def test_publish_artifact_saves_under_the_sandbox_tenant(
+    monkeypatch: pytest.MonkeyPatch,
+    sandbox: FirecrackerHarnessSandbox,
+    new_ref: NewRef,
+) -> None:
+    ref = new_ref()
+    sandbox.write_file(ref, "a.txt", b"x")
+    seen: list[str] = []
+
+    class Store:
+        def save_file(self, **_kwargs: object) -> str:
+            seen.append(get_current_tenant_id())
+            return "file-1"
+
+    monkeypatch.setattr(harness_sandbox, "get_default_file_store", Store)
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set("another_tenant")
+    try:
+        assert sandbox.publish_artifact(ref, "a.txt") == "file-1"
+        assert get_current_tenant_id() == "another_tenant"
+    finally:
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+    assert seen == [TENANT_ID]
+
+
 # Activity
 
 
@@ -711,6 +742,40 @@ def test_a_failed_registration_stops_the_started_command(
         if e.argv[:2] == ["bash", "-c"]
     ]
     assert node.agent.cancel_calls == [command.execution_id]
+
+
+@pytest.mark.parametrize("reached_the_daemon", [True, False])
+def test_a_start_without_an_answer_adopts_the_command_if_it_started(
+    monkeypatch: pytest.MonkeyPatch,
+    sandbox: FirecrackerHarnessSandbox,
+    node: RunningFakeAgent,
+    new_ref: NewRef,
+    reached_the_daemon: bool,
+) -> None:
+    ref = new_ref()
+    real_start = SandboxDaemonClient.start
+
+    def lost_answer(self: SandboxDaemonClient, command: ExecCommand) -> ExecStarted:
+        if reached_the_daemon:
+            real_start(self, command)
+        raise HostAgentError(grpc.StatusCode.DEADLINE_EXCEEDED, "lost", None)
+
+    monkeypatch.setattr(SandboxDaemonClient, "start", lost_answer)
+    if not reached_the_daemon:
+        with pytest.raises(HostAgentError):
+            _run(sandbox.exec_command(ref, "cat", yield_time_ms=250))
+        return
+    _, result = _run(sandbox.exec_command(ref, "cat", yield_time_ms=250))
+    assert result.exec_session_id is not None
+    commands = [
+        e
+        for e in node.agent.executions[str(ref.sandbox_id)].values()
+        if e.argv[:2] == ["bash", "-c"]
+    ]
+    assert len(commands) == 1 and commands[0].result is None
+    monkeypatch.undo()
+    _, result = _run(sandbox.write_stdin(ref, result.exec_session_id, "hi"))
+    assert result.output == "hi"
 
 
 @pytest.mark.usefixtures("node")
