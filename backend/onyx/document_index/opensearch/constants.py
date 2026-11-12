@@ -55,6 +55,18 @@ DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES = int(
 # https://docs.opensearch.org/latest/query-dsl/specialized/k-nn/index/#ef_search
 EF_SEARCH = DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES
 
+# Index files OpenSearch reads into the page cache when a shard opens
+# (index.store.preload), so the first searches after a restart do not wait on
+# random disk reads. These are the files a search scores with: vectors, the HNSW
+# graph, postings, terms, doc values and compound files of small segments.
+# Stored text is not listed; only the top hits read it.
+STORE_PRELOAD_BASE_EXTENSIONS = ("vex", "doc", "tim", "tip", "dvd", "cfs")
+# The graph walk reads float32 vectors (.vec) on an unquantized index and the
+# quantized copy (.veq) on a quantized one. A quantized index only reads .vec to
+# rescore its top candidates, so preloading it would undo the memory saving.
+STORE_PRELOAD_VECTOR_EXTENSION_UNQUANTIZED = "vec"
+STORE_PRELOAD_VECTOR_EXTENSION_QUANTIZED = "veq"
+
 
 class LuceneScalarQuantization(BaseModel):
     """Lucene "sq" encoder settings for one VectorQuantization level.
