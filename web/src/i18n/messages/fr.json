@@ -1525,6 +1525,9 @@
         },
         "federatedSlack": {
           "description": "Rechercher dans Slack à la requête"
+        },
+        "shortcut": {
+          "description": "Épopées, histoires et tâches Shortcut"
         }
       }
     },

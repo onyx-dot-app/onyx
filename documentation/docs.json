@@ -293,6 +293,7 @@
                       "admins/connectors/official/slack/slack_federated"
                     ]
                   },
+                  "admins/connectors/official/shortcut",
                   "admins/connectors/official/slab",
                   "admins/connectors/official/testrail",
                   "admins/connectors/official/web",

@@ -1525,6 +1525,9 @@
         },
         "federatedSlack": {
           "description": "질의 시 Slack 검색"
+        },
+        "shortcut": {
+          "description": "Shortcut 에픽, 스토리 및 작업"
         }
       }
     },

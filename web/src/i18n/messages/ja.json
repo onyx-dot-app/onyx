@@ -1525,6 +1525,9 @@
         },
         "federatedSlack": {
           "description": "クエリ時に Slack を検索"
+        },
+        "shortcut": {
+          "description": "Shortcut エピック、ストーリー、タスク"
         }
       }
     },

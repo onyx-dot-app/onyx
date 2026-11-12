@@ -1525,6 +1525,9 @@
         },
         "federatedSlack": {
           "description": "查询时搜索 Slack"
+        },
+        "shortcut": {
+          "description": "Shortcut 史诗、故事和任务"
         }
       }
     },

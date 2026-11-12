@@ -339,6 +339,7 @@ class DocumentSource(str, Enum):
     LUMAPPS = "lumapps"
     YOUTRACK = "youtrack"
     AZURE_DATALAKE = "azure_datalake"
+    SHORTCUT = "shortcut"
 
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"
@@ -841,6 +842,7 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.NOTION: "Documentation, notes, and project pages",
     DocumentSource.ZULIP: "Chat messages and topic discussions",
     DocumentSource.LINEAR: "Engineering and product tickets",
+    DocumentSource.SHORTCUT: "Shortcut epics, stories, and tasks",
     DocumentSource.HUBSPOT: "CRM data, contacts, and deals",
     DocumentSource.DOCUMENT360: "Knowledge base articles and documentation",
     DocumentSource.GONG: "Sales call recordings and transcripts",

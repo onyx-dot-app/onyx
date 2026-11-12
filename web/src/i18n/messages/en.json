@@ -1525,6 +1525,9 @@
         },
         "federatedSlack": {
           "description": "Search Slack at query time"
+        },
+        "shortcut": {
+          "description": "Shortcut epics, stories, & tasks"
         }
       }
     },

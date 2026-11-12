@@ -152,6 +152,7 @@ export const SOURCE_DESCRIPTION_KEYS = {
   [ValidSources.FederatedSlack]: "sources.federatedSlack.description",
   [ValidSources.OneDrive]: "sources.onedrive.description",
   [ValidSources.Zoom]: "sources.zoom.description",
+  [ValidSources.Shortcut]: "sources.shortcut.description",
 } as const satisfies Record<ValidSources, string>;
 
 // ---------------------------------------------------------------------------
@@ -421,6 +422,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     icon: SvgTestRail,
     displayName: "TestRail",
     category: SourceCategory.TicketingAndTaskManagement,
+  },
+  shortcut: {
+    icon: SvgLinear,
+    displayName: "Shortcut",
+    category: SourceCategory.TicketingAndTaskManagement,
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/shortcut`,
   },
 
   // Messaging

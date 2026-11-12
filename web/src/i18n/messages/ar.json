@@ -1525,6 +1525,9 @@
         },
         "federatedSlack": {
           "description": "البحث في Slack عند الاستعلام"
+        },
+        "shortcut": {
+          "description": "ملاحم وقصص ومهام Shortcut"
         }
       }
     },
