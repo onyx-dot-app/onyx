@@ -1,6 +1,6 @@
 """Per-user skill limits.
 
-A write may not move an active user from within the write limits to past
+A user's own write may not move them from within the write limits to past
 them. The run-time limits are larger: a user past the write limits, for
 example after a group join, still gets every plugin that fits in them
 (``onyx.skills.push``).
@@ -96,11 +96,10 @@ class SkillUsageModel(BaseModel):
 
 
 class SkillLimitRefusal(BaseModel):
-    """Why a write was refused: the number of users it puts past the write
-    limits, and the acting user's usage after it when they are one of them."""
+    """Why a write was refused: the acting user's usage after it, and the
+    write limits."""
 
-    users_over: int
-    usage: SkillUsageModel | None
+    usage: SkillUsageModel
     max_bytes: int
     max_files: int
 

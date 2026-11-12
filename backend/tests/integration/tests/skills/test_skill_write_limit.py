@@ -1,43 +1,32 @@
-"""The per-user skill limit on writes (G7a): 500 MB or 5,000 files.
+"""The per-user skill limit on a user's own writes (G7a): 500 MB or 5,000
+files. Changes that admins and sharers make for other users are not refused.
 
 Sizes are patched on plugin_version rows, so small real bundles stand for
 large ones."""
 
 import io
-import threading
 import zipfile
 from collections.abc import Generator
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import httpx
 import pytest
 from sqlalchemy import select, update
 
-from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import Plugin, PluginVersion
 from onyx.skills.built_in import BUILT_IN_SKILLS_USAGE
 from onyx.skills.limits import SKILL_WRITE_MAX_BYTES, SKILL_WRITE_MAX_FILES
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.skill import SkillManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.tests.skills.conftest import share_skill, unique_name
 
 _MB = 1024 * 1024
-
-
-@pytest.fixture(autouse=True)
-def _db_access() -> Generator[None, None, None]:
-    SqlEngine.init_engine(pool_size=10, max_overflow=5)
-    token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
-    try:
-        yield
-    finally:
-        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
 _FILLERS: list[UUID] = []
@@ -49,10 +38,6 @@ def _empty_fillers() -> Generator[None, None, None]:
     yield
     while _FILLERS:
         _set_size(_FILLERS.pop(), size=0, files=0)
-
-
-def _name(prefix: str) -> str:
-    return f"{prefix}-{uuid4().hex[:8]}"
 
 
 def _set_size(
@@ -77,7 +62,7 @@ def _set_size(
 def _fill(user: DATestUser, *, free_bytes: int = 0, free_files: int = 0) -> UUID:
     """Give the user one enabled skill that leaves ``free_bytes`` and
     ``free_files`` under the limits (negative: past them)."""
-    skill = SkillManager.create_custom(user, name=_name("filler"))
+    skill = SkillManager.create_custom(user, name=unique_name("filler"))
     _set_size(
         skill.id,
         size=SKILL_WRITE_MAX_BYTES - BUILT_IN_SKILLS_USAGE.bytes - free_bytes,
@@ -85,16 +70,6 @@ def _fill(user: DATestUser, *, free_bytes: int = 0, free_files: int = 0) -> UUID
     )
     _FILLERS.append(skill.id)
     return skill.id
-
-
-def _share(
-    user: DATestUser, skill_id: UUID | str, body: dict[str, Any]
-) -> httpx.Response:
-    return client.patch(
-        f"{API_SERVER_URL}/skills/custom/{skill_id}/share",
-        json=body,
-        headers=user.headers,
-    )
 
 
 def _group_share(group_id: int, policy: str) -> dict[str, Any]:
@@ -133,12 +108,12 @@ def _bundle(name: str, extra_bytes: int = 0) -> bytes:
     return buf.getvalue()
 
 
-def _assert_refused(response: httpx.Response, users_over: int) -> dict[str, Any]:
+def _assert_refused(response: httpx.Response) -> dict[str, Any]:
     assert response.status_code == 413, response.text
     body = response.json()
     assert body["error_code"] == "SKILL_LIMIT_EXCEEDED"
     limit = body["skill_limit"]
-    assert limit["users_over"] == users_over
+    assert set(limit) == {"usage", "max_bytes", "max_files"}
     assert limit["max_bytes"] == SKILL_WRITE_MAX_BYTES
     assert limit["max_files"] == SKILL_WRITE_MAX_FILES
     return limit
@@ -149,11 +124,11 @@ def _custom_names(user: DATestUser) -> set[str]:
 
 
 def test_upload_refused_past_500_mb() -> None:
-    user = UserManager.create(name=_name("limit_bytes"))
+    user = UserManager.create(name=unique_name("limit_bytes"))
     filler = _fill(user, free_bytes=10, free_files=100)
 
-    name = _name("too-big")
-    limit = _assert_refused(_upload(user, _bundle(name, extra_bytes=64), name), 1)
+    name = unique_name("too-big")
+    limit = _assert_refused(_upload(user, _bundle(name, extra_bytes=64), name))
     assert limit["usage"]["bytes"] > SKILL_WRITE_MAX_BYTES
     assert name not in _custom_names(user)
 
@@ -164,20 +139,20 @@ def test_upload_refused_past_500_mb() -> None:
 
 
 def test_upload_refused_past_5000_files() -> None:
-    user = UserManager.create(name=_name("limit_files"))
+    user = UserManager.create(name=unique_name("limit_files"))
     _fill(user, free_bytes=10 * _MB, free_files=0)
 
-    name = _name("one-file-too-many")
-    limit = _assert_refused(_upload(user, _bundle(name), name), 1)
+    name = unique_name("one-file-too-many")
+    limit = _assert_refused(_upload(user, _bundle(name), name))
     assert limit["usage"]["files"] == SKILL_WRITE_MAX_FILES + 1
     assert name not in _custom_names(user)
 
 
 def test_batch_upload_reports_limit_per_skill() -> None:
-    user = UserManager.create(name=_name("limit_batch"))
+    user = UserManager.create(name=unique_name("limit_batch"))
     _fill(user, free_bytes=10, free_files=100)
 
-    name = _name("batch-too-big")
+    name = unique_name("batch-too-big")
     response = client.post(
         f"{API_SERVER_URL}/skills/custom/batch",
         files=[
@@ -200,9 +175,11 @@ def test_batch_upload_reports_limit_per_skill() -> None:
 
 
 def test_toggle_on_refused_with_usage() -> None:
-    owner = UserManager.create(name=_name("toggle_owner"))
-    user = UserManager.create(name=_name("toggle_user"))
-    skill = SkillManager.create_custom(owner, name=_name("toggle"), is_public=True)
+    owner = UserManager.create(name=unique_name("toggle_owner"))
+    user = UserManager.create(name=unique_name("toggle_user"))
+    skill = SkillManager.create_custom(
+        owner, name=unique_name("toggle"), is_public=True
+    )
     _set_size(skill.id, size=5 * _MB)
     _fill(user, free_bytes=1 * _MB, free_files=100)
 
@@ -211,91 +188,39 @@ def test_toggle_on_refused_with_usage() -> None:
         json={"enabled": True},
         headers=user.headers,
     )
-    limit = _assert_refused(response, 1)
+    limit = _assert_refused(response)
     assert limit["usage"]["bytes"] > SKILL_WRITE_MAX_BYTES
 
 
-def test_required_group_setting_refused_for_one_member(
-    admin_user: DATestUser,
-) -> None:
-    author = UserManager.create(name=_name("req_author"))
-    full = UserManager.create(name=_name("req_full"))
-    roomy = UserManager.create(name=_name("req_roomy"))
+def test_admin_change_past_the_limit_is_not_refused(admin_user: DATestUser) -> None:
+    """A group setting that puts a member past the limit is saved. The member
+    shows in the admin list of users past the limit."""
+    author = UserManager.create(name=unique_name("req_author"))
+    full = UserManager.create(name=unique_name("req_full"))
     group = UserGroupManager.create(
-        admin_user, name=_name("req-group"), user_ids=[full.id, roomy.id]
+        admin_user, name=unique_name("req-group"), user_ids=[full.id]
     )
-    skill = SkillManager.create_custom(author, name=_name("req"))
+    skill = SkillManager.create_custom(author, name=unique_name("req"))
     _set_size(skill.id, size=10 * _MB)
     _fill(full, free_bytes=5 * _MB, free_files=100)
 
-    response = _share(admin_user, skill.id, _group_share(group.id, "REQUIRED"))
-    limit = _assert_refused(response, 1)
-    # An admin is not one of the users who go over.
-    assert limit["usage"] is None
-    assert skill.name not in _custom_names(roomy)
-
-    # Installed by default turns it on too, so it is refused as well.
-    _assert_refused(_share(admin_user, skill.id, _group_share(group.id, "DEFAULT")), 1)
-
-    # Available gives access only: nobody has it until they turn it on.
-    _share(admin_user, skill.id, _group_share(group.id, "AVAILABLE")).raise_for_status()
-    assert skill.name in _custom_names(roomy)
-
-
-def test_concurrent_admin_changes_one_refused(admin_user: DATestUser) -> None:
-    author = UserManager.create(name=_name("conc_author"))
-    member = UserManager.create(name=_name("conc_member"))
-    group = UserGroupManager.create(
-        admin_user, name=_name("conc-group"), user_ids=[member.id]
-    )
-    first = SkillManager.create_custom(author, name=_name("conc-a"))
-    second = SkillManager.create_custom(author, name=_name("conc-b"))
-    _set_size(first.id, size=10 * _MB)
-    _set_size(second.id, size=10 * _MB)
-    # Room for one of the two skills, not both.
-    _fill(member, free_bytes=15 * _MB, free_files=100)
-
-    responses: list[httpx.Response] = []
-    barrier = threading.Barrier(2)
-
-    def share(skill_id: UUID) -> None:
-        barrier.wait()
-        responses.append(
-            _share(admin_user, skill_id, _group_share(group.id, "REQUIRED"))
-        )
-
-    threads = [
-        threading.Thread(target=share, args=(skill_id,))
-        for skill_id in (first.id, second.id)
-    ]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
-
-    statuses = sorted(response.status_code for response in responses)
-    assert statuses == [200, 413], [response.text for response in responses]
-
-
-def test_save_on_published_skill_counts_for_share_recipients_only(
-    admin_user: DATestUser,
-) -> None:
-    author = UserManager.create(name=_name("pub_author"))
-    recipient = UserManager.create(name=_name("pub_recipient"))
-    org_only = UserManager.create(name=_name("pub_org_only"))
-    name = _name("published")
-    skill = SkillManager.create_custom(author, name=name, is_public=True)
-    _share(
-        author,
-        skill.id,
-        {"user_shares": [{"user_id": recipient.id, "permission": "VIEWER"}]},
+    share_skill(
+        admin_user, skill.id, _group_share(group.id, "REQUIRED")
     ).raise_for_status()
-    _share(admin_user, skill.id, {"installation_policy": "DEFAULT"}).raise_for_status()
-    assert name in _custom_names(org_only)
-    assert name in _custom_names(recipient)
+    assert skill.name in _custom_names(full)
+    over = client.get(
+        f"{API_SERVER_URL}/skills/users-over-limit", headers=admin_user.headers
+    )
+    over.raise_for_status()
+    assert full.id in {user["user_id"] for user in over.json()["users"]}
 
-    recipient_filler = _fill(recipient, free_bytes=1 * _MB, free_files=100)
-    _fill(org_only, free_bytes=1 * _MB, free_files=100)
+
+def test_save_counts_for_the_author() -> None:
+    """A new version the author runs counts for the author."""
+    author = UserManager.create(name=unique_name("save_author"))
+    name = unique_name("saved")
+    skill = SkillManager.create_custom(author, name=name)
+    filler = _fill(author, free_bytes=1 * _MB, free_files=100)
 
     def save() -> httpx.Response:
         return client.put(
@@ -310,39 +235,22 @@ def test_save_on_published_skill_counts_for_share_recipients_only(
             headers=_multipart_headers(author),
         )
 
-    # The recipient runs the current version, so the save counts for them.
-    _assert_refused(save(), 1)
-
-    # With room for the recipient, the save passes. The organization-only
-    # user runs the published version, so the larger draft does not count.
-    _set_size(recipient_filler, size=0, files=0)
+    _assert_refused(save())
+    _set_size(filler, size=0, files=0)
     response = save()
     assert response.status_code == 200, response.text
 
 
-def test_already_over_user_is_not_refused(admin_user: DATestUser) -> None:
-    author = UserManager.create(name=_name("over_author"))
-    over = UserManager.create(name=_name("over_member"))
-    group = UserGroupManager.create(
-        admin_user, name=_name("over-group"), user_ids=[over.id]
-    )
-    skill = SkillManager.create_custom(author, name=_name("over"))
+def test_already_over_user_is_not_refused() -> None:
+    owner = UserManager.create(name=unique_name("over_owner"))
+    over = UserManager.create(name=unique_name("over_member"))
+    skill = SkillManager.create_custom(owner, name=unique_name("over"), is_public=True)
     _set_size(skill.id, size=1 * _MB)
     _fill(over, free_bytes=-1 * _MB, free_files=100)
 
-    _share(admin_user, skill.id, _group_share(group.id, "REQUIRED")).raise_for_status()
-    assert skill.name in _custom_names(over)
-
-
-def test_inactive_user_is_ignored(admin_user: DATestUser) -> None:
-    author = UserManager.create(name=_name("inactive_author"))
-    inactive = UserManager.create(name=_name("inactive_member"))
-    group = UserGroupManager.create(
-        admin_user, name=_name("inactive-group"), user_ids=[inactive.id]
+    response = client.put(
+        f"{API_SERVER_URL}/skills/{skill.id}/enabled",
+        json={"enabled": True},
+        headers=over.headers,
     )
-    skill = SkillManager.create_custom(author, name=_name("inactive"))
-    _set_size(skill.id, size=10 * _MB)
-    _fill(inactive, free_bytes=1 * _MB, free_files=100)
-    UserManager.set_status(inactive, False, admin_user)
-
-    _share(admin_user, skill.id, _group_share(group.id, "REQUIRED")).raise_for_status()
+    assert response.status_code == 200, response.text

@@ -113,7 +113,7 @@ from onyx.db.plugin_review import (
     deny_review__no_commit,
     pending_version,
 )
-from onyx.db.skill_limit import check_skill_limit
+from onyx.db.skill_limit import check_skill_limit, lock_user_skill_preferences
 from onyx.db.utils import (
     UNSET,
     UnsetType,
@@ -515,16 +515,6 @@ def add_new_skill__no_commit(
     return skill
 
 
-def _lock_user_skill_preferences(user_id: UUID, db_session: Session) -> None:
-    """Serialize one user's user_plugin_preference writes on the user row,
-    without blocking the foreign-key reads of sharing writes."""
-    db_session.execute(
-        select(User.__table__.c.id)
-        .where(User.__table__.c.id == user_id)
-        .with_for_update(key_share=True)
-    )
-
-
 def enable_new_skill_if_name_available__no_commit(
     skill: Skill,
     user_id: UUID,
@@ -532,7 +522,7 @@ def enable_new_skill_if_name_available__no_commit(
 ) -> bool:
     """Enable a newly inserted skill under the same user lock as toggles.
     Refused with 413 when it puts the user past the skill limit."""
-    _lock_user_skill_preferences(user_id, db_session)
+    lock_user_skill_preferences(user_id, db_session)
     user = db_session.get(User, user_id)
     if user is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "User not found.")
@@ -547,7 +537,7 @@ def enable_new_skill_if_name_available__no_commit(
             return False
     if skill.is_custom:
         plugin = lock_skill_plugin__no_commit(skill, db_session)
-        with check_skill_limit(db_session, [plugin.id], user_id, user_ids=[user_id]):
+        with check_skill_limit(db_session, [plugin.id], user_id):
             set_plugin_preferences__no_commit(user_id, [plugin.id], True, db_session)
     _write_legacy_choice__no_commit(user_id, skill, True, db_session)
     return True
@@ -645,7 +635,7 @@ def replace_skill_bundle(
 
     Returns None, and changes nothing, when ``skip_if_unchanged`` is set and
     the files did not change; the caller then deletes the new blob. A version
-    that puts a user who runs it past the skill limit is refused with 413.
+    that puts the acting user past the skill limit is refused with 413.
 
     Rejects built-in rows — they have no bundle.
     """
@@ -794,7 +784,7 @@ def set_skill_enabled_for_user(
     user: User,
     db_session: Session,
 ) -> Skill:
-    _lock_user_skill_preferences(user.id, db_session)
+    lock_user_skill_preferences(user.id, db_session)
     # Another user's switch inserts a preference for this skill while it holds
     # a plugin lock this call waits for. A FOR UPDATE here blocks that
     # foreign-key check and the two switches deadlock.
@@ -849,7 +839,7 @@ def set_skill_enabled_for_user(
     conflict_plugin_ids = [
         plugin_id for plugin_id in locked_plugin_ids if plugin_id != skill.id
     ]
-    with check_skill_limit(db_session, locked_plugin_ids, user.id, user_ids=[user.id]):
+    with check_skill_limit(db_session, locked_plugin_ids, user.id):
         if conflicts:
             set_plugin_preferences__no_commit(
                 user.id, conflict_plugin_ids, False, db_session
@@ -949,18 +939,17 @@ def transfer_skill_ownership(
         return
 
     plugin = lock_skill_plugin__no_commit(skill, db_session)
-    with check_skill_limit(db_session, [plugin.id], None):
-        try:
-            skill.author_user_id = new_owner_user_id
-            db_session.flush()
-        except IntegrityError as e:
-            if is_fk_violation(e):
-                raise OnyxError(
-                    OnyxErrorCode.INVALID_INPUT,
-                    "New owner user does not exist.",
-                ) from e
-            raise
-        transfer_plugin__no_commit(plugin.id, new_owner_user_id, db_session)
+    try:
+        skill.author_user_id = new_owner_user_id
+        db_session.flush()
+    except IntegrityError as e:
+        if is_fk_violation(e):
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "New owner user does not exist.",
+            ) from e
+        raise
+    transfer_plugin__no_commit(plugin.id, new_owner_user_id, db_session)
     # The author has no share, so the new owner's share goes.
     apply_plugin_access_change__no_commit(
         [plugin.id],
@@ -1132,11 +1121,10 @@ def publish_skill__no_commit(
     check_base_version(plugin, base_version_id)
     if plugin.published_version_id == plugin.current_version_id:
         return set()
-    with check_skill_limit(db_session, [plugin.id], user.id):
-        before = affected_user_ids_for_plugins([plugin.id], db_session)
-        publish_or_request_review__no_commit(
-            plugin, skill, plugin.current_version_id, user, "raise", db_session
-        )
+    before = affected_user_ids_for_plugins([plugin.id], db_session)
+    publish_or_request_review__no_commit(
+        plugin, skill, plugin.current_version_id, user, "raise", db_session
+    )
     return before | affected_user_ids_for_plugins([plugin.id], db_session)
 
 
@@ -1145,15 +1133,14 @@ def approve_skill_review__no_commit(
 ) -> set[UUID]:
     """Publish the pending version of a skill. A first publish moves the skill
     to the Organization library, and a name clash there is refused with
-    CONFLICT, and a version that puts users past the skill limit with 413
-    (R12). The caller holds the skill row lock. Returns the affected users."""
+    CONFLICT. The caller holds the skill row lock. Returns the affected
+    users."""
     plugin = lock_skill_plugin__no_commit(skill, db_session)
     version = pending_version(plugin, version_id, db_session)
-    with check_skill_limit(db_session, [plugin.id], None):
-        before = affected_user_ids_for_plugins([plugin.id], db_session)
-        publish_or_request_review__no_commit(
-            plugin, skill, version.id, None, "raise", db_session
-        )
+    before = affected_user_ids_for_plugins([plugin.id], db_session)
+    publish_or_request_review__no_commit(
+        plugin, skill, version.id, None, "raise", db_session
+    )
     return before | affected_user_ids_for_plugins([plugin.id], db_session)
 
 

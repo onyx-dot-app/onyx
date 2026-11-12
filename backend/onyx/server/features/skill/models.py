@@ -1,6 +1,7 @@
 """Pydantic request and response models for the skills API."""
 
 import datetime
+from dataclasses import replace
 from typing import Any, Literal
 from uuid import UUID
 
@@ -456,7 +457,10 @@ class SkillGroupShareRequest(BaseModel):
     permission: SkillSharePermission
 
 
-class SkillShareRequest(BaseModel):
+class SkillBulkSharing(BaseModel):
+    """An access change for many skills. Group install settings are set one
+    skill at a time (``SkillShareRequest``)."""
+
     model_config = ConfigDict(extra="forbid")
 
     # Missing: unchanged. Null: no own setting, so the marketplace default
@@ -465,9 +469,6 @@ class SkillShareRequest(BaseModel):
 
     user_shares: list[SkillUserShareRequest] | None = None
     group_shares: list[SkillGroupShareRequest] | None = None
-    # Group install settings with no change to the group's share. A group with
-    # no row gets a row that holds only the setting.
-    group_settings: list[SkillGroupSettingRequest] | None = None
     public_permission: SkillSharePermission | None = None
 
     def to_change(self) -> SkillSharingChange:
@@ -489,14 +490,23 @@ class SkillShareRequest(BaseModel):
                 if self.group_shares is not None
                 else None
             ),
-            group_settings=(
-                {
-                    setting.group_id: setting.installation_policy
-                    for setting in self.group_settings
-                }
-                if self.group_settings is not None
-                else None
-            ),
+        )
+
+
+class SkillShareRequest(SkillBulkSharing):
+    # Group install settings with no change to the group's share. A group with
+    # no row gets a row that holds only the setting.
+    group_settings: list[SkillGroupSettingRequest] | None = None
+
+    def to_change(self) -> SkillSharingChange:
+        if self.group_settings is None:
+            return super().to_change()
+        return replace(
+            super().to_change(),
+            group_settings={
+                setting.group_id: setting.installation_policy
+                for setting in self.group_settings
+            },
         )
 
 
@@ -509,7 +519,7 @@ class SkillBulkShareRequest(BaseModel):
 
     skill_ids: list[UUID] = Field(min_length=1, max_length=GITHUB_SKILL_MAX_COUNT)
     action: Literal["share"]
-    sharing: SkillShareRequest
+    sharing: SkillBulkSharing
 
 
 class SkillBulkActionRequest(BaseModel):

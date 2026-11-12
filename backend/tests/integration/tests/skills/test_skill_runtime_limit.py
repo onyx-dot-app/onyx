@@ -5,12 +5,12 @@ Sizes are written to plugin_version rows, so small real bundles stand for
 large ones."""
 
 from collections.abc import Generator
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import pytest
 from sqlalchemy import select, update
 
-from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import Plugin, PluginVersion, User
 from onyx.skills.limits import (
     SKILL_RUNTIME_MAX_BYTES,
@@ -18,25 +18,13 @@ from onyx.skills.limits import (
     SKILL_WRITE_MAX_FILES,
 )
 from onyx.skills.push import build_user_skills_payload
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.skill import SkillManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestUser
-
-
-@pytest.fixture(autouse=True)
-def _db_access() -> Generator[None, None, None]:
-    SqlEngine.init_engine(pool_size=10, max_overflow=5)
-    token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
-    try:
-        yield
-    finally:
-        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
-
+from tests.integration.tests.skills.conftest import unique_name
 
 _RESIZED: list[UUID] = []
 
@@ -52,10 +40,6 @@ def _reset_sizes() -> Generator[None, None, None]:
         )
         db_session.commit()
     _RESIZED.clear()
-
-
-def _name(prefix: str) -> str:
-    return f"{prefix}-{uuid4().hex[:8]}"
 
 
 def _set_size(skill_id: UUID | str, size: int) -> None:
@@ -90,10 +74,10 @@ def _over_limit(admin: DATestUser) -> dict[str, dict[str, int]]:
 def test_group_join_past_500_mb_keeps_every_skill_under_900_mb(
     admin_user: DATestUser,
 ) -> None:
-    author = UserManager.create(name=_name("rt_author"))
-    member = UserManager.create(name=_name("rt_member"))
-    group = UserGroupManager.create(admin_user, name=_name("rt-group"))
-    names = [_name("rt-skill") for _ in range(3)]
+    author = UserManager.create(name=unique_name("rt_author"))
+    member = UserManager.create(name=unique_name("rt_member"))
+    group = UserGroupManager.create(admin_user, name=unique_name("rt-group"))
+    names = [unique_name("rt-skill") for _ in range(3)]
     for name in names:
         skill = SkillManager.create_custom(author, name=name, auto_enable=False)
         _set_size(skill.id, SKILL_RUNTIME_MAX_BYTES * 3 // 10)

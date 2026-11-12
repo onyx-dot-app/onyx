@@ -1,5 +1,3 @@
-from uuid import UUID
-
 from fastapi import APIRouter, Depends
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -46,8 +44,6 @@ from ee.onyx.server.user_group.models import (
     UserGroupDataAccessCCPairs,
     UserGroupIncognitoUpdate,
     UserGroupMemberCounts,
-    UserGroupPlugin,
-    UserGroupPluginUpdate,
     UserGroupRename,
     UserGroupUpdate,
 )
@@ -67,7 +63,6 @@ from onyx.auth.scoped_permissions import (
     get_scoped_groups,
     get_visible_user_group_ids,
     manages_group,
-    within_scope,
 )
 from onyx.background.celery.tasks.beat_schedule import BEAT_EXPIRES_DEFAULT
 from onyx.background.celery.versioned_apps.client import app as client_app
@@ -82,8 +77,6 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import ConnectorManageRole, Permission, PermissionAuthority
 from onyx.db.models import User
 from onyx.db.persona import fetch_persona_by_id_for_user, get_personas_by_ids
-from onyx.db.plugin import set_group_install_setting__no_commit
-from onyx.db.plugin_access import load_group_plugins, plugin_ids_in_managed_scope
 from onyx.db.user_group import (
     assert_group_config_is_editable,
     assert_group_permissions_editable,
@@ -821,69 +814,3 @@ def set_group_manager(
             "is_manager": request.is_manager,
         },
     )
-
-
-def _assert_reads_group_plugins(
-    user: User, user_group_id: int, db_session: Session
-) -> None:
-    """Organization-wide MANAGE_PLUGINS reads every group; a scoped manager
-    reads only groups they manage."""
-    if not within_scope(
-        user,
-        db_session,
-        permission=Permission.MANAGE_PLUGINS,
-        current_group_ids=[user_group_id],
-        requested_group_ids=[],
-        is_non_public=True,
-    ):
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User group not found")
-    if fetch_user_group(db_session, user_group_id) is None:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User group not found")
-
-
-def _group_plugins(
-    user_group_id: int, user: User, db_session: Session
-) -> list[UserGroupPlugin]:
-    rows = load_group_plugins(user_group_id, db_session)
-    editable = (
-        {row.plugin_id for row in rows}
-        if has_global_permission(user, Permission.MANAGE_PLUGINS)
-        else plugin_ids_in_managed_scope(
-            [row.plugin_id for row in rows], user, db_session
-        )
-    )
-    return [UserGroupPlugin.from_row(row, row.plugin_id in editable) for row in rows]
-
-
-@router.get("/admin/user-group/{user_group_id}/plugins")
-def get_user_group_plugins(
-    user_group_id: int,
-    user: User = Depends(
-        require_permission(Permission.MANAGE_PLUGINS, allow_scope=True)
-    ),
-    db_session: Session = Depends(get_session),
-) -> list[UserGroupPlugin]:
-    """The plugins shared with the group or with a group install setting."""
-    _assert_reads_group_plugins(user, user_group_id, db_session)
-    return _group_plugins(user_group_id, user, db_session)
-
-
-@router.put("/admin/user-group/{user_group_id}/plugins/{plugin_id}")
-def set_user_group_plugin_installation_policy(
-    user_group_id: int,
-    plugin_id: UUID,
-    update: UserGroupPluginUpdate,
-    user: User = Depends(
-        require_permission(Permission.MANAGE_PLUGINS, allow_scope=True)
-    ),
-    db_session: Session = Depends(get_session),
-) -> list[UserGroupPlugin]:
-    """Set or remove the group's install setting of a plugin. A private
-    plugin that the group does not have yet is shared with it as viewer."""
-    _assert_reads_group_plugins(user, user_group_id, db_session)
-    affected = set_group_install_setting__no_commit(
-        plugin_id, user_group_id, update.installation_policy, user, db_session
-    ).affected_user_ids
-    db_session.commit()
-    push_skills_and_commit(affected, db_session)
-    return _group_plugins(user_group_id, user, db_session)

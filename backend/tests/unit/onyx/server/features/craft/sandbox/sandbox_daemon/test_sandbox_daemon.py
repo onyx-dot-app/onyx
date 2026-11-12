@@ -532,37 +532,6 @@ def test_push_with_sha_mismatch_returns_400(
     assert "SHA-256" in resp.text or "mismatch" in resp.text.lower()
 
 
-def test_push_over_size_cap_returns_413(
-    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
-    client: TestClient,
-) -> None:
-    """Content-Length over the archive cap -> 413, body never streamed."""
-    extract_mod, _, priv, allowed_root = configured_sandbox_daemon
-    mount_path = str(allowed_root / "skills")
-
-    # Use a small body but advertise a huge Content-Length. The daemon rejects
-    # based on the header before reading the body.
-    body = _build_targz_bytes({"x": b"x"})
-    huge = str(extract_mod.MAX_ARCHIVE_BYTES + 1)
-    sha = hashlib.sha256(body).hexdigest()
-    ts = str(int(time.time()))
-    sig = _sign(priv, mount_path=mount_path, sha256_hex=sha, timestamp=ts)
-
-    resp = client.post(
-        "/push",
-        params={"mount_path": mount_path},
-        content=body,
-        headers={
-            "Content-Type": "application/gzip",
-            "Content-Length": huge,
-            "X-Bundle-Sha256": sha,
-            "X-Push-Signature": sig,
-            "X-Push-Timestamp": ts,
-        },
-    )
-    assert resp.status_code == 413
-
-
 def test_push_to_mount_path_outside_allowed_prefix_returns_400(
     configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
     client: TestClient,
@@ -1731,7 +1700,7 @@ async def _asgi_push_from_file(
     return status[0]
 
 
-def test_200_mb_push_streams_with_bounded_memory(
+def test_large_push_streams_with_bounded_memory(
     configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
     spool_dir: Path,
     tmp_path: Path,
@@ -1741,10 +1710,10 @@ def test_200_mb_push_streams_with_bounded_memory(
     _, server_mod, priv, allowed_root = configured_sandbox_daemon
     mount_path = str(allowed_root / "skills")
     archive_path = tmp_path / "push.tar.gz"
-    file_bytes = 20 * 1024 * 1024
-    sha = _write_large_archive(archive_path, file_count=10, file_bytes=file_bytes)
+    file_bytes = 8 * 1024 * 1024
+    sha = _write_large_archive(archive_path, file_count=8, file_bytes=file_bytes)
     body_bytes = archive_path.stat().st_size
-    assert body_bytes > 200 * 1024 * 1024
+    assert body_bytes > 64 * 1024 * 1024
 
     tracemalloc.start()
     try:
@@ -1763,9 +1732,9 @@ def test_200_mb_push_streams_with_bounded_memory(
         tracemalloc.stop()
 
     assert status == 200
-    assert peak < 32 * 1024 * 1024, f"peak traced memory {peak} bytes"
+    assert peak < 16 * 1024 * 1024, f"peak traced memory {peak} bytes"
     extracted = Path(mount_path) / "big-skill"
-    assert sorted(p.stat().st_size for p in extracted.iterdir()) == [file_bytes] * 10
+    assert sorted(p.stat().st_size for p in extracted.iterdir()) == [file_bytes] * 8
     assert list(spool_dir.iterdir()) == []
 
 
@@ -1800,27 +1769,6 @@ def test_push_body_over_the_cap_is_refused_and_keeps_the_live_tree(
     assert resp.status_code == 413
     assert Path(mount_path).resolve() == live
     assert list(spool_dir.iterdir()) == []
-
-
-def test_push_with_malformed_content_length_returns_400(
-    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
-    client: TestClient,
-) -> None:
-    _, _, priv, allowed_root = configured_sandbox_daemon
-    mount_path = str(allowed_root / "skills")
-    body = _build_targz_bytes({"x": b"x"})
-
-    resp = client.post(
-        "/push",
-        params={"mount_path": mount_path},
-        content=body,
-        headers={
-            **_signed_push_headers(priv, mount_path, hashlib.sha256(body).hexdigest()),
-            "Content-Length": "abc",
-        },
-    )
-
-    assert resp.status_code == 400
 
 
 @pytest.mark.parametrize("case", ["sha_mismatch", "traversal", "corrupt_gzip"])

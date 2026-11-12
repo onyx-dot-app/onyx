@@ -1,11 +1,13 @@
 """Database and cache operations for the license table."""
 
+import hashlib
+import struct
 from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import NamedTuple
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from ee.onyx.server.license.models import LicenseMetadata, LicensePayload
@@ -14,7 +16,6 @@ from onyx.cache.interface import CacheLock
 from onyx.configs.constants import ANONYMOUS_USER_EMAIL
 from onyx.db.enums import AccountType
 from onyx.db.models import License, User
-from onyx.db.utils import acquire_advisory_xact_lock, advisory_lock_id
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
@@ -33,6 +34,12 @@ _LICENSE_CACHE_LOCK_TIMEOUT_SEC = 30
 # and the lock id can't collide with other advisory locks in the codebase.
 _SEAT_LOCK_NAMESPACE = "onyx_seat_lock"
 _LICENSE_STORE_LOCK_NAMESPACE = "onyx_license_store_lock"
+
+
+def advisory_lock_id(namespace: str, tenant_id: str) -> int:
+    digest = hashlib.sha256(f"{namespace}:{tenant_id}".encode()).digest()
+    # pg_advisory_xact_lock takes a signed 8-byte int.
+    return struct.unpack("q", digest[:8])[0]
 
 
 def seat_lock_id_for_tenant(tenant_id: str) -> int:
@@ -61,6 +68,20 @@ def acquire_seat_lock(db_session: Session, tenant_id: str | None = None) -> None
     acquire_advisory_xact_lock(
         db_session, seat_lock_id_for_tenant(tenant_id or get_current_tenant_id())
     )
+
+
+def acquire_advisory_xact_lock(db_session: Session, lock_id: int) -> None:
+    # Bounded wait: a double-acquisition bug or wedged holder should fail
+    # fast with lock_not_available, not hang until the idle-in-transaction
+    # reaper kills the session (observed as 10-minute invite freezes).
+    db_session.execute(text("SET LOCAL lock_timeout = '10s'"))
+    db_session.execute(
+        text("SELECT pg_advisory_xact_lock(:lock_id)"),
+        {"lock_id": lock_id},
+    )
+    # Restore the session default so the caller's later row-lock waits
+    # aren't capped by the advisory-acquisition bound.
+    db_session.execute(text("SET LOCAL lock_timeout = DEFAULT"))
 
 
 class SeatAvailabilityResult(NamedTuple):

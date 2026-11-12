@@ -1,7 +1,5 @@
-"""Rules of the one access change function for group install settings, group
-shares and the admin Sharing setting."""
-
-from dataclasses import replace
+"""Rules of the one access change function for group install settings and
+group shares."""
 
 import pytest
 from sqlalchemy import select
@@ -25,14 +23,12 @@ from onyx.db.plugin import (
     PluginAccessMode,
     PluginGroupGrant,
     PluginGroupSetting,
-    PluginUserGrant,
     apply_plugin_access_change__no_commit,
 )
 from onyx.db.skill import SkillManagementPolicy, fetch_skill
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from tests.external_dependency_unit.craft.db_helpers import (
-    add_user_to_group,
     make_group,
     make_skill,
     make_user,
@@ -92,11 +88,10 @@ def _group_row(
     [
         ("admin", False, None),
         ("admin", True, None),
-        ("manager", False, None),
-        # A published plugin needs organization-wide MANAGE_PLUGINS (H6).
+        # Group install settings need organization-wide MANAGE_PLUGINS, also
+        # for a manager of the group.
+        ("manager", False, OnyxErrorCode.INSUFFICIENT_PERMISSIONS),
         ("manager", True, OnyxErrorCode.INSUFFICIENT_PERMISSIONS),
-        # A manager of another group.
-        ("other_manager", False, OnyxErrorCode.INSUFFICIENT_PERMISSIONS),
     ],
 )
 def test_group_install_setting_rules(
@@ -109,10 +104,8 @@ def test_group_install_setting_rules(
     group = make_group(db_session)
     if actor_kind == "admin":
         actor = make_user(db_session, is_admin=True)
-    elif actor_kind == "manager":
-        actor = _manager_of(db_session, group)
     else:
-        actor = _manager_of(db_session, make_group(db_session))
+        actor = _manager_of(db_session, group)
     skill = make_skill(db_session, is_public=published, author_user_id=actor.id)
 
     if expected is None:
@@ -128,55 +121,6 @@ def test_group_install_setting_rules(
             [skill.id], _setting_for(group), actor, db_session
         )
     assert exc_info.value.error_code == expected
-
-
-@pytest.mark.parametrize("outside", ["group", "user"])
-def test_scoped_manager_cannot_set_a_group_setting_on_a_plugin_shared_outside(
-    db_session: Session,
-    test_user: User,  # noqa: ARG001
-    outside: str,
-) -> None:
-    """H6 and R17: the plugin must be shared only within the manager's groups,
-    by group share and by direct user share."""
-    group = make_group(db_session)
-    manager = _manager_of(db_session, group)
-    skill = make_skill(db_session, author_user_id=manager.id)
-    if outside == "group":
-        share_plugin_with_group(
-            db_session, skill.id, make_group(db_session).id, SkillSharePermission.VIEWER
-        )
-    else:
-        share_plugin_with_user(
-            db_session,
-            skill.id,
-            make_user(db_session, standard_account=True).id,
-            SkillSharePermission.VIEWER,
-        )
-
-    with pytest.raises(OnyxError) as exc_info:
-        apply_plugin_access_change__no_commit(
-            [skill.id], _setting_for(group), manager, db_session
-        ).raise_first_failure()
-    assert exc_info.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
-
-    # A direct share with a member of the managed group stays in scope.
-    if outside == "user":
-        member = make_user(db_session, standard_account=True)
-        add_user_to_group(db_session, member, group)
-        apply_plugin_access_change__no_commit(
-            [skill.id],
-            replace(
-                _setting_for(group),
-                mode=PluginAccessMode.REPLACE,
-                user_grants=(
-                    PluginUserGrant(
-                        user_id=member.id, permission=SkillSharePermission.VIEWER
-                    ),
-                ),
-            ),
-            manager,
-            db_session,
-        ).raise_first_failure()
 
 
 def test_scoped_manager_edit_scope_checks_direct_user_shares(

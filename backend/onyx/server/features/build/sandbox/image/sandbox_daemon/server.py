@@ -157,20 +157,6 @@ async def _spool_verified_archive(
         raise
 
 
-def _check_content_length(request: Request, max_bytes: int) -> None:
-    content_length = request.headers.get("content-length")
-    if content_length is None:
-        return
-    try:
-        length = int(content_length)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid Content-Length")
-    if length > max_bytes:
-        raise HTTPException(
-            status_code=413, detail=f"Bundle exceeds {max_bytes} byte limit"
-        )
-
-
 def _clear_spool_dir() -> None:
     """Remove archives that a killed sidecar left behind."""
     _PUSH_SPOOL_DIR.mkdir(parents=True, exist_ok=True)
@@ -273,8 +259,6 @@ async def push(
 
     if not mount_path.startswith("/"):
         raise HTTPException(status_code=400, detail="mount_path must be absolute")
-
-    _check_content_length(request, MAX_ARCHIVE_BYTES)
 
     async with _push_lock:
         archive_path: Path | None = None

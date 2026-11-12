@@ -3,27 +3,21 @@ dialogs, the explicit company Available and app skills (G6)."""
 
 from collections.abc import Generator
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import httpx
 import pytest
-from sqlalchemy import update
 
-from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.db.enums import (
     ExternalAppType,
     PluginInstallationPolicy,
     SkillSharePermission,
 )
-from onyx.db.models import User__UserGroup
-from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.server.features.skill.models import (
     SkillEditableDetailResponse,
     SkillGroupSummary,
     SkillResponse,
 )
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.external_app import ExternalAppManager
@@ -31,28 +25,15 @@ from tests.integration.common_utils.managers.skill import SkillManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.tests.skills.conftest import promote_to_manager, unique_name
 
 _DEFAULT_ACCESS = f"{API_SERVER_URL}/skills/organization-library/default-access"
-
-
-@pytest.fixture(autouse=True)
-def _db_access() -> Generator[None, None, None]:
-    SqlEngine.init_engine(pool_size=10, max_overflow=5)
-    token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
-    try:
-        yield
-    finally:
-        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
 @pytest.fixture(autouse=True)
 def _reset_default(admin_user: DATestUser) -> Generator[None, None, None]:
     yield
     _set_default(admin_user, "AVAILABLE").raise_for_status()
-
-
-def _name(prefix: str) -> str:
-    return f"{prefix}-{uuid4().hex[:8]}"
 
 
 def _set_default(admin: DATestUser, policy: str) -> httpx.Response:
@@ -84,36 +65,20 @@ def _summaries(
     }
 
 
-def _promote_to_manager(user_id: str, group_id: int) -> None:
-    with get_session_with_current_tenant() as db_session:
-        promoted = db_session.scalars(
-            update(User__UserGroup)
-            .where(
-                User__UserGroup.user_id == UUID(user_id),
-                User__UserGroup.user_group_id == group_id,
-            )
-            .values(is_manager=True)
-            .returning(User__UserGroup.user_id)
-        ).all()
-        assert len(promoted) == 1
-        recompute_user_permissions__no_commit(UUID(user_id), db_session)
-        db_session.commit()
-
-
 def test_group_summaries_follow_the_share_details_rule(
     admin_user: DATestUser,
 ) -> None:
     """An editor sees every group row, a scoped manager the rows of their
     groups, and a member none."""
-    author = UserManager.create(name=_name("gs_author"))
-    member = UserManager.create(name=_name("gs_member"))
-    manager = UserManager.create(name=_name("gs_manager"))
+    author = UserManager.create(name=unique_name("gs_author"))
+    member = UserManager.create(name=unique_name("gs_member"))
+    manager = UserManager.create(name=unique_name("gs_manager"))
     managed = UserGroupManager.create(
-        admin_user, name=_name("gs-managed"), user_ids=[member.id, manager.id]
+        admin_user, name=unique_name("gs-managed"), user_ids=[member.id, manager.id]
     )
-    other = UserGroupManager.create(admin_user, name=_name("gs-other"))
-    setting_only = UserGroupManager.create(admin_user, name=_name("gs-setting"))
-    _promote_to_manager(manager.id, managed.id)
+    other = UserGroupManager.create(admin_user, name=unique_name("gs-other"))
+    setting_only = UserGroupManager.create(admin_user, name=unique_name("gs-setting"))
+    promote_to_manager(manager.id, managed.id)
 
     skill = SkillManager.create_custom(author)
     saved = _share(
@@ -149,15 +114,15 @@ def test_group_summaries_follow_the_share_details_rule(
     }
 
 
-def test_group_settings_from_the_share_and_bulk_dialogs(
+def test_group_settings_from_the_share_dialog(
     admin_user: DATestUser,
 ) -> None:
     """``group_settings`` adds a setting-only row, keeps a share, and null
     removes the setting; a row with no share is then gone."""
-    author = UserManager.create(name=_name("gset_author"))
-    member = UserManager.create(name=_name("gset_member"))
+    author = UserManager.create(name=unique_name("gset_author"))
+    member = UserManager.create(name=unique_name("gset_member"))
     group = UserGroupManager.create(
-        admin_user, name=_name("gset-group"), user_ids=[member.id]
+        admin_user, name=unique_name("gset-group"), user_ids=[member.id]
     )
     first = SkillManager.create_custom(author, is_public=True)
     second = SkillManager.create_custom(author, is_public=True)
@@ -185,6 +150,7 @@ def test_group_settings_from_the_share_and_bulk_dialogs(
     assert cleared.group_summaries == []
     assert first.id in _listed(member)
 
+    # Group settings are set one skill at a time; the bulk dialog has none.
     response = client.post(
         f"{API_SERVER_URL}/skills/bulk",
         json={
@@ -198,22 +164,26 @@ def test_group_settings_from_the_share_and_bulk_dialogs(
         },
         headers=admin_user.headers,
     )
-    response.raise_for_status()
-    assert response.json()["failed"] == []
+    assert response.status_code == 422
+
+    _share(
+        admin_user,
+        first.id,
+        {"group_settings": [{"group_id": group.id, "installation_policy": "REQUIRED"}]},
+    )
     listed = _listed(member)
-    for skill_id in (first.id, second.id):
-        assert listed[skill_id].enabled and not listed[skill_id].can_toggle
-        assert _summaries(_listed(admin_user)[skill_id].group_summaries) == {
-            group.id: (None, PluginInstallationPolicy.REQUIRED)
-        }
+    assert listed[first.id].enabled and not listed[first.id].can_toggle
+    assert _summaries(_listed(admin_user)[first.id].group_summaries) == {
+        group.id: (None, PluginInstallationPolicy.REQUIRED)
+    }
 
 
 def test_explicit_available_overrides_a_not_available_default(
     admin_user: DATestUser,
 ) -> None:
     """AVAILABLE is the skill's own setting; null follows Default Access."""
-    author = UserManager.create(name=_name("ea_author"))
-    other = UserManager.create(name=_name("ea_other"))
+    author = UserManager.create(name=unique_name("ea_author"))
+    other = UserManager.create(name=unique_name("ea_other"))
     _set_default(admin_user, "NOT_AVAILABLE").raise_for_status()
     skill = SkillManager.create_custom(author, is_public=True)
 
@@ -241,7 +211,7 @@ def test_explicit_available_overrides_a_not_available_default(
 def _create_app(admin: DATestUser) -> int:
     app = ExternalAppManager.create(
         user_performing_action=admin,
-        name=_name("G6 app"),
+        name=unique_name("G6 app"),
         upstream_url_patterns=["https://api.example.com/*"],
         auth_template={"Authorization": "Bearer {access_token}"},
         organization_credentials={},
@@ -254,7 +224,7 @@ def test_app_skills_stay_visible_under_a_not_available_default(
     admin_user: DATestUser,
 ) -> None:
     """Both app link paths give the skill an explicit Available setting."""
-    member = UserManager.create(name=_name("app_member"))
+    member = UserManager.create(name=unique_name("app_member"))
     _set_default(admin_user, "NOT_AVAILABLE").raise_for_status()
     app_id = _create_app(admin_user)
     try:
@@ -265,7 +235,7 @@ def test_app_skills_stay_visible_under_a_not_available_default(
             headers=admin_user.headers,
         ).raise_for_status()
 
-        name = _name("app-created")
+        name = unique_name("app-created")
         created = client.post(
             f"{API_SERVER_URL}/skills/custom/editor",
             data={

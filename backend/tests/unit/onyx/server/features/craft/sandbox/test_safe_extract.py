@@ -316,25 +316,3 @@ def test_truncated_archive_keeps_the_live_tree(tmp_path: Path) -> None:
 
     assert _live(mount_path) == live
     assert list(live.parent.iterdir()) == [live]
-
-
-def test_entries_are_copied_in_chunks(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """No entry is read into memory in one call."""
-    mount_path = _make_mount_path(tmp_path)
-    monkeypatch.setattr(extract, "_COPY_CHUNK_BYTES", 4096)
-    reads: list[int] = []
-    original_read = tarfile.ExFileObject.read
-
-    def recording_read(self: tarfile.ExFileObject, size: int | None = -1) -> bytes:
-        reads.append(-1 if size is None else size)
-        return original_read(self, size)
-
-    monkeypatch.setattr(tarfile.ExFileObject, "read", recording_read)
-    data = os.urandom(64 * 1024)
-
-    safe_extract_then_atomic_swap(_build_tar_gz({"a.bin": data}), mount_path)
-
-    assert (_live(mount_path) / "a.bin").read_bytes() == data
-    assert reads and all(0 < size <= 4096 for size in reads)

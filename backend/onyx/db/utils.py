@@ -1,5 +1,3 @@
-import hashlib
-import struct
 from enum import Enum
 from typing import Any, Final, TypeGuard, TypeVar
 
@@ -7,9 +5,8 @@ from asyncpg.exceptions import CheckViolationError as AsyncpgCheckViolationError
 from psycopg2 import OperationalError, errorcodes
 from psycopg2.errors import CheckViolation, ForeignKeyViolation, UniqueViolation
 from pydantic import BaseModel, Field
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
 
 from onyx.db.models import Base
 
@@ -128,26 +125,3 @@ class DiscordChannelView(BaseModel):
     channel_name: str
     channel_type: str = "text"  # text, forum
     is_private: bool = False  # True if @everyone cannot view the channel
-
-
-def advisory_lock_id(namespace: str, tenant_id: str) -> int:
-    """A Postgres advisory lock id for a namespace in one tenant, so tenants
-    do not block each other."""
-    digest = hashlib.sha256(f"{namespace}:{tenant_id}".encode()).digest()
-    # pg_advisory_xact_lock takes a signed 8-byte int.
-    return struct.unpack("q", digest[:8])[0]
-
-
-def acquire_advisory_xact_lock(db_session: Session, lock_id: int) -> None:
-    """Take a transaction-scoped advisory lock, released on commit or rollback."""
-    # Bounded wait: a double-acquisition bug or wedged holder should fail
-    # fast with lock_not_available, not hang until the idle-in-transaction
-    # reaper kills the session (observed as 10-minute invite freezes).
-    db_session.execute(text("SET LOCAL lock_timeout = '10s'"))
-    db_session.execute(
-        text("SELECT pg_advisory_xact_lock(:lock_id)"),
-        {"lock_id": lock_id},
-    )
-    # Restore the session default so the caller's later row-lock waits
-    # aren't capped by the advisory-acquisition bound.
-    db_session.execute(text("SET LOCAL lock_timeout = DEFAULT"))

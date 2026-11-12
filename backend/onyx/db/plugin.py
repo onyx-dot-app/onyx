@@ -58,12 +58,9 @@ from onyx.db.models import (
 from onyx.db.plugin_access import (
     PluginKind,
     affected_user_ids_for_plugins,
-    plugin_editable_by_user,
-    plugin_ids_in_managed_scope,
     plugin_version_kind,
 )
 from onyx.db.plugin_review import publish_action_for, request_review__no_commit
-from onyx.db.skill_limit import check_skill_limit
 from onyx.db.user_group import assert_not_shared_with_default_group
 from onyx.db.utils import (
     UNSET,
@@ -172,8 +169,7 @@ def set_organization_library_default__no_commit(
 ) -> set[UUID]:
     """Set the Organization library default and return the users with a
     running sandbox who could see an affected plugin before or after. REQUIRED
-    is refused: one switch would force every published plugin on every user.
-    A change that puts users past the skill limit is refused with 413."""
+    is refused: one switch would force every published plugin on every user."""
     if policy == PluginInstallationPolicy.REQUIRED:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
@@ -191,10 +187,9 @@ def set_organization_library_default__no_commit(
             )
         )
     )
-    with check_skill_limit(db_session, affected_ids, None):
-        before = affected_user_ids_for_plugins(affected_ids, db_session)
-        library.default_installation_policy = policy
-        db_session.flush()
+    before = affected_user_ids_for_plugins(affected_ids, db_session)
+    library.default_installation_policy = policy
+    db_session.flush()
     return before | affected_user_ids_for_plugins(affected_ids, db_session)
 
 
@@ -1377,63 +1372,13 @@ def _check_sharing_setting(
         )
 
 
-_OUTSIDE_MANAGED_SCOPE = (
-    "This skill is shared outside the groups you manage. Only an "
-    "organization-wide skill manager can set its group install settings."
-)
-
-
-def _check_scoped_group_setting(
-    plugins: Mapping[UUID, _LockedPlugin],
-    change: PluginAccessChange,
-    actor: User,
-    setting_group_ids: list[int],
-    db_session: Session,
-) -> None:
-    """A user with MANAGE_PLUGINS for some groups sets the settings of those
-    groups only, on a plugin that is not published and that they can edit.
-    After the change it must still be in their scope
-    (``plugin_in_managed_scope``), which ``_apply_to_plugin__no_commit``
-    checks."""
-    if change.publish or any(locked.published for locked in plugins.values()):
-        raise OnyxError(
-            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "Only an organization-wide skill manager can set a group install "
-            "setting on a published skill.",
-        )
-    assert_within_scope(
-        actor,
-        db_session,
-        permission=Permission.MANAGE_PLUGINS,
-        current_group_ids=[],
-        requested_group_ids=setting_group_ids,
-        is_non_public=True,
-    )
-    editable = set(
-        db_session.scalars(
-            select(Plugin.id).where(
-                Plugin.id.in_(list(plugins)),
-                plugin_editable_by_user(Plugin, actor.id),
-            )
-        )
-    ) | plugin_ids_in_managed_scope(plugins, actor, db_session)
-    if set(plugins) - editable:
-        raise OnyxError(
-            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "Only an organization-wide skill manager, or a group manager who can "
-            "edit this skill, can change its group install settings.",
-        )
-
-
 def _check_access_change(
     plugins: Mapping[UUID, _LockedPlugin],
     change: PluginAccessChange,
     actor: User | None,
     db_session: Session,
-) -> bool:
-    """The checks that apply to the whole set. They raise before any write.
-    Returns True when each plugin must be in the actor's managed scope after
-    the write."""
+) -> None:
+    """The checks that apply to the whole set. They raise before any write."""
     is_global_manager = actor is not None and has_global_permission(
         actor, Permission.MANAGE_PLUGINS
     )
@@ -1448,8 +1393,17 @@ def _check_access_change(
         )
     if actor is not None and not is_global_manager:
         _check_sharing_setting(plugins, change)
+    if (
+        change.group_settings is not None
+        and actor is not None
+        and not is_global_manager
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Only an organization-wide skill manager can set a group install setting.",
+        )
     if change.group_grants is None and change.group_settings is None:
-        return False
+        return
     requested_group_ids = sorted(
         {grant.group_id for grant in change.group_grants or ()}
     )
@@ -1471,14 +1425,6 @@ def _check_access_change(
                     "group's share first.",
                 )
 
-    scoped_setting = (
-        bool(setting_group_ids) and actor is not None and not is_global_manager
-    )
-    if scoped_setting and actor is not None:
-        _check_scoped_group_setting(
-            plugins, change, actor, setting_group_ids, db_session
-        )
-
     # A change to a plugin's group shares is a MANAGE_PLUGINS action. The
     # current shares come from the database, never the request, so a
     # reassignment cannot escape scope. Re-sending the current set is no change.
@@ -1489,7 +1435,7 @@ def _check_access_change(
         != _group_shares(locked.group_rows)
     ]
     if actor is None or not changed:
-        return scoped_setting
+        return
     assert_within_scope(
         actor,
         db_session,
@@ -1505,7 +1451,6 @@ def _check_access_change(
         is_non_public=not change.publish
         and not any(locked.published for locked in changed),
     )
-    return scoped_setting
 
 
 def _legacy_installation_policy(
@@ -1664,83 +1609,27 @@ def apply_plugin_access_change__no_commit(
 
     Rules: a company install setting needs organization-wide MANAGE_PLUGINS. A
     group install setting (``group_settings``) needs organization-wide
-    MANAGE_PLUGINS, or MANAGE_PLUGINS for that group on a private plugin the
-    actor can edit and that stays in their managed scope. A group row with a
-    permission cannot be NOT_AVAILABLE. A change
+    MANAGE_PLUGINS too. A group row with a permission cannot be
+    NOT_AVAILABLE. A change
     to group shares must stay within the actor's managed scope. With the admin
     Sharing setting off, only organization-wide MANAGE_PLUGINS adds shares.
     Publishing needs the author or organization-wide MANAGE_PLUGINS.
 
     ``actor`` None is a system write that the caller authorized, such as an
     ownership transfer. The permission checks are skipped; the other rules
-    still apply.
-
-    The skill limit (``onyx.db.skill_limit``) is checked once for the whole
-    set: a change that puts users past it is refused with 413."""
+    still apply."""
     ids = sorted(set(plugin_ids))
     if not ids:
         return PluginAccessResult(affected_user_ids=set(), failures={})
     plugins, failures = _lock_for_access_change(ids, db_session)
-    check_scope = _check_access_change(plugins, change, actor, db_session)
+    _check_access_change(plugins, change, actor, db_session)
 
-    with check_skill_limit(
-        db_session, plugins, actor.id if actor is not None else None
-    ):
-        before = affected_user_ids_for_plugins(plugins, db_session)
-        for plugin_id, locked in plugins.items():
-            try:
-                with db_session.begin_nested():
-                    _apply_to_plugin__no_commit(locked, change, actor, db_session)
-                    if (
-                        check_scope
-                        and actor is not None
-                        and not plugin_ids_in_managed_scope(
-                            [plugin_id], actor, db_session
-                        )
-                    ):
-                        raise OnyxError(
-                            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-                            _OUTSIDE_MANAGED_SCOPE,
-                        )
-            except OnyxError as exc:
-                failures[plugin_id] = exc
-        after = affected_user_ids_for_plugins(plugins, db_session)
+    before = affected_user_ids_for_plugins(plugins, db_session)
+    for plugin_id, locked in plugins.items():
+        try:
+            with db_session.begin_nested():
+                _apply_to_plugin__no_commit(locked, change, actor, db_session)
+        except OnyxError as exc:
+            failures[plugin_id] = exc
+    after = affected_user_ids_for_plugins(plugins, db_session)
     return PluginAccessResult(affected_user_ids=before | after, failures=failures)
-
-
-def set_group_install_setting__no_commit(
-    plugin_id: UUID,
-    group_id: int,
-    policy: PluginInstallationPolicy | None,
-    actor: User,
-    db_session: Session,
-) -> PluginAccessResult:
-    """The group page write. A private plugin that the group does not have
-    yet is shared with it as VIEWER, with ``policy``. Otherwise only the
-    group's install setting changes: a published plugin gets a setting-only
-    row, and None removes the setting (and a row with no permission). The
-    caller checks that the actor can edit a private plugin."""
-    plugins, missing = _lock_for_access_change([plugin_id], db_session)
-    if plugin_id in missing:
-        raise missing[plugin_id]
-    locked = plugins[plugin_id]
-    change = PluginAccessChange(
-        group_grants=(
-            (
-                PluginGroupGrant(
-                    group_id=group_id, permission=SkillSharePermission.VIEWER
-                ),
-            )
-            if group_id not in locked.group_rows and not locked.published
-            else None
-        ),
-        group_settings=(
-            PluginGroupSetting(group_id=group_id, installation_policy=policy),
-        ),
-        mode=PluginAccessMode.ADD_ONLY,
-    )
-    result = apply_plugin_access_change__no_commit(
-        [plugin_id], change, actor, db_session
-    )
-    result.raise_first_failure()
-    return result

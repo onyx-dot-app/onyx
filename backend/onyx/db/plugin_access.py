@@ -292,22 +292,16 @@ def plugin_ids_in_managed_scope(
     )
 
 
-def _version_run(
-    plugin: type[Plugin], gets_current: ColumnElement[bool]
-) -> ColumnElement[UUID]:
-    return case(
-        (gets_current, plugin.current_version_id),
-        else_=func.coalesce(plugin.published_version_id, plugin.current_version_id),
-    )
-
-
 def version_user_runs(plugin: type[Plugin], user_id: UserIdExpr) -> ColumnElement[UUID]:
-    return _version_run(
-        plugin,
-        or_(
-            plugin.author_user_id == user_id,
-            plugin_shared_with_user(plugin, user_id),
+    return case(
+        (
+            or_(
+                plugin.author_user_id == user_id,
+                plugin_shared_with_user(plugin, user_id),
+            ),
+            plugin.current_version_id,
         ),
+        else_=func.coalesce(plugin.published_version_id, plugin.current_version_id),
     )
 
 
@@ -864,88 +858,6 @@ def load_plugin_access(
         )
         for row in plugin_rows
     }
-
-
-@dataclass(frozen=True)
-class GroupPluginRow:
-    """One plugin__user_group row of a group, for the group page. The name and
-    description come from the version the group's members run: the current
-    version through a share, else the published one."""
-
-    plugin_id: UUID
-    kind: PluginKind
-    plugin_name: str
-    # From the frontmatter of the version the group runs.
-    skill_name: str | None
-    description: str
-    published: bool
-    # None: the row holds only a group install setting.
-    permission: SkillSharePermission | None
-    # None: no group override.
-    installation_policy: PluginInstallationPolicy | None
-    company_installation_policy: PluginInstallationPolicy
-
-    @property
-    def name(self) -> str:
-        """A plugin of kind skill shows as its skill."""
-        if self.kind == "skill" and self.skill_name:
-            return self.skill_name
-        return self.plugin_name
-
-
-def load_group_plugins(group_id: int, db_session: Session) -> list[GroupPluginRow]:
-    """Every plugin__user_group row of the group, ordered by plugin name."""
-    group_runs = _version_run(Plugin, Plugin__UserGroup.permission.is_not(None))
-    skill_paths = (
-        select(func.array_agg(aggregate_order_by(PluginSkill.path, PluginSkill.path)))
-        .where(PluginSkill.plugin_version_id == group_runs)
-        .correlate_except(PluginSkill)
-        .scalar_subquery()
-    )
-    rows = db_session.execute(
-        select(
-            Plugin.id,
-            Plugin.name,
-            skill_name_in_version(group_runs),
-            func.coalesce(
-                _frontmatter_in_version("description", group_runs),
-                Plugin.description,
-            ),
-            skill_paths,
-            plugin_is_published(Marketplace),
-            Plugin__UserGroup.permission,
-            Plugin__UserGroup.installation_policy,
-            company_installation_policy(Plugin, Marketplace),
-        )
-        .join(Plugin, Plugin.id == Plugin__UserGroup.plugin_id)
-        .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
-        .where(Plugin__UserGroup.user_group_id == group_id)
-    ).all()
-    result = [
-        GroupPluginRow(
-            plugin_id=plugin_id,
-            kind=plugin_version_kind(paths or ()),
-            plugin_name=plugin_name,
-            skill_name=skill_name,
-            description=description,
-            published=bool(published),
-            permission=permission,
-            installation_policy=policy,
-            company_installation_policy=company,
-        )
-        for (
-            plugin_id,
-            plugin_name,
-            skill_name,
-            description,
-            paths,
-            published,
-            permission,
-            policy,
-            company,
-        ) in rows
-    ]
-    return sorted(result, key=lambda row: (row.name.lower(), row.plugin_id))
 
 
 def plugin_is_in_user_uploads_of(user_id: UUID) -> ColumnElement[bool]:
