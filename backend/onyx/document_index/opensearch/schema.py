@@ -27,6 +27,9 @@ from onyx.document_index.opensearch.constants import (
     EF_CONSTRUCTION,
     EF_SEARCH,
     LUCENE_SCALAR_QUANTIZATION,
+    STORE_PRELOAD_BASE_EXTENSIONS,
+    STORE_PRELOAD_VECTOR_EXTENSION_QUANTIZED,
+    STORE_PRELOAD_VECTOR_EXTENSION_UNQUANTIZED,
     M,
 )
 from onyx.document_index.opensearch.string_filtering import (
@@ -635,7 +638,9 @@ class DocumentSchema:
         return schema
 
     @staticmethod
-    def get_index_settings_based_on_environment() -> dict[str, Any]:
+    def get_index_settings_based_on_environment(
+        vector_quantization: VectorQuantization = VectorQuantization.NONE,
+    ) -> dict[str, Any]:
         """
         Returns the index settings based on the environment.
         """
@@ -657,12 +662,23 @@ class DocumentSchema:
         if OPENSEARCH_INDEX_NUM_REPLICAS is not None:
             number_of_replicas = OPENSEARCH_INDEX_NUM_REPLICAS
 
-        return {
-            "index": {
-                "number_of_shards": number_of_shards,
-                "number_of_replicas": number_of_replicas,
-                # Required for vector search.
-                "knn": True,
-                "knn.algo_param.ef_search": EF_SEARCH,
-            }
+        index_settings: dict[str, Any] = {
+            "number_of_shards": number_of_shards,
+            "number_of_replicas": number_of_replicas,
+            # Required for vector search.
+            "knn": True,
+            "knn.algo_param.ef_search": EF_SEARCH,
         }
+        # Self-hosted only: AWS managed domains are multi-shard and sized by AWS,
+        # and the multi-tenant index is far larger than node memory.
+        if not USING_AWS_MANAGED_OPENSEARCH:
+            vector_extension = (
+                STORE_PRELOAD_VECTOR_EXTENSION_UNQUANTIZED
+                if vector_quantization == VectorQuantization.NONE
+                else STORE_PRELOAD_VECTOR_EXTENSION_QUANTIZED
+            )
+            index_settings["store.preload"] = [
+                vector_extension,
+                *STORE_PRELOAD_BASE_EXTENSIONS,
+            ]
+        return {"index": index_settings}

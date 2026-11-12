@@ -435,8 +435,8 @@ class OpenSearchDocumentIndex(DocumentIndex):
             )
 
             if not self._client.index_exists():
-                index_settings = (
-                    DocumentSchema.get_index_settings_based_on_environment()
+                index_settings = DocumentSchema.get_index_settings_based_on_environment(
+                    vector_quantization=self._vector_quantization
                 )
                 self._client.create_index(
                     mappings=expected_mappings,
