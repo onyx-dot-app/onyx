@@ -172,11 +172,14 @@ def submit_human_message__no_commit(
     message: str,
     delivery: MessageDelivery,
     target_response_id: int | None,
+    turn_preparing: bool,
 ) -> PendingChatMessage:
     """Store text after authorization. Only `send` binds to a running response.
 
     A send without a target goes to the selected response. A send to a response
-    that no longer accepts input waits in the queue instead.
+    that no longer accepts input waits in the queue instead, unless a turn is
+    preparing: then it stays an untargeted send, and the turn's response
+    reservation takes it.
     """
     lock_agent(session, str(chat_session_id))
     selected, branch = get_selected_branch(session, chat_session_id)
@@ -211,7 +214,10 @@ def submit_human_message__no_commit(
     if delivery == MessageDelivery.SEND and (
         target is None or target.response_status not in _ACCEPTING_STATUSES
     ):
-        delivery = MessageDelivery.QUEUE
+        if turn_preparing:
+            target = None
+        else:
+            delivery = MessageDelivery.QUEUE
     pending_count = session.scalar(
         select(func.count()).select_from(
             _pending_human_inputs(chat_session_id).subquery()

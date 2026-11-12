@@ -1385,6 +1385,7 @@ _RESUME_MAX_CHUNKS_PER_READ = 32
 def get_chat_session_processing_status(
     session_id: UUID,
     background_tasks: BackgroundTasks,
+    request: Request,
     user: User = Depends(
         require_permission(Permission.READ_CHAT, allow_anonymous=True)
     ),
@@ -1424,7 +1425,13 @@ def get_chat_session_processing_status(
         )
     ):
         # Queued work can outlive the process that completed its previous response.
-        background_tasks.add_task(dispatch_pending_chat_messages, session_id, user.id)
+        background_tasks.add_task(
+            dispatch_pending_chat_messages,
+            session_id,
+            user.id,
+            get_relevant_headers(request.headers, LITELLM_PASS_THROUGH_HEADERS),
+            get_relevant_headers(request.headers, CUSTOM_TOOL_PASS_THROUGH_HEADERS),
+        )
     return status
 
 
@@ -1531,14 +1538,17 @@ def submit_pending_chat_message(
 ) -> PendingChatMessage:
     """Submit text for the next step, normal completion, or interruption."""
     chat_session = get_human_input_session(db_session, session_id, user)
+    cache = get_cache_backend()
     pending = submit_human_message__no_commit(
         db_session,
         session_id,
         message=process_chat_query(body.message, chat_session, user, db_session),
         delivery=body.delivery,
         target_response_id=body.target_response_id,
+        # A turn that holds admission without a stream has no response yet.
+        turn_preparing=is_chat_session_processing(session_id, cache)
+        and get_processing_stream_id(session_id, cache) is None,
     )
-    cache = get_cache_backend()
     # The interrupt stops the turn running at commit, never the turn it starts.
     interrupted = current_turn_owner(session_id, cache)
     db_session.commit()

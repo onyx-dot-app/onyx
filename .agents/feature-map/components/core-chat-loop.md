@@ -24,8 +24,11 @@
   fails with "Message ID is required" ([[#session-admission]]).
   The separate pending-message API accepts text during a turn. `send` targets
   the current response's next model step; without a target it goes to the
-  selected response. A `send` that its response no longer reads, including one
-  to an idle session, is stored as `queue` and never refused. `queue` starts a
+  selected response. A `send` that arrives while a turn prepares has no
+  response to target yet; it stays an untargeted `send`, and the turn's
+  response reservation (`db/chat.py:reserve_chat_response_ids`) takes it. Any
+  other `send` that its response no longer reads, including one to an idle
+  session, is stored as `queue` and never refused. `queue` starts a
   new turn after normal completion or the step limit. `interrupt` requests Stop,
   then starts a new turn after execution and saves drain. Stop and failure
   leave ordinary queued text pending. The main-chat frontend uses this API; Craft has a
