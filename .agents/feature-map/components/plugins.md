@@ -93,6 +93,14 @@ whose preference has `enabled_in_chat` false. On the web,
 `lib/plugins/chat.ts:effectiveChatPreferredToolId` drops an unavailable preferred plugin tool in
 Default Chat when the user's preference turns it off.
 
+**Tool selection of an existing chat.** `lib/tools/hooks.ts:useToolConfiguration`
+keeps each chat's tool states. When the user changes them in an existing chat
+that is not incognito and not anonymous, it PATCHes
+`/api/chat/chat-session/{id}/tool-selection` with the `allowed_tool_ids` and
+`preferred_tool_id` a send would carry, debounced by 300 ms. The server keeps
+that selection on the chat session. A new chat saves its selection on its
+first send.
+
 ---
 
 ## Contracts and traps

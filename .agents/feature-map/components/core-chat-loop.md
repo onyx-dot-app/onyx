@@ -107,7 +107,12 @@ Processing hook before it saves the user message, only for a new, non-blank
 message, and only when the incognito mode allows hooks
 (`IncognitoRecordMode.fires_hooks`), because the hook sends the query out
 ([[hooks]]). A rejection raises `QUERY_REJECTED`. A regeneration reuses the saved
-user message. Then setup resolves the custom agent prompt, memories, the
+user message. Each user send saves its tools in `chat_session.tool_selection`
+(`allowed_tool_ids`, `preferred_tool_id`; NULL means the agent's tools), and the
+`PATCH /chat/chat-session/{session_id}/tool-selection` route updates them between
+sends. A single-model send with a model override saves it in
+`chat_session.llm_override`, which later turns without an override use. Then
+setup resolves the custom agent prompt, memories, the
 reserved tokens, the tool configuration and the branch summary, and copies the
 history out of the ORM rows. It closes the DB session before slow file loading,
 renews the admission between stages, and reserves one assistant row per model.

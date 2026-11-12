@@ -65,6 +65,7 @@ from onyx.server.query_and_chat.models import (
     ChatMessageDetail,
 )
 from onyx.server.query_and_chat.streaming_models import StreamingError
+from onyx.tools.models import ChatToolSelection
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
 
@@ -929,6 +930,28 @@ def reserve_chat_response_ids(
 
     db_session.commit()
     return [message.id for message in reserved]
+
+
+def set_chat_session_llm_override__no_commit(
+    db_session: Session, chat_session_id: UUID, llm_override: LLMOverride
+) -> None:
+    """Remember the model the user last chose."""
+    db_session.execute(
+        update(ChatSession)
+        .where(ChatSession.id == chat_session_id)
+        .values(llm_override=llm_override)
+    )
+
+
+def set_chat_session_tool_selection__no_commit(
+    db_session: Session, chat_session_id: UUID, tool_selection: ChatToolSelection
+) -> None:
+    """Save the tools the user selected for this chat."""
+    db_session.execute(
+        update(ChatSession)
+        .where(ChatSession.id == chat_session_id)
+        .values(tool_selection=tool_selection)
+    )
 
 
 def set_preferred_response(
