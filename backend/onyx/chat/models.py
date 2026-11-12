@@ -31,7 +31,8 @@ from onyx.configs.constants import MessageType
 from onyx.context.models import UserMemoryContext
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.db.enums import IncognitoRecordMode
-from onyx.deep_research.models import ResearchAgentCallResult, ResearchConfiguration
+from onyx.db.models import SAVED_TOOL_RESULT_TYPES, SavedToolResultDetails
+from onyx.deep_research.models import ResearchConfiguration
 from onyx.file_store.models import (
     ChatLoadedFile,
     ExtractedContextFiles,
@@ -64,15 +65,14 @@ from onyx.tools.models import (
     SearchToolUsage,
     ToolCallInfo,
 )
+from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
 from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultType
 from onyx.tools.tool_implementations.search.models import SearchContext
 
 MAX_DISCOVERED_AGENTS = 128
 _MESSAGE_ADAPTER = TypeAdapter(Message)
 _INCOGNITO_IMAGES = TypeAdapter(list[SavedLoadedFile])
-_INCOGNITO_SOURCE_DETAILS = TypeAdapter(
-    Annotated[SearchDocsResponse | ResearchAgentCallResult, Field(discriminator="type")]
-)
+_INCOGNITO_DETAILS = TypeAdapter(SavedToolResultDetails)
 
 
 class PromptMetadata(CompactionMetadata):
@@ -256,12 +256,13 @@ def _read_incognito_message(value: dict[str, JsonValue] | Message) -> Message:
     message = _MESSAGE_ADAPTER.validate_python(data)
     message.metadata = metadata
     if details is not None and isinstance(message, ToolResultMessage):
-        message.details = _INCOGNITO_SOURCE_DETAILS.validate_python(details)
+        message.details = _INCOGNITO_DETAILS.validate_python(details)
     return message
 
 
 def serialize_incognito_message(message: Message) -> dict[str, JsonValue]:
-    """Retain replay text and citation sources, excluding execution files and state."""
+    """Retain replay text, citation sources and saved tool result details, excluding
+    execution files and state."""
     metadata = (
         message.metadata
         if isinstance(message.metadata, PromptMetadata)
@@ -283,13 +284,11 @@ def serialize_incognito_message(message: Message) -> dict[str, JsonValue]:
             else None,
         }
     )
-    if isinstance(message, ToolResultMessage):
-        if isinstance(message.details, SearchDocsResponse):
-            data["details"] = message.details.model_dump(
-                mode="json", include={"type", "search_docs", "citation_mapping"}
-            )
-        elif isinstance(message.details, ResearchAgentCallResult):
-            data["details"] = message.details.model_dump(mode="json")
+    if isinstance(message, ToolResultMessage) and isinstance(
+        message.details, SAVED_TOOL_RESULT_TYPES
+    ):
+        # Dumped as the saved type: staged files stay in execution state.
+        data["details"] = _INCOGNITO_DETAILS.dump_python(message.details, mode="json")
     return data
 
 
@@ -446,8 +445,22 @@ class SearchParams(BaseModel):
     search_usage: SearchToolUsage
 
 
-class ChatSearchResult(SearchDocsResponse):
-    """Search documents with files staged before the tool result is committed."""
+class ResultSources(BaseModel):
+    """Documents carried by one tool result and the citation numbers it gave them."""
+
+    model_config = ConfigDict(frozen=True)
+
+    # The documents the result carries: every search result, or only the cited
+    # documents of a research result.
+    documents: list[SearchDoc]
+    # The documents to show for the call; a search can select a subset. None when
+    # the call shows no documents of its own.
+    displayed: list[SearchDoc] | None
+    citations: dict[int, SearchDoc]
+
+
+class StagedChatFiles(BaseModel):
+    """Files of a tool result's documents, staged before the result is committed."""
 
     staged_files: list[ChatFile]
 
@@ -466,6 +479,14 @@ class ChatSearchResult(SearchDocsResponse):
             else SavedChatFile.model_validate(file).restore()
             for file in value
         ]
+
+
+class ChatSearchResult(StagedChatFiles, SearchDocsResponse):
+    """Search documents with their files staged."""
+
+
+class ChatCodeModeResult(StagedChatFiles, CodeModeExecutionResult):
+    """A code mode result with the files of its nested searches staged."""
 
 
 class ToolHistorySnapshot(BaseModel):
@@ -602,6 +623,7 @@ class ChatFeatureState(BaseModel):
     include_citations: bool
     inject_memories: bool
     preferred_tool_id: int | None = None
+    code_mode: bool
     base_prompt: str
     custom_prompt: str | None
     request_context: str | None = None

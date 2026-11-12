@@ -28,7 +28,7 @@ export default function SpendingLimitsPage() {
   const t = useTranslations("admin.spendingLimits");
   const adminRouteTitle = useAdminRouteTitle();
   const { data, error, mutate } = useSpendingLimits();
-  const { data: groups } = useGroups();
+  const { data: groups } = useGroups(false, false);
   const baseModelOptions = useModelOptions();
   // Cards opened through "Add Group Limit" that are not saved yet.
   const [newCardKeys, setNewCardKeys] = useState<number[]>([]);
@@ -77,7 +77,7 @@ export default function SpendingLimitsPage() {
   const pickableGroups = (groups ?? []).map((group) => ({
     id: group.id,
     name: group.name,
-    memberCount: group.users.length,
+    memberCount: group.member_count,
   }));
 
   function refresh() {

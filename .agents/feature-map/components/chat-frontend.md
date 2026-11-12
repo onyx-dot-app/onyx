@@ -42,9 +42,15 @@
   models, the answers appear when the run ends; the input stays busy until
   then.
 - **A user rates, copies or shares an answer.** Copy turns markdown tables into
-  tab-separated text so a spreadsheet keeps the columns. A share link opens a
+  tab-separated text so a spreadsheet keeps the columns. Each answer table
+  also has its own copy button, which writes HTML with links and full source
+  names (`app/app/message/tableCopyUtils.ts`). On desktop, a wide table grows
+  past the reading column up to the chat area; in a multi-model view it stays
+  in its pane. A share link opens a
   read-only copy. The page needs a session, so a visitor with none goes to
   sign-in.
+- **The incognito start button** appears only on the new chat page when
+  incognito is available and unlocked.
 - **A user in incognito** cannot turn incognito on or off once the session
   exists, and answers show no rating buttons. Leaving the chat, reloading or
   closing the tab ends it. If an explicit exit fails, an error shows and the user stays in
@@ -158,13 +164,79 @@ by file ID, and render once above the answer as soon as they arrive. Later tool
 calls do not hide them. An image call does not mark the
 answer as final; later search or image calls can continue the timeline.
 
-A group closes on its own `SECTION_END` or `ERROR`; a new `turn_index` or a
-stop packet adds a `SECTION_END` to each open group. Parallel tools share a
-`turn_index` and differ by `tab_index`. A subagent's child packets carry the
-parent's key plus `sub_turn_index`, which the processor ignores, so they join
-the parent group. `ResearchAgentRenderer` and `CodingAgentRenderer` split on
-`sub_turn_index`, and `app/app/message/messageComponents/toolDisplayHelpers.tsx:isToolComplete` ignores nested
-`SECTION_END` packets.
+A group closes on its own parent-level `SECTION_END` or `ERROR`
+(`app/app/message/messageComponents/timeline/packetHelpers.ts:isGroupEndPacket`,
+shared by `isToolComplete` and the packet processor); a new `turn_index` or a
+stop packet adds a parent-level `SECTION_END` to each open group. A stop
+packet also ends each open nested call, because no packet follows it. Parallel
+tools share a `turn_index` and differ by `tab_index`. The child packets of a
+subagent, a coding agent (its bash calls and thinking) or a code mode program
+carry the parent's key plus `sub_turn_index`, so they join the parent group,
+and their `SECTION_END` or `ERROR` does not close it. A nested `MESSAGE_START`
+does not start the answer.
+The packet processor splits each group once
+(`app/app/message/messageComponents/timeline/hooks/packetProcessor.ts:buildGroupsFromKeys`).
+`GroupedPacket.packets` holds only the group's own packets. The step-kind checks
+in `app/app/message/messageComponents/timeline/packetHelpers.ts`,
+`findRenderer`, the header, and `isToolComplete` read only these, so a research
+step with a nested search is a research step, not a search step.
+`GroupedPacket.nestedCalls` holds the nested calls, made with
+`app/app/message/messageComponents/timeline/packetHelpers.ts:nestedCallSnapshot`.
+Each `NestedCall` holds one call's packets placed at parent level, so the tool's
+own renderer reads it as a direct call. The snapshot reuses the object of each
+unchanged call, so memoized renderers of finished calls do not redraw.
+`GroupedPacket.streamPackets` holds every packet in stream order. Every renderer
+receives all three as required props. `ResearchAgentRenderer` draws each entry
+of `nestedCalls` with the renderer of its tool. `CodingAgentRenderer` reads
+`streamPackets`, because its thinking and bash sections interleave in stream
+order.
+After the answer starts, a tool packet of a group whose tool has not started
+is a new tool call and sets `finalAnswerComing` back to false. The tool starts
+with its first tool packet other than a streamed argument, so a call whose
+arguments streamed before the answer also counts when it starts. A later
+packet of a started tool, such as a code mode closing record, joins its group,
+and the answer stays shown. Live,
+the closing record follows the answer. On replay, it follows its tab's section
+end, before the answer's `message_start`. Both orders give the same groups.
+The mobile app copies the group end and step-kind rules in
+`mobile/src/chat/timeline/packetHelpers.ts` and
+`mobile/src/chat/messageProcessor.ts` ([[mobile-app]]); change both. Its
+`GroupedPacket.packets` also holds only the group's own packets. Mobile has
+`nestedCalls` for code mode steps, but no `streamPackets`.
+
+**Code mode steps.** Code mode runs behind the scenes: the timeline shows the
+tool calls a program makes, not the program.
+`app/app/message/messageComponents/timeline/transformers.ts:expandCodeModeSteps`
+turns each nested call of an `execute_code` or `wait_code` group into its own
+step, drawn by that tool's renderer as a direct call would be. The packet
+processor adds each nested packet to its call as the packet arrives, and after
+each processed batch builds `GroupedPacket.nestedCalls` for each group with
+`app/app/message/messageComponents/timeline/packetHelpers.ts:nestedCallSnapshot`.
+It reuses the `NestedCall` object of each unchanged call, and
+`expandCodeModeSteps` reuses the step it made for that object, so memoized
+renderers of finished calls do not redraw. A call is its cell and
+`sub_turn_index`, as `CodeModeRenderer` (`backend/onyx/chat/renderer.py`)
+states, so the latest report replaces the earlier ones in place. Pacing
+compares the last packet of each step, because a new report can have as many
+packets as the old one. The program, its output, `wait_code`
+calls, yields and closing records have no step. A program without tool calls
+shows no step. `expandCodeModeSteps` returns the steps and `codeModeWorking`
+in one pass: a program runs from `code_mode_start` until a `code_mode_delta`
+reports a status, and a running program whose cell has no running call sets
+it. A yield (status `running`) ends the program's turn: the model acts next.
+`useTimelineUIState` takes `codeModeWorking`, so the header reads "Working"
+even when the last turn group is parallel.
+The header names a step's activity from its own first packet; nested packets
+do not decide it. `TransformedStep.groupKey` keeps the packet group of a step,
+so pacing still knows restored steps. The expanded timeline renders one list
+keyed by step (a parallel group by its first step), not by position, because a
+cell's new call can move later steps into another turn group. Concurrent calls of one program show as
+sequential steps, not parallel tabs: on replay the backend emits each call's
+packets one after another, and the saved calls have no start or end order, so
+the client cannot tell which calls overlapped. Mobile mirrors these transforms
+in its own module, `mobile/src/chat/timeline/transformers.ts`, so change both;
+its tests mirror the web cases. Mobile processes all packets again on each
+flush, so it does not reuse call or step objects.
 
 **Resume.** `web/src/hooks/useChatSessionController.ts` loads the session.
 When the response has `current_stream`, Stop can target that stream ID at

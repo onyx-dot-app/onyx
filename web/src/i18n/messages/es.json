@@ -353,7 +353,7 @@
         "clientMetadataRejected": "El proveedor no pudo usar el documento de metadatos del cliente. Si esta instancia no es accesible desde internet, desactiva «Usar el documento de metadatos del cliente» y vuelve a conectar.",
         "discoveryFailed": "No se encontraron los ajustes de inicio de sesión OAuth. Comprueba la URL del servidor o introduce los endpoints de tu proveedor.",
         "connectionFailed": "No se pudo acceder al servidor. Comprueba la URL del servidor e inténtalo de nuevo.",
-        "oauthFailed": "No se pudo iniciar la sesión OAuth. Comprueba los ajustes de tu cliente e inténtalo de nuevo.",
+        "oauthFailed": "No se pudo iniciar sesión con OAuth. Inténtalo de nuevo o revisa la configuración de OAuth del servidor.",
         "oauthInitFailed": "No se pudo iniciar OAuth: {detail}"
       },
       "header": {
@@ -2621,8 +2621,8 @@
       },
       "groupRestriction": {
         "empty": {
-          "description": "Todos conservan el acceso sincronizado desde el origen.",
-          "title": "Sin restricción hasta que se añadan grupos"
+          "description": "Restringir requiere un grupo. Desactiva la restricción para mantener el acceso sincronizado desde la fuente.",
+          "title": "Elige al menos un grupo"
         },
         "loadError": "No se pudieron cargar los grupos. Vuelve a cargar la página para intentarlo de nuevo.",
         "memberCount": "{count, plural, one {# miembro} other {# miembros}}",
@@ -2968,6 +2968,7 @@
           "sync": "Acceso a documentos **sincronizado con {source}**",
           "managedByAdmins": "Gestionado por **administradores**",
           "managedByGroups": "Gestionado por **{count, plural, one {# grupo} other {# grupos}}**",
+          "onlyMe": "Documentos visibles a través de este conector **solo para su propietario**",
           "syncRestricted": "Acceso a documentos **sincronizado con {source}**, restringido a **{count, plural, one {# grupo} other {# grupos}}**",
           "groupsPending": "Documentos compartidos con **grupos específicos**",
           "syncRestrictedPending": "Acceso a documentos **sincronizado con {source}**, restringido a **grupos específicos**"
@@ -3751,15 +3752,19 @@
             "description": "Los documentos indexados por este conector están disponibles para todos en tu organización.",
             "title": "Todos en tu organización"
           },
+          "onlyMe": {
+            "description": "Solo el propietario de la credencial de este conector obtiene acceso a través de él; para una fuente sin credencial, solo la persona que lo creó.",
+            "title": "Solo yo"
+          },
           "specificGroups": {
             "description": "Indica los grupos que pueden acceder a los documentos de este conector.",
-            "required": "Elige al menos un grupo.",
             "title": "Grupos específicos"
           },
           "sync": {
             "description": "{appName} sincroniza los permisos con la fuente. Los usuarios solo pueden buscar lo que pueden ver en la fuente.",
             "disabledReason": "El método de autenticación de la credencial actual no admite la sincronización automática de permisos. Cambia el método de autenticación de la credencial a uno compatible.",
-            "title": "Sincronizar con {source}"
+            "title": "Sincronizar con {source}",
+            "restrictionRequired": "Elige al menos un grupo o desactiva la restricción."
           },
           "title": "Acceso a documentos"
         },
@@ -7496,7 +7501,8 @@
           "public": "Público para tu organización",
           "private": "{count, plural, =0 {Privado} one {Compartido con # grupo} other {Compartido con # grupos}}",
           "sync": "Sincronización automática de permisos",
-          "sync_restricted": "Sincronización automática de permisos"
+          "sync_restricted": "Sincronización automática de permisos",
+          "personal": "Solo yo"
         },
         "detail": {
           "queued": "{position, selectordinal, other {#.º}} en la cola",
@@ -7623,7 +7629,7 @@
             "targetUriParseFailed": "No se pudo analizar el URI de destino — se usan los valores originales."
           },
           "validation": {
-            "targetUriInvalid": "El URI de destino debe ser una URL válida con el parámetro de consulta api-version y, o bien un nombre de implementación en la ruta, o bien /openai/responses",
+            "targetUriInvalid": "El URI de destino debe ser una URL válida: una URL /openai/v1/ o una URL con el parámetro de consulta api-version y, o bien un nombre de implementación en la ruta, o bien /openai/responses",
             "targetUriRequired": "El URI de destino es obligatorio"
           }
         },
@@ -7837,7 +7843,6 @@
           "row": {
             "defaultLabel": "Modelo predeterminado",
             "decisionTag": {
-              "label": "Decisión",
               "decisionOnly": "Modelo de decisiones. No está disponible en el selector de modelos de chat.",
               "chatAndDecision": "Admite tareas de chat y de decisiones."
             },
@@ -7846,9 +7851,6 @@
             },
             "setDefaultButton": {
               "label": "Establecer como predeterminado"
-            },
-            "visionMarker": {
-              "title": "Visión"
             }
           },
           "selectAllButton": {
@@ -12820,6 +12822,11 @@
           "text": "Se detuvo la generación de imágenes"
         }
       },
+      "markdownTable": {
+        "copyButton": {
+          "label": "Copiar tabla"
+        }
+      },
       "memoizedLink": {
         "questionFallback": {
           "label": "Pregunta"
@@ -12904,6 +12911,9 @@
         "codingAgent": {
           "bashExit": {
             "header": "Bash · salida {exitCode}"
+          },
+          "bashFailed": {
+            "header": "Bash · falló"
           },
           "bashRequest": {
             "label": "Solicitud"
@@ -13008,6 +13018,9 @@
           },
           "updatingMemory": {
             "label": "Actualizando memoria..."
+          },
+          "working": {
+            "label": "Trabajando"
           }
         },
         "internalSearch": {
@@ -14235,6 +14248,11 @@
       "completeFailed": {
         "message": "No se pudo completar la autorización"
       },
+      "desktopHandoff": {
+        "button": "Abrir Onyx",
+        "description": "Tu navegador abre la aplicación de escritorio de Onyx para terminar la conexión. Puedes cerrar esta pestaña cuando se abra la aplicación.",
+        "title": "Volver a Onyx"
+      },
       "genericError": {
         "description": "Se produjo un error durante el proceso de OAuth. Inténtalo de nuevo.",
         "title": "Algo salió mal"
@@ -14352,6 +14370,10 @@
       },
       "labels": {
         "default": "Predeterminado"
+      },
+      "modelTypes": {
+        "decision": "Decisión",
+        "vision": "Visión"
       }
     }
   },

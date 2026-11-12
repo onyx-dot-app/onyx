@@ -33,9 +33,9 @@
     "Qwen/Qwen3.6-35B-A3B": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.05,
+        "cache_read": 0.035,
         "input": 0.1,
-        "output": 0.95
+        "output": 0.89
       },
       "family": "qwen",
       "limit": {
@@ -91,9 +91,9 @@
     "deepseek-ai/DeepSeek-V3.1": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.55,
-        "input": 0.55,
-        "output": 1.65
+        "cache_read": 0.2,
+        "input": 0.5,
+        "output": 1.5
       },
       "family": "deepseek",
       "limit": {
@@ -119,9 +119,9 @@
     "deepseek-ai/DeepSeek-V4-Flash-0731": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.07,
+        "cache_read": 0.05,
         "input": 0.13,
-        "output": 0.28
+        "output": 0.27
       },
       "family": "deepseek-flash",
       "limit": {
@@ -197,6 +197,35 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-09-10",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "deepseek-ai/DeepSeek-V4.1-Flash-1017": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.006,
+        "input": 0.3,
+        "output": 1.2
+      },
+      "family": "deepseek-flash",
+      "limit": {
+        "context": 1048576,
+        "output": 1048576
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "DeepSeek V4.1 Flash 1017",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-17",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -602,8 +631,8 @@
       "attachment": false,
       "cost": {
         "cache_read": 0.19,
-        "input": 1.2,
-        "output": 4
+        "input": 0.75,
+        "output": 3
       },
       "family": "glm",
       "limit": {

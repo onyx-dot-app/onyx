@@ -200,6 +200,7 @@ def _construct_tools_impl(
     search_usage_forcing_setting: SearchToolUsage = SearchToolUsage.AUTO,
     selection_llm_factory: Callable[[], LLM] | None = None,
 ) -> dict[int, list[Tool]]:
+    """Construct available tools, resolving each MCP server once per model response."""
     tool_dict: dict[int, list[Tool]] = {}
 
     persona_tool_names = [t.name for t in configuration.tools]
@@ -210,7 +211,7 @@ def _construct_tools_impl(
         persona_tool_names,
     )
 
-    mcp_tool_cache: dict[int, dict[int, MCPTool]] = {}
+    mcp_tool_cache: dict[int, dict[int, MCPTool] | None] = {}
     mcp_preferences = (
         get_mcp_server_user_preferences(
             list(
@@ -468,11 +469,13 @@ def _construct_tools_impl(
             if preference is not None and not preference.enabled_in_chat:
                 continue
             if db_tool_model.mcp_server_id in mcp_tool_cache:
-                tool_dict[db_tool_model.id] = [
-                    mcp_tool_cache[db_tool_model.mcp_server_id][db_tool_model.id]
-                ]
+                cached_tools = mcp_tool_cache[db_tool_model.mcp_server_id]
+                if cached_tools is not None:
+                    tool_dict[db_tool_model.id] = [cached_tools[db_tool_model.id]]
                 continue
 
+            # Cache unavailable servers too, including access and resolution failures.
+            mcp_tool_cache[db_tool_model.mcp_server_id] = None
             mcp_server = get_mcp_server_by_id(db_tool_model.mcp_server_id, db_session)
 
             if (
@@ -502,7 +505,16 @@ def _construct_tools_impl(
             if custom_tool_config and custom_tool_config.mcp_headers:
                 additional_mcp_headers = custom_tool_config.mcp_headers
 
-            mcp_tool_cache[db_tool_model.mcp_server_id] = {}
+            if not mcp_credentials.can_authenticate_with_headers(
+                additional_mcp_headers
+            ):
+                logger.debug(
+                    "Skipping MCP server %s: credentials required", mcp_server.id
+                )
+                continue
+
+            server_tools: dict[int, MCPTool] = {}
+            mcp_tool_cache[db_tool_model.mcp_server_id] = server_tools
             # Find the matching tool definition
             for saved_tool in saved_tools:
                 # Create MCPTool instance for this specific tool
@@ -512,13 +524,14 @@ def _construct_tools_impl(
                     tool_name=saved_tool.name,
                     tool_description=saved_tool.description or "",
                     tool_definition=saved_tool.mcp_input_schema or {},
+                    output_schema=saved_tool.mcp_output_schema,
                     user_email=user.email,
                     user_id=str(user.id),
                     user_oauth_token=mcp_credentials.user_oauth_token,
                     additional_headers=additional_mcp_headers,
                     resolved_credentials=mcp_credentials,
                 )
-                mcp_tool_cache[db_tool_model.mcp_server_id][saved_tool.id] = mcp_tool
+                server_tools[saved_tool.id] = mcp_tool
 
                 if saved_tool.id == db_tool_model.id:
                     tool_dict[saved_tool.id] = [mcp_tool]

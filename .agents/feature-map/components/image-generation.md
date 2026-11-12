@@ -18,7 +18,8 @@ is on (`ee/onyx/server/tenants/provisioning.py`).
   they attached or to one that the assistant made, and the model uses it as a
   reference. After an image call, the assistant can continue with other tools
   or generate another image before answering. Generated images from all steps
-  appear once above the answer.
+  appear once above the answer. With code mode on, a program can generate
+  images too, and they show the same way.
 - **An admin** opens the image generation admin page. It lists the image
   models of each connected LLM provider. The recommended view, the default,
   shows the non-deprecated catalog image models; the full view shows every
@@ -50,6 +51,7 @@ It does not own:
   `LLMProvider` row, which [[llm-providers]] owns.
 - File storage and the session stamp on generated images
   ([[file-store-and-user-files]]).
+- How the timeline and the answer show the images ([[chat-frontend]]).
 - The chat cycle and its tool-call limit ([[core-chat-loop]]).
 - The Craft `image-generation` skill, which calls the CLI ([[skills]]). The
   skill is offered only when `is_image_generation_configured` is true.
@@ -172,7 +174,9 @@ and saves no files. The caller needs `Permission.GENERATE_IMAGE`.
    names.** The web enum calls the finished-image packet
    `IMAGE_GENERATION_TOOL_DELTA`, but its value is `"image_generation_final"`
    (`web/src/app/app/services/streamingModels.ts`). The renderer treats "start
-   with no end" as running. Match packets by their string value.
+   with no end" as running. An empty final packet shows "No images
+   generated"; a call that ends with no final packet (Stop, or an interrupted
+   code mode program) shows as stopped. Match packets by their string value.
 9. `one-image-per-chat-call` **The chat tool makes one image per call.**
    `ImageGenerationTool._generate_image` passes `n=1`. Only the standalone
    endpoint accepts `n`, up to `server/features/image_generation/api.py:_MAX_IMAGES`.

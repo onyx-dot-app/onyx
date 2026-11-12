@@ -10,7 +10,7 @@ import pytest
 
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import ToolInvocation, ToolProgress
-from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import DocumentSource, FederatedConnectorSource
 from onyx.context.search.models import (
     BaseFilters,
     DocumentTimeField,
@@ -42,6 +42,7 @@ from onyx.tools.tool_implementations.search.models import (
     SearchPlanningResult,
 )
 from onyx.tools.tool_implementations.search.search_tool import (
+    MAX_QUERIES_PER_CALL,
     SearchTool,
     update_search_context,
 )
@@ -93,6 +94,8 @@ def _run(
     progress: list[ToolProgress] | None = None,
     sections: list[InferenceSection] | None = None,
     context: ToolContext | None = None,
+    queries: list[str] | None = None,
+    federated_mock: MagicMock | None = None,
 ) -> MagicMock:
     """Mock retrieval and scope selection; supplied sections exercise context expansion."""
     mock_search_pipeline = MagicMock(return_value=[])
@@ -107,7 +110,12 @@ def _run(
         ),
         patch(f"{MODULE}.get_current_search_settings", return_value=MagicMock()),
         patch(f"{MODULE}.EmbeddingModel"),
-        patch(f"{MODULE}.get_federated_retrieval_functions", return_value=[]),
+        patch(
+            f"{MODULE}.get_federated_retrieval_functions",
+            federated_mock
+            if federated_mock is not None
+            else MagicMock(return_value=[]),
+        ),
         patch(
             f"{MODULE}.fetch_unique_document_sources", return_value=connected_sources
         ),
@@ -124,7 +132,7 @@ def _run(
         result = tool.run(
             invocation=ToolInvocation(
                 call_id="search",
-                arguments={"queries": ["ticket"]},
+                arguments={"queries": queries or ["ticket"]},
                 cancellation=CancellationSignal(),
                 update=lambda item: (
                     progress.append(item.model_copy(deep=True))
@@ -152,6 +160,65 @@ def _run(
             ],
         )
     return mock_search_pipeline
+
+
+@pytest.mark.parametrize(
+    ("selected", "expected"),
+    [(["Engineering Wiki"], ["Engineering Wiki"]), (None, ["Persona Set"])],
+)
+def test_federated_retrieval_uses_selected_document_sets(
+    selected: list[str] | None, expected: list[str]
+) -> None:
+    """Selected document sets replace the persona's sets, as for indexed search."""
+    tool = _make_tool(user_selected_filters=BaseFilters(document_set=selected))
+    tool.persona_search_info.document_set_names = ["Persona Set"]
+    federated = MagicMock(return_value=[])
+
+    with patch(
+        f"{MODULE}.filter_document_set_names_by_user_access",
+        return_value=set(selected or []),
+    ):
+        _run(
+            tool,
+            connected_sources=[],
+            skip_query_expansion=True,
+            federated_mock=federated,
+        )
+
+    assert federated.call_args.kwargs["document_set_names"] == expected
+
+
+def _slack_oauth_token(connector_id: int) -> MagicMock:
+    token = MagicMock(federated_connector_id=connector_id)
+    token.federated_connector.source = FederatedConnectorSource.FEDERATED_SLACK
+    token.federated_connector.config = {"channels": ["eng"]}
+    token.token.get_value.return_value = f"slack-token-{connector_id}"
+    return token
+
+
+@pytest.mark.parametrize(
+    ("linked_connector_id", "expected_token"),
+    [(7, "slack-token-7"), (9, "slack-token-9"), (8, None)],
+)
+def test_slack_oauth_search_requires_link_to_selected_document_sets(
+    linked_connector_id: int, expected_token: str | None
+) -> None:
+    tool = _make_tool(user_selected_filters=BaseFilters(document_set=["Eng"]))
+    with (
+        patch(
+            f"{MODULE}.list_federated_connector_oauth_tokens",
+            return_value=[_slack_oauth_token(7), _slack_oauth_token(9)],
+        ),
+        patch(
+            f"{MODULE}.get_federated_connector_document_set_mappings_by_document_set_names",
+            return_value=[MagicMock(federated_connector_id=linked_connector_id)],
+        ) as mappings,
+    ):
+        access_token, _, _ = tool._prefetch_slack_data(MagicMock())
+
+    mappings.assert_called_once()
+    assert mappings.call_args.args[1] == ["Eng"]
+    assert access_token == expected_token
 
 
 def test_empty_search_never_resolves_selection_model() -> None:
@@ -376,6 +443,19 @@ def _emitted_filter_sources(progress: list[ToolProgress]) -> list[list[str]]:
         for item in progress
         if isinstance(item.details, SearchDocsResponse) and item.details.sources
     ]
+
+
+def test_a_call_runs_at_most_the_query_limit() -> None:
+    queries = [f"query {index}" for index in range(MAX_QUERIES_PER_CALL + 2)]
+    mock_search_pipeline = _run(
+        _make_tool(),
+        connected_sources=[DocumentSource.SLACK],
+        skip_query_expansion=True,
+        queries=queries,
+    )
+    sent = set(_queries_sent(mock_search_pipeline))
+    assert set(queries[:MAX_QUERIES_PER_CALL]) <= sent
+    assert not set(queries[MAX_QUERIES_PER_CALL:]) & sent
 
 
 def test_decided_scope_is_passed_to_search() -> None:

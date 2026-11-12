@@ -550,7 +550,14 @@ func indexOf(s, sub string) int {
 
 func TestUp_keepsServiceOnFixedPortItHolds(t *testing.T) {
 	s := newTestStack(t, t.TempDir())
-	fixed := freeBasePort() + 5
+	reservation, err := net.Listen("tcp", ":0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixed := reservation.Addr().(*net.TCPAddr).Port
+	if err := reservation.Close(); err != nil {
+		t.Fatal(err)
+	}
 	p := &fakeProvider{services: []string{"web", "bot"}, fixedPorts: map[string]int{"bot": fixed}}
 	mustUp(t, s, p)
 	bot := servicePID(t, s, "bot")

@@ -16,6 +16,7 @@ from onyx.agents.compaction import (
     compact_history,
     context_budget,
     count_tokens,
+    head_and_tail_tokens,
     history_boundaries,
     request_tokens,
     working_messages,
@@ -29,6 +30,7 @@ from onyx.agents.models import (
     RunState,
     RunStatus,
     StepInput,
+    ToolResultAmendment,
 )
 from onyx.agents.runtime import (
     Agent,
@@ -510,6 +512,60 @@ def test_compaction_within_task_preserves_tool_effects_and_prepared_steps() -> N
         "Conversation summary:" in message.text
         for message in model.generations[-1].messages
     )
+
+
+@pytest.mark.parametrize("max_tokens", [1, 3, 4, 7])
+def test_head_and_tail_tokens_keep_whole_characters(max_tokens: int) -> None:
+    text = "お誕生日おめでとう 🎉" * 4
+    head, tail, count = head_and_tail_tokens(text, max_tokens)
+    assert count == count_tokens(text) > max_tokens
+    assert "\ufffd" not in head + tail
+    assert text.startswith(head) and text.endswith(tail)
+    assert count_tokens(head) + count_tokens(tail) <= max_tokens
+
+
+def test_amending_a_summarized_result_drops_the_summary() -> None:
+    model = ContextModel(tool_rounds=5)
+    agent = Agent(
+        model,
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        state=AgentState(messages=[UserMessage(content=TASK)]),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(
+                    name="lookup", description="Search", parameters={}
+                ),
+                execute=lambda _invocation: ToolResult(
+                    content="Evidence [1] 東京 " * 180
+                ),
+            )
+        ],
+        on_finish=lambda _results: [
+            ToolResultAmendment(
+                call_id="call-1", result=ToolResult(content="Amended evidence.")
+            )
+        ],
+    )
+    run = agent.start(max_steps=6)
+    run.result()
+    assert run.wait_for_idle(2)
+    assert model.summaries
+    assert run.snapshot().checkpoint is None
+
+    # The next turn reads the amended result, not a summary of the replaced one.
+    summaries = len(model.summaries)
+    reloaded = Agent(
+        model,
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        state=AgentState(
+            messages=agent.state.messages, checkpoint=agent.state.checkpoint
+        ),
+    )
+    reloaded.start(max_steps=1, messages=[UserMessage(content="Conclude.")]).result()
+    inputs = [message.text for message in model.generations[-1].messages] + [
+        request.messages[0].text for request in model.summaries[summaries:]
+    ]
+    assert any("Amended evidence." in text for text in inputs)
 
 
 @pytest.mark.parametrize("step_timeout", [None, 37])

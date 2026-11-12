@@ -14,7 +14,7 @@ There is no doc picker. Onyx indexes every doc the token's Coda account can reac
 | Pages   | One document per Coda page. Onyx indexes the page name, its link, and the page text.                                                      |
 | Tables  | One document per table, with one section per row. A row is indexed as its name followed by the values of its cells.                       |
 | Links   | Every page, table and row keeps its Coda browser link, so a citation opens the item in Coda.                                              |
-| Permissions | Not available. **Sync with Coda** is not offered, so the access type can only be **Everyone in Your Organization** or **Specific Groups**. |
+| Permissions | Not available. **Sync with Coda** is not offered, so the access type can only be **Everyone in Your Organization**, **Specific Groups**, or **Only Me**. |
 
 Each refresh re-reads the docs the token can open and indexes the pages and tables changed since the last run.
 A table whose rows cannot be read is still indexed from its name alone,
@@ -62,8 +62,9 @@ You need:
   </Step>
 
   <Step title="Choose who can see the content">
-    Under **Document Access**, select **Everyone in Your Organization** or **Specific Groups**.
-    **Specific Groups** is available on Onyx Cloud and Enterprise Edition.
+    Under **Document Access**, select **Everyone in Your Organization**, **Specific Groups**, or **Only Me**.
+    **Specific Groups** and **Only Me** are available on Onyx Cloud and Enterprise Edition.
+    See [Document Access Controls](/admins/connectors/overview#document-access-controls) for what each option means.
   </Step>
 
   <Step title="Create and verify">

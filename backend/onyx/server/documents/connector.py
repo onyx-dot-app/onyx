@@ -39,6 +39,7 @@ from onyx.configs.app_configs import (
     EMAIL_CONFIGURED,
     ENABLED_CONNECTOR_TYPES,
     MOCK_CONNECTOR_FILE_PATH,
+    WEB_DOMAIN,
 )
 from onyx.configs.constants import (
     ONYX_METADATA_FILENAME,
@@ -1568,6 +1569,9 @@ def _apply_connector_status_filters(
     # The "sync" filter covers restricted perm-synced pairs too.
     if AccessType.SYNC in access_type_filters:
         access_type_filters = [*access_type_filters, AccessType.SYNC_RESTRICTED]
+    # The "private" filter covers owner-only pairs too.
+    if AccessType.PRIVATE in access_type_filters:
+        access_type_filters = [*access_type_filters, AccessType.PERSONAL]
 
     for status in statuses:
         # Filter by access type
@@ -2181,6 +2185,8 @@ def gmail_auth(
         key=_GMAIL_CREDENTIAL_ID_COOKIE_NAME,
         value=credential_id,
         httponly=True,
+        secure=WEB_DOMAIN.startswith("https"),
+        samesite="lax",
         max_age=600,
     )
     return AuthUrl(
@@ -2202,6 +2208,8 @@ def google_drive_auth(
         key=_GOOGLE_DRIVE_CREDENTIAL_ID_COOKIE_NAME,
         value=credential_id,
         httponly=True,
+        secure=WEB_DOMAIN.startswith("https"),
+        samesite="lax",
         max_age=600,
     )
     return AuthUrl(

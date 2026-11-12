@@ -47,6 +47,7 @@ import {
   useLanguageModelsForAgent,
 } from "@/lib/languageModels/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { userGroupListUrl } from "@/hooks/useGroups";
 
 const buildReactedDocsUrl = (ascending: boolean, limit: number) => {
   return `/api/manage/admin/doc-boosts?ascending=${ascending}&limit=${limit}`;
@@ -882,7 +883,10 @@ export function useLlmManager(
 EE Only APIs
 */
 
-/** `enabled: false` skips the request, e.g. below the plan groups need. */
+/**
+ * Groups without member lists; read `member_count`. `enabled: false` skips the
+ * request, e.g. below the plan groups need.
+ */
 export const useUserGroups = (
   enabled: boolean = true
 ): {
@@ -896,12 +900,21 @@ export const useUserGroups = (
   const isPaidEnterpriseFeaturesEnabled =
     enabled && !isLoading && settings.enterprise !== null;
 
+  const url = userGroupListUrl({
+    includeDefault: false,
+    includeMembers: false,
+  });
   const swrResponse = useSWR<UserGroup[]>(
-    isPaidEnterpriseFeaturesEnabled ? SWR_KEYS.adminUserGroups : null,
+    isPaidEnterpriseFeaturesEnabled ? url : null,
     errorHandlingFetcher
   );
 
-  const refreshUserGroups = () => mutate(SWR_KEYS.adminUserGroups);
+  // Every variant, the same as useGroups' refreshGroups.
+  const refreshUserGroups = () =>
+    mutate(
+      (key) =>
+        typeof key === "string" && key.startsWith(SWR_KEYS.adminUserGroups)
+    );
 
   if (isLoading) {
     return {

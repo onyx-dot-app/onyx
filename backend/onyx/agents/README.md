@@ -57,6 +57,7 @@ During a run, the agent emits typed `AgentEvent` values to `on_event`:
 | `input_required`, `agent_suspended` | A call awaits identified input, or execution releases its workers at a supported boundary. |
 | `message_start`, `message_update`, `message_end` | An assistant message starts, receives content updates, or ends with its accepted content and outcome. |
 | `tool_start`, `tool_update`, `tool_end` | A tool call starts, reports progress, or returns a result. |
+| `tool_result_amended` | A finish or suspend hook set the final result of a call of this run. |
 
 Each event carries a run ID so consumers can distinguish concurrent executions.
 The run applies generation updates under its state lock before notifying listeners.
@@ -194,6 +195,20 @@ Other tool definitions can remain in the request for cache reuse.
 Explicit calls recovered from model text follow the same permission checks as native calls.
 A forbidden call returns a tool error so the model can retry; generation alone does not authorize execution.
 
+`on_finish(results)` runs once when the run ends, for every outcome, on the execution thread.
+It receives the run's recorded tool results, not copies, and must not change them.
+It returns `ToolResultAmendment` values: each one replaces the recorded result of a call this run
+started, or gives a call that ended without a result (such as on Stop) its result.
+The call keeps its execution status.
+The run applies them and publishes `tool_result_amended` before `agent_end` and before it saves output.
+A hook that raises `ReleaseFailed` gives its amendments, and the run then fails with its error.
+On suspend, the run fails instead of suspending.
+A cancelled run (Stop or deadline) stays cancelled; the hook's error is only logged.
+A hook that fails otherwise or stops for cancellation is logged; the run keeps its outcome and recorded results.
+An amended result inside the compaction checkpoint drops the checkpoint, so the next request summarizes the new result.
+`on_suspend(results)` has the same contract; it runs when the run suspends, before the run captures its state.
+Chat code mode uses these hooks to stop open cells and save what they did, also for a call that Stop interrupted.
+
 Two optional tool callbacks cover interception and enrichment:
 
 | Callback | Contract |
@@ -202,6 +217,11 @@ Two optional tool callbacks cover interception and enrichment:
 | `after_tool_call` | Enrich an already accepted result. Failure preserves that result and fails the run. |
 
 Callbacks receive copies. Required transformations belong inside the tool, before it returns a valid result.
+A tool that calls other tools for the model, such as a code mode program, gets `before_tool_call` as `ToolInvocation.before_call` and applies it to each of those calls.
+Such a call cannot wait for approval, so a `PendingToolInput` decision makes it fail.
+A hook that raises fails the run, as for a direct call: `before_call` raises `BeforeToolCallFailed`, which the tool lets leave `execute`.
+A code mode program stops at the failure; the observation that reports its end raises it.
+When no observation reports that end, the cells' finish or suspend hook raises `ReleaseFailed`.
 For example, deep research normalizes a child report's citations before returning the parent tool result.
 
 The runtime records a tool's raw result before calling `after_tool_call`.
@@ -216,6 +236,8 @@ The `ToolInvocation` argument provides everything the tool needs:
 
 - `arguments` — the parsed JSON arguments.
 - `call_id`, `call_index`, `messages` — the call's identity and logical working history.
+- `recorded_results` — every recorded tool result before the call, with details and without
+  compaction: earlier steps, then this step's completed results in call order. Read only.
 - `cancellation` — a `CancellationSignal`; long-running tools should call `check()` often.
 - `update(ToolProgress(...))` — the current partial output and typed result details.
   The details type defines snapshot or delta semantics. Return the complete value in `ToolResult`.
@@ -254,6 +276,9 @@ Prompt assembly replaces exact repeated passages within a step with references t
 
 Tools return `ToolResult(is_error=True)` when the model can respond to a failure.
 The runtime also logs ordinary tool exceptions and converts them to error results. Cancellation propagates.
+A cancelled call returns no result; the run's finish hook can supply one (see `on_finish`).
+On restore, a call that a lost owner left running runs again, unless the tool sets
+`interrupted_result`; then the run saves that result as the call's result instead (status `error` for an error result).
 Errors in runtime coordination or tool hooks can fail the run.
 The runtime produces error results for unknown tool names, malformed arguments, and
 arguments the model truncated. The default loop stops when all results in a step set `terminate=True`.

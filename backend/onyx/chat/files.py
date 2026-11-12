@@ -37,16 +37,18 @@ from onyx.file_store.utils import (
     plaintext_file_name_for_id,
     store_plaintext,
 )
+from onyx.llm.constants import APPROX_CHARS_PER_TOKEN
 from onyx.llm.models import UserMessage
 from onyx.prompts.chat_prompts import CONTENT_PENDING_NOTICE, CONTENT_UNAVAILABLE_NOTICE
-from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
+from onyx.server.query_and_chat.chat_utils import (
+    is_code_interpreter_staged_mime_type,
+    mime_type_to_chat_file_type,
+)
 from onyx.tools.models import ChatFile, SearchToolUsage
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 logger = setup_logger()
-
-APPROX_CHARS_PER_TOKEN = 4
 
 
 def collect_available_file_ids(
@@ -110,8 +112,8 @@ def load_context_user_files_for_tools(
     user_files: list[UserFileMetadata],
     existing_filenames: set[str],
 ) -> list[ChatFile]:
-    """Stage tabular project/persona files for code-interpreter as lazy
-    ChatFile instances.
+    """Stage tabular and Office project/persona files for code-interpreter as
+    lazy ChatFile instances.
 
     Raw bytes are not read here; each ChatFile carries a loader closure that
     pulls from the file store only when PythonTool actually accesses
@@ -129,7 +131,7 @@ def load_context_user_files_for_tools(
             continue
         seen_file_ids.add(user_file.file_id)
 
-        if not mime_type_to_chat_file_type(user_file.file_type).use_metadata_only():
+        if not is_code_interpreter_staged_mime_type(user_file.file_type):
             continue
 
         filename = _deduped_filename(
@@ -341,7 +343,11 @@ def _build_tool_metadata(user_file: UserFileMetadata) -> FileToolMetadata:
         file_type=file_type,
         approx_char_count=(user_file.token_count or 0) * APPROX_CHARS_PER_TOKEN,
     ).tool_metadata.model_copy(
-        update={"staged_for_tools": file_type.use_metadata_only()}
+        update={
+            "staged_for_tools": is_code_interpreter_staged_mime_type(
+                user_file.file_type
+            )
+        }
     )
 
 

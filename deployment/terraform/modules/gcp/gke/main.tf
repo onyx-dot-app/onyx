@@ -6,6 +6,12 @@ locals {
     { "onyx.app/workload" = "sandbox" },
     local.sandbox_firecracker ? { "onyx.app/kvm" = "true" } : {},
   )
+  # Kubelet does not count microVM memory, so a Firecracker pool also carries
+  # the onyx.app/kvm taint. Only the host agent and preflight tolerate it.
+  sandbox_node_taints = concat(
+    [{ key = "workload", value = "sandbox", effect = "NO_SCHEDULE" }],
+    local.sandbox_firecracker ? [{ key = "onyx.app/kvm", value = "true", effect = "NO_SCHEDULE" }] : [],
+  )
 
   # GKE adds this taint to a GPU pool itself, but only when a non-GPU pool
   # already exists. On a fresh apply the pools are built in parallel, so the
@@ -33,7 +39,7 @@ locals {
       disk_size_gb   = var.sandbox_node_disk_size_gb
       disk_type      = "pd-balanced"
       labels         = local.sandbox_node_labels
-      taints         = [{ key = "workload", value = "sandbox", effect = "NO_SCHEDULE" }]
+      taints         = local.sandbox_node_taints
       node_locations = []
     }
   } : {}
@@ -63,6 +69,15 @@ locals {
   ])
 
   workload_pool = "${var.project_id}.svc.id.goog"
+
+  # GCS signed URLs need an IAM service account to sign through signBlob, and
+  # a direct principal has none. So the Firecracker runtime, which hands
+  # sandboxes signed URLs, maps the workload account to a Google one.
+  workload_google_service_account    = local.sandbox_firecracker
+  workload_google_service_account_id = length(var.name) <= 21 ? "${var.name}-workload" : "${substr(var.name, 0, 15)}-${substr(sha1(var.name), 0, 5)}-workload"
+  # Built from inputs so the bucket grant's for_each key is known at plan.
+  workload_google_service_account_email = "${local.workload_google_service_account_id}@${var.project_id}.iam.gserviceaccount.com"
+  workload_principal                    = "principal://iam.googleapis.com/projects/${data.google_project.this.number}/locations/global/workloadIdentityPools/${local.workload_pool}/subject/ns/${var.workload_namespace}/sa/${var.workload_service_account_name}"
 }
 
 data "google_project" "this" {
@@ -352,16 +367,48 @@ resource "kubernetes_namespace" "workload" {
   depends_on = [google_container_cluster.this]
 }
 
-# No annotation: IAM grants name this account directly through the
-# workload_identity_principal output, so there is no Google account to map to.
+# By default there is no annotation: IAM grants name this account directly
+# through the workload_identity_principal output. The Firecracker runtime maps
+# it to the Google account below instead.
 resource "kubernetes_service_account" "workload" {
   count = var.create_workload_service_account ? 1 : 0
 
   metadata {
     name = var.workload_service_account_name
+    annotations = local.workload_google_service_account ? {
+      "iam.gke.io/gcp-service-account" = local.workload_google_service_account_email
+    } : null
     # Reading the name back off the namespace is what orders this after it.
     namespace = var.create_workload_namespace ? kubernetes_namespace.workload[0].metadata[0].name : var.workload_namespace
   }
 
   depends_on = [google_container_cluster.this]
+}
+
+resource "google_service_account" "workload" {
+  count = local.workload_google_service_account ? 1 : 0
+
+  project      = var.project_id
+  account_id   = local.workload_google_service_account_id
+  display_name = "Onyx workloads for ${var.name}"
+}
+
+resource "google_service_account_iam_member" "workload_identity_user" {
+  count = local.workload_google_service_account ? 1 : 0
+
+  service_account_id = google_service_account.workload[0].name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "serviceAccount:${local.workload_pool}[${var.workload_namespace}/${var.workload_service_account_name}]"
+
+  # GKE creates the identity pool with the cluster.
+  depends_on = [google_container_cluster.this]
+}
+
+# Signing a GCS URL without a key calls signBlob on the account itself.
+resource "google_service_account_iam_member" "workload_token_creator" {
+  count = local.workload_google_service_account ? 1 : 0
+
+  service_account_id = google_service_account.workload[0].name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.workload[0].email}"
 }

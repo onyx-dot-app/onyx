@@ -3,7 +3,13 @@
 import { usePathname } from "@opal/navigation";
 import { type ReactElement, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Button, MessageCard, Modal, Text } from "@opal/components";
+import {
+  Button,
+  MessageCard,
+  Modal,
+  Text,
+  useCreateModal,
+} from "@opal/components";
 import { SvgAlertTriangle } from "@opal/icons";
 import { markdown } from "@opal/utils";
 import { useOpenSearchResourceHealth } from "@/lib/opensearch-health/hooks";
@@ -72,11 +78,11 @@ export function OpenSearchResourceBanner(): ReactElement | null {
   const t = useTranslations("opensearchHealth");
   const { user, isAdmin } = useUser();
   const { data, error } = useOpenSearchResourceHealth();
-  const [detailsOpen, setDetailsOpen] = useState<boolean>(false);
+  const detailsModal = useCreateModal();
   const hasIssues: boolean = !!data?.issues.length;
   useEffect(() => {
-    setDetailsOpen(false);
-  }, [user?.id, hasIssues]);
+    detailsModal.toggle(false);
+  }, [user?.id, hasIssues, detailsModal.toggle]);
   if (!isAdmin || !data?.issues.length) return null;
 
   return (
@@ -88,18 +94,18 @@ export function OpenSearchResourceBanner(): ReactElement | null {
           <Button
             prominence="secondary"
             size="sm"
-            onClick={() => setDetailsOpen(true)}
+            onClick={() => detailsModal.toggle(true)}
           >
             {t("viewDetails")}
           </Button>
         }
       />
-      {detailsOpen && (
+      <detailsModal.Provider>
         <ResourceDialog
           health={{ ...data, stale: data.stale || !!error }}
-          onClose={() => setDetailsOpen(false)}
+          onClose={() => detailsModal.toggle(false)}
         />
-      )}
+      </detailsModal.Provider>
     </div>
   );
 }

@@ -7,7 +7,6 @@ import { Button, Card, OnyxLoader } from "@opal/components";
 import { IllustrationContent } from "@opal/layouts";
 import { SvgConnected, SvgPlugBroken } from "@opal/illustrations";
 import { verifyMemberPluginConnection } from "@/lib/plugins/member";
-import { notifyMemberPluginOAuthComplete } from "@/lib/plugins/memberConnection";
 import { parsePluginId } from "@/lib/plugins/routes";
 import { CRAFT_PLUGINS_PATH } from "@/app/craft/v1/constants";
 
@@ -25,7 +24,6 @@ export default function MemberPluginOAuthCompletePage() {
     processed.current = true;
     const kind = searchParams?.get("pluginKind");
     const id = parsePluginId(searchParams?.get("pluginId") ?? undefined);
-    const attempt = searchParams?.get("attempt");
     const agentIdParam = searchParams?.get("agentId");
     const agentId = agentIdParam == null ? undefined : Number(agentIdParam);
     const surfaceParam = searchParams?.get("surface");
@@ -38,7 +36,6 @@ export default function MemberPluginOAuthCompletePage() {
     if (
       (kind !== "mcp" && kind !== "openapi" && kind !== "external-app") ||
       id === null ||
-      !attempt ||
       searchParams?.get("message") !== "oauth_connected" ||
       (agentIdParam != null &&
         (!/^\d+$/.test(agentIdParam) || !Number.isSafeInteger(agentId))) ||
@@ -48,10 +45,7 @@ export default function MemberPluginOAuthCompletePage() {
       return;
     }
     verifyMemberPluginConnection({ kind, id }, { agentId, surface }).then(
-      () => {
-        notifyMemberPluginOAuthComplete(attempt);
-        setStatus("success");
-      },
+      () => setStatus("success"),
       () => setStatus("error")
     );
   }, [searchParams]);

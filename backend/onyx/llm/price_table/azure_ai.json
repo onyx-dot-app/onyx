@@ -838,20 +838,6 @@
       "mode": "realtime",
       "name": "eu/gpt-4o-mini-realtime-preview-2024-12-17"
     },
-    "eu/gpt-4o-realtime-preview-2024-10-01": {
-      "cost": {
-        "cache_read": 2.75,
-        "input": 5.5,
-        "output": 22.0
-      },
-      "limit": {
-        "context": 128000,
-        "output": 4096
-      },
-      "mode": "realtime",
-      "name": "eu/gpt-4o-realtime-preview-2024-10-01",
-      "status": "deprecated"
-    },
     "eu/gpt-4o-realtime-preview-2024-12-17": {
       "cost": {
         "cache_read": 2.75,
@@ -1212,20 +1198,6 @@
       },
       "mode": "audio_speech",
       "name": "gpt-4o-mini-tts"
-    },
-    "gpt-4o-realtime-preview-2024-10-01": {
-      "cost": {
-        "cache_read": 2.5,
-        "input": 5.0,
-        "output": 20.0
-      },
-      "limit": {
-        "context": 128000,
-        "output": 4096
-      },
-      "mode": "realtime",
-      "name": "gpt-4o-realtime-preview-2024-10-01",
-      "status": "deprecated"
     },
     "gpt-4o-realtime-preview-2024-12-17": {
       "cost": {
@@ -2554,6 +2526,19 @@
       "mode": "realtime",
       "name": "gpt-realtime-2.1"
     },
+    "gpt-realtime-2.1-2026-07-07": {
+      "cost": {
+        "cache_read": 0.39999999999999997,
+        "input": 4.0,
+        "output": 24.0
+      },
+      "limit": {
+        "context": 32000,
+        "output": 4096
+      },
+      "mode": "realtime",
+      "name": "gpt-realtime-2.1-2026-07-07"
+    },
     "gpt-realtime-2.1-mini": {
       "cost": {
         "cache_read": 0.06,
@@ -2566,6 +2551,19 @@
       },
       "mode": "realtime",
       "name": "gpt-realtime-2.1-mini"
+    },
+    "gpt-realtime-2.1-mini-2026-07-07": {
+      "cost": {
+        "cache_read": 0.06,
+        "input": 0.6,
+        "output": 2.4
+      },
+      "limit": {
+        "context": 32000,
+        "output": 4096
+      },
+      "mode": "realtime",
+      "name": "gpt-realtime-2.1-mini-2026-07-07"
     },
     "gpt-realtime-2025-08-28": {
       "cost": {
@@ -2617,6 +2615,28 @@
       "mode": "realtime",
       "name": "gpt-realtime-translate"
     },
+    "gpt-realtime-translate-2026-05-06": {
+      "cost": {
+        "second_input": 0.0005666666666666667
+      },
+      "limit": {
+        "context": 32000,
+        "output": 4096
+      },
+      "mode": "realtime",
+      "name": "gpt-realtime-translate-2026-05-06"
+    },
+    "gpt-realtime-translate-2026-05-07": {
+      "cost": {
+        "second_input": 0.0005666666666666667
+      },
+      "limit": {
+        "context": 32000,
+        "output": 4096
+      },
+      "mode": "realtime",
+      "name": "gpt-realtime-translate-2026-05-07"
+    },
     "gpt-realtime-whisper": {
       "cost": {
         "second_input": 0.0002833333333333333
@@ -2627,6 +2647,28 @@
       },
       "mode": "audio_transcription",
       "name": "gpt-realtime-whisper"
+    },
+    "gpt-realtime-whisper-2026-05-06": {
+      "cost": {
+        "second_input": 0.0002833333333333333
+      },
+      "limit": {
+        "context": 32000,
+        "output": 4096
+      },
+      "mode": "audio_transcription",
+      "name": "gpt-realtime-whisper-2026-05-06"
+    },
+    "gpt-realtime-whisper-2026-05-07": {
+      "cost": {
+        "second_input": 0.0002833333333333333
+      },
+      "limit": {
+        "context": 32000,
+        "output": 4096
+      },
+      "mode": "audio_transcription",
+      "name": "gpt-realtime-whisper-2026-05-07"
     },
     "gpt-transcribe": {
       "cost": {
@@ -3635,20 +3677,6 @@
       "mode": "realtime",
       "name": "us/gpt-4o-mini-realtime-preview-2024-12-17"
     },
-    "us/gpt-4o-realtime-preview-2024-10-01": {
-      "cost": {
-        "cache_read": 2.75,
-        "input": 5.5,
-        "output": 22.0
-      },
-      "limit": {
-        "context": 128000,
-        "output": 4096
-      },
-      "mode": "realtime",
-      "name": "us/gpt-4o-realtime-preview-2024-10-01",
-      "status": "deprecated"
-    },
     "us/gpt-4o-realtime-preview-2024-12-17": {
       "cost": {
         "cache_read": 2.75,
@@ -3661,6 +3689,45 @@
       },
       "mode": "realtime",
       "name": "us/gpt-4o-realtime-preview-2024-12-17"
+    },
+    "us/gpt-realtime-1.5": {
+      "cost": {
+        "cache_read": 0.44,
+        "input": 4.4,
+        "output": 17.6
+      },
+      "limit": {
+        "context": 32000,
+        "output": 4096
+      },
+      "mode": "realtime",
+      "name": "us/gpt-realtime-1.5"
+    },
+    "us/gpt-realtime-2.1": {
+      "cost": {
+        "cache_read": 0.44,
+        "input": 4.4,
+        "output": 26.400000000000002
+      },
+      "limit": {
+        "context": 32000,
+        "output": 4096
+      },
+      "mode": "realtime",
+      "name": "us/gpt-realtime-2.1"
+    },
+    "us/gpt-realtime-2.1-mini": {
+      "cost": {
+        "cache_read": 0.06599999999999999,
+        "input": 0.66,
+        "output": 2.64
+      },
+      "limit": {
+        "context": 32000,
+        "output": 4096
+      },
+      "mode": "realtime",
+      "name": "us/gpt-realtime-2.1-mini"
     },
     "us/text-embedding-3-large": {
       "cost": {

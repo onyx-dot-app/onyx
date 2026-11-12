@@ -83,13 +83,15 @@ Slack API search for each expanded query.
 **Token choice.** `SearchTool._prefetch_slack_data` runs only when
 `enable_slack_search` is true or the call has a `slack_context`, and never with
 `retrieval_only`.
-- Bot context: the persona's document sets must map to a `FEDERATED_SLACK`
-  connector through `FederatedConnector__DocumentSet`. If they do, it picks an
+- Bot context: the scoped document sets must map to a `FEDERATED_SLACK`
+  connector through `FederatedConnector__DocumentSet`. The scoped sets are the
+  caller's selected sets if any, else the persona's. If they do, it picks an
   enabled Slack bot, and prefers one with a `user_token`. The access token is
   `user_token or bot_token`.
 - If no token is found yet and the call has a user, it takes the user's
-  `FederatedConnectorOAuthToken` for Slack. This branch has no document-set
-  check.
+  `FederatedConnectorOAuthToken` for Slack. When the caller selected document
+  sets, that Slack connector must be linked to one of them. With no selection,
+  this branch has no document-set check.
 
 Chat sets `enable_slack_search` through
 `chat/execution.py:create_chat_agent`: true for the default
@@ -150,9 +152,11 @@ both.
      `team_id` are both set. `_run_slack_search` passes `team_id=None`, so it
      never runs on this path (see Known issues).
 2. `token-branches-asymmetric` **The two token branches are not symmetric.**
-   Only the bot branch of `tools/tool_implementations/search/search_tool.py:SearchTool._prefetch_slack_data` checks the document-set link.
-   A web user's Slack results are scoped by their own token, not by the agent's
-   document sets. In the bot branch, a change that reads a token before the
+   The bot branch of `tools/tool_implementations/search/search_tool.py:SearchTool._prefetch_slack_data`
+   always checks the document-set link. The web-user branch checks it only
+   when the caller selected document sets, and then picks the first linked
+   Slack token. Otherwise a web user's Slack results are scoped by their own
+   token, not by the agent's document sets. In both branches, a change that reads a token before the
    document-set check lets Slack search run outside that scope. Do not assume a
    change to one branch applies to the other.
 3. `registry-skip-in-step` **The registry skip and the `SearchTool` lane must

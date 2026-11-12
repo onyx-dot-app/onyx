@@ -25,6 +25,11 @@ output "workload_identity_principal" {
   value       = module.gke.workload_identity_principal
 }
 
+output "workload_google_service_account_email" {
+  description = "Google service account the workload service account maps to, which signs GCS URLs. Null unless craft_sandbox_runtime = \"firecracker\" with the sandbox pool on."
+  value       = module.gke.workload_google_service_account_email
+}
+
 output "workload_namespace" {
   description = "Namespace of the workload service account. Install the Helm release into it."
   value       = module.gke.workload_namespace

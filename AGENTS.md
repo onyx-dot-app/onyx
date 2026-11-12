@@ -72,9 +72,12 @@ Explore the tree with `ls` rather than relying on docs for the full package list
 ### Docs
 
 When you change something a customer sees or configures (UI, admin settings, connectors, environment variables, the
-public API, deployment), update the matching page in `documentation/` in the same PR. Recapture screenshots of UI you
-changed: follow `.agents/skills/docs-writing/SKILL.md` and use the local app and admin login above. Skip docs for
-internal refactors, tests, CI, and multi-tenant cloud operations, which customers cannot use.
+public API, deployment), check the matching page in `documentation/`. If the change makes the page wrong or leaves out
+something a customer needs, update it in the same PR. Write for the page's reader and task, at the level of detail of
+the whole page. Keep the behavior a reader can see, such as contracts, limits, sync, and failure handling.
+Recapture the screenshots that your change makes wrong. Follow "Decide what to include" and the other rules in
+`.agents/skills/docs-writing/SKILL.md`, and use the local app and admin login above. Skip docs for internal refactors,
+tests, CI, and multi-tenant cloud operations, which customers cannot use.
 
 ### Feature Map
 
@@ -151,6 +154,11 @@ There are 4 main types of tests: unit, external dependency unit, integration, an
 (`web/tests/e2e`). Commands and guidance for all four live in `backend/AGENTS.md`; shared fixtures
 and deeper detail in `backend/tests/README.md`. Prefer integration tests over the other types.
 
+- A regression test for a fix must fail without the fix. Revert the fix, see the test fail, then
+  restore the fix. Do this before you push.
+- Run each README command and Playwright spec that you add or change before you push. If you
+  cannot run one, say so in the PR description.
+
 ## Logs
 
 When (1) writing integration tests or (2) doing live tests (e.g. curl / playwright) you can get access
@@ -196,8 +204,23 @@ router and settings patterns. Do not invent a parallel mechanism. If the existin
 do enough, extend it so other callers get the change too. A new pattern needs a reason that the
 existing ones cannot meet.
 
+## Review Follow-up
+
+Use these rules when you fix findings from human or bot reviewers.
+
+- **Fix the class, not the instance.** Before you fix a finding, name its defect class in one line,
+  for example "limit counted in characters, not bytes". Search the PR for other instances. In a
+  stack, also search the later PRs. Fix all instances in one push, each in the stack PR that adds it.
+- **Review your fix diff.** Before you push, read `git diff <last reviewed commit>..HEAD` against
+  the comments. Fixes cause most late findings.
+- **Review locally first.** Before the first push, review the full diff with a local reviewer, for
+  example the `cli-review` skill. Handle its findings the same way.
+- **Push fixes together.** After a review round, push all fixes at one time. Request another full
+  bot round only if the round had P1 or P2 findings, or if a fix changed logic. For P3 and
+  doc-wording fixes, review the diff yourself and push without a new request.
+
 ## Best Practices
 
 In addition to the other content in this file, best practices for contributing
-to the codebase can be found in the "Engineering Best Practices" section of
-`CONTRIBUTING.md`. Understand its contents and follow them.
+to the codebase are in `contributing_guides/best_practices.md`. Understand its
+contents and follow them.

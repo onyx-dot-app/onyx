@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Callable, Literal, Self
+from typing import Annotated, Any, Callable, Literal, Self
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
@@ -88,6 +88,7 @@ class ToolConfiguration(BaseModel):
     enabled: bool
     openapi_schema: dict[str, JsonValue] | None
     mcp_input_schema: dict[str, JsonValue] | None
+    mcp_output_schema: dict[str, JsonValue] | None
     custom_headers: list[HeaderItemDict] | None
     passthrough_auth: bool
     mcp_server_id: int | None
@@ -148,6 +149,9 @@ class CustomToolCallSummary(BaseModel):
         union_mode="left_to_right"
     )
     error: CustomToolErrorInfo | None = None
+    # The server's structured content, which code mode programs receive in
+    # place of `tool_result`. Live only: not saved or streamed.
+    structured_result: dict[str, JsonValue] | None = Field(default=None, exclude=True)
 
     @model_validator(mode="after")
     def restore_file_references(self) -> Self:
@@ -234,7 +238,8 @@ class ToolCallInfo(BaseModel):
     tab_index: int
     tool_name: str
     tool_call_id: str
-    tool_id: int
+    # None for a tool that has no tool row, such as code mode.
+    tool_id: int | None
     reasoning_tokens: str | None
     tool_call_arguments: dict[str, Any]
     tool_call_response: str
@@ -340,3 +345,109 @@ class LlmBashExecutionResult(BaseModel):
     exit_code: int | None
     timed_out: bool
     error: str | None = None
+
+
+def _is_none(value: object) -> bool:
+    return value is None
+
+
+# A key that the JSON leaves out when it has no value.
+_OMITTED_WHEN_NONE = Field(exclude_if=_is_none)
+
+
+class SearchResult(BaseModel):
+    """One document of a search-like tool result, as the model and code mode
+    programs read it."""
+
+    document: int = Field(description="Citation number. Cite it in the answer as [n].")
+    title: str
+    updated_at: Annotated[str | None, _OMITTED_WHEN_NONE] = None
+    authors: Annotated[list[str] | None, _OMITTED_WHEN_NONE] = None
+    source_type: Annotated[str | None, _OMITTED_WHEN_NONE] = None
+    url: Annotated[str | None, _OMITTED_WHEN_NONE] = None
+    document_identifier: Annotated[str | None, _OMITTED_WHEN_NONE] = None
+    file_name: Annotated[str | None, _OMITTED_WHEN_NONE] = None
+    content: str
+    metadata: Annotated[str | None, _OMITTED_WHEN_NONE] = Field(
+        default=None, description="JSON-encoded metadata of the document."
+    )
+
+
+class SearchResults(BaseModel):
+    """The content of internal search, web search, and open URL results."""
+
+    results: list[SearchResult]
+    note: Annotated[str | None, _OMITTED_WHEN_NONE] = None
+    message: Annotated[str | None, _OMITTED_WHEN_NONE] = None
+
+
+class CodeModeExposure(str, Enum):
+    """How code mode offers a tool to the model."""
+
+    # Its own tool beside `execute_code`, never a function inside programs. Tools
+    # that wait for child runs must use this: a program cannot wait for them.
+    DIRECT = "direct"
+    # A function whose stub the `execute_code` description lists.
+    IMMEDIATE = "immediate"
+    # A function that programs can call but the description does not list; the
+    # model finds it with `tool_search`.
+    DEFERRED = "deferred"
+
+
+class CodeModeFunctionName(BaseModel):
+    """A tool's code mode function name before it becomes a Python identifier:
+    `<namespace>__<name>`, or `name` without a namespace."""
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str
+    # A group of tools, such as the MCP server of an MCP tool.
+    namespace: str | None = None
+
+    @property
+    def qualified(self) -> str:
+        return self.name if self.namespace is None else f"{self.namespace}__{self.name}"
+
+
+class CodeModeResultKind(str, Enum):
+    """How a code mode program receives a tool's result content."""
+
+    # The content is a JSON object; anything else is raised as an error.
+    JSON_OBJECT = "json_object"
+    # The content is passed to the program as a string.
+    TEXT = "text"
+    # JSON when the content parses, else the string.
+    AUTO = "auto"
+    # An MCP result envelope `{"tool_result": value}`; the program gets the value.
+    MCP = "mcp"
+
+
+class CodeModeResultSpec(BaseModel):
+    """The value a tool returns to a code mode program, and its stub type."""
+
+    model_config = ConfigDict(frozen=True)
+
+    kind: CodeModeResultKind
+    # The stub's return annotation; the model's name when unset, else Any.
+    annotation: str | None = None
+    # The model whose JSON the content is. The stub module declares it, and the
+    # models of its fields, as TypedDicts of the same names.
+    model: type[BaseModel] | None = None
+    # JSON Schema of the value, from the tool's server. The stub types the value
+    # from it, and declares a top-level object as a TypedDict.
+    output_schema: dict[str, JsonValue] | None = None
+    # Docstring note on the returned value.
+    returns: str | None = None
+    # Docstring note on how a program should call the tool, such as batching.
+    usage: str | None = None
+    # The tool numbers its results for citation and needs a citation block.
+    cites: bool = False
+
+    @property
+    def type_annotation(self) -> str:
+        if self.annotation is not None:
+            return self.annotation
+        return self.model.__name__ if self.model is not None else "Any"
+
+
+DEFAULT_CODE_MODE_RESULT = CodeModeResultSpec(kind=CodeModeResultKind.AUTO)

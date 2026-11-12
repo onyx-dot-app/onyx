@@ -2,7 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Button, MessageCard, Modal, Text } from "@opal/components";
+import {
+  Button,
+  MessageCard,
+  Modal,
+  Text,
+  useCreateModal,
+} from "@opal/components";
 import { SvgUploadCloud } from "@opal/icons";
 import { inspectSkillBundle, uploadSkillBundles } from "@/lib/skills/api";
 import type { PreparedSkillBundle } from "@/lib/skills/bundleUpload";
@@ -58,7 +64,7 @@ export function CreateSkillModalContent({
   const [batchFiles, setBatchFiles] = useState<File[]>([]);
   const [result, setResult] = useState<GitHubSkillsImportResult | null>(null);
   const [sharing, setSharing] = useState<SkillSharingDraft | null>(null);
-  const [sharingOpen, setSharingOpen] = useState(false);
+  const sharingModal = useCreateModal();
   const sharingDraft =
     sharing ??
     emptySkillSharingDraft(
@@ -184,7 +190,7 @@ export function CreateSkillModalContent({
             count={batchFiles.length}
             configureLabel={t("importGithub.sharing.configureButton")}
             disabled={busy}
-            onConfigure={() => setSharingOpen(true)}
+            onConfigure={() => sharingModal.toggle(true)}
           >
             <Section height="auto" className="max-h-24 overflow-y-auto">
               <Text font="secondary-body" color="text-03">
@@ -297,15 +303,15 @@ export function CreateSkillModalContent({
           </>
         )}
       </Modal.Footer>
-      {sharingOpen && (
+      <sharingModal.Provider>
         <ShareSkillModal
           mode="create"
           open
           draft={sharingDraft}
           onSaveDraft={setSharing}
-          onClose={() => setSharingOpen(false)}
+          onClose={() => sharingModal.toggle(false)}
         />
-      )}
+      </sharingModal.Provider>
     </>
   );
 }

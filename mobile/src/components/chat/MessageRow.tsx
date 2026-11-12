@@ -87,6 +87,7 @@ function AssistantMessage({
   const {
     processed,
     toolTurnGroups,
+    codeModeWorking,
     displayGroups,
     hasSteps,
     stopPacketSeen,
@@ -154,6 +155,7 @@ function AssistantMessage({
         generatedImageCount={generatedImages.length}
         toolProcessingDuration={toolProcessingDuration}
         streamingStartTime={node.streamingStartedAt}
+        codeModeWorking={codeModeWorking}
       />
       {/* Images from every image generation step lead the answer. */}
       {generatedImages.length > 0 ? (

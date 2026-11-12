@@ -95,6 +95,12 @@ compaction candidate. The list on each model call:
 [image-drop notice]         USER reminder, only when an image cap dropped images
 ```
 
+`llm/multi_llm.py:LitellmLLM._prepare_request` joins the leading SYSTEM
+messages into one unless the cache adapter's
+`caches_leading_system_messages_separately` is true (only the Anthropic
+adapter). Some chat templates, such as Qwen's on vLLM, reject a second system
+message with a 400.
+
 The notices and reminders change between steps, so they stay after the stable
 prefix. Prompt assembly marks the stable part as cacheable
 (`chat/prompt_formatting.py:prepare_model_messages`), and provider-side prefix
@@ -120,7 +126,9 @@ document and text) with a pointer to that result
 search result JSON must keep that parse working. Later turns retain saved tool-result
 content until compaction or truncation moves the cutoff past it. A placeholder is used when a legacy record has missing or empty output.
 Compaction controls history growth; starting a new user turn does not rewrite
-previous evidence. `backend/onyx/chat/README.md` has worked examples of the fixed
+previous evidence. A code mode result keeps what a later turn needs in its own
+content ([[chat-persistence#code-mode-replay-content]]).
+`backend/onyx/chat/README.md` has worked examples of the fixed
 preamble and growing history.
 
 **System prompt.** `chat/prompt_utils.py:build_system_prompt` resolves the

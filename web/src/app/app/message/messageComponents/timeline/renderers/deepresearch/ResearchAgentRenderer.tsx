@@ -4,7 +4,6 @@ import { SvgCircle, SvgCheckCircle, SvgBookOpen } from "@opal/icons";
 
 import {
   PacketType,
-  Packet,
   ResearchAgentPacket,
   ResearchAgentStart,
   IntermediateReportDelta,
@@ -14,8 +13,11 @@ import {
   FullChatState,
   RenderType,
 } from "@/app/app/message/messageComponents/types";
-import { getToolName } from "@/app/app/message/messageComponents/toolDisplayHelpers";
 import { StepContainer } from "@/app/app/message/messageComponents/timeline/StepContainer";
+import {
+  isGroupEndPacket,
+  NestedCall,
+} from "@/app/app/message/messageComponents/timeline/packetHelpers";
 import {
   TimelineRendererComponent,
   TimelineRendererOutput,
@@ -29,13 +31,8 @@ import {
   renderMarkdown,
 } from "@/app/app/message/messageComponents/markdownUtils";
 
-interface NestedToolGroup {
-  sub_turn_index: number;
-  toolType: string;
-  status: string;
-  isComplete: boolean;
-  packets: Packet[];
-}
+// A nested call has no nested calls of its own.
+const CALLS_OF_A_NESTED_CALL: NestedCall[] = [];
 
 /**
  * ResearchAgentRenderer - Renders research agent steps in deep research
@@ -56,6 +53,7 @@ export const ResearchAgentRenderer: MessageRenderer<
   FullChatState
 > = ({
   packets,
+  nestedCalls,
   state,
   onComplete,
   renderType,
@@ -74,69 +72,27 @@ export const ResearchAgentRenderer: MessageRenderer<
     ? (startPacket.obj as ResearchAgentStart).research_task
     : "";
 
-  // Separate parent packets from nested tool packets
-  const { parentPackets, nestedToolGroups } = useMemo(() => {
-    const parent: Packet[] = [];
-    const nestedBySubTurn = new Map<number, Packet[]>();
-
-    packets.forEach((packet) => {
-      const subTurnIndex = packet.placement.sub_turn_index;
-      if (subTurnIndex === undefined || subTurnIndex === null) {
-        parent.push(packet);
-      } else {
-        if (!nestedBySubTurn.has(subTurnIndex)) {
-          nestedBySubTurn.set(subTurnIndex, []);
-        }
-        nestedBySubTurn.get(subTurnIndex)!.push(packet);
-      }
-    });
-
-    // Convert nested packets to groups with metadata
-    const groups: NestedToolGroup[] = Array.from(nestedBySubTurn.entries())
-      .sort(([a], [b]) => a - b)
-      .map(([subTurnIndex, toolPackets]) => {
-        const name = getToolName(toolPackets, t);
-        const isComplete = toolPackets.some(
-          (p) =>
-            p.obj.type === PacketType.SECTION_END ||
-            p.obj.type === PacketType.REASONING_DONE
-        );
-        return {
-          sub_turn_index: subTurnIndex,
-          toolType: name,
-          status: isComplete ? "Complete" : "Running",
-          isComplete,
-          packets: toolPackets,
-        };
-      });
-
-    return { parentPackets: parent, nestedToolGroups: groups };
-  }, [packets, t]);
-
   // Filter nested tool groups based on renderType (COMPACT and HIGHLIGHT show only latest)
   const visibleNestedToolGroups = useMemo(() => {
     if (
       (renderType !== RenderType.COMPACT &&
         renderType !== RenderType.HIGHLIGHT) ||
-      nestedToolGroups.length === 0
+      nestedCalls.length === 0
     ) {
-      return nestedToolGroups;
+      return nestedCalls;
     }
     // COMPACT/HIGHLIGHT mode: show only the latest group (last in sorted array)
-    const latestGroup = nestedToolGroups[nestedToolGroups.length - 1];
+    const latestGroup = nestedCalls[nestedCalls.length - 1];
     return latestGroup ? [latestGroup] : [];
-  }, [renderType, nestedToolGroups]);
+  }, [renderType, nestedCalls]);
 
-  // Check completion from parent packets
-  const isComplete = parentPackets.some(
-    (p) => p.obj.type === PacketType.SECTION_END
-  );
+  const isComplete = packets.some(isGroupEndPacket);
 
   // Determine if report is actively streaming
   const isReportStreaming = !isComplete && !stopPacketSeen;
 
   // Build report content from parent packets
-  const fullReportContent = parentPackets
+  const fullReportContent = packets
     .map((packet) => {
       if (packet.obj.type === PacketType.INTERMEDIATE_REPORT_DELTA) {
         return (packet.obj as IntermediateReportDelta).content;
@@ -219,39 +175,39 @@ export const ResearchAgentRenderer: MessageRenderer<
     if (showOnlyTools) {
       const latestGroup = visibleNestedToolGroups[0];
       if (latestGroup) {
-        return (
-          <TimelineRendererComponent
-            key={latestGroup.sub_turn_index}
-            packets={latestGroup.packets}
-            chatState={state}
-            animate={!stopPacketSeen && !latestGroup.isComplete}
-            stopPacketSeen={stopPacketSeen}
-            defaultExpanded={false}
-            renderTypeOverride={RenderType.HIGHLIGHT}
-            isLastStep={true}
-            isHover={isHover}
-          >
-            {(results: TimelineRendererOutput) =>
-              children([
-                {
-                  icon: null,
-                  status: null,
-                  content: (
-                    <>
-                      {results.map((result, index) => (
-                        <React.Fragment key={index}>
-                          {result.content}
-                        </React.Fragment>
-                      ))}
-                    </>
-                  ),
-                  supportsCollapsible: true,
-                  timelineLayout: "content",
-                },
-              ])
-            }
-          </TimelineRendererComponent>
-        );
+        return children([
+          {
+            icon: null,
+            status: null,
+            content: (
+              <TimelineRendererComponent
+                key={latestGroup.subTurnIndex}
+                packets={latestGroup.packets}
+                nestedCalls={CALLS_OF_A_NESTED_CALL}
+                streamPackets={latestGroup.packets}
+                chatState={state}
+                animate={!stopPacketSeen && !latestGroup.complete}
+                stopPacketSeen={stopPacketSeen}
+                defaultExpanded={false}
+                renderTypeOverride={RenderType.HIGHLIGHT}
+                isLastStep={true}
+                isHover={isHover}
+              >
+                {(results: TimelineRendererOutput) => (
+                  <>
+                    {results.map((result, index) => (
+                      <React.Fragment key={index}>
+                        {result.content}
+                      </React.Fragment>
+                    ))}
+                  </>
+                )}
+              </TimelineRendererComponent>
+            ),
+            supportsCollapsible: true,
+            timelineLayout: "content",
+          },
+        ]);
       }
     }
 
@@ -299,7 +255,7 @@ export const ResearchAgentRenderer: MessageRenderer<
           collapsible={true}
           isLastStep={
             !stopPacketSeen &&
-            nestedToolGroups.length === 0 &&
+            nestedCalls.length === 0 &&
             !fullReportContent &&
             !isComplete
           }
@@ -324,10 +280,12 @@ export const ResearchAgentRenderer: MessageRenderer<
 
           return (
             <TimelineRendererComponent
-              key={group.sub_turn_index}
+              key={group.subTurnIndex}
               packets={group.packets}
+              nestedCalls={CALLS_OF_A_NESTED_CALL}
+              streamPackets={group.packets}
               chatState={state}
-              animate={!stopPacketSeen && !group.isComplete}
+              animate={!stopPacketSeen && !group.complete}
               stopPacketSeen={stopPacketSeen}
               defaultExpanded={true}
               isLastStep={isLastNestedStep}
@@ -352,7 +310,7 @@ export const ResearchAgentRenderer: MessageRenderer<
           stepIcon={SvgBookOpen}
           header={t("researchAgent.report.title")}
           isLastStep={!stopPacketSeen && !isComplete}
-          isFirstStep={!researchTask && nestedToolGroups.length === 0}
+          isFirstStep={!researchTask && nestedCalls.length === 0}
           isHover={isHover}
           noPaddingRight={true}
         >

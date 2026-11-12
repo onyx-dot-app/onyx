@@ -1,5 +1,6 @@
 """The seeded Basic group grants create:user_api_keys by default. An admin can switch
-it off and back on, and nothing else can be toggled there."""
+it off and back on. add:agents is also toggleable there, but off by default. Nothing
+else can be toggled there."""
 
 import os
 
@@ -14,6 +15,7 @@ from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestPAT, DATestUser
 
 PAT_PERMISSION = Permission.CREATE_USER_API_KEYS.value
+AGENTS_PERMISSION = Permission.ADD_AGENTS.value
 
 
 @pytest.mark.skipif(
@@ -54,9 +56,31 @@ def test_basic_group_pat_toggle(new_admin_user: DATestUser) -> None:
     )
     assert restored.token is not None
 
+    # add:agents is allowlisted on Basic but off by default. An admin can switch it on
+    # next to the token grant, and it is removed again when left out of the next PUT.
+    assert AGENTS_PERMISSION not in UserGroupManager.get_permissions_by_id(
+        basic.id, new_admin_user
+    )
+    agents_on: httpx.Response = UserGroupManager.set_permissions_by_id(
+        basic.id, [PAT_PERMISSION, AGENTS_PERMISSION], new_admin_user
+    )
+    agents_on.raise_for_status()
+    assert AGENTS_PERMISSION in UserGroupManager.get_permissions_by_id(
+        basic.id, new_admin_user
+    )
+    agents_off: httpx.Response = UserGroupManager.set_permissions_by_id(
+        basic.id, [PAT_PERMISSION], new_admin_user
+    )
+    agents_off.raise_for_status()
+    assert AGENTS_PERMISSION not in UserGroupManager.get_permissions_by_id(
+        basic.id, new_admin_user
+    )
+
     # Only the allowlisted toggles exist on Basic, and Admin takes none.
     refused: httpx.Response = UserGroupManager.set_permissions_by_id(
-        basic.id, [PAT_PERMISSION, Permission.MANAGE_LLMS.value], new_admin_user
+        basic.id,
+        [PAT_PERMISSION, AGENTS_PERMISSION, Permission.MANAGE_LLMS.value],
+        new_admin_user,
     )
     assert refused.status_code == 409
     admin_group: UserGroup = UserGroupManager.get_default(

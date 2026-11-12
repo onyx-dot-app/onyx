@@ -220,6 +220,114 @@ to use a different image. The image must have a POSIX shell, awk, grep and GNU c
 `stat -f`, `mktemp`).
 Remove the DaemonSet after the check: set `enabled: false` and upgrade.
 
+### Craft Firecracker runtime (not usable yet)
+
+`craft.sandboxRuntime` selects how Craft sandboxes run: `pod` (default) or
+`firecracker`. It mirrors the Terraform `craft_sandbox_runtime` of the sandbox
+node pool. Keep `pod`: the backend Firecracker sandbox manager is not released.
+
+With `firecracker`, the chart:
+
+- sets `SANDBOX_RUNTIME=firecracker` for the backend and sandbox-proxy;
+- deploys the host agent (`onyxdotapp/craft-fc-host-agent`), a privileged
+  DaemonSet with `hostPID` and `/dev/kvm`, on the sandbox nodes that have the
+  label `onyx.app/kvm=true`. The agent and the preflight tolerate the taint
+  `onyx.app/kvm=true:NoSchedule` that Terraform puts on these nodes. Pod
+  sandboxes and the image prepuller do not, so they need a sandbox node pool
+  without that taint. The chart refuses `sandboxPod.tolerations` that tolerate
+  it;
+- puts the agent in its own namespace (`craft.hostAgent.namespace`) with Pod
+  Security `privileged`;
+- adds a headless Service for the agent port (7443);
+- lets only the agent clients (api_server, heavy and scheduled-tasks workers)
+  reach the agent port, and lets the agent pods reach the sandbox-proxy port;
+- gives the agent `POD_IP`, so the agent registers `<pod IP>:7443` with its
+  node key (`craft.hostAgent.advertiseAddress` overrides it).
+
+The agent needs a TLS Secret in the agent namespace. It holds the agent
+certificate (`tls.crt`, `tls.key`) and the CA of the api_server client
+certificates (`ca.crt`). The chart does not make certificates. Until the Secret
+exists, the agent pods stay in `ContainerCreating`.
+
+The agent clients need a second Secret, in the release namespace
+(`craft.hostAgent.client.existingSecret`). It holds the client certificate
+(`tls.crt`, `tls.key`, signed by the CA in the agent `ca.crt`) and the CA of the
+agent certificates (`ca.crt`). The chart mounts it in the api_server, heavy and
+scheduled-tasks pods and sets `SANDBOX_FC_AGENT_CLIENT_CERT_PATH`,
+`SANDBOX_FC_AGENT_CLIENT_KEY_PATH` and `SANDBOX_FC_AGENT_CA_PATH`. The clients
+dial agent pod IPs. If the agent certificates do not carry the pod IPs, set
+`craft.hostAgent.client.tlsServerName` (`SANDBOX_FC_AGENT_TLS_SERVER_NAME`) to
+a DNS name in the agent certificate. To accept only some client certificates,
+set `craft.hostAgent.clientAllowedSans`.
+
+```yaml
+craft:
+  sandboxRuntime: firecracker
+  hostAgent:
+    image:
+      tag: "<host agent version>"
+    tls:
+      existingSecret: craft-fc-host-agent-tls
+    client:
+      existingSecret: craft-fc-agent-client-tls
+      tlsServerName: craft-fc-host-agent
+auth:
+  sandboxNodeRegistration:
+    enabled: true
+    values:
+      sandbox_node_registration_secret: "<random value>"
+```
+
+The chart copies `sandbox_node_registration_secret` into the agent namespace.
+If you change `auth.sandboxNodeRegistration.secretKeys`, the copy uses the same
+key. If `auth.sandboxNodeRegistration` uses `existingSecret`, create the same
+Secret (with the same key) in the agent namespace too and set
+`craft.hostAgent.registrationExistingSecret`.
+
+For a private agent image, create the pull Secret in the agent namespace and
+set `craft.hostAgent.imagePullSecrets`. The release `imagePullSecrets` are not
+used there, because Secrets are namespaced.
+To manage the agent namespace yourself, set `craft.hostAgent.createNamespace:
+false` and give the namespace the label
+`pod-security.kubernetes.io/enforce: privileged`.
+The agent data dir (`craft.hostAgent.dataDir`, default `/var/lib/craft-fc`)
+must be on XFS with reflink. The preflight above checks
+`craft.firecrackerPreflight.scratchHostPath`, not the data dir. Set
+`scratchHostPath` to the same path as `dataDir` for the check, or check the
+data dir on a node (`stat -f -c %T <dataDir>` must print `xfs`, and
+`xfs_info` must show `reflink=1`). The agent also checks reflink support at
+start-up and does not start without it.
+
+To scrape the agent metrics, set `craft.hostAgent.metrics.enabled: true`
+(port `craft.hostAgent.metrics.port`, default 9464). With
+`monitoring.serviceMonitors.enabled: true`, the chart also makes a
+ServiceMonitor in the agent namespace. Auth follows the API server `/metrics`:
+with `auth.metricsAuth.enabled`, the agent requires the same bearer token and
+the ServiceMonitor sends it. The chart copies `auth.metricsAuth.values` into
+the agent namespace, because Secrets are namespaced. If `auth.metricsAuth`
+uses `existingSecret`, create a Secret with the same key in the agent
+namespace and set `craft.hostAgent.metrics.authExistingSecret`. With
+`configMap.DISABLE_METRICS_AUTH: "true"` the agent has no auth. With neither,
+every scrape gets 401. The NetworkPolicy lets only Prometheus Operator pods
+(`app.kubernetes.io/name: prometheus`) in the release namespace reach the
+port. If Prometheus runs in another namespace, set
+`craft.hostAgent.metrics.networkPolicyFrom`. The agent writes each VM's serial console and Firecracker log to its
+stdout as JSON lines (`kind=guest_log`), and an audit line for every API call
+to stderr (`kind=audit`), so the cluster log pipeline collects both.
+
+With the agent metrics on, `monitoring.grafana.dashboards.enabled: true` also
+deploys the "Onyx Craft Firecracker Host Agent" dashboard, and
+`monitoring.prometheusRules.enabled: true` deploys its alert rules (a
+PrometheusRule in the release namespace; set `monitoring.prometheusRules.labels`
+to match your Prometheus `ruleSelector`). The thresholds in
+`craft.hostAgent.alerts` are proposed defaults. `CraftFcHostAgentPodsMissing`
+needs kube-state-metrics. The dashboard and the rules need the agent series:
+set `monitoring.serviceMonitors.enabled: true` (with
+`monitoring.serviceMonitors.labels` that match your Prometheus
+`serviceMonitorSelector`), unless another scrape configuration collects the
+agent metrics. For another scrape configuration, set `craft.hostAgent.metrics.job`
+to its `job` label. Runbooks: `microvm/RUNBOOKS.md`.
+
 ## Using an external Redis
 
 To point Onyx at an externally-managed Redis (e.g. AWS ElastiCache) and skip

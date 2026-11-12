@@ -11,6 +11,7 @@ import {
   InputSwitch,
   Table,
   Text,
+  useCreateModal,
   type TableColumn,
 } from "@opal/components";
 import {
@@ -59,6 +60,8 @@ export default function CraftPage() {
   const [searchTerm, setSearchTerm] = useState("");
   // The default value pending confirmation, or null when no confirm is open.
   const [pendingDefault, setPendingDefault] = useState<boolean | null>(null);
+  // `pendingDefault` stays set on close so the modal can animate out.
+  const confirmModal = useCreateModal();
   const [isSavingDefault, setIsSavingDefault] = useState(false);
 
   const realUsers = useMemo(() => users.filter((u) => u.id !== null), [users]);
@@ -147,7 +150,7 @@ export default function CraftPage() {
       toast.error(err instanceof Error ? err.message : t("saveError.message"));
     } finally {
       setIsSavingDefault(false);
-      setPendingDefault(null);
+      confirmModal.toggle(false);
     }
   }
 
@@ -199,7 +202,10 @@ export default function CraftPage() {
               <InputSwitch
                 checked={defaultEnabled}
                 disabled={isSavingDefault}
-                onCheckedChange={(checked) => setPendingDefault(checked)}
+                onCheckedChange={(checked) => {
+                  setPendingDefault(checked);
+                  confirmModal.toggle(true);
+                }}
               />
             </InputHorizontal>
             <Text as="p" font="secondary-body" color="text-03">
@@ -259,46 +265,50 @@ export default function CraftPage() {
         </Section>
       </SettingsLayouts.Body>
 
-      {pendingDefault !== null && (
-        <ConfirmationModalLayout
-          icon={ADMIN_ROUTES.CRAFT_ACCESS.icon}
-          title={
-            pendingDefault
-              ? t("confirmModal.enableHeader.title")
-              : t("confirmModal.disableHeader.title")
-          }
-          onClose={isSavingDefault ? undefined : () => setPendingDefault(null)}
-          submit={
-            <Button
-              disabled={isSavingDefault}
-              onClick={() => {
-                void saveDefault(pendingDefault);
-              }}
-            >
+      <confirmModal.Provider>
+        {pendingDefault !== null && (
+          <ConfirmationModalLayout
+            icon={ADMIN_ROUTES.CRAFT_ACCESS.icon}
+            title={
+              pendingDefault
+                ? t("confirmModal.enableHeader.title")
+                : t("confirmModal.disableHeader.title")
+            }
+            onClose={
+              isSavingDefault ? undefined : () => confirmModal.toggle(false)
+            }
+            submit={
+              <Button
+                disabled={isSavingDefault}
+                onClick={() => {
+                  void saveDefault(pendingDefault);
+                }}
+              >
+                {pendingDefault
+                  ? t("confirmModal.enableButton.label")
+                  : t("confirmModal.disableButton.label")}
+              </Button>
+            }
+          >
+            <Text as="p" color="text-03">
               {pendingDefault
-                ? t("confirmModal.enableButton.label")
-                : t("confirmModal.disableButton.label")}
-            </Button>
-          }
-        >
-          <Text as="p" color="text-03">
-            {pendingDefault
-              ? explicitlyDisabled > 0
-                ? t("confirmModal.enableBody.withExclusions.description", {
-                    total: realUsers.length,
-                    excludedCount: explicitlyDisabled,
-                  })
-                : t("confirmModal.enableBody.description", {
-                    total: realUsers.length,
-                  })
-              : explicitlyEnabled > 0
-                ? t("confirmModal.disableBody.withExceptions.description", {
-                    enabledCount: explicitlyEnabled,
-                  })
-                : t("confirmModal.disableBody.description")}
-          </Text>
-        </ConfirmationModalLayout>
-      )}
+                ? explicitlyDisabled > 0
+                  ? t("confirmModal.enableBody.withExclusions.description", {
+                      total: realUsers.length,
+                      excludedCount: explicitlyDisabled,
+                    })
+                  : t("confirmModal.enableBody.description", {
+                      total: realUsers.length,
+                    })
+                : explicitlyEnabled > 0
+                  ? t("confirmModal.disableBody.withExceptions.description", {
+                      enabledCount: explicitlyEnabled,
+                    })
+                  : t("confirmModal.disableBody.description")}
+            </Text>
+          </ConfirmationModalLayout>
+        )}
+      </confirmModal.Provider>
     </SettingsLayouts.Root>
   );
 }

@@ -7,6 +7,7 @@ from uuid import UUID
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
+from onyx.chat.citation_utils import result_cites_documents
 from onyx.chat.models import (
     ChatPrompt,
     ChatReminderContext,
@@ -21,6 +22,7 @@ from onyx.chat.prompt_formatting import (
     prepare_model_messages,
     prompt_metadata,
 )
+from onyx.chat.tool_results import tool_result_parts
 from onyx.context.models import UserMemoryContext
 from onyx.context.search.models import SearchDocsResponse
 from onyx.db.enums import SUPPORTED_LANGUAGE_ENGLISH_NAMES, SupportedLanguage
@@ -58,6 +60,7 @@ from onyx.prompts.prompt_utils import (
     substitute_user_placeholders,
 )
 from onyx.prompts.tool_prompts import (
+    CODE_MODE_GUIDANCE,
     GENERATE_IMAGE_GUIDANCE,
     INTERNAL_SEARCH_GUIDANCE,
     MEMORY_GUIDANCE,
@@ -80,7 +83,7 @@ from onyx.prompts.user_info import (
     USER_PREFERENCES_PROMPT,
     USER_ROLE_PROMPT,
 )
-from onyx.tools.constants import CITEABLE_TOOLS_NAMES, FILE_READER_TOOL_NAME
+from onyx.tools.constants import CODE_MODE_TOOL_NAME, FILE_READER_TOOL_NAME
 from onyx.tools.interface import Tool
 from onyx.tools.models import LlmPythonExecutionResult
 from onyx.tools.tool_implementations.images.image_generation_tool import (
@@ -98,6 +101,11 @@ from onyx.utils.timing import log_function_time
 logger = setup_logger()
 
 
+def callable_tools(tools: Sequence[Tool]) -> list[Tool]:
+    """The offered tools, then the tools that run inside their calls."""
+    return [*tools, *(inner for tool in tools for inner in tool.inner_tools)]
+
+
 def build_chat_reminder(
     context: ChatReminderContext,
     results: Sequence[ToolResultMessage],
@@ -106,41 +114,43 @@ def build_chat_reminder(
     enabled: bool,
     has_history_citations: bool = False,
 ) -> str | None:
+    """`results` are this turn's tool results; `previous_results` the last step's."""
     if not enabled:
         return context.persona_task_prompt
     reminder_text = context.persona_task_prompt
-    has_generated_images = any(
-        isinstance(result.details, FinalImageGenerationResponse)
-        and result.details.generated_images
-        for result in results
-    )
+    parts = [part for result in results for part in tool_result_parts(result)]
     # Only suggest opening URLs when this agent has the tool.
     if (
-        not any(result.tool_name == ImageGenerationTool.NAME for result in results)
+        not any(part.tool_name == ImageGenerationTool.NAME for part in parts)
         and context.has_open_url_tool
         and not context.out_of_cycles
         and any(
-            result.tool_name == WebSearchTool.NAME
-            and isinstance(result.details, SearchDocsResponse)
-            and result.details.search_docs
+            part.tool_name == WebSearchTool.NAME
+            and isinstance(part.details, SearchDocsResponse)
+            and part.details.search_docs
             for result in previous_results
+            for part in tool_result_parts(result)
         )
     ):
         reminder_text = OPEN_URL_REMINDER
     return build_reminder_message(
         reminder_text=reminder_text,
         include_citation_reminder=any(
-            result.tool_name in CITEABLE_TOOLS_NAMES for result in results
+            result_cites_documents(result) for result in results
         )
         or context.has_context_documents
         or has_history_citations,
         include_file_reminder=any(
-            result.tool_name == PythonTool.NAME
-            and isinstance(result.details, LlmPythonExecutionResult)
-            and result.details.generated_files
-            for result in results
+            part.tool_name == PythonTool.NAME
+            and isinstance(part.details, LlmPythonExecutionResult)
+            and part.details.generated_files
+            for part in parts
         ),
-        include_image_reminder=has_generated_images,
+        include_image_reminder=any(
+            isinstance(part.details, FinalImageGenerationResponse)
+            and part.details.generated_images
+            for part in parts
+        ),
         is_last_cycle=context.out_of_cycles,
     )
 
@@ -175,7 +185,7 @@ def build_chat_prompt(
         reminders_enabled
         and (
             has_history_citations
-            or any(result.tool_name in CITEABLE_TOOLS_NAMES for result in results)
+            or any(result_cites_documents(result) for result in results)
         )
     ) or context_documents
     datetime_aware = persona.datetime_aware if persona else True
@@ -214,7 +224,9 @@ def build_chat_prompt(
         custom = None
     reminder = build_chat_reminder(
         ChatReminderContext(
-            has_open_url_tool=any(isinstance(tool, OpenURLTool) for tool in tools),
+            has_open_url_tool=any(
+                isinstance(tool, OpenURLTool) for tool in callable_tools(tools)
+            ),
             out_of_cycles=is_last_step,
             persona_task_prompt=render(persona_task, citations=cite),
             has_context_documents=context_documents,
@@ -225,7 +237,9 @@ def build_chat_prompt(
         has_history_citations=has_history_citations,
     )
     if preferred_tool_id is not None:
-        preferred_names = [tool.name for tool in tools if tool.id == preferred_tool_id]
+        preferred_names = [
+            name for tool in tools for name in tool.operation_names(preferred_tool_id)
+        ]
         if not preferred_names:
             raise ValueError(f"Preferred tool {preferred_tool_id} is not available")
         preference = TOOL_PREFERENCE_REMINDER.format(
@@ -449,6 +463,9 @@ def build_system_prompt(
     """Should only be called with the default behavior system prompt.
     If the user has replaced the default behavior prompt with their custom agent prompt, do not call this function.
 
+    `tools` are the offered tools. Tools that run inside their calls, such as code
+    mode functions, get their guidance too, and the prompt names them as functions.
+
     With include_user_info=False the per-user block is left out so the result is
     byte-identical across users; emit it separately via build_user_information_prompt.
     The org-wide framing (and company context) for that block stays here.
@@ -482,11 +499,16 @@ def build_system_prompt(
             PYTHON_TOOL_GUIDANCE,
             GENERATE_IMAGE_GUIDANCE,
             MEMORY_GUIDANCE,
+            CODE_MODE_GUIDANCE,
         ]
         system_prompt += TOOL_SECTION_HEADER + "\n".join(tool_sections)
         return system_prompt
 
     if tools:
+        code_mode = any(tool.name == CODE_MODE_TOOL_NAME for tool in tools)
+        # Inner tools are functions of a code mode program, not direct tools.
+        tools = callable_tools(tools)
+        tool_guidance_sections: list[str] = [CODE_MODE_GUIDANCE] if code_mode else []
         has_web_search = any(isinstance(tool, WebSearchTool) for tool in tools)
         has_internal_search = any(isinstance(tool, SearchTool) for tool in tools)
         has_open_urls = any(isinstance(tool, OpenURLTool) for tool in tools)
@@ -495,8 +517,6 @@ def build_system_prompt(
             isinstance(tool, ImageGenerationTool) for tool in tools
         )
         has_memory = any(isinstance(tool, MemoryTool) for tool in tools)
-
-        tool_guidance_sections: list[str] = []
 
         if has_web_search or has_internal_search:
             tool_guidance_sections.append(TOOL_DESCRIPTION_SEARCH_GUIDANCE)
@@ -677,10 +697,11 @@ def _create_file_tool_metadata_message(
     copy; the python tool is handed the files themselves, so prompt truncation
     does not take them away from it.
 
-    The python tier applies only when every listed file actually reached
+    The python tier lists only files that actually reached
     ``chat_files_for_tools`` (see ``FileToolMetadata.staged_for_tools``) —
     summary-truncated files are listed for the LLM but never staged, so naming
-    python for them would send the model after bytes it does not have. The
+    python for them would send the model after bytes it does not have. Other
+    files in the same notice go under the no-reader header. The
     notice also stops short of promising a path, because PythonTool normalizes
     and de-duplicates filenames at staging time and applies its own count and
     byte caps.
@@ -703,31 +724,44 @@ def _create_file_tool_metadata_message(
         )
         return _finalize_file_metadata_message(lines, token_counter)
 
+    def _entries(metas: list[FileToolMetadata]) -> list[str]:
+        return [
+            f'- filename="{meta.filename}" (~{meta.approx_char_count:,} chars)'
+            for meta in metas
+        ]
+
     if SearchTool.NAME in offered:
         lines = [
             "These files are attached but too large to include in full. Their "
             "contents are indexed — use internal search to find the relevant "
-            "passages. Do not guess them or search the web for them:"
+            "passages. Do not guess them or search the web for them:",
+            *_entries(file_metadata),
         ]
-    elif PythonTool.NAME in offered and all(
-        meta.staged_for_tools for meta in file_metadata
-    ):
-        lines = [
+        return _finalize_file_metadata_message(lines, token_counter)
+
+    python_offered = PythonTool.NAME in offered
+    staged = [
+        meta for meta in file_metadata if python_offered and meta.staged_for_tools
+    ]
+    unreadable = [
+        meta for meta in file_metadata if not (python_offered and meta.staged_for_tools)
+    ]
+    lines = []
+    if staged:
+        lines.append(
             "These files are attached but too large to include in full. The "
             "python tool receives them — read them there, listing the working "
             "directory if a name does not resolve. Do not guess their contents "
             "or search the web for them:"
-        ]
-    else:
-        lines = [
+        )
+        lines.extend(_entries(staged))
+    if unreadable:
+        lines.append(
             "These files are attached but too large to include in full, and no "
             "tool here can read them. Do not guess their contents or search the "
             "web for them — say they are too large to read in this conversation:"
-        ]
-    lines.extend(
-        f'- filename="{meta.filename}" (~{meta.approx_char_count:,} chars)'
-        for meta in file_metadata
-    )
+        )
+        lines.extend(_entries(unreadable))
     return _finalize_file_metadata_message(lines, token_counter)
 
 

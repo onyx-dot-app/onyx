@@ -7,7 +7,6 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::{Mutex, RwLock};
-use url::Url;
 
 pub const DEFAULT_SERVER_URL: &str = "https://cloud.onyx.app";
 const CONFIG_FILE_NAME: &str = "config.json";
@@ -136,7 +135,6 @@ pub fn save_config(config: &AppConfig) -> Result<(), String> {
 pub struct ConfigState {
     config: RwLock<AppConfig>,
     config_initialized: RwLock<bool>,
-    app_base_url: RwLock<Option<Url>>,
     pub debug_mode: bool,
     pub debug_log_file: Mutex<Option<fs::File>>,
     /// Serializes update-then-persist-to-disk sequences. Without it, two
@@ -156,7 +154,6 @@ impl ConfigState {
         Self {
             config: RwLock::new(config),
             config_initialized: RwLock::new(config_initialized),
-            app_base_url: RwLock::new(None),
             debug_mode,
             debug_log_file: Mutex::new(debug_log_file),
             persist_lock: Mutex::new(()),
@@ -217,20 +214,6 @@ impl ConfigState {
             .config_initialized
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = value;
-    }
-
-    pub fn app_base_url(&self) -> Option<Url> {
-        self.app_base_url
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone()
-    }
-
-    pub fn set_app_base_url(&self, url: Option<Url>) {
-        *self
-            .app_base_url
-            .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = url;
     }
 }
 

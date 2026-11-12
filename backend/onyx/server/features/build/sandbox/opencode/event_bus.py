@@ -9,6 +9,7 @@ gaps via the cumulative ``part.text`` field on ``message.part.updated``.
 from __future__ import annotations
 
 import json
+import socket
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -84,6 +85,7 @@ class PodEventBus:
         self._child_to_parent: dict[str, str] = {}
 
         self._reader_thread: threading.Thread | None = None
+        self._active_response: httpx.Response | None = None
         self.stream_ready = threading.Event()
 
     @property
@@ -134,6 +136,7 @@ class PodEventBus:
         """Stop the reader and signal subscribers. Idempotent."""
         self._stop.set()
         self._signal_subscribers_closed()
+        self._interrupt_active_stream()
         # Don't self-join if called from the reader thread (give-up path).
         if (
             self._reader_thread is not None
@@ -145,6 +148,25 @@ class PodEventBus:
                 logger.warning(
                     "PodEventBus reader thread did not exit within 5s on close"
                 )
+
+    def _interrupt_active_stream(self) -> None:
+        """Shut down the /event socket so a reader blocked on an idle stream
+        wakes now instead of at the next frame or read timeout. Closing the
+        response from another thread does not wake the blocked read."""
+        with self._lock:
+            response = self._active_response
+        if response is None:
+            return
+        network_stream = response.extensions.get("network_stream")
+        if network_stream is None:
+            return
+        sock = network_stream.get_extra_info("socket")
+        if not isinstance(sock, socket.socket):
+            return
+        try:
+            sock.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
 
     def _signal_subscribers_closed(self) -> None:
         with self._lock:
@@ -190,6 +212,8 @@ class PodEventBus:
                         backoff,
                     )
             except Exception as e:
+                if self._stop.is_set():
+                    return
                 # Cached password was stale (pod re-provisioned with a new
                 # Secret) — re-attach immediately with the rotated credential.
                 # Still counts against the failure budget so a Secret source
@@ -247,25 +271,38 @@ class PodEventBus:
             params=params,
             timeout=timeout,
         ) as response:
-            response.raise_for_status()
-            self.stream_ready.set()
-            logger.info(
-                "PodEventBus connected to %s/event?directory=%s (status=%s)",
-                self._base_url,
-                self._directory,
-                response.status_code,
-            )
-            buf = ""
-            for chunk in response.iter_text():
-                if self._stop.is_set():
-                    return
-                buf += chunk
-                while "\n\n" in buf:
-                    block, buf = buf.split("\n\n", 1)
-                    evt = _parse_sse_block(block)
-                    if evt is None:
-                        continue
-                    self._dispatch(evt)
+            with self._lock:
+                self._active_response = response
+            try:
+                self._consume_stream(response)
+            finally:
+                with self._lock:
+                    self._active_response = None
+
+    def _consume_stream(self, response: httpx.Response) -> None:
+        # Checked after publishing the response so a concurrent close()
+        # either sees it and shuts it down, or is seen here.
+        if self._stop.is_set():
+            return
+        response.raise_for_status()
+        self.stream_ready.set()
+        logger.info(
+            "PodEventBus connected to %s/event?directory=%s (status=%s)",
+            self._base_url,
+            self._directory,
+            response.status_code,
+        )
+        buf = ""
+        for chunk in response.iter_text():
+            if self._stop.is_set():
+                return
+            buf += chunk
+            while "\n\n" in buf:
+                block, buf = buf.split("\n\n", 1)
+                evt = _parse_sse_block(block)
+                if evt is None:
+                    continue
+                self._dispatch(evt)
 
     def _refresh_auth_on_401(self) -> bool:
         """Reload auth after a 401; True if the credential actually rotated.

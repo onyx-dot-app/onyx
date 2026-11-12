@@ -715,15 +715,14 @@
     "alibaba/qwen3.8-27b": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.1,
-        "cache_write": 0.625,
-        "input": 0.5,
-        "output": 3
+        "cache_read": 0.059,
+        "input": 0.06,
+        "output": 2.3
       },
       "family": "qwen",
       "limit": {
-        "context": 1000000,
-        "output": 131072
+        "context": 262144,
+        "output": 262144
       },
       "modalities": {
         "input": [
@@ -2847,9 +2846,9 @@
     "deepseek/deepseek-v4-flash-0731": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.014,
-        "input": 0.076,
-        "output": 0.153
+        "cache_read": 0.028,
+        "input": 0.13,
+        "output": 0.26
       },
       "family": "deepseek-flash",
       "limit": {
@@ -2904,14 +2903,14 @@
     "deepseek/deepseek-v4-pro": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.022,
-        "input": 0.66,
-        "output": 1.98
+        "cache_read": 0.132,
+        "input": 1.32,
+        "output": 3.96
       },
       "family": "deepseek-thinking",
       "limit": {
-        "context": 1000000,
-        "output": 384000
+        "context": 1048600,
+        "output": 1048600
       },
       "modalities": {
         "input": [
@@ -3043,6 +3042,33 @@
       "release_date": "2026-10-17",
       "structured_output": true,
       "temperature": true,
+      "tool_call": true
+    },
+    "deepseek/deepseek-v4.1-flash-1017-ultrafast": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.048,
+        "input": 2.4,
+        "output": 9.6
+      },
+      "family": "deepseek",
+      "limit": {
+        "context": 1048576,
+        "output": 1048576
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "DeepSeek V4.1 Flash 1017 Ultrafast",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-06",
       "tool_call": true
     },
     "deepseek/deepseek-v4.1-flash-fast": {
@@ -3451,35 +3477,6 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-05-28",
-      "temperature": true,
-      "tool_call": false
-    },
-    "google/gemini-3.1-flash-image-preview": {
-      "attachment": true,
-      "cost": {
-        "cache_read": 0.05,
-        "input": 0.5,
-        "output": 3
-      },
-      "family": "gemini-flash",
-      "limit": {
-        "context": 131072,
-        "output": 32768
-      },
-      "modalities": {
-        "input": [
-          "text",
-          "image"
-        ],
-        "output": [
-          "text",
-          "image"
-        ]
-      },
-      "name": "Gemini 3.1 Flash Image Preview (Nano Banana 2)",
-      "open_weights": false,
-      "reasoning": true,
-      "release_date": "2026-02-26",
       "temperature": true,
       "tool_call": false
     },
@@ -4006,6 +4003,33 @@
       "temperature": false,
       "tool_call": false
     },
+    "google/gemini-omni-1.2-flash": {
+      "attachment": true,
+      "cost": {
+        "input": 1.5,
+        "output": 9
+      },
+      "family": "gemini",
+      "limit": {
+        "context": 131072,
+        "output": 260640
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "video"
+        ]
+      },
+      "name": "Gemini Omni 1.2 Flash",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-05",
+      "tool_call": false
+    },
     "google/gemini-omni-flash-preview": {
       "attachment": true,
       "cost": {
@@ -4097,7 +4121,7 @@
       "attachment": false,
       "family": "text-embedding",
       "limit": {
-        "context": 8192,
+        "context": 2048,
         "output": 0
       },
       "modalities": {
@@ -4111,7 +4135,7 @@
       "name": "Text Embedding 005",
       "open_weights": false,
       "reasoning": false,
-      "release_date": "2024-08-01",
+      "release_date": "2024-11-18",
       "temperature": false,
       "tool_call": false
     },
@@ -4119,7 +4143,7 @@
       "attachment": false,
       "family": "text-embedding",
       "limit": {
-        "context": 8192,
+        "context": 2048,
         "output": 0
       },
       "modalities": {
@@ -4133,53 +4157,7 @@
       "name": "Text Multilingual Embedding 002",
       "open_weights": false,
       "reasoning": false,
-      "release_date": "2024-03-01",
-      "temperature": false,
-      "tool_call": false
-    },
-    "google/veo-3.0-fast-generate-001": {
-      "attachment": true,
-      "family": "veo",
-      "limit": {
-        "context": 0,
-        "output": 0
-      },
-      "modalities": {
-        "input": [
-          "text",
-          "image"
-        ],
-        "output": [
-          "video"
-        ]
-      },
-      "name": "Veo 3.0 Fast Generate",
-      "open_weights": false,
-      "reasoning": false,
-      "release_date": "2025-07-31",
-      "temperature": false,
-      "tool_call": false
-    },
-    "google/veo-3.0-generate-001": {
-      "attachment": true,
-      "family": "veo",
-      "limit": {
-        "context": 0,
-        "output": 0
-      },
-      "modalities": {
-        "input": [
-          "text",
-          "image"
-        ],
-        "output": [
-          "video"
-        ]
-      },
-      "name": "Veo 3.0",
-      "open_weights": false,
-      "reasoning": false,
-      "release_date": "2025-05-20",
+      "release_date": "2024-05-14",
       "temperature": false,
       "tool_call": false
     },
@@ -4278,6 +4256,31 @@
       "release_date": "2026-10-09",
       "temperature": false,
       "tool_call": false
+    },
+    "humansand/ampersand-v0.1": {
+      "attachment": false,
+      "cost": {
+        "input": 0,
+        "output": 0
+      },
+      "family": "v0",
+      "limit": {
+        "context": 1000000,
+        "output": 32768
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Ampersand v0.1",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-06",
+      "tool_call": true
     },
     "inception/mercury-2": {
       "attachment": false,
@@ -4526,8 +4529,9 @@
     "inclusionai/ling-3.1-flash-1019": {
       "attachment": false,
       "cost": {
-        "input": 0,
-        "output": 0
+        "cache_read": 0.06,
+        "input": 0.3,
+        "output": 0.9
       },
       "family": "ling",
       "limit": {
@@ -5733,7 +5737,7 @@
         ]
       },
       "name": "MiniMax-M3.1-Flash",
-      "open_weights": false,
+      "open_weights": true,
       "reasoning": true,
       "release_date": "2026-10-19",
       "temperature": true,
@@ -6333,14 +6337,13 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.2,
-        "cache_write": 2,
         "input": 2,
         "output": 10
       },
       "family": "kimi-k3",
       "limit": {
-        "context": 1048576,
-        "output": 1048576
+        "context": 1000000,
+        "output": 262144
       },
       "modalities": {
         "input": [
@@ -6352,7 +6355,7 @@
         ]
       },
       "name": "Kimi K3.1 Pro",
-      "open_weights": false,
+      "open_weights": true,
       "reasoning": true,
       "release_date": "2026-10-23",
       "temperature": false,
@@ -6521,9 +6524,9 @@
     "nvidia/nemotron-3.5-lightning": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.01,
-        "input": 0.05,
-        "output": 0.2
+        "cache_read": 0.03,
+        "input": 0.06,
+        "output": 0.16
       },
       "family": "nemotron",
       "limit": {
@@ -10697,30 +10700,6 @@
       "temperature": false,
       "tool_call": false
     },
-    "spacexai/grok-voice-think-fast-2.0": {
-      "attachment": true,
-      "family": "grok",
-      "limit": {
-        "context": 0,
-        "output": 0
-      },
-      "modalities": {
-        "input": [
-          "text",
-          "audio"
-        ],
-        "output": [
-          "text",
-          "audio"
-        ]
-      },
-      "name": "Grok Voice Think Fast 2.0",
-      "open_weights": false,
-      "reasoning": false,
-      "release_date": "2026-07-29",
-      "temperature": true,
-      "tool_call": true
-    },
     "stealth/glyph-cluster": {
       "attachment": false,
       "cost": {
@@ -10900,6 +10879,34 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-07-06",
+      "temperature": true,
+      "tool_call": true
+    },
+    "tencent/hy4": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.021,
+        "input": 0.417,
+        "output": 1.2505
+      },
+      "family": "Hy",
+      "limit": {
+        "context": 1024000,
+        "output": 64000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Tencent Hy4",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-04",
       "temperature": true,
       "tool_call": true
     },
@@ -11717,9 +11724,9 @@
     "zai/glm-5.2": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.16,
-        "input": 0.8,
-        "output": 2.55
+        "cache_read": 0.14,
+        "input": 1.4,
+        "output": 4.4
       },
       "family": "glm",
       "limit": {

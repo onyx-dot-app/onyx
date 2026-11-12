@@ -13,6 +13,7 @@ use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
 
 #[cfg(target_os = "macos")]
 const TITLEBAR_SCRIPT: &str = include_str!("../../src/titlebar.js");
+const DESKTOP_BRIDGE_SCRIPT: &str = "window.__ONYX_DESKTOP__ = Object.assign(window.__ONYX_DESKTOP__ || {}, { oauthInBrowser: true });";
 
 /// The window a shortcut or menu action should apply to: whichever one is
 /// focused (the app can have several windows). Focus-query failures are
@@ -42,44 +43,55 @@ pub fn focus_main_window(app: &AppHandle) {
     }
 }
 
-pub fn trigger_new_chat(app: &AppHandle) {
-    let server_url = app.state::<ConfigState>().config().server_url;
-
-    if let Some(window) = app.get_webview_window("main") {
-        let url = format!("{server_url}/chat");
-        if let Err(e) = window.eval(format!("window.location.href = '{url}'")) {
-            log_backend_error(app, &format!("Failed to navigate to new chat: {e}"));
-        }
-    }
+/// The window a File-menu action applies to: the focused app window, else
+/// `main`. Popups are skipped because they host sign-in pages, not the app.
+fn target_app_window(app: &AppHandle) -> Option<WebviewWindow> {
+    focused_webview_window(app)
+        .filter(|window| !window.label().starts_with(POPUP_LABEL_PREFIX))
+        .or_else(|| app.get_webview_window("main"))
 }
 
-/// Focus the main window and navigate it to `/chat`, building it first if it
-/// doesn't exist. Building and navigating must happen in the same task --
-/// doing them as the two independent fire-and-forget steps `focus_main_window`
-/// / `trigger_new_chat` normally are lets the navigation run against a window
-/// that hasn't finished being created yet, silently dropping it.
-pub fn open_chat_window(app: &AppHandle) {
-    if app.get_webview_window("main").is_some() {
-        focus_main_window(app);
-        trigger_new_chat(app);
-        return;
-    }
-
+/// Build a new window, then run `action` on it in the same task. Two
+/// independent fire-and-forget steps let the action run against a window
+/// that is not created yet, which silently drops it.
+fn build_window_then(app: &AppHandle, action: fn(&AppHandle, &WebviewWindow)) {
     let handle = app.clone();
     tauri::async_runtime::spawn(async move {
         match build_and_setup_window(&handle) {
-            Ok(window) => {
-                let server_url = handle.state::<ConfigState>().config().server_url;
-                let url = format!("{server_url}/chat");
-                if let Err(e) = window.eval(format!("window.location.href = '{url}'")) {
-                    log_backend_error(&handle, &format!("Failed to navigate to new chat: {e}"));
-                }
-            }
-            Err(e) => {
-                log_backend_error(&handle, &format!("Failed to open new window: {e}"));
-            }
+            Ok(window) => action(&handle, &window),
+            Err(e) => log_backend_error(&handle, &format!("Failed to open new window: {e}")),
         }
     });
+}
+
+/// Native navigation, not `eval`: a script cannot run on an error page or on
+/// a page that failed to load, so `eval` cannot recover such a window.
+fn navigate_to_new_chat(app: &AppHandle, window: &WebviewWindow) {
+    let server_url = app.state::<ConfigState>().config().server_url;
+    let result = Url::parse(&format!("{server_url}/chat"))
+        .map_err(|e| e.to_string())
+        .and_then(|url| window.navigate(url).map_err(|e| e.to_string()));
+    if let Err(e) = result {
+        log_backend_error(app, &format!("Failed to navigate to new chat: {e}"));
+    }
+}
+
+pub fn trigger_new_chat(app: &AppHandle) {
+    match target_app_window(app) {
+        Some(window) => navigate_to_new_chat(app, &window),
+        None => build_window_then(app, navigate_to_new_chat),
+    }
+}
+
+/// Focus the main window and navigate it to `/chat`, building a window first
+/// if `main` does not exist.
+pub fn open_chat_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        focus_main_window(app);
+        navigate_to_new_chat(app, &window);
+    } else {
+        build_window_then(app, navigate_to_new_chat);
+    }
 }
 
 /// Build a new Onyx window (title, size, platform-specific transparency /
@@ -160,25 +172,52 @@ pub fn open_docs(app: &AppHandle) {
     }
 }
 
-pub fn open_settings(app: &AppHandle) {
-    // Navigate main window to the settings page (index.html) with settings flag
-    let settings_url = app
-        .state::<ConfigState>()
-        .app_base_url()
-        .map(|mut url| {
-            url.set_query(None);
-            url.set_fragment(Some("settings"));
-            url.set_path("/");
-            url
-        })
-        .or_else(|| Url::parse("tauri://localhost/#settings").ok());
+/// The origin that serves the bundled pages (`index.html`). Tauri uses
+/// `tauri://localhost`, but `WebView2` on Windows needs
+/// `http(s)://tauri.localhost`. Tauri does not expose this origin, so this
+/// copies its rule. `windows` is a parameter so tests can cover both rules.
+const fn app_origin(windows: bool, use_https_scheme: bool) -> &'static str {
+    match (windows, use_https_scheme) {
+        (true, true) => "https://tauri.localhost",
+        (true, false) => "http://tauri.localhost",
+        (false, _) => "tauri://localhost",
+    }
+}
 
-    if let Some(window) = app.get_webview_window("main") {
-        if let Some(url) = settings_url {
-            if let Err(e) = window.navigate(url) {
-                log_backend_error(app, &format!("Failed to navigate to settings: {e}"));
-            }
-        }
+/// The bundled settings page. The origin that a window shows at startup is
+/// not a safe source: on Windows it can still be `about:blank`.
+fn settings_url(use_https_scheme: bool) -> Result<Url, url::ParseError> {
+    let origin = app_origin(cfg!(target_os = "windows"), use_https_scheme);
+    Url::parse(&format!("{origin}/#settings"))
+}
+
+/// True for a page that the app itself serves, such as Settings.
+fn is_app_origin_url(url: &Url, windows: bool) -> bool {
+    [false, true].into_iter().any(|https| {
+        Url::parse(app_origin(windows, https)).is_ok_and(|origin| same_origin(&origin, url))
+    })
+}
+
+fn navigate_to_settings(app: &AppHandle, window: &WebviewWindow) {
+    let use_https_scheme = app
+        .config()
+        .app
+        .windows
+        .iter()
+        .find(|config| config.label == "main")
+        .is_some_and(|config| config.use_https_scheme);
+    let result = settings_url(use_https_scheme)
+        .map_err(|e| e.to_string())
+        .and_then(|url| window.navigate(url).map_err(|e| e.to_string()));
+    if let Err(e) = result {
+        log_backend_error(app, &format!("Failed to navigate to settings: {e}"));
+    }
+}
+
+pub fn open_settings(app: &AppHandle) {
+    match target_app_window(app) {
+        Some(window) => navigate_to_settings(app, &window),
+        None => build_window_then(app, navigate_to_settings),
     }
 }
 
@@ -193,7 +232,16 @@ pub fn is_chat_session_url(url: &Url) -> bool {
 }
 
 pub fn should_open_in_external_browser(current_url: &Url, destination_url: &Url) -> bool {
-    if !is_chat_session_url(current_url) {
+    should_open_in_external_browser_on(current_url, destination_url, cfg!(target_os = "windows"))
+}
+
+fn should_open_in_external_browser_on(
+    current_url: &Url,
+    destination_url: &Url,
+    windows: bool,
+) -> bool {
+    // On Windows the Settings page is an `http` URL on another origin.
+    if !is_chat_session_url(current_url) || is_app_origin_url(destination_url, windows) {
         return false;
     }
 
@@ -316,7 +364,7 @@ fn handle_new_window(
 }
 
 const POPUP_DEFAULT_SIZE: (f64, f64) = (650.0, 760.0);
-const POPUP_LABEL_PREFIX: &str = "popup-";
+pub const POPUP_LABEL_PREFIX: &str = "popup-";
 
 pub fn is_popup_window(webview: &Webview) -> bool {
     webview.label().starts_with(POPUP_LABEL_PREFIX)
@@ -360,7 +408,7 @@ fn build_popup_window(
 
 /// wry destroys the webview on `window.close()` but leaves its GTK window open.
 #[cfg(target_os = "linux")]
-fn close_window_with_webview(window: &WebviewWindow) {
+pub fn close_window_with_webview(window: &WebviewWindow) {
     use gtk::prelude::WidgetExt;
 
     let handle = window.clone();
@@ -382,6 +430,9 @@ fn with_shared_webview_handlers(
     builder: WebviewWindowBuilder<'_, Wry, AppHandle>,
 ) -> WebviewWindowBuilder<'_, Wry, AppHandle> {
     builder
+        // Lets the web app hand OAuth to the system browser; the callback
+        // returns through an onyx:// link (see `oauth_handoff`).
+        .initialization_script(DESKTOP_BRIDGE_SCRIPT)
         // Tauri's own drag-and-drop handler swallows file drops, so the web
         // app's upload drop zones never receive them.
         .disable_drag_drop_handler()
@@ -495,6 +546,60 @@ mod tests {
     #[allow(clippy::unwrap_used)]
     fn url(s: &str) -> Url {
         Url::parse(s).unwrap()
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn settings_url_uses_the_platform_app_origin() {
+        let expected = if cfg!(target_os = "windows") {
+            "http://tauri.localhost/#settings"
+        } else {
+            "tauri://localhost/#settings"
+        };
+        assert_eq!(settings_url(false).unwrap().as_str(), expected);
+        if cfg!(target_os = "windows") {
+            assert_eq!(
+                settings_url(true).unwrap().as_str(),
+                "https://tauri.localhost/#settings"
+            );
+        }
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn settings_page_stays_in_the_app_from_a_chat() {
+        let chat = url("https://cloud.onyx.app/app?chatId=123");
+        let external = url("https://example.com");
+
+        for (windows, settings) in [
+            (true, "http://tauri.localhost/#settings"),
+            (true, "https://tauri.localhost/#settings"),
+            (false, "tauri://localhost/#settings"),
+        ] {
+            assert!(!should_open_in_external_browser_on(
+                &chat,
+                &url(settings),
+                windows
+            ));
+            assert!(should_open_in_external_browser_on(
+                &chat, &external, windows
+            ));
+        }
+        // Only the exact app origin is exempt, not other localhost hosts.
+        assert!(should_open_in_external_browser_on(
+            &chat,
+            &url("http://localhost:3000/"),
+            true
+        ));
+        assert!(should_open_in_external_browser_on(
+            &chat,
+            &url("http://tauri.localhost/"),
+            false
+        ));
+        assert!(!should_open_in_external_browser(
+            &chat,
+            &settings_url(false).unwrap()
+        ));
     }
 
     #[test]

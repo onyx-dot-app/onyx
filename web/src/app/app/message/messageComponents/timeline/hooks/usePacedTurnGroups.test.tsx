@@ -22,16 +22,22 @@ function createStep(
   tabIndex: number,
   packetType: PacketType = PacketType.SEARCH_TOOL_START
 ): TransformedStep {
+  const packets = [
+    {
+      placement: { turn_index: turnIndex, tab_index: tabIndex },
+      obj: { type: packetType },
+    } as Packet,
+  ];
+  const key = `${turnIndex}-${tabIndex}`;
   return {
-    key: `${turnIndex}-${tabIndex}`,
+    key,
+    groupKey: key,
     turnIndex,
     tabIndex,
-    packets: [
-      {
-        placement: { turn_index: turnIndex, tab_index: tabIndex },
-        obj: { type: packetType },
-      } as Packet,
-    ],
+    packets,
+    nestedCalls: [],
+    streamPackets: packets,
+    codeMode: null,
   };
 }
 
@@ -51,20 +57,24 @@ function createTurnGroup(steps: TransformedStep[]): TurnGroup {
  * Create a mock display group (MESSAGE_START)
  */
 function createDisplayGroup(turnIndex: number): GroupedPacket {
+  const packets = [
+    {
+      placement: { turn_index: turnIndex, tab_index: 0 },
+      obj: {
+        type: PacketType.MESSAGE_START,
+        id: "msg-1",
+        content: "",
+        final_documents: null,
+      },
+    } as Packet,
+  ];
   return {
     turn_index: turnIndex,
     tab_index: 0,
-    packets: [
-      {
-        placement: { turn_index: turnIndex, tab_index: 0 },
-        obj: {
-          type: PacketType.MESSAGE_START,
-          id: "msg-1",
-          content: "",
-          final_documents: null,
-        },
-      } as Packet,
-    ],
+    packets,
+    nestedCalls: [],
+    streamPackets: packets,
+    codeMode: null,
   };
 }
 
@@ -537,16 +547,18 @@ describe("usePacedTurnGroups", () => {
 
       const firstGroupRef = result.current.pacedTurnGroups[0];
 
-      // Simulate streaming: step2 gets more packets (new object with longer packets array)
+      // Simulate streaming: step2 gets one more packet
+      const packets = [
+        ...step2.packets,
+        {
+          placement: { turn_index: 1, tab_index: 0 },
+          obj: { type: PacketType.SEARCH_TOOL_START },
+        } as Packet,
+      ];
       const step2Updated: TransformedStep = {
         ...step2,
-        packets: [
-          ...step2.packets,
-          {
-            placement: { turn_index: 1, tab_index: 0 },
-            obj: { type: PacketType.SEARCH_TOOL_START },
-          } as Packet,
-        ],
+        packets,
+        streamPackets: packets,
       };
       rerender({
         turnGroups: [createTurnGroup([step1]), createTurnGroup([step2Updated])],
@@ -557,6 +569,34 @@ describe("usePacedTurnGroups", () => {
       expect(result.current.pacedTurnGroups[0]).toBe(firstGroupRef);
       // Second group changed (packets.length differs) — new reference
       expect(result.current.pacedTurnGroups.length).toBe(2);
+      expect(result.current.pacedTurnGroups[1]!.steps[0]).toBe(step2Updated);
+    });
+
+    test("returns the updated step when only a nested call changes", () => {
+      const step = createStep(0, 0, PacketType.RESEARCH_AGENT_START);
+
+      const { result, rerender } = renderHook(
+        ({ turnGroups }) => usePacedTurnGroups(turnGroups, [], false, 1, false),
+        { initialProps: { turnGroups: [createTurnGroup([step])] } }
+      );
+      expect(result.current.pacedTurnGroups[0]!.steps[0]).toBe(step);
+
+      const nestedPacket = {
+        placement: { turn_index: 0, tab_index: 0, sub_turn_index: 0 },
+        obj: { type: PacketType.SEARCH_TOOL_START },
+      } as Packet;
+      const stepWithNestedCall: TransformedStep = {
+        ...step,
+        nestedCalls: [
+          { subTurnIndex: 0, packets: [nestedPacket], complete: false },
+        ],
+        streamPackets: [...step.streamPackets, nestedPacket],
+      };
+      rerender({ turnGroups: [createTurnGroup([stepWithNestedCall])] });
+
+      expect(result.current.pacedTurnGroups[0]!.steps[0]).toBe(
+        stepWithNestedCall
+      );
     });
 
     test("returns new array reference when a new step is revealed", () => {

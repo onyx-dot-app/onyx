@@ -43,6 +43,7 @@ from onyx.agents.events import (
     MessageStartEvent,
     MessageUpdateEvent,
     ToolEndEvent,
+    ToolResultAmendedEvent,
     ToolStartEvent,
     ToolUpdateEvent,
 )
@@ -55,6 +56,7 @@ from onyx.agents.models import (
     ExecutionRequest,
     ExecutionStatus,
     PreparedStep,
+    ReleaseFailed,
     RunAction,
     RunFailure,
     RunFailureKind,
@@ -68,6 +70,7 @@ from onyx.agents.models import (
     StepResult,
     ToolCallContext,
     ToolExecutionRecord,
+    ToolResultAmendment,
     messages_from_steps,
 )
 from onyx.agents.tool_execution import ToolBatch
@@ -209,6 +212,11 @@ def _capture_unsettled_child(state: RunState) -> RunState:
     return snapshot
 
 
+# Called with the run's recorded tool results; returns final results of its calls,
+# or raises ReleaseFailed to fail the run after it applies them.
+ReleaseHook = Callable[[list[ToolResultMessage]], list[ToolResultAmendment]]
+
+
 class RestorableFeature(Protocol):
     """Capture and restore feature-owned state at safe execution boundaries."""
 
@@ -242,6 +250,8 @@ class Agent:
         | None = None,
         after_tool_call: Callable[[ToolCallContext, ToolResult], ToolResult]
         | None = None,
+        on_finish: ReleaseHook | None = None,
+        on_suspend: ReleaseHook | None = None,
         agent_id: str | None = None,
         previous_run_id: str | None = None,
         restoration: "RestorableFeature | None" = None,
@@ -285,6 +295,9 @@ class Agent:
         self.after_step = after_step
         self.before_tool_call = before_tool_call
         self.after_tool_call = after_tool_call
+        self.on_finish = on_finish
+        # Called when the run suspends, before its state is captured.
+        self.on_suspend = on_suspend
         self._restoration = restoration
         self._state = (state or AgentState()).snapshot()
         for message in self._state.messages:
@@ -502,6 +515,8 @@ class Run:
         self._state = state
         self._history = history if history is not None else AgentState()
         self._token_counts: dict[str, int] = {}
+        # Tool call IDs of the conversation and this run; built on the first step.
+        self._tool_call_ids: set[str] | None = None
         self.cancellation_signal = cancellation_signal
         self._completed: Future[None] = Future()
         self._idle: Future[None] = Future()
@@ -529,6 +544,8 @@ class Run:
         self.after_tool_call: (
             Callable[[ToolCallContext, ToolResult], ToolResult] | None
         ) = None
+        self._on_finish: ReleaseHook | None = None
+        self._on_suspend: ReleaseHook | None = None
         self._restoration: RestorableFeature | None = None
         self._step_tools: list[AgentTool] | None = None
         self.work = ExecutionWork()
@@ -753,6 +770,7 @@ class Run:
     def record_tool_results(
         self, result: ToolResult, calls: Sequence[ToolCall]
     ) -> None:
+        """Record the result of calls; `finish_tool` later ends them."""
         # Checkpoint capture must not split a completed batch.
         with self.execution_lock:
             self.cancellation_signal.check()
@@ -946,6 +964,8 @@ class Run:
             self._after_step = agent.after_step
             self.before_tool_call = agent.before_tool_call
             self.after_tool_call = agent.after_tool_call
+            self._on_finish = agent.on_finish
+            self._on_suspend = agent.on_suspend
             self._restoration = agent._restoration
             self._thread_context = copy_context()
             if coordinator is not None:
@@ -1114,8 +1134,17 @@ class Run:
             completion.add_done_callback(lambda _future: self._wake_execution())
 
     def _suspend(self) -> None:
+        amendments, failure = self._release_amendments(self._on_suspend)
+        if amendments:
+            with self.execution_lock:
+                self._apply_amendments(amendments)
+        # A run cancelled while the hook ran finishes instead of suspending,
+        # as cancelled even when the hook failed.
+        self.cancellation_signal.check()
+        if failure is not None:
+            # The run fails instead of suspending.
+            raise failure
         if self._restoration is not None:
-            self.cancellation_signal.check()
             feature_state = _FEATURE_STATE.validate_python(
                 self._restoration.capture_state().model_dump(mode="json")
             )
@@ -1158,12 +1187,22 @@ class Run:
 
         self.work.tracker.on_idle(drained)
 
-    def _finish(
-        self,
-        outcome: RunOutcome,
-        llm: LLM,
-    ) -> None:
+    def _finish(self, outcome: RunOutcome, llm: LLM) -> None:
         self._cancellation_link.close()
+        amendments, failure = self._release_amendments(self._on_finish)
+        if failure is not None:
+            if outcome == RunStatus.CANCELLED:
+                # A Stop or deadline wins: the run stays cancelled.
+                logger.warning(
+                    "Run %s was cancelled; its release hook also failed: %s",
+                    self.id,
+                    failure,
+                )
+            else:
+                with self.execution_lock:
+                    if self._state.failure is None:
+                        self._state.failure = _failure(failure, llm)
+                        outcome = RunStatus.ERROR
         if self.coordination and outcome in (
             RunStatus.ERROR,
             RunStatus.CANCELLED,
@@ -1213,6 +1252,8 @@ class Run:
                 for execution in step.tools.values():
                     if execution.status == ExecutionStatus.RUNNING:
                         execution.status = ExecutionStatus(outcome.value)
+            # After partial messages end, so live events keep the saved order.
+            self._apply_amendments(amendments)
             if (
                 outcome == RunStatus.CANCELLED
                 and self._state.failure is None
@@ -1246,6 +1287,83 @@ class Run:
         finally:
             self._drain_workers()
 
+    def _release_amendments(
+        self, hook: ReleaseHook | None
+    ) -> tuple[list[ToolResultAmendment], Exception | None]:
+        """Ask a finish or suspend hook for the final results of this run's calls,
+        and the error that fails the run, if the hook raised ReleaseFailed.
+
+        The hook runs without the execution lock, since it can wait for tool work.
+        A hook that fails otherwise or stops for cancellation sets no results, so
+        the run still ends or suspends normally.
+        """
+        if hook is None:
+            return [], None
+        with self.execution_lock:
+            # Not copied: the hook reads them and must not change them.
+            results = [
+                message
+                for message in self._state.messages
+                if isinstance(message, ToolResultMessage)
+            ]
+        try:
+            return hook(results), None
+        except ReleaseFailed as failed:
+            return failed.amendments, failed.error
+        except AgentCancelled:
+            logger.info("Run release hook stopped for cancellation: %s", self.id)
+            return [], None
+        except Exception:
+            logger.exception("Run release hook failed: %s", self.id)
+            return [], None
+
+    def _apply_amendments(self, amendments: Sequence[ToolResultAmendment]) -> None:
+        """Set the final results of started calls; the caller holds the execution lock.
+
+        An amendment replaces a recorded result, or gives a call that ended without
+        one its result. The call keeps its execution status. An amendment that names
+        no started call of this run is logged and skipped. A compaction summary that
+        covers an amended result describes the replaced one, so it is dropped and
+        the next request builds its context from the amended result.
+        """
+        started = {
+            call.id: (index, message_id, step.tools[call.id], call)
+            for index, step in enumerate(self._state.steps)
+            if (message_id := step.message.id) is not None
+            for call in step.message.tool_calls
+            if call.id in step.tools
+        }
+        amended_ids: set[str | None] = set()
+        for amendment in amendments:
+            located = started.get(amendment.call_id)
+            if located is None:
+                logger.warning(
+                    "Ignoring amendment of a call this run did not start: %s",
+                    amendment.call_id,
+                )
+                continue
+            index, message_id, execution, call = located
+            execution.result = _tool_result_message(amendment.result, call, message_id)
+            amended_ids.add(execution.result.id)
+            if self.event_delivery:
+                self.event_delivery.publish(
+                    ToolResultAmendedEvent(
+                        **self.event_context,
+                        message_id=message_id,
+                        step_index=index,
+                        tool_call=call,
+                        result=amendment.result,
+                    )
+                )
+        checkpoint = self._state.checkpoint
+        if checkpoint is None or not amended_ids:
+            return
+        order = [message.id for message in self._state.messages]
+        if checkpoint.covered_through_message_id in order:
+            covered = order[: order.index(checkpoint.covered_through_message_id) + 1]
+            if amended_ids.intersection(covered):
+                self._state.checkpoint = None
+
     def _clear_execution_config(self) -> None:
         self._token_counts.clear()
         self._llm = None
@@ -1258,6 +1376,8 @@ class Run:
         self._after_step = None
         self.before_tool_call = None
         self.after_tool_call = None
+        self._on_finish = None
+        self._on_suspend = None
         self._restoration = None
 
     def _drain_workers(self) -> None:
@@ -1474,9 +1594,19 @@ def _advance_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) -
         }
     )
     source = [*run._history.messages, *run._state.input_messages, *run._state.messages]
+    call_ids = run._tool_call_ids
+    if call_ids is None:
+        call_ids = run._tool_call_ids = {
+            call.id
+            for message in source
+            if isinstance(message, AssistantMessage)
+            for call in message.tool_calls
+        }
+    # Compaction can leave calls out of the request; new calls must not reuse them.
+    reserved = frozenset(call_ids)
     request = _compact_context(
         run, llm, source, prepared, generation_context, tools=definitions
-    )
+    ).model_copy(update={"reserved_tool_call_ids": reserved})
     execution_options = request.options.model_copy(deep=True)
     message_id = f"{run._state.run_id}:{step.index}"
     started = MessageStartEvent(
@@ -1575,7 +1705,7 @@ def _advance_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) -
             generation_context,
             tools=definitions,
             force=True,
-        )
+        ).model_copy(update={"reserved_tool_call_ids": reserved})
         execution_options = request.options.model_copy(deep=True)
         with run.execution_lock:
             recorded_step.message = AssistantMessage(
@@ -1585,6 +1715,7 @@ def _advance_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) -
     with run.execution_lock:
         cancellation_signal.check()
         recorded_step.generation_status = ExecutionStatus.COMPLETE
+        call_ids.update(call.id for call in recorded_step.message.tool_calls)
         ended = MessageEndEvent(
             **run.event_context,
             message_id=message_id,
@@ -1749,22 +1880,24 @@ def _execute_tools(run: Run) -> bool:
             if allowed is None or tool.name in allowed:
                 tools.append(tool)
         run._step_tools = tools
+    recorded = [
+        *run._history.messages,
+        *run._state.input_messages,
+        *messages_from_steps(run._state.steps[: progress.step_index]),
+    ]
     batch = ToolBatch(
         run,
         tools=run._step_tools,
         progress=progress,
         record=run._state.steps[progress.step_index],
         history=working_messages(
-            [
-                *run._history.messages,
-                *run._state.input_messages,
-                *messages_from_steps(run._state.steps[: progress.step_index]),
-            ],
+            recorded,
             run._state.checkpoint,
             input_start=len(run._history.messages)
             if run._state.input_messages
             else None,
         ),
+        recorded=recorded,
     )
     if not batch.execute():
         return False

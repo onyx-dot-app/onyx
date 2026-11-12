@@ -1072,7 +1072,7 @@
         ]
       },
       "name": "MiniMax-M3.1-Flash",
-      "open_weights": false,
+      "open_weights": true,
       "reasoning": true,
       "release_date": "2026-10-19",
       "structured_output": true,
@@ -1332,7 +1332,7 @@
         ]
       },
       "name": "Kimi K3.1 Pro",
-      "open_weights": false,
+      "open_weights": true,
       "reasoning": true,
       "release_date": "2026-10-23",
       "structured_output": true,
@@ -1363,7 +1363,7 @@
         ]
       },
       "name": "Kimi K3.1 Pro Highspeed",
-      "open_weights": false,
+      "open_weights": true,
       "reasoning": true,
       "release_date": "2026-10-23",
       "structured_output": true,
@@ -2026,6 +2026,36 @@
       "temperature": true,
       "tool_call": true
     },
+    "tencent/hy4": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.021,
+        "input": 0.417,
+        "output": 1.2505
+      },
+      "family": "Hy",
+      "limit": {
+        "context": 1000000,
+        "input": 983010,
+        "output": 64000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Hy4",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-04",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
     "tencent/hy4-preview": {
       "attachment": false,
       "cost": {
@@ -2507,6 +2537,36 @@
         ]
       },
       "name": "GLM-5.3-Flash",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-08-26",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "zai-org/glm-5.3-flashX": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.075,
+        "input": 0.37,
+        "output": 1.25
+      },
+      "family": "glm-flash",
+      "limit": {
+        "context": 1048576,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GLM 5.3 FlashX",
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-08-26",

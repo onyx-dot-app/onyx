@@ -1,8 +1,6 @@
 """Push skill bundles to running sandboxes."""
 
 import hashlib
-import io
-import zipfile
 from collections.abc import Iterable
 from uuid import UUID
 
@@ -25,6 +23,10 @@ from onyx.server.features.build.db.sandbox import (
     set_sandbox_skills_hashes__no_commit,
 )
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
+from onyx.server.features.build.sandbox.image.sandbox_daemon.extract import (
+    MAX_BUNDLE_BYTES,
+    MAX_FILE_BYTES,
+)
 from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     build_connectable_apps_list,
@@ -35,11 +37,18 @@ from onyx.skills.built_in import (
     EXTERNAL_APP_SKILL_ID_TO_APP_TYPE,
     BuiltInSkillDefinition,
 )
-from onyx.skills.bundle import TEMPLATE_SUFFIX
+from onyx.skills.bundle import (
+    DEFAULT_PER_FILE_MAX_BYTES,
+    SKILL_MD_NAME,
+    TEMPLATE_SUFFIX,
+    open_bundle_zip,
+)
 from onyx.skills.content import iter_builtin_skill_files
 from onyx.skills.rendering import (
+    CLAUDE_SKILL_DIR_PLACEHOLDER,
     render_company_search_skill,
     render_external_app_files,
+    resolve_skill_dir_placeholder,
 )
 from onyx.skills.validation import (
     load_stored_custom_skill_bundle,
@@ -116,14 +125,45 @@ def _render_template(
     )
 
 
+def _resolved_size(name: str, skill_md: bytes) -> int:
+    """Size of a root ``SKILL.md`` after ``${CLAUDE_SKILL_DIR}`` resolution."""
+    placeholder = CLAUDE_SKILL_DIR_PLACEHOLDER.encode()
+    return len(skill_md) + skill_md.count(placeholder) * (
+        len(f"{SKILLS_MOUNT_PATH}/{name}".encode()) - len(placeholder)
+    )
+
+
 def _add_bundle_bytes(files: FileSet, skill: Skill, bundle_bytes: bytes) -> None:
     try:
         bundle_files: FileSet = {}
-        with zipfile.ZipFile(io.BytesIO(bundle_bytes)) as zf:
-            for info in zf.infolist():
-                if info.is_dir():
-                    continue
+        with open_bundle_zip(bundle_bytes) as zf:
+            infos = [info for info in zf.infolist() if not info.is_dir()]
+            # A member never reads past its declared size, so this bounds memory
+            # before the receiver would refuse the whole push.
+            total = sum(len(content) for content in files.values()) + sum(
+                info.file_size for info in infos
+            )
+            if total > MAX_BUNDLE_BYTES:
+                logger.warning(
+                    "Skipping skill %s: the skills exceed the sandbox size limit",
+                    skill.name,
+                )
+                return
+            for info in infos:
                 bundle_files[f"{skill.name}/{info.filename}"] = zf.read(info)
+        skill_md = bundle_files.get(f"{skill.name}/{SKILL_MD_NAME}", b"")
+        resolved = _resolved_size(skill.name, skill_md)
+        # Count the resolved instructions now, so a Skill that resolution would
+        # drop does not push later Skills over the total.
+        if (
+            resolved > min(DEFAULT_PER_FILE_MAX_BYTES, MAX_FILE_BYTES)
+            or total - len(skill_md) + resolved > MAX_BUNDLE_BYTES
+        ):
+            logger.warning(
+                "Skipping skill %s: resolved instructions exceed a sandbox size limit",
+                skill.name,
+            )
+            return
         files.update(bundle_files)
     except Exception:
         logger.warning(
@@ -132,6 +172,35 @@ def _add_bundle_bytes(files: FileSet, skill: Skill, bundle_bytes: bytes) -> None
             skill.bundle_file_id,
             exc_info=True,
         )
+
+
+def _resolve_skill_dirs(files: FileSet, skill_names: Iterable[str]) -> None:
+    """Point ``${CLAUDE_SKILL_DIR}`` in each root ``SKILL.md`` at the skill's
+    sandbox folder. Only the sent copy changes, not the stored bundle."""
+    placeholder = CLAUDE_SKILL_DIR_PLACEHOLDER.encode()
+    total = sum(len(content) for content in files.values())
+    file_limit = min(DEFAULT_PER_FILE_MAX_BYTES, MAX_FILE_BYTES)
+    for name in skill_names:
+        path = f"{name}/{SKILL_MD_NAME}"
+        content = files.get(path)
+        if content is None or placeholder not in content:
+            continue
+        skill_dir = f"{SKILLS_MOUNT_PATH}/{name}"
+        resolved_size = _resolved_size(name, content)
+        resolved_total = total - len(content) + resolved_size
+        if resolved_size > file_limit or resolved_total > MAX_BUNDLE_BYTES:
+            logger.warning(
+                "Skipping skill %s: resolved instructions exceed a sandbox size limit",
+                name,
+            )
+            prefix = f"{name}/"
+            for skill_path in [key for key in files if key.startswith(prefix)]:
+                total -= len(files.pop(skill_path))
+            continue
+        total = resolved_total
+        files[path] = resolve_skill_dir_placeholder(
+            content.decode("utf-8"), skill_dir
+        ).encode("utf-8")
 
 
 def _assemble_fileset(
@@ -211,6 +280,8 @@ def _assemble_fileset(
         _add_static_builtin(files, skill, definition)
         if definition.has_template:
             _render_template(files, skill, definition, db_session, user)
+
+    _resolve_skill_dirs(files, sorted(seen_names))
 
     try:
         persist_skill_validity(validity_updates)

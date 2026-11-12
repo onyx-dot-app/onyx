@@ -13,7 +13,9 @@ transport.
 from __future__ import annotations
 
 import threading
+import time
 from collections.abc import Generator
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from queue import Empty
 from typing import Any
 
@@ -483,6 +485,61 @@ def test_close_signals_subscribers_even_with_full_queue(bus: PodEventBus) -> Non
 def test_close_is_idempotent(bus: PodEventBus) -> None:
     bus.close()
     bus.close()  # must not raise
+
+
+class _IdleSSEHandler(BaseHTTPRequestHandler):
+    """Sends one ses_A event, then holds the stream open with no frames."""
+
+    release = threading.Event()
+
+    def do_GET(self) -> None:
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.end_headers()
+        self.wfile.write(
+            b'data: {"type": "message.part.delta", "properties": {"sessionID": "ses_A"}}\n\n'
+        )
+        self.wfile.flush()
+        type(self).release.wait(timeout=30.0)
+
+    def log_message(self, format: str, *args: Any) -> None:  # noqa: ARG002
+        return None
+
+
+@pytest.fixture
+def idle_sse_url() -> Generator[str, None, None]:
+    _IdleSSEHandler.release.clear()
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _IdleSSEHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_address[1]}"
+    finally:
+        _IdleSSEHandler.release.set()
+        server.shutdown()
+        server.server_close()
+
+
+def test_close_interrupts_idle_stream(idle_sse_url: str) -> None:
+    """close() must wake a reader blocked on an idle /event stream instead of
+    waiting out the join timeout."""
+    bus = PodEventBus(base_url=idle_sse_url, auth=None, event_read_timeout=60.0)
+    try:
+        sub = bus.subscribe("ses_A")
+        # Once the frame is dispatched the reader is back in (or entering) the
+        # blocking read, so only a socket interrupt can end it quickly.
+        assert sub.queue.get(timeout=5.0) is not None
+        reader = bus._reader_thread
+        assert reader is not None
+
+        start = time.monotonic()
+        bus.close()
+        elapsed = time.monotonic() - start
+    finally:
+        bus.close()
+
+    assert elapsed < 2.0
+    assert not reader.is_alive()
 
 
 # ---------------------------------------------------------------------------

@@ -143,10 +143,34 @@ locals {
     }
   } : {}
 
-  craft_sandbox_firecracker = var.craft_sandbox_runtime == "firecracker"
+  craft_sandbox_firecracker       = var.craft_sandbox_runtime == "firecracker"
+  craft_firecracker_max_map_count = 1048576
+  craft_firecracker_sysctl_script = <<-EOT
+    #!/bin/bash
+    set -euo pipefail
+    echo "vm.max_map_count = ${local.craft_firecracker_max_map_count}" > /etc/sysctl.d/99-onyx-firecracker.conf
+    sysctl -w vm.max_map_count=${local.craft_firecracker_max_map_count}
+  EOT
   craft_sandbox_metal = alltrue([
     for t in var.craft_sandbox_node_instance_types : strcontains(t, ".metal")
   ])
+
+  craft_sandbox_workload_taint = {
+    key    = "workload"
+    value  = "sandbox"
+    effect = "NO_SCHEDULE"
+  }
+  craft_sandbox_metadata_options = {
+    http_endpoint               = "enabled"
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 1
+  }
+  # cluster-autoscaler auto-discovery: tag the node group's ASG so demand
+  # beyond min_size adds nodes (and scales back down when idle).
+  craft_sandbox_autoscaler_tags = {
+    "k8s.io/cluster-autoscaler/enabled"             = "true"
+    "k8s.io/cluster-autoscaler/${var.cluster_name}" = "owned"
+  }
 
   # Optional dedicated Craft sandbox node group. Sandbox pods pin here
   # via nodeSelector onyx.app/workload=sandbox + toleration of the workload taint.
@@ -165,18 +189,18 @@ locals {
         { "onyx.app/workload" = "sandbox" },
         local.craft_sandbox_firecracker ? { "onyx.app/kvm" = "true" } : {},
       )
-      taints = [
-        {
-          key    = "workload"
-          value  = "sandbox"
+      # Kubelet does not count microVM memory, so a Firecracker node also
+      # carries the onyx.app/kvm taint. Only the host agent and preflight
+      # tolerate it; pod sandboxes and the image prepuller stay off.
+      taints = concat(
+        [local.craft_sandbox_workload_taint],
+        local.craft_sandbox_firecracker ? [{
+          key    = "onyx.app/kvm"
+          value  = "true"
           effect = "NO_SCHEDULE"
-        }
-      ]
-      metadata_options = {
-        http_endpoint               = "enabled"
-        http_tokens                 = "required"
-        http_put_response_hop_limit = 1
-      }
+        }] : [],
+      )
+      metadata_options = local.craft_sandbox_metadata_options
       block_device_mappings = {
         xvda = {
           device_name = "/dev/xvda"
@@ -190,21 +214,54 @@ locals {
           }
         }
       }
-      # cluster-autoscaler auto-discovery: tag the node group's ASG so demand
-      # beyond min_size adds nodes (and scales back down when idle).
-      tags = {
-        "k8s.io/cluster-autoscaler/enabled"             = "true"
-        "k8s.io/cluster-autoscaler/${var.cluster_name}" = "owned"
-      }
+      tags = local.craft_sandbox_autoscaler_tags
       },
       # Firecracker needs /dev/kvm. Non-metal Intel types get it from nested
       # virtualization on the launch template. A spot reclaim kills every
       # microVM on the node, so the group stays on-demand.
       local.craft_sandbox_firecracker ? { capacity_type = "ON_DEMAND" } : {},
+      local.craft_sandbox_firecracker ? {
+        # AL2023 ships vm.max_map_count 524288; the Firecracker host agent
+        # preflight needs 1048576.
+        cloudinit_pre_nodeadm = [{
+          content_type = "text/x-shellscript"
+          content      = local.craft_firecracker_sysctl_script
+        }]
+      } : {},
       local.craft_sandbox_firecracker && !local.craft_sandbox_metal ? {
         cpu_options = { nested_virtualization = "enabled" }
       } : {},
     )
+  } : {}
+
+  # Optional pod sandbox group beside a Firecracker group. It has the same
+  # label and taint as a pod-runtime sandbox group but no onyx.app/kvm, so pod
+  # sandboxes and the image prepuller land here and not on the KVM nodes.
+  craft_pod_sandbox_node_groups = var.enable_craft && var.enable_craft_pod_sandbox_node_group ? {
+    sandbox_pod = {
+      name             = "sandbox-pod-group"
+      instance_types   = var.craft_pod_sandbox_node_instance_types
+      min_size         = var.craft_pod_sandbox_node_min_size
+      max_size         = var.craft_pod_sandbox_node_max_size
+      desired_size     = var.craft_pod_sandbox_node_desired_size
+      labels           = { "onyx.app/workload" = "sandbox" }
+      taints           = [local.craft_sandbox_workload_taint]
+      metadata_options = local.craft_sandbox_metadata_options
+      block_device_mappings = {
+        xvda = {
+          device_name = "/dev/xvda"
+          ebs = {
+            volume_size           = var.craft_sandbox_node_disk_size_gb
+            volume_type           = "gp3"
+            encrypted             = true
+            delete_on_termination = true
+            iops                  = 3000
+            throughput            = 125
+          }
+        }
+      }
+      tags = local.craft_sandbox_autoscaler_tags
+    }
   } : {}
 }
 
@@ -271,7 +328,7 @@ module "eks" {
   } : {}
 
   eks_managed_node_groups = {
-    for k, v in merge(var.eks_managed_node_groups, local.gpu_node_groups, local.craft_sandbox_node_groups) : k => merge(local.node_group_defaults, v,
+    for k, v in merge(var.eks_managed_node_groups, local.gpu_node_groups, local.craft_sandbox_node_groups, local.craft_pod_sandbox_node_groups) : k => merge(local.node_group_defaults, v,
       {
         instance_types = v.instance_types != null ? v.instance_types : (
           k == "main" ? var.main_node_instance_types :

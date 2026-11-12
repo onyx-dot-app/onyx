@@ -1859,7 +1859,7 @@
         "output": 9.0
       },
       "limit": {
-        "context": 57920,
+        "context": 131072,
         "output": 57920
       },
       "modalities": {
@@ -1875,14 +1875,14 @@
       "name": "gemini-omni-1.1-flash-preview",
       "reasoning": true
     },
-    "gemini-omni-flash-preview": {
+    "gemini-omni-1.2-flash": {
       "cost": {
         "input": 1.5,
         "output": 9.0
       },
       "limit": {
-        "context": 1048576,
-        "output": 65535
+        "context": 131072,
+        "output": 260640
       },
       "modalities": {
         "input": [
@@ -1894,8 +1894,10 @@
         ]
       },
       "mode": "chat",
-      "name": "gemini-omni-flash-preview",
-      "reasoning": true
+      "name": "gemini-omni-1.2-flash",
+      "reasoning": true,
+      "structured_output": false,
+      "tool_call": false
     },
     "gemini-robotics-er-1.5-preview": {
       "cost": {

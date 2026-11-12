@@ -449,7 +449,13 @@ sandbox_node_vm_size     = "Standard_D8ds_v5"
 With `"firecracker"`, the `aks` module:
 
 - sets the sandbox pool OS to `Ubuntu2404`;
-- adds the label `onyx.app/kvm=true`.
+- adds the label `onyx.app/kvm=true` and the taint `onyx.app/kvm=true:NoSchedule`.
+
+Kubelet does not count microVM memory, so only the Firecracker host agent and
+the preflight check tolerate the `onyx.app/kvm` taint. Pod sandboxes and the
+sandbox image prepuller do not run on the sandbox pool. To keep pod sandboxes,
+add a pool in `node_pools` with the label `onyx.app/workload=sandbox` and the
+taint `workload=sandbox:NoSchedule` only.
 
 The default, `"pod"`, keeps the AKS default `Ubuntu` image. A change to
 `craft_sandbox_runtime` changes the pool OS, so AKS replaces the sandbox nodes

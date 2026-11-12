@@ -312,7 +312,7 @@ function OverrideRow({ override }: OverrideRowProps) {
   const locale = useLocale();
   const format = useFormatter();
   const { mutate } = useSWRConfig();
-  const [editing, setEditing] = useState(false);
+  const editModal = useCreateModal();
   const deleteModal = useCreateModal();
   const providerDisplayName = getOverrideProviderName(override, providerNames);
   const rateParts = [
@@ -361,11 +361,14 @@ function OverrideRow({ override }: OverrideRowProps) {
 
   return (
     <>
-      {editing && (
-        <OverrideModal existing={override} onClose={() => setEditing(false)} />
-      )}
+      <editModal.Provider>
+        <OverrideModal
+          existing={override}
+          onClose={() => editModal.toggle(false)}
+        />
+      </editModal.Provider>
 
-      {deleteModal.isOpen && (
+      <deleteModal.Provider>
         <ConfirmationModalLayout
           icon={SvgTrash}
           title={markdown(
@@ -389,7 +392,7 @@ function OverrideRow({ override }: OverrideRowProps) {
             )}
           </Text>
         </ConfirmationModalLayout>
-      )}
+      </deleteModal.Provider>
 
       <Hoverable.Root
         group="OverrideRow"
@@ -400,7 +403,7 @@ function OverrideRow({ override }: OverrideRowProps) {
           padding={2}
           rounding={4}
           aria-label={override.model_display_name}
-          onClick={() => setEditing(true)}
+          onClick={() => editModal.toggle(true)}
         >
           <Section gap={0} alignItems="stretch" height="fit">
             <ContentAction
@@ -436,7 +439,7 @@ function OverrideRow({ override }: OverrideRowProps) {
                     aria-label={t("row.editButton.ariaLabel", ariaNames)}
                     onClick={(e) => {
                       e.stopPropagation();
-                      setEditing(true);
+                      editModal.toggle(true);
                     }}
                   />
                 </Section>
@@ -474,7 +477,7 @@ function OverrideRow({ override }: OverrideRowProps) {
 export default function CostOverridesPanel() {
   const t = useTranslations("admin.costOverrides");
   const { costOverrides, isLoading, error } = useCostOverrides();
-  const [adding, setAdding] = useState(false);
+  const addModal = useCreateModal();
 
   return (
     <Section gap={3} height="fit" alignItems="stretch" justifyContent="start">
@@ -482,18 +485,22 @@ export default function CostOverridesPanel() {
         font="main-content-emphasis"
         title={t("panel.title")}
         description={markdown(t("panel.description"))}
+        padding={0}
+        center
         rightChildren={
           <Button
             icon={SvgPlus}
             prominence="secondary"
-            onClick={() => setAdding(true)}
+            onClick={() => addModal.toggle(true)}
           >
             {t("panel.addButton.label")}
           </Button>
         }
       />
 
-      {adding && <OverrideModal onClose={() => setAdding(false)} />}
+      <addModal.Provider>
+        <OverrideModal onClose={() => addModal.toggle(false)} />
+      </addModal.Provider>
 
       {error ? (
         <MessageCard

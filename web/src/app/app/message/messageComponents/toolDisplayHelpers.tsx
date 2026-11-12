@@ -31,34 +31,11 @@ export function hasToolError(packets: Packet[]): boolean {
 }
 
 /**
- * Check if a tool group is complete.
- * For research agents, we only look at parent-level SECTION_END or ERROR packets (sub_turn_index is undefined/null),
- * not the SECTION_END packets from nested tools (which have sub_turn_index as a number).
+ * Check if a tool group is complete: a parent-level SECTION_END or ERROR
+ * arrived. Nested calls end with their own SECTION_END and do not count.
  */
 export function isToolComplete(packets: Packet[]): boolean {
-  const firstPacket = packets[0];
-  if (!firstPacket) return false;
-
-  if (firstPacket.obj.type === PacketType.RESEARCH_AGENT_START) {
-    return packets.some(isGroupEndPacket);
-  }
-
-  // For coding agents, the CodingAgentFinal packet (or an error) marks completion.
-  // Nested BashTool packets are part of the same group and don't indicate the
-  // agent is done.
-  if (firstPacket.obj.type === PacketType.CODING_AGENT_START) {
-    return packets.some(
-      (p) =>
-        p.obj.type === PacketType.CODING_AGENT_FINAL ||
-        p.obj.type === PacketType.ERROR
-    );
-  }
-
-  // For other tools, any SECTION_END or ERROR indicates completion
-  return packets.some(
-    (p) =>
-      p.obj.type === PacketType.SECTION_END || p.obj.type === PacketType.ERROR
-  );
+  return packets.some(isGroupEndPacket);
 }
 
 /**

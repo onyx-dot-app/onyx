@@ -34,7 +34,8 @@ def validate_pairing_access(
         OnyxError: FEATURE_NOT_AVAILABLE when group restrictions are turned
             off for a restricted pair, when a pair becomes restricted before
             the cc_pair_ids backfill of the search index is complete, or when
-            the plan does not include permission sync. INVALID_INPUT when a restricted pair has no
+            the plan does not include permission sync or owner-only access.
+            INVALID_INPUT when a restricted pair has no
             data-access group, when data-access groups are set on an access
             type that does not use them, or when the source does not support
             permission sync. INSUFFICIENT_PERMISSIONS when the user cannot see
@@ -64,6 +65,12 @@ def validate_pairing_access(
                 "Restricted connectors are not available yet. A background job "
                 "is updating the search index for them. Try again later.",
             )
+
+    fetch_ee_implementation_or_noop(
+        "onyx.utils.tier",
+        "require_business_tier_for_personal_access",
+        noop_return_value=None,
+    )(access_type)
 
     if data_access_group_ids:
         if access_type not in AccessType.data_access_types():

@@ -21,6 +21,7 @@ import {
   Tabs,
   Text,
   type DropdownMenuItem,
+  useCreateModal,
 } from "@opal/components";
 import {
   Content,
@@ -182,8 +183,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   // A Manage menu action in flight: the Manage button spins meanwhile.
   const [busy, setBusy] = useState(false);
-  const [showDeleteConnectorConfirmModal, setShowDeleteConnectorConfirmModal] =
-    useState(false);
+  const deleteConnectorModal = useCreateModal();
   // Counts the status card's asks to open the checks card.
   const [checksExpandRequest, setChecksExpandRequest] = useState(0);
   // One window drives the Indexing tab's chart and run list.
@@ -354,7 +354,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
   ]);
 
   const handleUpdateName = async (newName: string) => {
-    if (!ccPair) return;
+    if (!ccPair || !newName) return;
     try {
       const response = await updateConnectorCredentialPairName(
         ccPair.id,
@@ -533,7 +533,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
                 danger: true,
                 title: t("manageMenu.delete.label"),
                 description: t("manageMenu.delete.description"),
-                onSelect: () => setShowDeleteConnectorConfirmModal(true),
+                onSelect: () => deleteConnectorModal.toggle(true),
               },
             ],
           },
@@ -553,16 +553,16 @@ function Main({ ccPairId }: { ccPairId: number }) {
   return (
     <SettingsLayouts.Root width="xl" narrowGutters>
       {ConfirmModal}
-      {showDeleteConnectorConfirmModal && (
+      <deleteConnectorModal.Provider>
         <ConfirmEntityModal
           danger
           entityType={t("deleteModal.entityType")}
           entityName={ccPair.name}
           additionalDetails={t("deleteModal.additionalDetails")}
-          onClose={() => setShowDeleteConnectorConfirmModal(false)}
+          onClose={() => deleteConnectorModal.toggle(false)}
           onSubmit={scheduleConnectorDeletion}
         />
-      )}
+      </deleteConnectorModal.Provider>
 
       <BackToConnectors />
       <SettingsLayouts.Header

@@ -242,6 +242,36 @@
       "temperature": true,
       "tool_call": true
     },
+    "moonshotai/Kimi-K3.1-Pro": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "input": 2,
+        "output": 10
+      },
+      "family": "kimi-k3",
+      "limit": {
+        "context": 1000000,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Kimi K3.1 Pro",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-23",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
     "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B": {
       "attachment": false,
       "cost": {
@@ -263,7 +293,7 @@
         ]
       },
       "mode": "chat",
-      "name": "Nemotron Ultra",
+      "name": "Nemotron 3 Ultra",
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-06-04",

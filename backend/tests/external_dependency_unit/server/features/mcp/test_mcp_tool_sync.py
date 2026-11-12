@@ -6,6 +6,7 @@ concurrent tool refreshes and every tool was stored twice."""
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -130,3 +131,29 @@ def test_sync_collapses_existing_duplicates_and_drops_stale_tools(
 
     remaining = get_tools_by_mcp_server_id(server.id, db_session)
     assert [(t.id, t.name) for t in remaining] == [(keeper_id, "keep")]
+
+
+def test_sync_stores_updates_and_clears_the_output_schema(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    server = _make_server(db_session)
+    first: dict[str, Any] = {
+        "type": "object",
+        "properties": {"count": {"type": "integer"}},
+    }
+    second: dict[str, Any] = {
+        "type": "object",
+        "properties": {"total": {"type": "number"}},
+    }
+
+    def sync_and_read(output_schema: dict[str, Any] | None) -> object:
+        tool = MCPLibTool(name="orders", inputSchema={}, outputSchema=output_schema)
+        mcp_api._sync_mcp_server_tools(server.id, [tool], db_session)
+        db_session.expire_all()
+        (stored,) = get_tools_by_mcp_server_id(server.id, db_session)
+        return stored.mcp_output_schema
+
+    assert sync_and_read(first) == first
+    assert sync_and_read(second) == second
+    assert sync_and_read(None) is None

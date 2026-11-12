@@ -17,6 +17,7 @@ import {
   processPackets,
 } from "@/app/app/message/messageComponents/timeline/hooks/packetProcessor";
 import {
+  expandCodeModeSteps,
   transformPacketGroups,
   groupStepsByTurn,
   TurnGroup,
@@ -27,6 +28,8 @@ export interface UsePacketProcessorResult {
   toolGroups: GroupedPacket[];
   displayGroups: GroupedPacket[];
   toolTurnGroups: TurnGroup[];
+  /** A code mode program works between tool calls; it has no step. */
+  codeModeWorking: boolean;
   citations: StreamingCitation[];
   citationMap: CitationMap;
   documentMap: Map<string, OnyxDocument>;
@@ -41,7 +44,7 @@ export interface UsePacketProcessorResult {
   // Tool processing duration from backend (via MESSAGE_START packet)
   toolProcessingDuration: number | undefined;
 
-  // Complete after stop when the visible answer finishes, or none is shown.
+  // Completion: stopped, and the answer (if any) finished rendering
   isComplete: boolean;
 
   // Callbacks
@@ -118,9 +121,11 @@ export function usePacketProcessor(
   ]);
 
   // Transform toolGroups to timeline format
-  const toolTurnGroups = useMemo(() => {
-    const allSteps = transformPacketGroups(state.toolGroups);
-    return groupStepsByTurn(allSteps);
+  const { toolTurnGroups, codeModeWorking } = useMemo(() => {
+    const { steps, codeModeWorking } = expandCodeModeSteps(
+      transformPacketGroups(state.toolGroups)
+    );
+    return { toolTurnGroups: groupStepsByTurn(steps), codeModeWorking };
   }, [state.toolGroups]);
 
   // Callback reads from ref: always current value, no ref needed in component
@@ -139,6 +144,7 @@ export function usePacketProcessor(
     toolGroups: state.toolGroups,
     displayGroups,
     toolTurnGroups,
+    codeModeWorking,
     citations: state.citations,
     citationMap: state.citationMap,
     documentMap: state.documentMap,
@@ -151,7 +157,8 @@ export function usePacketProcessor(
     finalAnswerComing: state.finalAnswerComing,
     toolProcessingDuration: state.toolProcessingDuration,
 
-    // Complete after stop when the visible answer finishes, or none is shown.
+    // Completion: the stream stopped, and the answer finished rendering or
+    // there is no answer to render
     isComplete:
       state.stopPacketSeen && (renderComplete || displayGroups.length === 0),
 

@@ -38,6 +38,7 @@ import {
   Dropdown,
   SelectButton,
   Text,
+  useCreateModal,
   type DropdownMenuItem,
   type DropdownView,
 } from "@opal/components";
@@ -94,10 +95,9 @@ function Header() {
     toggleIncognito,
     setIncognitoEnabled,
   } = useIncognito();
-  const [showShareModal, setShowShareModal] = useState(false);
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
-    useState(false);
+  const shareModal = useCreateModal();
+  const deleteModal = useCreateModal();
+  const moveCustomAgentModal = useCreateModal();
   const [pendingMoveProjectId, setPendingMoveProjectId] = useState<
     number | null
   >(null);
@@ -134,8 +134,8 @@ function Header() {
 
   const resetMoveState = useCallback(() => {
     setPendingMoveProjectId(null);
-    setShowMoveCustomAgentModal(false);
-  }, []);
+    moveCustomAgentModal.toggle(false);
+  }, [moveCustomAgentModal.toggle]);
 
   const performMove = useCallback(
     async (targetProjectId: number) => {
@@ -170,12 +170,12 @@ function Header() {
       if (!currentChatSession) return;
       if (shouldShowMoveModal(currentChatSession)) {
         setPendingMoveProjectId(projectId);
-        setShowMoveCustomAgentModal(true);
+        moveCustomAgentModal.toggle(true);
         return;
       }
       void performMove(projectId);
     },
-    [currentChatSession, performMove]
+    [currentChatSession, moveCustomAgentModal.toggle, performMove]
   );
 
   const handleDeleteChat = useCallback(async () => {
@@ -188,7 +188,7 @@ function Header() {
       removeSession(currentChatSession.id);
       await Promise.all([refreshChatSessions(), fetchProjects()]);
       navigation.go("/app", { replace: true });
-      setDeleteModalOpen(false);
+      deleteModal.toggle(false);
     } catch (error) {
       console.error("Failed to delete chat:", error);
       showErrorNotification("Failed to delete chat. Please try again.");
@@ -199,14 +199,18 @@ function Header() {
     removeSession,
     fetchProjects,
     navigation,
+    deleteModal.toggle,
   ]);
 
-  const setDeleteConfirmationModalOpen = useCallback((open: boolean) => {
-    setDeleteModalOpen(open);
-    if (open) {
-      setMenuOpen(false);
-    }
-  }, []);
+  const setDeleteConfirmationModalOpen = useCallback(
+    (open: boolean) => {
+      deleteModal.toggle(open);
+      if (open) {
+        setMenuOpen(false);
+      }
+    },
+    [deleteModal.toggle]
+  );
 
   // Incognito stays on until teardown returns, so the composer cannot submit
   // into a session being torn down. The server deletes that session's uploads
@@ -340,14 +344,16 @@ function Header() {
 
   return (
     <>
-      {showShareModal && currentChatSession && (
-        <ShareChatSessionModal
-          chatSession={currentChatSession}
-          onClose={() => setShowShareModal(false)}
-        />
-      )}
+      <shareModal.Provider>
+        {currentChatSession && (
+          <ShareChatSessionModal
+            chatSession={currentChatSession}
+            onClose={() => shareModal.toggle(false)}
+          />
+        )}
+      </shareModal.Provider>
 
-      {showMoveCustomAgentModal && (
+      <moveCustomAgentModal.Provider>
         <MoveCustomAgentChatModal
           onCancel={resetMoveState}
           onConfirm={async (doNotShowAgain: boolean) => {
@@ -362,13 +368,13 @@ function Header() {
             }
           }}
         />
-      )}
+      </moveCustomAgentModal.Provider>
 
-      {deleteModalOpen && (
+      <deleteModal.Provider>
         <ConfirmationModalLayout
           title={t("deleteModal.title")}
           icon={SvgTrash}
-          onClose={() => setDeleteModalOpen(false)}
+          onClose={() => deleteModal.toggle(false)}
           submit={
             <Button variant="danger" onClick={handleDeleteChat}>
               {t("deleteModal.submitButton.label")}
@@ -377,7 +383,7 @@ function Header() {
         >
           {t("deleteModal.description")}
         </ConfirmationModalLayout>
-      )}
+      </deleteModal.Provider>
 
       {(appPosition.isChat() ||
         appPosition.isNewSession() ||
@@ -495,20 +501,18 @@ function Header() {
               <div className="flex flex-1 justify-end items-center">
                 {(appPosition.isChat() || appPosition.isNewSession()) && (
                   <FrostedDiv className="flex shrink flex-row items-center">
-                    {incognitoAvailable && !incognitoEnabled && (
-                      <Button
-                        icon={SvgEyeOff}
-                        prominence="tertiary"
-                        onClick={toggleIncognito}
-                        disabled={incognitoLocked}
-                        aria-label={t("incognitoStart.ariaLabel")}
-                        tooltip={
-                          incognitoLocked
-                            ? t("incognitoStart.lockedTooltip")
-                            : t("incognitoStart.tooltip")
-                        }
-                      />
-                    )}
+                    {appPosition.isNewSession() &&
+                      incognitoAvailable &&
+                      !incognitoEnabled &&
+                      !incognitoLocked && (
+                        <Button
+                          icon={SvgEyeOff}
+                          prominence="tertiary"
+                          onClick={toggleIncognito}
+                          aria-label={t("incognitoStart.ariaLabel")}
+                          tooltip={t("incognitoStart.tooltip")}
+                        />
+                      )}
                     {/* On mobile widths the reading-width cap never applies
                         (chat is always full width), so the toggle is hidden. */}
                     {!isMobile && (
@@ -546,9 +550,9 @@ function Header() {
                       <Button
                         icon={SvgShare}
                         prominence="tertiary"
-                        interaction={showShareModal ? "hover" : "rest"}
+                        interaction={shareModal.isOpen ? "hover" : "rest"}
                         responsiveHideText
-                        onClick={() => setShowShareModal(true)}
+                        onClick={() => shareModal.toggle(true)}
                         aria-label="share-chat-button"
                       >
                         {t("share.label")}
