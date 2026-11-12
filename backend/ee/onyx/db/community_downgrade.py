@@ -47,6 +47,7 @@ from onyx.db.models import (
     UserGroup__ConnectorCredentialPair,
 )
 from onyx.db.permissions import recompute_user_permissions__no_commit
+from onyx.db.plugin import lock_skill_plugin__no_commit, publish_plugin__no_commit
 from onyx.db.users import (
     DEFAULT_ADMIN_GROUP_NAME,
     DEFAULT_BASIC_GROUP_NAME,
@@ -209,8 +210,11 @@ def _make_group_shared_resources_public__no_commit(
         )
         .values(is_public=True)
     )
-    db_session.execute(
-        update(Skill)
+    # A private skill shared with one of these groups is published. The
+    # downgrade cannot stop, so a plugin whose name the Organization library
+    # already has takes the next free name (deploy-2).
+    skills: Sequence[Skill] = db_session.scalars(
+        select(Skill)
         .where(
             Skill.id.in_(
                 select(Skill__UserGroup.skill_id).where(
@@ -219,8 +223,20 @@ def _make_group_shared_resources_public__no_commit(
             ),
             Skill.public_permission.is_(None),
         )
-        .values(public_permission=SkillSharePermission.VIEWER)
-    )
+        .order_by(Skill.id)
+        .with_for_update()
+    ).all()
+    # Skill rows first, then their plugin rows in id order.
+    plugin_ids = [
+        lock_skill_plugin__no_commit(skill, db_session).id
+        for skill in skills
+        if skill.is_custom
+    ]
+    for skill in skills:
+        skill.public_permission = SkillSharePermission.VIEWER
+    db_session.flush()
+    for plugin_id in plugin_ids:
+        publish_plugin__no_commit(plugin_id, "rename", db_session)
 
 
 def _add_to_default_group__no_commit(

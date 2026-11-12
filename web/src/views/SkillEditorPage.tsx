@@ -68,6 +68,8 @@ import SkillFileTree from "@/sections/skills/SkillFileTree";
 import SkillFilesPicker from "@/sections/skills/SkillFilesPicker";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { useUser } from "@/providers/UserProvider";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
 import { externalAppAdminUrl } from "@/app/craft/v1/apps/admin/skillAssociationNavigation";
 
 interface SkillEditorPageProps {
@@ -89,6 +91,9 @@ export default function SkillEditorPage({
   const isCreatingForApp = isCreating && hasAppContext;
   const navigation = useNavigation();
   const { isAdmin, user } = useUser();
+  const { isGlobalHolder: canManageOrgSkills } = usePermissionAuthority(
+    Permission.MANAGE_SKILLS
+  );
   const creationDraft = useMemo(
     () => (isCreating && draftId ? getSkillCreationDraft(draftId) : undefined),
     [draftId, isCreating]
@@ -834,7 +839,8 @@ export default function SkillEditorPage({
 
               {skill &&
                 canManageSkill &&
-                (skill.installation_policy !== "REQUIRED" || isAdmin) && (
+                (skill.installation_policy !== "REQUIRED" || isAdmin) &&
+                (skill.public_permission === null || canManageOrgSkills) && (
                   <>
                     <Divider paddingParallel={0} paddingPerpendicular={0} />
 

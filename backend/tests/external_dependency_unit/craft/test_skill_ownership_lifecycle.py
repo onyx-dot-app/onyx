@@ -87,6 +87,8 @@ def test_copied_plugin_does_not_block_deletion_of_former_owner(
     db_session: Session,
     change: str,
 ) -> None:
+    """A transfer or publish moves the plugin with its skill, out of the former
+    owner's "My uploads". A delete removes it."""
     owner = make_user(db_session, standard_account=True)
     successor = make_user(db_session, standard_account=True)
     skill = make_skill(db_session, author_user_id=owner.id)
@@ -108,7 +110,12 @@ def test_copied_plugin_does_not_block_deletion_of_former_owner(
 
     delete_user_from_db__no_commit(owner, db_session)
     assert db_session.get(User, owner.id) is None
-    assert db_session.scalar(select(Plugin.id).where(Plugin.id == plugin_id)) is None
+    plugin = db_session.scalar(select(Plugin).where(Plugin.id == plugin_id))
+    if change == "delete":
+        assert plugin is None
+    else:
+        assert plugin is not None
+        assert plugin.author_user_id == (successor.id if change == "transfer" else None)
 
 
 def test_database_rejects_deletion_that_would_orphan_private_skill(

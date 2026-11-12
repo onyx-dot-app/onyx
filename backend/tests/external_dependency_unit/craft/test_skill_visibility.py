@@ -13,6 +13,7 @@ from onyx.db.skill import (
     list_skills,
     set_skill_public_permission,
 )
+from onyx.error_handling.exceptions import OnyxError
 from tests.external_dependency_unit.craft.db_helpers import (
     add_user_to_group,
     make_group,
@@ -78,7 +79,7 @@ class TestSkillVisibility:
 
         assert (result is not None) is is_editable
 
-    def test_public_permission_null_controls_org_visibility(
+    def test_public_permission_controls_org_visibility(
         self,
         db_session: Session,
         test_user: User,  # noqa: ARG002
@@ -97,9 +98,36 @@ class TestSkillVisibility:
 
         set_skill_public_permission(
             skill=skill,
-            public_permission=SkillSharePermission.EDITOR,
+            public_permission=SkillSharePermission.VIEWER,
             db_session=db_session,
         )
+        for policy, visible in (
+            (SkillManagementPolicy.VIEW, True),
+            (SkillManagementPolicy.EDIT, False),
+        ):
+            result = fetch_skill(
+                skill.id, policy=policy, user=user, db_session=db_session
+            )
+            assert (result is not None) is visible
+
+        # The organization cannot edit, and publishing is one-way.
+        with pytest.raises(OnyxError, match="edit access"):
+            set_skill_public_permission(
+                skill=skill,
+                public_permission=SkillSharePermission.EDITOR,
+                db_session=db_session,
+            )
+        with pytest.raises(OnyxError, match="cannot be made private"):
+            set_skill_public_permission(
+                skill=skill,
+                public_permission=None,
+                db_session=db_session,
+            )
+
+        # Until reads move to the plugin tables, an organization EDITOR row
+        # written before still grants edit access.
+        skill.public_permission = SkillSharePermission.EDITOR
+        db_session.flush()
         editor_result = fetch_skill(
             skill.id,
             policy=SkillManagementPolicy.EDIT,
@@ -108,21 +136,6 @@ class TestSkillVisibility:
         )
         assert editor_result is not None
         assert editor_result.id == skill.id
-
-        set_skill_public_permission(
-            skill=skill,
-            public_permission=None,
-            db_session=db_session,
-        )
-        assert (
-            fetch_skill(
-                skill.id,
-                policy=SkillManagementPolicy.VIEW,
-                user=user,
-                db_session=db_session,
-            )
-            is None
-        )
 
     def test_user_loses_skill_after_group_removal(
         self,
