@@ -442,6 +442,7 @@ def test_admission_precedes_model_setup_and_releases_after_setup_failure() -> No
             "onyx.chat.process_message._load_session",
             return_value=ChatSession(id=session_id, persona=None),
         ),
+        patch("onyx.chat.process_message.set_chat_session_tool_selection__no_commit"),
         patch("onyx.chat.process_message._select_models", side_effect=fail_model_setup),
         pytest.raises(RuntimeError, match="model setup failed"),
     ):
