@@ -179,7 +179,8 @@ from earlier turns; it marks the caller and accepts a `path_prefix` filter. An a
 any other agent in the tree. `send_message` reaches the next model step or starts an idle agent
 with fresh limits; a message to the root waits for the root's next run and never starts one.
 `send_message(delivery="queue")` waits for normal completion or the step limit. `interrupt_agent` cancels one
-agent's active run, except the caller's and the root's; agents below it keep running. The
+agent's active run, except the caller's and the root's, including its in-flight tool calls and
+foreground children; agents it started in the background keep running. The
 interrupted run reports no result and starts no follow-up; its conversation remains.
 Results reach the agent's spawner automatically before its next model call.
 A subagent suspends before completing until the results of children it spawned are available.

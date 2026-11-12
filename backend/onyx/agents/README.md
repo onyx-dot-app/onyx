@@ -334,7 +334,8 @@ An explicit send can start fresh work after a pause.
 Messages to the root wait in its inbox until a root run reads them at a model step; they never start a root run.
 A message run continues the recipient's latest run on the selected branch. When the sender's turn is older than that run, the new run belongs to the newer turn.
 Chat prefixes a message with its sender's path unless the sender spawned the recipient.
-`invocation.agents.interrupt_agent(agent_id)` cancels one agent's active run; agents below it keep running.
+`invocation.agents.interrupt_agent(agent_id)` cancels the agent's current run, including its in-flight tool calls and foreground children.
+Agents it started in the background keep running.
 Any agent except the caller and the root can be interrupted.
 The interrupted run reports no result: `RunOwnership.withdraw_result` drops it before the cancellation, so it wakes no agent.
 A spawner waiting on that run stops waiting. Conversations remain, and queued messages stay paused until an explicit send.

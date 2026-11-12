@@ -835,6 +835,107 @@ def test_stopping_parent_wait_keeps_background_child_running() -> None:
         assert coordinator.close(3)
 
 
+def test_interrupt_cancels_foreground_work_but_not_background_agents() -> None:
+    """Interrupting an agent cancels its current run with its foreground children.
+
+    Agents it started in the background keep running.
+    """
+    release = threading.Event()
+    entered = {"foreground": threading.Event(), "background": threading.Event()}
+    spawned: dict[str, SpawnResult] = {}
+
+    def worker(name: str) -> Agent:
+        def generate(
+            _request: GenerationRequest, signal: CancellationSignal
+        ) -> AssistantMessage:
+            entered[name].set()
+            while not release.wait(0.01):
+                signal.check()
+            return AssistantMessage(content=[TextContent(text=f"{name} finished")])
+
+        return Agent(
+            FakeModelClient(generate),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        )
+
+    def work(invocation: ToolInvocation) -> ChildRunWait:
+        for name, lifetime in (
+            ("background", AgentLifetime.BACKGROUND),
+            ("foreground", AgentLifetime.FOREGROUND),
+        ):
+            spawned[name] = invocation.agents.spawn_agent(
+                worker(name),
+                name=name,
+                description=name,
+                messages=[],
+                max_steps=1,
+                lifetime=lifetime,
+            )
+        return ChildRunWait(run_ids=[spawned["foreground"].run_id])
+
+    target = parent_agent(
+        work,
+        result_from_children=lambda _invocation, children: ToolResult(
+            content=children[0].status.value
+        ),
+    )
+
+    def spawn_target(invocation: ToolInvocation) -> ToolResult:
+        spawned["target"] = invocation.agents.spawn_agent(
+            target,
+            name="target",
+            description="Delegates work",
+            messages=[],
+            max_steps=2,
+            lifetime=AgentLifetime.BACKGROUND,
+        )
+        return ToolResult(content="started")
+
+    def interrupt(invocation: ToolInvocation) -> ToolResult:
+        assert entered["foreground"].wait(3) and entered["background"].wait(3)
+        assert invocation.agents.interrupt_agent(spawned["target"].agent_id)
+        return ToolResult(content="interrupted")
+
+    replies = iter(
+        [
+            [ToolCall(id="spawn", name="spawn_target", arguments={})],
+            [ToolCall(id="interrupt", name="interrupt", arguments={})],
+            [TextContent(text="done")],
+        ]
+    )
+    root = Agent(
+        FakeModelClient(lambda *_: AssistantMessage(content=next(replies))),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(name=name, description="", parameters={}),
+                execute=execute,
+            )
+            for name, execute in (
+                ("spawn_target", spawn_target),
+                ("interrupt", interrupt),
+            )
+        ],
+    )
+    coordinator = AgentCoordinator()
+    run = root.start(max_steps=3, coordinator=coordinator)
+    try:
+        assert run.result(5).output.text == "done"
+
+        def status(name: str) -> RunStatus:
+            return coordinator.completion(spawned[name].run_id).result(5).status
+
+        assert status("target") == RunStatus.CANCELLED
+        assert status("foreground") == RunStatus.CANCELLED
+        background = coordinator.run(spawned["background"].run_id)
+        assert background.status == RunStatus.RUNNING
+        release.set()
+        assert status("background") == RunStatus.COMPLETE
+    finally:
+        release.set()
+        assert coordinator.close(5)
+
+
 def test_completion_failure_is_retained_and_shutdown_waits_for_handler() -> None:
     entered, release = threading.Event(), threading.Event()
 
