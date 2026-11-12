@@ -1,7 +1,8 @@
 import { Section } from "@opal/layouts";
+import { FileBody } from "@/lib/timeline/components/bodies/FileBody";
 import { useEffect } from "react";
 import { useTranslations } from "next-intl";
-import { Card, Text } from "@opal/components";
+import { Text } from "@opal/components";
 import { SvgFileText } from "@opal/icons";
 import {
   PacketType,
@@ -59,6 +60,8 @@ export const FileReaderToolRenderer: MessageRenderer<
   {}
 > = ({ packets, onComplete, stopPacketSeen, renderType, children }) => {
   const t = useTranslations("chat.messages.timeline");
+  // The file preview shares Craft's read-step labels.
+  const tRead = useTranslations("craft.toolCards.read");
   const state = constructFileReaderState(packets);
 
   useEffect(() => {
@@ -118,23 +121,19 @@ export const FileReaderToolRenderer: MessageRenderer<
                 </Text>
               </Section>
               {hasPreview && (
-                <Card
-                  color="transparent"
-                  border="solid"
-                  padding={2}
-                  rounding={4}
-                >
-                  <Section alignItems="start" height="fit" gap={1}>
-                    <Text as="span" font="secondary-mono" color="text-04">
-                      {`${state.previewStart}${state.previewEnd ? "\u2026" : ""}`}
-                    </Text>
-                    {state.previewEnd && (
-                      <Text as="span" font="secondary-mono" color="text-04">
-                        {`\u2026${state.previewEnd}`}
-                      </Text>
-                    )}
-                  </Section>
-                </Card>
+                <FileBody
+                  content={
+                    state.previewEnd
+                      ? `${state.previewStart}\n\u2026\n${state.previewEnd}`
+                      : state.previewStart
+                  }
+                  path={state.fileName}
+                  emptyLabel={tRead("emptyFile.label")}
+                  moreLinesLabel={(count) =>
+                    tRead("moreLines.label", { count })
+                  }
+                  showAllLabel={tRead("showAll.button")}
+                />
               )}
             </>
           ) : (
