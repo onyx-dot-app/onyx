@@ -24,7 +24,6 @@ from onyx.db.plugin import (
     lock_skill_plugin__no_commit,
     publish_plugin__no_commit,
 )
-from onyx.db.plugin_access import NameHiddenReason
 from onyx.db.skill import (
     add_new_skill__no_commit,
     enable_new_skill_if_name_available__no_commit,
@@ -752,10 +751,6 @@ def test_published_default_keeps_its_name_over_a_shared_selection(
     states = skill_user_states(user, [default.id, selected.id], db_session)
     assert states[default.id].enabled
     assert not states[selected.id].enabled
-    hidden = states[selected.id].name_hidden
-    assert hidden is not None
-    assert hidden.kept_by_plugin_id == default.id
-    assert hidden.reason == NameHiddenReason.PUBLISHED
     assert default.id in runtime_ids() and selected.id not in runtime_ids()
 
     replace_skill_shares(

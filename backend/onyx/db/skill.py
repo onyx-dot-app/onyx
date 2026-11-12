@@ -32,7 +32,7 @@ roll back atomically.
 """
 
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from typing import Any, Literal
@@ -72,7 +72,6 @@ from onyx.db.models import (
     ExternalApp__Skill,
     Marketplace,
     Plugin,
-    Plugin__User,
     Plugin__UserGroup,
     PluginVersion,
     Sandbox,
@@ -104,7 +103,6 @@ from onyx.db.plugin import (
     transfer_plugin__no_commit,
 )
 from onyx.db.plugin_access import (
-    HiddenSkillName,
     SkillNameOrder,
     SkillNameRank,
     UserPluginState,
@@ -112,7 +110,7 @@ from onyx.db.plugin_access import (
     load_user_plugin_states,
     order_skill_names,
     plugin_editable_by_user,
-    plugin_is_published,
+    plugin_in_managed_scope,
     plugin_usage_by_plugin,
     plugin_visible_to_user,
     skill_name_in_version,
@@ -122,11 +120,6 @@ from onyx.db.plugin_access import (
 from onyx.db.plugin_review import (
     deny_review__no_commit,
     pending_version,
-)
-from onyx.db.scoped_permissions import (
-    managed_group_member_ids_subquery,
-    scoped_group_ids_subquery,
-    within_managed_scope_clause,
 )
 from onyx.db.skill_limit import SkillLimitCheck, skill_limit_check
 from onyx.db.utils import (
@@ -181,12 +174,7 @@ class RuntimeSkill:
 class SkillUserState:
     enabled: bool
     can_toggle: bool
-    # The install setting for the user. None for a built-in or a skill the
-    # user cannot see.
-    installation_policy: PluginInstallationPolicy | None
     external_app_dependency: SkillExternalAppDependencyState | None
-    # Set when the name order hides the skill for the user.
-    name_hidden: HiddenSkillName | None
 
 
 def _is_shared_with_user(
@@ -254,40 +242,6 @@ def _plugin_of_skill_matches(build: _PluginClause[bool]) -> ColumnElement[bool]:
     )
 
 
-def _is_published() -> ColumnElement[bool]:
-    return _plugin_of_skill_matches(
-        lambda _plugin, marketplace: plugin_is_published(marketplace)
-    )
-
-
-def _is_group_shared_only_within_managed_scope(user: User) -> ColumnElement[bool]:
-    """A scoped manager may edit a skill only when every group it is shared with
-    is one they manage, and it isn't published org-wide. Delegates to the shared
-    read-side helper so this can't drift from the write-side GATE 2. Only group
-    rows with a permission count. Every direct user share must also go to a
-    member of a managed group."""
-    managed = scoped_group_ids_subquery(user)
-    share_outside_scope = (
-        select(Plugin__User.plugin_id)
-        .where(
-            Plugin__User.plugin_id == Skill.id,
-            Plugin__User.user_id.notin_(managed_group_member_ids_subquery(user)),
-        )
-        .exists()
-    )
-    return and_(
-        within_managed_scope_clause(
-            resource_id_col=Skill.id,
-            junction_resource_col=Plugin__UserGroup.plugin_id,
-            junction_group_col=Plugin__UserGroup.user_group_id,
-            non_public_clause=and_(Skill.built_in_skill_id.is_(None), ~_is_published()),
-            managed_subq=managed,
-            junction_live_clause=Plugin__UserGroup.permission.is_not(None),
-        ),
-        ~share_outside_scope,
-    )
-
-
 def skill_visible_to_user(user: User) -> ColumnElement[bool]:
     """Custom skills follow the plugin rule (``onyx.db.plugin_access``).
     Built-in skills have no plugin and keep their own rows."""
@@ -315,7 +269,14 @@ def _is_editable_by_user(user: User) -> ColumnElement[bool]:
         lambda plugin, _marketplace: plugin_editable_by_user(plugin, user.id)
     )
     if has_permission(user, Permission.MANAGE_PLUGINS) is PermissionAuthority.SCOPED:
-        editable = or_(editable, _is_group_shared_only_within_managed_scope(user))
+        editable = or_(
+            editable,
+            _plugin_of_skill_matches(
+                lambda plugin, marketplace: plugin_in_managed_scope(
+                    plugin, marketplace, user
+                )
+            ),
+        )
     return editable
 
 
@@ -343,7 +304,7 @@ class _UserSkillSelection:
 
     def enabled(self, skill_id: UUID) -> bool:
         state = self.states.get(skill_id)
-        return state is not None and state.enabled and not self.order.hides(skill_id)
+        return state is not None and state.enabled and skill_id not in self.order.hidden
 
     def other_skills_named(self, name: str, skill_id: UUID) -> list[UserPluginState]:
         """Enabled skills other than ``skill_id`` with the name, before the
@@ -910,7 +871,6 @@ def skill_user_states(
 
     external_app_dependencies = get_skill_external_app_dependencies(db_session, user)
     selection = _user_skill_selection(user, db_session, external_app_dependencies)
-    hidden = {entry.plugin_id: entry for entry in selection.order.hidden}
     states: dict[UUID, SkillUserState] = {}
     for skill_id, built_in_skill_id in db_session.execute(
         select(Skill.id, Skill.built_in_skill_id).where(Skill.id.in_(requested_ids))
@@ -919,18 +879,13 @@ def skill_user_states(
             states[skill_id] = SkillUserState(
                 enabled=True,
                 can_toggle=False,
-                installation_policy=None,
                 external_app_dependency=external_app_dependencies.get(skill_id),
-                name_hidden=None,
             )
             continue
         state = selection.states.get(skill_id)
         enabled = selection.enabled(skill_id)
         states[skill_id] = SkillUserState(
             enabled=enabled,
-            installation_policy=state.installation_policy
-            if state is not None
-            else None,
             can_toggle=state is not None
             and state.version_is_valid is not False
             and state.installation_policy != PluginInstallationPolicy.REQUIRED
@@ -940,7 +895,6 @@ def skill_user_states(
                 or external_app_dependencies[skill_id].ready
             ),
             external_app_dependency=external_app_dependencies.get(skill_id),
-            name_hidden=hidden.get(skill_id),
         )
     return states
 
@@ -1295,11 +1249,6 @@ class SkillSharingChange:
     installation_policy: PluginInstallationPolicy | None | UnsetType = UNSET
     user_shares: Mapping[UUID, SkillSharePermission] | None = None
     group_shares: Mapping[int, SkillSharePermission] | None = None
-    # Group install settings for groups in ``group_shares``. A group left out
-    # keeps its setting; None removes it.
-    group_installation_policies: Mapping[int, PluginInstallationPolicy | None] = field(
-        default_factory=dict
-    )
     # Group install settings with no change to the share. None removes one.
     group_settings: Mapping[int, PluginInstallationPolicy | None] | None = None
 
@@ -1331,17 +1280,11 @@ def _user_grants(
 
 def _group_grants(
     shares: Mapping[int, SkillSharePermission] | None,
-    policies: Mapping[int, PluginInstallationPolicy | None] | None = None,
 ) -> tuple[PluginGroupGrant, ...] | None:
     if shares is None:
         return None
-    policies = policies or {}
     return tuple(
-        PluginGroupGrant(
-            group_id=group_id,
-            permission=permission,
-            installation_policy=(policies[group_id] if group_id in policies else UNSET),
-        )
+        PluginGroupGrant(group_id=group_id, permission=permission)
         for group_id, permission in shares.items()
     )
 
@@ -1355,9 +1298,7 @@ def _plugin_access_change(
     checked per skill (``_publish_requested``); VIEWER publishes."""
     return PluginAccessChange(
         user_grants=_user_grants(change.user_shares),
-        group_grants=_group_grants(
-            change.group_shares, change.group_installation_policies
-        ),
+        group_grants=_group_grants(change.group_shares),
         group_settings=(
             tuple(
                 PluginGroupSetting(group_id=group_id, installation_policy=policy)

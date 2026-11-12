@@ -121,15 +121,12 @@ def test_group_summaries_follow_the_share_details_rule(
         skill.id,
         {
             "group_shares": [
-                {
-                    "group_id": managed.id,
-                    "permission": "VIEWER",
-                    "installation_policy": "DEFAULT",
-                },
+                {"group_id": managed.id, "permission": "VIEWER"},
                 {"group_id": other.id, "permission": "VIEWER"},
             ],
             "group_settings": [
-                {"group_id": setting_only.id, "installation_policy": "NOT_AVAILABLE"}
+                {"group_id": managed.id, "installation_policy": "DEFAULT"},
+                {"group_id": setting_only.id, "installation_policy": "NOT_AVAILABLE"},
             ],
         },
     )
@@ -205,9 +202,7 @@ def test_group_settings_from_the_share_and_bulk_dialogs(
     assert response.json()["failed"] == []
     listed = _listed(member)
     for skill_id in (first.id, second.id):
-        assert listed[skill_id].effective_installation_policy == (
-            PluginInstallationPolicy.REQUIRED
-        )
+        assert listed[skill_id].enabled and not listed[skill_id].can_toggle
         assert _summaries(_listed(admin_user)[skill_id].group_summaries) == {
             group.id: (None, PluginInstallationPolicy.REQUIRED)
         }
@@ -225,16 +220,12 @@ def test_explicit_available_overrides_a_not_available_default(
     shown = _listed(admin_user)[skill.id]
     assert shown.installation_policy is None
     assert shown.default_installation_policy == PluginInstallationPolicy.NOT_AVAILABLE
-    assert shown.company_installation_policy == PluginInstallationPolicy.NOT_AVAILABLE
     assert skill.id not in _listed(other)
 
     explicit = _share(admin_user, skill.id, {"installation_policy": "AVAILABLE"})
     assert explicit.installation_policy == PluginInstallationPolicy.AVAILABLE
-    assert explicit.company_installation_policy == PluginInstallationPolicy.AVAILABLE
     other_view = _listed(other)[skill.id]
-    assert other_view.effective_installation_policy == (
-        PluginInstallationPolicy.AVAILABLE
-    )
+    assert not other_view.enabled and other_view.can_toggle
     assert other_view.installation_policy == PluginInstallationPolicy.AVAILABLE
 
     # A save that leaves the setting out keeps it.
@@ -244,9 +235,6 @@ def test_explicit_available_overrides_a_not_available_default(
 
     inherited = _share(admin_user, skill.id, {"installation_policy": None})
     assert inherited.installation_policy is None
-    assert inherited.company_installation_policy == (
-        PluginInstallationPolicy.NOT_AVAILABLE
-    )
     assert skill.id not in _listed(other)
 
 

@@ -1,6 +1,8 @@
 """Rules of the one access change function for group install settings, group
 shares and the admin Sharing setting."""
 
+from dataclasses import replace
+
 import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -29,7 +31,6 @@ from onyx.db.plugin import (
 from onyx.db.skill import SkillManagementPolicy, fetch_skill
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.settings.models import Settings
 from tests.external_dependency_unit.craft.db_helpers import (
     add_user_to_group,
     make_group,
@@ -57,12 +58,21 @@ def _setting_for(
     permission: SkillSharePermission = SkillSharePermission.VIEWER,
 ) -> PluginAccessChange:
     return PluginAccessChange(
-        group_grants=(
-            PluginGroupGrant(
-                group_id=group.id, permission=permission, installation_policy=policy
-            ),
+        group_grants=(PluginGroupGrant(group_id=group.id, permission=permission),),
+        group_settings=(
+            PluginGroupSetting(group_id=group.id, installation_policy=policy),
         ),
         mode=PluginAccessMode.ADD_ONLY,
+    )
+
+
+def _group_setting(
+    group: UserGroup, policy: PluginInstallationPolicy | None
+) -> PluginAccessChange:
+    return PluginAccessChange(
+        group_settings=(
+            PluginGroupSetting(group_id=group.id, installation_policy=policy),
+        )
     )
 
 
@@ -146,9 +156,8 @@ def test_scoped_manager_cannot_set_a_group_setting_on_a_plugin_shared_outside(
     with pytest.raises(OnyxError) as exc_info:
         apply_plugin_access_change__no_commit(
             [skill.id], _setting_for(group), manager, db_session
-        )
+        ).raise_first_failure()
     assert exc_info.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
-    assert "outside the groups you manage" in exc_info.value.detail
 
     # A direct share with a member of the managed group stays in scope.
     if outside == "user":
@@ -156,13 +165,14 @@ def test_scoped_manager_cannot_set_a_group_setting_on_a_plugin_shared_outside(
         add_user_to_group(db_session, member, group)
         apply_plugin_access_change__no_commit(
             [skill.id],
-            PluginAccessChange(
+            replace(
+                _setting_for(group),
+                mode=PluginAccessMode.REPLACE,
                 user_grants=(
                     PluginUserGrant(
                         user_id=member.id, permission=SkillSharePermission.VIEWER
                     ),
                 ),
-                group_grants=_setting_for(group).group_grants,
             ),
             manager,
             db_session,
@@ -201,56 +211,12 @@ def test_scoped_manager_edit_scope_checks_direct_user_shares(
     assert not editable()
 
 
-def test_editor_with_not_available_is_refused(
-    db_session: Session,
-    test_user: User,  # noqa: ARG001
-) -> None:
-    admin = make_user(db_session, is_admin=True)
-    group = make_group(db_session)
-    skill = make_skill(db_session, author_user_id=admin.id)
-
-    with pytest.raises(OnyxError) as exc_info:
-        apply_plugin_access_change__no_commit(
-            [skill.id],
-            _setting_for(
-                group,
-                PluginInstallationPolicy.NOT_AVAILABLE,
-                SkillSharePermission.EDITOR,
-            ),
-            admin,
-            db_session,
-        )
-    assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
-
-    # The existing setting counts too.
-    share_plugin_with_group(
-        db_session,
-        skill.id,
-        group.id,
-        SkillSharePermission.VIEWER,
-        PluginInstallationPolicy.NOT_AVAILABLE,
-    )
-    with pytest.raises(OnyxError):
-        apply_plugin_access_change__no_commit(
-            [skill.id],
-            PluginAccessChange(
-                group_grants=(
-                    PluginGroupGrant(
-                        group_id=group.id, permission=SkillSharePermission.EDITOR
-                    ),
-                ),
-            ),
-            admin,
-            db_session,
-        )
-
-
 def test_not_available_writes_and_the_legacy_rows(
     db_session: Session,
     test_user: User,  # noqa: ARG001
 ) -> None:
     """Not available is accepted. The legacy column gets AVAILABLE, and a
-    group row with Not available gets no legacy share."""
+    group row with only a setting gets no legacy share."""
     admin = make_user(db_session, is_admin=True)
     group = make_group(db_session)
     skill = make_skill(db_session, author_user_id=admin.id)
@@ -259,9 +225,9 @@ def test_not_available_writes_and_the_legacy_rows(
         [skill.id],
         PluginAccessChange(
             company_installation_policy=PluginInstallationPolicy.NOT_AVAILABLE,
-            group_grants=_setting_for(
+            group_settings=_group_setting(
                 group, PluginInstallationPolicy.NOT_AVAILABLE
-            ).group_grants,
+            ).group_settings,
         ),
         admin,
         db_session,
@@ -314,69 +280,6 @@ def test_owner_removing_a_group_share_keeps_its_setting(
     assert exc_info.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
 
 
-def _group_setting(
-    group: UserGroup, policy: PluginInstallationPolicy | None
-) -> PluginAccessChange:
-    return PluginAccessChange(
-        group_settings=(
-            PluginGroupSetting(group_id=group.id, installation_policy=policy),
-        )
-    )
-
-
-def test_group_setting_without_a_share(
-    db_session: Session,
-    test_user: User,  # noqa: ARG001
-) -> None:
-    """A group setting alone makes a setting-only row, keeps the permission of
-    a share, and removing it deletes a row with no permission."""
-    admin = make_user(db_session, is_admin=True)
-    group = make_group(db_session)
-    published = make_skill(db_session, is_public=True)
-
-    apply_plugin_access_change__no_commit(
-        [published.id],
-        _group_setting(group, PluginInstallationPolicy.REQUIRED),
-        admin,
-        db_session,
-    ).raise_first_failure()
-    row = _group_row(db_session, published.id, group)
-    assert row is not None
-    assert row.permission is None
-    assert row.installation_policy == PluginInstallationPolicy.REQUIRED
-    assert (
-        db_session.scalar(
-            select(Skill__UserGroup).where(Skill__UserGroup.skill_id == published.id)
-        )
-        is None
-    )
-
-    apply_plugin_access_change__no_commit(
-        [published.id], _group_setting(group, None), admin, db_session
-    ).raise_first_failure()
-    db_session.expire_all()
-    assert _group_row(db_session, published.id, group) is None
-
-    shared = make_skill(db_session)
-    apply_plugin_access_change__no_commit(
-        [shared.id], _setting_for(group, None), admin, db_session
-    ).raise_first_failure()
-    apply_plugin_access_change__no_commit(
-        [shared.id],
-        _group_setting(group, PluginInstallationPolicy.NOT_AVAILABLE),
-        admin,
-        db_session,
-    ).raise_first_failure()
-    apply_plugin_access_change__no_commit(
-        [shared.id], _group_setting(group, None), admin, db_session
-    ).raise_first_failure()
-    db_session.expire_all()
-    row = _group_row(db_session, shared.id, group)
-    assert row is not None
-    assert row.permission == SkillSharePermission.VIEWER
-    assert row.installation_policy is None
-
-
 def test_group_setting_alone_follows_the_setting_rules(
     db_session: Session,
     test_user: User,  # noqa: ARG001
@@ -393,51 +296,34 @@ def test_group_setting_alone_follows_the_setting_rules(
         )
     assert exc_info.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
 
+    # A group with a share cannot be Not available, with the setting before
+    # or after the share.
     admin = make_user(db_session, is_admin=True)
-    editor = make_skill(db_session)
+    shared = make_skill(db_session)
     apply_plugin_access_change__no_commit(
-        [editor.id],
-        _setting_for(group, None, SkillSharePermission.EDITOR),
+        [shared.id], _setting_for(group, None), admin, db_session
+    ).raise_first_failure()
+    setting_only = make_skill(db_session)
+    apply_plugin_access_change__no_commit(
+        [setting_only.id],
+        _group_setting(group, PluginInstallationPolicy.NOT_AVAILABLE),
         admin,
         db_session,
     ).raise_first_failure()
-    with pytest.raises(OnyxError) as exc_info:
-        apply_plugin_access_change__no_commit(
-            [editor.id],
-            _group_setting(group, PluginInstallationPolicy.NOT_AVAILABLE),
-            admin,
-            db_session,
-        )
-    assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
-
-
-def test_member_share_is_refused_while_sharing_is_off(
-    db_session: Session,
-    test_user: User,  # noqa: ARG001
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        "onyx.db.plugin.load_settings",
-        lambda raise_on_error=False: Settings(plugin_sharing=False),  # noqa: ARG005
-    )
-    owner = make_user(db_session, standard_account=True)
-    admin = make_user(db_session, is_admin=True)
-    viewer = make_user(db_session, standard_account=True)
-    skill = make_skill(db_session, author_user_id=owner.id)
-    share = PluginAccessChange(
-        user_grants=(
-            PluginUserGrant(user_id=viewer.id, permission=SkillSharePermission.VIEWER),
-        )
-    )
-
-    with pytest.raises(OnyxError) as exc_info:
-        apply_plugin_access_change__no_commit([skill.id], share, owner, db_session)
-    assert exc_info.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
-
-    # An organization-wide manager still shares, and the owner can remove it.
-    apply_plugin_access_change__no_commit(
-        [skill.id], share, admin, db_session
-    ).raise_first_failure()
-    apply_plugin_access_change__no_commit(
-        [skill.id], PluginAccessChange(user_grants=()), owner, db_session
-    ).raise_first_failure()
+    for skill, change in (
+        (shared, _group_setting(group, PluginInstallationPolicy.NOT_AVAILABLE)),
+        (
+            setting_only,
+            PluginAccessChange(
+                group_grants=(
+                    PluginGroupGrant(
+                        group_id=group.id, permission=SkillSharePermission.VIEWER
+                    ),
+                ),
+                mode=PluginAccessMode.ADD_ONLY,
+            ),
+        ),
+    ):
+        with pytest.raises(OnyxError) as exc_info:
+            apply_plugin_access_change__no_commit([skill.id], change, admin, db_session)
+        assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT

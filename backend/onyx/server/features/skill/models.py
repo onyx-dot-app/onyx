@@ -69,11 +69,6 @@ class SkillResponse(BaseModel):
     installation_policy: PluginInstallationPolicy | None = None
     # The default of the skill's marketplace. None for built-ins.
     default_installation_policy: PluginInstallationPolicy | None = None
-    # The own setting, else the default of the skill's marketplace.
-    company_installation_policy: PluginInstallationPolicy | None = None
-    # The setting for the caller, after group settings and shares. None for
-    # built-ins.
-    effective_installation_policy: PluginInstallationPolicy | None = None
     author_user_id: UUID | None = None
     author_email: str | None = None
     owner: MinimalUserSnapshot | None = None
@@ -129,7 +124,6 @@ class SkillResponse(BaseModel):
         *,
         enabled: bool,
         can_toggle: bool = True,
-        effective_installation_policy: PluginInstallationPolicy | None = None,
         user_permission: SkillAccessLevel | None = None,
         include_share_details: bool = False,
         group_summaries: list[SkillGroupSummary] | None = None,
@@ -171,10 +165,6 @@ class SkillResponse(BaseModel):
             default_installation_policy=(
                 access.marketplace_default_policy if access is not None else None
             ),
-            company_installation_policy=(
-                access.company_installation_policy if access is not None else None
-            ),
-            effective_installation_policy=effective_installation_policy,
             enabled=enabled,
             can_toggle=can_toggle,
             author_user_id=author_user_id,
@@ -467,8 +457,6 @@ class SkillGroupSettingRequest(BaseModel):
 class SkillGroupShareRequest(BaseModel):
     group_id: int
     permission: SkillSharePermission
-    # Missing: unchanged. Null: the group follows the company setting.
-    installation_policy: PluginInstallationPolicy | None = None
 
 
 class SkillShareRequest(BaseModel):
@@ -503,15 +491,6 @@ class SkillShareRequest(BaseModel):
                 {share.group_id: share.permission for share in self.group_shares}
                 if self.group_shares is not None
                 else None
-            ),
-            group_installation_policies=(
-                {
-                    share.group_id: share.installation_policy
-                    for share in self.group_shares
-                    if "installation_policy" in share.model_fields_set
-                }
-                if self.group_shares is not None
-                else {}
             ),
             group_settings=(
                 {

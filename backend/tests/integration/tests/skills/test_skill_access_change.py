@@ -199,7 +199,7 @@ def test_share_keeps_group_install_setting_of_removed_share(
         skill.id,
         group.id,
         SkillSharePermission.EDITOR,
-        PluginInstallationPolicy.NOT_AVAILABLE,
+        PluginInstallationPolicy.DEFAULT,
     )
 
     # A level change keeps the setting.
@@ -209,14 +209,12 @@ def test_share_keeps_group_install_setting_of_removed_share(
         {"group_shares": [{"group_id": group.id, "permission": "VIEWER"}]},
     ).raise_for_status()
     assert _group_rows(skill.id) == {
-        group.id: (SkillSharePermission.VIEWER, PluginInstallationPolicy.NOT_AVAILABLE)
+        group.id: (SkillSharePermission.VIEWER, PluginInstallationPolicy.DEFAULT)
     }
 
     # Removing the share keeps the setting, with no access.
     _share(admin_user, skill.id, {"group_shares": []}).raise_for_status()
-    assert _group_rows(skill.id) == {
-        group.id: (None, PluginInstallationPolicy.NOT_AVAILABLE)
-    }
+    assert _group_rows(skill.id) == {group.id: (None, PluginInstallationPolicy.DEFAULT)}
     _assert_rows_match(skill.id)
 
 

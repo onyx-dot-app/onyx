@@ -99,28 +99,26 @@ def test_organization_library_default_not_available(
     assert skill.id not in _visible_ids(other)
     shown = SkillManager.get_for_user(skill.id, shared)
     assert shown.installation_policy is None
-    assert shown.company_installation_policy == PluginInstallationPolicy.NOT_AVAILABLE
-    assert shown.effective_installation_policy == PluginInstallationPolicy.AVAILABLE
+    assert shown.default_installation_policy == PluginInstallationPolicy.NOT_AVAILABLE
+    # The share gives Available: off until the user turns it on.
+    assert not shown.enabled and shown.can_toggle
 
     # A group setting reaches the group's members only.
     _share(
         admin_user,
         skill.id,
         {
-            "group_shares": [
-                {
-                    "group_id": group.id,
-                    "permission": "VIEWER",
-                    "installation_policy": "DEFAULT",
-                }
-            ]
+            "group_shares": [{"group_id": group.id, "permission": "VIEWER"}],
+            "group_settings": [
+                {"group_id": group.id, "installation_policy": "DEFAULT"}
+            ],
         },
     ).raise_for_status()
     assert skill.id in _visible_ids(group_member)
     assert skill.id not in _visible_ids(other)
     member_view = SkillManager.get_for_user(skill.id, group_member)
-    assert member_view.effective_installation_policy == PluginInstallationPolicy.DEFAULT
-    assert member_view.enabled
+    # Installed by default: on, and the member can turn it off.
+    assert member_view.enabled and member_view.can_toggle
 
     # A company setting reaches everyone.
     _share(admin_user, skill.id, {"installation_policy": "DEFAULT"}).raise_for_status()
@@ -140,29 +138,7 @@ def test_not_available_company_setting(admin_user: DATestUser) -> None:
     assert skill.id not in _visible_ids(other)
     # The author still sees it and can turn it on.
     assert skill.id in _visible_ids(author)
-    assert (
-        SkillManager.get_for_user(skill.id, author).effective_installation_policy
-        == PluginInstallationPolicy.AVAILABLE
-    )
-
-
-def test_editor_group_with_not_available_is_refused(admin_user: DATestUser) -> None:
-    group = UserGroupManager.create(admin_user, name=_name("na-editor"))
-    skill = SkillManager.create_custom(admin_user)
-    response = _share(
-        admin_user,
-        skill.id,
-        {
-            "group_shares": [
-                {
-                    "group_id": group.id,
-                    "permission": "EDITOR",
-                    "installation_policy": "NOT_AVAILABLE",
-                }
-            ]
-        },
-    )
-    assert response.status_code == 400
+    assert SkillManager.get_for_user(skill.id, author).can_toggle
 
 
 def test_member_share_is_refused_while_sharing_is_off(

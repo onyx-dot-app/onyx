@@ -166,14 +166,12 @@ def test_setting_only_row_changes_what_a_member_gets(admin_user: DATestUser) -> 
     )
     skill = SkillManager.create_custom(author, name=_name("gp-so"), is_public=True)
     before = SkillManager.get_for_user(skill.id, member)
-    assert before.effective_installation_policy == PluginInstallationPolicy.AVAILABLE
-    assert not before.enabled
+    assert not before.enabled and before.can_toggle
 
     _set(admin_user, group.id, skill.id, "REQUIRED").raise_for_status()
     assert _group_row(skill.id, group.id) == (None, PluginInstallationPolicy.REQUIRED)
     required = SkillManager.get_for_user(skill.id, member)
-    assert required.effective_installation_policy == PluginInstallationPolicy.REQUIRED
-    assert required.enabled
+    assert required.enabled and not required.can_toggle
 
     # A group setting replaces the company setting, also when it is stricter.
     _set(admin_user, group.id, skill.id, "NOT_AVAILABLE").raise_for_status()
@@ -222,19 +220,29 @@ def test_add_a_private_plugin_to_a_group(admin_user: DATestUser) -> None:
     assert SkillManager.get_for_user(skill.id, member).enabled
 
 
-def test_editor_group_with_not_available_is_refused(admin_user: DATestUser) -> None:
-    author = UserManager.create(name=_name("gp_editor_author"))
-    group = UserGroupManager.create(admin_user, name=_name("gp-editor"))
-    skill = SkillManager.create_custom(author, name=_name("gp-editor"))
-    _share(
-        admin_user,
-        skill.id,
-        {"group_shares": [{"group_id": group.id, "permission": "EDITOR"}]},
-    ).raise_for_status()
+def test_shared_group_with_not_available_is_refused(admin_user: DATestUser) -> None:
+    """A group with a share cannot be Not available, with the setting set
+    before or after the share."""
+    author = UserManager.create(name=_name("gp_na_author"))
+    group = UserGroupManager.create(admin_user, name=_name("gp-na"))
+    skill = SkillManager.create_custom(author, name=_name("gp-na"))
+    share = {"group_shares": [{"group_id": group.id, "permission": "VIEWER"}]}
+    _share(admin_user, skill.id, share).raise_for_status()
 
     response = _set(admin_user, group.id, skill.id, "NOT_AVAILABLE")
     assert response.status_code == 400
-    assert _group_row(skill.id, group.id) == (SkillSharePermission.EDITOR, None)
+    assert "Remove the group's share first" in response.json()["detail"]
+    assert _group_row(skill.id, group.id) == (SkillSharePermission.VIEWER, None)
+
+    setting_first = SkillManager.create_custom(
+        author, name=_name("gp-na-first"), is_public=True
+    )
+    _set(admin_user, group.id, setting_first.id, "NOT_AVAILABLE").raise_for_status()
+    assert _share(admin_user, setting_first.id, share).status_code == 400
+    assert _group_row(setting_first.id, group.id) == (
+        None,
+        PluginInstallationPolicy.NOT_AVAILABLE,
+    )
 
 
 def test_member_cannot_read_or_change_group_plugins(
@@ -313,5 +321,5 @@ def test_group_manager_refusals(
 
     # A private plugin the manager cannot edit is not added to their group.
     unshared = SkillManager.create_custom(author, name=_name("gp-unshared"))
-    assert _set(manager, managed.id, unshared.id, "DEFAULT").status_code == 404
+    assert _set(manager, managed.id, unshared.id, "DEFAULT").status_code == 403
     assert _group_row(unshared.id, managed.id) is None

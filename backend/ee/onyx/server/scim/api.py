@@ -72,7 +72,7 @@ from onyx.db.permissions import (
 )
 from onyx.db.users import assign_user_to_default_groups__no_commit, user_is_admin
 from onyx.db.utils import is_unique_violation
-from onyx.skills.push import push_skills_after_membership_change
+from onyx.skills.push import push_skills_and_commit
 from onyx.utils.audit import (
     AuditAction,
     AuditActor,
@@ -1371,7 +1371,7 @@ def create_group(
         dal.create_group_mapping(external_id=external_id, user_group_id=db_group.id)
 
     dal.commit()
-    push_skills_after_membership_change(member_uuids, db_session)
+    push_skills_and_commit(member_uuids, db_session)
 
     emit_audit_event(
         AuditAction.USER_GROUP_CREATE,
@@ -1446,7 +1446,7 @@ def replace_group(
     dal.commit()
 
     added_ids = sorted(set(member_uuids) - old_member_ids)
-    push_skills_after_membership_change([*added_ids, *removed_ids], db_session)
+    push_skills_and_commit([*added_ids, *removed_ids], db_session)
     _emit_scim_group_update(
         _token,
         group_id=group.id,
@@ -1537,7 +1537,7 @@ def patch_group(
 
     dal.sync_group_external_id(group.id, patched.externalId)
     dal.commit()
-    push_skills_after_membership_change(affected_uuids, db_session)
+    push_skills_and_commit(affected_uuids, db_session)
 
     # Report the validated sets that were applied, not the raw added_ids /
     # removed_ids from the request, which can contain entries that were rejected.
@@ -1589,7 +1589,7 @@ def delete_group(
     recompute_user_permissions__no_commit(affected_user_ids, db_session)
 
     dal.commit()
-    push_skills_after_membership_change(affected_user_ids, db_session)
+    push_skills_and_commit(affected_user_ids, db_session)
 
     emit_audit_event(
         AuditAction.USER_GROUP_DELETE,

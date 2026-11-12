@@ -559,11 +559,8 @@ def push_skills_for_users(user_ids: set[UUID], db_session: Session) -> None:
         logger.exception("Failed to persist successful skill push state")
 
 
-def push_skills_after_membership_change(
-    user_ids: Iterable[UUID], db_session: Session
-) -> None:
-    """Group shares and group install settings follow membership, so users who
-    joined or left a group get a push. The caller committed the change; this
-    commits the push state."""
+def push_skills_and_commit(user_ids: Iterable[UUID], db_session: Session) -> None:
+    """Push to the users after the caller committed the change, and commit the
+    push state."""
     push_skills_for_users(set(user_ids), db_session)
     db_session.commit()

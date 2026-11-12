@@ -2,9 +2,8 @@
 (``load_user_plugin_states``, ``order_skill_names``), read for many users and
 plugins at one time.
 
-Group settings and company settings are written directly, because no route
-writes NOT_AVAILABLE or group settings yet (G3). Each test rolls its
-transaction back."""
+Group settings and company settings are written directly, so each case sets
+up only the rows it needs. Each test rolls its transaction back."""
 
 from __future__ import annotations
 
@@ -35,7 +34,6 @@ from onyx.db.plugin import (
     set_plugin_preferences__no_commit,
 )
 from onyx.db.plugin_access import (
-    NameHiddenReason,
     UserPluginState,
     load_user_plugin_states,
     order_skill_names,
@@ -178,8 +176,7 @@ def test_direct_share_gives_available_also_past_a_group_not_available(
     test_user: User,  # noqa: ARG001
 ) -> None:
     """H7: a direct share gives at least AVAILABLE, with any company setting
-    and past a group NOT_AVAILABLE. A group share whose own setting is
-    NOT_AVAILABLE gives no access. A group row with no permission gives no
+    and past a group NOT_AVAILABLE. A group row with no permission gives no
     access and does not make the group's members share recipients."""
     owner = make_user(db_session, standard_account=True)
     group_a = make_group(db_session)
@@ -215,19 +212,9 @@ def test_direct_share_gives_available_also_past_a_group_not_available(
     assert _setting(states[(owner.id, hidden_company.id)]) == AVAILABLE
     assert states[(direct_in_a.id, published.id)].shared
 
-    # A group share with its own setting NOT_AVAILABLE gives no access.
     private = make_skill(db_session, author_user_id=owner.id)
     group_g = make_group(db_session)
     member_g = _member_of(db_session, group_g)
-    share_plugin_with_group(
-        db_session,
-        private.id,
-        group_g.id,
-        SkillSharePermission.VIEWER,
-        NOT_AVAILABLE,
-    )
-    state = _states(db_session, [member_g], [private])[(member_g.id, private.id)]
-    assert not state.visible and not state.shared and not state.enabled
     share_plugin_with_group(
         db_session, private.id, group_g.id, SkillSharePermission.VIEWER, None
     )
@@ -378,8 +365,8 @@ def test_name_order(
     test_user: User,  # noqa: ARG001
 ) -> None:
     """Required for the user, then published, then the user's own, then
-    shared. The older plugin wins a tie. Hidden skills come back with a
-    reason, and the runtime list keeps one skill for each name."""
+    shared. The older plugin wins a tie, and the runtime list keeps one skill
+    for each name."""
     user = make_user(db_session, standard_account=True)
     owner = make_user(db_session, standard_account=True)
     name = f"name-order-{uuid4().hex[:8]}"
@@ -403,12 +390,10 @@ def test_name_order(
     )
     all_skills = [required, published, own, shared_old, shared_new]
 
-    def order() -> tuple[UUID | None, dict[UUID, NameHiddenReason]]:
+    def order() -> tuple[UUID | None, frozenset[UUID]]:
         states = _states(db_session, [user], all_skills).values()
         result = order_skill_names(states)
-        return result.kept.get(name), {
-            entry.plugin_id: entry.reason for entry in result.hidden
-        }
+        return result.kept.get(name), result.hidden
 
     def runtime_ids() -> set[UUID]:
         return {
@@ -424,10 +409,10 @@ def test_name_order(
     assert order() == (
         required.id,
         {
-            published.id: NameHiddenReason.REQUIRED,
-            own.id: NameHiddenReason.REQUIRED,
-            shared_old.id: NameHiddenReason.REQUIRED,
-            shared_new.id: NameHiddenReason.REQUIRED,
+            published.id,
+            own.id,
+            shared_old.id,
+            shared_new.id,
         },
     )
     assert runtime_ids() == {required.id}
@@ -436,9 +421,9 @@ def test_name_order(
     assert order() == (
         published.id,
         {
-            own.id: NameHiddenReason.PUBLISHED,
-            shared_old.id: NameHiddenReason.PUBLISHED,
-            shared_new.id: NameHiddenReason.PUBLISHED,
+            own.id,
+            shared_old.id,
+            shared_new.id,
         },
     )
     assert runtime_ids() == {published.id}
@@ -447,21 +432,21 @@ def test_name_order(
     assert order() == (
         own.id,
         {
-            shared_old.id: NameHiddenReason.OWN,
-            shared_new.id: NameHiddenReason.OWN,
+            shared_old.id,
+            shared_new.id,
         },
     )
     assert runtime_ids() == {own.id}
 
     set_plugin_preferences__no_commit(user.id, [own.id], False, db_session)
-    assert order() == (shared_old.id, {shared_new.id: NameHiddenReason.OLDER})
+    assert order() == (shared_old.id, {shared_new.id})
     assert runtime_ids() == {shared_old.id}
 
     # A built-in name always wins.
     states = _states(db_session, [user], all_skills).values()
     result = order_skill_names(states, reserved_names={name})
     assert name not in result.kept
-    assert {entry.reason for entry in result.hidden} == {NameHiddenReason.BUILT_IN}
+    assert result.hidden == {shared_old.id, shared_new.id}
 
 
 def _bundle(name: str) -> bytes:

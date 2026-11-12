@@ -101,13 +101,10 @@ def test_group_join_past_500_mb_keeps_every_skill_under_900_mb(
         client.patch(
             f"{API_SERVER_URL}/skills/custom/{skill.id}/share",
             json={
-                "group_shares": [
-                    {
-                        "group_id": group.id,
-                        "permission": "VIEWER",
-                        "installation_policy": "DEFAULT",
-                    }
-                ]
+                "group_shares": [{"group_id": group.id, "permission": "VIEWER"}],
+                "group_settings": [
+                    {"group_id": group.id, "installation_policy": "DEFAULT"}
+                ],
             },
             headers=admin_user.headers,
         ).raise_for_status()

@@ -3,7 +3,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
-from ee.onyx.db.user_group_plugin import UserGroupPluginRow
 from onyx.auth.permissions import Permission
 from onyx.db.enums import (
     ConnectorManageRole,
@@ -11,6 +10,7 @@ from onyx.db.enums import (
     SkillSharePermission,
 )
 from onyx.db.models import UserGroup as UserGroupModel
+from onyx.db.plugin_access import GroupPluginRow
 from onyx.server.documents.models import (
     ConnectorCredentialPairDescriptor,
     ConnectorSnapshot,
@@ -237,8 +237,7 @@ class UserGroupPlugin(BaseModel):
     can_edit: bool
 
     @classmethod
-    def from_row(cls, item: UserGroupPluginRow) -> "UserGroupPlugin":
-        row = item.row
+    def from_row(cls, row: GroupPluginRow, can_edit: bool) -> "UserGroupPlugin":
         return cls(
             plugin_id=row.plugin_id,
             kind=row.kind,
@@ -248,7 +247,7 @@ class UserGroupPlugin(BaseModel):
             permission=row.permission,
             installation_policy=row.installation_policy,
             company_installation_policy=row.company_installation_policy,
-            can_edit=item.can_edit,
+            can_edit=can_edit,
         )
 
 

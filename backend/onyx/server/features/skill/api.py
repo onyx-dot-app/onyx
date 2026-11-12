@@ -129,7 +129,11 @@ from onyx.skills.limits import (
 )
 from onyx.skills.metadata import parse_skill_document
 from onyx.skills.models import GITHUB_SKILL_MAX_COUNT
-from onyx.skills.push import push_skill_to_affected_sandboxes, push_skills_for_users
+from onyx.skills.push import (
+    push_skill_to_affected_sandboxes,
+    push_skills_and_commit,
+    push_skills_for_users,
+)
 from shared_configs.contextvars import get_current_tenant_id
 
 user_router = APIRouter(prefix="/skills")
@@ -458,8 +462,7 @@ def set_organization_library_default_access(
         request.installation_policy, db_session
     )
     db_session.commit()
-    push_skills_for_users(affected, db_session)
-    db_session.commit()
+    push_skills_and_commit(affected, db_session)
     return OrganizationLibraryDefaultAccess(
         installation_policy=request.installation_policy
     )

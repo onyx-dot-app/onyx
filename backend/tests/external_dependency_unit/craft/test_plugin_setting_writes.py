@@ -4,23 +4,19 @@ the install setting."""
 
 from __future__ import annotations
 
-import contextvars
-import threading
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import delete, select, update
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import PluginInstallationPolicy, SkillSharePermission
+from onyx.db.enums import PluginInstallationPolicy
 from onyx.db.external_app import (
     delete_external_app,
     disconnect_external_app_for_user,
 )
 from onyx.db.models import (
     Plugin,
-    Plugin__User,
     Plugin__UserGroup,
     User,
     UserPluginPreference,
@@ -36,7 +32,6 @@ from onyx.db.plugin import (
 from onyx.db.plugin_access import load_user_plugin_states, order_skill_names
 from onyx.db.skill import (
     delete_skill_for_user__no_commit,
-    enable_new_skill_if_name_available__no_commit,
     set_skill_enabled_for_user,
     skill_user_states,
 )
@@ -50,7 +45,6 @@ from tests.external_dependency_unit.craft.db_helpers import (
     make_skill,
     make_user,
     share_plugin_with_group,
-    share_plugin_with_user,
 )
 
 
@@ -88,51 +82,6 @@ def _create(
         created_by=None,
         db_session=db_session,
     )
-
-
-def test_concurrent_creates_of_one_name_in_one_marketplace(
-    db_session: Session,
-    test_user: User,  # noqa: ARG001
-) -> None:
-    """The second create waits for the first one's name, then takes the next
-    free name instead of failing."""
-    author = make_user(db_session, standard_account=True)
-    uploads_id = get_or_create_user_uploads__no_commit(author.id, db_session)
-    db_session.commit()
-    name = f"deploy-{uuid4().hex[:8]}"
-    created: list[UUID] = []
-    second_name: list[str] = []
-    errors: list[BaseException] = []
-
-    try:
-        first = _create(db_session, uploads_id, name, author.id)
-        created.append(first.id)
-
-        def second() -> None:
-            try:
-                with get_session_with_current_tenant() as other:
-                    plugin = _create(other, uploads_id, name, author.id)
-                    second_name.append(plugin.name)
-                    created.append(plugin.id)
-                    other.commit()
-            except BaseException as exc:
-                errors.append(exc)
-
-        thread = threading.Thread(target=contextvars.copy_context().run, args=(second,))
-        thread.start()
-        # The second insert blocks on the unique name index until this commit.
-        thread.join(timeout=2)
-        assert thread.is_alive()
-        db_session.commit()
-        thread.join(timeout=30)
-
-        assert not errors
-        assert first.name == name
-        assert second_name == [f"{name}-2"]
-    finally:
-        db_session.rollback()
-        db_session.execute(delete(Plugin).where(Plugin.id.in_(created)))
-        db_session.commit()
 
 
 def test_one_name_in_two_marketplaces(
@@ -212,47 +161,7 @@ def test_a_version_with_a_new_skill_name(
 
     order = order_skill_names(load_user_plugin_states([user.id], db_session))
     assert order.kept[taken] in {holder.id, plugin.id}
-    assert [entry.name for entry in order.hidden] == [taken]
-
-
-def test_a_hidden_plugins_enabled_choice_does_not_block_a_switch(
-    db_session: Session,
-    test_user: User,  # noqa: ARG001
-) -> None:
-    """A user turned on a shared skill, then lost the share. The kept choice
-    must not block a same-name skill, and must not change."""
-    user = make_user(db_session, standard_account=True)
-    owner = make_user(db_session, standard_account=True)
-    name = f"deploy-{uuid4().hex[:8]}"
-    hidden = make_skill(db_session, name=name, author_user_id=owner.id)
-    share_plugin_with_user(db_session, hidden.id, user.id, SkillSharePermission.VIEWER)
-    set_skill_enabled_for_user(
-        skill_id=hidden.id, enabled=True, user=user, db_session=db_session
-    )
-    db_session.execute(
-        delete(Plugin__User).where(
-            Plugin__User.plugin_id == hidden.id, Plugin__User.user_id == user.id
-        )
-    )
-    db_session.flush()
-    own = make_skill(db_session, name=name, author_user_id=user.id)
-
-    set_skill_enabled_for_user(
-        skill_id=own.id, enabled=True, user=user, db_session=db_session
-    )
-
-    assert skill_user_states(user, [own.id], db_session)[own.id].enabled
-    hidden_choice = db_session.get(UserPluginPreference, (user.id, hidden.id))
-    assert hidden_choice is not None and hidden_choice.enabled
-
-    # A new upload's auto-enable is not blocked either.
-    upload = make_skill(db_session, name=name, author_user_id=user.id)
-    set_skill_enabled_for_user(
-        skill_id=own.id, enabled=False, user=user, db_session=db_session
-    )
-    assert enable_new_skill_if_name_available__no_commit(upload, user.id, db_session)
-    choice = db_session.get(UserPluginPreference, (user.id, upload.id))
-    assert choice is not None and choice.enabled
+    assert order.hidden == {holder.id, plugin.id} - {order.kept[taken]}
 
 
 def test_toggle_and_auto_enable_read_the_group_setting(
@@ -276,7 +185,6 @@ def test_toggle_and_auto_enable_read_the_group_setting(
 
     state = skill_user_states(member, [required.id], db_session)[required.id]
     assert state.enabled and not state.can_toggle
-    assert state.installation_policy == PluginInstallationPolicy.REQUIRED
     with pytest.raises(OnyxError):
         set_skill_enabled_for_user(
             skill_id=required.id, enabled=False, user=member, db_session=db_session

@@ -6,8 +6,7 @@ The rule, once:
   for the user is not NOT_AVAILABLE; or the user is its author; or a
   plugin__user row; or a plugin__user_group row with a permission for one of
   the user's groups. A group row with no permission holds only a group install
-  setting and grants nothing. A group row whose own setting is NOT_AVAILABLE
-  grants nothing either.
+  setting and grants nothing. A row with a permission cannot be NOT_AVAILABLE.
 - Editable: the author, or EDITOR through plugin__user or plugin__user_group.
   There is no organization-wide edit.
 - Install setting for a user: the company setting is the plugin's own setting,
@@ -34,7 +33,7 @@ can compute access for many users or many plugins.
 from collections.abc import Collection, Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from enum import Enum, IntEnum
+from enum import IntEnum
 from typing import Literal
 from uuid import UUID
 
@@ -78,6 +77,10 @@ from onyx.db.models import (
     User__UserGroup,
     UserGroup,
     UserPluginPreference,
+)
+from onyx.db.scoped_permissions import (
+    managed_group_member_ids_subquery,
+    scoped_group_ids_subquery,
 )
 from onyx.skills.limits import (
     SKILL_MIN_FILE_BYTES,
@@ -129,8 +132,7 @@ def plugin_shared_with_user(
     permission: SkillSharePermission | None = None,
 ) -> ColumnElement[bool]:
     """A plugin__user row, or a plugin__user_group row with a permission for
-    one of the user's groups and a setting other than NOT_AVAILABLE. With
-    ``permission``, only rows at that level."""
+    one of the user's groups. With ``permission``, only rows at that level."""
     user_share = (
         select(Plugin__User.plugin_id)
         .where(Plugin__User.plugin_id == plugin.id, Plugin__User.user_id == user_id)
@@ -146,9 +148,6 @@ def plugin_shared_with_user(
             Plugin__UserGroup.plugin_id == plugin.id,
             User__UserGroup.user_id == user_id,
             Plugin__UserGroup.permission.is_not(None),
-            Plugin__UserGroup.installation_policy.is_distinct_from(
-                PluginInstallationPolicy.NOT_AVAILABLE
-            ),
         )
         .correlate_except(Plugin__UserGroup, User__UserGroup)
     )
@@ -261,16 +260,63 @@ def plugin_is_published(marketplace: type[Marketplace]) -> ColumnElement[bool]:
     return marketplace.kind == MarketplaceKind.ORGANIZATION_LIBRARY
 
 
-def version_user_runs(plugin: type[Plugin], user_id: UserIdExpr) -> ColumnElement[UUID]:
+def plugin_in_managed_scope(
+    plugin: type[Plugin], marketplace: type[Marketplace], manager: User
+) -> ColumnElement[bool]:
+    """H6 and R17: a group manager acts on a plugin that is not published, is
+    shared with a group they manage, and is shared with no other group and no
+    user outside their groups. Fails closed for a user who manages no group."""
+    managed = scoped_group_ids_subquery(manager)
+    group_share = select(Plugin__UserGroup.plugin_id).where(
+        Plugin__UserGroup.plugin_id == plugin.id,
+        Plugin__UserGroup.permission.is_not(None),
+    )
+    user_share_outside = select(Plugin__User.plugin_id).where(
+        Plugin__User.plugin_id == plugin.id,
+        Plugin__User.user_id.not_in(managed_group_member_ids_subquery(manager)),
+    )
+    return and_(
+        ~plugin_is_published(marketplace),
+        group_share.where(Plugin__UserGroup.user_group_id.in_(managed)).exists(),
+        ~group_share.where(Plugin__UserGroup.user_group_id.not_in(managed)).exists(),
+        ~user_share_outside.exists(),
+    )
+
+
+def plugin_ids_in_managed_scope(
+    plugin_ids: Iterable[UUID], manager: User, db_session: Session
+) -> set[UUID]:
+    ids = sorted(set(plugin_ids))
+    if not ids:
+        return set()
+    return set(
+        db_session.scalars(
+            select(Plugin.id)
+            .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
+            .where(
+                Plugin.id.in_(ids),
+                plugin_in_managed_scope(Plugin, Marketplace, manager),
+            )
+        )
+    )
+
+
+def _version_run(
+    plugin: type[Plugin], gets_current: ColumnElement[bool]
+) -> ColumnElement[UUID]:
     return case(
-        (
-            or_(
-                plugin.author_user_id == user_id,
-                plugin_shared_with_user(plugin, user_id),
-            ),
-            plugin.current_version_id,
-        ),
+        (gets_current, plugin.current_version_id),
         else_=func.coalesce(plugin.published_version_id, plugin.current_version_id),
+    )
+
+
+def version_user_runs(plugin: type[Plugin], user_id: UserIdExpr) -> ColumnElement[UUID]:
+    return _version_run(
+        plugin,
+        or_(
+            plugin.author_user_id == user_id,
+            plugin_shared_with_user(plugin, user_id),
+        ),
     )
 
 
@@ -339,16 +385,6 @@ class SkillNameRank(IntEnum):
     PUBLISHED = 2
     OWN = 3
     SHARED = 4
-
-
-class NameHiddenReason(str, Enum):
-    BUILT_IN = "built_in"
-    REQUIRED = "required"
-    PUBLISHED = "published"
-    OWN = "own"
-    SHARED = "shared"
-    # The same rank: the older plugin kept the name.
-    OLDER = "older"
 
 
 @dataclass(frozen=True)
@@ -775,30 +811,11 @@ def runtime_plugin_charges(
 
 
 @dataclass(frozen=True)
-class HiddenSkillName:
-    plugin_id: UUID
-    name: str
-    # None when a built-in skill keeps the name.
-    kept_by_plugin_id: UUID | None
-    reason: NameHiddenReason
-
-
-@dataclass(frozen=True)
 class SkillNameOrder:
     # Skill name to the plugin that keeps it. Built-in names are not listed.
     kept: dict[str, UUID]
-    hidden: tuple[HiddenSkillName, ...]
-
-    def hides(self, plugin_id: UUID) -> bool:
-        return any(entry.plugin_id == plugin_id for entry in self.hidden)
-
-
-def _hidden_reason(
-    kept_rank: SkillNameRank, hidden_rank: SkillNameRank
-) -> NameHiddenReason:
-    if kept_rank == hidden_rank:
-        return NameHiddenReason.OLDER
-    return NameHiddenReason(kept_rank.name.lower())
+    # Plugins that lose at least one of their names.
+    hidden: frozenset[UUID]
 
 
 def order_skill_names(
@@ -806,7 +823,8 @@ def order_skill_names(
     reserved_names: Collection[str] = (),
 ) -> SkillNameOrder:
     """Keep one plugin for each skill name of one user's enabled plugins.
-    ``reserved_names`` are the built-in skill names, which always win."""
+    ``reserved_names`` are the names of the user's built-in skills, which
+    always win."""
     contenders: dict[str, list[UserPluginState]] = {}
     for state in states:
         if not state.enabled:
@@ -815,33 +833,19 @@ def order_skill_names(
             contenders.setdefault(name, []).append(state)
 
     kept: dict[str, UUID] = {}
-    hidden: list[HiddenSkillName] = []
-    for name in sorted(contenders):
+    hidden: set[UUID] = set()
+    for name, named in contenders.items():
         ordered = sorted(
-            contenders[name],
+            named,
             key=lambda state: skill_name_order_key(
                 state.name_rank, state.created_at, state.plugin_id
             ),
         )
-        if name in reserved_names:
-            winner_id: UUID | None = None
-            winner_rank = SkillNameRank.BUILT_IN
-            losers = ordered
-        else:
-            winner_id = ordered[0].plugin_id
-            winner_rank = ordered[0].name_rank
-            kept[name] = winner_id
-            losers = ordered[1:]
-        hidden.extend(
-            HiddenSkillName(
-                plugin_id=loser.plugin_id,
-                name=name,
-                kept_by_plugin_id=winner_id,
-                reason=_hidden_reason(winner_rank, loser.name_rank),
-            )
-            for loser in losers
-        )
-    return SkillNameOrder(kept=kept, hidden=tuple(hidden))
+        if name not in reserved_names:
+            kept[name] = ordered[0].plugin_id
+            ordered = ordered[1:]
+        hidden.update(state.plugin_id for state in ordered)
+    return SkillNameOrder(kept=kept, hidden=frozenset(hidden))
 
 
 # --- Access of plugins for responses ----------------------------------------
@@ -901,11 +905,6 @@ class PluginAccess:
 
     # The default of the plugin's marketplace.
     marketplace_default_policy: PluginInstallationPolicy
-
-    @property
-    def company_installation_policy(self) -> PluginInstallationPolicy:
-        """The plugin's own setting, else its marketplace default."""
-        return self.installation_policy or self.marketplace_default_policy
 
 
 def load_plugin_access(
@@ -1047,18 +1046,7 @@ class GroupPluginRow:
 
 def load_group_plugins(group_id: int, db_session: Session) -> list[GroupPluginRow]:
     """Every plugin__user_group row of the group, ordered by plugin name."""
-    group_runs = case(
-        (
-            and_(
-                Plugin__UserGroup.permission.is_not(None),
-                Plugin__UserGroup.installation_policy.is_distinct_from(
-                    PluginInstallationPolicy.NOT_AVAILABLE
-                ),
-            ),
-            Plugin.current_version_id,
-        ),
-        else_=func.coalesce(Plugin.published_version_id, Plugin.current_version_id),
-    )
+    group_runs = _version_run(Plugin, Plugin__UserGroup.permission.is_not(None))
     skill_paths = (
         select(func.array_agg(aggregate_order_by(PluginSkill.path, PluginSkill.path)))
         .where(PluginSkill.plugin_version_id == group_runs)
@@ -1083,7 +1071,6 @@ def load_group_plugins(group_id: int, db_session: Session) -> list[GroupPluginRo
         .join(Plugin, Plugin.id == Plugin__UserGroup.plugin_id)
         .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
         .where(Plugin__UserGroup.user_group_id == group_id)
-        .order_by(Plugin.name, Plugin.id)
     ).all()
     result = [
         GroupPluginRow(

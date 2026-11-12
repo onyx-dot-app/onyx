@@ -32,10 +32,6 @@ from ee.onyx.db.user_group import (
     update_user_group,
 )
 from ee.onyx.db.user_group import delete_user_group as db_delete_user_group
-from ee.onyx.db.user_group_plugin import (
-    list_user_group_plugins,
-    set_user_group_plugin_setting__no_commit,
-)
 from ee.onyx.server.user_group.models import (
     AddUsersToUserGroupRequest,
     BulkSetPermissionsRequest,
@@ -86,6 +82,8 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import ConnectorManageRole, Permission, PermissionAuthority
 from onyx.db.models import User
 from onyx.db.persona import fetch_persona_by_id_for_user, get_personas_by_ids
+from onyx.db.plugin import set_group_install_setting__no_commit
+from onyx.db.plugin_access import load_group_plugins, plugin_ids_in_managed_scope
 from onyx.db.user_group import (
     assert_group_config_is_editable,
     assert_group_permissions_editable,
@@ -94,7 +92,7 @@ from onyx.db.user_group import (
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.security.store import get_security_settings
-from onyx.skills.push import push_skills_after_membership_change, push_skills_for_users
+from onyx.skills.push import push_skills_and_commit
 from onyx.utils.audit import (
     AuditAction,
     AuditOutcome,
@@ -339,7 +337,7 @@ def create_user_group(
             "cc_pair_ids": list(user_group.cc_pair_ids),
         },
     )
-    push_skills_after_membership_change(user_group.user_ids, db_session)
+    push_skills_and_commit(user_group.user_ids, db_session)
 
     return UserGroup.from_model(
         db_user_group,
@@ -436,7 +434,7 @@ def patch_user_group(
         )
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
-    push_skills_after_membership_change(
+    push_skills_and_commit(
         members_before ^ fetch_user_group_member_ids(db_session, user_group_id),
         db_session,
     )
@@ -569,7 +567,7 @@ def add_users(
         )
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
-    push_skills_after_membership_change(
+    push_skills_and_commit(
         fetch_user_group_member_ids(db_session, user_group_id) - members_before,
         db_session,
     )
@@ -598,7 +596,7 @@ def delete_user_group(
         prepare_user_group_for_deletion(db_session, user_group_id)
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
-    push_skills_after_membership_change(member_uuids, db_session)
+    push_skills_and_commit(member_uuids, db_session)
 
     emit_audit_event(
         AuditAction.USER_GROUP_DELETE,
@@ -843,6 +841,20 @@ def _assert_reads_group_plugins(
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "User group not found")
 
 
+def _group_plugins(
+    user_group_id: int, user: User, db_session: Session
+) -> list[UserGroupPlugin]:
+    rows = load_group_plugins(user_group_id, db_session)
+    editable = (
+        {row.plugin_id for row in rows}
+        if has_global_permission(user, Permission.MANAGE_PLUGINS)
+        else plugin_ids_in_managed_scope(
+            [row.plugin_id for row in rows], user, db_session
+        )
+    )
+    return [UserGroupPlugin.from_row(row, row.plugin_id in editable) for row in rows]
+
+
 @router.get("/admin/user-group/{user_group_id}/plugins")
 def get_user_group_plugins(
     user_group_id: int,
@@ -853,10 +865,7 @@ def get_user_group_plugins(
 ) -> list[UserGroupPlugin]:
     """The plugins shared with the group or with a group install setting."""
     _assert_reads_group_plugins(user, user_group_id, db_session)
-    return [
-        UserGroupPlugin.from_row(row)
-        for row in list_user_group_plugins(user_group_id, user, db_session)
-    ]
+    return _group_plugins(user_group_id, user, db_session)
 
 
 @router.put("/admin/user-group/{user_group_id}/plugins/{plugin_id}")
@@ -872,13 +881,9 @@ def set_user_group_plugin_installation_policy(
     """Set or remove the group's install setting of a plugin. A private
     plugin that the group does not have yet is shared with it as viewer."""
     _assert_reads_group_plugins(user, user_group_id, db_session)
-    affected = set_user_group_plugin_setting__no_commit(
-        user_group_id, plugin_id, update.installation_policy, user, db_session
-    )
+    affected = set_group_install_setting__no_commit(
+        plugin_id, user_group_id, update.installation_policy, user, db_session
+    ).affected_user_ids
     db_session.commit()
-    push_skills_for_users(affected, db_session)
-    db_session.commit()
-    return [
-        UserGroupPlugin.from_row(row)
-        for row in list_user_group_plugins(user_group_id, user, db_session)
-    ]
+    push_skills_and_commit(affected, db_session)
+    return _group_plugins(user_group_id, user, db_session)
