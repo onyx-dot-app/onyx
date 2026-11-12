@@ -145,8 +145,9 @@ no `SYSTEM` root: its first question has no parent, and
 `ChatRunStore.reserve_run_id` saves first. A later call to the same sub-agent
 reuses its child session and chains the new question to the previous
 response, which must be terminal. Creation links determine authorized ancestors;
-the invoking tool identifies the requester of each run. Accepted instructions
-also deliver the result to their senders on the selected branch. An automatic response
+the invoking tool identifies the requester of each run. A child's result goes
+to the agent that spawned it, also for runs that a later instruction started
+(`db/chat_inputs.py:reserve_inbox_run__no_commit`). An automatic response
 to child output links directly to the previous assistant response and retains
 its original invocation. It creates no user-message row. An ancestor can request
 a grandchild's next run without changing the grandchild's session ancestry.

@@ -189,10 +189,10 @@ not cancelled, refreshes the admission lease every 5 s, and lets each
 `ChatRunStore` renew its owner leases every 10 s. After
 `CHAT_EXECUTION_TIMEOUT_S` each response run cancels itself with a saved
 `DEADLINE` failure. The turn cancels remaining work 30 seconds later, including
-preparation that has not started a run. When no response worker and no
-owned run remains, it releases the admission and then finishes delivery, so a
-client that sees the stream end can send again at once. A child
-run's owner lease also keeps the turn and its admission alive.
+preparation that has not started a run. When no response worker remains, it
+releases the admission and then finishes delivery, so a client that sees the
+stream end can send again at once. Background child runs keep the control loop
+running after the release, but they do not hold the admission.
 Before release it reads Stop one last time. A Stop of the turn, even one that
 arrived after its answer finished, pauses the queue
 (`chat_session.queue_paused_at`, `db/chat_inputs.py:pause_chat_queue__no_commit`);
@@ -356,9 +356,9 @@ termination grace period is much shorter, so it ends running turns first
     `db/chat.py:reserve_chat_response_ids`. Stream resume does not restart work;
     only a suspended checkpoint (`ChatRunStore.handoff` and `resume`) restores it.
     Saved results can still start a new root response through status polling.
-    Pending nested delivery needs a live chat control worker; a crashed worker
-    is not recreated by status polling. A later chat turn can dispatch the
-    saved results.
+    Status polling also restarts pending nested delivery: the status route
+    schedules dispatch for child work, and dispatch starts an agent host
+    (`chat/execution.py:host_agent_work`) when no running child remains.
 13. `shared-loop-pieces` **Shared runtime pieces have several callers.** A change
     to `agents/runtime.py`, to `chat/prompt_utils.py:prepare_prompt` or to
     `Placement` handling also reaches deep research, the research agent and the
