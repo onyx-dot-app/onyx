@@ -347,6 +347,32 @@ Onyx uses one of them in this order:
 
 If the two Skills are equal in this order, Onyx uses the older one. The other Skill shows as off.
 
+### Skill limit for each user
+
+The Skills that a user has on can use at most 500 MB and 5,000 files together.
+Onyx counts the extracted size and file count of each Skill version that the user runs.
+It also counts the built-in Skills. A Skill that the user has not turned on does not count.
+A Skill version saved before Onyx measured sizes counts as 0 until Onyx measures it.
+
+Onyx refuses a change that puts an active user past either limit:
+
+| Change | Result |
+| --- | --- |
+| A user uploads a Skill or turns on a Skill | Refused. The error shows the user's size and file count. |
+| An edit, restore, or bundle replace makes a Skill larger | Refused if a user who runs that version goes past the limit. |
+| An admin sets **Required** or **Installed by default**, for the organization or a group | Refused if a member goes past the limit. |
+| An admin shares a Skill with a group, changes **Default Access**, publishes, approves, or transfers a Skill | Refused if a user goes past the limit. |
+| An admin sets **Available to install** | Allowed. Members get the Skill only when they turn it on. |
+| A user connects an App that a Skill needs | The App connects. Skills that do not fit stay off, and the response lists them. |
+| A user joins a group | Always allowed. |
+
+The error is HTTP 413 with the code `SKILL_LIMIT_EXCEEDED`. Its `skill_limit` field gives `users_over`,
+the number of users who would go past the limit, and `max_bytes` and `max_files`. For a change to your own Skills,
+`usage` gives your size and file count after the change.
+
+Users who are already past the limit, for example after a group join, do not block a change.
+Inactive users do not count.
+
 ## Maintain a Skill
 
 Open a custom Skill to manage its lifecycle:
@@ -432,6 +458,12 @@ Configure access once before importing the batch. Onyx reports invalid bundles s
   If it was shared during an active session, start a new turn or session and check the picker again.
   For a published Skill with no installation policy of its own, check **Default Access** under **Craft → Preferences**.
   With **Not available**, only the author and the people and groups it is shared with see it.
+</Accordion>
+
+<Accordion title="A Skill change returns SKILL_LIMIT_EXCEEDED">
+  The change would put one or more users past 500 MB or 5,000 files of Skills.
+  See [Skill limit for each user](#skill-limit-for-each-user). Ask the users to turn off Skills they do not use,
+  make the Skill smaller, or set **Available to install** so that members choose it.
 </Accordion>
 
 <Accordion title="A Skill is on but Craft uses a different Skill">

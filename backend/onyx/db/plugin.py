@@ -65,6 +65,7 @@ from onyx.db.scoped_permissions import (
     fetch_managed_group_ids,
     fetch_managed_group_member_ids,
 )
+from onyx.db.skill_limit import skill_limit_check
 from onyx.db.user_group import assert_not_shared_with_default_group
 from onyx.db.utils import (
     UNSET,
@@ -173,7 +174,8 @@ def set_organization_library_default__no_commit(
 ) -> set[UUID]:
     """Set the Organization library default and return the users with a
     running sandbox who could see an affected plugin before or after. REQUIRED
-    is refused: one switch would force every published plugin on every user."""
+    is refused: one switch would force every published plugin on every user.
+    A change that puts users past the skill limit is refused with 413."""
     if policy == PluginInstallationPolicy.REQUIRED:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
@@ -191,9 +193,10 @@ def set_organization_library_default__no_commit(
             )
         )
     )
-    before = affected_user_ids_for_plugins(affected_ids, db_session)
-    library.default_installation_policy = policy
-    db_session.flush()
+    with skill_limit_check(db_session, affected_ids, actor_id=None):
+        before = affected_user_ids_for_plugins(affected_ids, db_session)
+        library.default_installation_policy = policy
+        db_session.flush()
     return before | affected_user_ids_for_plugins(affected_ids, db_session)
 
 
@@ -1749,21 +1752,27 @@ def apply_plugin_access_change__no_commit(
 
     ``actor`` None is a system write that the caller authorized, such as an
     ownership transfer. The permission checks are skipped; the other rules
-    still apply."""
+    still apply.
+
+    The skill limit (``onyx.db.skill_limit``) is checked once for the whole
+    set: a change that puts users past it is refused with 413."""
     ids = sorted(set(plugin_ids))
     if not ids:
         return PluginAccessResult(affected_user_ids=set(), failures={})
     plugins, failures = _lock_for_access_change(ids, db_session)
     _check_access_change(plugins, change, actor, db_session)
 
-    before = affected_user_ids_for_plugins(plugins, db_session)
-    for plugin_id, locked in plugins.items():
-        try:
-            with db_session.begin_nested():
-                _apply_to_plugin__no_commit(locked, change, actor, db_session)
-        except OnyxError as exc:
-            failures[plugin_id] = exc
-    after = affected_user_ids_for_plugins(plugins, db_session)
+    with skill_limit_check(
+        db_session, plugins, actor_id=actor.id if actor is not None else None
+    ):
+        before = affected_user_ids_for_plugins(plugins, db_session)
+        for plugin_id, locked in plugins.items():
+            try:
+                with db_session.begin_nested():
+                    _apply_to_plugin__no_commit(locked, change, actor, db_session)
+            except OnyxError as exc:
+                failures[plugin_id] = exc
+        after = affected_user_ids_for_plugins(plugins, db_session)
     return PluginAccessResult(affected_user_ids=before | after, failures=failures)
 
 

@@ -7,7 +7,6 @@ from pydantic import BaseModel
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
-from ee.onyx.db.license import acquire_advisory_xact_lock, advisory_lock_id
 from ee.onyx.server.spending_limits.models import GroupWithLimits, SpendingLimitRequest
 from onyx.configs.constants import (
     TokenRateLimitAction,
@@ -27,6 +26,7 @@ from onyx.db.user_usage import (
     get_usage_bucket_start,
     insert_user_usage_baselines__no_commit,
 )
+from onyx.db.utils import acquire_advisory_xact_lock, advisory_lock_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from shared_configs.contextvars import get_current_tenant_id

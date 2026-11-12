@@ -1,4 +1,3 @@
-import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any, cast
@@ -18,6 +17,9 @@ from onyx.db.enums import (
     GatedAppKind,
     SkillInstallationPolicy,
     SkillSharePermission,
+)
+from onyx.db.external_app_readiness import (
+    is_user_authenticated_for_app,
 )
 from onyx.db.models import (
     ExternalApp,
@@ -46,8 +48,6 @@ from onyx.utils.sensitive import SensitiveValue
 
 logger = setup_logger()
 
-_PLACEHOLDER_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
-
 
 @dataclass(frozen=True)
 class SkillExternalAppDependencyState:
@@ -55,26 +55,6 @@ class SkillExternalAppDependencyState:
     name: str
     enabled: bool
     ready: bool
-
-
-def placeholders_in_template(auth_template: dict[str, Any]) -> set[str]:
-    placeholders: set[str] = set()
-    for value in auth_template.values():
-        if isinstance(value, str):
-            placeholders.update(_PLACEHOLDER_RE.findall(value))
-    return placeholders
-
-
-def required_user_credential_keys(
-    auth_template: dict[str, Any],
-    organization_credentials: dict[str, Any],
-) -> list[str]:
-    """Sorted credential parameter names the user must supply: `{placeholder}`
-    references in `auth_template` values not pre-filled by
-    `organization_credentials`."""
-    return sorted(
-        placeholders_in_template(auth_template) - organization_credentials.keys()
-    )
 
 
 def validate_auth_template(
@@ -128,24 +108,6 @@ def resolve_masked_credentials(
         else:
             resolved[key] = value
     return resolved
-
-
-def is_user_authenticated_for_app(
-    app: ExternalApp,
-    user_cred: ExternalAppUserCredential | None,
-) -> bool:
-    """True iff the user has supplied every credential parameter the app's
-    ``auth_template`` requires that the org hasn't pre-filled. Apps with no
-    user-required keys need no credential row."""
-    required = required_user_credential_keys(
-        app.auth_template, app.organization_credentials.get_value(apply_mask=False)
-    )
-    if not required:
-        return True
-    if user_cred is None:
-        return False
-    stored = user_cred.user_credentials.get_value(apply_mask=False)
-    return all(k in stored for k in required)
 
 
 def get_external_app_by_id(
@@ -769,7 +731,28 @@ def upsert_external_app_user_credential(
     granted_scopes: list[str] | None | UnsetType = UNSET,
     resolve_masked_values: bool = False,
 ) -> ExternalAppUserCredential:
-    """Create or replace the calling user's credentials for the app, and commit.
+    """Create or replace the user's credentials for the app, and commit."""
+    cred = upsert_external_app_user_credential__no_commit(
+        db_session,
+        external_app_id=external_app_id,
+        user_id=user_id,
+        user_credentials=user_credentials,
+        granted_scopes=granted_scopes,
+        resolve_masked_values=resolve_masked_values,
+    )
+    db_session.commit()
+    return cred
+
+
+def upsert_external_app_user_credential__no_commit(
+    db_session: Session,
+    external_app_id: int,
+    user_id: UUID,
+    user_credentials: dict[str, Any],
+    granted_scopes: list[str] | None | UnsetType = UNSET,
+    resolve_masked_values: bool = False,
+) -> ExternalAppUserCredential:
+    """Create or replace the calling user's credentials for the app.
     Atomic via ON CONFLICT on (external_app_id, user_id). Raises
     ``OnyxError(NOT_FOUND)`` if the app doesn't exist. ``resolve_masked_values``
     is for user form submissions that may echo masked display values; internal
@@ -822,9 +805,7 @@ def upsert_external_app_user_credential(
         set_=update_set,
     ).returning(ExternalAppUserCredential)
 
-    cred = db_session.scalars(stmt).one()
-    db_session.commit()
-    return cred
+    return db_session.scalars(stmt.execution_options(populate_existing=True)).one()
 
 
 def disconnect_external_app_for_user(

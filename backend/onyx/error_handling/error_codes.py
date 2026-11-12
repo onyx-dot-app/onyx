@@ -105,6 +105,9 @@ class OnyxErrorCode(Enum):
     # Payload (413)
     # --------------------------------------------------------------------------
     PAYLOAD_TOO_LARGE = ("PAYLOAD_TOO_LARGE", 413)
+    # A write that would put users past the per-user skill limit. The body's
+    # `skill_limit` gives the number of users, the caller's usage and the limits.
+    SKILL_LIMIT_EXCEEDED = ("SKILL_LIMIT_EXCEEDED", 413)
 
     # --------------------------------------------------------------------------
     # Connector / Credential Errors (400-range)

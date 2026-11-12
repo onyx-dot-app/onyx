@@ -605,6 +605,31 @@ The library preview of an external-app skill calls the same renderer
     Admin Panel → Skills (`web/src/sections/skills/SkillReviewRequests.tsx`; a
     global manager without full admin sees it on the Craft Skills page); an
     approve error such as a name clash shows the server detail.
+25. `write-skill-limit` **No write moves an active user past 500 MB or 5,000
+    files of skills.** Limits are `skills/limits.py` constants. A user's total
+    is `plugin_version.unpacked_size_bytes` and `file_count` of the version
+    the user runs, for each plugin enabled for the user (before the name
+    order) with a version that is not invalid and a connected app
+    (`db/plugin_access.py:plugin_usage_by_user`, one query for many users),
+    plus every offered built-in (`skills/built_in.py:BUILT_IN_SKILL_USAGE`,
+    measured at import). A backfilled version with no sizes counts as 0.
+    `db/skill_limit.py:skill_limit_check`
+    wraps every write that can grow a total: A1 (shares, bulk, group
+    settings, group page, first publish), Default Access, create (upload,
+    editor, import), auto-enable, toggle, save/restore/replace, publish
+    update, approve and transfer. `track` measures the changed plugins
+    before the write; `finish` takes the tenant-wide advisory lock
+    (`lock_skill_limit`, wait logged), measures them again and reads full
+    totals only for users whose share grew. Refuse only under -> over (413
+    `SKILL_LIMIT_EXCEEDED`, body `skill_limit`: `users_over`, `usage` for the
+    acting user, `max_bytes`, `max_files`); already over is a logged warning;
+    inactive users and bot/external accounts do not count. The lock is taken
+    after the write's row locks and nothing waits for a row lock while it is
+    held. A nested check joins the session's outer one. App connect
+    (`db/skill.py:connect_external_app_within_skill_limit__no_commit`)
+    connects and saves an off choice for app skills that do not fit; the
+    response lists them in `skills_left_off_for_limit`. Group membership
+    changes are never checked: the run-time rule applies.
 ---
 
 ## Decisions
@@ -728,6 +753,10 @@ The library preview of an external-app skill calls the same renderer
   `backend/tests/integration/tests/skills/test_skill_group_summaries.py`
   covers group summaries, `group_settings`, the explicit company Available and
   app skills under Default Access Not available.
+  `backend/tests/integration/tests/skills/test_skill_write_limit.py` covers
+  the write limit through the API, and
+  `backend/tests/external_dependency_unit/craft/test_skill_write_limit.py`
+  the warning, app connect, backfilled sizes and the lock wait.
   `backend/tests/integration/tests/craft/k8s/` covers a real
   push.
 - By hand: edit a skill while a Craft session runs. The stale notice must

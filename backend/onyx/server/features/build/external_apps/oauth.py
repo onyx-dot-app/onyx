@@ -14,9 +14,10 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.external_app import (
     get_external_app_by_id,
-    upsert_external_app_user_credential,
+    upsert_external_app_user_credential__no_commit,
 )
 from onyx.db.models import ExternalApp, User
+from onyx.db.skill import connect_external_app_within_skill_limit__no_commit
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.base import OAuthExternalAppProvider, OAuthFlowSpec
@@ -295,13 +296,19 @@ def handle_external_app_oauth_callback(
     # it); None when the provider gives no signal.
     granted_scopes = provider.extract_granted_scopes(response_data)
 
-    upsert_external_app_user_credential(
+    left_off = connect_external_app_within_skill_limit__no_commit(
+        app.id,
+        user,
+        lambda: upsert_external_app_user_credential__no_commit(
+            db_session,
+            external_app_id=app.id,
+            user_id=user.id,
+            user_credentials=stored_credentials,
+            granted_scopes=granted_scopes,
+        ),
         db_session,
-        external_app_id=app.id,
-        user_id=user.id,
-        user_credentials=stored_credentials,
-        granted_scopes=granted_scopes,
     )
+    db_session.commit()
 
     # Authenticating opens this user's per-user gate; refresh their sandboxes so
     # the now-usable skill bundle lands
@@ -309,5 +316,8 @@ def handle_external_app_oauth_callback(
     db_session.commit()
 
     return OAuthCallbackResponse(
-        success=True, external_app_id=app.id, return_path=payload.return_path
+        success=True,
+        external_app_id=app.id,
+        return_path=payload.return_path,
+        skills_left_off_for_limit=left_off,
     )

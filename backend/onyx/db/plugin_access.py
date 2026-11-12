@@ -50,15 +50,19 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import aggregate_order_by
 from sqlalchemy.orm import InstrumentedAttribute, Session, aliased
 from sqlalchemy.sql.elements import KeyedColumnElement
+from sqlalchemy.sql.selectable import Subquery
 
 from onyx.db.enums import (
+    AccountType,
     MarketplaceKind,
     PluginInstallationPolicy,
     PluginReviewStatus,
     SandboxStatus,
     SkillSharePermission,
 )
+from onyx.db.external_app_readiness import ready_app_skill_pairs
 from onyx.db.models import (
+    ExternalApp__Skill,
     Marketplace,
     Plugin,
     Plugin__User,
@@ -71,6 +75,7 @@ from onyx.db.models import (
     UserGroup,
     UserPluginPreference,
 )
+from onyx.skills.limits import SkillUsage
 
 UserIdExpr = UUID | ColumnElement[UUID] | InstrumentedAttribute[UUID]
 
@@ -377,17 +382,11 @@ def skill_name_order_key(
     return (rank, created_at or datetime.min.replace(tzinfo=timezone.utc), plugin_id)
 
 
-def load_user_plugin_states(
-    user_ids: Iterable[UUID],
-    db_session: Session,
-    plugin_ids: Iterable[UUID] | None = None,
-) -> list[UserPluginState]:
-    """The state of each plugin for each user, in one query. With
-    ``plugin_ids``, every pair of the users and those plugins; without, only
-    the plugins each user can see."""
-    users = sorted(set(user_ids))
-    if not users:
-        return []
+def _user_plugin_pairs(
+    user_filter: ColumnElement[bool], plugin_ids: list[UUID] | None
+) -> Subquery:
+    """Each user (``user_filter`` on the user table) with each plugin: the given
+    plugins, or else only the plugins the user can see."""
     user_id: KeyedColumnElement[UUID] = User.__table__.c.id
     access = (
         select(
@@ -404,20 +403,21 @@ def load_user_plugin_states(
         .select_from(User.__table__)
         .join(Plugin, true())
         .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
-        .where(user_id.in_(users))
+        .where(user_filter)
     )
     if plugin_ids is not None:
-        plugins = sorted(set(plugin_ids))
-        if not plugins:
-            return []
-        access = access.where(Plugin.id.in_(plugins))
+        access = access.where(Plugin.id.in_(plugin_ids))
     else:
         access = access.where(plugin_visible_to_user(Plugin, Marketplace, user_id))
-    pairs = access.subquery("pairs")
+    return access.subquery("pairs")
 
+
+def _enabled_in_pairs(pairs: Subquery) -> ColumnElement[bool]:
+    """The user's choice under the setting. Needs an outer join of
+    user_plugin_preference on the pair."""
     choice = UserPluginPreference.enabled
     rank = pairs.c.rank
-    enabled = case(
+    return case(
         (pairs.c.visible.is_not(True), False),
         (rank == policy_rank(PluginInstallationPolicy.REQUIRED), True),
         (
@@ -430,6 +430,32 @@ def load_user_plugin_states(
         ),
         else_=False,
     )
+
+
+def _preference_of_pair(pairs: Subquery) -> ColumnElement[bool]:
+    return and_(
+        UserPluginPreference.user_id == pairs.c.user_id,
+        UserPluginPreference.plugin_id == pairs.c.plugin_id,
+    )
+
+
+def load_user_plugin_states(
+    user_ids: Iterable[UUID],
+    db_session: Session,
+    plugin_ids: Iterable[UUID] | None = None,
+) -> list[UserPluginState]:
+    """The state of each plugin for each user, in one query. With
+    ``plugin_ids``, every pair of the users and those plugins; without, only
+    the plugins each user can see."""
+    users = sorted(set(user_ids))
+    if not users:
+        return []
+    plugins = sorted(set(plugin_ids)) if plugin_ids is not None else None
+    if plugins is not None and not plugins:
+        return []
+    pairs = _user_plugin_pairs(User.__table__.c.id.in_(users), plugins)
+    rank = pairs.c.rank
+    enabled = _enabled_in_pairs(pairs)
     skill_names = (
         select(
             func.array_agg(
@@ -458,13 +484,7 @@ def load_user_plugin_states(
             skill_names,
         )
         .join(PluginVersion, PluginVersion.id == pairs.c.version_id)
-        .outerjoin(
-            UserPluginPreference,
-            and_(
-                UserPluginPreference.user_id == pairs.c.user_id,
-                UserPluginPreference.plugin_id == pairs.c.plugin_id,
-            ),
-        )
+        .outerjoin(UserPluginPreference, _preference_of_pair(pairs))
         .order_by(pairs.c.user_id, pairs.c.plugin_id)
     ).all()
     return [
@@ -484,6 +504,101 @@ def load_user_plugin_states(
         )
         for row in rows
     ]
+
+
+# --- Skill usage of many users ------------------------------------------------
+
+_NO_SKILL_DISK_ACCOUNTS = (
+    AccountType.BOT,
+    AccountType.EXT_PERM_USER,
+    AccountType.ANONYMOUS,
+)
+
+
+def active_skill_user() -> ColumnElement[bool]:
+    """Users the skill limit counts: active accounts that can get a skill
+    disk."""
+    user = User.__table__.c
+    return and_(
+        user.is_active.is_(True), user.account_type.not_in(_NO_SKILL_DISK_ACCOUNTS)
+    )
+
+
+def _plugin_usage_rows(
+    user_filter: ColumnElement[bool],
+    plugin_ids: list[UUID] | None,
+    by_plugin: bool,
+    db_session: Session,
+) -> list[tuple[UUID, UUID | None, SkillUsage]]:
+    """Usage of the plugins each user gets, in one query, then one query for
+    app connections. A plugin counts with the size of the version the user
+    runs when it is enabled for the user (before the name order), its version
+    is not invalid, and its app, if any, is connected. A backfilled version
+    with no sizes counts as 0."""
+    pairs = _user_plugin_pairs(user_filter, plugin_ids)
+    app_plugin = pairs.c.plugin_id.in_(select(ExternalApp__Skill.skill_id))
+    key = (
+        pairs.c.plugin_id
+        if by_plugin
+        else case((app_plugin, pairs.c.plugin_id), else_=None)
+    )
+    rows = db_session.execute(
+        select(
+            pairs.c.user_id,
+            key,
+            app_plugin,
+            func.sum(func.coalesce(PluginVersion.unpacked_size_bytes, 0)),
+            func.sum(func.coalesce(PluginVersion.file_count, 0)),
+        )
+        .join(PluginVersion, PluginVersion.id == pairs.c.version_id)
+        .outerjoin(UserPluginPreference, _preference_of_pair(pairs))
+        .where(_enabled_in_pairs(pairs), PluginVersion.is_valid.is_not(False))
+        .group_by(pairs.c.user_id, key, app_plugin)
+    ).all()
+    ready = ready_app_skill_pairs(
+        ((user_id, plugin_id) for user_id, plugin_id, is_app, _, _ in rows if is_app),
+        db_session,
+    )
+    return [
+        (user_id, plugin_id, SkillUsage(bytes=int(size), files=int(files)))
+        for user_id, plugin_id, is_app, size, files in rows
+        if not is_app or (user_id, plugin_id) in ready
+    ]
+
+
+def plugin_usage_by_user(
+    user_filter: ColumnElement[bool],
+    db_session: Session,
+    plugin_ids: Iterable[UUID] | None = None,
+) -> dict[UUID, SkillUsage]:
+    """Usage of the plugins each user gets (``plugin_ids``, or all), for the
+    users that ``user_filter`` selects on the user table. Users with no usage
+    are left out. Built-in skills are not plugins and are not counted."""
+    plugins = sorted(set(plugin_ids)) if plugin_ids is not None else None
+    if plugins is not None and not plugins:
+        return {}
+    usage: dict[UUID, SkillUsage] = {}
+    for user_id, _, row_usage in _plugin_usage_rows(
+        user_filter, plugins, False, db_session
+    ):
+        usage[user_id] = usage.get(user_id, SkillUsage()) + row_usage
+    return usage
+
+
+def plugin_usage_by_plugin(
+    user_id: UUID, plugin_ids: Iterable[UUID], db_session: Session
+) -> dict[UUID, SkillUsage]:
+    """Usage of each of the plugins one user gets."""
+    plugins = sorted(set(plugin_ids))
+    if not plugins:
+        return {}
+    return {
+        plugin_id: row_usage
+        for _, plugin_id, row_usage in _plugin_usage_rows(
+            User.__table__.c.id == user_id, plugins, True, db_session
+        )
+        if plugin_id is not None
+    }
 
 
 @dataclass(frozen=True)

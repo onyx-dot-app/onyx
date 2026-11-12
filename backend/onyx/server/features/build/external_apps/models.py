@@ -143,6 +143,13 @@ class OAuthCallbackResponse(BaseModel):
     success: bool
     external_app_id: int
     return_path: str | None = None
+    # App skills left off because they would put the user past the skill limit.
+    skills_left_off_for_limit: list[UUID] = Field(default_factory=list)
+
+
+class ExternalAppConnectResponse(BaseModel):
+    # App skills left off because they would put the user past the skill limit.
+    skills_left_off_for_limit: list[UUID] = Field(default_factory=list)
 
 
 class ConnectAppDecisionRequest(BaseModel):
