@@ -5665,14 +5665,6 @@ class PluginVersion(Base):
         nullable=False,
         server_default=PluginReviewStatus.DRAFT.value,
     )
-    review_requested_by_user_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("user.id", ondelete="SET NULL"),
-        nullable=True,
-    )
-    review_requested_at: Mapped[datetime.datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
 
     __table_args__ = (
         UniqueConstraint(

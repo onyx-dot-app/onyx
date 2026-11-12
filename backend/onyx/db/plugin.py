@@ -23,19 +23,17 @@ Functions here flush and never commit.
 import hashlib
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
-from datetime import datetime, timedelta
 from enum import Enum
 from typing import Literal
 from uuid import UUID, uuid4
 
-from sqlalchemy import ColumnElement, and_, delete, exists, func, or_, select, update
+from sqlalchemy import and_, delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission
 from onyx.auth.scoped_permissions import assert_within_scope
-from onyx.configs.constants import FileOrigin
 from onyx.db.enums import (
     MarketplaceKind,
     Permission,
@@ -45,7 +43,6 @@ from onyx.db.enums import (
     SkillSharePermission,
 )
 from onyx.db.models import (
-    FileRecord,
     Marketplace,
     Plugin,
     Plugin__User,
@@ -60,6 +57,7 @@ from onyx.db.models import (
     UserSkillPreference,
 )
 from onyx.db.plugin_access import affected_user_ids_for_plugins
+from onyx.db.plugin_review import publish_action_for, request_review__no_commit
 from onyx.db.user_group import assert_not_shared_with_default_group
 from onyx.db.utils import (
     UNSET,
@@ -85,8 +83,8 @@ PLUGIN_NAME_MAX_LENGTH = 64
 _PLUGIN_NAME_INDEX = "uq_plugin_marketplace_name"
 _PLUGIN_PRIMARY_KEY = "plugin_pkey"
 
-# The newest version keeps its bundle, with the newest older versions up to
-# this many bundles. The published and pending versions always keep theirs.
+# Bundles kept for the newest versions of a plugin. The current, published and
+# pending versions always keep theirs.
 BUNDLES_KEPT = 100
 
 NameClashAction = Literal["raise", "rename"]
@@ -267,7 +265,7 @@ def create_plugin__no_commit(
             )
             db_session.add(plugin)
             db_session.flush()
-            version = _add_version_rows(
+            _add_version_rows(
                 version_id=version_id,
                 plugin_id=plugin_id,
                 version_number=1,
@@ -275,9 +273,6 @@ def create_plugin__no_commit(
                 created_by=created_by,
                 db_session=db_session,
             )
-            if publish:
-                version.review_status = PluginReviewStatus.PUBLISHED
-                db_session.flush()
     except IntegrityError as exc:
         if not is_unique_violation(exc, _PLUGIN_NAME_INDEX):
             raise
@@ -313,23 +308,12 @@ def _manifest_matches(
     return current.bundle_sha256 == content.bundle_sha256
 
 
-def _has_no_file_manifest() -> ColumnElement[bool]:
-    # An ORM insert of None writes JSON null; the plugin backfill writes NULL.
-    return or_(
-        PluginVersion.file_manifest.is_(None),
-        func.jsonb_typeof(PluginVersion.file_manifest) == "null",
-    )
-
-
 def prune_plugin_bundles__no_commit(plugin: Plugin, db_session: Session) -> list[str]:
-    """Empty the bundle of each version that is not kept. The current,
-    published and pending versions keep their bundles, with the newest older
-    versions up to ``BUNDLES_KEPT`` bundles; denied versions count last, so
-    they are pruned first. The version rows stay. A bundle that the legacy
-    skill row uses is kept, and so is the bundle of a version with no stored
-    file list or root SKILL.md text, because reads of that version still open
-    the bundle. Call under the plugin lock. Returns the files that nothing
-    uses now; the caller deletes them after the commit."""
+    """Empty the bundle of each version that is not kept. Kept: the current,
+    published and pending versions, and the newest ``BUNDLES_KEPT`` versions.
+    The version rows stay. Call under the plugin lock. Returns the files that
+    no plugin version or legacy skill row uses now; the caller deletes them
+    after the commit."""
     kept = {
         version_id
         for version_id in (plugin.current_version_id, plugin.published_version_id)
@@ -346,36 +330,21 @@ def prune_plugin_bundles__no_commit(plugin: Plugin, db_session: Session) -> list
     kept.update(
         db_session.scalars(
             select(PluginVersion.id)
-            .where(
-                PluginVersion.plugin_id == plugin.id,
-                PluginVersion.id != plugin.current_version_id,
-            )
-            .order_by(
-                PluginVersion.review_status == PluginReviewStatus.DENIED,
-                PluginVersion.version_number.desc(),
-            )
-            .limit(BUNDLES_KEPT - 1)
+            .where(PluginVersion.plugin_id == plugin.id)
+            .order_by(PluginVersion.version_number.desc())
+            .limit(BUNDLES_KEPT)
         )
     )
-    legacy_bundle_file_id = db_session.scalar(
-        select(Skill.bundle_file_id).where(Skill.id == plugin.id)
-    )
-    pruned: dict[UUID, str] = {
+    pruned = {
         version_id: file_id
         for version_id, file_id in db_session.execute(
             select(PluginVersion.id, PluginVersion.bundle_file_id).where(
                 PluginVersion.plugin_id == plugin.id,
                 PluginVersion.bundle_file_id.is_not(None),
                 PluginVersion.id.not_in(kept),
-                ~_has_no_file_manifest(),
-                ~exists().where(
-                    PluginSkill.plugin_version_id == PluginVersion.id,
-                    PluginSkill.path == "",
-                    PluginSkill.skill_md.is_(None),
-                ),
             )
         ).tuples()
-        if file_id is not None and file_id != legacy_bundle_file_id
+        if file_id is not None
     }
     if not pruned:
         return []
@@ -391,6 +360,10 @@ def prune_plugin_bundles__no_commit(plugin: Plugin, db_session: Session) -> list
                 PluginVersion.bundle_file_id.in_(file_ids)
             )
         )
+    ) | set(
+        db_session.scalars(
+            select(Skill.bundle_file_id).where(Skill.bundle_file_id.in_(file_ids))
+        )
     )
     return sorted(file_ids - still_used)
 
@@ -400,29 +373,6 @@ class AddedPluginVersion:
     version: PluginVersion
     # Bundles that retention pruned. Delete them after the commit.
     pruned_bundle_file_ids: list[str]
-
-
-def set_published_version__no_commit(
-    plugin: Plugin, version_id: UUID, db_session: Session
-) -> None:
-    """Point published_version_id of a locked plugin at a version. That
-    version becomes published and the one it replaces superseded."""
-    previous = plugin.published_version_id
-    if previous == version_id:
-        return
-    if previous is not None:
-        db_session.execute(
-            update(PluginVersion)
-            .where(PluginVersion.id == previous)
-            .values(review_status=PluginReviewStatus.SUPERSEDED)
-        )
-    db_session.execute(
-        update(PluginVersion)
-        .where(PluginVersion.id == version_id, PluginVersion.plugin_id == plugin.id)
-        .values(review_status=PluginReviewStatus.PUBLISHED)
-    )
-    plugin.published_version_id = version_id
-    db_session.flush()
 
 
 def check_base_version(plugin: Plugin, base_version_id: UUID | None) -> None:
@@ -499,7 +449,7 @@ def add_plugin_version__no_commit(
         select(Marketplace.kind).where(Marketplace.id == plugin.marketplace_id)
     )
     if marketplace_kind == MarketplaceKind.ORGANIZATION_LIBRARY:
-        set_published_version__no_commit(plugin, version.id, db_session)
+        publish_plugin__no_commit(plugin.id, "raise", db_session, version_id=version.id)
     if plugin_version_kind(skill.path for skill in content.skills) == "skill":
         plugin.description = content.skills[0].description
     db_session.flush()
@@ -509,89 +459,38 @@ def add_plugin_version__no_commit(
     )
 
 
-@dataclass(frozen=True)
-class PluginVersionSummary:
-    id: UUID
-    version_number: int
-    created_at: datetime
-    created_by_user_id: UUID | None
-    created_by_email: str | None
-    # None for a version copied from a legacy skill row.
-    file_count: int | None
-    unpacked_size_bytes: int | None
-    # False after retention pruned the bundle.
-    bundle_kept: bool
-    is_current: bool
-    review_status: PluginReviewStatus
-
-
-PLUGIN_VERSION_PAGE_SIZE = 50
-
-
-def _plugin_version_summaries(
-    plugin_id: UUID,
-    db_session: Session,
-    *,
-    version_id: UUID | None = None,
-    before_version: int | None = None,
-) -> list[PluginVersionSummary]:
-    stmt = (
-        select(
-            PluginVersion.id,
-            PluginVersion.version_number,
-            PluginVersion.created_at,
-            PluginVersion.created_by_user_id,
-            PluginVersion.created_by_email,
-            PluginVersion.file_count,
-            PluginVersion.unpacked_size_bytes,
-            PluginVersion.bundle_file_id.is_not(None),
-            PluginVersion.id == Plugin.current_version_id,
-            PluginVersion.review_status,
-        )
-        .join(Plugin, Plugin.id == PluginVersion.plugin_id)
-        .where(PluginVersion.plugin_id == plugin_id)
-        .order_by(PluginVersion.version_number.desc())
-        .limit(PLUGIN_VERSION_PAGE_SIZE)
-    )
-    if version_id is not None:
-        stmt = stmt.where(PluginVersion.id == version_id)
-    if before_version is not None:
-        stmt = stmt.where(PluginVersion.version_number < before_version)
+def list_plugin_versions(
+    plugin_id: UUID, db_session: Session
+) -> list[tuple[PluginVersion, bool, bool]]:
+    """Every version of a plugin, newest first, with whether it is the current
+    and the published version."""
     return [
-        PluginVersionSummary(
-            id=row[0],
-            version_number=row[1],
-            created_at=row[2],
-            created_by_user_id=row[3],
-            created_by_email=row[4],
-            file_count=row[5],
-            unpacked_size_bytes=row[6],
-            bundle_kept=bool(row[7]),
-            is_current=bool(row[8]),
-            review_status=row[9],
-        )
-        for row in db_session.execute(stmt)
+        (version, bool(is_current), bool(is_published))
+        for version, is_current, is_published in db_session.execute(
+            select(
+                PluginVersion,
+                PluginVersion.id == Plugin.current_version_id,
+                PluginVersion.id == Plugin.published_version_id,
+            )
+            .join(Plugin, Plugin.id == PluginVersion.plugin_id)
+            .where(PluginVersion.plugin_id == plugin_id)
+            .order_by(PluginVersion.version_number.desc())
+        ).tuples()
     ]
 
 
-def list_plugin_versions(
-    plugin_id: UUID, db_session: Session, *, before_version: int | None = None
-) -> list[PluginVersionSummary]:
-    """Up to ``PLUGIN_VERSION_PAGE_SIZE`` versions of a plugin, newest first.
-    Pass the last version number as ``before_version`` to read older ones."""
-    return _plugin_version_summaries(
-        plugin_id, db_session, before_version=before_version
-    )
-
-
-def get_plugin_version_summary(
+def get_plugin_version(
     plugin_id: UUID, version_id: UUID, db_session: Session
-) -> PluginVersionSummary:
+) -> PluginVersion:
     """One version of the plugin. A version of another plugin is not found."""
-    rows = _plugin_version_summaries(plugin_id, db_session, version_id=version_id)
-    if not rows:
+    version = db_session.scalar(
+        select(PluginVersion).where(
+            PluginVersion.id == version_id, PluginVersion.plugin_id == plugin_id
+        )
+    )
+    if version is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill version not found.")
-    return rows[0]
+    return version
 
 
 @dataclass(frozen=True)
@@ -728,31 +627,6 @@ def persist_plugin_version_validity__no_commit(
         )
         .values(is_valid=is_valid)
     )
-
-
-# An upload saves its bundle before the row that uses it commits.
-ORPHAN_BUNDLE_MIN_AGE = timedelta(hours=1)
-
-
-def get_orphan_skill_bundle_file_ids(
-    *, after_file_id: str | None, limit: int, db_session: Session
-) -> list[str]:
-    """Skill bundle files older than ``ORPHAN_BUNDLE_MIN_AGE`` that no plugin
-    version and no legacy skill row uses, in file id order."""
-    statement = (
-        select(FileRecord.file_id)
-        .where(
-            FileRecord.file_origin == FileOrigin.SKILL_BUNDLE,
-            FileRecord.created_at < func.now() - ORPHAN_BUNDLE_MIN_AGE,
-            ~exists().where(PluginVersion.bundle_file_id == FileRecord.file_id),
-            ~exists().where(Skill.bundle_file_id == FileRecord.file_id),
-        )
-        .order_by(FileRecord.file_id)
-        .limit(limit)
-    )
-    if after_file_id is not None:
-        statement = statement.where(FileRecord.file_id > after_file_id)
-    return list(db_session.scalars(statement))
 
 
 # --- Skill plugins and their access ----------------------------------------
@@ -981,8 +855,38 @@ def publish_plugin__no_commit(
         )
     elif version_id is None:
         return
-    set_published_version__no_commit(
-        plugin, version_id or plugin.current_version_id, db_session
+    plugin.published_version_id = version_id or plugin.current_version_id
+    db_session.execute(
+        update(PluginVersion)
+        .where(
+            PluginVersion.plugin_id == plugin.id,
+            PluginVersion.review_status == PluginReviewStatus.PENDING,
+        )
+        .values(review_status=PluginReviewStatus.DRAFT)
+    )
+    db_session.flush()
+
+
+def publish_or_request_review__no_commit(
+    plugin: Plugin,
+    skill: Skill | None,
+    version_id: UUID,
+    actor: User | None,
+    on_name_clash: NameClashAction,
+    db_session: Session,
+) -> None:
+    """Publish a version of a locked plugin, or make it the pending request
+    when the Publishing setting requires review for ``actor``; OFF raises. The
+    one place the setting applies. ``actor`` None is a system or approved
+    publish and always publishes."""
+    if actor is not None and publish_action_for(actor) == "request_review":
+        request_review__no_commit(plugin, version_id, db_session)
+        return
+    if skill is not None and skill.public_permission is None:
+        skill.public_permission = SkillSharePermission.VIEWER
+        db_session.flush()
+    publish_plugin__no_commit(
+        plugin.id, on_name_clash, db_session, version_id=version_id
     )
 
 
@@ -1203,11 +1107,13 @@ class PluginAccessChange:
     not change anything.
 
     ``company_installation_policy``: UNSET keeps it, None means "use the
-    marketplace default", and a value sets that value."""
+    marketplace default", and a value sets that value. ``on_name_clash``
+    applies when ``publish`` moves a plugin to the Organization library."""
 
     user_grants: tuple[PluginUserGrant, ...] | None = None
     group_grants: tuple[PluginGroupGrant, ...] | None = None
     publish: bool = False
+    on_name_clash: NameClashAction = "raise"
     company_installation_policy: PluginInstallationPolicy | None | UnsetType = UNSET
     mode: PluginAccessMode = PluginAccessMode.REPLACE
 
@@ -1562,8 +1468,6 @@ def _apply_to_plugin__no_commit(
     plugin = locked.plugin
     skill = locked.skill
     if change.publish:
-        # Until the Publishing setting: the author or an organization-wide
-        # manager publishes.
         if (
             actor is not None
             and plugin.author_user_id != actor.id
@@ -1573,10 +1477,15 @@ def _apply_to_plugin__no_commit(
                 OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
                 "You do not have permission to change organization-wide skill access.",
             )
-        if skill is not None and skill.public_permission is None:
-            skill.public_permission = SkillSharePermission.VIEWER
-            db_session.flush()
-        publish_plugin__no_commit(plugin.id, "raise", db_session)
+        if plugin.published_version_id is None:
+            publish_or_request_review__no_commit(
+                plugin,
+                skill,
+                plugin.current_version_id,
+                actor,
+                change.on_name_clash,
+                db_session,
+            )
 
     if is_set(change.company_installation_policy):
         policy = change.company_installation_policy

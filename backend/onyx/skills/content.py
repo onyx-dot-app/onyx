@@ -19,7 +19,7 @@ from onyx.skills.bundle import (
     strip_skill_md_frontmatter,
 )
 from onyx.skills.models import CustomSkillBundleContents
-from onyx.skills.validation import is_missing_file_error, read_stored_bundle_bytes
+from onyx.skills.validation import read_stored_bundle_bytes
 
 
 def iter_builtin_skill_files(source_dir: Path) -> Iterator[Path]:
@@ -61,8 +61,7 @@ def read_skill_bundle_blob(
     skill_name: str,
     file_store: FileStore | None = None,
 ) -> bytes:
-    """A pruned bundle raises NOT_FOUND, also when the prune wins a race with
-    this read."""
+    """A pruned bundle raises NOT_FOUND."""
     if bundle_file_id is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, VERSION_FILES_NOT_KEPT)
     store = file_store or get_default_file_store()
@@ -71,8 +70,6 @@ def read_skill_bundle_blob(
     except OnyxError:
         raise
     except Exception as exc:
-        if is_missing_file_error(exc):
-            raise OnyxError(OnyxErrorCode.NOT_FOUND, VERSION_FILES_NOT_KEPT) from exc
         raise OnyxError(
             OnyxErrorCode.INTERNAL_ERROR,
             f"Failed to read bundle for skill '{skill_name}'.",

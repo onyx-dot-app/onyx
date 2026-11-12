@@ -8,12 +8,12 @@ from typing import Literal
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import insert, update
+from sqlalchemy import update
 
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.db.enums import SkillSharePermission
 from onyx.db.models import PluginVersion
-from onyx.db.plugin import BUNDLES_KEPT, PLUGIN_VERSION_PAGE_SIZE
+from onyx.db.plugin import BUNDLES_KEPT
 from onyx.server.features.skill.models import SkillPatchRequest, SkillUserShareRequest
 from onyx.skills.content import VERSION_FILES_NOT_KEPT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
@@ -103,33 +103,27 @@ def test_list_preview_and_restore(
     assert [version.version_number for version in history] == [3, 2, 1]
     assert [version.is_current for version in history] == [True, False, False]
     original = history[-1]
-    assert original.created_by_user_id == UUID(owner.id)
     assert original.created_by_email == owner.email
     assert original.created_at.tzinfo is not None
     assert original.bundle_kept
-    assert original.file_count == 2
-    assert original.unpacked_size_bytes is not None
-    assert original.unpacked_size_bytes > len(b"original attachment")
-    assert history[0].file_count == 3
 
     preview = SkillManager.preview_version(skill.id, original.id, actor)
-    assert preview.id == original.id
     assert preview.version_number == 1
-    assert preview.name == skill.name
     assert preview.description == "Original description"
     assert preview.instructions_markdown == "Original instructions"
-    assert [(file.path, file.size) for file in preview.files] == [("reference.txt", 19)]
 
     restored = SkillManager.restore_version(skill.id, original.id, history[0].id, actor)
     assert restored.description == "Original description"
     assert restored.instructions_markdown == "Original instructions"
-    assert restored.files == preview.files
+    assert [(file.path, file.size) for file in restored.files] == [
+        ("reference.txt", 19)
+    ]
     assert restored.current_version_number == 4
 
     after = SkillManager.list_versions(skill.id, actor)
     assert [version.version_number for version in after] == [4, 3, 2, 1]
     assert after[0].id == restored.current_version_id
-    assert after[0].created_by_user_id == UUID(actor.id)
+    assert after[0].created_by_email == actor.email
     assert after[0].is_current
     assert [version.id for version in after[1:]] == [version.id for version in history]
     assert SkillManager.get_for_user(skill.id, owner).description == (
@@ -205,14 +199,14 @@ def test_restore_past_the_limit_prunes_the_oldest_bundle(owner: DATestUser) -> N
         SkillManager.patch_custom(
             skill, owner, SkillPatchRequest(description=f"Description {number}")
         )
-    history = SkillManager.list_all_versions(skill.id, owner)
+    history = SkillManager.list_versions(skill.id, owner)
     assert all(version.bundle_kept for version in history)
     second = history[-2]
 
     restored = SkillManager.restore_version(skill.id, second.id, history[0].id, owner)
 
     assert restored.description == "Description 2"
-    after = SkillManager.list_all_versions(skill.id, owner)
+    after = SkillManager.list_versions(skill.id, owner)
     assert [version.version_number for version in after] == list(
         range(BUNDLES_KEPT + 1, 0, -1)
     )
@@ -265,29 +259,3 @@ def test_version_of_another_skill_is_not_found(
     for response in (preview, restore):
         assert response.status_code == 404
         assert response.json()["detail"] == "Skill version not found."
-
-
-def test_list_pages_through_older_versions(owner: DATestUser) -> None:
-    skill = SkillManager.create_custom(owner)
-    total = PLUGIN_VERSION_PAGE_SIZE + 5
-    with get_session_with_current_tenant() as db_session:
-        db_session.execute(
-            insert(PluginVersion),
-            [
-                {"id": uuid4(), "plugin_id": skill.id, "version_number": number}
-                for number in range(2, total + 1)
-            ],
-        )
-        db_session.commit()
-
-    numbers: list[int] = []
-    before_version: int | None = None
-    while True:
-        page = SkillManager.list_versions(skill.id, owner, before_version)
-        if not page:
-            break
-        assert len(page) <= PLUGIN_VERSION_PAGE_SIZE
-        numbers.extend(version.version_number for version in page)
-        before_version = page[-1].version_number
-
-    assert numbers == list(range(total, 0, -1))
