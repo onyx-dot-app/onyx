@@ -625,7 +625,10 @@ function interruptRequests() {
   );
 }
 
-test("Stop is withdrawn once the response's stop packet arrives", async () => {
+test.each([
+  ["a live single-model stop", { turn_index: 0, model_index: 0 }],
+  ["a replayed stop", { turn_index: 0 }],
+])("Stop is withdrawn once %s arrives", async (_case, placement) => {
   const user = setupUser();
   const store = useChatSessionStore.getState();
   store.updateChatState("session", "streaming");
@@ -644,7 +647,7 @@ test("Stop is withdrawn once the response's stop packet arrives", async () => {
   const answer = tree.get(2)!;
   tree.set(2, {
     ...answer,
-    packets: [{ placement: { turn_index: 0 }, obj: { type: "stop" } }],
+    packets: [{ placement, obj: { type: "stop" } }],
   });
   act(() => store.updateSessionMessageTree("session", tree));
   expect(send).toBeDisabled();
@@ -655,6 +658,45 @@ test("Stop is withdrawn once the response's stop packet arrives", async () => {
   await user.click(screen.getByRole("textbox", { name: "Message input" }));
   await user.keyboard("Next{Enter}");
   await waitFor(() => expect(pending).toHaveLength(2));
+});
+
+test("Stop stays while another model of the turn still runs", async () => {
+  const store = useChatSessionStore.getState();
+  store.updateChatState("session", "streaming");
+  const { container } = render(
+    <ChatInput {...props("streaming")} initialMessage="" />
+  );
+  const send = container.querySelector<HTMLButtonElement>(
+    "#onyx-chat-input-send-button"
+  );
+  if (!send) throw new Error("Send button is missing");
+
+  const tree = new Map(
+    useChatSessionStore.getState().sessions.get("session")!.messageTree
+  );
+  const question = tree.get(1)!;
+  const answer = tree.get(2)!;
+  tree.set(1, { ...question, childrenNodeIds: [2, 3] });
+  tree.set(2, {
+    ...answer,
+    packets: [
+      { placement: { turn_index: 0, model_index: 0 }, obj: { type: "stop" } },
+    ],
+  });
+  tree.set(3, { ...answer, nodeId: 3, messageId: 3, packets: [] });
+  act(() => store.updateSessionMessageTree("session", tree));
+  expect(send).toBeEnabled();
+
+  tree.set(3, {
+    ...answer,
+    nodeId: 3,
+    messageId: 3,
+    packets: [
+      { placement: { turn_index: 0, model_index: 1 }, obj: { type: "stop" } },
+    ],
+  });
+  act(() => store.updateSessionMessageTree("session", new Map(tree)));
+  expect(send).toBeDisabled();
 });
 
 test("every pending write refreshes the chat status", async () => {
