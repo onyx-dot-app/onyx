@@ -77,6 +77,19 @@ class SkillManager:
         return [SkillVersionResponse.model_validate(item) for item in response.json()]
 
     @staticmethod
+    def list_all_versions(
+        skill_id: UUID, user_performing_action: DATestUser
+    ) -> list[SkillVersionResponse]:
+        versions: list[SkillVersionResponse] = []
+        before_version: int | None = None
+        while page := SkillManager.list_versions(
+            skill_id, user_performing_action, before_version
+        ):
+            versions.extend(page)
+            before_version = page[-1].version_number
+        return versions
+
+    @staticmethod
     def preview_version(
         skill_id: UUID, version_id: UUID, user_performing_action: DATestUser
     ) -> SkillVersionPreviewResponse:
