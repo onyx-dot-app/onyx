@@ -57,6 +57,9 @@ When it fails:
   list the Skill in `not_imported`, and a GitHub preview marks it unavailable.
 - Turning on a skill whose name another enabled skill uses returns a name
   conflict. The client can retry with `replace_conflict` to switch skills.
+- When two enabled skills still share a name, for example after a share or a
+  publish, the sandbox gets one of them by the name order. The other shows as
+  off. The push does not fail.
 - A required skill rejects a toggle.
 - If a push to a sandbox fails, the change still saves. The sandbox keeps its
   old skills until the next push, session start or reload.
@@ -121,15 +124,26 @@ a `FOR UPDATE` blocks that foreign-key check into a deadlock.
 
 **The runtime gate.** `db/skill.py:list_runtime_skills_for_user` decides what
 a sandbox gets. It combines visibility (`skill_visible_to_user`), enablement
-(`_is_enabled_for_user`), app readiness, bundle validity (`is_valid` of the
-version the user runs not false) and built-in availability (`_exclude_unavailable_built_in_skills`).
-These inputs stay independent. A required skill still needs a ready app and a
-valid bundle.
+and the name order (`_user_skill_selection`), app readiness, bundle validity
+(`is_valid` of the version the user runs not false) and built-in availability
+(`_exclude_unavailable_built_in_skills`). These inputs stay independent. A
+required skill still needs a ready app and a valid bundle.
 
-**Enablement.** `_is_enabled_for_user` is the one SQL rule for API responses
-and the runtime gate. Built-ins are on. A visible required skill is on and
-hides other skills with its name. Else an explicit preference wins. Else a
-default skill is on unless another visible skill with its name is selected.
+**Enablement.** `db/plugin_access.py:load_user_plugin_states` is the one rule
+for API responses, toggles and the runtime gate. One query gives, for many
+users and plugins, the install setting, visibility, the version the user runs,
+its skill names and the user's choice under the setting: required is on,
+default is on until an opt-out, available is on after an opt-in, a hidden
+plugin is off and its saved choice stays. Built-ins are on.
+`db/skill.py:_user_skill_selection` reads it for one user.
+
+**Name order.** When two enabled skills of a user have one name,
+`db/plugin_access.py:order_skill_names` keeps one: a built-in name, then a
+plugin required for the user, then a published one, then the user's own,
+then a shared one. The older plugin (`plugin.created_at`, then id) wins a
+tie. The others come back as `HiddenSkillName` with a reason
+(`SkillUserState.name_hidden`). Only skills that can run (valid version,
+ready app) take part.
 
 **Two hashes.** `compute_skill_runtime_hash` is a SHA-256 over every rendered
 file path and its bytes, plus the connectable-apps text. `Sandbox.skills_hash`
@@ -178,13 +192,16 @@ The library preview of an external-app skill calls the same renderer
    `version_user_runs`). There is no organization-wide edit: a legacy
    organization `EDITOR` row gives view access only. A `plugin__user_group`
    row with no permission holds only a group install setting and grants
-   nothing. Built-in skills have no plugin and keep their skill rows.
+   nothing. A group row whose own setting is `NOT_AVAILABLE` grants nothing
+   either. The author and a direct share get at least available, also past a
+   group `NOT_AVAILABLE`. Built-in skills have no plugin and keep their skill
+   rows.
 4. `enablement-not-preference-row` **Never infer enablement from a preference
-   row.** Use `db/skill.py:_is_enabled_for_user`. It reads
+   row.** Use `db/plugin_access.py:load_user_plugin_states`. It reads
    `user_plugin_preference` and the install setting that applies to the user
    (`db/plugin_access.py:installation_rank_for_user`: the plugin's setting or
    its marketplace default, the most open non-default group setting, and at
-   least available with a share). Disable writes `enabled=False`; it does
+   least available for the author or with a share). Disable writes `enabled=False`; it does
    not delete the row. A required policy overrides an opt-out without deleting
    it, so the opt-out returns when the policy goes back to default.
 5. `name-uniqueness-in-db` **Name uniqueness is in the database.** The partial
@@ -197,8 +214,10 @@ The library preview of an external-app skill calls the same renderer
    lock does not block the `FOR KEY SHARE` locks that foreign-key checks take,
    so sharing writes that reference the user still run. A new preference
    writer, such as an auto-enable, must take the same lock.
-   `skills/push.py:_assemble_fileset` raises if two skills in one fileset share a name,
-   because the name is the sandbox directory. For a custom skill that name is
+   The run-time name order (Architecture, Name order) keeps one skill for each name,
+   because the name is the sandbox directory. `skills/push.py:_assemble_fileset`
+   applies it again (`db/skill.py:keep_one_skill_per_name`), so a duplicate
+   never fails a push. For a custom skill that name is
    `frontmatter->>'name'` of the version the user runs.
 6. `name-immutable` **A skill name never changes.** The frontmatter `name`,
    `Skill.name` and the bundle's wrapper directory, when there is one, must
@@ -594,7 +613,8 @@ The library preview of an external-app skill calls the same renderer
   ([[#affected-users-before-change]]).
 - `investigate-skill-missing` **Investigate "my skill is not in the sandbox".** Check the inputs of
   `list_runtime_skills_for_user` one at a time for that user: visibility,
-  `_is_enabled_for_user`, app readiness, `plugin_version.is_valid` of the
+  `load_user_plugin_states` (setting and choice), the name order
+  (`order_skill_names`: another skill may hold the name), app readiness, `plugin_version.is_valid` of the
   version the user runs (`version_user_runs`), and built-in availability. Then compare `Sandbox.skills_hash` with
   `BuildSession.skills_hash`: equal means the runtime loaded the last push;
   different means the session waits for a reload. Search the API server log

@@ -33,6 +33,7 @@ roll back atomically.
 
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
 from typing import Any, Literal
 from uuid import UUID
@@ -101,14 +102,18 @@ from onyx.db.plugin import (
     transfer_plugin__no_commit,
 )
 from onyx.db.plugin_access import (
+    HiddenSkillName,
+    SkillNameOrder,
+    SkillNameRank,
+    UserPluginState,
     affected_user_ids_for_plugins,
-    installation_rank_for_user,
+    load_user_plugin_states,
+    order_skill_names,
     plugin_editable_by_user,
     plugin_is_published,
     plugin_visible_to_user,
-    policy_rank,
     skill_name_in_version,
-    version_is_valid,
+    skill_name_order_key,
     version_user_runs,
 )
 from onyx.db.plugin_review import (
@@ -155,6 +160,9 @@ class RuntimeSkill:
     name: str
     # None for a built-in skill.
     version: RuntimeSkillVersion | None
+    # Place in the name order; BUILT_IN with no created_at for a built-in.
+    name_rank: SkillNameRank
+    plugin_created_at: datetime | None
 
 
 @dataclass(frozen=True)
@@ -162,6 +170,8 @@ class SkillUserState:
     enabled: bool
     can_toggle: bool
     external_app_dependency: SkillExternalAppDependencyState | None
+    # Set when the name order hides the skill for the user.
+    name_hidden: HiddenSkillName | None
 
 
 def _is_shared_with_user(
@@ -281,22 +291,6 @@ def _is_editable_by_user(user: User) -> ColumnElement[bool]:
     return editable
 
 
-_NO_PLUGIN_RANK = -1
-
-
-def _installation_rank_for_user(user: User) -> ColumnElement[int]:
-    """Rank of the install setting that applies to the user; -1 without a
-    plugin."""
-    return func.coalesce(
-        _plugin_of_skill(
-            lambda plugin, marketplace: installation_rank_for_user(
-                plugin, marketplace, user.id
-            )
-        ).scalar_subquery(),
-        _NO_PLUGIN_RANK,
-    )
-
-
 def _runtime_name(user: User) -> ColumnElement[str]:
     """The skill name in the version the user runs. Built-in skills use their
     row name."""
@@ -310,73 +304,57 @@ def _runtime_name(user: User) -> ColumnElement[str]:
     )
 
 
-def _runtime_version_is_valid(user: User) -> ColumnElement[bool | None]:
-    """Validity of the version the user runs; NULL without a plugin or while
-    the version is unclassified."""
-    return _plugin_of_skill(
-        lambda plugin, _marketplace: version_is_valid(
-            version_user_runs(plugin, user.id)
+@dataclass(frozen=True)
+class _UserSkillSelection:
+    """The custom skills one user can see, their choices and the name order
+    (``onyx.db.plugin_access``). Only skills that can run take part in the
+    name order: valid, and with a ready app if they need one."""
+
+    states: dict[UUID, UserPluginState]
+    order: SkillNameOrder
+
+    def enabled(self, skill_id: UUID) -> bool:
+        state = self.states.get(skill_id)
+        return state is not None and state.enabled and not self.order.hides(skill_id)
+
+    def other_skills_named(self, name: str, skill_id: UUID) -> list[UserPluginState]:
+        """Enabled skills other than ``skill_id`` with the name, before the
+        name order."""
+        return [
+            state
+            for state in self.states.values()
+            if state.plugin_id != skill_id
+            and state.enabled
+            and name in state.skill_names
+        ]
+
+
+def _user_skill_selection(
+    user: User,
+    db_session: Session,
+    external_app_dependencies: Mapping[UUID, SkillExternalAppDependencyState]
+    | None = None,
+) -> _UserSkillSelection:
+    if external_app_dependencies is None:
+        external_app_dependencies = get_skill_external_app_dependencies(
+            db_session, user
         )
-    ).scalar_subquery()
-
-
-def _is_required_for_user(user: User) -> ColumnElement[bool]:
-    return and_(
-        _installation_rank_for_user(user)
-        == policy_rank(PluginInstallationPolicy.REQUIRED),
-        skill_visible_to_user(user),
-    )
-
-
-def _is_enabled_for_user(user: User) -> ColumnElement[bool]:
-    """Built-in skills are always on. A required skill is on. Otherwise the
-    user's choice decides; with no choice, an installed-by-default skill is on
-    unless the user chose another skill with its name. A required skill's name
-    turns every other skill with that name off."""
-    name = _runtime_name(user)
-    preference = (
-        select(UserPluginPreference.enabled)
-        .where(
-            UserPluginPreference.user_id == user.id,
-            UserPluginPreference.plugin_id == Skill.id,
+    states = {
+        state.plugin_id: state
+        for state in load_user_plugin_states([user.id], db_session)
+    }
+    can_run = [
+        state
+        for state in states.values()
+        if state.version_is_valid is not False
+        and (
+            state.plugin_id not in external_app_dependencies
+            or external_app_dependencies[state.plugin_id].ready
         )
-        .correlate(Skill)
-        .scalar_subquery()
-    )
-    chosen: type[Plugin] = aliased(Plugin)
-    chosen_marketplace: type[Marketplace] = aliased(Marketplace)
-    selected_name = (
-        select(UserPluginPreference.plugin_id)
-        .join(chosen, chosen.id == UserPluginPreference.plugin_id)
-        .join(chosen_marketplace, chosen_marketplace.id == chosen.marketplace_id)
-        .where(
-            UserPluginPreference.user_id == user.id,
-            UserPluginPreference.enabled.is_(True),
-            plugin_visible_to_user(chosen, chosen_marketplace, user.id),
-            skill_name_in_version(version_user_runs(chosen, user.id)) == name,
-        )
-        .correlate_except(UserPluginPreference, chosen, chosen_marketplace)
-        .exists()
-    )
-    required_name = name.in_(
-        select(_runtime_name(user)).where(_is_required_for_user(user)).correlate(None)
-    )
-    return or_(
-        Skill.built_in_skill_id.isnot(None),
-        _is_required_for_user(user),
-        and_(
-            ~required_name,
-            or_(
-                preference.is_(True),
-                and_(
-                    _installation_rank_for_user(user)
-                    == policy_rank(PluginInstallationPolicy.DEFAULT),
-                    skill_visible_to_user(user),
-                    preference.is_(None),
-                    ~selected_name,
-                ),
-            ),
-        ),
+    ]
+    return _UserSkillSelection(
+        states=states,
+        order=order_skill_names(can_run, reserved_names=BUILT_IN_SKILLS.keys()),
     )
 
 
@@ -523,6 +501,7 @@ def list_runtime_skills_for_user(
         for skill_id, dependency in external_app_dependencies.items()
         if dependency.ready
     ]
+    selection = _user_skill_selection(user, db_session, external_app_dependencies)
     run_plugin: type[Plugin] = aliased(Plugin)
     run_version: type[PluginVersion] = aliased(PluginVersion)
     name = _runtime_name(user)
@@ -546,7 +525,10 @@ def list_runtime_skills_for_user(
         .order_by(name, Skill.id)
         .where(
             skill_visible_to_user(user),
-            _is_enabled_for_user(user),
+            or_(
+                Skill.built_in_skill_id.isnot(None),
+                Skill.id.in_(set(selection.order.kept.values())),
+            ),
             or_(
                 ~exists().where(ExternalApp__Skill.skill_id == Skill.id),
                 Skill.id.in_(ready_external_app_skill_ids),
@@ -558,20 +540,52 @@ def list_runtime_skills_for_user(
         )
     )
     rows = db_session.execute(_exclude_unavailable_built_in_skills(stmt, db_session))
-    return [
-        RuntimeSkill(
-            skill=skill,
-            name=skill_name,
-            version=(
-                RuntimeSkillVersion(
-                    id=version_id, bundle_file_id=bundle_file_id, is_valid=is_valid
+    skills: list[RuntimeSkill] = []
+    for skill, skill_name, version_id, bundle_file_id, is_valid in rows:
+        state = selection.states.get(skill.id)
+        if skill.built_in_skill_id is not None or state is None:
+            skills.append(
+                RuntimeSkill(
+                    skill=skill,
+                    name=skill_name,
+                    version=None,
+                    name_rank=SkillNameRank.BUILT_IN,
+                    plugin_created_at=None,
                 )
-                if skill.built_in_skill_id is None and version_id is not None
-                else None
-            ),
+            )
+            continue
+        skills.append(
+            RuntimeSkill(
+                skill=skill,
+                name=skill_name,
+                version=RuntimeSkillVersion(
+                    id=version_id, bundle_file_id=bundle_file_id, is_valid=is_valid
+                ),
+                name_rank=state.name_rank,
+                plugin_created_at=state.created_at,
+            )
         )
-        for skill, skill_name, version_id, bundle_file_id, is_valid in rows
-    ]
+    kept, _hidden = keep_one_skill_per_name(skills)
+    return kept
+
+
+def keep_one_skill_per_name(
+    skills: Iterable[RuntimeSkill],
+) -> tuple[list[RuntimeSkill], list[RuntimeSkill]]:
+    """Apply the name order (``onyx.db.plugin_access``) to runtime skills.
+    Returns the kept skills, in input order, and the hidden ones."""
+    skills = list(skills)
+    winners: dict[str, RuntimeSkill] = {}
+    for runtime_skill in sorted(
+        skills,
+        key=lambda item: skill_name_order_key(
+            item.name_rank, item.plugin_created_at, item.skill.id
+        ),
+    ):
+        winners.setdefault(runtime_skill.name, runtime_skill)
+    kept = [item for item in skills if winners[item.name] is item]
+    hidden = [item for item in skills if winners[item.name] is not item]
+    return kept, hidden
 
 
 def fetch_skill(
@@ -624,23 +638,15 @@ def enable_new_skill_if_name_available__no_commit(
     user = db_session.get(User, user_id)
     if user is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "User not found.")
-    name = _runtime_name(user)
-    skill_name, required = db_session.execute(
-        select(name, _is_required_for_user(user)).where(Skill.id == skill.id)
-    ).one()
-    if required:
-        return True
-    if (
-        db_session.scalar(
-            select(Skill.id).where(
-                name == skill_name,
-                Skill.id != skill.id,
-                _is_enabled_for_user(user),
-            )
-        )
-        is not None
-    ):
-        return False
+    selection = _user_skill_selection(user, db_session)
+    state = selection.states.get(skill.id)
+    if state is not None:
+        if state.installation_policy == PluginInstallationPolicy.REQUIRED:
+            return True
+        if any(
+            selection.other_skills_named(name, skill.id) for name in state.skill_names
+        ):
+            return False
     inserted_user_id = db_session.scalar(
         insert(UserSkillPreference)
         .values(user_id=user_id, skill_id=skill.id, name=skill.name, enabled=True)
@@ -824,38 +830,37 @@ def skill_user_states(
     if not requested_ids:
         return {}
 
-    external_app_dependencies = get_skill_external_app_dependencies(
-        db_session,
-        user,
-        requested_ids,
-    )
-    rows = db_session.execute(
-        select(
-            Skill.id,
-            _is_enabled_for_user(user).label("enabled"),
-            skill_visible_to_user(user).label("visible"),
-            and_(
-                Skill.built_in_skill_id.is_(None),
-                _runtime_version_is_valid(user).is_not(False),
-                _installation_rank_for_user(user)
-                != policy_rank(PluginInstallationPolicy.REQUIRED),
-            ).label("supports_preference"),
-        ).where(Skill.id.in_(requested_ids))
-    )
-    return {
-        skill_id: SkillUserState(
+    external_app_dependencies = get_skill_external_app_dependencies(db_session, user)
+    selection = _user_skill_selection(user, db_session, external_app_dependencies)
+    hidden = {entry.plugin_id: entry for entry in selection.order.hidden}
+    states: dict[UUID, SkillUserState] = {}
+    for skill_id, built_in_skill_id in db_session.execute(
+        select(Skill.id, Skill.built_in_skill_id).where(Skill.id.in_(requested_ids))
+    ):
+        if built_in_skill_id is not None:
+            states[skill_id] = SkillUserState(
+                enabled=True,
+                can_toggle=False,
+                external_app_dependency=external_app_dependencies.get(skill_id),
+                name_hidden=None,
+            )
+            continue
+        state = selection.states.get(skill_id)
+        enabled = selection.enabled(skill_id)
+        states[skill_id] = SkillUserState(
             enabled=enabled,
-            can_toggle=visible
-            and supports_preference
+            can_toggle=state is not None
+            and state.version_is_valid is not False
+            and state.installation_policy != PluginInstallationPolicy.REQUIRED
             and (
                 enabled
                 or skill_id not in external_app_dependencies
                 or external_app_dependencies[skill_id].ready
             ),
             external_app_dependency=external_app_dependencies.get(skill_id),
+            name_hidden=hidden.get(skill_id),
         )
-        for skill_id, enabled, visible, supports_preference in rows
-    }
+    return states
 
 
 def set_skill_enabled_for_user(
@@ -893,29 +898,33 @@ def set_skill_enabled_for_user(
 
     conflicts: list[UUID] = []
     if enabled:
-        name = _runtime_name(user)
-        skill_name = db_session.scalar(select(name).where(Skill.id == skill.id))
-        required = db_session.scalar(
-            select(Skill.id).where(
-                name == skill_name,
-                Skill.id != skill.id,
-                _is_required_for_user(user),
-            )
+        selection = _user_skill_selection(user, db_session)
+        target = selection.states.get(skill.id)
+        skill_name = (
+            target.skill_names[0] if target and target.skill_names else skill.name
         )
-        if required is not None:
+        others = selection.other_skills_named(skill_name, skill.id)
+        if any(
+            other.installation_policy == PluginInstallationPolicy.REQUIRED
+            for other in others
+        ):
             raise OnyxError(
                 OnyxErrorCode.SKILL_NAME_CONFLICT,
                 "A required skill already uses this name.",
             )
-        conflicts = list(
-            db_session.scalars(
-                select(Skill.id).where(
-                    name == skill_name,
-                    Skill.id != skill.id,
-                    _is_enabled_for_user(user),
-                )
+        # A saved choice of a skill the user cannot see still holds the name
+        # in the legacy preference index.
+        saved_choices = db_session.scalars(
+            select(Skill.id)
+            .join(UserPluginPreference, UserPluginPreference.plugin_id == Skill.id)
+            .where(
+                UserPluginPreference.user_id == user.id,
+                UserPluginPreference.enabled.is_(True),
+                Skill.id != skill.id,
+                _runtime_name(user) == skill_name,
             )
         )
+        conflicts = sorted({other.plugin_id for other in others} | set(saved_choices))
         if conflicts and not replace_conflict:
             raise OnyxError(
                 OnyxErrorCode.SKILL_NAME_CONFLICT,

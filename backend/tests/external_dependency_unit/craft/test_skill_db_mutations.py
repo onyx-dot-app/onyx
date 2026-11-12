@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import threading
 import time
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
@@ -22,6 +23,7 @@ from onyx.db.plugin import (
     lock_skill_plugin__no_commit,
     publish_plugin__no_commit,
 )
+from onyx.db.plugin_access import NameHiddenReason
 from onyx.db.skill import (
     add_new_skill__no_commit,
     enable_new_skill_if_name_available__no_commit,
@@ -46,6 +48,7 @@ from tests.external_dependency_unit.craft.db_helpers import (
     make_skill,
     make_user,
     set_current_version_validity,
+    set_plugin_created_at,
     share_skill_with_group,
     share_skill_with_user,
 )
@@ -616,6 +619,8 @@ def test_automatic_skill_name_conflicts(db_session: Session) -> None:
     name = f"policy-conflict-{uuid4().hex[:8]}"
     optional = make_skill(db_session, name=name, is_public=True)
     automatic = make_skill(db_session, name=name, is_public=True)
+    # Of two published skills with one name, the older one runs.
+    set_plugin_created_at(db_session, optional.id, datetime(2025, 1, 1, tzinfo=UTC))
     set_skill_enabled_for_user(
         skill_id=optional.id, enabled=True, user=user, db_session=db_session
     )
@@ -718,9 +723,11 @@ def test_replacing_default_skill_remembers_opt_out(db_session: Session) -> None:
 
 
 @pytest.mark.parametrize("share_via_group", [False, True])
-def test_inaccessible_selection_does_not_suppress_default(
+def test_published_default_keeps_its_name_over_a_shared_selection(
     db_session: Session, share_via_group: bool
 ) -> None:
+    """Name order: a published skill wins over a shared one, also when the
+    user turned the shared one on. The hidden choice stays saved."""
     owner = make_user(db_session)
     user = make_user(db_session)
     selected = make_skill(db_session, is_public=False, author_user_id=owner.id)
@@ -735,29 +742,29 @@ def test_inaccessible_selection_does_not_suppress_default(
     )
     default = make_skill(db_session, name=selected.name, is_public=True)
     set_skill_installation_policy(default, SkillInstallationPolicy.DEFAULT, db_session)
-    assert not skill_user_states(user, [default.id], db_session)[default.id].enabled
+
+    def runtime_ids() -> set[UUID]:
+        return {
+            skill.skill.id
+            for skill in list_runtime_skills_for_user(user=user, db_session=db_session)
+        }
+
+    states = skill_user_states(user, [default.id, selected.id], db_session)
+    assert states[default.id].enabled
+    assert not states[selected.id].enabled
+    hidden = states[selected.id].name_hidden
+    assert hidden is not None
+    assert hidden.kept_by_plugin_id == default.id
+    assert hidden.reason == NameHiddenReason.PUBLISHED
+    assert default.id in runtime_ids() and selected.id not in runtime_ids()
 
     replace_skill_shares(
         skill=selected, user_shares={}, group_shares={}, db_session=db_session
     )
     assert skill_user_states(user, [default.id], db_session)[default.id].enabled
-    runtime_ids = {
-        skill.skill.id
-        for skill in list_runtime_skills_for_user(user=user, db_session=db_session)
-    }
-    assert default.id in runtime_ids
-    assert selected.id not in runtime_ids
+    assert default.id in runtime_ids() and selected.id not in runtime_ids()
     preference = db_session.get(UserSkillPreference, (user.id, selected.id))
     assert preference is not None and preference.enabled
-
-    # Restoring access restores the saved selection without enabling both skills.
-    if share_via_group:
-        share_skill_with_group(db_session, selected, group)
-    else:
-        share_skill_with_user(db_session, selected, user)
-    states = skill_user_states(user, [default.id, selected.id], db_session)
-    assert states[selected.id].enabled
-    assert not states[default.id].enabled
 
 
 def test_replacement_clears_inaccessible_selection_and_effective_default(

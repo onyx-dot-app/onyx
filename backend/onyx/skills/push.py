@@ -12,11 +12,10 @@ from onyx.db.skill import (
     RuntimeSkill,
     SkillValidityUpdate,
     affected_user_ids_for_skill,
+    keep_one_skill_per_name,
     list_runtime_skills_for_user,
     persist_skill_validity,
 )
-from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.db.sandbox import (
     get_sandbox_user_map,
@@ -217,17 +216,16 @@ def _assemble_fileset(
     version the user runs, in a folder named by that version's frontmatter.
     The version must already be valid or pass lazy validation before its
     FileStore bundle is unpacked. Invalid, indeterminate, and unknown built-in
-    rows are skipped.
+    rows are skipped. Of two skills with one name, the name order keeps one.
     """
-    skills = list(skills)
-    seen_names: set[str] = set()
-    for runtime_skill in skills:
-        if runtime_skill.name in seen_names:
-            raise OnyxError(
-                OnyxErrorCode.INTERNAL_ERROR,
-                f"Multiple enabled skills are named '{runtime_skill.name}'.",
-            )
-        seen_names.add(runtime_skill.name)
+    skills, hidden = keep_one_skill_per_name(skills)
+    for runtime_skill in hidden:
+        logger.warning(
+            "Skipping skill %s: another skill is named '%s'",
+            runtime_skill.skill.id,
+            runtime_skill.name,
+        )
+    seen_names = {runtime_skill.name for runtime_skill in skills}
 
     files: FileSet = {}
     validity_updates: list[SkillValidityUpdate] = []

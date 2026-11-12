@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import zipfile
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import MagicMock
@@ -11,9 +12,8 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.models import Skill, User
-from onyx.db.skill import RuntimeSkill, RuntimeSkillVersion
-from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import OnyxError
+from onyx.db.plugin_access import SkillNameRank
+from onyx.db.skill import RuntimeSkill, RuntimeSkillVersion, keep_one_skill_per_name
 from onyx.file_store.file_store import FileStore
 from onyx.skills import push
 
@@ -37,6 +37,8 @@ def _skill(
     *,
     name: str = "canonical-name",
     is_valid: bool | None = None,
+    name_rank: SkillNameRank = SkillNameRank.PUBLISHED,
+    created_at: datetime | None = None,
 ) -> RuntimeSkill:
     """A custom skill with the version the user runs. The legacy row holds a
     different name and no bundle, so a read of it fails the test."""
@@ -55,6 +57,8 @@ def _skill(
         version=RuntimeSkillVersion(
             id=uuid4(), bundle_file_id="bundle-id", is_valid=is_valid
         ),
+        name_rank=name_rank,
+        plugin_created_at=created_at or datetime(2026, 1, 1, tzinfo=timezone.utc),
     )
 
 
@@ -72,14 +76,32 @@ def test_skill_runtime_hash_covers_files_and_connectable_apps() -> None:
     ) != push.compute_skill_runtime_hash(files, "different apps")
 
 
-def test_assemble_rejects_duplicate_names() -> None:
+def test_assemble_keeps_one_skill_per_name_by_the_name_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two skills with one name do not stop the push: a shared skill loses to
+    a published one, and the older of two published skills wins."""
+    file_store = MagicMock(spec=FileStore)
+    file_store.read_file.side_effect = lambda *_args, **_kwargs: io.BytesIO(
+        _bundle("canonical-name")
+    )
+    monkeypatch.setattr(push, "get_default_file_store", lambda: file_store)
+    monkeypatch.setattr(push, "persist_skill_validity", MagicMock())
     user = cast(User, SimpleNamespace())
-    skills = [_skill(is_valid=True), _skill(is_valid=True)]
+    older = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    shared = _skill(is_valid=True, name_rank=SkillNameRank.SHARED, created_at=older)
+    newer_published = _skill(is_valid=True)
+    older_published = _skill(is_valid=True, created_at=older)
 
-    with pytest.raises(OnyxError) as exc_info:
-        push._assemble_fileset(skills, user, MagicMock(spec=Session))
+    kept, hidden = keep_one_skill_per_name([shared, newer_published, older_published])
+    files = push._assemble_fileset(
+        [shared, newer_published, older_published], user, MagicMock(spec=Session)
+    )
 
-    assert exc_info.value.error_code == OnyxErrorCode.INTERNAL_ERROR
+    assert kept == [older_published]
+    assert hidden == [shared, newer_published]
+    assert "canonical-name/SKILL.md" in files
+    assert file_store.read_file.call_count == 1
 
 
 def test_assemble_classifies_and_hydrates_valid_unclassified_skill(

@@ -238,6 +238,17 @@ def set_current_version_validity(
     db_session.flush()
 
 
+def set_plugin_created_at(
+    db_session: Session, plugin_id: UUID, created_at: datetime
+) -> None:
+    """Set a plugin's age. Rows made in one test transaction share one
+    timestamp, and the name order prefers the older plugin."""
+    db_session.execute(
+        update(Plugin).where(Plugin.id == plugin_id).values(created_at=created_at)
+    )
+    db_session.flush()
+
+
 def make_built_in_skill_row(
     db_session: Session,
     *,
