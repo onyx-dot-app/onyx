@@ -1,3 +1,15 @@
-from onyx.connectors.jira_service_management.connector import JiraServiceManagementConnector
+"""Jira Service Management connector package."""
 
-__all__ = ["JiraServiceManagementConnector"]
+from onyx.connectors.jira_service_management.config import (
+    JiraServiceManagementConnectorConfig,
+)
+from onyx.connectors.jira_service_management.connector import (
+    JiraServiceManagementConnector,
+    JSMConnectorCheckpoint,
+)
+
+__all__ = [
+    "JSMConnectorCheckpoint",
+    "JiraServiceManagementConnector",
+    "JiraServiceManagementConnectorConfig",
+]
