@@ -57,7 +57,7 @@ class CurrentMailbox(BaseModel):
 #
 # For initial checkpointing, set both fields to `None`.
 class ImapCheckpoint(ConnectorCheckpoint):
-    version: int = 2
+    version: int = 1
     todo_mailboxes: list[str] | None = None
     current_mailbox: CurrentMailbox | None = None
 
@@ -271,7 +271,7 @@ class ImapConnector(
         )
 
     def build_dummy_checkpoint(self) -> ImapCheckpoint:
-        return ImapCheckpoint(has_more=True)
+        return ImapCheckpoint(has_more=True, version=2)
 
     def validate_checkpoint_json(self, checkpoint_json: str) -> ImapCheckpoint:
         return ImapCheckpoint.model_validate_json(json_data=checkpoint_json)

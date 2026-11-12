@@ -67,14 +67,10 @@ def test_legacy_checkpoint_version_migration() -> None:
     mock_client = MagicMock()
     connector._get_mail_client = MagicMock(return_value=mock_client)  # type: ignore
 
-    # Legacy checkpoint with version=1 or unset (default in legacy was version=1 from ConnectorCheckpoint)
-    legacy_ckpt = ImapCheckpoint(
-        has_more=True,
-        todo_mailboxes=["Sent"],
-        current_mailbox=CurrentMailbox(mailbox="INBOX", todo_email_ids=["1", "2"]),
-    )
-    # Manually set legacy version
-    legacy_ckpt.version = 1
+    # Legacy checkpoint without version key in json/dict
+    legacy_json = '{"has_more": true, "todo_mailboxes": ["Sent"], "current_mailbox": {"mailbox": "INBOX", "todo_email_ids": ["1", "2"]}}'
+    legacy_ckpt = connector.validate_checkpoint_json(legacy_json)
+    assert legacy_ckpt.version == 1
 
     mock_client.select.return_value = (_IMAP_OKAY_STATUS, [b"10"])
     mock_client.uid.return_value = (_IMAP_OKAY_STATUS, [b"101 102"])
