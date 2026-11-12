@@ -3,7 +3,6 @@ import os
 from collections.abc import Generator
 from datetime import datetime, timezone
 from typing import IO, Any
-from urllib.parse import quote
 
 from pydantic import Field
 
@@ -13,8 +12,14 @@ from onyx.configs.app_configs import (
     INDEX_BATCH_SIZE,
 )
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_oauth_callback_uri,
+)
+from onyx.connectors.egnyte.models import EgnyteFile
+from onyx.connectors.egnyte.source_operations import (
+    EgnyteApiError,
+    EgnyteSourceOperations,
 )
 from onyx.connectors.interfaces import (
     GenerateDocumentsOutput,
@@ -42,7 +47,6 @@ from onyx.utils.retry_wrapper import request_with_retries
 
 logger = setup_logger()
 
-_EGNYTE_API_BASE = "https://{domain}.egnyte.com/pubapi/v1"
 _EGNYTE_APP_BASE = "https://{domain}.egnyte.com"
 
 
@@ -53,7 +57,7 @@ def _parse_last_modified(last_modified: str) -> datetime:
 
 
 def _process_egnyte_file(
-    file_metadata: dict[str, Any],
+    file: EgnyteFile,
     file_content: IO,
     base_url: str,
     folder_path: str | None = None,
@@ -61,18 +65,18 @@ def _process_egnyte_file(
     """Process an Egnyte file into a Document object
 
     Args:
-        file_data: The file data from Egnyte API
+        file: The file metadata from the Egnyte API
         file_content: The raw content of the file in bytes
         base_url: The base URL for the Egnyte instance
         folder_path: Optional folder path to filter results
     """
     # Skip if file path doesn't match folder path filter
-    if folder_path and not file_metadata["path"].startswith(folder_path):
+    if folder_path and not file.path.startswith(folder_path):
         raise ValueError(
-            f"File path {file_metadata['path']} does not match folder path {folder_path}"
+            f"File path {file.path} does not match folder path {folder_path}"
         )
 
-    file_name = file_metadata["name"]
+    file_name = file.name
     extension = get_file_ext(file_name)
 
     # Explicitly excluding image extensions here. TODO: consider allowing images
@@ -84,7 +88,7 @@ def _process_egnyte_file(
     # TODO @wenxi-onyx: convert to extract_text_and_images
     if extension in OnyxFileExtensions.PLAIN_TEXT_EXTENSIONS:
         encoding = detect_encoding(file_content)
-        file_content_raw, file_metadata = read_text_file(
+        file_content_raw, _ = read_text_file(
             file_content, encoding=encoding, ignore_onyx_metadata=False
         )
     else:
@@ -95,39 +99,35 @@ def _process_egnyte_file(
         )
 
     # Build the web URL for the file
-    web_url = f"{base_url}/navigate/file/{file_metadata['group_id']}"
+    web_url = f"{base_url}/navigate/file/{file.group_id}"
 
     # Create document metadata
     metadata: dict[str, str | list[str]] = {
-        "file_path": file_metadata["path"],
-        "last_modified": file_metadata.get("last_modified", ""),
+        "file_path": file.path,
+        "last_modified": file.last_modified,
     }
 
-    # Add lock info if present
-    if lock_info := file_metadata.get("lock_info"):
+    if file.lock_info:
         metadata["lock_owner"] = (
-            f"{lock_info.get('first_name', '')} {lock_info.get('last_name', '')}"
+            f"{file.lock_info.first_name} {file.lock_info.last_name}"
         )
 
     # Create the document owners
     primary_owner = None
-    if uploaded_by := file_metadata.get("uploaded_by"):
+    if file.uploaded_by:
         primary_owner = BasicExpertInfo(
-            email=uploaded_by,  # Using username as email since that's what we have
+            email=file.uploaded_by,  # Using username as email since that's what we have
         )
 
-    # Create the document
+    # group_id stays the same across versions, so a new version updates the
+    # document instead of adding one.
     return Document(
-        id=f"egnyte-{file_metadata['entry_id']}",
+        id=f"egnyte-{file.group_id}",
         sections=[TextSection(text=file_content_raw.strip(), link=web_url)],
         source=DocumentSource.EGNYTE,
         semantic_identifier=file_name,
         metadata=metadata,
-        doc_updated_at=(
-            _parse_last_modified(file_metadata["last_modified"])
-            if "last_modified" in file_metadata
-            else None
-        ),
+        doc_updated_at=_parse_last_modified(file.last_modified),
         primary_owners=[primary_owner] if primary_owner else None,
     )
 
@@ -149,9 +149,16 @@ class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
         batch_size: int = INDEX_BATCH_SIZE,
     ) -> None:
         self.domain = ""  # will always be set in `load_credentials`
-        self.folder_path = folder_path or ""  # Root folder if not specified
+        # Egnyte paths start with "/", so "Shared/Docs" must match "/Shared/Docs".
+        self.folder_path = "/" + (folder_path or "").strip("/")
         self.batch_size = batch_size
-        self.access_token: str | None = None
+        self._ops: EgnyteSourceOperations | None = None
+
+    @property
+    def ops(self) -> EgnyteSourceOperations:
+        if self._ops is None:
+            raise ConnectorMissingCredentialError("Egnyte")
+        return self._ops
 
     @classmethod
     def oauth_id(cls) -> DocumentSource:
@@ -229,53 +236,29 @@ class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         self.domain = credentials["domain"]
-        self.access_token = credentials["access_token"]
+        self._ops = EgnyteSourceOperations(
+            credentials_provider=OnyxStaticCredentialsProvider(
+                None, DocumentSource.EGNYTE.value, credentials
+            )
+        )
         return None
 
-    def _get_files_list(
-        self,
-        path: str,
-    ) -> Generator[dict[str, Any], None, None]:
-        if not self.access_token or not self.domain:
-            raise ConnectorMissingCredentialError("Egnyte")
-
-        headers = {
-            "Authorization": f"Bearer {self.access_token}",
-        }
-
-        params: dict[str, Any] = {
-            "list_content": True,
-        }
-
-        url_encoded_path = quote(path or "")
-        url = f"{_EGNYTE_API_BASE.format(domain=self.domain)}/fs/{url_encoded_path}"
-        response = request_with_retries(
-            method="GET", url=url, headers=headers, params=params
-        )
-        if not response.ok:
-            raise RuntimeError(f"Failed to fetch files from Egnyte: {response.text}")
-
-        data = response.json()
-
-        # Yield files from current directory
-        for file in data.get("files", []):
-            yield file
-
-        # Recursively traverse folders
-        for folder in data.get("folders", []):
-            yield from self._get_files_list(folder["path"])
+    def _get_files_list(self, path: str) -> Generator[EgnyteFile, None, None]:
+        folder_paths = [path]
+        while folder_paths:
+            folder_path = folder_paths.pop()
+            for page in self.ops.iterate_folder_pages(folder_path=folder_path):
+                yield from page.files
+                folder_paths.extend(folder.path for folder in page.folders)
 
     def _should_index_file(
         self,
-        file: dict[str, Any],
+        file: EgnyteFile,
         start_time: datetime | None = None,
         end_time: datetime | None = None,
     ) -> bool:
         """Return True if file should be included based on filters."""
-        if file["is_folder"]:
-            return False
-
-        file_modified = _parse_last_modified(file["last_modified"])
+        file_modified = _parse_last_modified(file.last_modified)
         if start_time and file_modified < start_time:
             return False
         if end_time and file_modified > end_time:
@@ -293,58 +276,34 @@ class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
         # Iterate through yielded files and filter them
         for file in self._get_files_list(self.folder_path):
             if not self._should_index_file(file, start_time, end_time):
-                logger.debug("Skipping file '%s'.", file["path"])
+                logger.debug("Skipping file '%s'.", file.path)
                 continue
 
             try:
-                # Set up request with streaming enabled
-                headers = {
-                    "Authorization": f"Bearer {self.access_token}",
-                }
-                url_encoded_path = quote(file["path"])
-                url = f"{_EGNYTE_API_BASE.format(domain=self.domain)}/fs-content/{url_encoded_path}"
-                response = request_with_retries(
-                    method="GET",
-                    url=url,
-                    headers=headers,
-                    stream=True,
-                )
+                content = self.ops.download_file(file_path=file.path)
+            except EgnyteApiError as e:
+                if e.status_code != 404:
+                    raise
+                logger.warning("File '%s' was deleted before download.", file.path)
+                continue
 
-                if not response.ok:
-                    logger.error(
-                        "Failed to fetch file content: %s (status code: %s)",
-                        file["path"],
-                        response.status_code,
-                    )
-                    continue
-
-                # Stream the response content into a BytesIO buffer
-                buffer = io.BytesIO()
-                for chunk in response.iter_content(chunk_size=8192):
-                    if chunk:
-                        buffer.write(chunk)
-
-                # Reset buffer's position to the start
-                buffer.seek(0)
-
-                # Process the streamed file content
+            try:
                 doc = _process_egnyte_file(
-                    file_metadata=file,
-                    file_content=buffer,
+                    file=file,
+                    file_content=io.BytesIO(content),
                     base_url=_EGNYTE_APP_BASE.format(domain=self.domain),
                     folder_path=self.folder_path,
                 )
-
-                if doc is not None:
-                    current_batch.append(doc)
-
-                    if len(current_batch) >= self.batch_size:
-                        yield current_batch
-                        current_batch = []
-
             except Exception:
-                logger.exception("Failed to process file %s", file["path"])
+                logger.exception("Failed to process file %s", file.path)
                 continue
+
+            if doc is not None:
+                current_batch.append(doc)
+
+                if len(current_batch) >= self.batch_size:
+                    yield current_batch
+                    current_batch = []
 
         if current_batch:
             yield current_batch
