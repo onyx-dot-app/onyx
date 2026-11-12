@@ -33,7 +33,7 @@ roll back atomically.
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Literal
+from typing import Literal
 from uuid import UUID
 
 from sqlalchemy import (
@@ -171,10 +171,10 @@ def _is_shared_with_user_group(
     return stmt.exists()
 
 
-_PluginClause = Callable[[type[Plugin], type[Marketplace]], ColumnElement[Any]]
+type _PluginClause[T] = Callable[[type[Plugin], type[Marketplace]], ColumnElement[T]]
 
 
-def _plugin_of_skill(build: _PluginClause) -> Select[tuple[Any]]:
+def _plugin_of_skill[T](build: _PluginClause[T]) -> Select[tuple[T]]:
     """Select ``build`` over the plugin of the enclosing query's skill. Fresh
     aliases, so the clause can nest inside another plugin query."""
     plugin: type[Plugin] = aliased(Plugin)
@@ -188,7 +188,7 @@ def _plugin_of_skill(build: _PluginClause) -> Select[tuple[Any]]:
     )
 
 
-def _plugin_of_skill_matches(build: _PluginClause) -> ColumnElement[bool]:
+def _plugin_of_skill_matches(build: _PluginClause[bool]) -> ColumnElement[bool]:
     """True when the skill's plugin satisfies ``build``. False for a built-in
     skill or a custom skill with no plugin."""
     plugin: type[Plugin] = aliased(Plugin)
