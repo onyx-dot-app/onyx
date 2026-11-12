@@ -40,6 +40,7 @@ from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
 from onyx.server.features.build.db.build_session import (
     clear_nextjs_ports_for_user,
     get_orphan_build_session_ids,
+    get_webapp_session_ids,
     mark_user_sessions_idle__no_commit,
 )
 from onyx.server.features.build.db.sandbox import (
@@ -60,6 +61,7 @@ from onyx.server.features.build.db.sandbox import (
     set_sandbox_skills_hashes__no_commit,
     sleep_running_sandbox__no_commit,
 )
+from onyx.server.features.build.preview_activity import latest_preview_activity
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.locks import sandbox_provision_lock
 from onyx.server.features.build.sandbox.models import (
@@ -782,6 +784,21 @@ def is_sandbox_idle(sandbox: Sandbox, now: datetime) -> bool:
     return reference < now - timedelta(seconds=SANDBOX_IDLE_TIMEOUT_SECONDS)
 
 
+def is_sandbox_idle_after_preview_activity(
+    db_session: DBSession, sandbox: Sandbox, now: datetime
+) -> bool:
+    """``is_sandbox_idle`` that also counts app preview requests, which the
+    webapp proxy records only in the cache."""
+    if not is_sandbox_idle(sandbox, now):
+        return False
+    preview_at = latest_preview_activity(
+        get_webapp_session_ids(db_session, sandbox.user_id)
+    )
+    return preview_at is None or preview_at < now - timedelta(
+        seconds=SANDBOX_IDLE_TIMEOUT_SECONDS
+    )
+
+
 def list_snapshotable_session_workspaces(
     db_session: DBSession,
     sandbox_manager: SandboxManager,
@@ -1038,7 +1055,9 @@ def sleep_sandbox(
         if (
             sandbox.status != SandboxStatus.RUNNING
             or sandbox.provisioning_attempt_number != initial_attempt
-            or not is_sandbox_idle(sandbox, datetime.now(timezone.utc))
+            or not is_sandbox_idle_after_preview_activity(
+                db_session, sandbox, datetime.now(timezone.utc)
+            )
         ):
             logger.info("Sandbox %s went active mid-sweep; skipping reap", sandbox_id)
             return
@@ -1052,7 +1071,9 @@ def sleep_sandbox(
             if (
                 sandbox.status != SandboxStatus.RUNNING
                 or sandbox.provisioning_attempt_number != initial_attempt
-                or not is_sandbox_idle(sandbox, datetime.now(timezone.utc))
+                or not is_sandbox_idle_after_preview_activity(
+                    db_session, sandbox, datetime.now(timezone.utc)
+                )
             ):
                 return
             current_resources = list(
