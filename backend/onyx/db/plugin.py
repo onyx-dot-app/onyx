@@ -23,19 +23,17 @@ Functions here flush and never commit.
 import hashlib
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
-from datetime import timedelta
 from enum import Enum
 from typing import Literal
 from uuid import UUID, uuid4
 
-from sqlalchemy import ColumnElement, and_, delete, exists, func, or_, select, update
+from sqlalchemy import and_, delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission
 from onyx.auth.scoped_permissions import assert_within_scope
-from onyx.configs.constants import FileOrigin
 from onyx.db.enums import (
     MarketplaceKind,
     Permission,
@@ -44,7 +42,6 @@ from onyx.db.enums import (
     SkillSharePermission,
 )
 from onyx.db.models import (
-    FileRecord,
     Marketplace,
     Plugin,
     Plugin__User,
@@ -84,8 +81,8 @@ PLUGIN_NAME_MAX_LENGTH = 64
 _PLUGIN_NAME_INDEX = "uq_plugin_marketplace_name"
 _PLUGIN_PRIMARY_KEY = "plugin_pkey"
 
-# The newest version keeps its bundle, with the newest older versions up to
-# this many bundles. The published version always keeps its bundle too.
+# Bundles kept for the newest versions of a plugin. The current and published
+# versions always keep theirs.
 BUNDLES_KEPT = 100
 
 NameClashAction = Literal["raise", "rename"]
@@ -309,22 +306,12 @@ def _manifest_matches(
     return current.bundle_sha256 == content.bundle_sha256
 
 
-def _has_no_file_manifest() -> ColumnElement[bool]:
-    # An ORM insert of None writes JSON null; the plugin backfill writes NULL.
-    return or_(
-        PluginVersion.file_manifest.is_(None),
-        func.jsonb_typeof(PluginVersion.file_manifest) == "null",
-    )
-
-
 def prune_plugin_bundles__no_commit(plugin: Plugin, db_session: Session) -> list[str]:
-    """Empty the bundle of each version that is not one of the newest
-    ``BUNDLES_KEPT``, the current or the published version. The version rows
-    stay. A bundle that the legacy skill row uses is kept, and so is the
-    bundle of a version with no stored file list or root SKILL.md text,
-    because reads of that version still open the bundle. Call under the
-    plugin lock. Returns the files that nothing uses now; the caller deletes
-    them after the commit."""
+    """Empty the bundle of each version that is not kept. Kept: the current and
+    published versions, and the newest ``BUNDLES_KEPT`` versions. The version
+    rows stay. Call under the plugin lock. Returns the files that no plugin
+    version or legacy skill row uses now; the caller deletes them after the
+    commit."""
     kept = {
         version_id
         for version_id in (plugin.current_version_id, plugin.published_version_id)
@@ -338,25 +325,16 @@ def prune_plugin_bundles__no_commit(plugin: Plugin, db_session: Session) -> list
             .limit(BUNDLES_KEPT)
         )
     )
-    legacy_bundle_file_id = db_session.scalar(
-        select(Skill.bundle_file_id).where(Skill.id == plugin.id)
-    )
-    pruned: dict[UUID, str] = {
+    pruned = {
         version_id: file_id
         for version_id, file_id in db_session.execute(
             select(PluginVersion.id, PluginVersion.bundle_file_id).where(
                 PluginVersion.plugin_id == plugin.id,
                 PluginVersion.bundle_file_id.is_not(None),
                 PluginVersion.id.not_in(kept),
-                ~_has_no_file_manifest(),
-                ~exists().where(
-                    PluginSkill.plugin_version_id == PluginVersion.id,
-                    PluginSkill.path == "",
-                    PluginSkill.skill_md.is_(None),
-                ),
             )
         ).tuples()
-        if file_id is not None and file_id != legacy_bundle_file_id
+        if file_id is not None
     }
     if not pruned:
         return []
@@ -371,6 +349,10 @@ def prune_plugin_bundles__no_commit(plugin: Plugin, db_session: Session) -> list
             select(PluginVersion.bundle_file_id).where(
                 PluginVersion.bundle_file_id.in_(file_ids)
             )
+        )
+    ) | set(
+        db_session.scalars(
+            select(Skill.bundle_file_id).where(Skill.bundle_file_id.in_(file_ids))
         )
     )
     return sorted(file_ids - still_used)
@@ -587,31 +569,6 @@ def persist_plugin_version_validity__no_commit(
         )
         .values(is_valid=is_valid)
     )
-
-
-# An upload saves its bundle before the row that uses it commits.
-ORPHAN_BUNDLE_MIN_AGE = timedelta(hours=1)
-
-
-def get_orphan_skill_bundle_file_ids(
-    *, after_file_id: str | None, limit: int, db_session: Session
-) -> list[str]:
-    """Skill bundle files older than ``ORPHAN_BUNDLE_MIN_AGE`` that no plugin
-    version and no legacy skill row uses, in file id order."""
-    statement = (
-        select(FileRecord.file_id)
-        .where(
-            FileRecord.file_origin == FileOrigin.SKILL_BUNDLE,
-            FileRecord.created_at < func.now() - ORPHAN_BUNDLE_MIN_AGE,
-            ~exists().where(PluginVersion.bundle_file_id == FileRecord.file_id),
-            ~exists().where(Skill.bundle_file_id == FileRecord.file_id),
-        )
-        .order_by(FileRecord.file_id)
-        .limit(limit)
-    )
-    if after_file_id is not None:
-        statement = statement.where(FileRecord.file_id > after_file_id)
-    return list(db_session.scalars(statement))
 
 
 # --- Skill plugins and their access ----------------------------------------
