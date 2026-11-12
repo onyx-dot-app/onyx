@@ -41,6 +41,7 @@ from onyx.db.models import (
     UserGroup,
 )
 from onyx.db.permissions import recompute_user_permissions__no_commit
+from onyx.db.plugin import delete_user_upload_plugins__no_commit
 from onyx.db.utils import is_check_violation
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -973,6 +974,7 @@ def delete_user_from_db__no_commit(
             OnyxErrorCode.CONFLICT,
             "Transfer or delete this user's private skills before deleting the user.",
         )
+    delete_user_upload_plugins__no_commit(db_session, user_to_delete.id)
     for oauth_account in user_to_delete.oauth_accounts:
         db_session.delete(oauth_account)
 

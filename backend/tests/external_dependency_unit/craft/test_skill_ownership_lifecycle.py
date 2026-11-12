@@ -2,6 +2,7 @@
 
 from contextlib import nullcontext
 from unittest.mock import AsyncMock, patch
+from uuid import uuid4
 
 import pytest
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
@@ -12,8 +13,20 @@ from sqlalchemy.orm import Session
 from ee.onyx.server.tenants.team_membership_api import leave_organization
 from onyx.auth.users import UserManager
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
-from onyx.db.models import User, User__UserGroup
-from onyx.db.skill import transfer_skill_ownership
+from onyx.db.enums import MarketplaceKind, SkillSharePermission
+from onyx.db.models import (
+    Marketplace,
+    Plugin,
+    PluginVersion,
+    Skill,
+    User,
+    User__UserGroup,
+)
+from onyx.db.skill import (
+    delete_skill,
+    set_skill_public_permission,
+    transfer_skill_ownership,
+)
 from onyx.db.users import delete_user_from_db__no_commit
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -41,6 +54,61 @@ def test_owner_must_transfer_private_skills_before_deletion(
     delete_user_from_db__no_commit(owner, db_session)
     assert db_session.get(User, owner.id) is None
     assert skill.author_user_id == successor.id
+
+
+def _copy_to_user_uploads(db_session: Session, skill: Skill, owner: User) -> None:
+    """Copy a private skill into the owner's "My uploads", as the backfill does."""
+    marketplace = Marketplace(
+        id=uuid4(),
+        kind=MarketplaceKind.USER_UPLOADS,
+        name="My uploads",
+        owner_user_id=owner.id,
+    )
+    db_session.add(marketplace)
+    db_session.flush()
+    db_session.add_all(
+        [
+            Plugin(
+                id=skill.id,
+                name=skill.name,
+                description=skill.description,
+                marketplace_id=marketplace.id,
+                author_user_id=owner.id,
+                current_version_id=skill.id,
+            ),
+            PluginVersion(id=skill.id, plugin_id=skill.id, version_number=1),
+        ]
+    )
+    db_session.flush()
+
+
+@pytest.mark.parametrize("change", ["transfer", "delete", "publish"])
+def test_copied_plugin_does_not_block_deletion_of_former_owner(
+    db_session: Session,
+    change: str,
+) -> None:
+    owner = make_user(db_session, standard_account=True)
+    successor = make_user(db_session, standard_account=True)
+    skill = make_skill(db_session, author_user_id=owner.id)
+    plugin_id = skill.id
+    _copy_to_user_uploads(db_session, skill, owner)
+
+    if change == "transfer":
+        transfer_skill_ownership(
+            skill=skill, new_owner_user_id=successor.id, db_session=db_session
+        )
+    elif change == "delete":
+        delete_skill(skill, db_session)
+    else:
+        set_skill_public_permission(
+            skill=skill,
+            public_permission=SkillSharePermission.VIEWER,
+            db_session=db_session,
+        )
+
+    delete_user_from_db__no_commit(owner, db_session)
+    assert db_session.get(User, owner.id) is None
+    assert db_session.scalar(select(Plugin.id).where(Plugin.id == plugin_id)) is None
 
 
 def test_database_rejects_deletion_that_would_orphan_private_skill(
