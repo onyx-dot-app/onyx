@@ -3,10 +3,14 @@ import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import {
   addMockLlmConversation,
   mockLlmNonce,
+  mockLlmToolCallReply,
   MOCK_LLM_BACKEND_URL,
 } from "@tests/e2e/utils/mockLlm";
 
-test("custom tool output and answer survive a history reload", async ({
+// Code mode runs behind the scenes; none of it is user-facing copy.
+const CODE_MODE_TEXT = /await \w+\(|\bcell\b|Ran code|execute_code|wait_code/i;
+
+test("custom tool output and answer survive a history reload @code-mode", async ({
   browser,
   page,
   chatPage,
@@ -44,7 +48,7 @@ test("custom tool output and answer survive a history reload", async ({
       name: nonce,
       conditions: { prompt_contains: [nonce] },
       replies: [
-        { tool_calls: [{ id: callId, name: toolName, arguments: {} }] },
+        mockLlmToolCallReply([{ id: callId, name: toolName, arguments: {} }]),
         {
           text: "The health check returned ok.",
           conditions: { has_results_for: [callId] },
@@ -54,13 +58,13 @@ test("custom tool output and answer survive a history reload", async ({
     await chatPage.goto(sessionId);
     await chatPage.inputBar.fill(`Check the service. ${nonce}`);
     await chatPage.inputBar.send();
-    await chatPage.expectCompleteAnswers(1);
-    await chatPage.expectAnswerParagraph("The health check returned ok.");
-    await chatPage.expectCustomToolResult(operation, '"status": "ok"');
-    await chatPage.reload();
-    await chatPage.expectCompleteAnswers(1);
-    await chatPage.expectAnswerParagraph("The health check returned ok.");
-    await chatPage.expectCustomToolResult(operation, '"status": "ok"');
+    for (const view of ["live", "reloaded"]) {
+      if (view === "reloaded") await chatPage.reload();
+      await chatPage.expectCompleteAnswers(1);
+      await chatPage.expectAnswerParagraph("The health check returned ok.");
+      await chatPage.expectCustomToolResult(operation, '"status": "ok"');
+      await expect(chatPage.aiMessage()).not.toContainText(CODE_MODE_TEXT);
+    }
   } finally {
     if (sessionId) await api.deleteChatSession(sessionId);
     if (agentId !== undefined) await adminApi.deleteAgent(agentId);

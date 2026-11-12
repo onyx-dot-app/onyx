@@ -183,7 +183,7 @@ test.describe("Default Agent MCP Integration", () => {
     await plugins.setPluginEnabled(serverName, true);
   });
 
-  test("Basic user can create an assistant with MCP actions attached", async ({
+  test("Basic user can create an assistant with MCP actions attached @code-mode", async ({
     page,
   }) => {
     await page.context().clearCookies();

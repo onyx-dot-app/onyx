@@ -3,7 +3,11 @@ import {
   getToolPacketCounts,
   sendMessageAndCaptureStreamPackets,
 } from "@tests/e2e/utils/chatStream";
-import { addMockLlmConversation, mockLlmNonce } from "@tests/e2e/utils/mockLlm";
+import {
+  addMockLlmConversation,
+  mockLlmNonce,
+  mockLlmToolCallReply,
+} from "@tests/e2e/utils/mockLlm";
 
 /** The name the LLM sees for an MCP tool; it matches `MCPTool.name` in the backend. */
 export function qualifiedMcpToolName(
@@ -36,12 +40,9 @@ export async function sendMcpToolCall(
     name: `mcp-${nonce}`,
     conditions: { prompt_contains: [nonce] },
     replies: [
-      {
-        tool_calls: [
-          { id: callId, name: toolName, arguments: { name: nonce } },
-        ],
-        conditions: { offers: [toolName] },
-      },
+      mockLlmToolCallReply([
+        { id: callId, name: toolName, arguments: { name: nonce } },
+      ]),
       { text: "Done.", conditions: { has_results_for: [callId] } },
     ],
   });

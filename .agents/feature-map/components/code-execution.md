@@ -722,7 +722,8 @@ health calls are not retried.
   (`code_mode_dirs` in `.github/workflows/pr-integration-tests.yml`) and the
   `@code-mode` Playwright specs in the `code-mode` project. Mock LLM scripts
   pick the call shape with `tool_call_reply` and `requires_code_mode`
-  (`backend/tests/integration/common_utils/managers/mock_llm.py`); external
+  (`backend/tests/integration/common_utils/managers/mock_llm.py`) or
+  `mockLlmToolCallReply` (`web/tests/e2e/utils/mockLlm.ts`); external
   dependency unit tests take the `code_mode` fixture
   (`backend/tests/external_dependency_unit/conftest.py`) to run in both modes. Web:
   the code mode cases in
@@ -733,8 +734,9 @@ health calls are not retried.
   `web/src/app/app/message/messageComponents/timeline/hooks/packetProcessor.test.ts`
   (cells and closing records, live and replay order).
   Playwright: `web/tests/e2e/chat/code_mode.spec.ts` (a call that outlives a yield reads
-  as one direct call, with `wait_code` or at response end; with the backend, a
-  program's custom tool call shows as its own step after a reload). Mobile:
+  as one direct call, with `wait_code` or at response end) and
+  `web/tests/e2e/chat/tool_history.spec.ts` (a custom tool call, direct or from
+  a program, after a reload). Mobile:
   `mobile/src/chat/timeline/__tests__/grouping.test.ts` and
   `mobile/src/chat/timeline/__tests__/transformers.test.ts`.
 - By hand, set `CODE_MODE_ENABLED=true`, attach an MCP server and internal
