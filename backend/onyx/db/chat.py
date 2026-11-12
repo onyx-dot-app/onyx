@@ -24,7 +24,13 @@ from sqlalchemy.orm import Session, joinedload, load_only, selectinload
 from sqlalchemy.sql.expression import ColumnElement
 from sqlalchemy.sql.selectable import CTE
 
-from onyx.agents.models import CompactionCheckpoint, RunFailureKind, RunStatus
+from onyx.agents.models import (
+    CompactionCheckpoint,
+    InputSource,
+    MessageDelivery,
+    RunFailureKind,
+    RunStatus,
+)
 from onyx.chat.errors import chat_error
 from onyx.chat.models import (
     ChatBranch,
@@ -44,6 +50,7 @@ from onyx.db.enums import (
     record_mode_persists_content,
 )
 from onyx.db.models import (
+    ChatInput,
     ChatMessage,
     ChatMessage__SearchDoc,
     ChatSession,
@@ -925,7 +932,10 @@ def reserve_chat_response_ids(
     parent_message_id: int,
     model_display_names: list[str],
 ) -> list[int]:
-    """Reserve assistant responses and select the last response as the active branch."""
+    """Reserve assistant responses and select the last response as the active branch.
+
+    Pending sends without a target were submitted while this turn prepared.
+    """
     if not model_display_names:
         raise ValueError("At least one response model is required")
     configure_response_transaction__no_commit(db_session)
@@ -960,6 +970,18 @@ def reserve_chat_response_ids(
     )
     if parent:
         parent.latest_child_message_id = reserved[-1].id
+
+    # Sends that arrived while this turn prepared go to its selected response.
+    db_session.execute(
+        update(ChatInput)
+        .where(
+            ChatInput.recipient_session_id == chat_session_id,
+            ChatInput.source == InputSource.HUMAN,
+            ChatInput.delivery == MessageDelivery.SEND,
+            ChatInput.target_response_id.is_(None),
+        )
+        .values(target_response_id=reserved[-1].id)
+    )
 
     db_session.commit()
     return [message.id for message in reserved]

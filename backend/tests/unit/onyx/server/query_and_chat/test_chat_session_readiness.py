@@ -2,7 +2,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
-from fastapi import BackgroundTasks
+from fastapi import BackgroundTasks, Request
 
 from onyx.chat.models import ChatBranch, ChatInbox
 from onyx.db.models import User
@@ -29,5 +29,8 @@ def test_status_does_not_report_idle_when_cache_fails() -> None:
         pytest.raises(ConnectionError),
     ):
         get_chat_session_processing_status(
-            uuid4(), background_tasks=BackgroundTasks(), user=User(id=uuid4())
+            uuid4(),
+            background_tasks=BackgroundTasks(),
+            request=Request({"type": "http", "headers": []}),
+            user=User(id=uuid4()),
         )

@@ -8,7 +8,7 @@ from typing import Any, override
 from uuid import UUID, uuid4
 
 import pytest
-from fastapi import BackgroundTasks, FastAPI
+from fastapi import BackgroundTasks, FastAPI, Request
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from pydantic import JsonValue
@@ -34,6 +34,7 @@ from onyx.chat.process_message import (
 from onyx.chat.run_store import RESPONSE_OWNER_KEY_PREFIX
 from onyx.chat.stop_signal_checker import request_stop
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
+from onyx.db.chat import reserve_chat_response_ids
 from onyx.db.chat_inputs import (
     MAX_PENDING_MESSAGE_BYTES,
     cancel_completed_responses__no_commit,
@@ -70,6 +71,9 @@ from onyx.tools.models import ChatToolSelection
 from onyx.utils.threadpool_concurrency import start_thread_future
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.unit.onyx.agents.fakes import FakeModelClient
+
+# A status request without pass-through headers.
+_NO_HEADERS = Request({"type": "http", "headers": []})
 
 
 @pytest.fixture
@@ -190,6 +194,7 @@ def test_input_changed_after_a_run_read_it_is_not_accepted(
         message="Focus on cost",
         delivery=MessageDelivery.SEND,
         target_response_id=response.id,
+        turn_preparing=False,
     )
     messages = read()
     assert consume_inputs__no_commit(
@@ -898,7 +903,9 @@ def test_queued_start_failure_saves_error_and_pauses_queue(
     assert chat_turn_work.wait_idle(timeout=30)
     assert [message["message"] for message in client.get(path).json()] == ["Second"]
     tasks = BackgroundTasks()
-    status = chat_backend.get_chat_session_processing_status(chat_id, tasks, owner)
+    status = chat_backend.get_chat_session_processing_status(
+        chat_id, tasks, _NO_HEADERS, owner
+    )
     assert not status.has_startable_input
     assert status.latest_response_id == answer.id
     assert tasks.tasks == []
@@ -940,6 +947,8 @@ def test_late_send_after_a_finished_response_starts_the_next_turn(
     admission = ChatTurnAdmission(get_cache_backend())
     if admission_held:
         admission.claim(chat_id)
+        # The finished turn published its stream before it releases the chat.
+        admission.publish(1)
     try:
         sent = client.post(
             path,
@@ -976,6 +985,50 @@ def test_late_send_after_a_finished_response_starts_the_next_turn(
     assert client.get(path).json() == []
 
 
+def test_send_during_preparation_goes_to_the_preparing_turn(
+    client: TestClient,
+    response: ChatMessage,
+    db_session: Session,
+) -> None:
+    """A send before the preparing turn reserves its response is read by that response."""
+    chat_id = response.chat_session_id
+    path = f"/chat/chat-session/{chat_id}/pending-messages"
+    response.response_status = RunStatus.COMPLETE
+    question = ChatMessage(
+        chat_session_id=chat_id,
+        parent_message_id=response.id,
+        message="Next question",
+        token_count=2,
+        message_type=MessageType.USER,
+    )
+    db_session.add(question)
+    db_session.commit()
+    admission = ChatTurnAdmission(get_cache_backend())
+    admission.claim(chat_id)
+    try:
+        sent = client.post(
+            path,
+            json={
+                "message": "Focus on cost",
+                "delivery": "send",
+                "target_response_id": response.id,
+            },
+        )
+        assert sent.status_code == 200, sent.text
+        pending = PendingChatMessage.model_validate(sent.json())
+        assert pending.delivery == MessageDelivery.SEND
+        assert pending.target_response_id is None
+        [reserved] = reserve_chat_response_ids(
+            db_session, chat_id, question.id, ["Model"]
+        )
+        assert [
+            message.content
+            for message in read_run_inputs(db_session, str(chat_id), str(reserved))
+        ] == ["Focus on cost"]
+    finally:
+        admission.release()
+
+
 def test_status_recovers_queued_message_after_previous_dispatcher_exits(
     client: TestClient,
     response: ChatMessage,
@@ -1006,12 +1059,23 @@ def test_status_recovers_queued_message_after_previous_dispatcher_exits(
             content=[TextContent(text="Recovered answer")]
         )
     )
+    model_headers: list[dict[str, str] | None] = []
+
+    def model_for_persona(**kwargs: Any) -> QueueTestLLM:
+        model_headers.append(kwargs["additional_headers"])
+        return model
+
     monkeypatch.setattr(
-        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
+        "onyx.chat.process_message.get_llm_for_persona", model_for_persona
     )
+    monkeypatch.setattr(chat_backend, "LITELLM_PASS_THROUGH_HEADERS", ["x-proxy-user"])
     tasks = BackgroundTasks()
+    # The status poll that recovers the queue passes on its own request's headers.
     status = chat_backend.get_chat_session_processing_status(
-        response.chat_session_id, tasks, owner
+        response.chat_session_id,
+        tasks,
+        Request({"type": "http", "headers": [(b"x-proxy-user", b"user-1")]}),
+        owner,
     )
     assert not status.is_processing
     assert status.has_startable_input
@@ -1026,6 +1090,7 @@ def test_status_recovers_queued_message_after_previous_dispatcher_exits(
         select(ChatMessage).where(ChatMessage.parent_message_id == question.id)
     )
     assert answer is not None and answer.message == "Recovered answer"
+    assert model_headers == [{"x-proxy-user": "user-1"}]
     assert client.get(path).json() == []
 
 
@@ -1095,7 +1160,9 @@ def test_stop_after_the_answer_finishes_pauses_the_queue(
             queued.json()["id"]
         ]
         tasks = BackgroundTasks()
-        status = chat_backend.get_chat_session_processing_status(chat.id, tasks, owner)
+        status = chat_backend.get_chat_session_processing_status(
+            chat.id, tasks, _NO_HEADERS, owner
+        )
         assert not status.has_startable_input
         assert tasks.tasks == []
     finally:
@@ -1352,7 +1419,7 @@ def test_status_repairs_a_running_root_whose_owner_is_gone(
     get_cache_backend().delete(f"{RESPONSE_OWNER_KEY_PREFIX}{response.id}")
     tasks = BackgroundTasks()
     status = chat_backend.get_chat_session_processing_status(
-        response.chat_session_id, tasks, owner
+        response.chat_session_id, tasks, _NO_HEADERS, owner
     )
     assert not status.is_processing
     assert not status.has_startable_input
@@ -1387,7 +1454,7 @@ def test_stop_after_a_step_limit_pauses_the_queue(
     assert queued.status_code == 200, queued.text
     tasks = BackgroundTasks()
     assert chat_backend.get_chat_session_processing_status(
-        chat_id, tasks, owner
+        chat_id, tasks, _NO_HEADERS, owner
     ).has_startable_input
 
     cancel_completed_responses__no_commit(db_session, chat_id, [response.id])
@@ -1397,7 +1464,7 @@ def test_stop_after_a_step_limit_pauses_the_queue(
     assert stopped is not None
     assert stopped.response_status == RunStatus.CANCELLED
     assert not chat_backend.get_chat_session_processing_status(
-        chat_id, BackgroundTasks(), owner
+        chat_id, BackgroundTasks(), _NO_HEADERS, owner
     ).has_startable_input
 
 
