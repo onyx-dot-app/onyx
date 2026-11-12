@@ -403,7 +403,7 @@ The library preview of an external-app skill calls the same renderer
     Content of a version comes from one function,
     `skills/content.py:read_version_contents`: `plugin_version.file_manifest`
     and `plugin_skill.skill_md` from the database, and the bundle only when
-    they are NULL (a version copied from a legacy row before the repair task).
+    they are NULL (a version copied from a legacy row).
     The legacy `bundle_file_id`, `bundle_sha256` and `is_valid` columns are
     only written, by the dual writes; `db/plugin.py:legacy_skill_version_content`
     reads them once to make a plugin for a skill that has none.

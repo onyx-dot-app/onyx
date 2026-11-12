@@ -5638,7 +5638,8 @@ class PluginVersion(Base):
     bundle_file_id: Mapped[str | None] = mapped_column(String, nullable=True)
     bundle_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     is_valid: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-    # One {path, size, sha256} entry per file. NULL until the repair task runs.
+    # One {path, size, sha256} entry per file. NULL for a version copied from
+    # a legacy skill row.
     file_manifest: Mapped[list[dict[str, Any]] | None] = mapped_column(
         PGJSONB(), nullable=True, deferred=True
     )
