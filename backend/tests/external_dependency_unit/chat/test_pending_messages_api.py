@@ -35,6 +35,7 @@ from onyx.chat.process_message import (
 from onyx.chat.run_store import RESPONSE_OWNER_KEY_PREFIX
 from onyx.chat.stop_signal_checker import request_stop
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
+from onyx.context.search.models import BaseFilters
 from onyx.db.chat import reserve_chat_response_ids
 from onyx.db.chat_inputs import (
     MAX_PENDING_MESSAGE_BYTES,
@@ -55,7 +56,7 @@ from onyx.hooks.points.query_processing import (
     QueryProcessingResponse,
 )
 from onyx.llm.cancellation import CancellationSignal
-from onyx.llm.interfaces import GenerationContext, LLMConfig
+from onyx.llm.interfaces import LLM, GenerationContext, LLMConfig
 from onyx.llm.models import (
     AssistantMessage,
     GenerationEvent,
@@ -1802,3 +1803,106 @@ def test_a_queued_message_starts_its_turn_with_the_model_it_was_sent_with(
     assert queued.status_code == 200, queued.text
     assert chat_turn_work.wait_idle(timeout=30)
     assert [request.llm_override for request in started] == [chosen]
+
+
+def _start_queued_turn(
+    client: TestClient,
+    response: ChatMessage,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+    **chat_settings: object,
+) -> tuple[ChatMessage, list[LLMOverride | None]]:
+    """Queue a message after a finished response; return its answer and model."""
+    chat_id = response.chat_session_id
+    response.response_status = RunStatus.COMPLETE
+    chat = db_session.get(ChatSession, chat_id)
+    assert chat is not None
+    for name, value in chat_settings.items():
+        setattr(chat, name, value)
+    db_session.commit()
+    models: list[LLMOverride | None] = []
+    model = QueueTestLLM(
+        lambda _request, _signal: AssistantMessage(content=[TextContent(text="Done")])
+    )
+
+    def get_model(*, llm_override: LLMOverride | None, **_kwargs: object) -> LLM:
+        models.append(llm_override)
+        return model
+
+    monkeypatch.setattr("onyx.chat.process_message.get_llm_for_persona", get_model)
+    queued = client.post(
+        f"/chat/chat-session/{chat_id}/pending-messages",
+        json={"message": "Queued question", "delivery": "queue"},
+    )
+    assert queued.status_code == 200, queued.text
+    assert chat_turn_work.wait_idle(timeout=30)
+    db_session.expire_all()
+    answer = db_session.scalar(
+        select(ChatMessage).where(
+            ChatMessage.chat_session_id == chat_id,
+            ChatMessage.message_type == MessageType.ASSISTANT,
+            ChatMessage.id != response.id,
+        )
+    )
+    assert answer is not None
+    return answer, models
+
+
+def test_a_queued_message_without_a_model_uses_the_chat_model(
+    client: TestClient,
+    response: ChatMessage,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    answer, models = _start_queued_turn(
+        client,
+        response,
+        db_session,
+        monkeypatch,
+        current_alternate_model="My Provider__openai__gpt__mini__mc:42",
+    )
+    assert answer.response_status == RunStatus.COMPLETE
+    assert models == [
+        LLMOverride(
+            model_provider="My Provider",
+            model_version="gpt__mini",
+            model_configuration_id=42,
+        )
+    ]
+
+
+def test_a_queued_turn_checks_access_to_the_saved_document_sets(
+    client: TestClient,
+    response: ChatMessage,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Access can end while a message waits; the turn saves an error instead."""
+    answer, models = _start_queued_turn(
+        client,
+        response,
+        db_session,
+        monkeypatch,
+        tool_selection=ChatToolSelection(
+            internal_search_filters=BaseFilters(document_set=[f"Gone {uuid4()}"])
+        ),
+    )
+    assert answer.response_status == RunStatus.ERROR
+    assert models == []
+
+
+def test_a_queued_turn_runs_without_a_saved_preferred_tool_that_is_gone(
+    client: TestClient,
+    response: ChatMessage,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    answer, _models = _start_queued_turn(
+        client,
+        response,
+        db_session,
+        monkeypatch,
+        tool_selection=ChatToolSelection(preferred_tool_id=2_000_000_000),
+    )
+    assert answer.response_status == RunStatus.COMPLETE
+    assert answer.message == "Done"

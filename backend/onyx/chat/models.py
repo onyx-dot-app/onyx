@@ -694,6 +694,9 @@ class ChatTurnSetup(BaseModel):
     all_injected_file_metadata: dict[str, FileToolMetadata]
     available_files: AvailableFiles
     preferred_tool_id: int | None
+    # The preferred tool comes from the chat's saved selection, which can
+    # outlive the tool or its plugin; the turn then runs without it.
+    preferred_tool_saved: bool = False
     chat_files_for_tools: list[ChatFile]
     custom_agent_prompt: str | None
     user_memory_context: UserMemoryContext

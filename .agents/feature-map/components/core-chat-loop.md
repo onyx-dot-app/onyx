@@ -202,20 +202,15 @@ conversation has an inbox row. With admission free, dispatch saves a selected ro
 still `RUNNING` without an owner as interrupted
 (`chat/run_store.py:interrupt_ownerless_responses`). It starts a response with
 current session settings and fresh authorization checks. A queued turn whose
-owner lost `WRITE_CHAT` saves an error response, which pauses the queue. The model is
-`chat_session.llm_override`, which each single-model user turn with a model
-override updates, so queued and interrupting turns use the user's last
-model. Tools work the same way: each user send and the
-`PATCH /chat/chat-session/{session_id}/tool-selection` route save
-`chat_session.tool_selection` (`allowed_tool_ids`, `preferred_tool_id`,
-`internal_search_filters`), and a turn the server starts uses the selection
-current when it starts. NULL means
-the agent's tools. Deep Research is a choice of each message, not of the chat:
-a queued or interrupting message stores `chat_input.deep_research`, and its
-turn starts as Deep Research when it is set. The model works the same way, as
-the web saves it only with a sent message: `chat_input.llm_override` holds the
-model the picker showed, and the turn saves it as the chat's model when it
-starts. The composer does not queue during a multi-model comparison.
+owner lost `WRITE_CHAT`, or access to a saved document set, saves an error
+response, which pauses the queue. A turn the server starts uses the chat's
+saved `chat_session.tool_selection` (NULL means the agent's tools). A saved
+preferred tool that this turn cannot build is dropped, and the turn runs
+without it. Deep Research and the model are choices of each message: a queued
+or interrupting message stores `chat_input.deep_research` and
+`chat_input.llm_override`, the model the picker showed. A message without a
+model uses `current_alternate_model`, the model the web last sent with. The
+composer does not queue during a multi-model comparison.
 Child agents keep their own tool configuration. If the queue head changes before acceptance, preparation ends with a
 conflict, and the next trigger dispatches again. Consuming the inbox row
 prevents delivery twice. If automatic preparation fails, a saved error response

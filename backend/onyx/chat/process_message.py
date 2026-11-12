@@ -297,6 +297,29 @@ def prepare_chat_turn(
                 new_msg_req = SendMessageRequest.model_validate(
                     new_msg_req.model_dump() | chat_session.tool_selection.model_dump()
                 )
+            alternate_model = (
+                (chat_session.current_alternate_model or "").split("__")
+                if queued_turn is not None and new_msg_req.llm_override is None
+                else []
+            )
+            if len(alternate_model) >= 3:
+                # Without its own model, a turn the server starts uses the model
+                # the picker last sent with: name__provider__model[__mc:id].
+                provider_name, _provider, *model_parts = alternate_model
+                configuration_id = (
+                    int(model_parts.pop()[3:])
+                    if len(model_parts) > 1 and re.fullmatch(r"mc:\d+", model_parts[-1])
+                    else None
+                )
+                new_msg_req = new_msg_req.model_copy(
+                    update={
+                        "llm_override": LLMOverride(
+                            model_provider=provider_name,
+                            model_version="__".join(model_parts),
+                            model_configuration_id=configuration_id,
+                        )
+                    }
+                )
             chat_history, parent_message = load_message_branch(
                 chat_session.id, new_msg_req.parent_message_id, db_session
             )
@@ -330,6 +353,11 @@ def prepare_chat_turn(
                 # pauses the queue instead of retrying the turn.
                 if not has_global_permission(user, Permission.WRITE_CHAT):
                     raise OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS)
+                # Document-set access can end too; check the saved filters again.
+                filters = new_msg_req.internal_search_filters
+                require_document_set_access(
+                    db_session, filters.document_set if filters else None, user
+                )
                 check_token_rate_limits(user)
             selected_models = _select_models(
                 new_msg_req,
@@ -642,6 +670,7 @@ def prepare_chat_turn(
             all_injected_file_metadata=history.all_injected_file_metadata,
             available_files=available_files,
             preferred_tool_id=preferred_tool_id,
+            preferred_tool_saved=queued_turn is not None,
             chat_files_for_tools=chat_files_for_tools,
             custom_agent_prompt=custom_prompt,
             user_memory_context=memory,

@@ -3484,6 +3484,7 @@ def test_a_run_that_ends_at_the_deadline_but_saves_past_the_backstop_stops_once(
 def test_invalid_preferred_tool_returns_an_actionable_error() -> None:
     setup = _make_setup(n_models=1)
     setup.preferred_tool_id = 1
+    setup.preferred_tool_saved = False
     with patch("onyx.chat.execution.construct_tools", return_value={}):
         with pytest.raises(OnyxError) as raised:
             create_chat_agent(setup, MagicMock(), 0, CancellationSignal(), True)

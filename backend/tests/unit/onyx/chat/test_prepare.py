@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from threading import Event
 from typing import cast
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 from uuid import UUID, uuid4
 
 import pytest
@@ -31,7 +31,7 @@ from onyx.chat.process_message import (
 from onyx.chat.prompt_utils import build_chat_prompt, prepare_prompt
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
 from onyx.context.models import UserInfo, UserMemoryContext
-from onyx.context.search.models import PersonaSearchInfo
+from onyx.context.search.models import BaseFilters, PersonaSearchInfo
 from onyx.db.enums import IncognitoRecordMode
 from onyx.db.models import (
     ChatMessage,
@@ -60,7 +60,7 @@ from onyx.llm.models import (
 )
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.tools.constants import CODING_AGENT_TOOL_ID
-from onyx.tools.models import PersonaToolConfiguration
+from onyx.tools.models import ChatToolSelection, PersonaToolConfiguration
 from tests.unit.fakes import FakeCache
 from tests.unit.onyx.agents.fakes import ScriptedLLM
 
@@ -615,6 +615,7 @@ def test_a_queued_turn_uses_the_saved_tools_and_search_filters(
         patch("onyx.chat.process_message.set_response_model_names__no_commit"),
         patch("onyx.chat.process_message.has_global_permission", return_value=True),
         patch("onyx.chat.process_message.check_token_rate_limits"),
+        patch("onyx.chat.process_message.require_document_set_access") as check_access,
     ):
         setup = prepare_chat_turn(
             SendMessageRequest(message="Queued", chat_session_id=chat_session.id),
@@ -633,46 +634,7 @@ def test_a_queued_turn_uses_the_saved_tools_and_search_filters(
     assert setup.new_msg_req.allowed_tool_ids == [3]
     assert setup.new_msg_req.preferred_tool_id == 3
     assert setup.new_msg_req.internal_search_filters == filters
-    setup.admission.release()
-
-
-def test_a_queued_turn_saves_the_model_its_message_was_sent_with(
-    chat_session: ChatSession,
-    _mock_chat_preparation: None,
-) -> None:
-    chosen = LLMOverride(model_provider="Provider", model_version="picked-model")
-    question = ChatMessage(id=5, message_type=MessageType.USER)
-    with (
-        patch("onyx.chat.process_message.accept_queued_turn__no_commit"),
-        patch(
-            "onyx.chat.process_message.create_new_chat_message", return_value=question
-        ),
-        patch("onyx.chat.process_message.reserve_chat_response_ids", return_value=[6]),
-        patch("onyx.chat.process_message.set_response_model_names__no_commit"),
-        patch("onyx.chat.process_message.has_global_permission", return_value=True),
-        patch("onyx.chat.process_message.check_token_rate_limits"),
-        patch(
-            "onyx.chat.process_message.set_chat_session_llm_override__no_commit"
-        ) as save_model,
-    ):
-        setup = prepare_chat_turn(
-            SendMessageRequest(
-                message="Queued", chat_session_id=chat_session.id, llm_override=chosen
-            ),
-            User(id=uuid4(), email="reader@example.com"),
-            llm_overrides=None,
-            queued_turn=QueuedChatTurn(
-                parent_response_id=1,
-                message=PendingChatMessage(
-                    id="queued",
-                    message="Queued",
-                    delivery=MessageDelivery.QUEUE,
-                    target_response_id=None,
-                    llm_override=chosen,
-                ),
-            ),
-        )
-    save_model.assert_called_once_with(ANY, chat_session.id, chosen)
+    check_access.assert_called_once_with(ANY, ["Handbook"], ANY)
     setup.admission.release()
 
 
