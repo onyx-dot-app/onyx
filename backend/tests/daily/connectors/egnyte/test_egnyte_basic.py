@@ -5,6 +5,7 @@ to this file describes. Egnyte gives each access token 1,000 calls per day, so
 the tests read only small folders and one run makes about 50 calls.
 """
 
+import time
 from collections.abc import Generator
 from unittest.mock import MagicMock
 from urllib.parse import quote
@@ -42,6 +43,7 @@ BIG_FILE_COUNT = 120
 TEST_PAGE_SIZE = 50
 RENAME_FOLDER = "Versions"
 RENAMED_FOLDER = "Versions Renamed"
+MOVE_ATTEMPTS = 5
 
 # Each folder's readers among the test users and groups, besides the
 # administrators, who read every folder.
@@ -134,12 +136,17 @@ def _administrator_emails(connector: EgnyteConnector) -> set[str]:
 
 
 def _move(access_token: str, source: str, destination: str) -> None:
-    response = requests.post(
-        f"https://{DOMAIN}.egnyte.com/pubapi/v1/fs{quote(source)}",
-        json={"action": "move", "destination": destination},
-        headers={"Authorization": f"Bearer {access_token}"},
-        timeout=30,
-    )
+    # The connector's calls just before may have used this second's quota.
+    for _ in range(MOVE_ATTEMPTS):
+        response = requests.post(
+            f"https://{DOMAIN}.egnyte.com/pubapi/v1/fs{quote(source)}",
+            json={"action": "move", "destination": destination},
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=30,
+        )
+        if response.status_code != 429:
+            break
+        time.sleep(float(response.headers.get("Retry-After") or 1))
     assert response.ok, f"Moving {source} failed: HTTP {response.status_code}"
 
 
