@@ -105,7 +105,11 @@ from onyx.server.query_and_chat.streaming_models import (
 )
 from onyx.server.query_and_chat.token_limit import check_model_spend_limits
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
-from onyx.tools.constants import FILE_READER_TOOL_ID, SEARCH_TOOL_ID
+from onyx.tools.constants import (
+    CODING_AGENT_TOOL_ID,
+    FILE_READER_TOOL_ID,
+    SEARCH_TOOL_ID,
+)
 from onyx.tools.models import SearchToolUsage
 from onyx.utils.fleet_query_telemetry import QueryObservation, telemetry_chat
 from onyx.utils.logger import setup_logger
@@ -301,6 +305,20 @@ def prepare_chat_turn(
                         OnyxErrorCode.BAD_REQUEST,
                         "Deep research requires a model with at least 50,000 input tokens",
                     )
+            if (
+                chat_session.incognito_record_mode is not None
+                and new_msg_req.preferred_tool_id is not None
+                and any(
+                    tool.id == new_msg_req.preferred_tool_id
+                    and tool.in_code_tool_id == CODING_AGENT_TOOL_ID
+                    for tool in chat_session.persona.tools
+                )
+            ):
+                # Incognito offers no coding agent; reject before the question is saved.
+                raise OnyxError(
+                    OnyxErrorCode.BAD_REQUEST,
+                    "The Coding Agent is not available in incognito. Start a normal chat to use it.",
+                )
             token_counter = get_llm_token_counter(selected_models[0][0])
             chat_history, parent_message = load_message_branch(
                 chat_session.id, new_msg_req.parent_message_id, db_session
