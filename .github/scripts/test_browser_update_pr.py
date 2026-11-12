@@ -6,6 +6,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 
@@ -21,7 +22,80 @@ def run(
     )
 
 
+def task_step(name: str) -> str:
+    workflow = (SCRIPTS.parent / "workflows/reusable-agent-task-pr.yml").read_text()
+    step = re.search(
+        rf"      - name: {re.escape(name)}\n.*?        run: \|\n(.*?)(?=\n      - name:)",
+        workflow,
+        re.DOTALL,
+    )
+    assert step is not None
+    return textwrap.dedent(step[1])
+
+
 class TaskPRTests(unittest.TestCase):
+    def test_script_task_needs_no_model_credentials(self) -> None:
+        command = task_step("Run script task")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / ".task-source/task.py"
+            source.parent.mkdir()
+            source.write_text(
+                "from pathlib import Path\nPath('result').write_text('trusted')\n"
+            )
+            (root / "task.py").write_text("raise RuntimeError('untrusted task')\n")
+            env = {
+                **os.environ,
+                "SCRIPT": "task.py",
+                "SCRIPT_ARGS": "",
+                "OPENAI_API_KEY": "",
+            }
+            result = run(root, "bash", "-e", "-c", command, env=env)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((root / "result").read_text(), "trusted")
+
+    def test_recommended_models_fallback_writes_target_checkout(self) -> None:
+        caller = (
+            SCRIPTS.parent / "workflows/update-recommended-models.yml"
+        ).read_text()
+        arguments = re.search(r"      fallback-args: (.+)", caller)
+        assert arguments is not None
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / ".task-source/backend/scripts"
+            source.mkdir(parents=True)
+            for name in (
+                "update_recommended_models.py",
+                "update_recommended_models_rules.json",
+            ):
+                shutil.copy2(
+                    SCRIPTS.parents[1] / "backend/scripts" / name, source / name
+                )
+            output = (
+                root / "backend/onyx/llm/well_known_providers/recommended-models.json"
+            )
+            output.parent.mkdir(parents=True)
+            original = json.dumps(
+                json.loads((SCRIPTS.parents[1] / output.relative_to(root)).read_text())
+            )
+            output.write_text(original)
+            catalog = root / "catalog.json"
+            catalog.write_text('{"data": []}')
+            result = run(
+                root,
+                "bash",
+                "-e",
+                "-c",
+                task_step("Run deterministic fallback"),
+                env={
+                    **os.environ,
+                    "FALLBACK_SCRIPT": "backend/scripts/update_recommended_models.py",
+                    "FALLBACK_ARGS": arguments[1] + f" --catalog-file {catalog}",
+                },
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertNotEqual(output.read_text(), original)
+
     def test_publisher_excludes_pre_staged_unapproved_files(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "repo"
@@ -116,6 +190,9 @@ class BrowserUpdatePRTests(unittest.TestCase):
             reviewers = root / ".github/actions/slack-notify/cve-reviewers.json"
             reviewers.parent.mkdir(parents=True)
             reviewers.write_text(json.dumps(["reviewer"]))
+            quality = root / ".github/workflows/pr-quality-checks.yml"
+            quality.parent.mkdir()
+            quality.write_text("name: Validate automatic browser pin updates\n")
             run(root, "git", "add", ".")
             self.assertEqual(run(root, "git", "commit", "-m", "initial").returncode, 0)
             self.assertEqual(
@@ -149,6 +226,7 @@ class BrowserUpdatePRTests(unittest.TestCase):
                 "curl": '#!/bin/sh\ncase "$*" in\n*last-known*) printf \'{"channels":{"Stable":{"version":"%s"}}}\' "$STABLE";;\n*linux-arm64*) printf "%s-arm64" "$STABLE";;\n*) printf "%s-amd64" "$STABLE";;\nesac\n',
                 "gh": """#!/bin/sh
 case "$1 $2" in
+"api --paginate") cat "$JOBS_FIXTURE";;
 "pr list") if [ -n "$EXISTING_PR" ] || [ -f "$CREATED_PR" ]; then echo 123; fi;;
 "pr create") touch "$CREATED_PR"; echo "pr create" >> "$PR_CALLS";;
 "pr view")
@@ -230,6 +308,42 @@ esac
                 first,
                 run(root, "git", "ls-remote", "origin", f"refs/heads/{branch}").stdout,
             )
+            # The merge validator requires both native rendering jobs, not only a green run.
+            job_file = Path(directory) / "jobs.json"
+            jobs = [
+                {
+                    "name": f"Sandbox browser audit ({arch})",
+                    "conclusion": "success",
+                    "steps": [
+                        {
+                            "name": "Verify browser rendering and screenshots",
+                            "conclusion": "success",
+                        }
+                    ],
+                }
+                for arch in ("amd64", "arm64")
+            ]
+            for case in (
+                jobs,
+                jobs[:1],
+                [{**jobs[0], "steps": []}, jobs[1]],
+                [jobs[0], {**jobs[1], "conclusion": "failure"}],
+            ):
+                job_file.write_text(json.dumps([{"jobs": case}]))
+                result = run(
+                    root,
+                    "python3",
+                    ".github/scripts/verify-browser-pin.py",
+                    "origin/main",
+                    "HEAD",
+                    env={
+                        **env,
+                        "REPO": "test/repo",
+                        "VALIDATION_RUN_ID": "42",
+                        "JOBS_FIXTURE": str(job_file),
+                    },
+                )
+                self.assertEqual(result.returncode == 0, case == jobs, result.stderr)
             # Identical output must refresh a PR if the base changed its paths.
             run(root, "git", "checkout", "main")
             intermediate = run(

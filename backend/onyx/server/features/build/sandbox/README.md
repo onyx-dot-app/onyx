@@ -452,6 +452,8 @@ Other components can continue. CVE collection disables freshness checks and stil
 Backport the gate to supported release branches; existing tags retain their original audit code.
 
 The updater uses the shared task-PR workflow for main and four supported release lines.
+The shared workflow owns script execution, PR publication, and auto-merge.
+The browser validator checks the pin diff and native rendering results.
 Branches run independently. Identical output does not push another commit.
 Native browser rendering, screenshot, and vulnerability checks run on both architectures.
 Auto-merge requires those checks and a pin-only diff. The required quality job validates

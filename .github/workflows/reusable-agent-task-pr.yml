@@ -35,15 +35,19 @@ on:
         type: string
         default: main
       diff-validator:
-        description: "Trusted Python script accepting base and head refs"
+        description: "Trusted Python validator accepting base/head; VALIDATION_RUN_ID enables completed-run checks"
         type: string
         default: ""
+      auto-merge:
+        description: "Enable merge after a successful validation run; requires a diff-validator"
+        type: boolean
+        default: false
       workflow-permission:
         description: "Request workflow permission when publishing release history"
         type: boolean
         default: false
       task-runner:
-        description: "Execution adapter: script, deterministic, or claude-code"
+        description: "Execution adapter: script or claude-code"
         required: false
         type: string
         default: script
@@ -197,7 +201,9 @@ jobs:
           persist-credentials: false
           ref: ${{ github.workflow_sha }}
           path: .task-source
-          sparse-checkout: .github/scripts
+          sparse-checkout: |
+            .github/scripts
+            backend/scripts
 
       - name: Configure git identity as App
         env:
@@ -258,9 +264,6 @@ jobs:
         run: |
           case "${TASK_RUNNER}" in
             script)
-              test -f "${SCRIPT}"
-              ;;
-            deterministic)
               test -f ".task-source/${SCRIPT}"
               ;;
             claude-code)
@@ -339,8 +342,7 @@ jobs:
             args="${args} --failure-context-file /tmp/failure_context.txt"
           fi
 
-          test -n "${OPENAI_API_KEY:-}"
-          python3 "${SCRIPT}" ${args}
+          python3 ".task-source/${SCRIPT}" ${args}
 
       - name: Checkout harness action
         if: >-
@@ -376,13 +378,6 @@ jobs:
           rationale-file: /tmp/agent_rationale.md
           failure-context-file: ${{ (github.event_name == 'workflow_run' || inputs.failure-run-id != '') && '/tmp/failure_context.txt' || '' }}
 
-      - name: Run deterministic task
-        if: inputs.task-runner == 'deterministic'
-        env:
-          SCRIPT: ${{ inputs.script }}
-          SCRIPT_ARGS: ${{ inputs.script-args }}
-        run: python3 ".task-source/${SCRIPT}" --write --rationale-file /tmp/agent_rationale.md ${SCRIPT_ARGS}
-
       - name: Run deterministic fallback
         if: >-
           (github.event_name != 'workflow_run' ||
@@ -397,7 +392,7 @@ jobs:
             echo "::error::Agent task failed and no fallback is configured."
             exit 1
           fi
-          python3 "${FALLBACK_SCRIPT}" ${FALLBACK_ARGS}
+          python3 ".task-source/${FALLBACK_SCRIPT}" ${FALLBACK_ARGS}
 
       - name: Validate task output
         if: >-
@@ -464,3 +459,57 @@ jobs:
             ${{ inputs.task-name }} PR ready for review {mention}
             *PR:* <${{ steps.pr.outputs.pr_url }}|#${{ steps.pr.outputs.pr_number }}>
             *Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|workflow run>
+
+  enable-auto-merge:
+    if: >-
+      inputs.auto-merge && github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.head_branch == inputs.branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Only trusted default-branch code runs with the App token.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          ref: ${{ github.workflow_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify the reviewed commit and task validation
+        id: verify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ inputs.branch }}
+          BASE: ${{ inputs.base }}
+          VALIDATOR: ${{ inputs.diff-validator }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          VALIDATION_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          test -n "$VALIDATOR"
+          gh api "repos/${REPO}/pulls?state=open&head=${REPO%%/*}:${BRANCH}" > "$RUNNER_TEMP/prs.json"
+          number="$(jq -r --arg sha "$HEAD_SHA" --arg base "$BASE" --arg repo "$REPO" \
+            '.[] | select(.head.sha == $sha and .base.ref == $base and .head.repo.full_name == $repo) | .number' "$RUNNER_TEMP/prs.json")"
+          if [ -z "$number" ]; then exit 0; fi
+          git fetch --quiet origin "$BRANCH" "$BASE"
+          python3 "$VALIDATOR" "origin/$BASE" "$HEAD_SHA"
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        id: app-token
+        if: steps.verify.outputs.number != ''
+        with:
+          client-id: ${{ vars.CHERRY_PICK_APP_ID }}
+          private-key: ${{ secrets.CHERRY_PICK_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Enable merge after required reviews and checks
+        if: steps.verify.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          NUMBER: ${{ steps.verify.outputs.number }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: gh pr merge "$NUMBER" --auto --squash --match-head-commit "$HEAD_SHA"

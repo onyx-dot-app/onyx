@@ -24,6 +24,7 @@ on:
       - ".github/scripts/base-image-ref.sh"
       - ".github/scripts/chrome-stable-version.sh"
       - ".github/scripts/test_base_image_ref.py"
+      - ".github/scripts/*supported*release*"
       - ".github/scripts/update-sandbox-browser.sh"
       - "backend/onyx/server/features/build/sandbox/image/Dockerfile"
       - "backend/onyx/server/features/build/sandbox/image/install-browser.sh"
@@ -154,6 +155,7 @@ jobs:
         run: |
           python3 -m unittest discover -s .github/scripts -p test_base_image_ref.py -v
           python3 -m unittest discover -s .github/scripts -p test_browser_update_pr.py -v
+          python3 -m unittest discover -s .github/scripts -p test_supported_release_branches.py -v
 
       - name: Build browser OS stage
         run: >-
