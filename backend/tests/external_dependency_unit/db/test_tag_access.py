@@ -1,8 +1,10 @@
 from collections.abc import Generator
+from typing import Any
 from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import event
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
@@ -172,3 +174,32 @@ def test_valid_tags_limit_is_bounded(
         match_pattern=prefix, limit=limit, user=tag_user, db_session=db_session
     )
     assert len(result.tags) == expected
+
+
+def test_tag_access_is_probed_one_tag_at_a_time(
+    db_session: Session, tag_user: User
+) -> None:
+    """Each tag is checked for one accessible document, so the query never
+    builds the full set of accessible document-tag pairs."""
+    captured: list[tuple[str, Any]] = []
+
+    def _capture(*args: Any) -> None:
+        _, _, statement, parameters, _, _ = args
+        if statement.lstrip().upper().startswith("SELECT TAG."):
+            captured.append((statement, parameters))
+
+    engine = db_session.get_bind()
+    event.listen(engine, "before_cursor_execute", _capture)
+    try:
+        get_tags(user=tag_user, db_session=db_session)
+    finally:
+        event.remove(engine, "before_cursor_execute", _capture)
+    [(statement, parameters)] = captured
+
+    plan = "\n".join(
+        db_session.connection()
+        .exec_driver_sql(f"EXPLAIN {statement}", parameters)
+        .scalars()
+    )
+    # A Limit below the root is the per-tag probe.
+    assert "->  Limit" in plan, plan
