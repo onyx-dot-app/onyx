@@ -169,6 +169,7 @@ function customSkill(id: string, name: string): CustomSkill {
     user_permission: "VIEWER",
     external_app: null,
     current_version_id: null,
+    current_version_number: null,
   };
 }
 

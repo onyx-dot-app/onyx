@@ -63,6 +63,7 @@ function custom(overrides: Partial<CustomSkill> = {}): CustomSkillCardItem {
     user_permission: "OWNER",
     external_app: null,
     current_version_id: null,
+    current_version_number: null,
     ...overrides,
   };
   return {

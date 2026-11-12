@@ -2,7 +2,7 @@
 
 import type { RichStr } from "@opal/types";
 import { IconLoader } from "@opal/loaders";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import { Button, CompactMarkdown, MessageCard, Text } from "@opal/components";
@@ -66,13 +66,56 @@ type SkillPreviewDetailsProps = Pick<
   "skillId" | "unavailableReason"
 >;
 
+interface SkillInstructionsPanelProps {
+  instructionsMarkdown: string;
+}
+
+export function SkillInstructionsPanel({
+  instructionsMarkdown,
+}: SkillInstructionsPanelProps) {
+  const t = useTranslations("skills.modals");
+  const [instructionsDisplayMode, setInstructionsDisplayMode] =
+    useState<InstructionsDisplayMode>("rendered");
+  return (
+    <Section gap={1} height="auto" alignItems="stretch">
+      <Section
+        flexDirection="row"
+        justifyContent="between"
+        height="auto"
+        gap={2}
+      >
+        <Text font="main-ui-action" color="text-05">
+          {t("preview.instructions.title")}
+        </Text>
+        <InstructionsDisplayModeToggle
+          value={instructionsDisplayMode}
+          onChange={setInstructionsDisplayMode}
+        />
+      </Section>
+      <Section
+        height="auto"
+        padding={3}
+        gap={0}
+        alignItems="stretch"
+        className="rounded-lg border border-border overflow-y-auto overflow-x-hidden bg-background-neutral-00 max-h-[48dvh]"
+      >
+        {instructionsDisplayMode === "rendered" ? (
+          <CompactMarkdown>{instructionsMarkdown}</CompactMarkdown>
+        ) : (
+          <pre className="m-0 whitespace-pre-wrap wrap-break-word font-mono text-xs leading-5 text-text-04">
+            {instructionsMarkdown}
+          </pre>
+        )}
+      </Section>
+    </Section>
+  );
+}
+
 export function SkillPreviewDetails({
   skillId,
   unavailableReason = null,
 }: SkillPreviewDetailsProps) {
   const t = useTranslations("skills.modals");
-  const [instructionsDisplayMode, setInstructionsDisplayMode] =
-    useState<InstructionsDisplayMode>("rendered");
   const swrKey = skillId ? SWR_KEYS.userSkillPreview(skillId) : null;
   const {
     data: preview,
@@ -90,10 +133,6 @@ export function SkillPreviewDetails({
       : null;
   const displayedUnavailableReason =
     unavailableReason ?? dependencyUnavailableReason;
-
-  useEffect(() => {
-    setInstructionsDisplayMode("rendered");
-  }, [skillId]);
 
   return (
     <>
@@ -143,37 +182,10 @@ export function SkillPreviewDetails({
             ))}
           </CardGrid>
 
-          <Section gap={1} height="auto" alignItems="stretch">
-            <Section
-              flexDirection="row"
-              justifyContent="between"
-              height="auto"
-              gap={2}
-            >
-              <Text font="main-ui-action" color="text-05">
-                {t("preview.instructions.title")}
-              </Text>
-              <InstructionsDisplayModeToggle
-                value={instructionsDisplayMode}
-                onChange={setInstructionsDisplayMode}
-              />
-            </Section>
-            <Section
-              height="auto"
-              padding={3}
-              gap={0}
-              alignItems="stretch"
-              className="rounded-lg border border-border overflow-y-auto overflow-x-hidden bg-background-neutral-00 max-h-[48dvh]"
-            >
-              {instructionsDisplayMode === "rendered" ? (
-                <CompactMarkdown>{instructionsMarkdown}</CompactMarkdown>
-              ) : (
-                <pre className="m-0 whitespace-pre-wrap wrap-break-word font-mono text-xs leading-5 text-text-04">
-                  {instructionsMarkdown}
-                </pre>
-              )}
-            </Section>
-          </Section>
+          <SkillInstructionsPanel
+            key={skillId}
+            instructionsMarkdown={instructionsMarkdown}
+          />
         </Section>
       )}
     </>

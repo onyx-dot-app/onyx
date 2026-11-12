@@ -17392,7 +17392,43 @@
       },
       "tabs": {
         "details": "Détails",
-        "sharing": "Partage"
+        "sharing": "Partage",
+        "versions": "Versions"
+      },
+      "versions": {
+        "tableLabel": "Versions de la compétence",
+        "columns": {
+          "version": "Version",
+          "madeBy": "Créée par",
+          "date": "Date"
+        },
+        "versionLabel": "Version {number}",
+        "currentBadge": "Actuelle",
+        "unknownAuthor": "Inconnu",
+        "previewRow": {
+          "ariaLabel": "Aperçu de la version {number}"
+        },
+        "restore": {
+          "label": "Restaurer",
+          "ariaLabel": "Restaurer la version {number}",
+          "successToast": "Version {number} restaurée en tant que version {newNumber}.",
+          "unchangedToast": "La version {number} a les mêmes fichiers que la version actuelle.",
+          "failedToast": "Impossible de restaurer cette version.",
+          "unsavedChanges": {
+            "title": "Enregistrez d'abord vos modifications",
+            "description": "Enregistrez ou annulez les modifications de l'éditeur avant de restaurer une version."
+          }
+        },
+        "loadError": {
+          "title": "Impossible de charger les versions",
+          "description": "Réessayez plus tard."
+        },
+        "preview": {
+          "back": "Toutes les versions",
+          "loadError": {
+            "title": "Impossible de charger cette version"
+          }
+        }
       }
     },
     "page": {
