@@ -17412,9 +17412,6 @@
         "previewRow": {
           "ariaLabel": "预览版本 {number}"
         },
-        "showOlder": {
-          "label": "显示更早的版本"
-        },
         "restore": {
           "label": "恢复",
           "ariaLabel": "恢复版本 {number}",

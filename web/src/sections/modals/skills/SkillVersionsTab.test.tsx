@@ -30,10 +30,7 @@ function version(overrides: Partial<SkillVersion> = {}): SkillVersion {
     id: "version-1",
     version_number: 1,
     created_at: "2026-11-01T10:00:00Z",
-    created_by_user_id: "user-1",
     created_by_email: "owner@example.com",
-    file_count: 1,
-    unpacked_size_bytes: 100,
     bundle_kept: true,
     is_current: false,
     review_status: "draft",
@@ -59,11 +56,9 @@ describe("SkillVersionsTab", () => {
       if (url === "/api/skills/custom/skill-1/versions") return VERSIONS;
       if (url === "/api/skills/custom/skill-1/versions/version-2") {
         return {
-          ...VERSIONS[1],
-          name: "report-writer",
+          version_number: 2,
           description: "Older description",
           instructions_markdown: "Older instructions.",
-          files: [],
         };
       }
       throw new Error(`unexpected ${url}`);
@@ -155,11 +150,9 @@ describe("SkillVersionsTab", () => {
       if (url === "/api/skills/custom/skill-1/versions") return pruned;
       if (url === "/api/skills/custom/skill-1/versions/version-2") {
         return {
-          ...pruned[1],
-          name: "report-writer",
+          version_number: 2,
           description: "Older description",
           instructions_markdown: "Older instructions.",
-          files: [],
         };
       }
       throw new Error(`unexpected ${url}`);

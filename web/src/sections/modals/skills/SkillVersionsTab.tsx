@@ -3,7 +3,6 @@
 import { useState, type ReactNode } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import useSWR from "swr";
-import useSWRInfinite from "swr/infinite";
 import { IconLoader } from "@opal/loaders";
 import {
   Badge,
@@ -24,8 +23,6 @@ import type {
   SkillVersionPreview,
 } from "@/lib/skills/types";
 import { SkillInstructionsPanel } from "@/sections/modals/SkillPreviewModal";
-
-const VERSIONS_PAGE_SIZE = 50;
 
 interface SkillVersionsTabProps {
   skillId: string;
@@ -51,30 +48,17 @@ export default function SkillVersionsTab({
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [isStale, setIsStale] = useState(false);
   const {
-    data: pages,
+    data: versions = [],
     error,
     isLoading,
-    size,
-    setSize,
     mutate: refreshVersions,
-  } = useSWRInfinite<SkillVersion[], Error>(
-    (index: number, previous: SkillVersion[] | null): string | null => {
-      if (index === 0) return SWR_KEYS.skillVersions(skillId);
-      const last = previous?.at(-1);
-      if (!previous || previous.length < VERSIONS_PAGE_SIZE || !last)
-        return null;
-      return SWR_KEYS.skillVersions(skillId, last.version_number);
-    },
+  } = useSWR<SkillVersion[], Error>(
+    SWR_KEYS.skillVersions(skillId),
     errorHandlingFetcher
   );
-  const versions = pages?.flat() ?? [];
   const currentVersion = versions.find((version) => version.is_current);
   const previewVersion =
     versions.find((version) => version.id === previewVersionId) ?? null;
-  const hasOlder =
-    pages !== undefined &&
-    pages.length === size &&
-    (pages.at(-1)?.length ?? 0) === VERSIONS_PAGE_SIZE;
 
   async function handleRestore(version: SkillVersion) {
     if (!currentVersion || restoringId !== null || restoreBlocked) return;
@@ -242,30 +226,18 @@ export default function SkillVersionsTab({
           restoreAction={restoreButton(previewVersion)}
         />
       ) : (
-        <Section gap={2} height="auto" alignItems="stretch">
-          <Table
-            label={t("tableLabel")}
-            items={versions}
-            columns={columns}
-            getRowId={(row) => row.id}
-            pageSize={false}
-            size={2.25}
-            onRowClick={(row) => setPreviewVersionId(row.id)}
-            getRowLabel={(row) =>
-              t("previewRow.ariaLabel", { number: row.version_number })
-            }
-          />
-          {hasOlder && (
-            <Section height="auto" alignItems="start">
-              <Button
-                prominence="secondary"
-                onClick={() => void setSize(size + 1)}
-              >
-                {t("showOlder.label")}
-              </Button>
-            </Section>
-          )}
-        </Section>
+        <Table
+          label={t("tableLabel")}
+          items={versions}
+          columns={columns}
+          getRowId={(row) => row.id}
+          pageSize={false}
+          size={2.25}
+          onRowClick={(row) => setPreviewVersionId(row.id)}
+          getRowLabel={(row) =>
+            t("previewRow.ariaLabel", { number: row.version_number })
+          }
+        />
       )}
     </Section>
   );

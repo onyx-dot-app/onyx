@@ -17412,9 +17412,6 @@
         "previewRow": {
           "ariaLabel": "버전 {number} 미리 보기"
         },
-        "showOlder": {
-          "label": "이전 버전 보기"
-        },
         "restore": {
           "label": "복원",
           "ariaLabel": "버전 {number} 복원",

@@ -17412,9 +17412,6 @@
         "previewRow": {
           "ariaLabel": "バージョン {number} をプレビュー"
         },
-        "showOlder": {
-          "label": "以前のバージョンを表示"
-        },
         "restore": {
           "label": "復元",
           "ariaLabel": "バージョン {number} を復元",

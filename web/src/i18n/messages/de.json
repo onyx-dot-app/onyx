@@ -17412,9 +17412,6 @@
         "previewRow": {
           "ariaLabel": "Vorschau von Version {number}"
         },
-        "showOlder": {
-          "label": "Ältere Versionen anzeigen"
-        },
         "restore": {
           "label": "Wiederherstellen",
           "ariaLabel": "Version {number} wiederherstellen",
