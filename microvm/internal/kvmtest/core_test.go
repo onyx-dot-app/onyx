@@ -47,15 +47,23 @@ func newUUID() string {
 // startAgent runs the agent in this process on a Unix socket and returns a client.
 func startAgent(t *testing.T, e env, cmd jailer.Command) pb.HostAgentClient {
 	t.Helper()
+	return startAgentWith(t, e, cmd, func(*agent.Config) {})
+}
+
+// startAgentWith is startAgent with a change to the agent config.
+func startAgentWith(t *testing.T, e env, cmd jailer.Command, change func(*agent.Config)) pb.HostAgentClient {
+	t.Helper()
 	uids, err := jailer.NewUIDPool(uidBase, 65536)
 	if err != nil {
 		t.Fatal(err)
 	}
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
-	m := agent.NewManager(agent.Config{
+	cfg := agent.Config{
 		MinFreeMemMiB: 2048, MinFreeDiskBytes: 10 * uint64(scratch.GiB), MaxScratchGiB: 100,
 		StartTimeout: 60 * time.Second, StopTimeout: 30 * time.Second, TombstoneTTL: time.Hour,
-	},
+	}
+	change(&cfg)
+	m := agent.NewManager(cfg,
 		&template.Store{Dir: filepath.Join(e.DataDir, "templates")},
 		&fcvm.Launcher{Cmd: cmd, Log: log},
 		hostinfo.Stats{DataDir: e.DataDir},

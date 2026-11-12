@@ -76,7 +76,7 @@ func newObservability(f obsFlags, m *agent.Manager, lay jailer.Layout, stats age
 		return nil, err
 	}
 	o := &observability{f: f, log: log}
-	src := metrics.Source{VMs: m.List, Stats: stats, PrivateMem: hostinfo.PrivateMemoryBytes, DialStreams: func() int {
+	src := metrics.Source{VMs: m.List, Stats: stats, PrivateMem: hostinfo.PrivateMemoryBytes, MaxVMs: m.MaxVMs(), DialStreams: func() int {
 		if o.dials == nil {
 			return 0
 		}

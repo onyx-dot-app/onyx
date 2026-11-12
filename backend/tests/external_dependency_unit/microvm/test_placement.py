@@ -12,13 +12,13 @@ from uuid import UUID, uuid4
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
-from pydantic import ValidationError
+from pydantic import SecretStr, ValidationError
 
 from onyx.cache.interface import TTL_NO_EXPIRY, CacheBackend, CacheLock
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.microvm import admission, configs, placement, registry
-from onyx.microvm.agent_client import HostAgentErrorReason
+from onyx.microvm.agent_client import HostAgentErrorReason, new_sandboxd_key
 from onyx.microvm.models import PlacedVm, RegisteredNode, VmRequest
 from onyx.microvm.placement import place_sandbox_vm
 from onyx.microvm.registry import (
@@ -122,6 +122,135 @@ def test_refusal_moves_to_next_node(
 
     assert refusing.agent.create_calls == 1
     assert placed.node.node_id == second_id
+
+
+def test_node_at_its_vm_cap_is_skipped(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
+) -> None:
+    full_id = _node("capped")
+    full = add_node(full_id, FakeHostAgent(mem_available_mib=32_768))
+    full.agent.max_vms = 2
+    full.agent.add_vm(sandbox_id=str(uuid4()), tenant_id=TENANT_ID, attempt=1)
+    # A template build VM holds the second slot.
+    full.agent.other_slots = 1
+    other_id = _node("other")
+    add_node(other_id, FakeHostAgent(mem_available_mib=8192))
+
+    placed = place_sandbox_vm(
+        shared_cache, tenant_cache, client_factory, _request(new_sandbox_id())
+    )
+
+    assert placed.node.node_id == other_id
+    assert full.agent.create_calls == 0
+
+
+def test_refused_placement_deletes_its_daemon_key(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
+) -> None:
+    node_id = _node("full")
+    add_node(node_id).agent.refuse_create = HostAgentErrorReason.CAPACITY_VM_SLOTS
+    sandbox_id = new_sandbox_id()
+
+    with pytest.raises(OnyxError) as exc:
+        place_sandbox_vm(
+            shared_cache, tenant_cache, client_factory, _request(sandbox_id)
+        )
+
+    assert exc.value.extra == {
+        "reason": "CAPACITY_VM_SLOTS",
+        "nodes": {node_id: "CAPACITY_VM_SLOTS"},
+    }
+    assert tenant_cache.get(registry._DAEMON_KEY_PREFIX + str(sandbox_id)) is None
+    assert get_sandbox_reservation(tenant_cache, sandbox_id) is None
+
+
+def test_refused_placement_keeps_the_key_when_the_pinned_node_was_skipped(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
+) -> None:
+    # The pinned node may run this attempt's VM (a Create with no known
+    # outcome), but it no longer lists the requested template.
+    pinned_id = _node("pinned")
+    add_node(pinned_id, FakeHostAgent(template="tpl-old"))
+    add_node(_node("full")).agent.refuse_create = HostAgentErrorReason.CAPACITY_MEMORY
+    sandbox_id = new_sandbox_id()
+    reserve_sandbox(
+        tenant_cache,
+        sandbox_id,
+        SandboxReservation(attempt=1, node_id=pinned_id, owner="crashed"),
+        replaces=None,
+    )
+    key = new_sandboxd_key()
+    registry.set_sandbox_daemon_key(tenant_cache, sandbox_id, attempt=1, key=key)
+
+    with pytest.raises(OnyxError):
+        place_sandbox_vm(
+            shared_cache, tenant_cache, client_factory, _request(sandbox_id)
+        )
+
+    kept = registry.get_sandbox_daemon_key(tenant_cache, sandbox_id, attempt=1)
+    assert kept is not None and kept.get_secret_value() == key.get_secret_value()
+
+
+def test_refused_placement_keeps_the_key_of_a_placement_that_took_over(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    add_node(_node("full")).agent.refuse_create = HostAgentErrorReason.CAPACITY_MEMORY
+    sandbox_id = new_sandbox_id()
+    real_place_new = placement._place_new
+    taken: list[tuple[bytes, SecretStr]] = []
+
+    def refused_then_taken_over(*args: Any, **kwargs: Any) -> PlacedVm | None:
+        placed = real_place_new(*args, **kwargs)
+        # After a lock lease expired, another placement resumed the same
+        # attempt: it stores the same key under its own owner, then sends it.
+        found = get_sandbox_reservation(tenant_cache, sandbox_id)
+        assert found is not None
+        raw = reserve_sandbox(
+            tenant_cache,
+            sandbox_id,
+            found[0].model_copy(update={"owner": "other"}),
+            replaces=found[1],
+        )
+        claimed = registry.claim_sandbox_daemon_key(
+            tenant_cache,
+            sandbox_id,
+            attempt=found[0].attempt,
+            owner="other",
+            new_key=new_sandboxd_key(),
+        )
+        assert raw is not None and claimed is not None
+        taken.append((raw, claimed[0]))
+        return placed
+
+    monkeypatch.setattr(placement, "_place_new", refused_then_taken_over)
+
+    with pytest.raises(OnyxError):
+        place_sandbox_vm(
+            shared_cache, tenant_cache, client_factory, _request(sandbox_id)
+        )
+
+    raw, key = taken[0]
+    kept = registry.get_sandbox_daemon_key(tenant_cache, sandbox_id, attempt=1)
+    assert kept is not None and kept.get_secret_value() == key.get_secret_value()
+    found = get_sandbox_reservation(tenant_cache, sandbox_id)
+    assert found is not None and found[1] == raw
 
 
 def test_one_vm_per_sandbox(

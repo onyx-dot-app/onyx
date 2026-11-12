@@ -278,6 +278,15 @@ it deletes the old one.
   default). A multi-shard search already fetches only the top hits, and a
   second request would go to every shard. Explain describes the hybrid
   scoring, so it keeps one request.
+- **New self-hosted indexes preload their search files.**
+  `DocumentSchema.get_index_settings_based_on_environment` sets
+  `index.store.preload` to the vectors, HNSW graph, postings, terms, doc
+  values and compound files. When a shard opens, OpenSearch reads them in one
+  sequential pass. Without it, the first searches after a restart each wait on
+  thousands of random reads, and search stays slow for minutes. A quantized
+  index preloads `.veq`, not the float32 `.vec`, so it keeps its memory saving.
+  Stored text is not preloaded: only the top hits read it. AWS managed indexes
+  do not set it. The setting applies only when the index is created.
 
 ## Known issues
 

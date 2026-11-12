@@ -35,7 +35,7 @@ func (stats) DiskFreeBytes() (uint64, error)   { return 1 << 40, nil }
 // the ErrorInfo reason.
 func TestTypedErrorsOverUnixSocket(t *testing.T) {
 	uids, _ := jailer.NewUIDPool(1000, 10)
-	m := agent.NewManager(agent.Config{StartTimeout: time.Second, StopTimeout: time.Second, MaxScratchGiB: 10},
+	m := agent.NewManager(agent.Config{StartTimeout: time.Second, StopTimeout: time.Second, MaxScratchGiB: 10, MaxVMs: 60},
 		&template.Store{Dir: t.TempDir()}, noLaunch{}, stats{}, uids, agent.Versions{Firecracker: "v1.17.0", Agent: "test"},
 		slog.New(slog.NewTextHandler(io.Discard, nil)))
 	// Short path: macOS limits sun_path to 104 bytes.
@@ -68,7 +68,7 @@ func TestTypedErrorsOverUnixSocket(t *testing.T) {
 		t.Fatalf("list: %v %v", l, err)
 	}
 	ni, err := c.NodeInfo(ctx, &pb.NodeInfoRequest{})
-	if err != nil || ni.GetMemAvailableMib() != 512 || ni.GetFirecrackerVersion() != "v1.17.0" ||
+	if err != nil || ni.GetMemAvailableMib() != 512 || ni.GetFirecrackerVersion() != "v1.17.0" || ni.GetMaxVms() != 60 ||
 		ni.GetDrain().GetState() != pb.DrainState_DRAIN_STATE_ACTIVE || ni.GetDrain().GetSince() != nil {
 		t.Fatalf("node info: %v %v", ni, err)
 	}

@@ -28,6 +28,7 @@ func TestCheckRanges(t *testing.T) {
 		}
 	}
 	for name, edit := range map[string]func(f *flags){
+		"max vms negative":    func(f *flags) { f.maxVMs = -1 },
 		"managed keep 0":      func(f *flags) { f.managedKeep = 0 },
 		"managed zip 0":       func(f *flags) { f.managedZipMiB = 0 },
 		"managed content 0":   func(f *flags) { f.managedMaxMiB = 0 },
