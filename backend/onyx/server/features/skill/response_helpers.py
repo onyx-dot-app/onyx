@@ -17,6 +17,7 @@ from onyx.db.models import Skill, User
 from onyx.db.persona_sharing import (
     get_user_group_ids_for_user,
 )
+from onyx.db.plugin import get_plugin_version_number
 from onyx.db.plugin_access import PluginAccess, load_plugin_access
 from onyx.db.scoped_permissions import fetch_managed_group_ids
 from onyx.db.skill import SkillUserState, skill_user_states
@@ -147,8 +148,15 @@ def skill_response_for_user(
     if plugin_access is None:
         plugin_access = load_plugin_access([skill.id], user.id, db_session)
     access = plugin_access.get(skill.id)
-    if shown_version_id is None and access is not None:
-        shown_version_id = access.current_version_id
+    shown_version_number: int | None = None
+    if access is not None:
+        if shown_version_id is None or shown_version_id == access.current_version_id:
+            shown_version_id = access.current_version_id
+            shown_version_number = access.current_version_number
+        else:
+            shown_version_number = get_plugin_version_number(
+                shown_version_id, db_session
+            )
     return SkillResponse.from_custom(
         skill,
         access,
@@ -164,6 +172,7 @@ def skill_response_for_user(
         include_share_details=include_share_details,
         external_app=_dependency_response(state.external_app_dependency),
         current_version_id=shown_version_id,
+        current_version_number=shown_version_number,
     )
 
 

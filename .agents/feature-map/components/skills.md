@@ -455,6 +455,20 @@ The library preview of an external-app skill calls the same renderer
     (`skills/content.py:read_skill_bundle_blob`), not a 500. On Azure, only a
     `BlobNotFound` error counts as a missing file
     (`skills/validation.py:is_missing_file_error`).
+22. `version-history-api` **Version history uses the EDIT policy.** The
+    owner, editors and global `MANAGE_PLUGINS` list versions
+    (`GET /skills/custom/{id}/versions`, 50 per page, `before_version` for
+    older ones), preview one (`GET .../versions/{version_id}`) and restore one
+    (`POST .../versions/{version_id}/restore`); a viewer gets 404. The list and
+    preview read the database (`db/plugin.py:list_plugin_versions`,
+    `skills/content.py:read_version_preview`), so a version with no bundle
+    still previews when its content is stored. Restore needs
+    `base_version_id` (409 `PLUGIN_VERSION_STALE`), copies the old bundle into
+    a new blob and saves it through the editor save path, so it adds no
+    version when the files equal the current files, and the new version
+    prunes like any save ([[#bundle-retention]]). A version with no bundle
+    gets 404 `skills/content.py:VERSION_FILES_NOT_KEPT`. Skill responses carry
+    `current_version_number`.
 
 ---
 
@@ -564,8 +578,10 @@ The library preview of an external-app skill calls the same renderer
 - `backend/tests/integration/tests/skills/` covers the API, bulk actions,
   import sharing and plugin version writes
   (`backend/tests/integration/tests/skills/test_skill_plugin_versions.py`),
-  and bundle retention and deletes
-  (`backend/tests/integration/tests/skills/test_skill_bundle_retention.py`).
+  bundle retention and deletes
+  (`backend/tests/integration/tests/skills/test_skill_bundle_retention.py`),
+  and the version list, preview and restore
+  (`backend/tests/integration/tests/skills/test_skill_version_api.py`).
   `backend/tests/external_dependency_unit/craft/test_skill_bundle_cleanup.py`
   covers the orphan bundle cleanup and the read of a pruned bundle.
   `backend/tests/integration/tests/craft/k8s/` covers a real

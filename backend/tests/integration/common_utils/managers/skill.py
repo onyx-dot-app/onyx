@@ -18,6 +18,9 @@ from onyx.server.features.skill.models import (
     SkillShareRequest,
     SkillsList,
     SkillUserShareRequest,
+    SkillVersionPreviewResponse,
+    SkillVersionResponse,
+    SkillVersionRestoreRequest,
     TransferSkillOwnershipRequest,
 )
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -55,6 +58,63 @@ def build_minimal_bundle(
 
 
 class SkillManager:
+    @staticmethod
+    def list_versions(
+        skill_id: UUID,
+        user_performing_action: DATestUser,
+        before_version: int | None = None,
+    ) -> list[SkillVersionResponse]:
+        response = client.get(
+            f"{API_SERVER_URL}/skills/custom/{skill_id}/versions",
+            headers=user_performing_action.headers,
+            params=(
+                {"before_version": before_version}
+                if before_version is not None
+                else None
+            ),
+        )
+        response.raise_for_status()
+        return [SkillVersionResponse.model_validate(item) for item in response.json()]
+
+    @staticmethod
+    def preview_version(
+        skill_id: UUID, version_id: UUID, user_performing_action: DATestUser
+    ) -> SkillVersionPreviewResponse:
+        response = client.get(
+            f"{API_SERVER_URL}/skills/custom/{skill_id}/versions/{version_id}",
+            headers=user_performing_action.headers,
+        )
+        response.raise_for_status()
+        return _response_model(response, SkillVersionPreviewResponse)
+
+    @staticmethod
+    def restore_version_response(
+        skill_id: UUID,
+        version_id: UUID,
+        base_version_id: UUID,
+        user_performing_action: DATestUser,
+    ) -> httpx.Response:
+        return client.post(
+            f"{API_SERVER_URL}/skills/custom/{skill_id}/versions/{version_id}/restore",
+            json=SkillVersionRestoreRequest(base_version_id=base_version_id).model_dump(
+                mode="json"
+            ),
+            headers=user_performing_action.headers,
+        )
+
+    @staticmethod
+    def restore_version(
+        skill_id: UUID,
+        version_id: UUID,
+        base_version_id: UUID,
+        user_performing_action: DATestUser,
+    ) -> SkillEditableDetailResponse:
+        response = SkillManager.restore_version_response(
+            skill_id, version_id, base_version_id, user_performing_action
+        )
+        response.raise_for_status()
+        return _response_model(response, SkillEditableDetailResponse)
+
     @staticmethod
     def create_from_editor(
         user_performing_action: DATestUser,

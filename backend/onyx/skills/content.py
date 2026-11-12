@@ -94,9 +94,16 @@ def read_version_bundle_bytes(
     db_session: Session,
     file_store: FileStore | None = None,
 ) -> bytes:
-    stored = _stored_version_content(version_id, db_session)
+    return _stored_bundle_bytes(
+        _stored_version_content(version_id, db_session), file_store
+    )
+
+
+def _stored_bundle_bytes(
+    stored: StoredVersionContent, file_store: FileStore | None
+) -> bytes:
     return read_skill_bundle_blob(
-        stored.bundle_file_id, stored.name or str(version_id), file_store
+        stored.bundle_file_id, stored.name or str(stored.version_id), file_store
     )
 
 
@@ -108,11 +115,23 @@ def read_version_contents(
     """The SKILL.md instructions and file list of one plugin version. Reads the
     database, and opens the bundle only for a version that stores no file list
     or SKILL.md text yet (one copied from a legacy skill row)."""
+    return _version_contents(
+        _stored_version_content(version_id, db_session), file_store
+    )
+
+
+def read_version_preview(
+    version_id: UUID, db_session: Session
+) -> tuple[StoredVersionContent, CustomSkillBundleContents]:
+    """The stored name and description of one version, with its contents as
+    ``read_version_contents`` reads them."""
     stored = _stored_version_content(version_id, db_session)
+    return stored, _version_contents(stored, None)
+
+
+def _version_contents(
+    stored: StoredVersionContent, file_store: FileStore | None
+) -> CustomSkillBundleContents:
     if stored.file_manifest is not None and stored.skill_md is not None:
         return custom_bundle_contents_from_stored(stored.skill_md, stored.file_manifest)
-    return inspect_custom_bundle(
-        read_skill_bundle_blob(
-            stored.bundle_file_id, stored.name or str(version_id), file_store
-        )
-    )
+    return inspect_custom_bundle(_stored_bundle_bytes(stored, file_store))

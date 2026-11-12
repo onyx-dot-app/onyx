@@ -295,6 +295,7 @@ class PluginAccess:
     published: bool
     installation_policy: PluginInstallationPolicy | None
     current_version_id: UUID
+    current_version_number: int
     version_user_runs: UUID
     # From the frontmatter of the version the user runs.
     name: str | None
@@ -326,6 +327,7 @@ def load_plugin_access(
     if not ids:
         return {}
     runs = version_user_runs(Plugin, user_id)
+    current: type[PluginVersion] = aliased(PluginVersion)
     author = User.__table__.alias("author")
     user_email: KeyedColumnElement[str] = User.__table__.c.email
     plugin_rows = db_session.execute(
@@ -337,6 +339,7 @@ def load_plugin_access(
             plugin_is_published(Marketplace),
             Plugin.installation_policy,
             Plugin.current_version_id,
+            current.version_number,
             runs,
             skill_name_in_version(runs),
             func.coalesce(
@@ -345,6 +348,7 @@ def load_plugin_access(
             version_is_valid(runs),
         )
         .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
+        .join(current, current.id == Plugin.current_version_id)
         .outerjoin(author, author.c.id == Plugin.author_user_id)
         .where(Plugin.id.in_(ids))
     ).all()
@@ -395,10 +399,11 @@ def load_plugin_access(
             published=bool(row[4]),
             installation_policy=row[5],
             current_version_id=row[6],
-            version_user_runs=row[7],
-            name=row[8],
-            description=row[9],
-            is_valid=row[10],
+            current_version_number=row[7],
+            version_user_runs=row[8],
+            name=row[9],
+            description=row[10],
+            is_valid=row[11],
             user_shares=tuple(user_shares.get(row[0], ())),
             group_shares=tuple(group_shares.get(row[0], ())),
         )

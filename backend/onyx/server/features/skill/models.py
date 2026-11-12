@@ -13,6 +13,7 @@ from onyx.db.enums import (
     SkillSharePermission,
 )
 from onyx.db.models import Skill
+from onyx.db.plugin import PluginVersionSummary
 from onyx.db.plugin_access import PluginAccess
 from onyx.db.skill import SkillSharingChange
 from onyx.db.utils import UNSET
@@ -68,6 +69,7 @@ class SkillResponse(BaseModel):
     # The plugin version of a custom skill whose files this response shows.
     # Edits send it back as base_version_id. None for built-ins.
     current_version_id: UUID | None = None
+    current_version_number: int | None = None
 
     @classmethod
     def from_builtin(
@@ -104,6 +106,7 @@ class SkillResponse(BaseModel):
         include_share_details: bool = False,
         external_app: SkillExternalAppDependencyResponse | None = None,
         current_version_id: UUID | None = None,
+        current_version_number: int | None = None,
     ) -> "SkillResponse":
         """Access fields come from the skill's plugin; ``access`` is None only
         for a custom skill with no plugin, which no one but an admin sees."""
@@ -159,6 +162,7 @@ class SkillResponse(BaseModel):
             user_permission=user_permission,
             external_app=external_app,
             current_version_id=current_version_id,
+            current_version_number=current_version_number,
         )
 
 
@@ -219,6 +223,48 @@ class SkillPreviewResponse(BaseModel):
 class SkillEditableDetailResponse(SkillResponse):
     instructions_markdown: str
     files: list[SkillBundleFile]
+
+
+class SkillVersionResponse(BaseModel):
+    id: UUID
+    version_number: int
+    created_at: datetime.datetime
+    created_by_user_id: UUID | None
+    created_by_email: str | None
+    # None for a version made before file lists were stored.
+    file_count: int | None
+    unpacked_size_bytes: int | None
+    # False when retention removed the files; such a version cannot be restored.
+    bundle_kept: bool
+    is_current: bool
+
+    @classmethod
+    def from_summary(cls, summary: PluginVersionSummary) -> "SkillVersionResponse":
+        return cls(
+            id=summary.id,
+            version_number=summary.version_number,
+            created_at=summary.created_at,
+            created_by_user_id=summary.created_by_user_id,
+            created_by_email=summary.created_by_email,
+            file_count=summary.file_count,
+            unpacked_size_bytes=summary.unpacked_size_bytes,
+            bundle_kept=summary.bundle_kept,
+            is_current=summary.is_current,
+        )
+
+
+class SkillVersionPreviewResponse(SkillVersionResponse):
+    name: str
+    description: str
+    instructions_markdown: str
+    files: list[SkillBundleFile]
+
+
+class SkillVersionRestoreRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # The current version the restore starts from. 409 when it is not current.
+    base_version_id: UUID
 
 
 class SkillBundleInspectResponse(BaseModel):
