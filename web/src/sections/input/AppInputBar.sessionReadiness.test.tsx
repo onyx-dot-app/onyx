@@ -16,6 +16,7 @@ import {
 } from "@/lib/chat/sessionReadiness";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { useChatSessionQueue } from "@/lib/chat/hooks";
+import { flushToolSelection } from "@/lib/tools/hooks";
 import type { PendingChatMessage } from "@/lib/chat/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
@@ -104,6 +105,10 @@ jest.mock("@/refresh-components/popovers/FilePickerPopover", () => ({
   default: () => null,
 }));
 jest.mock("@/lib/tools/components", () => ({ ToolsPopover: () => null }));
+jest.mock("@/lib/tools/hooks", () => ({
+  ...jest.requireActual("@/lib/tools/hooks"),
+  flushToolSelection: jest.fn(() => Promise.resolve()),
+}));
 jest.mock("@/components/voice/Waveform", () => ({
   __esModule: true,
   default: () => null,
@@ -470,6 +475,28 @@ test("a failed submission keeps text typed while it was pending", async () => {
   await waitFor(() =>
     expect(textbox).toHaveTextContent(/^Keep this draft\s*more$/)
   );
+});
+
+test("a queued message waits for the chat's tool selection to save", async () => {
+  const user = setupUser();
+  const saved = deferred<void>();
+  const flush = jest.mocked(flushToolSelection);
+  flush.mockReturnValueOnce(saved.promise);
+  const posted = jest.fn();
+  fetchSpy.mockImplementation(async (_url, init) => {
+    if (init?.method === "POST") {
+      posted();
+      return new Response(JSON.stringify(pending[0]));
+    }
+    return new Response(JSON.stringify(pending));
+  });
+  render(<ChatInput {...props("streaming")} />);
+  await user.click(screen.getByRole("textbox", { name: "Message input" }));
+  await user.keyboard("{Control>}{Enter}{/Control}");
+  await waitFor(() => expect(flush).toHaveBeenCalledWith("session"));
+  expect(posted).not.toHaveBeenCalled();
+  await act(async () => saved.resolve());
+  await waitFor(() => expect(posted).toHaveBeenCalledTimes(1));
 });
 
 test("an accepted message cannot be edited into a duplicate instruction", async () => {

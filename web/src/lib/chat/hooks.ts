@@ -11,7 +11,10 @@ import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
 import { useProjectsContext } from "@/lib/projects/providers";
 import { useTags } from "@/lib/searchFilters/hooks";
 import { normalizeSourceSelection } from "@/lib/searchFilters/utils";
-import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
+import {
+  flushToolSelection,
+  type ToolConfigurationHandle,
+} from "@/lib/tools/hooks";
 
 import useSWR, { useSWRConfig } from "swr";
 import { useTranslations } from "next-intl";
@@ -184,6 +187,8 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
           const session = sessionId
             ? useChatSessionStore.getState().sessions.get(sessionId)
             : undefined;
+          // A turn the server starts reads the chat's saved tools.
+          if (sessionId) await flushToolSelection(sessionId);
           try {
             const accepted = await errorHandlingFetchWith<PendingChatMessage>(
               key,
@@ -232,6 +237,7 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
         }),
       interrupt: async (id) => {
         await request(async (key) => {
+          if (sessionId) await flushToolSelection(sessionId);
           try {
             await errorHandlingFetchWith<PendingChatMessage>(
               `${key}/${id}/interrupt`,
