@@ -3,8 +3,6 @@
  * `backend/onyx/server/features/skill/models.py`.
  */
 
-import type { SkillLimitDetails } from "@/lib/skills/limits";
-
 export type SkillInstallationPolicy =
   | "AVAILABLE"
   | "DEFAULT"
@@ -70,14 +68,10 @@ export interface Skill {
   is_personal: boolean;
   enabled: boolean;
   can_toggle: boolean;
-  /** The skill's own company setting. Null: Default Access applies. */
+  /** The skill's own Organization setting. Null: Default access applies. */
   installation_policy: SkillInstallationPolicy | null;
-  /** The Default Access that applies when the skill has no own setting. */
+  /** The Default access that applies when the skill has no own setting. */
   default_installation_policy: SkillInstallationPolicy | null;
-  /** The own setting, else the default of the skill's marketplace. */
-  company_installation_policy: SkillInstallationPolicy | null;
-  /** The setting for the caller, after group settings and shares. */
-  effective_installation_policy: SkillInstallationPolicy | null;
   author_user_id: string | null;
   author_email: string | null;
   owner: {
@@ -202,8 +196,6 @@ export interface GitHubSkillNotImported {
   path: string;
   name: string;
   reason: string;
-  /** Set when the skill limit refused the skill. */
-  skill_limit?: SkillLimitDetails | null;
 }
 
 export interface GitHubSkillsImportResult {

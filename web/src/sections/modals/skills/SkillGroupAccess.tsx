@@ -1,21 +1,18 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Button, Card, InputSingleSelect } from "@opal/components";
+import { Card, InputSingleSelect } from "@opal/components";
 import { Content, Section } from "@opal/layouts";
-import { SvgMinusCircle, SvgUsers } from "@opal/icons";
+import { SvgUsers } from "@opal/icons";
 import type { MinimalUserGroupSnapshot } from "@/hooks/useShareableGroups";
 import type { SkillInstallationPolicy } from "@/lib/skills/types";
 import type { GroupAccessRow } from "@/lib/skills/sharing";
-import {
-  INHERIT,
-  isPolicyChoice,
-  useGroupPolicyOptions,
-} from "@/lib/skills/installationPolicy";
+import { INHERIT, usePolicyOptions } from "@/lib/skills/installationPolicy";
+import GroupPolicyRow from "@/sections/skills/GroupPolicyRow";
 
 interface SkillGroupAccessProps {
   rows: GroupAccessRow[];
-  /** The organization setting a group with no setting uses; null when it
+  /** The Organization setting a group with no setting uses; null when it
    * differs between skills. */
   company: SkillInstallationPolicy | null;
   groups: MinimalUserGroupSnapshot[];
@@ -35,7 +32,9 @@ export default function SkillGroupAccess({
   onChange,
 }: SkillGroupAccessProps) {
   const t = useTranslations("skills.modals.share.groupAccess");
-  const { options } = useGroupPolicyOptions(company);
+  const options = usePolicyOptions({
+    inherit: { scope: "group", policy: company },
+  });
   const present = new Set(rows.map((row) => row.group_id));
   const candidates = groups.filter((group) => !present.has(group.id));
 
@@ -50,76 +49,36 @@ export default function SkillGroupAccess({
         <Card border="solid" padding={2}>
           <Section gap={1} height="auto" alignItems="stretch">
             {rows.map((row) => (
-              <Section
+              <GroupPolicyRow
                 key={row.group_id}
-                role="group"
-                aria-label={row.group_name}
-                flexDirection="row"
-                justifyContent="between"
-                wrap
-                gap={2}
-                height="auto"
-                padding={1}
-              >
-                <Section
-                  width="auto"
-                  height="auto"
-                  alignItems="start"
-                  className="min-w-0 grow basis-40"
-                >
-                  <Content
-                    icon={SvgUsers}
-                    font="main-ui-body"
-                    title={row.group_name}
-                    description={
-                      row.permission === null ? t("settingOnly") : t("shared")
-                    }
-                  />
-                </Section>
-                <Section
-                  flexDirection="row"
-                  width="auto"
-                  height="auto"
-                  gap={1}
-                  className="min-w-0 grow basis-56"
-                >
-                  <Section width="full" height="auto" alignItems="stretch">
-                    <InputSingleSelect
-                      placeholder={t("select", { name: row.group_name })}
-                      value={row.choice}
-                      defaultOption={INHERIT}
-                      options={options}
-                      disabled={disabled}
-                      onValueChange={(value) => {
-                        if (!isPolicyChoice(value)) return;
-                        onChange(
-                          rows.map((current) =>
-                            current.group_id === row.group_id
-                              ? { ...current, choice: value }
-                              : current
-                          )
-                        );
-                      }}
-                    />
-                  </Section>
-                  {row.permission === null && (
-                    <Button
-                      icon={SvgMinusCircle}
-                      prominence="tertiary"
-                      tooltip={t("remove", { name: row.group_name })}
-                      aria-label={t("remove", { name: row.group_name })}
-                      disabled={disabled}
-                      onClick={() =>
+                name={row.group_name}
+                icon={SvgUsers}
+                description={
+                  row.permission === null ? t("settingOnly") : t("shared")
+                }
+                value={row.choice}
+                options={options}
+                disabled={disabled}
+                onChange={(choice) =>
+                  onChange(
+                    rows.map((current) =>
+                      current.group_id === row.group_id
+                        ? { ...current, choice }
+                        : current
+                    )
+                  )
+                }
+                onRemove={
+                  row.permission === null
+                    ? () =>
                         onChange(
                           rows.filter(
                             (current) => current.group_id !== row.group_id
                           )
                         )
-                      }
-                    />
-                  )}
-                </Section>
-              </Section>
+                    : undefined
+                }
+              />
             ))}
           </Section>
         </Card>

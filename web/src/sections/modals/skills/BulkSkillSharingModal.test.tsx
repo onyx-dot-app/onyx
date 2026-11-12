@@ -78,7 +78,7 @@ describe("BulkSkillSharingModal", () => {
     );
     fireEvent.click(screen.getByRole("combobox", { name: "Installation" }));
     expect(
-      screen.getByRole("option", { name: /^Organization default/ })
+      screen.getByRole("option", { name: /^Default access/ })
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("option", { name: /^Not available/ }));
 

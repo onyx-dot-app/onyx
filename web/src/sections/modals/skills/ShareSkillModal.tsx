@@ -53,8 +53,8 @@ import {
   fromPolicyChoice,
   isPolicyChoice,
   toPolicyChoice,
-  useCompanyPolicyOptions,
   useInstallationPolicyCopy,
+  usePolicyOptions,
 } from "@/lib/skills/installationPolicy";
 import SkillGroupAccess from "@/sections/modals/skills/SkillGroupAccess";
 import { Permission, type MinimalUserSnapshot } from "@/lib/types";
@@ -148,9 +148,12 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
   } = usePermissionAuthority(Permission.MANAGE_PLUGINS);
   const policyCopy = useInstallationPolicyCopy();
   const policyCopyT = useTranslations("skills.installationPolicy");
-  const companyOptions = useCompanyPolicyOptions(
-    loadedSkill?.default_installation_policy ?? null
-  );
+  const companyOptions = usePolicyOptions({
+    inherit: {
+      scope: "skill",
+      policy: loadedSkill?.default_installation_policy ?? null,
+    },
+  });
   const { mutate } = useSWRConfig();
   const publishAction = usePublishAction();
 
@@ -241,12 +244,9 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
   // Publishing is one-way: a saved published skill shows no private option.
   const isPublished = props.mode === "edit" && initialState?.isPublic === true;
   const isPublishing = !!effectiveState?.isPublic && !isPublished;
-  // Group settings need manage-plugins: organization-wide, or for the
-  // manager's groups on a skill that is not published.
+  // The server checks each group row against the caller's scope.
   const canSetGroupSettings =
-    props.mode === "edit" &&
-    (isOrganizationManager ||
-      (isScopedPluginManager && !isPublished && !isPublishing));
+    props.mode === "edit" && (isOrganizationManager || isScopedPluginManager);
   const groupChanges = useMemo(
     () => groupSettingChanges(initialGroupRows, groupRows),
     [initialGroupRows, groupRows]
@@ -415,8 +415,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
       const payload = serializeSkillSharing(
         nextDraft,
         isAdmin,
-        isOrganizationManager,
-        initialPolicy
+        isOrganizationManager
       );
       if (canSetGroupSettings && groupChanges.length > 0) {
         payload.group_settings = groupChanges;
@@ -582,7 +581,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
             />
             <Text color="text-03" font="secondary-body" role="status">
               {installationPolicy === null
-                ? policyCopyT("inherit.organizationDescription")
+                ? policyCopyT("inherit.description", { scope: "skill" })
                 : policyCopy.description(installationPolicy)}
             </Text>
           </Section>

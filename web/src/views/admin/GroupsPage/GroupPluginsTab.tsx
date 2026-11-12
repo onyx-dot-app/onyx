@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Button,
+  Card,
   InputSingleSelect,
   Text,
   useCreateModal,
@@ -18,15 +19,16 @@ import {
 import { PageLoader } from "@opal/loaders";
 import { SvgBlocks, SvgPlusCircle } from "@opal/icons";
 import SvgNoResult from "@opal/illustrations/no-result";
-import { fetchErrorDetail } from "@/lib/fetcher";
 import { useUserGroupPlugins } from "@/lib/groupPlugins/hooks";
 import useUserSkills from "@/hooks/useUserSkills";
 import type { CustomSkill, SkillInstallationPolicy } from "@/lib/skills/types";
-import GroupPluginSettingRow from "@/views/admin/GroupsPage/GroupPluginSettingRow";
+import type { UserGroupPlugin } from "@/lib/groupPlugins/types";
+import GroupPolicyRow from "@/sections/skills/GroupPolicyRow";
 import {
   INHERIT,
+  fromPolicyChoice,
   isPolicyChoice,
-  useGroupPolicyOptions,
+  usePolicyOptions,
   type PolicyChoice,
 } from "@/lib/skills/installationPolicy";
 import { useSkillLimitCopy } from "@/lib/skills/limits";
@@ -39,25 +41,25 @@ interface GroupPluginsTabProps {
  * saves on its own; the group form's Save never sends them. */
 export default function GroupPluginsTab({ groupId }: GroupPluginsTabProps) {
   const t = useTranslations("admin.groups.plugins");
-  const { errorMessage } = useSkillLimitCopy();
+  const { describeError } = useSkillLimitCopy();
   const { data, error, refresh, setPolicy } = useUserGroupPlugins(groupId);
   const addModal = useCreateModal();
+  const [savingId, setSavingId] = useState<string | null>(null);
 
   async function save(
     pluginId: string,
     policy: SkillInstallationPolicy | null
   ): Promise<boolean> {
+    setSavingId(pluginId);
     try {
       await setPolicy(pluginId, policy);
       toast.success(t("toasts.saved"));
       return true;
     } catch (saveError) {
-      toast.error(
-        errorMessage(saveError) ??
-          fetchErrorDetail(saveError) ??
-          t("toasts.saveFailed")
-      );
+      toast.error(describeError(saveError, t("toasts.saveFailed")));
       return false;
+    } finally {
+      setSavingId(null);
     }
   }
 
@@ -92,14 +94,8 @@ export default function GroupPluginsTab({ groupId }: GroupPluginsTabProps) {
           gap={1}
           className="min-w-0 max-w-full grow basis-80"
         >
-          <Text font="main-ui-body" color="text-04" as="p">
-            {t("intro")}
-          </Text>
           <Text font="secondary-body" color="text-03" as="p">
-            {t("inheritance")}
-          </Text>
-          <Text font="secondary-body" color="text-03" as="p">
-            {t("conflicts")}
+            {t("description")}
           </Text>
         </Section>
         <Button
@@ -118,13 +114,18 @@ export default function GroupPluginsTab({ groupId }: GroupPluginsTabProps) {
           description={t("empty.description")}
         />
       ) : (
-        data.map((plugin) => (
-          <GroupPluginSettingRow
-            key={plugin.plugin_id}
-            plugin={plugin}
-            onSave={save}
-          />
-        ))
+        <Card border="solid" padding={2}>
+          <Section gap={1} height="auto" alignItems="stretch">
+            {data.map((plugin) => (
+              <GroupPluginRow
+                key={plugin.plugin_id}
+                plugin={plugin}
+                disabled={!plugin.can_edit || savingId !== null}
+                onSave={save}
+              />
+            ))}
+          </Section>
+        </Card>
       )}
 
       <addModal.Provider>
@@ -135,6 +136,49 @@ export default function GroupPluginsTab({ groupId }: GroupPluginsTabProps) {
         />
       </addModal.Provider>
     </Section>
+  );
+}
+
+interface GroupPluginRowProps {
+  plugin: UserGroupPlugin;
+  disabled: boolean;
+  onSave: (
+    pluginId: string,
+    policy: SkillInstallationPolicy | null
+  ) => Promise<boolean>;
+}
+
+function GroupPluginRow({ plugin, disabled, onSave }: GroupPluginRowProps) {
+  const t = useTranslations("admin.groups.plugins");
+  const options = usePolicyOptions({
+    inherit: { scope: "group", policy: plugin.company_installation_policy },
+  });
+  const saved: PolicyChoice = plugin.installation_policy ?? INHERIT;
+  return (
+    <GroupPolicyRow
+      name={plugin.name}
+      icon={SvgBlocks}
+      description={t("row.access", {
+        access:
+          plugin.permission === null
+            ? "settingOnly"
+            : plugin.published
+              ? "published"
+              : "shared",
+      })}
+      value={saved}
+      options={options}
+      disabled={disabled}
+      onChange={(choice) => {
+        if (choice !== saved)
+          void onSave(plugin.plugin_id, fromPolicyChoice(choice));
+      }}
+      onRemove={
+        plugin.permission === null
+          ? () => void onSave(plugin.plugin_id, null)
+          : undefined
+      }
+    />
   );
 }
 
@@ -169,11 +213,17 @@ function AddGroupPluginModal({
   }, [skills, existingIds]);
   const selected = candidates.find((skill) => skill.id === pluginId) ?? null;
   const published = selected?.public_permission != null;
-  const { options } = useGroupPolicyOptions(
-    selected === null || published
-      ? undefined
-      : (selected.company_installation_policy ?? undefined)
-  );
+  const options = usePolicyOptions({
+    inherit:
+      selected === null || published
+        ? undefined
+        : {
+            scope: "group",
+            policy:
+              selected.installation_policy ??
+              selected.default_installation_policy,
+          },
+  });
   const canAdd =
     selected !== null && choice !== "" && !(published && choice === INHERIT);
 

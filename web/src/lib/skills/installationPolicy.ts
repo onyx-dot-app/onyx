@@ -4,8 +4,8 @@ import { useTranslations } from "next-intl";
 import type { SelectOption } from "@opal/components";
 import type { SkillInstallationPolicy } from "@/lib/skills/types";
 
-/** The select value for "no own setting": a group follows the organization
- * setting, and a skill follows Default Access. */
+/** The select value for "no own setting": a group follows the Organization
+ * setting, and a skill follows Default access. */
 export const INHERIT = "INHERIT";
 export type PolicyChoice = SkillInstallationPolicy | typeof INHERIT;
 
@@ -46,61 +46,45 @@ export function useInstallationPolicyCopy() {
   };
 }
 
-function useLevelOptions(
-  policies: readonly SkillInstallationPolicy[] = INSTALLATION_POLICIES
-): SelectOption[] {
+/** What the "no own setting" option names: a group uses the Organization
+ * setting, and a skill uses Default access. */
+export interface InheritOption {
+  scope: "group" | "skill";
+  /** The value the option stands for; null when it differs between skills. */
+  policy: SkillInstallationPolicy | null;
+}
+
+interface PolicyOptionsConfig {
+  levels?: readonly SkillInstallationPolicy[];
+  inherit?: InheritOption;
+}
+
+/** The select options of an install setting, with an optional "no own
+ * setting" option first. */
+export function usePolicyOptions({
+  levels = INSTALLATION_POLICIES,
+  inherit,
+}: PolicyOptionsConfig = {}): SelectOption[] {
+  const t = useTranslations("skills.installationPolicy.inherit");
   const copy = useInstallationPolicyCopy();
-  return policies.map((policy) => ({
+  const options: SelectOption[] = levels.map((policy) => ({
     value: policy,
     title: copy.label(policy),
     description: copy.description(policy),
   }));
-}
-
-/** The settings of a group. ``company`` is the organization setting the
- * "no group setting" option names; undefined leaves the option out, and null
- * names no value (several skills at once). */
-export function useGroupPolicyOptions(
-  company: SkillInstallationPolicy | null | undefined
-) {
-  const t = useTranslations("skills.installationPolicy.inherit");
-  const copy = useInstallationPolicyCopy();
-  const levels = useLevelOptions();
-  const options: SelectOption[] = [
-    ...(company === undefined
-      ? []
-      : [
-          {
-            value: INHERIT,
-            title:
-              company === null
-                ? t("groupAny")
-                : t("group", { policy: copy.label(company) }),
-            description: t("groupDescription"),
-          },
-        ]),
-    ...levels,
-  ];
-  return { options, policyLabel: copy.label };
-}
-
-/** The company settings of a skill. ``defaultPolicy`` is the Default Access
- * that applies when the skill has no own setting; null names no value. */
-export function useCompanyPolicyOptions(
-  defaultPolicy: SkillInstallationPolicy | null
-): SelectOption[] {
-  const t = useTranslations("skills.installationPolicy.inherit");
-  const copy = useInstallationPolicyCopy();
-  const levels = useLevelOptions();
+  if (!inherit) return options;
   return [
     {
       value: INHERIT,
       title:
-        defaultPolicy === null
-          ? t("organizationAny")
-          : t("organization", { policy: copy.label(defaultPolicy) }),
-      description: t("organizationDescription"),
+        inherit.policy === null
+          ? t("label", { scope: inherit.scope })
+          : t("labelWithPolicy", {
+              scope: inherit.scope,
+              policy: copy.label(inherit.policy),
+            }),
+      description: t("description", { scope: inherit.scope }),
     },
-    ...levels,
+    ...options,
   ];
 }

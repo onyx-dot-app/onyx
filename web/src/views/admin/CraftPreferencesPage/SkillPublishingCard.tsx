@@ -11,7 +11,7 @@ import { useSettings } from "@/lib/settings/hooks";
 import { PluginPublishingPolicy } from "@/lib/settings/types";
 import { updateAdminSettings } from "@/lib/settings/svc";
 import { setOrganizationLibraryDefaultAccess } from "@/lib/skills/api";
-import { useInstallationPolicyCopy } from "@/lib/skills/installationPolicy";
+import { usePolicyOptions } from "@/lib/skills/installationPolicy";
 import type {
   OrganizationLibraryDefaultAccess,
   OrganizationLibraryDefaultPolicy,
@@ -47,22 +47,19 @@ export default function SkillPublishingCard() {
     errorHandlingFetcher
   );
   const [isSaving, setIsSaving] = useState(false);
-  const policyCopy = useInstallationPolicyCopy();
+  const defaultAccessOptions = usePolicyOptions({
+    levels: DEFAULT_ACCESS_POLICIES,
+  });
 
-  async function saveSetting(
-    run: () => Promise<void>,
-    key: string,
-    success: string,
-    failure: string
-  ) {
+  async function saveSetting(run: () => Promise<void>, key: string) {
     setIsSaving(true);
     try {
       await run();
       await mutate(key);
-      toast.success(success);
+      toast.success(t("saveSuccess.message"));
     } catch (err) {
       console.error("Failed to save a skill setting", err);
-      toast.error(describeError(err, failure));
+      toast.error(describeError(err, t("saveError.message")));
     } finally {
       setIsSaving(false);
     }
@@ -72,30 +69,21 @@ export default function SkillPublishingCard() {
     if (next === policy) return;
     await saveSetting(
       () => updateAdminSettings({ plugin_publishing: next }),
-      SWR_KEYS.settings,
-      t("saveSuccess.message"),
-      t("saveError.message")
+      SWR_KEYS.settings
     );
   }
 
   async function saveDefaultAccess(next: OrganizationLibraryDefaultPolicy) {
     if (next === defaultAccess?.installation_policy) return;
-    await saveSetting(
-      async () => {
-        await setOrganizationLibraryDefaultAccess(next);
-      },
-      SWR_KEYS.organizationLibraryDefaultAccess,
-      t("defaultAccess.saveSuccess.message"),
-      t("defaultAccess.saveError.message")
-    );
+    await saveSetting(async () => {
+      await setOrganizationLibraryDefaultAccess(next);
+    }, SWR_KEYS.organizationLibraryDefaultAccess);
   }
 
   async function saveSharing(next: boolean) {
     await saveSetting(
       () => updateAdminSettings({ plugin_sharing: next }),
-      SWR_KEYS.settings,
-      t("sharing.saveSuccess.message"),
-      t("sharing.saveError.message")
+      SWR_KEYS.settings
     );
   }
 
@@ -135,9 +123,7 @@ export default function SkillPublishingCard() {
         </InputHorizontal>
         <InputHorizontal
           title={t("defaultAccess.title")}
-          description={t("defaultAccess.description", {
-            setting: policyCopy.description(currentDefault),
-          })}
+          description={t("defaultAccess.description")}
           withLabel
         >
           <InputSingleSelect
@@ -148,10 +134,7 @@ export default function SkillPublishingCard() {
             onValueChange={(value: string) => {
               if (isDefaultAccessPolicy(value)) void saveDefaultAccess(value);
             }}
-            options={DEFAULT_ACCESS_POLICIES.map((value) => ({
-              value,
-              title: policyCopy.label(value),
-            }))}
+            options={defaultAccessOptions}
           />
         </InputHorizontal>
         <InputHorizontal

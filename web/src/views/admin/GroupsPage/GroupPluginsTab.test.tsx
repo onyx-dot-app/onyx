@@ -41,7 +41,6 @@ function custom(overrides: Partial<CustomSkill>): Partial<CustomSkill> {
     description: "",
     public_permission: null,
     installation_policy: "AVAILABLE",
-    company_installation_policy: "AVAILABLE",
     ...overrides,
   };
 }
@@ -53,7 +52,7 @@ describe("GroupPluginsTab", () => {
     mockSetPolicy.mockReset().mockImplementation(async () => mockRows);
   });
 
-  it("shows each plugin with its setting and the inheritance text", async () => {
+  it("shows each plugin with its access and setting", async () => {
     mockRows = [
       row({}),
       row({
@@ -67,19 +66,8 @@ describe("GroupPluginsTab", () => {
     render(<GroupPluginsTab groupId={7} />);
 
     expect(await screen.findByRole("group", { name: "deploy" })).toBeVisible();
-    expect(
-      screen.getByText("By default, every group uses the organization setting.")
-    ).toBeVisible();
-    expect(
-      screen.getByText(
-        "Shared with this group · Uses the organization setting: Available to install."
-      )
-    ).toBeVisible();
-    expect(
-      screen.getByText(
-        "Group setting only · Group setting: Required. Organization setting: Available to install."
-      )
-    ).toBeVisible();
+    expect(screen.getByText("Shared with this group")).toBeVisible();
+    expect(screen.getByText("Group setting only")).toBeVisible();
     expect(
       screen.getByRole("combobox", { name: "Setting for deploy" })
     ).toHaveValue("Organization setting (Available to install)");
@@ -114,12 +102,8 @@ describe("GroupPluginsTab", () => {
     render(<GroupPluginsTab groupId={7} />);
 
     await screen.findByRole("group", { name: "lint" });
-    expect(
-      screen.queryByRole("button", { name: "Remove deploy from this group" })
-    ).toBeNull();
-    await user.click(
-      screen.getByRole("button", { name: "Remove lint from this group" })
-    );
+    expect(screen.queryByRole("button", { name: "Remove deploy" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Remove lint" }));
     await waitFor(() =>
       expect(mockSetPolicy).toHaveBeenCalledWith(7, "p-2", null)
     );
@@ -132,11 +116,6 @@ describe("GroupPluginsTab", () => {
     expect(
       await screen.findByRole("combobox", { name: "Setting for deploy" })
     ).toBeDisabled();
-    expect(
-      screen.getByText(
-        "Only an organization-wide plugin manager can change this setting."
-      )
-    ).toBeVisible();
   });
 
   it("adds a private plugin with the organization setting", async () => {

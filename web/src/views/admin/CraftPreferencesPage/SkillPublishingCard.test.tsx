@@ -80,29 +80,18 @@ describe("SkillPublishingCard", () => {
 
     expect(
       screen.getByText(
-        "Applies to every published skill that doesn't have its own setting, including skills published later. Members find it and turn it on if they want it."
+        "Applies to every published skill that doesn't have its own setting, including skills published later."
       )
     ).toBeVisible();
     const select = screen.getByRole("combobox", { name: "Default Access" });
     await waitFor(() => expect(select).toBeEnabled());
     await user.click(select);
-    expect(screen.queryByRole("option", { name: "Required" })).toBeNull();
-    await user.click(screen.getByRole("option", { name: "Not available" }));
+    expect(screen.queryByRole("option", { name: /^Required/ })).toBeNull();
+    await user.click(screen.getByRole("option", { name: /^Not available/ }));
 
     await waitFor(() =>
       expect(mockSetDefaultAccess).toHaveBeenCalledWith("NOT_AVAILABLE")
     );
-  });
-
-  it("describes a saved Not available default", async () => {
-    mockDefaultAccess = "NOT_AVAILABLE";
-    render(<SkillPublishingCard />);
-
-    expect(
-      await screen.findByText(
-        "Applies to every published skill that doesn't have its own setting, including skills published later. Hidden. Members can't find or turn it on."
-      )
-    ).toBeVisible();
   });
 
   it("turns Sharing off", async () => {

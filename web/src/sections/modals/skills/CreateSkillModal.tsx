@@ -58,7 +58,7 @@ export function CreateSkillModalContent({
   validateDraft,
 }: CreateSkillModalContentProps) {
   const t = useTranslations("skills.modals");
-  const { describeError, refusal } = useSkillLimitCopy();
+  const { describeError } = useSkillLimitCopy();
   const [bundle, setBundle] = useState<PreparedSkillBundle | null>(null);
   const [preparing, setPreparing] = useState(false);
   const [inspecting, setInspecting] = useState(false);
@@ -244,9 +244,7 @@ export function CreateSkillModalContent({
               >
                 {t("create.batch.failure", {
                   name: item.name,
-                  reason: item.skill_limit
-                    ? refusal(item.skill_limit)
-                    : item.reason,
+                  reason: item.reason,
                 })}
               </Text>
             ))}

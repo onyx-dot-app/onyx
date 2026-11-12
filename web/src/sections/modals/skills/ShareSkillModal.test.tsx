@@ -604,7 +604,6 @@ describe("ShareSkillModal", () => {
         user_permission: "OWNER",
         installation_policy: null,
         default_installation_policy: "NOT_AVAILABLE",
-        company_installation_policy: "NOT_AVAILABLE",
       })
     );
     render(
@@ -618,7 +617,7 @@ describe("ShareSkillModal", () => {
     );
     expect(
       await screen.findByRole("combobox", { name: "Installation" })
-    ).toHaveValue("Organization default (Not available)");
+    ).toHaveValue("Default access (Not available)");
     await pickCompanySetting(/^Available to install/);
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>
@@ -629,7 +628,7 @@ describe("ShareSkillModal", () => {
     );
   });
 
-  it("sends null when an admin picks the organization default", async () => {
+  it("sends null when an admin picks Default access", async () => {
     const user = setupUser();
     render(
       <ShareSkillModal
@@ -640,7 +639,7 @@ describe("ShareSkillModal", () => {
         onSaved={jest.fn()}
       />
     );
-    await pickCompanySetting(/^Organization default/);
+    await pickCompanySetting(/^Default access/);
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>
       expect(mockUpdateSkillShares).toHaveBeenCalledWith(
@@ -650,7 +649,7 @@ describe("ShareSkillModal", () => {
     );
   });
 
-  it("saves changed group settings and leaves the company setting out", async () => {
+  it("saves changed group settings and sends the unchanged company setting", async () => {
     const user = setupUser();
     mockGroups = [
       { id: 3, name: "Design" },
@@ -714,7 +713,7 @@ describe("ShareSkillModal", () => {
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(mockUpdateSkillShares).toHaveBeenCalled());
     const payload = mockUpdateSkillShares.mock.calls[0][1];
-    expect(payload.installation_policy).toBeUndefined();
+    expect(payload.installation_policy).toBeNull();
     expect(payload.group_settings).toEqual([
       { group_id: 3, installation_policy: "NOT_AVAILABLE" },
       { group_id: 5, installation_policy: "DEFAULT" },

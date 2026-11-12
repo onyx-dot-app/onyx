@@ -1,8 +1,4 @@
-import type {
-  CustomSkill,
-  SkillInstallationPolicy,
-  SkillSharePermission,
-} from "@/lib/skills/types";
+import type { CustomSkill, SkillSharePermission } from "@/lib/skills/types";
 import type {
   SkillGroupSettingPayload,
   SkillShareUpdatePayload,
@@ -70,20 +66,13 @@ export function emptySkillSharingDraft(
   };
 }
 
-/** ``initialPolicy`` is the company setting the dialog opened with. The
- * payload holds the setting only when it changed, so a save never turns "no
- * own setting" into an explicit value by accident. */
 export function serializeSkillSharing(
   draft: SkillSharingDraft,
   isAdmin: boolean,
-  isOrganizationManager: boolean,
-  initialPolicy: SkillInstallationPolicy | null = null
+  isOrganizationManager: boolean
 ): SkillShareUpdatePayload {
   return {
-    installation_policy:
-      isAdmin && draft.installation_policy !== initialPolicy
-        ? draft.installation_policy
-        : undefined,
+    installation_policy: isAdmin ? draft.installation_policy : undefined,
     public_permission:
       !draft.external_app &&
       canChangeOrganizationAccess(draft, isOrganizationManager)

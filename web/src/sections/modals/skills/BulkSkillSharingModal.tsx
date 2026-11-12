@@ -28,7 +28,7 @@ import type { GroupAccessRow } from "@/lib/skills/sharing";
 import {
   fromPolicyChoice,
   isPolicyChoice,
-  useCompanyPolicyOptions,
+  usePolicyOptions,
   type PolicyChoice,
 } from "@/lib/skills/installationPolicy";
 import { AddPeoplePicker } from "@/sections/modals/AddPeoplePicker";
@@ -63,7 +63,9 @@ export default function BulkSkillSharingModal({
     Permission.MANAGE_PLUGINS
   );
   const canSetGroupSettings = isGlobalHolder || isScopedManager;
-  const companyOptions = useCompanyPolicyOptions(null);
+  const companyOptions = usePolicyOptions({
+    inherit: { scope: "skill", policy: null },
+  });
   const { data: users } = useShareableUsers({ includeApiKeys: true });
   const { data: groups } = useShareableGroups();
   // Publishing is one-way, so bulk can publish but never make skills private.

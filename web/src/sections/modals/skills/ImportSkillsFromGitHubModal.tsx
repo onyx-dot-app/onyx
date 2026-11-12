@@ -196,7 +196,6 @@ export function ImportSkillsFromGitHubModalView({
   onConfigureSharing,
 }: ImportSkillsFromGitHubModalViewProps) {
   const t = useTranslations("skills.modals");
-  const { refusal } = useSkillLimitCopy();
   const policyCopy = useTranslations("skills.installationPolicy");
   const importablePaths = useMemo(
     () =>
@@ -394,9 +393,7 @@ export function ImportSkillsFromGitHubModalView({
                         >
                           <Text font="main-ui-action">{item.name}</Text>
                           <Text as="p" font="secondary-body" color="text-03">
-                            {"skill_limit" in item && item.skill_limit
-                              ? refusal(item.skill_limit)
-                              : item.reason}
+                            {item.reason}
                           </Text>
                         </Section>
                       ))}
@@ -469,7 +466,7 @@ export function ImportSkillsFromGitHubModalView({
                   {isAdmin && (
                     <Text font="secondary-body" color="text-03">
                       {sharing.installation_policy === null
-                        ? policyCopy("inherit.organizationAny")
+                        ? policyCopy("inherit.label", { scope: "skill" })
                         : policyCopy(`${sharing.installation_policy}.label`)}
                     </Text>
                   )}
