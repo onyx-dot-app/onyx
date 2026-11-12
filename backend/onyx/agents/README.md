@@ -535,6 +535,11 @@ An assistant `chat_message` owns one complete or partial response, its outcome, 
 Its user-message parent owns the input. `chat_response_item` stores each assistant model generation in step order.
 These items retain message identity, content, generation status, and provider metadata, including empty messages.
 Each item's `inputs` column keeps the messages its generation accepted, with their identity and source.
+An input accepted between steps belongs to the step that read it. It is stored in that step's
+`chat_response_item.inputs` and does not become a `chat_message` row; the surrounding assistant
+response is the only `chat_message`. History, replay, rendering, and exports must show the input at
+the step where the model read it, and acceptance happens exactly once, in that step's transaction.
+`.agents/feature-map/components/chat-persistence.md` gives the routing rule for each input.
 `tool_call` stores the result payload, execution status, and a queryable copy of the call arguments.
 Argument parsing details remain in the saved assistant message; tool rows do not store another copy.
 

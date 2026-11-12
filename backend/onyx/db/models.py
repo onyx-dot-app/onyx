@@ -3790,6 +3790,8 @@ class ChatResponseItem(Base):
         PydanticType(AssistantMessage, sanitize_strings=True, none_as_null=True),
     )
     # Messages this generation accepted before it started, in model order.
+    # An input accepted between steps is stored only here, on the step that read
+    # it; it is not a chat_message row. See chat-persistence.md for the routing.
     inputs: Mapped[list[AcceptedChatInput]] = mapped_column(
         PydanticListType(AcceptedChatInput),
         default=list,
