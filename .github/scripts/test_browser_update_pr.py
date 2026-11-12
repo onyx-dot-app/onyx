@@ -1,0 +1,144 @@
+"""Exercise pin PR publication against a real local Git remote."""
+
+import json
+import os
+import re
+import shutil
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+
+SCRIPTS = Path(__file__).parent.resolve()
+INSTALLER = "backend/onyx/server/features/build/sandbox/image/install-browser.sh"
+
+
+def run(
+    root: Path, *args: str, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        args, cwd=root, env=env, capture_output=True, text=True, check=False
+    )
+
+
+class BrowserUpdatePRTests(unittest.TestCase):
+    def test_publish_retry_and_reject_extra_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "repo"
+            root.mkdir()
+            remote = Path(directory) / "remote.git"
+            self.assertEqual(run(root, "git", "init", "-b", "main").returncode, 0)
+            run(root, "git", "config", "user.name", "Test")
+            run(root, "git", "config", "user.email", "test@example.com")
+            target = root / INSTALLER
+            target.parent.mkdir(parents=True)
+            shutil.copyfile(SCRIPTS.parents[1] / INSTALLER, target)
+            scripts = root / ".github/scripts"
+            scripts.mkdir(parents=True)
+            for name in (
+                "publish-task-pr.sh",
+                "update-sandbox-browser.sh",
+                "chrome-stable-version.sh",
+                "verify-browser-pin.py",
+            ):
+                shutil.copy2(SCRIPTS / name, scripts / name)
+            reviewers = root / ".github/actions/slack-notify/cve-reviewers.json"
+            reviewers.parent.mkdir(parents=True)
+            reviewers.write_text(json.dumps(["reviewer"]))
+            run(root, "git", "add", ".")
+            self.assertEqual(run(root, "git", "commit", "-m", "initial").returncode, 0)
+            self.assertEqual(
+                run(root, "git", "clone", "--bare", str(root), str(remote)).returncode,
+                0,
+            )
+            run(root, "git", "remote", "add", "origin", str(remote))
+            run(root, "git", "fetch", "origin")
+            # A version-only change cannot pass the required pin contract.
+            original = target.read_text()
+            target.write_text(
+                re.sub(
+                    r"^version=.*$", "version=999.0.1.2", original, flags=re.MULTILINE
+                )
+            )
+            run(root, "git", "add", INSTALLER)
+            run(root, "git", "commit", "-m", "incomplete pin")
+            verification = run(
+                root,
+                "python3",
+                ".github/scripts/verify-browser-pin.py",
+                "origin/main",
+                "HEAD",
+            )
+            self.assertNotEqual(verification.returncode, 0)
+            self.assertIn("must change both checksums", verification.stderr)
+            run(root, "git", "reset", "--hard", "origin/main")
+            binaries = Path(directory) / "bin"
+            binaries.mkdir()
+            fixtures = {
+                "curl": '#!/bin/sh\ncase "$*" in\n*last-known*) echo \'{"channels":{"Stable":{"version":"999.0.1.2"}}}\';;\n*linux-arm64*) printf arm64;;\n*) printf amd64;;\nesac\n',
+                "gh": '#!/bin/sh\ncase "$1 $2" in\n"pr list") if [ -n "$EXISTING_PR" ] || [ -f "$CREATED_PR" ]; then echo 123; fi;;\n"pr create") touch "$CREATED_PR"; echo "pr create" >> "$PR_CALLS";;\n*) echo "$*" >> "$PR_CALLS";;\nesac\n',
+                "shuf": "#!/bin/sh\nhead -1\n",
+            }
+            for name, content in fixtures.items():
+                (binaries / name).write_text(content)
+                (binaries / name).chmod(0o755)
+            env = {
+                **os.environ,
+                "PATH": f"{binaries}:{os.environ['PATH']}",
+                "GITHUB_OUTPUT": str(Path(directory) / "output"),
+                "RUN_URL": "https://example.com/run",
+                "PR_CALLS": str(Path(directory) / "calls"),
+                "EXISTING_PR": "",
+                "CREATED_PR": str(Path(directory) / "created"),
+                "BASE": "main",
+                "BRANCH": "auto/sandbox-browser/main",
+                "FILES": INSTALLER,
+                "DIFF_VALIDATOR": ".github/scripts/verify-browser-pin.py",
+                "PR_TITLE": "chore(deps): update browser",
+                "TASK_NAME": "test",
+                "REPO_URL": "https://github.com/onyx-dot-app/onyx",
+            }
+            args = ("bash", ".github/scripts/publish-task-pr.sh")
+
+            def publish(
+                environment: dict[str, str],
+            ) -> subprocess.CompletedProcess[str]:
+                run(root, "git", "checkout", "main")
+                update = run(
+                    root,
+                    "bash",
+                    ".github/scripts/update-sandbox-browser.sh",
+                    INSTALLER,
+                    env=environment,
+                )
+                self.assertEqual(update.returncode, 0, update.stderr)
+                return run(root, *args, env=environment)
+
+            result = publish(env)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            branch = "auto/sandbox-browser/main"
+            first = run(
+                root, "git", "ls-remote", "origin", f"refs/heads/{branch}"
+            ).stdout
+            self.assertIn("pr create", Path(env["PR_CALLS"]).read_text())
+            result = publish({**env, "EXISTING_PR": "123"})
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("PR #123 already has this output.", result.stdout)
+            self.assertEqual(
+                first,
+                run(root, "git", "ls-remote", "origin", f"refs/heads/{branch}").stdout,
+            )
+            # Refuse to overwrite or auto-merge unrelated changes in an existing PR.
+            run(root, "git", "checkout", "-b", "tamper", f"origin/{branch}")
+            (root / "unexpected.txt").write_text("unexpected change")
+            run(root, "git", "add", "unexpected.txt")
+            run(root, "git", "commit", "-m", "unrelated")
+            run(root, "git", "push", "origin", f"HEAD:refs/heads/{branch}")
+            run(root, "git", "checkout", "main")
+            result = publish({**env, "EXISTING_PR": "123"})
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("must change only install-browser.sh", result.stderr)
+
+
+if __name__ == "__main__":
+    unittest.main()
