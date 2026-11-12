@@ -36,8 +36,8 @@ describe("useAuthErrors", () => {
     const { result } = renderHook(() => useAuthErrors(packets));
 
     expect(result.current).toEqual([
-      { toolName: "create_issue", toolId: null },
-      { toolName: "create_issue", toolId: null },
+      { turnIndex: 0, toolName: "create_issue", toolId: null },
+      { turnIndex: 0, toolName: "create_issue", toolId: null },
     ]);
   });
 
@@ -49,6 +49,8 @@ describe("useAuthErrors", () => {
 
     const { result } = renderHook(() => useAuthErrors(packets));
 
-    expect(result.current).toEqual([{ toolName: "get_user", toolId: 7 }]);
+    expect(result.current).toEqual([
+      { turnIndex: 0, toolName: "get_user", toolId: 7 },
+    ]);
   });
 });

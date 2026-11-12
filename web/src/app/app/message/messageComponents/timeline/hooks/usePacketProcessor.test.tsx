@@ -291,6 +291,48 @@ describe("usePacketProcessor", () => {
   });
 
   describe("onRenderComplete callback", () => {
+    test.each([false, true])(
+      "completion follows the answer after accepted input (has next answer: %s)",
+      (hasNextAnswer) => {
+        const packets = [createMessageStartPacket({ turn_index: 0 })];
+        const { result, rerender } = renderHook(
+          ({ packets }) => usePacketProcessor(packets, 1),
+          { initialProps: { packets } }
+        );
+        act(() => result.current.onRenderComplete());
+
+        packets.push(
+          createPacket(
+            PacketType.USER_MESSAGE,
+            { turn_index: 1 },
+            {
+              id: "accepted-input",
+              message: "Use the latest report",
+            }
+          )
+        );
+        rerender({ packets });
+        expect(result.current.isComplete).toBe(false);
+
+        packets.push(createSearchToolStartPacket({ turn_index: 2 }));
+        rerender({ packets });
+        expect(
+          result.current.displayGroups.map((group) => group.turn_index)
+        ).toEqual([0, 1]);
+
+        if (hasNextAnswer) {
+          packets.push(createMessageStartPacket({ turn_index: 3 }));
+        }
+        packets.push(createStopPacket());
+        rerender({ packets });
+        expect(result.current.isComplete).toBe(!hasNextAnswer);
+        if (hasNextAnswer) {
+          act(() => result.current.onRenderComplete());
+          expect(result.current.isComplete).toBe(true);
+        }
+      }
+    );
+
     test("sets isComplete when finalAnswerComing and stopPacketSeen", () => {
       const packets = [
         createMessageStartPacket({ turn_index: 0 }),
@@ -415,24 +457,6 @@ describe("usePacketProcessor", () => {
     });
   });
 
-  describe("hasSteps flag", () => {
-    test("false when no tool groups", () => {
-      const packets = [createMessageStartPacket({ turn_index: 0 })];
-
-      const { result } = renderHook(() => usePacketProcessor(packets, 1));
-
-      expect(result.current.hasSteps).toBe(false);
-    });
-
-    test("true when tool groups exist", () => {
-      const packets = [createSearchToolStartPacket({ turn_index: 0 })];
-
-      const { result } = renderHook(() => usePacketProcessor(packets, 1));
-
-      expect(result.current.hasSteps).toBe(true);
-    });
-  });
-
   describe("toolTurnGroups transformation", () => {
     test("groups tools by turn index", () => {
       const packets = [
@@ -473,7 +497,6 @@ describe("usePacketProcessor", () => {
 
       expect(result.current.toolGroups.length).toBe(1);
       expect(result.current.displayGroups.length).toBe(1);
-      expect(result.current.hasSteps).toBe(true);
       expect(result.current.stopPacketSeen).toBe(true);
       expect(result.current.stopReason).toBe(StopReason.FINISHED);
       expect(result.current.finalAnswerComing).toBe(true);
@@ -512,7 +535,7 @@ describe("usePacketProcessor", () => {
       expect(result.current.generatedImages.map((i) => i.file_id)).toEqual([
         "img1",
       ]);
-      expect(result.current.hasSteps).toBe(true);
+      expect(result.current.toolTurnGroups).toHaveLength(1);
       expect(result.current.finalAnswerComing).toBe(true);
       expect(result.current.displayGroups.length).toBe(1);
     });
@@ -537,7 +560,7 @@ describe("usePacketProcessor", () => {
         "reloaded-0",
         "reloaded-1",
       ]);
-      expect(result.current.hasSteps).toBe(true);
+      expect(result.current.toolTurnGroups).toHaveLength(1);
       expect(result.current.displayGroups.length).toBe(0);
       expect(result.current.stopPacketSeen).toBe(true);
       expect(result.current.isComplete).toBe(true);

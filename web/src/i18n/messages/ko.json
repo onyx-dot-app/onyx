@@ -12465,6 +12465,21 @@
         "voiceSetupButton": {
           "ariaLabel": "음성 설정",
           "tooltip": "음성이 구성되지 않았습니다. 관리자 설정에서 구성하세요."
+        },
+        "pendingMessages": {
+          "keyboardHint": "Enter로 전송 · Ctrl 또는 Command + Enter로 대기열에 추가",
+          "preparingHint": "응답이 시작되면 대기열에 추가할 수 있습니다.",
+          "attachmentsHint": "이 응답이 끝난 후 첨부 파일을 보내세요.",
+          "chooseResponseHint": "메시지를 대기열에 추가하기 전에 응답을 선택하세요.",
+          "incognitoHint": "시크릿 채팅에서는 응답이 끝날 때까지 기다리세요.",
+          "sendHint": "이 응답의 다음 단계에서 전송",
+          "interruptHint": "현재 작업을 중단하고 이 메시지 전송",
+          "sendLabel": "전송",
+          "queueLabel": "대기열",
+          "interruptKeyboardHint": "Enter로 중단 · Ctrl 또는 Command + Enter로 대기열에 추가",
+          "interruptLabel": "중단",
+          "waitHint": "응답이 끝날 때까지 기다리세요.",
+          "ctrlKey": "Ctrl"
         }
       },
       "baseInputBar": {
@@ -12563,16 +12578,26 @@
       },
       "queuedMessageBar": {
         "discardButton": {
-          "tooltip": "대기 중인 메시지 제거"
+          "tooltip": "대기 중인 메시지 제거",
+          "ariaLabel": "대기 중인 메시지 삭제: {message}"
         },
         "editHint": {
           "label": "편집 ·"
         },
-        "item": {
-          "ariaLabel": "대기 중인 메시지 전환"
-        },
         "removeHint": {
           "label": "제거"
+        },
+        "editButton": {
+          "tooltip": "대기열 메시지 편집",
+          "clearDraftTooltip": "대기열 메시지를 편집하려면 초안을 비우세요",
+          "ariaLabel": "대기 중인 메시지 편집: {message}"
+        },
+        "sendButton": {
+          "tooltip": "현재 작업을 중단하고 이 메시지 전송",
+          "ariaLabel": "지금 보내기: {message}"
+        },
+        "sendHint": {
+          "label": "지금 전송 ·"
         }
       },
       "sharedAppInputBar": {
@@ -12582,6 +12607,13 @@
         "startSessionButton": {
           "label": "새 세션 시작"
         }
+      },
+      "pendingMessages": {
+        "submitFailed": "메시지를 전송하지 못했습니다.",
+        "withdrawFailed": "대기 중인 메시지를 삭제하지 못했습니다.",
+        "loadFailed": "대기 중인 메시지를 불러오지 못했습니다.",
+        "alreadyAccepted": "이 메시지는 이미 수락되어 더 이상 대기 중이 아닙니다.",
+        "interruptFailed": "지금 메시지를 전송하지 못했습니다. 메시지는 대기 중입니다."
       }
     },
     "mcpApiKey": {
@@ -16423,6 +16455,12 @@
       "title": "채팅",
       "toasts": {
         "saveFailed": "환경설정을 저장하지 못했습니다"
+      },
+      "sendBehavior": {
+        "title": "작업 중 전송 동작",
+        "description": "응답 중 Enter 키와 전송 버튼의 동작을 선택하세요. Ctrl/Cmd+Enter는 항상 후속 메시지를 대기열에 추가합니다.",
+        "afterStep": "현재 단계 후",
+        "interrupt": "현재 작업 중단"
       }
     },
     "connectors": {

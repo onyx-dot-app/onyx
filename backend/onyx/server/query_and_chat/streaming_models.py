@@ -38,6 +38,7 @@ class StreamingType(Enum):
 
     MESSAGE_START = "message_start"
     MESSAGE_DELTA = "message_delta"
+    USER_MESSAGE = "user_message"
     SEARCH_TOOL_START = "search_tool_start"
     SEARCH_TOOL_QUERIES_DELTA = "search_tool_queries_delta"
     SEARCH_TOOL_FILTER_DELTA = "search_tool_filter_delta"
@@ -111,6 +112,12 @@ class PacketException(BaseObj):
 # Payload-less keepalive so idle proxies don't kill an otherwise-silent stream
 class ChatHeartbeat(BaseObj):
     type: Literal["chat_heartbeat"] = StreamingType.CHAT_HEARTBEAT.value
+
+
+class UserMessagePacket(BaseObj):
+    type: Literal["user_message"] = StreamingType.USER_MESSAGE.value
+    id: str
+    message: str
 
 
 ################################################
@@ -473,6 +480,7 @@ class CodeModeDelta(BaseObj):
 ################################################
 # Discriminated union of all possible packet object types
 PacketObj = Union[
+    UserMessagePacket,
     # Control Packets
     OverallStop,
     SectionEnd,

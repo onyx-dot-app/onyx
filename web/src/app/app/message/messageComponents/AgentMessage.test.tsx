@@ -89,8 +89,6 @@ function message(
   };
 }
 
-// A session that just sent a follow-up: the gate is closed and the new
-// answer is the latest node.
 function seedSessionAwaitingAnswer() {
   const messageTree = upsertMessages(
     new Map(),
@@ -106,54 +104,13 @@ function seedSessionAwaitingAnswer() {
   store.createSession(SESSION_ID, {
     messageTree,
     chatState: "input",
-    latestMessageRenderComplete: false,
   });
   store.setCurrentSession(SESSION_ID);
-}
-
-function renderAnswer(messageNodeId: number): void {
-  render(
-    <AgentMessage
-      rawPackets={answerPackets}
-      chatState={chatState}
-      nodeId={messageNodeId}
-      llmManager={null}
-      hideFooter
-      disableTTS
-    />
-  );
-}
-
-function renderComplete(): boolean | undefined {
-  return useChatSessionStore.getState().sessions.get(SESSION_ID)
-    ?.latestMessageRenderComplete;
 }
 
 afterEach(() => {
   useChatSessionStore.setState({ currentSessionId: null, sessions: new Map() });
   jest.useRealTimers();
-});
-
-describe("AgentMessage queue gate", () => {
-  beforeEach(() => {
-    seedSessionAwaitingAnswer();
-  });
-
-  test("releases the gate when the latest answer arrives complete", async () => {
-    // The whole stream, stop packet included, landed before the first
-    // render, so the renderer mounts with animate=false.
-    renderAnswer(NEW_ANSWER_NODE_ID);
-
-    expect(await screen.findByText("A quick answer.")).toBeInTheDocument();
-    await waitFor(() => expect(renderComplete()).toBe(true));
-  });
-
-  test("keeps the gate closed when an older answer mounts", async () => {
-    renderAnswer(OLD_ANSWER_NODE_ID);
-
-    expect(await screen.findByText("A quick answer.")).toBeInTheDocument();
-    expect(renderComplete()).toBe(false);
-  });
 });
 
 test("parallel search tabs complete independently", async () => {
@@ -450,7 +407,6 @@ test("a timed out answer explains its deadline without claiming the user stopped
   expect(
     screen.queryByText("User has stopped generation")
   ).not.toBeInTheDocument();
-  await waitFor(() => expect(renderComplete()).toBe(true));
 });
 
 test("code mode reads as the tool calls it makes", async () => {
@@ -848,7 +804,6 @@ test("generated images from earlier tool steps lead the answer once", async () =
     expect(images[0]?.compareDocumentPosition(answer)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING
     );
-    await waitFor(() => expect(renderComplete()).toBe(true));
   } finally {
     view.unmount();
   }
@@ -917,7 +872,6 @@ test.each([
       expect(
         await screen.findByRole("img", { name: "Chat attachment" })
       ).toHaveAttribute("src", "/api/chat/file/first-image");
-      expect(renderComplete()).toBe(false);
       const finalPackets: Packet[] = cancelled
         ? [
             ...initialPackets,
@@ -959,37 +913,9 @@ test.each([
           );
         }
       }
-      await waitFor(() => expect(renderComplete()).toBe(true));
     } finally {
       view.unmount();
     }
-  }
-);
-
-test.each([
-  StopReason.TIMED_OUT,
-  StopReason.USER_CANCELLED,
-  StopReason.FINISHED,
-])(
-  "a stopped response without an answer releases the render gate (%s)",
-  async (stopReason) => {
-    seedSessionAwaitingAnswer();
-    render(
-      <AgentMessage
-        rawPackets={[
-          {
-            placement,
-            obj: { type: PacketType.STOP, stop_reason: stopReason },
-          },
-        ]}
-        chatState={chatState}
-        nodeId={NEW_ANSWER_NODE_ID}
-        llmManager={null}
-        hideFooter
-        disableTTS
-      />
-    );
-    await waitFor(() => expect(renderComplete()).toBe(true));
   }
 );
 
@@ -1035,7 +961,6 @@ test("generated images remain visible when another tool follows answer text", as
       ]);
       expect(image).toBeVisible();
     });
-    expect(renderComplete()).toBe(false);
   } finally {
     view.unmount();
   }

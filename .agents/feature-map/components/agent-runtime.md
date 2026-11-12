@@ -37,8 +37,8 @@ document does not repeat it.
   records them with the step. Accepted inputs retain their identity and source
   in saved history. `MessageStartEvent.input_messages` contains the inputs
   durably accepted by that step; it excludes instructions still queued or
-  withdrawn before acceptance. `chat/run_store.py:ChatRunStore` sends no inputs:
-  `receive_inputs` returns an empty list.
+  withdrawn before acceptance. `chat/run_store.py:ChatRunStore` reads human
+  messages sent to the running response ([[chat-persistence]]).
 - [[tools-framework]]: `tools/interface.py:Tool.bind` turns each chat `Tool`
   into an `AgentTool`.
 - **A backend developer who builds a feature on the runtime.** Start from the
@@ -137,7 +137,7 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
 | Runtime interface | Chat implementation |
 |---|---|
 | `RunStore` | `chat/persistence.py:ChatResponsePersistence` saves the root response at the end and skips child runs. In a session that keeps content, `chat/run_store.py:ChatRunStore` wraps it: it saves the parent's partial record before each child reservation and saves each child when it ends. Incognito sessions have no children. |
-| `RunOwnership` | `ChatRunStore`, with cache leases that the turn's control thread renews. A `FULL_HISTORY` incognito run also has it; a `USAGE_ONLY` incognito run has no run ownership. |
+| `RunOwnership` | `ChatRunStore`, with cache leases that the turn's control thread renews. It also owns the inbox of human messages sent to a running response. A `FULL_HISTORY` incognito run also has it; a `USAGE_ONLY` incognito run has no run ownership. |
 | `AgentDirectory` | `chat/subagents.py:ChatAgentDirectory`, limited to the selected branch of a chat that keeps content, including a `FULL_HISTORY` incognito chat. It reads saved agents through `chat/history_store.py:PostgresChatHistoryStore` and runs through `ChatRunStore`. A `USAGE_ONLY` incognito run has no directory. |
 | Event listener | `chat/presentation.py:ResponsePresenter`. |
 | `RestorableFeature` | `ChatAgent`, `DeepResearchAgent` and `ResearchAgent`. Product calls only `capture_state`, at each suspension. `chat/restoration.py:restore_chat_agent` rebuilds them for `ChatRunStore.resume`. |

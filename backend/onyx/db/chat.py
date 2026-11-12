@@ -27,6 +27,7 @@ from sqlalchemy.sql.selectable import CTE
 from onyx.agents.models import CompactionCheckpoint, RunFailureKind, RunStatus
 from onyx.chat.errors import chat_error
 from onyx.chat.models import (
+    ChatBranch,
     HistoryLink,
     MessageRendering,
     PresentationMode,
@@ -75,6 +76,8 @@ FILE_CLEANUP_BATCH_SIZE = 500
 MAX_AGENT_HISTORY_RUNS = 512
 MAX_AGENT_DEPTH = 8
 MAX_CONVERSATION_MESSAGES = 8192
+CHAT_RESPONSE_STATEMENT_TIMEOUT_MS = 30_000
+CHAT_RESPONSE_LOCK_TIMEOUT_MS = 5_000
 
 
 def visible_chat_messages_filter() -> ColumnElement[bool]:
@@ -893,6 +896,28 @@ def get_or_create_root_message(
         return new_root_message
 
 
+def configure_response_transaction__no_commit(session: Session) -> None:
+    """Bound database waits while a response holds its execution lease."""
+    session.execute(
+        select(
+            func.set_config(
+                "statement_timeout",
+                str(CHAT_RESPONSE_STATEMENT_TIMEOUT_MS),
+                True,
+            )
+        )
+    )
+    session.execute(
+        select(
+            func.set_config(
+                "lock_timeout",
+                str(CHAT_RESPONSE_LOCK_TIMEOUT_MS),
+                True,
+            )
+        )
+    )
+
+
 def reserve_chat_response_ids(
     db_session: Session,
     chat_session_id: UUID,
@@ -902,6 +927,13 @@ def reserve_chat_response_ids(
     """Reserve assistant responses and select the last response as the active branch."""
     if not model_display_names:
         raise ValueError("At least one response model is required")
+    configure_response_transaction__no_commit(db_session)
+    # Queue submission and response reservation share the session-first lock order.
+    db_session.execute(
+        select(ChatSession.id)
+        .where(ChatSession.id == chat_session_id)
+        .with_for_update(key_share=True)
+    )
     reserved: list[ChatMessage] = []
     for display_name in model_display_names:
         msg = ChatMessage(
@@ -932,10 +964,22 @@ def reserve_chat_response_ids(
     return [message.id for message in reserved]
 
 
+def set_response_model_names__no_commit(
+    db_session: Session, model_display_names: dict[int, str]
+) -> None:
+    """Name the models of responses reserved before their models were selected."""
+    for response_id, display_name in model_display_names.items():
+        db_session.execute(
+            update(ChatMessage)
+            .where(ChatMessage.id == response_id)
+            .values(model_display_name=display_name)
+        )
+
+
 def set_chat_session_llm_override__no_commit(
     db_session: Session, chat_session_id: UUID, llm_override: LLMOverride
 ) -> None:
-    """Remember the model the user last chose."""
+    """Remember the model the user last chose; turns the server starts use it."""
     db_session.execute(
         update(ChatSession)
         .where(ChatSession.id == chat_session_id)
@@ -1614,6 +1658,62 @@ def find_summary_for_branch(
         db_session,
         chat_history[0].chat_session_id,
         [message.id for message in reversed(chat_history)],
+    )
+
+
+def get_selected_branch(
+    session: Session, chat_session_id: UUID
+) -> tuple[ChatMessage | None, ChatBranch]:
+    """Return the selected latest response and the message IDs on its branch."""
+    branch = (
+        select(
+            ChatMessage.id,
+            ChatMessage.latest_child_message_id,
+            literal(0).label("depth"),
+        )
+        .where(
+            ChatMessage.chat_session_id == chat_session_id,
+            ChatMessage.parent_message_id.is_(None),
+        )
+        .cte("selected_branch", recursive=True)
+    )
+    branch = branch.union_all(
+        select(
+            ChatMessage.id,
+            ChatMessage.latest_child_message_id,
+            branch.c.depth + 1,
+        )
+        .join(branch, ChatMessage.id == branch.c.latest_child_message_id)
+        .where(
+            ChatMessage.chat_session_id == chat_session_id,
+            branch.c.depth < MAX_CONVERSATION_MESSAGES,
+        )
+    )
+    message_ids = list(
+        session.scalars(select(branch.c.id).order_by(branch.c.depth.desc()))
+    )
+    # Follow only IDs; queue checks do not need response content or tool results.
+    selected = (
+        session.scalar(
+            select(ChatMessage)
+            .where(
+                ChatMessage.id == message_ids[0],
+                ChatMessage.message_type == MessageType.ASSISTANT,
+            )
+            .options(
+                load_only(
+                    ChatMessage.id,
+                    ChatMessage.chat_session_id,
+                    ChatMessage.parent_message_id,
+                    ChatMessage.response_status,
+                )
+            )
+        )
+        if message_ids
+        else None
+    )
+    return selected, ChatBranch(
+        chat_session_id=chat_session_id, message_ids=message_ids
     )
 
 

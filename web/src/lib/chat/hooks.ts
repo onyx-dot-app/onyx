@@ -13,6 +13,255 @@ import { useTags } from "@/lib/searchFilters/hooks";
 import { normalizeSourceSelection } from "@/lib/searchFilters/utils";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 
+import useSWR, { useSWRConfig } from "swr";
+import { useTranslations } from "next-intl";
+import { useShallow } from "zustand/react/shallow";
+import { toast } from "@opal/layouts";
+import {
+  errorHandlingFetcher,
+  errorHandlingFetchWith,
+  fetchErrorDetail,
+  FetchError,
+  skipRetryOnAuthError,
+} from "@/lib/fetcher";
+import { refreshChatSession } from "@/lib/chat/settleChatSession";
+import type {
+  ChatSessionQueue,
+  ChatSessionStatus,
+  PendingChatMessage,
+} from "@/lib/chat/types";
+import {
+  getLatestMessageChain,
+  getMessageByMessageId,
+  type MessageTreeState,
+} from "@/app/app/services/messageTree";
+import { getUnresolvedMultiModelTurn } from "@/app/app/message/multiModel";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
+
+const EMPTY_PENDING_MESSAGES: PendingChatMessage[] = [];
+const SERVER_WORK_POLL_MS = 2000;
+
+/** The response new input continues. Without a saved ID the server targets the running one. */
+function pendingInputTarget(tree: MessageTreeState | undefined) {
+  if (!tree) return { needsResponseSelection: false, targetResponseId: null };
+  const history = getLatestMessageChain(tree);
+  const needsResponseSelection = Boolean(
+    getUnresolvedMultiModelTurn(history, tree)
+  );
+  const latest = history.at(-1);
+  return {
+    needsResponseSelection,
+    targetResponseId:
+      latest?.type === "assistant" &&
+      latest.messageId != null &&
+      latest.messageId > 0 &&
+      !needsResponseSelection
+        ? latest.messageId
+        : null,
+  };
+}
+
+/**
+ * Server-owned pending messages of the current chat.
+ * Mount once per chat surface; the composer only renders the result.
+ */
+export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
+  const t = useTranslations("chat.input.pendingMessages");
+  const tReadiness = useTranslations("chat.readiness");
+  // Primitives only: the message tree changes on every streamed frame.
+  const { sessionId, idle, needsResponseSelection, hasTargetResponse } =
+    useChatSessionStore(
+      useShallow((state) => {
+        const session = state.currentSessionId
+          ? state.sessions.get(state.currentSessionId)
+          : undefined;
+        const target = pendingInputTarget(session?.messageTree);
+        return {
+          sessionId: state.currentSessionId,
+          idle:
+            session?.chatState === "input" && !session.isFetchingChatMessages,
+          needsResponseSelection: target.needsResponseSelection,
+          hasTargetResponse: target.targetResponseId !== null,
+        };
+      })
+    );
+  const pendingKey =
+    enabled && sessionId ? SWR_KEYS.pendingChatMessages(sessionId) : null;
+  const statusKey =
+    enabled && sessionId ? SWR_KEYS.chatSessionStatus(sessionId) : null;
+
+  // Key-addressed, unlike the mutate useSWR returns, which follows the current key.
+  const { mutate } = useSWRConfig();
+  const { data: messages, error } = useSWR<PendingChatMessage[], Error>(
+    pendingKey,
+    errorHandlingFetcher,
+    { onErrorRetry: skipRetryOnAuthError }
+  );
+  const { data: status } = useSWR<ChatSessionStatus, Error>(
+    statusKey,
+    errorHandlingFetcher,
+    {
+      // Pending input can start a turn this client did not send.
+      refreshInterval: (current) =>
+        current?.has_startable_input ? SERVER_WORK_POLL_MS : 0,
+      onErrorRetry: skipRetryOnAuthError,
+    }
+  );
+
+  // A reader owns a busy session; an idle one attaches to turns the server
+  // started, whichever status read found them.
+  const checkFailed = tReadiness("checkFailed");
+  useEffect(() => {
+    if (!sessionId || !status || !idle) return;
+    const session = useChatSessionStore.getState().sessions.get(sessionId);
+    if (!session) return;
+    const missingResponse =
+      status.latest_response_id !== null &&
+      !getMessageByMessageId(session.messageTree, status.latest_response_id);
+    if (status.is_processing || missingResponse)
+      void refreshChatSession(sessionId, checkFailed);
+  }, [sessionId, status, idle, checkFailed]);
+
+  // Every turn saves a new response, so a new latest response means a turn
+  // may have taken pending input, whoever started it and whether or not this
+  // browser read its stream.
+  const latestResponseId = status?.latest_response_id;
+  const seenResponse = useRef<{
+    sessionId: string | null;
+    responseId: number | null | undefined;
+  }>({ sessionId, responseId: latestResponseId });
+  useEffect(() => {
+    const previous = seenResponse.current;
+    seenResponse.current = { sessionId, responseId: latestResponseId };
+    if (
+      pendingKey &&
+      previous.sessionId === sessionId &&
+      previous.responseId !== undefined &&
+      latestResponseId !== undefined &&
+      latestResponseId !== previous.responseId
+    )
+      void mutate(pendingKey);
+  }, [sessionId, latestResponseId, pendingKey, mutate]);
+
+  // One request per chat at a time. The composer keeps new input until it ends.
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+  const busy = busyKey !== null && busyKey === pendingKey;
+
+  return useMemo(() => {
+    // A 409 means the server already accepted the message.
+    function toastPendingFailure(error: unknown, fallback: string) {
+      toast.error(
+        error instanceof FetchError && error.status === 409
+          ? t("alreadyAccepted")
+          : (fetchErrorDetail(error) ?? fallback)
+      );
+    }
+
+    // Writes after an await target the chat that made the request.
+    async function request<T>(
+      action: (key: string) => Promise<T>
+    ): Promise<T | null> {
+      const key = pendingKey;
+      const status = statusKey;
+      if (!key || !status || busy) return null;
+      setBusyKey(key);
+      try {
+        return await action(key);
+      } finally {
+        setBusyKey((current) => (current === key ? null : current));
+        // A write can make input startable, and only a fresh status polls for
+        // the turn that takes it.
+        void mutate(status);
+      }
+    }
+
+    return {
+      enabled,
+      messages: messages ?? EMPTY_PENDING_MESSAGES,
+      error: error ? t("loadFailed") : null,
+      busy,
+      hasTargetResponse,
+      needsResponseSelection,
+      submit: async (message, delivery) =>
+        (await request(async (key) => {
+          const session = sessionId
+            ? useChatSessionStore.getState().sessions.get(sessionId)
+            : undefined;
+          try {
+            const accepted = await errorHandlingFetchWith<PendingChatMessage>(
+              key,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  message,
+                  delivery,
+                  target_response_id: pendingInputTarget(session?.messageTree)
+                    .targetResponseId,
+                }),
+              }
+            );
+            // Revalidates after the write, since a turn can consume it at once.
+            void mutate<PendingChatMessage[]>(key, (current = []) => [
+              ...current,
+              accepted,
+            ]);
+            return true;
+          } catch (failure) {
+            toast.error(fetchErrorDetail(failure) ?? t("submitFailed"));
+            return false;
+          }
+        })) ?? false,
+      withdraw: (id) =>
+        request(async (key) => {
+          try {
+            const withdrawn = await errorHandlingFetchWith<PendingChatMessage>(
+              `${key}/${id}`,
+              { method: "DELETE" }
+            );
+            void mutate<PendingChatMessage[]>(
+              key,
+              (current = []) => current.filter((message) => message.id !== id),
+              { revalidate: false }
+            );
+            return withdrawn;
+          } catch (failure) {
+            toastPendingFailure(failure, t("withdrawFailed"));
+            void mutate(key);
+            return null;
+          }
+        }),
+      interrupt: async (id) => {
+        await request(async (key) => {
+          try {
+            await errorHandlingFetchWith<PendingChatMessage>(
+              `${key}/${id}/interrupt`,
+              { method: "POST" }
+            );
+          } catch (failure) {
+            toastPendingFailure(failure, t("interruptFailed"));
+          } finally {
+            void mutate(key);
+          }
+        });
+      },
+    };
+  }, [
+    enabled,
+    messages,
+    error,
+    busy,
+    hasTargetResponse,
+    needsResponseSelection,
+    sessionId,
+    pendingKey,
+    statusKey,
+    mutate,
+    t,
+  ]);
+}
+
 interface UseSendChatMessageFromURLProps {
   /** From `useChatController`, which needs more than this hook can see. */
   onSubmit: (props: OnSubmitProps) => void;

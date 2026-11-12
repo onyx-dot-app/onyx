@@ -1,7 +1,7 @@
 import json
 from uuid import UUID
 
-from sqlalchemy import delete, func, inspect, select
+from sqlalchemy import delete, inspect, select
 from sqlalchemy.orm import Session, aliased, joinedload, object_session, selectinload
 
 from onyx.agents.compaction import count_tokens
@@ -37,6 +37,7 @@ from onyx.db.chat import (
     add_search_docs_to_tool_call,
     agent_session_path,
     checkpoint_from_summary,
+    configure_response_transaction__no_commit,
     create_db_search_doc,
     find_summary_for_ancestry,
     parent_session_id,
@@ -68,9 +69,6 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_json_like, sanitize_string
 
 logger = setup_logger()
-
-CHAT_RESPONSE_STATEMENT_TIMEOUT_MS = 30_000
-CHAT_RESPONSE_LOCK_TIMEOUT_MS = 5_000
 
 
 def _extract_referenced_file_descriptors(
@@ -298,28 +296,6 @@ def save_chat_turn(
             assistant_message.files = existing_files + referenced
 
     db_session.commit()
-
-
-def configure_response_transaction__no_commit(session: Session) -> None:
-    """Bound database waits while a response holds its execution lease."""
-    session.execute(
-        select(
-            func.set_config(
-                "statement_timeout",
-                str(CHAT_RESPONSE_STATEMENT_TIMEOUT_MS),
-                True,
-            )
-        )
-    )
-    session.execute(
-        select(
-            func.set_config(
-                "lock_timeout",
-                str(CHAT_RESPONSE_LOCK_TIMEOUT_MS),
-                True,
-            )
-        )
-    )
 
 
 def save_chat_response_to_db(

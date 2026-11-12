@@ -18,12 +18,15 @@ from onyx.agents.models import (
     AgentState,
     CompactionCheckpoint,
     ExecutionCheckpoint,
+    InputMessageMetadata,
+    InputSource,
+    MessageDelivery,
     PreparedStep,
     RunProgress,
     RunState,
     RunStatus,
 )
-from onyx.agents.runtime import Agent
+from onyx.agents.runtime import Agent, RunFailed
 from onyx.agents.tools import (
     AgentLifetime,
     AgentTool,
@@ -34,10 +37,11 @@ from onyx.agents.tools import (
     ToolInvocation,
 )
 from onyx.cache.factory import get_cache_backend
+from onyx.chat import run_store
 from onyx.chat.agent import ChatAgent
 from onyx.chat.checkpoint import CHECKPOINT_PAYLOAD_TYPES
 from onyx.chat.history_store import PostgresChatHistoryStore, get_chat_history_store
-from onyx.chat.models import ChatFeatureState, CheckpointBinding
+from onyx.chat.models import ChatFeatureState, CheckpointBinding, ResponseRecord
 from onyx.chat.presentation import project_response
 from onyx.chat.restoration import persist_checkpoint_files
 from onyx.chat.run_store import ChatRunStore
@@ -49,8 +53,18 @@ from onyx.db.chat_checkpoint import (
     claim_checkpoint__no_commit,
     release_checkpoint_claim__no_commit,
 )
+from onyx.db.chat_response import (
+    read_response__no_commit,
+    save_response_record__no_commit,
+)
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_tenant
-from onyx.db.models import ChatMessage, ChatResponseCheckpoint, ChatSession
+from onyx.db.models import (
+    ChatInput,
+    ChatMessage,
+    ChatResponseCheckpoint,
+    ChatResponseItem,
+    ChatSession,
+)
 from onyx.file_store.models import ExtractedContextFiles
 from onyx.file_store.postgres_file_store import PostgresBackedFileStore
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
@@ -377,11 +391,11 @@ def test_transfer_preserves_result_budget_and_callback_boundary(
                 with pytest.raises(RuntimeError, match="cache unavailable"):
                     run.result(0)
             assert remote.resume(run.id, context=context) is None
-            owner.cache.delete(owner._owner_key(int(run.id)))
+            owner.cache.delete(run_store._owner_key(int(run.id)))
         elif scenario == "ownership_lock":
-            with owner._ownership_lock(int(run.id)):
+            with run_store._ownership_lock(owner.cache, int(run.id)):
                 threading.Event().wait(1.5)
-                assert owner.cache.exists(owner._owner_key(int(run.id)))
+                assert owner.cache.exists(run_store._owner_key(int(run.id)))
             owner.handoff(run.id)
         elif scenario == "slow_release":
 
@@ -830,7 +844,7 @@ def test_owner_cleanup_failure_releases_local_control(
             with pytest.raises(RuntimeError, match="cache cleanup failed"):
                 run.wait_for_idle(timeout=10)
             assert not owner.has_owned_work
-        owner.cache.delete(owner._owner_key(int(run.id)))
+        owner.cache.delete(run_store._owner_key(int(run.id)))
     finally:
         assert coordinator.close(timeout=10)
 
@@ -1346,3 +1360,102 @@ def test_resumed_child_keeps_its_original_response_tree(
     finally:
         assert first.close(timeout=10)
         assert second.close(timeout=10)
+
+
+@pytest.mark.parametrize("commit_before_error", [False, True])
+def test_input_acceptance_failure_preserves_committed_history(
+    branch: tuple[UUID, int],
+    db_session: Session,
+    user_message: UserMessage,
+    monkeypatch: pytest.MonkeyPatch,
+    commit_before_error: bool,
+) -> None:
+    entered, release = threading.Event(), threading.Event()
+
+    def generate(
+        _request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        entered.set()
+        assert release.wait(10)
+        return AssistantMessage(content=[TextContent(text="First answer")])
+
+    def fail_acceptance(
+        session: Session, root_message_id: int, record: ResponseRecord
+    ) -> None:
+        save_response_record__no_commit(session, root_message_id, record)
+        if any(step.input_messages for step in record.steps):
+            if commit_before_error:
+                session.commit()
+            raise RuntimeError("Input acceptance failed")
+
+    monkeypatch.setattr(
+        "onyx.chat.run_store.save_response_record__no_commit", fail_acceptance
+    )
+
+    def restore(_checkpoint: ExecutionCheckpoint) -> Agent:
+        raise AssertionError("Unexpected restoration")
+
+    owner = store(branch)
+    coordinator = AgentCoordinator()
+    view = owner.bind(coordinator, build_agent=restore, directory=directory(owner))
+    agent = Agent(
+        FakeModelClient(generate),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        agent_id=str(branch[0]),
+    )
+    try:
+        run = agent.start(messages=[user_message], max_steps=2, coordinator=view)
+        assert entered.wait(10)
+        db_session.add(
+            ChatInput(
+                recipient_session_id=branch[0],
+                message_id="incoming",
+                source=InputSource.HUMAN,
+                target_response_id=branch[1],
+                delivery=MessageDelivery.SEND,
+                content="New instruction",
+            )
+        )
+        db_session.commit()
+        release.set()
+        with pytest.raises(RunFailed):
+            run.result(timeout=10)
+        assert run.wait_for_idle(timeout=10)
+        if commit_before_error:
+            with pytest.raises(ValueError, match="cannot discard recorded items"):
+                coordinator.completion(run.id).result(timeout=10)
+        else:
+            assert (
+                coordinator.completion(run.id).result(timeout=10).status
+                == RunStatus.ERROR
+            )
+        state = run.snapshot()
+        assert len(state.steps) == 1
+        assert all(
+            message.id != "incoming"
+            for step in state.steps
+            for message in step.input_messages
+        )
+        saved = read_response__no_commit(db_session, branch[1])
+        assert saved is not None
+        assert len(saved.response.steps) == (2 if commit_before_error else 1)
+        pending = list(
+            db_session.scalars(
+                select(ChatInput).where(
+                    ChatInput.recipient_session_id == branch[0],
+                    ChatInput.message_id == "incoming",
+                )
+            )
+        )
+        # Acceptance consumes the pending row in the transaction that saves the step.
+        assert len(pending) == int(not commit_before_error)
+        if commit_before_error:
+            item = db_session.get(ChatResponseItem, f"{run.id}:1")
+            assert item is not None
+            assert [entry.id for entry in item.inputs] == ["incoming"]
+            restored_input = saved.response.steps[1].input_messages[0]
+            assert isinstance(restored_input.metadata, InputMessageMetadata)
+            assert restored_input.metadata.source == InputSource.HUMAN
+    finally:
+        release.set()
+        assert coordinator.close(timeout=10)

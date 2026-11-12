@@ -38,8 +38,9 @@ for the usage report, log export, query history and workspace analytics.
   the stdout and events of every pod. A second start during an export gets a
   429.
 - **An EE admin with query-history permission** reads and exports chat
-  sessions. The `query_history_type` setting can hide user emails or turn the
-  feature off.
+  sessions. Each answer lists the messages its response accepted while it
+  ran, such as mid-response user messages, in model order. The
+  `query_history_type` setting can hide user emails or turn the feature off.
 - **An EE admin** sees workspace analytics: query, active-user, Slack bot and
   per-agent counts. A user with agent-analytics permission sees the stats of
   an agent.

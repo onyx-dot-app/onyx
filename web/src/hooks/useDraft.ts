@@ -34,6 +34,25 @@ function defaultIsEmpty<T>(value: T): boolean {
   return false;
 }
 
+/** Writes a draft now, also for a page that is not open. Empty values remove the key. */
+export function writeDraft<T>(
+  key: string,
+  value: T,
+  isEmpty: (value: T) => boolean = defaultIsEmpty
+) {
+  const storage = getStorage();
+  if (!storage) return;
+  try {
+    if (isEmpty(value)) {
+      storage.removeItem(key);
+    } else {
+      storage.setItem(key, JSON.stringify(value));
+    }
+  } catch {
+    // ignore
+  }
+}
+
 export interface UseDraftOptions<T> {
   key: string;
   debounceMs?: number;
@@ -62,6 +81,7 @@ export function useDraft<T>({
     null
   );
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const writeRef = useRef<(() => void) | null>(null);
   const isEmptyRef = useRef(isEmpty);
 
   useEffect(() => {
@@ -93,25 +113,30 @@ export function useDraft<T>({
     };
   }, [key]);
 
+  // A page unload skips React cleanup, so write the pending value before the
+  // timer is lost.
+  useEffect(() => {
+    const flush = () => {
+      if (timerRef.current === null) return;
+      clearTimeout(timerRef.current);
+      writeRef.current?.();
+    };
+    window.addEventListener("pagehide", flush);
+    return () => window.removeEventListener("pagehide", flush);
+  }, []);
+
   const save = useCallback(
     (value: T) => {
       if (timerRef.current !== null) clearTimeout(timerRef.current);
       const write = () => {
         timerRef.current = null;
-        const storage = getStorage();
-        if (!storage) return;
-        try {
-          if (isEmptyRef.current(value)) {
-            storage.removeItem(key);
-          } else {
-            storage.setItem(key, JSON.stringify(value));
-          }
-        } catch {
-          // ignore
-        }
+        writeDraft(key, value, isEmptyRef.current);
       };
       if (debounceMs === 0) write();
-      else timerRef.current = setTimeout(write, debounceMs);
+      else {
+        writeRef.current = write;
+        timerRef.current = setTimeout(write, debounceMs);
+      }
     },
     [key, debounceMs]
   );

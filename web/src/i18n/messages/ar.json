@@ -12465,6 +12465,21 @@
         "voiceSetupButton": {
           "ariaLabel": "إعداد الصوت",
           "tooltip": "الصوت غير مهيأ. قم بإعداده في إعدادات المسؤول."
+        },
+        "pendingMessages": {
+          "keyboardHint": "Enter للإرسال · Ctrl أو Command + Enter للإضافة إلى القائمة",
+          "preparingHint": "يمكن إضافة الرسائل إلى قائمة الانتظار بعد بدء الرد.",
+          "attachmentsHint": "أرسل الملفات المرفقة بعد انتهاء هذا الرد.",
+          "chooseResponseHint": "اختر ردًا قبل إضافة رسالة إلى قائمة الانتظار.",
+          "incognitoHint": "انتظر انتهاء الرد في المحادثة المتخفية.",
+          "sendHint": "الإرسال في الخطوة التالية من هذه الاستجابة",
+          "interruptHint": "مقاطعة العمل الحالي وإرسال هذه الرسالة",
+          "sendLabel": "إرسال",
+          "queueLabel": "إضافة للقائمة",
+          "interruptKeyboardHint": "Enter للمقاطعة · Ctrl أو Command + Enter للإضافة إلى القائمة",
+          "interruptLabel": "مقاطعة",
+          "waitHint": "انتظر حتى ينتهي الرد.",
+          "ctrlKey": "Ctrl"
         }
       },
       "baseInputBar": {
@@ -12563,16 +12578,26 @@
       },
       "queuedMessageBar": {
         "discardButton": {
-          "tooltip": "إزالة الرسالة من قائمة الانتظار"
+          "tooltip": "إزالة الرسالة من قائمة الانتظار",
+          "ariaLabel": "إزالة الرسالة من قائمة الانتظار: {message}"
         },
         "editHint": {
           "label": "تعديل ·"
         },
-        "item": {
-          "ariaLabel": "تبديل الرسالة في قائمة الانتظار"
-        },
         "removeHint": {
           "label": "إزالة"
+        },
+        "editButton": {
+          "tooltip": "تعديل رسالة في قائمة الانتظار",
+          "clearDraftTooltip": "امسح المسودة لتعديل رسالة في قائمة الانتظار",
+          "ariaLabel": "تعديل الرسالة في قائمة الانتظار: {message}"
+        },
+        "sendButton": {
+          "tooltip": "مقاطعة العمل الحالي وإرسال هذه الرسالة",
+          "ariaLabel": "إرسال الآن: {message}"
+        },
+        "sendHint": {
+          "label": "إرسال الآن ·"
         }
       },
       "sharedAppInputBar": {
@@ -12582,6 +12607,13 @@
         "startSessionButton": {
           "label": "بدء جلسة جديدة"
         }
+      },
+      "pendingMessages": {
+        "submitFailed": "تعذر إرسال الرسالة.",
+        "withdrawFailed": "تعذر إزالة الرسالة المعلقة.",
+        "loadFailed": "تعذر تحميل الرسائل المعلقة.",
+        "alreadyAccepted": "تم قبول هذه الرسالة بالفعل ولم تعد قيد الانتظار.",
+        "interruptFailed": "تعذر إرسال هذه الرسالة الآن. لا تزال قيد الانتظار."
       }
     },
     "mcpApiKey": {
@@ -16423,6 +16455,12 @@
       "title": "المحادثات",
       "toasts": {
         "saveFailed": "فشل حفظ التفضيلات"
+      },
+      "sendBehavior": {
+        "title": "سلوك الإرسال أثناء العمل",
+        "description": "اختر إجراء Enter وزر الإرسال أثناء الرد. يضيف Ctrl/Cmd+Enter دائمًا رسالة متابعة إلى قائمة الانتظار.",
+        "afterStep": "بعد الخطوة الحالية",
+        "interrupt": "مقاطعة العمل الحالي"
       }
     },
     "connectors": {
