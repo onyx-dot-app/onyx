@@ -6246,10 +6246,6 @@
           "syncing": "This group is currently syncing. Please wait a moment and try again.",
           "updateFailed": "Failed to update group",
           "updated": "Group \"{name}\" updated"
-        },
-        "tabs": {
-          "group": "Group",
-          "plugins": "Plugins"
         }
       },
       "form": {
@@ -6405,38 +6401,6 @@
           "name": "Basic",
           "description": "Default group for all users with basic permissions."
         }
-      },
-      "plugins": {
-        "description": "Set how each plugin is installed for the members of this group. A group setting replaces the organization setting for its members, also when it is stricter. A member in several groups gets the most open setting.",
-        "row": {
-          "access": "{access, select, settingOnly {Group setting only} published {Published and shared with this group} other {Shared with this group}}"
-        },
-        "add": {
-          "button": "Add plugins",
-          "title": "Add a Plugin",
-          "description": "Choose a plugin and the setting for this group. A private plugin is shared with the group.",
-          "plugin": {
-            "label": "Plugin",
-            "placeholder": "Select a plugin",
-            "published": "Published"
-          },
-          "setting": {
-            "label": "Setting",
-            "placeholder": "Select a setting"
-          },
-          "submit": "Add",
-          "noCandidates": "Every plugin you can manage is already in this group."
-        },
-        "toasts": {
-          "saved": "Setting saved.",
-          "saveFailed": "Failed to save the setting."
-        },
-        "empty": {
-          "title": "No plugins in this group",
-          "description": "Add a plugin to set how it is installed for this group."
-        },
-        "loadFailed": "Failed to load the plugins of this group.",
-        "retry": "Retry"
       }
     },
     "hooks": {
@@ -17473,7 +17437,6 @@
         "groupAccess": {
           "title": "Group Access",
           "description": "By default, every group uses the organization setting. A group setting replaces it for the group's members, also when it is stricter.",
-          "bulkDescription": "Set these groups on every selected skill. Groups you do not list keep their settings.",
           "add": "Add a group",
           "select": "Setting for {name}",
           "remove": "Remove {name}",
@@ -17767,8 +17730,7 @@
     },
     "limit": {
       "refused": {
-        "you": "This change puts you past the skill limit of {maxSize} or {maxFiles, number} files. Turn off skills you do not use, then try again.",
-        "users": "This change puts {count, plural, one {# user} other {# users}} past the skill limit of {maxSize} or {maxFiles, number} files. Choose a narrower setting, or ask them to turn off skills."
+        "you": "This change puts you past the skill limit of {maxSize} or {maxFiles, number} files. Turn off skills you do not use, then try again."
       },
       "banner": {
         "title": "{count, plural, one {# user is past the skill limit} other {# users are past the skill limit}}",

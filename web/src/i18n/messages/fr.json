@@ -6246,10 +6246,6 @@
           "syncing": "Ce groupe est en cours de synchronisation. Patientez un instant et réessayez.",
           "updateFailed": "Échec de la mise à jour du groupe",
           "updated": "Groupe \"{name}\" mis à jour"
-        },
-        "tabs": {
-          "group": "Groupe",
-          "plugins": "Plugins"
         }
       },
       "form": {
@@ -6405,38 +6401,6 @@
           "name": "Basique",
           "description": "Groupe par défaut pour tous les utilisateurs avec des autorisations de base."
         }
-      },
-      "plugins": {
-        "description": "Définissez comment chaque plugin est installé pour les membres de ce groupe. Un paramètre de groupe remplace celui de l'organisation pour ses membres, même s'il est plus strict. Un membre de plusieurs groupes obtient le paramètre le plus ouvert.",
-        "row": {
-          "access": "{access, select, settingOnly {Paramètre de groupe uniquement} published {Publié et partagé avec ce groupe} other {Partagé avec ce groupe}}"
-        },
-        "add": {
-          "button": "Ajouter des plugins",
-          "title": "Ajouter un Plugin",
-          "description": "Choisissez un plugin et le paramètre pour ce groupe. Un plugin privé est partagé avec le groupe.",
-          "plugin": {
-            "label": "Plugin",
-            "placeholder": "Sélectionnez un plugin",
-            "published": "Publié"
-          },
-          "setting": {
-            "label": "Paramètre",
-            "placeholder": "Sélectionnez un paramètre"
-          },
-          "submit": "Ajouter",
-          "noCandidates": "Tous les plugins que vous pouvez gérer sont déjà dans ce groupe."
-        },
-        "toasts": {
-          "saved": "Paramètre enregistré.",
-          "saveFailed": "Échec de l'enregistrement du paramètre."
-        },
-        "empty": {
-          "title": "Aucun plugin dans ce groupe",
-          "description": "Ajoutez un plugin pour définir comment il est installé pour ce groupe."
-        },
-        "loadFailed": "Échec du chargement des plugins de ce groupe.",
-        "retry": "Réessayer"
       }
     },
     "hooks": {
@@ -17473,7 +17437,6 @@
         "groupAccess": {
           "title": "Accès des groupes",
           "description": "Par défaut, chaque groupe utilise le paramètre de l'organisation. Un paramètre de groupe le remplace pour les membres du groupe, même s'il est plus strict.",
-          "bulkDescription": "Appliquez ces groupes à chaque compétence sélectionnée. Les groupes que vous n'indiquez pas gardent leurs paramètres.",
           "add": "Ajouter un groupe",
           "select": "Paramètre pour {name}",
           "remove": "Retirer {name}",
@@ -17767,8 +17730,7 @@
     },
     "limit": {
       "refused": {
-        "you": "Cette modification vous fait dépasser la limite de skills de {maxSize} ou {maxFiles, number} fichiers. Désactivez les skills que vous n’utilisez pas, puis réessayez.",
-        "users": "Cette modification fait dépasser à {count, plural, one {# utilisateur} other {# utilisateurs}} la limite de skills de {maxSize} ou {maxFiles, number} fichiers. Choisissez un paramètre plus restreint, ou demandez-leur de désactiver des skills."
+        "you": "Cette modification vous fait dépasser la limite de skills de {maxSize} ou {maxFiles, number} fichiers. Désactivez les skills que vous n’utilisez pas, puis réessayez."
       },
       "banner": {
         "title": "{count, plural, one {# utilisateur dépasse la limite de skills} other {# utilisateurs dépassent la limite de skills}}",

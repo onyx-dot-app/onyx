@@ -46,7 +46,6 @@ describe("skill limit refusals", () => {
   it("tells a user the limit from a skills API error", async () => {
     const limit: SkillLimitDetails = {
       ...LIMITS,
-      users_over: 2,
       usage: { bytes: 600 * MB, files: 30 },
     };
     global.fetch = jest.fn().mockResolvedValue({
@@ -65,11 +64,14 @@ describe("skill limit refusals", () => {
     );
   });
 
-  it("tells an admin the number of users from a FetchError", () => {
-    const limit: SkillLimitDetails = { ...LIMITS, users_over: 3, usage: null };
+  it("reads the refusal from a FetchError", () => {
+    const limit: SkillLimitDetails = {
+      ...LIMITS,
+      usage: { bytes: 510 * MB, files: 12 },
+    };
     const error = new FetchError("Request failed", 413, body(limit));
-    expect(copy().describeError(error, "fallback")).toBe(
-      "This change puts 3 users past the skill limit of 500 MB or 5,000 files. Choose a narrower setting, or ask them to turn off skills."
+    expect(copy().describeError(error, "fallback")).toMatch(
+      /^This change puts you past the skill limit of 500 MB/
     );
   });
 });

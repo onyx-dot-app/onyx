@@ -1,14 +1,23 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Card, InputSingleSelect } from "@opal/components";
+import {
+  Button,
+  Card,
+  InputSingleSelect,
+  type SelectOption,
+} from "@opal/components";
 import { Content, Section } from "@opal/layouts";
-import { SvgUsers } from "@opal/icons";
+import { SvgMinusCircle, SvgUsers } from "@opal/icons";
 import type { MinimalUserGroupSnapshot } from "@/hooks/useShareableGroups";
 import type { SkillInstallationPolicy } from "@/lib/skills/types";
 import type { GroupAccessRow } from "@/lib/skills/sharing";
-import { INHERIT, usePolicyOptions } from "@/lib/skills/installationPolicy";
-import GroupPolicyRow from "@/sections/skills/GroupPolicyRow";
+import {
+  INHERIT,
+  isPolicyChoice,
+  usePolicyOptions,
+  type PolicyChoice,
+} from "@/lib/skills/installationPolicy";
 
 interface SkillGroupAccessProps {
   rows: GroupAccessRow[];
@@ -52,7 +61,6 @@ export default function SkillGroupAccess({
               <GroupPolicyRow
                 key={row.group_id}
                 name={row.group_name}
-                icon={SvgUsers}
                 description={
                   row.permission === null ? t("settingOnly") : t("shared")
                 }
@@ -111,6 +119,86 @@ export default function SkillGroupAccess({
           }}
         />
       )}
+    </Section>
+  );
+}
+
+interface GroupPolicyRowProps {
+  name: string;
+  description?: string;
+  value: PolicyChoice;
+  options: SelectOption[];
+  disabled?: boolean;
+  onChange: (choice: PolicyChoice) => void;
+  /** Shows a remove button. Only a row that holds just a setting has one. */
+  onRemove?: () => void;
+}
+
+/** One group and its setting, with a remove button for a setting-only row. */
+function GroupPolicyRow({
+  name,
+  description,
+  value,
+  options,
+  disabled = false,
+  onChange,
+  onRemove,
+}: GroupPolicyRowProps) {
+  const t = useTranslations("skills.modals.share.groupAccess");
+  return (
+    <Section
+      role="group"
+      aria-label={name}
+      flexDirection="row"
+      justifyContent="between"
+      wrap
+      gap={2}
+      height="auto"
+      padding={1}
+    >
+      <Section
+        width="auto"
+        height="auto"
+        alignItems="start"
+        className="min-w-0 grow basis-40"
+      >
+        <Content
+          icon={SvgUsers}
+          font="main-ui-body"
+          title={name}
+          description={description}
+        />
+      </Section>
+      <Section
+        flexDirection="row"
+        width="auto"
+        height="auto"
+        gap={1}
+        className="min-w-0 grow basis-56"
+      >
+        <Section width="full" height="auto" alignItems="stretch">
+          <InputSingleSelect
+            placeholder={t("select", { name })}
+            value={value}
+            defaultOption={INHERIT}
+            options={options}
+            disabled={disabled}
+            onValueChange={(next) => {
+              if (isPolicyChoice(next)) onChange(next);
+            }}
+          />
+        </Section>
+        {onRemove && (
+          <Button
+            icon={SvgMinusCircle}
+            prominence="tertiary"
+            tooltip={t("remove", { name })}
+            aria-label={t("remove", { name })}
+            disabled={disabled}
+            onClick={onRemove}
+          />
+        )}
+      </Section>
     </Section>
   );
 }

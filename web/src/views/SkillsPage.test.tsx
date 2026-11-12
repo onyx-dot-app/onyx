@@ -865,7 +865,6 @@ describe("SkillsPage preference toggles", () => {
         error_code: "SKILL_LIMIT_EXCEEDED",
         detail: "Refused",
         skill_limit: {
-          users_over: 1,
           usage: { bytes: 520 * 1024 * 1024, files: 140 },
           max_bytes: 500 * 1024 * 1024,
           max_files: 5000,

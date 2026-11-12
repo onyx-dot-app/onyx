@@ -6246,10 +6246,6 @@
           "syncing": "此用户组正在同步。请稍候再试。",
           "updateFailed": "更新用户组失败",
           "updated": "已更新用户组“{name}”"
-        },
-        "tabs": {
-          "group": "群组",
-          "plugins": "插件"
         }
       },
       "form": {
@@ -6405,38 +6401,6 @@
           "name": "基本",
           "description": "所有用户的默认组，拥有基本权限。"
         }
-      },
-      "plugins": {
-        "description": "设置每个插件为此群组成员安装的方式。群组设置会为其成员替换组织设置，即使更严格也是如此。属于多个群组的成员获得最开放的设置。",
-        "row": {
-          "access": "{access, select, settingOnly {仅群组设置} published {已发布并与此群组共享} other {已与此群组共享}}"
-        },
-        "add": {
-          "button": "添加插件",
-          "title": "添加插件",
-          "description": "选择一个插件和此群组的设置。私有插件会与群组共享。",
-          "plugin": {
-            "label": "插件",
-            "placeholder": "选择插件",
-            "published": "已发布"
-          },
-          "setting": {
-            "label": "设置",
-            "placeholder": "选择设置"
-          },
-          "submit": "添加",
-          "noCandidates": "你可以管理的所有插件都已在此群组中。"
-        },
-        "toasts": {
-          "saved": "设置已保存。",
-          "saveFailed": "无法保存设置。"
-        },
-        "empty": {
-          "title": "此群组中没有插件",
-          "description": "添加插件以设置它为此群组安装的方式。"
-        },
-        "loadFailed": "无法加载此群组的插件。",
-        "retry": "重试"
       }
     },
     "hooks": {
@@ -17473,7 +17437,6 @@
         "groupAccess": {
           "title": "群组访问",
           "description": "默认情况下，每个群组都使用组织设置。群组设置会为该群组的成员替换组织设置，即使它更严格。",
-          "bulkDescription": "为每个所选技能设置这些群组。未列出的群组保留其设置。",
           "add": "添加群组",
           "select": "{name} 的设置",
           "remove": "移除 {name}",
@@ -17767,8 +17730,7 @@
     },
     "limit": {
       "refused": {
-        "you": "此更改会使你超出 {maxSize} 或 {maxFiles, number} 个文件的技能上限。关闭不使用的技能，然后重试。",
-        "users": "此更改会使 {count, plural, other {# 位用户}}超出 {maxSize} 或 {maxFiles, number} 个文件的技能上限。选择范围更小的设置，或请他们关闭一些技能。"
+        "you": "此更改会使你超出 {maxSize} 或 {maxFiles, number} 个文件的技能上限。关闭不使用的技能，然后重试。"
       },
       "banner": {
         "title": "{count, plural, other {# 位用户超出技能上限}}",

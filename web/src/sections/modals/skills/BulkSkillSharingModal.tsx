@@ -12,8 +12,6 @@ import {
 import { Content, Section } from "@opal/layouts";
 import { SvgBlocks, SvgOrganization, SvgUsers } from "@opal/icons";
 import { useUser } from "@/providers/UserProvider";
-import { usePermissionAuthority } from "@/lib/permissions/hooks";
-import { Permission } from "@/lib/types";
 import useShareableUsers from "@/hooks/useShareableUsers";
 import useShareableGroups, {
   type MinimalUserGroupSnapshot,
@@ -24,7 +22,6 @@ import type {
   SkillSharePermission,
 } from "@/lib/skills/types";
 import type { SkillShareUpdatePayload } from "@/lib/skills/api";
-import type { GroupAccessRow } from "@/lib/skills/sharing";
 import {
   fromPolicyChoice,
   isPolicyChoice,
@@ -33,7 +30,6 @@ import {
 } from "@/lib/skills/installationPolicy";
 import { AddPeoplePicker } from "@/sections/modals/AddPeoplePicker";
 import { SharePermissionMenu } from "@/lib/permissions/components";
-import SkillGroupAccess from "@/sections/modals/skills/SkillGroupAccess";
 
 const KEEP = "KEEP";
 
@@ -59,10 +55,6 @@ export default function BulkSkillSharingModal({
   const t = useTranslations("skills.bulk");
   const shareCopy = useTranslations("skills.modals.share");
   const { isAdmin } = useUser();
-  const { isGlobalHolder, isScopedManager } = usePermissionAuthority(
-    Permission.MANAGE_PLUGINS
-  );
-  const canSetGroupSettings = isGlobalHolder || isScopedManager;
   const companyOptions = usePolicyOptions({
     inherit: { scope: "skill", policy: null },
   });
@@ -71,7 +63,6 @@ export default function BulkSkillSharingModal({
   // Publishing is one-way, so bulk can publish but never make skills private.
   const [scope, setScope] = useState<"KEEP" | "PUBLIC">("KEEP");
   const [policy, setPolicy] = useState<typeof KEEP | PolicyChoice>(KEEP);
-  const [groupRows, setGroupRows] = useState<GroupAccessRow[]>([]);
   const [permission, setPermission] = useState<SkillSharePermission>("VIEWER");
   const [stagedUsers, setStagedUsers] = useState<MinimalUserSnapshot[]>([]);
   const [stagedGroups, setStagedGroups] = useState<MinimalUserGroupSnapshot[]>(
@@ -80,7 +71,6 @@ export default function BulkSkillSharingModal({
   const changed =
     scope !== "KEEP" ||
     policy !== KEEP ||
-    groupRows.length > 0 ||
     stagedUsers.length > 0 ||
     stagedGroups.length > 0;
 
@@ -89,7 +79,6 @@ export default function BulkSkillSharingModal({
   function reset() {
     setScope("KEEP");
     setPolicy(KEEP);
-    setGroupRows([]);
     setPermission("VIEWER");
     setStagedUsers([]);
     setStagedGroups([]);
@@ -99,13 +88,6 @@ export default function BulkSkillSharingModal({
     const sharing: SkillShareUpdatePayload = {};
     if (scope === "PUBLIC") sharing.public_permission = "VIEWER";
     if (policy !== KEEP) sharing.installation_policy = fromPolicyChoice(policy);
-    // A listed group gets its setting on every skill; the organization setting
-    // clears it.
-    if (groupRows.length)
-      sharing.group_settings = groupRows.map((row) => ({
-        group_id: row.group_id,
-        installation_policy: fromPolicyChoice(row.choice),
-      }));
     if (stagedUsers.length)
       sharing.user_shares = stagedUsers.map((user) => ({
         user_id: user.id,
@@ -185,16 +167,6 @@ export default function BulkSkillSharingModal({
                   }}
                 />
               </Section>
-            )}
-            {canSetGroupSettings && (
-              <SkillGroupAccess
-                rows={groupRows}
-                company={null}
-                groups={groups ?? []}
-                description={shareCopy("groupAccess.bulkDescription")}
-                disabled={saving}
-                onChange={setGroupRows}
-              />
             )}
             <Section gap={2} height="auto" alignItems="stretch">
               <Content font="main-ui-action" title={shareCopy("peopleTitle")} />

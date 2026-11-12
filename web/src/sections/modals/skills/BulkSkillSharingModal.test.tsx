@@ -63,7 +63,7 @@ describe("BulkSkillSharingModal", () => {
       expect(onSave).toHaveBeenCalledWith({ public_permission: "VIEWER" })
     );
   });
-  it("sets Not available for the company and a setting for each group", async () => {
+  it("sets Not available for every selected skill", async () => {
     const user = setupUser();
     const onSave = jest.fn().mockResolvedValue(undefined);
     render(
@@ -82,20 +82,10 @@ describe("BulkSkillSharingModal", () => {
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("option", { name: /^Not available/ }));
 
-    fireEvent.click(screen.getByRole("combobox", { name: "Add a group" }));
-    fireEvent.click(screen.getByRole("option", { name: "Cash Kings" }));
-    const setting = screen.getByRole("combobox", {
-      name: "Setting for Cash Kings",
-    });
-    expect(setting).toHaveValue("Organization setting");
-    fireEvent.click(setting);
-    fireEvent.click(screen.getByRole("option", { name: /^Required/ }));
-
     await user.click(screen.getByRole("button", { name: "Apply to 2 skills" }));
     await waitFor(() =>
       expect(onSave).toHaveBeenCalledWith({
         installation_policy: "NOT_AVAILABLE",
-        group_settings: [{ group_id: 7, installation_policy: "REQUIRED" }],
       })
     );
   });

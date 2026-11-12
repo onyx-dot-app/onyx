@@ -6246,10 +6246,6 @@
           "syncing": "이 그룹은 현재 동기화 중입니다. 잠시 후 다시 시도하세요.",
           "updateFailed": "그룹 업데이트에 실패했습니다",
           "updated": "그룹 \"{name}\"을(를) 업데이트했습니다"
-        },
-        "tabs": {
-          "group": "그룹",
-          "plugins": "플러그인"
         }
       },
       "form": {
@@ -6405,38 +6401,6 @@
           "name": "기본",
           "description": "기본 권한을 가진 모든 사용자의 기본 그룹입니다."
         }
-      },
-      "plugins": {
-        "description": "이 그룹 구성원에게 각 플러그인을 설치하는 방식을 설정합니다. 그룹 설정은 더 엄격하더라도 해당 구성원에 대해 조직 설정을 대체합니다. 여러 그룹에 속한 구성원은 가장 개방적인 설정을 받습니다.",
-        "row": {
-          "access": "{access, select, settingOnly {그룹 설정만} published {게시되었으며 이 그룹과 공유됨} other {이 그룹과 공유됨}}"
-        },
-        "add": {
-          "button": "플러그인 추가",
-          "title": "플러그인 추가",
-          "description": "플러그인과 이 그룹의 설정을 선택하세요. 비공개 플러그인은 그룹과 공유됩니다.",
-          "plugin": {
-            "label": "플러그인",
-            "placeholder": "플러그인 선택",
-            "published": "게시됨"
-          },
-          "setting": {
-            "label": "설정",
-            "placeholder": "설정 선택"
-          },
-          "submit": "추가",
-          "noCandidates": "관리할 수 있는 모든 플러그인이 이미 이 그룹에 있습니다."
-        },
-        "toasts": {
-          "saved": "설정이 저장되었습니다.",
-          "saveFailed": "설정을 저장하지 못했습니다."
-        },
-        "empty": {
-          "title": "이 그룹에 플러그인이 없습니다",
-          "description": "플러그인을 추가하여 이 그룹에 설치되는 방식을 설정하세요."
-        },
-        "loadFailed": "이 그룹의 플러그인을 불러오지 못했습니다.",
-        "retry": "다시 시도"
       }
     },
     "hooks": {
@@ -17473,7 +17437,6 @@
         "groupAccess": {
           "title": "그룹 액세스",
           "description": "기본적으로 모든 그룹은 조직 설정을 사용합니다. 그룹 설정은 더 엄격한 경우에도 그룹 구성원에 대해 조직 설정을 대체합니다.",
-          "bulkDescription": "선택한 모든 스킬에 이 그룹을 설정합니다. 지정하지 않은 그룹은 현재 설정을 유지합니다.",
           "add": "그룹 추가",
           "select": "{name} 설정",
           "remove": "{name} 제거",
@@ -17767,8 +17730,7 @@
     },
     "limit": {
       "refused": {
-        "you": "이 변경으로 {maxSize} 또는 파일 {maxFiles, number}개의 스킬 한도를 넘습니다. 사용하지 않는 스킬을 끈 다음 다시 시도하세요.",
-        "users": "이 변경으로 {count, plural, other {사용자 #명}}이 {maxSize} 또는 파일 {maxFiles, number}개의 스킬 한도를 넘습니다. 더 좁은 설정을 선택하거나 스킬을 끄도록 요청하세요."
+        "you": "이 변경으로 {maxSize} 또는 파일 {maxFiles, number}개의 스킬 한도를 넘습니다. 사용하지 않는 스킬을 끈 다음 다시 시도하세요."
       },
       "banner": {
         "title": "{count, plural, other {사용자 #명이 스킬 한도를 넘었습니다}}",

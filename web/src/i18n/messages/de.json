@@ -6246,10 +6246,6 @@
           "syncing": "Diese Gruppe wird gerade synchronisiert. Bitte warten Sie einen Moment und versuchen Sie es erneut.",
           "updateFailed": "Die Gruppe konnte nicht aktualisiert werden",
           "updated": "Gruppe \"{name}\" aktualisiert"
-        },
-        "tabs": {
-          "group": "Gruppe",
-          "plugins": "Plugins"
         }
       },
       "form": {
@@ -6405,38 +6401,6 @@
           "name": "Basis",
           "description": "Standardgruppe für alle Benutzer mit Basisberechtigungen."
         }
-      },
-      "plugins": {
-        "description": "Legen Sie fest, wie jedes Plugin für die Mitglieder dieser Gruppe installiert wird. Eine Gruppeneinstellung ersetzt die Einstellung der Organisation für ihre Mitglieder, auch wenn sie strenger ist. Ein Mitglied in mehreren Gruppen erhält die offenste Einstellung.",
-        "row": {
-          "access": "{access, select, settingOnly {Nur Gruppeneinstellung} published {Veröffentlicht und mit dieser Gruppe geteilt} other {Mit dieser Gruppe geteilt}}"
-        },
-        "add": {
-          "button": "Plugins hinzufügen",
-          "title": "Plugin hinzufügen",
-          "description": "Wählen Sie ein Plugin und die Einstellung für diese Gruppe. Ein privates Plugin wird mit der Gruppe geteilt.",
-          "plugin": {
-            "label": "Plugin",
-            "placeholder": "Plugin auswählen",
-            "published": "Veröffentlicht"
-          },
-          "setting": {
-            "label": "Einstellung",
-            "placeholder": "Einstellung auswählen"
-          },
-          "submit": "Hinzufügen",
-          "noCandidates": "Jedes Plugin, das Sie verwalten können, ist bereits in dieser Gruppe."
-        },
-        "toasts": {
-          "saved": "Einstellung gespeichert.",
-          "saveFailed": "Einstellung konnte nicht gespeichert werden."
-        },
-        "empty": {
-          "title": "Keine Plugins in dieser Gruppe",
-          "description": "Fügen Sie ein Plugin hinzu, um festzulegen, wie es für diese Gruppe installiert wird."
-        },
-        "loadFailed": "Die Plugins dieser Gruppe konnten nicht geladen werden.",
-        "retry": "Erneut versuchen"
       }
     },
     "hooks": {
@@ -17473,7 +17437,6 @@
         "groupAccess": {
           "title": "Gruppenzugriff",
           "description": "Standardmäßig verwendet jede Gruppe die Einstellung der Organisation. Eine Gruppeneinstellung ersetzt sie für die Mitglieder der Gruppe, auch wenn sie strenger ist.",
-          "bulkDescription": "Legen Sie diese Gruppen für jeden ausgewählten Skill fest. Gruppen, die Sie nicht auflisten, behalten ihre Einstellungen.",
           "add": "Gruppe hinzufügen",
           "select": "Einstellung für {name}",
           "remove": "{name} entfernen",
@@ -17767,8 +17730,7 @@
     },
     "limit": {
       "refused": {
-        "you": "Diese Änderung bringt Sie über das Skill-Limit von {maxSize} oder {maxFiles, number} Dateien. Deaktivieren Sie Skills, die Sie nicht verwenden, und versuchen Sie es erneut.",
-        "users": "Diese Änderung bringt {count, plural, one {# Benutzer} other {# Benutzer}} über das Skill-Limit von {maxSize} oder {maxFiles, number} Dateien. Wählen Sie eine engere Einstellung oder bitten Sie sie, Skills zu deaktivieren."
+        "you": "Diese Änderung bringt Sie über das Skill-Limit von {maxSize} oder {maxFiles, number} Dateien. Deaktivieren Sie Skills, die Sie nicht verwenden, und versuchen Sie es erneut."
       },
       "banner": {
         "title": "{count, plural, one {# Benutzer ist über dem Skill-Limit} other {# Benutzer sind über dem Skill-Limit}}",

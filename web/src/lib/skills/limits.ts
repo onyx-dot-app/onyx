@@ -33,11 +33,10 @@ export interface SkillUsage {
   files: number;
 }
 
-/** The `skill_limit` field of a 413 SKILL_LIMIT_EXCEEDED response. */
+/** The `skill_limit` field of a 413 SKILL_LIMIT_EXCEEDED response: the acting
+ * user's usage after the change and the limits. */
 export interface SkillLimitDetails {
-  users_over: number;
-  /** The acting user's usage after the change, when they are one of the users over. */
-  usage: SkillUsage | null;
+  usage: SkillUsage;
   max_bytes: number;
   max_files: number;
 }
@@ -116,15 +115,11 @@ export function useSkillLimitCopy(): SkillLimitCopy {
   const describeError = useCallback(
     (error: unknown, fallback: string) => {
       const limit = skillLimitOf(error);
-      if (limit !== null) {
-        const values = {
+      if (limit !== null)
+        return t("you", {
           maxSize: formatSize(limit.max_bytes),
           maxFiles: limit.max_files,
-        };
-        return limit.usage === null
-          ? t("users", { ...values, count: limit.users_over })
-          : t("you", values);
-      }
+        });
       if (error instanceof FetchError)
         return fetchErrorDetail(error) ?? fallback;
       return error instanceof Error && error.message ? error.message : fallback;

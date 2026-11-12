@@ -142,10 +142,9 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
   });
   const { data: shareableGroupsData } = useShareableGroups();
   const { isAdmin, user: currentUser } = useUser();
-  const {
-    isGlobalHolder: isOrganizationManager,
-    isScopedManager: isScopedPluginManager,
-  } = usePermissionAuthority(Permission.MANAGE_PLUGINS);
+  const { isGlobalHolder: isOrganizationManager } = usePermissionAuthority(
+    Permission.MANAGE_PLUGINS
+  );
   const policyCopy = useInstallationPolicyCopy();
   const policyCopyT = useTranslations("skills.installationPolicy");
   const companyOptions = usePolicyOptions({
@@ -244,9 +243,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
   // Publishing is one-way: a saved published skill shows no private option.
   const isPublished = props.mode === "edit" && initialState?.isPublic === true;
   const isPublishing = !!effectiveState?.isPublic && !isPublished;
-  // The server checks each group row against the caller's scope.
-  const canSetGroupSettings =
-    props.mode === "edit" && (isOrganizationManager || isScopedPluginManager);
+  const canSetGroupSettings = props.mode === "edit" && isOrganizationManager;
   const groupChanges = useMemo(
     () => groupSettingChanges(initialGroupRows, groupRows),
     [initialGroupRows, groupRows]

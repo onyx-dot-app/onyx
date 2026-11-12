@@ -6246,10 +6246,6 @@
           "syncing": "Este grupo se está sincronizando. Espera un momento e inténtalo de nuevo.",
           "updateFailed": "No se pudo actualizar el grupo",
           "updated": "Grupo \"{name}\" actualizado"
-        },
-        "tabs": {
-          "group": "Grupo",
-          "plugins": "Plugins"
         }
       },
       "form": {
@@ -6405,38 +6401,6 @@
           "name": "Básico",
           "description": "Grupo predeterminado para todos los usuarios con permisos básicos."
         }
-      },
-      "plugins": {
-        "description": "Define cómo se instala cada plugin para los miembros de este grupo. Una configuración de grupo reemplaza la de la organización para sus miembros, incluso si es más estricta. Un miembro de varios grupos obtiene la configuración más abierta.",
-        "row": {
-          "access": "{access, select, settingOnly {Solo configuración de grupo} published {Publicado y compartido con este grupo} other {Compartido con este grupo}}"
-        },
-        "add": {
-          "button": "Agregar plugins",
-          "title": "Agregar un Plugin",
-          "description": "Elige un plugin y la configuración para este grupo. Un plugin privado se comparte con el grupo.",
-          "plugin": {
-            "label": "Plugin",
-            "placeholder": "Selecciona un plugin",
-            "published": "Publicado"
-          },
-          "setting": {
-            "label": "Configuración",
-            "placeholder": "Selecciona una configuración"
-          },
-          "submit": "Agregar",
-          "noCandidates": "Todos los plugins que puedes administrar ya están en este grupo."
-        },
-        "toasts": {
-          "saved": "Configuración guardada.",
-          "saveFailed": "No se pudo guardar la configuración."
-        },
-        "empty": {
-          "title": "No hay plugins en este grupo",
-          "description": "Agrega un plugin para definir cómo se instala para este grupo."
-        },
-        "loadFailed": "No se pudieron cargar los plugins de este grupo.",
-        "retry": "Reintentar"
       }
     },
     "hooks": {
@@ -17473,7 +17437,6 @@
         "groupAccess": {
           "title": "Acceso de grupos",
           "description": "De forma predeterminada, cada grupo usa la configuración de la organización. Una configuración de grupo la reemplaza para los miembros del grupo, también cuando es más estricta.",
-          "bulkDescription": "Aplica estos grupos a cada skill seleccionado. Los grupos que no indiques conservan su configuración.",
           "add": "Agregar un grupo",
           "select": "Configuración para {name}",
           "remove": "Quitar {name}",
@@ -17767,8 +17730,7 @@
     },
     "limit": {
       "refused": {
-        "you": "Este cambio te lleva por encima del límite de skills de {maxSize} o {maxFiles, number} archivos. Desactiva los skills que no uses y vuelve a intentarlo.",
-        "users": "Este cambio lleva a {count, plural, one {# usuario} other {# usuarios}} por encima del límite de skills de {maxSize} o {maxFiles, number} archivos. Elige una configuración más limitada o pídeles que desactiven skills."
+        "you": "Este cambio te lleva por encima del límite de skills de {maxSize} o {maxFiles, number} archivos. Desactiva los skills que no uses y vuelve a intentarlo."
       },
       "banner": {
         "title": "{count, plural, one {# usuario supera el límite de skills} other {# usuarios superan el límite de skills}}",
