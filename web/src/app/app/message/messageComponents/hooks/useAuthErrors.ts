@@ -19,6 +19,9 @@ export function useAuthErrors(rawPackets: Packet[]): AuthError[] {
 
 function computeAuthErrors(rawPackets: Packet[]): AuthError[] {
   const errors: AuthError[] = [];
+  // Labels can repeat across tools, so deduplicate on the tool ID or the
+  // qualified tool name.
+  const seen = new Set<string>();
 
   for (const packet of rawPackets) {
     if (packet.obj.type !== PacketType.CUSTOM_TOOL_DELTA) {
@@ -30,18 +33,16 @@ function computeAuthErrors(rawPackets: Packet[]): AuthError[] {
       continue;
     }
 
-    const alreadyPresent = errors.some(
-      (error) =>
-        (delta.tool_id != null && error.toolId === delta.tool_id) ||
-        (delta.tool_id == null && error.toolName === delta.tool_name)
-    );
-
-    if (!alreadyPresent) {
-      errors.push({
-        toolName: externalToolLabel(delta.tool_name),
-        toolId: delta.tool_id ?? null,
-      });
+    const key =
+      delta.tool_id != null ? `id:${delta.tool_id}` : `name:${delta.tool_name}`;
+    if (seen.has(key)) {
+      continue;
     }
+    seen.add(key);
+    errors.push({
+      toolName: externalToolLabel(delta.tool_name),
+      toolId: delta.tool_id ?? null,
+    });
   }
 
   return errors;
