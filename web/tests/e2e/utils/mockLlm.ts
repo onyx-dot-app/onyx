@@ -78,6 +78,7 @@ export interface MockLlmRequestConditions {
 
 export interface MockLlmReply {
   pause_after_first_chunk?: string;
+  heartbeat_while_paused?: boolean;
   reasoning?: string;
   text?: string;
   tool_calls?: MockLlmToolCall[];

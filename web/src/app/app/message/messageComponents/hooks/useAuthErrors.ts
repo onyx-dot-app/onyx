@@ -8,6 +8,7 @@ import {
 } from "@/app/app/services/streamingModels";
 
 interface AuthError {
+  turnIndex: number;
   toolName: string;
   toolId: number | null;
 }
@@ -56,6 +57,7 @@ function computeAuthErrors(rawPackets: Packet[]): AuthError[] {
     }
     seen.add(key);
     errors.push({
+      turnIndex: packet.placement.turn_index,
       toolName: labels.get(callKey(packet.placement)) ?? delta.tool_name,
       toolId: delta.tool_id ?? null,
     });

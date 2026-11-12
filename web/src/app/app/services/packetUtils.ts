@@ -68,7 +68,10 @@ export function isActualToolCallPacket(packet: Packet): boolean {
 }
 
 export function isDisplayPacket(packet: Packet) {
-  return packet.obj.type === PacketType.MESSAGE_START;
+  return (
+    packet.obj.type === PacketType.MESSAGE_START ||
+    packet.obj.type === PacketType.USER_MESSAGE
+  );
 }
 
 export function isSearchToolPacket(packet: Packet): boolean {

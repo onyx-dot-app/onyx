@@ -2,6 +2,7 @@
 
 import threading
 import time
+from collections.abc import Callable
 from concurrent.futures import Future
 from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
@@ -46,7 +47,9 @@ from onyx.configs.chat_configs import (
     SKIP_DEEP_RESEARCH_CLARIFICATION,
 )
 from onyx.configs.constants import DEFAULT_PERSONA_ID, DocumentSource
+from onyx.db.chat_inputs import cancel_completed_responses__no_commit
 from onyx.db.chat_subagents import load_chat_branch
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import record_mode_persists_content
 from onyx.db.models import User
 from onyx.deep_research.agent import DeepResearchAgent
@@ -100,6 +103,7 @@ def start_chat_turn(
     response_future: Future[ChatResponseOutcome] | None = None,
     *,
     query_observation: QueryObservation | None = None,
+    dispatch_pending_messages: Callable[[], None] | None = None,
 ) -> ChatStream:
     """Publish response identity and launch work that outlives its stream reader."""
     mode = setup.incognito_record_mode
@@ -130,6 +134,7 @@ def start_chat_turn(
             response_future,
             stream_buffer,
             query_observation=query_observation,
+            dispatch_pending_messages=dispatch_pending_messages,
         )
         startup_error: Exception | None = None
         try:
@@ -198,11 +203,13 @@ class ChatTurnExecution:
         stream_buffer: StreamBufferWriter | None = None,
         *,
         query_observation: QueryObservation | None = None,
+        dispatch_pending_messages: Callable[[], None] | None = None,
     ) -> None:
         self.setup = setup
         self.user = user
         self.delivery = ChatDelivery(stream_buffer, query_observation=query_observation)
         self._query_observation = query_observation
+        self._dispatch_pending_messages = dispatch_pending_messages
         self._stores: list[ChatRunStore] = []
         self.cancellation = CancellationSignal()
         self._response_future = response_future
@@ -405,11 +412,37 @@ class ChatTurnExecution:
 
     def _clear_processing_status(self) -> bool:
         try:
+            # A Stop that arrives after the answer finished still pauses the queue.
+            if self._stopped_by_user or is_stop_requested(
+                self.setup.chat_session_id,
+                self.setup.admission.cache,
+                stream_id=self.setup.stream_id,
+            ):
+                self._stopped_by_user = True
+                try:
+                    self.setup.admission.check_owner(self.setup.chat_session_id)
+                except CacheLockLostError:
+                    logger.debug("Chat admission changed before Stop was saved")
+                else:
+                    # Saves have drained, so no writer can replace this status.
+                    with get_session_with_current_tenant() as session:
+                        cancel_completed_responses__no_commit(
+                            session,
+                            self.setup.chat_session_id,
+                            [response.message_id for response in self.setup.responses],
+                        )
+                        session.commit()
             self.setup.admission.release()
-            return True
         except Exception:
             logger.exception("Failed to clear chat processing status; will retry")
             return False
+        if self._dispatch_pending_messages is not None:
+            # Start queued input once the chat is idle.
+            try:
+                self._dispatch_pending_messages()
+            except Exception:
+                logger.exception("Could not dispatch queued chat input")
+        return True
 
     def _run_response(
         self,

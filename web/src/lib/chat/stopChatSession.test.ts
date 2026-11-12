@@ -6,7 +6,7 @@ import { ChatSendRejectedError, sendMessage } from "@/app/app/services/lib";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { settleChatSession } from "@/lib/chat/settleChatSession";
 import { stopChatSession } from "@/lib/chat/stopChatSession";
-import { waitForChatSessionIdle } from "@/lib/chat/sessionReadiness";
+import { waitForChatResponseEnd } from "@/lib/chat/sessionReadiness";
 
 jest.mock("@/app/app/services/lib", () => ({
   ChatSendRejectedError: class extends Error {},
@@ -14,7 +14,7 @@ jest.mock("@/app/app/services/lib", () => ({
   processRawChatHistory: jest.fn(() => new Map()),
 }));
 jest.mock("@/lib/chat/sessionReadiness", () => ({
-  waitForChatSessionIdle: jest.fn(),
+  waitForChatResponseEnd: jest.fn(),
   fetchSettledChatSession: jest.fn(async () => ({
     messages: [],
     packets: [],
@@ -41,7 +41,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   global.fetch = fetchMock;
   fetchMock.mockResolvedValue(new Response(null, { status: 200 }));
-  jest.mocked(waitForChatSessionIdle).mockResolvedValue();
+  jest.mocked(waitForChatResponseEnd).mockResolvedValue(null);
   useChatSessionStore.setState({ sessions: new Map(), currentSessionId: null });
   useChatSessionStore.getState().createSession("session", {
     chatState: "loading",
@@ -63,9 +63,9 @@ test.each([false, true])(
   async (multiModel) => {
     const admitted = Promise.withResolvers<void>();
     const provider = Promise.withResolvers<void>();
-    const idle = Promise.withResolvers<void>();
+    const idle = Promise.withResolvers<number | null>();
     const pollingStarted = Promise.withResolvers<void>();
-    jest.mocked(waitForChatSessionIdle).mockImplementation(() => {
+    jest.mocked(waitForChatResponseEnd).mockImplementation(() => {
       pollingStarted.resolve();
       return idle.promise;
     });
@@ -89,7 +89,7 @@ test.each([false, true])(
     const stopping = stopChatSession("session", errorMessage);
     await Promise.resolve();
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(waitForChatSessionIdle).not.toHaveBeenCalled();
+    expect(waitForChatResponseEnd).not.toHaveBeenCalled();
     expect(
       useChatSessionStore.getState().sessions.get("session")?.chatState
     ).toBe("cancelling");
@@ -100,12 +100,15 @@ test.each([false, true])(
       `/api/chat/stop-chat-session/session?stream_id=${multiModel ? 11 : 12}`,
       expect.objectContaining({ method: "POST" })
     );
-    expect(waitForChatSessionIdle).toHaveBeenCalledWith("session");
+    expect(waitForChatResponseEnd).toHaveBeenCalledWith(
+      "session",
+      multiModel ? 11 : 12
+    );
     expect(
       useChatSessionStore.getState().sessions.get("session")?.chatState
     ).toBe("cancelling");
 
-    idle.resolve();
+    idle.resolve(null);
     await stopping;
     expect(
       useChatSessionStore.getState().sessions.get("session")
@@ -128,7 +131,7 @@ test("a rejected send finishes without stopping another session turn", async () 
   await stopChatSession("session", errorMessage);
   await sending;
   expect(fetchMock).not.toHaveBeenCalled();
-  expect(waitForChatSessionIdle).toHaveBeenCalledWith("session");
+  expect(waitForChatResponseEnd).toHaveBeenCalledWith("session", null);
 });
 
 test("a connection failure before admission cannot release input through either completion path", async () => {
@@ -153,11 +156,10 @@ test("a connection failure before admission cannot release input through either 
   await sending;
   await rejectedStop;
   await settling;
-  expect(waitForChatSessionIdle).not.toHaveBeenCalled();
+  expect(waitForChatResponseEnd).not.toHaveBeenCalled();
   expect(fetchMock).not.toHaveBeenCalled();
   expect(useChatSessionStore.getState().sessions.get("session")).toMatchObject({
     chatState: "unconfirmed",
-    queuedMessagesPaused: true,
   });
 });
 
@@ -179,7 +181,7 @@ test("late admission cannot stop or clear a newer request", async () => {
   await sending;
   await stopping;
   expect(fetchMock).not.toHaveBeenCalled();
-  expect(waitForChatSessionIdle).not.toHaveBeenCalled();
+  expect(waitForChatResponseEnd).not.toHaveBeenCalled();
   expect(useChatSessionStore.getState().sessions.get("session")).toMatchObject({
     chatState: "loading",
     streamingStartTime: 123,
@@ -201,7 +203,6 @@ test("a failed Stop can target the same accepted stream again before the reader 
   );
   expect(useChatSessionStore.getState().sessions.get("session")).toMatchObject({
     chatState: "streaming",
-    queuedMessagesPaused: true,
     uncaughtError: errorMessage,
   });
   const retry = stopChatSession("session", errorMessage);
@@ -211,7 +212,7 @@ test("a failed Stop can target the same accepted stream again before the reader 
     "/api/chat/stop-chat-session/session?stream_id=42",
     expect.objectContaining({ method: "POST" })
   );
-  expect(waitForChatSessionIdle).not.toHaveBeenCalled();
+  expect(waitForChatResponseEnd).not.toHaveBeenCalled();
   reader.resolve();
   await retry;
   expect(

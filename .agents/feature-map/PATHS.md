@@ -41,7 +41,7 @@ covers new files that match it.
 | `backend/onyx/chat/incognito_context.py` | chat-persistence, context-assembly |
 | `backend/onyx/prompts/`, `backend/ee/onyx/prompts/` | context-assembly |
 | `backend/onyx/chat/citation_processor.py`, `backend/onyx/chat/citation_utils.py` | citations |
-| `backend/onyx/db/chat_response.py`, `backend/onyx/db/chat_subagents.py` | chat-persistence |
+| `backend/onyx/db/chat_response.py`, `backend/onyx/db/chat_subagents.py`, `backend/onyx/db/chat_inputs.py` | chat-persistence |
 | `backend/onyx/db/chat.py`, `backend/onyx/db/chat_search.py`, `backend/onyx/db/feedback.py` | chat-persistence |
 | `backend/ee/onyx/background/celery/tasks/ttl_management/` | chat-persistence, background-jobs |
 | `backend/onyx/server/query_and_chat/chat_backend.py`, `backend/onyx/server/query_and_chat/models.py`, `backend/onyx/server/query_and_chat/session_loading.py`, `backend/onyx/server/query_and_chat/chat_utils.py` | core-chat-loop, chat-persistence |
@@ -399,6 +399,7 @@ the admin routes and check that each has a row above, run
 | `web/src/lib/admin-routes.ts`, `web/src/lib/admin-sidebar-utils.ts`, `web/src/lib/adminNavLabels.tsx`, `web/src/app/admin/layout.tsx` | The admin route list, the sidebar that filters it by permission and feature flag, its labels, and the admin shell. A new admin route needs its own row above. |
 | `web/src/lib/types.ts` | Frontend types that many components share, such as `Permission`, which must match `backend/onyx/db/enums.py`. Check the callers. |
 | `web/src/lib/swr-keys.ts` | The SWR cache keys of the whole app. A key belongs to the component that fetches it; invalidate through the key, never a string literal. |
+| `web/src/lib/types.ts` | Shared frontend types for users, preferences, permissions, and connectors. Read the component that owns the changed type. |
 | `web/src/sections/admin/` | Admin UI that several admin pages share, such as `ProviderCard` (Tracing, Voice, Web Search) and the Lite-mode indexing notice. Read the calling page's component. |
-| `web/src/components/`, `web/src/refresh-components/`, `web/src/layouts/`, `web/lib/opal/`, `web/lib/shared/`, `web/src/hooks/useContainerCenter.ts`, `web/src/hooks/usePaginatedFetch.ts`, `web/src/hooks/useUnsavedChangesGuard.ts` | Shared UI. Read the calling component, and the Opal rules in `web/AGENTS.md`. |
+| `web/src/components/`, `web/src/refresh-components/`, `web/src/layouts/`, `web/lib/opal/`, `web/lib/shared/`, `web/src/hooks/useContainerCenter.ts`, `web/src/hooks/usePaginatedFetch.ts`, `web/src/hooks/useUnsavedChangesGuard.ts`, `web/src/hooks/useDraft.ts` | Shared UI. Read the calling component, and the Opal rules in `web/AGENTS.md`. |
 | `web/src/app/layout.tsx`, `web/src/app/page.tsx`, `web/src/app/not-found.tsx`, `web/src/app/providers.tsx`, `web/src/app/css/`, `web/src/i18n/`, `web/public/` | The app shell, global styles, translations and static assets. |

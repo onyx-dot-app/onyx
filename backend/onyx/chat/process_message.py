@@ -10,10 +10,13 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from onyx.auth.permissions import has_global_permission
 from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CacheBackend
 from onyx.chat.chat_processing_checker import (
     ADMISSION_CACHE_TIMEOUT_S,
     ChatTurnAdmission,
+    is_chat_session_processing,
 )
 from onyx.chat.chat_utils import (
     capture_chat_history,
@@ -22,7 +25,7 @@ from onyx.chat.chat_utils import (
     is_last_assistant_message_clarification,
 )
 from onyx.chat.errors import chat_error
-from onyx.chat.execution import start_chat_turn
+from onyx.chat.execution import chat_turn_work, start_chat_turn
 from onyx.chat.files import (
     collect_available_file_ids,
     convert_loaded_files_to_chat_files,
@@ -41,10 +44,12 @@ from onyx.chat.incognito_context import incognito_session_ended
 from onyx.chat.models import (
     AnswerStream,
     ChatFullResponse,
+    ChatInbox,
     ChatResponseOutcome,
     ChatTurnSetup,
     CreateChatSessionID,
     PersonaPromptConfig,
+    QueuedChatTurn,
     ReservedChatResponse,
     ToolCallResponse,
 )
@@ -52,6 +57,7 @@ from onyx.chat.prompt_utils import (
     calculate_reserved_tokens,
     get_default_base_system_prompt,
 )
+from onyx.chat.run_store import interrupt_ownerless_responses
 from onyx.chat.stream_buffer import ChatStream
 from onyx.configs.chat_configs import CHAT_RESPONSE_WAIT_TIMEOUT_S
 from onyx.configs.constants import (
@@ -66,14 +72,21 @@ from onyx.db.chat import (
     get_chat_session_by_id,
     load_message_branch,
     reserve_chat_response_ids,
+    set_response_model_names__no_commit,
+)
+from onyx.db.chat_inputs import (
+    accept_queued_turn__no_commit,
+    fail_response_start__no_commit,
+    read_chat_inbox,
 )
 from onyx.db.document_set import require_document_set_access
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import HookPoint, record_mode_persists_content
+from onyx.db.enums import HookPoint, Permission, record_mode_persists_content
 from onyx.db.memory import get_memories
 from onyx.db.models import ChatSession, User
 from onyx.db.tools import capture_persona_tool_configuration, get_tools
 from onyx.db.user_file import capture_user_file_metadata, prepare_chat_file_inputs
+from onyx.db.users import fetch_user_by_id
 from onyx.deep_research.agent import MIN_RESEARCH_CONTEXT_TOKENS
 from onyx.deep_research.tool_definitions import (
     RESEARCH_AGENT_IN_CODE_ID,
@@ -103,7 +116,10 @@ from onyx.server.query_and_chat.models import (
 from onyx.server.query_and_chat.streaming_models import (
     StreamingError,
 )
-from onyx.server.query_and_chat.token_limit import check_model_spend_limits
+from onyx.server.query_and_chat.token_limit import (
+    check_model_spend_limits,
+    check_token_rate_limits,
+)
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.tools.constants import (
     CODING_AGENT_TOOL_ID,
@@ -111,9 +127,11 @@ from onyx.tools.constants import (
     SEARCH_TOOL_ID,
 )
 from onyx.tools.models import SearchToolUsage
+from onyx.tracing.framework.scope import Scope
 from onyx.utils.fleet_query_telemetry import QueryObservation, telemetry_chat
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
+from onyx.utils.threadpool_concurrency import start_thread_future
 from onyx.utils.timing import log_function_time, log_generator_function_time
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -214,12 +232,13 @@ def _select_models(
     return selected_models
 
 
-def _process_query(
+def process_chat_query(
     message_text: str,
     chat_session: ChatSession,
     user: User,
     db_session: Session,
 ) -> str:
+    """Apply query hooks before user text enters chat history or the pending queue."""
     # The hook sends query text and email externally; respect content egress policy.
     mode = chat_session.incognito_record_mode
     if not message_text.strip() or (mode is not None and not mode.fires_hooks):
@@ -256,16 +275,62 @@ def prepare_chat_turn(
     mcp_headers: dict[str, str] | None = None,
     slack_context: SlackContext | None = None,
     additional_context: str | None = None,
+    queued_turn: QueuedChatTurn | None = None,
 ) -> ChatTurnSetup:
-    """Capture configuration, load files, then reserve responses before execution."""
+    """Capture configuration, load files, then reserve responses before execution.
+
+    A queued turn starts from its accepted message. It accepts the message and
+    reserves its response right after admission, so a later failure saves an
+    error response that pauses the queue.
+    """
     admission = ChatTurnAdmission(
         get_cache_backend(operation_timeout_s=ADMISSION_CACHE_TIMEOUT_S)
     )
+    response_ids: list[int] = []
     try:
         with get_session_with_current_tenant() as db_session:
             chat_session = _load_session(new_msg_req, user, db_session)
             # Reserve the session before model setup or changes to its message tree.
             admission.claim(chat_session.id)
+            if queued_turn is not None and chat_session.tool_selection is not None:
+                # A turn the server starts uses the chat's current tools and filters.
+                new_msg_req = SendMessageRequest.model_validate(
+                    new_msg_req.model_dump() | chat_session.tool_selection.model_dump()
+                )
+            chat_history, parent_message = load_message_branch(
+                chat_session.id, new_msg_req.parent_message_id, db_session
+            )
+            accepted_text = None
+            if queued_turn is not None:
+                # Submitted input already passed the hook before entering the queue.
+                accepted_text = new_msg_req.message
+                accept_queued_turn__no_commit(db_session, chat_session.id, queued_turn)
+                chat_history.append(
+                    create_new_chat_message(
+                        chat_session_id=chat_session.id,
+                        parent_message=parent_message,
+                        message=accepted_text,
+                        # Use one tokenizer for stored counts, including after model switches.
+                        token_count=len(
+                            get_tokenizer(None, None).encode(accepted_text)
+                        ),
+                        message_type=MessageType.USER,
+                        db_session=db_session,
+                        commit=False,
+                    )
+                )
+                # The model name is known after selection.
+                response_ids = reserve_chat_response_ids(
+                    db_session=db_session,
+                    chat_session_id=chat_session.id,
+                    parent_message_id=chat_history[-1].id,
+                    model_display_names=[""],
+                )
+                # Write access can end while a message waits; the error response
+                # pauses the queue instead of retrying the turn.
+                if not has_global_permission(user, Permission.WRITE_CHAT):
+                    raise OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS)
+                check_token_rate_limits(user)
             selected_models = _select_models(
                 new_msg_req,
                 chat_session,
@@ -308,14 +373,21 @@ def prepare_chat_turn(
                     OnyxErrorCode.BAD_REQUEST,
                     "The Coding Agent is not available in incognito. Start a normal chat to use it.",
                 )
+            if queued_turn is not None:
+                set_response_model_names__no_commit(
+                    db_session,
+                    {
+                        response_id: display_name
+                        for response_id, (_, display_name) in zip(
+                            response_ids, selected_models, strict=True
+                        )
+                    },
+                )
+                db_session.commit()
             token_counter = get_llm_token_counter(selected_models[0][0])
-            chat_history, parent_message = load_message_branch(
-                chat_session.id, new_msg_req.parent_message_id, db_session
-            )
-            accepted_text = None
             # Regeneration reuses the user message and its accepted query.
-            if parent_message.message_type != MessageType.USER:
-                accepted_text = _process_query(
+            if queued_turn is None and parent_message.message_type != MessageType.USER:
+                accepted_text = process_chat_query(
                     new_msg_req.message, chat_session, user, db_session
                 )
                 # Use one tokenizer for stored counts, including after model switches.
@@ -526,12 +598,13 @@ def prepare_chat_turn(
         admission.refresh()
         # Reserve assistant message IDs so each model response has a saved identity.
         with get_session_with_current_tenant() as db_session:
-            response_ids = reserve_chat_response_ids(
-                db_session=db_session,
-                chat_session_id=chat_session_id,
-                parent_message_id=user_message_id,
-                model_display_names=[name for _, name in selected_models],
-            )
+            if not response_ids:
+                response_ids = reserve_chat_response_ids(
+                    db_session=db_session,
+                    chat_session_id=chat_session_id,
+                    parent_message_id=user_message_id,
+                    model_display_names=[name for _, name in selected_models],
+                )
         models = [
             ReservedChatResponse(llm=llm, display_name=name, message_id=message_id)
             for (llm, name), message_id in zip(
@@ -581,8 +654,96 @@ def prepare_chat_turn(
             mcp_headers=mcp_headers,
         )
     except BaseException:
-        admission.release()
+        try:
+            if response_ids:
+                with get_session_with_current_tenant() as db_session:
+                    for response_id in response_ids:
+                        fail_response_start__no_commit(db_session, response_id)
+                    db_session.commit()
+        except Exception:
+            logger.exception("Could not save chat preparation failure")
+        finally:
+            admission.release()
         raise
+
+
+def read_repaired_chat_inbox(chat_session_id: UUID, cache: CacheBackend) -> ChatInbox:
+    """Read the inbox after saving a running response that lost its owner.
+
+    An ownerless response never finishes, so it would block the queue.
+    """
+    with get_session_with_current_tenant() as db_session:
+        inbox = read_chat_inbox(db_session, chat_session_id)
+    if interrupt_ownerless_responses(
+        cache, get_current_tenant_id(), inbox.running_response_ids
+    ):
+        with get_session_with_current_tenant() as db_session:
+            inbox = read_chat_inbox(db_session, chat_session_id)
+    return inbox
+
+
+def dispatch_pending_chat_messages(chat_session_id: UUID, user_id: UUID) -> None:
+    """Start the selected branch's next queued turn through chat admission."""
+    try:
+        cache = get_cache_backend(operation_timeout_s=ADMISSION_CACHE_TIMEOUT_S)
+        if is_chat_session_processing(chat_session_id, cache):
+            return
+        inbox = read_repaired_chat_inbox(chat_session_id, cache)
+        queued_turn = inbox.next_turn
+        if queued_turn is None:
+            return
+
+        def start_pending_work() -> None:
+            # Queued work starts a new root trace while retaining tenant context.
+            trace_token = Scope.set_current_trace(None)
+            span_token = Scope.set_current_span(None)
+            try:
+                with get_session_with_current_tenant() as db_session:
+                    user = fetch_user_by_id(db_session, user_id)
+                if user is None or not user.is_active:
+                    logger.info("Queued chat work has no active owner")
+                    return
+                setup = prepare_chat_turn(
+                    new_msg_req=SendMessageRequest(
+                        message=queued_turn.message.message,
+                        chat_session_id=chat_session_id,
+                        parent_message_id=queued_turn.parent_response_id,
+                    ),
+                    user=user,
+                    llm_overrides=None,
+                    queued_turn=queued_turn,
+                )
+                stream = start_chat_turn(
+                    setup,
+                    user,
+                    dispatch_pending_messages=partial(
+                        dispatch_pending_chat_messages, chat_session_id, user_id
+                    ),
+                )
+                # Delivery and persistence continue without a browser reader.
+                stream.close()
+            except OnyxError as error:
+                if error.error_code is OnyxErrorCode.CONFLICT:
+                    logger.debug("Queued chat work was claimed elsewhere")
+                else:
+                    log_onyx_error(error)
+            except Exception:
+                logger.exception("Could not start queued chat work")
+            finally:
+                Scope.reset_current_span(span_token)
+                Scope.reset_current_trace(trace_token)
+
+        chat_turn_work.started()
+        try:
+            worker = start_thread_future(
+                start_pending_work, name="chat-queued-message", daemon=False
+            )
+        except BaseException:
+            chat_turn_work.finished()
+            raise
+        worker.add_done_callback(lambda _future: chat_turn_work.finished())
+    except Exception:
+        logger.exception("Could not dispatch queued chat input")
 
 
 def _stream_chat_turn(
@@ -596,8 +757,13 @@ def _stream_chat_turn(
     slack_context: SlackContext | None = None,
     response_future: Future[ChatResponseOutcome] | None = None,
     query_observation: QueryObservation | None = None,
+    delivers_follow_ups: bool = True,
 ) -> AnswerStream:
-    """Prepare one request, then read its independently owned agent stream."""
+    """Prepare one request, then read its independently owned agent stream.
+
+    `delivers_follow_ups` is false for one-shot callers. Their turns start no
+    queued work.
+    """
     setup: ChatTurnSetup | None = None
     stream: ChatStream | None = None
     try:
@@ -616,6 +782,11 @@ def _stream_chat_turn(
             user,
             response_future,
             query_observation=query_observation,
+            dispatch_pending_messages=partial(
+                dispatch_pending_chat_messages, setup.chat_session_id, user.id
+            )
+            if delivers_follow_ups and setup.incognito_record_mode is None
+            else None,
         )
         yield from stream
     except Exception as error:
@@ -642,6 +813,7 @@ def handle_stream_message_objects(
     slack_context: SlackContext | None = None,
     response_future: Future[ChatResponseOutcome] | None = None,
     query_observation: QueryObservation | None = None,
+    delivers_follow_ups: bool = True,
 ) -> AnswerStream:
     """Single-model streaming entrypoint. For multi-model comparison, use ``handle_multi_model_stream``.
 
@@ -660,6 +832,7 @@ def handle_stream_message_objects(
         slack_context=slack_context,
         response_future=response_future,
         query_observation=query_observation,
+        delivers_follow_ups=delivers_follow_ups,
     )
 
 
@@ -815,7 +988,10 @@ def run_chat_turn(
     additional_context: str | None = None,
     slack_context: SlackContext | None = None,
 ) -> ChatFullResponse:
-    """Run one chat turn to completion for in-process, non-streaming callers."""
+    """Run one chat turn to completion for in-process, non-streaming callers.
+
+    These callers read one response, so the turn starts no queued work.
+    """
     response_future = Future[ChatResponseOutcome]()
     packets = handle_stream_message_objects(
         new_msg_req=new_msg_req,
@@ -826,5 +1002,6 @@ def run_chat_turn(
         additional_context=additional_context,
         slack_context=slack_context,
         response_future=response_future,
+        delivers_follow_ups=False,
     )
     return gather_stream_full(packets, response_future)

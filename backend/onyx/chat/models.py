@@ -19,6 +19,7 @@ from onyx.agents.models import (
     AgentInfo,
     CompactionCheckpoint,
     CompactionMetadata,
+    MessageDelivery,
     RunFailure,
     RunStatus,
     StepRecord,
@@ -73,6 +74,20 @@ MAX_DISCOVERED_AGENTS = 128
 _MESSAGE_ADAPTER = TypeAdapter(Message)
 _INCOGNITO_IMAGES = TypeAdapter(list[SavedLoadedFile])
 _INCOGNITO_DETAILS = TypeAdapter(SavedToolResultDetails)
+
+
+class PendingChatMessage(BaseModel):
+    id: str
+    message: str
+    delivery: MessageDelivery
+    target_response_id: int | None
+
+
+class QueuedChatTurn(BaseModel):
+    """The next root turn: a submitted message and the response it follows."""
+
+    parent_response_id: int | None
+    message: PendingChatMessage
 
 
 class PromptMetadata(CompactionMetadata):
@@ -204,6 +219,16 @@ class ResponseAncestry(BaseModel):
 class ChatBranch(BaseModel):
     chat_session_id: UUID
     message_ids: list[int]
+
+
+class ChatInbox(BaseModel):
+    """The selected branch and the queued turn that can start on it."""
+
+    branch: ChatBranch
+    selected_response_id: int | None
+    # The running selected response; it can have lost its owner.
+    running_response_ids: list[int] = Field(default_factory=list)
+    next_turn: QueuedChatTurn | None = None
 
 
 class ResponseLink(BaseModel):
