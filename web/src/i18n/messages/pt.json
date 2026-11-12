@@ -17130,6 +17130,13 @@
         "savingChanges": "Salvando as alterações...",
         "savingSkill": "Salvando a habilidade..."
       },
+      "staleVersion": {
+        "description": "Alguém salvou uma versão mais recente. Recarregue para obtê-la. Suas alterações não salvas serão perdidas.",
+        "reload": {
+          "label": "Recarregar"
+        },
+        "title": "Esta habilidade mudou desde que você a abriu"
+      },
       "toasts": {
         "created": "\"{name}\" criada",
         "deleteFailed": "Falha ao excluir a habilidade",

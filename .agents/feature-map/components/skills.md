@@ -274,7 +274,12 @@ The library preview of an external-app skill calls the same renderer
     `skills/bundle.py:normalize_stored_bundle`, so a saved bundle over the ZIP-size
     or file-count limit stays editable. Merges that add files keep the upload
     limits, so repeated merges cannot pass them. A full-replacement upload in the
-    editor does not read the current bundle. Only direct uploads return 413. Batch uploads report
+    editor does not read the current bundle. One limit applies to every new
+    version, edits included: `skills/bundle.py:check_skill_md_size` refuses a
+    SKILL.md over `SKILL_MD_MAX_BYTES` (256 KiB) or with a NUL character
+    (400), because each version stores the text in a Postgres text column.
+    `skills/ingest.py:ingest_skill_bundle` and the GitHub preview call
+    it. Only direct uploads return 413. Batch uploads report
     `not_imported` and GitHub previews mark the Skill unavailable.
 18. `bundle-file-list-memory` **ZIP metadata memory has a fixed bound.**
     Every Skill ZIP opens through `skills/bundle.py:open_bundle_zip`, which uses
@@ -291,25 +296,55 @@ The library preview of an external-app skill calls the same renderer
     reads the files. It also checks the resolved SKILL.md size then, so a
     Skill that `skill-dir-placeholder` would drop never counts against later
     Skills.
-19. `plugin-tables-unused` **The plugin tables are a copy that no code reads
-    yet.** Migration `cdec9dd9ca3d` adds `plugin_marketplace`, `plugin`,
-    `plugin_version`, `plugin_skill`, `plugin__user`, `plugin__user_group` and
-    `user_plugin_preference` (`db/models.py:Plugin` and its neighbours), and
-    fills them from each custom skill. Built-in skills get no plugin. A plugin,
-    its version 1 and its `plugin_skill` row take the id of the skill. Public
-    and author-less skills go to the Organization library, published at
-    version 1. Other skills go to the author's "My uploads". A duplicate name
-    in one marketplace gets the first free `-N` suffix on `plugin.name` only.
-    The skill name lives only in `plugin_skill.frontmatter` (NOT NULL, a check
-    requires a string `name`); the backfill seeds it with the name and
-    description of the legacy row. No column stores the kind (skill or
-    plugin): it comes from the layout of each version. App code does not write the tables, so they go stale after the deploy. The
-    one exception: a user delete removes the plugins in that user's "My
-    uploads" (`db/plugin.py`), because a stale copy there would block the
-    delete after the user's skill is transferred, deleted or made public. Do
-    not read them until the later migrations re-sync them with
-    `backfill_plugins_from_skills`, which skips skills that have a plugin. The
-    skill table and its checks do not change.
+19. `plugin-tables-unused` **App code writes the plugin tables but does not
+    read them yet.** Migration `cdec9dd9ca3d` adds `plugin_marketplace`,
+    `plugin`, `plugin_version`, `plugin_skill`, `plugin__user`,
+    `plugin__user_group` and `user_plugin_preference` (`db/models.py:Plugin`
+    and its neighbours), and fills them from each custom skill. Built-in
+    skills get no plugin. A plugin and the legacy skill row share one id.
+    Public and author-less skills go to the Organization library, published.
+    Other skills go to the author's "My uploads". A duplicate name in one
+    marketplace gets the first free `-N` suffix on `plugin.name` only
+    (`db/plugin.py:free_plugin_name` in app code). The skill name lives only
+    in `plugin_skill.frontmatter` (NOT NULL, a check requires a string
+    `name`); the backfill seeds it with the name and description of the
+    legacy row. No column stores the kind (skill or plugin):
+    `db/plugin.py:is_skill_version` reads it from the layout of each
+    version. Creates, bundle changes and
+    deletes write the plugin rows ([[#bundle-change-adds-version]]). A user
+    delete removes the plugins in that user's "My uploads"
+    (`db/plugin.py:delete_user_upload_plugins__no_commit`), because a stale
+    copy there would block the delete. So a live skill can have no plugin
+    row; the next file change makes one from the legacy row first. Shares,
+    publishing, install settings, choices and transfers write only the skill
+    rows, so those plugin columns go stale until a later re-sync. A re-sync
+    migration runs before reads move to the plugin tables. Every read still
+    uses the skill rows.
+20. `bundle-change-adds-version` **A file change adds a plugin version and
+    keeps the old bundle.** Each create and each change to a custom skill's
+    files goes through `db/skill.py:create_custom_skill__no_commit` or
+    `db/skill.py:replace_skill_bundle`, which call `db/plugin.py`. In one
+    transaction they lock the skill row, then the plugin row, add the next
+    `plugin_version` with its file list (`skills/bundle.py:compute_bundle_manifest`)
+    and `plugin_skill` row, move `current_version_id`, and copy the bundle,
+    name and description to the legacy skill row. A save on a plugin in the
+    Organization library also moves `published_version_id`. An editor save
+    whose file list equals the current version's adds no version, and the
+    route deletes the new blob. A version copied from a legacy row has no
+    file list, so editor routes pass `previous_manifest`, the list of the
+    stored bundle; the bytes of a rewritten ZIP differ even when its files
+    do not. A bundle upload always adds one. An edit
+    request may carry `base_version_id`; if it is not the current version,
+    the edit gets 409 `PLUGIN_VERSION_STALE`. Skill responses return as
+    `current_version_id` the version that holds the bundle they show
+    (`db/plugin.py:get_version_ids_for_bundles`), so the editor's base always
+    matches its fields. Routes no longer delete the
+    previous bundle, because older versions still point at it; a skill delete
+    removes only the current bundle, so earlier blobs stay until a cleanup
+    task exists. Each new version stores `plugin_skill.skill_md`
+    ([[#bundle-size-limits]]). `skills/metadata.py:frontmatter_for_jsonb`
+    drops a frontmatter value that JSONB cannot hold and keeps every other
+    key; name and description are always the validated strings.
 
 ---
 
@@ -410,8 +445,10 @@ The library preview of an external-app skill calls the same renderer
   covers the plugin backfill, and
   `backend/tests/external_dependency_unit/db/test_plugin_constraints.py` the
   database rules of the plugin tables.
-- `backend/tests/integration/tests/skills/` covers the API, bulk actions and
-  import sharing. `backend/tests/integration/tests/craft/k8s/` covers a real
+- `backend/tests/integration/tests/skills/` covers the API, bulk actions,
+  import sharing and plugin version writes
+  (`backend/tests/integration/tests/skills/test_skill_plugin_versions.py`).
+  `backend/tests/integration/tests/craft/k8s/` covers a real
   push.
 - By hand: edit a skill while a Craft session runs. The stale notice must
   appear, and after reload the agent must read the new text.

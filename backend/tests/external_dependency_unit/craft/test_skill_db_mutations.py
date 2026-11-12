@@ -28,6 +28,8 @@ from onyx.db.skill import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.skills.ingest import IngestedBundle
+from onyx.skills.models import PluginSkillContent, PluginVersionContent
 from tests.external_dependency_unit.craft.db_helpers import (
     add_user_to_group,
     make_built_in_skill_row,
@@ -552,9 +554,30 @@ def test_installation_policies_preserve_choices_through_updates(
     )
     replace_skill_bundle(
         skill=skill,
-        new_bundle_file_id="updated-bundle",
-        new_bundle_sha256="new-hash",
-        new_description="Updated",
+        ingested=IngestedBundle(
+            canonical_name=skill.name,
+            bundle_file_id="updated-bundle",
+            bundle_sha256="new-hash",
+            description="Updated",
+            content=PluginVersionContent(
+                bundle_file_id="updated-bundle",
+                bundle_sha256="new-hash",
+                is_valid=True,
+                file_manifest=[],
+                unpacked_size_bytes=0,
+                file_count=0,
+                skills=[
+                    PluginSkillContent(
+                        path="",
+                        skill_md=None,
+                        frontmatter={"name": skill.name, "description": "Updated"},
+                    )
+                ],
+            ),
+        ),
+        base_version_id=None,
+        user=user,
+        skip_if_unchanged=False,
         db_session=db_session,
     )
     assert not skill_user_states(user, [skill.id], db_session)[skill.id].enabled

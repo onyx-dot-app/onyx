@@ -59,6 +59,9 @@ export interface Skill {
   public_permission: SkillSharePermission | null;
   user_permission: SkillAccessLevel | null;
   external_app: SkillExternalAppDependency | null;
+  /** Newest plugin version of a custom skill. Edits send it back as
+   * `base_version_id`, so a save over a newer version gets a 409. */
+  current_version_id: string | null;
 }
 
 export type BuiltinSkill = Skill & {
