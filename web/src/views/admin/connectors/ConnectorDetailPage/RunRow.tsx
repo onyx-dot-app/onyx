@@ -83,7 +83,7 @@ function runIcon(run: CCPairRun): IconFunctionComponent {
 
 /** The run's results that have a row: checks that apply to the pair. */
 export function shownCheckResults(
-  run: CheckRunSnapshot,
+  run: CheckRunSnapshot
 ): CapabilityCheckResult[] {
   return applicableResults(run.check_results);
 }
@@ -97,7 +97,7 @@ export function hasInlineDetails(run: CCPairRun): boolean {
 /** How many of a check run's shown checks ended in `status`. */
 export function checkCount(
   run: CheckRunSnapshot,
-  status: CapabilityCheckStatus,
+  status: CapabilityCheckStatus
 ): number {
   return shownCheckResults(run).filter((result) => result.status === status)
     .length;
@@ -252,7 +252,7 @@ function liveRate(run: CCPairRun, now: number): number | null {
 function useRateLabel(): (
   run: CCPairRun,
   rate: number,
-  duration?: string,
+  duration?: string
 ) => string {
   const t = useTranslations("admin.connector.runs.detail");
   const format = useFormatter();
@@ -404,7 +404,7 @@ function DocCounts({ attempt }: DocCountsProps) {
   const t = useTranslations("admin.connector.runs");
   const updated = Math.max(
     0,
-    attempt.total_docs_indexed - attempt.new_docs_indexed,
+    attempt.total_docs_indexed - attempt.new_docs_indexed
   );
   return (
     <CountsRow>
@@ -710,7 +710,7 @@ export default function RunRow({
               <div
                 className={cn(
                   !logsShown &&
-                    "opacity-0 transition-opacity focus-within:opacity-100 group-hover/run-line:opacity-100 no-hover:opacity-100",
+                    "opacity-0 transition-opacity focus-within:opacity-100 group-hover/run-line:opacity-100 no-hover:opacity-100"
                 )}
               >
                 {/* Every line has the action, and a run that recorded no trace or message has nothing to open. */}
