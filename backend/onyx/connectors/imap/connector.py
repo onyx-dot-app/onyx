@@ -6,7 +6,7 @@ import re
 import ssl
 from datetime import datetime, timezone
 from email.message import Message
-from email.utils import parseaddr
+from email.utils import getaddresses
 from enum import Enum
 from typing import Any, cast
 
@@ -202,13 +202,21 @@ class ImapConnector(
                 )
                 continue
 
-            email_headers = EmailHeaders.from_email_msg(email_msg=email_msg)
+            try:
+                email_headers = EmailHeaders.from_email_msg(email_msg=email_msg)
 
-            yield _convert_email_headers_and_body_into_document(
-                email_msg=email_msg,
-                email_headers=email_headers,
-                include_perm_sync=include_perm_sync,
-            )
+                yield _convert_email_headers_and_body_into_document(
+                    email_msg=email_msg,
+                    email_headers=email_headers,
+                    include_perm_sync=include_perm_sync,
+                )
+            except Exception:
+                # A single malformed email must not abort the whole batch.
+                logger.exception(
+                    "Failed to convert email_id=%r to a document; skipping",
+                    email_id,
+                )
+                continue
 
         return checkpoint
 
@@ -438,9 +446,9 @@ def _sanitize_mailbox_names(mailboxes: list[str]) -> list[str]:
 
 
 def _parse_addrs(raw_header: str) -> list[tuple[str, str]]:
-    addrs = raw_header.split(",")
-    name_addr_pairs = [parseaddr(addr=addr) for addr in addrs if addr]
-    return [(name, addr) for name, addr in name_addr_pairs if addr]
+    # getaddresses honors quoted display names; a naive split on ","
+    # breaks on headers like '"Lastname, Firstname" <a@b.c>'.
+    return [(name, addr) for name, addr in getaddresses([raw_header]) if addr]
 
 
 def _parse_singular_addr(raw_header: str) -> tuple[str, str]:
