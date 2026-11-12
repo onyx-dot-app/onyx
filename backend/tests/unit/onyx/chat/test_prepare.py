@@ -10,7 +10,7 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.agents.models import CompactionCheckpoint, RunStatus
+from onyx.agents.models import CompactionCheckpoint, MessageDelivery, RunStatus
 from onyx.cache.interface import CacheLockLostError
 from onyx.chat.chat_processing_checker import (
     PREPARATION_LEASE_SECONDS,
@@ -21,6 +21,8 @@ from onyx.chat.models import (
     ChatHistoryResult,
     IncognitoAgentResponse,
     IncognitoState,
+    PendingChatMessage,
+    QueuedChatTurn,
 )
 from onyx.chat.process_message import (
     prepare_chat_turn,
@@ -593,6 +595,45 @@ def test_incognito_rejects_a_preferred_coding_agent_before_the_question_is_saved
         "The Coding Agent is not available in incognito. Start a normal chat to use it."
     )
     create_message.assert_not_called()
+
+
+def test_a_queued_turn_uses_the_saved_tools_and_search_filters(
+    chat_session: ChatSession,
+    _mock_chat_preparation: None,
+) -> None:
+    filters = BaseFilters(document_set=["Handbook"])
+    chat_session.tool_selection = ChatToolSelection(
+        allowed_tool_ids=[3], preferred_tool_id=3, internal_search_filters=filters
+    )
+    question = ChatMessage(id=5, message_type=MessageType.USER)
+    with (
+        patch("onyx.chat.process_message.accept_queued_turn__no_commit"),
+        patch(
+            "onyx.chat.process_message.create_new_chat_message", return_value=question
+        ),
+        patch("onyx.chat.process_message.reserve_chat_response_ids", return_value=[6]),
+        patch("onyx.chat.process_message.set_response_model_names__no_commit"),
+        patch("onyx.chat.process_message.has_global_permission", return_value=True),
+        patch("onyx.chat.process_message.check_token_rate_limits"),
+    ):
+        setup = prepare_chat_turn(
+            SendMessageRequest(message="Queued", chat_session_id=chat_session.id),
+            User(id=uuid4(), email="reader@example.com"),
+            llm_overrides=None,
+            queued_turn=QueuedChatTurn(
+                parent_response_id=1,
+                message=PendingChatMessage(
+                    id="queued",
+                    message="Queued",
+                    delivery=MessageDelivery.QUEUE,
+                    target_response_id=None,
+                ),
+            ),
+        )
+    assert setup.new_msg_req.allowed_tool_ids == [3]
+    assert setup.new_msg_req.preferred_tool_id == 3
+    assert setup.new_msg_req.internal_search_filters == filters
+    setup.admission.release()
 
 
 def test_regeneration_reuses_user_message_without_writing(

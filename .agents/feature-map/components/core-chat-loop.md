@@ -200,8 +200,9 @@ owner lost `WRITE_CHAT` saves an error response, which pauses the queue. The mod
 override updates, so queued and interrupting turns use the user's last
 model. Tools work the same way: each user send and the
 `PATCH /chat/chat-session/{session_id}/tool-selection` route save
-`chat_session.tool_selection` (`allowed_tool_ids`, `preferred_tool_id`), and a
-turn the server starts uses the selection current when it starts. NULL means
+`chat_session.tool_selection` (`allowed_tool_ids`, `preferred_tool_id`,
+`internal_search_filters`), and a turn the server starts uses the selection
+current when it starts. NULL means
 the agent's tools. Child agents keep their own tool configuration. If the queue head changes before acceptance, preparation ends with a
 conflict, and the next trigger dispatches again. Consuming the inbox row
 prevents delivery twice. If automatic preparation fails, a saved error response
