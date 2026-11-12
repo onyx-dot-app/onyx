@@ -125,6 +125,16 @@ export class SkillsLibraryPage {
     ).toBeVisible();
   }
 
+  async expectWaitingForReview(): Promise<void> {
+    await expect(
+      this.dialog.getByText("Waiting for review", { exact: true })
+    ).toBeVisible();
+  }
+
+  async expectInstructions(text: string): Promise<void> {
+    await expect(this.dialog.getByText(text, { exact: true })).toBeVisible();
+  }
+
   async expectToast(text: string): Promise<void> {
     await expect(this.page.getByText(text, { exact: true })).toBeVisible();
   }

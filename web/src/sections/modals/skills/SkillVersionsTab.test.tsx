@@ -341,6 +341,27 @@ describe("SkillVersionsTab", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("tells the author when a publish update went to an admin for review", async () => {
+    const user = setupUser();
+    mockPublishSkill.mockResolvedValue({
+      ...SKILL,
+      published_version_number: 2,
+      pending_version_number: 3,
+    });
+    renderTab({ skill: { ...SKILL, published_version_number: 2 } });
+
+    await user.click(
+      await screen.findByRole("button", { name: "Publish update" })
+    );
+
+    await waitFor(() =>
+      expect(mockToast.info).toHaveBeenCalledWith(
+        "Version 3 went to an admin for review."
+      )
+    );
+    expect(mockToast.success).not.toHaveBeenCalled();
+  });
+
   it("offers Publish update for a version saved after the pending one", async () => {
     const user = setupUser();
     mockPublishSkill.mockResolvedValue({

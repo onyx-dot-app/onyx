@@ -56,6 +56,7 @@ import CreateSkillModal from "@/sections/modals/skills/CreateSkillModal";
 import ImportSkillsFromGitHubModal from "@/sections/modals/skills/ImportSkillsFromGitHubModal";
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 import SkillPreviewModal from "@/sections/modals/SkillPreviewModal";
+import SkillReviewRequests from "@/sections/skills/SkillReviewRequests";
 import type { BuiltinSkill, CustomSkill } from "@/lib/skills/types";
 import { stageSkillCreationDraft } from "@/lib/skills/creationDraft";
 import {
@@ -547,6 +548,9 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
       </SettingsLayouts.Header>
 
       <SettingsLayouts.Body>
+        {canManageOrgSkills && (admin || !isAdmin) && (
+          <SkillReviewRequests onReviewed={() => void revalidateSkills()} />
+        )}
         {bulkFailures.length > 0 && (
           <MessageCard
             variant="error"

@@ -511,8 +511,17 @@ The library preview of an external-app skill calls the same renderer
     only. The skill dialog's Versions tab shows each `review_status`, an
     **Unpublished changes** badge when `current_version_number` is newer than
     `published_version_number`, and **Publish update** (or **Waiting for
-    review** while a version is pending) for the author and organization-wide
-    managers.
+    review** while the current version is pending) for the author and
+    organization-wide managers (`canChangeOrganizationAccess`, which takes the
+    global `MANAGE_PLUGINS` holder, not full admin). Admin UI: the **Skill Publishing** select on Admin Panel →
+    Craft → Preferences (`web/src/views/admin/CraftPreferencesPage/SkillPublishingCard.tsx`,
+    saved with `updateAdminSettings({ plugin_publishing })` so the PATCH
+    changes only that field), and **Publish Requests** with Approve and Deny
+    on Admin Panel → Skills (`web/src/sections/skills/SkillReviewRequests.tsx`;
+    a global manager without full admin sees it on the Craft Skills page);
+    an approve error such as a name clash shows the server detail. Under
+    `REQUIRES_REVIEW` the share dialog and **Publish update** tell an author
+    without global `MANAGE_PLUGINS` that the request went to an admin.
 
 ---
 

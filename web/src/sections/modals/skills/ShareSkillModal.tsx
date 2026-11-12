@@ -68,6 +68,8 @@ import {
 } from "@opal/icons";
 import { markdown } from "@opal/utils";
 import { SkillPreviewDetails } from "@/sections/modals/SkillPreviewModal";
+import { useSettings } from "@/lib/settings/hooks";
+import { PluginPublishingPolicy } from "@/lib/settings/types";
 import SkillVersionsTab from "@/sections/modals/skills/SkillVersionsTab";
 
 type ShareModalView = "share" | "transfer";
@@ -133,6 +135,12 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     Permission.MANAGE_PLUGINS
   );
   const { mutate } = useSWRConfig();
+  const { plugin_publishing: publishingPolicy } = useSettings();
+  const publishNeedsReview =
+    !isOrganizationManager &&
+    publishingPolicy === PluginPublishingPolicy.REQUIRES_REVIEW;
+  const publishingOff =
+    !isOrganizationManager && publishingPolicy === PluginPublishingPolicy.OFF;
 
   const [draftState, setDraftState] = useState<SkillShareDraftState | null>(
     null
@@ -372,9 +380,17 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
         isAdmin,
         isOrganizationManager
       );
-      await updateSkillShares(props.skillId, payload);
+      const saved = await updateSkillShares(props.skillId, payload);
       void refreshSkill();
-      toast.success(t("share.savedToast.message"));
+      if (
+        isPublishing &&
+        saved.public_permission === null &&
+        saved.pending_version_number !== null
+      ) {
+        toast.info(t("share.reviewRequestedToast.message"));
+      } else {
+        toast.success(t("share.savedToast.message"));
+      }
       props.onSaved();
       closeModal();
     } catch (err) {
@@ -471,13 +487,31 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
               </Section>
             )}
           </Card>
-          {isPublishing && (
+          {isPublishing && publishingOff && (
+            <MessageCard
+              variant="error"
+              outerPadding={1}
+              innerPadding={1}
+              title={t("share.publishOff.title")}
+              description={t("share.publishOff.description")}
+            />
+          )}
+          {isPublishing && !publishingOff && (
             <MessageCard
               variant="warning"
               outerPadding={1}
               innerPadding={1}
               title={t("share.publishWarning.title")}
               description={t("share.publishWarning.description")}
+            />
+          )}
+          {isPublishing && publishNeedsReview && (
+            <MessageCard
+              variant="info"
+              outerPadding={1}
+              innerPadding={1}
+              title={t("share.publishReview.title")}
+              description={t("share.publishReview.description")}
             />
           )}
           {skill.external_app && (
@@ -892,7 +926,12 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
               </Button>
             ) : canEditShares && (tab === "sharing" || isDirty) ? (
               <Button
-                disabled={!isDirty || saving || !!loadError}
+                disabled={
+                  !isDirty ||
+                  saving ||
+                  !!loadError ||
+                  (isPublishing && publishingOff)
+                }
                 onClick={handleSave}
               >
                 {t("share.saveButton.label")}

@@ -5181,6 +5181,27 @@
       "unavailable": {
         "description": "O Craft é ativado por implantação pela Onyx. Entre em contato com seu representante Onyx para obter acesso.",
         "title": "O Craft não está disponível nesta implantação"
+      },
+      "publishing": {
+        "title": "Publicação de habilidades",
+        "open": {
+          "label": "Aberta",
+          "description": "Os autores publicam na organização na hora."
+        },
+        "requiresReview": {
+          "label": "Requer revisão",
+          "description": "Um administrador aprova cada publicação e cada atualização."
+        },
+        "off": {
+          "label": "Desativada",
+          "description": "Somente administradores publicam habilidades na organização."
+        },
+        "saveSuccess": {
+          "message": "Configuração de publicação salva."
+        },
+        "saveError": {
+          "message": "Não foi possível salvar a configuração de publicação."
+        }
       }
     },
     "credentials": {
@@ -17393,6 +17414,17 @@
         "publishWarning": {
           "title": "A publicação não pode ser desfeita",
           "description": "Depois de salvar, todos na organização podem usar esta habilidade. Não é possível torná-la privada novamente. Somente um administrador pode excluí-la."
+        },
+        "reviewRequestedToast": {
+          "message": "Sua solicitação de publicação foi enviada a um administrador para revisão."
+        },
+        "publishOff": {
+          "title": "A publicação está desativada",
+          "description": "Um administrador desativou a publicação na organização. Peça a um administrador para publicar esta habilidade."
+        },
+        "publishReview": {
+          "title": "Um administrador precisa aprovar esta publicação",
+          "description": "A habilidade fica privada até um administrador aprovar a solicitação."
         }
       },
       "placeholders": {
@@ -17456,6 +17488,7 @@
           "label": "Publicar atualização",
           "successToast": "Versão {number} publicada para a organização.",
           "failedToast": "Não foi possível publicar esta atualização.",
+          "sentForReviewToast": "A versão {number} foi enviada a um administrador para revisão.",
           "offNotice": "A publicação está desativada. Peça a um administrador para publicar esta atualização."
         }
       }
@@ -17617,6 +17650,40 @@
         "title": "A publicação não pode ser desfeita",
         "description": "Depois de aplicar, todos na organização podem usar as habilidades selecionadas. Habilidades publicadas não podem voltar a ser privadas. Somente um administrador pode excluí-las."
       }
+    },
+    "reviewRequests": {
+      "title": "Solicitações de publicação",
+      "description": "Aprove ou recuse solicitações para publicar habilidades na organização.",
+      "columns": {
+        "skill": "Habilidade",
+        "version": "Versão",
+        "kind": "Solicitação",
+        "requestedBy": "Solicitada por",
+        "date": "Data"
+      },
+      "versionLabel": "Versão {number}",
+      "kind": {
+        "firstPublish": "Primeira publicação",
+        "update": "Atualização da versão {number}"
+      },
+      "unknownRequester": "Desconhecido",
+      "unnamedSkill": "Habilidade sem nome",
+      "approve": {
+        "label": "Aprovar",
+        "ariaLabel": "Aprovar {name}"
+      },
+      "deny": {
+        "label": "Recusar",
+        "ariaLabel": "Recusar {name}"
+      },
+      "approvedToast": "Versão {number} de {name} publicada.",
+      "deniedToast": "Versão {number} de {name} recusada.",
+      "failedToast": "Não foi possível atualizar esta solicitação.",
+      "loadError": {
+        "title": "Não foi possível carregar as solicitações de publicação",
+        "description": "Tente novamente mais tarde."
+      },
+      "empty": "Nenhuma habilidade aguarda revisão."
     }
   },
   "opensearchHealth": {

@@ -5181,6 +5181,27 @@
       "unavailable": {
         "description": "Craft wird von Onyx pro Bereitstellung aktiviert. Wenden Sie sich an Ihren Onyx-Ansprechpartner, um Zugriff zu erhalten.",
         "title": "Craft ist in dieser Bereitstellung nicht verfügbar"
+      },
+      "publishing": {
+        "title": "Skill-Veröffentlichung",
+        "open": {
+          "label": "Offen",
+          "description": "Skill-Autoren veröffentlichen sofort für die Organisation."
+        },
+        "requiresReview": {
+          "label": "Prüfung erforderlich",
+          "description": "Ein Admin genehmigt jede Veröffentlichung und jedes Update."
+        },
+        "off": {
+          "label": "Aus",
+          "description": "Nur Admins veröffentlichen Skills für die Organisation."
+        },
+        "saveSuccess": {
+          "message": "Veröffentlichungseinstellung gespeichert."
+        },
+        "saveError": {
+          "message": "Die Veröffentlichungseinstellung konnte nicht gespeichert werden."
+        }
       }
     },
     "credentials": {
@@ -17393,6 +17414,17 @@
         "publishWarning": {
           "title": "Die Veröffentlichung kann nicht rückgängig gemacht werden",
           "description": "Nach dem Speichern kann jeder in der Organisation diesen Skill verwenden. Sie können ihn danach nicht wieder privat machen. Nur ein Administrator kann ihn löschen."
+        },
+        "reviewRequestedToast": {
+          "message": "Ihre Veröffentlichungsanfrage wurde einem Admin zur Prüfung gesendet."
+        },
+        "publishOff": {
+          "title": "Die Veröffentlichung ist deaktiviert",
+          "description": "Ein Admin hat die Veröffentlichung in der Organisation deaktiviert. Bitten Sie einen Admin, diesen Skill zu veröffentlichen."
+        },
+        "publishReview": {
+          "title": "Ein Admin muss diese Veröffentlichung genehmigen",
+          "description": "Der Skill bleibt privat, bis ein Admin die Anfrage genehmigt."
         }
       },
       "placeholders": {
@@ -17456,6 +17488,7 @@
           "label": "Update veröffentlichen",
           "successToast": "Version {number} für die Organisation veröffentlicht.",
           "failedToast": "Dieses Update konnte nicht veröffentlicht werden.",
+          "sentForReviewToast": "Version {number} wurde einem Admin zur Prüfung gesendet.",
           "offNotice": "Die Veröffentlichung ist deaktiviert. Bitten Sie einen Admin, dieses Update zu veröffentlichen."
         }
       }
@@ -17617,6 +17650,40 @@
         "title": "Die Veröffentlichung kann nicht rückgängig gemacht werden",
         "description": "Nach dem Anwenden kann jeder in der Organisation die ausgewählten Skills verwenden. Veröffentlichte Skills können nicht wieder privat gemacht werden. Nur ein Administrator kann sie löschen."
       }
+    },
+    "reviewRequests": {
+      "title": "Veröffentlichungsanfragen",
+      "description": "Genehmigen oder ablehnen Sie Anfragen, Skills für die Organisation zu veröffentlichen.",
+      "columns": {
+        "skill": "Skill",
+        "version": "Version",
+        "kind": "Anfrage",
+        "requestedBy": "Angefragt von",
+        "date": "Datum"
+      },
+      "versionLabel": "Version {number}",
+      "kind": {
+        "firstPublish": "Erste Veröffentlichung",
+        "update": "Update von Version {number}"
+      },
+      "unknownRequester": "Unbekannt",
+      "unnamedSkill": "Unbenannter Skill",
+      "approve": {
+        "label": "Genehmigen",
+        "ariaLabel": "{name} genehmigen"
+      },
+      "deny": {
+        "label": "Ablehnen",
+        "ariaLabel": "{name} ablehnen"
+      },
+      "approvedToast": "Version {number} von {name} veröffentlicht.",
+      "deniedToast": "Version {number} von {name} abgelehnt.",
+      "failedToast": "Diese Anfrage konnte nicht aktualisiert werden.",
+      "loadError": {
+        "title": "Veröffentlichungsanfragen konnten nicht geladen werden",
+        "description": "Versuchen Sie es später erneut."
+      },
+      "empty": "Keine Skills warten auf eine Prüfung."
     }
   },
   "opensearchHealth": {

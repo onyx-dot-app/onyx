@@ -5181,6 +5181,27 @@
       "unavailable": {
         "description": "Craft est activé déploiement par déploiement par Onyx. Contactez votre représentant Onyx pour y accéder.",
         "title": "Craft n'est pas disponible sur ce déploiement"
+      },
+      "publishing": {
+        "title": "Publication des compétences",
+        "open": {
+          "label": "Ouverte",
+          "description": "Les auteurs publient pour l'organisation immédiatement."
+        },
+        "requiresReview": {
+          "label": "Examen requis",
+          "description": "Un administrateur approuve chaque publication et chaque mise à jour."
+        },
+        "off": {
+          "label": "Désactivée",
+          "description": "Seuls les administrateurs publient des compétences pour l'organisation."
+        },
+        "saveSuccess": {
+          "message": "Paramètre de publication enregistré."
+        },
+        "saveError": {
+          "message": "Impossible d'enregistrer le paramètre de publication."
+        }
       }
     },
     "credentials": {
@@ -17393,6 +17414,17 @@
         "publishWarning": {
           "title": "La publication est irréversible",
           "description": "Après l'enregistrement, tout le monde dans l'organisation peut utiliser cette compétence. Vous ne pourrez plus la rendre privée. Seul un administrateur peut la supprimer."
+        },
+        "reviewRequestedToast": {
+          "message": "Votre demande de publication a été envoyée à un administrateur pour examen."
+        },
+        "publishOff": {
+          "title": "La publication est désactivée",
+          "description": "Un administrateur a désactivé la publication dans l'organisation. Demandez à un administrateur de publier cette compétence."
+        },
+        "publishReview": {
+          "title": "Un administrateur doit approuver cette publication",
+          "description": "La compétence reste privée jusqu'à ce qu'un administrateur approuve la demande."
         }
       },
       "placeholders": {
@@ -17456,6 +17488,7 @@
           "label": "Publier la mise à jour",
           "successToast": "Version {number} publiée pour l'organisation.",
           "failedToast": "Impossible de publier cette mise à jour.",
+          "sentForReviewToast": "La version {number} a été envoyée à un administrateur pour examen.",
           "offNotice": "La publication est désactivée. Demandez à un administrateur de publier cette mise à jour."
         }
       }
@@ -17617,6 +17650,40 @@
         "title": "La publication est irréversible",
         "description": "Après l'application, tout le monde dans l'organisation peut utiliser les compétences sélectionnées. Les compétences publiées ne peuvent plus redevenir privées. Seul un administrateur peut les supprimer."
       }
+    },
+    "reviewRequests": {
+      "title": "Demandes de publication",
+      "description": "Approuvez ou refusez les demandes de publication de compétences pour l'organisation.",
+      "columns": {
+        "skill": "Compétence",
+        "version": "Version",
+        "kind": "Demande",
+        "requestedBy": "Demandée par",
+        "date": "Date"
+      },
+      "versionLabel": "Version {number}",
+      "kind": {
+        "firstPublish": "Première publication",
+        "update": "Mise à jour depuis la version {number}"
+      },
+      "unknownRequester": "Inconnu",
+      "unnamedSkill": "Compétence sans nom",
+      "approve": {
+        "label": "Approuver",
+        "ariaLabel": "Approuver {name}"
+      },
+      "deny": {
+        "label": "Refuser",
+        "ariaLabel": "Refuser {name}"
+      },
+      "approvedToast": "Version {number} de {name} publiée.",
+      "deniedToast": "Version {number} de {name} refusée.",
+      "failedToast": "Impossible de mettre à jour cette demande.",
+      "loadError": {
+        "title": "Impossible de charger les demandes de publication",
+        "description": "Réessayez plus tard."
+      },
+      "empty": "Aucune compétence n'attend d'examen."
     }
   },
   "opensearchHealth": {

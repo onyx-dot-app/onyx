@@ -126,6 +126,18 @@ export type SkillVersionPreview = SkillVersion & {
   files: SkillBundleFile[];
 };
 
+export interface SkillReviewRequest {
+  skill_id: string;
+  name: string | null;
+  version_id: string;
+  version_number: number;
+  /** Null for a first publish. */
+  published_version_number: number | null;
+  requested_by_user_id: string | null;
+  requested_by_email: string | null;
+  requested_at: string | null;
+}
+
 export interface SkillBundleFile {
   path: string;
   size: number;
