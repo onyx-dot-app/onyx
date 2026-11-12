@@ -22,6 +22,8 @@ export interface OnyxMeta {
   partId?: string;
   /** The part's full current text. Replaces the text received so far. */
   snapshotText?: string;
+  /** For a plan entry: its present-tense label while it runs. */
+  activeForm?: string;
 }
 
 /** ACP's extension field on every object. */
