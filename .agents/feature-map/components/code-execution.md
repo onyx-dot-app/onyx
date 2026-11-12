@@ -632,7 +632,7 @@ health calls are not retried.
   (`chat/run_store.py:ChatRunStore._load_status` calls
   `db/chat_checkpoint.py:interrupt_response__no_commit`). The cleanup never
   runs, so the sandbox stays until its 1 h TTL. Also,
-  `chat/subagents.py:ChatAgentDirectory.restore_agent` raises for a coding
+  `chat/restoration.py:restore_subagent` raises for a coding
   agent: the coding child is saved without a restoration configuration.
 - **Code mode limits.** Monty's `asyncio.gather` takes no keyword arguments,
   so the tool description teaches a `try`/`except` wrapper instead of

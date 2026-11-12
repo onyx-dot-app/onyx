@@ -27,6 +27,7 @@ export class ChatPage {
   readonly humanMessages: Locator;
   readonly humanMessageBubbles: Locator;
   readonly aiMessages: Locator;
+  readonly agentResultsDividers: Locator;
   /** One row per message; far from the viewport, an empty placeholder. */
   readonly messageRows: Locator;
   readonly scrollToBottomButton: Locator;
@@ -51,6 +52,10 @@ export class ChatPage {
     this.humanMessages = page.locator("#onyx-human-message");
     this.humanMessageBubbles = page.getByTestId("human-message-bubble");
     this.aiMessages = page.getByTestId("onyx-ai-message");
+    this.agentResultsDividers = this.scrollContainer.getByText(
+      "Subagent results received",
+      { exact: true }
+    );
     this.messageRows = this.scrollContainer.locator('[id^="message-"]');
     this.scrollToBottomButton = page.getByRole("button", {
       name: "Scroll to bottom",
@@ -433,6 +438,14 @@ export class ChatPage {
     await this.openModelSettings(modelName);
     await this.modelPopover.getByRole("slider").first().press("End");
     await this.page.keyboard.press("Escape");
+  }
+
+  async selectPreviousHumanMessage(index = 0): Promise<void> {
+    await this.humanMessage(index)
+      .getByTestId("MessageSwitcher/container")
+      .getByRole("button")
+      .first()
+      .click();
   }
 
   async editHumanMessage(text: string, index = 0): Promise<void> {

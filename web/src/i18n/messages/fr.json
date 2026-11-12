@@ -12453,6 +12453,7 @@
     },
     "input": {
       "appInputBar": {
+        "subagentsWorking": "Sous-agents en cours",
         "attachFilesButton": {
           "tooltip": "Joindre des fichiers"
         },
@@ -12734,6 +12735,9 @@
         "timedOut": {
           "text": "La réponse s'est arrêtée, car elle a atteint sa limite de temps."
         }
+      },
+      "agentResults": {
+        "received": "Résultats des sous-agents reçus"
       },
       "codeBlock": {
         "copyButton": {

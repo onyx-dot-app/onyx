@@ -12453,6 +12453,7 @@
     },
     "input": {
       "appInputBar": {
+        "subagentsWorking": "الوكلاء الفرعيون يعملون",
         "attachFilesButton": {
           "tooltip": "إرفاق ملفات"
         },
@@ -12734,6 +12735,9 @@
         "timedOut": {
           "text": "توقف الرد لأنه بلغ الحد الزمني."
         }
+      },
+      "agentResults": {
+        "received": "تم استلام نتائج الوكيل الفرعي"
       },
       "codeBlock": {
         "copyButton": {

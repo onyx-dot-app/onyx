@@ -98,7 +98,11 @@ from onyx.utils.threadpool_concurrency import (
 )
 from onyx.utils.variable_functionality import global_version
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from tests.unit.onyx.agents.fakes import FakeModelClient, FakeRunOwnership, FakeRunStore
+from tests.unit.onyx.agents.fakes import (
+    FakeModelClient,
+    FakeRunOwnership,
+    FakeRunStore,
+)
 
 MODEL_REFUSAL_ERROR_CODE = "MODEL_REFUSAL"
 CONTENT_FILTER_FINISH_REASON = "content_filter"
@@ -407,6 +411,7 @@ def _make_setup(n_models: int = 1) -> MagicMock:
     )
     setup.preferred_tool_id = None
     setup.previous_run_id = None
+    setup.checkpoint = None
     setup.messages = []
     setup.input_messages = []
     setup.chat_session_id = uuid4()
@@ -511,13 +516,15 @@ class TestRunModels:
         _search_selection_model.return_value = fast_llm
 
         with (
-            patch("onyx.chat.execution.ChatAgent") as answer,
+            patch("onyx.chat.agent.ChatAgent") as answer,
             patch("onyx.chat.execution.construct_tools", return_value={}) as tools,
             patch(
                 "onyx.chat.execution.get_llm_token_counter", return_value=lambda _: 0
             ),
         ):
-            create_chat_agent(setup, MagicMock(), 0, CancellationSignal(), True)
+            create_chat_agent(
+                setup, MagicMock(), 0, CancellationSignal(), True, with_subagents=True
+            )
 
         assert answer.call_args.kwargs["llm"] is setup.responses[0].llm
         assert tools.call_args.kwargs["llm"] is setup.responses[0].llm
@@ -567,7 +574,9 @@ class TestRunModels:
                 "onyx.chat.execution.get_llm_token_counter", return_value=lambda _: 0
             ),
         ):
-            create_chat_agent(setup, MagicMock(), 0, CancellationSignal(), True)
+            create_chat_agent(
+                setup, MagicMock(), 0, CancellationSignal(), True, with_subagents=True
+            )
 
         offered = {
             configured.in_code_tool_id
@@ -1385,6 +1394,7 @@ def mock_model_execution(
         index: int,
         _cancellation: CancellationSignal,
         auto_filters: bool,
+        **_kwargs: object,
     ) -> ChatAgent:
         with lock:
             response_future, emitter = captured[index]
@@ -1453,10 +1463,6 @@ def _mock_settings() -> Generator[None, None, None]:
         patch(
             "onyx.chat.execution.load_chat_branch",
             return_value=MagicMock(chat_session_id=ANY, message_ids=[]),
-        ),
-        patch(
-            "onyx.chat.history_store.PostgresChatHistoryStore.list_agents",
-            return_value=[],
         ),
         patch("onyx.chat.execution.get_cache_backend"),
         patch("onyx.chat.execution.get_session_with_current_tenant"),
@@ -2336,6 +2342,7 @@ def test_stop_retains_turn_while_preparation_drains(
         _index: int,
         _cancellation: CancellationSignal,
         _auto_filters: bool,
+        **_kwargs: object,
     ) -> ChatAgent:
         entered.set()
         assert release.wait(5)
@@ -2394,6 +2401,7 @@ def test_model_failure_does_not_cancel_comparison_response() -> None:
         index: int,
         _cancellation: CancellationSignal,
         _auto_filters: bool,
+        **_kwargs: object,
     ) -> ChatAgent:
         return prepared[index]
 
@@ -2571,6 +2579,7 @@ def test_response_workers_track_generations_and_share_one_event_consumer(
         index: int,
         _cancellation: CancellationSignal,
         _auto_filters: bool,
+        **_kwargs: object,
     ) -> ChatAgent:
         with lock:
             preparation_threads[index] = threading.get_ident()
@@ -3003,7 +3012,7 @@ def test_control_failure_retains_turn_and_polls_ownership_until_workers_drain(
         )
     )
 
-    def prepare(*_args: object) -> ChatAgent:
+    def prepare(*_args: object, **_kwargs: object) -> ChatAgent:
         entered.set()
         assert release.wait(5)
         return prepared
@@ -3357,7 +3366,7 @@ def test_execution_deadline_cancels_work_but_waits_for_preparation_to_drain(
         )
     )
 
-    def prepare(*_args: object) -> ChatAgent:
+    def prepare(*_args: object, **_kwargs: object) -> ChatAgent:
         entered.set()
         assert release.wait(5)
         return prepared
@@ -3409,6 +3418,7 @@ def test_preparation_that_outlives_the_deadline_ends_the_turn_as_timed_out(
         _index: int,
         cancellation: CancellationSignal,
         _auto_filters: bool,
+        **_kwargs: object,
     ) -> ChatAgent:
         # Preparation that never starts a run, e.g. a slow tool server.
         stopped = threading.Event()
@@ -3487,7 +3497,9 @@ def test_invalid_preferred_tool_returns_an_actionable_error() -> None:
     setup.preferred_tool_saved = False
     with patch("onyx.chat.execution.construct_tools", return_value={}):
         with pytest.raises(OnyxError) as raised:
-            create_chat_agent(setup, MagicMock(), 0, CancellationSignal(), True)
+            create_chat_agent(
+                setup, MagicMock(), 0, CancellationSignal(), True, with_subagents=True
+            )
     assert raised.value.error_code == OnyxErrorCode.BAD_REQUEST
     packet = chat_error(raised.value, setup.responses[0].llm, model_index=1)
     assert packet.details == {
@@ -3531,6 +3543,7 @@ def test_completed_model_does_not_hide_a_second_models_stop(
         index: int,
         cancellation: CancellationSignal,
         _auto_filters: bool,
+        **_kwargs: object,
     ) -> ChatAgent:
         if index == 0:
             return _chat_agent(

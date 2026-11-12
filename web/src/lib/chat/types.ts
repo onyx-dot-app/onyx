@@ -25,6 +25,7 @@ export interface ChatHistoryPage {
 export interface ChatSessionStatus {
   is_processing: boolean;
   current_stream: { stream_id: number } | null;
+  has_active_subagents: boolean;
   /** Pending input can start a run now; false while the queue is paused. */
   has_startable_input: boolean;
   latest_response_id: number | null;
@@ -37,6 +38,7 @@ export interface ChatSessionQueue {
   error: string | null;
   /** A pending-message request is in flight. */
   busy: boolean;
+  hasActiveSubagents: boolean;
   needsResponseSelection: boolean;
   /**
    * A queued or interrupting message's turn starts as Deep Research when

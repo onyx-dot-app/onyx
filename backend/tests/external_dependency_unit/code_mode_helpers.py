@@ -108,7 +108,7 @@ def send(
     """Send a message and read its stream; `on_part` sees each part as it arrives."""
     parts: list[AnswerStreamPart] = []
     with (
-        patch("onyx.chat.execution.CODE_MODE_ENABLED", code_mode),
+        patch("onyx.chat.agent.CODE_MODE_ENABLED", code_mode),
         patch("onyx.chat.process_message.get_llm_for_persona", return_value=llm),
         patch(
             "onyx.server.features.mcp.ssrf.validate_mcp_outbound_url",

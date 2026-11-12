@@ -12453,6 +12453,7 @@
     },
     "input": {
       "appInputBar": {
+        "subagentsWorking": "子代理正在工作",
         "attachFilesButton": {
           "tooltip": "附加文件"
         },
@@ -12734,6 +12735,9 @@
         "timedOut": {
           "text": "回复已达到时间限制，因此已停止。"
         }
+      },
+      "agentResults": {
+        "received": "已收到子代理结果"
       },
       "codeBlock": {
         "copyButton": {

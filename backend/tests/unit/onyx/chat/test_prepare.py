@@ -400,7 +400,6 @@ def test_attachment_loading_releases_the_preparation_session(
 
 
 def test_admission_precedes_model_setup_and_releases_after_setup_failure() -> None:
-    from types import SimpleNamespace
     from unittest.mock import MagicMock
     from uuid import uuid4
 
@@ -421,7 +420,7 @@ def test_admission_precedes_model_setup_and_releases_after_setup_failure() -> No
         patch("onyx.chat.process_message.get_session_with_current_tenant"),
         patch(
             "onyx.chat.process_message._load_session",
-            return_value=SimpleNamespace(id=session_id, persona=None),
+            return_value=ChatSession(id=session_id, persona=None),
         ),
         patch("onyx.chat.process_message._select_models", side_effect=fail_model_setup),
         patch(

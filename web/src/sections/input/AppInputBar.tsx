@@ -833,7 +833,8 @@ const AppInputBar = React.memo(
           </div>
         </div>
 
-        {hasPendingInput && (
+        {/* One row, so the activity and the hint cannot overlap. */}
+        {((queue.hasActiveSubagents && !isSearchMode) || hasPendingInput) && (
           <Section
             flexDirection="row"
             justifyContent="end"
@@ -841,44 +842,75 @@ const AppInputBar = React.memo(
             height="fit"
             gap={1}
             padding={1}
-            data-testid="pending-message-hint"
-            role="note"
-            aria-label={
-              !canSubmitPending
-                ? pendingMessageHint
-                : sendDelivery === "interrupt"
-                  ? t("appInputBar.pendingMessages.interruptKeyboardHint")
-                  : t("appInputBar.pendingMessages.keyboardHint")
-            }
             className="min-w-0 flex-1"
           >
-            {canSubmitPending ? (
-              <>
-                <Keycap>↵</Keycap>
-                <Text font="secondary-body" color="text-03" maxLines={1}>
-                  {t(
-                    sendDelivery === "interrupt"
-                      ? "appInputBar.pendingMessages.interruptLabel"
-                      : "appInputBar.pendingMessages.sendLabel"
-                  )}
-                </Text>
-                <Keycap>
-                  {isMac ? "⌘" : t("appInputBar.pendingMessages.ctrlKey")}
-                </Keycap>
-                <Keycap>↵</Keycap>
-                <Text font="secondary-body" color="text-03" maxLines={1}>
-                  {t("appInputBar.pendingMessages.queueLabel")}
-                </Text>
-              </>
-            ) : (
-              <Text
-                font="secondary-body"
-                color="text-03"
-                maxLines={1}
-                overflowTooltip
+            {queue.hasActiveSubagents && !isSearchMode && (
+              <Section
+                flexDirection="row"
+                justifyContent="start"
+                width="auto"
+                height="fit"
+                gap={1}
+                data-testid="subagent-activity"
+                role="status"
+                className="shrink-0"
               >
-                {pendingMessageHint}
-              </Text>
+                <span
+                  aria-hidden
+                  className="size-1.5 shrink-0 rounded-full bg-status-info-05 motion-safe:animate-pulse"
+                />
+                <Text font="secondary-body" color="text-03" maxLines={1}>
+                  {t("appInputBar.subagentsWorking")}
+                </Text>
+              </Section>
+            )}
+            {hasPendingInput && (
+              <Section
+                flexDirection="row"
+                justifyContent="end"
+                width="auto"
+                height="fit"
+                gap={1}
+                data-testid="pending-message-hint"
+                role="note"
+                aria-label={
+                  !canSubmitPending
+                    ? pendingMessageHint
+                    : sendDelivery === "interrupt"
+                      ? t("appInputBar.pendingMessages.interruptKeyboardHint")
+                      : t("appInputBar.pendingMessages.keyboardHint")
+                }
+                className="min-w-0"
+              >
+                {canSubmitPending ? (
+                  <>
+                    <Keycap>↵</Keycap>
+                    <Text font="secondary-body" color="text-03" maxLines={1}>
+                      {t(
+                        sendDelivery === "interrupt"
+                          ? "appInputBar.pendingMessages.interruptLabel"
+                          : "appInputBar.pendingMessages.sendLabel"
+                      )}
+                    </Text>
+                    <Keycap>
+                      {isMac ? "⌘" : t("appInputBar.pendingMessages.ctrlKey")}
+                    </Keycap>
+                    <Keycap>↵</Keycap>
+                    <Text font="secondary-body" color="text-03" maxLines={1}>
+                      {t("appInputBar.pendingMessages.queueLabel")}
+                    </Text>
+                  </>
+                ) : (
+                  <Text
+                    font="secondary-body"
+                    color="text-03"
+                    maxLines={1}
+                    overflowTooltip
+                  >
+                    {pendingMessageHint}
+                  </Text>
+                )}
+              </Section>
             )}
           </Section>
         )}

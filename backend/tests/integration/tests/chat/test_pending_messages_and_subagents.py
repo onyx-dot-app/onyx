@@ -1,4 +1,4 @@
-"""Pending human messages and incognito limits through the real chat API."""
+"""Pending human messages and background subagents through the real chat API."""
 
 import json
 import time
@@ -12,16 +12,20 @@ from onyx.agents.models import MessageDelivery, RunStatus
 from onyx.chat.models import PendingChatMessage
 from onyx.coding_agent.tool_definitions import CODING_AGENT_TOOL_NAME
 from onyx.configs.constants import MessageType
+from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat.models import (
     ChatSessionCreationRequest,
     ChatSessionDetailResponse,
     ChatSessionProcessingStatus,
     PendingChatMessageRequest,
 )
+from onyx.tools.constants import SEND_MESSAGE_TOOL_NAME, SPAWN_AGENT_TOOL_NAME
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.chat import ChatSessionManager
+from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.mock_llm import (
+    MockLLMManager,
     MockLLMScript,
 )
 from tests.integration.common_utils.managers.persona import PersonaManager
@@ -29,10 +33,18 @@ from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.mock_services.mock_llm_server.models import (
     Reply,
     RequestConditions,
+    ToolCall,
 )
 
 WAIT_TIMEOUT_S = 60
 SECURITY_URL = f"{API_SERVER_URL}/admin/security"
+SUBAGENT_TOOLS = {
+    SPAWN_AGENT_TOOL_NAME,
+    SEND_MESSAGE_TOOL_NAME,
+    "list_agents",
+    "interrupt_agent",
+}
+CHOSEN_MODEL = "mock-chosen-model"
 
 
 def _wait_until(condition: Callable[[], bool], description: str) -> None:
@@ -273,6 +285,120 @@ def test_interrupt_while_a_response_streams(
     assert _pending(session.id, admin_user) == []
 
 
+def test_background_agent_result_wakes_the_idle_chat(
+    admin_user: DATestUser, mock_llm: MockLLMScript
+) -> None:
+    """A finished root releases the chat while its child runs; the child's
+    result starts a follow-up under a hidden question. Turns that the server
+    starts use the model the user chose, not the default model."""
+    nonce = uuid4().hex
+    question = f"Research in the background. {nonce}"
+    child_task = f"Find the answer. {uuid4().hex}"
+    queued = "A question while research runs"
+    child_result = "Private child result: forty-two."
+    mock_llm.conversation(
+        nonce,
+        Reply(
+            tool_calls=[
+                ToolCall(
+                    id="spawn-research",
+                    name="spawn_agent",
+                    arguments={"name": "research", "instruction": child_task},
+                )
+            ]
+        ),
+        Reply(
+            text="Research started.",
+            conditions=RequestConditions(has_results_for=["spawn-research"]),
+        ),
+        Reply(
+            text="Answer while research runs.",
+            conditions=RequestConditions(prompt_contains=[queued]),
+        ),
+        Reply(
+            text="Final answer: forty-two.",
+            conditions=RequestConditions(prompt_contains=[child_result]),
+        ),
+        conditions=RequestConditions(prompt_contains=[nonce]),
+    )
+    mock_llm.conversation(
+        child_task,
+        Reply(text=child_result, pause_after_first_chunk=child_task),
+        conditions=RequestConditions(prompt_contains=[child_task]),
+    )
+    chosen = MockLLMManager.create(
+        mock_llm.api_base, admin_user, model_name=CHOSEN_MODEL, make_default=False
+    )
+    session = ChatSessionManager.create(user_performing_action=admin_user)
+    try:
+        started = ChatSessionManager.send_message(
+            session.id,
+            question,
+            admin_user,
+            llm_override=LLMOverride(
+                model_configuration_id=chosen.model_configuration_ids[0]
+            ),
+        )
+        assert started.error is None
+        assert started.full_message == "Research started."
+        _wait_until(
+            lambda: bool(mock_llm.requests_in(child_task)), "the child is running"
+        )
+
+        # The finished root releases the chat while its child works.
+        def released_with_active_child() -> bool:
+            status = _status(session.id, admin_user)
+            return status.has_active_subagents and not status.is_processing
+
+        _wait_until(released_with_active_child, "the root releases the chat")
+
+        # A queued message starts a turn without waiting for the child.
+        _submit(session.id, admin_user, queued)
+
+        def queued_answered() -> bool:
+            detail = _detail(session.id, admin_user)
+            return (
+                "Answer while research runs." in _texts(detail, MessageType.ASSISTANT)
+                and not detail.is_processing
+            )
+
+        _wait_until(queued_answered, "the queued message is answered")
+        assert _status(session.id, admin_user).has_active_subagents
+
+        # The child's result wakes the idle chat.
+        mock_llm.release_gate(child_task)
+
+        def follow_up_finished() -> bool:
+            detail = _detail(session.id, admin_user)
+            return (
+                "Final answer: forty-two." in _texts(detail, MessageType.ASSISTANT)
+                and not detail.is_processing
+                and not _status(session.id, admin_user).has_active_subagents
+            )
+
+        _wait_until(follow_up_finished, "the child result is answered")
+    finally:
+        mock_llm.release_gate(child_task)
+        LLMProviderManager.delete(chosen, user_performing_action=admin_user)
+
+    detail = _detail(session.id, admin_user)
+    # The follow-up's question is hidden and has no text.
+    assert _texts(detail, MessageType.USER) == [question, queued]
+    assert _texts(detail, MessageType.AGENT_RESULTS) == [""]
+    assert _texts(detail, MessageType.ASSISTANT) == [
+        "Research started.",
+        "Answer while research runs.",
+        "Final answer: forty-two.",
+    ]
+    status = _status(session.id, admin_user)
+    assert not status.has_active_subagents
+    assert not status.has_startable_input
+    # The queued turn and the result follow-up both use the chosen model.
+    root_requests = mock_llm.requests_in(nonce)
+    assert len(root_requests) == 4
+    assert {request.body["model"] for request in root_requests} == {CHOSEN_MODEL}
+
+
 def test_turns_the_server_starts_use_the_current_tool_selection(
     admin_user: DATestUser, mock_llm: MockLLMScript
 ) -> None:
@@ -391,13 +517,16 @@ def test_incognito_chat_has_no_child_agents(
     mock_llm: MockLLMScript,
     incognito_enabled: None,  # noqa: ARG001
 ) -> None:
-    """Incognito rejects deep research and offers the model no coding agent."""
+    """Incognito rejects deep research and offers the model no child-agent tools."""
     nonce = uuid4().hex
     mock_llm.conversation(
         nonce,
+        Reply(text="Normal answer."),
         Reply(text="Private answer."),
         conditions=RequestConditions(prompt_contains=[nonce]),
     )
+    normal = ChatSessionManager.create(user_performing_action=admin_user)
+    ChatSessionManager.send_message(normal.id, f"Normal chat. {nonce}", admin_user)
     created = client.post(
         f"{API_SERVER_URL}/chat/create-chat-session",
         json=ChatSessionCreationRequest(persona_id=0, incognito=True).model_dump(
@@ -431,5 +560,6 @@ def test_incognito_chat_has_no_child_agents(
             f"{API_SERVER_URL}/chat/delete-chat-session/{private_id}",
             headers=admin_user.headers,
         ).raise_for_status()
-    [private_request] = mock_llm.requests_in(nonce)
-    assert CODING_AGENT_TOOL_NAME not in private_request.tools
+    normal_request, private_request = mock_llm.requests_in(nonce)
+    assert SUBAGENT_TOOLS <= set(normal_request.tools)
+    assert not {*SUBAGENT_TOOLS, CODING_AGENT_TOOL_NAME} & set(private_request.tools)

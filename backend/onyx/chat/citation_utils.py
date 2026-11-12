@@ -1,25 +1,62 @@
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 
+from onyx.agents.models import InputMessageMetadata, InputSource
 from onyx.chat.citation_processor import CitationMapping
-from onyx.chat.models import ChatMessageMetadata
+from onyx.chat.models import ChatMessageMetadata, ReceivedAgentInputs
 from onyx.chat.tool_results import tool_result_sources
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc
 from onyx.deep_research.models import ResearchMessageMetadata
 from onyx.file_store.models import ContextFileMetadata
-from onyx.llm.models import Message, ToolResultMessage
+from onyx.llm.models import Message, ToolResultMessage, UserMessage
 from onyx.tools.constants import CITEABLE_TOOLS_NAMES
 
 
 def message_citation_sources(message: Message) -> CitationMapping:
     """Read citation numbers shared by chat answers, tool results, and research reports."""
-    if isinstance(message.metadata, (ChatMessageMetadata, ResearchMessageMetadata)):
-        return message.metadata.sources
+    metadata = message.metadata
+    if isinstance(metadata, InputMessageMetadata):
+        metadata = metadata.content_metadata
+    if isinstance(metadata, (ChatMessageMetadata, ResearchMessageMetadata)):
+        return metadata.sources
     if not isinstance(message, ToolResultMessage):
         return {}
     sources = tool_result_sources(message.details)
     return dict(sources.citations) if sources is not None else {}
+
+
+def remap_received_citations(
+    messages: Sequence[UserMessage], sources: CitationMapping
+) -> ReceivedAgentInputs:
+    """Renumber incoming agent citations into this conversation's numbers.
+
+    Returns the rewritten messages and the numbers they add to `sources`.
+    """
+    inputs: list[UserMessage] = []
+    merged = sources
+    for message in messages:
+        if not isinstance(message.metadata, InputMessageMetadata) or (
+            message.metadata.source != InputSource.AGENT_RESULT
+        ):
+            inputs.append(message)
+            continue
+        incoming = message_citation_sources(message)
+        cited = extract_citation_order_from_text(message.text)
+        text, merged = collapse_citations(
+            message.text,
+            merged,
+            {number: incoming[number] for number in cited if number in incoming},
+        )
+        inputs.append(message.model_copy(update={"content": text}))
+    return ReceivedAgentInputs(
+        messages=inputs,
+        new_citations={
+            number: document
+            for number, document in merged.items()
+            if number not in sources
+        },
+    )
 
 
 def result_cites_documents(result: ToolResultMessage) -> bool:

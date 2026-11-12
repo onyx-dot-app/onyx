@@ -294,16 +294,23 @@ its background task end ([[#pure-asgi-middleware]]).
     before releasing input. Web also follows `current_stream` when a queued
     turn starts, through
     `web/src/lib/chat/sessionReadiness.ts:waitForChatResponseEnd`.
-    When the selected response is running with no owner, the endpoint
-    schedules dispatch, which saves that response as interrupted so the queue
-    can continue. `has_startable_input` is true when queued text can start a
-    turn now; a queue that Stop or a failure paused reports false. The
+    Background children can remain active after the root response becomes
+    idle. `has_active_subagents` controls the activity indicator, not input
+    availability; it is true while a child on the selected branch runs or its
+    results are about to wake the root. When a running child has no owner, the
+    endpoint schedules dispatch, which saves the child as failed so its result
+    wakes the root. `has_startable_input` is true when queued text or unread
+    root results can start a turn now; a queue that Stop or a failure paused
+    reports false. The
     endpoint always reads the selected branch, and it reads inputs before
     admission. A turn claims admission before it consumes
     input, so a starting turn shows as startable input or as processing. Web
-    polls while `has_startable_input` is true, and checks `current_stream` and
-    `latest_response_id` (the newest response on the selected branch) to follow
-    queued turns, including turns that finish between polls.
+    polls while `has_startable_input` or `has_active_subagents` is true, and
+    checks `current_stream` and `latest_response_id` (the newest response on
+    the selected branch) to follow automatic replies, including replies that
+    finish between polls. An automatic reply's
+    `MessageResponseIDInfo` has no `user_message_id`; session history returns
+    its hidden parent with `message_type: "agent_results"`.
     Other clients wait for the session to become idle:
     `mobile/src/chat/sessionReadiness.ts:waitForSessionIdle`,
     `cli/internal/api/client.go:IsChatSessionProcessing` and

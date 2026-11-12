@@ -1,4 +1,4 @@
-"""Conversation storage for one chat response and, in saved chats, its agent history.
+"""Conversation storage for one chat response.
 
 Both backends retain PostgreSQL usage rows. Redis holds temporary conversation content.
 Execution ownership and checkpoints belong to ChatRunStore.
@@ -8,7 +8,7 @@ from collections.abc import Sequence
 from typing import Protocol
 from uuid import UUID
 
-from onyx.agents.models import AgentInfo, CompactionCheckpoint
+from onyx.agents.models import CompactionCheckpoint
 from onyx.chat.chat_processing_checker import ChatTurnAdmission
 from onyx.chat.incognito_context import (
     input_group_start,
@@ -17,21 +17,14 @@ from onyx.chat.incognito_context import (
     save_incognito_user_messages,
 )
 from onyx.chat.models import (
-    ChatBranch,
     ChatHistoryResult,
     ChatResponseSnapshot,
     IncognitoAgentResponse,
     IncognitoState,
     PromptMetadata,
-    SavedAgentContext,
 )
 from onyx.chat.response import restore_response_sources
 from onyx.db.chat_response import save_chat_response_to_db
-from onyx.db.chat_subagents import (
-    load_agent_history,
-    load_session_agent_metadata,
-    lookup_session_agent,
-)
 from onyx.llm.models import (
     AssistantMessage,
     Message,
@@ -80,27 +73,9 @@ class ChatHistoryStore(Protocol):
 
 
 class PostgresChatHistoryStore(ChatHistoryStore):
-    def __init__(
-        self,
-        *,
-        message_id: int,
-        chat_session_id: UUID,
-        branch: ChatBranch | None = None,
-    ) -> None:
+    def __init__(self, *, message_id: int, chat_session_id: UUID) -> None:
         self.message_id = message_id
         self.chat_session_id = chat_session_id
-        self.branch = branch
-
-    def list_agents(self) -> list[AgentInfo]:
-        return load_session_agent_metadata(
-            self.message_id, branch=self.branch, include_root=False
-        )
-
-    def lookup_agent(self, agent_id: str, parent_id: str) -> AgentInfo | None:
-        return lookup_session_agent(self.message_id, agent_id, parent_id)
-
-    def load_agent_history(self, agent_id: str) -> SavedAgentContext:
-        return load_agent_history(self.message_id, agent_id)
 
     def save_response(self, response: ChatResponseSnapshot) -> None:
         save_chat_response_to_db(

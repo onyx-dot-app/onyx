@@ -46,6 +46,7 @@ from onyx.llm.models import (
     Message,
     ReasoningEffort,
     ToolResultMessage,
+    UserMessage,
 )
 from onyx.llm.override_models import LLMOverride
 from onyx.onyxbot.slack.models import SlackContext
@@ -70,6 +71,7 @@ from onyx.tools.models import (
 from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
 from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultType
 from onyx.tools.tool_implementations.search.models import SearchContext
+from onyx.tools.tool_implementations.subagents.models import ChatConfiguration
 
 MAX_DISCOVERED_AGENTS = 128
 _MESSAGE_ADAPTER = TypeAdapter(Message)
@@ -87,10 +89,10 @@ class PendingChatMessage(BaseModel):
 
 
 class QueuedChatTurn(BaseModel):
-    """The next root turn: a submitted message and the response it follows."""
+    """The next root turn: a submitted message, or unread agent results when None."""
 
     parent_response_id: int | None
-    message: PendingChatMessage
+    message: PendingChatMessage | None
 
 
 class PromptMetadata(CompactionMetadata):
@@ -163,7 +165,7 @@ class ResponseRecord(BaseModel):
     agent_id: str | None = None
     agent_path: str = "/root"
     agent_description: str = ""
-    restoration_config: ResearchConfiguration | None = None
+    restoration_config: ResearchConfiguration | ChatConfiguration | None = None
     previous_run_id: str | None = None
     parent_run_id: str | None = None
     parent_tool_call_id: str | None = None
@@ -206,7 +208,7 @@ class ResponseStatus(BaseModel):
     message_id: int
     root_message_id: int
     root_session_id: UUID
-    parent_agent_id: str | None
+    ancestor_agent_ids: list[str]
     status: RunStatus
 
 
@@ -219,19 +221,45 @@ class ResponseAncestry(BaseModel):
     parent_response_id: int | None
 
 
+class AgentResultState(BaseModel):
+    """An unread child result on a branch; it is readable once its response finishes."""
+
+    recipient_id: UUID
+    response_id: int
+    status: RunStatus
+
+
+class AgentInboxWork(BaseModel):
+    """An idle child's next run: a queued message, or its unread results when None."""
+
+    agent_id: str
+    message: UserMessage | None
+    # None: the step limit of the chat agent that hosts the run.
+    max_steps: int | None
+    total_timeout_s: float | None
+    parent_run_id: str
+    parent_message_id: str
+    parent_tool_call_id: str
+
+
 class ChatBranch(BaseModel):
     chat_session_id: UUID
     message_ids: list[int]
 
 
 class ChatInbox(BaseModel):
-    """The selected branch and the queued turn that can start on it."""
+    """Running children and startable work on a conversation's selected branch."""
 
     branch: ChatBranch
     selected_response_id: int | None
-    # The running selected response; it can have lost its owner.
+    # The running selected response and running children with unread results.
+    # Each can have lost its owner.
     running_response_ids: list[int] = Field(default_factory=list)
+    results: list[AgentResultState] = Field(default_factory=list)
     next_turn: QueuedChatTurn | None = None
+    child_work: list[AgentInboxWork] = Field(default_factory=list)
+    # Unfinished latest runs of agents whose messages wait for them.
+    waiting_response_ids: list[int] = Field(default_factory=list)
 
 
 class ResponseLink(BaseModel):
@@ -328,7 +356,7 @@ class SavedAgentContext(BaseModel):
     """Saved history, settings, and sources used to rebuild an agent."""
 
     agent_id: str
-    configuration: ResearchConfiguration | None
+    configuration: ResearchConfiguration | ChatConfiguration | None
     messages: list[Message]
     checkpoint: CompactionCheckpoint | None = None
     previous_run_id: str | None = None
@@ -342,6 +370,13 @@ class ChatMessageMetadata(BaseModel):
     documents: list[SearchDoc] = Field(default_factory=list)
     include_citations: bool = True
     elapsed_seconds: float = 0
+
+
+class ReceivedAgentInputs(BaseModel):
+    """Received messages and the citation numbers their sources add."""
+
+    messages: list[UserMessage]
+    new_citations: dict[int, SearchDoc]
 
 
 class ToolRecordReference(BaseModel):
@@ -679,7 +714,8 @@ class ChatTurnSetup(BaseModel):
     tool_configuration: PersonaToolConfiguration
     research_tool_id: int | None
     checkpoint: CompactionCheckpoint | None
-    user_message_id: int
+    # Child-result delivery has no new user message.
+    user_message_id: int | None
     user_identity: LLMUserIdentity
     responses: list[ReservedChatResponse]
     messages: list[Message]

@@ -163,7 +163,8 @@ export interface Message {
   messageId?: number;
   nodeId: number; // Unique identifier for tree structure (can be negative for temp messages)
   message: string;
-  type: "user" | "assistant" | "system" | "error"; // TODO: rename "assistant" to "agent" — https://linear.app/onyx-app/issue/ENG-3766
+  // agent_results is the hidden question node of an automatic follow-up response.
+  type: "user" | "assistant" | "agent_results" | "system" | "error"; // TODO: rename "assistant" to "agent" — https://linear.app/onyx-app/issue/ENG-3766
   retrievalType?: RetrievalType;
   researchType?: ResearchType;
   query?: string | null;
