@@ -1,6 +1,7 @@
 """Data models of the Firecracker runtime (`SANDBOX_RUNTIME=firecracker`)."""
 
-from datetime import datetime
+import re
+from datetime import datetime, timezone
 from enum import Enum
 from uuid import UUID
 
@@ -100,6 +101,20 @@ class TemplateInfo(BaseModel):
     # Managed mounts the template's VMs can swap. Empty from an agent that
     # predates named mounts (it swaps only skills).
     managed_mounts: list[str] = Field(default_factory=list)
+    # False: the template key does not fit this node; Create refuses it.
+    compatible: bool = True
+    built_at: datetime | None = None
+
+
+_IMAGE_TAG_UNSAFE = re.compile(r"[^A-Za-z0-9._-]+")
+_KEY_HASH = re.compile(r"[0-9a-f]{12}")
+
+
+def template_tag(image_tag: str) -> str:
+    """The tag part of a template version "<image tag>-<key hash[:12]>"
+    (microvm/internal/tplbuild Name)."""
+    tag = _IMAGE_TAG_UNSAFE.sub("-", image_tag).strip("-._")
+    return (tag or "img")[:40]
 
 
 class NodeInfo(BaseModel):
@@ -119,7 +134,25 @@ class NodeInfo(BaseModel):
     vm_slots_used: int = 0
 
     def template(self, version: str) -> TemplateInfo | None:
-        return next((t for t in self.templates if t.version == version), None)
+        """The template with this exact version, else the newest compatible
+        template built from the source image tag `version`. The version
+        suffix hashes node facts (kernel, CPU, egress CA), so it differs
+        per node."""
+        exact = next((t for t in self.templates if t.version == version), None)
+        if exact is not None:
+            return exact
+        prefix = template_tag(version) + "-"
+        built = [
+            t
+            for t in self.templates
+            if t.compatible
+            and t.version.startswith(prefix)
+            and _KEY_HASH.fullmatch(t.version[len(prefix) :])
+        ]
+        if not built:
+            return None
+        oldest = datetime.min.replace(tzinfo=timezone.utc)
+        return max(built, key=lambda t: t.built_at or oldest)
 
 
 class CreateResult(BaseModel):
