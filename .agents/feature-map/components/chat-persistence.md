@@ -169,8 +169,9 @@ its queued text into the question tree in the same transaction.
 The runtime records an input only after its acceptance transaction commits.
 Live and saved rendering emit accepted human inputs as `user_message` packets
 before the model step that consumed them. This preserves their display order.
-Main Chat accepts text only, without
-request headers or serialized request settings. The human queue belongs to the
+Main Chat accepts text without attachments or request headers. A queued or
+interrupting message keeps its Deep Research choice (`chat_input.deep_research`)
+and the model the picker showed (`chat_input.llm_override`). The human queue belongs to the
 session: only a `send` row targets a response, and a `send` that its run never
 reads waits like queued input. Withdrawing pending text uses the
 same recipient lock as acceptance; accepted text cannot be withdrawn. Promotion
