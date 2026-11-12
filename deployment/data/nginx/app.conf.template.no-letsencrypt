@@ -24,7 +24,7 @@ upstream web_server {
 }
 
 # Conditionally include MCP upstream configuration
-include /etc/nginx/conf.d/mcp_upstream.conf.inc;
+include "${CONF_DIR}/mcp_upstream.conf.inc";
 
 # WebSocket support: only set Connection "upgrade" for actual upgrade requests
 map $http_upgrade $connection_upgrade {
@@ -40,8 +40,8 @@ server {
     access_log /var/log/nginx/access.log custom_main;
 
     # Conditionally include MCP location configuration
-    include /etc/nginx/conf.d/mcp.conf.inc;
-    include /etc/nginx/conf.d/webhook.conf.inc;
+    include "${CONF_DIR}/mcp.conf.inc";
+    include "${CONF_DIR}/webhook.conf.inc";
 
     # First-party health probe served directly by nginx (no upstreams),
     # used by the container healthcheck.
