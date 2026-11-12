@@ -90,6 +90,7 @@ from onyx.db.chat_checkpoint import (
     publish_checkpoint__no_commit,
 )
 from onyx.db.chat_inputs import (
+    MAX_PENDING_MESSAGE_BYTES,
     agent_result_states,
     can_start_input,
     consume_inputs__no_commit,
@@ -138,6 +139,8 @@ from onyx.deep_research.models import (
     ResearchMessageMetadata,
     ResearchPhase,
 )
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.models import ChatFileType, FileDescriptor
 from onyx.llm.models import (
     AssistantMessage,
@@ -3667,6 +3670,35 @@ def test_agent_inbox_acceptance_preserves_content_and_source(
         db_session.scalar(select(ChatInput).where(ChatInput.message_id == receipt.id))
         is None
     )
+
+
+def test_agent_message_over_the_byte_limit_is_not_stored(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    response = _response(db_session, conversation)
+    parent = _record(response)
+    child = _child_record(db_session, parent, uuid4(), "First answer")
+    _save(db_session, response, parent)
+    child_row = db_session.get(ChatMessage, int(child.run_id))
+    assert child_row is not None and child.agent_id is not None
+    child_row.response_status = RunStatus.RUNNING
+    branch = ChatBranch(chat_session_id=conversation.id, message_ids=[response.id])
+    # Two-byte characters: the text fits the limit in characters but not in bytes.
+    content = "\u00e9" * (MAX_PENDING_MESSAGE_BYTES // 2 + 1)
+    request = AgentMessageRequest(
+        agent_id=child.agent_id,
+        parent_id=str(conversation.id),
+        message=UserMessage(content=content),
+        delivery=MessageDelivery.SEND,
+        max_steps=3,
+        parent_run_id=parent.run_id,
+        parent_message_id=f"{parent.run_id}:0",
+        parent_tool_call_id="delegate",
+    )
+    with pytest.raises(OnyxError) as error:
+        enqueue_message(db_session, branch, request, response.id)
+    assert error.value.error_code == OnyxErrorCode.PAYLOAD_TOO_LARGE
+    assert pending_inputs(db_session, branch, child.agent_id) == []
 
 
 def test_unreceived_send_starts_the_next_child_run(
