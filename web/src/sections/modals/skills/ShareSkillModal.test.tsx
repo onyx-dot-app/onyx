@@ -258,6 +258,71 @@ describe("ShareSkillModal", () => {
     }
   );
 
+  it("shows a published skill as Organization with no way to make it private", async () => {
+    mockLoadSkill.mockResolvedValue(
+      customFixture({ user_permission: "OWNER", public_permission: "VIEWER" })
+    );
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        open
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+      />
+    );
+    expect(await screen.findByText("Organization")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Published. Everyone in the organization can use this skill."
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Change sharing scope" })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Publishing cannot be undone")
+    ).not.toBeInTheDocument();
+  });
+
+  it("warns that publishing cannot be undone before a private skill is published", async () => {
+    mockLoadSkill.mockResolvedValue(
+      customFixture({ user_permission: "OWNER", public_permission: null })
+    );
+    const user = setupUser();
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        open
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+      />
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Change sharing scope" })
+    );
+    expect(
+      screen.queryByText("Publishing cannot be undone")
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("option", { name: "Anyone in your organization" })
+    );
+    expect(
+      await screen.findByText("Publishing cannot be undone")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Change organization permission" })
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(mockUpdateSkillShares).toHaveBeenCalledWith(
+        "custom-1",
+        expect.objectContaining({ public_permission: "VIEWER" })
+      )
+    );
+  });
+
   it("keeps creation settings local until the skill is created", async () => {
     const user = setupUser();
     const onSaveDraft = jest.fn();

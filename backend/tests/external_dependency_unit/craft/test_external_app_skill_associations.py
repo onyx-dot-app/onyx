@@ -17,6 +17,7 @@ from onyx.db.external_app import (
     replace_custom_skill_associations__no_commit,
 )
 from onyx.db.models import Skill, User, UserSkillPreference
+from onyx.db.plugin import get_current_version_bundle_file_id
 from onyx.db.skill import set_skill_public_permission
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -33,6 +34,7 @@ from tests.external_dependency_unit.craft.db_helpers import (
     make_sandbox,
     make_skill,
     make_user,
+    set_current_version_validity,
 )
 
 
@@ -151,7 +153,7 @@ def test_associate_rejects_an_invalid_skill_without_promoting_it(
 ) -> None:
     app_id = _make_app(db_session)
     invalid = make_skill(db_session, name="invalid-app-skill", is_public=False)
-    invalid.is_valid = False
+    set_current_version_validity(db_session, invalid.id, False)
     db_session.flush()
 
     with pytest.raises(OnyxError) as exc_info:
@@ -200,7 +202,7 @@ def test_replace_rejects_an_invalid_skill_without_mutating_associations(
     app_id = _make_app(db_session)
     original = make_skill(db_session, name="original-skill", is_public=True)
     invalid = make_skill(db_session, name="invalid-app-skill", is_public=False)
-    invalid.is_valid = False
+    set_current_version_validity(db_session, invalid.id, False)
     associate_custom_skill_with_external_app__no_commit(
         db_session,
         external_app_id=app_id,
@@ -226,7 +228,7 @@ def test_unlink_retains_skill_visibility_content_and_preferences(
 ) -> None:
     owner = make_user(db_session, standard_account=True)
     skill = make_skill(db_session, is_public=True, author_user_id=owner.id)
-    original_bundle_file_id = skill.bundle_file_id
+    original_bundle_file_id = get_current_version_bundle_file_id(skill.id, db_session)
     db_session.add(
         UserSkillPreference(user_id=owner.id, skill_id=skill.id, name=skill.name)
     )
@@ -245,7 +247,10 @@ def test_unlink_retains_skill_visibility_content_and_preferences(
     unlinked = affected[0]
 
     assert unlinked.public_permission == SkillSharePermission.VIEWER
-    assert unlinked.bundle_file_id == original_bundle_file_id
+    assert (
+        get_current_version_bundle_file_id(unlinked.id, db_session)
+        == original_bundle_file_id
+    )
     assert get_external_app_by_skill_id(db_session, skill.id) is None
     assert (
         db_session.get(
@@ -254,12 +259,14 @@ def test_unlink_retains_skill_visibility_content_and_preferences(
         )
         is not None
     )
-    set_skill_public_permission(
-        skill=unlinked,
-        public_permission=None,
-        db_session=db_session,
-    )
-    assert unlinked.public_permission is None
+    # Publishing is one-way: an unlinked skill stays published.
+    with pytest.raises(OnyxError, match="cannot be made private"):
+        set_skill_public_permission(
+            skill=unlinked,
+            public_permission=None,
+            db_session=db_session,
+        )
+    assert unlinked.public_permission == SkillSharePermission.VIEWER
 
 
 def test_replacing_custom_associations_preserves_provider_skill(
@@ -368,7 +375,7 @@ def test_editor_creation_with_app_context_is_atomic_and_not_auto_enabled(
     )
     skill = db_session.scalar(select(Skill).where(Skill.id == response.id))
     assert skill is not None
-    bundle_file_id = skill.bundle_file_id
+    bundle_file_id = get_current_version_bundle_file_id(skill.id, db_session)
 
     try:
         assert response.public_permission == SkillSharePermission.VIEWER

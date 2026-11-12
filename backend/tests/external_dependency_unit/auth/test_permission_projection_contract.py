@@ -76,7 +76,6 @@ from onyx.db.models import (
     Persona__User,
     Persona__UserGroup,
     Skill,
-    Skill__UserGroup,
     Tool,
     User,
     User__UserGroup,
@@ -93,7 +92,8 @@ from onyx.db.persona import (
     is_persona_editable_by_user,
     persona_edit_within_scope,
 )
-from onyx.db.skill import get_group_ids_for_skill
+from onyx.db.plugin import create_skill_plugin__no_commit, legacy_skill_version_content
+from onyx.db.skill import get_group_ids_for_skill, replace_skill_shares
 from onyx.db.tools import can_manage_mcp_server, can_manage_tool
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents.credential import (
@@ -965,8 +965,14 @@ def _make_skill(
     )
     db_session.add(skill)
     db_session.flush()
-    for group in groups:
-        db_session.add(Skill__UserGroup(skill_id=skill.id, user_group_id=group.id))
+    create_skill_plugin__no_commit(
+        skill, legacy_skill_version_content(skill), None, db_session
+    )
+    replace_skill_shares(
+        skill=skill,
+        group_shares={group.id: SkillSharePermission.VIEWER for group in groups},
+        db_session=db_session,
+    )
     db_session.commit()
     return skill
 

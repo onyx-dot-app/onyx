@@ -1019,6 +1019,25 @@ class SkillInstallationPolicy(str, PyEnum):
     REQUIRED = "REQUIRED"
 
 
+class MarketplaceKind(str, PyEnum):
+    """Where a plugin comes from. A marketplace grants no access."""
+
+    # One "My uploads" for each user.
+    USER_UPLOADS = "user_uploads"
+    # One for each tenant. A plugin here is published to the organization.
+    ORGANIZATION_LIBRARY = "organization_library"
+
+
+class PluginInstallationPolicy(str, PyEnum):
+    """Install setting of a plugin, a group override or a marketplace default.
+    Writes refuse NOT_AVAILABLE until group install settings ship."""
+
+    REQUIRED = "REQUIRED"
+    DEFAULT = "DEFAULT"
+    AVAILABLE = "AVAILABLE"
+    NOT_AVAILABLE = "NOT_AVAILABLE"
+
+
 class ConnectorEventType(str, PyEnum):
     """What an inbound connector event says happened to one document."""
 

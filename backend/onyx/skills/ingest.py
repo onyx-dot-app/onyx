@@ -11,12 +11,15 @@ from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.bundle import (
     SKILL_MD_NAME,
     build_single_file_bundle,
+    build_skill_version_content,
+    check_skill_md_size,
     compute_bundle_sha256,
     normalize_custom_bundle,
     normalize_stored_bundle,
     open_bundle_zip,
 )
 from onyx.skills.metadata import parse_skill_document
+from onyx.skills.models import PluginVersionContent
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -27,6 +30,8 @@ class IngestedBundle(NamedTuple):
     bundle_file_id: str
     bundle_sha256: str
     description: str
+    # What a plugin version made from this bundle stores.
+    content: PluginVersionContent
 
 
 def save_skill_bundle_bytes(
@@ -76,6 +81,7 @@ def ingest_skill_bundle(
     )
     with open_bundle_zip(normalized.content) as bundle_zip:
         raw_skill_md = bundle_zip.read(SKILL_MD_NAME)
+    check_skill_md_size(raw_skill_md)
     document = parse_skill_document(
         raw_skill_md,
         directory_name=normalized.source_directory,
@@ -100,11 +106,23 @@ def ingest_skill_bundle(
         display_name=f"{name}.zip",
         file_store=file_store,
     )
+    try:
+        content = build_skill_version_content(
+            normalized.content,
+            bundle_file_id=bundle_file_id,
+            bundle_sha256=sha,
+            raw_skill_md=raw_skill_md,
+            document=document,
+        )
+    except Exception:
+        delete_bundle_blob(file_store, bundle_file_id)
+        raise
     return IngestedBundle(
         canonical_name=name,
         bundle_file_id=bundle_file_id,
         bundle_sha256=sha,
         description=description,
+        content=content,
     )
 
 

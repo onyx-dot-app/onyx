@@ -17,7 +17,7 @@ owns the rules.
 | Onyx | Danswer | Some identifiers and comments say Danswer. It is the same product. |
 | Craft | `build` | The product is Craft. The backend directory `backend/onyx/server/features/build/`, the `/build` API paths and `BUILD_MODE_FEATURE_ID` say build. |
 | Action | `Tool` | Some UI text calls tools "Actions". The code calls them Tools. |
-| Plugin | MCP server, OpenAPI `Tool`, or Craft external app | The UI word for all three. See [[plugins]]. |
+| Plugin | MCP server, OpenAPI `Tool`, or Craft external app | The UI word for all three. See [[plugins]]. The `plugin` table (`db/models.py:Plugin`) is different: a package of custom skills. Access reads for custom skills come from it. See [[skills#plugin-tables]]. |
 | Free plan | `Tier.COMMUNITY` | The web UI shows the Community tier as the Free plan. |
 | Workspace | the tenant | The tenant-wide scope, as in workspace setting, workspace default and workspace policy. An admin sets it. Not the session workspace (see Craft vocabulary). See [[multi-tenancy]]. |
 

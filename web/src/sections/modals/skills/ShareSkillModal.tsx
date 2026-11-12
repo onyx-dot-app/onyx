@@ -44,10 +44,18 @@ import {
   type SkillSharingDraft,
 } from "@/lib/skills/sharing";
 import type { MinimalUserSnapshot } from "@/lib/types";
-import { Button, Card, SelectCard, Tabs, Text } from "@opal/components";
+import {
+  Button,
+  Card,
+  MessageCard,
+  SelectCard,
+  Tabs,
+  Text,
+} from "@opal/components";
 import {
   SvgArrowExchange,
   SvgArrowLeft,
+  SvgBubbleText,
   SvgLock,
   SvgOrganization,
   SvgBlocks,
@@ -150,7 +158,8 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     const nextState: SkillShareDraftState = {
       groupShares: skill.group_shares,
       isPublic: skill.public_permission !== null,
-      publicPermission: skill.public_permission ?? "VIEWER",
+      // The organization can only view; editors are named users and groups.
+      publicPermission: "VIEWER",
       userShares: skill.user_shares,
     };
     setInstallationPolicy(skill.installation_policy);
@@ -181,6 +190,12 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     !skill?.external_app &&
     (skill?.user_permission === "OWNER" ||
       (isAdmin && skill?.user_permission === "EDITOR"));
+  // Publishing is one-way: a saved published skill shows no private option.
+  const isPublished = props.mode === "edit" && initialState?.isPublic === true;
+  const isPublishing = !!effectiveState?.isPublic && !isPublished;
+  const viewerLabel = permissionOptions.find(
+    (option) => option.value === "VIEWER"
+  )?.label;
   const canTransfer =
     props.mode === "edit" &&
     !!skill &&
@@ -391,43 +406,55 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
         <Section gap={3} height="auto" alignItems="stretch">
           <Content font="main-ui-action" title={t("share.accessTitle")} />
           <Card border="solid" padding={2}>
-            <Section
-              flexDirection="row"
-              justifyContent="between"
-              wrap
-              gap={2}
-              height="auto"
-              padding={2}
-            >
-              <SharePermissionMenu
-                ariaLabel={t("share.scopeMenu.ariaLabel")}
-                disabled={!canEditOrgVisibility}
-                onChange={(scope) => {
-                  setDraftState((currentDraftState) =>
-                    currentDraftState
-                      ? { ...currentDraftState, isPublic: scope === "PUBLIC" }
-                      : currentDraftState
-                  );
-                }}
-                options={scopeOptions}
-                showTriggerIcon
-                value={effectiveState.isPublic ? "PUBLIC" : "PRIVATE"}
+            {isPublished ? (
+              <ShareAccessRow
+                icon={SvgOrganization}
+                title={t("share.published.title")}
+                description={t("share.published.description")}
+                rightChildren={
+                  viewerLabel ? (
+                    <StaticPermissionLabel
+                      icon={SvgBubbleText}
+                      label={viewerLabel}
+                    />
+                  ) : undefined
+                }
               />
-              <SharePermissionMenu
-                ariaLabel={t("share.organizationPermissionMenu.ariaLabel")}
-                disabled={!canEditOrgVisibility}
-                onChange={(permission) => {
-                  setDraftState((currentDraftState) =>
-                    currentDraftState
-                      ? { ...currentDraftState, publicPermission: permission }
-                      : currentDraftState
-                  );
-                }}
-                options={permissionOptions}
-                value={effectiveState.publicPermission}
-              />
-            </Section>
+            ) : (
+              <Section
+                flexDirection="row"
+                justifyContent="between"
+                wrap
+                gap={2}
+                height="auto"
+                padding={2}
+              >
+                <SharePermissionMenu
+                  ariaLabel={t("share.scopeMenu.ariaLabel")}
+                  disabled={!canEditOrgVisibility}
+                  onChange={(scope) => {
+                    setDraftState((currentDraftState) =>
+                      currentDraftState
+                        ? { ...currentDraftState, isPublic: scope === "PUBLIC" }
+                        : currentDraftState
+                    );
+                  }}
+                  options={scopeOptions}
+                  showTriggerIcon
+                  value={effectiveState.isPublic ? "PUBLIC" : "PRIVATE"}
+                />
+              </Section>
+            )}
           </Card>
+          {isPublishing && (
+            <MessageCard
+              variant="warning"
+              outerPadding={1}
+              innerPadding={1}
+              title={t("share.publishWarning.title")}
+              description={t("share.publishWarning.description")}
+            />
+          )}
           {skill.external_app && (
             <Text color="text-03" font="secondary-body">
               {t("share.externalAppNotice", {

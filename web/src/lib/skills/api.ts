@@ -167,10 +167,20 @@ export function isSkillNameConflict(error: unknown): boolean {
   );
 }
 
+export function isSkillVersionStale(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    "errorCode" in error &&
+    error.errorCode === "PLUGIN_VERSION_STALE"
+  );
+}
+
 export interface PatchCustomSkillInput {
   description?: string;
   instructions_markdown?: string;
   public_permission?: SkillSharePermission | null;
+  /** The version the edit starts from. A newer saved version gives a 409. */
+  base_version_id?: string | null;
 }
 
 export async function setSkillEnabled(
@@ -201,10 +211,12 @@ export interface SkillShareUpdatePayload {
 
 export async function uploadUserSkillFiles(
   skillId: string,
-  upload: File
+  upload: File,
+  baseVersionId?: string | null
 ): Promise<SkillEditableDetail> {
   const form = new FormData();
   form.append("upload", upload);
+  if (baseVersionId) form.append("base_version_id", baseVersionId);
   const res = await fetch(`/api/skills/custom/${skillId}/files`, {
     method: "POST",
     body: form,
@@ -226,9 +238,11 @@ export async function inspectSkillBundle(
 
 export async function removeUserSkillFile(
   skillId: string,
-  path: string
+  path: string,
+  baseVersionId?: string | null
 ): Promise<SkillEditableDetail> {
   const params = new URLSearchParams({ path });
+  if (baseVersionId) params.set("base_version_id", baseVersionId);
   const res = await fetch(
     `/api/skills/custom/${skillId}/files?${params.toString()}`,
     { method: "DELETE" }

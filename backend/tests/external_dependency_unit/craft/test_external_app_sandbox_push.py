@@ -297,7 +297,7 @@ def test_delete_detaches_custom_skill_and_clears_enablement(
     db_session.commit()
 
     assert skill_id in {
-        runtime_skill.id
+        runtime_skill.skill.id
         for runtime_skill in list_runtime_skills_for_user(
             user=test_user,
             db_session=db_session,
@@ -330,7 +330,7 @@ def test_delete_detaches_custom_skill_and_clears_enablement(
         is None
     )
     assert skill_id not in {
-        runtime_skill.id
+        runtime_skill.skill.id
         for runtime_skill in list_runtime_skills_for_user(
             user=test_user,
             db_session=db_session,

@@ -145,7 +145,7 @@ the guards decide.
    | Connector (cc-pair) | EDIT access: global `MANAGE_CONNECTORS`, or a manager of a group with the Editor role on the pair; the Operator role gives only OPERATE ([[cc-pairs-and-creds]]) | Same as edit | Global `MANAGE_CONNECTORS` |
    | Agent | Owner or editor share; a change to its groups also needs GATE 2 on `MANAGE_AGENTS` | Owner, owner-group member, or global `MANAGE_AGENTS`, and `ADD_AGENTS` (scope admits); not a manager (`onyx/db/persona.py:can_delete_persona`) | Same people as delete, without `ADD_AGENTS` (`onyx/db/persona.py:update_persona_public_status`) |
    | Document set | Global, manager scope, or the creator of a private set with no groups | Global `MANAGE_DOCUMENT_SETS`, or the creator of a private set with no groups | Global `MANAGE_DOCUMENT_SETS` |
-   | Custom skill | Owner, editor share, manager scope, or global `MANAGE_PLUGINS` | Any editor; a required skill needs full admin (`db/skill.py:delete_skill_for_user__no_commit`) | Owner or global `MANAGE_PLUGINS` (`db/skill.py:ensure_can_edit_org_visibility`) |
+   | Custom skill | Owner, editor share, manager scope, or global `MANAGE_PLUGINS` | Any editor of a private skill; a published skill needs global `MANAGE_PLUGINS`, not the scoped permission; a required skill needs global `MANAGE_PLUGINS` too (`db/skill.py:delete_skill_for_user__no_commit`) | Owner or global `MANAGE_PLUGINS` (`db/skill.py:ensure_can_edit_org_visibility`). One-way: no unpublish, no organization edit |
    | Custom action, MCP server | Owner or global `MANAGE_ACTIONS` (`db/tools.py:can_manage_tool`) | Same as edit | Not applicable |
    | User group | Manager of that group, or global `MANAGE_USER_GROUPS` | Global `MANAGE_USER_GROUPS`; never a default group | Grants: full admin only |
 6. `recompute-on-grant-change` **Every change to grants or membership must
@@ -161,7 +161,9 @@ the guards decide.
    grants they do not hold, such as the seeded Admin group. In the same way,
    adding or removing an agent's group share is a `MANAGE_AGENTS` action
    (`ee/onyx/db/persona.py:_assert_group_share_within_scope`), and changing a
-   skill's group shares is a `MANAGE_PLUGINS` action.
+   skill's group shares is a `MANAGE_PLUGINS` action
+   (`db/plugin.py:apply_plugin_access_change__no_commit`). A skill's company
+   install setting needs global `MANAGE_PLUGINS`.
 8. `scoped-pat-fails-closed` **A scoped PAT fails closed; an unscoped PAT does
    not.** A scoped PAT reaches only routes with `require_permission` or
    `scope_exempt()`, and only when its scopes imply the required permission. A

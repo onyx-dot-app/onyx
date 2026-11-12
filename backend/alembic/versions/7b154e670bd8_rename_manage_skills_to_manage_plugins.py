@@ -5,7 +5,7 @@ permissions and personal access token scopes. Nothing grants this value, so
 most databases have no rows to change.
 
 Revision ID: 7b154e670bd8
-Revises: fdaeeca238a1
+Revises: 55bf66dd54dd
 Create Date: 2026-11-11 12:00:00.000000
 
 """
@@ -15,7 +15,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "7b154e670bd8"
-down_revision = "fdaeeca238a1"
+down_revision = "55bf66dd54dd"
 branch_labels = None
 depends_on = None
 
