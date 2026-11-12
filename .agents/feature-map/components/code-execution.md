@@ -409,8 +409,10 @@ health calls are not retried.
     agent does) must be `DIRECT`;
     `tools/tool_implementations/code_mode/code_mode_tool.py:with_code_mode`
     raises otherwise. The code mode tools are `DIRECT` too. MCP functions are
-    named `<server>__<tool>`; the description names the MCP servers with
-    deferred functions in one fixed paragraph. Every function is also an
+    named from `mcp__<server id>__<server>__<tool>`
+    (`MCPTool.code_mode_function_name`), converted to a Python identifier
+    that stays unique among the turn's functions; the description names the
+    MCP servers with deferred functions in one fixed paragraph. Every function is also an
     attribute of the importable module `functions`
     (`tools/tool_implementations/code_mode/sandbox.py:FUNCTIONS_MODULE`), so `from functions import f`
     works like the global. `CodeModeResultSpec.usage` adds a code-mode-only
