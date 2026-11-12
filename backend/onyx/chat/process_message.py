@@ -352,6 +352,8 @@ def prepare_chat_turn(
                 )
                 check_token_rate_limits(user)
             elif agent_host:
+                # Hosted agents spend the owner's budget for every model.
+                check_token_rate_limits(user)
                 response_ids = [parent_message.id]
             if not results_turn and not agent_host:
                 persona = chat_session.persona
