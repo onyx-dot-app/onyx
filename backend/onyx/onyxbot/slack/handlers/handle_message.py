@@ -24,7 +24,6 @@ from onyx.onyxbot.slack.utils import (
     fetch_slack_user_ids_from_emails,
     fetch_user_ids_from_groups,
     respond_in_thread_or_channel,
-    slack_usage_report,
     update_emote_react,
 )
 from onyx.server.security.store import get_security_settings
@@ -205,15 +204,6 @@ def handle_message(
             sender_id,
         )
         return False
-
-    action = "slack_message"
-    if is_slash_command:
-        action = "slack_slash_message"
-    elif bypass_filters:
-        action = "slack_tag_message"
-    elif is_bot_dm:
-        action = "slack_dm_message"
-    slack_usage_report(action=action, sender_id=sender_id, client=client)
 
     document_set_names: list[str] | None = None
     persona = slack_channel_config.persona if slack_channel_config else None

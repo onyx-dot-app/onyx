@@ -80,12 +80,15 @@ class ZulipConnector(LoadConnector, PollConnector):
         # The input field converts newlines to spaces in the provided
         # zuliprc file. This reverts them back to newlines.
         contents_spaces_to_newlines = contents.replace(" ", "\n")
-        # create a temporary zuliprc file
-        tempdir = tempfile.gettempdir()
-        config_file = os.path.join(tempdir, f"zuliprc-{self.realm_name}")
-        with open(config_file, "w") as f:
-            f.write(contents_spaces_to_newlines)
-        self.client = Client(config_file=config_file)
+        fd: int
+        config_file: str
+        fd, config_file = tempfile.mkstemp(prefix="zuliprc-")
+        try:
+            with os.fdopen(fd, "w") as f:
+                f.write(contents_spaces_to_newlines)
+            self.client = Client(config_file=config_file)
+        finally:
+            os.unlink(config_file)
         return None
 
     def _message_to_narrow_link(self, m: Message) -> str:

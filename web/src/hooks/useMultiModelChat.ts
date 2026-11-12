@@ -1,5 +1,6 @@
 "use client";
 
+import { useProviderNames } from "@/lib/languageModels/useProviderNames";
 import { useState, useCallback, useMemo } from "react";
 import {
   MAX_MODELS,
@@ -48,15 +49,18 @@ export default function useMultiModelChat(
   // (e.g. a stale admin/personal default pointing at a hidden model), so
   // `currentLlmModel` below can still match it — mirrors ModelSelector's
   // `currentModelName` param.
+  const providerNames = useProviderNames();
   const llmOptions = useMemo(
     () =>
       llmManager.llmProviders
         ? buildLlmOptions(
             llmManager.llmProviders,
-            llmManager.currentLlm.modelName
+            llmManager.currentLlm.modelName,
+            false,
+            providerNames
           )
         : [],
-    [llmManager.llmProviders, llmManager.currentLlm.modelName]
+    [llmManager.llmProviders, llmManager.currentLlm.modelName, providerNames]
   );
 
   // In single-model mode, derive the displayed model directly from

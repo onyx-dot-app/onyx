@@ -1,3 +1,4 @@
+import { MCPConnectionStatus } from "@/lib/mcp/types";
 import {
   detectSlashTrigger,
   filterPickerSections,
@@ -168,11 +169,11 @@ describe("toPickerSections", () => {
     const servers = [
       mcpServerFixture({ id: 9, name: "Zulip MCP" }),
       // A credential row can exist while the proxy still cannot authenticate
-      // the user, so `user_can_authenticate` must not drive this.
+      // the user, so `connection_status` must not drive this.
       mcpServerFixture({
         id: 4,
         name: "Asana MCP",
-        user_can_authenticate: true,
+        connection_status: MCPConnectionStatus.CONNECTED,
         craft_connected: false,
       }),
     ];

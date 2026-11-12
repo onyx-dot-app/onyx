@@ -11,7 +11,7 @@ import { useHighlightLanguages } from "@/hooks/useHighlightLanguages";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import "@/app/app/message/custom-code-styles.css";
-import { FullChatState } from "@/app/app/message/messageComponents/interfaces";
+import { FullChatState } from "@/app/app/message/messageComponents/types";
 import {
   MemoizedAnchor,
   MemoizedParagraph,
@@ -21,25 +21,39 @@ import {
   preprocessLaTeX,
   escapeIncompleteBlockMath,
   escapeIncompleteInlineMath,
+  labelBareCodeFences,
 } from "@/app/app/message/codeUtils";
 import { CodeBlock } from "@/app/app/message/CodeBlock";
 import { transformLinkUri } from "@/lib/utils";
 import { rehypeDirection } from "@/lib/rehypeDirection";
 import { cn } from "@opal/utils";
+import type { TextColor, TextFont } from "@opal/components";
 import { InMessageImage } from "@/app/app/components/files/images/InMessageImage";
 import { extractChatImageFileId } from "@/app/app/components/files/images/utils";
+import { CopyButton } from "@opal/components";
+import { Hoverable } from "@opal/core";
+import { useTranslations } from "next-intl";
+import {
+  TableCopyContent,
+  createCitationResolver,
+  tableToCopyContent,
+} from "@/app/app/message/tableCopyUtils";
 
 /** Table wrapper that detects horizontal overflow and shows a fade + scrollbar. */
 interface ScrollableTableProps extends React.TableHTMLAttributes<HTMLTableElement> {
   children: React.ReactNode;
+  /** When set, shows a hover/focus copy button for this table. */
+  getCopyContent?: () => TableCopyContent;
 }
 
 export function ScrollableTable({
   className,
   children,
   dir,
+  getCopyContent,
   ...props
 }: ScrollableTableProps) {
+  const t = useTranslations("chat.messages");
   const scrollRef = useRef<HTMLDivElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const tableRef = useRef<HTMLTableElement>(null);
@@ -80,18 +94,36 @@ export function ScrollableTable({
   return (
     // The stamped table dir lifts onto the scroller so scrollLeft semantics
     // and the initial scroll edge follow the table's own direction.
-    <div ref={wrapRef} dir={dir} className="markdown-table-card">
-      <div ref={scrollRef} className="markdown-table-breakout">
-        <table
-          ref={tableRef}
-          className={cn(
-            className,
-            "min-w-full my-0! [&_th]:whitespace-nowrap [&_td]:whitespace-nowrap"
+    <div className="markdown-table-frame">
+      <div ref={wrapRef} dir={dir} className="markdown-table-card">
+        <Hoverable.Root group="markdownTable">
+          <div ref={scrollRef} className="markdown-table-breakout">
+            <table
+              ref={tableRef}
+              className={cn(
+                className,
+                "min-w-full my-0! [&_th]:whitespace-nowrap [&_td]:whitespace-nowrap"
+              )}
+              {...props}
+            >
+              {children}
+            </table>
+          </div>
+          {getCopyContent && (
+            <div className="markdown-table-copy">
+              <Hoverable.Item group="markdownTable" variant="appear-on-hover">
+                <CopyButton
+                  size="sm"
+                  getCopyText={() => getCopyContent().tsv}
+                  getHtmlContent={() => getCopyContent().html}
+                  tooltip={t("markdownTable.copyButton.label")}
+                  aria-label={t("markdownTable.copyButton.label")}
+                  data-testid="markdown-table-copy-button"
+                />
+              </Hoverable.Item>
+            </div>
           )}
-          {...props}
-        >
-          {children}
-        </table>
+        </Hoverable.Root>
       </div>
     </div>
   );
@@ -115,22 +147,7 @@ export const processContent = (content: string): string => {
   // to a rendered formula the moment the closing `$$` arrives.
   content = escapeIncompleteBlockMath(content);
 
-  const codeBlockRegex = /```(\w*)\n[\s\S]*?```|```[\s\S]*?$/g;
-  const matches = content.match(codeBlockRegex);
-
-  if (matches) {
-    content = matches.reduce((acc, match) => {
-      if (!match.match(/```\w+/)) {
-        return acc.replace(match, match.replace("```", "```plaintext"));
-      }
-      return acc;
-    }, content);
-
-    const lastMatch = matches[matches.length - 1];
-    if (lastMatch && !lastMatch.endsWith("```")) {
-      return escapeIncompleteInlineMath(preprocessLaTeX(content));
-    }
-  }
+  content = labelBareCodeFences(content);
 
   const processed = preprocessLaTeX(content);
   return escapeIncompleteInlineMath(processed);
@@ -142,15 +159,20 @@ export const processContent = (content: string): string => {
 export const useMarkdownComponents = (
   state: FullChatState | undefined,
   processedContent: string,
-  className?: string
+  paragraphFont?: TextFont,
+  paragraphColor?: TextColor
 ) => {
   const paragraphCallback = useCallback(
     (props: React.ComponentProps<"p"> & ExtraProps) => (
-      <MemoizedParagraph dir={props.dir} className={className}>
+      <MemoizedParagraph
+        dir={props.dir}
+        font={paragraphFont}
+        color={paragraphColor}
+      >
         {props.children}
       </MemoizedParagraph>
     ),
-    [className]
+    [paragraphFont, paragraphColor]
   );
 
   const anchorCallback = useCallback(
@@ -221,7 +243,19 @@ export const useMarkdownComponents = (
       },
       table: ({ node, className, children, ...props }) => {
         return (
-          <ScrollableTable className={className} {...props}>
+          <ScrollableTable
+            className={className}
+            getCopyContent={
+              node
+                ? () =>
+                    tableToCopyContent(
+                      node,
+                      createCitationResolver(state?.docs, state?.citations)
+                    )
+                : undefined
+            }
+            {...props}
+          >
             {children}
           </ScrollableTable>
         );
@@ -236,7 +270,13 @@ export const useMarkdownComponents = (
         );
       },
     }),
-    [anchorCallback, paragraphCallback, processedContent]
+    [
+      anchorCallback,
+      paragraphCallback,
+      processedContent,
+      state?.docs,
+      state?.citations,
+    ]
   );
 
   return markdownComponents;
@@ -282,11 +322,7 @@ export const useMarkdownRenderer = (
   textSize: string
 ) => {
   const processedContent = useMemo(() => processContent(content), [content]);
-  const markdownComponents = useMarkdownComponents(
-    state,
-    processedContent,
-    textSize
-  );
+  const markdownComponents = useMarkdownComponents(state, processedContent);
   const highlightLanguages = useHighlightLanguages();
 
   const renderedContent = useMemo(

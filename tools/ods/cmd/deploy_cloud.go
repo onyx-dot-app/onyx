@@ -47,6 +47,9 @@ CLI: Ctrl-C is safe at any point (the tag is already pushed), and
 --attach <tag> re-attaches later. Pass --no-watch to print the run URL and
 exit immediately.
 
+The infra repo is read from the CLOUD_DEPLOYMENT_REPO variable of
+onyx-dot-app/onyx, or from ODS_CLOUD_DEPLOYMENT_REPO (owner/name) when set.
+
 With --attach, nothing is cut or pushed: the command only watches the given
 tag's existing pipeline. This also works for releases that already finished.
 
@@ -77,18 +80,18 @@ Example usage:
 				if !release.IsCloudTag(opts.Attach) {
 					return fmt.Errorf("%q is not a cloud tag (expected vX.Y.Z-cloud.N)", opts.Attach)
 				}
-				return watchCloudRelease(opts.Attach)
+				return watchCloudRelease(defaultRunPolling(), opts.Attach)
 			}
 			tag, err := deployCloud(opts)
 			if err != nil || tag == "" {
 				return err
 			}
 			if opts.NoWatch {
-				announceDeploymentRun(tag)
+				announceDeploymentRun(defaultRunPolling(), tag)
 				return nil
 			}
 			log.Infof("Watching the release; Ctrl-C is safe, re-attach with: ods deploy cloud --attach %s", tag)
-			return watchCloudRelease(tag)
+			return watchCloudRelease(defaultRunPolling(), tag)
 		},
 	}
 

@@ -1,0 +1,17 @@
+@reference "#reference.css";
+
+/* ---------------------------------------------------------------------------
+   InputTextArea
+
+   Multiline field on a growing InputContainer: the field and the right slot
+   align to the top, and the field's rows set its height above a min-height
+   floor.
+   --------------------------------------------------------------------------- */
+
+.opal-input-textarea-field {
+  @apply h-auto min-h-12 min-w-0 flex-1;
+}
+
+.opal-input-textarea-right {
+  @apply shrink-0 self-start;
+}

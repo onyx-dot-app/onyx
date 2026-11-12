@@ -1,9 +1,10 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useTranslations } from "next-intl";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
-import { SvgArrowExchange, SvgSimpleLoader } from "@opal/icons";
+import { SvgArrowExchange } from "@opal/icons";
 import { SvgOnyxLogo } from "@opal/logos";
 import { Button } from "@opal/components";
 import { Modal } from "@opal/components";
@@ -137,7 +138,7 @@ export function TracingSetupModal({ state, onSaved }: TracingSetupModalProps) {
                 <Button
                   type="submit"
                   disabled={!dirty || !isValid || isSubmitting}
-                  icon={isSubmitting ? SvgSimpleLoader : undefined}
+                  icon={isSubmitting ? IconLoader : undefined}
                 >
                   {isEditing
                     ? t("setupModal.update.label")

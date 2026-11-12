@@ -318,10 +318,8 @@ def run(args: argparse.Namespace) -> None:
     if args.num_hits:
         base_request.num_hits = args.num_hits
     stop_condition = StopCondition(
-        num_requests_to_make=(
-            args.requests_per_worker if args.requests_per_worker else None
-        ),
-        duration_s=args.duration_per_worker if args.duration_per_worker else None,
+        num_requests_to_make=(args.requests_per_worker or None),
+        duration_s=args.duration_per_worker or None,
     )
     print(str(stop_condition))
     results: list[Result] = []

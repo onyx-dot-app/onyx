@@ -5,11 +5,11 @@ import {
   Tag,
   UserGroup,
   ConnectorStatus,
-  FederatedConnectorDetail,
-  ValidSources,
   ConnectorIndexingStatusLiteResponse,
   IndexingStatusRequest,
 } from "@/lib/types";
+import { getConfiguredSources } from "@/lib/connectors/utils";
+import { SourceMetadata, ValidSources } from "@/lib/connectors/types/source";
 import useSWR, { mutate, useSWRConfig } from "swr";
 import { errorHandlingFetcher } from "./fetcher";
 import {
@@ -21,22 +21,20 @@ import {
   useState,
 } from "react";
 import { InputDateRangePickerValue } from "@opal/components";
-import { SourceMetadata } from "./search/interfaces";
 import {
   getProviderOverrideForAgent,
   parseLlmDescriptor,
 } from "@/lib/languageModels/utils";
-import { ChatSession } from "@/app/app/interfaces";
-import { Credential } from "./connectors/credentials";
+import { ChatSession } from "@/app/app/types";
 import { useSettings } from "@/lib/settings/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
 import {
   DefaultModel,
   LLMProviderDescriptor,
+  ModelPaging,
   ReasoningEffortOverride,
 } from "@/lib/languageModels/types";
 import { isAnthropic } from "@/lib/languageModels/svc";
-import { getConfiguredSources } from "@/lib/sources";
 import { DEFAULT_AGENT_ID, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
 import { useUser } from "@/providers/UserProvider";
 import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
@@ -44,21 +42,12 @@ import {
   updateReasoningEffortForChatSession,
   updateTemperatureOverrideForChatSession,
 } from "@/app/app/services/lib";
-import { useLLMProviders } from "@/lib/languageModels/hooks";
+import {
+  useLanguageModels,
+  useLanguageModelsForAgent,
+} from "@/lib/languageModels/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
-
-export const usePublicCredentials = () => {
-  const { mutate } = useSWRConfig();
-  const swrResponse = useSWR<Credential<any>[]>(
-    SWR_KEYS.adminCredentials,
-    errorHandlingFetcher
-  );
-
-  return {
-    ...swrResponse,
-    refreshCredentials: () => mutate(SWR_KEYS.adminCredentials),
-  };
-};
+import { userGroupListUrl } from "@/hooks/useGroups";
 
 const buildReactedDocsUrl = (ascending: boolean, limit: number) => {
   return `/api/manage/admin/doc-boosts?ascending=${ascending}&limit=${limit}`;
@@ -218,20 +207,6 @@ export const useConnectorStatus = (
   };
 };
 
-export const useFederatedConnectors = () => {
-  const { mutate } = useSWRConfig();
-  const url = SWR_KEYS.federatedConnectors;
-  const swrResponse = useSWR<FederatedConnectorDetail[]>(
-    url,
-    errorHandlingFetcher
-  );
-
-  return {
-    ...swrResponse,
-    refreshFederatedConnectors: () => mutate(url),
-  };
-};
-
 export interface LlmDescriptor {
   name: string;
   provider: string;
@@ -266,6 +241,8 @@ export interface LlmManager {
   /** True only when an override was set locally or is stored on the session. */
   hasTemperatureOverride: boolean;
   llmProviders: LLMProviderDescriptor[] | undefined;
+  /** Pages in the models `llmProviders` left out, for pickers fed that list. */
+  modelPaging: ModelPaging;
   isLoadingProviders: boolean;
   hasAnyProvider: boolean;
 }
@@ -398,7 +375,7 @@ export function getValidLlmDescriptorForProviders(
 
     // If we have parsed provider info, try to find that specific provider.
     // This ensures we don't incorrectly match a model to the wrong provider
-    // when the same model name exists across multiple providers (e.g., gpt-5 in Azure and OpenAI)
+    // when the same model name exists across multiple providers (e.g., gpt-6-sol in Azure and OpenAI)
     if (model.provider && model.provider.length > 0) {
       const hasModel = (p: LLMProviderDescriptor) =>
         p.model_configurations.some((mc) => mc.name === model.modelName);
@@ -467,7 +444,8 @@ export function useLlmManager(
     llmProviders: allUserProviders,
     defaultText: allUserDefaultText,
     isLoading: isLoadingAllProviders,
-  } = useLLMProviders();
+    modelPaging: allUserModelPaging,
+  } = useLanguageModels();
   // Fetch persona-specific providers to enforce RBAC restrictions per assistant
   // Only fetch if we have an agent selected
   const personaId = activeAgent?.id !== undefined ? activeAgent.id : undefined;
@@ -475,12 +453,15 @@ export function useLlmManager(
     llmProviders: personaProviders,
     defaultText: personaDefaultText,
     isLoading: isLoadingPersonaProviders,
-  } = useLLMProviders(personaId);
+    modelPaging: personaModelPaging,
+  } = useLanguageModelsForAgent(personaId);
 
   const llmProviders =
     personaProviders !== undefined ? personaProviders : allUserProviders;
   const defaultText =
     personaProviders !== undefined ? personaDefaultText : allUserDefaultText;
+  const modelPaging =
+    personaProviders !== undefined ? personaModelPaging : allUserModelPaging;
 
   const [userHasManuallyOverriddenLLM, setUserHasManuallyOverriddenLLM] =
     useState(false);
@@ -890,6 +871,7 @@ export function useLlmManager(
       temperatureExplicitlySet ||
       currentChatSession?.current_temperature_override != null,
     llmProviders,
+    modelPaging,
     isLoadingProviders:
       isLoadingAllProviders ||
       (personaId !== undefined && isLoadingPersonaProviders),
@@ -901,7 +883,13 @@ export function useLlmManager(
 EE Only APIs
 */
 
-export const useUserGroups = (): {
+/**
+ * Groups without member lists; read `member_count`. `enabled: false` skips the
+ * request, e.g. below the plan groups need.
+ */
+export const useUserGroups = (
+  enabled: boolean = true
+): {
   data: UserGroup[] | undefined;
   isLoading: boolean;
   error: string;
@@ -910,14 +898,23 @@ export const useUserGroups = (): {
   const settings = useSettings();
   const isLoading = settings.isLoading;
   const isPaidEnterpriseFeaturesEnabled =
-    !isLoading && settings.enterprise !== null;
+    enabled && !isLoading && settings.enterprise !== null;
 
+  const url = userGroupListUrl({
+    includeDefault: false,
+    includeMembers: false,
+  });
   const swrResponse = useSWR<UserGroup[]>(
-    isPaidEnterpriseFeaturesEnabled ? SWR_KEYS.adminUserGroups : null,
+    isPaidEnterpriseFeaturesEnabled ? url : null,
     errorHandlingFetcher
   );
 
-  const refreshUserGroups = () => mutate(SWR_KEYS.adminUserGroups);
+  // Every variant, the same as useGroups' refreshGroups.
+  const refreshUserGroups = () =>
+    mutate(
+      (key) =>
+        typeof key === "string" && key.startsWith(SWR_KEYS.adminUserGroups)
+    );
 
   if (isLoading) {
     return {

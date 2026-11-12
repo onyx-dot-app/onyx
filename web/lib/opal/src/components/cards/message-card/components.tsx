@@ -5,22 +5,26 @@ import { cn } from "@opal/utils";
 import type {
   CardColor,
   IconFunctionComponent,
-  Spacing,
   RichStr,
-  StatusVariants,
+  Rounding,
+  ShadowVariants,
+  StatusColor,
 } from "@opal/types";
 import { spacingToRem } from "@opal/shared";
 import { ContentAction } from "@opal/layouts";
 import { Card } from "@opal/components/cards/card/components";
+import { Fold } from "@opal/components/fold/components";
 import { Button, Divider } from "@opal/components";
 import {
   SvgAlertCircle,
   SvgAlertTriangle,
   SvgCheckCircle,
   SvgClock,
+  SvgHourglass,
   SvgX,
   SvgXOctagon,
 } from "@opal/icons";
+import { useState } from "react";
 import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
@@ -29,7 +33,7 @@ import { useOpalStrings } from "@opal/strings";
 
 interface MessageCardBaseProps {
   /** Visual variant controlling background, border, and icon. @default "default" */
-  variant?: StatusVariants;
+  variant?: StatusColor;
 
   /** Override the default variant icon. */
   icon?: IconFunctionComponent;
@@ -44,19 +48,45 @@ interface MessageCardBaseProps {
   titleMaxLines?: number;
 
   /**
-   * Padding, as a spacing step (`N / 4` rem). Narrowed on purpose — a message
-   * card is a fixed-density surface, so only these two densities are offered.
+   * Padding of the outer card, as a spacing step (`N / 4` rem). Narrowed on
+   * purpose — a message card is a fixed-density surface, so only these two
+   * densities are offered.
    *
    * @default 2
    */
-  padding?: 1 | 2;
+  outerPadding?: 1 | 2;
 
-  /** Padding around the header Content area, as a spacing step. @default 0 */
-  headerPadding?: Spacing;
+  /**
+   * Padding around the header Content area, as a spacing step. Narrowed like
+   * `outerPadding`: cards inside a modal or popover use 1 for both, cards on
+   * a page use 2 for both.
+   *
+   * @default 2
+   */
+  innerPadding?: 1 | 2;
+
+  /**
+   * Padding of the `ContentAction` itself, inside `innerPadding`, as a
+   * spacing step.
+   *
+   * @default 0
+   */
+  contentPadding?: 0 | 0.5 | 1 | 2;
+
+  rounding?: Rounding;
+
+  /**
+   * Drop-shadow depth of the card, passed to `Card`.
+   *
+   * @default "none"
+   */
+  shadow?: ShadowVariants;
 
   /**
    * Content rendered below a divider, under the main content area.
    * When provided, a `Divider` is inserted between the `ContentAction` and this node.
+   * Adding or removing it animates the section open or closed; a card that
+   * mounts with it does not animate.
    */
   bottomChildren?: React.ReactNode;
 
@@ -83,7 +113,7 @@ type MessageCardProps = MessageCardBaseProps &
 // ---------------------------------------------------------------------------
 
 const VARIANT_CONFIG: Record<
-  StatusVariants,
+  StatusColor,
   { icon: IconFunctionComponent; iconClass: string; color: CardColor }
 > = {
   default: {
@@ -110,6 +140,11 @@ const VARIANT_CONFIG: Record<
     icon: SvgClock,
     iconClass: "stroke-theme-amber-05",
     color: "theme-amber-01",
+  },
+  queued: {
+    icon: SvgHourglass,
+    iconClass: "stroke-theme-purple-05",
+    color: "theme-purple-01",
   },
   error: {
     icon: SvgXOctagon,
@@ -163,16 +198,27 @@ function MessageCard({
   title,
   description,
   titleMaxLines,
-  padding = 2,
-  headerPadding = 0,
+  outerPadding = 2,
+  innerPadding = 2,
+  contentPadding = 0,
+  shadow = "none",
   bottomChildren,
   rightChildren,
   onClose,
+  rounding = 4,
   ref,
 }: MessageCardProps) {
   const { icon: DefaultIcon, iconClass, color } = VARIANT_CONFIG[variant];
   const Icon = iconOverride ?? DefaultIcon;
   const strings = useOpalStrings();
+  // Falsey content (`condition && <X />`) counts as absent, as it always has.
+  const expanded = Boolean(bottomChildren);
+  // The last section shown, kept so it can animate out after the caller
+  // drops it.
+  const [shownBottom, setShownBottom] = useState(bottomChildren);
+  if (expanded && bottomChildren !== shownBottom) {
+    setShownBottom(bottomChildren);
+  }
 
   const right = onClose ? (
     <Button
@@ -187,7 +233,7 @@ function MessageCard({
     rightChildren
   );
 
-  // Built on Card: the root owns color, border, rounding, and padding, so
+  // Built on Card: the root owns color, border, and padding, so
   // this component keeps only its message layout. The wrapper preserves the
   // stretch behavior the old root class carried, since Card takes no
   // className.
@@ -197,31 +243,33 @@ function MessageCard({
         color={color}
         border="solid"
         borderColor={variant}
-        rounding={4}
-        padding={padding}
+        rounding={rounding}
+        padding={outerPadding}
+        shadow={shadow}
       >
         <div className="opal-message-card-layout">
-          <div style={{ padding: spacingToRem(headerPadding) }}>
+          <div style={{ padding: spacingToRem(innerPadding) }}>
             <ContentAction
+              font="main-ui-action"
               icon={(props) => (
                 <Icon {...props} className={cn(props.className, iconClass)} />
               )}
               title={title}
               description={description}
               titleMaxLines={titleMaxLines}
-              sizePreset="main-ui"
-              variant="section"
-              padding={1}
               rightChildren={right}
+              padding={contentPadding}
             />
           </div>
 
-          {bottomChildren && (
-            <>
-              <Divider paddingParallel={2} paddingPerpendicular={1} />
-              {bottomChildren}
-            </>
-          )}
+          {/* Fold animates only a change, so a card that mounts with the
+              section does not play the opening on page load. */}
+          <Fold open={expanded}>
+            <div className="opal-message-card-bottom-content">
+              <Divider paddingParallel={3} paddingPerpendicular={0} />
+              {expanded ? bottomChildren : shownBottom}
+            </div>
+          </Fold>
         </div>
       </Card>
     </div>

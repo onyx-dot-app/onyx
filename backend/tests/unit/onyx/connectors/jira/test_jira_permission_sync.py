@@ -5,7 +5,6 @@ import pytest
 
 from ee.onyx.external_permissions.jira.doc_sync import jira_doc_sync
 from onyx.connectors.jira.connector import JiraConnector
-from onyx.connectors.jira.utils import JIRA_SERVER_API_VERSION
 from onyx.db.models import ConnectorCredentialPair
 from onyx.utils.sensitive import make_mock_sensitive_value
 
@@ -47,19 +46,15 @@ def mock_fetch_all_existing_docs_ids_fn() -> MagicMock:
 
 
 def test_jira_permission_sync(
-    jira_connector: JiraConnector,
+    mock_source_operations: MagicMock,
     mock_jira_cc_pair: MagicMock,
     mock_fetch_all_existing_docs_fn: MagicMock,
     mock_fetch_all_existing_docs_ids_fn: MagicMock,
 ) -> None:
-    with patch("onyx.connectors.jira.connector.build_jira_client") as mock_build_client:
-        mock_build_client.return_value = jira_connector._jira_client
-        assert jira_connector._jira_client is not None
-        jira_connector._jira_client._options = MagicMock()
-        jira_connector._jira_client._options.return_value = {
-            "rest_api_version": JIRA_SERVER_API_VERSION
-        }
-
+    with patch(
+        "onyx.connectors.jira.connector.JiraSourceOperations",
+        return_value=mock_source_operations,
+    ):
         for doc in jira_doc_sync(
             cc_pair=mock_jira_cc_pair,
             fetch_all_existing_docs_fn=mock_fetch_all_existing_docs_fn,
@@ -70,6 +65,7 @@ def test_jira_permission_sync(
 
 def test_jira_doc_sync_passes_indexing_start(
     jira_connector: JiraConnector,
+    mock_source_operations: MagicMock,
     mock_jira_cc_pair: MagicMock,
     mock_fetch_all_existing_docs_fn: MagicMock,
     mock_fetch_all_existing_docs_ids_fn: MagicMock,
@@ -79,14 +75,10 @@ def test_jira_doc_sync_passes_indexing_start(
     indexing_start_dt = datetime(2025, 6, 1, tzinfo=timezone.utc)
     mock_jira_cc_pair.connector.indexing_start = indexing_start_dt
 
-    with patch("onyx.connectors.jira.connector.build_jira_client") as mock_build_client:
-        mock_build_client.return_value = jira_connector._jira_client
-        assert jira_connector._jira_client is not None
-        jira_connector._jira_client._options = MagicMock()
-        jira_connector._jira_client._options.return_value = {
-            "rest_api_version": JIRA_SERVER_API_VERSION
-        }
-
+    with patch(
+        "onyx.connectors.jira.connector.JiraSourceOperations",
+        return_value=mock_source_operations,
+    ):
         with patch.object(
             type(jira_connector),
             "retrieve_all_slim_docs_perm_sync",
@@ -107,6 +99,7 @@ def test_jira_doc_sync_passes_indexing_start(
 
 def test_jira_doc_sync_passes_none_when_no_indexing_start(
     jira_connector: JiraConnector,
+    mock_source_operations: MagicMock,
     mock_jira_cc_pair: MagicMock,
     mock_fetch_all_existing_docs_fn: MagicMock,
     mock_fetch_all_existing_docs_ids_fn: MagicMock,
@@ -114,14 +107,10 @@ def test_jira_doc_sync_passes_none_when_no_indexing_start(
     """Verify that indexing_start is None when the connector has no indexing_start set."""
     mock_jira_cc_pair.connector.indexing_start = None
 
-    with patch("onyx.connectors.jira.connector.build_jira_client") as mock_build_client:
-        mock_build_client.return_value = jira_connector._jira_client
-        assert jira_connector._jira_client is not None
-        jira_connector._jira_client._options = MagicMock()
-        jira_connector._jira_client._options.return_value = {
-            "rest_api_version": JIRA_SERVER_API_VERSION
-        }
-
+    with patch(
+        "onyx.connectors.jira.connector.JiraSourceOperations",
+        return_value=mock_source_operations,
+    ):
         with patch.object(
             type(jira_connector),
             "retrieve_all_slim_docs_perm_sync",

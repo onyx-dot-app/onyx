@@ -1,18 +1,24 @@
 import os
 
+# Bounds full-response callers waiting after delivery ends; execution keeps its own lifetime.
+CHAT_RESPONSE_WAIT_TIMEOUT_S = 3600
+
 NUM_RETURNED_HITS = 50
 
 # May be less depending on model
 MAX_CHUNKS_FED_TO_CHAT = int(os.environ.get("MAX_CHUNKS_FED_TO_CHAT") or 25)
 
 # Maximum number of LLM cycles (one tool-call round-trip per cycle) before the
-# agent is forced to answer. Default 6 covers the common search → open_url
-# pattern documented at the call site; raise via env when integrating with
-# tool-heavy MCPs that legitimately need more turns.
+# agent is forced to answer: the last cycle offers no tools. Default 6 covers the
+# common search → open_url pattern; raise via env when integrating with tool-heavy
+# MCPs that need more turns.
 MAX_LLM_CYCLES: int = int(os.environ.get("MAX_LLM_CYCLES") or 6)
+# The cycle cap when code mode applies. Programs batch tool calls, and each
+# wait_code observation of a running cell takes a cycle, so it is only a safety
+# cap, never lower than MAX_LLM_CYCLES.
+CODE_MODE_MAX_LLM_CYCLES: int = max(MAX_LLM_CYCLES, 100)
 
 # 1 / (1 + DOC_TIME_DECAY * doc-age-in-years), set to 0 to have no decay
-# Capped in Vespa at 0.5
 DOC_TIME_DECAY = float(
     os.environ.get("DOC_TIME_DECAY") or 0.5  # Hits limit at 2 years by default
 )
@@ -26,6 +32,10 @@ CONTEXT_CHUNKS_BELOW = int(os.environ.get("CONTEXT_CHUNKS_BELOW") or 1)
 LLM_SOCKET_READ_TIMEOUT = int(
     os.environ.get("LLM_SOCKET_READ_TIMEOUT") or "60"
 )  # 60 seconds
+# Default total timeout for LLM.invoke. It reuses LLM_SOCKET_READ_TIMEOUT so that
+# existing operator tuning still applies: on a plain request, the single socket
+# read was already the whole call.
+LLM_INVOKE_TIMEOUT_S = LLM_SOCKET_READ_TIMEOUT
 # Total per-call timeout for image summarization. Unlike LLM_SOCKET_READ_TIMEOUT
 # (per-packet gap), this bounds the whole call so a keepalive-only stream can't
 # wedge a docprocessing thread. A generous backstop against hangs.
@@ -94,8 +104,6 @@ HARD_DELETE_CHATS = os.environ.get("HARD_DELETE_CHATS", "").lower() == "true"
 NUM_INTERNET_SEARCH_RESULTS = int(os.environ.get("NUM_INTERNET_SEARCH_RESULTS") or 10)
 NUM_INTERNET_SEARCH_CHUNKS = int(os.environ.get("NUM_INTERNET_SEARCH_CHUNKS") or 50)
 
-VESPA_SEARCHER_THREADS = int(os.environ.get("VESPA_SEARCHER_THREADS") or 2)
-
 # Whether or not to use the semantic & keyword search expansions for Basic Search
 USE_SEMANTIC_KEYWORD_EXPANSIONS_BASIC_SEARCH = (
     os.environ.get("USE_SEMANTIC_KEYWORD_EXPANSIONS_BASIC_SEARCH", "false").lower()
@@ -109,3 +117,10 @@ COMPRESSION_TRIGGER_RATIO = float(os.environ.get("COMPRESSION_TRIGGER_RATIO", "0
 SKIP_DEEP_RESEARCH_CLARIFICATION = (
     os.environ.get("SKIP_DEEP_RESEARCH_CLARIFICATION", "false").lower() == "true"
 )
+
+# Bound execution separately from a caller waiting for its saved response.
+CHAT_EXECUTION_TIMEOUT_S = 3600
+
+
+# Offer chat tools as Python functions inside `execute_code` instead of directly.
+CODE_MODE_ENABLED = os.environ.get("CODE_MODE_ENABLED", "false").lower() == "true"

@@ -3,18 +3,17 @@
 import { useState, useMemo, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { Button, Divider } from "@opal/components";
-import { SvgUsers, SvgUser, SvgLogOut, SvgCheck } from "@opal/icons";
-import { ContentAction, toast } from "@opal/layouts";
+import { SvgUsers, SvgUser, SvgLogOut } from "@opal/icons";
+import { ContentAction, toast, Section } from "@opal/layouts";
 import { Modal } from "@opal/components";
 import { InputTypeIn } from "@opal/components";
-import { Popover } from "@opal/components";
+import { Dropdown } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { ShadowDiv } from "@opal/components";
 import { Tooltip } from "@opal/components";
-import { Section } from "@/layouts/general-layouts";
 import useGroups from "@/hooks/useGroups";
 import { addUserToGroup, removeUserFromGroup } from "./svc";
-import type { UserRow } from "./interfaces";
+import type { UserRow } from "./types";
 import { cn } from "@opal/utils";
 
 // ---------------------------------------------------------------------------
@@ -38,7 +37,11 @@ export default function EditUserModal({
 }: EditUserModalProps) {
   const t = useTranslations("admin.users");
   // defaults included; backend rejects the unsafe removals (last admin, self)
-  const { data: allGroups, isLoading: groupsLoading } = useGroups(true);
+  const {
+    data: allGroups,
+    isLoading: groupsLoading,
+    refreshGroups,
+  } = useGroups(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [popoverOpen, setPopoverOpen] = useState(false);
@@ -116,10 +119,13 @@ export default function EditUserModal({
       }
 
       onMutate();
+      refreshGroups();
       toast.success(t("editModal.toasts.updated"));
       onClose();
     } catch (err) {
-      onMutate(); // refresh to show partially-applied state
+      // refresh to show partially-applied state
+      onMutate();
+      refreshGroups();
       toast.error(
         err instanceof Error ? err.message : t("editModal.toasts.error")
       );
@@ -160,71 +166,88 @@ export default function EditUserModal({
               justifyContent="start"
               className="bg-background-tint-02 rounded-08"
             >
-              <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
-                <Popover.Trigger asChild>
-                  {/* asChild merges trigger props onto this div instead of rendering a <button>.
-                     Without it, the trigger <button> would nest around InputTypeIn's
-                     internal IconButton <button>, causing a hydration error. */}
-                  <div>
-                    <InputTypeIn
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      placeholder={t("editModal.search.placeholder")}
-                      searchIcon
-                    />
-                  </div>
-                </Popover.Trigger>
-                <Popover.Content
-                  width="trigger"
-                  align="start"
-                  container={contentEl}
-                >
-                  {groupsLoading ? (
-                    <LineItem
-                      skeleton
-                      description={t("editModal.groupList.loading.description")}
-                    >
-                      {t("editModal.groupList.loading.title")}
-                    </LineItem>
-                  ) : dropdownGroups.length === 0 ? (
-                    <LineItem
-                      skeleton
-                      description={t(
-                        "editModal.groupList.noResults.description"
-                      )}
-                    >
-                      {t("editModal.groupList.noResults.title")}
-                    </LineItem>
-                  ) : (
-                    <ShadowDiv
-                      shadowHeight="0.75rem"
-                      className={cn("flex flex-col gap-1 max-h-60 rounded-08")}
-                    >
-                      {dropdownGroups.map((group) => {
-                        const isMember = memberGroupIds.has(group.id);
-                        return (
-                          <LineItem
-                            key={group.id}
-                            icon={isMember ? SvgCheck : SvgUsers}
-                            description={t("editModal.groupList.memberCount", {
+              <Dropdown
+                open={popoverOpen}
+                onOpenChange={setPopoverOpen}
+                container={contentEl}
+              >
+                <Dropdown.Trigger asChild typeIn behavior="open">
+                  <InputTypeIn
+                    value={searchTerm}
+                    onChange={(e) => {
+                      setSearchTerm(e.target.value);
+                      // Typing opens the list, as a type-in does.
+                      setPopoverOpen(true);
+                    }}
+                    placeholder={t("editModal.search.placeholder")}
+                    icon="search"
+                    aria-label={t("editModal.search.placeholder")}
+                  />
+                </Dropdown.Trigger>
+                <Dropdown.Data
+                  label={t("editModal.search.placeholder")}
+                  query={searchTerm}
+                  values={new Set(Array.from(memberGroupIds, String))}
+                  onSelect={(option) => toggleGroup(Number(option.value))}
+                  items={
+                    groupsLoading
+                      ? [
+                          {
+                            kind: "custom",
+                            id: "loading",
+                            disabled: true,
+                            pinned: true,
+                            render: ({ props }) => (
+                              <div {...props}>
+                                <LineItem
+                                  skeleton
+                                  description={t(
+                                    "editModal.groupList.loading.description"
+                                  )}
+                                >
+                                  {t("editModal.groupList.loading.title")}
+                                </LineItem>
+                              </div>
+                            ),
+                          },
+                        ]
+                      : dropdownGroups.length === 0
+                        ? [
+                            {
+                              kind: "custom",
+                              id: "no-results",
+                              disabled: true,
+                              pinned: true,
+                              render: ({ props }) => (
+                                <div {...props}>
+                                  <LineItem
+                                    skeleton
+                                    description={t(
+                                      "editModal.groupList.noResults.description"
+                                    )}
+                                  >
+                                    {t("editModal.groupList.noResults.title")}
+                                  </LineItem>
+                                </div>
+                              ),
+                            },
+                          ]
+                        : (allGroups ?? []).map((group) => ({
+                            kind: "option",
+                            value: String(group.id),
+                            icon: SvgUsers,
+                            title: group.name,
+                            description: t("editModal.groupList.memberCount", {
                               count: group.users.length,
-                            })}
-                            selected={isMember}
-                            emphasized={isMember}
-                            onClick={() => toggleGroup(group.id)}
-                          >
-                            {group.name}
-                          </LineItem>
-                        );
-                      })}
-                    </ShadowDiv>
-                  )}
-                </Popover.Content>
-              </Popover>
+                            }),
+                          }))
+                  }
+                />
+              </Dropdown>
 
               <ShadowDiv
                 className={cn(" max-h-44 flex flex-col gap-1 rounded-08")}
-                shadowHeight="0.75rem"
+                shadowHeight={3}
               >
                 {joinedGroups.length === 0 ? (
                   <LineItem
@@ -252,7 +275,7 @@ export default function EditUserModal({
                         rightChildren={
                           <Tooltip
                             tooltip={t("editModal.removeGroupButton.tooltip")}
-                            side="left"
+                            side="start"
                           >
                             <SvgLogOut height={16} width={16} />
                           </Tooltip>

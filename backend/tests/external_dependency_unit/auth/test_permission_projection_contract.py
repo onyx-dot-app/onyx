@@ -15,10 +15,9 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.analytics import user_can_view_assistant_stats
-from ee.onyx.db.token_limit import insert_user_group_token_rate_limit
-from ee.onyx.server.token_rate_limits.api import (
-    _authorize_group_token_rate_limit_write,
-    get_group_token_limit_settings,
+from ee.onyx.server.spending_limits.api import (
+    _authorize_group_write,
+    get_group_spending_limits,
 )
 from ee.onyx.server.user_group.api import delete_user_group, set_user_group_permissions
 from onyx.auth.permission_projection import (
@@ -47,8 +46,8 @@ from onyx.auth.scoped_permissions import (
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
 from onyx.db.connector_credential_pair import (
+    CCPairAccessLevel,
     get_connector_credential_pair_from_id_for_user,
-    user_owns_groupless_cc_pair,
 )
 from onyx.db.document_set import (
     fetch_all_document_sets_for_user,
@@ -58,6 +57,7 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
     AccessType,
     ConnectorCredentialPairStatus,
+    ConnectorManageRole,
     MCPServerStatus,
     Permission,
     PermissionAuthority,
@@ -77,7 +77,6 @@ from onyx.db.models import (
     Persona__UserGroup,
     Skill,
     Skill__UserGroup,
-    TokenRateLimit__UserGroup,
     Tool,
     User,
     User__UserGroup,
@@ -95,11 +94,10 @@ from onyx.db.persona import (
     persona_edit_within_scope,
 )
 from onyx.db.skill import get_group_ids_for_skill
-from onyx.db.token_limit import insert_global_token_rate_limit
 from onyx.db.tools import can_manage_mcp_server, can_manage_tool
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents.credential import (
-    _assert_credential_share_within_scope,
+    assert_credential_share_within_scope,
     create_credential_from_model,
     create_credential_with_private_key,
 )
@@ -124,7 +122,6 @@ from onyx.server.features.tool.api import (
     list_tools,
 )
 from onyx.server.manage.administrative import create_deletion_attempt_for_connector_id
-from onyx.server.token_rate_limits.models import TokenRateLimitArgs
 from tests.external_dependency_unit.conftest import create_test_user
 
 
@@ -166,7 +163,10 @@ def _manage(db_session: Session, user: User, *groups: UserGroup) -> None:
 
 
 def _make_cc_pair(
-    db_session: Session, *, is_public: bool, groups: list[UserGroup]
+    db_session: Session,
+    *,
+    is_public: bool,
+    manage_rows: list[tuple[UserGroup, ConnectorManageRole]],
 ) -> ConnectorCredentialPair:
     connector = Connector(
         name=f"proj-conn-{uuid4().hex[:12]}",
@@ -193,103 +193,112 @@ def _make_cc_pair(
     )
     db_session.add(cc_pair)
     db_session.flush()
-    for group in groups:
+    for group, role in manage_rows:
         db_session.add(
             UserGroup__ConnectorCredentialPair(
-                user_group_id=group.id, cc_pair_id=cc_pair.id, is_current=True
+                user_group_id=group.id, cc_pair_id=cc_pair.id, role=role
             )
         )
     db_session.commit()
     return cc_pair
 
 
+def _has_access(
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+    user: User,
+    access_level: CCPairAccessLevel,
+) -> bool:
+    return (
+        get_connector_credential_pair_from_id_for_user(
+            cc_pair.id, db_session, user, access_level
+        )
+        is not None
+    )
+
+
 def test_cc_pair_projection_matches_gates(db_session: Session) -> None:
-    """Each key is pinned to the real route, not the bool that built it: edit → the editable
-    query (which must agree with the within_scope write decision); delete → the deletion route's
-    GATE 1 narrowed by its GATE 2; publish → the associate route's real GATE 2
-    (assert_within_scope for the PUBLIC state). The pair here sits in a group, so a scoped
-    manager edits it but can neither delete nor publish it."""
-    managed = _make_group(db_session)
+    """Each key is pinned to the real gate, not the bool that built it: operate and edit →
+    the OPERATE and EDIT queries the write routes run; delete → the deletion route's GATE 1
+    narrowed by its EDIT fetch; publish → the associate route's real GATE 2
+    (assert_within_scope for the PUBLIC state)."""
+    editor_group = _make_group(db_session)
+    operator_group = _make_group(db_session)
 
-    in_scope = create_test_user(db_session, "proj-cc-inscope")
-    _manage(db_session, in_scope, managed)
-    in_scope.effective_permissions = []
+    editor = create_test_user(db_session, "proj-cc-editor")
+    _manage(db_session, editor, editor_group)
+    editor.effective_permissions = []
 
-    out_scope = create_test_user(db_session, "proj-cc-outscope")
-    _manage(db_session, out_scope, _make_group(db_session))
-    out_scope.effective_permissions = []
+    operator = create_test_user(db_session, "proj-cc-operator")
+    _manage(db_session, operator, operator_group)
+    operator.effective_permissions = []
+
+    no_role = create_test_user(db_session, "proj-cc-norole")
+    _manage(db_session, no_role, _make_group(db_session))
+    no_role.effective_permissions = []
 
     admin = create_test_user(db_session, "proj-cc-admin", is_admin=True)
     db_session.commit()
 
-    cc_pair = _make_cc_pair(db_session, is_public=False, groups=[managed])
+    cc_pair = _make_cc_pair(
+        db_session,
+        is_public=False,
+        manage_rows=[
+            (editor_group, ConnectorManageRole.EDITOR),
+            (operator_group, ConnectorManageRole.OPERATOR),
+        ],
+    )
 
-    for actor in (in_scope, out_scope, admin):
-        # edit: the real editable query must agree with the within_scope write decision
-        is_editable = (
-            get_connector_credential_pair_from_id_for_user(
-                cc_pair.id, db_session, actor, get_editable=True
-            )
-            is not None
+    expected = {
+        editor.email: {"operate": True, "edit": True, "delete": True, "publish": False},
+        operator.email: {
+            "operate": True,
+            "edit": False,
+            "delete": False,
+            "publish": False,
+        },
+        no_role.email: {
+            "operate": False,
+            "edit": False,
+            "delete": False,
+            "publish": False,
+        },
+        admin.email: {"operate": True, "edit": True, "delete": True, "publish": True},
+    }
+    for actor in (editor, operator, no_role, admin):
+        can_operate = _has_access(db_session, cc_pair, actor, CCPairAccessLevel.OPERATE)
+        can_edit = _has_access(db_session, cc_pair, actor, CCPairAccessLevel.EDIT)
+        delete_admits = (
+            _route_admits(create_deletion_attempt_for_connector_id, "user", actor)
+            and can_edit
         )
-        scope_decision = within_scope(
-            actor,
-            db_session,
-            permission=Permission.MANAGE_CONNECTORS,
-            current_group_ids=[managed.id],
-            requested_group_ids=[managed.id],
-            is_non_public=True,
-        )
-        assert is_editable == scope_decision, actor.email
-
-        # delete: the deletion route's GATE 1 (allow_scope) narrowed by its GATE 2,
-        # which admits a non-admin only for a groupless pair they created
-        delete_admits = _route_admits(
-            create_deletion_attempt_for_connector_id, "user", actor
-        ) and (
-            has_global_permission(actor, Permission.MANAGE_CONNECTORS)
-            or user_owns_groupless_cc_pair(cc_pair, db_session, actor)
-        )
-        # publish: the associate route's real GATE 2 for the PUBLIC state (is_non_public=False)
         publish_enforced = not _guard_raises(
             assert_within_scope,
             actor,
             db_session,
             permission=Permission.MANAGE_CONNECTORS,
-            current_group_ids=[managed.id],
-            requested_group_ids=[managed.id],
+            current_group_ids=[editor_group.id],
+            requested_group_ids=[editor_group.id],
             is_non_public=False,
         )
 
         tags = cc_pair_permissions(
-            is_editable=is_editable,
+            can_operate=can_operate,
+            can_edit=can_edit,
             is_connectors_admin=has_global_permission(
                 actor, Permission.MANAGE_CONNECTORS
             ),
         )
-        assert tags["edit"] == scope_decision, actor.email
+        assert tags["operate"] == can_operate, actor.email
+        assert tags["edit"] == can_edit, actor.email
         assert tags["delete"] == delete_admits, actor.email
         assert tags["publish"] == publish_enforced, actor.email
-
-    # concrete: an in-scope manager edits but can neither delete nor publish
-    in_scope_editable = (
-        get_connector_credential_pair_from_id_for_user(
-            cc_pair.id, db_session, in_scope, get_editable=True
-        )
-        is not None
-    )
-    assert cc_pair_permissions(
-        is_editable=in_scope_editable,
-        is_connectors_admin=has_global_permission(
-            in_scope, Permission.MANAGE_CONNECTORS
-        ),
-    ) == {"edit": True, "delete": False, "publish": False}
+        assert tags == expected[actor.email], actor.email
 
 
 def test_cc_pair_scope_ignores_stale_group_links(db_session: Session) -> None:
-    """A group edit marks every one of its cc_pair junction rows is_current=False until the
-    sync cleans up, so the scope read must count live rows only. Otherwise a detached pair
-    stays editable, and a pair whose *other* link is stale gets hidden."""
+    """A group deletion marks its cc_pair junction rows is_current=False until the sync
+    cleans up, so the scope read must count live rows only."""
     managed = _make_group(db_session)
     unmanaged = _make_group(db_session)
 
@@ -299,43 +308,44 @@ def test_cc_pair_scope_ignores_stale_group_links(db_session: Session) -> None:
     db_session.commit()
 
     def editable(cc_pair: ConnectorCredentialPair) -> bool:
-        return (
-            get_connector_credential_pair_from_id_for_user(
-                cc_pair.id, db_session, manager, get_editable=True
-            )
-            is not None
-        )
+        return _has_access(db_session, cc_pair, manager, CCPairAccessLevel.EDIT)
 
     def link(cc_pair: ConnectorCredentialPair, group: UserGroup, current: bool) -> None:
         db_session.add(
             UserGroup__ConnectorCredentialPair(
-                user_group_id=group.id, cc_pair_id=cc_pair.id, is_current=current
+                user_group_id=group.id,
+                cc_pair_id=cc_pair.id,
+                role=ConnectorManageRole.EDITOR,
+                is_current=current,
             )
         )
         db_session.commit()
 
     # Detached from the managed group: the stale row must not keep it editable.
-    detached = _make_cc_pair(db_session, is_public=False, groups=[])
+    detached = _make_cc_pair(db_session, is_public=False, manage_rows=[])
     link(detached, managed, current=False)
     assert editable(detached) is False
 
-    # Attached, plus a stale link to a group they don't manage: must stay editable.
-    attached = _make_cc_pair(db_session, is_public=False, groups=[managed])
+    # Attached, plus a stale link to a group they don't manage: stays editable.
+    attached = _make_cc_pair(
+        db_session,
+        is_public=False,
+        manage_rows=[(managed, ConnectorManageRole.EDITOR)],
+    )
     link(attached, unmanaged, current=False)
     assert editable(attached) is True
 
-    # A *live* link to an unmanaged group still removes it from scope.
+    # A live co-manager group no longer removes it from scope: the role decides.
     link(attached, unmanaged, current=True)
-    assert editable(attached) is False
+    assert editable(attached) is True
 
 
 def test_cc_pair_creator_exception_is_bounded_to_groupless_private(
     db_session: Session,
 ) -> None:
     """The creator carve-out exists because a permission-synced pair sits in no group, so
-    the scope clause (needs >=1 managed group) can never match it. Unbounded it outlives
-    the scope rules — keeping the creator editable once the pair is published or moved
-    into groups they don't manage, which is what the write routes authorize on."""
+    no role can match it. Unbounded it would keep the creator an Editor once the pair is
+    published or given manage groups they don't manage."""
     unmanaged = _make_group(db_session)
 
     creator = create_test_user(db_session, "proj-cc-creator")
@@ -343,26 +353,25 @@ def test_cc_pair_creator_exception_is_bounded_to_groupless_private(
     creator.effective_permissions = []
     db_session.commit()
 
-    def editable(cc_pair: ConnectorCredentialPair) -> bool:
-        return (
-            get_connector_credential_pair_from_id_for_user(
-                cc_pair.id, db_session, creator, get_editable=True
-            )
-            is not None
+    def own(
+        is_public: bool, manage_rows: list[tuple[UserGroup, ConnectorManageRole]]
+    ) -> ConnectorCredentialPair:
+        cc_pair = _make_cc_pair(
+            db_session, is_public=is_public, manage_rows=manage_rows
         )
-
-    def own(**kwargs: object) -> ConnectorCredentialPair:
-        cc_pair = _make_cc_pair(db_session, **kwargs)  # ty: ignore[invalid-argument-type]
         cc_pair.creator_id = creator.id
         db_session.commit()
         return cc_pair
 
+    def editable(cc_pair: ConnectorCredentialPair) -> bool:
+        return _has_access(db_session, cc_pair, creator, CCPairAccessLevel.EDIT)
+
     # The case the carve-out is for: theirs, private, in no group.
-    assert editable(own(is_public=False, groups=[])) is True
-    # Published org-wide — public is out of scope for a manager, creator or not.
-    assert editable(own(is_public=True, groups=[])) is False
-    # Moved into a group they don't manage.
-    assert editable(own(is_public=False, groups=[unmanaged])) is False
+    assert editable(own(False, [])) is True
+    # Published org-wide: the carve-out stops.
+    assert editable(own(True, [])) is False
+    # Given a manage group they don't manage.
+    assert editable(own(False, [(unmanaged, ConnectorManageRole.EDITOR)])) is False
 
 
 def test_both_credential_create_paths_share_the_scope_gate(
@@ -394,15 +403,17 @@ def test_both_credential_create_paths_share_the_scope_gate(
         )
 
     assert not _guard_raises(
-        _assert_credential_share_within_scope, cred([]), manager, db_session
+        assert_credential_share_within_scope, cred([]), manager, db_session
     )
     assert _guard_raises(
-        _assert_credential_share_within_scope, cred([unmanaged.id]), manager, db_session
+        assert_credential_share_within_scope, cred([unmanaged.id]), manager, db_session
     )
 
 
 def test_cc_pair_projection_key_coverage() -> None:
-    stamped = set(cc_pair_permissions(is_editable=True, is_connectors_admin=True))
+    stamped = set(
+        cc_pair_permissions(can_operate=True, can_edit=True, is_connectors_admin=True)
+    )
     assert stamped == set(CC_PAIR_ACTIONS), (
         "cc_pair projection keys drifted from the declared CC_PAIR_ACTIONS vocabulary"
     )
@@ -945,6 +956,7 @@ def _make_skill(
     skill = Skill(
         id=uuid4(),
         name=f"contract skill {uuid4().hex[:8]}",
+        author_user_id=create_test_user(db_session, f"skill-owner-{uuid4().hex}").id,
         description="contract",
         # custom skills need a bundle source (ck_skill_definition_source)
         bundle_file_id=f"proj-bundle-{uuid4().hex}",
@@ -1208,8 +1220,8 @@ def test_actions_and_skill_key_coverage() -> None:
 
 def test_user_group_projection_matches_gates(db_session: Session) -> None:
     """Each flag is pinned to its real route, not the bool that built it: manage and
-    edit_token_limits → assert_manages_group (per-group scoped — the token read route now
-    admits scope), delete → delete-group (global MANAGE_USER_GROUPS), edit_permissions →
+    edit_token_limits → assert_manages_group (per-group scoped — the spending-limits group
+    read route admits scope), delete → delete-group (global MANAGE_USER_GROUPS), edit_permissions →
     permission-toggle (FULL_ADMIN). groups_admin (global MANAGE_USER_GROUPS, not full admin)
     separates the two levels; out_scope (manages a different group) pins the per-group gate."""
     managed = _make_group(db_session)
@@ -1232,7 +1244,7 @@ def test_user_group_projection_matches_gates(db_session: Session) -> None:
         manage_enforced = not _guard_raises(
             assert_manages_group, actor, db_session, group_id=managed.id
         )
-        # the token-limit POST guard (scoped create) is the same managed-scope decision
+        # the group spending-limit write guard is the same managed-scope decision
         token_create_enforced = not _guard_raises(
             assert_within_scope,
             actor,
@@ -1255,6 +1267,7 @@ def test_user_group_projection_matches_gates(db_session: Session) -> None:
                 actor, Permission.FULL_ADMIN_PANEL_ACCESS
             ),
             is_default=False,
+            permission_toggles_allowed=True,
         )
         assert tags["manage"] == manage_enforced, actor.email
         assert tags["manage_members"] == manage_enforced, actor.email
@@ -1264,9 +1277,9 @@ def test_user_group_projection_matches_gates(db_session: Session) -> None:
         assert tags["edit_permissions"] == _route_admits(
             set_user_group_permissions, "user", actor
         ), actor.email
-        # edit_token_limits rides the token read route: GATE 1 admits scope, GATE 2 is
-        # assert_manages_group — net per-group decision, so AND the two.
-        token_read_gate1 = _route_admits(get_group_token_limit_settings, "user", actor)
+        # edit_token_limits rides the group spending-limit read route: GATE 1 admits
+        # scope, GATE 2 is assert_manages_group — net per-group decision, so AND the two.
+        token_read_gate1 = _route_admits(get_group_spending_limits, "user", actor)
         assert tags["edit_token_limits"] == (token_read_gate1 and manage_enforced), (
             actor.email
         )
@@ -1280,6 +1293,7 @@ def test_user_group_projection_matches_gates(db_session: Session) -> None:
             in_scope, Permission.FULL_ADMIN_PANEL_ACCESS
         ),
         is_default=False,
+        permission_toggles_allowed=True,
     ) == {
         "manage": True,
         "manage_members": True,
@@ -1300,6 +1314,7 @@ def test_user_group_projection_matches_gates(db_session: Session) -> None:
             groups_admin, Permission.FULL_ADMIN_PANEL_ACCESS
         ),
         is_default=False,
+        permission_toggles_allowed=True,
     ) == {
         "manage": True,
         "manage_members": True,
@@ -1331,6 +1346,7 @@ def test_default_user_group_projection_is_membership_only(db_session: Session) -
                 actor, Permission.FULL_ADMIN_PANEL_ACCESS
             ),
             is_default=True,
+            permission_toggles_allowed=False,
         )
 
     assert _tags(admin) == {
@@ -1349,6 +1365,22 @@ def test_default_user_group_projection_is_membership_only(db_session: Session) -
         "edit_token_limits": False,
     }
 
+    # Basic is the one default group that offers permission toggles, full admin only.
+    assert user_group_permissions(
+        can_manage=False,
+        is_user_groups_admin=True,
+        is_full_admin=True,
+        is_default=True,
+        permission_toggles_allowed=True,
+    )["edit_permissions"]
+    assert not user_group_permissions(
+        can_manage=False,
+        is_user_groups_admin=True,
+        is_full_admin=False,
+        is_default=True,
+        permission_toggles_allowed=True,
+    )["edit_permissions"]
+
 
 def test_user_group_key_coverage() -> None:
     assert set(
@@ -1357,22 +1389,16 @@ def test_user_group_key_coverage() -> None:
             is_user_groups_admin=True,
             is_full_admin=True,
             is_default=False,
+            permission_toggles_allowed=True,
         )
     ) == set(USER_GROUP_ACTIONS)
 
 
-def test_group_token_rate_limit_write_scope(db_session: Session) -> None:
-    """A group token-limit write needs the caller to manage the group AND the limit to
-    belong to it — so a group admin fully manages its limits, but a global/per-user limit or
-    another group's limit can't be reached through the group path."""
+def test_group_spending_limit_write_scope(db_session: Session) -> None:
+    """A group spending-limit write needs the caller to manage the group: a group
+    admin manages its own group's pool, and nobody reaches another group's cards."""
     managed = _make_group(db_session)
     other = _make_group(db_session)
-
-    args = TokenRateLimitArgs(enabled=True, token_budget=1000, period_hours=24)
-    managed_limit = insert_user_group_token_rate_limit(
-        db_session=db_session, token_rate_limit_settings=args, group_id=managed.id
-    )
-    global_limit = insert_global_token_rate_limit(db_session, args)
 
     in_scope = create_test_user(db_session, "proj-trl-in")
     _manage(db_session, in_scope, managed)
@@ -1391,76 +1417,12 @@ def test_group_token_rate_limit_write_scope(db_session: Session) -> None:
     plain.effective_permissions = []
     db_session.commit()
 
-    def denied(actor: User, group_id: int, rate_limit_id: int) -> bool:
-        return _guard_raises(
-            _authorize_group_token_rate_limit_write,
-            actor,
-            db_session,
-            group_id=group_id,
-            rate_limit_id=rate_limit_id,
-        )
+    def denied(actor: User, group_id: int) -> bool:
+        return _guard_raises(_authorize_group_write, actor, db_session, group_id)
 
-    assert not denied(admin, managed.id, managed_limit.id)
-    assert not denied(groups_admin, managed.id, managed_limit.id)
-    assert not denied(in_scope, managed.id, managed_limit.id)
-    assert denied(out_scope, managed.id, managed_limit.id)
-    assert denied(plain, managed.id, managed_limit.id)
-
-    # a global limit can't be reached through the group path — even for a full admin
-    assert denied(admin, managed.id, global_limit.id)
-
-    # the limit must belong to the claimed group (can't reach managed's limit via other)
-    assert denied(out_scope, other.id, managed_limit.id)
-    assert denied(in_scope, other.id, managed_limit.id)
-
-    # an unknown id folds into the same OnyxError 404, not the helper's raw ValueError
-    nonexistent_limit_id = -1
-    assert denied(in_scope, managed.id, nonexistent_limit_id)
-    assert denied(admin, managed.id, nonexistent_limit_id)
-
-
-def test_group_token_rate_limit_write_multi_group_scope(db_session: Session) -> None:
-    """Defensive: no API path attaches a limit to more than one group, but the schema allows
-    many-to-many. If a limit ever spanned groups, a mutation would hit all of them, so a manager
-    of only one attached group must be denied — the guard checks every attached group, not one
-    arbitrary association; global holders manage all groups so they pass. Builds the multi-group
-    state directly (no API can) to lock in the guard's behavior if that ever changes."""
-    managed = _make_group(db_session)
-    unmanaged = _make_group(db_session)
-
-    args = TokenRateLimitArgs(enabled=True, token_budget=1000, period_hours=24)
-    # limit attached to BOTH a managed and an unmanaged group
-    shared_limit = insert_user_group_token_rate_limit(
-        db_session=db_session, token_rate_limit_settings=args, group_id=managed.id
-    )
-    db_session.add(
-        TokenRateLimit__UserGroup(
-            rate_limit_id=shared_limit.id, user_group_id=unmanaged.id
-        )
-    )
-    db_session.commit()
-
-    in_scope = create_test_user(db_session, "proj-trl-multi-in")
-    _manage(db_session, in_scope, managed)
-    in_scope.effective_permissions = []
-
-    groups_admin = create_test_user(db_session, "proj-trl-multi-groupsadmin")
-    groups_admin.effective_permissions = [Permission.MANAGE_USER_GROUPS.value]
-
-    admin = create_test_user(db_session, "proj-trl-multi-admin", is_admin=True)
-    db_session.commit()
-
-    def denied(actor: User) -> bool:
-        return _guard_raises(
-            _authorize_group_token_rate_limit_write,
-            actor,
-            db_session,
-            group_id=managed.id,
-            rate_limit_id=shared_limit.id,
-        )
-
-    # manager of `managed` only: mutating the shared limit would also hit `unmanaged`, so deny
-    assert denied(in_scope)
-    # global MANAGE_USER_GROUPS holders manage every group, so the shared limit is reachable
-    assert not denied(groups_admin)
-    assert not denied(admin)
+    assert not denied(admin, managed.id)
+    assert not denied(groups_admin, managed.id)
+    assert not denied(in_scope, managed.id)
+    assert denied(out_scope, managed.id)
+    assert denied(plain, managed.id)
+    assert denied(in_scope, other.id)

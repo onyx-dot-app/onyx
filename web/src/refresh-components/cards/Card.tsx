@@ -65,7 +65,7 @@
  * ```
  */
 
-import { Section, SectionProps } from "@/layouts/general-layouts";
+import { Section, SectionProps } from "@opal/layouts";
 import { cn } from "@opal/utils";
 
 type CardVariant =

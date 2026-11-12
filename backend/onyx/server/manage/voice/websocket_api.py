@@ -4,7 +4,7 @@ import asyncio
 import io
 import json
 import os
-from collections.abc import MutableMapping
+from collections.abc import Awaitable, MutableMapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -16,6 +16,11 @@ from onyx.auth.users import current_user_from_websocket
 from onyx.db.engine.sql_engine import get_sqlalchemy_engine
 from onyx.db.models import User
 from onyx.db.voice import fetch_default_stt_provider, fetch_default_tts_provider
+from onyx.redis.redis_pool import (
+    VoiceSessionLimitExceeded,
+    acquire_voice_session,
+    release_voice_session,
+)
 from onyx.server.manage.voice.text_utils import strip_markdown_for_tts
 from onyx.utils.logger import setup_logger
 from onyx.voice.factory import get_voice_provider
@@ -24,6 +29,7 @@ from onyx.voice.interface import (
     StreamingSynthesizerProtocol,
     StreamingTranscriberProtocol,
     TranscriptResult,
+    VoiceSessionPolicy,
 )
 
 logger = setup_logger()
@@ -566,6 +572,35 @@ async def handle_streaming_transcription(
         )
 
 
+async def _run_with_session_cap(
+    policy: VoiceSessionPolicy | None, handler: Awaitable[None]
+) -> VoiceSessionPolicy | None:
+    """Run a transcription handler under the provider's session cap, if any.
+
+    Returns the policy when its cap ended the session, else None. A
+    TimeoutError raised by the handler itself is re-raised so setup failures
+    use the normal error path.
+    """
+    if policy is None:
+        await handler
+        return None
+    deadline = asyncio.timeout(policy.handler_seconds)
+    try:
+        async with deadline:
+            await handler
+    except TimeoutError:
+        if not deadline.expired():
+            raise
+    return policy if deadline.expired() else None
+
+
+async def _send_session_timeout(
+    websocket: WebSocket, policy: VoiceSessionPolicy
+) -> None:
+    logger.info("WebSocket transcribe: %s session reached the hard cap", policy.scope)
+    await websocket.send_json({"type": "error", "message": policy.timeout_message})
+
+
 async def handle_chunked_transcription(
     websocket: WebSocket,
     transcriber: ChunkedTranscriber,
@@ -748,6 +783,9 @@ async def websocket_transcribe(
 
     streaming_transcriber = None
     provider = None
+    session_policy: VoiceSessionPolicy | None = None
+    session_member_id: str | None = None
+    session_user_id = str(_user.id)
 
     try:
         # Get STT provider
@@ -802,14 +840,34 @@ async def websocket_transcribe(
 
         # One budget for the whole connection, shared with the chunked fallback.
         session_deadline = _session_deadline()
+        session_policy = provider.session_policy()
+        if session_policy is not None:
+            try:
+                session_member_id = await acquire_voice_session(
+                    policy=session_policy, user_id=session_user_id
+                )
+            except VoiceSessionLimitExceeded as e:
+                await websocket.send_json({"type": "error", "message": str(e)})
+                return
 
         if use_streaming:
-            try:
+
+            async def stream_with_provider() -> None:
+                # Setup counts toward the session cap, so a slow handshake cannot
+                # stretch the session past the Redis admission TTL.
+                nonlocal streaming_transcriber
                 streaming_transcriber = await provider.create_streaming_transcriber()
                 logger.info("WebSocket transcribe: streaming transcriber created")
                 await handle_streaming_transcription(
                     websocket, streaming_transcriber, deadline=session_deadline
                 )
+
+            try:
+                capped = await _run_with_session_cap(
+                    session_policy, stream_with_provider()
+                )
+                if capped is not None:
+                    await _send_session_timeout(websocket, capped)
                 return
             except WebSocketDisconnect:
                 raise
@@ -851,9 +909,14 @@ async def websocket_transcribe(
 
         # Chunked/REST path; browser sends raw PCM16 chunks.
         chunked_transcriber = ChunkedTranscriber(provider, audio_format="pcm16")
-        await handle_chunked_transcription(
-            websocket, chunked_transcriber, deadline=session_deadline
+        capped = await _run_with_session_cap(
+            session_policy,
+            handle_chunked_transcription(
+                websocket, chunked_transcriber, deadline=session_deadline
+            ),
         )
+        if capped is not None:
+            await _send_session_timeout(websocket, capped)
 
     except WebSocketDisconnect:
         logger.debug("WebSocket transcribe: client disconnected")
@@ -869,6 +932,18 @@ async def websocket_transcribe(
     finally:
         if streaming_transcriber:
             await _close_transcriber(streaming_transcriber)
+        if session_policy is not None and session_member_id is not None:
+            try:
+                await release_voice_session(
+                    policy=session_policy,
+                    user_id=session_user_id,
+                    session_member_id=session_member_id,
+                )
+            except Exception:
+                logger.warning(
+                    "WebSocket transcribe: failed to release session slot",
+                    exc_info=True,
+                )
         try:
             await websocket.close()
         except Exception:

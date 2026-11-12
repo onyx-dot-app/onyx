@@ -322,5 +322,9 @@
   "backdrop-blur-03": {
     "value": "1px",
     "type": "dimension"
+  },
+  "width-chat-message-max": {
+    "value": "45rem",
+    "type": "dimension"
   }
 }

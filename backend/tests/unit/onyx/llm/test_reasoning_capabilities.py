@@ -4,9 +4,14 @@ from onyx.llm.api_surfaces import LlmApiSurface
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.model_capabilities import (
     ReasoningParamStyle,
+    anthropic_identity_is_always_thinking,
+    anthropic_thinking_is_always_on,
+    anthropic_turns_thinking_off_between_tools,
+    gemini_lowest_thinking_level_is_low,
     is_openai_registry_model_name,
     openai_chat_tools_require_reasoning_none,
     parse_anthropic_model_version,
+    parse_gemini_version,
     parse_openai_gpt_version,
     resolve_reasoning_param_style,
     supported_reasoning_efforts,
@@ -241,6 +246,8 @@ def test_resolve_reasoning_param_style(
         (LlmProviderNames.BIFROST, "openai/gpt-5.1", CHAT_COMPLETIONS, True),
         (LlmProviderNames.BIFROST, "anthropic/claude-opus-4-7", CHAT_COMPLETIONS, True),
         (LlmProviderNames.ANTHROPIC, "claude-opus-4-7", None, True),
+        # Sonnet 5.5 can stop up-front thinking, so the picker keeps off.
+        (LlmProviderNames.ANTHROPIC, "claude-sonnet-5-5", None, True),
         (LlmProviderNames.BEDROCK, "us.anthropic.claude-opus-4-8-v1:0", None, True),
         # Legacy Anthropic budgets make xhigh indistinguishable from high.
         (LlmProviderNames.ANTHROPIC, "claude-3-7-sonnet", None, False),
@@ -265,6 +272,82 @@ def test_supported_reasoning_efforts(
     assert (ReasoningEffort.XHIGH in efforts) is xhigh_supported
 
 
+@pytest.mark.parametrize(
+    "model_name, always_on",
+    [
+        ("claude-fable-5", True),
+        ("claude-fable-5-1", True),
+        ("claude-5-mythos", True),
+        ("claude-opus-5", False),
+        # Opus 5.5 rejects thinking.type=disabled, Opus 5 does not.
+        ("claude-opus-5-5", True),
+        ("us.anthropic.claude-opus-5-5", True),
+        ("claude-sonnet-5", False),
+        ("claude-opus-4-7", False),
+        # Pre-adaptive Claude only thinks when the param asks for it.
+        ("claude-3-7-sonnet", False),
+        # The leading tier word decides, whichever the tier list names first.
+        ("claude-opus-4-7-mythos", False),
+        ("claude-mythos-5-opus", True),
+        ("fable-writer-v2", False),
+    ],
+)
+def test_anthropic_thinking_is_always_on(model_name: str, always_on: bool) -> None:
+    assert anthropic_thinking_is_always_on(model_name) is always_on
+
+
+@pytest.mark.parametrize(
+    "model_names, always_on",
+    [
+        (["claude-fable-5"], True),
+        # The deployment alias reaches the provider, so it decides.
+        (["claude-fable-5", "claude-opus-5"], False),
+        (["claude-opus-5", "claude-fable-5"], True),
+        (["my-deployment", "claude-mythos-5-1"], True),
+        # An alias that names no Claude version leaves the model name to decide.
+        (["claude-fable-5", "prod-claude-alias"], True),
+    ],
+)
+def test_anthropic_identity_is_always_thinking(
+    model_names: list[str], always_on: bool
+) -> None:
+    assert anthropic_identity_is_always_thinking(model_names) is always_on
+
+
+@pytest.mark.parametrize(
+    "model_name", ["claude-fable-5", "claude-mythos-5-1", "claude-opus-5-5"]
+)
+def test_always_thinking_models_offer_no_off(model_name: str) -> None:
+    """Off would promise a saving these models never honor: they reject both
+    thinking.type=disabled and between_tools, so there is no off to send."""
+    efforts = supported_reasoning_efforts(
+        LlmProviderNames.ANTHROPIC, [model_name], None
+    )
+    assert ReasoningEffort.OFF not in efforts
+    assert efforts[0] is ReasoningEffort.LOW
+
+
+@pytest.mark.parametrize(
+    "model_name, between_tools",
+    [
+        ("claude-sonnet-5-5", True),
+        ("us.anthropic.claude-sonnet-5-5", True),
+        ("claude-sonnet-5-5@20260928", True),
+        # Sonnet 5 and 4.6 take disabled, and pre-adaptive Sonnet omits the param.
+        ("claude-sonnet-5", False),
+        ("claude-sonnet-4-6", False),
+        ("claude-3-7-sonnet", False),
+        # Opus 5.5 rejects between_tools along with disabled.
+        ("claude-opus-5-5", False),
+        ("claude-fable-5-1", False),
+    ],
+)
+def test_anthropic_turns_thinking_off_between_tools(
+    model_name: str, between_tools: bool
+) -> None:
+    assert anthropic_turns_thinking_off_between_tools(model_name) is between_tools
+
+
 @pytest.mark.parametrize("model_name", ["o1-mini", "o1-preview", "o1-mini-2024-09-12"])
 def test_models_rejecting_reasoning_effort_support_no_levels(model_name: str) -> None:
     """These models reason but take no effort parameter on any surface, so the
@@ -272,13 +355,68 @@ def test_models_rejecting_reasoning_effort_support_no_levels(model_name: str) ->
     assert supported_reasoning_efforts(LlmProviderNames.AZURE, [model_name], None) == []
 
 
-@pytest.mark.parametrize("model_name", ["gpt-5-chat-latest", "gpt-5.1-chat-latest"])
+@pytest.mark.parametrize("model_name", ["gpt-5-chat"])
 def test_chat_variants_support_no_levels(model_name: str) -> None:
     """The request builder drops every reasoning param for GPT-5 "-chat"
     registry variants, so the picker must offer no levels either."""
     assert (
         supported_reasoning_efforts(LlmProviderNames.OPENAI, [model_name], None) == []
     )
+
+
+@pytest.mark.parametrize(
+    "model_name, expected",
+    [
+        ("gemini-3.8-flash", (3, 8)),
+        ("vertex_ai/gemini-3.7-flash", (3, 7)),
+        ("gemini-3-flash-preview", (3, 0)),
+        ("gemini-2.5-pro", (2, 5)),
+        ("google/gemini-3.1-pro-preview", (3, 1)),
+        ("claude-sonnet-5", None),
+        ("gpt-5.5", None),
+    ],
+)
+def test_parse_gemini_version(
+    model_name: str, expected: tuple[int, int] | None
+) -> None:
+    assert parse_gemini_version(model_name) == expected
+
+
+@pytest.mark.parametrize(
+    "model_name, expected",
+    [
+        ("gemini-3.8-flash", True),
+        ("vertex_ai/gemini-3.8-flash", True),
+        ("gemini-3.7-flash", True),
+        ("gemini-3.6-flash", False),
+        ("gemini-3.5-flash", False),
+        ("gemini-3.5-flash-lite", False),
+        ("gemini-3-flash-preview", False),
+        ("gemini-3.1-pro-preview", False),
+        ("gemini-2.5-flash", False),
+        ("claude-sonnet-5", False),
+    ],
+)
+def test_gemini_lowest_thinking_level_is_low(model_name: str, expected: bool) -> None:
+    assert gemini_lowest_thinking_level_is_low(model_name) is expected
+
+
+@pytest.mark.parametrize(
+    "model_provider, model_name, offers_off",
+    [
+        (LlmProviderNames.VERTEX_AI, "gemini-3.8-flash", False),
+        (LlmProviderNames.OPENROUTER, "google/gemini-3.8-flash", False),
+        (LlmProviderNames.VERTEX_AI, "gemini-3.5-flash", True),
+        (LlmProviderNames.VERTEX_AI, "gemini-3.1-pro-preview", True),
+    ],
+)
+def test_gemini_flash_without_off_level_hides_off(
+    model_provider: str, model_name: str, offers_off: bool
+) -> None:
+    efforts = supported_reasoning_efforts(model_provider, [model_name], None)
+    assert (ReasoningEffort.OFF in efforts) is offers_off
+    assert ReasoningEffort.XHIGH not in efforts
+    assert efforts[-1] is ReasoningEffort.HIGH
 
 
 def test_model_identity_taken_from_any_name() -> None:

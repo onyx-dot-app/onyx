@@ -13,6 +13,7 @@ from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryTask
 from onyx.db.connector_credential_pair import (
+    CCPairAccessLevel,
     get_connector_credential_pairs_for_user,
 )
 from onyx.db.document_set import (
@@ -85,20 +86,20 @@ def _assert_attachable_cc_pairs(
     user: User, db_session: Session, cc_pair_ids: list[int]
 ) -> None:
     """Bounds attachments to the connectors the caller can already reach: public and
-    sync pairs, pairs in a group they belong to or manage, and groupless pairs they
-    created. ``update_document_set`` checks connectors against the *requested* groups,
-    so it checks nothing once those are empty; only the editable query carries the
-    creator fallback."""
+    sync pairs, pairs in a group they belong to, pairs they may operate, and groupless
+    pairs they created. ``update_document_set`` checks connectors against the
+    *requested* groups, so it checks nothing once those are empty; only the operate
+    query carries the creator fallback."""
     if not cc_pair_ids:
         return
 
     attachable = {
         cc_pair.id
-        for editable in (False, True)
+        for access_level in (CCPairAccessLevel.READ, CCPairAccessLevel.OPERATE)
         for cc_pair in get_connector_credential_pairs_for_user(
             db_session=db_session,
             user=user,
-            get_editable=editable,
+            access_level=access_level,
             ids=cc_pair_ids,
             processing_mode=None,
         )
@@ -291,6 +292,10 @@ def list_document_sets_for_user(
     get_editable: bool = Query(
         False, description="If true, return editable document sets"
     ),
+    searchable_only: bool = Query(
+        False,
+        description="If true, return only document sets the user can search",
+    ),
 ) -> list[DocumentSetSummary]:
     readable = fetch_all_document_sets_for_user(
         db_session=db_session, user=user, get_editable=get_editable
@@ -315,6 +320,18 @@ def list_document_sets_for_user(
     by_id = {ds.id: ds for ds in readable}
     by_id.update({ds.id: ds for ds in editable})
     document_sets = list(by_id.values())
+    if searchable_only:
+        # Search validates names with the read predicate, so editable-only sets
+        # would be rejected there.
+        searchable = (
+            fetch_all_document_sets_for_user(
+                db_session=db_session, user=user, get_editable=False
+            )
+            if get_editable
+            else readable
+        )
+        searchable_ids = {ds.id for ds in searchable}
+        document_sets = [ds for ds in document_sets if ds.id in searchable_ids]
 
     summaries: list[DocumentSetSummary] = []
     for ds in document_sets:

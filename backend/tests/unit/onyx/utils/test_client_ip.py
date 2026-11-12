@@ -2,10 +2,17 @@
 
 from unittest.mock import MagicMock
 
+import pytest
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
+from starlette.types import Message, Receive, Scope, Send
 
-from onyx.utils.client_ip import ClientIPMiddleware, current_client_ip, get_client_ip
+from onyx.utils.client_ip import (
+    _CLIENT_IP_CONTEXTVAR,
+    ClientIPMiddleware,
+    current_client_ip,
+    get_client_ip,
+)
 
 
 def _fake_request(
@@ -120,3 +127,34 @@ def test_middleware_with_no_routable_ip_sets_none() -> None:
     res = client.get("/echo-ip", headers={"X-Forwarded-For": "10.0.0.5"})
     assert res.status_code == 200
     assert res.json() == {"ip": None}
+
+
+@pytest.mark.asyncio
+async def test_context_covers_body_and_resets_after_failure() -> None:
+    scope: Scope = {
+        "type": "http",
+        "headers": [(b"x-forwarded-for", b"8.8.8.8")],
+    }
+    messages: list[Message] = []
+
+    async def receive() -> Message:
+        raise AssertionError("The middleware must not read the request body")
+
+    async def send(message: Message) -> None:
+        assert current_client_ip() == "8.8.8.8"
+        messages.append(message)
+
+    async def app(_scope: Scope, _receive: Receive, send: Send) -> None:
+        assert current_client_ip() == "8.8.8.8"
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"first", "more_body": True})
+        raise ValueError("stream failed")
+
+    token = _CLIENT_IP_CONTEXTVAR.set("1.1.1.1")
+    try:
+        with pytest.raises(ValueError, match="stream failed"):
+            await ClientIPMiddleware(app)(scope, receive, send)
+        assert current_client_ip() == "1.1.1.1"
+        assert len(messages) == 2
+    finally:
+        _CLIENT_IP_CONTEXTVAR.reset(token)

@@ -1,4 +1,4 @@
-import { BackendChatSession, BackendMessage } from "@/app/app/interfaces";
+import { BackendChatSession, BackendMessage } from "@/app/app/types";
 import { UNNAMED_CHAT } from "@/lib/constants";
 import { downloadFile } from "@/lib/download";
 

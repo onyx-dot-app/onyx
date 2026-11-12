@@ -13,11 +13,28 @@ from onyx.configs.app_configs import DEV_MODE
 from onyx.configs.constants import DocumentSource
 from onyx.db.enums import Permission
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+
+def _assert_site_relative_redirect(redirect_on_success: str | None) -> None:
+    if redirect_on_success is None:
+        return
+    if (
+        not redirect_on_success.startswith("/")
+        or redirect_on_success.startswith("//")
+        or "\\" in redirect_on_success
+        or any(ord(char) < 32 or ord(char) == 127 for char in redirect_on_success)
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "redirect_on_success must be a site-relative path.",
+        )
 
 
 @router.post("/prepare-authorization-request")
@@ -31,6 +48,8 @@ def prepare_authorization_request(
 
     Example: https://www.oauth.com/oauth2-servers/authorization/the-authorization-request/
     """
+
+    _assert_site_relative_redirect(redirect_on_success)
 
     # create random oauth state param for security and to retrieve user data later
     oauth_uuid = uuid.uuid4()
@@ -49,7 +68,7 @@ def prepare_authorization_request(
             oauth_url = SlackOAuth.generate_dev_oauth_url(oauth_state)
 
         session = SlackOAuth.session_dump_json(
-            email=user.email, redirect_on_success=redirect_on_success
+            email=user.email, redirect_on_success=redirect_on_success, user_id=user.id
         )
     elif connector == DocumentSource.CONFLUENCE:
         if not DEV_MODE:
@@ -57,7 +76,7 @@ def prepare_authorization_request(
         else:
             oauth_url = ConfluenceCloudOAuth.generate_dev_oauth_url(oauth_state)
         session = ConfluenceCloudOAuth.session_dump_json(
-            email=user.email, redirect_on_success=redirect_on_success
+            email=user.email, redirect_on_success=redirect_on_success, user_id=user.id
         )
     elif connector == DocumentSource.GOOGLE_DRIVE:
         if not DEV_MODE:
@@ -65,7 +84,7 @@ def prepare_authorization_request(
         else:
             oauth_url = GoogleDriveOAuth.generate_dev_oauth_url(oauth_state)
         session = GoogleDriveOAuth.session_dump_json(
-            email=user.email, redirect_on_success=redirect_on_success
+            email=user.email, redirect_on_success=redirect_on_success, user_id=user.id
         )
     else:
         oauth_url = None

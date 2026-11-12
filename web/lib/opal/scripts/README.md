@@ -86,6 +86,20 @@ export { default as SvgMyIcon } from "@opal/icons/my-icon";
 ./scripts/convert-svg.sh --logo src/logos/my-logo.svg
 ```
 
+#### Logo naming
+
+A logo is named after its brand:
+
+- **File name:** the brand in lowercase, with a hyphen only where the brand has a space.
+  `openai.tsx` (OpenAI), `github.tsx` (GitHub), `google-drive.tsx` (Google Drive),
+  `lm-studio.tsx` (LM Studio).
+- **Export name:** `Svg` followed by the brand's own capitalization, without the spaces.
+  `SvgOpenAI`, `SvgGitHub`, `SvgGoogleDrive`, `SvgLMStudio`. A brand that starts in lowercase
+  still starts with a capital after `Svg`: `SvgXAI` (xAI), `SvgMixedbread` (mixedbread).
+
+The script names the component after the file, so `openai.svg` becomes `SvgOpenai`. Rename the
+component in the generated file to the brand's capitalization, and use that name in the export.
+
 Then add the export to `src/logos/index.ts`:
 ```ts
 export { default as SvgMyLogo } from "@opal/logos/my-logo";

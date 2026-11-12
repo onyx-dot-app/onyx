@@ -81,7 +81,12 @@ def _make_replica(
     ) -> None:
         return None
 
-    def _provision_opencode_secret(sandbox_id: str, config_json: str) -> None:  # noqa: ARG001
+    def _provision_opencode_secret(
+        _sandbox_id: str,
+        _config_json: str,
+        _tenant_id: str,
+        _provisioning_attempt_number: int,
+    ) -> None:
         return None
 
     def _create_sandbox_pod(
@@ -222,7 +227,12 @@ def test_lock_released_after_provision_failure(
 
     failing = _make_replica(cluster, monkeypatch)
 
-    def _boom(sandbox_id: str, config_json: str) -> None:  # noqa: ARG001
+    def _boom(
+        _sandbox_id: str,
+        _config_json: str,
+        _tenant_id: str,
+        _provisioning_attempt_number: int,
+    ) -> None:
         raise ApiException(status=500, reason="secret create failed")
 
     monkeypatch.setattr(failing, "_provision_opencode_secret", _boom)

@@ -1,0 +1,66 @@
+name: Docs Preview
+
+# Mintlify previews pull requests only when they target its deployment branch, docs/live
+# (see docs-publish.yml). Docs pull requests target main, so previews take two workflows:
+# - This one builds the same tree docs-publish pushes to docs/live (documentation/ with the
+#   generated logos, icons and openapi.json) from pull request code. It holds no secrets.
+# - docs-preview-publish.yml runs from main after this one finishes. It pushes the built
+#   tree to a docs-preview/pr-<number> branch, asks Mintlify to preview it, and comments.
+concurrency:
+  group: Docs-Preview-${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "documentation/**"
+      - ".github/workflows/docs-preview.yml"
+      - ".github/workflows/docs-preview-publish.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # Mintlify does not preview forked branches, so fork pull requests get no preview.
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository
+      && github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Setup Python and Install Dependencies
+        uses: ./.github/actions/setup-python-and-install-dependencies
+        with:
+          requirements: |
+            backend/requirements/default.txt
+            backend/requirements/ee.txt
+      - name: Setup bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # ratchet:oven-sh/setup-bun@v2 # zizmor: ignore[cache-poisoning]
+        with:
+          bun-version: "1.3.13"
+      - name: Install web dependencies
+        working-directory: ./web
+        run: bun install --frozen-lockfile
+      - name: Generate logos, icons and openapi.json
+        run: documentation/scripts/generate.sh
+      - name: Package the docs tree
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          out="$RUNNER_TEMP/docs-preview"
+          mkdir -p "$out"
+          tar -czf "$out/documentation.tar.gz" documentation
+          jq -n --argjson pr "$PR_NUMBER" --arg sha "$HEAD_SHA" '{pr_number: $pr, head_sha: $sha}' > "$out/meta.json"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # ratchet:actions/upload-artifact@v4
+        with:
+          name: docs-preview
+          overwrite: true
+          path: ${{ runner.temp }}/docs-preview
+          retention-days: 3

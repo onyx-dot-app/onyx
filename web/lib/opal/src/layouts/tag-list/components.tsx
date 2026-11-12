@@ -27,8 +27,8 @@ interface TagListProps {
 // ---------------------------------------------------------------------------
 
 /**
- * Wrap-flowing row of Tags outside an input, for any labelled list. All
- * items show by default. `maxVisible` collapses the rest into a "+N" tag.
+ * Wrap-flowing row of Chips outside an input, for any labelled list. All
+ * items show by default. `maxVisible` collapses the rest into a "+N" chip.
  */
 function TagList({ items, onRemove, maxVisible, overflowIcon }: TagListProps) {
   const visible = maxVisible === undefined ? items : items.slice(0, maxVisible);

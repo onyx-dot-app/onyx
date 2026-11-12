@@ -33,26 +33,26 @@ type agentResource struct {
 }
 
 type agentResourceModel struct {
+	DocumentSetIDs              types.Set    `tfsdk:"document_set_ids"`
+	ToolIDs                     types.Set    `tfsdk:"tool_ids"`
+	StarterMessages             types.List   `tfsdk:"starter_messages"`
+	LabelIDs                    types.Set    `tfsdk:"label_ids"`
+	Users                       types.Set    `tfsdk:"users"`
+	Groups                      types.Set    `tfsdk:"groups"`
 	ID                          types.String `tfsdk:"id"`
 	Name                        types.String `tfsdk:"name"`
 	Description                 types.String `tfsdk:"description"`
 	SystemPrompt                types.String `tfsdk:"system_prompt"`
 	TaskPrompt                  types.String `tfsdk:"task_prompt"`
+	IconName                    types.String `tfsdk:"icon_name"`
+	DefaultModelConfigurationID types.String `tfsdk:"default_model_configuration_id"`
+	SearchStartDate             types.String `tfsdk:"search_start_date"`
+	DisplayPriority             types.Int64  `tfsdk:"display_priority"`
 	ReplaceBaseSystemPrompt     types.Bool   `tfsdk:"replace_base_system_prompt"`
 	DatetimeAware               types.Bool   `tfsdk:"datetime_aware"`
-	DocumentSetIDs              types.Set    `tfsdk:"document_set_ids"`
-	ToolIDs                     types.Set    `tfsdk:"tool_ids"`
 	IsPublic                    types.Bool   `tfsdk:"is_public"`
 	IsListed                    types.Bool   `tfsdk:"is_listed"`
 	IsFeatured                  types.Bool   `tfsdk:"is_featured"`
-	DisplayPriority             types.Int64  `tfsdk:"display_priority"`
-	IconName                    types.String `tfsdk:"icon_name"`
-	StarterMessages             types.List   `tfsdk:"starter_messages"`
-	LabelIDs                    types.Set    `tfsdk:"label_ids"`
-	DefaultModelConfigurationID types.String `tfsdk:"default_model_configuration_id"`
-	SearchStartDate             types.String `tfsdk:"search_start_date"`
-	Users                       types.Set    `tfsdk:"users"`
-	Groups                      types.Set    `tfsdk:"groups"`
 	BuiltinAgent                types.Bool   `tfsdk:"builtin_agent"`
 }
 
@@ -164,7 +164,8 @@ func (r *agentResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				MarkdownDescription: "Sort position in the assistant list. Lower sorts first. " +
 					"Onyx reads this from the agent only when it is created, so a later change is " +
 					"applied through its own endpoint as a second call. Removing the attribute " +
-					"leaves the last value in place rather than clearing it.",
+					"leaves the last value in place rather than clearing it. The second call needs " +
+					"full admin access, so an API key with scoped permissions cannot change it.",
 			},
 			"icon_name": schema.StringAttribute{
 				Optional:            true,
@@ -173,7 +174,7 @@ func (r *agentResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 			"label_ids": schema.SetAttribute{
 				Optional:            true,
 				ElementType:         types.Int64Type,
-				MarkdownDescription: "Ids of the labels the agent is filed under. Labels are created in the admin panel.",
+				MarkdownDescription: "Ids of the labels the agent is filed under. Manage labels with `onyx_agent_label`.",
 			},
 			"default_model_configuration_id": schema.StringAttribute{
 				Optional: true,
@@ -184,8 +185,9 @@ func (r *agentResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				Optional: true,
 				MarkdownDescription: "Ignore documents older than this date, as `YYYY-MM-DD` or a full " +
 					"timestamp.\n\n" +
-					"~> Onyx does not return this field, so Terraform cannot detect a change made " +
-					"outside it. The configured value is re-sent on every apply.",
+					"~> Onyx returns this field as a full timestamp, so Terraform keeps the configured " +
+					"value and does not detect a change made outside it. The configured value is " +
+					"re-sent on every apply.",
 			},
 			"users": schema.SetAttribute{
 				Optional:    true,
@@ -296,8 +298,6 @@ func (r *agentResource) writeFromModel(
 		SearchStartDate:             stringPointer(model.SearchStartDate),
 		Users:                       users,
 		Groups:                      groups,
-		HierarchyNodeIDs:            []int64{},
-		DocumentIDs:                 []string{},
 	}, true
 }
 
@@ -522,25 +522,6 @@ func (r *agentResource) Update(ctx context.Context, req resource.UpdateRequest, 
 	if !ok {
 		return
 	}
-
-	// The update replaces the whole agent, and an omitted folder or document
-	// list clears it. Terraform does not manage those, so carry over whatever
-	// the agent holds rather than dropping it.
-	//
-	// Reading them back is the only option the API leaves: both fields are
-	// plain lists on the request model, so omitting one clears it and sending
-	// null is rejected outright (422, "Input should be a valid list"). That
-	// leaves a narrow window in which an attachment added between this read and
-	// the write below is reverted. Making the two fields nullable server-side,
-	// so null means "leave unchanged", would remove the read and the window
-	// with it.
-	current, err := r.client.GetAgent(ctx, id)
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to read the Onyx agent before updating it", err.Error())
-		return
-	}
-	write.HierarchyNodeIDs = current.HierarchyNodeIDs()
-	write.DocumentIDs = current.DocumentIDs()
 
 	remote, err := r.client.UpdateAgent(ctx, id, write)
 	if err != nil {

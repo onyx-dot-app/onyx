@@ -19,7 +19,7 @@ from onyx.server.manage.llm.models import PortkeyModelsRequest
 _SAMPLE = {
     "object": "list",
     "data": [
-        {"id": "gpt-4o", "name": "GPT-4o", "context_length": 128000},
+        {"id": "gpt-6-sol", "name": "GPT-6 Sol", "context_length": 128000},
         {"id": "claude-sonnet-5", "name": "Claude Sonnet 5", "context_length": 200000},
         {"id": "text-embedding-3-large", "name": "Embedding", "context_length": 8191},
         {"id": "", "name": "no id"},
@@ -51,17 +51,17 @@ def test_embedding_and_idless_entries_dropped() -> None:
     by_name = _fetch()
     assert "text-embedding-3-large" not in by_name
     # Only the two chat models remain (embedding + id-less entry dropped).
-    assert set(by_name) == {"gpt-4o", "claude-sonnet-5"}
+    assert set(by_name) == {"gpt-6-sol", "claude-sonnet-5"}
 
 
 def test_context_length_mapped() -> None:
     by_name = _fetch()
-    assert by_name["gpt-4o"].max_input_tokens == 128000
+    assert by_name["gpt-6-sol"].max_input_tokens == 128000
     assert by_name["claude-sonnet-5"].max_input_tokens == 200000
 
 
 def test_display_name_from_payload() -> None:
-    assert _fetch()["gpt-4o"].display_name == "GPT-4o"
+    assert _fetch()["gpt-6-sol"].display_name == "GPT-6 Sol"
 
 
 def test_results_sorted_by_name() -> None:
@@ -77,10 +77,10 @@ def test_results_sorted_by_name() -> None:
             _=cast(User, None),
             db_session=cast(Session, None),
         )
-    assert [r.name for r in results] == ["claude-sonnet-5", "gpt-4o"]
+    assert [r.name for r in results] == ["claude-sonnet-5", "gpt-6-sol"]
 
 
 def test_messages_mode_bare_base_still_fetches() -> None:
     # Messages mode passes the bare host; the fetcher still resolves /v1/models.
     by_name = _fetch(api_base="https://api.portkey.ai")
-    assert set(by_name) == {"gpt-4o", "claude-sonnet-5"}
+    assert set(by_name) == {"gpt-6-sol", "claude-sonnet-5"}

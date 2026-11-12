@@ -22,12 +22,13 @@ from __future__ import annotations
 
 import threading
 import time
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from typing import Any
 
 import httpx
 import pytest
 
+from onyx.server.features.build import connect_app
 from onyx.server.features.build.sandbox.event_schema import (
     TURN_ERROR_CODE_TIMEOUT,
     TURN_ERROR_CODE_TRANSPORT,
@@ -45,6 +46,7 @@ from onyx.server.features.build.sandbox.opencode.serve_client import (
     OpencodeServeClient,
 )
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
+from tests.unit.fakes import FakeCache
 
 _SESSION = "ses_test_123"
 _CHILD_SESSION = "ses_child_456"
@@ -122,6 +124,7 @@ def _run_send_message(
     timeout: float = 5.0,
     absolute_timeout: float | None = None,
     attachments: list[PromptAttachment] | None = None,
+    should_interrupt: Callable[[], bool] | None = None,
 ) -> tuple[list[Any], threading.Thread]:
     """Start ``send_message`` on a background thread, returning the
     collected events list (populated as the generator yields)."""
@@ -138,6 +141,7 @@ def _run_send_message(
                 attachments=attachments,
                 timeout=timeout,
                 absolute_timeout=absolute_timeout,
+                should_interrupt=should_interrupt,
             )
         )
 
@@ -850,11 +854,69 @@ def test_send_message_aborts_on_generator_exit(bus: PodEventBus) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_send_message_auto_allows_permission_asks(bus: PodEventBus) -> None:
-    """Unexpected permission.asked events trigger an out-of-band POST to
-    opencode's ``/permissions/{id}`` endpoint with ``{"response": "once"}``.
-    This keeps the turn moving when opencode adds a new permission category
-    we haven't pre-configured in opencode.json."""
+def test_cancelled_turn_removes_only_its_connection_requests(
+    bus: PodEventBus, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cache = FakeCache()
+    announced = threading.Event()
+    monkeypatch.setattr(serve_client, "get_cache_backend", lambda **_: cache)
+    monkeypatch.setattr(serve_client, "get_current_tenant_id", lambda: "public")
+    monkeypatch.setattr(connect_app, "announce_request", lambda *_: announced.set())
+    transport = _RecordingTransport(_ok_response)
+    client = _make_client(bus, transport)
+    stop = threading.Event()
+    events, thread = _run_send_message(client, should_interrupt=stop.is_set)
+    try:
+        assert _wait_for(lambda: _prompt_async_posted(transport))
+        bus._dispatch(
+            {
+                "type": "permission.asked",
+                "properties": {
+                    "sessionID": _SESSION,
+                    "id": "permission-to-cancel",
+                    "permission": "connect_app",
+                    "metadata": {"external_app_id": 17},
+                },
+            }
+        )
+        assert announced.wait(2)
+        pending = connect_app.list_pending_requests("test-session", cache)
+        assert len(pending) == 1
+
+        # Another producer's request must survive this turn's cleanup.
+        successor = connect_app.ConnectAppRequest(
+            request_id="successor-request", external_app_id=18
+        )
+        connect_app.stash_pending(
+            successor.request_id,
+            connect_app.ConnectAppPending(
+                build_session_id="test-session",
+                opencode_session_id=_SESSION,
+                perm_id="successor-permission",
+                directory=_DIRECTORY,
+                request=successor,
+                expires_at=time.time() + 180,
+            ),
+            cache,
+        )
+        stop.set()
+        thread.join(timeout=3)
+        assert not thread.is_alive()
+        assert any(isinstance(event, PromptResponse) for event in events)
+        assert any(req.url.path.endswith("/abort") for req in transport.requests)
+        assert connect_app.load_pending(pending[0].request_id, cache) is None
+        assert connect_app.list_pending_requests("test-session", cache) == [successor]
+    finally:
+        stop.set()
+        thread.join(timeout=3)
+
+
+@pytest.mark.parametrize("malformed_connect", [False, True])
+def test_send_message_answers_permission_asks(
+    bus: PodEventBus,
+    malformed_connect: bool,
+) -> None:
+    """Answer unknown permissions and reject malformed connection requests."""
     permission_posts: list[dict[str, Any]] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -878,7 +940,11 @@ def test_send_message_auto_allows_permission_asks(bus: PodEventBus) -> None:
                 "properties": {
                     "sessionID": _SESSION,
                     "id": "perm_42",
-                    "permission": "bash",
+                    "permission": "connect_app" if malformed_connect else "bash",
+                    "metadata": {
+                        "external_app_id": 17,
+                        "reason": {"invalid": "object"},
+                    },
                     "patterns": ["rm *"],
                 },
             }
@@ -904,7 +970,9 @@ def test_send_message_auto_allows_permission_asks(bus: PodEventBus) -> None:
 
     assert len(permission_posts) == 1
     assert permission_posts[0]["path"].endswith(f"/{_SESSION}/permissions/perm_42")
-    assert permission_posts[0]["body"] == {"response": "once"}
+    assert permission_posts[0]["body"] == {
+        "response": "reject" if malformed_connect else "once"
+    }
 
 
 # ---------------------------------------------------------------------------

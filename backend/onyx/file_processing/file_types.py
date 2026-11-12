@@ -1,3 +1,6 @@
+import mimetypes
+import os
+
 PRESENTATION_MIME_TYPE = (
     "application/vnd.openxmlformats-officedocument.presentationml.presentation"
 )
@@ -15,6 +18,22 @@ WORD_PROCESSING_MIME_TYPE = (
 )
 PDF_MIME_TYPE = "application/pdf"
 PLAIN_TEXT_MIME_TYPE = "text/plain"
+
+# Server images lack /etc/mime.types, so mimetypes cannot resolve Office files.
+_OFFICE_MIME_TYPES_BY_EXTENSION: dict[str, str] = {
+    ".xlsx": SPREADSHEET_MIME_TYPE,
+    ".xlsm": SPREADSHEET_MACRO_MIME_TYPE,
+    ".docx": WORD_PROCESSING_MIME_TYPE,
+    ".pptx": PRESENTATION_MIME_TYPE,
+}
+
+
+def guess_mime_type(filename: str) -> str | None:
+    extension = os.path.splitext(filename)[1].lower()
+    return (
+        _OFFICE_MIME_TYPES_BY_EXTENSION.get(extension)
+        or mimetypes.guess_type(filename)[0]
+    )
 
 
 class OnyxMimeTypes:
@@ -42,6 +61,12 @@ class OnyxMimeTypes:
         PRESENTATION_MIME_TYPE,
         "message/rfc822",
         "application/epub+zip",
+    }
+
+    # Agent and project files whose original bytes go to the Python tool.
+    CODE_INTERPRETER_STAGED_MIME_TYPES = TABULAR_MIME_TYPES | {
+        WORD_PROCESSING_MIME_TYPE,
+        PRESENTATION_MIME_TYPE,
     }
 
     ALLOWED_MIME_TYPES = IMAGE_MIME_TYPES.union(

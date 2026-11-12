@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from onyx.db.enums import EndpointPolicy
+from onyx.db.enums import ActionPolicy
 from onyx.external_apps.matching.engine import MatchedAction
 from onyx.server.features.build.sandbox.models import CraftLLMProviderConfig
 
 
 def default_llm_config(
     provider: str = "openai",
-    model_name: str = "gpt-5-mini",
+    model_name: str = "gpt-6-luna",
     api_key: str = "test-key",
 ) -> CraftLLMProviderConfig:
     """Standard ``CraftLLMProviderConfig`` for tests that don't care about specifics."""
@@ -28,7 +28,7 @@ def action_entry(
     *,
     display_name: str = "Action",
     description: str = "An action.",
-    policy: EndpointPolicy = EndpointPolicy.ASK,
+    policy: ActionPolicy = ActionPolicy.ASK,
 ) -> dict[str, Any]:
     """JSONB-shape dict for one ``ActionApproval.actions`` entry."""
     return MatchedAction(

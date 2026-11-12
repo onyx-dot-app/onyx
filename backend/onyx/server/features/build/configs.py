@@ -1,6 +1,15 @@
 import os
 from enum import Enum
 
+# In-sandbox paths shared by every backend implementation. Kept in sync with
+# the SESSIONS_ROOT constants the individual managers define (those exist
+# separately because the K8s manager emits exec scripts and the Docker
+# manager mounts via the named volume — both happen to land at the same
+# in-container path). The daemon's sandbox_daemon/snapshot.py also has its
+# own copy because it can't import from this package at runtime.
+BUN_CACHE_DIR = "/workspace/sessions/.bun-cache"
+BUN_IMAGE_CACHE_DIR = "/home/sandbox/.bun/install/cache"
+
 
 class SandboxBackend(str, Enum):
     KUBERNETES = "kubernetes"
@@ -20,6 +29,32 @@ if _env_sandbox_backend:
             f"image versions."
         )
 
+
+class SandboxRuntime(str, Enum):
+    """How sandboxes run on a Kubernetes backend. Mirrors Terraform `craft_sandbox_runtime`."""
+
+    POD = "pod"
+    # Opt-in. Adds relay-signed VM identity in the egress proxy and host-node
+    # key registration; pod sandboxes keep working beside it.
+    FIRECRACKER = "firecracker"
+
+
+SANDBOX_RUNTIME = SandboxRuntime.POD
+_env_sandbox_runtime = os.environ.get("SANDBOX_RUNTIME", "").strip()
+if _env_sandbox_runtime:
+    try:
+        SANDBOX_RUNTIME = SandboxRuntime(_env_sandbox_runtime.lower())
+    except ValueError:
+        raise ValueError(
+            f"Invalid SANDBOX_RUNTIME={_env_sandbox_runtime!r}. Valid values: "
+            f"{', '.join(r.value for r in SandboxRuntime)}."
+        )
+if (
+    SANDBOX_RUNTIME is SandboxRuntime.FIRECRACKER
+    and SANDBOX_BACKEND is not SandboxBackend.KUBERNETES
+):
+    raise ValueError("SANDBOX_RUNTIME=firecracker requires SANDBOX_BACKEND=kubernetes.")
+
 _disabled_tools_str = os.environ.get("OPENCODE_DISABLED_TOOLS", "question")
 OPENCODE_DISABLED_TOOLS: list[str] = [
     t.strip() for t in _disabled_tools_str.split(",") if t.strip()
@@ -38,6 +73,10 @@ SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS = int(
 SANDBOX_APPROVAL_WAIT_MARGIN_SECONDS = 20
 SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS = int(
     os.environ.get("SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS", "60")
+)
+# Cleanup leaves runtime resources younger than this alone.
+SANDBOX_RESOURCE_GRACE_SECONDS = int(
+    os.environ.get("SANDBOX_RESOURCE_GRACE_SECONDS", str(15 * 60))
 )
 SANDBOX_HEARTBEAT_REFRESH_INTERVAL_SECONDS = 60
 
@@ -101,6 +140,15 @@ ONYX_SERVER_URL = os.environ.get("ONYX_SERVER_URL", "")
 SANDBOX_PROXY_HOST = os.environ.get("SANDBOX_PROXY_HOST", "")
 SANDBOX_PROXY_PORT = int(os.environ.get("SANDBOX_PROXY_PORT", "8080"))
 
+SANDBOX_PROXY_LISTEN_HOST = os.environ.get(
+    "SANDBOX_PROXY_LISTEN_HOST",
+    "0.0.0.0",  # noqa: S104 — pod network listener
+)
+SANDBOX_PROXY_ALLOW_GLOBAL_CLIENTS = (
+    os.environ.get("SANDBOX_PROXY_ALLOW_GLOBAL_CLIENTS", "false").lower() == "true"
+)
+SANDBOX_PROXY_INTERNAL_CIDRS: str = os.environ.get("SANDBOX_PROXY_INTERNAL_CIDRS", "")
+
 SANDBOX_PROXY_LISTEN_PORT = int(os.environ.get("SANDBOX_PROXY_LISTEN_PORT", "8080"))
 # Env-tunable on Helm only; compose's healthcheck.test hardcodes 8081 (can't
 # read container env), so a compose change here desyncs the probe.
@@ -109,8 +157,11 @@ SANDBOX_PROXY_HEALTHZ_PORT = int(os.environ.get("SANDBOX_PROXY_HEALTHZ_PORT", "8
 # Optional additive CA bundle used by mitmproxy when it verifies HTTPS origins.
 # The Helm chart writes it into the proxy's writable confdir because the proxy
 # container intentionally runs non-root with a read-only root filesystem.
+# Other deployments can share the SSL_CERT_FILE bundle used by HTTPX OAuth calls.
 SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA = (
-    os.environ.get("SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA", "").strip() or None
+    os.environ.get("SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA", "").strip()
+    or os.environ.get("SSL_CERT_FILE", "").strip()
+    or None
 )
 
 # The CA Secret lives here; the CA ConfigMap is projected into SANDBOX_NAMESPACE
@@ -143,6 +194,14 @@ SANDBOX_PROXY_INJECTED_PLACEHOLDER = "replaced_by_egress_proxy"
 # The egress proxy reads it to attribute the tool call to a session for approval,
 # then strips it so it never reaches the MCP origin.
 MCP_SESSION_TAG_HEADER = "X-Onyx-Mcp-Session"
+
+# Shared cluster credential the Firecracker host agent presents to register its
+# node signing key. Unset = registration is locked.
+SANDBOX_NODE_REGISTRATION_SECRET = (
+    os.environ.get("SANDBOX_NODE_REGISTRATION_SECRET", "").strip() or None
+)
+# How long a node's previous signing key keeps verifying after rotation.
+SANDBOX_NODE_SIGNING_KEY_ROTATION_OVERLAP_SECONDS = 300
 
 
 # ==============================================================================
@@ -213,9 +272,15 @@ OPENCODE_SERVER_USERNAME = "opencode"
 OPENCODE_SERVE_CONNECT_TIMEOUT = float(
     os.environ.get("OPENCODE_SERVE_CONNECT_TIMEOUT", "5.0")
 )
+# Ordinary requests default to 30 seconds. Session initialization gets 90 seconds
+# because session lookup and creation can initialize a cold directory.
+# Stop uses a short request while it holds the interactive admission lock.
+OPENCODE_SERVE_ABORT_TIMEOUT = 2.0
+
 OPENCODE_SERVE_REQUEST_TIMEOUT = float(
     os.environ.get("OPENCODE_SERVE_REQUEST_TIMEOUT", "30.0")
 )
+OPENCODE_SERVE_SESSION_INIT_TIMEOUT = 90.0
 # Idle timeout for the raw /event SSE connection to opencode-serve. The
 # reader reconnects (with backoff) if no bytes arrive for this long. Its
 # floor is opencode-serve's own emission cadence on /event — NOT our

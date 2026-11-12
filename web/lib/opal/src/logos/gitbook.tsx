@@ -1,5 +1,5 @@
 import type { IconProps } from "@opal/types";
-const SvgGitbook = ({ size, ...props }: IconProps) => (
+const SvgGitBook = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}
@@ -14,4 +14,4 @@ const SvgGitbook = ({ size, ...props }: IconProps) => (
     />
   </svg>
 );
-export default SvgGitbook;
+export default SvgGitBook;

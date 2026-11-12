@@ -1,7 +1,7 @@
 """Dispatcher-level tests for Confluence space permission sync.
 
 The companion file `backend/tests/unit/onyx/connectors/confluence/test_onyx_confluence.py`
-covers the OnyxConfluence client methods (REST 404/500 handling, version
+covers the Confluence transport client (REST 404/500 handling, version
 probe, userKey-email cache). Tests here cover the EE-side dispatcher in
 `ee/onyx/external_permissions/confluence/space_access.py` -- which path
 gets picked, how the REST response shape is translated into ExternalAccess,
@@ -16,8 +16,13 @@ import pytest
 
 from ee.onyx.external_permissions.confluence import space_access
 from ee.onyx.external_permissions.confluence.constants import ALL_CONF_EMAILS_GROUP_NAME
-from onyx.connectors.confluence.onyx_confluence import (
+from onyx.connectors.confluence import source_operations
+from onyx.connectors.confluence.source_operations import (
     ConfluenceRestSpacePermissionsNotAvailableError,
+    ConfluenceSourceOperations,
+)
+from tests.unit.onyx.connectors.confluence.confluence_gateway_fakes import (
+    gateway_with_client,
 )
 
 # ---------------------------------------------------------------------------
@@ -55,7 +60,8 @@ def _make_client(
     jsonrpc_permissions: list[dict[str, Any]] | None = None,
 ) -> mock.Mock:
     client = mock.Mock()
-    client.supports_rest_space_permissions.return_value = supports_rest
+    client._url = "https://confluence.example.com"
+    client.get_server_version.return_value = (9, 1) if supports_rest else (8, 9)
 
     if isinstance(rest_permissions, Exception):
         client.get_all_space_permissions_server_rest.side_effect = rest_permissions
@@ -71,10 +77,14 @@ def _make_client(
     return client
 
 
+def _gateway(client: mock.Mock) -> ConfluenceSourceOperations:
+    return gateway_with_client(client, wiki_base=client._url)
+
+
 @pytest.fixture
 def patched_userkey_resolver() -> Generator[dict[str, str | None], None, None]:
-    """Make get_user_email_from_userkey__server return whatever the test
-    sets in the returned dict, with no real network involvement.
+    """Make the userKey email lookup return whatever the test sets in the
+    returned dict, with no real network involvement.
     """
     fake_db: dict[str, str | None] = {}
 
@@ -82,8 +92,8 @@ def patched_userkey_resolver() -> Generator[dict[str, str | None], None, None]:
         return fake_db.get(user_key)
 
     with mock.patch.object(
-        space_access,
-        "get_user_email_from_userkey__server",
+        source_operations,
+        "_get_user_email_by_userkey",
         side_effect=fake_resolver,
     ):
         yield fake_db
@@ -110,7 +120,7 @@ def test_dispatcher_uses_rest_for_dc_91_plus(
     )
 
     access = space_access._get_server_space_permissions(
-        confluence_client=client, space_key="ENG"
+        source_operations=_gateway(client), space_key="ENG"
     )
 
     assert access.is_public is False
@@ -139,7 +149,7 @@ def test_dispatcher_falls_back_to_jsonrpc_for_pre_91() -> None:
     )
 
     access = space_access._get_server_space_permissions(
-        confluence_client=client, space_key="ENG"
+        source_operations=_gateway(client), space_key="ENG"
     )
 
     assert access.external_user_group_ids == {"confluence-users"}
@@ -166,7 +176,7 @@ def test_dispatcher_falls_back_to_jsonrpc_when_rest_signals_unavailable() -> Non
     )
 
     access = space_access._get_server_space_permissions(
-        confluence_client=client, space_key="ENG"
+        source_operations=_gateway(client), space_key="ENG"
     )
 
     assert access.external_user_group_ids == {"fallback-group"}
@@ -195,7 +205,7 @@ def test_rest_anonymous_endpoint_marks_public_when_env_var_set() -> None:
 
     with mock.patch.object(space_access, "CONFLUENCE_ANONYMOUS_ACCESS_IS_PUBLIC", True):
         access = space_access._get_server_space_permissions(
-            confluence_client=client, space_key="ENG"
+            source_operations=_gateway(client), space_key="ENG"
         )
 
     assert access.is_public is True
@@ -222,7 +232,7 @@ def test_rest_anonymous_endpoint_falls_back_to_all_users_group_when_env_unset() 
         space_access, "CONFLUENCE_ANONYMOUS_ACCESS_IS_PUBLIC", False
     ):
         access = space_access._get_server_space_permissions(
-            confluence_client=client, space_key="ENG"
+            source_operations=_gateway(client), space_key="ENG"
         )
 
     assert access.is_public is False
@@ -250,7 +260,7 @@ def test_rest_anonymous_endpoint_failure_does_not_break_explicit_grants(
     )
 
     access = space_access._get_server_space_permissions(
-        confluence_client=client, space_key="ENG"
+        source_operations=_gateway(client), space_key="ENG"
     )
 
     assert access.is_public is False
@@ -298,7 +308,7 @@ def test_rest_path_ignores_non_read_and_non_space_permissions(
     )
 
     access = space_access._get_server_space_permissions(
-        confluence_client=client, space_key="ENG"
+        source_operations=_gateway(client), space_key="ENG"
     )
 
     assert access.external_user_emails == {"alice@example.com"}

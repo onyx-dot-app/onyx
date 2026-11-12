@@ -4,7 +4,7 @@ import { useTranslations } from "next-intl";
 import { Text, Button } from "@opal/components";
 import { SvgTrash } from "@opal/icons";
 import { cn, clickOnKeyDown } from "@opal/utils";
-import { QueuedMessage } from "@/app/app/interfaces";
+import { QueuedMessage } from "@/app/app/types";
 
 interface QueuedMessageBarProps {
   messages: readonly QueuedMessage[];

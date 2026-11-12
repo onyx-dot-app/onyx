@@ -18,6 +18,7 @@ loop."""
 import json
 import os
 from collections.abc import Generator
+from urllib.parse import parse_qs, urlsplit
 
 import httpx
 import pytest
@@ -201,12 +202,19 @@ def _idp_login(authorization_url: str, email: str, email_verified: bool = True) 
 
 
 async def _drive_login(
-    client: AsyncClient, provider: str, email: str, email_verified: bool = True
+    client: AsyncClient,
+    provider: str,
+    email: str,
+    email_verified: bool = True,
+    next_url: str | None = None,
 ) -> httpx.Response:
     """Full authorization-code flow: authorize on the Onyx side (CSRF cookie lands
     in the client jar), log in at the IdP, then follow the redirect back into the
     Onyx callback."""
-    resp = await client.get(f"/auth/oidc/{provider}/authorize")
+    resp = await client.get(
+        f"/auth/oidc/{provider}/authorize",
+        params={"next": next_url} if next_url else None,
+    )
     assert resp.status_code == 200, resp.text
     location = _idp_login(resp.json()["authorization_url"], email, email_verified)
 
@@ -222,6 +230,25 @@ def _user_by_email(db_session: Session, email: str) -> User:
         .filter(User.email == email)  # ty: ignore[invalid-argument-type]
         .one()
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("providers")
+async def test_next_url_survives_the_round_trip(app: FastAPI) -> None:
+    """The login page starts SSO with the URL the user arrived on, query
+    included, and the callback must land them back on exactly that."""
+    next_url = "/app?user-prompt=hello%20world&sources=slack"
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url=_WEB_DOMAIN) as client:
+        resp = await _drive_login(client, _PROVIDER_A, _USER_A, next_url=next_url)
+    assert resp.status_code == 302, resp.text
+    # Compared parsed: the redirect may re-encode the query and add its own
+    # parameters, and neither may cost the user what they typed.
+    landed = urlsplit(resp.headers["location"])
+    assert landed.path == "/app"
+    landed_query = parse_qs(landed.query)
+    assert landed_query["user-prompt"] == ["hello world"]
+    assert landed_query["sources"] == ["slack"]
 
 
 @pytest.mark.usefixtures("providers")

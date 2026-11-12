@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname } from "@opal/navigation";
 // Bottom-left banner queue: consolidates every banner-worthy notification
 // into a single pageable card, most urgent first.
 //
@@ -17,7 +18,6 @@
 // a one-time popup. Needs a backend change to carry that flag through.
 
 import { useCallback, useMemo, useState } from "react";
-import { usePathname } from "next/navigation";
 import useSWR, { mutate } from "swr";
 import Cookies from "js-cookie";
 import { errorHandlingFetcher } from "@/lib/fetcher";

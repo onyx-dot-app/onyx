@@ -7,7 +7,7 @@ run in the same multi-tenant worker process."""
 
 from unittest.mock import MagicMock
 
-import onyx.connectors.confluence.onyx_confluence as onyx_confluence
+import onyx.connectors.confluence.source_operations as source_operations
 
 
 def _client(url: str) -> MagicMock:
@@ -17,7 +17,7 @@ def _client(url: str) -> MagicMock:
 
 
 def test_username_email_cache_is_instance_isolated() -> None:
-    onyx_confluence._USER_EMAIL_CACHE.clear()
+    source_operations._USERNAME_TO_EMAIL_CACHE.clear()
     username = "jsmith"
     client_a = _client("https://a.example.com")
     client_a.get_mobile_parameters.return_value = {"email": "a@example.com"}
@@ -25,26 +25,26 @@ def test_username_email_cache_is_instance_isolated() -> None:
     client_b.get_mobile_parameters.return_value = {"email": "b@example.com"}
 
     assert (
-        onyx_confluence.get_user_email_from_username__server(client_a, username)
+        source_operations._get_user_email_by_username(client_a, username)
         == "a@example.com"
     )
     # repeat call for the same instance is served from cache
     assert (
-        onyx_confluence.get_user_email_from_username__server(client_a, username)
+        source_operations._get_user_email_by_username(client_a, username)
         == "a@example.com"
     )
     assert client_a.get_mobile_parameters.call_count == 1
 
     # same username on a different instance must not see instance A's email
     assert (
-        onyx_confluence.get_user_email_from_username__server(client_b, username)
+        source_operations._get_user_email_by_username(client_b, username)
         == "b@example.com"
     )
     assert client_b.get_mobile_parameters.call_count == 1
 
 
 def test_userkey_email_cache_is_instance_isolated() -> None:
-    onyx_confluence._USER_KEY_TO_EMAIL_CACHE.clear()
+    source_operations._USER_KEY_TO_EMAIL_CACHE.clear()
     user_key = "ff8080816f"
     client_a = _client("https://a.example.com")
     client_a.get_user_details_by_userkey.return_value = {"email": "a@example.com"}
@@ -52,11 +52,11 @@ def test_userkey_email_cache_is_instance_isolated() -> None:
     client_b.get_user_details_by_userkey.return_value = {"email": "b@example.com"}
 
     assert (
-        onyx_confluence.get_user_email_from_userkey__server(client_a, user_key)
+        source_operations._get_user_email_by_userkey(client_a, user_key)
         == "a@example.com"
     )
     assert (
-        onyx_confluence.get_user_email_from_userkey__server(client_b, user_key)
+        source_operations._get_user_email_by_userkey(client_b, user_key)
         == "b@example.com"
     )
     assert client_a.get_user_details_by_userkey.call_count == 1
@@ -64,13 +64,13 @@ def test_userkey_email_cache_is_instance_isolated() -> None:
 
 
 def test_display_name_cache_is_instance_isolated() -> None:
-    onyx_confluence._USER_ID_TO_DISPLAY_NAME_CACHE.clear()
+    source_operations._USER_ID_TO_DISPLAY_NAME_CACHE.clear()
     user_id = "user-1"
     client_a = _client("https://a.example.com")
     client_a.get_user_details_by_userkey.return_value = {"displayName": "Alice A"}
     client_b = _client("https://b.example.com")
     client_b.get_user_details_by_userkey.return_value = {"displayName": "Bob B"}
 
-    assert onyx_confluence._get_user(client_a, user_id) == "Alice A"
+    assert source_operations._get_user(client_a, user_id) == "Alice A"
     # same id on a different instance must not see instance A's display name
-    assert onyx_confluence._get_user(client_b, user_id) == "Bob B"
+    assert source_operations._get_user(client_b, user_id) == "Bob B"

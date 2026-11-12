@@ -1,7 +1,7 @@
 """External-dependency-unit tests for the artifact and receipt DALs.
 
 Runs real ORM/SQL against Postgres so the upsert semantics the reconciler
-depends on (hash-driven version bumps, archive invalidation, operation-key
+depends on (revision-driven version bumps, archive invalidation, operation-key
 coalescing, terminal receipt states) actually fail on regression.
 """
 
@@ -34,7 +34,7 @@ def _upsert(
     session: BuildSession,
     *,
     path: str = "q3_board_deck.pptx",
-    content_hash: str | None = "hash-a",
+    source_revision: str = "revision-a",
     turn_index: int | None = 1,
 ) -> Artifact:
     return upsert_artifact(
@@ -45,11 +45,11 @@ def _upsert(
         name=path,
         turn_index=turn_index,
         size_bytes=1024,
-        content_hash=content_hash,
+        source_revision=source_revision,
     )
 
 
-def test_upsert_same_hash_touches_without_version_bump(
+def test_upsert_same_revision_touches_without_version_bump(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
     build_session_with_user: Callable[..., BuildSession],
@@ -63,10 +63,10 @@ def test_upsert_same_hash_touches_without_version_bump(
     db_session.commit()
     assert second.id == first.id
     assert second.version == 1
-    assert second.turn_index == 2
+    assert second.turn_index == 1
 
 
-def test_upsert_content_change_bumps_version_and_clears_archive(
+def test_upsert_revision_change_bumps_version_and_clears_archive(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
     build_session_with_user: Callable[..., BuildSession],
@@ -76,11 +76,13 @@ def test_upsert_content_change_bumps_version_and_clears_archive(
     first.archive_file_id = "file-store-id"
     db_session.commit()
 
-    second = _upsert(db_session, session, content_hash="hash-b")
-    db_session.commit()
+    # Keep the original row loaded across the Core upsert.
+    assert first.version == 1
+    second = _upsert(db_session, session, source_revision="revision-b")
     assert second.id == first.id
     assert second.version == 2
     assert second.archive_file_id is None
+    db_session.commit()
 
 
 def test_deleted_artifact_hidden_then_resurrected(

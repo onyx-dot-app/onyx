@@ -37,10 +37,10 @@ const LONG_AI_RESPONSE = `Onyx is an open-source Gen-AI and Enterprise Search pl
 
 Onyx uses a **connector-based architecture** where each data source has a dedicated connector. These connectors run as background workers and can index simultaneously without interfering with each other. The supported connectors include:
 
-- **Confluence** — Full page and space indexing with attachment support
-- **Google Drive** — File and folder indexing with shared drive support
-- **Slack** — Channel message indexing with thread support
-- **GitHub** — Repository, issue, and pull request indexing
+- **Confluence**: Full page and space indexing with attachment support
+- **Google Drive**: File and folder indexing with shared drive support
+- **Slack**: Channel message indexing with thread support
+- **GitHub**: Repository, issue, and pull request indexing
 
 Each connector runs on its own schedule and can be configured independently for polling frequency.
 
@@ -67,12 +67,25 @@ The typical indexing latency depends on your configuration:
 The chat system uses a **Retrieval-Augmented Generation (RAG)** pipeline:
 
 1. User query is analyzed and expanded
-2. Relevant documents are retrieved from the vector database (Vespa)
+2. Relevant documents are retrieved from the vector database (OpenSearch)
 3. Documents are ranked and filtered by relevance and permissions
 4. The LLM generates a response grounded in the retrieved documents
 5. Citations are attached to specific claims in the response
 
 When documents contain conflicting information, the system presents the most relevant and recent information first, and includes citations so users can verify the source material themselves.`;
+
+const WIDE_TABLE_COLUMNS = Array.from(
+  { length: 12 },
+  (_, i) => `Column header number ${i + 1}`
+);
+
+const WIDE_TABLE_AI_RESPONSE = `Here is a wide table:
+
+| ${WIDE_TABLE_COLUMNS.join(" | ")} |
+| ${WIDE_TABLE_COLUMNS.map(() => "---").join(" | ")} |
+| [Onyx](https://onyx.app) | ${WIDE_TABLE_COLUMNS.slice(1)
+  .map((_, i) => `value ${i + 2}`)
+  .join(" | ")} |`;
 
 const MARKDOWN_AI_RESPONSE = `Here's a quick overview with various formatting:
 
@@ -247,12 +260,41 @@ for (const theme of THEMES) {
 
         await sendMessage(page, "Give me an overview of Onyx features");
 
-        const aiMessage = page.getByTestId("onyx-ai-message").first();
-        await expect(aiMessage).toContainText("Key Features");
-        await expect(aiMessage).toContainText("OnyxClient");
-        await expect(aiMessage).toContainText("Privacy");
+        await chat.expectAnswerHeading("Key Features");
+        await chat.expectAnswerTable(["Feature", "Status", "Notes"], 5);
+        await chat.expectAnswerCode("from onyx import OnyxClient");
+        await chat.expectAnswerListItem(
+          "Privacy: Your data stays within your infrastructure"
+        );
 
         await chat.screenshotContainer(`chat-markdown-code-response-${theme}`);
+      });
+
+      test("wide table grows past the prose column and copies as TSV", async ({
+        page,
+      }) => {
+        await page.setViewportSize({ width: 1800, height: 900 });
+        await page
+          .context()
+          .grantPermissions(["clipboard-read", "clipboard-write"]);
+        await chat.goto();
+        await mockChatEndpoint(page, buildMockStream(WIDE_TABLE_AI_RESPONSE));
+
+        await sendMessage(page, "Show me a wide table");
+        await chat.expectAnswerTable(WIDE_TABLE_COLUMNS, 2);
+
+        await chat.expectAnswerTableBrokenOut();
+
+        await chat.copyAnswerTable();
+        await chat.expectClipboardText(
+          [
+            WIDE_TABLE_COLUMNS.join("\t"),
+            [
+              "Onyx (https://onyx.app)",
+              ...WIDE_TABLE_COLUMNS.slice(1).map((_, i) => `value ${i + 2}`),
+            ].join("\t"),
+          ].join("\n")
+        );
       });
 
       test("AI response with LaTeX math renders correctly", async ({
@@ -498,9 +540,9 @@ Key advantages include:
 
 The Q3 2025 priorities focus on three main areas [[D1]](https://company.atlassian.net/wiki/spaces/ENG/pages/123):
 
-1. **Platform stability** — Improving error handling and retry mechanisms across all connectors
-2. **New integrations** — Adding support for ServiceNow and Zendesk connectors
-3. **Performance** — Optimizing vector search latency and reducing indexing time
+1. **Platform stability**: Improving error handling and retry mechanisms across all connectors
+2. **New integrations**: Adding support for ServiceNow and Zendesk connectors
+3. **Performance**: Optimizing vector search latency and reducing indexing time
 
 The platform architecture document provides additional context on how these improvements fit into the overall system design [[D2]](https://drive.google.com/file/d/abc123). The microservices architecture allows each component to be scaled independently.`;
 
@@ -529,6 +571,7 @@ The platform architecture document provides additional context on how these impr
         await expect(aiMessage).toContainText("Platform stability");
         await expect(aiMessage).toContainText("New integrations");
         await expect(aiMessage).toContainText("Performance");
+        await chat.expectInlineCitationsFitLine(2);
 
         await chat.screenshotContainer(
           `chat-internal-search-with-citations-${theme}`

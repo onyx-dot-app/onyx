@@ -3,8 +3,8 @@
 import { useTranslations } from "next-intl";
 import { SvgGlobe, SvgUser, SvgSlack, SvgKey } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
-import Text from "@/refresh-components/texts/Text";
-import type { UserRow } from "./interfaces";
+import { Text } from "@opal/components";
+import type { UserRow } from "./types";
 import { AccountType } from "@/lib/types";
 
 const ACCOUNT_TYPE_ICONS: Partial<Record<AccountType, IconFunctionComponent>> =
@@ -32,7 +32,7 @@ export default function AccountTypeCell({ user }: AccountTypeCellProps) {
 
   if (!user.account_type) {
     return (
-      <Text as="span" secondaryBody text03>
+      <Text as="span" font="secondary-body" color="text-03">
         —
       </Text>
     );
@@ -43,7 +43,7 @@ export default function AccountTypeCell({ user }: AccountTypeCellProps) {
   return (
     <div className="flex flex-row items-center gap-1">
       <Icon className="w-4 h-4 text-text-03" />
-      <Text as="span" mainUiBody text03>
+      <Text as="span" font="main-ui-body" color="text-03">
         {accountTypeLabels[user.account_type]}
       </Text>
     </div>

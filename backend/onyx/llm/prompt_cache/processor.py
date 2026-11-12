@@ -2,9 +2,10 @@
 
 from datetime import datetime, timezone
 
-from onyx.configs.model_configs import ENABLE_PROMPT_CACHING
 from onyx.llm.interfaces import LLMConfig
-from onyx.llm.models import LanguageModelInput
+from onyx.llm.model_request import ChatCompletionMessage
+from onyx.llm.model_request import UserMessage as ProviderUserMessage
+from onyx.llm.models import UserMessage
 from onyx.llm.prompt_cache.cache_manager import generate_cache_key_hash
 from onyx.llm.prompt_cache.models import CacheMetadata
 from onyx.llm.prompt_cache.providers.factory import get_provider_adapter
@@ -17,11 +18,11 @@ logger = setup_logger()
 # TODO: test with a history containing images
 def process_with_prompt_cache(
     llm_config: LLMConfig,
-    cacheable_prefix: LanguageModelInput | None,
-    suffix: LanguageModelInput,
+    cacheable_prefix: list[ChatCompletionMessage] | None,
+    suffix: list[ChatCompletionMessage],
     continuation: bool = False,
     with_metadata: bool = True,
-) -> tuple[LanguageModelInput, CacheMetadata | None]:
+) -> tuple[list[ChatCompletionMessage], CacheMetadata | None]:
     """Process prompt with caching support.
 
     This function takes a cacheable prefix and suffix, processes them according to
@@ -45,21 +46,6 @@ def process_with_prompt_cache(
             (currently None for implicit caching, will be populated in future PR
             for explicit caching); always None when ``with_metadata`` is False
     """
-    # Check if prompt caching is enabled
-    if not ENABLE_PROMPT_CACHING:
-        logger.debug("Prompt caching is disabled via configuration")
-        # Fall back to no-op behavior
-        from onyx.llm.prompt_cache.providers.noop import NoOpPromptCacheProvider
-
-        noop_adapter = NoOpPromptCacheProvider()
-        combined = noop_adapter.prepare_messages_for_caching(
-            cacheable_prefix=cacheable_prefix,
-            suffix=suffix,
-            continuation=continuation,
-            cache_metadata=None,
-        )
-        return combined, None
-
     # If no cacheable prefix, return suffix unchanged
     if cacheable_prefix is None:
         logger.debug("No cacheable prefix provided, skipping caching")
@@ -150,3 +136,18 @@ def process_with_prompt_cache(
             cache_metadata=None,
         )
         return combined, None
+
+
+def cached_user_message(llm_config: LLMConfig, prefix: str, suffix: str) -> UserMessage:
+    """Prepare one continued user prompt with provider-specific cache metadata."""
+    prepared, _ = process_with_prompt_cache(
+        llm_config,
+        cacheable_prefix=[ProviderUserMessage(content=prefix)],
+        suffix=[ProviderUserMessage(content=suffix)],
+        continuation=True,
+        with_metadata=False,
+    )
+    message = prepared[0]
+    if not isinstance(message, ProviderUserMessage):
+        raise TypeError("User prompt caching must preserve the message role")
+    return UserMessage(content=message.content)

@@ -45,12 +45,12 @@ _TEST_SECRET = "unit-test-secret"
 
 
 def _provider(**overrides: object) -> SSOProvider:
-    base: dict[str, Any] = dict(
-        name="okta",
-        provider_type=SSOProviderType.OIDC,
-        allowed_email_domains=["companya.com"],
-        config=make_mock_sensitive_value(dict(_OIDC_CONFIG)),
-    )
+    base: dict[str, Any] = {
+        "name": "okta",
+        "provider_type": SSOProviderType.OIDC,
+        "allowed_email_domains": ["companya.com"],
+        "config": make_mock_sensitive_value(dict(_OIDC_CONFIG)),
+    }
     base.update(overrides)
     return cast(SSOProvider, SimpleNamespace(**base))
 

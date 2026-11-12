@@ -56,6 +56,39 @@ the directory with the docker-compose.yml file. First bring the containers down 
 verify the version you want in the environment file (see below), (if using `latest` tag, be sure to run
 `docker compose pull`) and run `docker compose up` to restart the services on the latest version
 
+A hand-run upgrade from a release before v5.0 of an install on the bundled MinIO (`.env` has
+`S3_ENDPOINT_URL=http://minio:9000`) needs two more `.env` edits before `docker compose up`, since v5.0
+moves the bundled file store from MinIO to the object store and only `onyx-cli deploy upgrade` makes them
+for you: set `S3_ENDPOINT_URL=http://object-store:8333` and add `S3_LEGACY_ENDPOINT_URL=http://minio:9000`.
+Keep `MINIO_REPLICAS` unset or `1` until you retire MinIO, since it still holds the files. Without the two edits the app keeps its files in MinIO, which a later release removes. The `api_server` and
+`object-store-copy` logs warn about this at startup. External storage (S3, GCS, Azure) needs no change. See
+the [object store migration guide](https://docs.onyx.app/admins/advanced_configs/object_store_migration).
+
+### Rolling back the deployment
+A rollback does not change the database schema. An older release fails to start on a newer schema with
+`Can't locate revision`. Only the newer image has the migrations to downgrade it. The downgrade deletes data
+that only the newer release stores.
+
+First get the last migration of the target release. For v4.9 it is `25053020dd5a`.
+
+```bash
+docker run --rm onyxdotapp/onyx-backend:<target version> alembic heads
+```
+
+Then downgrade with the newer image and roll back immediately. Run the downgrade in the directory with the
+compose files. On a prod install, add `-f docker-compose.prod.yml` after `docker compose`. If
+`docker compose ls` shows a project name other than `onyx`, add `-p <project>`. Run `onyx-cli` from where you
+usually run it, or pass `--dir <install root>`. It warns that downgrades are not supported. Continue, because
+the schema now matches.
+
+```bash
+IMAGE_TAG=<newer version> docker compose run --rm --no-deps api_server alembic downgrade <target migration>
+onyx-cli deploy upgrade --tag <target version> --allow-downgrade
+```
+
+If you rolled back first and `api_server` restarts in a loop, run the same downgrade command. `api_server`
+then starts on the target release.
+
 ### Customizing the compose files
 The CLI owns the compose files it writes. Each `onyx-cli deploy upgrade` refreshes them to match the
 new version. If you edit one, the CLI asks before it replaces the file, and it keeps a backup — but
@@ -102,3 +135,20 @@ Every image publishes a `-dev` twin for each of its tags (e.g. `latest-dev`, `v1
 its `-dev` twin adds interactive debugging tools (vim, nano, curl, ps, psql) that the default image leaves out to stay
 minimal. The web-server, model-server, and sandbox `-dev` tags are identical to their plain counterparts and exist so
 that one version string covers every image.
+
+### Self-hosted embedding models and air-gapped deployments
+The model-server image contains one embedding model: `ibm-granite/granite-embedding-97m-multilingual-r2`,
+the default for new installs. It works with no network access.
+
+The model servers download all other self-hosted embedding models from Hugging Face the first time
+they use them. This includes `nomic-ai/nomic-embed-text-v1`, which older images contained. The
+downloads go to the `model_cache_huggingface` and `indexing_huggingface_model_cache` volumes.
+When a model is in these volumes, the model servers load it from there with no network access. An
+upgrade keeps the models that are already in the volumes.
+
+For an air-gapped deployment:
+- Keep these volumes when you upgrade. Do not delete them.
+- To use a self-hosted model that is not in the volumes, give the model servers network access to
+  Hugging Face once, or copy the model into the Hugging Face cache in both volumes before you select it.
+  Onyx loads its recommended self-hosted models at the revision that
+  `backend/shared_configs/embedding_models.py` pins, so copy that revision.

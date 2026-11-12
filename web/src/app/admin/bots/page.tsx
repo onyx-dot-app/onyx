@@ -1,9 +1,11 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useTranslations } from "next-intl";
+import { useSettings } from "@/lib/settings/hooks";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { PageLoader } from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import { SlackBotTable } from "./SlackBotTable";
 import { useSlackBots } from "./[bot-id]/hooks";
@@ -17,6 +19,8 @@ const route = ADMIN_ROUTES.SLACK_BOTS;
 
 function Main() {
   const t = useTranslations("admin.slackBots");
+  const navigation = useNavigation();
+  const { appName } = useSettings();
   const {
     data: slackBots,
     isLoading: isSlackBotsLoading,
@@ -44,7 +48,7 @@ function Main() {
   return (
     <div className="mb-8">
       <p className="mb-2 text-sm text-muted-foreground">
-        {t("intro.description")}
+        {t("intro.description", { appName })}
       </p>
 
       <div className="mb-2">
@@ -73,7 +77,7 @@ function Main() {
       <Button
         icon={SvgPlusCircle}
         prominence="secondary"
-        href="/admin/bots/new"
+        {...navigation.linkTo("/admin/bots/new")}
       >
         {t("newBotButton.label")}
       </Button>

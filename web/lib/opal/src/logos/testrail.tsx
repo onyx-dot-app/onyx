@@ -1,5 +1,5 @@
 import type { IconProps } from "@opal/types";
-const SvgTestrail = ({ size, ...props }: IconProps) => (
+const SvgTestRail = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}
@@ -14,4 +14,4 @@ const SvgTestrail = ({ size, ...props }: IconProps) => (
     />
   </svg>
 );
-export default SvgTestrail;
+export default SvgTestRail;

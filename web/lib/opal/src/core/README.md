@@ -2,7 +2,7 @@
 
 The lowest-level primitives of the Opal design system. Think of `core` like Rust's `core` crate — compiler intrinsics and foundational types — while higher-level modules (like Rust's `std`) provide the public-facing components that most consumers should reach for first.
 
-End-users _can_ use these components directly when needed, but in most cases they should prefer the higher-level components (such as `Button`, `OpenButton`, `SelectButton`, etc.) that are built on top of `core`.
+End-users _can_ use these components directly when needed, but in most cases they should prefer the higher-level components (such as `Button`, `SelectButton`, etc.) that are built on top of `core`.
 
 ## Contents
 

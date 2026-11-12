@@ -1,17 +1,18 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import useSWR, { mutate } from "swr";
+import useSWR from "swr";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import type {
-  AgentEditorMCPServer,
-  MCPServersResponse,
+  ChatSearchFilters,
   ToolSnapshot,
   ToolState,
 } from "@/lib/tools/types";
-import { useAppPosition } from "@/lib/position/hooks";
+export type { ChatSearchFilters } from "@/lib/tools/types";
+import type { Tag } from "@/lib/types";
+import { useAppPosition } from "@/lib/navigation/hooks";
 import { useActiveAgent } from "@/lib/agents/hooks";
 import {
   CODING_AGENT_TOOL_ID,
@@ -24,108 +25,6 @@ import {
   SEARCH_TOOL_ID,
   WEB_SEARCH_TOOL_ID,
 } from "@/lib/tools/constants";
-
-/**
- * Every MCP server the current user can reach.
- *
- * This is the user-facing listing. For the admin console's view of every
- * configured server, including ones this user cannot use, see
- * {@link useAdminMcpServers} — the two return the same shape from different
- * endpoints, so picking the wrong one type-checks and silently answers a
- * different question.
- */
-export function useMcpServers() {
-  const {
-    data: mcpData,
-    error,
-    isLoading,
-    mutate: mutateMcpServers,
-  } = useSWR<MCPServersResponse>(SWR_KEYS.mcpServers, errorHandlingFetcher);
-
-  return {
-    mcpData: mcpData ?? null,
-    isLoading,
-    error,
-    mutateMcpServers,
-  };
-}
-
-/**
- * Every configured MCP server, from the admin endpoint. Use this only on admin
- * surfaces; {@link useMcpServers} is what user-facing UI should read.
- */
-export function useAdminMcpServers() {
-  const {
-    data: mcpData,
-    error,
-    isLoading,
-    mutate: mutateMcpServers,
-  } = useSWR<MCPServersResponse>(
-    SWR_KEYS.adminMcpServers,
-    errorHandlingFetcher
-  );
-
-  return {
-    mcpData: mcpData ?? null,
-    isLoading,
-    error,
-    mutateMcpServers,
-  };
-}
-
-/**
- * The MCP servers relevant to one agent: those the user can reach, plus any
- * already attached to the agent that they cannot. `can_attach` distinguishes
- * them, so the editor can show an attached server without offering it as a
- * choice the user is not allowed to make.
- */
-export function useMcpServersForAgent(agentId: number | undefined) {
-  const accessible = useMcpServers();
-  const {
-    data: attachedData,
-    error: attachedError,
-    isLoading: attachedIsLoading,
-  } = useSWR<MCPServersResponse>(
-    agentId ? SWR_KEYS.agentMcpServers(agentId) : null,
-    errorHandlingFetcher
-  );
-
-  const mcpServers = useMemo<AgentEditorMCPServer[]>(() => {
-    const accessibleServers = accessible.mcpData?.mcp_servers ?? [];
-    const accessibleIds = new Set(accessibleServers.map((server) => server.id));
-    return [
-      ...accessibleServers.map((server) => ({ ...server, can_attach: true })),
-      ...(attachedData?.mcp_servers ?? [])
-        .filter((server) => !accessibleIds.has(server.id))
-        .map((server) => ({ ...server, can_attach: false })),
-    ];
-  }, [accessible.mcpData, attachedData]);
-
-  return {
-    mcpServers,
-    isLoading:
-      accessible.isLoading || (agentId !== undefined && attachedIsLoading),
-    error: accessible.error || attachedError,
-  };
-}
-
-/**
- * MCP servers an admin made available to Craft, with this user's connection
- * state (`craft_connected`).
- */
-export function useCraftMcpServers(enabled: boolean = true) {
-  const { data, error, isLoading } = useSWR<MCPServersResponse>(
-    enabled ? SWR_KEYS.mcpServersCraft : null,
-    errorHandlingFetcher,
-    // The Apps page re-reads this after every connect/disconnect; holding the
-    // previous list keeps the tab from flashing empty on revalidation.
-    { keepPreviousData: true }
-  );
-
-  const refresh = () => mutate(SWR_KEYS.mcpServersCraft);
-
-  return { data, error, isLoading, refresh };
-}
 
 /**
  * Hook to fetch all available tools from the backend.
@@ -164,18 +63,44 @@ export function useAvailableTools() {
   };
 }
 
-// # NOTE (@raunakab):
-// ## The tool configuration
-//
-// What a message is sent with — the tool it must use, the tools it may not —
-// belongs to the chat it was chosen in, and returning any of it to neutral is
-// always something the user does. Nothing below is exported: a configuration
-// is only reachable through `useToolConfiguration`, so the two rules that hold
-// it together cannot be worked around by building one somewhere else.
+// Tool preferences, permissions, and source filters belong to the chat.
+// Sending a message preserves the selection.
 
 type ToolConfiguration = Readonly<Record<number, ToolState>>;
 
-const NEUTRAL: ToolConfiguration = {};
+/** Everything a chat's next message is configured with. */
+interface ChatConfiguration {
+  tools: ToolConfiguration;
+  filters: ChatSearchFilters;
+}
+
+const NEUTRAL_FILTERS: ChatSearchFilters = {
+  selectedSources: null,
+  documentSets: [],
+  tags: [],
+  timeRange: null,
+};
+
+const NEUTRAL: ChatConfiguration = {
+  tools: {},
+  filters: NEUTRAL_FILTERS,
+};
+
+function isNeutralFilters(filters: ChatSearchFilters): boolean {
+  return (
+    filters.selectedSources === null &&
+    filters.documentSets.length === 0 &&
+    filters.tags.length === 0 &&
+    filters.timeRange === null
+  );
+}
+
+function isNeutralConfiguration(configuration: ChatConfiguration): boolean {
+  return (
+    Object.keys(configuration.tools).length === 0 &&
+    isNeutralFilters(configuration.filters)
+  );
+}
 
 const STORAGE_PREFIX = "onyx:tools";
 
@@ -189,8 +114,8 @@ function isChatKey(key: string): boolean {
 }
 
 /**
- * Applies the one rule a map cannot state: a single tool is forced at a time,
- * because a message carries a single `forced_tool_id`. That a tool is forced,
+ * Applies the one rule a map cannot state: a single tool is preferred at a time,
+ * because a message carries a single `preferred_tool_id`. That a tool is preferred,
  * disabled or neutral and never two of those comes free, since a key holds one
  * value.
  *
@@ -210,8 +135,8 @@ function withToolState(
   for (const key of Object.keys(configuration)) {
     const id = Number(key);
     if (id === toolId) continue;
-    // Forcing this tool releases whatever was forced before it.
-    if (next === "forced" && configuration[id] === "forced") continue;
+    // Preferring this tool releases whatever was preferred before it.
+    if (next === "preferred" && configuration[id] === "preferred") continue;
     updated[id] = configuration[id]!;
   }
   if (next !== null) updated[toolId] = next;
@@ -226,30 +151,61 @@ function withToolState(
   return same ? configuration : updated;
 }
 
-/**
- * Reads a configuration back from untrusted text.
- *
- * The rules are applied again rather than assumed: storage can be edited by
- * hand, and an older build may have written a shape this one does not know. So
- * text claiming two forced tools keeps one, and anything unrecognised is
- * dropped instead of carried through.
- */
-function parseConfiguration(raw: string): ToolConfiguration {
-  let value: unknown;
-  try {
-    value = JSON.parse(raw);
-  } catch {
-    return NEUTRAL;
-  }
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return NEUTRAL;
-  }
-  // SAFETY: narrowed to a non-array object above, and every entry below is
-  // checked before it is kept.
-  const entries = value as Record<string, unknown>;
+/** Narrows without a cast: predicates carry the proof the checks make. */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
+function isUnknownArray(value: unknown): value is readonly unknown[] {
+  return Array.isArray(value);
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return (
+    isUnknownArray(value) && value.every((item) => typeof item === "string")
+  );
+}
+
+/** A stored row is kept only when it is exactly the shape of a {@link Tag}. */
+function isTag(value: unknown): value is Tag {
+  return (
+    isRecord(value) &&
+    typeof value.tag_key === "string" &&
+    typeof value.tag_value === "string" &&
+    typeof value.source === "string"
+  );
+}
+
+function isTagArray(value: unknown): value is Tag[] {
+  return isUnknownArray(value) && value.every(isTag);
+}
+
+/** The filter half of {@link parseConfiguration}, on an already-checked object. */
+function parseFilters(entries: Record<string, unknown>): ChatSearchFilters {
+  const range = entries.timeRange;
+  const timeRange =
+    isRecord(range) &&
+    typeof range.from === "string" &&
+    typeof range.to === "string"
+      ? { from: range.from, to: range.to }
+      : null;
+
+  return {
+    selectedSources: isStringArray(entries.selectedSources)
+      ? entries.selectedSources
+      : null,
+    documentSets: isStringArray(entries.documentSets)
+      ? entries.documentSets
+      : [],
+    tags: isTagArray(entries.tags) ? entries.tags : [],
+    timeRange,
+  };
+}
+
+/** The tool half of {@link parseConfiguration}, on an already-checked object. */
+function parseTools(entries: Record<string, unknown>): ToolConfiguration {
   const configuration: Record<number, ToolState> = {};
-  let hasForced = false;
+  let hasPreferred = false;
   for (const key of Object.keys(entries)) {
     const toolId = Number(key);
     if (!Number.isInteger(toolId)) continue;
@@ -257,12 +213,47 @@ function parseConfiguration(raw: string): ToolConfiguration {
     const state = entries[key];
     if (state === "disabled") {
       configuration[toolId] = "disabled";
-    } else if (state === "forced" && !hasForced) {
-      hasForced = true;
-      configuration[toolId] = "forced";
+    } else if (state === "preferred" && !hasPreferred) {
+      hasPreferred = true;
+      configuration[toolId] = "preferred";
     }
   }
   return configuration;
+}
+
+/**
+ * Reads a configuration back from untrusted text.
+ *
+ * The rules are applied again rather than assumed: storage can be edited by
+ * hand, and an older build may have written a shape this one does not know. So
+ * text claiming two preferred tools keeps one, and anything unrecognised is
+ * dropped instead of carried through.
+ *
+ * A build before the filters moved in wrote the tool map bare. That shape is
+ * still read: an object without a `tools` key is taken as the tool map, with
+ * the filters at their defaults.
+ */
+function parseConfiguration(raw: string): ChatConfiguration {
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return NEUTRAL;
+  }
+  if (!isRecord(value)) return NEUTRAL;
+
+  if (isRecord(value.tools)) {
+    return {
+      tools: parseTools(value.tools),
+      filters: isRecord(value.filters)
+        ? parseFilters(value.filters)
+        : NEUTRAL_FILTERS,
+    };
+  }
+  return {
+    tools: parseTools(value),
+    filters: NEUTRAL_FILTERS,
+  };
 }
 
 /** Session storage throws outright rather than degrading when it is blocked. */
@@ -275,7 +266,7 @@ function storage(): Storage | null {
   }
 }
 
-function readConfiguration(key: string): ToolConfiguration {
+function readConfiguration(key: string): ChatConfiguration {
   const store = storage();
   if (!store) return NEUTRAL;
   try {
@@ -301,11 +292,11 @@ function clearConfiguration(key: string) {
   }
 }
 
-function writeConfiguration(key: string, configuration: ToolConfiguration) {
+function writeConfiguration(key: string, configuration: ChatConfiguration) {
   const store = storage();
   if (!store) return;
   try {
-    if (Object.keys(configuration).length === 0) store.removeItem(key);
+    if (isNeutralConfiguration(configuration)) store.removeItem(key);
     else store.setItem(key, JSON.stringify(configuration));
   } catch {
     // Blocked or full. The configuration still holds for this composer; only
@@ -317,8 +308,8 @@ export interface ToolConfigurationHandle {
   /** What this chat has been told about one tool, or null for neutral. */
   stateOf: (toolId: number) => ToolState | null;
   /**
-   * The only way to change a configuration. Forcing a tool releases whatever
-   * was forced; a tool returned to neutral is forgotten rather than recorded.
+   * The only way to change a tool's state. Preferring a tool releases whatever
+   * was preferred; a tool returned to neutral is forgotten rather than recorded.
    */
   setToolState: (
     toolId: number,
@@ -336,16 +327,37 @@ export interface ToolConfigurationHandle {
   toggleToolState: (toolId: number, state: ToolState) => void;
 
   /**
-   * Releases whatever is forced, for the callers that want no forced tool
+   * Releases whatever is preferred, for the callers that want no preferred tool
    * without caring which one is. Still goes through `setToolState`, so the
    * rules hold.
    */
-  clearForcedTool: () => void;
-
-  /** The tool every message in this chat is made to use, if any. */
-  forcedToolId: number | null;
+  clearPreferredTool: () => void;
+  /** The preferred tool for this chat, if any. */
+  preferredToolId: number | null;
   /** The tools the model may not use in this chat. */
   disabledToolIds: number[];
+
+  /**
+   * Whether writes land yet: the composer's key has resolved and its stored
+   * configuration has been read back. Until then `setToolState` and
+   * `setFilters` are silently dropped, so a caller sequencing work on a
+   * fresh mount — the deep-link send — must wait for this.
+   */
+  ready: boolean;
+
+  /**
+   * The search filters this chat sends with. Orthogonal to the tool states:
+   * changing one never changes the other.
+   */
+  filters: ChatSearchFilters;
+  /**
+   * The only way to change the filters. The next value arrives as a function
+   * of the current one for the same reason `setToolState`'s does; a change
+   * that returns its input leaves the entry untouched.
+   */
+  setFilters: (
+    change: (current: ChatSearchFilters) => ChatSearchFilters
+  ) => void;
 
   /**
    * Called by the send path once the message it is sending has created the
@@ -359,11 +371,11 @@ export interface ToolConfigurationHandle {
    * agent viewer, which hands off to `/app` rather than sending in place.
    * Leaves the configuration where that page will find it, once.
    */
-  handOffToNewChatWith: (agentId: number) => void;
+  handOffToNewChatWith: (agentId: number, projectId?: number | null) => void;
 }
 
 /**
- * The tools this chat will send its next message with.
+ * The tools and search filters this chat will send its next message with.
  *
  * Only a chat that exists keeps its configuration. What is chosen for a chat
  * that does not exist yet — a new session, a new agent chat, a new project
@@ -414,7 +426,7 @@ export function useToolConfiguration(
   // the composer has since moved to.
   const [entry, setEntry] = useState<{
     key: string | null;
-    configuration: ToolConfiguration;
+    configuration: ChatConfiguration;
   }>({ key: null, configuration: NEUTRAL });
 
   // Storage is only reachable on the client, so the first paint shows neutral
@@ -429,13 +441,14 @@ export function useToolConfiguration(
     // A chat that does not exist yet keeps nothing, so anything found under
     // its key was handed over by a send on its way here. Taken once, then
     // removed, so returning later starts neutral.
-    if (!isChatKey(key) && Object.keys(stored).length > 0) {
+    if (!isChatKey(key) && !isNeutralConfiguration(stored)) {
       clearConfiguration(key);
     }
     setEntry({ key, configuration: stored });
   }, [key]);
 
   const configuration = entry.key === key ? entry.configuration : NEUTRAL;
+  const ready = key !== null && entry.key === key;
 
   // Written from an effect rather than inside the setter, so two changes made
   // in one tick compose instead of the later one landing on what the earlier
@@ -454,13 +467,31 @@ export function useToolConfiguration(
     ) => {
       if (key === null) return;
       setEntry((previous) => {
-        const current = previous.key === key ? previous.configuration : NEUTRAL;
-        const configuration = withToolState(current, toolId, change);
+        // Between a key change and its storage read, a write would land on
+        // NEUTRAL and then be clobbered by the read. `ready` documents that
+        // writes are dropped in that window; this is the drop.
+        if (previous.key !== key) return previous;
+        const current = previous.configuration;
+        const tools = withToolState(current.tools, toolId, change);
         // Asking for the state it already holds has to leave the same entry
         // behind. A new one every time is a change to everything reading it,
         // and a caller that writes what it reads would never settle.
-        if (previous.key === key && configuration === current) return previous;
-        return { key, configuration };
+        if (tools === current.tools) return previous;
+        return { key, configuration: { ...current, tools } };
+      });
+    },
+    [key]
+  );
+
+  const setFilters = useCallback(
+    (change: (current: ChatSearchFilters) => ChatSearchFilters) => {
+      if (key === null) return;
+      setEntry((previous) => {
+        if (previous.key !== key) return previous;
+        const current = previous.configuration;
+        const filters = change(current.filters);
+        if (filters === current.filters) return previous;
+        return { key, configuration: { ...current, filters } };
       });
     },
     [key]
@@ -475,31 +506,50 @@ export function useToolConfiguration(
   );
 
   const handOffToNewChatWith = useCallback(
-    (agentId: number) =>
-      writeConfiguration(`${STORAGE_PREFIX}:new:${agentId}`, configuration),
+    (agentId: number, projectId: number | null = null) =>
+      writeConfiguration(
+        projectId === null
+          ? `${STORAGE_PREFIX}:new:${agentId}`
+          : `${STORAGE_PREFIX}:new:${agentId}:${projectId}`,
+        configuration
+      ),
     [configuration]
   );
 
   return useMemo(() => {
-    const ids = Object.keys(configuration).map(Number);
-    const forcedToolId =
-      ids.find((toolId) => configuration[toolId] === "forced") ?? null;
+    const ids = Object.keys(configuration.tools).map(Number);
+    const preferredToolId =
+      ids.find((toolId) => configuration.tools[toolId] === "preferred") ?? null;
     return {
-      stateOf: (toolId: number) => configuration[toolId] ?? null,
+      stateOf: (toolId: number) => configuration.tools[toolId] ?? null,
       setToolState,
       toggleToolState: (toolId: number, state: ToolState) =>
         setToolState(toolId, (current) => (current === state ? null : state)),
-      clearForcedTool: () => {
-        if (forcedToolId !== null) setToolState(forcedToolId, () => null);
+      clearPreferredTool: () => {
+        if (preferredToolId !== null) {
+          setToolState(preferredToolId, (current) =>
+            current === "preferred" ? null : current
+          );
+        }
       },
-      forcedToolId,
+      preferredToolId,
       disabledToolIds: ids.filter(
-        (toolId) => configuration[toolId] === "disabled"
+        (toolId) => configuration.tools[toolId] === "disabled"
       ),
+      ready,
+      filters: configuration.filters,
+      setFilters,
       handOffTo,
       handOffToNewChatWith,
     };
-  }, [configuration, setToolState, handOffTo, handOffToNewChatWith]);
+  }, [
+    configuration,
+    ready,
+    setToolState,
+    setFilters,
+    handOffTo,
+    handOffToNewChatWith,
+  ]);
 }
 
 /**

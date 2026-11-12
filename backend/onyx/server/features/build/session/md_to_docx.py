@@ -105,7 +105,7 @@ Node = dict[str, Any]
 # surrogate range, and U+FFFE/U+FFFF. Mapped to None for str.translate (C-speed).
 _XML_INVALID_TRANSLATION = {
     **{code: None for code in range(0x20) if code not in (0x09, 0x0A, 0x0D)},
-    **{code: None for code in range(0xD800, 0xE000)},
+    **dict.fromkeys(range(55296, 57344)),
     0xFFFE: None,
     0xFFFF: None,
 }

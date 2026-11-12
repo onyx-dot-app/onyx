@@ -30,28 +30,26 @@ import {
   ChatExportFormat,
 } from "@/lib/chat/exportChatSession";
 import { UNNAMED_CHAT } from "@/lib/constants";
-import { useRouter } from "next/navigation";
 import { MoveCustomAgentChatModal } from "@/lib/agents/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import FrostedDiv from "@/refresh-components/FrostedDiv";
 import {
   Button,
-  LineItemButton,
-  OpenButton,
-  Popover,
-  PopoverMenu,
+  Dropdown,
+  SelectButton,
   Text,
+  useCreateModal,
+  type DropdownMenuItem,
+  type DropdownView,
 } from "@opal/components";
-import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
-import SimplePopover from "@/refresh-components/SimplePopover";
 import { useSidebarState } from "@opal/layouts";
 import useScreenSize from "@/hooks/useScreenSize";
 import {
   SvgBubbleText,
   SvgChevronLeft,
   SvgDownload,
-  SvgFileText,
   SvgEyeOff,
+  SvgFileText,
   SvgFitWidth,
   SvgFolderIn,
   SvgFullWidth,
@@ -66,10 +64,12 @@ import {
 import { useIsSearchModeAvailable, useSettings } from "@/lib/settings/hooks";
 import type { AppMode } from "@/providers/QueryControllerProvider";
 import { useAppDocumentTitle, useCustomFooterContent } from "@/lib/app/hooks";
-import { useAppPosition } from "@/lib/position/hooks";
+import { useAppPosition } from "@/lib/navigation/hooks";
+import { PendingRoute, useNavigation } from "@opal/navigation";
+import { AppChromeLoader } from "@/layouts/chromes/AppChromeLoader";
 import { useQueryController } from "@/providers/QueryControllerProvider";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
 import { useFullWidthChat } from "@/providers/FullWidthChatProvider";
 import { useIncognito } from "@/providers/IncognitoProvider";
 
@@ -79,6 +79,7 @@ import { useIncognito } from "@/providers/IncognitoProvider";
 
 function Header() {
   const t = useTranslations("chat.appChrome");
+  const tSidebar = useTranslations("sidebar");
   const appPosition = useAppPosition();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const { state, setAppMode } = useQueryController();
@@ -94,18 +95,13 @@ function Header() {
     toggleIncognito,
     setIncognitoEnabled,
   } = useIncognito();
-  const [showShareModal, setShowShareModal] = useState(false);
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
-    useState(false);
+  const shareModal = useCreateModal();
+  const deleteModal = useCreateModal();
+  const moveCustomAgentModal = useCreateModal();
   const [pendingMoveProjectId, setPendingMoveProjectId] = useState<
     number | null
   >(null);
-  const [showMoveOptions, setShowMoveOptions] = useState(false);
-  const [showExportOptions, setShowExportOptions] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [popoverOpen, setPopoverOpen] = useState(false);
-  const [popoverItems, setPopoverItems] = useState<React.ReactNode[]>([]);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [modePopoverOpen, setModePopoverOpen] = useState(false);
   const {
     projects,
@@ -120,7 +116,7 @@ function Header() {
     refreshChatSessions,
     removeSession,
   } = useChatSessions();
-  const router = useRouter();
+  const navigation = useNavigation();
 
   const customHeaderContent = settings.enterprise?.custom_header_content;
   const pageWithHeaderContent =
@@ -136,20 +132,10 @@ function Header() {
     return projects.filter((project) => project.id !== currentProjectId);
   }, [projects, currentProjectId]);
 
-  const filteredProjects = useMemo(() => {
-    if (!searchTerm) return availableProjects;
-    const term = searchTerm.toLowerCase();
-    return availableProjects.filter((project) =>
-      project.name.toLowerCase().includes(term)
-    );
-  }, [availableProjects, searchTerm]);
-
   const resetMoveState = useCallback(() => {
-    setShowMoveOptions(false);
-    setSearchTerm("");
     setPendingMoveProjectId(null);
-    setShowMoveCustomAgentModal(false);
-  }, []);
+    moveCustomAgentModal.toggle(false);
+  }, [moveCustomAgentModal.toggle]);
 
   const performMove = useCallback(
     async (targetProjectId: number) => {
@@ -164,7 +150,7 @@ function Header() {
           currentProjectId,
         });
         resetMoveState();
-        setPopoverOpen(false);
+        setMenuOpen(false);
       } catch (error) {
         console.error("Failed to move chat session:", error);
       }
@@ -184,12 +170,12 @@ function Header() {
       if (!currentChatSession) return;
       if (shouldShowMoveModal(currentChatSession)) {
         setPendingMoveProjectId(projectId);
-        setShowMoveCustomAgentModal(true);
+        moveCustomAgentModal.toggle(true);
         return;
       }
       void performMove(projectId);
     },
-    [currentChatSession, performMove]
+    [currentChatSession, moveCustomAgentModal.toggle, performMove]
   );
 
   const handleDeleteChat = useCallback(async () => {
@@ -201,8 +187,8 @@ function Header() {
       }
       removeSession(currentChatSession.id);
       await Promise.all([refreshChatSessions(), fetchProjects()]);
-      router.replace("/app");
-      setDeleteModalOpen(false);
+      navigation.go("/app", { replace: true });
+      deleteModal.toggle(false);
     } catch (error) {
       console.error("Failed to delete chat:", error);
       showErrorNotification("Failed to delete chat. Please try again.");
@@ -212,15 +198,19 @@ function Header() {
     refreshChatSessions,
     removeSession,
     fetchProjects,
-    router,
+    navigation,
+    deleteModal.toggle,
   ]);
 
-  const setDeleteConfirmationModalOpen = useCallback((open: boolean) => {
-    setDeleteModalOpen(open);
-    if (open) {
-      setPopoverOpen(false);
-    }
-  }, []);
+  const setDeleteConfirmationModalOpen = useCallback(
+    (open: boolean) => {
+      deleteModal.toggle(open);
+      if (open) {
+        setMenuOpen(false);
+      }
+    },
+    [deleteModal.toggle]
+  );
 
   // Incognito stays on until teardown returns, so the composer cannot submit
   // into a session being torn down. The server deletes that session's uploads
@@ -245,14 +235,14 @@ function Header() {
     setIncognitoEnabled(false);
     setCurrentMessageFiles([]);
     if (sessionId) {
-      router.replace("/app");
+      navigation.go("/app", { replace: true });
     }
   }, [
     currentChatSessionId,
     setIncognitoEnabled,
     setCurrentMessageFiles,
     removeSession,
-    router,
+    navigation,
   ]);
 
   const handleExport = useCallback(
@@ -272,107 +262,98 @@ function Header() {
     [currentChatSession, t]
   );
 
-  useEffect(() => {
-    let items: ReactNode[];
-    if (showMoveOptions) {
-      items = [
-        <PopoverSearchInput
-          key="search"
-          setShowMoveOptions={setShowMoveOptions}
-          onSearch={setSearchTerm}
-        />,
-        ...filteredProjects.map((project) => (
-          <LineItemButton
-            key={project.id}
-            sizePreset="main-ui"
-            rounding={2}
-            icon={SvgFolderIn}
-            title={project.name}
-            onClick={noProp(() => handleMoveClick(project.id))}
-          />
-        )),
-      ];
-    } else if (showExportOptions) {
-      items = [
-        <LineItemButton
-          key="export-back"
-          sizePreset="main-ui"
-          rounding={2}
-          icon={SvgChevronLeft}
-          title={t("exportAs.label")}
-          onClick={noProp(() => setShowExportOptions(false))}
-        />,
-        <Popover.Close asChild key="export-plaintext">
-          <LineItemButton
-            sizePreset="main-ui"
-            rounding={2}
-            icon={SvgFileText}
-            title={t("exportPlaintext.label")}
-            onClick={noProp(() => handleExport("text"))}
-          />
-        </Popover.Close>,
-        <Popover.Close asChild key="export-markdown">
-          <LineItemButton
-            sizePreset="main-ui"
-            rounding={2}
-            icon={SvgHash}
-            title={t("exportMarkdown.label")}
-            onClick={noProp(() => handleExport("markdown"))}
-          />
-        </Popover.Close>,
-      ];
-    } else {
-      items = [
-        <LineItemButton
-          key="move"
-          sizePreset="main-ui"
-          rounding={2}
-          icon={SvgFolderIn}
-          title={t("moveToProject.label")}
-          onClick={noProp(() => setShowMoveOptions(true))}
-        />,
-        <LineItemButton
-          key="export"
-          sizePreset="main-ui"
-          rounding={2}
-          icon={SvgDownload}
-          title={t("exportAs.label")}
-          onClick={noProp(() => setShowExportOptions(true))}
-        />,
-        null,
-        <LineItemButton
-          key="delete"
-          sizePreset="main-ui"
-          rounding={2}
-          color="danger"
-          icon={SvgTrash}
-          title={t("delete.label")}
-          onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
-        />,
-      ];
-    }
-
-    setPopoverItems(items);
-  }, [
-    showMoveOptions,
-    showExportOptions,
-    filteredProjects,
-    currentChatSession,
-    setDeleteConfirmationModalOpen,
-    handleMoveClick,
-    handleExport,
-  ]);
+  // The chat options menu: move and export are pages of their own.
+  const moveView: DropdownView = {
+    search: {
+      placeholder: tSidebar("chatButton.projectSearchInput.placeholder"),
+    },
+    items: [
+      {
+        kind: "action",
+        id: "back",
+        pinned: true,
+        icon: SvgChevronLeft,
+        title: t("moveToProject.label"),
+        onSelect: (views) => views.pop(),
+      },
+      ...availableProjects.map(
+        (project): DropdownMenuItem => ({
+          kind: "action",
+          id: `project-${project.id}`,
+          icon: SvgFolderIn,
+          title: project.name,
+          onSelect: () => handleMoveClick(project.id),
+        })
+      ),
+    ],
+  };
+  const exportView: DropdownView = {
+    items: [
+      {
+        kind: "action",
+        id: "back",
+        icon: SvgChevronLeft,
+        title: t("exportAs.label"),
+        onSelect: (views) => views.pop(),
+      },
+      {
+        kind: "action",
+        id: "export-plaintext",
+        icon: SvgFileText,
+        title: t("exportPlaintext.label"),
+        onSelect: () => handleExport("text"),
+      },
+      {
+        kind: "action",
+        id: "export-markdown",
+        icon: SvgHash,
+        title: t("exportMarkdown.label"),
+        onSelect: () => handleExport("markdown"),
+      },
+    ],
+  };
+  const menuItems: DropdownMenuItem[] = [
+    {
+      kind: "action",
+      id: "move",
+      icon: SvgFolderIn,
+      title: t("moveToProject.label"),
+      onSelect: (views) => views.push("move"),
+    },
+    {
+      kind: "action",
+      id: "export",
+      icon: SvgDownload,
+      title: t("exportAs.label"),
+      onSelect: (views) => views.push("export"),
+    },
+    {
+      kind: "group",
+      items: [
+        {
+          kind: "action",
+          id: "delete",
+          icon: SvgTrash,
+          danger: true,
+          title: t("delete.label"),
+          onSelect: () => setDeleteConfirmationModalOpen(true),
+        },
+      ],
+    },
+  ];
 
   return (
     <>
-      {showShareModal && currentChatSession && (
-        <ShareChatSessionModal
-          chatSession={currentChatSession}
-          onClose={() => setShowShareModal(false)}
-        />
-      )}
+      <shareModal.Provider>
+        {currentChatSession && (
+          <ShareChatSessionModal
+            chatSession={currentChatSession}
+            onClose={() => shareModal.toggle(false)}
+          />
+        )}
+      </shareModal.Provider>
 
-      {showMoveCustomAgentModal && (
+      <moveCustomAgentModal.Provider>
         <MoveCustomAgentChatModal
           onCancel={resetMoveState}
           onConfirm={async (doNotShowAgain: boolean) => {
@@ -387,13 +368,13 @@ function Header() {
             }
           }}
         />
-      )}
+      </moveCustomAgentModal.Provider>
 
-      {deleteModalOpen && (
+      <deleteModal.Provider>
         <ConfirmationModalLayout
           title={t("deleteModal.title")}
           icon={SvgTrash}
-          onClose={() => setDeleteModalOpen(false)}
+          onClose={() => deleteModal.toggle(false)}
           submit={
             <Button variant="danger" onClick={handleDeleteChat}>
               {t("deleteModal.submitButton.label")}
@@ -402,7 +383,7 @@ function Header() {
         >
           {t("deleteModal.description")}
         </ConfirmationModalLayout>
-      )}
+      </deleteModal.Provider>
 
       {(appPosition.isChat() ||
         appPosition.isNewSession() ||
@@ -428,71 +409,67 @@ function Header() {
                 )}
                 {incognitoEnabled &&
                   (appPosition.isChat() || appPosition.isNewSession()) && (
-                    <OpenButton
+                    <SelectButton
+                      chevron
                       disabled
                       icon={SvgEyeOff}
                       aria-label={t("incognitoPill.ariaLabel")}
                       data-testid="incognito-chat-pill"
                     >
                       {t("incognitoPill.label")}
-                    </OpenButton>
+                    </SelectButton>
                   )}
                 {businessTier &&
                   isSearchModeAvailable &&
                   !incognitoEnabled &&
                   appPosition.isNewSession() &&
                   state.phase === "idle" && (
-                    <Popover
+                    <Dropdown
                       open={modePopoverOpen}
                       onOpenChange={setModePopoverOpen}
                     >
-                      <Popover.Trigger asChild>
-                        <OpenButton
+                      <Dropdown.Trigger asChild>
+                        <SelectButton
+                          chevron
                           aria-label={t("modeButton.ariaLabel")}
                           icon={
                             effectiveMode === "search"
                               ? SvgSearchMenu
                               : SvgBubbleText
                           }
+                          interaction={modePopoverOpen ? "hover" : "rest"}
                         >
                           {effectiveMode === "search"
                             ? t("mode.search.label")
                             : t("mode.chat.label")}
-                        </OpenButton>
-                      </Popover.Trigger>
-                      <Popover.Content align="start" width="lg">
-                        <Popover.Menu>
-                          <LineItemButton
-                            sizePreset="main-ui"
-                            rounding={2}
-                            icon={SvgSearchMenu}
-                            state={
-                              effectiveMode === "search" ? "selected" : "empty"
-                            }
-                            title={t("mode.search.label")}
-                            description={t("mode.search.description")}
-                            onClick={noProp(() => {
-                              setAppMode("search");
-                              setModePopoverOpen(false);
-                            })}
-                          />
-                          <LineItemButton
-                            sizePreset="main-ui"
-                            rounding={2}
-                            icon={SvgBubbleText}
-                            state={
-                              effectiveMode === "chat" ? "selected" : "empty"
-                            }
-                            title={t("mode.chat.label")}
-                            description={t("mode.chat.description")}
-                            onClick={noProp(() => {
-                              setAppMode("chat");
-                              setModePopoverOpen(false);
-                            })}
-                          />
-                        </Popover.Menu>
-                      </Popover.Content>
-                    </Popover>
+                        </SelectButton>
+                      </Dropdown.Trigger>
+                      <Dropdown.Data
+                        label={t("modeButton.ariaLabel")}
+                        value={effectiveMode}
+                        onSelect={(option) =>
+                          setAppMode(
+                            option.value === "search" ? "search" : "chat"
+                          )
+                        }
+                        items={[
+                          {
+                            kind: "option",
+                            value: "search",
+                            icon: SvgSearchMenu,
+                            title: t("mode.search.label"),
+                            description: t("mode.search.description"),
+                          },
+                          {
+                            kind: "option",
+                            value: "chat",
+                            icon: SvgBubbleText,
+                            title: t("mode.chat.label"),
+                            description: t("mode.chat.description"),
+                          },
+                        ]}
+                      />
+                    </Dropdown>
                   )}
               </div>
 
@@ -524,20 +501,18 @@ function Header() {
               <div className="flex flex-1 justify-end items-center">
                 {(appPosition.isChat() || appPosition.isNewSession()) && (
                   <FrostedDiv className="flex shrink flex-row items-center">
-                    {incognitoAvailable && !incognitoEnabled && (
-                      <Button
-                        icon={SvgEyeOff}
-                        prominence="tertiary"
-                        onClick={toggleIncognito}
-                        disabled={incognitoLocked}
-                        aria-label={t("incognitoStart.ariaLabel")}
-                        tooltip={
-                          incognitoLocked
-                            ? t("incognitoStart.lockedTooltip")
-                            : t("incognitoStart.tooltip")
-                        }
-                      />
-                    )}
+                    {appPosition.isNewSession() &&
+                      incognitoAvailable &&
+                      !incognitoEnabled &&
+                      !incognitoLocked && (
+                        <Button
+                          icon={SvgEyeOff}
+                          prominence="tertiary"
+                          onClick={toggleIncognito}
+                          aria-label={t("incognitoStart.ariaLabel")}
+                          tooltip={t("incognitoStart.tooltip")}
+                        />
+                      )}
                     {/* On mobile widths the reading-width cap never applies
                         (chat is always full width), so the toggle is hidden. */}
                     {!isMobile && (
@@ -565,41 +540,42 @@ function Header() {
                     )}
                   </FrostedDiv>
                 )}
+                {/* Only for the chat on screen: during a navigation to another
+                    chat, the URL's session is still the one these act on. */}
                 {appPosition.isChat() &&
                   currentChatSession &&
+                  currentChatSession.id === appPosition.chat() &&
                   !incognitoEnabled && (
                     <FrostedDiv className="flex shrink flex-row items-center">
                       <Button
                         icon={SvgShare}
                         prominence="tertiary"
-                        interaction={showShareModal ? "hover" : "rest"}
+                        interaction={shareModal.isOpen ? "hover" : "rest"}
                         responsiveHideText
-                        onClick={() => setShowShareModal(true)}
+                        onClick={() => shareModal.toggle(true)}
                         aria-label="share-chat-button"
                       >
                         {t("share.label")}
                       </Button>
-                      <SimplePopover
-                        trigger={
+                      <Dropdown
+                        width={60}
+                        open={menuOpen}
+                        onOpenChange={setMenuOpen}
+                      >
+                        <Dropdown.Trigger asChild>
                           <Button
                             icon={SvgMoreHorizontal}
                             prominence="tertiary"
-                            interaction={popoverOpen ? "hover" : "rest"}
+                            interaction={menuOpen ? "hover" : "rest"}
+                            aria-label={tSidebar("chatButton.options.label")}
                           />
-                        }
-                        onOpenChange={(state) => {
-                          setPopoverOpen(state);
-                          if (!state) {
-                            setShowMoveOptions(false);
-                            setShowExportOptions(false);
-                            setSearchTerm("");
-                          }
-                        }}
-                        side="bottom"
-                        align="end"
-                      >
-                        <PopoverMenu>{popoverItems}</PopoverMenu>
-                      </SimplePopover>
+                        </Dropdown.Trigger>
+                        <Dropdown.Data
+                          label={tSidebar("chatButton.options.label")}
+                          items={menuItems}
+                          views={{ move: moveView, export: exportView }}
+                        />
+                      </Dropdown>
                     </FrostedDiv>
                   )}
               </div>
@@ -664,7 +640,7 @@ function Footer() {
 // AppChrome
 // ---------------------------------------------------------------------------
 
-interface AppChromeProps {
+export interface AppChromeProps {
   children: React.ReactNode;
 }
 
@@ -779,7 +755,11 @@ export default function AppChrome({ children }: AppChromeProps) {
 
             {/* Header */}
             <Header />
-            <RootLayout.MainContent>{children}</RootLayout.MainContent>
+            <RootLayout.MainContent>
+              <PendingRoute base="/app" loader={<AppChromeLoader />}>
+                {children}
+              </PendingRoute>
+            </RootLayout.MainContent>
             <Footer />
           </div>
           {rightPanel}

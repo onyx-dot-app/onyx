@@ -8,6 +8,9 @@ import { User } from "@/lib/types";
 
 jest.mock("posthog-js/react", () => ({ usePostHog: () => undefined }));
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   useRouter: () => ({ refresh: jest.fn() }),
 }));
 jest.mock("@/lib/settings/hooks", () => ({ useSettings: () => ({}) }));

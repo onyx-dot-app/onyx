@@ -21,6 +21,8 @@ from onyx.db.federated import (
     validate_federated_connector_credentials,
 )
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.federated_connectors.factory import (
     get_federated_connector,
     get_federated_connector_cls,
@@ -376,7 +378,7 @@ def get_authorize_url(
 @router.post("/callback")
 def handle_oauth_callback_generic(
     request: Request,
-    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> OAuthCallbackResult:
     """Handle callback for any federated connector using state parameter"""
@@ -399,6 +401,11 @@ def handle_oauth_callback_generic(
     if not oauth_session:
         raise HTTPException(
             status_code=400, detail="Invalid or expired state parameter"
+        )
+
+    if str(user.id) != oauth_session.user_id:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS, "User mismatch in OAuth callback"
         )
 
     # Get federated connector ID from the state
@@ -428,12 +435,12 @@ def handle_oauth_callback_generic(
     )
     oauth_result = connector_instance.callback(callback_data, get_oauth_callback_uri())
 
-    # Convert OAuthResult to OAuthCallbackResult for API response
-    oauth_result_dict = oauth_result.model_dump()
-    oauth_callback_result = OAuthCallbackResult(**oauth_result_dict)
-
-    # Add source information to the response
-    oauth_callback_result.source = federated_connector.source
+    oauth_callback_result = OAuthCallbackResult(
+        expires_at=oauth_result.expires_at,
+        token_type=oauth_result.token_type,
+        scope=oauth_result.scope,
+        source=federated_connector.source,
+    )
 
     # Store OAuth token in database if we have an access token
     if oauth_result.access_token:

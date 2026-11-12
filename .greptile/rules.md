@@ -1,12 +1,8 @@
 # Greptile Review Rules
 
-## Type Annotations
-
-Use explicit type annotations for variables to enhance code clarity, especially when moving type hints around in the code.
-
 ## Best Practices
 
-Use the "Engineering Best Practices" section of `CONTRIBUTING.md` as core review context. Prefer consistency with existing patterns, fix issues in code you touch, avoid tacking new features onto muddy interfaces, fail loudly instead of silently swallowing errors, keep code strictly typed, preserve clear state boundaries, remove duplicate or dead logic, break up overly long functions, avoid hidden import-time side effects, respect module boundaries, and favor correctness-by-construction over relying on callers to use an API correctly.
+Use `contributing_guides/best_practices.md` as core review context. Prefer consistency with existing patterns, fix issues in code you touch, avoid tacking new features onto muddy interfaces, fail loudly instead of silently swallowing errors, keep code strictly typed, preserve clear state boundaries, remove duplicate or dead logic, break up overly long functions, avoid hidden import-time side effects, respect module boundaries, and favor correctness-by-construction over relying on callers to use an API correctly.
 
 ## TODOs
 
@@ -23,6 +19,10 @@ When hardcoding a boolean variable to a constant value, remove the variable enti
 ## Multi-tenant vs Single-tenant
 
 Code changes must consider both multi-tenant and single-tenant deployments. In multi-tenant mode, preserve tenant isolation, ensure tenant context is propagated correctly, and avoid assumptions that only hold for a single shared schema or globally shared state. In single-tenant mode, avoid introducing unnecessary tenant-specific requirements or cloud-only control-plane dependencies.
+
+## Migration Rows Are Deterministic
+
+A new revision under `backend/alembic/versions` may insert rows, and those rows must be identical on every schema: fixed ids and literal values, no `uuid4()`, `now()`, `gen_random_uuid()`, randomness or env reads, in Python or in the SQL text, anywhere but `downgrade`. The template schema is migrated once, snapshotted and cloned into every new tenant, and the deploy gate compares it with a fresh build of the chain, so a run-dependent value makes template and tenants diverge. Schema defaults such as `server_default=now()` and updates to existing rows are fine. A deliberate exception carries `# migration-determinism: allow` on its statement. Flag any run-dependent value in an insert and ask for a fixed one.
 
 ## Routing for New Non-/api Backend Routes
 
@@ -71,3 +71,7 @@ All tests under `web/tests/e2e/` must drive the UI through Page Object classes (
 ## Playwright E2E — Auto-Retrying Matchers Only
 
 Never use `locator.getAttribute()`, `locator.textContent()`, `locator.count()`, or `page.evaluate()` snapshots as the basis of an assertion on state that may update asynchronously (React state, effects, microtasks, deferred DOM mutations). One-shot reads flake. Use Playwright's auto-retrying matchers: `expect(locator).toHaveAttribute(...)`, `toHaveClass(...)`, `toHaveText(...)` / `toContainText(...)`, `toHaveCount(...)`, `toHaveValue(...)`, `toBeVisible()` / `toBeHidden()`. Snapshot reads are still fine when the value drives control flow inside the spec — not for assertions. See `web/tests/e2e/README.md`.
+
+## Docs Updates
+
+Customer docs live in `documentation/` (see `documentation/AGENTS.md`). When a PR adds or changes something a customer sees or configures (a UI flow, an admin setting, a connector, an environment variable, a public API, or a deployment step), the same PR should update the matching page in `documentation/`, including screenshots of changed UI. If it does not, leave one comment that names the page to update, or ask the author to state that no docs change is needed. Do not ask for docs on internal refactors, tests, CI, or changes that only affect multi-tenant cloud operations (for example `backend/ee/onyx/server/tenants/`, `backend/alembic_tenants/`, or code that runs only when `MULTI_TENANT` is set). Customers cannot use those.

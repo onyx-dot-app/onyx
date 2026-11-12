@@ -15,7 +15,7 @@ function model(
 ): ModelConfiguration {
   return {
     id: 1,
-    name: "gpt-5",
+    name: "gpt-6-sol",
     is_visible: true,
     display_name: null,
     custom_display_name: null,
@@ -113,13 +113,13 @@ describe("resolveDefaultOption", () => {
       provider({
         id: 10,
         name: "OpenAI Prod",
-        model_configurations: [model({ id: 1, name: "gpt-5" })],
+        model_configurations: [model({ id: 1, name: "gpt-6-sol" })],
       }),
     ];
     const options = buildModelOptions(providers);
     const resolved = resolveDefaultOption(
       providers,
-      { provider_id: 10, model_name: "gpt-5" },
+      { provider_id: 10, model_name: "gpt-6-sol" },
       options,
     );
     expect(resolved?.modelConfigurationId).toBe(1);
@@ -143,18 +143,18 @@ describe("resolveDefaultOption", () => {
       provider({
         id: 10,
         name: "First",
-        model_configurations: [model({ id: 1, name: "gpt-5" })],
+        model_configurations: [model({ id: 1, name: "gpt-6-sol" })],
       }),
       provider({
         id: 11,
         name: "Second",
-        model_configurations: [model({ id: 2, name: "gpt-5" })],
+        model_configurations: [model({ id: 2, name: "gpt-6-sol" })],
       }),
     ];
     const options = buildModelOptions(providers);
     const resolved = resolveDefaultOption(
       providers,
-      { provider_id: 11, model_name: "gpt-5" },
+      { provider_id: 11, model_name: "gpt-6-sol" },
       options,
     );
     expect(resolved?.modelProvider).toBe("Second");
@@ -201,7 +201,7 @@ describe("toLlmOverride", () => {
     expect(toLlmOverride(buildModelOptions([provider()])[0]!)).toEqual({
       model_configuration_id: 1,
       model_provider: "OpenAI Prod",
-      model_version: "gpt-5",
+      model_version: "gpt-6-sol",
     });
   });
 });

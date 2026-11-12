@@ -15,6 +15,9 @@ from onyx.document_index.chunk_content_enrichment import (
 )
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.indexing.models import ChunkEmbedding, DocAwareChunk, IndexChunk
+from onyx.natural_language_processing.embedding_rate_limit import (
+    EmbeddingWaitTimeoutError,
+)
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.utils.logger import setup_logger
 from onyx.utils.pydantic_util import shallow_model_dump
@@ -24,7 +27,6 @@ from shared_configs.configs import (
     INDEXING_MODEL_SERVER_PORT,
 )
 from shared_configs.enums import EmbeddingProvider, EmbedTextType
-from shared_configs.model_server_models import Embedding
 
 logger = setup_logger()
 
@@ -46,6 +48,7 @@ class IndexingEmbedder(ABC):
         deployment_name: str | None,
         reduced_dimension: int | None,
         callback: IndexingHeartbeatInterface | None,
+        embedding_model: EmbeddingModel | None = None,
     ):
         self.model_name = model_name
         self.normalize = normalize
@@ -57,7 +60,7 @@ class IndexingEmbedder(ABC):
         self.api_version = api_version
         self.deployment_name = deployment_name
 
-        self.embedding_model = EmbeddingModel(
+        self.embedding_model = embedding_model or EmbeddingModel(
             model_name=model_name,
             query_prefix=query_prefix,
             passage_prefix=passage_prefix,
@@ -99,6 +102,7 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
         deployment_name: str | None = None,
         reduced_dimension: int | None = None,
         callback: IndexingHeartbeatInterface | None = None,
+        embedding_model: EmbeddingModel | None = None,
     ):
         super().__init__(
             model_name,
@@ -112,6 +116,7 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
             deployment_name,
             reduced_dimension,
             callback,
+            embedding_model,
         )
 
     @log_function_time()
@@ -157,33 +162,6 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
             request_id=request_id,
         )
 
-        chunk_titles = {
-            chunk.source_document.get_title_for_document_index() for chunk in chunks
-        }
-
-        # Drop any None or empty strings
-        # If there is no title or the title is empty, the title embedding field will be null
-        # which is ok, it just won't contribute at all to the scoring.
-        chunk_titles_list = [title for title in chunk_titles if title]
-
-        # Cache the Title embeddings to only have to do it once
-        title_embed_dict: dict[str, Embedding] = {}
-        if chunk_titles_list:
-            title_embeddings = self.embedding_model.encode(
-                chunk_titles_list,
-                text_type=EmbedTextType.PASSAGE,
-                tenant_id=tenant_id,
-                request_id=request_id,
-            )
-            title_embed_dict.update(
-                {
-                    title: vector
-                    for title, vector in zip(
-                        chunk_titles_list, title_embeddings, strict=True
-                    )
-                }
-            )
-
         # Mapping embeddings to chunks
         embedded_chunks: list[IndexChunk] = []
         embedding_ind_start = 0
@@ -195,32 +173,12 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
                 embedding_ind_start : embedding_ind_start + num_embeddings
             ]
 
-            title = chunk.source_document.get_title_for_document_index()
-
-            title_embedding = None
-            if title:
-                if title in title_embed_dict:
-                    # Using cached value to avoid recalculating for every chunk
-                    title_embedding = title_embed_dict[title]
-                else:
-                    logger.error(
-                        "Title had to be embedded separately, this should not happen!"
-                    )
-                    title_embedding = self.embedding_model.encode(
-                        [title],
-                        text_type=EmbedTextType.PASSAGE,
-                        tenant_id=tenant_id,
-                        request_id=request_id,
-                    )[0]
-                    title_embed_dict[title] = title_embedding
-
             new_embedded_chunk = IndexChunk.model_construct(
                 **shallow_model_dump(chunk),
                 embeddings=ChunkEmbedding(
                     full_embedding=chunk_embeddings[0],
                     mini_chunk_embeddings=chunk_embeddings[1:],
                 ),
-                title_embedding=title_embedding,
             )
             embedded_chunks.append(new_embedded_chunk)
             embedding_ind_start += num_embeddings
@@ -245,6 +203,13 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
             deployment_name=search_settings.deployment_name,
             reduced_dimension=search_settings.reduced_dimension,
             callback=callback,
+            embedding_model=EmbeddingModel.from_db_model(
+                search_settings,
+                server_host=INDEXING_MODEL_SERVER_HOST,
+                server_port=INDEXING_MODEL_SERVER_PORT,
+                retrim_content=True,
+                callback=callback,
+            ),
         )
 
 
@@ -255,11 +220,15 @@ def embed_chunks_with_failure_handling(
     request_id: str | None = None,
 ) -> tuple[list[IndexChunk], list[ConnectorFailure]]:
     """Tries to embed all chunks in one large batch. If that batch fails for any reason,
-    goes document by document to isolate the failure(s).
+    goes document by document to isolate the failure(s). A rate limit wait that
+    times out fails every remaining document at once: retrying each document
+    would wait the full time limit again.
     """
 
     # TODO(rkuo): this doesn't disambiguate calls to the model server on retries.
     # Improve this if needed.
+
+    wait_timeout: EmbeddingWaitTimeoutError | None = None
 
     # First try to embed all chunks in one batch
     try:
@@ -274,6 +243,10 @@ def embed_chunks_with_failure_handling(
             "Connector stop signal detected in embed_chunks_with_failure_handling"
         )
         raise e
+    except EmbeddingWaitTimeoutError as e:
+        logger.error("Embedding rate limit wait timed out; failing the batch: %s", e)
+        sentry_sdk.capture_exception(e)
+        wait_timeout = e
     except Exception:
         logger.exception("Failed to embed chunk batch. Trying individual docs.")
         # wait a couple seconds to let any rate limits or temporary issues resolve
@@ -288,11 +261,21 @@ def embed_chunks_with_failure_handling(
     failures: list[ConnectorFailure] = []
 
     for doc_id, chunks_for_doc in chunks_by_doc.items():
+        if wait_timeout is not None:
+            failures.append(_document_failure(doc_id, chunks_for_doc, wait_timeout))
+            continue
         try:
             doc_embedded_chunks = embedder.embed_chunks(
                 chunks=chunks_for_doc, tenant_id=tenant_id, request_id=request_id
             )
             embedded_chunks.extend(doc_embedded_chunks)
+        except EmbeddingWaitTimeoutError as e:
+            logger.error(
+                "Embedding rate limit wait timed out; failing the batch: %s", e
+            )
+            sentry_sdk.capture_exception(e)
+            wait_timeout = e
+            failures.append(_document_failure(doc_id, chunks_for_doc, e))
         except Exception as e:
             with sentry_sdk.new_scope() as scope:
                 scope.set_tag("stage", "embedding")
@@ -302,17 +285,19 @@ def embed_chunks_with_failure_handling(
                 scope.fingerprint = ["embedding-failure", type(e).__name__]
                 sentry_sdk.capture_exception(e)
             logger.exception("Failed to embed chunks for document '%s'", doc_id)
-            failures.append(
-                ConnectorFailure(
-                    failed_document=DocumentFailure(
-                        document_id=doc_id,
-                        document_link=(
-                            chunks_for_doc[0].get_link() if chunks_for_doc else None
-                        ),
-                    ),
-                    failure_message=str(e),
-                    exception=e,
-                )
-            )
+            failures.append(_document_failure(doc_id, chunks_for_doc, e))
 
     return embedded_chunks, failures
+
+
+def _document_failure(
+    doc_id: str, chunks_for_doc: list[DocAwareChunk], error: Exception
+) -> ConnectorFailure:
+    return ConnectorFailure(
+        failed_document=DocumentFailure(
+            document_id=doc_id,
+            document_link=chunks_for_doc[0].get_link() if chunks_for_doc else None,
+        ),
+        failure_message=str(error),
+        exception=error,
+    )

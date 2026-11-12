@@ -3,8 +3,12 @@ import collections.abc
 import concurrent.futures
 import contextvars
 import copy
+import heapq
+import itertools
 import threading
+import time
 import uuid
+from collections import deque
 from collections.abc import Callable, Coroutine, Iterator, MutableMapping, Sequence
 from concurrent.futures import (
     FIRST_COMPLETED,
@@ -13,6 +17,7 @@ from concurrent.futures import (
     as_completed,
     wait,
 )
+from contextlib import AbstractContextManager
 from typing import Any, Generic, Protocol, TypeVar, cast, overload
 
 from pydantic import GetCoreSchemaHandler
@@ -452,25 +457,59 @@ def run_async_sync_no_cancel(coro: Coroutine[Any, Any, T]) -> T:
         return future.result()
 
 
-def run_multiple_in_background(
-    funcs: list[Callable[[], None]],
-    thread_name_prefix: str = "worker",
-) -> ThreadPoolExecutor:
-    """Submit multiple callables to a ``ThreadPoolExecutor`` with context propagation.
+class _Cancelled:
+    """The result of a call that its cancellation signal stopped."""
 
-    Copies the current ``contextvars`` context once and runs every callable
-    inside that copy, which is important for preserving tenant IDs and other
-    context-local state across threads.
 
-    Returns the executor so the caller can ``shutdown()`` when done.
+def run_until_cancelled(
+    coro: Coroutine[Any, Any, T],
+    *,
+    is_cancelled: Callable[[], bool],
+    on_cancel: Callable[[Callable[[], None]], AbstractContextManager[None]],
+    cancellation_error: type[BaseException],
+) -> T:
+    """Run a coroutine on its own event loop and drain it on cancellation.
+
+    The caller supplies thread-safe cancellation callbacks and the exception to
+    raise. A completed result or error takes precedence over cancellation.
     """
-    ctx = contextvars.copy_context()
-    executor = ThreadPoolExecutor(
-        max_workers=len(funcs), thread_name_prefix=thread_name_prefix
-    )
-    for func in funcs:
-        executor.submit(ctx.run, func)
-    return executor
+    if is_cancelled():
+        coro.close()
+        raise cancellation_error()
+
+    async def until_cancelled() -> T | _Cancelled:
+        loop = asyncio.get_running_loop()
+        stopped = asyncio.Event()
+
+        async def run_if_active() -> T | _Cancelled:
+            if is_cancelled():
+                coro.close()
+                return _Cancelled()
+            return await coro
+
+        def stop_soon() -> None:
+            loop.call_soon_threadsafe(stopped.set)
+
+        with on_cancel(stop_soon):
+            work = asyncio.ensure_future(run_if_active())
+            stop = asyncio.ensure_future(stopped.wait())
+            await asyncio.wait({work, stop}, return_when=asyncio.FIRST_COMPLETED)
+            stop.cancel()
+        if work.done():
+            return work.result()
+        work.cancel()
+        try:
+            await work
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            logger.exception("Coroutine cleanup failed after cancellation")
+        return _Cancelled()
+
+    result = run_async_sync_no_cancel(until_cancelled())
+    if isinstance(result, _Cancelled):
+        raise cancellation_error()
+    return result
 
 
 def start_thread_with_context(
@@ -480,16 +519,15 @@ def start_thread_with_context(
     daemon: bool = False,
     args: tuple[Any, ...] = (),
     kwargs: dict[str, Any] | None = None,
+    context: contextvars.Context | None = None,
 ) -> threading.Thread:
-    """Spawn a fire-and-forget thread that inherits the caller's contextvars
-    (tenant id, request id, trace context). A raw ``threading.Thread`` starts
-    with an empty context, so tenant-scoped DB access inside the thread would
-    raise "Tenant ID is not set".
+    """Start a thread with an explicit context or a copy of the caller's context.
 
-    Unlike ``run_in_background`` / ``run_multiple_in_background``, this is for
-    daemon producer threads that are never joined.
+    Preserve tenant ID, request ID, and trace context across threads.
     """
-    ctx = contextvars.copy_context()
+    ctx: contextvars.Context = (
+        context if context is not None else contextvars.copy_context()
+    )
     thread = threading.Thread(
         target=lambda: ctx.run(target, *args, **(kwargs or {})),
         name=name,
@@ -497,6 +535,84 @@ def start_thread_with_context(
     )
     thread.start()
     return thread
+
+
+def start_thread_future[T](
+    operation: Callable[[], T], *, name: str, daemon: bool = True
+) -> Future[T]:
+    """Start independent work with the caller's context and an observable result."""
+    result: Future[T] = Future()
+    result.set_running_or_notify_cancel()
+
+    def run() -> None:
+        try:
+            value: T = operation()
+        except BaseException as error:
+            result.set_exception(error)
+        else:
+            result.set_result(value)
+
+    start_thread_with_context(run, name=name, daemon=daemon)
+    return result
+
+
+class _Timers:
+    """Callbacks due at a time, run on one daemon thread for the whole process."""
+
+    def __init__(self) -> None:
+        self._ready = threading.Condition()
+        # (due time, id) in due order; a cancelled id has no callback left.
+        self._due: list[tuple[float, int]] = []
+        self._callbacks: dict[int, Callable[[], None]] = {}
+        self._ids = itertools.count()
+        self._thread: threading.Thread | None = None
+
+    def call_later(
+        self, delay: float, callback: Callable[[], None]
+    ) -> Callable[[], None]:
+        """Run `callback` with the caller's context after `delay` seconds; returns
+        a function that cancels it.
+
+        All callbacks share one daemon thread, so a timer costs no thread of its
+        own. Use it for short callbacks such as a watchdog; they run one at a
+        time, and an exception is logged.
+        """
+        context = contextvars.copy_context()
+        with self._ready:
+            timer_id = next(self._ids)
+            self._callbacks[timer_id] = lambda: context.run(callback)
+            heapq.heappush(self._due, (time.monotonic() + delay, timer_id))
+            # A forked child has the parent's thread object, but not the thread.
+            if self._thread is None or not self._thread.is_alive():
+                self._thread = start_thread_with_context(
+                    self._run, name="call-later", daemon=True
+                )
+            self._ready.notify()
+
+        def cancel() -> None:
+            with self._ready:
+                self._callbacks.pop(timer_id, None)
+
+        return cancel
+
+    def _run(self) -> None:
+        while True:
+            with self._ready:
+                while not self._due or self._due[0][0] > time.monotonic():
+                    self._ready.wait(
+                        self._due[0][0] - time.monotonic() if self._due else None
+                    )
+                _, timer_id = heapq.heappop(self._due)
+                callback = self._callbacks.pop(timer_id, None)
+            if callback is None:
+                continue
+            try:
+                callback()
+            except Exception:
+                logger.exception("Scheduled callback failed")
+
+
+call_later = _Timers().call_later
 
 
 class TimeoutThread(threading.Thread, Generic[R]):
@@ -589,7 +705,11 @@ def parallel_yield(gens: list[Iterator[R]], max_workers: int = 10) -> Iterator[R
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_index: dict[Future[tuple[int, R | None]], int] = (  # ty: ignore[invalid-assignment]
             {
-                executor.submit(_next_or_none, ind, gen): ind
+                # The caller's context rides along, as in the rest of this
+                # module: the tenant id and the log prefix live in contextvars.
+                executor.submit(
+                    contextvars.copy_context().run, _next_or_none, ind, gen
+                ): ind
                 for ind, gen in enumerate(gens)
             }
         )
@@ -601,11 +721,40 @@ def parallel_yield(gens: list[Iterator[R]], max_workers: int = 10) -> Iterator[R
                 ind, result = future.result()
                 if result is not None:
                     yield result
-                    future_to_index[executor.submit(_next_or_none, ind, gens[ind])] = (
-                        next_ind  # ty: ignore[invalid-assignment]
-                    )
+                    future_to_index[
+                        executor.submit(
+                            contextvars.copy_context().run,
+                            _next_or_none,
+                            ind,
+                            gens[ind],
+                        )
+                    ] = next_ind  # ty: ignore[invalid-assignment]
                     next_ind += 1
                 del future_to_index[future]
+
+
+def drain(
+    items: Sequence[_T], listing: Callable[[_T], Iterator[R]], workers: int
+) -> Iterator[R]:
+    """Every item listed, ``workers`` at a time, each worker taking the next
+    item off a shared queue so a slow item holds back only its own worker."""
+    if workers <= 1 or len(items) <= 1:
+        for item in items:
+            yield from listing(item)
+        return
+    queue: deque[_T] = deque(items)
+
+    def worker() -> Iterator[R]:
+        while True:
+            try:
+                item = queue.popleft()
+            except IndexError:
+                return
+            yield from listing(item)
+
+    yield from parallel_yield(
+        [worker() for _ in range(min(workers, len(items)))], max_workers=workers
+    )
 
 
 def parallel_yield_from_funcs(

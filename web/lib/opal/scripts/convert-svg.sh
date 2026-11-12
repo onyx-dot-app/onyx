@@ -3,8 +3,9 @@
 # Convert an SVG file to a TypeScript React component.
 #
 # By default, converts to a colour-overridable icon (stroke colours stripped, replaced with currentColor).
-# With --illustration, converts to a fixed-colour illustration (all original colours preserved).
-# With --logo, converts to a fixed-colour logo (all original colours preserved, same as illustration).
+# With --illustration, keeps the original colours. By hand, swap them for theme tokens, drop per-path strokeWidth,
+# and set strokeWidth={illustrationStrokeWidth(size)} on the <svg> (src/illustrations/line-weight.ts).
+# With --logo, converts to a fixed-colour logo (all original colours preserved).
 #
 # Usage (from the opal package root — web/lib/opal/):
 #   ./scripts/convert-svg.sh src/icons/<filename.svg>

@@ -2,7 +2,7 @@ import React from "react";
 import { render, screen, act, fireEvent } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import { Formik, useFormikContext } from "formik";
-import { AgentDraftManager } from "@/views/AgentEditorPage";
+import { AgentDraftManager } from "@/views/AgentEditorPage/page";
 import { draftKey } from "@/hooks/useDraft";
 
 const KEY = draftKey("agent-editor", "new");

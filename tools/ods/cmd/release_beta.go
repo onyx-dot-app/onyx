@@ -64,7 +64,7 @@ Example usage:
 			if err != nil || tag == "" {
 				return err
 			}
-			announceDeploymentRun(tag)
+			announceDeploymentRun(defaultRunPolling(), tag)
 			return nil
 		},
 	}

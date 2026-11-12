@@ -27,7 +27,7 @@
 //   primitives / size / typography  top-level    path = ["radius-12"]
 //   semantic light                  under "light" path = ["light", "text-05"]
 //   semantic dark                   under "dark"  path = ["dark",  "text-05"]
-//   typography presets              under "text"  path = ["text", "heading-h1", "fontSize"]
+//   typography presets              under "text"  path = ["text", "heading-hero", "fontSize"]
 //   e.g. semantic-light.json: { "light": { "text-05": { "value": "{alpha-grey-100-90}", "type": "color" } } }
 //
 // PIPELINE:  read JSON  ->  name transform  ->  each format prints a file  ->  dist/
@@ -115,8 +115,8 @@ StyleDictionary.registerFormat({
 // FORMAT -> typography.css (web/Opal). Each preset under "text" becomes a Tailwind
 // v4 @utility, byte-equivalent to Opal's hand-authored blocks. Values keep their
 // `var()` refs (font families + height metrics) so they resolve from tokens.css.
-// e.g.  text.heading-h1.{fontSize:"48px", fontWeight:"600", ...}  ->
-//         @utility font-heading-h1 { font-size: 48px; font-weight: 600; ... }
+// e.g.  text.heading-hero.{fontSize:"32px", fontWeight:"500", ...}  ->
+//         @utility font-heading-hero { font-size: 32px; font-weight: 500; ... }
 const TYPO_PROP_ORDER = [
   ["fontFamily", "font-family"],
   ["fontSize", "font-size"],
@@ -226,12 +226,12 @@ StyleDictionary.registerFormat({
 // FORMAT -> nativewind-typography.cjs (mobile). The RN counterpart of web's
 // typography.css `@utility font-*` blocks: a `.font-<preset>` -> RN-text-style map
 // that mobile/tailwind.config.js registers as NativeWind utilities (via tailwindcss
-// `plugin` + addUtilities). This is what lets mobile write `font-heading-h1` exactly
+// `plugin` + addUtilities). This is what lets mobile write `font-heading-hero` exactly
 // like web. Values share js/native-vars' textPresets resolution (same numeric
-// magnitudes) but are serialized differently: CSS-ish px strings here (e.g. "48px")
+// magnitudes) but are serialized differently: CSS-ish px strings here (e.g. "32px")
 // vs bare RN-style numbers there — NativeWind parses these strings into RN text styles.
-// e.g.  text.heading-h1  ->  ".font-heading-h1": { fontFamily: "Hanken Grotesk",
-//         fontSize: "48px", fontWeight: "600", lineHeight: "64px", letterSpacing: "-0.48px" }
+// e.g.  text.heading-hero  ->  ".font-heading-hero": { fontFamily: "Hanken Grotesk",
+//         fontSize: "32px", fontWeight: "500", lineHeight: "48px", letterSpacing: "-0.32px" }
 StyleDictionary.registerFormat({
   name: "js/nativewind-typography",
   format: ({ dictionary }) => {
@@ -263,7 +263,7 @@ StyleDictionary.registerFormat({
 // as RN style objects. Uses resolved values (concrete hex/numbers) since RN has no
 // var(). varsLight = primitives + light semantics; varsDark = primitives + dark.
 // e.g.  varsLight["--text-05"] = "#000000e5"   varsDark["--text-05"] = "#fffffff2"
-//       textPresets["heading-h1"] = { fontFamily: "Hanken Grotesk", fontSize: 48, ... }
+//       textPresets["heading-hero"] = { fontFamily: "Hanken Grotesk", fontSize: 32, ... }
 StyleDictionary.registerFormat({
   name: "js/native-vars",
   format: ({ dictionary }) => {

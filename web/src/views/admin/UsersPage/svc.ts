@@ -122,7 +122,7 @@ export async function inviteUsers(emails: string[]): Promise<void> {
   } catch (err) {
     if (err instanceof DOMException && err.name === "TimeoutError") {
       throw new Error(
-        "The invite request timed out. The invites may still be processing — check the user list before retrying."
+        "The invite request timed out. The invites may still be processing. Check the user list before retrying."
       );
     }
     throw err;

@@ -1,5 +1,5 @@
 import type { IconProps } from "@opal/types";
-const SvgXenforo = ({ size, ...props }: IconProps) => (
+const SvgXenForo = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}
@@ -29,4 +29,4 @@ const SvgXenforo = ({ size, ...props }: IconProps) => (
     <path d="M27.06 28.3084H29.9922V38.9903H27.06V28.3084Z" fill="white" />
   </svg>
 );
-export default SvgXenforo;
+export default SvgXenForo;

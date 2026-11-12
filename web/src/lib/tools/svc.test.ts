@@ -1,65 +1,42 @@
-import {
-  getMCPUserOAuthNavigationUrl,
-  MCPUserOAuthStartResponse,
-  startMCPUserOAuth,
-} from "@/lib/tools/svc";
+import { updateToolUserPreferences } from "@/lib/tools/svc";
 
-describe("MCP OAuth start", () => {
-  afterEach(() => {
-    jest.restoreAllMocks();
+afterEach(() => jest.restoreAllMocks());
+
+test("saves the caller's default Chat preference through the member endpoint", async () => {
+  const fetchSpy = jest
+    .spyOn(global, "fetch")
+    .mockResolvedValue(
+      new Response(JSON.stringify({ enabled_in_chat: false }))
+    );
+  await expect(
+    updateToolUserPreferences(20, { enabled_in_chat: false })
+  ).resolves.toEqual({ enabled_in_chat: false });
+  expect(fetchSpy).toHaveBeenCalledWith("/api/tool/20/preferences", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled_in_chat: false }),
   });
-
-  test.each<{
-    name: string;
-    forceReauthentication: boolean;
-    response: MCPUserOAuthStartResponse;
-    expectedNavigation: string;
-  }>([
-    {
-      name: "opens provider authorization for a forced reconnect",
-      forceReauthentication: true,
-      response: {
-        status: "authorization_required",
-        server_id: 42,
-        authorization_url: "https://accounts.example.com/authorize",
-        redirect_url: "/app",
-      },
-      expectedNavigation: "https://accounts.example.com/authorize",
-    },
-    {
-      name: "returns internally when the existing grant is usable",
-      forceReauthentication: false,
-      response: {
-        status: "already_authenticated",
-        server_id: 42,
-        authorization_url: null,
-        redirect_url: "/app",
-      },
-      expectedNavigation: "/app",
-    },
-  ])(
-    "$name",
-    async ({ forceReauthentication, response, expectedNavigation }) => {
-      const fetchSpy = jest.spyOn(global, "fetch").mockResolvedValueOnce({
-        ok: true,
-        json: async () => response,
-      } as Response);
-
-      const result = await startMCPUserOAuth(42, "/app", {
-        forceReauthentication,
-      });
-
-      expect(fetchSpy).toHaveBeenCalledWith("/api/mcp/oauth/connect", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          server_id: 42,
-          return_path: "/app",
-          include_resource_param: true,
-          force_reauthentication: forceReauthentication,
-        }),
-      });
-      expect(getMCPUserOAuthNavigationUrl(result)).toBe(expectedNavigation);
-    }
-  );
 });
+
+test("preserves the backend's rejected-save detail", async () => {
+  jest.spyOn(global, "fetch").mockResolvedValue(
+    new Response(JSON.stringify({ detail: "Plugin is disabled" }), {
+      status: 403,
+    })
+  );
+  await expect(
+    updateToolUserPreferences(20, { enabled_in_chat: true })
+  ).rejects.toThrow("Plugin is disabled");
+});
+
+test.each([{}, { enabled_in_chat: "false" }, { enabled_in_chat: null }])(
+  "rejects malformed preference responses: %j",
+  async (body) => {
+    jest
+      .spyOn(global, "fetch")
+      .mockResolvedValue(new Response(JSON.stringify(body)));
+    await expect(
+      updateToolUserPreferences(20, { enabled_in_chat: false })
+    ).rejects.toThrow();
+  }
+);

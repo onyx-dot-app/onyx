@@ -64,6 +64,42 @@ def get_scoped_groups(
     return fetch_managed_group_ids(user, db_session)
 
 
+def get_visible_user_group_ids(user: User, db_session: Session) -> set[int] | None:
+    """The groups the user can see, as GET /manage/admin/user-group lists them.
+    None means every group (global READ_USER_GROUPS). A scoped manager sees the
+    groups they manage; anyone else sees none."""
+    if has_global_permission(user, Permission.READ_USER_GROUPS):
+        return None
+    if (
+        has_permission(user, Permission.MANAGE_USER_GROUPS)
+        is not PermissionAuthority.SCOPED
+    ):
+        return set()
+    return get_scoped_groups(user, db_session, Permission.MANAGE_USER_GROUPS)
+
+
+def scope_data_access_group_ids(
+    requested_group_ids: Collection[int],
+    current_group_ids: Collection[int],
+    visible_group_ids: Collection[int] | None,
+) -> set[int]:
+    """The data-access groups a request leaves on a pair. A caller who sees
+    only some groups (``visible_group_ids``; None: every group) cannot see,
+    add or remove the others: current groups the caller cannot see stay, and
+    adding one is refused."""
+    requested = set(requested_group_ids)
+    if visible_group_ids is None:
+        return requested
+    current = set(current_group_ids)
+    visible = set(visible_group_ids)
+    if hidden_added := requested - current - visible:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            f"You can't give data access to groups you can't see: {sorted(hidden_added)}",
+        )
+    return requested | (current - visible)
+
+
 def within_scope(
     user: User,
     db_session: Session,

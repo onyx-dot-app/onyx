@@ -26,6 +26,15 @@ class AccountType(str, PyEnum):
             AccountType.EXT_PERM_USER,
         )
 
+    def allows_password_login(self) -> bool:
+        """Whether this account type may sign in or reset with a password.
+
+        Service accounts authenticate only with their API key."""
+        return self.is_web_login() and self not in (
+            AccountType.SERVICE_ACCOUNT,
+            AccountType.ANONYMOUS,
+        )
+
 
 class GrantSource(str, PyEnum):
     """How a permission grant was created."""
@@ -107,6 +116,72 @@ class PermissionSyncStatus(str, PyEnum):
             self == PermissionSyncStatus.SUCCESS
             or self == PermissionSyncStatus.COMPLETED_WITH_ERRORS
         )
+
+
+class CCPairRunKind(str, PyEnum):
+    """A kind of run in a pair's run history."""
+
+    INDEXING = "indexing"
+    DOC_PERMISSION_SYNC = "doc_permission_sync"
+    GROUP_SYNC = "group_sync"
+    PRUNING = "pruning"
+    CHECKS = "checks"
+
+
+class CCPairRunStatusGroup(str, PyEnum):
+    """How the run history buckets the attempt statuses of every kind."""
+
+    RUNNING = "running"
+    # Queued, not started yet.
+    SCHEDULED = "scheduled"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    CANCELED = "canceled"
+
+
+class CCPairRunErrors(str, PyEnum):
+    """Runs by their document errors: some still open, all of them resolved,
+    or none at all."""
+
+    UNRESOLVED = "unresolved"
+    RESOLVED = "resolved"
+    NONE = "none"
+
+
+class IndexAttemptErrorResolvedReason(str, PyEnum):
+    """How an index attempt error closed."""
+
+    # A targeted re-index indexed the document.
+    RETRY = "retry"
+    # A later run indexed the document or closed the pair's entity errors
+    # clean, or a later run other than a Retry failed the document again.
+    LATER_RUN = "later_run"
+    # An admin resolved it. ``is_resolved`` stays false, since the poll cursor
+    # and Retry read it and still treat the error as open.
+    WITHOUT_RETRY = "without_retry"
+
+
+class IndexAttemptErrorOrder(str, PyEnum):
+    """How a pair's errors list orders its rows."""
+
+    # Newest first.
+    TIME = "time"
+    # Open, then resolved without retry, then closed by a run, a Retry or a
+    # legacy resolve, each newest first.
+    STATE = "state"
+
+
+class SyncEntityKind(str, PyEnum):
+    """What a permission sync failed to read: a user or a group."""
+
+    USER = "user"
+    GROUP = "group"
+
+
+class SyncAttemptErrorResolvedReason(str, PyEnum):
+    """How a sync attempt error closed."""
+
+    WITHOUT_RETRY = "without_retry"
 
 
 class PortAttemptStatus(str, PyEnum):
@@ -234,7 +309,8 @@ class IndexReclaimStatus(str, PyEnum):
     SOAKING: the old index stopped being read; waiting out the retention window.
     DELETING: deleting the old index's data (loops until count-verified empty).
     RECLAIMED: terminal success — the old index's data is gone; the PAST row is kept
-        (not deleted) as the durable record that this index was reclaimed.
+        (not deleted) as the durable record that this index was reclaimed. Some rows
+        hold a shorter value for it; see IndexReclaimStatusType.
     BLOCKED: parked after repeated failures; alerted, needs operator/cooldown revival.
     """
 
@@ -277,18 +353,56 @@ class ConnectorCredentialPairStatus(str, PyEnum):
         return self in self.active_statuses()
 
 
+class ConnectorManageRole(str, PyEnum):
+    """A group's role on a cc-pair it manages. Editors change and delete the
+    configuration; Operators schedule and monitor indexing."""
+
+    EDITOR = "editor"
+    OPERATOR = "operator"
+
+
 class AccessType(str, PyEnum):
     PUBLIC = "public"
     PRIVATE = "private"
     SYNC = "sync"
+    # Perm sync, narrowed to members of the connector's data-access groups.
+    SYNC_RESTRICTED = "sync_restricted"
+    # Only the credential owner reads the documents; takes no groups. Distinct
+    # from PRIVATE with no groups.
+    PERSONAL = "personal"
+
+    def is_perm_synced(self) -> bool:
+        return self in (AccessType.SYNC, AccessType.SYNC_RESTRICTED)
+
+    @classmethod
+    def perm_synced_types(cls) -> list["AccessType"]:
+        return [cls.SYNC, cls.SYNC_RESTRICTED]
+
+    @classmethod
+    def data_access_types(cls) -> list["AccessType"]:
+        """Types whose data-access groups decide who may read the documents."""
+        return [cls.PRIVATE, cls.SYNC_RESTRICTED]
 
 
 class EmbeddingPrecision(str, PyEnum):
-    # matches vespa tensor type
-    # only support float / bfloat16 for now, since there's not a
-    # good reason to specify anything else
+    """Unused. Kept only because old Alembic migrations import it."""
+
     BFLOAT16 = "bfloat16"
     FLOAT = "float"
+
+
+class VectorQuantization(str, PyEnum):
+    """Scalar quantization of the stored vectors in the OpenSearch index.
+
+    Fewer bits per dimension use less memory but lower recall. It is part of
+    the index mapping, so a change needs a reindex into a new index.
+    """
+
+    NONE = "none"
+    # 4x less vector memory.
+    SCALAR_7_BIT = "scalar_7_bit"
+    # 32x less vector memory. Needs OpenSearch 3.6 or later.
+    SCALAR_1_BIT = "scalar_1_bit"
 
 
 class UserFileStatus(str, PyEnum):
@@ -343,22 +457,6 @@ class SwitchoverType(str, PyEnum):
     REINDEX = "reindex"
     ACTIVE_ONLY = "active_only"
     INSTANT = "instant"
-
-
-class OpenSearchDocumentMigrationStatus(str, PyEnum):
-    """Status for Vespa to OpenSearch migration per document."""
-
-    PENDING = "pending"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    PERMANENTLY_FAILED = "permanently_failed"
-
-
-class OpenSearchTenantMigrationStatus(str, PyEnum):
-    """Status for tenant-level OpenSearch migration."""
-
-    PENDING = "pending"
-    COMPLETED = "completed"
 
 
 # Onyx Build Mode Enums
@@ -459,6 +557,7 @@ class ScheduledTaskErrorClass(str, PyEnum):
     TIMEOUT = "timeout"
     STUCK = "stuck"
     AGENT_EXCEPTION = "agent_exception"
+    AGENT_PERMISSION_REQUIRED = "agent_permission_required"
 
 
 class ScheduledTaskSkipReason(str, PyEnum):
@@ -506,6 +605,7 @@ class ExternalAppType(str, PyEnum):
     GITHUB = "GITHUB"
     HUBSPOT = "HUBSPOT"
     NOTION = "NOTION"
+    ZENDESK = "ZENDESK"
     CUSTOM = "CUSTOM"
 
     @property
@@ -516,7 +616,7 @@ class ExternalAppType(str, PyEnum):
         return self is not ExternalAppType.CUSTOM
 
 
-class EndpointPolicy(str, PyEnum):
+class ActionPolicy(str, PyEnum):
     """What the egress layer does with an outbound request once it has been
     matched to an action of a connected external app."""
 
@@ -528,10 +628,10 @@ class EndpointPolicy(str, PyEnum):
 # Strictness ordering: higher = stricter. When one request matches several
 # actions, the strictest policy governs (sort/`max` with this key); readers
 # of a persisted `actions` list rely on `actions[0]` being the strictest.
-POLICY_SEVERITY: dict[EndpointPolicy, int] = {
-    EndpointPolicy.ALWAYS: 0,
-    EndpointPolicy.ASK: 1,
-    EndpointPolicy.DENY: 2,
+POLICY_SEVERITY: dict[ActionPolicy, int] = {
+    ActionPolicy.ALWAYS: 0,
+    ActionPolicy.ASK: 1,
+    ActionPolicy.DENY: 2,
 }
 
 
@@ -616,6 +716,9 @@ class HierarchyNodeType(str, PyEnum):
     # Slack
     CHANNEL = "channel"
 
+    # Outlook
+    MAILBOX = "mailbox"
+
 
 class LLMModelFlowType(str, PyEnum):
     CHAT = "chat"
@@ -623,7 +726,10 @@ class LLMModelFlowType(str, PyEnum):
     CONTEXTUAL_RAG = "contextual_rag"
     REASONING = "reasoning"
     CHAT_NAMING = "chat_naming"
+    SEARCH_SELECTION = "search_selection"
+    DECISION = "decision"
     CRAFT = "craft"
+    IMAGE_GENERATION = "image_generation"
 
 
 class HookPoint(str, PyEnum):
@@ -868,6 +974,20 @@ class CapabilityCheckTrigger(str, PyEnum):
     INDEXING_ATTEMPT = "indexing_attempt"
     # Recorded from the blocking validation at doc-permission-sync run start.
     PERM_SYNC_ATTEMPT = "perm_sync_attempt"
+    # Recorded from the validation that applies an edit to an existing cc-pair.
+    CONNECTOR_CONFIG_UPDATE = "connector_config_update"
+    # The beat re-ran a pair's checks on its connector's check frequency.
+    SCHEDULED = "scheduled"
+
+
+class CapabilityCheckRunStatus(str, PyEnum):
+    """How one run in a pair's check history ended. FAILED means a required,
+    applicable check failed; other failures leave the run PASSED."""
+
+    RUNNING = "running"
+    PASSED = "passed"
+    FAILED = "failed"
+    FAILED_TO_RUN = "failed_to_run"
 
 
 class CapabilityReportRunStatus(str, PyEnum):
@@ -880,3 +1000,48 @@ class CapabilityReportRunStatus(str, PyEnum):
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED_TO_RUN = "failed_to_run"
+
+
+class SkillInstallationPolicy(str, PyEnum):
+    AVAILABLE = "AVAILABLE"
+    DEFAULT = "DEFAULT"
+    REQUIRED = "REQUIRED"
+
+
+class MarketplaceKind(str, PyEnum):
+    """Where a plugin comes from. A marketplace grants no access."""
+
+    # One "My uploads" for each user.
+    USER_UPLOADS = "user_uploads"
+    # One for each tenant. A plugin here is published to the organization.
+    ORGANIZATION_LIBRARY = "organization_library"
+
+
+class PluginInstallationPolicy(str, PyEnum):
+    """Install setting of a plugin, a group override or a marketplace default.
+    Writes refuse NOT_AVAILABLE until group install settings ship."""
+
+    REQUIRED = "REQUIRED"
+    DEFAULT = "DEFAULT"
+    AVAILABLE = "AVAILABLE"
+    NOT_AVAILABLE = "NOT_AVAILABLE"
+
+
+class ConnectorEventType(str, PyEnum):
+    """What an inbound connector event says happened to one document."""
+
+    UPSERT = "upsert"
+    DELETE = "delete"
+
+
+class ConnectorEventStatus(str, PyEnum):
+    """Lifecycle of one row in `connector_event_inbox`.
+
+    IN_PROGRESS means an index attempt has claimed the row. The next run of the
+    same pair settles it against that attempt's outcome.
+    """
+
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    FAILED = "failed"

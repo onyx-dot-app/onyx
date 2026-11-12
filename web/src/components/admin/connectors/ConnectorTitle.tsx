@@ -1,4 +1,5 @@
-import {
+import { NavLink } from "@opal/navigation";
+import type {
   ConfluenceConfig,
   Connector,
   GithubConfig,
@@ -6,11 +7,9 @@ import {
   JiraConfig,
   SlackConfig,
   ZulipConfig,
-} from "@/lib/connectors/connectors";
-import { getSourceMetadata } from "@/lib/sources";
+} from "@/lib/connectors/types";
+import { getSourceMetadata } from "@/lib/connectors/utils";
 import { useTranslations } from "next-intl";
-
-import Link from "next/link";
 
 interface ConnectorTitleProps {
   connector: Connector<any>;
@@ -124,12 +123,12 @@ export const ConnectorTitle = ({
   return (
     <div className="my-auto max-w-full">
       {isLink ? (
-        <Link
+        <NavLink
           className={mainSectionClassName}
           href={`/admin/connector/${ccPairId}`}
         >
           {mainDisplay}
-        </Link>
+        </NavLink>
       ) : (
         <div className={mainSectionClassName}>{mainDisplay}</div>
       )}

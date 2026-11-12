@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strconv"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/float64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/mapvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -38,34 +39,38 @@ type llmProviderResource struct {
 }
 
 type llmProviderResourceModel struct {
+	Groups                types.Set    `tfsdk:"groups"`
+	Agents                types.Set    `tfsdk:"agents"`
+	ModelConfigurations   types.Set    `tfsdk:"model_configurations"`
+	CustomConfig          types.Map    `tfsdk:"custom_config"`
+	CustomConfigWO        types.Map    `tfsdk:"custom_config_wo"`
 	ID                    types.String `tfsdk:"id"`
 	Name                  types.String `tfsdk:"name"`
 	ProviderType          types.String `tfsdk:"provider_type"`
 	APIKey                types.String `tfsdk:"api_key"`
 	APIKeyWO              types.String `tfsdk:"api_key_wo"`
-	APIKeyWOVersion       types.Int64  `tfsdk:"api_key_wo_version"`
 	APIBase               types.String `tfsdk:"api_base"`
 	APIVersion            types.String `tfsdk:"api_version"`
 	DeploymentName        types.String `tfsdk:"deployment_name"`
-	CustomConfig          types.Map    `tfsdk:"custom_config"`
-	CustomConfigWO        types.Map    `tfsdk:"custom_config_wo"`
+	APIKeyWOVersion       types.Int64  `tfsdk:"api_key_wo_version"`
 	CustomConfigWOVersion types.Int64  `tfsdk:"custom_config_wo_version"`
 	IsPublic              types.Bool   `tfsdk:"is_public"`
 	IsAutoMode            types.Bool   `tfsdk:"is_auto_mode"`
-	Groups                types.Set    `tfsdk:"groups"`
-	Agents                types.Set    `tfsdk:"agents"`
 	ForceDelete           types.Bool   `tfsdk:"force_delete"`
-	ModelConfigurations   types.Set    `tfsdk:"model_configurations"`
 }
 
 type modelConfigurationModel struct {
 	Name               types.String `tfsdk:"name"`
-	IsVisible          types.Bool   `tfsdk:"is_visible"`
-	MaxInputTokens     types.Int64  `tfsdk:"max_input_tokens"`
-	SupportsImageInput types.Bool   `tfsdk:"supports_image_input"`
-	SupportsReasoning  types.Bool   `tfsdk:"supports_reasoning"`
 	DisplayName        types.String `tfsdk:"display_name"`
 	CustomDisplayName  types.String `tfsdk:"custom_display_name"`
+	MaxInputTokens     types.Int64  `tfsdk:"max_input_tokens"`
+	IsVisible          types.Bool   `tfsdk:"is_visible"`
+	SupportsImageInput types.Bool   `tfsdk:"supports_image_input"`
+	SupportsReasoning  types.Bool   `tfsdk:"supports_reasoning"`
+
+	ReasoningEffortMax     types.String  `tfsdk:"reasoning_effort_max"`
+	ReasoningEffortDefault types.String  `tfsdk:"reasoning_effort_default"`
+	TemperatureDefault     types.Float64 `tfsdk:"temperature_default"`
 }
 
 var modelConfigurationAttrTypes = map[string]attr.Type{
@@ -76,7 +81,15 @@ var modelConfigurationAttrTypes = map[string]attr.Type{
 	"supports_reasoning":   types.BoolType,
 	"display_name":         types.StringType,
 	"custom_display_name":  types.StringType,
+
+	"reasoning_effort_max":     types.StringType,
+	"reasoning_effort_default": types.StringType,
+	"temperature_default":      types.Float64Type,
 }
+
+// reasoningEfforts mirrors USER_SELECTABLE_REASONING_EFFORTS
+// (backend/onyx/llm/models.py).
+var reasoningEfforts = []string{"off", "low", "medium", "high", "xhigh"}
 
 func (r *llmProviderResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_llm_provider"
@@ -198,7 +211,9 @@ func (r *llmProviderResource) Schema(_ context.Context, _ resource.SchemaRequest
 			"force_delete": schema.BoolAttribute{
 				Optional: true,
 				MarkdownDescription: "Allow destroying this provider even while it holds the deployment " +
-					"default model. Defaults to false, where such a destroy fails.",
+					"default model. Defaults to false, where such a destroy fails. It does not override " +
+					"the decision model: a provider that holds it cannot be destroyed until the decision " +
+					"model is cleared.",
 			},
 			"model_configurations": schema.SetNestedAttribute{
 				Required: true,
@@ -208,7 +223,7 @@ func (r *llmProviderResource) Schema(_ context.Context, _ resource.SchemaRequest
 					Attributes: map[string]schema.Attribute{
 						"name": schema.StringAttribute{
 							Required:            true,
-							MarkdownDescription: "Model name as known to the provider, e.g. `gpt-5-mini`.",
+							MarkdownDescription: "Model name as known to the provider, e.g. `gpt-6-luna`.",
 						},
 						"is_visible": schema.BoolAttribute{
 							Optional:            true,
@@ -235,6 +250,30 @@ func (r *llmProviderResource) Schema(_ context.Context, _ resource.SchemaRequest
 						"custom_display_name": schema.StringAttribute{
 							Optional:            true,
 							MarkdownDescription: "Admin-specified display-name override.",
+						},
+						"reasoning_effort_max": schema.StringAttribute{
+							Optional: true,
+							MarkdownDescription: "Highest reasoning effort users can select for this model: " +
+								"`off`, `low`, `medium`, `high`, or `xhigh`. Unset, Onyx keeps the stored value.",
+							Validators: []validator.String{
+								stringvalidator.OneOf(reasoningEfforts...),
+							},
+						},
+						"reasoning_effort_default": schema.StringAttribute{
+							Optional: true,
+							MarkdownDescription: "Reasoning effort for this model when the user does not select one. " +
+								"Must not be higher than `reasoning_effort_max`. Same values. Unset, Onyx keeps the stored value.",
+							Validators: []validator.String{
+								stringvalidator.OneOf(reasoningEfforts...),
+							},
+						},
+						"temperature_default": schema.Float64Attribute{
+							Optional: true,
+							MarkdownDescription: "Temperature for this model when the user does not set one, " +
+								"0 to 2. Unset, Onyx keeps the stored value.",
+							Validators: []validator.Float64{
+								float64validator.Between(0, 2),
+							},
 						},
 					},
 				},
@@ -298,6 +337,10 @@ func (r *llmProviderResource) buildUpsertRequest(ctx context.Context, plan llmPr
 			SupportsReasoning:  mc.SupportsReasoning.ValueBoolPointer(),
 			DisplayName:        mc.DisplayName.ValueStringPointer(),
 			CustomDisplayName:  mc.CustomDisplayName.ValueStringPointer(),
+
+			ReasoningEffortMax:     mc.ReasoningEffortMax.ValueStringPointer(),
+			ReasoningEffortDefault: mc.ReasoningEffortDefault.ValueStringPointer(),
+			TemperatureDefault:     mc.TemperatureDefault.ValueFloat64Pointer(),
 		})
 	}
 	return upsert
@@ -407,6 +450,16 @@ func (r *llmProviderResource) reconcileModelConfigurations(ctx context.Context, 
 		if remoteMC, exists := remoteNames[mc.Name.ValueString()]; exists {
 			mc.IsVisible = types.BoolValue(remoteMC.IsVisible)
 			mc.CustomDisplayName = types.StringPointerValue(remoteMC.CustomDisplayName)
+			// Null means unmanaged, so only refresh the values in configuration.
+			if !mc.ReasoningEffortMax.IsNull() {
+				mc.ReasoningEffortMax = types.StringPointerValue(remoteMC.ReasoningEffortMax)
+			}
+			if !mc.ReasoningEffortDefault.IsNull() {
+				mc.ReasoningEffortDefault = types.StringPointerValue(remoteMC.ReasoningEffortDefault)
+			}
+			if !mc.TemperatureDefault.IsNull() {
+				mc.TemperatureDefault = types.Float64PointerValue(remoteMC.TemperatureDefault)
+			}
 			result = append(result, mc)
 			seen[mc.Name.ValueString()] = true
 		}
@@ -423,6 +476,10 @@ func (r *llmProviderResource) reconcileModelConfigurations(ctx context.Context, 
 			SupportsReasoning:  types.BoolValue(mc.SupportsReasoning),
 			DisplayName:        types.StringPointerValue(mc.DisplayName),
 			CustomDisplayName:  types.StringPointerValue(mc.CustomDisplayName),
+
+			ReasoningEffortMax:     types.StringPointerValue(mc.ReasoningEffortMax),
+			ReasoningEffortDefault: types.StringPointerValue(mc.ReasoningEffortDefault),
+			TemperatureDefault:     types.Float64PointerValue(mc.TemperatureDefault),
 		})
 	}
 
@@ -521,7 +578,8 @@ func (r *llmProviderResource) Delete(ctx context.Context, req resource.DeleteReq
 		resp.Diagnostics.AddError(
 			"Failed to delete Onyx LLM provider",
 			err.Error()+"\n\nIf this provider holds the deployment default model, either repoint "+
-				"the default first or set force_delete = true.",
+				"the default first or set force_delete = true. If it holds the decision model, clear "+
+				"the decision model first: force_delete does not override it.",
 		)
 	}
 }

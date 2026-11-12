@@ -3,10 +3,11 @@ import { FetchToolPacket } from "@/app/app/services/streamingModels";
 import {
   MessageRenderer,
   RenderType,
-} from "@/app/app/message/messageComponents/interfaces";
+} from "@/app/app/message/messageComponents/types";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
-import { OnyxDocument } from "@/lib/search/interfaces";
-import { ValidSources } from "@/lib/types";
+import { OnyxDocument } from "@/lib/search/types";
+import { openExternalLink } from "@/lib/search/utils";
+import { ValidSources } from "@/lib/connectors/types/source";
 import { SearchChipList, SourceInfo } from "../search/SearchChipList";
 import { getMetadataTags } from "../search/searchStateUtils";
 import {
@@ -14,7 +15,7 @@ import {
   INITIAL_URLS_TO_SHOW,
   URLS_PER_EXPANSION,
 } from "./fetchStateUtils";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { SvgCircle } from "@opal/icons";
 
 const urlToSourceInfo = (url: string, index: number): SourceInfo => ({
@@ -86,9 +87,11 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
         timelineLayout: "content",
         content: (
           <div className="flex flex-col">
-            <Text as="p" text02 className="text-sm mb-1">
-              {t("fetch.reading.status")}
-            </Text>
+            <div className="mb-1">
+              <Text as="p" color="text-02">
+                {t("fetch.reading.status")}
+              </Text>
+            </div>
             {displayDocuments ? (
               <SearchChipList
                 items={documents}
@@ -97,7 +100,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
                 getKey={(doc: OnyxDocument) => doc.document_id}
                 toSourceInfo={(doc: OnyxDocument) => documentToSourceInfo(doc)}
                 onClick={(doc: OnyxDocument) => {
-                  if (doc.link) window.open(doc.link, "_blank");
+                  if (doc.link) openExternalLink(doc.link);
                 }}
                 emptyState={!stopPacketSeen ? <BlinkingBar /> : undefined}
               />
@@ -108,7 +111,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
                 expansionCount={URLS_PER_EXPANSION}
                 getKey={(url: string) => url}
                 toSourceInfo={urlToSourceInfo}
-                onClick={(url: string) => window.open(url, "_blank")}
+                onClick={(url: string) => openExternalLink(url)}
                 emptyState={!stopPacketSeen ? <BlinkingBar /> : undefined}
               />
             ) : (
@@ -136,7 +139,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
               getKey={(doc: OnyxDocument) => doc.document_id}
               toSourceInfo={(doc: OnyxDocument) => documentToSourceInfo(doc)}
               onClick={(doc: OnyxDocument) => {
-                if (doc.link) window.open(doc.link, "_blank");
+                if (doc.link) openExternalLink(doc.link);
               }}
               emptyState={!stopPacketSeen ? <BlinkingBar /> : undefined}
             />
@@ -147,7 +150,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
               expansionCount={URLS_PER_EXPANSION}
               getKey={(url: string) => url}
               toSourceInfo={urlToSourceInfo}
-              onClick={(url: string) => window.open(url, "_blank")}
+              onClick={(url: string) => openExternalLink(url)}
               emptyState={!stopPacketSeen ? <BlinkingBar /> : undefined}
             />
           ) : (

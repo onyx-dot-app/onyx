@@ -1,6 +1,6 @@
 import type { IconProps } from "@opal/types";
 
-const SvgAws = ({ size, ...props }: IconProps) => (
+const SvgAWS = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}
@@ -29,4 +29,4 @@ const SvgAws = ({ size, ...props }: IconProps) => (
   </svg>
 );
 
-export default SvgAws;
+export default SvgAWS;

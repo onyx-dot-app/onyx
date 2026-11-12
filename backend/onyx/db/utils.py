@@ -1,9 +1,10 @@
 from enum import Enum
 from typing import Any, Final, TypeGuard, TypeVar
 
+from asyncpg.exceptions import CheckViolationError as AsyncpgCheckViolationError
 from psycopg2 import OperationalError, errorcodes
-from psycopg2.errors import ForeignKeyViolation, UniqueViolation
-from pydantic import BaseModel
+from psycopg2.errors import CheckViolation, ForeignKeyViolation, UniqueViolation
+from pydantic import BaseModel, Field
 from sqlalchemy import inspect
 from sqlalchemy.exc import IntegrityError
 
@@ -58,6 +59,18 @@ def is_unique_violation(exc: IntegrityError, constraint: str) -> bool:
     )
 
 
+def is_check_violation(exc: IntegrityError, constraint: str) -> bool:
+    """True when a database write violates the named check constraint."""
+    if isinstance(exc.orig, CheckViolation):
+        return exc.orig.diag.constraint_name == constraint
+    # SQLAlchemy wraps asyncpg errors and retains the driver error as the cause.
+    cause = exc.orig.__cause__ if exc.orig is not None else None
+    return (
+        isinstance(cause, AsyncpgCheckViolationError)
+        and cause.as_dict().get("constraint_name") == constraint
+    )
+
+
 def is_fk_violation(exc: IntegrityError) -> bool:
     """True iff the IntegrityError is a foreign-key violation."""
     return isinstance(exc.orig, ForeignKeyViolation)
@@ -96,6 +109,7 @@ class DocumentRow(BaseModel):
     id: str
     doc_metadata: dict[str, Any]
     external_user_group_ids: list[str]
+    external_user_emails: list[str] = Field(default_factory=list)
 
 
 class SortOrder(str, Enum):

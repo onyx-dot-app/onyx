@@ -1,34 +1,30 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
+import { IconLoader } from "@opal/loaders";
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Table, Button, Divider } from "@opal/components";
-import { IllustrationContent, toast } from "@opal/layouts";
-import { SvgUsers, SvgSimpleLoader } from "@opal/icons";
+import { IllustrationContent, toast, Section } from "@opal/layouts";
+import { SvgUsers } from "@opal/icons";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { SettingsLayouts } from "@opal/layouts";
-import { Section } from "@/layouts/general-layouts";
-import { InputTypeIn } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
+import { InputTypeIn, Text } from "@opal/components";
 import useGroupMemberCandidates from "./useGroupMemberCandidates";
 import {
   createGroup,
   updateAgentGroupSharing,
   updateDocSetGroupSharing,
-  saveTokenLimits,
   saveGroupPermissions,
 } from "./svc";
 import { makeMemberTableColumns, PAGE_SIZE } from "./shared";
 import SharedGroupResources from "@/views/admin/GroupsPage/SharedGroupResources";
 import GroupPermissionsSection from "./GroupPermissionsSection";
-import TokenLimitSection from "./TokenLimitSection";
-import type { TokenLimit } from "./TokenLimitSection";
 import { useUser } from "@/providers/UserProvider";
 
 function CreateGroupPage() {
   const t = useTranslations("admin.groups");
-  const router = useRouter();
+  const navigation = useNavigation();
   const [groupName, setGroupName] = useState("");
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -39,15 +35,6 @@ function CreateGroupPage() {
   const [enabledPermissions, setEnabledPermissions] = useState<Set<string>>(
     new Set()
   );
-  const [tokenLimits, setTokenLimits] = useState<TokenLimit[]>([
-    {
-      tokenId: null,
-      enabled: true,
-      tokenBudget: null,
-      periodDays: null,
-      costBudgetDollars: null,
-    },
-  ]);
 
   const { isAdmin } = useUser();
   const { rows: allRows, isLoading, error } = useGroupMemberCandidates();
@@ -81,9 +68,8 @@ function CreateGroupPage() {
       }
       await updateAgentGroupSharing(groupId, [], selectedAgentIds);
       await updateDocSetGroupSharing(groupId, [], selectedDocSetIds);
-      await saveTokenLimits(groupId, tokenLimits, []);
       toast.success(t("create.toasts.created", { name: trimmed }));
-      router.push("/admin/groups");
+      navigation.go("/admin/groups");
     } catch (e) {
       toast.error(
         e instanceof Error ? e.message : t("create.toasts.createFailed")
@@ -93,22 +79,15 @@ function CreateGroupPage() {
     }
   }
 
-  const headerActions = (
-    <Section flexDirection="row" gap={2} width="auto" height="auto">
-      <Button
-        prominence="secondary"
-        onClick={() => router.push("/admin/groups")}
-      >
-        {t("form.cancel.label")}
-      </Button>
-      <Button
-        onClick={handleCreate}
-        disabled={!groupName.trim() || isSubmitting}
-      >
-        {t("create.submit.label")}
-      </Button>
-    </Section>
-  );
+  const headerActions = [
+    <Button
+      key="submit"
+      onClick={handleCreate}
+      disabled={!groupName.trim() || isSubmitting}
+    >
+      {t("create.submit.label")}
+    </Button>,
+  ];
 
   return (
     <SettingsLayouts.Root>
@@ -116,7 +95,8 @@ function CreateGroupPage() {
         icon={SvgUsers}
         title={t("create.header.title")}
         divider
-        rightChildren={headerActions}
+        cancel={() => navigation.go("/admin/groups")}
+        actions={headerActions}
       />
 
       <SettingsLayouts.Body>
@@ -127,7 +107,7 @@ function CreateGroupPage() {
           alignItems="stretch"
           justifyContent="start"
         >
-          <Text mainUiBody text04>
+          <Text font="main-ui-body" color="text-04">
             {t("form.name.label")}
           </Text>
           <InputTypeIn
@@ -140,10 +120,10 @@ function CreateGroupPage() {
         <Divider paddingParallel={0} paddingPerpendicular={0} />
 
         {/* Members table */}
-        {isLoading && <SvgSimpleLoader />}
+        {isLoading && <IconLoader />}
 
         {error ? (
-          <Text as="p" secondaryBody text03>
+          <Text as="p" font="secondary-body" color="text-03">
             {t("members.loadError.text")}
           </Text>
         ) : null}
@@ -159,16 +139,16 @@ function CreateGroupPage() {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder={t("members.searchUsers.placeholder")}
-              searchIcon
+              icon="search"
             />
             <Table
-              data={allRows}
+              items={allRows}
               columns={memberColumns}
               getRowId={(row) => row.id ?? row.email}
               pageSize={PAGE_SIZE}
-              searchTerm={searchTerm}
+              query={searchTerm}
               selectionBehavior="multi-select"
-              onSelectionChange={setSelectedUserIds}
+              onSelectionChange={(values) => setSelectedUserIds([...values])}
               footer={{}}
               emptyState={
                 <IllustrationContent
@@ -194,11 +174,6 @@ function CreateGroupPage() {
           onDocSetIdsChange={setSelectedDocSetIds}
           selectedAgentIds={selectedAgentIds}
           onAgentIdsChange={setSelectedAgentIds}
-        />
-
-        <TokenLimitSection
-          limits={tokenLimits}
-          onLimitsChange={setTokenLimits}
         />
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>

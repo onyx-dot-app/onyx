@@ -40,10 +40,11 @@ interface UploadFile {
  */
 async function uploadFilesToChat(
   page: Page,
-  files: UploadFile[]
+  files: UploadFile[],
+  getStatus: () => string = () => "COMPLETED"
 ): Promise<void> {
-  // Report every tracked file as COMPLETED so the chat input treats uploads
-  // as ready. The send button is disabled while a file is still processing,
+  // Report every tracked file as COMPLETED (by default) so the chat input
+  // treats uploads as ready. The send button is disabled while a file is still processing,
   // and a file that fails to index is dropped from the message — so without
   // this stub these tests would race (or depend on) the real indexing
   // pipeline. UI rendering is what's under test here, not indexing.
@@ -57,7 +58,7 @@ async function uploadFilesToChat(
       body: JSON.stringify(
         ids.map((id) => ({
           id,
-          status: "COMPLETED",
+          status: getStatus(),
           token_count: 1,
           chunk_count: 1,
         }))
@@ -89,6 +90,16 @@ async function uploadFilesToChat(
       : inputWrapper.getByText(file.name);
     await expect(card.first()).toBeVisible({ timeout: 10000 });
   }
+}
+
+async function serveImage(page: Page, fileId: string): Promise<void> {
+  await page.route(`**/api/chat/file/${fileId}`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "image/png",
+      body: CHECKERED_PNG,
+    });
+  });
 }
 
 test.describe("Chat File Uploads", () => {
@@ -184,6 +195,44 @@ test.describe("Chat File Uploads", () => {
     });
   });
 
+  test.describe("File Processing State", () => {
+    test("file chip shows processing and blocks send until the file is ready", async ({
+      page,
+    }) => {
+      await chat.goto();
+      await mockChatEndpoint(page, buildMockStream(SHORT_AI_RESPONSE));
+
+      let fileStatus = "PROCESSING";
+      const fileName = "notes-processing.txt";
+      await uploadFilesToChat(
+        page,
+        [
+          {
+            name: fileName,
+            mimeType: "text/plain",
+            buffer: Buffer.from("Notes that are still processing.", "utf-8"),
+          },
+        ],
+        () => fileStatus
+      );
+
+      const { inputBar } = chat;
+      await inputBar.expectFileProcessing();
+
+      await inputBar.fill("Summarize this file");
+      await expect(inputBar.sendButton).toBeDisabled();
+      await inputBar.send();
+      await chat.expectNoHumanMessages();
+      await inputBar.expectText("Summarize this file");
+
+      fileStatus = "COMPLETED";
+      await inputBar.expectFileProcessing(false);
+      await expect(inputBar.sendButton).toBeEnabled();
+      await inputBar.send();
+      await chat.expectHumanMessage("Summarize this file");
+    });
+  });
+
   test.describe("LLM-Generated Images", () => {
     test("AI response with generated image renders correctly", async ({
       page,
@@ -191,14 +240,7 @@ test.describe("Chat File Uploads", () => {
       await chat.goto();
 
       const fileId = "00000000-0000-0000-0000-00000000aaaa";
-
-      await page.route(`**/api/chat/file/${fileId}`, async (route) => {
-        await route.fulfill({
-          status: 200,
-          contentType: "image/png",
-          body: CHECKERED_PNG,
-        });
-      });
+      await serveImage(page, fileId);
 
       await mockChatEndpoint(
         page,
@@ -214,8 +256,8 @@ test.describe("Chat File Uploads", () => {
         "Generate an image of a friendly cartoon onyx stone"
       );
 
-      const aiMessage = page.getByTestId("onyx-ai-message").first();
-      const generatedImage = aiMessage.locator('img[alt="Chat attachment"]');
+      const aiMessage = chat.aiMessage();
+      const generatedImage = chat.generatedImages();
       await expect(generatedImage).toBeVisible({ timeout: 10000 });
       await expect(generatedImage).toHaveAttribute(
         "src",
@@ -224,6 +266,42 @@ test.describe("Chat File Uploads", () => {
       await expect(aiMessage).toContainText(IMAGE_GEN_AI_MESSAGE);
 
       await chat.screenshotContainer("chat-llm-generated-image");
+    });
+
+    test("an image from an earlier step leads the answer once", async ({
+      page,
+    }) => {
+      await chat.goto();
+      const fileId = "00000000-0000-0000-0000-00000000bbbb";
+      await serveImage(page, fileId);
+      await mockChatEndpoint(
+        page,
+        buildMockImageGenStream({
+          fileId,
+          revisedPrompt: "An onyx stone on a desk",
+          message: IMAGE_GEN_AI_MESSAGE,
+          searchAfterImage: true,
+        })
+      );
+
+      await sendMessage(page, "Draw an onyx stone, then search for onyx");
+
+      const images = chat.generatedImages();
+      await expect(images).toHaveCount(1, { timeout: 10000 });
+      await expect(images.first()).toBeVisible();
+      const answerText = chat.answerText(IMAGE_GEN_AI_MESSAGE);
+      await expect(answerText).toBeVisible();
+
+      await expect
+        .poll(async () => {
+          const imageBox = await images.first().boundingBox();
+          const textBox = await answerText.boundingBox();
+          return (
+            imageBox !== null && textBox !== null && imageBox.y < textBox.y
+          );
+        })
+        .toBe(true);
+      await chat.screenshotContainer("chat-image-before-later-tools");
     });
   });
 

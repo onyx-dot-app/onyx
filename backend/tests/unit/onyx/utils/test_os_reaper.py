@@ -152,6 +152,69 @@ finally:
 )
 
 
+_MID_RUN_HARNESS = (
+    _CLEANUP
+    + """
+import os
+import time
+
+from onyx.utils.os_reaper import (
+    _live_child_pids,
+    become_child_subreaper,
+    reap_zombie_children,
+)
+
+try:
+    assert become_child_subreaper()
+
+    # a running direct child (think: the live Playwright driver) must survive
+    running_pid = os.fork()
+    if running_pid == 0:
+        time.sleep(60)
+        os._exit(0)
+
+    # orphan a grandchild that exits (think: a Chromium helper after teardown)
+    child_pid = os.fork()
+    if child_pid == 0:
+        grandchild_pid = os.fork()
+        if grandchild_pid == 0:
+            time.sleep(0.2)
+            os._exit(0)
+        os._exit(0)
+    os.waitpid(child_pid, 0)
+
+    deadline = time.monotonic() + 10
+    reaped = 0
+    while reaped == 0 and time.monotonic() < deadline:
+        reaped = reap_zombie_children()
+        time.sleep(0.05)
+
+    assert reaped == 1, f"expected to reap exactly the zombie orphan, got {reaped}"
+    assert _live_child_pids() == [running_pid], "the running child must be untouched"
+    print("ok")
+finally:
+    _kill_live_children()
+"""
+)
+
+_NOT_SUBREAPER_HARNESS = """
+import os
+import time
+
+from onyx.utils.os_reaper import reap_zombie_children
+
+child_pid = os.fork()
+if child_pid == 0:
+    os._exit(0)
+time.sleep(0.2)  # let it zombify
+
+# without the subreaper flag we don't own the drain — leave it to the waiter
+assert reap_zombie_children() == 0
+assert os.waitpid(child_pid, os.WNOHANG)[0] == child_pid, "zombie must still be ours to wait"
+print("ok")
+"""
+
+
 def _run_harness(code: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, "-c", code],
@@ -190,6 +253,24 @@ def test_sigterm_cancellation_drains_running_orphan() -> None:
     # the drain must have killed the orphan — not left it running for PID 1
     with pytest.raises(OSError):
         os.kill(orphan_pid, 0)
+
+
+@pytest.mark.skipif(
+    sys.platform != "linux", reason="prctl/waitpid semantics are Linux-only"
+)
+def test_mid_run_reap_drains_zombies_but_spares_running_children() -> None:
+    result = _run_harness(_MID_RUN_HARNESS)
+    assert result.returncode == 0, result.stderr
+    assert "ok" in result.stdout
+
+
+@pytest.mark.skipif(
+    sys.platform != "linux", reason="prctl/waitpid semantics are Linux-only"
+)
+def test_mid_run_reap_is_noop_outside_subreaper() -> None:
+    result = _run_harness(_NOT_SUBREAPER_HARNESS)
+    assert result.returncode == 0, result.stderr
+    assert "ok" in result.stdout
 
 
 def test_reap_exited_children_noop_without_children() -> None:

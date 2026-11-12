@@ -28,7 +28,10 @@ class _FakeGraphClient(GraphApiClient):
         self._fake_get_json = get_json
 
     def get_json(
-        self, url: str, params: dict[str, str] | None = None
+        self,
+        url: str,
+        params: dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,  # noqa: ARG002
     ) -> dict[str, Any]:
         return self._fake_get_json(url, params)
 

@@ -1,0 +1,103 @@
+name: Craft Runtime Image
+
+on:
+  pull_request:
+    paths:
+      - "deployment/craft-runtime/**"
+      - "deployment/craft-fc/**"
+      - "microvm/**"
+      - "backend/onyx/server/features/build/sandbox/image/install-browser.sh"
+      - ".github/scripts/audit-sandbox-browser.sh"
+      - "backend/onyx/server/features/build/sandbox/image/templates/pptx/**"
+      - ".github/workflows/craft-runtime.yml"
+      - ".github/workflows/craft-runtime-release.yml"
+  push:
+    branches: [main]
+    paths:
+      - "deployment/craft-runtime/**"
+      - "deployment/craft-fc/**"
+      - "microvm/**"
+      - "backend/onyx/server/features/build/sandbox/image/install-browser.sh"
+      - ".github/scripts/audit-sandbox-browser.sh"
+      - "backend/onyx/server/features/build/sandbox/image/templates/pptx/**"
+      - ".github/workflows/craft-runtime.yml"
+      - ".github/workflows/craft-runtime-release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: Craft-Runtime-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    runs-on:
+      - runs-on
+      - runner=8cpu-linux-x64
+      - family=m8i.2xlarge
+      - ram=32
+      - nested-virt=true
+      - spot=false
+      - volume=80gb
+      - run-id=${{ github.run_id }}-craft-runtime
+      - extras=ecr-cache
+    timeout-minutes: 45
+    steps:
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/login-ecr-pullthrough-cache
+        with:
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
+      - name: Build runtime
+        uses: docker/bake-action@d3418bd7d0e9324001bca92fa8ba175ea7e6dc9b
+        env:
+          IMAGE_VERSION: ${{ github.sha }}
+          TAG: ci
+        with:
+          source: .
+          files: deployment/craft-runtime/docker-bake.hcl
+          targets: runtime
+          load: true
+          set: |
+            runtime.cache-from=type=gha,scope=craft-runtime
+            runtime.cache-to=type=gha,scope=craft-runtime,mode=max
+      - name: Audit browser
+        run: bash .github/scripts/audit-sandbox-browser.sh onyxdotapp/craft-runtime:ci
+      - name: Check runtime offline
+        run: |
+          docker run --rm --network none --shm-size=256m \
+            --security-opt seccomp=unconfined \
+            onyxdotapp/craft-runtime:ci /opt/onyx/check-runtime
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # ratchet:actions/setup-go@v5
+        with:
+          go-version-file: microvm/go.mod
+          cache: false
+      - name: Check interrupted command diagnostics
+        working-directory: microvm
+        run: go test -tags kvm -run '^TestCollectKeepsPartialOutput$' ./internal/guestd/kvmtest
+      - name: Install rootfs build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends e2fsprogs file openssl python3
+      - name: Build pinned Firecracker test artifacts
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+        with:
+          context: deployment/craft-fc
+          file: deployment/craft-fc/Dockerfile.artifacts
+          target: artifacts
+          platforms: linux/amd64
+          build-args: |
+            BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
+          outputs: type=local,dest=${{ runner.temp }}/craft-runtime-artifacts
+      - name: Check runtime in Firecracker KVM
+        run: |
+          sudo modprobe kvm_intel
+          sudo env "PATH=$PATH" "BASE_IMAGE_REGISTRY=${BASE_IMAGE_REGISTRY}" \
+            "DOCKER_CONFIG=${DOCKER_CONFIG:-$HOME/.docker}" \
+            bash deployment/craft-runtime/check-kvm.sh onyxdotapp/craft-runtime:ci \
+              "${RUNNER_TEMP}/craft-runtime-artifacts/craft-fc"

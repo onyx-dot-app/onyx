@@ -10,7 +10,11 @@ import httpx
 from fastmcp.server.auth.auth import AccessToken
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
-from onyx.configs.app_configs import MCP_SERVER_API_REQUEST_TIMEOUT_SECONDS
+from onyx.configs.app_configs import (
+    MCP_SERVER_API_REQUEST_TIMEOUT_SECONDS,
+    MCP_SERVER_SEARCH_RETRIEVAL_ONLY,
+    OPEN_URLS_MAX_URLS_PER_REQUEST,
+)
 from onyx.configs.constants import DocumentSource
 from onyx.mcp_server.api import mcp_server
 from onyx.mcp_server.utils import (
@@ -22,6 +26,7 @@ from onyx.mcp_server.utils import (
     require_access_token,
 )
 from onyx.server.features.search.models import (
+    RawSearchRequest,
     SearchRequest,
     SearchResponse,
     SearchResult,
@@ -277,6 +282,7 @@ async def search_indexed_documents(
     time_cutoff: str | None = None,
     skip_query_expansion: bool = False,
     agent: str | None = None,
+    retrieval_only: bool = False,
 ) -> dict[str, Any]:
     """
     Search the user's knowledge base indexed in Onyx.
@@ -305,12 +311,18 @@ async def search_indexed_documents(
     `agent` and `document_set_names` are mutually exclusive: explicit document
     sets replace an agent's knowledge scope rather than narrowing it, so passing
     both is rejected.
+    `retrieval_only` skips every LLM step (query expansion, filter detection,
+    federated Slack search and document selection) and returns up to 10
+    sections in retrieval order, each with up to 5 chunks of surrounding
+    context on each side. Use it when you rank results yourself: it is faster and has no LLM
+    cost. The server can force it on.
 
     Returns ``{"results": [{title, url, source_type, content, updated_at},
     ...]}``. Results are ordered by LLM-judged relevance. ``content`` is the
     full chunk of the document the LLM selected; in the rare case the LLM
     selection step yields no full chunk for a doc, it falls back to the
-    short search blurb.
+    short search blurb. With `retrieval_only`, results keep retrieval order
+    and ``content`` is the retrieved section and its surrounding chunks.
 
     Example usage:
     ```
@@ -332,12 +344,14 @@ async def search_indexed_documents(
     """
     _start = time.monotonic()
     tool = MCPServerToolName.SEARCH_INDEXED_DOCUMENTS
+    use_retrieval_only = retrieval_only or MCP_SERVER_SEARCH_RETRIEVAL_ONLY
     logger.info(
-        "Onyx MCP Server: document search: query='%s', sources=%s, document_sets=%s, agent=%s",
+        "Onyx MCP Server: document search: query='%s', sources=%s, document_sets=%s, agent=%s, retrieval_only=%s",
         query,
         source_types,
         document_set_names,
         agent,
+        use_retrieval_only,
     )
 
     _record_requested_sources(source_types)
@@ -383,15 +397,27 @@ async def search_indexed_documents(
             )
             parsed_cutoff = None
 
-        request = SearchRequest(
-            query=query,
-            sources=filters.source_types,
-            document_sets=document_set_names,
-            time_cutoff=parsed_cutoff,
-            skip_query_expansion=skip_query_expansion,
-            persona_id=filters.persona_id,
-        )
-        endpoint = f"{build_api_server_url_for_http_requests(respect_env_override_if_set=True)}/search"
+        request: SearchRequest | RawSearchRequest
+        if use_retrieval_only:
+            route = "/search/raw"
+            request = RawSearchRequest(
+                query=query,
+                sources=filters.source_types,
+                document_sets=document_set_names,
+                time_cutoff=parsed_cutoff,
+                persona_id=filters.persona_id,
+            )
+        else:
+            route = "/search"
+            request = SearchRequest(
+                query=query,
+                sources=filters.source_types,
+                document_sets=document_set_names,
+                time_cutoff=parsed_cutoff,
+                skip_query_expansion=skip_query_expansion,
+                persona_id=filters.persona_id,
+            )
+        endpoint = f"{build_api_server_url_for_http_requests(respect_env_override_if_set=True)}{route}"
         response = await _post_model(endpoint, request, access_token)
         if not response.is_success:
             return _error_payload(_extract_error_detail(response))
@@ -485,6 +511,7 @@ async def open_urls(
     Useful for following up on web search results when snippets do not provide enough information.
 
     Returns the full text content of each URL along with metadata like title and content type.
+    Accepts a limited number of URLs per call (20 by default).
 
     Example usage:
     ```
@@ -501,6 +528,11 @@ async def open_urls(
     outcome = MCPToolCallStatus.ERROR
 
     try:
+        if len(urls) > OPEN_URLS_MAX_URLS_PER_REQUEST:
+            return _error_payload(
+                f"Too many URLs ({len(urls)}); pass at most "
+                f"{OPEN_URLS_MAX_URLS_PER_REQUEST} per call."
+            )
         response = await _post_model(
             f"{build_api_server_url_for_http_requests(respect_env_override_if_set=True)}/web-search/open-urls",
             OpenUrlsToolRequest(urls=urls),

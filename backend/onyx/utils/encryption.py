@@ -2,7 +2,7 @@ from typing import Any
 from urllib.parse import urlparse, urlunparse
 
 from onyx.configs.app_configs import ENCRYPTION_KEY_SECRET
-from onyx.configs.constants import MASK_CREDENTIAL_CHAR, MASK_CREDENTIAL_LONG_RE
+from onyx.configs.constants import MASK_CREDENTIAL_LONG_RE, MASK_CREDENTIAL_SHORT
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_AUTHENTICATION_METHOD,
 )
@@ -39,7 +39,7 @@ def mask_string(sensitive_str: str) -> str:
     min_masked_chars = 6
 
     if len(sensitive_str) < visible_start + visible_end + min_masked_chars:
-        return "••••••••••••"
+        return MASK_CREDENTIAL_SHORT
 
     return f"{sensitive_str[:visible_start]}...{sensitive_str[-visible_end:]}"
 
@@ -107,7 +107,8 @@ def is_masked_credential(value: str) -> bool:
     - Short strings (< 14 chars): "••••••••••••" (U+2022 BULLET)
     - Long strings (>= 14 chars): "abcd...wxyz" (first4 + "..." + last4)
     """
-    return MASK_CREDENTIAL_CHAR in value or bool(MASK_CREDENTIAL_LONG_RE.match(value))
+    # The whole placeholder, not any bullet: a real secret may contain one.
+    return value == MASK_CREDENTIAL_SHORT or bool(MASK_CREDENTIAL_LONG_RE.match(value))
 
 
 def reject_masked_credentials(credentials: dict[str, Any]) -> None:
@@ -151,6 +152,20 @@ MASK_CREDENTIALS_WHITELIST = {
     "wiki_base",
     "cloud_name",
     "cloud_id",
+    # Where an account works (its realm): not secrets, and the add-connector
+    # form compares them with the realm typed above the saved accounts.
+    "github_base_url",
+    "gitlab_url",
+    "bookstack_base_url",
+    "outline_base_url",
+    "gong_base_url",
+    "loopio_subdomain",
+    "zendesk_subdomain",
+    "base_url",
+    "freshdesk_domain",
+    "domain",
+    "highspot_url",
+    "testrail_base_url",
     # OAuth scope lists are public identifiers, not secrets, and masked list
     # items cannot round-trip through a chip editor.
     "scopes",

@@ -25,14 +25,14 @@ function option(overrides: Partial<ModelOption> = {}): ModelOption {
   return {
     modelConfigurationId: 1,
     modelProvider: "OpenAI Prod",
-    modelVersion: "gpt-5",
+    modelVersion: "gpt-6-sol",
     providerDisplayName: "OpenAI Prod",
-    displayName: "GPT-5",
+    displayName: "GPT-6 Sol",
     ...overrides,
   };
 }
 
-const gpt5 = option();
+const luna = option();
 const claude = option({
   modelConfigurationId: 2,
   modelProvider: "Anthropic Prod",
@@ -43,8 +43,8 @@ const claude = option({
 
 function renderSelector(overrides: Partial<ComposerTools> = {}) {
   const value: ComposerTools = makeComposerTools({
-    modelOptions: [gpt5, claude],
-    effectiveModel: gpt5,
+    modelOptions: [luna, claude],
+    effectiveModel: luna,
     ...overrides,
   });
   render(
@@ -60,12 +60,12 @@ function renderSelector(overrides: Partial<ComposerTools> = {}) {
 describe("ModelSelector", () => {
   it("labels the trigger with the active model", () => {
     renderSelector();
-    expect(screen.getByText("GPT-5")).toBeTruthy();
+    expect(screen.getByText("GPT-6 Sol")).toBeTruthy();
   });
 
   it("renders nothing when there is nothing to choose between", () => {
-    renderSelector({ modelOptions: [gpt5] });
-    expect(screen.queryByText("GPT-5")).toBeNull();
+    renderSelector({ modelOptions: [luna] });
+    expect(screen.queryByText("GPT-6 Sol")).toBeNull();
   });
 
   it("keeps the list closed until the trigger is pressed", () => {
@@ -86,11 +86,11 @@ describe("ModelSelector", () => {
 describe("ModelList", () => {
   // The Popover root is here because each row dismisses the panel on press. It renders its
   // children whether or not the panel is open, so the list is still reachable.
-  function renderList(options: ModelOption[] = [gpt5, claude]) {
+  function renderList(options: ModelOption[] = [luna, claude]) {
     const onSelect = jest.fn();
     render(
       <Popover>
-        <ModelList options={options} selected={gpt5} onSelect={onSelect} />
+        <ModelList options={options} selected={luna} onSelect={onSelect} />
       </Popover>,
     );
     return onSelect;
@@ -98,7 +98,7 @@ describe("ModelList", () => {
 
   it("lists every model", () => {
     renderList();
-    expect(screen.getByText("GPT-5")).toBeTruthy();
+    expect(screen.getByText("GPT-6 Sol")).toBeTruthy();
     expect(screen.getByText("Claude Sonnet 5")).toBeTruthy();
   });
 
@@ -116,8 +116,8 @@ describe("ModelList", () => {
 
   it("drops the headings when a single provider offers everything", () => {
     renderList([
-      gpt5,
-      { ...claude, providerDisplayName: gpt5.providerDisplayName },
+      luna,
+      { ...claude, providerDisplayName: luna.providerDisplayName },
     ]);
     expect(screen.queryByText("OpenAI Prod")).toBeNull();
   });

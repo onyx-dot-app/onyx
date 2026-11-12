@@ -6,15 +6,16 @@ Stateless interactive surface primitive for buttons, links, and cards. Applies v
 
 ## Props
 
-| Prop          | Type                                                   | Default     | Description                              |
-| ------------- | ------------------------------------------------------ | ----------- | ---------------------------------------- |
-| `variant`     | `"none" \| "default" \| "action" \| "danger"`          | `"default"` | Color variant                            |
-| `prominence`  | `"primary" \| "secondary" \| "tertiary" \| "internal"` | `"primary"` | Color prominence within the variant      |
-| `interaction` | `"rest" \| "hover" \| "active"`                        | `"rest"`    | JS-controlled interaction override       |
-| `group`       | `string`                                               | —           | Tailwind group class for `group-hover:*` |
-| `disabled`    | `boolean`                                              | `false`     | Disables the element                     |
-| `href`        | `string`                                               | —           | URL for link behavior                    |
-| `target`      | `string`                                               | —           | Link target (e.g. `"_blank"`)            |
+| Prop          | Type                                                   | Default     | Description                                                                                                          |
+| ------------- | ------------------------------------------------------ | ----------- | -------------------------------------------------------------------------------------------------------------------- |
+| `variant`     | `"none" \| "default" \| "action" \| "danger"`          | `"default"` | Color variant                                                                                                        |
+| `prominence`  | `"primary" \| "secondary" \| "tertiary" \| "internal"` | `"primary"` | Color prominence within the variant                                                                                  |
+| `interaction` | `"rest" \| "hover" \| "active"`                        | `"rest"`    | JS-controlled interaction override                                                                                   |
+| `group`       | `string`                                               | —           | Tailwind group class for `group-hover:*`                                                                             |
+| `disabled`    | `boolean`                                              | `false`     | Disables the element                                                                                                 |
+| `passive`     | `boolean`                                              | `false`     | Keeps the resting colours but drops hover, focus and pressed states; children stay interactive (unlike HTML `inert`) |
+| `href`        | `string`                                               | —           | URL for link behavior                                                                                                |
+| `target`      | `string`                                               | —           | Link target (e.g. `"_blank"`)                                                                                        |
 
 ## CSS custom properties
 

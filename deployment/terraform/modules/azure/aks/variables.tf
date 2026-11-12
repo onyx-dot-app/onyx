@@ -271,6 +271,24 @@ variable "sandbox_node_disk_size_gb" {
   }
 }
 
+variable "craft_sandbox_runtime" {
+  type        = string
+  description = "Prepares the sandbox pool for Craft Firecracker: \"pod\" or \"firecracker\". \"firecracker\" needs an Intel D or E v5, v6 or v7 sandbox_node_vm_size. Craft still runs sandboxes as pods until its Firecracker backend ships. See \"Craft sandboxes on Firecracker\" in the azure module README."
+  default     = "pod"
+
+  validation {
+    condition     = contains(["pod", "firecracker"], var.craft_sandbox_runtime)
+    error_message = "craft_sandbox_runtime must be \"pod\" or \"firecracker\"."
+  }
+
+  # An "a" in the feature letters is AMD and a "p" is Arm. Neither is in the
+  # allowed set, so Standard_D8as_v5 and Standard_D8ps_v6 fail here.
+  validation {
+    condition     = var.craft_sandbox_runtime != "firecracker" || can(regex("^standard_[de][0-9]+(-[0-9]+)?[bdilmst]*_v[5-7]$", lower(var.sandbox_node_vm_size)))
+    error_message = "craft_sandbox_runtime = \"firecracker\" needs an Intel D or E v5, v6 or v7 sandbox_node_vm_size, such as Standard_D8ds_v5. AMD (\"a\") and Arm (\"p\") sizes have no nested virtualization; keep craft_sandbox_runtime = \"pod\" on them."
+  }
+}
+
 # --- Workload identity -------------------------------------------------------
 # Azure federates a managed identity to a Kubernetes service account rather
 # than assuming a role from an OIDC subject, so this is the shape IRSA takes

@@ -4,13 +4,20 @@ import { useTranslations } from "next-intl";
 import { Label, SubLabel } from "@/components/Field";
 import { toast } from "@opal/layouts";
 import { useCustomAnalyticsScript } from "@/lib/analytics/hooks";
-import { Button, InputTextArea, Text } from "@opal/components";
+import {
+  Button,
+  InputPasswordTypeIn,
+  InputTextArea,
+  Text,
+} from "@opal/components";
 import { markdown } from "@opal/utils";
 import { useState } from "react";
 import { Spacer } from "@opal/components";
+import { useSettings } from "@/lib/settings/hooks";
 
 export default function CustomAnalyticsUpdateForm() {
   const t = useTranslations("admin.customAnalytics");
+  const { appName } = useSettings();
   const customAnalyticsScript = useCustomAnalyticsScript();
 
   const [newCustomAnalyticsScript, setNewCustomAnalyticsScript] =
@@ -64,19 +71,12 @@ export default function CustomAnalyticsUpdateForm() {
           <>
             {t.rich("secretKey.description", {
               i: (chunks) => <i>{chunks}</i>,
+              appName,
             })}
           </>
         </SubLabel>
-        <input
-          className={`
-            border
-            border-border
-            rounded
-            w-full
-            py-2
-            px-3
-            mt-1`}
-          type="password"
+        <Spacer rem={0.25} />
+        <InputPasswordTypeIn
           value={secretKey}
           onChange={(e) => setSecretKey(e.target.value)}
         />

@@ -1,6 +1,6 @@
 import { act, renderHook } from "@tests/setup/test-utils";
 import { useLlmManager } from "@/lib/hooks";
-import { ChatSession, ChatSessionSharedStatus } from "@/app/app/interfaces";
+import { ChatSession, ChatSessionSharedStatus } from "@/app/app/types";
 import { ReasoningEffortOverride } from "@/lib/languageModels/types";
 import {
   updateReasoningEffortForChatSession,
@@ -10,13 +10,14 @@ import {
 jest.mock("@/providers/UserProvider", () => ({
   useUser: () => ({ user: null }),
 }));
-jest.mock("@/lib/languageModels/hooks", () => ({
-  useLLMProviders: () => ({
+jest.mock("@/lib/languageModels/hooks", () => {
+  const empty = () => ({
     llmProviders: [],
     defaultText: undefined,
     isLoading: false,
-  }),
-}));
+  });
+  return { useLanguageModels: empty, useLanguageModelsForAgent: empty };
+});
 jest.mock("@/app/app/services/lib", () => ({
   updateReasoningEffortForChatSession: jest.fn(),
   updateTemperatureOverrideForChatSession: jest.fn(),

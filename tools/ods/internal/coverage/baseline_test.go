@@ -145,3 +145,37 @@ func readFile(t *testing.T, path string) string {
 	}
 	return string(data)
 }
+
+// A baseline with only a total still gates, and a nil baseline gates nothing.
+func TestLoadBaseline_withoutPackages(t *testing.T) {
+	path := filepath.Join(t.TempDir(), BaselineFile)
+	if err := os.WriteFile(path, []byte("total: 40\n"), 0644); err != nil {
+		t.Fatalf("failed to write the fixture: %v", err)
+	}
+
+	baseline, err := LoadBaseline(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reference := baseline.Reference()
+	if reference.Total != 40 || reference.Packages == nil || len(reference.Packages) != 0 {
+		t.Fatalf("expected a 40%% total and no package floors, got %+v", reference)
+	}
+	if (*Baseline)(nil).Reference() != nil {
+		t.Fatal("expected no reference from a nil baseline")
+	}
+}
+
+func TestBaseline_saveFailsUnderAFile(t *testing.T) {
+	blocker := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(blocker, nil, 0644); err != nil {
+		t.Fatal(err)
+	}
+	baseline := &Baseline{Total: 1, Packages: map[string]float64{}}
+
+	path := filepath.Join(blocker, BaselineFile)
+	err := baseline.Save(path, GoTests)
+	if err == nil || !strings.HasPrefix(err.Error(), "write "+path+": ") {
+		t.Fatalf("expected a write error naming %s, got %v", path, err)
+	}
+}

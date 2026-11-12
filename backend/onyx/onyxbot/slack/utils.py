@@ -14,7 +14,6 @@ from slack_sdk.models.blocks import Block, SectionBlock
 from slack_sdk.models.metadata import Metadata
 from slack_sdk.socket_mode import SocketModeClient
 
-from onyx.configs.app_configs import DISABLE_TELEMETRY
 from onyx.configs.constants import ID_SEPARATOR, MessageType
 from onyx.configs.onyxbot_configs import (
     ONYX_BOT_FEEDBACK_VISIBILITY,
@@ -26,13 +25,10 @@ from onyx.configs.onyxbot_configs import (
 )
 from onyx.connectors.slack.source_operations import SlackUserInfoResponse
 from onyx.connectors.slack.utils import FetchUserInfo, SlackTextCleaner
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.users import get_user_by_email
 from onyx.onyxbot.slack.constants import FeedbackVisibility
 from onyx.onyxbot.slack.models import ChannelType, ThreadMessage
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
-from onyx.utils.telemetry import RecordType, optional_telemetry
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
@@ -639,30 +635,6 @@ def read_slack_thread(
         )
 
     return thread_messages
-
-
-def slack_usage_report(action: str, sender_id: str | None, client: WebClient) -> None:
-    if DISABLE_TELEMETRY:
-        return
-
-    onyx_user = None
-    sender_email = None
-    try:
-        resp = client.users_info(user=sender_id)  # ty: ignore[invalid-argument-type]
-        data = cast(dict[str, Any], resp.data)
-        sender_email = data["user"]["profile"]["email"]
-    except Exception:
-        logger.warning("Unable to find sender email")
-
-    if sender_email is not None:
-        with get_session_with_current_tenant() as db_session:
-            onyx_user = get_user_by_email(email=sender_email, db_session=db_session)
-
-    optional_telemetry(
-        record_type=RecordType.USAGE,
-        data={"action": action},
-        user_id=str(onyx_user.id) if onyx_user else "Non-Onyx-Or-No-Auth-User",
-    )
 
 
 class SlackRateLimiter:

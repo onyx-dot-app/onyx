@@ -51,13 +51,14 @@ export interface AgentTimelineProps {
   buttonTitle?: string;
   // Backend duration for a hydrated (already finished) turn.
   processingDurationSeconds?: number;
-  isGeneratingImage?: boolean;
   generatedImageCount?: number;
   // Backend `pre_answer_processing_seconds`; freezes the live timer once present.
   toolProcessingDuration?: number;
   // Epoch ms this node's stream started. Absent on history, where the timer falls back to the
   // backend duration.
   streamingStartTime?: number;
+  // A code mode program works between tool calls; it has no step.
+  codeModeWorking?: boolean;
 }
 
 function TimelineContainer({
@@ -95,10 +96,10 @@ function areAgentTimelinePropsEqual(
     prev.collapsible === next.collapsible &&
     prev.buttonTitle === next.buttonTitle &&
     prev.chatState === next.chatState &&
-    prev.isGeneratingImage === next.isGeneratingImage &&
     prev.generatedImageCount === next.generatedImageCount &&
     prev.toolProcessingDuration === next.toolProcessingDuration &&
-    prev.streamingStartTime === next.streamingStartTime
+    prev.streamingStartTime === next.streamingStartTime &&
+    prev.codeModeWorking === next.codeModeWorking
   );
 }
 
@@ -112,15 +113,15 @@ export const AgentTimeline = memo(function AgentTimeline({
   collapsible = true,
   buttonTitle,
   processingDurationSeconds,
-  isGeneratingImage = false,
   generatedImageCount = 0,
   toolProcessingDuration,
   streamingStartTime,
+  codeModeWorking = false,
 }: AgentTimelineProps) {
   const { headerText, hasPackets, userStopped } = useTimelineHeader(
     turnGroups,
     stopReason,
-    isGeneratingImage,
+    codeModeWorking,
   );
 
   const {
@@ -197,8 +198,8 @@ export const AgentTimeline = memo(function AgentTimeline({
       lastStepIsResearchAgent,
       parallelActiveStepSupportsCollapsedStreaming,
       parallelActiveStepHasCollapsedContent,
-      isGeneratingImage,
       finalAnswerComing,
+      codeModeWorking,
     }),
     [
       stopPacketSeen,
@@ -213,8 +214,8 @@ export const AgentTimeline = memo(function AgentTimeline({
       lastStepIsResearchAgent,
       parallelActiveStepSupportsCollapsedStreaming,
       parallelActiveStepHasCollapsedContent,
-      isGeneratingImage,
       finalAnswerComing,
+      codeModeWorking,
     ],
   );
 

@@ -16,39 +16,47 @@ type ModelConfigurationUpsert struct {
 	SupportsReasoning  *bool   `json:"supports_reasoning"`
 	DisplayName        *string `json:"display_name"`
 	CustomDisplayName  *string `json:"custom_display_name"`
+	// Omitted when unset: Onyx then keeps the stored value.
+	ReasoningEffortMax     *string  `json:"reasoning_effort_max,omitempty"`
+	ReasoningEffortDefault *string  `json:"reasoning_effort_default,omitempty"`
+	TemperatureDefault     *float64 `json:"temperature_default,omitempty"`
 }
 
 // ModelConfigurationView mirrors ModelConfigurationView. Only fields the
 // provider consumes are declared; extra response fields are ignored.
 type ModelConfigurationView struct {
-	ID                 *int64  `json:"id"`
 	Name               string  `json:"name"`
-	IsVisible          bool    `json:"is_visible"`
+	ID                 *int64  `json:"id"`
 	MaxInputTokens     *int64  `json:"max_input_tokens"`
-	SupportsImageInput bool    `json:"supports_image_input"`
-	SupportsReasoning  bool    `json:"supports_reasoning"`
 	DisplayName        *string `json:"display_name"`
 	CustomDisplayName  *string `json:"custom_display_name"`
+	IsVisible          bool    `json:"is_visible"`
+	SupportsImageInput bool    `json:"supports_image_input"`
+	SupportsReasoning  bool    `json:"supports_reasoning"`
+
+	ReasoningEffortMax     *string  `json:"reasoning_effort_max"`
+	ReasoningEffortDefault *string  `json:"reasoning_effort_default"`
+	TemperatureDefault     *float64 `json:"temperature_default"`
 }
 
 // LLMProviderUpsertRequest mirrors the backend model. No omitempty: the PUT
 // is a full replace and must assert complete desired state.
 type LLMProviderUpsertRequest struct {
+	Groups              []int64                    `json:"groups"`
+	Agents              []int64                    `json:"personas"`
+	ModelConfigurations []ModelConfigurationUpsert `json:"model_configurations"`
+	Provider            string                     `json:"provider"`
 	ID                  *int64                     `json:"id"`
 	Name                *string                    `json:"name"`
-	Provider            string                     `json:"provider"`
 	APIKey              *string                    `json:"api_key"`
 	APIBase             *string                    `json:"api_base"`
 	APIVersion          *string                    `json:"api_version"`
 	CustomConfig        map[string]string          `json:"custom_config"`
+	DeploymentName      *string                    `json:"deployment_name"`
 	IsPublic            bool                       `json:"is_public"`
 	IsAutoMode          bool                       `json:"is_auto_mode"`
-	Groups              []int64                    `json:"groups"`
-	Agents              []int64                    `json:"personas"`
-	DeploymentName      *string                    `json:"deployment_name"`
 	APIKeyChanged       bool                       `json:"api_key_changed"`
 	CustomConfigChanged bool                       `json:"custom_config_changed"`
-	ModelConfigurations []ModelConfigurationUpsert `json:"model_configurations"`
 }
 
 // LLMProviderView mirrors LLMProviderView. api_key and custom_config values
@@ -81,6 +89,9 @@ type LLMProviderList struct {
 	DefaultText       *DefaultModel     `json:"default_text"`
 	DefaultVision     *DefaultModel     `json:"default_vision"`
 	DefaultChatNaming *DefaultModel     `json:"default_chat_naming"`
+	DefaultCraft      *DefaultModel     `json:"default_craft"`
+	// Onyx v5.0.0 and later.
+	DefaultSearchSelection *DefaultModel `json:"default_search_selection"`
 }
 
 // UpsertLLMProvider creates (isCreation=true) or updates an LLM provider.
@@ -113,23 +124,14 @@ func (c *Client) ListLLMProviders(ctx context.Context) (*LLMProviderList, error)
 	return &list, nil
 }
 
-// GetLLMProvider finds a provider by id. The API has no get-by-id endpoint,
-// so this scans the list; a missing provider returns an *APIError with 404.
+// GetLLMProvider reads one provider, image-generation ones included. A
+// missing provider answers 404.
 func (c *Client) GetLLMProvider(ctx context.Context, id int64) (*LLMProviderView, error) {
-	list, err := c.ListLLMProviders(ctx)
-	if err != nil {
+	var view LLMProviderView
+	if err := c.doJSON(ctx, http.MethodGet, fmt.Sprintf("/admin/llm/provider/%d", id), nil, &view); err != nil {
 		return nil, err
 	}
-	for i := range list.Providers {
-		if list.Providers[i].ID == id {
-			return &list.Providers[i], nil
-		}
-	}
-	return nil, &APIError{
-		StatusCode: http.StatusNotFound,
-		ErrorCode:  "NOT_FOUND",
-		Detail:     fmt.Sprintf("LLM provider with id %d not found", id),
-	}
+	return &view, nil
 }
 
 // DeleteLLMProvider deletes a provider. force allows deleting the provider
@@ -158,4 +160,27 @@ func (c *Client) SetDefaultChatNamingModel(ctx context.Context, req DefaultModel
 // vision defaults have no equivalent unset endpoint.
 func (c *Client) ClearDefaultChatNamingModel(ctx context.Context) error {
 	return c.doJSON(ctx, http.MethodDelete, "/admin/llm/default-chat-naming", nil, nil)
+}
+
+// SetDefaultCraftModel sets the default model for Onyx Craft sessions.
+func (c *Client) SetDefaultCraftModel(ctx context.Context, req DefaultModel) error {
+	return c.doJSON(ctx, http.MethodPost, "/admin/llm/default-craft", req, nil)
+}
+
+// ClearDefaultCraftModel clears the Craft default. Craft then uses the text
+// default.
+func (c *Client) ClearDefaultCraftModel(ctx context.Context) error {
+	return c.doJSON(ctx, http.MethodDelete, "/admin/llm/default-craft", nil, nil)
+}
+
+// SetDefaultSearchSelectionModel sets the model that selects search results.
+// Onyx v5.0.0 and later.
+func (c *Client) SetDefaultSearchSelectionModel(ctx context.Context, req DefaultModel) error {
+	return c.doJSON(ctx, http.MethodPost, "/admin/llm/default-search-selection", req, nil)
+}
+
+// ClearDefaultSearchSelectionModel clears the search selection default. The
+// session's model then selects search results.
+func (c *Client) ClearDefaultSearchSelectionModel(ctx context.Context) error {
+	return c.doJSON(ctx, http.MethodDelete, "/admin/llm/default-search-selection", nil, nil)
 }

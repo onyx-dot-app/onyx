@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from redis.exceptions import RedisError
+from sqlalchemy.exc import SQLAlchemyError
 
 from onyx.server.settings.models import ApplicationStatus, Settings
 
@@ -34,23 +35,6 @@ def base_settings() -> Settings:
 class TestApplyLicenseStatusToSettings:
     """Tests for apply_license_status_to_settings function."""
 
-    @patch("ee.onyx.server.settings.api.LICENSE_ENFORCEMENT_ENABLED", False)
-    def test_enforcement_disabled_enables_ee_features(
-        self, base_settings: Settings
-    ) -> None:
-        """When LICENSE_ENFORCEMENT_ENABLED=False, EE features are enabled."""
-        from ee.onyx.server.settings.api import apply_license_status_to_settings
-
-        assert base_settings.ee_features_enabled is False
-        result = apply_license_status_to_settings(base_settings)
-        assert _pick(result) == {
-            "application_status": ApplicationStatus.ACTIVE,
-            "ee_features_enabled": True,
-            "seat_count": None,
-            "used_seats": None,
-        }
-
-    @patch("ee.onyx.server.settings.api.LICENSE_ENFORCEMENT_ENABLED", True)
     @patch("ee.onyx.server.settings.api.MULTI_TENANT", True)
     def test_multi_tenant_enables_ee_features(self, base_settings: Settings) -> None:
         """Cloud mode always enables EE features."""
@@ -118,7 +102,6 @@ class TestApplyLicenseStatusToSettings:
             ),
         ],
     )
-    @patch("ee.onyx.server.settings.api.LICENSE_ENFORCEMENT_ENABLED", True)
     @patch("ee.onyx.server.settings.api.MULTI_TENANT", False)
     @patch("ee.onyx.server.settings.api.get_current_tenant_id")
     @patch("ee.onyx.server.settings.api.get_cached_license_metadata")
@@ -145,7 +128,6 @@ class TestApplyLicenseStatusToSettings:
         result = apply_license_status_to_settings(base_settings)
         assert _pick(result) == expected
 
-    @patch("ee.onyx.server.settings.api.LICENSE_ENFORCEMENT_ENABLED", True)
     @patch("ee.onyx.server.settings.api.MULTI_TENANT", False)
     @patch("ee.onyx.server.settings.api.get_current_tenant_id")
     @patch("ee.onyx.server.settings.api.get_cached_license_metadata")
@@ -173,7 +155,6 @@ class TestApplyLicenseStatusToSettings:
             "used_seats": 15,
         }
 
-    @patch("ee.onyx.server.settings.api.LICENSE_ENFORCEMENT_ENABLED", True)
     @patch("ee.onyx.server.settings.api.MULTI_TENANT", False)
     @patch("ee.onyx.server.settings.api.get_current_tenant_id")
     @patch("ee.onyx.server.settings.api.get_cached_license_metadata")
@@ -201,65 +182,73 @@ class TestApplyLicenseStatusToSettings:
             "used_seats": None,
         }
 
-    @patch("ee.onyx.server.settings.api.ENTERPRISE_EDITION_ENABLED", True)
-    @patch("ee.onyx.server.settings.api.LICENSE_ENFORCEMENT_ENABLED", True)
+    @pytest.mark.parametrize(
+        "has_perm_synced_cc_pairs, expected_status",
+        [
+            (True, ApplicationStatus.GATED_ACCESS),
+            # Nothing synced is left to protect, e.g. after a downgrade.
+            (False, ApplicationStatus.ACTIVE),
+        ],
+    )
     @patch("ee.onyx.server.settings.api.MULTI_TENANT", False)
+    @patch("ee.onyx.server.settings.api.has_perm_synced_cc_pairs")
     @patch("ee.onyx.server.settings.api.refresh_license_cache", return_value=None)
     @patch("ee.onyx.server.settings.api.get_session_with_current_tenant")
     @patch("ee.onyx.server.settings.api.get_current_tenant_id")
     @patch("ee.onyx.server.settings.api.get_cached_license_metadata")
-    def test_no_license_with_ee_flag_gates_access(
+    def test_no_license_gates_only_perm_synced_data(
         self,
         mock_get_metadata: MagicMock,
         mock_get_tenant: MagicMock,
         _mock_get_session: MagicMock,
         _mock_refresh: MagicMock,
+        mock_has_perm_synced: MagicMock,
+        has_perm_synced_cc_pairs: bool,
+        expected_status: ApplicationStatus,
         base_settings: Settings,
     ) -> None:
-        """No license + ENTERPRISE_EDITION_ENABLED=true → GATED_ACCESS."""
+        """No license gates only while a perm-synced connector exists."""
+        from ee.onyx.server.settings.api import apply_license_status_to_settings
+
+        mock_get_tenant.return_value = "test_tenant"
+        mock_get_metadata.return_value = None
+        mock_has_perm_synced.return_value = has_perm_synced_cc_pairs
+
+        result = apply_license_status_to_settings(base_settings)
+        assert _pick(result) == {
+            "application_status": expected_status,
+            "ee_features_enabled": False,
+            "seat_count": None,
+            "used_seats": None,
+        }
+
+    @patch("ee.onyx.server.settings.api.MULTI_TENANT", False)
+    @patch(
+        "ee.onyx.server.settings.api.has_perm_synced_cc_pairs",
+        side_effect=SQLAlchemyError("db down"),
+    )
+    @patch("ee.onyx.server.settings.api.refresh_license_cache", return_value=None)
+    @patch("ee.onyx.server.settings.api.get_session_with_current_tenant")
+    @patch("ee.onyx.server.settings.api.get_current_tenant_id")
+    @patch("ee.onyx.server.settings.api.get_cached_license_metadata")
+    def test_no_license_stays_gated_when_the_connector_check_fails(
+        self,
+        mock_get_metadata: MagicMock,
+        mock_get_tenant: MagicMock,
+        _mock_get_session: MagicMock,
+        _mock_refresh: MagicMock,
+        _mock_has_perm_synced: MagicMock,
+        base_settings: Settings,
+    ) -> None:
+        """An unreadable DB must not unlock the deployment."""
         from ee.onyx.server.settings.api import apply_license_status_to_settings
 
         mock_get_tenant.return_value = "test_tenant"
         mock_get_metadata.return_value = None
 
         result = apply_license_status_to_settings(base_settings)
-        assert _pick(result) == {
-            "application_status": ApplicationStatus.GATED_ACCESS,
-            "ee_features_enabled": False,
-            "seat_count": None,
-            "used_seats": None,
-        }
+        assert result.application_status == ApplicationStatus.GATED_ACCESS
 
-    @patch("ee.onyx.server.settings.api.ENTERPRISE_EDITION_ENABLED", False)
-    @patch("ee.onyx.server.settings.api.LICENSE_ENFORCEMENT_ENABLED", True)
-    @patch("ee.onyx.server.settings.api.MULTI_TENANT", False)
-    @patch("ee.onyx.server.settings.api.refresh_license_cache", return_value=None)
-    @patch("ee.onyx.server.settings.api.get_session_with_current_tenant")
-    @patch("ee.onyx.server.settings.api.get_current_tenant_id")
-    @patch("ee.onyx.server.settings.api.get_cached_license_metadata")
-    def test_no_license_without_ee_flag_allows_community(
-        self,
-        mock_get_metadata: MagicMock,
-        mock_get_tenant: MagicMock,
-        _mock_get_session: MagicMock,
-        _mock_refresh: MagicMock,
-        base_settings: Settings,
-    ) -> None:
-        """No license + ENTERPRISE_EDITION_ENABLED=false → community mode (no gating)."""
-        from ee.onyx.server.settings.api import apply_license_status_to_settings
-
-        mock_get_tenant.return_value = "test_tenant"
-        mock_get_metadata.return_value = None
-
-        result = apply_license_status_to_settings(base_settings)
-        assert _pick(result) == {
-            "application_status": ApplicationStatus.ACTIVE,
-            "ee_features_enabled": False,
-            "seat_count": None,
-            "used_seats": None,
-        }
-
-    @patch("ee.onyx.server.settings.api.LICENSE_ENFORCEMENT_ENABLED", True)
     @patch("ee.onyx.server.settings.api.MULTI_TENANT", False)
     @patch("ee.onyx.server.settings.api.get_current_tenant_id")
     @patch("ee.onyx.server.settings.api.get_cached_license_metadata")

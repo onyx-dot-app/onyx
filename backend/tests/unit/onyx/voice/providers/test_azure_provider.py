@@ -174,6 +174,35 @@ async def test_streaming_cancel_reports_sanitized_error() -> None:
 
 
 @pytest.mark.asyncio
+async def test_streaming_end_of_stream_cancel_is_not_a_failure() -> None:
+    """Closing the push stream cancels with EndOfStream; that is a normal exit."""
+    import azure.cognitiveservices.speech as speechsdk
+
+    with (
+        patch("azure.cognitiveservices.speech.SpeechConfig"),
+        patch("azure.cognitiveservices.speech.SpeechRecognizer") as recognizer,
+        patch(
+            "azure.cognitiveservices.speech.languageconfig.AutoDetectSourceLanguageConfig"
+        ),
+        patch("azure.cognitiveservices.speech.audio.AudioStreamFormat"),
+        patch("azure.cognitiveservices.speech.audio.PushAudioInputStream"),
+        patch("azure.cognitiveservices.speech.audio.AudioConfig"),
+    ):
+        transcriber = AzureStreamingTranscriber(
+            api_key="key", languages=["en-US"], region="eastus"
+        )
+        await transcriber.connect()
+        on_canceled = recognizer.return_value.canceled.connect.call_args[0][0]
+
+    event = MagicMock()
+    event.cancellation_details.reason = speechsdk.CancellationReason.EndOfStream
+    on_canceled(event)
+    await asyncio.sleep(0)
+
+    assert transcriber._transcript_queue.empty()
+
+
+@pytest.mark.asyncio
 async def test_streaming_close_keeps_transcripts_from_drained_audio() -> None:
     """Recognition drains before close marks the session closed."""
     with (

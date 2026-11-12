@@ -26,10 +26,9 @@ type StarterMessage struct {
 // rather than "clear". The provider manages the whole agent, so it sends every
 // value it owns on every write and the tri-state never comes into play.
 //
-// HierarchyNodeIDs and DocumentIDs are the exception: Terraform does not manage
-// them, but they default to an empty list when omitted, which would clear
-// attachments made in the admin panel. Update reads the stored values and
-// sends them back.
+// hierarchy_node_ids and document_ids are left out on purpose. Terraform does
+// not manage them, and since Onyx v4.8 an omitted list keeps the stored
+// attachments.
 type AgentWrite struct {
 	Name                        string           `json:"name"`
 	Description                 string           `json:"description"`
@@ -49,8 +48,6 @@ type AgentWrite struct {
 	SearchStartDate             *string          `json:"search_start_date"`
 	Users                       []string         `json:"users"`
 	Groups                      []int64          `json:"groups"`
-	HierarchyNodeIDs            []int64          `json:"hierarchy_node_ids"`
-	DocumentIDs                 []string         `json:"document_ids"`
 }
 
 type agentToolRef struct {
@@ -69,40 +66,29 @@ type agentUserRef struct {
 	ID string `json:"id"`
 }
 
-type agentHierarchyNodeRef struct {
-	ID int64 `json:"id"`
-}
-
-type agentAttachedDocumentRef struct {
-	ID string `json:"id"`
-}
-
-// Agent mirrors PersonaSnapshot.
-//
-// The snapshot carries no search_start_date, so that field cannot be read back.
+// Agent mirrors PersonaSnapshot. GET also returns search_start_date, as a
+// timestamp; the provider does not decode it (see applyRemoteAgent).
 type Agent struct {
-	ID                          int64                      `json:"id"`
-	Name                        string                     `json:"name"`
-	Description                 string                     `json:"description"`
-	IsPublic                    bool                       `json:"is_public"`
-	IsListed                    bool                       `json:"is_listed"`
-	IsFeatured                  bool                       `json:"is_featured"`
-	BuiltinAgent                bool                       `json:"builtin_persona"`
-	IconName                    *string                    `json:"icon_name"`
-	DisplayPriority             *int64                     `json:"display_priority"`
-	StarterMessages             []StarterMessage           `json:"starter_messages"`
-	Tools                       []agentToolRef             `json:"tools"`
-	DocumentSets                []agentDocumentSetRef      `json:"document_sets"`
-	Labels                      []agentLabelRef            `json:"labels"`
-	Users                       []agentUserRef             `json:"users"`
-	Groups                      []int64                    `json:"groups"`
-	HierarchyNodes              []agentHierarchyNodeRef    `json:"hierarchy_nodes"`
-	AttachedDocuments           []agentAttachedDocumentRef `json:"attached_documents"`
-	DefaultModelConfigurationID *int64                     `json:"default_model_configuration_id"`
-	SystemPrompt                *string                    `json:"system_prompt"`
-	TaskPrompt                  *string                    `json:"task_prompt"`
-	DatetimeAware               bool                       `json:"datetime_aware"`
-	ReplaceBaseSystemPrompt     bool                       `json:"replace_base_system_prompt"`
+	StarterMessages             []StarterMessage      `json:"starter_messages"`
+	Tools                       []agentToolRef        `json:"tools"`
+	DocumentSets                []agentDocumentSetRef `json:"document_sets"`
+	Labels                      []agentLabelRef       `json:"labels"`
+	Users                       []agentUserRef        `json:"users"`
+	Groups                      []int64               `json:"groups"`
+	Name                        string                `json:"name"`
+	Description                 string                `json:"description"`
+	ID                          int64                 `json:"id"`
+	IconName                    *string               `json:"icon_name"`
+	DisplayPriority             *int64                `json:"display_priority"`
+	DefaultModelConfigurationID *int64                `json:"default_model_configuration_id"`
+	SystemPrompt                *string               `json:"system_prompt"`
+	TaskPrompt                  *string               `json:"task_prompt"`
+	IsPublic                    bool                  `json:"is_public"`
+	IsListed                    bool                  `json:"is_listed"`
+	IsFeatured                  bool                  `json:"is_featured"`
+	BuiltinAgent                bool                  `json:"builtin_persona"`
+	DatetimeAware               bool                  `json:"datetime_aware"`
+	ReplaceBaseSystemPrompt     bool                  `json:"replace_base_system_prompt"`
 }
 
 // ToolIDs returns the ids of the actions attached to the agent.
@@ -144,32 +130,24 @@ func (p *Agent) UserIDs() []string {
 	return ids
 }
 
-// HierarchyNodeIDs returns the ids of the folders attached for scoped search.
-func (p *Agent) HierarchyNodeIDs() []int64 {
-	ids := make([]int64, 0, len(p.HierarchyNodes))
-	for _, node := range p.HierarchyNodes {
-		ids = append(ids, node.ID)
-	}
-	return ids
-}
-
-// DocumentIDs returns the ids of the documents attached for scoped search.
-func (p *Agent) DocumentIDs() []string {
-	ids := make([]string, 0, len(p.AttachedDocuments))
-	for _, doc := range p.AttachedDocuments {
-		ids = append(ids, doc.ID)
-	}
-	return ids
-}
-
 // CreateAgent creates an agent and returns the stored object.
 //
 // Onyx matches a create by name: a name another live agent holds is rejected,
 // and a name held only by a deleted agent revives that agent, id and all. That
 // makes the call unsafe to repeat, which the POST rule already covers.
+// agentCreate clears attachments on create. A create that matches a deleted
+// agent's name revives that row, and omitted lists would keep its old folders
+// and documents.
+type agentCreate struct {
+	AgentWrite
+	HierarchyNodeIDs []int64  `json:"hierarchy_node_ids"`
+	DocumentIDs      []string `json:"document_ids"`
+}
+
 func (c *Client) CreateAgent(ctx context.Context, req AgentWrite) (*Agent, error) {
 	var agent Agent
-	if err := c.doJSON(ctx, http.MethodPost, "/persona", req, &agent); err != nil {
+	body := agentCreate{AgentWrite: req, HierarchyNodeIDs: []int64{}, DocumentIDs: []string{}}
+	if err := c.doJSON(ctx, http.MethodPost, "/persona", body, &agent); err != nil {
 		return nil, err
 	}
 	return &agent, nil

@@ -51,4 +51,21 @@ metadata:
 data:
   onyx-indexing-pruning.json: |
     {{- .Files.Get "dashboards/indexing-pruning.json" | nindent 4 }}
+{{- $fcMetrics := dig "hostAgent" "metrics" "enabled" false (.Values.craft | default dict) }}
+{{- if and (eq (include "onyx.craftSandboxRuntime" .) "firecracker") $fcMetrics }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "onyx.resourceName" (list . "craft-fc-host-agent-dashboard") }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+  annotations:
+    grafana_folder: "Onyx"
+data:
+  onyx-craft-fc-host-agent.json: |
+    {{- /* The default job is the agent Service name, which can be truncated. */}}
+    {{- .Files.Get "dashboards/craft-fc-host-agent.json" | replace "__CRAFT_FC_HOST_AGENT_JOB__" (include "onyx.craftHostAgentMetricsJob" .) | replace "__CRAFT_FC_HOST_AGENT_DAEMONSET__" (include "onyx.resourceName" (list . "craft-fc-host-agent")) | nindent 4 }}
+{{- end }}
 {{- end }}

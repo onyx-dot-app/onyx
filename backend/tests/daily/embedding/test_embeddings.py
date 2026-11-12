@@ -7,6 +7,8 @@ from tenacity import (
 )
 
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
+from shared_configs.configs import DEFAULT_DOCUMENT_ENCODER_MODEL
+from shared_configs.embedding_models import EmbeddingModelSpec, get_local_model_spec
 from shared_configs.enums import EmbedTextType
 from shared_configs.model_server_models import EmbeddingProvider
 from tests.utils.secret_names import TestSecret
@@ -69,8 +71,41 @@ def test_cohere_embedding(cohere_embedding_model: EmbeddingModel) -> None:
     _run_embeddings(TOO_LONG_SAMPLE, cohere_embedding_model, 384)
 
 
+def _default_model_spec() -> EmbeddingModelSpec:
+    # The default self-hosted model, baked into the model-server image.
+    spec = get_local_model_spec(DEFAULT_DOCUMENT_ENCODER_MODEL)
+    assert spec is not None
+    return spec
+
+
+@pytest.fixture
+def local_default_embedding_model() -> EmbeddingModel:
+    spec = _default_model_spec()
+    return EmbeddingModel(
+        server_host="localhost",
+        server_port=9000,
+        model_name=spec.model_name,
+        normalize=spec.normalize,
+        query_prefix=spec.query_prefix,
+        passage_prefix=spec.passage_prefix,
+        api_key=None,
+        provider_type=None,
+        api_url=None,
+    )
+
+
+def test_local_default_embedding(
+    local_default_embedding_model: EmbeddingModel,
+) -> None:
+    model_dim = _default_model_spec().model_dim
+    _run_embeddings(VALID_SAMPLE, local_default_embedding_model, model_dim)
+    _run_embeddings(TOO_LONG_SAMPLE, local_default_embedding_model, model_dim)
+
+
 @pytest.fixture
 def local_nomic_embedding_model() -> EmbeddingModel:
+    # Legacy model. It is no longer baked into the model-server image, so the
+    # first request downloads it from Hugging Face.
     return EmbeddingModel(
         server_host="localhost",
         server_port=9000,
@@ -91,9 +126,9 @@ def test_local_nomic_embedding(local_nomic_embedding_model: EmbeddingModel) -> N
 
 @pytest.fixture
 def local_e5_small_embedding_model() -> EmbeddingModel:
-    # Unlike nomic (pre-baked into the image), e5-small is not in the image, so the
-    # first request forces the model server to download it from HuggingFace at
-    # runtime -- exercising the outbound-TLS path that the custom-CA bundle governs.
+    # e5-small is not in the image, so the first request forces the model server
+    # to download it from HuggingFace at runtime -- exercising the outbound-TLS
+    # path that the custom-CA bundle governs.
     return EmbeddingModel(
         server_host="localhost",
         server_port=9000,

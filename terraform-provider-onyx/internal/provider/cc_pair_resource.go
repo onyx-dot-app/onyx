@@ -24,10 +24,14 @@ import (
 )
 
 var (
-	_ resource.Resource                = (*ccPairResource)(nil)
-	_ resource.ResourceWithConfigure   = (*ccPairResource)(nil)
-	_ resource.ResourceWithImportState = (*ccPairResource)(nil)
+	_ resource.Resource                   = (*ccPairResource)(nil)
+	_ resource.ResourceWithConfigure      = (*ccPairResource)(nil)
+	_ resource.ResourceWithImportState    = (*ccPairResource)(nil)
+	_ resource.ResourceWithValidateConfig = (*ccPairResource)(nil)
 )
+
+// Access types whose readers come from data-access groups.
+var ccPairDataAccessTypes = map[string]bool{"private": true, "sync_restricted": true}
 
 // defaultCCPairDeleteTimeout bounds the wait for Celery to remove a pair and
 // the documents it indexed. Large connectors take minutes, not seconds.
@@ -50,6 +54,7 @@ type ccPairResourceModel struct {
 	AccessType             types.String         `tfsdk:"access_type"`
 	AutoSyncOptions        jsontypes.Normalized `tfsdk:"auto_sync_options"`
 	Groups                 types.Set            `tfsdk:"groups"`
+	DataAccessGroupIDs     types.Set            `tfsdk:"data_access_group_ids"`
 	ProcessingMode         types.String         `tfsdk:"processing_mode"`
 	Paused                 types.Bool           `tfsdk:"paused"`
 	Status                 types.String         `tfsdk:"status"`
@@ -69,10 +74,11 @@ func (r *ccPairResource) Schema(ctx context.Context, _ resource.SchemaRequest, r
 			"they produce.\n\n" +
 			"Creating a pair starts indexing. Destroying one removes the indexed documents too, which " +
 			"runs in the background — Terraform waits for it to finish.\n\n" +
-			"~> **Drift blind spot.** Onyx does not report `groups`, `auto_sync_options` or " +
-			"`processing_mode` back on read, so Terraform cannot detect changes made to them elsewhere. " +
-			"They are recorded from the configuration at create time. After `terraform import` they are " +
-			"empty, and setting them then replaces the pair.",
+			"~> **Replacement re-indexes.** Onyx has no update route for `access_type`, `groups`, " +
+			"`auto_sync_options` or `processing_mode`, so a change to one of them replaces the pair: " +
+			"Onyx deletes its documents and indexes them again. Terraform reads these attributes back, " +
+			"so a change made in the admin panel to an attribute in the configuration also shows as a " +
+			"replacement. An attribute left out of the configuration keeps the value Onyx reports.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:            true,
@@ -105,33 +111,56 @@ func (r *ccPairResource) Schema(ctx context.Context, _ resource.SchemaRequest, r
 				Computed: true,
 				Default:  stringdefault.StaticString("public"),
 				MarkdownDescription: "Who may read the indexed documents: `public` (everyone), `private` " +
-					"(the groups below), or `sync` (mirrored from the source system). `sync` needs a " +
-					"Business tier license and a source that supports permission sync.",
+					"(the groups below), `sync` (mirrored from the source system), or `sync_restricted` " +
+					"(mirrored from the source system, and only for members of " +
+					"`data_access_group_ids`). `sync` and `sync_restricted` need a Business tier license " +
+					"and a source that supports permission sync. `sync_restricted` needs Onyx v5.0 or " +
+					"later: v4.9 knows the value but refuses to create such a pair. Unset means `public`, " +
+					"also after an import: set it to match an imported pair, or the next apply replaces " +
+					"the pair.",
 				Validators: []validator.String{
-					stringvalidator.OneOf("public", "private", "sync"),
+					stringvalidator.OneOf("public", "private", "sync", "sync_restricted"),
 				},
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"auto_sync_options": schema.StringAttribute{
-				Optional:            true,
-				CustomType:          jsontypes.NormalizedType{},
-				MarkdownDescription: "Permission-sync settings as a JSON object. Only meaningful with `access_type = \"sync\"`.",
+				Optional:   true,
+				Computed:   true,
+				CustomType: jsontypes.NormalizedType{},
+				MarkdownDescription: "Permission-sync settings as a JSON object. Only meaningful with " +
+					"`access_type = \"sync\"` or `\"sync_restricted\"`.",
 				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"groups": schema.SetAttribute{
-				Optional:            true,
-				ElementType:         types.Int64Type,
-				MarkdownDescription: "User group ids that may read the documents. Applies when `access_type = \"private\"`.",
+				Optional:    true,
+				Computed:    true,
+				ElementType: types.Int64Type,
+				MarkdownDescription: "User group ids linked to the pair. With `access_type = \"private\"` " +
+					"their members may read the documents, unless `data_access_group_ids` names other " +
+					"groups. From Onyx v5.0 these groups also manage the pair.",
 				PlanModifiers: []planmodifier.Set{
+					setplanmodifier.UseStateForUnknown(),
 					setplanmodifier.RequiresReplace(),
 				},
 			},
+			"data_access_group_ids": schema.SetAttribute{
+				Optional:    true,
+				ElementType: types.Int64Type,
+				MarkdownDescription: "User group ids whose members may read the documents of a `private` " +
+					"or `sync_restricted` pair. Required for `sync_restricted`. Unset on create means the " +
+					"`groups` above. A change is applied in place. Needs Onyx v5.0 or later and " +
+					"Enterprise Edition; on other servers, apply fails rather than skip the setting. " +
+					"Terraform refreshes this attribute only while it is set. Removing it, or importing " +
+					"a pair, leaves the groups in Onyx as they are, and they can differ from `groups`.",
+			},
 			"processing_mode": schema.StringAttribute{
 				Optional: true,
+				Computed: true,
 				MarkdownDescription: "How fetched documents are processed. Defaults to `REGULAR`, the full " +
 					"index pipeline. `RAW_BINARY` stores the file without extracting text. `FILE_SYSTEM` " +
 					"is deprecated and produces documents that cannot be searched.",
@@ -139,6 +168,7 @@ func (r *ccPairResource) Schema(ctx context.Context, _ resource.SchemaRequest, r
 					stringvalidator.OneOf("REGULAR", "RAW_BINARY", "FILE_SYSTEM"),
 				},
 				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
@@ -173,10 +203,37 @@ func (r *ccPairResource) Configure(_ context.Context, req resource.ConfigureRequ
 	r.client = clientFromResourceConfigure(req, resp)
 }
 
-// applyRemoteCCPair copies the server's view into the model. It never touches
-// groups, auto_sync_options or processing_mode: the read model does not carry
-// them, so overwriting would discard what Terraform recorded at create time.
-func applyRemoteCCPair(model *ccPairResourceModel, remote *client.CCPair) {
+// ValidateConfig reports at plan time the data-access rules Onyx enforces at
+// create time.
+func (r *ccPairResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	var config ccPairResourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() || config.AccessType.IsUnknown() || config.DataAccessGroupIDs.IsUnknown() {
+		return
+	}
+	accessType := config.AccessType.ValueString()
+	if config.AccessType.IsNull() {
+		accessType = "public"
+	}
+	setsDataAccess := !config.DataAccessGroupIDs.IsNull()
+	hasDataAccess := setsDataAccess && len(config.DataAccessGroupIDs.Elements()) > 0
+	if accessType == "sync_restricted" && !hasDataAccess {
+		resp.Diagnostics.AddAttributeError(path.Root("data_access_group_ids"),
+			"Missing data-access groups",
+			"access_type = \"sync_restricted\" needs at least one group in data_access_group_ids.")
+	}
+	// Onyx refuses the data-access route for other types, even with an empty list.
+	if setsDataAccess && !ccPairDataAccessTypes[accessType] {
+		resp.Diagnostics.AddAttributeError(path.Root("data_access_group_ids"),
+			"Data-access groups need a private or restricted pair",
+			fmt.Sprintf("Onyx accepts data_access_group_ids only with access_type \"private\" or "+
+				"\"sync_restricted\", not %q.", accessType))
+	}
+}
+
+// applyRemoteCCPair copies the server's view into the model. Data-access
+// groups have their own route; see refreshDataAccess.
+func applyRemoteCCPair(ctx context.Context, model *ccPairResourceModel, remote *client.CCPair, diags *diag.Diagnostics) {
 	model.ID = types.StringValue(strconv.FormatInt(remote.ID, 10))
 	model.ConnectorID = types.StringValue(strconv.FormatInt(remote.Connector.ID, 10))
 	model.CredentialID = types.StringValue(strconv.FormatInt(remote.Credential.ID, 10))
@@ -186,6 +243,66 @@ func applyRemoteCCPair(model *ccPairResourceModel, remote *client.CCPair) {
 	model.Paused = types.BoolValue(remote.Status == client.CCPairStatusPaused)
 	model.NumDocsIndexed = types.Int64Value(remote.NumDocsIndexed)
 	model.LastIndexAttemptStatus = types.StringPointerValue(remote.LastIndexAttemptStatus)
+
+	// Onyx before v4.8 does not return these fields. Keep what Terraform knows,
+	// so an older server does not plan a replacement.
+	if remote.ProcessingMode == "" {
+		if model.Groups.IsUnknown() {
+			model.Groups = types.SetValueMust(types.Int64Type, nil)
+		}
+		if model.AutoSyncOptions.IsUnknown() {
+			model.AutoSyncOptions = jsontypes.NewNormalizedNull()
+		}
+		if model.ProcessingMode.IsUnknown() {
+			model.ProcessingMode = types.StringValue("REGULAR")
+		}
+		return
+	}
+	model.ProcessingMode = types.StringValue(remote.ProcessingMode)
+
+	groups := remote.Groups
+	if groups == nil {
+		groups = []int64{}
+	}
+	groupSet, setDiags := types.SetValueFrom(ctx, types.Int64Type, groups)
+	diags.Append(setDiags...)
+	model.Groups = groupSet
+
+	if remote.AutoSyncOptions == nil {
+		model.AutoSyncOptions = jsontypes.NewNormalizedNull()
+	} else if value, ok := normalizedFromJSONObject(remote.AutoSyncOptions, "auto_sync_options", diags); ok {
+		model.AutoSyncOptions = value
+	}
+}
+
+// refreshDataAccess reads the data-access groups while the configuration
+// sets them. A 403 keeps the known value. A 404 means Onyx before v5.0 or
+// Community Edition: a read keeps the known value, but after a write it is an
+// error, because Onyx dropped the groups.
+func (r *ccPairResource) refreshDataAccess(ctx context.Context, id int64, model *ccPairResourceModel, afterWrite bool, diags *diag.Diagnostics) {
+	if model.DataAccessGroupIDs.IsNull() || model.DataAccessGroupIDs.IsUnknown() ||
+		!ccPairDataAccessTypes[model.AccessType.ValueString()] {
+		return
+	}
+	groupIDs, err := r.client.GetCCPairDataAccess(ctx, id)
+	if client.IsNotFound(err) && afterWrite {
+		diags.AddAttributeError(path.Root("data_access_group_ids"),
+			"Onyx did not store the data-access groups",
+			"data_access_group_ids needs Onyx v5.0 or later and Enterprise Edition. This server has "+
+				"no data-access route, so readers are not restricted to these groups. Upgrade Onyx "+
+				"or remove the attribute.")
+		return
+	}
+	if client.IsNotFound(err) || client.IsForbidden(err) {
+		return
+	}
+	if err != nil {
+		diags.AddError("Failed to read the data-access groups of the Onyx connector-credential pair", err.Error())
+		return
+	}
+	value, setDiags := types.SetValueFrom(ctx, types.Int64Type, groupIDs)
+	diags.Append(setDiags...)
+	model.DataAccessGroupIDs = value
 }
 
 func (r *ccPairResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -216,12 +333,22 @@ func (r *ccPairResource) Create(ctx context.Context, req resource.CreateRequest,
 	if plan.ProcessingMode.IsNull() || plan.ProcessingMode.IsUnknown() {
 		processingMode = "REGULAR"
 	}
+	var dataAccess *[]int64
+	if !plan.DataAccessGroupIDs.IsNull() && !plan.DataAccessGroupIDs.IsUnknown() {
+		ids, idDiags := int64SetValues(ctx, plan.DataAccessGroupIDs)
+		resp.Diagnostics.Append(idDiags...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		dataAccess = &ids
+	}
 
 	id, err := r.client.CreateCCPair(ctx, connectorID, credentialID, client.CCPairCreate{
 		Name:            plan.Name.ValueString(),
 		AccessType:      plan.AccessType.ValueString(),
 		AutoSyncOptions: autoSyncOptions,
 		Groups:          groups,
+		DataAccess:      dataAccess,
 		ProcessingMode:  processingMode,
 	})
 	if err != nil {
@@ -243,10 +370,12 @@ func (r *ccPairResource) Create(ctx context.Context, req resource.CreateRequest,
 		resp.Diagnostics.AddError("Failed to read back the new Onyx connector-credential pair", err.Error())
 		// Persist the id so the next apply updates instead of creating a duplicate.
 		plan.ID = types.StringValue(strconv.FormatInt(id, 10))
+		plan.ensureComputedKnown()
 		resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 		return
 	}
-	applyRemoteCCPair(&plan, remote)
+	applyRemoteCCPair(ctx, &plan, remote, &resp.Diagnostics)
+	r.refreshDataAccess(ctx, id, &plan, true, &resp.Diagnostics)
 	if pauseErr != nil {
 		resp.Diagnostics.AddError("Failed to pause the new Onyx connector-credential pair", pauseErr.Error())
 	}
@@ -297,7 +426,8 @@ func (r *ccPairResource) Read(ctx context.Context, req resource.ReadRequest, res
 	// A pair stuck in DELETING stays in state on purpose. A failed deletion
 	// never leaves that status, and dropping it here would hide a pair that
 	// still exists and still holds its (connector, credential) key.
-	applyRemoteCCPair(&state, remote)
+	applyRemoteCCPair(ctx, &state, remote, &resp.Diagnostics)
+	r.refreshDataAccess(ctx, id, &state, false, &resp.Diagnostics)
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
@@ -314,7 +444,8 @@ func (r *ccPairResource) Update(ctx context.Context, req resource.UpdateRequest,
 		return
 	}
 
-	// Name and status have separate endpoints; everything else replaces.
+	// Name, status and data access have separate endpoints; everything else
+	// replaces.
 	if !plan.Name.Equal(state.Name) {
 		if err := r.client.SetCCPairName(ctx, id, plan.Name.ValueString()); err != nil {
 			resp.Diagnostics.AddError("Failed to rename Onyx connector-credential pair", err.Error())
@@ -332,12 +463,25 @@ func (r *ccPairResource) Update(ctx context.Context, req resource.UpdateRequest,
 		}
 	}
 
+	if !plan.DataAccessGroupIDs.IsNull() && !plan.DataAccessGroupIDs.Equal(state.DataAccessGroupIDs) {
+		groupIDs, idDiags := int64SetValues(ctx, plan.DataAccessGroupIDs)
+		resp.Diagnostics.Append(idDiags...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		if _, err := r.client.SetCCPairDataAccess(ctx, id, groupIDs); err != nil {
+			resp.Diagnostics.AddError("Failed to set the data-access groups of the Onyx connector-credential pair", err.Error())
+			return
+		}
+	}
+
 	remote, err := r.client.GetCCPair(ctx, id)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to read back the Onyx connector-credential pair", err.Error())
 		return
 	}
-	applyRemoteCCPair(&plan, remote)
+	applyRemoteCCPair(ctx, &plan, remote, &resp.Diagnostics)
+	r.refreshDataAccess(ctx, id, &plan, !plan.DataAccessGroupIDs.Equal(state.DataAccessGroupIDs), &resp.Diagnostics)
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
@@ -401,4 +545,27 @@ func (r *ccPairResource) Delete(ctx context.Context, req resource.DeleteRequest,
 
 func (r *ccPairResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+}
+
+// ensureComputedKnown replaces a still-unknown computed value with null, so a
+// failed read-back does not also report provider bugs for unknown state.
+func (m *ccPairResourceModel) ensureComputedKnown() {
+	if m.Groups.IsUnknown() {
+		m.Groups = types.SetNull(types.Int64Type)
+	}
+	if m.AutoSyncOptions.IsUnknown() {
+		m.AutoSyncOptions = jsontypes.NewNormalizedNull()
+	}
+	if m.ProcessingMode.IsUnknown() {
+		m.ProcessingMode = types.StringNull()
+	}
+	if m.Status.IsUnknown() {
+		m.Status = types.StringNull()
+	}
+	if m.NumDocsIndexed.IsUnknown() {
+		m.NumDocsIndexed = types.Int64Null()
+	}
+	if m.LastIndexAttemptStatus.IsUnknown() {
+		m.LastIndexAttemptStatus = types.StringNull()
+	}
 }

@@ -1,8 +1,7 @@
 """External-dependency-unit tests for `McpRequestEvaluator` against a real DB.
 
 Pins proxy-authoritative per-tool approvals: a craft MCP `tools/call` becomes an
-`AllMatchedActions` targeting the server, carrying the tool's effective policy
-(admin override else default ASK); protocol plumbing is ungated (``None``); an
+`AllMatchedActions` targeting the server, carrying the tool's default ASK policy; protocol plumbing retains server attribution without action approval; an
 unclassifiable body on a matched host is a DENY verdict so the gate fails closed.
 """
 
@@ -15,24 +14,26 @@ from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
+from mitmproxy import http
 from sqlalchemy.orm import Session
 
+from onyx.db.action_policy import (
+    get_or_create_gated_app_id,
+    replace_workspace_action_policies,
+)
 from onyx.db.enums import (
-    EndpointPolicy,
+    ActionPolicy,
     GatedAppKind,
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
     MCPTransport,
 )
-from onyx.db.gated_app import (
-    get_or_create_gated_app_id,
-    replace_action_policies__no_commit,
-)
 from onyx.db.mcp import (
     create_mcp_server__no_commit,
     update_mcp_server__no_commit,
 )
-from onyx.db.models import MCPServer
+from onyx.db.models import MCPServer, Tool
+from onyx.sandbox_proxy.models import AllMatchedActions, McpProtocolRequest
 from onyx.sandbox_proxy.request_evaluator import (
     MCP_UNCLASSIFIABLE_ACTION_TYPE,
     McpRequestEvaluator,
@@ -145,23 +146,28 @@ def test_tools_call_defaults_to_ask(
     assert matched.target.key == (GatedAppKind.MCP_SERVER, server.id)
     assert matched.app_name == server.name
     assert [a.action_type for a in matched.actions] == ["send_email"]
-    assert matched.governing_action.policy is EndpointPolicy.ASK
+    assert matched.governing_action.policy is ActionPolicy.ASK
     # The JSON-RPC body is carried through for the approval card.
     assert matched.payload["method"] == "tools/call"
 
 
-@pytest.mark.parametrize("override", [EndpointPolicy.ALWAYS, EndpointPolicy.DENY])
-def test_admin_tool_override_is_reflected(
+@pytest.mark.parametrize("override", [ActionPolicy.ALWAYS, ActionPolicy.DENY])
+def test_admin_tool_override_does_not_change_recognition(
     db_session: Session,
     craft_server: CraftServerFactory,
-    override: EndpointPolicy,
+    override: ActionPolicy,
 ) -> None:
     user = create_test_user(db_session, f"mcp_eval_override_{override.value}")
     server = craft_server()
+    db_session.add_all(
+        Tool(name=name, mcp_server_id=server.id, enabled=True)
+        for name in ("send_email",)
+    )
+    db_session.flush()
     gated_app_id = get_or_create_gated_app_id(
         db_session, GatedAppKind.MCP_SERVER, server.id
     )
-    replace_action_policies__no_commit(
+    replace_workspace_action_policies(
         db_session, gated_app_id, {"send_email": override}
     )
     db_session.commit()
@@ -170,32 +176,68 @@ def test_admin_tool_override_is_reflected(
         _request(_server_host(server), body=_tool_call_body("send_email")), user.id
     )
     assert matched is not None
-    assert matched.governing_action.policy is override
+    assert matched.governing_action.policy is ActionPolicy.ASK
     # A tool without an override still defaults to ASK.
     other = _evaluate(
         _request(_server_host(server), body=_tool_call_body("read_inbox")), user.id
     )
     assert other is not None
-    assert other.governing_action.policy is EndpointPolicy.ASK
+    assert other.governing_action.policy is ActionPolicy.ASK
 
 
-@pytest.mark.parametrize("method", ["initialize", "tools/list", "notifications/x"])
-def test_protocol_plumbing_is_not_gated(
+@pytest.mark.parametrize(
+    "method",
+    ["initialize", "tools/list", "notifications/x", "resources/read", "prompts/get"],
+)
+def test_protocol_plumbing_retains_server_attribution(
     db_session: Session, craft_server: CraftServerFactory, method: str
 ) -> None:
     user = create_test_user(db_session, "mcp_eval_plumbing")
     server = craft_server()
     body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method}).encode()
-    assert _evaluate(_request(_server_host(server), body=body), user.id) is None
+    assert isinstance(
+        _evaluate(_request(_server_host(server), body=body), user.id),
+        McpProtocolRequest,
+    )
 
 
-def test_get_stream_is_not_gated(
-    db_session: Session, craft_server: CraftServerFactory
+@pytest.mark.parametrize("method", ["GET", "DELETE"])
+def test_bodyless_protocol_retains_server_attribution(
+    db_session: Session, craft_server: CraftServerFactory, method: str
 ) -> None:
     user = create_test_user(db_session, "mcp_eval_get")
     server = craft_server()
-    req = _request(_server_host(server), method="GET", body=b"")
-    assert _evaluate(req, user.id) is None
+    req = _request(_server_host(server), method=method, body=b"")
+    assert isinstance(_evaluate(req, user.id), McpProtocolRequest)
+
+
+@pytest.mark.parametrize("method", ["GET", "POST"])
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {"Upgrade": "websocket", "Connection": "keep-alive, Upgrade"},
+        {"Upgrade": "custom-protocol"},
+        {"Connection": "uPgRaDe"},
+    ],
+)
+def test_protocol_upgrade_is_denied(
+    db_session: Session,
+    craft_server: CraftServerFactory,
+    method: str,
+    headers: dict[str, str],
+) -> None:
+    user = create_test_user(db_session, "mcp_eval_upgrade")
+    server = craft_server()
+    request = http.Request.make(
+        method,
+        server.server_url,
+        b'{"jsonrpc":"2.0","id":1,"method":"initialize"}' if method == "POST" else b"",
+        [(key.encode(), value.encode()) for key, value in headers.items()],
+    )
+    matched = McpRequestEvaluator().evaluate(request, POSTGRES_DEFAULT_SCHEMA, user.id)
+    assert isinstance(matched, AllMatchedActions)
+    assert matched.governing_action.policy is ActionPolicy.DENY
+    assert matched.governing_action.action_type == MCP_UNCLASSIFIABLE_ACTION_TYPE
 
 
 def test_unclassifiable_body_on_matched_host_is_denied(
@@ -204,8 +246,8 @@ def test_unclassifiable_body_on_matched_host_is_denied(
     user = create_test_user(db_session, "mcp_eval_unclassifiable")
     server = craft_server()
     matched = _evaluate(_request(_server_host(server), body=b"<not-json>"), user.id)
-    assert matched is not None
-    assert matched.governing_action.policy is EndpointPolicy.DENY
+    assert isinstance(matched, AllMatchedActions)
+    assert matched.governing_action.policy is ActionPolicy.DENY
     assert matched.governing_action.action_type == MCP_UNCLASSIFIABLE_ACTION_TYPE
     assert matched.target.key == (GatedAppKind.MCP_SERVER, server.id)
 
@@ -230,18 +272,23 @@ def test_non_craft_enabled_server_is_not_attributed(
     assert _evaluate(req, user.id) is None
 
 
-def test_batched_tool_calls_sorted_strictest_first(
+def test_batched_tool_calls_preserve_each_action(
     db_session: Session, craft_server: CraftServerFactory
 ) -> None:
     user = create_test_user(db_session, "mcp_eval_batch")
     server = craft_server()
+    db_session.add_all(
+        Tool(name=name, mcp_server_id=server.id, enabled=True)
+        for name in ("safe_read", "danger_write")
+    )
+    db_session.flush()
     gated_app_id = get_or_create_gated_app_id(
         db_session, GatedAppKind.MCP_SERVER, server.id
     )
-    replace_action_policies__no_commit(
+    replace_workspace_action_policies(
         db_session,
         gated_app_id,
-        {"safe_read": EndpointPolicy.ALWAYS, "danger_write": EndpointPolicy.DENY},
+        {"safe_read": ActionPolicy.ALWAYS, "danger_write": ActionPolicy.DENY},
     )
     db_session.commit()
 
@@ -252,9 +299,8 @@ def test_batched_tool_calls_sorted_strictest_first(
         user.id,
     )
     assert matched is not None
-    # DENY (strictest) governs; both tools are represented.
-    assert matched.governing_action.action_type == "danger_write"
-    assert matched.governing_action.policy is EndpointPolicy.DENY
+    # Recognition includes every action; the gate resolves settings afterwards.
+    assert all(action.policy is ActionPolicy.ASK for action in matched.actions)
     assert {a.action_type for a in matched.actions} == {"safe_read", "danger_write"}
 
 
@@ -263,9 +309,7 @@ def test_evaluator_failure_after_attribution_denies(
     craft_server: CraftServerFactory,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """An evaluator crash on an attributed MCP request must yield a DENY verdict:
-    the gate treats evaluator exceptions as off-catalog and the MCP resolver
-    claims by host, so a raise would forward the request with credentials."""
+    """Malformed MCP requests cannot reach credential injection."""
     user = create_test_user(db_session, "mcp_eval_crash")
     server = craft_server()
 
@@ -274,13 +318,13 @@ def test_evaluator_failure_after_attribution_denies(
     def _boom(*_args: Any, **_kwargs: Any) -> None:
         raise RuntimeError("policy lookup failed")
 
-    monkeypatch.setattr(re_mod, "get_action_policies", _boom)
+    monkeypatch.setattr(re_mod, "classify_mcp_request", _boom)
 
     matched = _evaluate(
         _request(_server_host(server), body=_tool_call_body("send_email")), user.id
     )
-    assert matched is not None
-    assert matched.governing_action.policy is EndpointPolicy.DENY
+    assert isinstance(matched, AllMatchedActions)
+    assert matched.governing_action.policy is ActionPolicy.DENY
     assert matched.governing_action.action_type == MCP_UNCLASSIFIABLE_ACTION_TYPE
     assert matched.target.key == (GatedAppKind.MCP_SERVER, server.id)
 
@@ -318,7 +362,7 @@ def test_attribution_resolves_by_user_access(
     matched = _evaluate(_request(host, body=_tool_call_body("send_email")), user.id)
     assert matched is not None
     assert matched.target.key == (GatedAppKind.MCP_SERVER, accessible.id)
-    assert matched.governing_action.policy is EndpointPolicy.ASK
+    assert matched.governing_action.policy is ActionPolicy.ASK
 
 
 def test_two_accessible_identical_servers_stay_ambiguous(

@@ -18,6 +18,9 @@ type ImageOptions struct {
 	Format    string // comma-separated list of text|json|sarif
 	FailOn    Severity
 	IgnoreURL string
+	// Strict fails a scan that extracts no packages, for callers that read a
+	// missing finding as a resolved one. Every image ships OS packages.
+	Strict bool
 	// Stdout/Stderr route the requested formats; see Options and renderReport.
 	Stdout io.Writer
 	Stderr io.Writer
@@ -28,7 +31,7 @@ type ImageOptions struct {
 // returns the result. Findings at or above opts.FailOn are reported as Blocking,
 // which is how it gates a release.
 func RunImage(opts ImageOptions) (*Result, error) {
-	findings, err := scanImage(opts.Image)
+	findings, err := scanImage(opts.Image, opts.Strict)
 	if err != nil {
 		return nil, fmt.Errorf("image scan failed: %w", err)
 	}
@@ -62,7 +65,7 @@ func RunImage(opts ImageOptions) (*Result, error) {
 // scanImage runs osv-scanner's layer-aware container scanner (as a library)
 // over ref and maps the results into Findings. ref may be a remote image, which
 // is pulled using the ambient Docker credentials.
-func scanImage(ref string) ([]Finding, error) {
+func scanImage(ref string, strict bool) ([]Finding, error) {
 	res, err := osvscanner.DoContainerScan(osvscanner.ScannerActions{
 		Image: ref,
 		// Fetch the OSV databases so matching works on a fresh CI runner
@@ -72,7 +75,7 @@ func scanImage(ref string) ([]Finding, error) {
 	if err != nil {
 		// ErrVulnerabilitiesFound is the normal "found something" path; results
 		// are still populated. ErrNoPackagesFound means nothing to scan.
-		if errors.Is(err, osvscanner.ErrNoPackagesFound) {
+		if errors.Is(err, osvscanner.ErrNoPackagesFound) && !strict {
 			return nil, nil
 		}
 		if !errors.Is(err, osvscanner.ErrVulnerabilitiesFound) {

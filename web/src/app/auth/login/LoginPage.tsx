@@ -1,10 +1,12 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { AuthTypeMetadata } from "@/lib/auth/types";
 import LoginText from "@/app/auth/login/LoginText";
 import CloudSSOSignIn from "@/app/auth/login/CloudSSOSignIn";
 import ProviderSignInButton from "@/app/auth/login/ProviderSignInButton";
 import { SignInButton, EmailPasswordForm } from "@/lib/auth/components";
+import { shouldAutoStartSso } from "@/lib/auth/utils";
 import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
 import { useSendAuthRequiredMessage } from "@/lib/extension/hooks";
 import { Button, MessageCard } from "@opal/components";
@@ -18,6 +20,8 @@ interface LoginPageProps {
   hidePageRedirect?: boolean;
   verified?: boolean;
   isFirstUser?: boolean;
+  /** False keeps the SSO button instead of starting the flow on load. */
+  autoRedirectToSso: boolean;
 }
 
 export default function LoginPage({
@@ -27,8 +31,10 @@ export default function LoginPage({
   hidePageRedirect,
   verified,
   isFirstUser,
+  autoRedirectToSso,
 }: LoginPageProps) {
   const t = useTranslations("auth");
+  const navigation = useNavigation();
   useSendAuthRequiredMessage();
 
   // Honor any existing nextUrl; only default to new team flow for first users with no nextUrl
@@ -38,6 +44,7 @@ export default function LoginPage({
   const ssoProviders = authTypeMetadata?.ssoProviders ?? [];
   // Kill switch off: hide password login/signup. Backend refuses regardless.
   const passwordAuthEnabled = authTypeMetadata?.passwordAuthEnabled !== false;
+  const autoStartSso = shouldAutoStartSso(authTypeMetadata, autoRedirectToSso);
   const orDivider = t("login.orDivider.text");
 
   return (
@@ -64,7 +71,7 @@ export default function LoginPage({
             nextUrl={effectiveNextUrl}
           />
           {NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED && (
-            <Button href="/auth/forgot-password">
+            <Button {...navigation.linkTo("/auth/forgot-password")}>
               {t("login.resetPasswordButton.label")}
             </Button>
           )}
@@ -82,6 +89,7 @@ export default function LoginPage({
                     key={provider.name}
                     provider={provider}
                     nextUrl={effectiveNextUrl}
+                    autoStart={autoStartSso}
                   />
                 ))}
               </div>
@@ -105,7 +113,7 @@ export default function LoginPage({
               if (typeof window !== "undefined" && window.top) {
                 window.top.location.href = "/auth/signup";
               } else {
-                window.location.href = "/auth/signup";
+                navigation.load("/auth/signup");
               }
             }}
             className="text-link font-medium cursor-pointer"

@@ -19,6 +19,9 @@ package release
 //	B9 shallow clone (even with --version) -> error                             TestComputeBetaTag_shallowCloneErrors
 //	B10 predecessor beta not an ancestor   -> error                             TestComputeBetaTag_predecessorNotAncestorErrors
 //	B11 origin unreachable                 -> error, no stale-state fallback    TestComputeBetaTag_fetchFailureErrors
+//	B12 override not a bare X.Y.Z          -> error                             TestComputeBetaTag_malformedOverrideErrors
+//	B13 ref that does not resolve          -> error                             TestComputeBetaTag_unknownRefErrors
+//	B14 origin unreachable, no override    -> error, hint --version             TestComputeBetaTag_detectionFailureErrors
 //
 // New branch cuts (ComputeNewBetaBranch) take the next minor after the newest
 // branch and cut it from origin/main, whose tip is PostCutSHA.
@@ -29,6 +32,10 @@ package release
 //	N3 another minor branch cut meanwhile  -> the cut follows the newest one     TestComputeNewBetaBranch_followsTheNewestBranch
 //	N4 next minor base already released    -> error                             TestComputeNewBetaBranch_releasedBaseErrors
 //	N5 shallow clone                       -> error                             TestComputeNewBetaBranch_shallowCloneErrors
+//	N6 no release branches on origin       -> error                             TestComputeNewBetaBranch_noReleaseBranchesErrors
+//	N7 origin unreachable                  -> error                             TestComputeNewBetaBranch_listFailureErrors
+//	N8 ref that does not resolve           -> error                             TestComputeNewBetaBranch_unknownRefErrors
+//	N9 betas of the base without a branch  -> error, no orphan beta.1           TestComputeNewBetaBranch_orphanBetasErrors
 
 import (
 	"strings"
@@ -307,5 +314,107 @@ func TestComputeNewBetaBranch_shallowCloneErrors(t *testing.T) {
 	// Postcondition.
 	if err == nil || !strings.Contains(err.Error(), "shallow clone") {
 		t.Errorf("expected shallow-clone error, got %v", err)
+	}
+}
+
+func TestComputeBetaTag_malformedOverrideErrors(t *testing.T) {
+	// Precondition.
+	gittest.SetupReleaseBranchRepo(t)
+
+	// Under test: the override carries a leading v.
+	_, _, err := ComputeBetaTag("", "v4.5.0")
+
+	// Postcondition.
+	if err == nil || !strings.Contains(err.Error(), "must be X.Y.Z") {
+		t.Errorf("expected a malformed-override error, got %v", err)
+	}
+}
+
+func TestComputeBetaTag_unknownRefErrors(t *testing.T) {
+	// Precondition.
+	gittest.SetupReleaseBranchRepo(t)
+
+	// Under test.
+	_, _, err := ComputeBetaTag("no-such-ref", "")
+
+	// Postcondition.
+	if err == nil || !strings.Contains(err.Error(), "failed to resolve") {
+		t.Errorf("expected a resolve error, got %v", err)
+	}
+}
+
+func TestComputeBetaTag_detectionFailureErrors(t *testing.T) {
+	// Precondition: an unreachable origin, so the branch listing fails.
+	repo := gittest.SetupReleaseBranchRepo(t)
+	gittest.Git(t, repo.Work, "remote", "set-url", "origin", t.TempDir())
+
+	// Under test.
+	_, _, err := ComputeBetaTag("", "")
+
+	// Postcondition.
+	if err == nil || !strings.Contains(err.Error(), "failed to detect the target release branch") {
+		t.Errorf("expected a detection error, got %v", err)
+	}
+	if err == nil || !strings.Contains(err.Error(), "--version") {
+		t.Errorf("expected a --version hint, got %v", err)
+	}
+}
+
+func TestComputeNewBetaBranch_noReleaseBranchesErrors(t *testing.T) {
+	// Precondition: an origin with main only.
+	_, work := gittest.InitOriginAndWork(t)
+	gittest.Commit(t, work, "a.txt")
+	gittest.PublishMain(t, work)
+	t.Chdir(work)
+
+	// Under test.
+	_, _, _, err := ComputeNewBetaBranch("")
+
+	// Postcondition.
+	if err == nil || !strings.Contains(err.Error(), "no release/vX.Y branches") {
+		t.Errorf("expected no-release-branches error, got %v", err)
+	}
+}
+
+func TestComputeNewBetaBranch_listFailureErrors(t *testing.T) {
+	// Precondition: an unreachable origin.
+	repo := gittest.SetupReleaseBranchRepo(t)
+	gittest.Git(t, repo.Work, "remote", "set-url", "origin", t.TempDir())
+
+	// Under test.
+	_, _, _, err := ComputeNewBetaBranch("")
+
+	// Postcondition.
+	if err == nil || !strings.Contains(err.Error(), "git ls-remote failed") {
+		t.Errorf("expected an ls-remote error, got %v", err)
+	}
+}
+
+func TestComputeNewBetaBranch_unknownRefErrors(t *testing.T) {
+	// Precondition.
+	gittest.SetupReleaseBranchRepo(t)
+
+	// Under test.
+	_, _, _, err := ComputeNewBetaBranch("no-such-ref")
+
+	// Postcondition.
+	if err == nil || !strings.Contains(err.Error(), "failed to resolve") {
+		t.Errorf("expected a resolve error, got %v", err)
+	}
+}
+
+func TestComputeNewBetaBranch_orphanBetasErrors(t *testing.T) {
+	// Precondition: v4.6.0-beta.0 is on origin, but release/v4.6 is not.
+	repo := gittest.SetupReleaseBranchRepo(t)
+	gittest.Git(t, repo.Work, "tag", "v4.6.0-beta.0", repo.PostCutSHA)
+	gittest.Git(t, repo.Work, "push", "--quiet", "origin", "v4.6.0-beta.0")
+	gittest.Git(t, repo.Work, "tag", "-d", "v4.6.0-beta.0")
+
+	// Under test.
+	_, _, _, err := ComputeNewBetaBranch("")
+
+	// Postcondition: the fetched beta blocks the cut instead of a beta.1.
+	if err == nil || !strings.Contains(err.Error(), "betas of v4.6.0 already exist but release/v4.6 does not") {
+		t.Errorf("expected an orphan-betas error, got %v", err)
 	}
 }

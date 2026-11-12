@@ -1,14 +1,25 @@
+import pytest
+
 from onyx.configs import app_configs
 from onyx.configs.constants import DocumentSource
 from onyx.tools.constants import SEARCH_TOOL_ID
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
+from tests.integration.common_utils.managers.mock_llm import MockLLMScript
 from tests.integration.common_utils.managers.persona import PersonaManager
+from tests.integration.common_utils.managers.project import ProjectManager
 from tests.integration.common_utils.managers.tool import ToolManager
 from tests.integration.common_utils.test_models import DATestUser, ToolName
+from tests.integration.mock_services.mock_llm_server.models import (
+    Reply,
+    RequestConditions,
+    ToolCall,
+)
 
 _DUMMY_OPENAI_API_KEY = "sk-mock-tool-policy-tests"
+_SEARCH_CALL_ID = "call_search_1"
+_ANSWER = "Here is what the search found."
 
 
 def _assert_integration_mode_enabled() -> None:
@@ -40,10 +51,36 @@ def _ensure_llm_provider(admin_user: DATestUser) -> None:
     )
 
 
-def test_forced_tool_executes_when_available(admin_user: DATestUser) -> None:
+def _script_preferred_search(mock_llm: MockLLMScript, query: str) -> None:
+    """The preferred search remains optional while definitions stay stable."""
+    mock_llm.conversation(
+        "chat",
+        Reply(
+            tool_calls=[
+                ToolCall(
+                    id=_SEARCH_CALL_ID,
+                    name="internal_search",
+                    arguments={"queries": [query]},
+                )
+            ],
+            conditions=RequestConditions(
+                offers=["internal_search"],
+                tool_choice="auto",
+            ),
+        ),
+        Reply(
+            text=_ANSWER,
+            conditions=RequestConditions(has_results_for=[_SEARCH_CALL_ID]),
+        ),
+    )
+
+
+def test_preferred_tool_executes_when_available(
+    admin_user: DATestUser, mock_llm: MockLLMScript
+) -> None:
     _assert_integration_mode_enabled()
     _seed_connector_for_search_tool(admin_user)
-    _ensure_llm_provider(admin_user)
+    _script_preferred_search(mock_llm, "alpha")
 
     search_tool_id = _get_internal_search_tool_id(admin_user)
     persona = PersonaManager.create(
@@ -55,10 +92,9 @@ def test_forced_tool_executes_when_available(admin_user: DATestUser) -> None:
 
     response = ChatSessionManager.send_message(
         chat_session_id=chat_session.id,
-        message="force the search tool",
+        message="prefer the search tool",
         user_performing_action=admin_user,
-        forced_tool_ids=[search_tool_id],
-        mock_llm_response='{"name":"internal_search","arguments":{"queries":["alpha"]}}',
+        preferred_tool_id=search_tool_id,
     )
 
     assert response.error is None, f"Unexpected stream error: {response.error}"
@@ -70,7 +106,64 @@ def test_forced_tool_executes_when_available(admin_user: DATestUser) -> None:
     assert response.tool_call_debug[0].tool_args == {"queries": ["alpha"]}
 
 
-def test_forced_tool_rejected_when_not_in_persona_tools(
+@pytest.mark.parametrize("allow_search", [True, False])
+def test_search_preference_uses_inline_project_files(
+    admin_user: DATestUser, mock_llm: MockLLMScript, allow_search: bool
+) -> None:
+    _assert_integration_mode_enabled()
+    _seed_connector_for_search_tool(admin_user)
+    search_tool_id = _get_internal_search_tool_id(admin_user)
+    project = ProjectManager.create(
+        name="Inline project search preference", user_performing_action=admin_user
+    )
+    evidence = "The project access code is HARBOR-5729."
+    uploaded = ProjectManager.upload_files(
+        project_id=project.id,
+        files=[("access-code.txt", evidence.encode())],
+        user_performing_action=admin_user,
+    )
+    assert len(uploaded.user_files) == 1
+    assert not uploaded.rejected_files
+    assert uploaded.user_files[0].token_count
+    if allow_search:
+        mock_llm.conversation(
+            "inline-project",
+            Reply(
+                text="The code is HARBOR-5729.",
+                conditions=RequestConditions(
+                    prompt_contains=[evidence], does_not_offer=["internal_search"]
+                ),
+            ),
+        )
+    chat_session = ChatSessionManager.create(
+        project_id=project.id, user_performing_action=admin_user
+    )
+    response = ChatSessionManager.send_message(
+        chat_session_id=chat_session.id,
+        message="What is the project access code?",
+        user_performing_action=admin_user,
+        preferred_tool_id=search_tool_id,
+        allowed_tool_ids=None if allow_search else [],
+    )
+
+    if not allow_search:
+        assert response.error is not None
+        assert (
+            response.error.error
+            == f"Preferred tool {search_tool_id} not found in tools"
+        )
+        assert not response.used_tools
+        return
+
+    assert response.error is None, f"Unexpected stream error: {response.error}"
+    assert response.full_message == "The code is HARBOR-5729."
+    assert not response.used_tools
+    requests = mock_llm.requests_in("inline-project")
+    assert len(requests) == 1
+    assert "The user selected these operations" not in requests[0].prompt_text
+
+
+def test_preferred_tool_rejected_when_not_in_persona_tools(
     admin_user: DATestUser,
 ) -> None:
     _assert_integration_mode_enabled()
@@ -85,22 +178,29 @@ def test_forced_tool_rejected_when_not_in_persona_tools(
 
     response = ChatSessionManager.send_message(
         chat_session_id=chat_session.id,
-        message="try forcing a missing tool",
+        message="prefer a missing tool",
         user_performing_action=admin_user,
-        forced_tool_ids=[search_tool_id],
+        preferred_tool_id=search_tool_id,
     )
 
     assert response.error is not None
-    assert response.error.error == f"Forced tool {search_tool_id} not found in tools"
+    assert response.error.error == f"Preferred tool {search_tool_id} not found in tools"
     assert response.used_tools == []
 
 
 def test_allowed_tool_ids_excludes_tools_outside_allowlist(
-    admin_user: DATestUser,
+    admin_user: DATestUser, mock_llm: MockLLMScript
 ) -> None:
     _assert_integration_mode_enabled()
     _seed_connector_for_search_tool(admin_user)
-    _ensure_llm_provider(admin_user)
+    # Tool-call JSON in the text must not run a tool that was not offered.
+    mock_llm.conversation(
+        "chat",
+        Reply(
+            text='{"name":"internal_search","arguments":{"queries":["beta"]}}',
+            conditions=RequestConditions(does_not_offer=["internal_search"]),
+        ),
+    )
 
     search_tool_id = _get_internal_search_tool_id(admin_user)
     persona = PersonaManager.create(
@@ -115,7 +215,6 @@ def test_allowed_tool_ids_excludes_tools_outside_allowlist(
         message="attempt tool use with empty allowlist",
         user_performing_action=admin_user,
         allowed_tool_ids=[],
-        mock_llm_response='{"name":"internal_search","arguments":{"queries":["beta"]}}',
     )
 
     assert response.error is None, f"Unexpected stream error: {response.error}"
@@ -123,7 +222,7 @@ def test_allowed_tool_ids_excludes_tools_outside_allowlist(
     assert response.tool_call_debug == []
 
 
-def test_forced_and_allowlist_conflict_returns_validation_error(
+def test_preferred_and_allowlist_conflict_returns_validation_error(
     admin_user: DATestUser,
 ) -> None:
     _assert_integration_mode_enabled()
@@ -140,21 +239,88 @@ def test_forced_and_allowlist_conflict_returns_validation_error(
 
     response = ChatSessionManager.send_message(
         chat_session_id=chat_session.id,
-        message="force a tool blocked by allowlist",
+        message="prefer a tool blocked by allowlist",
         user_performing_action=admin_user,
         allowed_tool_ids=[],
-        forced_tool_ids=[search_tool_id],
+        preferred_tool_id=search_tool_id,
     )
 
     assert response.error is not None
-    assert response.error.error == f"Forced tool {search_tool_id} not found in tools"
+    assert response.error.error == f"Preferred tool {search_tool_id} not found in tools"
     assert response.used_tools == []
 
 
-def test_run_search_always_maps_to_forced_search_tool(admin_user: DATestUser) -> None:
+def test_preference_is_optional_and_does_not_leak_into_followup(
+    admin_user: DATestUser, mock_llm: MockLLMScript
+) -> None:
     _assert_integration_mode_enabled()
     _seed_connector_for_search_tool(admin_user)
-    _ensure_llm_provider(admin_user)
+    mock_llm.conversation(
+        "chat",
+        Reply(
+            text="No search needed.", conditions=RequestConditions(tool_choice="auto")
+        ),
+        Reply(
+            text="Follow-up answer.", conditions=RequestConditions(tool_choice="auto")
+        ),
+    )
+    search_tool_id = _get_internal_search_tool_id(admin_user)
+    persona = PersonaManager.create(
+        tool_ids=[search_tool_id], user_performing_action=admin_user
+    )
+    chat_session = ChatSessionManager.create(
+        persona_id=persona.id, user_performing_action=admin_user
+    )
+    first = ChatSessionManager.send_message(
+        chat_session_id=chat_session.id,
+        message="Hello",
+        user_performing_action=admin_user,
+        preferred_tool_id=search_tool_id,
+    )
+    second = ChatSessionManager.send_message(
+        chat_session_id=chat_session.id,
+        message="Hello again",
+        user_performing_action=admin_user,
+    )
+    assert first.error is second.error is None
+    assert first.used_tools == second.used_tools == []
+    first_request, second_request = mock_llm.requests_in("chat")
+    assert (
+        "The user selected these operations for this request: internal_search."
+        in str(first_request.body["messages"])
+    )
+    assert "The user selected these operations" not in str(
+        second_request.body["messages"]
+    )
+    assert first_request.body["tools"] == second_request.body["tools"]
+    mock_llm.verify()
+
+
+def test_parallel_tool_calls_each_get_a_debug_entry(
+    admin_user: DATestUser, mock_llm: MockLLMScript
+) -> None:
+    _assert_integration_mode_enabled()
+    _seed_connector_for_search_tool(admin_user)
+    call_ids = ["call_search_alpha", "call_search_beta"]
+    mock_llm.conversation(
+        "chat",
+        Reply(
+            tool_calls=[
+                ToolCall(
+                    id=call_id,
+                    name="internal_search",
+                    arguments={"queries": [query]},
+                )
+                for call_id, query in zip(call_ids, ["alpha", "beta"], strict=True)
+            ],
+            conditions=RequestConditions(
+                offers=["internal_search"],
+                tool_choice="auto",
+            ),
+        ),
+        # The merged search call keeps the first call's id.
+        Reply(text=_ANSWER, conditions=RequestConditions(has_results_for=call_ids[:1])),
+    )
 
     search_tool_id = _get_internal_search_tool_id(admin_user)
     persona = PersonaManager.create(
@@ -166,16 +332,63 @@ def test_run_search_always_maps_to_forced_search_tool(admin_user: DATestUser) ->
 
     response = ChatSessionManager.send_message(
         chat_session_id=chat_session.id,
-        message="always run search",
+        message="run the search tool twice",
         user_performing_action=admin_user,
-        forced_tool_ids=[search_tool_id],
-        mock_llm_response='{"name":"internal_search","arguments":{"queries":["gamma"]}}',
+        preferred_tool_id=search_tool_id,
     )
 
     assert response.error is None, f"Unexpected stream error: {response.error}"
-    assert any(
-        tool.tool_name == ToolName.INTERNAL_SEARCH for tool in response.used_tools
+    assert [entry.tool_name for entry in response.tool_call_debug] == [
+        "internal_search",
+        "internal_search",
+    ]
+    assert [entry.tool_args for entry in response.tool_call_debug] == [
+        {"queries": ["alpha"]},
+        {"queries": ["beta"]},
+    ]
+    assert [entry.tool_call_id for entry in response.tool_call_debug] == call_ids
+
+
+def test_preferred_tool_call_written_as_xml_executes(
+    admin_user: DATestUser, mock_llm: MockLLMScript
+) -> None:
+    """Explicit XML tool calls still execute when the request has a preference."""
+    _assert_integration_mode_enabled()
+    _seed_connector_for_search_tool(admin_user)
+    mock_llm.conversation(
+        "chat",
+        Reply(
+            text=(
+                '<function_calls><invoke name="internal_search">'
+                '<parameter name="queries">["delta"]</parameter>'
+                "</invoke></function_calls>"
+            ),
+            conditions=RequestConditions(
+                offers=["internal_search"],
+                tool_choice="auto",
+            ),
+        ),
+        Reply(text=_ANSWER, conditions=RequestConditions(tool_choice="auto")),
     )
+
+    search_tool_id = _get_internal_search_tool_id(admin_user)
+    persona = PersonaManager.create(
+        tool_ids=[search_tool_id], user_performing_action=admin_user
+    )
+    chat_session = ChatSessionManager.create(
+        persona_id=persona.id, user_performing_action=admin_user
+    )
+
+    response = ChatSessionManager.send_message(
+        chat_session_id=chat_session.id,
+        message="use the search tool",
+        user_performing_action=admin_user,
+        preferred_tool_id=search_tool_id,
+    )
+
+    assert response.error is None, f"Unexpected stream error: {response.error}"
     assert len(response.tool_call_debug) == 1
     assert response.tool_call_debug[0].tool_name == "internal_search"
-    assert response.tool_call_debug[0].tool_args == {"queries": ["gamma"]}
+    assert response.tool_call_debug[0].tool_args == {"queries": ["delta"]}
+    _, answer_request = mock_llm.requests_in("chat")
+    assert answer_request.tool_result_ids(), "expected the search result in history"

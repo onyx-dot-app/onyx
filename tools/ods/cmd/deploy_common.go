@@ -32,6 +32,27 @@ const (
 	buildPollTimeout = 120 * time.Minute
 )
 
+// runPolling holds the poll intervals and discovery timeouts used while
+// watching workflow runs and bump PRs.
+type runPolling struct {
+	discoveryInterval time.Duration
+	discoveryTimeout  time.Duration
+	progressInterval  time.Duration
+	bumpPRInterval    time.Duration
+	bumpPRTimeout     time.Duration
+}
+
+// defaultRunPolling returns the polling used by the deploy commands.
+func defaultRunPolling() runPolling {
+	return runPolling{
+		discoveryInterval: runDiscoveryInterval,
+		discoveryTimeout:  runDiscoveryTimeout,
+		progressInterval:  runProgressInterval,
+		bumpPRInterval:    bumpPRPollInterval,
+		bumpPRTimeout:     bumpPRDiscoveryTimeout,
+	}
+}
+
 // resolveDeployTarget returns the deploy target repo and workflow to use,
 // preferring explicit flags, then saved config, then prompting the user on
 // first-time setup. The repo is shared by all deploy subcommands (read from and
@@ -39,10 +60,10 @@ const (
 // workflowSelector picks which per-command section holds the workflow filename
 // (e.g. DeployEdge vs DeployWiki). Any newly-prompted values are persisted back
 // to the config file so subsequent runs are non-interactive.
-func resolveDeployTarget(flagRepo, flagWorkflow string, workflowSelector func(*config.Config) *string) (string, string) {
+func resolveDeployTarget(flagRepo, flagWorkflow string, workflowSelector func(*config.Config) *string) (string, string, error) {
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("Failed to load ods config: %v", err)
+		return "", "", fatalErrorf("Failed to load ods config: %w", err)
 	}
 	repoPtr := &cfg.Deploy.TargetRepo
 	workflowPtr := workflowSelector(cfg)
@@ -71,20 +92,20 @@ func resolveDeployTarget(flagRepo, flagWorkflow string, workflowSelector func(*c
 		*repoPtr = repo
 		*workflowPtr = workflow
 		if err := config.Save(cfg); err != nil {
-			log.Fatalf("Failed to save ods config: %v", err)
+			return "", "", fatalErrorf("Failed to save ods config: %w", err)
 		}
 		log.Infof("Saved deploy target to %s", paths.ConfigFilePath())
 	}
 
-	return repo, workflow
+	return repo, workflow, nil
 }
 
 // announceDeploymentRun looks up the deployment.yml run triggered by pushing
 // tag and prints its URL. The lookup is best-effort: the tag is already pushed
 // and the build runs regardless, so failures only warn.
-func announceDeploymentRun(tag string) {
+func announceDeploymentRun(polling runPolling, tag string) {
 	log.Info("Looking up the deployment run...")
-	run, err := waitForNewRun(onyxRepo, deploymentWorkflowFile, "push", tag, 0)
+	run, err := waitForNewRun(polling, onyxRepo, deploymentWorkflowFile, "push", tag, 0)
 	if err != nil {
 		log.Warnf("Could not find the deployment run for %s: %v", tag, err)
 		log.Warnf("Find it at https://github.com/%s/actions/workflows/%s", onyxRepo, deploymentWorkflowFile)
@@ -102,7 +123,11 @@ type workflowRun struct {
 	URL        string `json:"url"`
 	Event      string `json:"event"`
 	HeadBranch string `json:"headBranch"`
+	HeadSHA    string `json:"headSha"`
 }
+
+// workflowRunJSONFields are the `gh run` JSON fields that fill a workflowRun.
+const workflowRunJSONFields = "databaseId,status,conclusion,url,event,headBranch,headSha"
 
 // latestWorkflowRunID returns the highest databaseId for runs of the given
 // workflow filtered by event (and optional branch). Returns 0 if no runs
@@ -127,7 +152,7 @@ func listWorkflowRuns(repo, workflowFile, event, branch string, limit int) ([]wo
 		"-R", repo,
 		"--workflow", workflowFile,
 		"--limit", fmt.Sprintf("%d", limit),
-		"--json", "databaseId,status,conclusion,url,event,headBranch",
+		"--json", workflowRunJSONFields,
 	}
 	if event != "" {
 		args = append(args, "--event", event)
@@ -154,29 +179,46 @@ func listWorkflowRuns(repo, workflowFile, event, branch string, limit int) ([]wo
 
 // waitForNewRun polls until a workflow run with databaseId > priorRunID
 // appears, or the discovery timeout fires.
-func waitForNewRun(repo, workflowFile, event, branch string, priorRunID int64) (*workflowRun, error) {
-	deadline := time.Now().Add(runDiscoveryTimeout)
+func waitForNewRun(polling runPolling, repo, workflowFile, event, branch string, priorRunID int64) (*workflowRun, error) {
+	return waitForRun(polling, repo, workflowFile, event, branch, func(r workflowRun) bool {
+		return r.DatabaseID > priorRunID
+	})
+}
+
+// waitForRunAtCommit is waitForNewRun for a run that also built commit sha. A
+// tag name can point at other commits over time, so its newest run is not
+// always a build of the commit it points at now.
+func waitForRunAtCommit(polling runPolling, repo, workflowFile, event, branch, sha string, priorRunID int64) (*workflowRun, error) {
+	return waitForRun(polling, repo, workflowFile, event, branch, func(r workflowRun) bool {
+		return r.DatabaseID > priorRunID && r.HeadSHA == sha
+	})
+}
+
+// waitForRun polls the newest runs until one matches, or the discovery
+// timeout fires.
+func waitForRun(polling runPolling, repo, workflowFile, event, branch string, match func(workflowRun) bool) (*workflowRun, error) {
+	deadline := time.Now().Add(polling.discoveryTimeout)
 	for {
 		runs, err := listWorkflowRuns(repo, workflowFile, event, branch, 5)
 		if err != nil {
 			return nil, err
 		}
 		for _, r := range runs {
-			if r.DatabaseID > priorRunID {
+			if match(r) {
 				return &r, nil
 			}
 		}
 		if time.Now().After(deadline) {
-			return nil, fmt.Errorf("no new run appeared within %s", runDiscoveryTimeout)
+			return nil, fmt.Errorf("no matching run appeared within %s", polling.discoveryTimeout)
 		}
-		time.Sleep(runDiscoveryInterval)
+		time.Sleep(polling.discoveryInterval)
 	}
 }
 
 // waitForRunCompletion polls a specific run until it reaches a terminal
 // status. Returns an error if the run does not conclude with success or the
 // timeout fires.
-func waitForRunCompletion(repo string, runID int64, timeout time.Duration, label string) error {
+func waitForRunCompletion(polling runPolling, repo string, runID int64, timeout time.Duration, label string) error {
 	deadline := time.Now().Add(timeout)
 	for {
 		run, err := getRun(repo, runID)
@@ -193,7 +235,7 @@ func waitForRunCompletion(repo string, runID int64, timeout time.Duration, label
 		if time.Now().After(deadline) {
 			return fmt.Errorf("%s run %d did not complete within %s (see %s)", label, runID, timeout, run.URL)
 		}
-		time.Sleep(runProgressInterval)
+		time.Sleep(polling.progressInterval)
 	}
 }
 
@@ -201,7 +243,7 @@ func getRun(repo string, runID int64) (*workflowRun, error) {
 	cmd := exec.Command(
 		"gh", "run", "view", fmt.Sprintf("%d", runID),
 		"-R", repo,
-		"--json", "databaseId,status,conclusion,url,event,headBranch",
+		"--json", workflowRunJSONFields,
 	)
 	output, err := cmd.Output()
 	if err != nil {

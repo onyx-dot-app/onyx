@@ -12,12 +12,12 @@ import {
 import {
   MessageRenderer,
   RenderType,
-} from "@/app/app/message/messageComponents/interfaces";
+} from "@/app/app/message/messageComponents/types";
 import { CodeBlock } from "@/app/app/message/CodeBlock";
 import hljs from "highlight.js/lib/core";
 import python from "highlight.js/lib/languages/python";
 import { SvgTerminal } from "@opal/icons";
-import FadingEdgeContainer from "@/refresh-components/FadingEdgeContainer";
+import { ShadowDiv } from "@opal/components";
 
 // Register Python language for highlighting
 hljs.registerLanguage("python", python);
@@ -231,12 +231,14 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
       supportsCollapsible: true,
       alwaysCollapsible: true,
       content: (
-        <FadingEdgeContainer
-          direction="bottom"
+        <ShadowDiv
+          shadowDirection="bottom-only"
+          variant="mask"
+          shadowHeight={8}
           className="max-h-24 overflow-hidden"
         >
           {content}
-        </FadingEdgeContainer>
+        </ShadowDiv>
       ),
     },
   ]);

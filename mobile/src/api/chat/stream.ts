@@ -2,7 +2,7 @@
 import { fetch as expoFetch } from "expo/fetch";
 
 import { getBaseUrl } from "@/api/config";
-import { getValidToken } from "@/api/auth/refreshState";
+import { buildHeaders } from "@/api/client";
 import { createNdjsonBuffer } from "@/chat/ndjson";
 import { FileDescriptor } from "@/chat/interfaces";
 import { LlmOverride } from "@/chat/models";
@@ -23,9 +23,9 @@ export interface SendMessageBody {
   file_descriptors: FileDescriptor[];
   deep_research: boolean;
   origin: string;
-  // Omitted/null = backend defaults: allow all tools, force none, no source filter.
+  // Omitted/null = backend defaults: allow all tools, prefer none, no source filter.
   allowed_tool_ids?: number[] | null;
-  forced_tool_id?: number | null;
+  preferred_tool_id?: number | null;
   internal_search_filters?: InternalSearchFilters | null;
   // Omitted or null runs the agent's own default model. Note the singular name: `llm_overrides`
   // is a separate field for multi-model comparison, which mobile does not use.
@@ -35,7 +35,7 @@ export interface SendMessageBody {
 export interface ChatToolOptions {
   deepResearch: boolean;
   allowedToolIds: number[] | null;
-  forcedToolId: number | null;
+  preferredToolId: number | null;
   internalSearchFilters: InternalSearchFilters | null;
   llmOverride: LlmOverride | null;
 }
@@ -75,13 +75,6 @@ export function isHeartbeat(event: unknown): boolean {
   const wrapped = (event as { obj?: { type?: string } }).obj;
   if (wrapped?.type === "chat_heartbeat") return true;
   return (event as { type?: string }).type === "chat_heartbeat";
-}
-
-async function authHeaders(): Promise<Record<string, string>> {
-  const token = await getValidToken();
-  const headers: Record<string, string> = { Accept: "application/json" };
-  if (token) headers.Authorization = `Bearer ${token}`;
-  return headers;
 }
 
 async function raiseForStatus(response: ExpoResponse): Promise<never> {
@@ -132,7 +125,7 @@ export async function* streamChatMessage(
 ): AsyncGenerator<StreamEvent> {
   const response = await expoFetch(`${getBaseUrl()}/chat/send-chat-message`, {
     method: "POST",
-    headers: { ...(await authHeaders()), "Content-Type": "application/json" },
+    headers: await buildHeaders({ signal }, true),
     body: JSON.stringify(body),
     signal,
   });
@@ -149,7 +142,7 @@ export async function* resumeChatMessage(
 ): AsyncGenerator<StreamEvent> {
   const response = await expoFetch(
     `${getBaseUrl()}/chat/chat-session/${sessionId}/resume-stream?cursor=${cursor}`,
-    { method: "GET", headers: await authHeaders(), signal },
+    { method: "GET", headers: await buildHeaders({ signal }, false), signal },
   );
 
   if (!response.ok) await raiseForStatus(response);

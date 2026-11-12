@@ -1,39 +1,42 @@
-import React from "react";
 import {
   act,
+  deferred,
   fireEvent,
   render,
   screen,
   waitFor,
 } from "@tests/setup/test-utils";
-import { SWRConfig } from "swr";
-
+import { FetchError } from "@/lib/fetcher";
+import { readWorkspaceDirectorySnapshot } from "@/app/craft/services/workspaceDirectorySnapshots";
+import { DirectoryTree } from "@/app/craft/components/output-panel/DirectoryTree";
 import FilesTab from "@/app/craft/components/output-panel/FilesTab";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
-import { fetchDirectoryListing } from "@/app/craft/services/apiServices";
+import {
+  fetchDirectoryListing,
+  downloadArtifactFile,
+  downloadDirectory,
+} from "@/app/craft/services/apiServices";
 import type {
   DirectoryListing,
   FileSystemEntry,
 } from "@/app/craft/types/streamingTypes";
 
+let mockUserId = "test-user";
+jest.mock("@/providers/UserProvider", () => ({
+  useUser: () => ({ user: { id: mockUserId } }),
+}));
+
 jest.mock("@/app/craft/services/apiServices", () => ({
   ...jest.requireActual("@/app/craft/services/apiServices"),
   fetchDirectoryListing: jest.fn(),
+  downloadArtifactFile: jest.fn(),
+  downloadDirectory: jest.fn(),
 }));
-
-const mockedFetchDirectoryListing = jest.mocked(fetchDirectoryListing);
-
+const listing = jest.mocked(fetchDirectoryListing);
 function file(name: string, path: string): FileSystemEntry {
-  return {
-    name,
-    path,
-    is_directory: false,
-    size: 10,
-    mime_type: "text/plain",
-  };
+  return { name, path, is_directory: false, size: 10, mime_type: "text/plain" };
 }
-
-const outputsDirectory: FileSystemEntry = {
+const outputs: FileSystemEntry = {
   name: "outputs",
   path: "outputs",
   is_directory: true,
@@ -41,350 +44,776 @@ const outputsDirectory: FileSystemEntry = {
   mime_type: null,
 };
 
-describe("FilesTab", () => {
-  beforeEach(() => {
-    mockedFetchDirectoryListing.mockReset();
-    useBuildSessionStore.setState({
-      currentSessionId: null,
-      sessions: new Map(),
+beforeEach(() => {
+  mockUserId = "test-user";
+  jest.clearAllMocks();
+  window.sessionStorage.clear();
+  useBuildSessionStore.setState({
+    currentSessionId: null,
+    sessions: new Map(),
+    preProvisioning: { status: "idle" },
+    sessionHistory: [],
+  });
+  useBuildSessionStore.getState().createSession("session");
+});
+
+it("opens outputs initially and opens a resource without replacing the tree", async () => {
+  listing.mockImplementation(async (_session, path) => ({
+    path: path ?? "",
+    entries: path ? [file("notes.md", "outputs/notes.md")] : [outputs],
+  }));
+  const onFileClick = jest.fn();
+  render(<FilesTab sessionId="session" onFileClick={onFileClick} />);
+  fireEvent.click(await screen.findByRole("button", { name: "notes.md" }));
+  expect(onFileClick).toHaveBeenCalledWith("outputs/notes.md", "notes.md");
+  expect(screen.getByRole("button", { name: "outputs" })).toHaveAttribute(
+    "aria-expanded",
+    "true"
+  );
+});
+
+it("keeps useful files during reload and rejects a superseded listing", async () => {
+  const first = deferred<DirectoryListing>();
+  const second = deferred<DirectoryListing>();
+  let children = 0;
+  listing.mockImplementation(async (_session, path) => {
+    if (!path) return { path: "", entries: [outputs] };
+    children++;
+    if (children === 1)
+      return { path, entries: [file("old.txt", "outputs/old.txt")] };
+    return children === 2 ? first.promise : second.promise;
+  });
+  const { rerender } = render(<FilesTab sessionId="session" />);
+  await screen.findByRole("button", { name: "old.txt" });
+  rerender(<FilesTab sessionId="session" refreshKey={1} />);
+  await waitFor(() => expect(children).toBe(2));
+  expect(screen.getByRole("button", { name: "old.txt" })).toBeInTheDocument();
+  rerender(<FilesTab sessionId="session" refreshKey={2} />);
+  await waitFor(() => expect(children).toBe(3));
+  await act(async () =>
+    second.resolve({
+      path: "outputs",
+      entries: [file("new.txt", "outputs/new.txt")],
+    })
+  );
+  await screen.findByRole("button", { name: "new.txt" });
+  await act(async () =>
+    first.resolve({
+      path: "outputs",
+      entries: [file("stale.txt", "outputs/stale.txt")],
+    })
+  );
+  expect(screen.queryByText("stale.txt")).not.toBeInTheDocument();
+});
+
+it("retains old files when refresh fails", async () => {
+  listing.mockResolvedValue({
+    path: "",
+    entries: [file("notes.txt", "notes.txt")],
+  });
+  const { rerender } = render(<FilesTab sessionId="session" />);
+  await screen.findByRole("button", { name: "notes.txt" });
+  listing.mockRejectedValue(new Error("offline"));
+  rerender(<FilesTab sessionId="session" refreshKey={1} />);
+  await screen.findByText("Error loading files");
+  expect(screen.getByRole("button", { name: "notes.txt" })).toBeInTheDocument();
+});
+
+it("searches collapsed directories and returns to the same tree", async () => {
+  const nested = { ...outputs, name: "scripts", path: "scripts" };
+  listing.mockImplementation(async (_session, path) => ({
+    path: path ?? "",
+    entries: path ? [file("report.txt", "scripts/report.txt")] : [nested],
+  }));
+  const { rerender } = render(<FilesTab sessionId="session" />);
+  const tree = await screen.findByRole("button", { name: "scripts" });
+  expect(tree).toHaveAttribute("aria-expanded", "false");
+  const container = tree.closest(".overflow-auto");
+  if (!container) throw new Error("No scroll container");
+  fireEvent.scroll(container, { target: { scrollTop: 120 } });
+  rerender(<FilesTab sessionId="session" searchQuery="REPORT" />);
+  await screen.findByRole("button", { name: "scripts/report.txt" });
+  rerender(<FilesTab sessionId="session" searchQuery="" />);
+  expect(screen.getByRole("button", { name: "scripts" })).toBe(tree);
+  expect(container.scrollTop).toBe(120);
+  expect(tree).toHaveAttribute("aria-expanded", "false");
+});
+
+it.each([
+  { name: "notes.txt", mimeType: "text/plain" },
+  { name: "photo.png", mimeType: "image/png" },
+])("downloads $name without an attach action", async ({ name, mimeType }) => {
+  listing.mockResolvedValue({
+    path: "",
+    entries: [{ ...file(name, name), mime_type: mimeType }],
+  });
+  render(<FilesTab sessionId="session" />);
+  await screen.findByRole("button", { name });
+  fireEvent.click(screen.getByRole("button", { name: "Download" }));
+  expect(downloadArtifactFile).toHaveBeenCalledWith("session", name);
+  expect(
+    screen.queryByRole("button", { name: "Attach to chat" })
+  ).not.toBeInTheDocument();
+});
+
+it.each([401, 403, 404])(
+  "removes retained directory rows after access loss (%s)",
+  async (status) => {
+    listing.mockResolvedValue({
+      path: "",
+      entries: [file("private.txt", "private.txt")],
+    });
+    const { rerender } = render(<FilesTab sessionId="session" />);
+    await screen.findByRole("button", { name: "private.txt" });
+    listing.mockRejectedValue(new FetchError("Unavailable", status, null));
+    rerender(<FilesTab sessionId="session" refreshKey={1} />);
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: "private.txt" })
+      ).not.toBeInTheDocument()
+    );
+    await waitFor(() =>
+      expect(
+        readWorkspaceDirectorySnapshot("test-user", "session", "")
+      ).toBeUndefined()
+    );
+  }
+);
+
+it("keeps prior search hits when a folder refresh is incomplete", async () => {
+  listing.mockImplementation(async (_session, path) => ({
+    path: path ?? "",
+    entries: path ? [file("report.txt", "outputs/report.txt")] : [outputs],
+  }));
+  const { rerender } = render(
+    <FilesTab sessionId="session" searchQuery="report" />
+  );
+  await screen.findByRole("button", { name: "outputs/report.txt" });
+  listing.mockImplementation(async (_session, path) => {
+    if (path) throw new Error("Temporary folder failure");
+    return { path: "", entries: [outputs] };
+  });
+  rerender(
+    <FilesTab sessionId="session" searchQuery="report" refreshKey={1} />
+  );
+  await screen.findByText(
+    "Some folders could not be loaded. Refresh to try again."
+  );
+  expect(
+    screen.getByRole("button", { name: "outputs/report.txt" })
+  ).toBeInTheDocument();
+});
+
+it("reuses fresh directory listings across panel and folder reopen", async () => {
+  listing.mockImplementation(async (_session, path) => ({
+    path: path ?? "",
+    entries: path ? [file("notes.txt", "outputs/notes.txt")] : [outputs],
+  }));
+  const { rerender } = render(<FilesTab sessionId="session" />);
+  await screen.findByRole("button", { name: "notes.txt" });
+  expect(listing).toHaveBeenCalledTimes(2);
+  rerender(<FilesTab sessionId="session" isActive={false} />);
+  rerender(<FilesTab sessionId="session" isActive />);
+  fireEvent.click(screen.getByRole("button", { name: "outputs" }));
+  fireEvent.click(screen.getByRole("button", { name: "outputs" }));
+  await screen.findByRole("button", { name: "notes.txt" });
+  expect(listing).toHaveBeenCalledTimes(2);
+});
+
+it("refreshes stale listings in the background while keeping their rows", async () => {
+  let now = Date.now();
+  const clock = jest.spyOn(Date, "now").mockImplementation(() => now);
+  const refresh = deferred<DirectoryListing>();
+  listing
+    .mockResolvedValueOnce({
+      path: "",
+      entries: [file("old.txt", "old.txt")],
+    })
+    .mockReturnValueOnce(refresh.promise);
+  try {
+    const { rerender } = render(<FilesTab sessionId="session" canLoad />);
+    await screen.findByRole("button", { name: "old.txt" });
+    rerender(<FilesTab sessionId="session" canLoad isActive={false} />);
+    now += 30_001;
+    rerender(<FilesTab sessionId="session" canLoad isActive />);
+    await waitFor(() => expect(listing).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole("button", { name: "old.txt" })).toBeInTheDocument();
+    await act(async () =>
+      refresh.resolve({
+        path: "",
+        entries: [file("new.txt", "new.txt")],
+      })
+    );
+    await screen.findByRole("button", { name: "new.txt" });
+  } finally {
+    clock.mockRestore();
+  }
+});
+
+it("bypasses freshness for explicit reload and hidden file changes", async () => {
+  listing.mockResolvedValue({
+    path: "",
+    entries: [file("notes.txt", "notes.txt")],
+  });
+  const { rerender } = render(<FilesTab sessionId="session" />);
+  await screen.findByRole("button", { name: "notes.txt" });
+  rerender(<FilesTab sessionId="session" refreshKey={1} />);
+  await waitFor(() => expect(listing).toHaveBeenCalledTimes(2));
+  await act(async () => {});
+  rerender(<FilesTab sessionId="session" refreshKey={1} isActive={false} />);
+  act(() => useBuildSessionStore.getState().triggerFilesRefresh("session"));
+  expect(listing).toHaveBeenCalledTimes(2);
+  rerender(<FilesTab sessionId="session" refreshKey={1} isActive />);
+  await waitFor(() => expect(listing).toHaveBeenCalledTimes(3));
+});
+
+it("retries a failed listing on immediate reopen", async () => {
+  listing.mockRejectedValueOnce(new Error("offline"));
+  const { rerender } = render(<FilesTab sessionId="session" canLoad />);
+  await screen.findByText("Error loading files");
+  listing.mockResolvedValue({
+    path: "",
+    entries: [file("recovered.txt", "recovered.txt")],
+  });
+  rerender(<FilesTab sessionId="session" canLoad isActive={false} />);
+  rerender(<FilesTab sessionId="session" canLoad isActive />);
+  await screen.findByRole("button", { name: "recovered.txt" });
+  expect(listing).toHaveBeenCalledTimes(2);
+});
+
+it("reuses recursive search inventory across quick panel and search reopen", async () => {
+  listing.mockImplementation(async (_session, path) => ({
+    path: path ?? "",
+    entries: path ? [file("report.txt", "outputs/report.txt")] : [outputs],
+  }));
+  const { rerender } = render(
+    <FilesTab sessionId="session" searchQuery="report" />
+  );
+  await screen.findByRole("button", { name: "outputs/report.txt" });
+  expect(listing).toHaveBeenCalledTimes(2);
+  rerender(
+    <FilesTab sessionId="session" searchQuery="report" isActive={false} />
+  );
+  rerender(<FilesTab sessionId="session" searchQuery="report" isActive />);
+  expect(listing).toHaveBeenCalledTimes(2);
+  rerender(<FilesTab sessionId="session" searchQuery="" />);
+  await screen.findByRole("button", { name: "report.txt" });
+  const count = listing.mock.calls.length;
+  rerender(<FilesTab sessionId="session" searchQuery="report" />);
+  await screen.findByRole("button", { name: "outputs/report.txt" });
+  expect(listing).toHaveBeenCalledTimes(count);
+});
+
+it("retains search hits only under failed folders during a partial refresh", async () => {
+  const reports = { ...outputs, name: "reports", path: "reports" };
+  const archive = { ...outputs, name: "archive", path: "archive" };
+  listing.mockImplementation(async (_session, path) => ({
+    path: path ?? "",
+    entries: !path
+      ? [reports, archive]
+      : [file("report.txt", `${path}/report.txt`)],
+  }));
+  const { rerender } = render(
+    <FilesTab sessionId="session" searchQuery="report" />
+  );
+  await screen.findByRole("button", { name: "reports/report.txt" });
+  await screen.findByRole("button", { name: "archive/report.txt" });
+  listing.mockImplementation(async (_session, path) => {
+    if (path === "archive") throw new Error("Unavailable archive");
+    return { path: path ?? "", entries: path ? [] : [reports, archive] };
+  });
+  rerender(
+    <FilesTab sessionId="session" searchQuery="report" refreshKey={1} />
+  );
+  await screen.findByText(
+    "Some folders could not be loaded. Refresh to try again."
+  );
+  expect(
+    screen.queryByRole("button", { name: "reports/report.txt" })
+  ).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "archive/report.txt" })
+  ).toBeInTheDocument();
+});
+
+it("spins in the folder icon slot while its directory loads", async () => {
+  const pending = deferred<DirectoryListing>();
+  listing.mockImplementation((_session, path) =>
+    path ? pending.promise : Promise.resolve({ path: "", entries: [outputs] })
+  );
+  render(<FilesTab sessionId="session" />);
+  const folder = await screen.findByRole("button", { name: "outputs" });
+  await waitFor(() => expect(folder).toHaveAttribute("aria-busy", "true"));
+  const spinner = folder.querySelector(".motion-safe\\:animate-spin");
+  expect(spinner).not.toBeNull();
+  const iconSlot = spinner?.parentElement;
+  await act(async () => pending.resolve({ path: "outputs", entries: [] }));
+  await waitFor(() => expect(folder).not.toHaveAttribute("aria-busy"));
+  await waitFor(() =>
+    expect(folder.querySelector(".motion-safe\\:animate-spin")).toBeNull()
+  );
+  const folderIcon = folder.querySelector("svg");
+  expect(folderIcon?.parentElement).toBe(iconSlot);
+});
+
+it("keeps each session's fresh directory cache across session switches", async () => {
+  useBuildSessionStore.getState().createSession("other");
+  listing.mockImplementation(async (id, path) => ({
+    path: path ?? "",
+    entries: path ? [file(`${id}.txt`, `outputs/${id}.txt`)] : [outputs],
+  }));
+  const { rerender } = render(<FilesTab sessionId="session" />);
+  await screen.findByRole("button", { name: "session.txt" });
+  act(() => useBuildSessionStore.getState().triggerFilesRefresh("session"));
+  await waitFor(() => expect(listing).toHaveBeenCalledTimes(4));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "outputs" })).not.toHaveAttribute(
+      "aria-busy"
+    )
+  );
+  rerender(<FilesTab sessionId="other" />);
+  await screen.findByRole("button", { name: "other.txt" });
+  expect(
+    screen.queryByRole("button", { name: "session.txt" })
+  ).not.toBeInTheDocument();
+  expect(listing).toHaveBeenCalledTimes(6);
+  rerender(<FilesTab sessionId="session" />);
+  await screen.findByRole("button", { name: "session.txt" });
+  expect(
+    screen.queryByRole("button", { name: "other.txt" })
+  ).not.toBeInTheDocument();
+  expect(listing).toHaveBeenCalledTimes(6);
+});
+
+it("keeps restored expansion until the current active listing confirms a folder is gone", async () => {
+  const refresh = deferred<DirectoryListing>();
+  listing
+    .mockResolvedValueOnce({ path: "", entries: [] })
+    .mockReturnValueOnce(refresh.promise);
+  const { rerender } = render(<FilesTab sessionId="session" />);
+  await screen.findByText("No files yet");
+  rerender(<FilesTab sessionId="session" isActive={false} refreshKey={1} />);
+  act(() =>
+    useBuildSessionStore.getState().updateFilesTabState("session", {
+      expandedPaths: ["outputs", "outputs/nested"],
+    })
+  );
+  const expansion = () =>
+    useBuildSessionStore.getState().sessions.get("session")?.filesTabState
+      .expandedPaths;
+  expect(expansion()).toEqual(["outputs", "outputs/nested"]);
+  rerender(<FilesTab sessionId="session" isActive refreshKey={1} />);
+  await waitFor(() => expect(listing).toHaveBeenCalledTimes(2));
+  expect(expansion()).toEqual(["outputs", "outputs/nested"]);
+  await act(async () => refresh.resolve({ path: "", entries: [] }));
+  await waitFor(() => expect(expansion()).toEqual([]));
+});
+
+it("shows a failed refresh instead of a cached empty directory message", async () => {
+  listing.mockResolvedValueOnce({ path: "", entries: [] });
+  const { rerender } = render(<FilesTab sessionId="session" />);
+  await screen.findByText("No files yet");
+  listing.mockRejectedValueOnce(new Error("offline"));
+  rerender(<FilesTab sessionId="session" refreshKey={1} />);
+  await screen.findByRole("alert");
+  expect(screen.getByText("Error loading files")).toBeInTheDocument();
+  expect(screen.queryByText("No files yet")).not.toBeInTheDocument();
+});
+
+it("keeps reconciled expansion state when a missing outputs folder returns", async () => {
+  useBuildSessionStore.getState().createSession("other");
+  listing.mockResolvedValue({ path: "", entries: [] });
+  const { rerender } = render(<FilesTab sessionId="session" />);
+  await screen.findByText("No files yet");
+  rerender(<FilesTab sessionId="other" />);
+  await screen.findByText("No files yet");
+  rerender(<FilesTab sessionId="session" isActive={false} refreshKey={1} />);
+  listing.mockImplementation(async (_session, path) => ({
+    path: path ?? "",
+    entries: path ? [file("restored.txt", "outputs/restored.txt")] : [outputs],
+  }));
+  rerender(<FilesTab sessionId="session" isActive refreshKey={1} />);
+  expect(
+    await screen.findByRole("button", { name: "outputs" })
+  ).toHaveAttribute("aria-expanded", "false");
+  fireEvent.click(screen.getByRole("button", { name: "outputs" }));
+  await screen.findByRole("button", { name: "restored.txt" });
+});
+
+it("reports a newly opened folder as loading before the fetch effect starts", async () => {
+  const pending = deferred<DirectoryListing>();
+  listing.mockReturnValue(pending.promise);
+  const onStatusChange = jest.fn();
+  render(
+    <DirectoryTree
+      sessionId="session"
+      path="outputs"
+      depth={1}
+      isActive
+      refreshGeneration={0}
+      onStatusChange={onStatusChange}
+      expandedPaths={new Set(["outputs"])}
+      onToggleFolder={jest.fn()}
+      onFileClick={jest.fn()}
+    />
+  );
+  expect(onStatusChange).toHaveBeenNthCalledWith(1, "outputs", "loading");
+  await act(async () => pending.resolve({ path: "outputs", entries: [] }));
+  await waitFor(() =>
+    expect(onStatusChange).toHaveBeenLastCalledWith("outputs", undefined)
+  );
+});
+
+it("shows persisted directory rows immediately after a new SWR provider mounts and reconciles in the background", async () => {
+  listing.mockImplementation(async (_session, path) => ({
+    path: path ?? "",
+    entries: path ? [file("cached.txt", "outputs/cached.txt")] : [outputs],
+  }));
+  const first = render(<FilesTab sessionId="session" />);
+  await screen.findByRole("button", { name: "cached.txt" });
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "outputs" })).not.toHaveAttribute(
+      "aria-busy"
+    )
+  );
+  first.unmount();
+  const root = deferred<DirectoryListing>();
+  const child = deferred<DirectoryListing>();
+  listing.mockImplementation((_session, path) =>
+    path ? child.promise : root.promise
+  );
+  render(<FilesTab sessionId="session" />);
+  expect(
+    screen.getByRole("button", { name: "cached.txt" })
+  ).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "outputs" })).toHaveAttribute(
+    "aria-busy",
+    "true"
+  );
+  await waitFor(() => expect(listing).toHaveBeenCalledTimes(4));
+  await act(async () => {
+    root.resolve({ path: "", entries: [outputs] });
+    child.resolve({
+      path: "outputs",
+      entries: [file("fresh.txt", "outputs/fresh.txt")],
     });
   });
+  await screen.findByRole("button", { name: "fresh.txt" });
+  expect(
+    screen.queryByRole("button", { name: "cached.txt" })
+  ).not.toBeInTheDocument();
+});
 
-  it("keeps expanded directory contents visible while refreshing", async () => {
-    const sessionId = "session-1";
-    const oldFile = file("old.txt", "outputs/old.txt");
-    const newFile = file("new.txt", "outputs/new.txt");
+it("reuses fresh directory rows after Files closes and truly unmounts", async () => {
+  listing.mockImplementation(async (_session, path) => ({
+    path: path ?? "",
+    entries: path ? [file("cached.txt", "outputs/cached.txt")] : [outputs],
+  }));
+  const { rerender } = render(<FilesTab sessionId="session" />);
+  await screen.findByRole("button", { name: "cached.txt" });
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "outputs" })).not.toHaveAttribute(
+      "aria-busy"
+    )
+  );
+  expect(listing).toHaveBeenCalledTimes(2);
+  rerender(<></>);
+  expect(
+    screen.queryByRole("button", { name: "cached.txt" })
+  ).not.toBeInTheDocument();
+  rerender(<FilesTab sessionId="session" />);
+  expect(
+    screen.getByRole("button", { name: "cached.txt" })
+  ).toBeInTheDocument();
+  await act(async () => {});
+  expect(listing).toHaveBeenCalledTimes(2);
+});
+
+it("downloads a folder without toggling its expansion", async () => {
+  listing.mockImplementation(async (_session, path) => ({
+    path: path ?? "",
+    entries: path ? [] : [outputs],
+  }));
+  render(<FilesTab sessionId="session" />);
+  const folder = await screen.findByRole("button", { name: "outputs" });
+  await waitFor(() => expect(folder).toHaveAttribute("aria-expanded", "true"));
+  fireEvent.click(folder);
+  expect(folder).toHaveAttribute("aria-expanded", "false");
+  fireEvent.click(screen.getByRole("button", { name: "Download" }));
+  expect(downloadDirectory).toHaveBeenCalledWith("session", "outputs");
+  expect(folder).toHaveAttribute("aria-expanded", "false");
+});
+
+// Loading has one owner per directory, with a primitive aggregate for the toolbar.
+it("keeps the toolbar busy until every expanded directory has settled", async () => {
+  const first = deferred<DirectoryListing>();
+  const second = deferred<DirectoryListing>();
+  const nested = { ...outputs, name: "other", path: "other" };
+  useBuildSessionStore
+    .getState()
+    .updateFilesTabState("session", { expandedPaths: ["outputs", "other"] });
+  listing.mockImplementation((_session, path) =>
+    path === "outputs"
+      ? first.promise
+      : path === "other"
+        ? second.promise
+        : Promise.resolve({ path: "", entries: [outputs, nested] })
+  );
+  const onRefreshingChange = jest.fn();
+  render(
+    <FilesTab sessionId="session" onRefreshingChange={onRefreshingChange} />
+  );
+  await waitFor(() => expect(listing).toHaveBeenCalledTimes(3));
+  expect(onRefreshingChange).toHaveBeenLastCalledWith(true);
+  await act(async () => first.resolve({ path: "outputs", entries: [] }));
+  expect(onRefreshingChange).toHaveBeenLastCalledWith(true);
+  await act(async () => second.resolve({ path: "other", entries: [] }));
+  await waitFor(() =>
+    expect(onRefreshingChange).toHaveBeenLastCalledWith(false)
+  );
+});
+
+it("releases a collapsed directory's loading state and ignores its late response", async () => {
+  const pending = deferred<DirectoryListing>();
+  listing.mockImplementation((_session, path) =>
+    path ? pending.promise : Promise.resolve({ path: "", entries: [outputs] })
+  );
+  const onRefreshingChange = jest.fn();
+  render(
+    <FilesTab sessionId="session" onRefreshingChange={onRefreshingChange} />
+  );
+  const folder = await screen.findByRole("button", { name: "outputs" });
+  await waitFor(() => expect(folder).toHaveAttribute("aria-busy", "true"));
+  fireEvent.click(folder);
+  await waitFor(() =>
+    expect(onRefreshingChange).toHaveBeenLastCalledWith(false)
+  );
+  const reported = onRefreshingChange.mock.calls.length;
+  await act(async () =>
+    pending.resolve({
+      path: "outputs",
+      entries: [file("late.txt", "outputs/late.txt")],
+    })
+  );
+  expect(onRefreshingChange).toHaveBeenCalledTimes(reported);
+  expect(
+    screen.queryByRole("button", { name: "late.txt" })
+  ).not.toBeInTheDocument();
+});
+
+it("does not reuse another user's directory rows at the same session URL", async () => {
+  listing.mockImplementation(async () => ({
+    path: "",
+    entries: [file(`${mockUserId}.txt`, `${mockUserId}.txt`)],
+  }));
+  const { rerender } = render(<FilesTab sessionId="session" />);
+  await screen.findByRole("button", { name: "test-user.txt" });
+  mockUserId = "new-user";
+  rerender(<FilesTab sessionId="session" />);
+  expect(
+    screen.queryByRole("button", { name: "test-user.txt" })
+  ).not.toBeInTheDocument();
+  await screen.findByRole("button", { name: "new-user.txt" });
+  expect(listing).toHaveBeenCalledTimes(2);
+});
+
+it("retains failed-folder search hits after the search component was remounted", async () => {
+  listing.mockImplementation(async (_session, path) => ({
+    path: path ?? "",
+    entries: path ? [file("report.txt", "outputs/report.txt")] : [outputs],
+  }));
+  const { rerender } = render(
+    <FilesTab sessionId="session" searchQuery="report" />
+  );
+  await screen.findByRole("button", { name: "outputs/report.txt" });
+  rerender(<FilesTab sessionId="session" searchQuery="" />);
+  await screen.findByRole("button", { name: "report.txt" });
+  listing.mockImplementation(async (_session, path) => {
+    if (path) throw new Error("temporary");
+    return { path: "", entries: [outputs] };
+  });
+  rerender(
+    <FilesTab sessionId="session" searchQuery="report" refreshKey={1} />
+  );
+  await screen.findByText(
+    "Some folders could not be loaded. Refresh to try again."
+  );
+  expect(
+    screen.getByRole("button", { name: "outputs/report.txt" })
+  ).toBeInTheDocument();
+});
+
+// Directory loading indicators.
+it.each([50, 250])(
+  "stops the folder loading icon when its %ims request finishes",
+  async (requestDuration) => {
+    jest.useFakeTimers();
+    const pending = deferred<DirectoryListing>();
+    listing.mockImplementation(async (_session, path) =>
+      path ? pending.promise : { path: "", entries: [outputs] }
+    );
     const onRefreshingChange = jest.fn();
-    let resolveRefreshedOutputs: (listing: DirectoryListing) => void = () => {};
-    const refreshedOutputs = new Promise<DirectoryListing>((resolve) => {
-      resolveRefreshedOutputs = resolve;
-    });
-
-    mockedFetchDirectoryListing.mockImplementation((_sessionId, path) => {
-      if (path === "") {
-        return Promise.resolve({ path: "", entries: [outputsDirectory] });
-      }
-      if (path === "outputs") return refreshedOutputs;
-      return Promise.resolve({ path: path ?? "", entries: [] });
-    });
-
-    useBuildSessionStore.getState().createSession(sessionId, {
-      filesTabState: {
-        expandedPaths: ["outputs"],
-        scrollTop: 0,
-        directoryCache: { outputs: [oldFile] },
-      },
-    });
-    useBuildSessionStore.getState().setCurrentSession(sessionId);
-
-    const { unmount } = render(
-      <SWRConfig value={{ provider: () => new Map() }}>
-        <FilesTab
-          sessionId={sessionId}
-          onRefreshingChange={onRefreshingChange}
-        />
-      </SWRConfig>
+    const view = render(
+      <FilesTab sessionId="session" onRefreshingChange={onRefreshingChange} />
     );
+    try {
+      await act(async () => {});
+      const folder = screen.getByRole("button", { name: "outputs" });
+      expect(folder).toHaveAttribute("aria-busy", "true");
+      await act(async () => jest.advanceTimersByTimeAsync(requestDuration));
+      await act(async () =>
+        pending.resolve({
+          path: "outputs",
+          entries: [file("ready.txt", "outputs/ready.txt")],
+        })
+      );
+      expect(screen.getByText("ready.txt")).toBeInTheDocument();
+      expect(onRefreshingChange).toHaveBeenLastCalledWith(false);
+      expect(folder).not.toHaveAttribute("aria-busy");
+      expect(folder.querySelector(".motion-safe\\:animate-spin")).toBeNull();
+    } finally {
+      view.unmount();
+      jest.useRealTimers();
+    }
+  }
+);
 
-    expect(await screen.findByText("old.txt")).toBeInTheDocument();
-
-    act(() => {
-      useBuildSessionStore.getState().triggerFilesRefresh(sessionId);
+it("keeps the current folder request busy when an older request is canceled", async () => {
+  const requests: Array<{
+    signal: AbortSignal;
+    resolve: (listing: DirectoryListing) => void;
+  }> = [];
+  listing.mockImplementation(async (_session, path, signal) => {
+    if (!path) return { path: "", entries: [outputs] };
+    return new Promise((resolve, reject) => {
+      if (!signal) throw new Error("Missing signal");
+      signal.addEventListener("abort", () => reject(signal.reason));
+      requests.push({ signal, resolve });
     });
+  });
+  const onRefreshingChange = jest.fn();
+  const { rerender } = render(
+    <FilesTab sessionId="session" onRefreshingChange={onRefreshingChange} />
+  );
+  await waitFor(() => expect(requests).toHaveLength(1));
+  rerender(
+    <FilesTab
+      sessionId="session"
+      refreshKey={1}
+      onRefreshingChange={onRefreshingChange}
+    />
+  );
+  await waitFor(() => expect(requests).toHaveLength(2));
+  expect(requests[0]?.signal.aborted).toBe(true);
+  expect(screen.getByRole("button", { name: "outputs" })).toHaveAttribute(
+    "aria-busy",
+    "true"
+  );
+  expect(onRefreshingChange).toHaveBeenLastCalledWith(true);
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  await act(async () => requests[1]?.resolve({ path: "outputs", entries: [] }));
+  await waitFor(() =>
+    expect(onRefreshingChange).toHaveBeenLastCalledWith(false)
+  );
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "outputs" })).not.toHaveAttribute(
+      "aria-busy"
+    )
+  );
+});
 
-    await waitFor(() =>
-      expect(mockedFetchDirectoryListing).toHaveBeenCalledWith(
-        sessionId,
-        "outputs"
-      )
+it("preserves an explicitly collapsed tree when the Files browser remounts", async () => {
+  listing.mockImplementation(async (_session, path) => ({
+    path: path ?? "",
+    entries: path ? [] : [outputs],
+  }));
+  const view = render(<FilesTab sessionId="session" onFileClick={jest.fn()} />);
+  const folder = await screen.findByRole("button", { name: "outputs" });
+  expect(folder).toHaveAttribute("aria-expanded", "true");
+  fireEvent.click(folder);
+  view.unmount();
+  render(<FilesTab sessionId="session" onFileClick={jest.fn()} />);
+  expect(
+    await screen.findByRole("button", { name: "outputs" })
+  ).toHaveAttribute("aria-expanded", "false");
+});
+
+it.each(["root", "folder"])(
+  "keeps aggregate refresh busy until the final %s request finishes",
+  async (lastRequest) => {
+    const root = deferred<DirectoryListing>();
+    const folder = deferred<DirectoryListing>();
+    const initialRoot = { path: "", entries: [outputs] };
+    const initialFolder = {
+      path: "outputs",
+      entries: [file("ready.txt", "outputs/ready.txt")],
+    };
+    listing.mockImplementation(async (_session, path) =>
+      path ? initialFolder : initialRoot
     );
-    expect(onRefreshingChange).toHaveBeenCalledWith(true);
-    expect(screen.getByText("old.txt")).toBeInTheDocument();
-    expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
-
-    act(() => {
-      resolveRefreshedOutputs({ path: "outputs", entries: [newFile] });
-    });
-
-    expect(await screen.findByText("new.txt")).toBeInTheDocument();
-    expect(screen.queryByText("old.txt")).not.toBeInTheDocument();
+    const onRefreshingChange = jest.fn();
+    const view = render(
+      <FilesTab sessionId="session" onRefreshingChange={onRefreshingChange} />
+    );
+    await screen.findByText("ready.txt");
     await waitFor(() =>
       expect(onRefreshingChange).toHaveBeenLastCalledWith(false)
     );
-
-    unmount();
-    render(
-      <SWRConfig value={{ provider: () => new Map() }}>
-        <FilesTab sessionId={sessionId} />
-      </SWRConfig>
+    listing.mockImplementation((_session, path) =>
+      path ? folder.promise : root.promise
     );
-    expect(await screen.findByText("new.txt")).toBeInTheDocument();
-    expect(
-      mockedFetchDirectoryListing.mock.calls.filter(
-        ([, path]) => path === "outputs"
-      )
-    ).toHaveLength(1);
-  });
-
-  it("retries a refresh interrupted by unmounting", async () => {
-    const sessionId = "session-1";
-    const oldFile = file("old.txt", "outputs/old.txt");
-    const staleFile = file("stale.txt", "outputs/stale.txt");
-    const newFile = file("new.txt", "outputs/new.txt");
-    const outputResolvers: Array<(listing: DirectoryListing) => void> = [];
-
-    mockedFetchDirectoryListing.mockImplementation((_sessionId, path) => {
-      if (path === "") {
-        return Promise.resolve({ path: "", entries: [outputsDirectory] });
-      }
-      if (path === "outputs") {
-        return new Promise<DirectoryListing>((resolve) => {
-          outputResolvers.push(resolve);
-        });
-      }
-      return Promise.resolve({ path: path ?? "", entries: [] });
-    });
-
-    useBuildSessionStore.getState().createSession(sessionId, {
-      filesTabState: {
-        expandedPaths: ["outputs"],
-        scrollTop: 0,
-        directoryCache: { outputs: [oldFile] },
-      },
-    });
-    useBuildSessionStore.getState().setCurrentSession(sessionId);
-
-    const { unmount } = render(
-      <SWRConfig value={{ provider: () => new Map() }}>
-        <FilesTab sessionId={sessionId} />
-      </SWRConfig>
+    view.rerender(
+      <FilesTab
+        sessionId="session"
+        refreshKey={1}
+        onRefreshingChange={onRefreshingChange}
+      />
     );
-
-    expect(await screen.findByText("old.txt")).toBeInTheDocument();
-    act(() => {
-      useBuildSessionStore.getState().triggerFilesRefresh(sessionId);
-    });
-    await waitFor(() => expect(outputResolvers).toHaveLength(1));
-
-    unmount();
+    await waitFor(() => expect(listing).toHaveBeenCalledTimes(4));
+    expect(onRefreshingChange).toHaveBeenLastCalledWith(true);
+    const row = screen.getByRole("button", { name: "outputs" });
+    expect(row).toHaveAttribute("aria-busy", "true");
     await act(async () => {
-      outputResolvers[0]?.({ path: "outputs", entries: [staleFile] });
-      await Promise.resolve();
+      if (lastRequest === "root") folder.resolve(initialFolder);
+      else root.resolve(initialRoot);
     });
-
-    render(
-      <SWRConfig value={{ provider: () => new Map() }}>
-        <FilesTab sessionId={sessionId} />
-      </SWRConfig>
-    );
-    await waitFor(() => expect(outputResolvers).toHaveLength(2));
-
-    act(() => {
-      outputResolvers[1]?.({ path: "outputs", entries: [newFile] });
-    });
-    expect(await screen.findByText("new.txt")).toBeInTheDocument();
-    expect(screen.queryByText("stale.txt")).not.toBeInTheDocument();
-  });
-
-  it("coalesces overlapping refreshes into one trailing refresh", async () => {
-    const sessionId = "session-1";
-    const oldFile = file("old.txt", "outputs/old.txt");
-    const staleFile = file("stale.txt", "outputs/stale.txt");
-    const newestFile = file("newest.txt", "outputs/newest.txt");
-    const outputResolvers: Array<(listing: DirectoryListing) => void> = [];
-
-    mockedFetchDirectoryListing.mockImplementation((_sessionId, path) => {
-      if (path === "") {
-        return Promise.resolve({ path: "", entries: [outputsDirectory] });
-      }
-      if (path === "outputs") {
-        return new Promise<DirectoryListing>((resolve) => {
-          outputResolvers.push(resolve);
-        });
-      }
-      return Promise.resolve({ path: path ?? "", entries: [] });
-    });
-
-    useBuildSessionStore.getState().createSession(sessionId, {
-      filesTabState: {
-        expandedPaths: ["outputs"],
-        scrollTop: 0,
-        directoryCache: { outputs: [oldFile] },
-      },
-    });
-    useBuildSessionStore.getState().setCurrentSession(sessionId);
-
-    render(
-      <SWRConfig value={{ provider: () => new Map() }}>
-        <FilesTab sessionId={sessionId} />
-      </SWRConfig>
-    );
-
-    expect(await screen.findByText("old.txt")).toBeInTheDocument();
-
-    act(() => {
-      useBuildSessionStore.getState().triggerFilesRefresh(sessionId);
-    });
-    await waitFor(() => expect(outputResolvers).toHaveLength(1));
-
-    act(() => {
-      useBuildSessionStore.getState().triggerFilesRefresh(sessionId);
-      useBuildSessionStore.getState().triggerFilesRefresh(sessionId);
-    });
-    await waitFor(() =>
-      expect(
-        useBuildSessionStore.getState().sessions.get(sessionId)
-          ?.filesNeedsRefresh
-      ).toBe(3)
-    );
-    expect(outputResolvers).toHaveLength(1);
-
-    act(() => {
-      outputResolvers[0]?.({ path: "outputs", entries: [staleFile] });
-    });
-    await waitFor(() => expect(outputResolvers).toHaveLength(2));
-
-    act(() => {
-      outputResolvers[1]?.({ path: "outputs", entries: [newestFile] });
-    });
-    expect(await screen.findByText("newest.txt")).toBeInTheDocument();
-    await waitFor(() => {
-      expect(screen.getByText("newest.txt")).toBeInTheDocument();
-      expect(screen.queryByText("stale.txt")).not.toBeInTheDocument();
-      expect(outputResolvers).toHaveLength(2);
-    });
-  });
-
-  it("refreshes expanded directories sequentially", async () => {
-    const sessionId = "session-1";
-    const oldFile = file("old.txt", "outputs/old.txt");
-    const newFile = file("new.txt", "outputs/new.txt");
-    const webDirectory: FileSystemEntry = {
-      name: "web",
-      path: "outputs/web",
-      is_directory: true,
-      size: null,
-      mime_type: null,
-    };
-    let resolveOutputs: (listing: DirectoryListing) => void = () => {};
-    let resolveWeb: (listing: DirectoryListing) => void = () => {};
-
-    mockedFetchDirectoryListing.mockImplementation((_sessionId, path) => {
-      if (path === "") {
-        return Promise.resolve({ path: "", entries: [outputsDirectory] });
-      }
-      if (path === "outputs") {
-        return new Promise<DirectoryListing>((resolve) => {
-          resolveOutputs = resolve;
-        });
-      }
-      if (path === "outputs/web") {
-        return new Promise<DirectoryListing>((resolve) => {
-          resolveWeb = resolve;
-        });
-      }
-      return Promise.resolve({ path: path ?? "", entries: [] });
-    });
-
-    useBuildSessionStore.getState().createSession(sessionId, {
-      filesTabState: {
-        expandedPaths: ["outputs", "outputs/web"],
-        scrollTop: 0,
-        directoryCache: {
-          outputs: [webDirectory, oldFile],
-          "outputs/web": [],
-        },
-      },
-    });
-    useBuildSessionStore.getState().setCurrentSession(sessionId);
-
-    render(
-      <SWRConfig value={{ provider: () => new Map() }}>
-        <FilesTab sessionId={sessionId} />
-      </SWRConfig>
-    );
-
-    expect(await screen.findByText("old.txt")).toBeInTheDocument();
-
-    act(() => {
-      useBuildSessionStore.getState().triggerFilesRefresh(sessionId);
-    });
-    await waitFor(() =>
-      expect(mockedFetchDirectoryListing).toHaveBeenCalledWith(
-        sessionId,
-        "outputs"
-      )
-    );
-    expect(mockedFetchDirectoryListing).not.toHaveBeenCalledWith(
-      sessionId,
-      "outputs/web"
-    );
-
-    act(() => {
-      resolveOutputs({ path: "outputs", entries: [webDirectory, newFile] });
-    });
-
-    expect(await screen.findByText("new.txt")).toBeInTheDocument();
-
-    await waitFor(() =>
-      expect(mockedFetchDirectoryListing).toHaveBeenCalledWith(
-        sessionId,
-        "outputs/web"
-      )
-    );
-
+    expect(onRefreshingChange).toHaveBeenLastCalledWith(true);
+    expect(screen.getByText("ready.txt")).toBeInTheDocument();
+    if (lastRequest === "root") {
+      expect(row).not.toHaveAttribute("aria-busy");
+      expect(row.querySelector(".motion-safe\\:animate-spin")).toBeNull();
+    } else {
+      expect(row).toHaveAttribute("aria-busy", "true");
+    }
     await act(async () => {
-      resolveWeb({ path: "outputs/web", entries: [] });
-      await Promise.resolve();
+      root.resolve(initialRoot);
+      folder.resolve(initialFolder);
     });
-  });
-
-  it("invalidates cached collapsed directories when refreshing", async () => {
-    const sessionId = "session-1";
-    const oldFile = file("old.txt", "outputs/old.txt");
-    const newFile = file("new.txt", "outputs/new.txt");
-
-    mockedFetchDirectoryListing.mockImplementation((_sessionId, path) => {
-      if (path === "") {
-        return Promise.resolve({ path: "", entries: [outputsDirectory] });
-      }
-      if (path === "outputs") {
-        return Promise.resolve({ path: "outputs", entries: [newFile] });
-      }
-      return Promise.resolve({ path: path ?? "", entries: [] });
-    });
-
-    useBuildSessionStore.getState().createSession(sessionId, {
-      filesTabState: {
-        expandedPaths: [],
-        scrollTop: 0,
-        directoryCache: { outputs: [oldFile] },
-      },
-    });
-    useBuildSessionStore.getState().setCurrentSession(sessionId);
-
-    render(
-      <SWRConfig value={{ provider: () => new Map() }}>
-        <FilesTab sessionId={sessionId} />
-      </SWRConfig>
-    );
-
-    expect(await screen.findByText("outputs")).toBeInTheDocument();
-
-    act(() => {
-      useBuildSessionStore.getState().triggerFilesRefresh(sessionId);
-    });
-
     await waitFor(() =>
-      expect(
-        useBuildSessionStore.getState().sessions.get(sessionId)?.filesTabState
-          .directoryCache.outputs
-      ).toBeUndefined()
+      expect(onRefreshingChange).toHaveBeenLastCalledWith(false)
     );
+    expect(row).not.toHaveAttribute("aria-busy");
+  }
+);
 
-    fireEvent.click(screen.getByText("outputs"));
-
-    expect(await screen.findByText("new.txt")).toBeInTheDocument();
-    expect(screen.queryByText("old.txt")).not.toBeInTheDocument();
+it("keeps fresh search results ahead of retained rows at the inventory limit", async () => {
+  const oldFiles = Array.from({ length: 10_000 }, (_, index) =>
+    file(`old-${index}.txt`, `old-${index}.txt`)
+  );
+  listing.mockResolvedValue({ path: "", entries: oldFiles });
+  const view = render(<FilesTab sessionId="session" searchQuery="fresh" />);
+  await screen.findByText("No matching files");
+  listing.mockResolvedValue({
+    path: "",
+    entries: [file("fresh.txt", "fresh.txt"), ...oldFiles],
   });
+  view.rerender(
+    <FilesTab sessionId="session" searchQuery="fresh" refreshKey={1} />
+  );
+  expect(
+    await screen.findByRole("button", { name: "fresh.txt" })
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText("Some folders could not be loaded. Refresh to try again.")
+  ).toBeInTheDocument();
 });

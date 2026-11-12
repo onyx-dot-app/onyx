@@ -4,10 +4,11 @@ from copy import copy
 
 from tokenizers import Encoding, Tokenizer
 
-from onyx.configs.model_configs import DOCUMENT_ENCODER_MODEL
+from onyx.configs.model_configs import DEFAULT_TOKENIZER_MODEL
 from onyx.context.search.models import InferenceChunk
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
+from shared_configs.embedding_models import get_local_model_spec
 from shared_configs.enums import EmbeddingProvider
 
 TRIM_SEP_PAT = "\n... {n} tokens removed...\n"
@@ -69,7 +70,15 @@ class TiktokenTokenizer(BaseTokenizer):
 
 class HuggingFaceTokenizer(BaseTokenizer):
     def __init__(self, model_name: str):
-        self.encoder: Tokenizer = Tokenizer.from_pretrained(model_name)
+        # Registry models load at their pinned revision, the same one the model
+        # server and the image bake use. Any other name keeps the plain call.
+        local_model_spec = get_local_model_spec(model_name)
+        revision = local_model_spec.hf_revision if local_model_spec else None
+        self.encoder: Tokenizer = (
+            Tokenizer.from_pretrained(model_name)
+            if revision is None
+            else Tokenizer.from_pretrained(model_name, revision=revision)
+        )
 
     def _safer_encode(self, string: str) -> Encoding:
         """
@@ -113,7 +122,7 @@ def _check_tokenizer_cache(
         if not tokenizer:
             logger.info(
                 "Falling back to default embedding model tokenizer: %s",
-                DOCUMENT_ENCODER_MODEL,
+                DEFAULT_TOKENIZER_MODEL,
             )
             tokenizer = _get_default_tokenizer()
 
@@ -128,17 +137,22 @@ def _try_initialize_tokenizer(
     tokenizer: BaseTokenizer | None = None
 
     if model_provider is not None:
-        # Try using TiktokenTokenizer first if model_provider exists
-        try:
-            tokenizer = TiktokenTokenizer(model_name)
-            logger.info("Initialized TiktokenTokenizer for: %s", model_name)
-            return tokenizer
-        except Exception as tiktoken_error:
-            logger.debug(
-                "TiktokenTokenizer not available for model %s: %s",
-                model_name,
-                tiktoken_error,
-            )
+        # Try using TiktokenTokenizer first if model_provider exists. Bifrost
+        # IDs like "openai/text-embedding-3-small" also try the bare model name.
+        candidates: list[str] = [model_name]
+        if model_provider == EmbeddingProvider.BIFROST:
+            candidates.append(model_name.split("/")[-1])
+        for candidate in dict.fromkeys(candidates):
+            try:
+                tokenizer = TiktokenTokenizer(candidate)
+                logger.info("Initialized TiktokenTokenizer for: %s", candidate)
+                return tokenizer
+            except Exception as tiktoken_error:
+                logger.debug(
+                    "TiktokenTokenizer not available for model %s: %s",
+                    candidate,
+                    tiktoken_error,
+                )
     else:
         # If no provider specified, try HuggingFaceTokenizer
         try:
@@ -163,7 +177,7 @@ def _get_default_tokenizer() -> BaseTokenizer:
     """Lazy-load the default tokenizer to avoid loading it at module import time."""
     global _DEFAULT_TOKENIZER
     if _DEFAULT_TOKENIZER is None:
-        _DEFAULT_TOKENIZER = HuggingFaceTokenizer(DOCUMENT_ENCODER_MODEL)
+        _DEFAULT_TOKENIZER = HuggingFaceTokenizer(DEFAULT_TOKENIZER_MODEL)
     return _DEFAULT_TOKENIZER
 
 

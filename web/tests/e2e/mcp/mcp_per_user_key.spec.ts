@@ -7,7 +7,7 @@ import {
   McpServerProcess,
 } from "@tests/e2e/utils/mcpServer";
 import { AdminMcpServersPage } from "@tests/e2e/pages/AdminMcpServersPage";
-import { ToolsPopover } from "@tests/e2e/pages/ToolsPopover";
+import { ChatPluginsPopover } from "@tests/e2e/pages/ChatPluginsPopover";
 
 // API keys baked into run_mcp_server_per_user_key.py. The script's middleware
 // also requires every /mcp/* request to carry a non-empty `X-Username` header
@@ -139,17 +139,9 @@ test.describe("MCP per-user API key auth (multi-field template)", () => {
 
     const uiServerName = `${serverName} (UI)`;
     await adminMcp.openAddServerModal();
-    await adminMcp.fillServerDetails({
-      name: uiServerName,
-      description: "Test per-user multi-field API key MCP server",
-      url: serverUrl,
-    });
-    uiServerId = await adminMcp.submitAddServer();
-
+    await adminMcp.enterServerUrlAndContinue(serverUrl);
     await adminMcp.selectAuthMethod("API Key");
-    // Per-user is the default tab for API Key; click it explicitly so the test
-    // fails loudly if that default ever changes.
-    await adminMcp.selectApiKeyTab("per-user");
+    await adminMcp.selectApiKeyCredentials("per-user");
 
     // Header row 1 is pre-populated with Authorization / Bearer {api_key}.
     await adminMcp.expectFirstHeaderPrefilled();
@@ -165,9 +157,12 @@ test.describe("MCP per-user API key auth (multi-field template)", () => {
       username: ADMIN_USERNAME,
     });
 
-    await adminMcp.connectAndWaitForUpsert();
+    await adminMcp.fillServerDetails({
+      name: uiServerName,
+    });
+    uiServerId = await adminMcp.connectAndWaitForCreation();
 
-    await adminMcp.expectServerCard(uiServerName);
+    await adminMcp.expectServerDetail(uiServerName);
     await adminMcp.refreshTools();
   });
 
@@ -181,37 +176,23 @@ test.describe("MCP per-user API key auth (multi-field template)", () => {
     await page.waitForURL("**/app**");
     await ensureOnboardingComplete(page);
 
-    const actions = new ToolsPopover(page);
-    await actions.expectServerVisible(serverName);
+    const plugins = new ChatPluginsPopover(page);
+    await plugins.connectPlugin(serverName);
+    const dialog = plugins.connectionDialog;
+    await dialog.expectFieldsVisible(["api_key", "username"]);
 
-    // Clicking before authenticating opens the credentials modal.
-    await actions.clickServer(serverName);
+    await expect(dialog.connectButton).toBeDisabled();
+    await dialog.fillField("api_key", BASIC_USER_API_KEY);
+    await expect(dialog.connectButton).toBeDisabled();
+    await dialog.fillField("username", BASIC_USERNAME);
+    await expect(dialog.connectButton).toBeEnabled();
+    await dialog.connectCredentials();
 
-    const modal = actions.credentialsModal;
-    await modal.expectOpen(/Enter Credentials/i);
-
-    // === The actual regression check ===
-    // Both required fields must render. Before the `required_fields`
-    // persistence fix, only `api_key` showed and the user could submit without
-    // `username`, leaving the literal `{username}` in the X-Username header.
-    await modal.expectFieldsVisible();
-
-    // The save button stays disabled until both fields are non-empty.
-    await expect(modal.saveButton).toBeVisible();
-    await expect(modal.saveButton).toBeDisabled();
-    await modal.fillApiKey(BASIC_USER_API_KEY);
-    await expect(modal.saveButton).toBeDisabled();
-    await modal.fillUsername(BASIC_USERNAME);
-    await expect(modal.saveButton).toBeEnabled();
-
-    await modal.save();
-
-    // Now authenticated: clicking the row drills into the tool list instead of
-    // reopening the auth modal. The popover closed with the modal, so reopen.
-    await actions.openServer(serverName);
+    await plugins.expectConnected(serverName);
+    await plugins.expectPluginEnabled(serverName, true);
   });
 
-  test("Re-authenticate row exposes the multi-field modal with the same gating", async ({
+  test("A saved personal connection keeps plugin selection available", async ({
     page,
   }) => {
     await page.context().clearCookies();
@@ -221,24 +202,9 @@ test.describe("MCP per-user API key auth (multi-field template)", () => {
     await page.waitForURL("**/app**");
     await ensureOnboardingComplete(page);
 
-    const actions = new ToolsPopover(page);
-    await actions.expectServerVisible(serverName);
-
-    // Already authenticated from the previous test, so this drills into tools.
-    await actions.openServer(serverName);
-    await actions.clickReauthRow();
-
-    const modal = actions.credentialsModal;
-    await modal.expectOpen(/Manage Credentials/i);
-    await modal.expectFieldsVisible();
-
-    // Gating still enforces "all-or-nothing".
-    await modal.fillApiKey("");
-    await modal.fillUsername("");
-    await expect(modal.updateButton).toBeDisabled();
-    await modal.fillApiKey(BASIC_USER_API_KEY);
-    await expect(modal.updateButton).toBeDisabled();
-    await modal.fillUsername(BASIC_USERNAME);
-    await expect(modal.updateButton).toBeEnabled();
+    const plugins = new ChatPluginsPopover(page);
+    await plugins.expectConnected(serverName);
+    await plugins.setPluginEnabled(serverName, false);
+    await plugins.setPluginEnabled(serverName, true);
   });
 });

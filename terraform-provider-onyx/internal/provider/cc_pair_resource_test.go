@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 	"github.com/onyx-dot-app/onyx/terraform-provider-onyx/internal/client"
 )
@@ -21,7 +22,11 @@ resource "onyx_connector" "test" {
   name                      = "tf-acc-ccpair-connector"
   source                    = "mock_connector"
   input_type                = "poll"
-  connector_specific_config = jsonencode({})
+  # A closed local port: the pair never reaches a real service.
+  connector_specific_config = jsonencode({
+    mock_server_host = "localhost"
+    mock_server_port = 9
+  })
 }
 
 resource "onyx_credential" "test" {
@@ -40,13 +45,18 @@ func TestAccCCPairResource(t *testing.T) {
 			{
 				Config: ccPairDependencies + `
 resource "onyx_cc_pair" "test" {
-  name          = "tf-acc-ccpair"
-  connector_id  = onyx_connector.test.id
-  credential_id = onyx_credential.test.id
+  name              = "tf-acc-ccpair"
+  connector_id      = onyx_connector.test.id
+  credential_id     = onyx_credential.test.id
+  processing_mode   = "REGULAR"
+  auto_sync_options = jsonencode({})
 }
 `,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("onyx_cc_pair.test", "name", "tf-acc-ccpair"),
+					resource.TestCheckResourceAttr("onyx_cc_pair.test", "processing_mode", "REGULAR"),
+					resource.TestCheckResourceAttr("onyx_cc_pair.test", "auto_sync_options", "{}"),
+					resource.TestCheckResourceAttr("onyx_cc_pair.test", "groups.#", "0"),
 					resource.TestCheckResourceAttr("onyx_cc_pair.test", "access_type", "public"),
 					resource.TestCheckResourceAttr("onyx_cc_pair.test", "paused", "false"),
 					resource.TestCheckResourceAttrSet("onyx_cc_pair.test", "id"),
@@ -63,15 +73,18 @@ resource "onyx_cc_pair" "test" {
 				ResourceName:      "onyx_cc_pair.test",
 				ImportState:       true,
 				ImportStateVerify: true,
-				// Onyx cycles these on its own as indexing progresses, so they
-				// change between the apply and the import.
+				// Onyx reads back groups, auto_sync_options and processing_mode, so
+				// the import must match. Onyx cycles the attributes below on its own
+				// as indexing progresses, so they change between apply and import.
 				ImportStateVerifyIgnore: []string{
 					"status", "last_index_attempt_status", "num_docs_indexed",
 				},
 			},
 			{
 				// Rename and pause in one apply. Neither may replace the pair,
-				// which would delete and re-index everything it holds.
+				// which would delete and re-index everything it holds. The
+				// computed create fields are left out here, which must not
+				// replace the pair either.
 				Config: ccPairDependencies + `
 resource "onyx_cc_pair" "test" {
   name          = "tf-acc-ccpair-renamed"
@@ -80,6 +93,11 @@ resource "onyx_cc_pair" "test" {
   paused        = true
 }
 `,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectResourceAction("onyx_cc_pair.test", plancheck.ResourceActionUpdate),
+					},
+				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("onyx_cc_pair.test", "name", "tf-acc-ccpair-renamed"),
 					resource.TestCheckResourceAttr("onyx_cc_pair.test", "paused", "true"),

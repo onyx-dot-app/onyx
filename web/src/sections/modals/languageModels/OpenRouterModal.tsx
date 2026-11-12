@@ -80,7 +80,7 @@ function OpenRouterModalInternals({
 
       <InputDivider />
       <ModelSelectionField
-        shouldShowAutoUpdateToggle={true}
+        shouldShowAutoUpdateToggle={false}
         onRefetch={isFetchDisabled ? undefined : handleFetchModels}
       />
 

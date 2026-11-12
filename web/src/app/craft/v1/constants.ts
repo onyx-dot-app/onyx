@@ -4,6 +4,7 @@ export const CRAFT_PATH = "/craft/v1";
 export const CRAFT_TASKS_PATH = `${CRAFT_PATH}/tasks`;
 export const CRAFT_SKILLS_PATH = `${CRAFT_PATH}/skills`;
 export const CRAFT_APPS_PATH = `${CRAFT_PATH}/apps` satisfies Route;
+export const CRAFT_PLUGINS_PATH = `${CRAFT_PATH}/plugins`;
 export const CRAFT_OAUTH_COOKIE_NAME = "build_mode_oauth";
 
 // Backend BFF root for Craft/build endpoints (routes through the frontend

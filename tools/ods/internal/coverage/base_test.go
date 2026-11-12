@@ -22,11 +22,13 @@ type fakeCommitHistory struct {
 	mergeBase map[string]string
 	// ancestors maps a sha to itself plus its first-parent ancestors.
 	ancestors map[string][]string
+	// shallowErr, mergeBaseErr and ancestorsErr, when set, fail that question.
+	shallowErr, mergeBaseErr, ancestorsErr error
 
 	fetchCalls []string
 }
 
-func (f *fakeCommitHistory) IsShallow() (bool, error) { return f.shallow, nil }
+func (f *fakeCommitHistory) IsShallow() (bool, error) { return f.shallow, f.shallowErr }
 
 func (f *fakeCommitHistory) ResolveCommit(rev string) (string, error) {
 	if sha, ok := f.resolved[rev]; ok {
@@ -44,11 +46,17 @@ func (f *fakeCommitHistory) FetchWithDepth(rev string, depth int) (string, error
 }
 
 func (f *fakeCommitHistory) MergeBaseWithHead(rev string) (string, bool, error) {
+	if f.mergeBaseErr != nil {
+		return "", false, f.mergeBaseErr
+	}
 	sha, ok := f.mergeBase[rev]
 	return sha, ok, nil
 }
 
 func (f *fakeCommitHistory) FirstParentAncestors(rev string, limit int) ([]string, error) {
+	if f.ancestorsErr != nil {
+		return nil, f.ancestorsErr
+	}
 	commits := f.ancestors[rev]
 	if len(commits) > limit {
 		commits = commits[:limit]
@@ -262,5 +270,29 @@ func TestLocateBaseSnapshot_hardStoreErrorStopsTheWalk(t *testing.T) {
 	}
 	if len(store.probes) != 1 {
 		t.Fatalf("expected the walk stopped after one probe, got %v", store.probes)
+	}
+}
+
+// A git failure is not a missing snapshot: it must not fall back to the floors.
+func TestLocateBaseSnapshot_gitErrorsAreHardErrors(t *testing.T) {
+	base := commitSha(0)
+	broken := errors.New("git failed")
+	for name, history := range map[string]*fakeCommitHistory{
+		"shallow check": {shallowErr: broken},
+		"merge base":    {resolved: map[string]string{base: base}, mergeBaseErr: broken},
+		"ancestors":     {resolved: map[string]string{base: base}, ancestorsErr: broken},
+	} {
+		t.Run(name, func(t *testing.T) {
+			store := &fakeSnapshotStore{snapshots: map[string]*Snapshot{base: snapshotAt(base)}}
+
+			_, err := LocateBaseSnapshot(base, history, store, DefaultBaseWalkLimit)
+
+			if !errors.Is(err, broken) || errors.Is(err, ErrBaseSnapshotUnavailable) {
+				t.Fatalf("expected the git error as a hard error, got %v", err)
+			}
+			if len(store.probes) != 0 {
+				t.Fatalf("expected no store probes, got %v", store.probes)
+			}
+		})
 	}
 }

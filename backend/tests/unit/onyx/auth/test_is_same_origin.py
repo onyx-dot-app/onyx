@@ -105,6 +105,21 @@ class TestTrailingSlash:
         assert is_same_origin("https://app.example.com/", "https://app.example.com/")
 
 
+class TestMalformedOrigins:
+    """Malformed attacker-controlled origins must read as a mismatch, not raise."""
+
+    @pytest.mark.parametrize(
+        "actual",
+        [
+            "http://evil.com:99999999",
+            "http://evil.com:notaport",
+            "http://[::1",
+        ],
+    )
+    def test_malformed_actual_origin_rejected(self, actual: str) -> None:
+        assert not is_same_origin(actual, "https://app.example.com")
+
+
 class TestCSWSHScenarios:
     """Realistic attack scenarios that must be rejected."""
 

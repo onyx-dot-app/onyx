@@ -103,10 +103,12 @@ def _isolated_redis_lock() -> Generator[None, None, None]:
     """
     redis_client = get_redis_client(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     redis_client.delete(OnyxRedisLocks.CLEANUP_IDLE_SANDBOXES_BEAT_LOCK)
+    redis_client.delete(tasks_module.RUNNING_SANDBOX_CURSOR_KEY)
     try:
         yield
     finally:
         redis_client.delete(OnyxRedisLocks.CLEANUP_IDLE_SANDBOXES_BEAT_LOCK)
+        redis_client.delete(tasks_module.RUNNING_SANDBOX_CURSOR_KEY)
 
 
 def _backdate_heartbeat(
@@ -500,14 +502,14 @@ def test_opencode_history_snapshot_failure_on_healthy_pod_aborts_sleep(
     )
 
 
-def test_opencode_history_snapshot_failure_on_unreachable_pod_still_terminates(
+def test_opencode_history_snapshot_failure_on_unreachable_pod_preserves_runtime(
     db_session: Session,
     test_user: User,  # noqa: ARG001
     stubbed_cleanup: StubSandboxManager,
     short_idle_threshold: int,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """If the pod is already unreachable, do not keep the sandbox RUNNING forever."""
+    """A health failure does not prove that pod-local files are lost."""
     user = make_user(db_session)
     sandbox = make_sandbox(db_session, user)
     _backdate_heartbeat(db_session, sandbox, seconds_ago=short_idle_threshold * 4)
@@ -537,24 +539,18 @@ def test_opencode_history_snapshot_failure_on_unreachable_pod_still_terminates(
     db_session.expire_all()
     refreshed = db_session.get(Sandbox, sandbox.id)
     assert refreshed is not None
-    assert refreshed.status == SandboxStatus.SLEEPING
-    assert {
-        "sandbox_id": sandbox.id
-    } in stubbed_cleanup.list_session_workspaces_payloads
-    assert sandbox.id in stubbed_cleanup.terminated_sandbox_ids
+    assert refreshed.status == SandboxStatus.RUNNING
+    assert sandbox.id not in stubbed_cleanup.terminated_sandbox_ids
 
 
-def test_snapshot_failure_on_unreachable_pod_still_terminates(
+def test_snapshot_failure_on_unreachable_pod_preserves_runtime(
     db_session: Session,
     test_user: User,  # noqa: ARG001
     stubbed_cleanup: StubSandboxManager,
     short_idle_threshold: int,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """An unreachable pod is terminated despite the snapshot failure: its
-    workspace is already gone, so keeping it RUNNING forever (never sleeping,
-    never reclaimed) is worse than terminating.
-    """
+    """Preserve files after snapshot failure, including on an unhealthy pod."""
     user = make_user(db_session)
     sandbox = make_sandbox(db_session, user)
     session_row = BuildSession(
@@ -587,11 +583,9 @@ def test_snapshot_failure_on_unreachable_pod_still_terminates(
     db_session.expire_all()
     refreshed = db_session.get(Sandbox, sandbox.id)
     assert refreshed is not None
-    # Unreachable pod is terminated despite the snapshot failure. (Tenant-wide
-    # task; assert our sandbox's outcome, not global counts.)
-    assert refreshed.status == SandboxStatus.SLEEPING
+    assert refreshed.status == SandboxStatus.RUNNING
     assert stubbed_cleanup.list_session_workspaces_count == 1
-    assert stubbed_cleanup.terminate_count >= 1
+    assert sandbox.id not in stubbed_cleanup.terminated_sandbox_ids
 
 
 def test_sessions_marked_idle_and_nextjs_ports_cleared(
@@ -640,20 +634,14 @@ def test_sessions_marked_idle_and_nextjs_ports_cleared(
     assert not session_runtime_stale(refreshed_b, sandbox)
 
 
-def test_idle_reaped_before_non_idle_background_snapshot(
+def test_sweep_preserves_query_order_for_idle_and_non_idle_sandboxes(
     db_session: Session,
     test_user: User,  # noqa: ARG001
     stubbed_cleanup: StubSandboxManager,
     short_idle_threshold: int,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A single sweep reaps the idle sandbox (snapshot + terminate) before it
-    background-snapshots a non-idle-but-stale one.
-
-    ``get_running_sandboxes`` is forced to return the non-idle sandbox first,
-    so a regression to interleaved processing would background-snapshot it
-    before the idle one is reaped; idle-first partitioning must override that.
-    """
+    """Process both sandbox states in UUID order so the cursor records progress."""
     nonidle_user = make_user(db_session)
     nonidle_sandbox = make_sandbox(db_session, nonidle_user)
     nonidle_session = BuildSession(
@@ -692,18 +680,6 @@ def test_idle_reaped_before_non_idle_background_snapshot(
 
     monkeypatch.setattr(stubbed_cleanup, "list_session_workspaces", _list_workspaces)
 
-    # The sweep query has no ORDER BY, so force the adversarial order rather
-    # than relying on physical row order matching commit order.
-    real_get_running_sandboxes = tasks_module.get_running_sandboxes
-
-    def _nonidle_first(session: Session) -> list[Sandbox]:
-        return sorted(
-            real_get_running_sandboxes(session),
-            key=lambda s: s.id != nonidle_sandbox.id,
-        )
-
-    monkeypatch.setattr(tasks_module, "get_running_sandboxes", _nonidle_first)
-
     stubbed_cleanup.create_snapshot_returns = SnapshotResult(
         storage_path="s3://snapshots/ordering.tar.gz",
         size_bytes=1234,
@@ -740,9 +716,10 @@ def test_idle_reaped_before_non_idle_background_snapshot(
     idle_terminate_idx = call_log.index(("terminate", idle_sandbox.id))
     nonidle_snapshot_idx = call_log.index(("create_snapshot", nonidle_sandbox.id))
 
-    # The idle sandbox is fully reaped (snapshot, then terminate) before the
-    # non-idle sandbox is background-snapshotted.
-    assert idle_snapshot_idx < idle_terminate_idx < nonidle_snapshot_idx
+    if idle_sandbox.id < nonidle_sandbox.id:
+        assert idle_snapshot_idx < idle_terminate_idx < nonidle_snapshot_idx
+    else:
+        assert nonidle_snapshot_idx < idle_snapshot_idx < idle_terminate_idx
 
     # The non-idle sandbox is never terminated.
     assert ("terminate", nonidle_sandbox.id) not in call_log

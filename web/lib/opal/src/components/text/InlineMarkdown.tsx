@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
-import Link from "next/link";
+import { NavLink } from "@opal/navigation/components";
 import type { Route } from "next";
 
 import type { RichStr } from "@opal/types";
@@ -59,9 +59,9 @@ const INLINE_COMPONENTS = {
     const isRelative = href.startsWith("/") || href.startsWith("#");
     if (isRelative) {
       return (
-        <Link href={href as Route} className="underline underline-offset-2">
+        <NavLink href={href as Route} className="underline underline-offset-2">
           {children}
-        </Link>
+        </NavLink>
       );
     }
     const isHttp = /^https?:/i.test(href);
@@ -134,5 +134,11 @@ export function toPlainString(value: string | RichStr): string {
     .replace(/(?<!\w)_([^_]+)_(?!\w)/g, "$1")
     .replace(/`([^`]+)`/g, "$1")
     .replace(/\s*\n\s*/g, " ")
+    .replace(/&#(\d+);/g, (entity: string, code: string) => {
+      const point = Number(code);
+      return point >= 0x21 && point <= 0x7e
+        ? String.fromCodePoint(point)
+        : entity;
+    })
     .trim();
 }

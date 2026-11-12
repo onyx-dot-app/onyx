@@ -207,7 +207,7 @@ func TestNextSequencedTag_countersPerBase(t *testing.T) {
 		"v4.6.0-cloud.0", "v4.6.0-cloud.5", // Gap between counters.
 		"v4.7.0-cloud.9", "v4.7.0-cloud.10", // Numeric vs lexical ordering.
 		"v4.9.0-beta.1", "v4.9.0", // Same-base non-cloud tags.
-		"v4.10.0-cloud.5",                                         // Base that v4.1.0 prefixes.
+		"v4.10.0-cloud.5",                                                              // Base that v4.1.0 prefixes.
 		"v4.12.0-cloud", "v4.12.0-cloud.abc", "v4.12.0-cloud.1.2", "v4.12.0-cloud.007", // Malformed suffixes.
 	} {
 		gittest.Git(t, work, "tag", tag, sha)
@@ -237,5 +237,36 @@ func TestNextSequencedTag_countersPerBase(t *testing.T) {
 				t.Errorf("expected %s, got %s", tc.want, tag)
 			}
 		})
+	}
+}
+
+func TestComputeCloudTag_unknownCommitErrors(t *testing.T) {
+	// Precondition: a SHA that names no object.
+	gittest.SetupReleaseBranchRepo(t)
+
+	// Under test.
+	_, err := ComputeCloudTag("0123456789abcdef0123456789abcdef01234567", "")
+
+	// Postcondition: an unknown commit is an error, not "not on main".
+	if err == nil || !strings.Contains(err.Error(), "merge-base --is-ancestor") {
+		t.Errorf("expected an ancestry error, got %v", err)
+	}
+}
+
+func TestIsCloudTag(t *testing.T) {
+	for _, c := range []struct {
+		in   string
+		want bool
+	}{
+		{"v4.7.0-cloud.3", true},
+		{"v4.7.0-cloud.0", true},
+		{"v4.7.0-cloud", false},
+		{"v4.7.0-cloud.03", false},
+		{"4.7.0-cloud.3", false},
+		{"v4.7.0-beta.3", false},
+	} {
+		if got := IsCloudTag(c.in); got != c.want {
+			t.Errorf("expected IsCloudTag(%q) = %v, got %v", c.in, c.want, got)
+		}
 	}
 }

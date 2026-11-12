@@ -533,6 +533,12 @@ class _ServeMixin:
                 session_id,
             )
 
+    def close_session_event_bus(self, sandbox_id: UUID, session_id: UUID) -> None:
+        """Release the session's bus but keep its workspace. For callers that
+        are done with a session but do not delete it, such as a finished
+        scheduled run."""
+        self._close_session_buses(sandbox_id, session_id)
+
     def _close_all_sandbox_buses(self, sandbox_id: UUID) -> None:
         """Tombstone + pop + close every bus for ``sandbox_id``. Call from
         ``terminate`` before destroying the container/pod so late subscribes
@@ -657,33 +663,56 @@ class _ServeMixin:
         finally:
             client.close()
 
-    def abort_opencode_session(
-        self,
-        sandbox_id: UUID,
-        session_id: UUID,
-        opencode_session_id: str,
-    ) -> None:
-        """Best-effort abort of the in-flight opencode prompt. Lock-agnostic
-        by design: any API process may stop running work (abort is
-        idempotent); only *starting* work is serialized by the prompt slot."""
+    @contextlib.contextmanager
+    def prepare_opencode_abort(
+        self, sandbox_id: UUID, session_id: UUID, opencode_session_id: str
+    ) -> Generator[Callable[[], None] | None, None, None]:
+        """Prepare transport before a caller locks admission for the abort."""
         session_path = self._session_directory(session_id)
         try:
             client = self._build_serve_client(
-                sandbox_id,
-                session_path,
-                with_event_bus=False,
+                sandbox_id, session_path, with_event_bus=False
             )
-            try:
-                client.abort(opencode_session_id, directory=session_path)
-            finally:
-                client.close()
         except Exception:
             logger.warning(
-                "[SANDBOX-SERVE] abort failed for sandbox=%s session=%s",
+                "[SANDBOX-SERVE] abort preparation failed for sandbox=%s session=%s",
                 sandbox_id,
                 session_id,
                 exc_info=True,
             )
+            yield None
+            return
+
+        def abort() -> None:
+            try:
+                client.abort(opencode_session_id, directory=session_path)
+            except Exception:
+                logger.warning(
+                    "[SANDBOX-SERVE] abort failed for sandbox=%s session=%s",
+                    sandbox_id,
+                    session_id,
+                    exc_info=True,
+                )
+
+        try:
+            yield abort
+        finally:
+            try:
+                client.close()
+            except Exception:
+                logger.warning(
+                    "[SANDBOX-SERVE] abort client close failed", exc_info=True
+                )
+
+    def abort_opencode_session(
+        self, sandbox_id: UUID, session_id: UUID, opencode_session_id: str
+    ) -> None:
+        """Best-effort abort for callers that already own the prompt lifecycle."""
+        with self.prepare_opencode_abort(
+            sandbox_id, session_id, opencode_session_id
+        ) as abort:
+            if abort is not None:
+                abort()
 
     def delete_opencode_session(
         self,
@@ -810,7 +839,7 @@ class _ServeMixin:
         its session store per-directory, so the hydrate REST call needs it.
         """
         bus = self._get_or_create_event_bus(sandbox_id, directory)
-        state = _TurnState(session_id=opencode_session_id)
+        state = _TurnState(session_id=opencode_session_id, emit_part_snapshots=True)
         client = self._build_serve_client(sandbox_id, directory)
 
         def fetch_message(mid: str) -> dict[str, Any] | None:
@@ -910,7 +939,14 @@ def _merge_text_chunk(
 ) -> SandboxEvent | None:
     if type(pending) is not type(incoming):
         return None
-    if not isinstance(pending, (AgentMessageChunk, AgentThoughtChunk)):
+    if not isinstance(
+        pending, (AgentMessageChunk, AgentThoughtChunk)
+    ) or not isinstance(incoming, (AgentMessageChunk, AgentThoughtChunk)):
+        return None
+
+    if pending.field_meta != incoming.field_meta:
+        return None
+    if pending.field_meta and "snapshotText" in pending.field_meta:
         return None
 
     pending_content = pending.content

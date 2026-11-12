@@ -1,0 +1,266 @@
+# Builds the Craft Firecracker host artifacts: the guest kernel (vmlinux),
+# Firecracker and jailer. See deployment/craft-fc/README.md.
+#
+# Pull requests and pushes to main build and check the image, with no push.
+# Only a manual dispatch on main publishes it to Docker Hub.
+name: Craft Firecracker Artifacts
+concurrency:
+  group: Craft-FC-Artifacts-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+on:
+  pull_request:
+    paths:
+      - "deployment/craft-fc/**"
+      - ".github/workflows/craft-fc-artifacts.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "deployment/craft-fc/**"
+      - ".github/workflows/craft-fc-artifacts.yml"
+  workflow_dispatch:
+    inputs:
+      revision:
+        description: "Optional tag suffix (for example r2). Use it to republish after a config-fragment change with the same versions."
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY_IMAGE: onyxdotapp/craft-fc-artifacts
+  CRAFT_FC_DIR: deployment/craft-fc
+
+jobs:
+  build:
+    runs-on:
+      - runs-on
+      - runner=8cpu-linux-x64
+      - run-id=${{ github.run_id }}-craft-fc-artifacts
+      - extras=ecr-cache
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    outputs:
+      image-tag: ${{ steps.versions.outputs.image-tag }}
+    steps:
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Read pinned versions
+        id: versions
+        env:
+          REVISION: ${{ inputs.revision }}
+        run: |
+          set -euo pipefail
+          dockerfile="${CRAFT_FC_DIR}/Dockerfile.artifacts"
+          kernel_tag="$(sed -n 's/^ARG KERNEL_TAG=//p' "${dockerfile}")"
+          fc_version="$(sed -n 's/^ARG FC_VERSION=//p' "${dockerfile}")"
+          # microvm-kernel-6.18.25-57.115.amzn2023 + v1.17.0 -> 6.18.25-57.115-fc1.17.0
+          kernel="${kernel_tag#microvm-kernel-}"
+          kernel="${kernel%.amzn2023}"
+          tag="${kernel}-fc${fc_version#v}"
+          if [ -n "${REVISION}" ]; then
+            if ! [[ "${REVISION}" =~ ^r[0-9]+$ ]]; then
+              echo "::error::revision must look like r2."
+              exit 1
+            fi
+            tag="${tag}-${REVISION}"
+          fi
+          echo "image-tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "Image tag: ${tag}"
+
+      - name: Log in to ECR pull-through cache
+        uses: ./.github/actions/login-ecr-pullthrough-cache
+        with:
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
+
+      - name: Build artifacts
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+        with:
+          context: ${{ env.CRAFT_FC_DIR }}
+          file: ${{ env.CRAFT_FC_DIR }}/Dockerfile.artifacts
+          target: artifacts
+          platforms: linux/amd64
+          build-args: |
+            BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
+            ONYX_COMMIT=${{ github.sha }}
+          outputs: type=local,dest=${{ runner.temp }}/artifacts
+          cache-from: type=gha,scope=craft-fc-artifacts
+          cache-to: type=gha,scope=craft-fc-artifacts,mode=max
+
+      - name: Check artifacts
+        env:
+          EXPORT_DIR: ${{ runner.temp }}/artifacts
+        run: |
+          bash "${CRAFT_FC_DIR}/check-artifacts.sh" "${EXPORT_DIR}"
+          cat "${EXPORT_DIR}/craft-fc/SOURCE.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build source bundle
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+        with:
+          context: ${{ env.CRAFT_FC_DIR }}
+          file: ${{ env.CRAFT_FC_DIR }}/Dockerfile.artifacts
+          target: source
+          platforms: linux/amd64
+          build-args: |
+            BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
+            ONYX_COMMIT=${{ github.sha }}
+          outputs: type=local,dest=${{ runner.temp }}/source
+          cache-from: type=gha,scope=craft-fc-artifacts
+
+      - name: Check source bundle
+        env:
+          EXPORT_DIR: ${{ runner.temp }}/source
+        run: |
+          set -euo pipefail
+          ls -la "${EXPORT_DIR}/craft-fc-source"
+          xz -t "${EXPORT_DIR}"/craft-fc-source/linux-*.tar.xz
+          for f in config-fragment fc-base.config SOURCE.md build/Dockerfile.artifacts \
+            build/check-artifacts.sh build/kernel/config-fragment; do
+            test -s "${EXPORT_DIR}/craft-fc-source/${f}"
+          done
+
+  publish:
+    needs:
+      - build
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on:
+      - runs-on
+      - runner=8cpu-linux-x64
+      - run-id=${{ github.run_id }}-craft-fc-artifacts-publish
+      - extras=ecr-cache
+    timeout-minutes: 60
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      IMAGE_TAG: ${{ needs.build.outputs.image-tag }}
+    steps:
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Log in to ECR pull-through cache
+        uses: ./.github/actions/login-ecr-pullthrough-cache
+        with:
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+
+      - name: Get AWS Secrets
+        uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53
+        with:
+          secret-ids: |
+            DOCKER_USERNAME, deploy/docker-username
+            DOCKER_TOKEN, deploy/docker-token
+          parse-json-secrets: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
+        with:
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ env.DOCKER_TOKEN }}
+
+      # A published kernel must always match the source published with it, so
+      # never replace an existing tag. Use the revision input instead. Only a
+      # clear "not found" counts as absent; any other error stops the job.
+      - name: Refuse to replace a published tag
+        run: |
+          set -euo pipefail
+          for tag in "${IMAGE_TAG}" "${IMAGE_TAG}-source"; do
+            ref="${REGISTRY_IMAGE}:${tag}"
+            if out="$(docker buildx imagetools inspect "${ref}" 2>&1)"; then
+              echo "::error::${ref} already exists. Set the revision input to publish a new tag."
+              exit 1
+            fi
+            if grep -qiE 'not found|manifest unknown|repository does not exist' <<<"${out}"; then
+              echo "${ref} does not exist yet."
+            else
+              echo "::error::Could not check whether ${ref} exists: ${out}"
+              exit 1
+            fi
+          done
+
+      # Push both images by digest only (no tag), check the pushed content, then
+      # tag those exact digests. So the tags always point at checked images.
+      - name: Push source bundle by digest
+        id: push-source
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+        with:
+          context: ${{ env.CRAFT_FC_DIR }}
+          file: ${{ env.CRAFT_FC_DIR }}/Dockerfile.artifacts
+          target: source
+          platforms: linux/amd64
+          build-args: |
+            BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
+            ONYX_COMMIT=${{ github.sha }}
+          outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=craft-fc-artifacts
+
+      - name: Push artifacts by digest
+        id: push-artifacts
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+        with:
+          context: ${{ env.CRAFT_FC_DIR }}
+          file: ${{ env.CRAFT_FC_DIR }}/Dockerfile.artifacts
+          target: artifacts
+          platforms: linux/amd64
+          build-args: |
+            BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
+            ONYX_COMMIT=${{ github.sha }}
+          outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=craft-fc-artifacts
+
+      - name: Check the pushed images
+        env:
+          SOURCE_DIGEST: ${{ steps.push-source.outputs.digest }}
+          ARTIFACTS_DIGEST: ${{ steps.push-artifacts.outputs.digest }}
+          EXPORT_DIR: ${{ runner.temp }}/pushed
+        run: |
+          set -euo pipefail
+          export_image() {
+            docker pull --platform linux/amd64 "${REGISTRY_IMAGE}@$1"
+            cid="$(docker create --platform linux/amd64 "${REGISTRY_IMAGE}@$1" /none)"
+            docker cp "${cid}:/$2" "${EXPORT_DIR}/"
+            docker rm "${cid}"
+          }
+          mkdir -p "${EXPORT_DIR}"
+          export_image "${ARTIFACTS_DIGEST}" craft-fc
+          export_image "${SOURCE_DIGEST}" craft-fc-source
+          bash "${CRAFT_FC_DIR}/check-artifacts.sh" "${EXPORT_DIR}"
+          xz -t "${EXPORT_DIR}"/craft-fc-source/linux-*.tar.xz
+          for f in config-fragment fc-base.config SOURCE.md build/Dockerfile.artifacts \
+            build/check-artifacts.sh build/kernel/config-fragment; do
+            test -s "${EXPORT_DIR}/craft-fc-source/${f}"
+          done
+
+      # Source first, so a published kernel never exists without its source.
+      - name: Tag the checked images
+        env:
+          SOURCE_DIGEST: ${{ steps.push-source.outputs.digest }}
+          ARTIFACTS_DIGEST: ${{ steps.push-artifacts.outputs.digest }}
+        run: |
+          set -euo pipefail
+          docker buildx imagetools create -t "${REGISTRY_IMAGE}:${IMAGE_TAG}-source" "${REGISTRY_IMAGE}@${SOURCE_DIGEST}"
+          docker buildx imagetools create -t "${REGISTRY_IMAGE}:${IMAGE_TAG}" "${REGISTRY_IMAGE}@${ARTIFACTS_DIGEST}"

@@ -1,12 +1,44 @@
-import { PacketType, sendMessage, SendMessageParams } from "./lib";
+import {
+  ChatSendRejectedError,
+  PacketType,
+  sendMessage,
+  SendMessageParams,
+} from "@/app/app/services/lib";
 
 export class CurrentMessageFIFO {
   private stack: PacketType[] = [];
   isComplete: boolean = false;
   error: string | null = null;
+  private resolveAdmission: (value: number | null) => void = () => {};
+  private rejectAdmission: (reason: Error) => void = () => {};
+  /** Accepted stream ID, or null if the server finishes without admission. */
+  readonly acknowledged: Promise<number | null>;
+
+  constructor() {
+    this.acknowledged = new Promise((resolve, reject) => {
+      this.resolveAdmission = resolve;
+      this.rejectAdmission = reject;
+    });
+    // Completion handlers consume errors after queued packets drain.
+    void this.acknowledged.catch(() => {});
+  }
 
   push(packetBunch: PacketType) {
     this.stack.push(packetBunch);
+    if ("reserved_assistant_message_id" in packetBunch) {
+      this.resolveAdmission(packetBunch.reserved_assistant_message_id);
+    } else if ("responses" in packetBunch) {
+      this.resolveAdmission(packetBunch.user_message_id);
+    }
+  }
+
+  complete(error?: unknown) {
+    this.isComplete = true;
+    if (error !== undefined)
+      this.rejectAdmission(
+        error instanceof Error ? error : new Error(String(error))
+      );
+    else this.resolveAdmission(null);
   }
 
   nextPacket(): PacketType | undefined {
@@ -29,7 +61,9 @@ export async function updateCurrentMessageFIFO(
       }
       stack.push(packet);
     }
+    stack.complete();
   } catch (error: unknown) {
+    stack.complete(error instanceof ChatSendRejectedError ? undefined : error);
     if (error instanceof Error) {
       if (error.name === "AbortError") {
         console.debug("Stream aborted");
@@ -39,7 +73,5 @@ export async function updateCurrentMessageFIFO(
     } else {
       stack.error = String(error);
     }
-  } finally {
-    stack.isComplete = true;
   }
 }

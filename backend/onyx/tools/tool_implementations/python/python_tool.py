@@ -1,15 +1,14 @@
 import hashlib
-import mimetypes
 import os
 import re
 from io import BytesIO
-from typing import Any, cast
+from uuid import UUID
 
 from pydantic import BaseModel, TypeAdapter
 from sqlalchemy.orm import Session
 from typing_extensions import override
 
-from onyx.chat.emitter import Emitter
+from onyx.agents.tools import ToolInvocation, ToolProgress
 from onyx.configs.app_configs import (
     CODE_INTERPRETER_BASE_URL,
     CODE_INTERPRETER_DEFAULT_TIMEOUT_MS,
@@ -20,22 +19,25 @@ from onyx.configs.app_configs import (
 )
 from onyx.configs.constants import FileOrigin
 from onyx.db.code_interpreter import fetch_code_interpreter_server
-from onyx.file_store.utils import build_full_frontend_file_url, get_default_file_store
-from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import (
-    Packet,
-    PythonToolDelta,
-    PythonToolStart,
+from onyx.file_processing.file_types import guess_mime_type
+from onyx.file_store.utils import (
+    build_full_frontend_file_url,
+    chat_image_gen_metadata,
+    get_default_file_store,
 )
-from onyx.tools.interface import Tool
+from onyx.llm.models import ToolDefinition, ToolResult
+from onyx.tools.interface import Tool, parse_tool_arguments
 from onyx.tools.models import (
     ChatFile,
+    CodeModeExposure,
+    CodeModeResultKind,
+    CodeModeResultSpec,
     LlmPythonExecutionResult,
+    PythonArguments,
+    PythonExecutionDelta,
     PythonExecutionFile,
-    PythonToolOverrideKwargs,
-    PythonToolRichResponse,
     ToolCallException,
-    ToolResponse,
+    ToolContext,
 )
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     CodeInterpreterClient,
@@ -103,10 +105,33 @@ def _code_references_file(filename: str, code: str) -> bool:
     return filename in code or _safe_code_interpreter_filename(filename) in code
 
 
-def _read_chat_file_content(chat_file: ChatFile) -> bytes:
+def _read_chat_file_content(chat_file: ChatFile) -> bytes | None:
     """Materialize a (possibly lazy) chat file's bytes; the object-store read
     happens here. Extracted so reads can be batched in parallel."""
-    return chat_file.content
+    # Catch here: the parallel helper logs full exception text.
+    try:
+        return chat_file.content
+    except Exception as e:
+        logger.warning(
+            "Failed to read file for Python execution: file_id=%s (%s)",
+            chat_file.file_id,
+            type(e).__name__,
+        )
+        return None
+
+
+def _upload_file_content(
+    client: CodeInterpreterClient, content: bytes, file_name: str
+) -> str | None:
+    try:
+        return client.upload_file(content, file_name)
+    except Exception as e:
+        logger.warning(
+            "Failed to upload file for Python execution: %d bytes (%s)",
+            len(content),
+            type(e).__name__,
+        )
+        return None
 
 
 def _staging_priority(chat_files: list[ChatFile], code: str) -> list[int]:
@@ -165,10 +190,6 @@ def _select_files_for_staging(
         over_budget = False
         for idx, content in zip(batch, contents, strict=True):
             if content is None:
-                logger.warning(
-                    "Failed to read file for Python execution: %s",
-                    chat_files[idx].filename,
-                )
                 read_failures.append(chat_files[idx].filename)
                 continue
             # Always stage at least one file; otherwise stop at the byte budget.
@@ -211,7 +232,7 @@ def _build_staging_notice(
     return " ".join(parts) if parts else None
 
 
-class PythonTool(Tool[PythonToolOverrideKwargs]):
+class PythonTool(Tool):
     """
     Python code execution tool using an external Code Interpreter service.
 
@@ -226,9 +247,9 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
     DISPLAY_NAME = "Code Interpreter"
     DESCRIPTION = "Execute Python code in an isolated sandbox environment."
 
-    def __init__(self, tool_id: int, emitter: Emitter) -> None:
-        super().__init__(emitter=emitter)
+    def __init__(self, tool_id: int, chat_session_id: UUID) -> None:
         self._id = tool_id
+        self._chat_session_id = chat_session_id
         # Cache of (filename, content_hash) -> ci_file_id to avoid re-uploading
         # the same file on every tool call iteration within the same agent session.
         # Filename is included in the key so two files with identical bytes but
@@ -243,6 +264,10 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
         return self._id
 
     @property
+    def code_mode_exposure(self) -> CodeModeExposure:
+        return CodeModeExposure.IMMEDIATE
+
+    @property
     def name(self) -> str:
         return self.NAME
 
@@ -253,6 +278,12 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
     @property
     def display_name(self) -> str:
         return self.DISPLAY_NAME
+
+    @property
+    def code_mode_result(self) -> CodeModeResultSpec:
+        return CodeModeResultSpec(
+            kind=CodeModeResultKind.JSON_OBJECT, model=LlmPythonExecutionResult
+        )
 
     @override
     @classmethod
@@ -266,30 +297,23 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
         with CodeInterpreterClient() as client:
             return client.health(use_cache=True).healthy
 
-    def tool_definition(self) -> dict:
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        CODE_FIELD: {
-                            "type": "string",
-                            "description": "Python source code to execute",
-                        },
+    def tool_definition(self) -> ToolDefinition:
+        return ToolDefinition(
+            name=self.name,
+            description=self.description,
+            strict=True,
+            parameters={
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    CODE_FIELD: {
+                        "type": "string",
+                        "description": "Python source code to execute",
                     },
-                    "required": [CODE_FIELD],
                 },
+                "required": [CODE_FIELD],
             },
-        }
-
-    def emit_start(self, placement: Placement) -> None:
-        """Emit start packet for this tool. Code will be emitted in run() method."""
-        # Note: PythonToolStart requires code, but we don't have it in emit_start
-        # The code is available in run() method via llm_kwargs
-        # We'll emit the start packet in run() instead
+        )
 
     def _upload_and_stage(
         self,
@@ -323,15 +347,15 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
         misses = [p for p in plans if p.cache_key not in self._uploaded_file_cache]
         if misses:
             upload_results = run_functions_tuples_in_parallel(
-                [(client.upload_file, (p.content, p.file_name)) for p in misses],
+                [
+                    (_upload_file_content, (client, p.content, p.file_name))
+                    for p in misses
+                ],
                 allow_failures=True,
                 max_workers=CODE_INTERPRETER_STAGING_CONCURRENCY,
             )
             for plan, ci_file_id in zip(misses, upload_results, strict=True):
                 if ci_file_id is None:
-                    logger.warning(
-                        "Failed to upload file for Python execution: %s", plan.file_name
-                    )
                     continue
                 self._uploaded_file_cache[plan.cache_key] = ci_file_id
 
@@ -343,27 +367,10 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
                 failed_uploads.append(plan.file_name)
                 continue
             files_to_stage.append({"path": plan.file_name, "file_id": ci_file_id})
-            logger.info("Staged file for Python execution: %s", plan.file_name)
         return files_to_stage, failed_uploads
 
-    def run(
-        self,
-        placement: Placement,
-        override_kwargs: PythonToolOverrideKwargs,
-        **llm_kwargs: Any,
-    ) -> ToolResponse:
-        """
-        Execute Python code in the Code Interpreter service.
-
-        Args:
-            placement: The placement info (turn_index and tab_index) for this tool call.
-            override_kwargs: Contains chat_files to stage for execution
-            **llm_kwargs: Contains 'code' parameter from LLM
-
-        Returns:
-            ToolResponse with execution results
-        """
-        if CODE_FIELD not in llm_kwargs:
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
+        if CODE_FIELD not in invocation.arguments:
             raise ToolCallException(
                 message=f"Missing required '{CODE_FIELD}' parameter in python tool call",
                 llm_facing_message=(
@@ -372,16 +379,8 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
                     f'{{"code": "print(\'Hello, world!\')"}}'
                 ),
             )
-        code = cast(str, llm_kwargs[CODE_FIELD])
-        chat_files = override_kwargs.chat_files if override_kwargs else []
-
-        # Emit start event with the code
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=PythonToolStart(code=code),
-            )
-        )
+        code = parse_tool_arguments(PythonArguments, invocation.arguments).code
+        chat_files = context.chat_files
 
         # Create Code Interpreter client — context manager ensures
         # session.close() is called on every exit path.
@@ -405,10 +404,20 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
                 selection.read_failures + upload_failures,
             )
             if staging_notice:
-                logger.warning(staging_notice)
+                logger.warning(
+                    "Python execution staging incomplete: staged=%d dropped=%d failed=%d",
+                    len(files_to_stage),
+                    selection.dropped_by_caps,
+                    len(selection.read_failures) + len(upload_failures),
+                )
 
             try:
-                logger.debug("Executing code: %s", code)
+                logger.debug(
+                    "Executing code: %d chars, %d lines, %d staged files",
+                    len(code),
+                    code.count("\n") + 1,
+                    len(files_to_stage),
+                )
 
                 # Execute code with streaming (falls back to batch if unavailable)
                 stdout_parts: list[str] = []
@@ -425,18 +434,16 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
                             stdout_parts.append(event.data)
                         else:
                             stderr_parts.append(event.data)
-                        # Emit incremental delta to frontend
-                        self.emitter.emit(
-                            Packet(
-                                placement=placement,
-                                obj=PythonToolDelta(
-                                    stdout=(
-                                        event.data if event.stream == "stdout" else ""
-                                    ),
-                                    stderr=(
-                                        event.data if event.stream == "stderr" else ""
-                                    ),
-                                ),
+                        invocation.update(
+                            ToolProgress(
+                                details=PythonExecutionDelta(
+                                    stdout=event.data
+                                    if event.stream == "stdout"
+                                    else "",
+                                    stderr=event.data
+                                    if event.stream == "stderr"
+                                    else "",
+                                )
                             )
                         )
                     elif isinstance(event, StreamResultEvent):
@@ -462,7 +469,6 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
 
                 # Handle generated files
                 generated_files: list[PythonExecutionFile] = []
-                generated_file_ids: list[str] = []
                 file_ids_to_cleanup: list[str] = []
                 file_store = get_default_file_store()
 
@@ -476,9 +482,9 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
 
                         # Determine MIME type from file extension
                         filename = workspace_file.path.split("/")[-1]
-                        mime_type, _ = mimetypes.guess_type(filename)
-                        # Default to binary if we can't determine the type
-                        mime_type = mime_type or "application/octet-stream"
+                        mime_type = (
+                            guess_mime_type(filename) or "application/octet-stream"
+                        )
 
                         # Save to Onyx file store
                         onyx_file_id = file_store.save_file(
@@ -486,6 +492,9 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
                             display_name=filename,
                             file_origin=FileOrigin.CHAT_IMAGE_GEN,
                             file_type=mime_type,
+                            file_metadata=chat_image_gen_metadata(
+                                self._chat_session_id
+                            ),
                         )
 
                         generated_files.append(
@@ -494,7 +503,6 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
                                 file_link=build_full_frontend_file_url(onyx_file_id),
                             )
                         )
-                        generated_file_ids.append(onyx_file_id)
 
                         # Mark for cleanup
                         file_ids_to_cleanup.append(workspace_file.file_id)
@@ -502,8 +510,8 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
                     except Exception as e:
                         logger.error(
                             "Failed to handle generated file %s: %s",
-                            workspace_file.path,
-                            e,
+                            workspace_file.file_id,
+                            type(e).__name__,
                         )
 
                 # Cleanup Code Interpreter files (generated files)
@@ -522,15 +530,6 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
                 # orphaned when the session ends, but the code interpreter cleans up
                 # stale files on its own TTL.
 
-                # Emit file_ids once files are processed
-                if generated_file_ids:
-                    self.emitter.emit(
-                        Packet(
-                            placement=placement,
-                            obj=PythonToolDelta(file_ids=generated_file_ids),
-                        )
-                    )
-
                 # Build result
                 result = LlmPythonExecutionResult(
                     stdout=truncated_stdout,
@@ -546,28 +545,15 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
                 adapter = TypeAdapter(LlmPythonExecutionResult)
                 llm_response = adapter.dump_json(result).decode()
 
-                return ToolResponse(
-                    rich_response=PythonToolRichResponse(
-                        generated_files=generated_files,
-                    ),
-                    llm_facing_response=llm_response,
+                return ToolResult(
+                    details=result,
+                    content=llm_response,
+                    is_error=result.exit_code != 0,
                 )
 
             except Exception as e:
-                logger.error("Python execution failed: %s", e)
+                logger.error("Python execution failed: %s", type(e).__name__)
                 error_msg = str(e)
-
-                # Emit error delta
-                self.emitter.emit(
-                    Packet(
-                        placement=placement,
-                        obj=PythonToolDelta(
-                            stdout="",
-                            stderr=error_msg,
-                            file_ids=[],
-                        ),
-                    )
-                )
 
                 # Return error result
                 result = LlmPythonExecutionResult(
@@ -583,12 +569,4 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
                 adapter = TypeAdapter(LlmPythonExecutionResult)
                 llm_response = adapter.dump_json(result).decode()
 
-                return ToolResponse(
-                    rich_response=None,
-                    llm_facing_response=llm_response,
-                )
-
-    @classmethod
-    @override
-    def should_emit_argument_deltas(cls) -> bool:
-        return True
+                return ToolResult(content=llm_response, details=result, is_error=True)

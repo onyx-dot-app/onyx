@@ -27,7 +27,9 @@ def _visible_models_by_name(provider: LLMProviderView) -> list[str]:
     """Sorted: the relationship carries no ORDER BY, and callers' choices end
     up in the rendered opencode config, which must be byte-stable."""
     return sorted(
-        model.name for model in provider.model_configurations if model.is_visible
+        model.name
+        for model in provider.model_configurations
+        if model.is_visible and model.supports_chat
     )
 
 
@@ -92,7 +94,9 @@ def _matching_visible_model(
             else provider.provider == selection.provider_type
         )
         if matches_request and any(
-            model.is_visible and model.name == selection.model_name
+            model.is_visible
+            and model.supports_chat
+            and model.name == selection.model_name
             for model in provider.model_configurations
         ):
             return provider.id, selection.model_name

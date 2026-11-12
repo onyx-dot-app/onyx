@@ -52,21 +52,25 @@ Usage
 from __future__ import annotations
 
 import contextlib
-from collections.abc import Callable, Generator, Iterable, Sequence
+from collections.abc import Callable, Generator, Iterable, Iterator, Sequence
+from contextlib import contextmanager
+from datetime import datetime, timezone
 from typing import Any, cast
 from uuid import UUID
 
 from onyx.server.features.build.sandbox.base import SandboxEvent, SandboxManager
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
+    FilesystemEntry,
     OutputsManifestResponse,
 )
 from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
     CraftMCPServerConfig,
     FileSet,
-    FilesystemEntry,
     PromptAttachment,
     SandboxInfo,
+    SandboxResource,
+    SandboxResourceKind,
     SnapshotResult,
 )
 from onyx.server.features.build.sandbox.serve_transport import (
@@ -118,7 +122,7 @@ class StubSandboxManager(SandboxManager):
     - ``list_directory_returns`` or ``list_directory_returns_by_path``,
       ``read_file_returns``, ``upload_file_returns``, ``delete_file_returns``,
       ``get_upload_stats_returns``, ``get_webapp_url_returns``,
-      ``generate_pptx_preview_returns``: return values for the matching
+      ``generate_document_preview_returns``: return values for the matching
       filesystem / utility methods. Use ``list_directory_returns_by_path`` for
       recursive directory-walk tests.
 
@@ -171,7 +175,7 @@ class StubSandboxManager(SandboxManager):
         self.dispose_opencode_instance_raises: Exception | None = None
         self.get_upload_stats_returns: tuple[int, int] | None = None
         self.get_webapp_url_returns: str | None = None
-        self.generate_pptx_preview_returns: tuple[list[str], bool] | None = None
+        self.generate_document_preview_returns: tuple[list[str], bool] | None = None
         # Preflight session id. Defaulted (not _not_configured) so send_message
         # tests don't each have to wire it; the real _ServeMixin override POSTs
         # /session over HTTP, which has no pod to reach under the stub.
@@ -179,6 +183,10 @@ class StubSandboxManager(SandboxManager):
 
         # Silent no-op opt-ins for methods that legitimately return None.
         self.terminate_silent: bool = False
+        self.resources_returns: list[SandboxResource] | None = None
+        self.workspace_storage_exists_returns: bool = True
+        self.runtime_exists_returns: bool = True
+        self.workspace_storage_identity_returns: str | None = "stub-workspace"
         self.setup_session_workspace_silent: bool = False
         self.cleanup_session_workspace_silent: bool = False
         self.dispose_opencode_instance_silent: bool = False
@@ -228,7 +236,7 @@ class StubSandboxManager(SandboxManager):
         self.get_upload_stats_count: int = 0
         self.write_files_to_sandbox_count: int = 0
         self.get_webapp_url_count: int = 0
-        self.generate_pptx_preview_count: int = 0
+        self.generate_document_preview_count: int = 0
 
         self.last_provision_payload: dict[str, Any] | None = None
         self.last_terminate_sandbox_id: UUID | None = None
@@ -256,7 +264,7 @@ class StubSandboxManager(SandboxManager):
         self.last_get_upload_stats_payload: dict[str, Any] | None = None
         self.last_write_files_to_sandbox_payload: dict[str, Any] | None = None
         self.last_get_webapp_url_payload: dict[str, Any] | None = None
-        self.last_generate_pptx_preview_payload: dict[str, Any] | None = None
+        self.last_generate_document_preview_payload: dict[str, Any] | None = None
         self.last_prompt_slot: RecordingPromptSlot | None = None
         self.abort_calls: list[tuple[UUID, UUID, str]] = []
 
@@ -312,6 +320,55 @@ class StubSandboxManager(SandboxManager):
         self.terminated_sandbox_ids.append(sandbox_id)
         if not self.terminate_silent:
             raise _not_configured("terminate")
+
+    def workspace_storage_exists(self, sandbox_id: UUID, tenant_id: str) -> bool:  # noqa: ARG002
+        return self.workspace_storage_exists_returns
+
+    def runtime_exists(self, sandbox_id: UUID, tenant_id: str) -> bool:  # noqa: ARG002
+        return self.runtime_exists_returns
+
+    def workspace_storage_identity(
+        self,
+        sandbox_id: UUID,  # noqa: ARG002
+        tenant_id: str,  # noqa: ARG002
+    ) -> str | None:
+        return self.workspace_storage_identity_returns
+
+    def iter_resources(
+        self,
+        tenant_id: str,
+        deadline: float,  # noqa: ARG002
+        sandbox_id: UUID | None = None,  # noqa: ARG002
+    ) -> Iterator[SandboxResource]:
+        if self.resources_returns is None:
+            return iter(
+                []
+                if sandbox_id is None
+                else [
+                    SandboxResource(
+                        kind=SandboxResourceKind.POD,
+                        name=f"stub-{sandbox_id}",
+                        instance_id=f"stub-{sandbox_id}",
+                        sandbox_id=sandbox_id,
+                        tenant_id=tenant_id,
+                        created_at=datetime.now(timezone.utc),
+                    )
+                ]
+            )
+        return iter(
+            r
+            for r in self.resources_returns
+            if r.tenant_id == tenant_id
+            and (sandbox_id is None or r.sandbox_id == sandbox_id)
+        )
+
+    def terminate_observed_resources(
+        self,
+        sandbox_id: UUID,
+        resources: list[SandboxResource],  # noqa: ARG002
+        deadline: float,  # noqa: ARG002
+    ) -> None:
+        self.terminate(sandbox_id)
 
     def setup_session_workspace(
         self,
@@ -563,6 +620,14 @@ class StubSandboxManager(SandboxManager):
         # Iterate over the snapshot — re-driveable across calls.
         yield from self._send_message_events
 
+    @contextmanager
+    def prepare_opencode_abort(
+        self, sandbox_id: UUID, session_id: UUID, opencode_session_id: str
+    ) -> Generator[Callable[[], None] | None, None, None]:
+        yield lambda: self.abort_opencode_session(
+            sandbox_id, session_id, opencode_session_id
+        )
+
     def abort_opencode_session(
         self,
         sandbox_id: UUID,
@@ -610,13 +675,19 @@ class StubSandboxManager(SandboxManager):
         return self.list_directory_returns
 
     def get_outputs_manifest(
-        self, sandbox_id: UUID, session_id: UUID
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        *,
+        include_web: bool = False,
     ) -> OutputsManifestResponse:
         self.get_outputs_manifest_count += 1
         self.last_outputs_manifest_payload = {
             "sandbox_id": sandbox_id,
             "session_id": session_id,
         }
+        if include_web:
+            self.last_outputs_manifest_payload["include_web"] = True
         if self.outputs_manifest_returns is None:
             raise _not_configured("get_outputs_manifest")
         return self.outputs_manifest_returns
@@ -755,20 +826,23 @@ class StubSandboxManager(SandboxManager):
             raise _not_configured("get_webapp_url")
         return self.get_webapp_url_returns
 
-    def generate_pptx_preview(
+    def generate_document_preview(
         self,
         sandbox_id: UUID,
         session_id: UUID,
-        pptx_path: str,
+        document_path: str,
         cache_dir: str,
+        *,
+        first_page_only: bool = False,
     ) -> tuple[list[str], bool]:
-        self.generate_pptx_preview_count += 1
-        self.last_generate_pptx_preview_payload = {
+        self.generate_document_preview_count += 1
+        self.last_generate_document_preview_payload = {
             "sandbox_id": sandbox_id,
             "session_id": session_id,
-            "pptx_path": pptx_path,
+            "document_path": document_path,
             "cache_dir": cache_dir,
+            "first_page_only": first_page_only,
         }
-        if self.generate_pptx_preview_returns is None:
-            raise _not_configured("generate_pptx_preview")
-        return self.generate_pptx_preview_returns
+        if self.generate_document_preview_returns is None:
+            raise _not_configured("generate_document_preview")
+        return self.generate_document_preview_returns

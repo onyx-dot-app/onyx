@@ -1,7 +1,9 @@
 """Invariants for the seeded default groups (Admin/Basic).
 
 A default group holds members and nothing else: no connectors, document sets, agents,
-skills, providers or limits, and its name and permission grant are fixed at seed time.
+skills, providers or limits, and its name is fixed. Its permission grants come from
+migrations, except the few an admin may switch on the Basic group
+(``DEFAULT_GROUP_TOGGLEABLE_PERMISSIONS``).
 
 Lives in Community Edition even though group management is Enterprise: the groups are
 seeded by a core migration and the resource-sharing paths that must refuse them are core
@@ -13,15 +15,23 @@ from collections.abc import Collection
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from onyx.auth.permissions import DEFAULT_GROUP_TOGGLEABLE_PERMISSIONS
+from onyx.db.enums import Permission
 from onyx.db.models import UserGroup
+from onyx.db.users import DEFAULT_BASIC_GROUP_NAME
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+
+
+def group_permission_toggles_allowed(user_group: UserGroup) -> bool:
+    """Custom groups take any toggleable grant, Basic its allowlist, Admin nothing."""
+    return not user_group.is_default or user_group.name == DEFAULT_BASIC_GROUP_NAME
 
 
 def assert_group_config_is_editable(
     db_session: Session, user_group_id: int, action: str
 ) -> None:
-    """Membership is the only thing a default group has, so every other write is refused.
+    """A default group holds only members, so the config writes this guards are refused.
     ``action`` completes "Cannot {action} a default system group.". A missing group falls
     through to the caller's own NOT_FOUND."""
     assert_groups_config_are_editable(db_session, [user_group_id], action)
@@ -69,4 +79,26 @@ def assert_not_shared_with_default_group(
             "Cannot share with the default system group(s): "
             + ", ".join(sorted(default_names))
             + ". Make the resource public instead.",
+        )
+
+
+def assert_group_permissions_editable(
+    user_group: UserGroup, permissions: Collection[Permission]
+) -> None:
+    """A custom group takes any toggleable grant. Basic takes only the allowlisted
+    ones, since it holds the whole org, and Admin takes none."""
+    if not user_group.is_default:
+        return
+    if not group_permission_toggles_allowed(user_group):
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "Cannot change the permissions of a default system group.",
+        )
+    refused: list[str] = sorted(
+        p.value for p in permissions if p not in DEFAULT_GROUP_TOGGLEABLE_PERMISSIONS
+    )
+    if refused:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            f"Permissions {refused} cannot be toggled on the Basic group.",
         )

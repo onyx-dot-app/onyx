@@ -1,4 +1,4 @@
-import { OnyxDocument } from "@/lib/search/interfaces";
+import { OnyxDocument } from "@/lib/search/types";
 
 // Base interface for all streaming objects
 interface BaseObj {
@@ -12,7 +12,6 @@ export enum PacketType {
 
   STOP = "stop",
   SECTION_END = "section_end",
-  TOP_LEVEL_BRANCHING = "top_level_branching",
   ERROR = "error",
 
   // Specific tool packets
@@ -30,6 +29,7 @@ export enum PacketType {
 
   // Tool call argument delta (streams tool args before tool executes)
   TOOL_CALL_ARGUMENT_DELTA = "tool_call_argument_delta",
+  TOOL_CALL_DEBUG = "tool_call_debug",
 
   // Custom tool packets
   CUSTOM_TOOL_START = "custom_tool_start",
@@ -71,6 +71,11 @@ export enum PacketType {
   // Bash Tool packets
   BASH_TOOL_START = "bash_tool_start",
   BASH_TOOL_DELTA = "bash_tool_delta",
+
+  // Code mode packets: one program that calls other tools. The nested calls
+  // stream their own tool packets at the same placement with sub_turn_index.
+  CODE_MODE_START = "code_mode_start",
+  CODE_MODE_DELTA = "code_mode_delta",
 }
 
 export const CODE_INTERPRETER_TOOL_TYPES = {
@@ -82,6 +87,9 @@ export const CODE_INTERPRETER_TOOL_TYPES = {
 
 export const isCodeInterpreterToolType = (toolType: string): boolean =>
   (Object.values(CODE_INTERPRETER_TOOL_TYPES) as string[]).includes(toolType);
+
+// tool_type of the argument deltas that stream a code mode program
+export const CODE_MODE_TOOL_TYPE = "execute_code";
 
 // Basic Message Packets
 export interface MessageStart extends BaseObj {
@@ -106,6 +114,8 @@ export interface MessageEnd extends BaseObj {
 export enum StopReason {
   FINISHED = "finished",
   USER_CANCELLED = "user_cancelled",
+  /** The turn reached its execution deadline. */
+  TIMED_OUT = "timed_out",
 }
 
 export interface Stop extends BaseObj {
@@ -115,11 +125,6 @@ export interface Stop extends BaseObj {
 
 export interface SectionEnd extends BaseObj {
   type: "section_end";
-}
-
-export interface TopLevelBranching extends BaseObj {
-  type: "top_level_branching";
-  num_parallel_branches: number;
 }
 
 export interface PacketError extends BaseObj {
@@ -154,7 +159,7 @@ export interface SearchToolDocumentsDelta extends BaseObj {
 
 export type ImageShape = "square" | "landscape" | "portrait";
 
-interface GeneratedImage {
+export interface GeneratedImage {
   file_id: string;
   url: string;
   revised_prompt: string;
@@ -206,7 +211,8 @@ export interface FetchToolDocuments extends BaseObj {
 // Custom Tool Packets
 export interface CustomToolErrorInfo {
   is_auth_error: boolean;
-  status_code: number;
+  is_unreachable: boolean;
+  status_code: number | null;
   message: string;
 }
 
@@ -355,6 +361,46 @@ export interface BashToolDelta extends BaseObj {
   timed_out: boolean;
 }
 
+// Code Mode Packets
+export type CodeModeStatus =
+  | "running"
+  | "completed"
+  | "failed"
+  | "timed_out"
+  | "terminated"
+  | "cancelled";
+
+export interface CodeModeStart extends BaseObj {
+  type: "code_mode_start";
+  // Empty on later observations of a cell
+  code: string;
+  // From the call arguments: null for execute_code, whose cell gets its id when it runs
+  cell_id?: number | null;
+  // 0 starts a cell (execute_code); 1 continues one (wait_code)
+  observation?: number;
+}
+
+export interface CodeModeDelta extends BaseObj {
+  type: "code_mode_delta";
+  // Appended to the stdout of earlier deltas, or replaces it when replace_stdout is set
+  stdout: string;
+  // Set on a final delta whose saved stdout differs from the streamed stdout
+  replace_stdout?: boolean;
+  result?: string | null;
+  error?: string | null;
+  // Set only on the final delta
+  status?: CodeModeStatus | null;
+  duration_seconds?: number | null;
+  tool_call_count?: number | null;
+  // Keys the program saved with store(); set only on the final delta
+  stored_keys?: string[] | null;
+  // Exact cell and observation; set only on the final delta
+  cell_id?: number | null;
+  observation?: number | null;
+  // Set on the closing record of a cell that ran past its last observation
+  response_ended?: boolean;
+}
+
 export type ChatObj = MessageStart | MessageDelta | MessageEnd;
 
 export type StopObj = Stop;
@@ -367,8 +413,6 @@ export interface ChatHeartbeat extends BaseObj {
 export type ChatHeartbeatObj = ChatHeartbeat;
 
 export type SectionEndObj = SectionEnd;
-
-export type TopLevelBranchingObj = TopLevelBranching;
 
 export type PacketErrorObj = PacketError;
 
@@ -457,19 +501,35 @@ export type CodingAgentObj =
   | SectionEnd
   | PacketError;
 
+// Nested tool packets of a code mode group are in NewToolObj
+export type CodeModeObj =
+  | CodeModeStart
+  | CodeModeDelta
+  | ToolCallArgumentDelta
+  | SectionEnd
+  | PacketError;
+
+export interface ToolCallDebug extends BaseObj {
+  type: "tool_call_debug";
+  tool_call_id: string;
+  tool_name: string;
+  tool_args: Record<string, unknown>;
+}
+
 // Union type for all possible streaming objects
 export type ObjTypes =
+  | ToolCallDebug
   | ChatObj
   | NewToolObj
   | ReasoningObj
   | StopObj
   | ChatHeartbeatObj
   | SectionEndObj
-  | TopLevelBranchingObj
   | CitationObj
   | DeepResearchPlanObj
   | ResearchAgentObj
   | CodingAgentObj
+  | CodeModeObj
   | PacketErrorObj
   | CitationObj;
 
@@ -547,11 +607,6 @@ export interface SectionEndPacket {
   obj: SectionEndObj;
 }
 
-export interface TopLevelBranchingPacket {
-  placement: Placement;
-  obj: TopLevelBranchingObj;
-}
-
 export interface DeepResearchPlanPacket {
   placement: Placement;
   obj: DeepResearchPlanObj;
@@ -565,4 +620,11 @@ export interface ResearchAgentPacket {
 export interface CodingAgentPacket {
   placement: Placement;
   obj: CodingAgentObj;
+}
+
+/** Transport cursor for the complete packet prefix preceding this record. */
+export interface StreamCursor {
+  stream_id: number;
+  next_cursor: number;
+  replay_complete: boolean;
 }

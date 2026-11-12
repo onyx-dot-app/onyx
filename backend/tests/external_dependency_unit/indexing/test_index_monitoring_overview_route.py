@@ -1,0 +1,289 @@
+"""Coverage for the indexing status page's overview: a pair mid-run counts as
+indexing, backfills included, a paused pair is not active, the window's
+documents come from the runs inside it, a reader sees only the pairs they can
+read, and there is no all-time window. The database holds other pairs, so every figure is read against the
+overview from before the pairs were created, with the clock frozen so no other
+run crosses the window's edge between the two reads."""
+
+from datetime import datetime, timedelta, timezone
+
+import pytest
+from sqlalchemy.orm import Session
+
+from onyx.configs.constants import DocumentSource
+from onyx.connectors.models import InputType
+from onyx.db.connector_credential_pair import (
+    CCPairAccessLevel,
+    get_connector_credential_pairs_for_user,
+)
+from onyx.db.enums import (
+    AccessType,
+    ConnectorCredentialPairStatus,
+    IndexingStatus,
+)
+from onyx.db.models import Connector, ConnectorCredentialPair, Credential
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.server.documents.index_monitoring import get_indexing_overview
+from onyx.server.documents.models import CCPairThroughputWindow
+from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.indexing_helpers import (
+    make_index_attempt,
+    throughput_clock_at,
+)
+
+
+def _create_cc_pair(
+    db_session: Session,
+    status: ConnectorCredentialPairStatus = ConnectorCredentialPairStatus.ACTIVE,
+    access_type: AccessType = AccessType.PUBLIC,
+) -> ConnectorCredentialPair:
+    owner = create_test_user(db_session, "overview_owner")
+    connector = Connector(
+        name="Overview Test Connector",
+        source=DocumentSource.GOOGLE_DRIVE,
+        input_type=InputType.POLL,
+        connector_specific_config={},
+        refresh_freq=None,
+        prune_freq=None,
+    )
+    db_session.add(connector)
+    db_session.flush()
+    credential = Credential(credential_json={}, user_id=owner.id, admin_public=True)
+    db_session.add(credential)
+    db_session.flush()
+    cc_pair = ConnectorCredentialPair(
+        connector_id=connector.id,
+        credential_id=credential.id,
+        name="Overview Test Pair",
+        status=status,
+        access_type=access_type,
+    )
+    db_session.add(cc_pair)
+    db_session.commit()
+    return cc_pair
+
+
+def test_overview_counts_the_readable_pairs_and_the_window(
+    db_session: Session,
+) -> None:
+    admin = create_test_user(db_session, "overview_admin", is_admin=True)
+    now = datetime.now(timezone.utc)
+    with throughput_clock_at(now):
+        before = get_indexing_overview(
+            window=CCPairThroughputWindow.HOURS_1, user=admin, db_session=db_session
+        )
+    running = _create_cc_pair(db_session)
+    backfilling = _create_cc_pair(db_session)
+    finished = _create_cc_pair(db_session)
+    paused = _create_cc_pair(db_session, ConnectorCredentialPairStatus.PAUSED)
+    make_index_attempt(
+        db_session,
+        running,
+        IndexingStatus.IN_PROGRESS,
+        now - timedelta(minutes=30),
+        None,
+        30,
+    )
+    # A backfill is the pair's only run, and it indexes like any other.
+    make_index_attempt(
+        db_session,
+        backfilling,
+        IndexingStatus.IN_PROGRESS,
+        now - timedelta(minutes=30),
+        None,
+        10,
+        is_backfill=True,
+    )
+    make_index_attempt(
+        db_session,
+        finished,
+        IndexingStatus.SUCCESS,
+        now - timedelta(minutes=20),
+        now - timedelta(minutes=10),
+        50,
+    )
+    # Finished a day ago, so it adds nothing to the window.
+    make_index_attempt(
+        db_session,
+        paused,
+        IndexingStatus.SUCCESS,
+        now - timedelta(days=1, hours=1),
+        now - timedelta(days=1),
+        500,
+    )
+
+    with throughput_clock_at(now):
+        response = get_indexing_overview(
+            window=CCPairThroughputWindow.HOURS_1, user=admin, db_session=db_session
+        )
+
+    assert response.indexing_connectors == before.indexing_connectors + 2
+    assert response.active_connectors == before.active_connectors + 3
+    assert response.recent_docs_indexed == before.recent_docs_indexed + 90
+    # The new pairs hold no documents.
+    assert response.total_docs_indexed == before.total_docs_indexed
+    assert sum(response.throughput.docs_indexed) == response.recent_docs_indexed
+    assert len(response.throughput.runs) == len(before.throughput.runs) + 3
+
+
+def test_a_reader_sees_only_the_pairs_they_can_read(db_session: Session) -> None:
+    reader = create_test_user(db_session, "overview_reader")
+    now = datetime.now(timezone.utc)
+    with throughput_clock_at(now):
+        before = get_indexing_overview(
+            window=CCPairThroughputWindow.HOURS_1, user=reader, db_session=db_session
+        )
+    public = _create_cc_pair(db_session)
+    private = _create_cc_pair(db_session, access_type=AccessType.PRIVATE)
+    started = now - timedelta(minutes=10)
+    finished = now - timedelta(minutes=5)
+    make_index_attempt(db_session, public, IndexingStatus.SUCCESS, started, finished, 5)
+    make_index_attempt(
+        db_session, private, IndexingStatus.SUCCESS, started, finished, 500
+    )
+    readable = {
+        cc_pair.id
+        for cc_pair in get_connector_credential_pairs_for_user(
+            db_session, reader, CCPairAccessLevel.READ
+        )
+    }
+    assert public.id in readable
+    assert private.id not in readable
+
+    with throughput_clock_at(now):
+        response = get_indexing_overview(
+            window=CCPairThroughputWindow.HOURS_1, user=reader, db_session=db_session
+        )
+
+    assert response.active_connectors == before.active_connectors + 1
+    assert response.recent_docs_indexed == before.recent_docs_indexed + 5
+    assert len(response.throughput.runs) == len(before.throughput.runs) + 1
+
+
+def test_the_overview_has_no_all_time_window(db_session: Session) -> None:
+    admin = create_test_user(db_session, "overview_admin", is_admin=True)
+
+    with pytest.raises(OnyxError) as refused:
+        get_indexing_overview(
+            window=CCPairThroughputWindow.ALL, user=admin, db_session=db_session
+        )
+
+    assert refused.value.error_code == OnyxErrorCode.INVALID_INPUT
+
+
+def test_the_overview_counts_paused_pairs(db_session: Session) -> None:
+    admin = create_test_user(db_session, "overview_admin", is_admin=True)
+    now = datetime.now(timezone.utc)
+    with throughput_clock_at(now):
+        before = get_indexing_overview(
+            window=CCPairThroughputWindow.HOURS_1, user=admin, db_session=db_session
+        )
+    _create_cc_pair(db_session, ConnectorCredentialPairStatus.PAUSED)
+    _create_cc_pair(db_session, ConnectorCredentialPairStatus.PAUSED)
+    _create_cc_pair(db_session)
+    # A deleting pair is neither active nor paused.
+    _create_cc_pair(db_session, ConnectorCredentialPairStatus.DELETING)
+
+    with throughput_clock_at(now):
+        response = get_indexing_overview(
+            window=CCPairThroughputWindow.HOURS_1, user=admin, db_session=db_session
+        )
+
+    assert response.paused_connectors == before.paused_connectors + 2
+    assert response.active_connectors == before.active_connectors + 1
+    assert response.indexing_connectors == before.indexing_connectors
+    assert response.total_docs_indexed == before.total_docs_indexed
+
+
+def test_a_reader_counts_only_readable_paused_pairs(db_session: Session) -> None:
+    reader = create_test_user(db_session, "overview_reader")
+    now = datetime.now(timezone.utc)
+    with throughput_clock_at(now):
+        before = get_indexing_overview(
+            window=CCPairThroughputWindow.HOURS_1, user=reader, db_session=db_session
+        )
+    _create_cc_pair(db_session, ConnectorCredentialPairStatus.PAUSED)
+    # Private with no group of the reader's, so it stays out of their counts.
+    _create_cc_pair(
+        db_session, ConnectorCredentialPairStatus.PAUSED, AccessType.PRIVATE
+    )
+
+    with throughput_clock_at(now):
+        response = get_indexing_overview(
+            window=CCPairThroughputWindow.HOURS_1, user=reader, db_session=db_session
+        )
+
+    assert response.paused_connectors == before.paused_connectors + 1
+
+
+def test_ac4_fleet_bins_give_the_same_slice_shape_across_readable_pairs(
+    db_session: Session,
+) -> None:
+    admin = create_test_user(db_session, "overview_admin", is_admin=True)
+    # Off every hourly boundary, so the window's end rounds up to 14:00.
+    now = datetime(2026, 1, 1, 13, 47, 12, tzinfo=timezone.utc)
+    width = timedelta(hours=1)
+    window_end = datetime(2026, 1, 1, 14, tzinfo=timezone.utc)
+    window_start = window_end - timedelta(hours=24)
+    first = _create_cc_pair(db_session)
+    second = _create_cc_pair(db_session)
+    failed = make_index_attempt(
+        db_session,
+        first,
+        IndexingStatus.FAILED,
+        window_start + width * 6 + timedelta(minutes=10),
+        window_start + width * 6 + timedelta(minutes=40),
+        0,
+    )
+    succeeded = make_index_attempt(
+        db_session,
+        second,
+        IndexingStatus.SUCCESS,
+        window_start + width * 15 + timedelta(minutes=10),
+        window_start + width * 15 + timedelta(minutes=40),
+        12,
+    )
+
+    with throughput_clock_at(now):
+        response = get_indexing_overview(
+            window=CCPairThroughputWindow.HOURS_24,
+            bins=24,
+            user=admin,
+            db_session=db_session,
+        )
+
+    throughput = response.throughput
+    assert throughput.window_end == window_end
+    assert len(throughput.docs_indexed) == 24
+    assert [(s.start, s.end) for s in throughput.slices] == [
+        (window_start + width * i, window_start + width * (i + 1)) for i in range(24)
+    ]
+    holding = {
+        attempt.id: [
+            (index, run.status, run.resolved)
+            for index, s in enumerate(throughput.slices)
+            for run in s.runs
+            if run.attempt_id == attempt.id
+        ]
+        for attempt in (failed, succeeded)
+    }
+    assert holding == {
+        failed.id: [(6, IndexingStatus.FAILED, False)],
+        succeeded.id: [(15, IndexingStatus.SUCCESS, False)],
+    }
+    assert [s.docs_indexed for s in throughput.slices] == throughput.docs_indexed
+
+
+def test_ac6_fleet_without_bins_keeps_the_window_default_count(
+    db_session: Session,
+) -> None:
+    admin = create_test_user(db_session, "overview_admin", is_admin=True)
+
+    response = get_indexing_overview(
+        window=CCPairThroughputWindow.HOURS_24, user=admin, db_session=db_session
+    )
+
+    assert len(response.throughput.docs_indexed) == 72
+    assert len(response.throughput.slices) == 72
+    assert sum(response.throughput.docs_indexed) == response.recent_docs_indexed

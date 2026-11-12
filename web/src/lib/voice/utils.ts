@@ -1,4 +1,4 @@
-import { SvgAzure, SvgElevenLabs, SvgOpenai } from "@opal/logos";
+import { SvgAzure, SvgElevenLabs, SvgOpenAI, SvgZoom } from "@opal/logos";
 import { SvgMicrophone } from "@opal/icons";
 import type { IconProps } from "@opal/types";
 import type { JsonValue } from "@/lib/json";
@@ -41,6 +41,10 @@ export interface VoiceProviderDetail {
   ttsModels?: Array<{ id: string; name: string }>;
   /** Set if the provider supports configurable STT languages; renders the Spoken Languages field. */
   sttLanguages?: { docsUrl: string };
+  /** Set if the provider requires a second stored credential in addition to the API key. */
+  requiresApiSecret?: boolean;
+  /** Single-select STT language options for providers with one active locale. */
+  sttLanguageOptions?: Array<{ id: string; name: string }>;
 }
 
 /** Locale shape for STT languages; mirrors AZURE_LOCALE_PATTERN in backend/onyx/voice/providers/azure.py. */
@@ -99,7 +103,7 @@ const DEFAULT_VOICE_PROVIDER_DETAIL: VoiceProviderDetail = {
 export const VOICE_PROVIDER_DETAILS: Record<string, VoiceProviderDetail> = {
   openai: {
     label: "OpenAI",
-    icon: SvgOpenai,
+    icon: SvgOpenAI,
     apiKeyUrl: "https://platform.openai.com/api-keys",
     docsUrl: "https://platform.openai.com/docs/guides/text-to-speech",
     voiceDocsUrl: {
@@ -126,6 +130,27 @@ export const VOICE_PROVIDER_DETAILS: Record<string, VoiceProviderDetail> = {
       docsUrl:
         "https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=stt",
     },
+  },
+  zoom: {
+    label: "Zoom AI Services",
+    icon: SvgZoom,
+    apiKeyUrl: "https://developers.zoom.us/docs/ai-services/",
+    docsUrl: "https://developers.zoom.us/docs/ai-services/",
+    sttModels: [{ id: "scribe-live", name: "Scribe Live" }],
+    requiresApiSecret: true,
+    sttLanguageOptions: [
+      { id: "en-US", name: "en-US" },
+      { id: "zh-CN", name: "zh-CN" },
+      { id: "ja-JP", name: "ja-JP" },
+      { id: "es-ES", name: "es-ES" },
+      { id: "it-IT", name: "it-IT" },
+      { id: "fr-FR", name: "fr-FR" },
+      { id: "de-DE", name: "de-DE" },
+      { id: "ar-SA", name: "ar-SA" },
+      { id: "ar-AE", name: "ar-AE" },
+      { id: "pt-BR", name: "pt-BR" },
+      { id: "pt-PT", name: "pt-PT" },
+    ],
   },
   elevenlabs: {
     label: "ElevenLabs",

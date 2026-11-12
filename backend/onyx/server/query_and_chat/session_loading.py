@@ -1,22 +1,28 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping, Sequence
 from typing import Any, Literal, cast
 
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.chat.citation_utils import extract_citation_order_from_text
-from onyx.coding_agent.mock_tools import CODING_AGENT_QUERY_KEY, CODING_AGENT_REPO_KEY
+from onyx.chat.presentation import replay_response
+from onyx.coding_agent.tool_definitions import (
+    CODING_AGENT_QUERY_KEY,
+    CODING_AGENT_REPO_KEY,
+)
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SavedSearchDoc, SearchDoc
 from onyx.db.chat import (
     get_db_search_doc_by_id,
     translate_db_search_doc_to_saved_search_doc,
 )
-from onyx.db.models import ChatMessage
-from onyx.db.tools import get_tool_by_id
-from onyx.deep_research.dr_mock_tools import (
+from onyx.db.chat_response import read_chat_execution, read_response_replay_data
+from onyx.db.models import ChatMessage, Tool
+from onyx.db.tools import get_tools_by_ids
+from onyx.deep_research.tool_definitions import (
     RESEARCH_AGENT_IN_CODE_ID,
     RESEARCH_AGENT_TASK_KEY,
 )
@@ -29,11 +35,9 @@ from onyx.server.query_and_chat.streaming_models import (
     CodingAgentStart,
     CustomToolArgs,
     CustomToolDelta,
-    CustomToolErrorInfo,
     CustomToolStart,
     FileReaderResult,
     FileReaderStart,
-    GeneratedImage,
     ImageGenerationFinal,
     ImageGenerationToolStart,
     IntermediateReportDelta,
@@ -54,8 +58,8 @@ from onyx.server.query_and_chat.streaming_models import (
     SearchToolQueriesDelta,
     SearchToolStart,
     SectionEnd,
-    TopLevelBranching,
 )
+from onyx.tools.models import CustomToolErrorInfo, GeneratedImage
 from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
     CodingAgentTool,
 )
@@ -526,15 +530,38 @@ def create_search_packets(
     return packets
 
 
+def load_session_tools(
+    messages: Sequence[ChatMessage], db_session: Session
+) -> dict[int, Tool]:
+    """The tools that the messages' tool calls used, by id, in one query."""
+    tool_ids = {
+        tool_call.tool_id
+        for message in messages
+        for tool_call in message.tool_calls or []
+        if tool_call.tool_id is not None
+    }
+    return {tool.id: tool for tool in get_tools_by_ids(list(tool_ids), db_session)}
+
+
 def translate_assistant_message_to_packets(
     chat_message: ChatMessage,
+    tools_by_id: Mapping[int, Tool],
     db_session: Session,
 ) -> list[Packet]:
     """
     Translates an assistant message and tool calls to packet format.
     It needs to be a list of list of packets combined into indices for "steps".
     The final answer and citations are also a "step".
+
+    `tools_by_id` holds the tools of the message's tool calls (see
+    `load_session_tools`), so replay does not query a tool per call.
     """
+    execution = read_chat_execution(chat_message)
+    if execution is not None:
+        replay = read_response_replay_data(execution, db_session)
+        return replay_response(
+            execution.response, replay.tools, execution.presentation, replay.documents
+        )
     packet_list: list[Packet] = []
 
     if chat_message.message_type != MessageType.ASSISTANT:
@@ -576,16 +603,17 @@ def translate_assistant_message_to_packets(
                 )
 
             # Process each tool call in this turn (single pass).
-            # We buffer packets for the turn so we can conditionally prepend a TopLevelBranching
-            # packet (which must appear before any tool output in the turn).
-            research_agent_count = 0
             turn_tool_packets: list[Packet] = []
             for tool_call in tool_calls_in_turn:
                 # Here we do a try because some tools may get deleted before the session is reloaded.
                 try:
-                    tool = get_tool_by_id(tool_call.tool_id, db_session)
-                    if tool.in_code_tool_id == RESEARCH_AGENT_IN_CODE_ID:
-                        research_agent_count += 1
+                    tool = (
+                        tools_by_id.get(tool_call.tool_id)
+                        if tool_call.tool_id is not None
+                        else None
+                    )
+                    if tool is None:
+                        raise ValueError("Tool by specified id does not exist")
 
                     # Handle different tool types
                     if tool.in_code_tool_id in [
@@ -787,7 +815,7 @@ def translate_assistant_message_to_packets(
                                 data=custom_data,
                                 file_ids=custom_file_ids,
                                 error=custom_error,
-                                tool_args=custom_args if custom_args else None,
+                                tool_args=custom_args or None,
                                 tool_id=tool_call.tool_id,
                             )
                         )
@@ -796,16 +824,6 @@ def translate_assistant_message_to_packets(
                     logger.warning("Error processing tool call %s: %s", tool_call.id, e)
                     continue
 
-            if research_agent_count > 1:
-                # Emit TopLevelBranching before processing any tool output in the turn.
-                packet_list.append(
-                    Packet(
-                        placement=Placement(turn_index=turn_num),
-                        obj=TopLevelBranching(
-                            num_parallel_branches=research_agent_count
-                        ),
-                    )
-                )
             packet_list.extend(turn_tool_packets)
 
     # Determine the next turn_index for the final message
@@ -818,8 +836,13 @@ def translate_assistant_message_to_packets(
     citation_info_list: list[CitationInfo] = []
 
     if citations:
+        # A citation points at one of the answer's own search docs, which are
+        # already loaded; only a doc outside them needs a query.
+        loaded_docs_by_id = {doc.id: doc for doc in chat_message.search_docs}
         for citation_num, search_doc_id in citations.items():
-            search_doc = get_db_search_doc_by_id(search_doc_id, db_session)
+            search_doc = loaded_docs_by_id.get(
+                search_doc_id
+            ) or get_db_search_doc_by_id(search_doc_id, db_session)
             if search_doc:
                 citation_info_list.append(
                     CitationInfo(

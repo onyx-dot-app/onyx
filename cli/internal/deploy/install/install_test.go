@@ -239,6 +239,9 @@ func TestRunInstallFreshLiteNoPrompt(t *testing.T) {
 			t.Errorf("%s not randomized: %q", key, v)
 		}
 	}
+	if Var(envStr, "MINIO_ROOT_USER") != Var(envStr, "S3_AWS_ACCESS_KEY_ID") || Var(envStr, "MINIO_ROOT_PASSWORD") != Var(envStr, "S3_AWS_SECRET_ACCESS_KEY") {
+		t.Error("MINIO_ROOT_* must match S3_AWS_* for tags whose MinIO reads only MINIO_ROOT_*")
+	}
 	if len(Var(envStr, "USER_AUTH_SECRET")) != 64 {
 		t.Errorf("USER_AUTH_SECRET not generated: %q", Var(envStr, "USER_AUTH_SECRET"))
 	}
@@ -545,6 +548,83 @@ func TestRerunRestartKeepsEnvUntouched(t *testing.T) {
 	}
 }
 
+// A .env written before the object store replaced MinIO still names the MinIO
+// service. The rerun follows the compose file it lays down, falls back to
+// MinIO for reads, and keeps MINIO_ROOT_*. An external endpoint stays as it is.
+func TestRerunAlignsBundledObjectStoreEndpoint(t *testing.T) {
+	for _, tc := range []struct {
+		name, seeded, want, wantLegacy, wantReplicas string
+	}{
+		// A fresh install on a pinned MinIO-only release wrote 0, but it has run MinIO since.
+		{"minio default", minioEndpoint, objectStoreEndpoint, minioEndpoint, "1"},
+		{"external endpoint", "https://s3.example.com", "https://s3.example.com", "", "0"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			isolateEnv(t)
+			shimDockerOnPath(t)
+			root := t.TempDir()
+			if err := os.MkdirAll(filepath.Join(root, "deployment"), 0755); err != nil {
+				t.Fatal(err)
+			}
+			seeded := "IMAGE_TAG=v1.0.0\nS3_ENDPOINT_URL=" + tc.seeded + "\nMINIO_ROOT_USER=legacyroot\nMINIO_REPLICAS=0\n"
+			if err := os.WriteFile(filepath.Join(root, "deployment", ".env"), []byte(seeded), 0600); err != nil {
+				t.Fatal(err)
+			}
+
+			deps := testDeps(t, &fakeRunner{handler: healthyDockerHandler}, notFoundServer(t))
+			if err := RunInstall(context.Background(), deps, Options{NoPrompt: true, Dir: root, NoWait: true, Local: true}); err != nil {
+				t.Fatalf("RunInstall: %v\noutput:\n%s", err, outBuf(deps).String())
+			}
+
+			env, err := os.ReadFile(filepath.Join(root, "deployment", ".env"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := Var(string(env), "S3_ENDPOINT_URL"); got != tc.want {
+				t.Errorf("S3_ENDPOINT_URL = %q, want %q", got, tc.want)
+			}
+			if got := Var(string(env), "S3_LEGACY_ENDPOINT_URL"); got != tc.wantLegacy {
+				t.Errorf("S3_LEGACY_ENDPOINT_URL = %q, want %q", got, tc.wantLegacy)
+			}
+			if got := Var(string(env), "MINIO_ROOT_USER"); got != "legacyroot" {
+				t.Errorf("MINIO_ROOT_USER = %q, want it kept for the copy", got)
+			}
+			if got := Var(string(env), "MINIO_REPLICAS"); got != tc.wantReplicas {
+				t.Errorf("MINIO_REPLICAS = %q, want %q", got, tc.wantReplicas)
+			}
+		})
+	}
+}
+
+// A fresh install never held files in MinIO, so it gets no legacy store and
+// MinIO stays stopped.
+func TestFreshStandardInstallStartsWithoutMinIO(t *testing.T) {
+	isolateEnv(t)
+	shimDockerOnPath(t)
+	root := t.TempDir()
+	deps := testDeps(t, &fakeRunner{handler: healthyDockerHandler}, notFoundServer(t))
+	// --include-craft implies standard mode without a prompt.
+	if err := RunInstall(context.Background(), deps, Options{
+		NoPrompt: true, IncludeCraft: true, Tag: "edge", Dir: root, NoWait: true,
+	}); err != nil {
+		t.Fatalf("RunInstall: %v\noutput:\n%s", err, outBuf(deps).String())
+	}
+
+	env, err := os.ReadFile(filepath.Join(root, "deployment", ".env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := Var(string(env), "S3_ENDPOINT_URL"); got != objectStoreEndpoint {
+		t.Errorf("S3_ENDPOINT_URL = %q, want %q", got, objectStoreEndpoint)
+	}
+	if got := Var(string(env), "S3_LEGACY_ENDPOINT_URL"); got != "" {
+		t.Errorf("S3_LEGACY_ENDPOINT_URL = %q, want it unset on a fresh install", got)
+	}
+	if got := Var(string(env), "MINIO_REPLICAS"); got != "0" {
+		t.Errorf("MINIO_REPLICAS = %q, want 0 so MinIO never starts", got)
+	}
+}
+
 func TestUserEditedFileKeptWithoutForce(t *testing.T) {
 	isolateEnv(t)
 	shimDockerOnPath(t)
@@ -844,7 +924,7 @@ func TestModeQuestionDoesNotOfferCraft(t *testing.T) {
 }
 
 // Leaving lite mode has to undo lite's .env adjustments, or the "standard"
-// deployment keeps storing files in Postgres and never starts MinIO.
+// deployment keeps storing files in Postgres and never starts the object store.
 func TestInstallRestoresStandardFileStoreWhenLeavingLite(t *testing.T) {
 	runner := &fakeRunner{handler: healthyDockerHandler}
 	root := installFixture(t, runner, "v4.0.0") // lite
@@ -868,8 +948,85 @@ func TestInstallRestoresStandardFileStoreWhenLeavingLite(t *testing.T) {
 	if got := Var(envStr, "FILE_STORE_BACKEND"); got != "s3" {
 		t.Errorf("FILE_STORE_BACKEND = %q, want s3", got)
 	}
+	if got := Var(envStr, "S3_LEGACY_ENDPOINT_URL"); got != "" {
+		t.Errorf("S3_LEGACY_ENDPOINT_URL = %q, want it unset since this install never ran MinIO", got)
+	}
 	if _, statErr := os.Stat(filepath.Join(root, "deployment", "docker-compose.onyx-lite.yml")); !os.IsNotExist(statErr) {
 		t.Error("lite overlay still on disk after switching to standard")
+	}
+}
+
+// A lite install that ran MinIO before the object store still holds files
+// there, so leaving lite mode brings MinIO back as the legacy store.
+func TestLeavingLiteRestoresTheLegacyStoreAnInstallRanOn(t *testing.T) {
+	runner := &fakeRunner{handler: healthyDockerHandler}
+	root := installFixture(t, runner, "v4.0.0") // lite
+	envPath := filepath.Join(root, "deployment", ".env")
+	env, err := os.ReadFile(envPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(envPath, []byte(SetVar(string(env), "MINIO_REPLICAS", "1")), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	deps := testDeps(t, &fakeRunner{handler: healthyDockerHandler}, notFoundServer(t))
+	if err := RunInstall(context.Background(), deps, Options{
+		NoPrompt: true, IncludeCraft: true, Dir: root, NoWait: true,
+	}); err != nil {
+		t.Fatalf("RunInstall: %v\noutput:\n%s", err, outBuf(deps).String())
+	}
+
+	env, err = os.ReadFile(envPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := Var(string(env), "S3_LEGACY_ENDPOINT_URL"); got != minioEndpoint {
+		t.Errorf("S3_LEGACY_ENDPOINT_URL = %q, want %q", got, minioEndpoint)
+	}
+}
+
+// A compose file without the object store, such as one a pinned older tag laid
+// down, moves the endpoint back to MinIO and drops the legacy store, which that
+// tag reads on its own.
+func TestRerunMovesTheEndpointBackToMinIOForAnOlderComposeFile(t *testing.T) {
+	isolateEnv(t)
+	shimDockerOnPath(t)
+	runner := &fakeRunner{handler: healthyDockerHandler}
+	root := t.TempDir()
+	deps := testDeps(t, runner, notFoundServer(t))
+	if err := RunInstall(context.Background(), deps, Options{NoPrompt: true, Tag: "edge", Dir: root, NoWait: true}); err != nil {
+		t.Fatalf("first install: %v", err)
+	}
+	envPath := filepath.Join(root, "deployment", ".env")
+	env, err := os.ReadFile(envPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seeded := SetVar(SetVar(string(env), "S3_ENDPOINT_URL", objectStoreEndpoint), "S3_LEGACY_ENDPOINT_URL", minioEndpoint)
+	if err := os.WriteFile(envPath, []byte(seeded), 0600); err != nil {
+		t.Fatal(err)
+	}
+	// The hand-edited file survives the rerun, like a pinned tag's file would.
+	olderCompose := "name: onyx\nservices:\n  minio:\n    image: minio/minio\n"
+	if err := os.WriteFile(filepath.Join(root, "deployment", "docker-compose.yml"), []byte(olderCompose), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	deps2 := testDeps(t, runner, notFoundServer(t))
+	if err := RunInstall(context.Background(), deps2, Options{NoPrompt: true, Dir: root, NoWait: true}); err != nil {
+		t.Fatalf("re-run: %v\noutput:\n%s", err, outBuf(deps2).String())
+	}
+
+	env, err = os.ReadFile(envPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := Var(string(env), "S3_ENDPOINT_URL"); got != minioEndpoint {
+		t.Errorf("S3_ENDPOINT_URL = %q, want %q", got, minioEndpoint)
+	}
+	if got := Var(string(env), "S3_LEGACY_ENDPOINT_URL"); got != "" {
+		t.Errorf("S3_LEGACY_ENDPOINT_URL = %q, want it dropped since the older tag reads MinIO itself", got)
 	}
 }
 

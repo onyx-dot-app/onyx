@@ -4,11 +4,11 @@ Tracks doc permission sync and external group sync phases:
 
 Doc permission sync (connector_permission_sync_generator_task):
   1. Overall sync duration (source enumeration + DB updates)
-  2. Cumulative per-element DB update duration within update_db
+  2. Cumulative per-element DB update duration within update_element_permissions_batch
   3. Documents successfully synced
   4. Documents with permission errors
 
-External group sync (_perform_external_group_sync):
+External group sync (connector_external_group_sync_generator_task):
   1. Overall sync duration
   2. Cumulative batch upsert duration
   3. Groups processed

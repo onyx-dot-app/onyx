@@ -1,0 +1,159 @@
+---
+title: "Overview"
+description: "Add MCP servers, OpenAPI plugins, and Craft Apps from one Admin Panel page"
+icon: "plug"
+---
+
+Plugins give Onyx agents live access to external tools and services.
+An agent can use a plugin to read current data or to take an action, such as post a Slack reply or create a ticket.
+
+Admins manage all plugins in **Admin Panel → Plugins** (`/admin/plugins`).
+Users connect their accounts and set personal defaults in **Plugins** in the main sidebar (`/app/plugins`).
+
+<img className="rounded-image" src="/assets/admins/plugins/plugins_directory.webp" alt="The Admin Panel Plugins page with an MCP server, an OpenAPI plugin, and a Slack Craft App"/>
+
+## Where things moved in Onyx 5
+
+In Onyx 5.0, MCP servers, OpenAPI actions, and Craft Apps moved to one **Plugins** page. Existing servers, tools,
+credentials, and Craft App settings stay the same. Only the location changed.
+
+| Before 5.0 | In 5.0 |
+| --- | --- |
+| **Admin Panel → MCP Actions** (`/admin/mcp-actions`) | **Admin Panel → Plugins**, type **MCP server** |
+| **Admin Panel → OpenAPI Actions** (`/admin/openapi-actions`) | **Admin Panel → Plugins**, type **OpenAPI** |
+| **Admin Panel → Craft → Apps** (`/admin/craft/apps`) | **Admin Panel → Plugins**, type **Craft App** |
+| **Craft → Apps** (`/craft/v1/apps`) | **Plugins** in the Craft sidebar (`/craft/v1/plugins`) |
+| MCP and OpenAPI tools in the Chat **Actions** menu | **Actions → Plugins** in Chat, and **Plugins** in the main sidebar (`/app/plugins`) |
+| "OpenAPI actions" and "MCP actions" | "OpenAPI plugins" and "MCP plugins" |
+
+Old links open the new pages.
+
+## Plugin types
+
+Onyx has three plugin types. Each type connects to a different kind of external system.
+
+| Type | What it connects | Where agents can use it | Use it when |
+| --- | --- | --- | --- |
+| [MCP](/admins/plugins/mcp) | A server that uses the [Model Context Protocol](https://modelcontextprotocol.io/) | Chat, custom agents, and Craft | The vendor publishes an MCP server, or you run your own. |
+| [OpenAPI](/admins/plugins/openapi) | A REST API that you describe with an OpenAPI schema | Chat and custom agents | You have an internal or third-party REST API and no MCP server. |
+| [Craft App](/admins/plugins/craft_apps) | A catalog of API endpoints for one application, such as Slack or Gmail | Craft only | Craft must act as each user in a supported application, with action-level approvals. Requires Craft, which is available on the **Business** and **Enterprise** plans. |
+
+<Tip>
+  You can add the same service more than once. For example,
+  add the Slack Craft App for Craft and the Slack MCP server for Chat.
+</Tip>
+
+### Plugins compared to connectors
+
+[Connectors](/admins/connectors/overview) and plugins solve different problems.
+
+| | Connectors | Plugins |
+| --- | --- | --- |
+| Data | Index a copy of documents into the Onyx knowledge index | Call the external service live, at the time of the request |
+| Permissions | Onyx applies the permissions it syncs from the source, so each user finds only documents they can access | The external service applies its own permissions to the account that the plugin uses |
+| Actions | Read only | Read and write, if the service and the plugin allow it |
+
+## Add a plugin
+
+Go to **Admin Panel → Plugins**, click **Add**, then select **MCP**, **OpenAPI**, or **Craft Apps**.
+Follow the guide for the plugin type: [MCP](/admins/plugins/mcp), [OpenAPI](/admins/plugins/openapi),
+or [Craft Apps](/admins/plugins/craft_apps).
+
+<img className="rounded-image" src="/assets/admins/plugins/plugins_add_menu.webp" alt="The Add menu with MCP, OpenAPI, and Craft Apps options"/>
+
+Only full admins can add Craft Apps. The **Craft Apps** filter and type show only for full admins,
+and only when Craft is available on your plan.
+Users with the **Manage Actions** permission can add and edit MCP and OpenAPI plugins.
+A Group Manager can restrict an MCP server only to the groups they manage.
+Only full admins can change which plugins are on in default Chat for the workspace.
+
+## The Plugins page
+
+Cards sort by status: active plugins first, then plugins with issues, then plugins that are off.
+Onyx-managed Craft Apps on Onyx Cloud cannot be deleted.
+
+Deleting a plugin removes it from the workspace, from every custom agent, and from every user.
+To keep a plugin but stop default Chat or Craft from using it, turn off its availability switch instead.
+
+## Plugin settings
+
+Changes stay as a draft until you click **Save Changes**.
+
+| Tab | MCP | OpenAPI | Craft App |
+| --- | --- | --- | --- |
+| **Configuration** | Name, description, access control, availability | Name, descriptions, schema, default Chat | Name, availability |
+| **Authentication** | Authentication method, custom headers, transport | Authentication method | Provider credentials or header patterns |
+| **Tools** | Tool list and Craft approval settings | Read-only list of operations | Action approval policies |
+| **Skills** | — | — | Skills that teach Craft how to use the app |
+
+## Availability and personal defaults
+
+| Setting | Who sets it | Effect |
+| --- | --- | --- |
+| **Access control** (MCP) | Admin | **Organization**, or limited to selected **User groups**. Group restrictions require a **Business** or **Enterprise** plan. |
+| **Enable in default Chat** (MCP, OpenAPI) | Admin | Makes the plugin available in chats that do not use a custom agent. |
+| **Enable for Craft** (MCP, Craft App) | Admin | Makes the plugin available in Craft sessions and scheduled tasks. |
+| **Custom agent attachment** | Agent builder | Gives one [custom agent](/admins/agents/overview) the plugin's tools. Default Chat settings do not change it. |
+| **Personal defaults** | Each user | Turns a workspace-available plugin off in that user's default Chat or Craft. |
+| **Account connection** | Each user | Signs the user in when the plugin uses personal OAuth or personal API keys. |
+
+A personal default can only narrow what the admin allows. If an admin turns off **Enable in default Chat**,
+no user can turn the plugin on in default Chat. Custom agents that already use the plugin keep it,
+and its credentials and settings stay the same.
+
+<Note>
+  Default Chat selection for MCP and OpenAPI plugins is now on the Plugins page.
+  **Chat Preferences** manages only built-in tools, such as Internal Search and Web Search. In Terraform,
+  `onyx_custom_tool.enabled` sets the default Chat selection for an OpenAPI plugin.
+</Note>
+
+## Status icons
+
+The status icon on each card shows where the plugin is available. Each segment of the icon is one surface:
+**Main Chat**, **Custom agents**, and **Craft**.
+
+| Color | Meaning |
+| --- | --- |
+| Green | On and ready |
+| Orange | Off, or the user must sign in |
+| Gray | The plugin type does not support this surface |
+
+## Approvals in Craft
+
+Craft can ask a user to approve an action before it runs.
+Admins set the policy for each MCP tool and each Craft App action:
+
+| Policy | Effect |
+| --- | --- |
+| **Auto-approve** | The action runs without a prompt. |
+| **Ask** | Craft shows an approval card. The user can approve once, approve for the session, or reject. |
+| **Disabled** | The action never runs. Users and scheduled tasks cannot override it. |
+
+Turn on **Let users manage approval settings** to let users choose a stricter or more permissive policy for actions that
+the admin did not disable.
+
+<Warning>
+  Approval policies apply only in Craft. In default Chat and custom agents,
+  an agent calls MCP and OpenAPI tools without an approval prompt.
+  Turn off tools in Chat that must not run without review.
+</Warning>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="MCP servers" icon="server" href="/admins/plugins/mcp">
+    Connect an MCP server and choose its tools.
+  </Card>
+
+  <Card title="OpenAPI plugins" icon="code" href="/admins/plugins/openapi">
+    Turn a REST API schema into agent tools.
+  </Card>
+
+  <Card title="Craft Apps" icon="hammer" href="/admins/plugins/craft_apps">
+    Let Craft act as each user in Slack, Gmail, Notion, and more.
+  </Card>
+
+  <Card title="Plugins for users" icon="user" href="/overview/core_features/plugins">
+    Connect accounts and set personal defaults.
+  </Card>
+</CardGroup>

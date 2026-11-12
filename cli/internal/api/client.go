@@ -271,6 +271,15 @@ func (c *Client) ListAgents(ctx context.Context) ([]models.AgentSummary, error) 
 	return result, nil
 }
 
+// ListDocumentSets returns the document sets the current user can search.
+func (c *Client) ListDocumentSets(ctx context.Context) ([]models.DocumentSetSummary, error) {
+	var result []models.DocumentSetSummary
+	if err := c.doJSON(ctx, "GET", "/manage/document-set?searchable_only=true", nil, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 // ListLLMProviders returns LLM providers (with their models) accessible to
 // the current user, plus the workspace default model.
 func (c *Client) ListLLMProviders(ctx context.Context) (*models.LLMProviderResponse, error) {
@@ -383,8 +392,8 @@ func (c *Client) GetBackendVersion(ctx context.Context) (string, error) {
 }
 
 // StopChatSession sends a stop signal for a streaming session (best-effort).
-func (c *Client) StopChatSession(ctx context.Context, sessionID string) {
-	req, err := c.newRequest(ctx, "POST", "/chat/stop-chat-session/"+sessionID, nil)
+func (c *Client) StopChatSession(ctx context.Context, sessionID string, streamID int) {
+	req, err := c.newRequest(ctx, "POST", fmt.Sprintf("/chat/stop-chat-session/%s?stream_id=%d", sessionID, streamID), nil)
 	if err != nil {
 		return
 	}
@@ -393,6 +402,45 @@ func (c *Client) StopChatSession(ctx context.Context, sessionID string) {
 		return
 	}
 	_ = resp.Body.Close()
+}
+
+// IsChatSessionProcessing confirms whether the server still owns the session.
+func (c *Client) IsChatSessionProcessing(ctx context.Context, sessionID string) (bool, error) {
+	var status struct {
+		IsProcessing *bool `json:"is_processing"`
+	}
+	if err := c.doJSON(ctx, "GET", "/chat/chat-session/"+sessionID+"/status", nil, &status); err != nil {
+		var apiErr *OnyxAPIError
+		if errors.As(err, &apiErr) && (apiErr.StatusCode == http.StatusNotFound || apiErr.StatusCode == http.StatusMethodNotAllowed) {
+			return true, fmt.Errorf("session or readiness endpoint unavailable; use a server with the chat readiness API: %w", err)
+		}
+		return true, err
+	}
+	if status.IsProcessing == nil {
+		return true, fmt.Errorf("invalid chat readiness response")
+	}
+	return *status.IsProcessing, nil
+}
+
+// WaitForChatSessionIdle keeps completion separate from delivery.
+func WaitForChatSessionIdle(ctx context.Context, client ClientAPI, sessionID string) error {
+	for {
+		processing, err := client.IsChatSessionProcessing(ctx, sessionID)
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if err != nil && !IsRetryableReadinessError(err) {
+			return err
+		}
+		if err == nil && !processing {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Second):
+		}
+	}
 }
 
 // ClientAPI is the interface satisfied by Client.
@@ -405,7 +453,8 @@ type ClientAPI interface {
 	RenameChatSession(ctx context.Context, sessionID string, name *string) (string, error)
 	UploadFile(ctx context.Context, filePath string) (*models.FileDescriptorPayload, error)
 	GetBackendVersion(ctx context.Context) (string, error)
-	StopChatSession(ctx context.Context, sessionID string)
+	StopChatSession(ctx context.Context, sessionID string, streamID int)
+	IsChatSessionProcessing(ctx context.Context, sessionID string) (bool, error)
 	SendMessageStream(ctx context.Context, message string, chatSessionID *string, agentID int, parentMessageID *int, fileDescriptors []models.FileDescriptorPayload, llmOverride *models.LLMOverride) <-chan models.StreamEvent
 	Search(ctx context.Context, req models.SearchRequest) (*models.SearchResponse, error)
 	GenerateImage(ctx context.Context, req models.ImageGenerationRequest) (*models.ImageGenerationResponse, error)

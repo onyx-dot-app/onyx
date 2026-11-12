@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { InputSwitch } from "@opal/components";
 import { toast } from "@opal/layouts";
-import type { UserRow } from "@/views/admin/UsersPage/interfaces";
+import type { UserRow } from "@/views/admin/UsersPage/types";
 import { setUsersCraftAccess } from "./svc";
 
 interface AccessCellProps {
@@ -32,11 +32,6 @@ export default function AccessCell({
       await setUsersCraftAccess(
         [user.email],
         checked === defaultEnabled ? null : checked
-      );
-      toast.success(
-        checked
-          ? t("accessCell.enabledSuccess.message")
-          : t("accessCell.disabledSuccess.message")
       );
     } catch (err) {
       toast.error(

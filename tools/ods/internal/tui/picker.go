@@ -36,6 +36,12 @@ func Pick(groups []PickerGroup) ([]int, error) {
 	}
 	defer screen.Fini()
 
+	return runPicker(screen, groups), nil
+}
+
+// runPicker drives the picker on an already-initialized screen. Split out from
+// Pick so it can be exercised with a tcell SimulationScreen in tests.
+func runPicker(screen tcell.Screen, groups []PickerGroup) []int {
 	entries := buildEntries(groups)
 	totalItems := countItems(entries)
 	cursor := firstSelectableIndex(entries)
@@ -55,10 +61,10 @@ func Pick(groups []PickerGroup) ([]int, error) {
 		case *tcell.EventKey:
 			switch action := keyAction(ev); action {
 			case actionQuit:
-				return nil, nil
+				return nil
 			case actionConfirm:
 				if countSelected(entries) > 0 {
-					return collectSelected(entries), nil
+					return collectSelected(entries)
 				}
 			case actionUp:
 				if cursor > 0 {

@@ -1,6 +1,6 @@
 import { DocumentSetSummary } from "../types";
 import { fetchSS } from "../utilsSS";
-import { Connector } from "../connectors/connectors";
+import type { Connector } from "@/lib/connectors/types";
 
 export async function fetchValidFilterInfo() {
   const [connectorsResponse, documentSetResponse] = await Promise.all([

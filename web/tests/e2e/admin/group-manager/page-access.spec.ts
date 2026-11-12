@@ -17,23 +17,18 @@ import { ADMIN_ROUTES } from "@/lib/admin-routes";
  */
 const PAGE_HEADINGS: Record<string, string> = {
   [ADMIN_ROUTES.AGENTS.path]: "Agents",
-  [ADMIN_ROUTES.MCP_ACTIONS.path]: "MCP Actions",
-  [ADMIN_ROUTES.OPENAPI_ACTIONS.path]: "OpenAPI Actions",
-  [ADMIN_ROUTES.INDEXING_STATUS.path]: "Existing Connectors",
-  [ADMIN_ROUTES.ADD_CONNECTOR.path]: "Add Connector",
+  [ADMIN_ROUTES.PLUGINS.path]: "Plugins",
+  [ADMIN_ROUTES.INDEXING_STATUS.path]: "Indexing Status",
+  [ADMIN_ROUTES.CONNECTORS.path]: "Connectors",
   [ADMIN_ROUTES.DOCUMENT_SETS.path]: "Document Sets",
 };
 
 /** Unlocked by the scoped bundle alone, with no feature flag or tier behind them. */
-const ALWAYS_PAGES = [
-  ADMIN_ROUTES.MCP_ACTIONS.path,
-  ADMIN_ROUTES.OPENAPI_ACTIONS.path,
-  ADMIN_ROUTES.AGENTS.path,
-];
+const ALWAYS_PAGES = [ADMIN_ROUTES.PLUGINS.path, ADMIN_ROUTES.AGENTS.path];
 
 /** Also require `vectorDbEnabled`. */
 const VECTOR_DB_PAGES = [
-  ADMIN_ROUTES.ADD_CONNECTOR.path,
+  ADMIN_ROUTES.CONNECTORS.path,
   ADMIN_ROUTES.DOCUMENT_SETS.path,
   ADMIN_ROUTES.INDEXING_STATUS.path,
 ];

@@ -2,7 +2,7 @@ from collections.abc import Callable
 from typing import Any, cast
 
 from onyx.access.models import ExternalAccess
-from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
+from onyx.connectors.confluence.source_operations import ConfluenceSourceOperations
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation,
     global_version,
@@ -10,7 +10,7 @@ from onyx.utils.variable_functionality import (
 
 
 def get_page_restrictions(
-    confluence_client: OnyxConfluence,
+    source_operations: ConfluenceSourceOperations,
     page_id: str,
     page_restrictions: dict[str, Any],
     ancestors: list[dict[str, Any]],
@@ -32,7 +32,13 @@ def get_page_restrictions(
 
     ee_get_all_page_restrictions = cast(
         Callable[
-            [OnyxConfluence, str, dict[str, Any], list[dict[str, Any]], bool],
+            [
+                ConfluenceSourceOperations,
+                str,
+                dict[str, Any],
+                list[dict[str, Any]],
+                bool,
+            ],
             ExternalAccess | None,
         ],
         fetch_versioned_implementation(
@@ -41,12 +47,12 @@ def get_page_restrictions(
     )
 
     return ee_get_all_page_restrictions(
-        confluence_client, page_id, page_restrictions, ancestors, add_prefix
+        source_operations, page_id, page_restrictions, ancestors, add_prefix
     )
 
 
 def get_page_restrictions_with_per_ancestor_fetch(
-    confluence_client: OnyxConfluence,
+    source_operations: ConfluenceSourceOperations,
     page_id: str,
     page_restrictions: dict[str, Any],
     ancestors: list[dict[str, Any]],
@@ -62,7 +68,7 @@ def get_page_restrictions_with_per_ancestor_fetch(
     ee_get_per_ancestor = cast(
         Callable[
             [
-                OnyxConfluence,
+                ConfluenceSourceOperations,
                 str,
                 dict[str, Any],
                 list[dict[str, Any]],
@@ -78,7 +84,7 @@ def get_page_restrictions_with_per_ancestor_fetch(
     )
 
     return ee_get_per_ancestor(
-        confluence_client,
+        source_operations,
         page_id,
         page_restrictions,
         ancestors,
@@ -88,7 +94,7 @@ def get_page_restrictions_with_per_ancestor_fetch(
 
 
 def get_all_space_permissions(
-    confluence_client: OnyxConfluence,
+    source_operations: ConfluenceSourceOperations,
     is_cloud: bool,
     add_prefix: bool = False,
 ) -> dict[str, ExternalAccess]:
@@ -108,7 +114,7 @@ def get_all_space_permissions(
 
     ee_get_all_space_permissions = cast(
         Callable[
-            [OnyxConfluence, bool, bool],
+            [ConfluenceSourceOperations, bool, bool],
             dict[str, ExternalAccess],
         ],
         fetch_versioned_implementation(
@@ -117,4 +123,4 @@ def get_all_space_permissions(
         ),
     )
 
-    return ee_get_all_space_permissions(confluence_client, is_cloud, add_prefix)
+    return ee_get_all_space_permissions(source_operations, is_cloud, add_prefix)

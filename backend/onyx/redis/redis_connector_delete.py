@@ -10,20 +10,23 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DB_YIELD_PER_DEFAULT
 from onyx.configs.constants import (
-    CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT,
+    CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
     OnyxCeleryPriority,
     OnyxCeleryQueues,
     OnyxCeleryTask,
     OnyxRedisConstants,
 )
-from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.document import construct_document_id_select_for_connector_credential_pair
 from onyx.redis.tenant_redis_client import TenantRedisClient
 
 
 class RedisConnectorDeletePayload(BaseModel):
+    # cumulative across batches, None until the first batch is queued
     num_tasks: int | None
     submitted: datetime
+    # linked docs when the latest batch was queued. A batch that drains without
+    # lowering it made no progress.
+    docs_remaining: int | None = None
 
 
 class RedisConnectorDelete:
@@ -107,29 +110,27 @@ class RedisConnectorDelete:
         celery_app: Celery,
         db_session: Session,
         lock: RedisLock,
-    ) -> int | None:
-        """Returns None if the cc_pair doesn't exist.
-        Otherwise, returns an int with the number of generated tasks."""
-        last_lock_time = time.monotonic()
+        connector_id: int,
+        credential_id: int,
+        max_tasks: int,
+    ) -> int:
+        """Queues cleanup for up to max_tasks docs still linked to the cc_pair.
 
-        cc_pair = get_connector_credential_pair_from_id(
-            db_session=db_session,
-            cc_pair_id=int(self.id),
-        )
-        if not cc_pair:
-            return None
+        Each task unlinks its doc, so repeated calls walk the remaining docs
+        without a cursor."""
+        last_lock_time = time.monotonic()
 
         num_tasks_sent = 0
 
         stmt = construct_document_id_select_for_connector_credential_pair(
-            cc_pair.connector_id, cc_pair.credential_id
-        )
+            connector_id, credential_id
+        ).limit(max_tasks)
         for doc_id in db_session.scalars(stmt).yield_per(DB_YIELD_PER_DEFAULT):
             doc_id = cast(str, doc_id)
             current_time = time.monotonic()
-            if current_time - last_lock_time >= (
-                CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT / 4
-            ):
+            # The caller holds the connector-deletion beat lock, whose TTL is
+            # the generic one, so refresh on a quarter of that TTL.
+            if current_time - last_lock_time >= (CELERY_GENERIC_BEAT_LOCK_TIMEOUT / 4):
                 lock.reacquire()
                 last_lock_time = current_time
 
@@ -143,12 +144,12 @@ class RedisConnectorDelete:
             # Priority on sync's triggered by new indexing should be medium
             celery_app.send_task(
                 OnyxCeleryTask.DOCUMENT_BY_CC_PAIR_CLEANUP_TASK,
-                kwargs=dict(
-                    document_id=doc_id,
-                    connector_id=cc_pair.connector_id,
-                    credential_id=cc_pair.credential_id,
-                    tenant_id=self.tenant_id,
-                ),
+                kwargs={
+                    "document_id": doc_id,
+                    "connector_id": connector_id,
+                    "credential_id": credential_id,
+                    "tenant_id": self.tenant_id,
+                },
                 queue=OnyxCeleryQueues.CONNECTOR_DELETION,
                 task_id=custom_task_id,
                 priority=OnyxCeleryPriority.MEDIUM,

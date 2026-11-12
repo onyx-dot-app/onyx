@@ -122,12 +122,21 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+            - name: SANDBOX_PROXY_LISTEN_HOST
+              value: {{ .Values.sandboxProxy.listenHost | default "0.0.0.0" | quote }}
+            - name: SANDBOX_PROXY_ALLOW_GLOBAL_CLIENTS
+              value: {{ .Values.sandboxProxy.allowGlobalClients | default false | quote }}
+            - name: SANDBOX_PROXY_INTERNAL_CIDRS
+              value: {{ .Values.sandboxProxy.internalCIDRs | default list | join "," | quote }}
             - name: SANDBOX_PROXY_LISTEN_PORT
               value: {{ $proxyPort | quote }}
             - name: SANDBOX_PROXY_HEALTHZ_PORT
               value: {{ $healthzPort | quote }}
             {{- if include "onyx.customCACerts.enabled" . }}
             - name: SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA
+              value: /var/run/sandbox-proxy/upstream-ca-bundle.crt
+            # OAuth refresh uses HTTPX directly, outside mitmproxy.
+            - name: SSL_CERT_FILE
               value: /var/run/sandbox-proxy/upstream-ca-bundle.crt
             {{- end }}
             {{- include "onyx.envSecrets" . | nindent 12}}

@@ -1,25 +1,29 @@
 "use client";
 
-import { markdown } from "@opal/utils";
+import { IconLoader } from "@opal/loaders";
+import { escapeMarkdown, markdown } from "@opal/utils";
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
+import { useSWRConfig } from "swr";
+import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import { useSettings } from "@/lib/settings/hooks";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { SvgOnyxLogo } from "@opal/logos";
 import { Modal } from "@opal/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
-import InputComboBoxField from "@/refresh-components/form/InputComboBoxField";
+import { InputSingleComboBoxField, InputSingleSelectField } from "@opal/form";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
-import InputSelectField from "@/refresh-components/form/InputSelectField";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { InputVertical, toast } from "@opal/layouts";
-import { Section } from "@/layouts/general-layouts";
-import { SvgArrowExchange, SvgUnplug, SvgSimpleLoader } from "@opal/icons";
+import { Section } from "@opal/layouts";
+import { SvgArrowExchange, SvgUnplug } from "@opal/icons";
 import { Button, Text } from "@opal/components";
 import { useModalClose } from "@opal/components";
 import type {
   VoiceProviderView,
+  VoiceProviderCustomConfig,
   VoiceFormValues,
   VoiceOption,
 } from "@/lib/voice/types";
@@ -49,13 +53,15 @@ const AZURE_PORTAL_URL = "https://portal.azure.com/";
 // VoiceProviderSetupModal
 // ---------------------------------------------------------------------------
 
-interface VoiceProviderSetupModalProps {
-  providerType: string;
+type VoiceProviderSetupModalProps = {
   existingProvider: VoiceProviderView | null;
-  mode: ProviderMode;
   defaultModelId?: string | null;
   onSuccess: () => void;
-}
+  onClose?: () => void;
+} & (
+  | { mode: ProviderMode; providerType: string }
+  | { mode: "connection"; providerType: "zoom" }
+);
 
 export function VoiceProviderSetupModal({
   providerType,
@@ -63,13 +69,39 @@ export function VoiceProviderSetupModal({
   mode,
   defaultModelId,
   onSuccess,
+  onClose: onCloseProp,
 }: VoiceProviderSetupModalProps) {
   const t = useTranslations("admin.voice");
-  const onClose = useModalClose();
+  const tDecision = useTranslations("admin.decisionModels");
+  const { mutate } = useSWRConfig();
+  const tPlaceholders = useTranslations("common.placeholders");
+  const tInputSelect = useTranslations("common.inputSelect");
+  const { appName } = useSettings();
+  const onClose = useModalClose(onCloseProp);
   const detail = getVoiceProviderDetail(providerType);
-  const initialTtsModel = defaultModelId
-    ? resolveModelId(defaultModelId)
-    : (existingProvider?.tts_model ?? "tts-1");
+  const initialSttModel =
+    mode === "stt" && defaultModelId
+      ? resolveModelId(defaultModelId)
+      : existingProvider
+        ? existingProvider.stt_model
+        : (detail.sttModels?.[0]?.id ?? "whisper-1");
+  const initialTtsModel =
+    mode === "tts" && defaultModelId
+      ? resolveModelId(defaultModelId)
+      : existingProvider
+        ? existingProvider.tts_model
+        : (detail.ttsModels?.[0]?.id ?? null);
+  const sttLanguageOptions = detail.sttLanguageOptions ?? [];
+  const defaultSttLanguage = sttLanguageOptions[0]?.id ?? "en-US";
+  const existingSttLanguage =
+    typeof existingProvider?.custom_config?.language === "string"
+      ? existingProvider.custom_config.language
+      : null;
+  const initialSttLanguage =
+    sttLanguageOptions.length > 0
+      ? (sttLanguageOptions.find((option) => option.id === existingSttLanguage)
+          ?.id ?? defaultSttLanguage)
+      : (existingSttLanguage ?? defaultSttLanguage);
 
   const isEditing = !!existingProvider;
 
@@ -80,15 +112,16 @@ export function VoiceProviderSetupModal({
     existingProvider?.default_voice ?? ""
   );
 
-  // Fetch voices on mount
   useEffect(() => {
+    if (mode !== "tts") return;
+
     setIsLoadingVoices(true);
     fetchVoicesByType(providerType)
       .then((res) => res.json())
       .then((data: Array<{ id: string; name: string }>) => {
         const options = data.map((v) => ({
           value: v.id,
-          label: v.name,
+          title: v.name,
           description: v.id,
         }));
         setVoiceOptions(options);
@@ -101,16 +134,19 @@ export function VoiceProviderSetupModal({
       })
       .catch(() => setVoiceOptions([]))
       .finally(() => setIsLoadingVoices(false));
-  }, [providerType]);
+  }, [mode, providerType]);
 
   const validationSchema = Yup.object().shape({
     api_key: Yup.string().required(t("setupModal.apiKey.required")),
+    api_secret: detail.requiresApiSecret
+      ? Yup.string().required(t("setupModal.apiSecret.required"))
+      : Yup.string(),
     target_uri:
       providerType === "azure"
         ? Yup.string().required(t("setupModal.targetUri.required"))
         : Yup.string(),
-    stt_model: Yup.string(),
-    tts_model: Yup.string(),
+    stt_model: Yup.string().nullable(),
+    tts_model: Yup.string().nullable(),
     default_voice: Yup.string(),
     stt_languages:
       mode === "stt" && detail.sttLanguages
@@ -146,17 +182,28 @@ export function VoiceProviderSetupModal({
             }
           )
         : Yup.string(),
+    stt_language:
+      mode === "stt" && sttLanguageOptions.length > 0
+        ? Yup.string()
+            .oneOf(
+              sttLanguageOptions.map((option) => option.id),
+              t("setupModal.sttLanguage.invalid")
+            )
+            .required(t("setupModal.sttLanguage.required"))
+        : Yup.string(),
   });
 
   const initialValues: VoiceFormValues = {
     api_key: existingProvider?.api_key ?? "",
+    api_secret: existingProvider?.api_secret ?? "",
     target_uri: existingProvider?.target_uri ?? "",
-    stt_model: existingProvider?.stt_model ?? "whisper-1",
+    stt_model: initialSttModel,
     tts_model: initialTtsModel,
     default_voice: initialDefaultVoice,
     stt_languages: sttLanguagesToInput(
       existingProvider?.custom_config?.stt_languages
     ),
+    stt_language: initialSttLanguage,
   };
 
   async function handleSubmit(
@@ -164,33 +211,18 @@ export function VoiceProviderSetupModal({
     { setSubmitting }: { setSubmitting: (v: boolean) => void }
   ) {
     const apiKeyChanged = values.api_key !== (existingProvider?.api_key ?? "");
+    const apiSecretChanged =
+      !!detail.requiresApiSecret &&
+      values.api_secret !== (existingProvider?.api_secret ?? "");
     const shouldUseStoredKey = !apiKeyChanged && !!existingProvider?.api_key;
+    const shouldUseStoredSecret =
+      !!detail.requiresApiSecret &&
+      !apiSecretChanged &&
+      !!existingProvider?.api_secret;
 
     try {
-      if (!shouldUseStoredKey) {
-        const testResponse = await testVoiceProvider({
-          provider_type: providerType,
-          api_key: apiKeyChanged ? values.api_key : undefined,
-          target_uri: values.target_uri || undefined,
-          use_stored_key: shouldUseStoredKey,
-        });
-
-        if (!testResponse.ok) {
-          const data: ErrorResponseBody = await testResponse
-            .json()
-            .catch(() => ({}));
-          toast.error(
-            typeof data?.detail === "string"
-              ? data.detail
-              : t("setupModal.connectionTestFailed.message")
-          );
-          setSubmitting(false);
-          return;
-        }
-      }
-
       // Preserve config keys the form doesn't own (e.g. speech_region).
-      const customConfig: Record<string, unknown> = {
+      const customConfig: VoiceProviderCustomConfig = {
         ...existingProvider?.custom_config,
       };
       if (mode === "stt" && detail.sttLanguages) {
@@ -201,27 +233,70 @@ export function VoiceProviderSetupModal({
           delete customConfig.stt_languages;
         }
       }
+      if (mode === "stt" && detail.sttLanguageOptions) {
+        customConfig.language = values.stt_language || "en-US";
+      }
 
-      const response = await upsertVoiceProvider({
+      const testResponse = await testVoiceProvider({
+        validation_mode: mode === "connection" ? "decision" : "voice",
         id: existingProvider?.id,
-        name: detail.label,
         provider_type: providerType,
         api_key: apiKeyChanged ? values.api_key : undefined,
+        api_secret: apiSecretChanged ? values.api_secret : undefined,
+        target_uri: values.target_uri || undefined,
+        use_stored_key: shouldUseStoredKey,
+        use_stored_secret: detail.requiresApiSecret
+          ? shouldUseStoredSecret
+          : undefined,
+        custom_config: customConfig,
+      });
+
+      if (!testResponse.ok) {
+        const data = await testResponse.json().catch(() => ({}));
+        toast.error(
+          typeof data?.detail === "string"
+            ? data.detail
+            : t("setupModal.connectionTestFailed.message")
+        );
+        setSubmitting(false);
+        return;
+      }
+
+      const response = await upsertVoiceProvider({
+        validation_mode: mode === "connection" ? "decision" : "voice",
+        id: existingProvider?.id,
+        name: existingProvider?.name ?? detail.label,
+        provider_type: providerType,
+        api_key: apiKeyChanged ? values.api_key : undefined,
+        api_secret: apiSecretChanged ? values.api_secret : undefined,
         api_key_changed: apiKeyChanged,
+        api_secret_changed: detail.requiresApiSecret
+          ? apiSecretChanged
+          : undefined,
         target_uri: values.target_uri || undefined,
         custom_config: customConfig,
         stt_model: values.stt_model,
         tts_model: values.tts_model,
         default_voice: values.default_voice,
-        activate_stt: isEditing
-          ? (existingProvider?.is_default_stt ?? false)
-          : mode === "stt",
-        activate_tts: isEditing
-          ? (existingProvider?.is_default_tts ?? false)
-          : mode === "tts",
+        activate_stt:
+          mode === "connection"
+            ? false
+            : isEditing
+              ? (existingProvider?.is_default_stt ?? false)
+              : mode === "stt",
+        activate_tts:
+          mode === "connection"
+            ? false
+            : isEditing
+              ? (existingProvider?.is_default_tts ?? false)
+              : mode === "tts",
       });
 
       if (response.ok) {
+        await Promise.all([
+          mutate(SWR_KEYS.voiceProviders),
+          refreshLlmProviderCaches(mutate),
+        ]);
         onSuccess();
       } else {
         const data: ErrorResponseBody = await response.json().catch(() => ({}));
@@ -254,17 +329,23 @@ export function VoiceProviderSetupModal({
                 moreIcon1={SvgArrowExchange}
                 moreIcon2={SvgOnyxLogo}
                 title={
-                  isEditing
-                    ? t("setupModal.editHeader.title", {
-                        provider: detail.label,
-                      })
-                    : t("setupModal.createHeader.title", {
+                  providerType === "zoom"
+                    ? tDecision("zoom.title")
+                    : isEditing
+                      ? t("setupModal.editHeader.title", {
+                          provider: detail.label,
+                        })
+                      : t("setupModal.createHeader.title", {
+                          provider: detail.label,
+                        })
+                }
+                description={
+                  providerType === "zoom"
+                    ? tDecision("zoom.description")
+                    : t("setupModal.header.description", {
                         provider: detail.label,
                       })
                 }
-                description={t("setupModal.header.description", {
-                  provider: detail.label,
-                })}
                 onClose={onClose}
               />
               <Modal.Body>
@@ -275,13 +356,14 @@ export function VoiceProviderSetupModal({
                       subDescription={markdown(
                         t("setupModal.targetUri.description", {
                           portalUrl: AZURE_PORTAL_URL,
+                          appName: escapeMarkdown(appName),
                         })
                       )}
                       withLabel="target_uri"
                     >
                       <InputTypeInField
                         name="target_uri"
-                        placeholder="https://your_resource_region.tts.speech.microsoft.com/"
+                        placeholder={tPlaceholders("azure.speechEndpoint")}
                       />
                     </InputVertical>
                   )}
@@ -298,9 +380,33 @@ export function VoiceProviderSetupModal({
                   >
                     <PasswordInputTypeInField
                       name="api_key"
+                      aria-label={t("setupModal.apiKey.label")}
                       placeholder={t("setupModal.apiKey.placeholder")}
+                      existingValue={existingProvider?.api_key ?? undefined}
                     />
                   </InputVertical>
+
+                  {detail.requiresApiSecret && (
+                    <InputVertical
+                      title={t("setupModal.apiSecret.label")}
+                      subDescription={markdown(
+                        t("setupModal.apiSecret.description", {
+                          url: detail.apiKeyUrl ?? "",
+                          provider: detail.label,
+                        })
+                      )}
+                      withLabel="api_secret"
+                    >
+                      <PasswordInputTypeInField
+                        name="api_secret"
+                        aria-label={t("setupModal.apiSecret.label")}
+                        placeholder={t("setupModal.apiSecret.placeholder")}
+                        existingValue={
+                          existingProvider?.api_secret ?? undefined
+                        }
+                      />
+                    </InputVertical>
+                  )}
 
                   {mode === "stt" && detail.sttLanguages && (
                     <InputVertical
@@ -314,8 +420,29 @@ export function VoiceProviderSetupModal({
                     >
                       <InputTypeInField
                         name="stt_languages"
-                        // oxlint-disable-next-line i18n/no-raw-jsx-text -- locale-code example, not copy
-                        placeholder="en-US, fr-FR"
+                        placeholder={t("placeholders.languages")}
+                      />
+                    </InputVertical>
+                  )}
+
+                  {mode === "stt" && detail.sttLanguageOptions && (
+                    <InputVertical
+                      title={t("setupModal.sttLanguage.label")}
+                      subDescription={markdown(
+                        t("setupModal.sttLanguage.description", {
+                          docsUrl: detail.docsUrl ?? "",
+                        })
+                      )}
+                      withLabel="stt_language"
+                    >
+                      <InputSingleSelectField
+                        name="stt_language"
+                        placeholder={tInputSelect("placeholder.fallback")}
+                        aria-label={t("setupModal.sttLanguage.label")}
+                        options={detail.sttLanguageOptions.map((language) => ({
+                          value: language.id,
+                          title: language.name,
+                        }))}
                       />
                     </InputVertical>
                   )}
@@ -325,16 +452,14 @@ export function VoiceProviderSetupModal({
                       title={t("setupModal.sttModel.label")}
                       withLabel="stt_model"
                     >
-                      <InputSelectField name="stt_model">
-                        <InputSelect.Trigger />
-                        <InputSelect.Content>
-                          {detail.sttModels!.map((m) => (
-                            <InputSelect.Item key={m.id} value={m.id}>
-                              {m.name}
-                            </InputSelect.Item>
-                          ))}
-                        </InputSelect.Content>
-                      </InputSelectField>
+                      <InputSingleSelectField
+                        name="stt_model"
+                        placeholder={tInputSelect("placeholder.fallback")}
+                        options={detail.sttModels!.map((m) => ({
+                          value: m.id,
+                          title: m.name,
+                        }))}
+                      />
                     </InputVertical>
                   )}
 
@@ -343,19 +468,19 @@ export function VoiceProviderSetupModal({
                       {(detail.ttsModels?.length ?? 0) > 1 && (
                         <InputVertical
                           title={t("setupModal.ttsModel.label")}
-                          subDescription={t("setupModal.ttsModel.description")}
+                          subDescription={t("setupModal.ttsModel.description", {
+                            appName,
+                          })}
                           withLabel="tts_model"
                         >
-                          <InputSelectField name="tts_model">
-                            <InputSelect.Trigger />
-                            <InputSelect.Content>
-                              {detail.ttsModels!.map((m) => (
-                                <InputSelect.Item key={m.id} value={m.id}>
-                                  {m.name}
-                                </InputSelect.Item>
-                              ))}
-                            </InputSelect.Content>
-                          </InputSelectField>
+                          <InputSingleSelectField
+                            name="tts_model"
+                            placeholder={tInputSelect("placeholder.fallback")}
+                            options={detail.ttsModels!.map((m) => ({
+                              value: m.id,
+                              title: m.name,
+                            }))}
+                          />
                         </InputVertical>
                       )}
 
@@ -371,7 +496,7 @@ export function VoiceProviderSetupModal({
                         )}
                         withLabel="default_voice"
                       >
-                        <InputComboBoxField
+                        <InputSingleComboBoxField
                           name="default_voice"
                           options={voiceOptions}
                           placeholder={
@@ -380,7 +505,7 @@ export function VoiceProviderSetupModal({
                               : t("setupModal.voice.placeholder")
                           }
                           disabled={isLoadingVoices}
-                          strict={false}
+                          mode="open"
                         />
                       </InputVertical>
                     </>
@@ -393,8 +518,12 @@ export function VoiceProviderSetupModal({
                 </Button>
                 <Button
                   type="submit"
-                  disabled={isSubmitting || !isValid || !dirty}
-                  icon={isSubmitting ? SvgSimpleLoader : undefined}
+                  disabled={
+                    isSubmitting ||
+                    !isValid ||
+                    (!dirty && mode !== "connection")
+                  }
+                  icon={isSubmitting ? IconLoader : undefined}
                 >
                   {isEditing
                     ? t("setupModal.updateButton.label")
@@ -429,6 +558,8 @@ export function VoiceDisconnectModal({
   onSuccess,
 }: VoiceDisconnectModalProps) {
   const t = useTranslations("admin.voice");
+  const tDecision = useTranslations("admin.decisionModels");
+  const { mutate } = useSWRConfig();
   const onClose = useModalClose();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -449,6 +580,10 @@ export function VoiceDisconnectModal({
           label: disconnectTarget.providerLabel,
         })
       );
+      await Promise.all([
+        mutate(SWR_KEYS.voiceProviders),
+        refreshLlmProviderCaches(mutate),
+      ]);
       onSuccess();
       onClose?.();
     } catch (err) {
@@ -466,7 +601,11 @@ export function VoiceDisconnectModal({
       title={t("disconnectModal.header.title", {
         label: disconnectTarget.providerLabel,
       })}
-      description={t("disconnectModal.header.description")}
+      description={
+        disconnectTarget.providerType === "zoom"
+          ? tDecision("zoom.removeDescription")
+          : t("disconnectModal.header.description")
+      }
       submit={
         <Button
           variant="danger"

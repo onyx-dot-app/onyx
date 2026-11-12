@@ -1,4 +1,4 @@
-from onyx.llm.utils import model_needs_formatting_reenabled
+from onyx.llm.model_capabilities import model_needs_formatting_reenabled
 
 
 def test_gpt_5_exact_match() -> None:

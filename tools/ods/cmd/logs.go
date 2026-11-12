@@ -43,7 +43,9 @@ Examples:
 			return runningServiceNames(), cobra.ShellCompDirectiveNoFileComp
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			runComposeLogs(args, opts)
+			if err := runComposeLogs(args, opts); err != nil {
+				log.Fatal(err)
+			}
 		},
 	}
 
@@ -53,8 +55,12 @@ Examples:
 	return cmd
 }
 
-func runComposeLogs(services []string, opts *LogsOptions) {
-	args := baseArgs("")
+func runComposeLogs(services []string, opts *LogsOptions) error {
+	target, err := resolveRuntimeTarget()
+	if err != nil {
+		return err
+	}
+	args := baseArgs("", target.Project)
 	args = append(args, "logs")
 	if opts.Follow {
 		args = append(args, "-f")
@@ -65,5 +71,5 @@ func runComposeLogs(services []string, opts *LogsOptions) {
 	args = append(args, services...)
 
 	log.Info("Viewing container logs...")
-	execDockerCompose(args, nil)
+	return execDockerCompose(args, nil)
 }

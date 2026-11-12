@@ -1,0 +1,95 @@
+---
+title: "OpenSearch"
+description: "Configuring Onyx with OpenSearch"
+icon: "magnifying-glass"
+---
+
+## Overview
+
+OpenSearch is the document index Onyx uses for keyword and vector retrieval. It replaced Vespa.
+Every full deployment needs one OpenSearch cluster. Onyx Lite runs without a document index,
+so connectors and search over indexed documents are disabled there.
+
+In the Onyx **Helm** chart, the `opensearch` section defines the OpenSearch instance,
+and the `auth.opensearch` section defines its credentials. Both are enabled by default. When you install the chart,
+Helm starts a single-node OpenSearch cluster and sets the host, port,
+and credential environment variables on every Onyx service.
+
+In the Onyx **Docker Compose** file, the `opensearch` service defines both the instance and its credentials.
+The application reads the same environment variables from your `.env` file.
+
+## Auth
+
+OpenSearch requires initial admin credentials. Onyx uses them to authenticate every request.
+The password must have at least 8 characters, with at least one uppercase letter, one lowercase letter, one digit,
+and one special character.
+
+With **Docker Compose**, no action is required.
+The Compose file sets an initial password that matches the default Onyx uses when `OPENSEARCH_ADMIN_PASSWORD` is not
+set.
+
+To use a different password, set `OPENSEARCH_ADMIN_PASSWORD` in the `.env` file before the first start.
+The Compose file passes it to both OpenSearch and the Onyx services.
+
+With **Helm**, there is no default password. Set one in your values file:
+
+```yaml values.yaml
+# Other overrides you may have.
+
+configMap:
+  # Other overrides you may have.
+
+  OPENSEARCH_ADMIN_PASSWORD: <your chosen password>
+
+auth:
+  # Other overrides you may have.
+
+  opensearch:
+   values:
+     opensearch_admin_password: <your chosen password>
+```
+
+## Configuration variables
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `OPENSEARCH_HOST` | `localhost` | Hostname of the OpenSearch cluster. The Compose file and Helm chart set it for you. |
+| `OPENSEARCH_REST_API_PORT` | `9200` | REST API port. |
+| `OPENSEARCH_ADMIN_USERNAME` | `admin` | Username for HTTP basic auth. |
+| `OPENSEARCH_ADMIN_PASSWORD` | Compose default | Password for HTTP basic auth. |
+| `USING_AWS_MANAGED_OPENSEARCH` | `false` | Set to `true` for an Amazon OpenSearch Service domain. |
+
+## If using your own managed OpenSearch
+
+[If you provisioned a managed instance](/deployment/local/terraform#opensearch-optional),
+you do not need Helm to start an OpenSearch cluster. Disable it in your Helm values file:
+
+```yaml values.yaml
+# Other overrides you may have.
+
+opensearch:
+  enabled: false
+
+auth:
+  # Other overrides you may have.
+
+  opensearch:
+    enabled: false
+```
+
+Then set the connection variables for your cluster. Helm passes them to every Onyx service.
+
+```yaml values.yaml
+# Other overrides you may have.
+
+configMap:
+  # Other overrides you may have.
+
+  OPENSEARCH_ADMIN_USERNAME: "<the username you set when creating the OpenSearch cluster>"
+  OPENSEARCH_ADMIN_PASSWORD: "<the password you set when creating the OpenSearch cluster>"
+  OPENSEARCH_HOST: "<the host name of the OpenSearch cluster, as reported on the AWS console; do not include https://>"
+  OPENSEARCH_REST_API_PORT: "443"
+  USING_AWS_MANAGED_OPENSEARCH: "true"
+```
+
+See [External Services](/deployment/production/external_services) for other managed OpenSearch options.

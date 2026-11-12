@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.db.enums import ActionPolicy, ExternalAppType
 from onyx.external_apps.providers import gmail, google_calendar, google_drive, registry
 from onyx.external_apps.providers.gmail import GmailAction
 from onyx.external_apps.providers.google_drive import GoogleDriveAction
@@ -111,7 +111,7 @@ _SKILL_TEMPLATES = {
 
 def _render_skill(
     app_type: ExternalAppType,
-    stored: dict[str, EndpointPolicy] | None = None,
+    stored: dict[str, ActionPolicy] | None = None,
 ) -> str:
     template = (
         BUILTIN_SKILLS_PATH / _SKILL_TEMPLATES[app_type] / "SKILL.md.template"
@@ -169,7 +169,7 @@ def test_cloud_note_precedes_the_unavailable_list_with_deny_merged() -> None:
     and the DENY override."""
     rendered = _render_skill(
         ExternalAppType.GOOGLE_DRIVE,
-        {GoogleDriveAction.FILES_CREATE: EndpointPolicy.DENY},
+        {GoogleDriveAction.FILES_CREATE: ActionPolicy.DENY},
     )
     assert rendered.index("drive.file") < rendered.index(
         "These actions are unavailable"

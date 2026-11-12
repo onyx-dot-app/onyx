@@ -22,7 +22,11 @@ export type ControlProps = React.PropsWithChildren<{
   asChild?: boolean;
 }>;
 
-export type DescriptionProps = React.HTMLAttributes<HTMLParagraphElement>;
+export interface DescriptionProps {
+  /** Classes for the wrapper around the description text. */
+  className?: string;
+  children?: React.ReactNode;
+}
 export type MessageByState = Partial<
   Record<FormFieldState, string | React.ReactNode>
 >;

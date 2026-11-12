@@ -6,4 +6,4 @@
 /web/STANDARDS.md @raunakab @Weves
 
 # Beta cherry-pick workflow owners
-/.github/workflows/post-merge-beta-cherry-pick.yml @justin-tahara @jmelahman
+/.github/workflows/post-merge-beta-cherry-pick.yml @justin-tahara

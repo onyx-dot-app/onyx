@@ -166,13 +166,13 @@ def _create_csv_file_and_update_db(
     fields: set[str] = set()
     for record in records:
         fields.update(record.keys())
-    fields = set(sorted(list(fields)))  # Sort for consistent order
+    sorted_fields = sorted(fields)  # Sort for a consistent column order
 
     # Create CSV file
     with tempfile.TemporaryDirectory() as directory:
         csv_path = os.path.join(directory, filename)
         with open(csv_path, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=fields)
+            writer = csv.DictWriter(f, fieldnames=sorted_fields)
             writer.writeheader()
             for record in records:
                 writer.writerow(record)
@@ -724,7 +724,7 @@ def _test_get_affected_parent_ids(sf_db: OnyxSalesforceSQLite) -> None:
 
     # Test Case 1: Account directly in updated_ids and parent_types
     updated_ids = [_VALID_SALESFORCE_IDS[1]]  # Parent Account 2
-    parent_types = set([ACCOUNT_OBJECT_TYPE])
+    parent_types = {ACCOUNT_OBJECT_TYPE}
     affected_ids_by_type = defaultdict(set)
     for parent_type, parent_id, _ in sf_db.get_changed_parent_ids_by_type(
         updated_ids, parent_types
@@ -739,7 +739,7 @@ def _test_get_affected_parent_ids(sf_db: OnyxSalesforceSQLite) -> None:
 
     # Test Case 2: Account with child in updated_ids
     updated_ids = [_VALID_SALESFORCE_IDS[40]]  # Child Contact
-    parent_types = set([ACCOUNT_OBJECT_TYPE])
+    parent_types = {ACCOUNT_OBJECT_TYPE}
     affected_ids_by_type = defaultdict(set)
     for parent_type, parent_id, _ in sf_db.get_changed_parent_ids_by_type(
         updated_ids, parent_types
@@ -754,7 +754,7 @@ def _test_get_affected_parent_ids(sf_db: OnyxSalesforceSQLite) -> None:
 
     # Test Case 3: Both direct and indirect affects
     updated_ids = [_VALID_SALESFORCE_IDS[1], _VALID_SALESFORCE_IDS[40]]  # Both cases
-    parent_types = set([ACCOUNT_OBJECT_TYPE])
+    parent_types = {ACCOUNT_OBJECT_TYPE}
     affected_ids_by_type = defaultdict(set)
     for parent_type, parent_id, _ in sf_db.get_changed_parent_ids_by_type(
         updated_ids, parent_types
@@ -773,7 +773,7 @@ def _test_get_affected_parent_ids(sf_db: OnyxSalesforceSQLite) -> None:
 
     # Test Case 4: No matches
     updated_ids = [_VALID_SALESFORCE_IDS[40]]  # Child Contact
-    parent_types = set(["Opportunity"])  # Wrong type
+    parent_types = {"Opportunity"}  # Wrong type
     affected_ids_by_type = defaultdict(set)
     for parent_type, parent_id, _ in sf_db.get_changed_parent_ids_by_type(
         updated_ids, parent_types

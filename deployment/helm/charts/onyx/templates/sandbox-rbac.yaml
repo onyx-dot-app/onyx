@@ -3,7 +3,8 @@
 {{- $sandboxNs := .Values.configMap.SANDBOX_NAMESPACE | default "onyx-sandboxes" }}
 {{- $saName := (index .Values.configMap "SANDBOX_SERVICE_ACCOUNT_NAME") | default "sandbox" }}
 {{- $proxyNs := (index .Values.configMap "SANDBOX_PROXY_NAMESPACE") | default .Release.Namespace }}
-{{- $boundSAs := prepend ((index $craft "extraBoundServiceAccounts") | default (list)) (include "onyx.serviceAccountName" .) }}
+{{- /* The api-server runs as its own account when the log export reads the Kubernetes API. */}}
+{{- $boundSAs := concat (list (include "onyx.serviceAccountName" .) (include "onyx.apiServerServiceAccountName" .)) ((index $craft "extraBoundServiceAccounts") | default (list)) | uniq }}
 {{- $rbacNameBase := printf "%s-%s" (include "onyx.fullname" .) .Release.Namespace }}
 {{- $rbacNamePrefix := $rbacNameBase }}
 {{- if gt (len $rbacNameBase) 47 }}
@@ -40,10 +41,10 @@ rules:
     verbs: ["get"]
   - apiGroups: [""]
     resources: ["services"]
-    verbs: ["get", "create", "delete"]
+    verbs: ["get", "list", "create", "delete"]
   - apiGroups: [""]
     resources: ["secrets"]
-    verbs: ["get", "create", "update", "delete"]
+    verbs: ["get", "list", "create", "update", "delete"]
   - apiGroups: [""]
     resources: ["pods/exec"]
     verbs: ["create", "get"]

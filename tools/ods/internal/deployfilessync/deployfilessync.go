@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/safefs"
 )
 
 // RelPaths lists the synced files relative to <repo>/deployment. They are the
@@ -34,6 +36,8 @@ var RelPaths = []string{
 	"data/nginx/app.conf.template",
 	"data/nginx/app.conf.template.prod",
 	"data/nginx/run-nginx.sh",
+	"data/nginx/mcp.conf.inc.template",
+	"data/nginx/mcp_upstream.conf.inc.template",
 }
 
 // SourceDir returns the directory the files are copied from.
@@ -88,10 +92,7 @@ func Write(repoRoot string) ([]Result, error) {
 			continue
 		}
 		dest := filepath.Join(DestDir(repoRoot), filepath.FromSlash(r.RelPath))
-		if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
-			return nil, fmt.Errorf("failed to create directory for %s: %w", r.RelPath, err)
-		}
-		if err := os.WriteFile(dest, []byte(r.Source), 0644); err != nil {
+		if err := safefs.WriteFileNoFollow(repoRoot, dest, []byte(r.Source), 0o644); err != nil {
 			return nil, fmt.Errorf("failed to write %s: %w", r.RelPath, err)
 		}
 	}

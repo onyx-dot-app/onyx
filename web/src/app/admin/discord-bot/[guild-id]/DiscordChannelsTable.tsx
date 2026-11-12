@@ -1,5 +1,6 @@
 "use client";
 
+import { Section } from "@opal/layouts";
 import { useTranslations } from "next-intl";
 import {
   Table,
@@ -9,11 +10,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { InputSwitch } from "@opal/components";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSwitch, Text } from "@opal/components";
+import { InputSingleSelect } from "@opal/components";
 import { EmptyMessageCard } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
-import { Section } from "@/layouts/general-layouts";
 import {
   DiscordChannelConfig,
   DiscordChannelType,
@@ -99,7 +98,7 @@ export function DiscordChannelsTable({
                   width="fit"
                 >
                   <ChannelIcon width={16} height={16} />
-                  <Text text04 mainUiBody>
+                  <Text font="main-ui-body" color="text-04">
                     {channel.channel_name}
                   </Text>
                 </Section>
@@ -138,7 +137,7 @@ export function DiscordChannelsTable({
                 )}
               </TableCell>
               <TableCell>
-                <InputSelect
+                <InputSingleSelect
                   value={channel.persona_override_id?.toString() ?? "default"}
                   onValueChange={(value: string) =>
                     onChannelUpdate(
@@ -148,20 +147,16 @@ export function DiscordChannelsTable({
                     )
                   }
                   disabled={disabled}
-                >
-                  <InputSelect.Trigger placeholder="-" />
-                  <InputSelect.Content>
-                    <InputSelect.Item value="default">-</InputSelect.Item>
-                    {personas.map((persona) => (
-                      <InputSelect.Item
-                        key={persona.id}
-                        value={persona.id.toString()}
-                      >
-                        {persona.name}
-                      </InputSelect.Item>
-                    ))}
-                  </InputSelect.Content>
-                </InputSelect>
+                  defaultOption="default"
+                  placeholder="-"
+                  options={[
+                    { value: "default", title: "-" },
+                    ...personas.map((persona) => ({
+                      value: persona.id.toString(),
+                      title: persona.name,
+                    })),
+                  ]}
+                />
               </TableCell>
             </TableRow>
           );

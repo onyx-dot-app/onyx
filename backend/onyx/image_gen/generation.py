@@ -100,7 +100,10 @@ def _default_provider_and_model(
         ),
         api_base=llm_provider.api_base,
         api_version=llm_provider.api_version,
-        deployment_name=llm_provider.deployment_name,
+        # A linked provider's deployment serves its chat model, not this one.
+        deployment_name=(
+            llm_provider.deployment_name if config.llm_provider_owned else None
+        ),
         custom_config=llm_provider.custom_config,
     )
     if not validate_credentials(llm_provider.provider, credentials):

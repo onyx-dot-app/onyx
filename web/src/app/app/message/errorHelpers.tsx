@@ -1,4 +1,5 @@
-import { AlertCircle, Clock, Lock, Wifi, Server } from "lucide-react";
+import { Wifi } from "lucide-react";
+import { SvgAlertCircle, SvgClock, SvgLock, SvgServer } from "@opal/icons";
 
 /**
  * Get the appropriate icon for a given error code
@@ -7,18 +8,18 @@ export const getErrorIcon = (errorCode?: string) => {
   switch (errorCode) {
     case "RATE_LIMIT":
     case "RATE_LIMITED":
-      return <Clock className="h-4 w-4" />;
+      return <SvgClock className="h-4 w-4" />;
     case "AUTH_ERROR":
     case "PERMISSION_DENIED":
-      return <Lock className="h-4 w-4" />;
+      return <SvgLock className="h-4 w-4" />;
     case "CONNECTION_ERROR":
       return <Wifi className="h-4 w-4" />;
     case "SERVICE_UNAVAILABLE":
-      return <Server className="h-4 w-4" />;
+      return <SvgServer className="h-4 w-4" />;
     case "BUDGET_EXCEEDED":
-      return <AlertCircle className="h-4 w-4" />;
+      return <SvgAlertCircle className="h-4 w-4" />;
     default:
-      return <AlertCircle className="h-4 w-4" />;
+      return <SvgAlertCircle className="h-4 w-4" />;
   }
 };
 

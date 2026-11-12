@@ -11,14 +11,17 @@ import httpx
 import pytest
 from sqlalchemy import select
 
+from onyx.db.action_policy import get_or_create_gated_app_id
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.db.enums import (
+    GatedAppKind,
     ScheduledTaskRunStatus,
     ScheduledTaskStatus,
     ScheduledTaskTriggerSource,
 )
 from onyx.db.mcp import create_mcp_server__no_commit, update_mcp_server__no_commit
-from onyx.db.models import ScheduledTask, ScheduledTaskRun
+from onyx.db.models import ScheduledTask, ScheduledTaskRun, Tool
+from onyx.db.scheduled_task import insert_run, mark_run_status
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -52,7 +55,7 @@ def _create_task(
     editor_payload: dict[str, Any] | None = None,
     status: ScheduledTaskStatus = ScheduledTaskStatus.ACTIVE,
     run_immediately: bool = False,
-    pre_approved_mcp_server_ids: list[int] | None = None,
+    action_policies: list[dict[str, Any]] | None = None,
 ) -> httpx.Response:
     body: dict[str, Any] = {
         "name": name or f"task-{uuid4().hex[:8]}",
@@ -62,8 +65,8 @@ def _create_task(
         "status": status.value,
         "run_immediately": run_immediately,
     }
-    if pre_approved_mcp_server_ids is not None:
-        body["pre_approved_mcp_server_ids"] = pre_approved_mcp_server_ids
+    if action_policies is not None:
+        body["action_policies"] = action_policies
     return client.post(
         _url(),
         json=body,
@@ -105,8 +108,11 @@ def _list_runs(
     *,
     cursor: str | None = None,
     limit: int | None = None,
+    unviewed: bool = False,
 ) -> httpx.Response:
     params: dict[str, Any] = {}
+    if unviewed:
+        params["unviewed"] = True
     if cursor is not None:
         params["cursor"] = cursor
     if limit is not None:
@@ -157,6 +163,9 @@ def _create_mcp_server(owner: str, *, available_in_craft: bool) -> int:
             db_session=db_session,
             available_in_craft=available_in_craft,
         )
+        db_session.add(
+            Tool(name="send_report", description="Send report", mcp_server_id=server.id)
+        )
         db_session.commit()
         return server.id
 
@@ -178,80 +187,70 @@ def test_create_task_compiles_cron(admin_user: DATestUser) -> None:
     assert row.cron_expression == cron
 
 
-def test_create_and_patch_mcp_pre_approvals(admin_user: DATestUser) -> None:
-    server_a = _create_mcp_server(admin_user.email, available_in_craft=True)
-    server_b = _create_mcp_server(admin_user.email, available_in_craft=True)
-    unavailable_server = _create_mcp_server(admin_user.email, available_in_craft=False)
-
-    create_response = _create_task(
-        admin_user,
-        pre_approved_mcp_server_ids=[server_b, server_a, server_b],
-    )
-    create_response.raise_for_status()
-    created = create_response.json()
-    task_id = UUID(created["id"])
-    created_mcp_server_ids = created["pre_approved_mcp_server_ids"]
-    assert len(created_mcp_server_ids) == 2
-    assert set(created_mcp_server_ids) == {server_a, server_b}
-
-    patch_response = _patch_task(
-        admin_user,
-        task_id,
-        {"pre_approved_mcp_server_ids": [server_a]},
-    )
-    patch_response.raise_for_status()
-    assert patch_response.json()["pre_approved_mcp_server_ids"] == [server_a]
-
-    rejected_response = _patch_task(
-        admin_user,
-        task_id,
-        {"pre_approved_mcp_server_ids": [unavailable_server]},
-    )
-    assert rejected_response.status_code == 400
-
-    detail_response = client.get(
-        _url(str(task_id)),
-        headers=admin_user.headers,
-        cookies=admin_user.cookies,
-    )
-    detail_response.raise_for_status()
-    assert detail_response.json()["pre_approved_mcp_server_ids"] == [server_a]
-
-
-def test_patch_retains_and_removes_existing_unavailable_mcp_pre_approval(
-    admin_user: DATestUser,
-) -> None:
-    server_id = _create_mcp_server(admin_user.email, available_in_craft=True)
-    create_response = _create_task(
-        admin_user,
-        pre_approved_mcp_server_ids=[server_id],
-    )
-    create_response.raise_for_status()
-    task_id = UUID(create_response.json()["id"])
-
+def _mcp_settings(server_id: int, policy: str | None) -> dict[str, Any]:
     with get_session_with_current_tenant() as db_session:
-        update_mcp_server__no_commit(
-            server_id=server_id,
-            db_session=db_session,
-            available_in_craft=False,
+        app_id = get_or_create_gated_app_id(
+            db_session, GatedAppKind.MCP_SERVER, server_id
         )
         db_session.commit()
+    return {
+        "gated_app_id": app_id,
+        "enabled": policy is not None,
+        "action_policies": {"send_report": policy} if policy else {},
+    }
 
-    retain_response = _patch_task(
+
+def test_create_and_patch_mcp_action_policies(admin_user: DATestUser) -> None:
+    server_a = _create_mcp_server(admin_user.email, available_in_craft=True)
+    server_b = _create_mcp_server(admin_user.email, available_in_craft=True)
+    unavailable = _create_mcp_server(admin_user.email, available_in_craft=False)
+    first = _mcp_settings(server_a, "ALWAYS")
+    second = _mcp_settings(server_b, "ALWAYS")
+    response = _create_task(admin_user, action_policies=[first, second])
+    response.raise_for_status()
+    task_id = UUID(response.json()["id"])
+    assert len(response.json()["action_policies"]) == 2
+    response = _patch_task(
+        admin_user, task_id, {"action_policies": [{**second, "enabled": False}]}
+    )
+    response.raise_for_status()
+    saved = {
+        setting["gated_app_id"]: setting
+        for setting in response.json()["action_policies"]
+    }
+    assert saved[first["gated_app_id"]]["enabled"] is True
+    assert saved[second["gated_app_id"]]["enabled"] is False
+    assert saved[second["gated_app_id"]]["action_policies"] == second["action_policies"]
+    # Clearing the submitted map removes dormant choices as well.
+    response = _patch_task(
+        admin_user, task_id, {"action_policies": [_mcp_settings(server_b, None)]}
+    )
+    response.raise_for_status()
+    assert response.json()["action_policies"] == [first]
+    response = _patch_task(
         admin_user,
         task_id,
-        {"pre_approved_mcp_server_ids": [server_id]},
+        {"action_policies": [_mcp_settings(unavailable, "ALWAYS")]},
     )
-    retain_response.raise_for_status()
-    assert retain_response.json()["pre_approved_mcp_server_ids"] == [server_id]
+    assert response.status_code == 404
 
-    remove_response = _patch_task(
-        admin_user,
-        task_id,
-        {"pre_approved_mcp_server_ids": []},
-    )
-    remove_response.raise_for_status()
-    assert remove_response.json()["pre_approved_mcp_server_ids"] == []
+
+def test_patch_preserves_unavailable_mcp_choices(admin_user: DATestUser) -> None:
+    server_id = _create_mcp_server(admin_user.email, available_in_craft=True)
+    settings = _mcp_settings(server_id, "ALWAYS")
+    response = _create_task(admin_user, action_policies=[settings])
+    response.raise_for_status()
+    task_id = UUID(response.json()["id"])
+    with get_session_with_current_tenant() as db_session:
+        update_mcp_server__no_commit(
+            server_id=server_id, db_session=db_session, available_in_craft=False
+        )
+        db_session.commit()
+    response = _patch_task(admin_user, task_id, {"name": "Updated task"})
+    response.raise_for_status()
+    assert response.json()["action_policies"] == [settings]
+    response = _patch_task(admin_user, task_id, {"action_policies": [settings]})
+    assert response.status_code == 404
 
 
 def test_create_task_interval_days_requires_time_of_day(admin_user: DATestUser) -> None:
@@ -377,3 +376,116 @@ def test_list_runs_paginates_by_started_at_cursor(admin_user: DATestUser) -> Non
     page_two_body = page_two.json()
     assert len(page_two_body["items"]) >= 1
     assert page_one_body["items"][0]["id"] != page_two_body["items"][0]["id"]
+
+
+def _insert_run_with_status(task_id: UUID, *statuses: ScheduledTaskRunStatus) -> UUID:
+    with get_session_with_current_tenant() as db_session:
+        run = insert_run(
+            db_session=db_session,
+            task_id=task_id,
+            trigger_source=ScheduledTaskTriggerSource.MANUAL_RUN_NOW,
+        )
+        for status in statuses:
+            mark_run_status(db_session=db_session, run_id=run.id, status=status)
+        db_session.commit()
+        return run.id
+
+
+def _set_run_status(run_id: UUID, status: ScheduledTaskRunStatus) -> None:
+    with get_session_with_current_tenant() as db_session:
+        mark_run_status(db_session=db_session, run_id=run_id, status=status)
+        db_session.commit()
+
+
+def _view_run(
+    user: DATestUser, task_id: UUID, run_id: UUID, revision: int
+) -> httpx.Response:
+    return client.patch(
+        _url(str(task_id), "runs", str(run_id), "viewed"),
+        json={"revision": revision},
+        headers=user.headers,
+        cookies=user.cookies,
+    )
+
+
+def _unviewed_run_count(user: DATestUser, task_id: UUID) -> int:
+    response = client.get(_url(), headers=user.headers, cookies=user.cookies)
+    response.raise_for_status()
+    item = next(i for i in response.json()["items"] if i["id"] == str(task_id))
+    return item["unviewed_run_count"]
+
+
+def test_run_results_stay_unviewed_until_opened(
+    admin_user: DATestUser, basic_user: DATestUser
+) -> None:
+    response = _create_task(admin_user, status=ScheduledTaskStatus.PAUSED)
+    response.raise_for_status()
+    task_id = UUID(response.json()["id"])
+
+    with get_session_with_current_tenant() as db_session:
+        skipped_id = insert_run(
+            db_session=db_session,
+            task_id=task_id,
+            trigger_source=ScheduledTaskTriggerSource.MANUAL_RUN_NOW,
+            status=ScheduledTaskRunStatus.SKIPPED,
+        ).id
+        db_session.commit()
+    run_id = _insert_run_with_status(
+        task_id, ScheduledTaskRunStatus.RUNNING, ScheduledTaskRunStatus.SUCCEEDED
+    )
+    assert _unviewed_run_count(admin_user, task_id) == 1
+    count = client.get(
+        _url("unviewed-count"), headers=admin_user.headers, cookies=admin_user.cookies
+    )
+    count.raise_for_status()
+    assert count.json()["count"] >= 1
+
+    runs = {run["id"]: run for run in _list_runs(admin_user, task_id).json()["items"]}
+    assert runs[str(run_id)]["revision"] == 1
+    assert runs[str(run_id)]["viewed_revision"] is None
+    assert runs[str(skipped_id)]["revision"] == 0
+    unviewed = _list_runs(admin_user, task_id, unviewed=True).json()["items"]
+    assert [run["id"] for run in unviewed] == [str(run_id)]
+
+    assert _view_run(admin_user, task_id, run_id, 2).status_code == 409
+    assert _view_run(basic_user, task_id, run_id, 1).status_code == 404
+
+    viewed = _view_run(admin_user, task_id, run_id, 1)
+    viewed.raise_for_status()
+    assert viewed.json()["viewed_revision"] == 1
+    assert _unviewed_run_count(admin_user, task_id) == 0
+    assert _list_runs(admin_user, task_id, unviewed=True).json()["items"] == []
+
+
+def test_bulk_view_keeps_newer_run_results_unviewed(admin_user: DATestUser) -> None:
+    response = _create_task(admin_user, status=ScheduledTaskStatus.PAUSED)
+    response.raise_for_status()
+    task_id = UUID(response.json()["id"])
+
+    run_id = _insert_run_with_status(
+        task_id,
+        ScheduledTaskRunStatus.RUNNING,
+        ScheduledTaskRunStatus.FAILED,
+    )
+    bulk = client.patch(
+        _url(str(task_id), "runs", "viewed"),
+        json={"revisions": {str(run_id): 1}},
+        headers=admin_user.headers,
+        cookies=admin_user.cookies,
+    )
+    bulk.raise_for_status()
+    assert [run["viewed_revision"] for run in bulk.json()["items"]] == [1]
+    assert _unviewed_run_count(admin_user, task_id) == 0
+
+    _set_run_status(run_id, ScheduledTaskRunStatus.RUNNING)
+    _set_run_status(run_id, ScheduledTaskRunStatus.SUCCEEDED)
+    assert _unviewed_run_count(admin_user, task_id) == 1
+
+    stale = client.patch(
+        _url(str(task_id), "runs", "viewed"),
+        json={"revisions": {str(run_id): 1}},
+        headers=admin_user.headers,
+        cookies=admin_user.cookies,
+    )
+    stale.raise_for_status()
+    assert _unviewed_run_count(admin_user, task_id) == 1

@@ -7,7 +7,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from onyx.context.search.models import SearchSettingsCreationRequest
-from onyx.db.enums import EmbeddingPrecision
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.manage.search_settings import (
@@ -32,7 +31,6 @@ def _request() -> SearchSettingsCreationRequest:
         provider_type=None,
         index_name=None,
         multipass_indexing=False,
-        embedding_precision=EmbeddingPrecision.FLOAT,
         reduced_dimension=None,
         enable_contextual_rag=False,
         contextual_rag_model_configuration_id=None,
@@ -104,7 +102,7 @@ def test_name_reuse_guard_pulls_occupant_into_reclaim(
 
     with pytest.raises(OnyxError) as exc:
         _guard_index_name_reuse(db_session, "danswer_chunk_x")
-    assert exc.value.error_code == OnyxErrorCode.CONFLICT
+    assert exc.value.error_code == OnyxErrorCode.INDEX_NAME_RECLAIMING
     mock_mark.assert_called_once_with(occupant)
     db_session.commit.assert_called_once()
     mock_enqueue.assert_called_once()

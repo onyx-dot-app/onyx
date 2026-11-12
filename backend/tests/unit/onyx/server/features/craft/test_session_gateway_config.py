@@ -6,9 +6,11 @@ from datetime import datetime, timezone
 from typing import cast
 from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
 from sqlalchemy.orm import Session
 
+from onyx.db.enums import LLMModelFlowType
 from onyx.db.models import BuildSession, Sandbox, User
 from onyx.llm.well_known_providers.auto_update_models import (
     LLMProviderRecommendation,
@@ -22,6 +24,7 @@ from onyx.server.features.build.sandbox.util.opencode_config import (
 )
 from onyx.server.features.build.session import llm_config
 from onyx.server.features.build.session import manager as manager_module
+from onyx.server.features.build.session.errors import OpencodeConfigReloadError
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.gateway import model_catalog
 from onyx.server.gateway.models import GatewayModelDescriptor
@@ -78,7 +81,7 @@ _TEST_RECOMMENDATIONS = LLMRecommendations(
             default_model=SimpleKnownModel(name="bedrock-pro")
         ),
         "openai": LLMProviderRecommendation(
-            default_model=SimpleKnownModel(name="gpt-5.6-sol")
+            default_model=SimpleKnownModel(name="gpt-6.1-sol")
         ),
     },
 )
@@ -92,6 +95,36 @@ def _mock_recommendations() -> Iterator[None]:
         llm_config, "get_recommendations", return_value=_TEST_RECOMMENDATIONS
     ):
         yield
+
+
+@pytest.mark.parametrize("supports_chat", [False, True])
+def test_decision_models_require_chat_capability_for_craft(supports_chat: bool) -> None:
+    provider = _provider(
+        3,
+        "openai",
+        [
+            ModelConfigurationView(
+                name="gpt-6-luna",
+                is_visible=True,
+                supports_image_input=False,
+                supports_chat=supports_chat,
+                supports_decisions=True,
+            )
+        ],
+    )
+    selection = llm_config.GatewaySelection(3, "gpt-6-luna")
+    expected = (3, "gpt-6-luna") if supports_chat else None
+
+    assert llm_config._select_gateway_default([provider], selection) == expected
+    assert llm_config._select_gateway_default([provider], None, [selection]) == expected
+    assert llm_config._select_gateway_default([provider], None) == expected
+    with patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test/api"):
+        config = llm_config.build_onyx_gateway_config([provider], selection)
+    if supports_chat:
+        assert config is not None
+        assert config.model_name == "3/gpt-6-luna"
+    else:
+        assert config is None
 
 
 def test_gateway_config_qualifies_collisions_and_selects_exact_default() -> None:
@@ -207,16 +240,16 @@ def test_custom_azure_alias_renders_deployment_limits_for_opencode() -> None:
         "azure",
         [
             _model(
-                "GPT-5.6-SOL",
+                "GPT-6.1-SOL",
                 # This is the misleading fallback produced when the alias itself
                 # is absent from LiteLLM, matching the production regression.
                 max_input_tokens=30_976,
             )
         ],
-        deployment_name="gpt-5",
+        deployment_name="gpt-6-sol",
     )
     model_map = {
-        "azure/gpt-5": {
+        "azure/gpt-6-sol": {
             "max_input_tokens": 272_000,
             "max_output_tokens": 128_000,
         }
@@ -230,7 +263,7 @@ def test_custom_azure_alias_renders_deployment_limits_for_opencode() -> None:
 
     assert gateway_config is not None
     opencode_config = build_provider_opencode_config(gateway_config)
-    assert opencode_config["provider"]["onyx"]["models"]["300/GPT-5.6-SOL"][
+    assert opencode_config["provider"]["onyx"]["models"]["300/GPT-6.1-SOL"][
         "limit"
     ] == {
         "context": 272_000,
@@ -250,10 +283,10 @@ def test_gateway_config_preserves_explicit_context_override() -> None:
                 configured_max_input_tokens=200_000,
             )
         ],
-        deployment_name="gpt-5",
+        deployment_name="gpt-6-sol",
     )
     model_map = {
-        "azure/gpt-5": {
+        "azure/gpt-6-sol": {
             "max_input_tokens": 272_000,
             "max_output_tokens": 128_000,
         }
@@ -305,10 +338,10 @@ def test_small_input_override_does_not_reduce_provider_output() -> None:
                 configured_max_input_tokens=25_000,
             )
         ],
-        deployment_name="gpt-5",
+        deployment_name="gpt-6-sol",
     )
     model_map = {
-        "azure/gpt-5": {
+        "azure/gpt-6-sol": {
             "max_input_tokens": 272_000,
             "max_output_tokens": 128_000,
         }
@@ -360,8 +393,11 @@ def test_manager_prefers_provider_recommended_default_in_provider_order() -> Non
             "fetch_all_accessible_llm_providers",
             return_value=[anthropic, bedrock],
         ) as fetch_providers,
-        patch.object(manager_module, "fetch_default_llm_model", return_value=None),
-        patch.object(manager_module, "fetch_default_craft_model", return_value=None),
+        patch.object(
+            manager_module,
+            "fetch_default_model",
+            return_value=None,
+        ),
     ):
         config = manager.build_llm_configs(user)
 
@@ -399,9 +435,13 @@ def test_manager_prefers_configured_default_over_recommendation() -> None:
             return_value=[anthropic, bedrock],
         ),
         patch.object(
-            manager_module, "fetch_default_llm_model", return_value=configured_default
+            manager_module,
+            "fetch_default_model",
+            side_effect=lambda _db, flow: {
+                LLMModelFlowType.CHAT: configured_default,
+                LLMModelFlowType.CRAFT: None,
+            }.get(flow),
         ),
-        patch.object(manager_module, "fetch_default_craft_model", return_value=None),
     ):
         config = manager.build_llm_configs(user)
 
@@ -437,9 +477,13 @@ def test_manager_falls_back_to_recommendation_when_configured_default_not_visibl
             return_value=[anthropic, bedrock],
         ),
         patch.object(
-            manager_module, "fetch_default_llm_model", return_value=configured_default
+            manager_module,
+            "fetch_default_model",
+            side_effect=lambda _db, flow: {
+                LLMModelFlowType.CHAT: configured_default,
+                LLMModelFlowType.CRAFT: None,
+            }.get(flow),
         ),
-        patch.object(manager_module, "fetch_default_craft_model", return_value=None),
     ):
         config = manager.build_llm_configs(user)
 
@@ -465,10 +509,12 @@ def test_manager_prefers_craft_default_over_chat_default() -> None:
             return_value=[anthropic, bedrock],
         ),
         patch.object(
-            manager_module, "fetch_default_llm_model", return_value=chat_default
-        ),
-        patch.object(
-            manager_module, "fetch_default_craft_model", return_value=craft_default
+            manager_module,
+            "fetch_default_model",
+            side_effect=lambda _db, flow: {
+                LLMModelFlowType.CHAT: chat_default,
+                LLMModelFlowType.CRAFT: craft_default,
+            }.get(flow),
         ),
     ):
         config = manager.build_llm_configs(user)
@@ -492,9 +538,13 @@ def test_manager_stored_selection_outranks_craft_default() -> None:
             "fetch_all_accessible_llm_providers",
             return_value=[anthropic, bedrock],
         ),
-        patch.object(manager_module, "fetch_default_llm_model", return_value=None),
         patch.object(
-            manager_module, "fetch_default_craft_model", return_value=craft_default
+            manager_module,
+            "fetch_default_model",
+            side_effect=lambda _db, flow: {
+                LLMModelFlowType.CHAT: None,
+                LLMModelFlowType.CRAFT: craft_default,
+            }.get(flow),
         ),
     ):
         config = manager.build_llm_configs(
@@ -535,10 +585,12 @@ def test_manager_craft_default_not_visible_falls_through_to_chat_default() -> No
             return_value=[anthropic, bedrock],
         ),
         patch.object(
-            manager_module, "fetch_default_llm_model", return_value=chat_default
-        ),
-        patch.object(
-            manager_module, "fetch_default_craft_model", return_value=craft_default
+            manager_module,
+            "fetch_default_model",
+            side_effect=lambda _db, flow: {
+                LLMModelFlowType.CHAT: chat_default,
+                LLMModelFlowType.CRAFT: craft_default,
+            }.get(flow),
         ),
     ):
         config = manager.build_llm_configs(user)
@@ -581,13 +633,13 @@ def test_stale_selection_falls_through_to_configured_default() -> None:
 def _gateway_config() -> CraftLLMProviderConfig:
     return CraftLLMProviderConfig(
         provider="onyx",
-        model_name="13/gpt-5-mini",
+        model_name="13/gpt-6-astra",
         api_key="proxy-placeholder",
         api_base="https://onyx.test/gateway/v1",
         models=[
             GatewayModelDescriptor(
-                id="13/gpt-5-mini",
-                display_name="GPT-5 Mini",
+                id="13/gpt-6-astra",
+                display_name="GPT-6 Astra",
                 provider="openai",
             )
         ],
@@ -633,7 +685,9 @@ def test_empty_gateway_session_skips_unchanged_catalog() -> None:
     config = _gateway_config()
     manager, sandbox_manager, build_llm_configs = _reconcile_manager(config)
     expected = json.dumps(
-        build_provider_opencode_config(config, disabled_tools=OPENCODE_DISABLED_TOOLS)
+        build_provider_opencode_config(
+            config, disabled_tools=OPENCODE_DISABLED_TOOLS, session_id="2"
+        )
     )
     assert expected is not None
     sandbox_manager.read_file.return_value = expected.encode()
@@ -658,7 +712,9 @@ def test_unchanged_catalog_retries_pending_dispose() -> None:
     config = _gateway_config()
     manager, sandbox_manager, build_llm_configs = _reconcile_manager(config)
     expected = json.dumps(
-        build_provider_opencode_config(config, disabled_tools=OPENCODE_DISABLED_TOOLS)
+        build_provider_opencode_config(
+            config, disabled_tools=OPENCODE_DISABLED_TOOLS, session_id="2"
+        )
     )
     assert expected is not None
     sandbox_manager.read_file.return_value = expected.encode()
@@ -814,18 +870,15 @@ def test_workspace_rebuild_claims_a_dispose_the_next_reconcile_honours() -> None
     config = _gateway_config()
     manager, sandbox_manager, _ = _reconcile_manager(config)
     expected = json.dumps(
-        build_provider_opencode_config(config, disabled_tools=OPENCODE_DISABLED_TOOLS)
+        build_provider_opencode_config(
+            config, disabled_tools=OPENCODE_DISABLED_TOOLS, session_id="2"
+        )
     )
     # Exactly the post-rebuild state: file already correct on disk.
     sandbox_manager.read_file.return_value = expected.encode()
 
     store: dict[str, str] = {}
-    cache = MagicMock()
-    cache.set.side_effect = lambda key, value, ex=None: store.__setitem__(  # noqa: ARG005
-        key, value
-    )
-    cache.get.side_effect = store.get
-    cache.delete.side_effect = lambda key: store.pop(key, None)
+    cache = _dict_cache(store)
 
     session = cast(
         BuildSession,
@@ -850,3 +903,109 @@ def test_workspace_rebuild_claims_a_dispose_the_next_reconcile_honours() -> None
 
     sandbox_manager.dispose_opencode_instance.assert_called_once()
     assert store == {}, "the claim must be cleared once the dispose succeeded"
+
+
+def _dict_cache(store: dict[str, str]) -> MagicMock:
+    cache = MagicMock()
+    cache.set.side_effect = lambda key, value, ex=None: store.__setitem__(  # noqa: ARG005
+        key, value
+    )
+    cache.get.side_effect = lambda key: store[key].encode() if key in store else None
+    cache.delete.side_effect = lambda key: store.pop(key, None)
+    return cache
+
+
+def _live_session() -> BuildSession:
+    return cast(
+        BuildSession,
+        MagicMock(
+            id=2,
+            agent_provider=None,
+            agent_model=None,
+            opencode_session_id="ses-live",
+            nextjs_port=3010,
+        ),
+    )
+
+
+def test_dispose_timeout_after_rewrite_converges_on_next_turn() -> None:
+    """The turn that rewrote the config fails with a clear error when the
+    dispose times out. The next turn sees a matching file plus the marker,
+    disposes again, and clears the marker."""
+    config = _gateway_config()
+    manager, sandbox_manager, _ = _reconcile_manager(config)
+    expected = json.dumps(
+        build_provider_opencode_config(
+            config, disabled_tools=OPENCODE_DISABLED_TOOLS, session_id="2"
+        )
+    )
+    session = _live_session()
+    sandbox = cast(Sandbox, MagicMock(id=1))
+    user = cast(User, MagicMock(spec=User, personal_name="Roshan"))
+    store: dict[str, str] = {}
+    cache = _dict_cache(store)
+
+    with (
+        patch.object(manager_module, "get_cache_backend", return_value=cache),
+        patch.object(manager_module, "get_connectable_apps_for_user", return_value=[]),
+    ):
+        sandbox_manager.read_file.return_value = b"stale"
+        sandbox_manager.dispose_opencode_instance.side_effect = httpx.ReadTimeout(
+            "timed out"
+        )
+        with pytest.raises(OpencodeConfigReloadError):
+            manager.reconcile_session_llm_config(sandbox, session, user)
+        assert len(store) == 1, "a failed dispose must keep the marker"
+
+        sandbox_manager.read_file.return_value = expected.encode()
+        sandbox_manager.dispose_opencode_instance.side_effect = None
+        manager.reconcile_session_llm_config(sandbox, session, user)
+
+    sandbox_manager.regenerate_session_config.assert_called_once()
+    assert sandbox_manager.dispose_opencode_instance.call_count == 2
+    assert store == {}
+
+
+def test_stuck_dispose_fails_fast_after_bounded_attempts() -> None:
+    """A dispose that never completes must not cost a full timeout on every
+    turn: after the attempt limit, turns fail fast without a dispose call
+    until the backoff passes. The marker stays, so no turn runs on the old
+    config."""
+    config = _gateway_config()
+    manager, sandbox_manager, _ = _reconcile_manager(config)
+    expected = json.dumps(
+        build_provider_opencode_config(
+            config, disabled_tools=OPENCODE_DISABLED_TOOLS, session_id="2"
+        )
+    )
+    sandbox_manager.read_file.return_value = expected.encode()
+    sandbox_manager.dispose_opencode_instance.side_effect = httpx.ReadTimeout(
+        "timed out"
+    )
+    session = _live_session()
+    sandbox = cast(Sandbox, MagicMock(id=1))
+    user = cast(User, MagicMock(spec=User))
+    store: dict[str, str] = {}
+    cache = _dict_cache(store)
+    max_attempts = manager_module._DISPOSE_MAX_FAILED_ATTEMPTS
+
+    with patch.object(manager_module, "get_cache_backend", return_value=cache):
+        manager_module.mark_opencode_dispose_pending(session.id)
+        messages: list[str] = []
+        for _ in range(max_attempts + 2):
+            with pytest.raises(OpencodeConfigReloadError) as exc_info:
+                manager.reconcile_session_llm_config(sandbox, session, user)
+            messages.append(str(exc_info.value))
+
+        assert sandbox_manager.dispose_opencode_instance.call_count == max_attempts
+        assert messages[-1] == manager_module._DISPOSE_BACKOFF_MESSAGE
+        assert len(store) == 1
+
+        # After the backoff, one more attempt runs; a success clears the marker.
+        (key,) = store
+        store[key] = manager_module._encode_dispose_pending(max_attempts, 0.0)
+        sandbox_manager.dispose_opencode_instance.side_effect = None
+        manager.reconcile_session_llm_config(sandbox, session, user)
+
+    assert sandbox_manager.dispose_opencode_instance.call_count == max_attempts + 1
+    assert store == {}

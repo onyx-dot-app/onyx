@@ -1,0 +1,171 @@
+### Pins the sandbox image's Chrome for Testing to the current stable release on
+### main and on the four newest release lines, and opens one PR per branch that
+### is behind.
+###
+### The deploy gate (.github/scripts/audit-sandbox-browser.sh) fails every build
+### whose Chrome is not the current stable, so a stale pin blocks each nightly
+### and release tag until it moves. CVE Alerts cannot open this PR: the gate
+### compares versions and reports no vulnerability for it to pin against.
+###
+### Each branch gets its own PR and not a cherry-pick of main's, so a release
+### line is unblocked without waiting for the main PR to merge.
+
+name: Update Sandbox Browser
+
+on:
+  schedule:
+    - cron: "15 */4 * * *" # Chrome stable ships at any hour, and the gate fails from that moment
+  # Dispatched when a non-test deploy's audit gate fails.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-sandbox-browser
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  update-sandbox-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Mint GitHub App installation token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        with:
+          client-id: ${{ vars.CHERRY_PICK_APP_ID }}
+          private-key: ${{ secrets.CHERRY_PICK_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: true
+          ref: main
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Configure git identity as App
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+        run: |
+          bot_user_id="$(gh api "/users/${APP_SLUG}[bot]" --jq .id)"
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${bot_user_id}+${APP_SLUG}[bot]@users.noreply.github.com"
+
+      # A fixed branch per base, force-pushed: an open PR for an older Chrome
+      # moves to the newest one and does not go stale behind a second PR.
+      - name: Open or update a PR per stale branch
+        id: pr
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          INSTALLER: backend/onyx/server/features/build/sandbox/image/install-browser.sh
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          # Main's copy of the script pins every branch, so a release line never
+          # has to carry it.
+          heads="$(git ls-remote --heads origin 'refs/heads/release/v*')"
+          mapfile -t bases < <(awk '{ sub("refs/heads/", "", $2); print $2 }' <<< "${heads}" | sort -V | tail -4)
+          bases=(main "${bases[@]}")
+
+          targets=()
+          files=()
+          for base in "${bases[@]}"; do
+            dir="${RUNNER_TEMP}/bases/${base}"
+            git fetch --depth=1 --quiet origin "${base}"
+            git worktree add --quiet --detach "${dir}" FETCH_HEAD
+            # A line cut before the sandbox shipped a browser has nothing to pin.
+            if [ ! -f "${dir}/${INSTALLER}" ]; then
+              continue
+            fi
+            targets+=("${base}")
+            files+=("${dir}/${INSTALLER}")
+          done
+
+          version="$(.github/scripts/update-sandbox-browser.sh "${files[@]}")"
+          if [ -z "${version}" ]; then
+            echo "Every branch pins the current stable Chrome. Nothing to do."
+            exit 0
+          fi
+
+          title="chore(deps): update sandbox Chrome to ${version}"
+          reviewer="$(jq -r '.[]' .github/actions/slack-notify/cve-reviewers.json | shuf -n 1)"
+          pr_links=""
+          for base in "${targets[@]}"; do
+            dir="${RUNNER_TEMP}/bases/${base}"
+            if git -C "${dir}" diff --quiet; then
+              echo "${base} already pins ${version}, skipping."
+              continue
+            fi
+
+            # The title names the version, so an open PR with this title already
+            # carries these pins. A push would only retrigger its CI.
+            branch="auto/sandbox-browser/${base}"
+            existing="$(gh pr list --state open --base "${base}" --head "${branch}" --json number,title --jq '.[0] // empty')"
+            if [ "$(jq -r '.title // ""' <<< "${existing}")" = "${title}" ]; then
+              echo "${base} already has #$(jq -r .number <<< "${existing}") open for ${version}, skipping."
+              continue
+            fi
+
+            git -C "${dir}" commit --quiet --all -m "${title}"
+            # Pushed from the main checkout, which holds the App credentials.
+            git push --force origin "$(git -C "${dir}" rev-parse HEAD):refs/heads/${branch}"
+
+            {
+              echo "Generated by the [Update Sandbox Browser workflow run](${RUN_URL})."
+              echo
+              echo "Pins the sandbox image's Chrome for Testing to ${version}, the current stable release, with the SHA-256 of both Linux archives."
+              echo
+              echo "The deploy audit gate fails every build from \`${base}\` until this merges."
+            } > "${RUNNER_TEMP}/pr-body.md"
+
+            if [ -n "${existing}" ]; then
+              gh pr edit "${branch}" --title "${title}" --body-file "${RUNNER_TEMP}/pr-body.md"
+            else
+              gh pr create --base "${base}" --head "${branch}" --title "${title}" --body-file "${RUNNER_TEMP}/pr-body.md"
+            fi
+            pr_url="$(gh pr view "${branch}" --json url --jq .url)"
+            gh pr edit "${pr_url}" --add-reviewer "${reviewer}" \
+              || echo "::warning::Could not request review on ${pr_url}"
+            pr_links+="<${pr_url}|Chrome ${version} on ${base}> "
+          done
+
+          echo "links=${pr_links}" >> "${GITHUB_OUTPUT}"
+          echo "reviewer=${reviewer}" >> "${GITHUB_OUTPUT}"
+
+      - name: Notify Slack about PRs ready for review
+        if: steps.pr.outputs.links != ''
+        continue-on-error: true
+        uses: ./.github/actions/slack-post-message
+        with:
+          bot-token: ${{ secrets.CVE_REVIEWS_BOT_TOKEN }}
+          channel: C0C6T9W2U3X # #ai-pr-reviews
+          text: "{mention} Please review ${{ steps.pr.outputs.links }}. The deploy audit gate fails until these merge."
+          mention: ${{ steps.pr.outputs.reviewer }}
+
+  notify-slack-on-failure:
+    needs:
+      - update-sandbox-browser
+    if: always() && needs.update-sandbox-browser.result == 'failure'
+    runs-on: ubuntu-latest
+    environment: ci-protected
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/actions/slack-notify
+
+      - name: Notify Slack about update failure
+        uses: ./.github/actions/slack-notify
+        with:
+          webhook-url: ${{ secrets.MONITOR_DEPLOYMENTS_WEBHOOK }}
+          title: "🚨 Update Sandbox Browser workflow failed"
+          details: "*The sandbox Chrome pin could not be refreshed.* The deploy audit gate fails while the pin is stale. Check the run logs."

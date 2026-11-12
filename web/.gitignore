@@ -48,5 +48,5 @@ next-env.d.ts
 /src/lib/generated
 .jest-cache
 
-# storybook
-storybook-static
+# Generated from the installed PDF.js package before dev and production builds.
+/public/pdfjs/

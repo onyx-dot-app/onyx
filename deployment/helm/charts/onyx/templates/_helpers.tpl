@@ -85,6 +85,41 @@ Create the name of the service account to use
 {{- end }}
 
 {{/*
+"true" when the api-server runs as its own service account with read access to
+pods, pod logs, and events for the admin log export. dig: a --reuse-values
+upgrade from a release without logExport.kubernetes keeps it off.
+*/}}
+{{- define "onyx.logExportKubernetesEnabled" -}}
+{{- if eq (toString (dig "kubernetes" "enabled" false (.Values.logExport | default dict))) "true" -}}true{{- end -}}
+{{- end }}
+
+{{/*
+The api-server's service account: a dedicated one when the log export reads the
+Kubernetes API, so no other Onyx pod gets that access.
+*/}}
+{{- define "onyx.apiServerServiceAccountName" -}}
+{{- if eq (include "onyx.logExportKubernetesEnabled" .) "true" -}}
+{{- include "onyx.resourceName" (list . "api-server") -}}
+{{- else -}}
+{{- include "onyx.serviceAccountName" . -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+Render a container securityContext. Kubernetes rejects
+allowPrivilegeEscalation=false alongside privileged or CAP_SYS_ADMIN, so the
+default is dropped when an override asks for either.
+*/}}
+{{- define "onyx.containerSecurityContext" -}}
+{{- $sc := deepCopy (. | default dict) -}}
+{{- $added := (get ($sc.capabilities | default dict) "add") | default list -}}
+{{- if or $sc.privileged (has "SYS_ADMIN" $added) (has "CAP_SYS_ADMIN" $added) -}}
+{{- $_ := unset $sc "allowPrivilegeEscalation" -}}
+{{- end -}}
+{{- toYaml $sc -}}
+{{- end }}
+
+{{/*
 Set secret name
 */}}
 {{- define "onyx.secretName" -}}
@@ -237,10 +272,173 @@ Return the configured autoscaling engine; defaults to HPA when unset.
 {{- end }}
 
 {{/*
-"true" when ENABLE_CRAFT is set in configMap, empty otherwise.
+Validate the firewall switch without treating false as an absent value.
 */}}
+{{- define "onyx.sandboxNetAdminLockdown" -}}
+{{- $sandboxPod := .Values.sandboxPod | default dict -}}
+{{- if hasKey $sandboxPod "netAdminLockdown" -}}
+{{- if not (kindIs "bool" $sandboxPod.netAdminLockdown) -}}
+{{- fail "sandboxPod.netAdminLockdown must be a boolean" -}}
+{{- end -}}
+{{- $sandboxPod.netAdminLockdown -}}
+{{- else -}}
+true
+{{- end -}}
+{{- end -}}
+
+{{/* "true" when ENABLE_CRAFT is set in configMap, empty otherwise. */}}
 {{- define "onyx.craftEnabled" -}}
 {{- if eq (toString (index .Values.configMap "ENABLE_CRAFT" | default "")) "true" -}}true{{- end -}}
+{{- end }}
+
+{{/* craft.sandboxRuntime: "pod" (default) or "firecracker". Mirrors Terraform craft_sandbox_runtime. */}}
+{{- define "onyx.craftSandboxRuntime" -}}
+{{- $runtime := lower (toString ((.Values.craft | default dict).sandboxRuntime | default "pod")) -}}
+{{- if not (has $runtime (list "pod" "firecracker")) -}}
+{{- fail (printf "craft.sandboxRuntime must be \"pod\" or \"firecracker\", not %q" $runtime) -}}
+{{- end -}}
+{{- $runtime -}}
+{{- end }}
+
+{{/* Tolerations (default: the sandbox tolerations) plus the onyx.app/kvm taint
+that Terraform puts on Firecracker nodes (kubelet does not count VM memory).
+Only the host agent and the preflight use this; pod sandboxes and the
+prepuller must not. Call with (dict "ctx" $ "tolerations" $list). */}}
+{{- define "onyx.craftKvmNodeTolerations" -}}
+{{- $sandboxPod := .ctx.Values.sandboxPod | default dict -}}
+{{- $base := .tolerations | default (index $sandboxPod "tolerations") | default (list (dict "key" "workload" "operator" "Equal" "value" "sandbox" "effect" "NoSchedule")) -}}
+{{- $out := list -}}
+{{- $hasKvm := false -}}
+{{- range $base -}}
+{{- $out = append $out . -}}
+{{- $effectMatches := has (toString (.effect | default "")) (list "" "NoSchedule") -}}
+{{- $exists := eq (toString .operator) "Exists" -}}
+{{- $keyMatches := and (eq (toString .key) "onyx.app/kvm") (or $exists (eq (toString .value) "true")) -}}
+{{- if and $effectMatches (or $keyMatches (and (not .key) $exists)) -}}{{- $hasKvm = true -}}{{- end -}}
+{{- end -}}
+{{- if not $hasKvm -}}
+{{- $out = append $out (dict "key" "onyx.app/kvm" "operator" "Equal" "value" "true" "effect" "NoSchedule") -}}
+{{- end -}}
+{{- toYaml $out -}}
+{{- end }}
+
+{{/* Fails when sandboxPod.tolerations would let pod sandboxes onto the
+onyx.app/kvm nodes: that key, or an Exists toleration without a key. */}}
+{{- define "onyx.craftCheckSandboxTolerations" -}}
+{{- if eq (include "onyx.craftSandboxRuntime" .) "firecracker" -}}
+{{- range (index (.Values.sandboxPod | default dict) "tolerations" | default list) -}}
+{{- $effectMatches := has (toString (.effect | default "")) (list "" "NoSchedule") -}}
+{{- if and $effectMatches (or (eq (toString .key) "onyx.app/kvm") (and (not .key) (eq (toString .operator) "Exists"))) -}}
+{{- fail "sandboxPod.tolerations must not tolerate the onyx.app/kvm taint (key onyx.app/kvm, or operator Exists without a key) with craft.sandboxRuntime=firecracker: pod sandboxes must stay off the Firecracker nodes" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end }}
+
+{{/* Prometheus job label of the host agent series (alert rules, dashboard).
+The value goes into PromQL and JSON strings unescaped, so only plain characters pass. */}}
+{{- define "onyx.craftHostAgentMetricsJob" -}}
+{{- $job := (dig "hostAgent" "metrics" "job" "" (.Values.craft | default dict)) | default (include "onyx.resourceName" (list . "craft-fc-host-agent")) -}}
+{{- if not (regexMatch "^[A-Za-z0-9_.:/-]+$" $job) -}}
+{{- fail "craft.hostAgent.metrics.job may only have letters, digits and _ . : / -" -}}
+{{- end -}}
+{{- $job -}}
+{{- end }}
+
+{{/*
+Increase of a counter selector over a window, for alert rules. A labeled
+counter series starts at its first event, and increase() does not count that
+event, so a series with no sample in the hour before the window gives its
+full value. The hour keeps a short scrape gap from making an old series new.
+Input: (list "<selector>" "<window>").
+*/}}
+{{- define "onyx.craftFcCounterIncrease" -}}
+{{- $x := index . 0 -}}
+{{- $w := index . 1 -}}
+(({{ $x }} unless present_over_time({{ $x }}[1h] offset {{ $w }})) or increase({{ $x }}[{{ $w }}]))
+{{- end }}
+
+{{- define "onyx.craftHostAgentNamespace" -}}
+{{- (dig "hostAgent" "namespace" "" (.Values.craft | default dict)) | default "onyx-sandbox-runtime" -}}
+{{- end }}
+
+{{/*
+Craft Firecracker host agent /metrics auth, the same rules as the api_server
+/metrics: "disabled" with configMap.DISABLE_METRICS_AUTH=true, "token" with
+auth.metricsAuth.enabled, else "locked" (every scrape gets 401).
+*/}}
+{{- define "onyx.craftHostAgentMetricsAuth" -}}
+{{- $metricsAuth := (.Values.auth | default dict).metricsAuth | default dict -}}
+{{- if eq (lower (toString ((.Values.configMap | default dict).DISABLE_METRICS_AUTH | default ""))) "true" -}}
+disabled
+{{- else if dig "enabled" false $metricsAuth -}}
+token
+{{- else -}}
+locked
+{{- end -}}
+{{- end }}
+
+{{/*
+mTLS client of the Craft Firecracker host agents, for the pods that call them:
+api_server, and the heavy (VM reconcile) and scheduled-tasks workers. Empty
+unless craft.sandboxRuntime=firecracker. Env names: backend/onyx/microvm/configs.py.
+*/}}
+{{- define "onyx.craftFcAgentClient.secretName" -}}
+{{- if eq (include "onyx.craftSandboxRuntime" .) "firecracker" -}}
+{{- $name := dig "hostAgent" "client" "existingSecret" "" (.Values.craft | default dict) -}}
+{{- if not $name -}}
+{{- fail "craft.hostAgent.client.existingSecret is required with craft.sandboxRuntime=firecracker" -}}
+{{- end -}}
+{{- $name -}}
+{{- end -}}
+{{- end }}
+
+{{- define "onyx.craftFcAgentClient.env" -}}
+{{- if include "onyx.craftFcAgentClient.secretName" . -}}
+- name: SANDBOX_FC_AGENT_CLIENT_CERT_PATH
+  value: /etc/onyx/craft-fc-agent-client/tls.crt
+- name: SANDBOX_FC_AGENT_CLIENT_KEY_PATH
+  value: /etc/onyx/craft-fc-agent-client/tls.key
+- name: SANDBOX_FC_AGENT_CA_PATH
+  value: /etc/onyx/craft-fc-agent-client/ca.crt
+{{- with dig "hostAgent" "client" "tlsServerName" "" (.Values.craft | default dict) }}
+- name: SANDBOX_FC_AGENT_TLS_SERVER_NAME
+  value: {{ . | quote }}
+{{- end }}
+{{- end -}}
+{{- end }}
+
+{{/* YAML lists, for concat with the pod's own volumeMounts and volumes. */}}
+{{- define "onyx.craftFcAgentClient.volumeMounts" -}}
+{{- if include "onyx.craftFcAgentClient.secretName" . -}}
+- name: craft-fc-agent-client
+  mountPath: /etc/onyx/craft-fc-agent-client
+  readOnly: true
+{{- end -}}
+{{- end }}
+
+{{- define "onyx.craftFcAgentClient.volumes" -}}
+{{- with include "onyx.craftFcAgentClient.secretName" . -}}
+- name: craft-fc-agent-client
+  secret:
+    secretName: {{ . }}
+    defaultMode: 0440
+{{- end -}}
+{{- end }}
+
+{{/*
+Key of the metrics token in auth.metricsAuth's Secret; the agent namespace
+copy uses the same key.
+*/}}
+{{- define "onyx.craftHostAgentMetricsKey" -}}
+{{- default "METRICS_AUTH_TOKEN" (dig "secretKeys" "METRICS_AUTH_TOKEN" "" ((.Values.auth | default dict).metricsAuth | default dict)) -}}
+{{- end }}
+
+{{/*
+Secret with the metrics token in the agent namespace (Secrets are namespaced).
+*/}}
+{{- define "onyx.craftHostAgentMetricsSecret" -}}
+{{- (dig "hostAgent" "metrics" "authExistingSecret" "" (.Values.craft | default dict)) | default (printf "%s-metrics-auth" (include "onyx.resourceName" (list . "craft-fc-host-agent"))) -}}
 {{- end }}
 
 {{/*
@@ -255,6 +453,11 @@ invisible (the DaemonSet looks healthy while every sandbox still cold-pulls).
 
 {{- define "onyx.sandboxImagePullPolicy" -}}
 {{- (index .Values.configMap "SANDBOX_IMAGE_PULL_POLICY") | default .Values.global.pullPolicy -}}
+{{- end }}
+
+{{/* Sandbox callbacks stay inside Kubernetes unless the operator sets a URL. */}}
+{{- define "onyx.sandboxApiUrl" -}}
+{{- (index .Values.configMap "ONYX_SERVER_URL") | default (printf "http://%s.%s.svc.cluster.local:%v" (include "onyx.resourceName" (list . "api-service")) .Release.Namespace (.Values.api.service.servicePort | default 8080)) -}}
 {{- end }}
 
 {{- define "onyx.sandboxProxyHost" -}}
@@ -276,8 +479,9 @@ invisible (the DaemonSet looks healthy while every sandbox still cold-pulls).
 - { name: HTTP_PROXY, value: "{{ $proxyUrl }}" }
 - { name: https_proxy, value: "{{ $proxyUrl }}" }
 - { name: http_proxy, value: "{{ $proxyUrl }}" }
-- { name: NO_PROXY, value: "127.0.0.1,localhost" }
-- { name: no_proxy, value: "127.0.0.1,localhost" }
+- { name: NO_PROXY, value: "127.0.0.1,localhost,::1,[::1]" }
+- { name: no_proxy, value: "127.0.0.1,localhost,::1,[::1]" }
+- { name: NODE_USE_ENV_PROXY, value: "1" }
 - { name: NODE_EXTRA_CA_CERTS, value: "{{ .caBundleFile }}" }
 - { name: REQUESTS_CA_BUNDLE, value: "{{ .caBundleFile }}" }
 - { name: SSL_CERT_FILE, value: "{{ .caBundleFile }}" }
@@ -578,5 +782,217 @@ volumes:
 {{- if $redisTls }}
 {{ $redisTls | nindent 2 }}
 {{- end }}
+{{- end -}}
+{{- end }}
+
+{{/* Set = used as-is, empty = chart default, null = no probe (Helm drops null keys). */}}
+{{- define "onyx.readinessProbe" -}}
+{{- if hasKey .values "readinessProbe" }}
+{{- with (.values.readinessProbe | default (merge (dict "periodSeconds" 10 "timeoutSeconds" 5 "failureThreshold" 3) .handler)) }}
+readinessProbe:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{/* Native sleep action: the web image has no shell or sleep binary. */}}
+{{- define "onyx.preStopSleep" -}}
+{{- $seconds := int (.values.preStopSleepSeconds | default 0) }}
+{{- if and (gt $seconds 0) (semverCompare ">=1.30.0-0" .ctx.Capabilities.KubeVersion.Version) }}
+lifecycle:
+  preStop:
+    sleep:
+      seconds: {{ $seconds }}
+{{- end }}
+{{- end }}
+
+{{/*
+Whether the chart runs the bundled object store. Unset follows minio.enabled, so
+an install on external object storage (minio.enabled: false) is left as it is.
+*/}}
+{{- define "onyx.objectStore.enabled" -}}
+{{- $objectStore := .Values.objectStore | default dict -}}
+{{- if kindIs "bool" $objectStore.enabled -}}
+{{- $objectStore.enabled -}}
+{{- else -}}
+{{- .Values.minio.enabled | default false -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+objectStore values over the defaults below. `helm upgrade --reuse-values` swaps
+the chart's values.yaml for the old release's values, which have no objectStore,
+so the templates must not depend on values.yaml for these keys.
+*/}}
+{{- define "onyx.objectStore.values" -}}
+{{- $minioPersistence := .Values.minio.persistence | default dict -}}
+{{- $defaults := dict
+  "image" (dict "repository" "chrislusf/seaweedfs" "tag" "4.47@sha256:ce9e796f1fe6f06968f4c04bdaf8f678dad9c8acdfef3d244133d71bfa6bf882" "pullPolicy" "IfNotPresent")
+  "service" (dict "port" 8333)
+  "persistence" (dict "size" (dig "size" "30Gi" $minioPersistence) "storageClass" (dig "storageClass" "" $minioPersistence) "annotations" dict)
+  "resources" (dict "requests" (dict "cpu" "100m" "memory" "256Mi") "limits" (dict "memory" "2Gi"))
+  "podSecurityContext" (dict "runAsNonRoot" true "runAsUser" 1000 "runAsGroup" 1000 "fsGroup" 1000 "fsGroupChangePolicy" "OnRootMismatch" "seccompProfile" (dict "type" "RuntimeDefault"))
+  "securityContext" (dict "allowPrivilegeEscalation" false "readOnlyRootFilesystem" true "capabilities" (dict "drop" (list "ALL")))
+  "podAnnotations" dict
+  "podLabels" dict
+  "nodeSelector" dict
+  "tolerations" list
+  "affinity" dict
+  "priorityClassName" ""
+  "legacyCopy" (dict "enabled" true "settleSeconds" 600 "workers" 16 "backoffLimit" 20 "resources" (dict "requests" (dict "cpu" "100m" "memory" "256Mi") "limits" (dict "memory" "1Gi")) "nodeSelector" dict "tolerations" list "affinity" dict)
+-}}
+{{- $user := .Values.objectStore | default dict -}}
+{{- $merged := mergeOverwrite $defaults (deepCopy $user) -}}
+{{- /* A merge cannot clear a default, and OpenShift needs podSecurityContext: {}. */ -}}
+{{- range $key := list "podSecurityContext" "securityContext" "resources" -}}
+{{- if hasKey $user $key -}}
+{{- $_ := set $merged $key (get $user $key) -}}
+{{- end -}}
+{{- end -}}
+{{- $userCopy := $user.legacyCopy | default dict -}}
+{{- if hasKey $userCopy "resources" -}}
+{{- $_ := set $merged.legacyCopy "resources" $userCopy.resources -}}
+{{- end -}}
+{{- toYaml $merged -}}
+{{- end }}
+
+{{/* The bundled object store's Service name and S3 endpoint. */}}
+{{- define "onyx.objectStore.endpoint" -}}
+{{- $objectStore := include "onyx.objectStore.values" . | fromYaml -}}
+{{- printf "http://%s:%v" (include "onyx.resourceName" (list . "object-store")) $objectStore.service.port -}}
+{{- end }}
+
+{{/*
+Holds a pod until the bundled object store's Service answers, so the api's
+startup bucket check and the legacy copy do not crash-loop while it starts.
+Uses the app image and the guarded container's resources and securityContext,
+so mirrors, admission and the pod's request stay the same. It renders into the
+legacy copy pod, so any edit here reruns the copy.
+*/}}
+{{- define "onyx.objectStore.waitInitContainer" -}}
+{{- $ctx := .ctx -}}
+- name: wait-for-object-store
+  image: "{{ $ctx.Values.api.image.repository }}:{{ $ctx.Values.api.image.tag | default $ctx.Values.global.version }}"
+  imagePullPolicy: {{ $ctx.Values.global.pullPolicy }}
+  command:
+    - python
+    - -c
+    - |
+      import http.client
+      import time
+      import urllib.request
+      url = "{{ include "onyx.objectStore.endpoint" $ctx }}/healthz"
+      while True:
+          try:
+              urllib.request.urlopen(url, timeout=5).close()
+              break
+          except (OSError, http.client.HTTPException) as e:
+              print(f"Waiting for the object store at {url}: {e}", flush=True)
+              time.sleep(3)
+  resources:
+    {{- toYaml .resources | nindent 4 }}
+  securityContext:
+    {{- include "onyx.containerSecurityContext" .securityContext | nindent 4 }}
+{{- end }}
+
+{{/* The app's S3 key pair, which is also the object store's admin identity. */}}
+{{- define "onyx.objectStore.credentialEnv" -}}
+{{- $auth := .Values.auth.objectstorage -}}
+- name: AWS_ACCESS_KEY_ID
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "onyx.secretName" $auth }}
+      key: {{ $auth.secretKeys.S3_AWS_ACCESS_KEY_ID | default "s3_aws_access_key_id" }}
+- name: AWS_SECRET_ACCESS_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "onyx.secretName" $auth }}
+      key: {{ $auth.secretKeys.S3_AWS_SECRET_ACCESS_KEY | default "s3_aws_secret_access_key" }}
+{{- end }}
+
+{{/*
+The legacy-minio-copy Job's pod. Scheduling falls back to api's. The Job is named
+by this template's hash, so comments here are template comments, or a reworded
+comment would rerun the copy.
+*/}}
+{{- define "onyx.objectStore.legacyCopyPod" -}}
+{{- $ctx := .ctx -}}
+{{- $copy := .copy -}}
+{{- /* Without the chart version, so a chart-only upgrade keeps the same Job name. */ -}}
+metadata:
+  labels:
+    {{- include "onyx.selectorLabels" $ctx | nindent 4 }}
+    app: legacy-minio-copy
+spec:
+  restartPolicy: OnFailure
+  {{- with $ctx.Values.imagePullSecrets }}
+  imagePullSecrets:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  serviceAccountName: {{ include "onyx.serviceAccountName" $ctx }}
+  securityContext:
+    {{- toYaml $ctx.Values.api.podSecurityContext | nindent 4 }}
+  {{- with ($copy.nodeSelector | default $ctx.Values.api.nodeSelector) }}
+  nodeSelector:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with ($copy.affinity | default $ctx.Values.api.affinity) }}
+  affinity:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with ($copy.tolerations | default $ctx.Values.api.tolerations) }}
+  tolerations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- /* Waiting here keeps the copy's retries for real copy failures. */}}
+  initContainers:
+    {{- include "onyx.objectStore.waitInitContainer" (dict "ctx" $ctx "resources" $copy.resources "securityContext" $ctx.Values.api.securityContext) | nindent 4 }}
+  containers:
+    - name: legacy-minio-copy
+      image: "{{ $ctx.Values.api.image.repository }}:{{ $ctx.Values.api.image.tag | default $ctx.Values.global.version }}"
+      imagePullPolicy: {{ $ctx.Values.global.pullPolicy }}
+      command: ["python", "-m", "onyx.file_store.legacy_copy"]
+      {{- /* The same config and secrets as the app, so the copy reaches both stores as it does. */}}
+      envFrom:
+        - configMapRef:
+            name: {{ $ctx.Values.config.envConfigMapName }}
+        {{- with $ctx.Values.extraEnvFromSecret }}
+        - secretRef:
+            name: {{ . }}
+        {{- end }}
+      env:
+        {{- include "onyx.envSecrets" $ctx | nindent 8 }}
+        {{- with include "onyx.customCACerts.env" $ctx }}
+        {{- . | nindent 8 }}
+        {{- end }}
+        {{- with $ctx.Values.api.extraEnv }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        - name: LEGACY_COPY_SETTLE_SECONDS
+          value: {{ $copy.settleSeconds | quote }}
+        - name: LEGACY_COPY_WORKERS
+          value: {{ $copy.workers | quote }}
+      resources:
+        {{- toYaml $copy.resources | nindent 8 }}
+      securityContext:
+        {{- include "onyx.containerSecurityContext" $ctx.Values.api.securityContext | nindent 8 }}
+      {{- /* The api's files too, such as a CA bundle its extraEnv points at. */}}
+      {{- $tmpMount := dict "name" "tmp" "mountPath" "/tmp" }}
+      {{- include "onyx.renderVolumeMounts" (dict "ctx" $ctx "volumeMounts" (prepend ($ctx.Values.api.volumeMounts | default list) $tmpMount)) | nindent 6 }}
+  {{- $tmpVolume := dict "name" "tmp" "emptyDir" dict }}
+  {{- include "onyx.renderVolumes" (dict "ctx" $ctx "volumes" (prepend ($ctx.Values.api.volumes | default list) $tmpVolume)) | nindent 2 }}
+{{- end }}
+
+{{/*
+The legacy-minio-copy Job's name, empty when the Job does not render. The name
+changes with the pod template or retry limit, since a Job's pod template is
+immutable.
+*/}}
+{{- define "onyx.objectStore.legacyCopyJobName" -}}
+{{- $objectStore := include "onyx.objectStore.values" . | fromYaml -}}
+{{- if and (eq (include "onyx.objectStore.enabled" .) "true") .Values.minio.enabled $objectStore.legacyCopy.enabled -}}
+{{- $copy := $objectStore.legacyCopy -}}
+{{- $podTemplate := include "onyx.objectStore.legacyCopyPod" (dict "ctx" . "copy" $copy) -}}
+{{- printf "%s-%s" (include "onyx.resourceName" (list . "legacy-minio-copy") | trunc 54 | trimSuffix "-") (printf "%s\n%v" $podTemplate $copy.backoffLimit | sha256sum | trunc 8) -}}
 {{- end -}}
 {{- end }}

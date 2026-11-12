@@ -1,6 +1,6 @@
 {
   "name": "onyx-chat-widget",
-  "version": "1.0.0",
+  "version": "1.1.1",
   "description": "Embeddable chat widget for Onyx",
   "type": "module",
   "main": "dist/onyx-widget.js",
@@ -14,10 +14,11 @@
     "build:cloud": "vite build --mode production",
     "build:self-hosted": "vite build --mode self-hosted",
     "preview": "vite preview",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "test": "bun test tests"
   },
   "dependencies": {
-    "dompurify": "^3.4.14",
+    "dompurify": "3.4.17",
     "lit": "^3.1.0",
     "marked": "^18.0.11",
     "terser": "^5.51.2"

@@ -40,8 +40,8 @@ resource "onyx_llm_provider" "openai" {
 
   # The complete set of enabled models: anything omitted is removed on apply.
   model_configurations = [
-    { name = "gpt-5" },
-    { name = "gpt-5-mini" },
+    { name = "gpt-6-sol" },
+    { name = "gpt-6-luna" },
   ]
 }
 
@@ -49,7 +49,7 @@ resource "onyx_llm_provider" "openai" {
 # released before the provider holding it is deleted.
 resource "onyx_llm_provider_default" "this" {
   provider_id = onyx_llm_provider.openai.id
-  model_name  = "gpt-5"
+  model_name  = "gpt-6-sol"
 }
 
 # ---------------------------------------------------------------------------

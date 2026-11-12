@@ -1,9 +1,14 @@
 import {
-  DEFAULT_ONYX_DOMAIN,
   CHROME_SPECIFIC_STORAGE_KEYS,
   ACTIONS,
   SIDE_PANEL_PATH,
 } from "./src/utils/constants.js";
+import {
+  getOnyxDomain,
+  getUseOnyxAsDefaultNewTab,
+  setUseOnyxAsDefaultNewTab,
+  isNewTabOverrideChange,
+} from "./src/utils/storage.js";
 
 // Track side panel state per window
 const sidePanelOpenState = new Map();
@@ -52,12 +57,8 @@ async function sendToOnyx(info, tab) {
   const currentUrl = encodeURIComponent(tab.url);
 
   try {
-    const result = await chrome.storage.local.get({
-      [CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN]: DEFAULT_ONYX_DOMAIN,
-    });
-    const url = `${
-      result[CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN]
-    }${SIDE_PANEL_PATH}?user-prompt=${selectedText}`;
+    const domain = await getOnyxDomain();
+    const url = `${domain}${SIDE_PANEL_PATH}?user-prompt=${selectedText}`;
 
     await openSidePanel(tab.id);
     chrome.runtime.sendMessage({
@@ -72,14 +73,12 @@ async function sendToOnyx(info, tab) {
 
 async function toggleNewTabOverride() {
   try {
-    const result = await chrome.storage.local.get(
-      CHROME_SPECIFIC_STORAGE_KEYS.USE_ONYX_AS_DEFAULT_NEW_TAB
-    );
-    const newValue =
-      !result[CHROME_SPECIFIC_STORAGE_KEYS.USE_ONYX_AS_DEFAULT_NEW_TAB];
-    await chrome.storage.local.set({
-      [CHROME_SPECIFIC_STORAGE_KEYS.USE_ONYX_AS_DEFAULT_NEW_TAB]: newValue,
-    });
+    const newValue = !(await getUseOnyxAsDefaultNewTab());
+    const updated = await setUseOnyxAsDefaultNewTab(newValue);
+    if (!updated) {
+      console.warn("New tab override is managed by policy; ignoring toggle");
+      return;
+    }
 
     chrome.notifications.create({
       type: "basic",
@@ -176,28 +175,16 @@ async function sendActiveTabUrlToPanel() {
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === ACTIONS.GET_CURRENT_ONYX_DOMAIN) {
-    chrome.storage.local.get(
-      { [CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN]: DEFAULT_ONYX_DOMAIN },
-      (result) => {
-        sendResponse({
-          [CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN]:
-            result[CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN],
-        });
-      }
-    );
+    getOnyxDomain().then((domain) => {
+      sendResponse({ [CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN]: domain });
+    });
     return true;
   }
   if (request.action === ACTIONS.CLOSE_SIDE_PANEL) {
     closeSidePanel();
-    chrome.storage.local.get(
-      { [CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN]: DEFAULT_ONYX_DOMAIN },
-      (result) => {
-        chrome.tabs.create({
-          url: `${result[CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN]}/auth/login`,
-          active: true,
-        });
-      }
-    );
+    getOnyxDomain().then((domain) => {
+      chrome.tabs.create({ url: `${domain}/auth/login`, active: true });
+    });
     return true;
   }
   if (request.action === ACTIONS.OPEN_SIDE_PANEL_WITH_INPUT) {
@@ -206,38 +193,34 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const windowId = sender.tab?.windowId;
 
     if (tabId && windowId) {
-      chrome.storage.local.get(
-        { [CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN]: DEFAULT_ONYX_DOMAIN },
-        (result) => {
-          const encodedText = encodeUserPrompt(selectedText);
-          const onyxDomain = result[CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN];
-          const url = `${onyxDomain}${SIDE_PANEL_PATH}?user-prompt=${encodedText}`;
+      getOnyxDomain().then((onyxDomain) => {
+        const encodedText = encodeUserPrompt(selectedText);
+        const url = `${onyxDomain}${SIDE_PANEL_PATH}?user-prompt=${encodedText}`;
 
-          chrome.storage.session.set({
-            pendingInput: {
+        chrome.storage.session.set({
+          pendingInput: {
+            url: url,
+            pageUrl: pageUrl,
+            timestamp: Date.now(),
+          },
+        });
+
+        chrome.sidePanel
+          .open({ windowId })
+          .then(() => {
+            chrome.runtime.sendMessage({
+              action: ACTIONS.OPEN_ONYX_WITH_INPUT,
               url: url,
               pageUrl: pageUrl,
-              timestamp: Date.now(),
-            },
-          });
-
-          chrome.sidePanel
-            .open({ windowId })
-            .then(() => {
-              chrome.runtime.sendMessage({
-                action: ACTIONS.OPEN_ONYX_WITH_INPUT,
-                url: url,
-                pageUrl: pageUrl,
-              });
-            })
-            .catch((error) => {
-              console.error(
-                "[Onyx SW] Error opening side panel with text:",
-                error
-              );
             });
-        }
-      );
+          })
+          .catch((error) => {
+            console.error(
+              "[Onyx SW] Error opening side panel with text:",
+              error
+            );
+          });
+      });
     } else {
       console.error("[Onyx SW] Missing tabId or windowId");
     }
@@ -255,15 +238,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 chrome.storage.onChanged.addListener((changes, namespace) => {
-  if (
-    namespace === "local" &&
-    changes[CHROME_SPECIFIC_STORAGE_KEYS.USE_ONYX_AS_DEFAULT_NEW_TAB]
-  ) {
+  if (isNewTabOverrideChange(changes, namespace)) {
     const newValue =
       changes[CHROME_SPECIFIC_STORAGE_KEYS.USE_ONYX_AS_DEFAULT_NEW_TAB]
         .newValue;
 
-    if (newValue === false) {
+    if (namespace === "local" && newValue === false) {
       chrome.runtime.openOptionsPage();
     }
   }
@@ -279,11 +259,7 @@ chrome.omnibox.setDefaultSuggestion({
 
 chrome.omnibox.onInputEntered.addListener(async (text) => {
   try {
-    const result = await chrome.storage.local.get({
-      [CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN]: DEFAULT_ONYX_DOMAIN,
-    });
-
-    const domain = result[CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN];
+    const domain = await getOnyxDomain();
     const searchUrl = `${domain}/chat?user-prompt=${encodeURIComponent(text)}`;
 
     chrome.tabs.update({ url: searchUrl });

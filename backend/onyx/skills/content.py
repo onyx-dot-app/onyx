@@ -1,5 +1,8 @@
 """Helpers for reading skill source content."""
 
+from collections.abc import Iterator
+from pathlib import Path
+
 from onyx.db.models import Skill
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -11,6 +14,20 @@ from onyx.skills.bundle import (
     read_custom_bundle_instructions,
     strip_skill_md_frontmatter,
 )
+from onyx.skills.validation import read_stored_bundle_bytes
+
+
+def iter_builtin_skill_files(source_dir: Path) -> Iterator[Path]:
+    """Yield source files, excluding hidden paths and Python caches."""
+    for path in sorted(source_dir.rglob("*")):
+        if not path.is_file():
+            continue
+        if any(
+            part == "__pycache__" or part.startswith(".")
+            for part in path.relative_to(source_dir).parts
+        ):
+            continue
+        yield path
 
 
 def read_builtin_skill_instructions(definition: BuiltInSkillDefinition) -> str:
@@ -50,7 +67,9 @@ def read_custom_skill_bundle_bytes(
         )
     store = file_store or get_default_file_store()
     try:
-        bundle_bytes = store.read_file(skill.bundle_file_id).read()
+        bundle_bytes = read_stored_bundle_bytes(skill.bundle_file_id, store)
+    except OnyxError:
+        raise
     except Exception as exc:
         raise OnyxError(
             OnyxErrorCode.INTERNAL_ERROR,

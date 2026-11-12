@@ -41,17 +41,17 @@ type userGroupResource struct {
 }
 
 type userGroupResourceModel struct {
-	ID               types.String   `tfsdk:"id"`
-	Name             types.String   `tfsdk:"name"`
 	UserIDs          types.Set      `tfsdk:"user_ids"`
 	ManagerIDs       types.Set      `tfsdk:"manager_ids"`
 	Permissions      types.Set      `tfsdk:"permissions"`
-	IncognitoEnabled types.Bool     `tfsdk:"incognito_enabled"`
 	CCPairIDs        types.Set      `tfsdk:"cc_pair_ids"`
 	DocumentSetIDs   types.Set      `tfsdk:"document_set_ids"`
 	AgentIDs         types.Set      `tfsdk:"agent_ids"`
-	IsDefault        types.Bool     `tfsdk:"is_default"`
+	ID               types.String   `tfsdk:"id"`
+	Name             types.String   `tfsdk:"name"`
 	Timeouts         timeouts.Value `tfsdk:"timeouts"`
+	IncognitoEnabled types.Bool     `tfsdk:"incognito_enabled"`
+	IsDefault        types.Bool     `tfsdk:"is_default"`
 }
 
 func (r *userGroupResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -421,41 +421,37 @@ func (r *userGroupResource) Delete(ctx context.Context, req resource.DeleteReque
 	}
 }
 
+// maxUserGroupDeleteAttempts bounds the retries when a delete meets the sync
+// gate. Each attempt first waits for the group to settle.
+const maxUserGroupDeleteAttempts = 5
+
 // deleteUserGroup asks Onyx to delete the group and reports whether it had
 // already gone.
 //
-// The delete passes through the sync gate, and the route funnels every
-// ValueError into not-found — the gate's "currently syncing" included. So a 404
-// here does not prove the group has gone, and trusting one would drop a live
-// group out of state and leave the next apply failing on the name it still
-// holds. Each 404 is confirmed against the listing, and a group that turns out
-// to be syncing is waited on and deleted once more.
+// The delete passes through the sync gate. A group that starts syncing again
+// between the wait and the delete answers 409 RESOURCE_SYNCING, so the
+// provider waits and tries again.
 func (r *userGroupResource) deleteUserGroup(ctx context.Context, id int64, timeout time.Duration) (alreadyGone bool, err error) {
-	for attempt := 0; attempt < 2; attempt++ {
+	for attempt := 0; attempt < maxUserGroupDeleteAttempts; attempt++ {
 		if err := r.client.WaitForUserGroupSettled(ctx, id, timeout); err != nil {
 			return false, err
 		}
 
 		err := r.client.DeleteUserGroup(ctx, id)
-		if err == nil {
+		switch {
+		case err == nil:
 			return false, nil
-		}
-		if !client.IsNotFound(err) {
-			return false, err
-		}
-
-		_, found, lookupErr := r.client.LookupUserGroup(ctx, id)
-		if lookupErr != nil {
-			return false, lookupErr
-		}
-		if !found {
+		case client.IsNotFound(err):
 			return true, nil
+		case client.IsSyncing(err):
+			continue
+		default:
+			return false, err
 		}
 	}
 	return false, fmt.Errorf(
-		"user group %d is still listed after Onyx answered not found, which is what a group "+
-			"reports while it is syncing — it started syncing again between the check and the "+
-			"delete, so re-run the destroy", id)
+		"user group %d was still syncing after %d delete attempts; re-run the destroy",
+		id, maxUserGroupDeleteAttempts)
 }
 
 func (r *userGroupResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
@@ -566,8 +562,11 @@ func (r *userGroupResource) readInto(
 		return false
 	}
 
+	// The permissions route needs global manage:user_groups, which a scoped
+	// group manager does not hold. Keep the known value rather than fail.
 	permissions, err := r.client.GetUserGroupPermissions(ctx, id)
-	if err != nil {
+	keepPermissions := client.IsForbidden(err)
+	if err != nil && !keepPermissions {
 		diags.AddError("Unable to read the user group permissions", err.Error())
 		return true
 	}
@@ -579,7 +578,9 @@ func (r *userGroupResource) readInto(
 
 	model.UserIDs = stringSetFrom(ctx, group.MemberIDs(), diags)
 	model.ManagerIDs = stringSetFrom(ctx, group.ManagerIDs, diags)
-	model.Permissions = stringSetFrom(ctx, permissions, diags)
+	if !keepPermissions || model.Permissions.IsNull() || model.Permissions.IsUnknown() {
+		model.Permissions = stringSetFrom(ctx, permissions, diags)
+	}
 	model.CCPairIDs = stringSetFrom(ctx, int64sAsStrings(group.CCPairIDs()), diags)
 	model.DocumentSetIDs = stringSetFrom(ctx, namedRefIDs(group.DocumentSets), diags)
 	model.AgentIDs = stringSetFrom(ctx, namedRefIDs(group.Agents), diags)

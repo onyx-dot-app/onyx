@@ -1,31 +1,20 @@
 import time
 from collections.abc import Callable, Iterable
-from http import HTTPStatus
 from itertools import chain, groupby
 
-import httpx
 import sentry_sdk
 
 from onyx.connectors.models import ConnectorFailure, DocumentFailure
-from onyx.document_index.interfaces_new import (
+from onyx.document_index.interfaces import (
     DocumentIndex,
     DocumentInsertionRecord,
     IndexingMetadata,
 )
+from onyx.document_index.opensearch.client import OpenSearchIndexWriteBlockedError
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-
-def _log_insufficient_storage_error(e: Exception) -> None:
-    if isinstance(e, httpx.HTTPStatusError):
-        if e.response.status_code == HTTPStatus.INSUFFICIENT_STORAGE:
-            logger.error(
-                "NOTE: HTTP Status 507 Insufficient Storage indicates "
-                "you need to allocate more memory or disk space to the "
-                "Vespa/index container."
-            )
 
 
 def write_chunks_to_vector_db_with_backoff(
@@ -50,6 +39,20 @@ def write_chunks_to_vector_db_with_backoff(
             ),
             [],
         )
+    except OpenSearchIndexWriteBlockedError as e:
+        # A block rejects every document alike, so a per-doc retry only
+        # repeats the same rejection once per document.
+        with sentry_sdk.new_scope() as scope:
+            scope.set_tag("stage", "vector_db_write")
+            scope.set_tag("tenant_id", tenant_id)
+            scope.fingerprint = ["vector-db-write-blocked"]
+            sentry_sdk.capture_exception(e)
+        logger.error(
+            "Document index is write-blocked; failing the whole chunk batch. "
+            "Check the index's storage and heap. Error: %s",
+            e,
+        )
+        return [], _fail_all_documents(make_chunks(), e)
     except Exception as e:
         # The batch write failing just means we fall back to the per-doc
         # retry loop below. It's only a real failure if the per-doc retry
@@ -66,9 +69,6 @@ def write_chunks_to_vector_db_with_backoff(
             type(e).__name__,
             e,
         )
-
-        # give some specific logging on this common failure case.
-        _log_insufficient_storage_error(e)
 
         # wait a couple seconds just to give the vector db a chance to recover
         time.sleep(2)
@@ -108,9 +108,6 @@ def write_chunks_to_vector_db_with_backoff(
                 "Failed to write document chunks for '%s' to vector db", doc_id
             )
 
-            # give some specific logging on this common failure case.
-            _log_insufficient_storage_error(e)
-
             failures.append(
                 ConnectorFailure(
                     failed_document=DocumentFailure(
@@ -123,3 +120,21 @@ def write_chunks_to_vector_db_with_backoff(
             )
 
     return insertion_records, failures
+
+
+def _fail_all_documents(
+    chunks: Iterable[DocMetadataAwareIndexChunk], error: Exception
+) -> list[ConnectorFailure]:
+    failures: list[ConnectorFailure] = []
+    for doc_id, chunks_for_doc in groupby(chunks, key=lambda c: c.source_document.id):
+        failures.append(
+            ConnectorFailure(
+                failed_document=DocumentFailure(
+                    document_id=doc_id,
+                    document_link=next(chunks_for_doc).get_link(),
+                ),
+                failure_message=str(error),
+                exception=error,
+            )
+        )
+    return failures

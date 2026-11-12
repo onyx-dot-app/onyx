@@ -38,8 +38,6 @@ configMap:
   ENABLE_CRAFT: "true"
   INTEGRATION_TESTS_MODE: "true"
   DISABLE_TELEMETRY: "true"
-  # EE so tier-gated routes work (test_skill_push user-groups); license seeded by the workflow.
-  ENABLE_PAID_ENTERPRISE_EDITION_FEATURES: "true"
   # No model server in this lane; skips the GPU-status probe that would hang API startup.
   DISABLE_MODEL_SERVER: "true"
   # Sandbox pods call the chart-managed API service, matching production.

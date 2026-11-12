@@ -48,6 +48,10 @@ class BaseConnector(abc.ABC, Generic[CT]):
     # Optional raw-file persistence hook to save original file
     raw_file_callback: RawFileCallback | None = None
 
+    # True when the slim listing filters `start` by the same date as indexing,
+    # so a prune can list only the documents from the indexing start.
+    slim_listing_honors_indexing_start: ClassVar[bool] = False
+
     @abc.abstractmethod
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         raise NotImplementedError
@@ -63,7 +67,7 @@ class BaseConnector(abc.ABC, Generic[CT]):
             if isinstance(metadata_value, str):
                 metadata_lines.append(f"{metadata_key}: {metadata_value}")
             elif isinstance(metadata_value, list):
-                if not all([isinstance(val, str) for val in metadata_value]):
+                if not all(isinstance(val, str) for val in metadata_value):
                     raise RuntimeError(custom_parser_req_msg)
                 metadata_lines.append(f"{metadata_key}: {', '.join(metadata_value)}")
             else:
@@ -260,13 +264,6 @@ class CredentialsConnector(BaseConnector):
         raise NotImplementedError
 
 
-# Event driven
-class EventConnector(BaseConnector):
-    @abc.abstractmethod
-    def handle_event(self, event: Any) -> GenerateDocumentsOutput:
-        raise NotImplementedError
-
-
 CheckpointOutput: TypeAlias = Generator[
     Document | HierarchyNode | ConnectorFailure, None, CT
 ]
@@ -348,3 +345,17 @@ class HierarchyConnector(BaseConnector):
         end: SecondsSinceUnixEpoch,
     ) -> HierarchyOutput:
         raise NotImplementedError
+
+
+def prune_listing_honors_indexing_start(
+    connector_class: type[BaseConnector],
+) -> bool:
+    """True if a prune lists only the documents from the indexing start.
+    Follows the listing order of ``extract_ids_from_runnable_connector``: a
+    slim listing honors it only if the connector says so, a full load cannot
+    filter, and a poll or checkpoint run filters as indexing does."""
+    if issubclass(connector_class, (SlimConnector, SlimConnectorWithPermSync)):
+        return connector_class.slim_listing_honors_indexing_start
+    if issubclass(connector_class, LoadConnector):
+        return False
+    return issubclass(connector_class, (PollConnector, CheckpointedConnector))

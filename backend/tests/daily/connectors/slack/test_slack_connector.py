@@ -27,26 +27,22 @@ def test_validate_slack_connector_settings(
         ["#general", set(), "general"],
         [
             "daily-connector-test-channel",
-            set(
-                [
-                    "Hello, world!",
-                    "",
-                    "Reply!",
-                    "Testing again...",
-                ]
-            ),
+            {
+                "Hello, world!",
+                "",
+                "Reply!",
+                "Testing again...",
+            },
             "daily-connector-test-channel",
         ],
         [
             "#daily-connector-test-channel",
-            set(
-                [
-                    "Hello, world!",
-                    "",
-                    "Reply!",
-                    "Testing again...",
-                ]
-            ),
+            {
+                "Hello, world!",
+                "",
+                "Reply!",
+                "Testing again...",
+            },
             "daily-connector-test-channel",
         ],
     ],

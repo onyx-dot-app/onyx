@@ -1,4 +1,5 @@
 {{- if eq (include "onyx.craftEnabled" .) "true" }}
+{{- include "onyx.craftCheckSandboxTolerations" . }}
 {{/*
 Static shape of the per-user sandbox Pod. _create_sandbox_pod reads this and
 overlays the dynamic fields (name, sandbox/tenant labels, per-pod
@@ -21,13 +22,14 @@ kubelet evicts sandbox pods first under node disk pressure. */}}
 {{- $nextjsStart := (index $cm "SANDBOX_NEXTJS_PORT_START") | default "3010" | int }}
 {{- $nextjsEnd := (index $cm "SANDBOX_NEXTJS_PORT_END") | default "3100" | int }}
 {{- $opencodePort := (index $cm "OPENCODE_SERVE_PORT") | default "4096" | int }}
-{{/* Keep in sync with PUSH_DAEMON_PORT in sandbox_daemon/contract.py. */}}
+{{/* Keep in sync with PUSH_DAEMON_PORT in sandbox_daemon/models.py. */}}
 {{- $pushDaemonPort := include "onyx.sandboxPushDaemonPort" . }}
 {{- $proxyPort := include "onyx.sandboxProxyPort" . }}
 {{- $proxyHost := include "onyx.sandboxProxyHost" . }}
 {{- $caConfigMap := (index $cm "SANDBOX_PROXY_CA_CONFIGMAP") | default "sandbox-proxy-ca-bundle" }}
-{{- $serverUrl := (index $cm "ONYX_SERVER_URL") }}
+{{- $serverUrl := include "onyx.sandboxApiUrl" . }}
 {{- $sandboxPod := .Values.sandboxPod | default dict }}
+{{- $netAdminLockdown := eq (include "onyx.sandboxNetAdminLockdown" .) "true" }}
 {{- $caBundleFile := "/etc/ssl/sandbox/ca-bundle.crt" }}
 apiVersion: v1
 kind: PodTemplate
@@ -42,8 +44,12 @@ template:
     labels:
       app.kubernetes.io/component: sandbox
       app.kubernetes.io/managed-by: onyx
+      onyx.app/net-admin-lockdown: {{ $netAdminLockdown | quote }}
       admission.datadoghq.com/enabled: "false"
   spec:
+    {{- with $sandboxPod.runtimeClassName }}
+    runtimeClassName: {{ . | quote }}
+    {{- end }}
     serviceAccountName: {{ $saName }}
     automountServiceAccountToken: false
     restartPolicy: Never
@@ -72,6 +78,7 @@ template:
           - { name: SANDBOX_PROXY_HOST, value: "{{ $proxyHost }}" }
           - { name: SANDBOX_PROXY_PORT, value: "{{ $proxyPort }}" }
           - { name: SANDBOX_PROXY_BOOTSTRAP_MODE, value: "initcontainer" }
+          - { name: SANDBOX_NET_ADMIN_LOCKDOWN, value: {{ $netAdminLockdown | quote }} }
           - { name: SANDBOX_PROXY_CA_BUNDLE_SRC, value: "/sandbox-ca/ca.crt" }
           - { name: SANDBOX_PROXY_CA_BUNDLE_DST, value: "{{ $caBundleFile }}" }
         volumeMounts:
@@ -88,7 +95,9 @@ template:
           privileged: false
           capabilities:
             drop: ["ALL"]
+            {{- if $netAdminLockdown }}
             add: ["NET_ADMIN"]
+            {{- end }}
       - name: sidecar
         image: {{ $image }}
         imagePullPolicy: {{ $pullPolicy }}
@@ -97,6 +106,7 @@ template:
         ports:
           - { name: push-daemon, containerPort: {{ $pushDaemonPort }} }
         env:
+          - { name: SANDBOX_LISTEN_HOST, value: {{ $sandboxPod.listenHost | default "0.0.0.0" | quote }} }
           {{- include "onyx.sandboxProxyEnv" (dict "proxyPort" $proxyPort "caBundleFile" $caBundleFile) | nindent 10 }}
         volumeMounts:
           - { name: workspace, mountPath: /workspace/sessions }
@@ -139,6 +149,7 @@ template:
           - { name: "nextjs-{{ $p }}", containerPort: {{ $p }} }
           {{- end }}
         env:
+          - { name: SANDBOX_LISTEN_HOST, value: {{ $sandboxPod.listenHost | default "0.0.0.0" | quote }} }
           - { name: ONYX_PAT, value: "replaced_by_egress_proxy" }
           - { name: ONYX_SERVER_URL, value: "{{ $serverUrl }}" }
           {{/* The deployment value is the exact API base; do not append the CLI default. */}}

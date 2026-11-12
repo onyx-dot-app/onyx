@@ -184,7 +184,7 @@ describe("getTextContent", () => {
   });
 });
 
-describe("createRichInputTileNode — skill tiles", () => {
+describe("createRichInputTileNode: skill tiles", () => {
   // Skill tiles are built with a "Skill: <name>" preview and an empty meta.
   it("marks the tile type and stores the skill slug", () => {
     const tile = createRichInputTileNode({

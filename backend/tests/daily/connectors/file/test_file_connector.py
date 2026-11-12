@@ -26,6 +26,9 @@ def mock_filestore_record() -> MagicMock:
     record = MagicMock()
     record.file_id = uuid4()
     record.display_name = "test.txt"
+    # Real columns: Document validates the MIME type and size read from them.
+    record.file_type = "text/plain"
+    record.file_size = 20
     return record
 
 
@@ -94,8 +97,18 @@ def test_two_text_files_with_zip_metadata(
     mock_get_filestore = MagicMock()
     mock_get_filestore.return_value = mock_file_store
     mock_file_store.read_file_record.side_effect = [
-        MagicMock(file_id=str(uuid4()), display_name="file1.txt"),
-        MagicMock(file_id=str(uuid4()), display_name="file2.txt"),
+        MagicMock(
+            file_id=str(uuid4()),
+            display_name="file1.txt",
+            file_type="text/plain",
+            file_size=20,
+        ),
+        MagicMock(
+            file_id=str(uuid4()),
+            display_name="file2.txt",
+            file_type="text/plain",
+            file_size=20,
+        ),
     ]
     mock_file_store.read_file.side_effect = [file1_content, file2_content]
     zip_metadata = {

@@ -1,5 +1,6 @@
+import { Text } from "@opal/components";
 import { SourceIcon } from "@/components/SourceIcon";
-import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
+import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/types";
 import { SvgTag } from "@opal/icons";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
 import { DocumentUpdatedAtBadge } from "@/components/search/DocumentUpdatedAtBadge";
@@ -7,10 +8,8 @@ import { MetadataBadge } from "@/components/MetadataBadge";
 import { WebResultIcon } from "@/components/WebResultIcon";
 import { Dispatch, SetStateAction, useMemo } from "react";
 import { openDocument } from "@/lib/search/utils";
-import { ValidSources } from "@/lib/types";
-import { cn } from "@opal/utils";
-import Truncated from "@/refresh-components/texts/Truncated";
-import Text from "@/refresh-components/texts/Text";
+import { ValidSources } from "@/lib/connectors/types/source";
+import { cn, richNodes } from "@opal/utils";
 
 interface DocumentMetadataBlockProps {
   modal?: boolean;
@@ -93,17 +92,33 @@ export default function ChatDocumentDisplay({
         ) : (
           <SourceIcon sourceType={document.source_type} iconSize={18} />
         )}
-        <Truncated className="line-clamp-2" side="left">
+        <Text
+          overflowTooltip
+          as="p"
+          textPosition="text-start"
+          font="main-ui-body"
+          color="text-05"
+          maxLines={2}
+          wordWrap="break-all"
+        >
           {title}
-        </Truncated>
+        </Text>
       </div>
 
       {hasMetadata && (
         <DocumentMetadataBlock modal={modal} document={document} />
       )}
 
-      <Text as="p" className="line-clamp-2 text-start" secondaryBody text03>
-        {buildDocumentSummaryDisplay(document.match_highlights, document.blurb)}
+      <Text
+        as="p"
+        textPosition="text-start"
+        maxLines={2}
+        font="secondary-body"
+        color="text-03"
+      >
+        {richNodes(
+          buildDocumentSummaryDisplay(document.match_highlights, document.blurb)
+        )}
       </Text>
     </button>
   );

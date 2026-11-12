@@ -49,7 +49,7 @@ def _get_effective_permissions(email: str) -> list[str]:
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="SAML tests are enterprise only",
 )
 @pytest.mark.parametrize(
@@ -89,7 +89,7 @@ def test_saml_converts_non_web_user(
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="SAML tests are enterprise only",
 )
 def test_saml_normal_signin_assigns_group(
@@ -112,7 +112,7 @@ def test_saml_normal_signin_assigns_group(
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="SAML tests are enterprise only",
 )
 def test_saml_idempotent_for_converted_user(

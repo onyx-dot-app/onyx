@@ -1,8 +1,9 @@
+import { ACTIONS } from "./constants.js";
 import {
-  CHROME_SPECIFIC_STORAGE_KEYS,
-  DEFAULT_ONYX_DOMAIN,
-  ACTIONS,
-} from "./constants.js";
+  getOnyxDomain,
+  isNewTabOverrideManaged,
+  setUseOnyxAsDefaultNewTab,
+} from "./storage.js";
 
 const errorModalHTML = `
   <div id="error-modal">
@@ -277,8 +278,16 @@ export function initErrorModal() {
       chrome.runtime.openOptionsPage();
     });
 
+    isNewTabOverrideManaged().then((managed) => {
+      if (managed) disableOverrideButton.style.display = "none";
+    });
+
     disableOverrideButton.addEventListener("click", () => {
-      chrome.storage.local.set({ useOnyxAsDefaultNewTab: false }, () => {
+      setUseOnyxAsDefaultNewTab(false).then((updated) => {
+        if (!updated) {
+          console.warn("New tab override is managed by policy; not disabled.");
+          return;
+        }
         chrome.tabs.update({ url: "chrome://new-tab-page" });
       });
     });
@@ -325,37 +334,30 @@ export function initAuthModal() {
 
     openAuthButton.addEventListener("click", (e) => {
       e.preventDefault();
-      chrome.storage.local.get(
-        { [CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN]: DEFAULT_ONYX_DOMAIN },
-        (result) => {
-          const onyxDomain = result[CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN];
-          chrome.runtime.sendMessage(
-            { action: ACTIONS.CLOSE_SIDE_PANEL },
-            () => {
+      getOnyxDomain().then((onyxDomain) => {
+        chrome.runtime.sendMessage({ action: ACTIONS.CLOSE_SIDE_PANEL }, () => {
+          if (chrome.runtime.lastError) {
+            console.error(
+              "Error closing side panel:",
+              chrome.runtime.lastError
+            );
+          }
+          chrome.tabs.create(
+            {
+              url: `${onyxDomain}/auth/login`,
+              active: true,
+            },
+            (_) => {
               if (chrome.runtime.lastError) {
                 console.error(
-                  "Error closing side panel:",
+                  "Error opening auth tab:",
                   chrome.runtime.lastError
                 );
               }
-              chrome.tabs.create(
-                {
-                  url: `${onyxDomain}/auth/login`,
-                  active: true,
-                },
-                (_) => {
-                  if (chrome.runtime.lastError) {
-                    console.error(
-                      "Error opening auth tab:",
-                      chrome.runtime.lastError
-                    );
-                  }
-                }
-              );
             }
           );
-        }
-      );
+        });
+      });
     });
   }
 }

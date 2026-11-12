@@ -5,7 +5,9 @@ Unit tests assume OSS resolution unless they opt into EE via the shared
 """
 
 from collections.abc import Generator
+from unittest.mock import patch
 
+import httpx
 import pytest
 
 from onyx.utils.variable_functionality import (
@@ -15,12 +17,34 @@ from onyx.utils.variable_functionality import (
 
 
 @pytest.fixture(autouse=True)
+def _no_remote_catalog_fetch() -> Generator[None, None, None]:
+    """Keeps the unit suite offline: catalog misses must not reach GitHub.
+
+    The fetch returns 404, which the catalog treats as no remote data. Raising
+    instead would put the exception in a captured log record, and its
+    traceback would keep the caller's frames alive.
+
+    Remote-catalog tests override this by patching
+    ``model_catalog._fetch_provider_file`` themselves. Patching that seam
+    (rather than ``httpx.get``) keeps every other httpx caller working.
+    """
+    from onyx.llm import model_catalog
+
+    with patch.object(
+        model_catalog,
+        "_fetch_provider_file",
+        return_value=httpx.Response(404),
+    ):
+        yield
+
+
+@pytest.fixture(autouse=True)
 def _reset_leaked_ee_state() -> Generator[None, None, None]:
     """Undoes EE state leaked into the process by import side effects.
 
-    ``set_is_ee_based_on_env_variable()`` runs at module level in ``onyx.main``
+    ``set_is_ee_if_available()`` runs at module level in ``onyx.main``
     and every ``background/celery/versioned_apps`` module, and flips the
-    process-global EE flag whenever license enforcement is on (its default). A
+    process-global EE flag whenever the build ships the EE code. A
     unit test whose import chain reaches one of those modules therefore silently
     switches every later test in the worker to EE resolution, breaking
     OSS-asserting tests order-dependently. Runs before ``enable_ee`` (autouse

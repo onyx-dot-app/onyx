@@ -277,7 +277,7 @@ class DiscordConnector(PollConnector, LoadConnector):
         if server_ids is None:
             server_ids = []
         self.batch_size = batch_size
-        self.channel_names: list[str] = channel_names if channel_names else []
+        self.channel_names: list[str] = channel_names or []
         self.server_ids: list[int] = (
             [int(server_id) for server_id in server_ids] if server_ids else []
         )

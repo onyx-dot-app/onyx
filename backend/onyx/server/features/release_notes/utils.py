@@ -22,6 +22,7 @@ from onyx.server.features.release_notes.constants import (
 from onyx.server.features.release_notes.models import ReleaseNoteEntry
 from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import ONYX_AIRGAPPED
 
 logger = setup_logger()
 
@@ -177,7 +178,7 @@ def ensure_release_notes_fresh_and_notify(db_session: Session) -> None:
     Since all users will trigger this via notification fetch,
     uses Redis lock to prevent concurrent GitHub requests when cache is stale.
     """
-    if not is_cache_stale():
+    if ONYX_AIRGAPPED or not is_cache_stale():
         return
 
     cache = get_shared_cache_backend()

@@ -8,6 +8,11 @@ import {
   CreateSessionResponse,
   SendMessageRequest,
 } from "@/types/api-types";
+import { TokenProvider } from "@/types/widget-types";
+
+const READINESS_REQUEST_TIMEOUT_MS = 10_000;
+
+class SessionUnavailableError extends Error {}
 
 export class ApiService {
   private maxRetries = 3;
@@ -15,7 +20,7 @@ export class ApiService {
 
   constructor(
     private backendUrl: string,
-    private apiKey: string
+    private resolveToken: TokenProvider
   ) {}
 
   /**
@@ -29,11 +34,11 @@ export class ApiService {
 
     const response = await this.fetchWithRetry(
       `${this.backendUrl}/chat/create-chat-session`,
-      {
+      async () => ({
         method: "POST",
-        headers: this.getHeaders(),
+        headers: await this.getHeaders(),
         body: JSON.stringify(request),
-      }
+      })
     );
 
     if (!response.ok) {
@@ -51,6 +56,87 @@ export class ApiService {
 
     const data = (await response.json()) as CreateSessionResponse;
     return data.chat_session_id;
+  }
+
+  async waitForSessionIdle(
+    sessionId: string,
+    signal: AbortSignal,
+    onUnconfirmed: () => void
+  ): Promise<void> {
+    let authenticationFailures = 0;
+    while (!signal.aborted) {
+      const controller = new AbortController();
+      const onAbort = () => controller.abort();
+      signal.addEventListener("abort", onAbort, { once: true });
+      const timeout = setTimeout(onAbort, READINESS_REQUEST_TIMEOUT_MS);
+      const aborted = new Promise<never>((_, reject) => {
+        controller.signal.addEventListener(
+          "abort",
+          () => reject(new DOMException("Request cancelled", "AbortError")),
+          { once: true }
+        );
+      });
+      try {
+        const response = await fetch(
+          `${this.backendUrl}/chat/chat-session/${sessionId}/status`,
+          {
+            headers: await Promise.race([this.getHeaders(), aborted]),
+            signal: controller.signal,
+          }
+        );
+        if (response.status === 401) {
+          authenticationFailures += 1;
+          if (authenticationFailures >= this.maxRetries) {
+            throw new SessionUnavailableError(
+              "Authentication failed. Reload the page to sign in again."
+            );
+          }
+        } else {
+          authenticationFailures = 0;
+        }
+        if (response.status === 405) {
+          throw new SessionUnavailableError(
+            "This server does not support chat readiness checks. Contact your administrator."
+          );
+        }
+        if (response.status === 403 || response.status === 404) {
+          throw new SessionUnavailableError(
+            "This conversation is no longer available. Start a new conversation."
+          );
+        }
+        if (!response.ok) throw new Error("Cannot confirm chat readiness");
+        const status: unknown = await response.json();
+        if (
+          typeof status !== "object" ||
+          status === null ||
+          !("is_processing" in status) ||
+          typeof status.is_processing !== "boolean"
+        ) {
+          throw new Error("Invalid chat readiness response");
+        }
+        if (!status.is_processing) return;
+      } catch (error) {
+        if (signal.aborted || error instanceof SessionUnavailableError)
+          throw error;
+        onUnconfirmed();
+      } finally {
+        clearTimeout(timeout);
+        signal.removeEventListener("abort", onAbort);
+      }
+      if (signal.aborted) break;
+      await new Promise<void>((resolve) => {
+        const onAbort = () => {
+          clearTimeout(timer);
+          resolve();
+        };
+        const timer = setTimeout(() => {
+          signal.removeEventListener("abort", onAbort);
+          resolve();
+        }, 1000);
+        signal.addEventListener("abort", onAbort, { once: true });
+      });
+    }
+    throw new DOMException("Request cancelled", "AbortError");
   }
 
   /**
@@ -74,12 +160,12 @@ export class ApiService {
 
     const response = await this.fetchWithRetry(
       `${this.backendUrl}/chat/send-chat-message`,
-      {
+      async () => ({
         method: "POST",
-        headers: this.getHeaders(),
+        headers: await this.getHeaders(),
         body: JSON.stringify(request),
         signal: params.signal,
-      }
+      })
     );
 
     if (!response.ok) {
@@ -182,22 +268,24 @@ export class ApiService {
   }
 
   /**
-   * Fetch with retry logic for network failures and 5xx errors
+   * Fetch with retry logic for network failures and 5xx errors.
+   * Options are rebuilt per attempt so each retry carries a freshly resolved
+   * credential; a short-lived token can otherwise expire during the backoff.
    */
   private async fetchWithRetry(
     url: string,
-    options: RequestInit,
+    buildOptions: () => Promise<RequestInit>,
     retries = 0
   ): Promise<Response> {
     try {
-      const response = await fetch(url, options);
+      const response = await fetch(url, await buildOptions());
 
       // Retry on 5xx errors only (not 4xx — those are permanent)
       if (!response.ok && retries < this.maxRetries) {
         if (response.status >= 500) {
           const delay = this.retryDelay * Math.pow(2, retries);
           await new Promise((resolve) => setTimeout(resolve, delay));
-          return this.fetchWithRetry(url, options, retries + 1);
+          return this.fetchWithRetry(url, buildOptions, retries + 1);
         }
       }
 
@@ -212,19 +300,26 @@ export class ApiService {
       if (retries < this.maxRetries) {
         const delay = this.retryDelay * Math.pow(2, retries);
         await new Promise((resolve) => setTimeout(resolve, delay));
-        return this.fetchWithRetry(url, options, retries + 1);
+        return this.fetchWithRetry(url, buildOptions, retries + 1);
       }
       throw error;
     }
   }
 
   /**
-   * Get common headers for API requests
+   * Get common headers for API requests.
+   * The credential is resolved per call so an expiring token can be refreshed
+   * by the host between requests.
    */
-  private getHeaders(): Record<string, string> {
+  private async getHeaders(): Promise<Record<string, string>> {
+    const token = await this.resolveToken();
+    if (!token) {
+      throw new Error("Onyx credential resolved to an empty value");
+    }
+
     return {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${this.apiKey}`,
+      Authorization: `Bearer ${token}`,
     };
   }
 }

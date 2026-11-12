@@ -2,11 +2,14 @@
 
 import React, { useMemo, useCallback } from "react";
 import { StopReason } from "@/app/app/services/streamingModels";
-import { FullChatState, RenderType } from "../interfaces";
+import {
+  FullChatState,
+  RenderType,
+} from "@/app/app/message/messageComponents/types";
 import { TurnGroup } from "./transformers";
 import { cn } from "@opal/utils";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
-import ShimmerText from "@/refresh-components/texts/ShimmerText";
+import { TextLoader } from "@opal/loaders";
 import { useTimelineExpansion } from "@/app/app/message/messageComponents/timeline/hooks/useTimelineExpansion";
 import { useTimelineMetrics } from "@/app/app/message/messageComponents/timeline/hooks/useTimelineMetrics";
 import { useTimelineHeader } from "@/app/app/message/messageComponents/timeline/hooks/useTimelineHeader";
@@ -83,12 +86,12 @@ export interface AgentTimelineProps {
   "data-testid"?: string;
   /** Processing duration in seconds (for completed messages) */
   processingDurationSeconds?: number;
-  /** Whether image generation is in progress */
-  isGeneratingImage?: boolean;
   /** Number of images generated */
   generatedImageCount?: number;
   /** Tool processing duration from backend (via MESSAGE_START packet) */
   toolProcessingDuration?: number;
+  /** A code mode program works between tool calls; it has no step */
+  codeModeWorking?: boolean;
 }
 
 /**
@@ -109,9 +112,9 @@ function areAgentTimelinePropsEqual(
     prev.collapsible === next.collapsible &&
     prev.buttonTitle === next.buttonTitle &&
     prev.chatState === next.chatState &&
-    prev.isGeneratingImage === next.isGeneratingImage &&
     prev.generatedImageCount === next.generatedImageCount &&
-    prev.toolProcessingDuration === next.toolProcessingDuration
+    prev.toolProcessingDuration === next.toolProcessingDuration &&
+    prev.codeModeWorking === next.codeModeWorking
   );
 }
 
@@ -126,15 +129,15 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   buttonTitle,
   "data-testid": testId,
   processingDurationSeconds,
-  isGeneratingImage = false,
   generatedImageCount = 0,
   toolProcessingDuration,
+  codeModeWorking = false,
 }: AgentTimelineProps) {
   // Header text and state flags
   const { headerText, hasPackets, userStopped } = useTimelineHeader(
     turnGroups,
     stopReason,
-    isGeneratingImage
+    codeModeWorking
   );
 
   // Memoized metrics derived from turn groups
@@ -229,8 +232,8 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     lastStepIsResearchAgent,
     parallelActiveStepSupportsCollapsedStreaming,
     parallelActiveStepHasCollapsedContent,
-    isGeneratingImage,
     finalAnswerComing,
+    codeModeWorking,
   });
 
   const headerIsInteractive = useMemo(() => {
@@ -348,14 +351,14 @@ export const AgentTimeline = React.memo(function AgentTimeline({
         agent={chatState.agent}
         headerContent={
           <div className="flex w-full h-full items-center ps-(--timeline-header-padding-left) pe-(--timeline-header-padding-right)">
-            <ShimmerText>{headerText}</ShimmerText>
+            <TextLoader>{headerText}</TextLoader>
           </div>
         }
       />
     );
   }
 
-  // Display content only (no timeline steps) - but show header for image generation
+  // Display content only (no timeline steps)
   if (uiState === TimelineUIState.DISPLAY_CONTENT_ONLY) {
     return <TimelineContainer agent={chatState.agent} />;
   }

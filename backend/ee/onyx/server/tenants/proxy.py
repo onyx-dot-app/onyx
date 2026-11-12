@@ -26,7 +26,6 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, ValidationError
 from redis.exceptions import RedisError
 
-from ee.onyx.configs.app_configs import LICENSE_ENFORCEMENT_ENABLED
 from ee.onyx.server.billing.models import SeatUpdateRequest, SeatUpdateResponse
 from ee.onyx.server.license.models import LicensePayload
 from ee.onyx.server.tenants.access import generate_data_plane_token
@@ -57,15 +56,6 @@ def _drop_billing_snapshot(tenant_id: str) -> None:
             "Billing info cache invalidation failed for tenant %s: %s",
             tenant_id,
             exc,
-        )
-
-
-def _check_license_enforcement_enabled() -> None:
-    """Ensure LICENSE_ENFORCEMENT_ENABLED is true (proxy endpoints only work on cloud DP)."""
-    if not LICENSE_ENFORCEMENT_ENABLED:
-        raise HTTPException(
-            status_code=501,
-            detail="Proxy endpoints are only available on cloud data plane",
         )
 
 
@@ -120,8 +110,6 @@ def verify_license_auth(
     Raises HTTPException on an invalid signature, or on expiry where the route
     requires a live license.
     """
-    _check_license_enforcement_enabled()
-
     try:
         payload = verify_license_signature(license_data)
     except ValueError as e:
@@ -167,8 +155,6 @@ async def get_optional_license_payload(
     Returns None if no license provided, otherwise validates and returns payload.
     Expired licenses are allowed for renewal flows.
     """
-    _check_license_enforcement_enabled()
-
     license_data = _extract_license_from_header(authorization, required=False)
     if license_data is None:
         return None
@@ -296,8 +282,6 @@ async def proxy_claim_license(
     Returns the license to the caller. For self-hosted instances, they will
     store the license locally. The cloud DP doesn't need to store it.
     """
-    _check_license_enforcement_enabled()
-
     result = await forward_to_control_plane(
         "POST",
         "/claim-license",

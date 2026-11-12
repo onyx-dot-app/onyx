@@ -1,6 +1,9 @@
+import asyncio
 import json
+import threading
+import time
+from dataclasses import dataclass, field
 from enum import Enum
-from functools import lru_cache
 from typing import Any, cast
 
 import jwt
@@ -9,7 +12,7 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 from jwt import (
     InvalidAudienceError,
     InvalidIssuerError,
-    InvalidTokenError,
+    InvalidSignatureError,
     MissingRequiredClaimError,
     PyJWTError,
 )
@@ -29,6 +32,12 @@ logger = setup_logger()
 
 
 _PUBLIC_KEY_FETCH_ATTEMPTS = 2
+_PUBLIC_KEY_FETCH_TIMEOUT_SECONDS = 15
+# Caller-supplied tokens can force a refetch, so bound how often that happens.
+_PUBLIC_KEY_REFRESH_MIN_INTERVAL_SECONDS = 60.0
+# Shorter wait after a failed fetch, so an IdP outage ends soon after recovery.
+_PUBLIC_KEY_FETCH_FAILURE_BACKOFF_SECONDS = 5.0
+_MAX_CACHED_PUBLIC_KEY_URLS = 8
 
 
 class PublicKeyFormat(Enum):
@@ -36,8 +45,65 @@ class PublicKeyFormat(Enum):
     PEM = "pem"
 
 
-# Keyed on the URL so a runtime settings change takes effect without a restart.
-@lru_cache(maxsize=8)
+_KeyPayload = tuple[str | dict[str, Any], PublicKeyFormat]
+# (url, operator_pinned, allow_private_network, block_loopback_and_link_local,
+# block_link_local_only). Keyed on the URL so a runtime settings change takes
+# effect without a restart.
+_KeyCacheKey = tuple[str, bool, bool, bool, bool]
+
+
+@dataclass
+class _KeyCacheEntry:
+    lock: threading.Lock = field(default_factory=threading.Lock)
+    fetched: bool = False
+    payload: _KeyPayload | None = None
+    next_fetch_allowed: float = float("-inf")
+
+
+_key_cache: dict[_KeyCacheKey, _KeyCacheEntry] = {}
+_key_cache_lock = threading.Lock()
+
+
+def _reset_public_key_cache() -> None:
+    with _key_cache_lock:
+        _key_cache.clear()
+
+
+def _get_public_key_payload(
+    cache_key: _KeyCacheKey, force_refresh: bool
+) -> _KeyPayload | None:
+    """Return cached key material. Refetches are rate-limited per URL: a long
+    interval after a successful refresh, a short backoff after a failed fetch.
+    Concurrent callers share one fetch."""
+    with _key_cache_lock:
+        entry = _key_cache.get(cache_key)
+        if entry is None:
+            if len(_key_cache) >= _MAX_CACHED_PUBLIC_KEY_URLS:
+                _key_cache.pop(next(iter(_key_cache)))
+            entry = _key_cache[cache_key] = _KeyCacheEntry()
+
+    with entry.lock:
+        if entry.fetched:
+            if entry.payload is not None and not force_refresh:
+                return entry.payload
+            if time.monotonic() < entry.next_fetch_allowed:
+                return entry.payload
+        was_fetched = entry.fetched
+        payload = _fetch_public_key_payload(*cache_key)
+        entry.fetched = True
+        now = time.monotonic()
+        if payload is None:
+            # Keep any earlier good keys; a failed refresh must not evict them.
+            entry.next_fetch_allowed = now + _PUBLIC_KEY_FETCH_FAILURE_BACKOFF_SECONDS
+        else:
+            entry.payload = payload
+            if was_fetched:
+                entry.next_fetch_allowed = (
+                    now + _PUBLIC_KEY_REFRESH_MIN_INTERVAL_SECONDS
+                )
+        return entry.payload
+
+
 def _fetch_public_key_payload(
     public_key_url: str,
     operator_pinned: bool,
@@ -51,7 +117,9 @@ def _fetch_public_key_payload(
     config-as-code and fetched as-is."""
     try:
         if operator_pinned:
-            response = requests.get(public_key_url)
+            response = requests.get(
+                public_key_url, timeout=_PUBLIC_KEY_FETCH_TIMEOUT_SECONDS
+            )
         else:
             # Mirrors the PUT-time check: the configured SSRF level decides
             # whether private endpoints are reachable.
@@ -100,14 +168,18 @@ def get_public_key(
     public_key_url: str,
     operator_pinned: bool,
     ssrf_params: OutboundSSRFParams,
+    force_refresh: bool = False,
 ) -> RSAPublicKey | str | None:
     """Return the concrete public key used to verify the provided JWT token."""
-    payload = _fetch_public_key_payload(
-        public_key_url,
-        operator_pinned,
-        ssrf_params.allow_private_network,
-        ssrf_params.block_loopback_and_link_local,
-        ssrf_params.block_link_local_only,
+    payload = _get_public_key_payload(
+        (
+            public_key_url,
+            operator_pinned,
+            ssrf_params.allow_private_network,
+            ssrf_params.block_loopback_and_link_local,
+            ssrf_params.block_link_local_only,
+        ),
+        force_refresh,
     )
     if payload is None:
         logger.error("Failed to retrieve public key payload")
@@ -168,6 +240,14 @@ def _resolve_public_key_from_jwks(
 
 
 async def verify_jwt_token(token: str) -> dict[str, Any] | None:
+    # Non-JWT bearers (PATs, API keys) must not reach the DNS check or key fetch.
+    if token.count(".") != 2:
+        return None
+    try:
+        jwt.get_unverified_header(token)
+    except PyJWTError:
+        return None
+
     settings = get_security_settings()
     if settings.jwt_public_key_url is None:
         logger.error("JWT public key URL is not configured")
@@ -178,22 +258,32 @@ async def verify_jwt_token(token: str) -> dict[str, Any] | None:
     operator_pinned = "jwt_public_key_url" in env_pinned_active_fields()
     if not operator_pinned:
         try:
-            validate_idp_url(settings.jwt_public_key_url, field="jwt_public_key_url")
+            # Resolves DNS, so it runs off the event loop.
+            await asyncio.to_thread(
+                validate_idp_url,
+                settings.jwt_public_key_url,
+                field="jwt_public_key_url",
+            )
         except UnsafeSSOUrl as e:
             logger.error("JWT public key URL rejected: %s", e)
             return None
 
+    ssrf_params = outbound_ssrf_params(settings.ssrf_protection_level)
     for attempt in range(_PUBLIC_KEY_FETCH_ATTEMPTS):
-        public_key = get_public_key(
+        # A retry means the signing key may have rotated. The fetch is
+        # blocking I/O, so it runs off the event loop.
+        can_retry = attempt < _PUBLIC_KEY_FETCH_ATTEMPTS - 1
+        public_key = await asyncio.to_thread(
+            get_public_key,
             token,
             settings.jwt_public_key_url,
             operator_pinned,
-            outbound_ssrf_params(settings.ssrf_protection_level),
+            ssrf_params,
+            attempt > 0,
         )
         if public_key is None:
             logger.error("Unable to resolve a public key for JWT verification")
-            if attempt < _PUBLIC_KEY_FETCH_ATTEMPTS - 1:
-                _fetch_public_key_payload.cache_clear()
+            if can_retry:
                 continue
             return None
 
@@ -213,21 +303,16 @@ async def verify_jwt_token(token: str) -> dict[str, Any] | None:
             InvalidIssuerError,
             MissingRequiredClaimError,
         ) as e:
-            # Definitive claim rejection: refetched keys cannot change it, and a
-            # cache clear would let bad tokens evict the signing key for everyone.
             logger.warning("JWT rejected by aud/iss enforcement: %s", str(e))
             return None
-        except InvalidTokenError as e:
-            logger.error("Invalid JWT token: %s", str(e))
-            if attempt < _PUBLIC_KEY_FETCH_ATTEMPTS - 1:
-                _fetch_public_key_payload.cache_clear()
+        except InvalidSignatureError as e:
+            logger.error("Invalid JWT signature: %s", str(e))
+            if can_retry:
                 continue
             return None
         except PyJWTError as e:
-            logger.error("JWT decoding error: %s", str(e))
-            if attempt < _PUBLIC_KEY_FETCH_ATTEMPTS - 1:
-                _fetch_public_key_payload.cache_clear()
-                continue
+            # Expired or malformed tokens: new keys cannot change the result.
+            logger.error("Invalid JWT token: %s", str(e))
             return None
 
         return payload

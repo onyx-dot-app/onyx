@@ -278,8 +278,8 @@ with engine.connect() as conn:
     except subprocess.CalledProcessError as e:
         return {
             "success": False,
-            "stdout": e.stdout if e.stdout else "",
-            "error": e.stderr if e.stderr else str(e),
+            "stdout": e.stdout or "",
+            "error": e.stderr or str(e),
         }
 
 

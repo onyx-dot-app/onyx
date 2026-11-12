@@ -11,14 +11,10 @@ import {
   isPrivateIdentifier,
   isTypeAssertion,
   SyntaxKind,
-} from "typescript-7/unstable/ast";
-import type { Node } from "typescript-7/unstable/ast";
-import {
-  API,
-  DiagnosticCategory,
-  TypeFlags,
-} from "typescript-7/unstable/async";
-import type { Checker, Diagnostic, Program } from "typescript-7/unstable/async";
+} from "typescript/unstable/ast";
+import type { Node } from "typescript/unstable/ast";
+import { API, DiagnosticCategory, TypeFlags } from "typescript/unstable/async";
+import type { Checker, Diagnostic, Program } from "typescript/unstable/async";
 
 // Type-checks web/ with TypeScript 7 and, from the same program, measures type
 // coverage: the share of identifiers whose type is not `any`, with each type

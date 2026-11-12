@@ -5,8 +5,7 @@ End-to-end tests that verify:
 1. Files can be uploaded and attached to a persona via API.
 2. The persona correctly reports its attached files.
 3. A chat session with a file-bearing persona processes without error.
-4. Precedence: custom persona files take priority over project files when
-   the chat session is inside a project.
+4. Custom personas retain project files alongside their own files.
 
 These tests run against a real Onyx deployment (all services running).
 File processing is asynchronous, so we poll the file status endpoint
@@ -142,15 +141,11 @@ def test_persona_without_files_still_works(
     assert len(response.full_message) > 0
 
 
-def test_persona_files_override_project_files(
+def test_persona_and_project_files_are_combined(
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001
 ) -> None:
-    """When a custom persona (with its own files) is used inside a project,
-    the persona's files take precedence — the project's files are invisible.
-
-    We verify this by putting different content in project vs persona files
-    and checking which content the model responds with."""
+    """A custom persona inside a project can answer from both file sets."""
 
     # Upload persona file
     persona_file = create_test_text_file("The persona's secret word is ALBATROSS.")
@@ -163,7 +158,7 @@ def test_persona_files_override_project_files(
     assert persona_user_file_id is not None
     # Create a project and upload project files
     project = ProjectManager.create(
-        name="Precedence Test Project",
+        name="Combined Context Project",
         user_performing_action=admin_user,
     )
     project_files = [
@@ -184,7 +179,7 @@ def test_persona_files_override_project_files(
     # Create persona with persona file
     persona = PersonaManager.create(
         user_performing_action=admin_user,
-        name="Override Agent",
+        name="Combined Context Agent",
         description="Persona with its own files",
         system_prompt="You are a helpful assistant. Answer using the files.",
         user_file_ids=[persona_user_file_id],
@@ -199,15 +194,17 @@ def test_persona_files_override_project_files(
 
     response = ChatSessionManager.send_message(
         chat_session_id=chat_session.id,
-        message="What is the secret word?",
+        message="What are the persona secret word and the project secret word? Give both.",
         user_performing_action=admin_user,
     )
 
     assert response.error is None, f"Chat should succeed, got error: {response.error}"
-    # The persona's file should be what the model sees, not the project's
     message_lower = response.full_message.lower()
     assert "albatross" in message_lower, (
         f"Response should reference the persona file's secret word (ALBATROSS), but got: {response.full_message}"
+    )
+    assert "flamingo" in message_lower, (
+        f"Response should also reference the project file's secret word (FLAMINGO), but got: {response.full_message}"
     )
 
 
@@ -254,18 +251,14 @@ def test_default_persona_in_project_uses_project_files(
     )
 
 
-def test_custom_persona_no_files_in_project_ignores_project(
+def test_custom_persona_no_files_in_project_uses_project_files(
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001
 ) -> None:
-    """A custom persona with NO files, used inside a project with files,
-    should NOT see the project's files.  The project is purely organizational.
-
-    We verify by asking about content only in the project file and checking
-    the model does NOT reference it."""
+    """A custom persona without files still receives the project's files."""
 
     project = ProjectManager.create(
-        name="Ignored Project",
+        name="Project Context",
         user_performing_action=admin_user,
     )
     project_upload_result = ProjectManager.upload_files(
@@ -283,7 +276,7 @@ def test_custom_persona_no_files_in_project_ignores_project(
     persona = PersonaManager.create(
         user_performing_action=admin_user,
         name="No Files Agent",
-        description="No files, project is irrelevant",
+        description="Uses the project files without separate agent files",
         system_prompt=(
             "You are a helpful assistant. If you do not have information "
             "to answer a question, say 'I do not have that information.'"
@@ -304,8 +297,7 @@ def test_custom_persona_no_files_in_project_ignores_project(
 
     assert response.error is None
     assert len(response.full_message) > 0
-    assert "capybara" not in response.full_message.lower(), (
-        "Response should NOT reference the project file content (CAPYBARA) "
-        "because the custom persona has no files and should not inherit "
-        f"project files, but got: {response.full_message}"
+    assert "capybara" in response.full_message.lower(), (
+        "A custom persona without files should still use project content (CAPYBARA), "
+        f"but got: {response.full_message}"
     )

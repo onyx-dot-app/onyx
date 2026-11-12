@@ -53,22 +53,10 @@ func handleSlashCommand(m Model, text string) (Model, tea.Cmd) {
 		return cmdNew(m)
 
 	case "/connectors":
-		url := config.OnyxWebURL(m.config.ServerURL) + "/admin/indexing/status"
-		if browser.OpenBrowser(url) {
-			m.viewport.addInfo("Opened " + url + " in browser")
-		} else {
-			m.viewport.addWarning("Failed to open browser. Visit: " + url)
-		}
-		return m, nil
+		return cmdOpenWebPage(m, "/admin/indexing/status"), nil
 
 	case "/settings":
-		url := config.OnyxWebURL(m.config.ServerURL) + "/app/settings/general"
-		if browser.OpenBrowser(url) {
-			m.viewport.addInfo("Opened " + url + " in browser")
-		} else {
-			m.viewport.addWarning("Failed to open browser. Visit: " + url)
-		}
-		return m, nil
+		return cmdOpenWebPage(m, "/app/settings/general"), nil
 
 	case "/experiments":
 		m.viewport.addInfo(config.ExperimentsText(m.config.Features))
@@ -83,9 +71,28 @@ func handleSlashCommand(m Model, text string) (Model, tea.Cmd) {
 	}
 }
 
+// openBrowser is a variable so tests can observe launches.
+var openBrowser = browser.OpenBrowser
+
+// cmdOpenWebPage opens a page of the Onyx web app. Over SSH it only prints
+// the URL, so a remote session never starts a program on the server host.
+func cmdOpenWebPage(m Model, path string) Model {
+	url := config.OnyxWebURL(m.config.ServerURL) + path
+	switch {
+	case RemoteMode:
+		m.viewport.addInfo("Visit: " + url)
+	case openBrowser(url):
+		m.viewport.addInfo("Opened " + url + " in browser")
+	default:
+		m.viewport.addWarning("Failed to open browser. Visit: " + url)
+	}
+	return m
+}
+
 func cmdNew(m Model) (Model, tea.Cmd) {
 	if m.isStreaming {
 		m, _ = m.cancelStream()
+		m, _ = m.finishStream(nil)
 	}
 	m.chatSessionID = nil
 	parentID := -1
@@ -183,9 +190,11 @@ func applyAgentSelection(m Model, lookup func() (*models.AgentSummary, error)) (
 	m.status.setAgent(target.Name)
 	m.viewport.addInfo("Switched to agent: " + target.Name)
 
-	// Save preference
-	m.config.DefaultAgentID = target.ID
-	_ = config.Save(m.config)
+	// Over SSH the selection is session-only: the config file belongs to the host operator.
+	if !RemoteMode {
+		m.config.DefaultAgentID = target.ID
+		_ = config.Save(m.config)
+	}
 
 	return m, nil
 }

@@ -1,4 +1,5 @@
 import type { TimelineTranslate } from "@/app/app/message/messageComponents/toolDisplayHelpers";
+import { getSourceDisplayName, isValidSource } from "@/lib/connectors/utils";
 import {
   PacketType,
   SearchToolPacket,
@@ -8,9 +9,8 @@ import {
   SearchToolDocumentsDelta,
   SectionEnd,
 } from "@/app/app/services/streamingModels";
-import { OnyxDocument } from "@/lib/search/interfaces";
-import { getSourceDisplayName, isValidSource } from "@/lib/sources";
-import { ValidSources } from "@/lib/types";
+import { OnyxDocument } from "@/lib/search/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 
 export const MAX_TITLE_LENGTH = 25;
 

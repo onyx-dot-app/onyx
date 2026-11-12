@@ -17,10 +17,16 @@ from onyx.configs.app_configs import (
     WEB_DOMAIN,
 )
 from onyx.configs.constants import DocumentSource
+from onyx.configs.slack_configs import (
+    SLACK_OAUTH_ACCESS_URL,
+    SLACK_OAUTH_AUTHORIZE_URL,
+)
 from onyx.db.credentials import create_credential
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import CredentialBase
 from shared_configs.contextvars import get_current_tenant_id
@@ -34,12 +40,13 @@ class SlackOAuth:
         """Stored in redis to be looked up on callback"""
 
         email: str
+        user_id: uuid.UUID | None = None
         redirect_on_success: str | None  # Where to send the user if OAuth flow succeeds
 
     CLIENT_ID = OAUTH_SLACK_CLIENT_ID
     CLIENT_SECRET = OAUTH_SLACK_CLIENT_SECRET
 
-    TOKEN_URL = "https://slack.com/api/oauth.v2.access"
+    TOKEN_URL = SLACK_OAUTH_ACCESS_URL
 
     # SCOPE is per https://docs.onyx.app/admins/connectors/official/slack/slack_indexed
     BOT_SCOPE = (
@@ -72,7 +79,7 @@ class SlackOAuth:
     @classmethod
     def _generate_oauth_url_helper(cls, redirect_uri: str, state: str) -> str:
         url = (
-            f"https://slack.com/oauth/v2/authorize"
+            f"{SLACK_OAUTH_AUTHORIZE_URL}"
             f"?client_id={cls.CLIENT_ID}"
             f"&redirect_uri={redirect_uri}"
             f"&scope={cls.BOT_SCOPE}"
@@ -81,12 +88,14 @@ class SlackOAuth:
         return url
 
     @classmethod
-    def session_dump_json(cls, email: str, redirect_on_success: str | None) -> str:
+    def session_dump_json(
+        cls, email: str, redirect_on_success: str | None, user_id: uuid.UUID
+    ) -> str:
         """Temporary state to store in redis. to be looked up on auth response.
         Returns a json string.
         """
         session = SlackOAuth.OAuthSession(
-            email=email, redirect_on_success=redirect_on_success
+            email=email, redirect_on_success=redirect_on_success, user_id=user_id
         )
         return session.model_dump_json()
 
@@ -134,9 +143,15 @@ def handle_slack_oauth_callback(
         )
 
     session_json = session_json_bytes.decode("utf-8")
-    try:
-        session = SlackOAuth.parse_session(session_json)
+    session = SlackOAuth.parse_session(session_json)
 
+    if session.user_id is None or session.user_id != user.id:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Slack OAuth failed - the OAuth state was started by another user.",
+        )
+
+    try:
         if not DEV_MODE:
             redirect_uri = SlackOAuth.REDIRECT_URI
         else:

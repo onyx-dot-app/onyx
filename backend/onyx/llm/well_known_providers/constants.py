@@ -23,6 +23,10 @@ OPENAI_COMPATIBLE_PROVIDER_NAME = "openai_compatible"
 
 NEBIUS_TOKENFACTORY_PROVIDER_NAME = "nebius_tokenfactory"
 
+VERCEL_AI_GATEWAY_PROVIDER_NAME = "vercel_ai_gateway"
+# Public, unauthenticated catalog; also litellm's default base for this provider.
+VERCEL_AI_GATEWAY_DEFAULT_API_BASE = "https://ai-gateway.vercel.sh/v1"
+
 VENICE_PROVIDER_NAME = "venice"
 VENICE_DEFAULT_API_BASE = "https://api.venice.ai/api/v1"
 # Venice prepends its own system prompts to the caller's unless told not to.
@@ -73,6 +77,11 @@ AWS_SECRET_ACCESS_KEY_KWARG = "aws_secret_access_key"
 AWS_SECRET_ACCESS_KEY_KWARG_ENV_VAR_FORMAT = "AWS_SECRET_ACCESS_KEY"
 AWS_SESSION_TOKEN_KWARG = "aws_session_token"
 AWS_SESSION_TOKEN_KWARG_ENV_VAR_FORMAT = "AWS_SESSION_TOKEN"
+# Cross-account Bedrock: LiteLLM assumes this role ARN via STS before each call.
+AWS_ROLE_NAME_KWARG = "aws_role_name"
+AWS_ROLE_NAME_KWARG_ENV_VAR_FORMAT = "AWS_ROLE_NAME"
+AWS_EXTERNAL_ID_KWARG = "aws_external_id"
+AWS_EXTERNAL_ID_KWARG_ENV_VAR_FORMAT = "AWS_EXTERNAL_ID"
 
 AZURE_AD_TOKEN_KWARG = "azure_ad_token"
 AZURE_AD_TOKEN_KWARG_ENV_VAR_FORMAT = "AZURE_AD_TOKEN"
