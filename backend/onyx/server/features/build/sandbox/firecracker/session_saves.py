@@ -55,7 +55,7 @@ from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
 
-# Top-level directories never saved. The daemon also skips its own excludes
+# Top-level names never saved. The daemon also skips its own excludes
 # (node_modules, venvs, caches) at any depth inside each root.
 SAVE_EXCLUDED_ROOTS: frozenset[str] = frozenset(
     {
@@ -203,13 +203,20 @@ def save_session(
     if listing is not None and listing.truncated:
         # A partial list would save a partial session.
         raise SessionSaveError(f"session {session_id} has too many entries to save")
+    # Top-level directories and regular files. Daemons before file roots
+    # skip a file root, so their saves keep only the directories.
     roots = sorted(
         e.name
         for e in (listing.entries if listing is not None else [])
-        if e.type is FileType.DIRECTORY
-        and e.name not in SAVE_EXCLUDED_ROOTS
+        if e.name not in SAVE_EXCLUDED_ROOTS
         and not e.name.startswith(".craft-")
-        and not _is_virtualenv(daemon, session_id, e.name)
+        and (
+            e.type is FileType.REGULAR
+            or (
+                e.type is FileType.DIRECTORY
+                and not _is_virtualenv(daemon, session_id, e.name)
+            )
+        )
     )
     save = SessionSave(
         file_id=None, size_bytes=0, sha256="", roots=[], saved_at=time.time()

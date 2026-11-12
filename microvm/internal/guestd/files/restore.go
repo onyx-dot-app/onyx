@@ -414,9 +414,7 @@ func (x *extractor) memberName(h *tar.Header) (string, error) {
 	if !x.allowed[parts[0]] {
 		return "", bad("not under a capture root")
 	}
-	if len(parts) == 1 && h.Typeflag != tar.TypeDir {
-		return "", bad("a capture root must be a directory")
-	}
+	// A capture root is a directory or a regular file; run rejects other types.
 	return n, nil
 }
 

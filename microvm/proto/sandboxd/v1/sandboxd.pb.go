@@ -3461,8 +3461,8 @@ func (x *ArchiveLimits) GetMaxEntries() int64 {
 type CaptureSessionRequest struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	SessionId string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	// Capture roots: names of directories in the session directory. Empty
-	// means the daemon's --capture-dirs (attachments).
+	// Capture roots: names of directories or regular files in the session
+	// directory. Empty means the daemon's --capture-dirs (attachments).
 	Roots []string `protobuf:"bytes,2,rep,name=roots,proto3" json:"roots,omitempty"`
 	// Names skipped at any depth. Empty means the daemon's --capture-exclude
 	// (node_modules, .venv, caches, ...). A directory with pyvenv.cfg is

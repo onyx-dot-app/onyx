@@ -585,6 +585,53 @@ func TestCaptureRestoreRoundTrip(t *testing.T) {
 	}
 }
 
+func TestCaptureRestoreFileRoots(t *testing.T) {
+	s, base := newStore(t, Config{})
+	put(t, base, "work/a.txt", "a")
+	put(t, base, "report.py", "print(1)")
+	if err := os.Chmod(filepath.Join(base, "report.py"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("/etc/passwd", filepath.Join(base, "pw")); err != nil {
+		t.Fatal(err)
+	}
+	roots := []string{"work", "report.py", "pw", "missing.txt"}
+	archive, cs := capture(t, s, CaptureSpec{SessionID: sid, Roots: roots})
+	if got := strings.Join(tarNames(t, archive), ","); got != "work/,work/a.txt,report.py" {
+		t.Fatalf("archive = %s", got)
+	}
+	if strings.Join(cs.Roots, ",") != "work,report.py" || cs.Files != 2 || cs.Skipped != 1 {
+		t.Fatalf("summary %+v", cs)
+	}
+
+	// A file root replaces an old file or directory of the same name.
+	other := "a6f1b1a2-0000-4000-8000-000000000009"
+	ob := filepath.Join(filepath.Dir(base), other)
+	put(t, ob, "report.py/old.txt", "old dir")
+	put(t, ob, "keep.txt", "keep")
+	rs, err := restore(s, other, archive, RestoreSpec{Roots: roots})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(rs.Roots, ",") != "work,report.py" || rs.Files != 2 {
+		t.Fatalf("restore %+v", rs)
+	}
+	fi, err := os.Lstat(filepath.Join(ob, "report.py"))
+	if err != nil || !fi.Mode().IsRegular() || fi.Mode().Perm() != 0o700 {
+		t.Fatalf("report.py %v %v", fi, err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(ob, "report.py")); string(b) != "print(1)" {
+		t.Fatalf("report.py = %q", b)
+	}
+	if b, _ := os.ReadFile(filepath.Join(ob, "keep.txt")); string(b) != "keep" {
+		t.Fatal("a file outside the capture roots changed")
+	}
+	// A file root must be in the request's roots.
+	if _, err := restore(s, other, archive, RestoreSpec{Roots: []string{"work"}}); !errors.Is(err, ErrArchive) {
+		t.Fatalf("file root not requested: %v", err)
+	}
+}
+
 func TestRestoreRejectsMismatch(t *testing.T) {
 	s, base := newStore(t, Config{})
 	buildSession(t, base)
@@ -663,7 +710,6 @@ func TestRestoreSafety(t *testing.T) {
 		"absolute":       {[]member{reg("/tmp/victim", "x")}, ErrArchive},
 		"unclean":        {[]member{reg("work//a", "x")}, ErrArchive},
 		"other root":     {[]member{reg("etc/passwd", "x")}, ErrArchive},
-		"root is a file": {[]member{reg("work", "x")}, ErrArchive},
 		"symlink":        {[]member{dir("work/"), {h: tar.Header{Typeflag: tar.TypeSymlink, Name: "work/l", Linkname: victim}}}, ErrArchive},
 		"hardlink":       {[]member{dir("work/"), {h: tar.Header{Typeflag: tar.TypeLink, Name: "work/l", Linkname: "work/a"}}}, ErrArchive},
 		"char device":    {[]member{dir("work/"), {h: tar.Header{Typeflag: tar.TypeChar, Name: "work/null", Devmajor: 1, Devminor: 3}}}, ErrArchive},

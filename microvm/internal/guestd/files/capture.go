@@ -74,7 +74,8 @@ func (s *Store) roots(names []string) ([]string, error) {
 	return names, nil
 }
 
-// Capture writes a tar + zstd archive of the session's capture roots to w.
+// Capture writes a tar + zstd archive of the session's capture roots (top-level
+// directories or regular files) to w.
 // It returns an error, and the caller must drop what w got, if a limit is
 // reached or the session cannot be read.
 func (s *Store) Capture(ctx context.Context, spec CaptureSpec, w io.Writer) (CaptureSummary, error) {
@@ -120,13 +121,26 @@ func (s *Store) Capture(ctx context.Context, spec CaptureSpec, w io.Writer) (Cap
 		if errors.Is(err, fs.ErrNotExist) {
 			continue
 		}
-		if err != nil || !fi.IsDir() {
+		if err != nil {
 			sum.Skipped++
 			continue
 		}
-		if err := c.dir(r, fi, 0); err != nil {
+		files := sum.Files
+		switch {
+		case fi.IsDir():
+			err = c.dir(r, fi, 0)
+		case fi.Mode().IsRegular():
+			err = c.file(r)
+		default:
+			sum.Skipped++
+			continue
+		}
+		if err != nil {
 			_ = zw.Close()
 			return sum, err
+		}
+		if !fi.IsDir() && sum.Files == files {
+			continue // the file could not be read
 		}
 		sum.Roots = append(sum.Roots, r)
 	}
