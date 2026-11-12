@@ -420,10 +420,22 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
                 for path, data in selected.items()
                 if not _skipped(path, exclude, skip_hidden=False)
             }
-            # Like the daemon: top-level files go under TOP_FILES_ROOT.
+            # Like the daemon: top-level files go under TOP_FILES_ROOT. Files
+            # directly in a TOP_FILES_ROOT directory stay there, unless a
+            # top-level entry has the same name.
+            top_names = {
+                p.split("/", 1)[0]
+                for (sid, session, p) in self.files
+                if sid == request.sandbox_id and session == request.session_id
+            }
             members = {
                 p if "/" in p else f"{TOP_FILES_ROOT}/{p}": d
                 for p, d in members.items()
+                if not p.startswith(f"{TOP_FILES_ROOT}/")
+                or (
+                    p.count("/") == 1
+                    and p.removeprefix(f"{TOP_FILES_ROOT}/") not in top_names
+                )
             }
             archive = _zip(members)
             capture_id = self.next_id("cap")

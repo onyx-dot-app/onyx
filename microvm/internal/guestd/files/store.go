@@ -54,7 +54,8 @@ const (
 // TopFilesRoot is the archive directory that holds the session's top-level
 // regular files. Restore moves its files back to the top level. A daemon
 // without this rule restores it as a normal directory, so its restore does
-// not fail. Capture skips a session directory with this name.
+// not fail. A capture with a TopFilesRoot root takes the files of that
+// session directory back into the archive.
 const TopFilesRoot = ".onyx-top-level"
 
 // DefaultCaptureRoots are the session directories that a save holds.

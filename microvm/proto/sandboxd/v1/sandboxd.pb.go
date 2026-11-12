@@ -3466,8 +3466,9 @@ type CaptureSessionRequest struct {
 	// Regular files go in the archive under the directory ".onyx-top-level",
 	// and the summary roots name ".onyx-top-level" instead of the files.
 	// Restore moves them back to the top level. A daemon without this rule
-	// restores ".onyx-top-level" as a directory. A ".onyx-top-level" root is
-	// skipped.
+	// restores ".onyx-top-level" as a directory. A ".onyx-top-level" root
+	// takes the regular files directly in that session directory into the
+	// archive in the same way, except names that are also top-level entries.
 	Roots []string `protobuf:"bytes,2,rep,name=roots,proto3" json:"roots,omitempty"`
 	// Names skipped at any depth. Empty means the daemon's --capture-exclude
 	// (node_modules, .venv, caches, ...). A directory with pyvenv.cfg is

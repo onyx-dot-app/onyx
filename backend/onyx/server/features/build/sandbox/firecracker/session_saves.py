@@ -76,10 +76,6 @@ SAVE_EXCLUDED_ROOTS: frozenset[str] = frozenset(
         ".parcel-cache",
     }
 )
-# The daemon saves top-level files under this archive directory and puts
-# them back at the top level on restore. Older daemons restore it as a
-# directory. A session directory with this name is not saved.
-TOP_FILES_ROOT = ".onyx-top-level"
 # One session's save (capture and upload, 15 min each at most) ends within
 # this time. A stop renews its sandbox lock for each session.
 SESSION_SAVE_MAX_SECONDS = 35 * 60.0
@@ -208,12 +204,13 @@ def save_session(
         # A partial list would save a partial session.
         raise SessionSaveError(f"session {session_id} has too many entries to save")
     # Top-level directories and regular files. Daemons before file roots
-    # skip a file root, so their saves keep only the directories.
+    # skip a file root, so their saves keep only the directories. The
+    # daemon's .onyx-top-level directory is a normal root: the daemon takes
+    # its files back as top-level files.
     roots = sorted(
         e.name
         for e in (listing.entries if listing is not None else [])
         if e.name not in SAVE_EXCLUDED_ROOTS
-        and e.name != TOP_FILES_ROOT
         and not e.name.startswith(".craft-")
         and (
             e.type is FileType.REGULAR

@@ -301,7 +301,8 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   VM first, in the background: CaptureSession of the session's top-level
   directories and files (without dependencies and caches; files go under
   `.onyx-top-level` in the archive, which older daemons restore as a
-  directory), presigned upload, file
+  directory; a later save sends that directory as a root, and the daemon
+  takes its files back as top-level files), presigned upload, file
   store finalize, commit of the new save in the cache, then deletion of the
   old archive. A busy sandbox (running command, turn, parked approval) or a
   failed save keeps the VM. A session's first use on a new VM instance

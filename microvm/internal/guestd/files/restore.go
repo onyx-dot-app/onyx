@@ -145,6 +145,13 @@ func (s *Store) Restore(ctx context.Context, spec RestoreSpec, r io.Reader) (Res
 	if err := swapRoots(root, staging, swap, x.present); err != nil {
 		return sum, err
 	}
+	if x.liftedTop {
+		// The files are at the top level now. An empty TopFilesRoot that a
+		// daemon without TopFilesRoot restored is left over.
+		if fi, err := root.Lstat(TopFilesRoot); err == nil && fi.IsDir() {
+			_ = root.Remove(TopFilesRoot)
+		}
+	}
 	for _, r := range roots {
 		if x.present[r] || (r == TopFilesRoot && len(x.topFiles) > 0) {
 			sum.Roots = append(sum.Roots, r)
@@ -177,6 +184,7 @@ func (x *extractor) liftTopFiles(roots []string) ([]string, error) {
 		swap = append(swap, f)
 	}
 	delete(x.present, TopFilesRoot)
+	x.liftedTop = true
 	if err := x.root.Remove(TopFilesRoot); err != nil {
 		return nil, err
 	}
@@ -365,6 +373,8 @@ type extractor struct {
 	own func(name string) error
 	// topFiles are the file names under TopFilesRoot.
 	topFiles []string
+	// liftedTop is set when the archive had TopFilesRoot.
+	liftedTop bool
 }
 
 // entry counts one member, or one parent directory that a member needs.

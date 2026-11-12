@@ -596,14 +596,13 @@ func TestCaptureRestoreFileRoots(t *testing.T) {
 	if err := os.Symlink("/etc/passwd", filepath.Join(base, "pw")); err != nil {
 		t.Fatal(err)
 	}
-	put(t, base, TopFilesRoot+"/x.txt", "a session directory with the reserved name")
 	roots := []string{"work", "report.py", "notes.md", "pw", "missing.txt", TopFilesRoot}
 	archive, cs := capture(t, s, CaptureSpec{SessionID: sid, Roots: roots})
 	want := "work/,work/a.txt,.onyx-top-level/,.onyx-top-level/report.py,.onyx-top-level/notes.md"
 	if got := strings.Join(tarNames(t, archive), ","); got != want {
 		t.Fatalf("archive = %s", got)
 	}
-	if strings.Join(cs.Roots, ",") != "work,"+TopFilesRoot || cs.Files != 3 || cs.Skipped != 2 {
+	if strings.Join(cs.Roots, ",") != "work,"+TopFilesRoot || cs.Files != 3 || cs.Skipped != 1 {
 		t.Fatalf("summary %+v", cs)
 	}
 
@@ -645,6 +644,53 @@ func TestCaptureRestoreFileRoots(t *testing.T) {
 	// TopFilesRoot must be in the request's roots.
 	if _, err := restore(s, other, archive, RestoreSpec{Roots: []string{"work"}}); !errors.Is(err, ErrArchive) {
 		t.Fatalf("top files not requested: %v", err)
+	}
+}
+
+// After a daemon without TopFilesRoot restored a save, the top-level files
+// are in the session directory TopFilesRoot. The next capture keeps them,
+// and a restore puts them back at the top level.
+func TestCaptureRecoversTopFilesDir(t *testing.T) {
+	s, base := newStore(t, Config{})
+	put(t, base, "work/a.txt", "a")
+	put(t, base, "notes.md", "top")
+	put(t, base, TopFilesRoot+"/report.py", "print(1)")
+	put(t, base, TopFilesRoot+"/notes.md", "shadowed")
+	put(t, base, TopFilesRoot+"/sub/a.txt", "nested")
+	if err := os.Symlink("/etc/passwd", filepath.Join(base, TopFilesRoot, "pw")); err != nil {
+		t.Fatal(err)
+	}
+	archive, cs := capture(t, s, CaptureSpec{SessionID: sid, Roots: []string{"work", "notes.md", TopFilesRoot}})
+	want := "work/,work/a.txt,.onyx-top-level/,.onyx-top-level/notes.md,.onyx-top-level/report.py"
+	if got := strings.Join(tarNames(t, archive), ","); got != want {
+		t.Fatalf("archive = %s", got)
+	}
+	// Skipped: the shadowed notes.md, sub and pw.
+	if strings.Join(cs.Roots, ",") != "work,"+TopFilesRoot || cs.Files != 3 || cs.Skipped != 3 {
+		t.Fatalf("summary %+v", cs)
+	}
+
+	other := "a6f1b1a2-0000-4000-8000-00000000000b"
+	ob := filepath.Join(filepath.Dir(base), other)
+	if err := os.MkdirAll(filepath.Join(ob, TopFilesRoot), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := restore(s, other, archive, RestoreSpec{Roots: cs.Roots}); err != nil {
+		t.Fatal(err)
+	}
+	for rel, data := range map[string]string{"report.py": "print(1)", "notes.md": "top", "work/a.txt": "a"} {
+		if b, _ := os.ReadFile(filepath.Join(ob, rel)); string(b) != data {
+			t.Fatalf("%s = %q", rel, b)
+		}
+	}
+	if _, err := os.Lstat(filepath.Join(ob, TopFilesRoot)); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("%s left: %v", TopFilesRoot, err)
+	}
+
+	// Without a TopFilesRoot root, capture does not read the directory.
+	archive, _ = capture(t, s, CaptureSpec{SessionID: sid, Roots: []string{"work"}})
+	if got := strings.Join(tarNames(t, archive), ","); got != "work/,work/a.txt" {
+		t.Fatalf("archive = %s", got)
 	}
 }
 
