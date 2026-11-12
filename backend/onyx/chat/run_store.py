@@ -508,7 +508,7 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory):
         try:
             inbox = self._read_inbox()
             if inbox is not None and interrupt_ownerless_responses(
-                self.cache, self.tenant_id, inbox.running_response_ids
+                self.cache, self.tenant_id, inbox.unfinished_response_ids
             ):
                 inbox = self._read_inbox()
             if inbox is None:

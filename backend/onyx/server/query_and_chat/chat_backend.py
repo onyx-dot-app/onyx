@@ -1429,7 +1429,7 @@ def get_chat_session_processing_status(
         and (
             inbox.next_turn is not None
             # Dispatch saves a response whose owner is gone as interrupted.
-            or ownerless_response_ids(cache, inbox.running_response_ids)
+            or ownerless_response_ids(cache, inbox.unfinished_response_ids)
             # Agent work needs a host when no running child's store scans.
             or (inbox.child_work and not inbox.running_response_ids)
         )
