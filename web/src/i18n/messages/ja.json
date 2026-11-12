@@ -5181,6 +5181,27 @@
       "unavailable": {
         "description": "Craft はデプロイごとに Onyx が有効にします。利用するには、Onyx の担当者にお問い合わせください。",
         "title": "このデプロイでは Craft を利用できません"
+      },
+      "publishing": {
+        "title": "スキルの公開",
+        "open": {
+          "label": "オープン",
+          "description": "スキルの作成者はすぐに組織に公開できます。"
+        },
+        "requiresReview": {
+          "label": "レビューが必要",
+          "description": "管理者が各公開と各更新を承認します。"
+        },
+        "off": {
+          "label": "オフ",
+          "description": "管理者だけがスキルを組織に公開できます。"
+        },
+        "saveSuccess": {
+          "message": "公開設定を保存しました。"
+        },
+        "saveError": {
+          "message": "公開設定を保存できませんでした。"
+        }
       }
     },
     "credentials": {
@@ -17388,7 +17409,15 @@
         },
         "publishWarning": {
           "title": "公開は取り消せません",
-          "description": "保存すると、組織内の全員がこのスキルを使用できます。非公開に戻すことはできません。削除できるのは管理者のみです。"
+          "description": "保存すると、組織内の全員がこのスキルを使用できます。非公開に戻すことはできません。削除できるのは管理者のみです。",
+          "reviewDescription": "管理者がリクエストを承認するまで、スキルは非公開のままです。承認後は非公開に戻すことはできません。"
+        },
+        "reviewRequestedToast": {
+          "message": "公開リクエストを管理者のレビューに送信しました。"
+        },
+        "publishOff": {
+          "title": "公開はオフになっています",
+          "description": "管理者が組織への公開をオフにしました。このスキルの公開を管理者に依頼してください。"
         }
       },
       "placeholders": {
@@ -17441,6 +17470,7 @@
           "label": "更新を公開",
           "successToast": "バージョン {number} を組織に公開しました。",
           "failedToast": "この更新を公開できませんでした。",
+          "sentForReviewToast": "バージョン {number} を管理者のレビューに送信しました。",
           "offNotice": "公開はオフになっています。このアップデートの公開を管理者に依頼してください。"
         }
       }
@@ -17601,6 +17631,34 @@
       "publishWarning": {
         "title": "公開は取り消せません",
         "description": "適用すると、組織内の全員が選択したスキルを使用できます。公開したスキルを非公開に戻すことはできません。削除できるのは管理者のみです。"
+      }
+    },
+    "reviewRequests": {
+      "title": "公開リクエスト",
+      "description": "組織へのスキル公開リクエストを承認または却下します。",
+      "columns": {
+        "skill": "スキル",
+        "version": "バージョン",
+        "author": "作成者",
+        "saved": "保存日時"
+      },
+      "unnamedSkill": "名前のないスキル",
+      "review": {
+        "label": "確認",
+        "ariaLabel": "{name} を確認"
+      },
+      "approve": {
+        "label": "承認"
+      },
+      "deny": {
+        "label": "却下"
+      },
+      "approvedToast": "{name} のバージョン {number} を公開しました。",
+      "deniedToast": "{name} のバージョン {number} を却下しました。",
+      "failedToast": "このリクエストを更新できませんでした。",
+      "version": {
+        "firstPublish": "v{number} · 初回公開",
+        "update": "v{number} · v{published} からの更新"
       }
     }
   },

@@ -5181,6 +5181,27 @@
       "unavailable": {
         "description": "Craft 由 Onyx 按部署逐一启用。请联系您的 Onyx 客户代表以获取访问权限。",
         "title": "此部署不提供 Craft"
+      },
+      "publishing": {
+        "title": "技能发布",
+        "open": {
+          "label": "开放",
+          "description": "技能作者可以立即发布到组织。"
+        },
+        "requiresReview": {
+          "label": "需要审核",
+          "description": "管理员批准每次发布和每次更新。"
+        },
+        "off": {
+          "label": "关闭",
+          "description": "只有管理员可以将技能发布到组织。"
+        },
+        "saveSuccess": {
+          "message": "已保存发布设置。"
+        },
+        "saveError": {
+          "message": "无法保存发布设置。"
+        }
       }
     },
     "credentials": {
@@ -17388,7 +17409,15 @@
         },
         "publishWarning": {
           "title": "发布后无法撤销",
-          "description": "保存后，组织中的所有人都可以使用此技能。您无法再将其设为私有。只有管理员可以删除它。"
+          "description": "保存后，组织中的所有人都可以使用此技能。您无法再将其设为私有。只有管理员可以删除它。",
+          "reviewDescription": "在管理员批准请求之前，技能保持私有。批准后，您无法再将其设为私有。"
+        },
+        "reviewRequestedToast": {
+          "message": "你的发布请求已提交给管理员审核。"
+        },
+        "publishOff": {
+          "title": "发布已关闭",
+          "description": "管理员已关闭向组织发布。请让管理员发布此技能。"
         }
       },
       "placeholders": {
@@ -17441,6 +17470,7 @@
           "label": "发布更新",
           "successToast": "已将版本 {number} 发布到组织。",
           "failedToast": "无法发布此更新。",
+          "sentForReviewToast": "版本 {number} 已提交给管理员审核。",
           "offNotice": "发布已关闭。请让管理员发布此更新。"
         }
       }
@@ -17601,6 +17631,34 @@
       "publishWarning": {
         "title": "发布后无法撤销",
         "description": "应用后，组织中的所有人都可以使用所选技能。已发布的技能无法再设为私有。只有管理员可以删除它们。"
+      }
+    },
+    "reviewRequests": {
+      "title": "发布请求",
+      "description": "批准或拒绝将技能发布到组织的请求。",
+      "columns": {
+        "skill": "技能",
+        "version": "版本",
+        "author": "作者",
+        "saved": "保存时间"
+      },
+      "unnamedSkill": "未命名技能",
+      "review": {
+        "label": "审核",
+        "ariaLabel": "审核 {name}"
+      },
+      "approve": {
+        "label": "批准"
+      },
+      "deny": {
+        "label": "拒绝"
+      },
+      "approvedToast": "已发布 {name} 的版本 {number}。",
+      "deniedToast": "已拒绝 {name} 的版本 {number}。",
+      "failedToast": "无法更新此请求。",
+      "version": {
+        "firstPublish": "v{number} · 首次发布",
+        "update": "v{number} · 从 v{published} 更新"
       }
     }
   },

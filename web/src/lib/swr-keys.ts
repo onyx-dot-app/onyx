@@ -266,6 +266,7 @@ export const SWR_KEYS = {
   userSkillPreview: (skillId: string) => `/api/skills/${skillId}/preview`,
   skillSharing: (skillId: string) => `/api/skills/custom/${skillId}/share`,
   editableSkill: (skillId: string) => `/api/skills/custom/${skillId}/edit`,
+  skillReviewRequests: "/api/skills/review-requests",
   skillVersions: (skillId: string) => `/api/skills/custom/${skillId}/versions`,
   skillVersion: (skillId: string, versionId: string) =>
     `/api/skills/custom/${skillId}/versions/${versionId}`,

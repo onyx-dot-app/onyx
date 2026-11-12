@@ -183,6 +183,35 @@ Publishing means reviewing that Skill and then sharing it with the intended audi
   </Step>
 </Steps>
 
+## Control who publishes
+
+The **Skill Publishing** setting controls how Skill authors publish to the organization. Open **Admin Panel**,
+select **Craft → Preferences**, and choose a value under **Skill Publishing**:
+
+| Value | Effect |
+| --- | --- |
+| **Open** | Authors publish a Skill and its updates to the organization at once. This is the default. |
+| **Requires review** | A publish or a **Publish update** makes a request. The Skill stays private, or the organization keeps the published version, until an Admin approves the request. |
+| **Off** | Authors cannot publish. Onyx shows an error when they try. |
+
+The setting applies to every way to publish: the sharing dialog, **Publish update**, bulk sharing, uploads, the editor,
+and GitHub import. Users with the organization-wide `manage:plugins` permission always publish at once.
+Linking a Skill to an App is not affected.
+
+### Review publish requests
+
+Under **Requires review**, a publish from an author makes a request, and the version shows **Pending review**.
+To review requests, open **Admin Panel → Skills**. **Publish Requests** shows each pending request with the Skill name,
+the version, the author, and when the version was saved. It does not show when there are no requests.
+Users with the organization-wide `manage:plugins` permission who are not admins see **Publish Requests** on the Craft
+**Skills** page.
+
+Select **Review** on a request to see the description and instructions of that version.
+Then select **Approve** to publish it, or **Deny** to remove the request. If another published Skill has the same name,
+Onyx refuses the approval and shows why. After a deny, the author can publish again later.
+
+A Skill has at most one pending request. A newer request replaces the older one.
+
 ## Choose sharing permissions
 
 | Scope               | Can use                                                   | Can edit                                                                                 |
