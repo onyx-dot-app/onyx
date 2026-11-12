@@ -21,23 +21,58 @@ function message(text: string): TimelineEvent {
 }
 
 describe("reduceTimeline", () => {
-  it("joins thought chunks and ends the block when the message starts", () => {
+  it("keeps messages, thinking and tool calls in arrival order", () => {
     const state = reduceTimelineEvents([
       thought("Let me "),
       thought("check."),
-      message("Done "),
-      message("here."),
+      message("Checking "),
+      message("now."),
+      update({ sessionUpdate: "tool_call", toolCallId: "t1", title: "Run" }),
+      message("Done."),
+    ]);
+
+    expect(
+      state.entries.map((entry) => [entry.id, entry.status, entry.payload])
+    ).toEqual([
+      ["thinking-0", "done", { kind: "thinking", text: "Let me check." }],
+      [
+        "message-1",
+        "done",
+        { kind: "message", content: [{ type: "text", text: "Checking now." }] },
+      ],
+      ["t1", "streaming", expect.objectContaining({ kind: "tool" })],
+      [
+        "message-3",
+        "streaming",
+        { kind: "message", content: [{ type: "text", text: "Done." }] },
+      ],
+    ]);
+  });
+
+  it("updates a part by its part id and replaces its text with a snapshot", () => {
+    const part = (text: string, snapshotText?: string): TimelineEvent =>
+      update({
+        sessionUpdate: "agent_message_chunk",
+        content: { type: "text", text },
+        _meta: { onyx: { partId: "p1", snapshotText } },
+      });
+    const state = reduceTimelineEvents([
+      part("Hel"),
+      part("lo"),
+      part("lo", "Hello"),
     ]);
 
     expect(state.entries).toEqual([
       {
-        id: "thinking-0",
-        status: "done",
+        id: "part:p1",
+        status: "streaming",
         groupId: null,
-        payload: { kind: "thinking", text: "Let me check." },
+        payload: {
+          kind: "message",
+          content: [{ type: "text", text: "Hello" }],
+        },
       },
     ]);
-    expect(state.message).toEqual([{ type: "text", text: "Done here." }]);
   });
 
   it("applies tool call updates and keeps the fields an update leaves out", () => {
@@ -75,9 +110,34 @@ describe("reduceTimeline", () => {
         content: [{ type: "content", content: { type: "text", text: "ok" } }],
         locations: [],
         rawInput: { command: "npm test" },
-        rawOutput: undefined,
+        rawOutput: null,
         _meta: null,
       },
+    });
+  });
+
+  it("treats null fields as unset", () => {
+    const state = reduceTimelineEvents([
+      update({
+        sessionUpdate: "tool_call",
+        toolCallId: "t1",
+        title: "Read",
+        rawInput: { path: "a.ts" },
+      }),
+      update({
+        sessionUpdate: "tool_call_update",
+        toolCallId: "t1",
+        title: null,
+        rawInput: null,
+        status: "completed",
+      }),
+    ]);
+
+    const payload = state.entries[0]?.payload;
+    expect(payload?.kind === "tool" && payload.toolCall).toMatchObject({
+      title: "Read",
+      rawInput: { path: "a.ts" },
+      status: "completed",
     });
   });
 
