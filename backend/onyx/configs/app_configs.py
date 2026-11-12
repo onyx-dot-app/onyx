@@ -459,8 +459,9 @@ OPENSEARCH_VERIFY_CERTS = (
     os.environ.get("OPENSEARCH_VERIFY_CERTS", "").lower() == "true"
 )
 # CA bundle to verify the server cert against when OPENSEARCH_VERIFY_CERTS=true.
-# If unset, uses SSL_CERT_FILE (set by the Helm chart's customCACerts) when that
-# file exists, else certifi's public roots. opensearch-py ignores SSL_CERT_FILE.
+# If unset, uses SSL_CERT_FILE (the Helm chart's customCACerts, or the Homebrew
+# bundle on macOS) when that file exists, else certifi's public roots.
+# opensearch-py ignores SSL_CERT_FILE.
 OPENSEARCH_CA_CERTS: str | None = os.environ.get("OPENSEARCH_CA_CERTS") or None
 _ssl_cert_file: str | None = os.environ.get("SSL_CERT_FILE") or None
 if OPENSEARCH_CA_CERTS is None and _ssl_cert_file and os.path.exists(_ssl_cert_file):
