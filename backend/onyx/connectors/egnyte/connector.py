@@ -214,12 +214,11 @@ def _is_fatal(error: Exception) -> bool:
 
 
 def _reindex_failure(
-    document_id: str, message: str, exception: Exception | None = None
+    target: DocumentFailure, message: str, exception: Exception | None = None
 ) -> ConnectorFailure:
+    """Keeps the target's link, so the error row still points at the file."""
     return ConnectorFailure(
-        failed_document=DocumentFailure(document_id=document_id),
-        failure_message=message,
-        exception=exception,
+        failed_document=target, failure_message=message, exception=exception
     )
 
 
@@ -406,7 +405,7 @@ class EgnyteConnector(
     ) -> Document | ConnectorFailure | None:
         document_id = egnyte_document_id(file.group_id)
         try:
-            content = self.ops.download_file(file_path=file.path)
+            content = self.ops.download_file(group_id=file.group_id)
             document = _build_document(
                 file,
                 _extract_text(file, content),
@@ -643,15 +642,16 @@ class EgnyteConnector(
 
     def _reindex_document(
         self,
-        document_id: str,
+        target: DocumentFailure,
         include_permissions: bool,
         folders: dict[str, tuple[EgnyteFolder, ExternalAccess | None]],
         yielded_folder_ids: set[str],
     ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
+        document_id = target.document_id
         group_id = parse_egnyte_document_id(document_id)
         if group_id is None:
             yield _reindex_failure(
-                document_id, f"'{document_id}' is not an Egnyte document id."
+                target, f"'{document_id}' is not an Egnyte document id."
             )
             return
         try:
@@ -661,19 +661,17 @@ class EgnyteConnector(
                 raise
             # The retry worker reads a missing result as a new failure, so
             # the reason is given. Pruning removes the document.
-            yield _reindex_failure(
-                document_id, f"Egnyte file {document_id} was deleted.", e
-            )
+            yield _reindex_failure(target, f"Egnyte file {document_id} was deleted.", e)
             return
         if not _is_under(file.path, self.folder_path):
             yield _reindex_failure(
-                document_id,
+                target,
                 f"Egnyte file {file.path} is outside {self.folder_path}.",
             )
             return
         if not is_indexable(file):
             yield _reindex_failure(
-                document_id, f"Egnyte file {file.path} is not a supported type."
+                target, f"Egnyte file {file.path} is not a supported type."
             )
             return
 
@@ -706,14 +704,16 @@ class EgnyteConnector(
         for failure in errors:
             if failure.failed_document is None:
                 continue
-            document_id = failure.failed_document.document_id
+            target = failure.failed_document
             try:
                 yield from self._reindex_document(
-                    document_id, include_permissions, folders, yielded_folder_ids
+                    target, include_permissions, folders, yielded_folder_ids
                 )
             except Exception as e:
                 if _is_fatal(e):
                     raise
                 yield _reindex_failure(
-                    document_id, f"Failed to read Egnyte file {document_id}: {e}", e
+                    target,
+                    f"Failed to read Egnyte file {target.document_id}: {e}",
+                    e,
                 )

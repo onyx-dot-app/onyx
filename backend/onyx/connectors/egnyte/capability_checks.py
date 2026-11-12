@@ -166,7 +166,7 @@ class _FilesCheck(CapabilityCheck[EgnyteConnectorConfig]):
                 return False
             # Failed files are read again by id.
             gateway.get_file(group_id=sample.group_id)
-            gateway.download_file(file_path=sample.path, max_bytes=_PROBE_BYTES)
+            gateway.download_file(group_id=sample.group_id, max_bytes=_PROBE_BYTES)
             return True
 
         if probe(download_sample, f"Onyx could not read files in {folder_path}."):

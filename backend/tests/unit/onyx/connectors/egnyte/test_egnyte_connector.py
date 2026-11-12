@@ -80,7 +80,8 @@ class _FakeEgnyte:
             files=[_file(child) for child in children if child not in self.tree],
         )
 
-    def download_file(self, *, file_path: str) -> BytesIO:
+    def download_file(self, *, group_id: str) -> BytesIO:
+        file_path = group_id.removeprefix("group:")
         self.downloads.append(file_path)
         return BytesIO(f"text of {file_path}".encode())
 
@@ -181,10 +182,10 @@ def test_failures_are_per_item_and_the_walk_goes_on() -> None:
         if folder_path == "/Shared/Locked":
             raise EgnyteApiError("boom", status_code=500)
 
-    def download_file(*, file_path: str) -> BytesIO:
-        if file_path == "/Shared/bad.txt":
+    def download_file(*, group_id: str) -> BytesIO:
+        if group_id == "group:/Shared/bad.txt":
             raise EgnyteApiError("boom", status_code=500)
-        if file_path == "/Shared/deleted.txt":
+        if group_id == "group:/Shared/deleted.txt":
             raise EgnyteApiError("gone", status_code=404)
         return BytesIO(b"ok")
 
@@ -360,6 +361,24 @@ def test_reindex_reports_deleted_and_unreadable_files() -> None:
         "not-egnyte",
     ]
     assert not [item for item in items if isinstance(item, Document)]
+
+
+def test_reindex_failures_keep_the_link_of_the_failed_document() -> None:
+    target = DocumentFailure(
+        document_id="egnyte-group:/Shared/deleted.txt",
+        document_link="https://acme.egnyte.com/navigate/file/x",
+    )
+    ops = _resolver_ops(_FakeEgnyte({"/Shared": []}))
+
+    items = list(
+        _connector(ops).reindex(
+            [ConnectorFailure(failed_document=target, failure_message="earlier")]
+        )
+    )
+
+    assert [i.failed_document for i in items if isinstance(i, ConnectorFailure)] == [
+        target
+    ]
 
 
 def test_reindex_ends_on_a_used_up_quota() -> None:
