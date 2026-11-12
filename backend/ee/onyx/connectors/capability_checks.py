@@ -14,6 +14,10 @@ from ee.onyx.external_permissions.azure_datalake.capability_checks import (
     build_azure_datalake_doc_permission_sync_checks,
     build_azure_datalake_group_sync_checks,
 )
+from ee.onyx.external_permissions.egnyte.capability_checks import (
+    build_egnyte_doc_permission_sync_checks,
+    build_egnyte_group_sync_checks,
+)
 from ee.onyx.external_permissions.linear.capability_checks import (
     build_linear_doc_permission_sync_checks,
     build_linear_group_sync_checks,
@@ -78,6 +82,7 @@ _DOC_PERMISSION_SYNC_CHECKS_BY_SOURCE: dict[DocumentSource, list[CapabilityCheck
     DocumentSource.SHAREPOINT: build_sharepoint_doc_permission_sync_checks(),
     DocumentSource.YOUTRACK: build_youtrack_doc_permission_sync_checks(),
     DocumentSource.AZURE_DATALAKE: build_azure_datalake_doc_permission_sync_checks(),
+    DocumentSource.EGNYTE: build_egnyte_doc_permission_sync_checks(),
 }
 
 # Slack registers nothing here by design: it has no group sync (channel access
@@ -93,6 +98,7 @@ _EXTERNAL_GROUP_SYNC_CHECKS_BY_SOURCE: dict[DocumentSource, list[CapabilityCheck
     DocumentSource.LINEAR: build_linear_group_sync_checks(),
     DocumentSource.YOUTRACK: build_youtrack_group_sync_checks(),
     DocumentSource.AZURE_DATALAKE: build_azure_datalake_group_sync_checks(),
+    DocumentSource.EGNYTE: build_egnyte_group_sync_checks(),
 }
 
 
