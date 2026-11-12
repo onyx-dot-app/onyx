@@ -73,6 +73,24 @@ class TaskPRTests(unittest.TestCase):
             self.assertEqual((root / "unapproved.txt").read_text(), "after")
             self.assertEqual((root / "unapproved-new.txt").read_text(), "after")
 
+            failed_sha = run(root, "git", "rev-parse", "HEAD").stdout.strip()
+            run(root, "git", "push", "origin", "--delete", "auto/test")
+            Path(env["CREATED"]).unlink()
+            run(root, "git", "checkout", "main")
+            (root / "approved.txt").write_text("repaired")
+            result = run(
+                root,
+                "bash",
+                str(SCRIPTS / "publish-task-pr.sh"),
+                env={**env, "FAILED_SHA": failed_sha},
+            )
+            self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("Repair target changed", result.stderr)
+            self.assertEqual(
+                run(root, "git", "ls-remote", "origin", "refs/heads/auto/test").stdout,
+                "",
+            )
+
 
 class BrowserUpdatePRTests(unittest.TestCase):
     def test_publish_retry_and_reject_extra_changes(self) -> None:
@@ -129,7 +147,22 @@ class BrowserUpdatePRTests(unittest.TestCase):
             binaries.mkdir()
             fixtures = {
                 "curl": '#!/bin/sh\ncase "$*" in\n*last-known*) printf \'{"channels":{"Stable":{"version":"%s"}}}\' "$STABLE";;\n*linux-arm64*) printf "%s-arm64" "$STABLE";;\n*) printf "%s-amd64" "$STABLE";;\nesac\n',
-                "gh": '#!/bin/sh\ncase "$1 $2" in\n"pr list") if [ -n "$EXISTING_PR" ] || [ -f "$CREATED_PR" ]; then echo 123; fi;;\n"pr create") touch "$CREATED_PR"; echo "pr create" >> "$PR_CALLS";;\n*) echo "$*" >> "$PR_CALLS";;\nesac\n',
+                "gh": """#!/bin/sh
+case "$1 $2" in
+"pr list") if [ -n "$EXISTING_PR" ] || [ -f "$CREATED_PR" ]; then echo 123; fi;;
+"pr create") touch "$CREATED_PR"; echo "pr create" >> "$PR_CALLS";;
+"pr view")
+  if [ -f "$REVIEW_DONE" ]; then
+    echo '{"reviewRequests":[{"login":"reviewer"}],"reviews":[]}'
+  else
+    echo '{"reviewRequests":[],"reviews":[]}'
+  fi;;
+"pr edit")
+  if [ "${FAIL_EDIT:-}" = true ]; then exit 1; fi
+  case "$*" in *--add-reviewer*) touch "$REVIEW_DONE";; esac
+  echo "$*" >> "$PR_CALLS";;
+esac
+""",
                 "shuf": "#!/bin/sh\nhead -1\n",
             }
             for name, content in fixtures.items():
@@ -144,6 +177,8 @@ class BrowserUpdatePRTests(unittest.TestCase):
                 "EXISTING_PR": "",
                 "STABLE": "999.0.1.2",
                 "CREATED_PR": str(Path(directory) / "created"),
+                "REVIEW_DONE": str(Path(directory) / "reviewed"),
+                "REVIEWER": "reviewer",
                 "BASE": "main",
                 "BRANCH": "auto/sandbox-browser/main",
                 "FILES": INSTALLER,
@@ -168,8 +203,8 @@ class BrowserUpdatePRTests(unittest.TestCase):
                 self.assertEqual(update.returncode, 0, update.stderr)
                 return run(root, *args, env=environment)
 
-            result = publish(env)
-            self.assertEqual(result.returncode, 0, result.stderr)
+            result = publish({**env, "FAIL_EDIT": "true"})
+            self.assertNotEqual(result.returncode, 0)
             branch = "auto/sandbox-browser/main"
             first = run(
                 root, "git", "ls-remote", "origin", f"refs/heads/{branch}"
@@ -178,6 +213,19 @@ class BrowserUpdatePRTests(unittest.TestCase):
             result = publish({**env, "EXISTING_PR": "123"})
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("PR #123 already has this output.", result.stdout)
+            self.assertTrue(Path(env["REVIEW_DONE"]).exists())
+            output = Path(env["GITHUB_OUTPUT"])
+            self.assertIn("pr_number=123", output.read_text())
+            self.assertIn("notify=true", output.read_text())
+            output.unlink()
+            calls_before = Path(env["PR_CALLS"]).read_text().count("--add-reviewer")
+            result = publish(env)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("notify=false", output.read_text())
+            self.assertIn("pr_number=123", output.read_text())
+            self.assertEqual(
+                Path(env["PR_CALLS"]).read_text().count("--add-reviewer"), calls_before
+            )
             self.assertEqual(
                 first,
                 run(root, "git", "ls-remote", "origin", f"refs/heads/{branch}").stdout,
