@@ -96,6 +96,7 @@ from onyx.db.chat_inputs import (
     agent_result_states,
     can_start_input,
     consume_inputs__no_commit,
+    count_running_agents,
     enqueue_message,
     fail_inbox_start__no_commit,
     has_pending_sends,
@@ -601,6 +602,28 @@ def test_agent_result_is_accepted_once_by_concurrent_consumers(
         start_thread_future(consume, name=f"test-consume-{index}") for index in range(2)
     ]
     assert sorted(worker.result(timeout=20) for worker in workers) == [False, True]
+
+
+def test_the_agent_cap_counts_suspended_background_agents(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    """A suspended agent resumes without a capacity check, so it keeps its slot."""
+    response = _response(db_session, conversation)
+    parent = _record(response)
+    child = _child_record(
+        db_session, parent, uuid4(), "Partial output", tool_name="spawn_agent"
+    )
+    _save(db_session, response, parent)
+    child_row = db_session.get(ChatMessage, int(child.run_id))
+    assert child_row is not None
+    for status, expected in (
+        (RunStatus.RUNNING, 1),
+        (RunStatus.SUSPENDED, 1),
+        (RunStatus.COMPLETE, 0),
+    ):
+        child_row.response_status = status
+        db_session.flush()
+        assert count_running_agents(db_session, [response.id]) == expected
 
 
 def test_abandoned_background_child_is_delivered_as_failure(

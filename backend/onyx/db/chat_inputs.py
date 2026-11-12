@@ -522,9 +522,10 @@ def _results_on_branch(branch_ids: Collection[int]) -> ColumnElement[bool]:
 
 
 def count_running_agents(session: Session, branch_ids: Collection[int]) -> int:
-    """Count the branch's running background agent runs.
+    """Count the branch's unfinished background agent runs.
 
-    Each such run has an unread result row from its reservation.
+    Each such run has an unread result row from its reservation. A suspended
+    run counts: it resumes without another capacity check.
     """
     return (
         session.scalar(
@@ -533,7 +534,9 @@ def count_running_agents(session: Session, branch_ids: Collection[int]) -> int:
             .join(ChatMessage, ChatMessage.id == ChatInput.source_response_id)
             .where(
                 _results_on_branch(branch_ids),
-                ChatMessage.response_status == RunStatus.RUNNING,
+                ChatMessage.response_status.in_(
+                    (RunStatus.RUNNING, RunStatus.SUSPENDED)
+                ),
             )
         )
         or 0

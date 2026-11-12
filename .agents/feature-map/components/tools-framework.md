@@ -173,7 +173,8 @@ catalog rows or persona switches. `chat/agent.py:chat_subagent_factory` builds c
 with `build_chat_agent`, the same builder that restores saved children.
 Each child builds its own controls and conversation state.
 Agents nest two levels below the root (`agents/agent_coordination.py:MAX_CHILD_DEPTH`). A chat runs at
-most ten background agents on a branch (`chat/run_store.py:MAX_RUNNING_AGENTS`); a spawn beyond that
+most ten background agents on a branch (`chat/run_store.py:MAX_RUNNING_AGENTS`), counting suspended
+agents, which resume without another check; a spawn beyond that
 returns a tool error, and inbox work for an idle agent waits until a run finishes. Each run checks the owner's token rate limits: root turns when they are sent
 or leave the queue, and runs that agents start in `chat/run_store.py:ChatRunStore.reserve_run_id`. The `stop-subagents` route interrupts every running
 or suspended agent on the selected branch except the root (`chat/run_store.py:interrupt_agent_runs`).

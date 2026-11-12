@@ -315,7 +315,7 @@ A successful completion callback marks those child failures as handled.
 
 Spawning returns an `agent_id` for later messages and a `run_id` for that execution.
 Agents nest at most `MAX_CHILD_DEPTH` levels below the root: the root, its children, and their children.
-Chat runs at most `MAX_RUNNING_AGENTS` background agents on a branch at a time; a spawn beyond that is a tool error, and inbox work for an idle agent waits until a run finishes.
+Chat runs at most `MAX_RUNNING_AGENTS` background agents on a branch at a time, counting suspended agents, which resume without another check; a spawn beyond that is a tool error, and inbox work for an idle agent waits until a run finishes.
 Every run checks the chat owner's token rate limits: a user's turn when it is sent or leaves the queue,
 and a run that an agent starts when the run store reserves it.
 `POST /chat/chat-session/{session_id}/stop-subagents` interrupts every running or suspended agent on the selected branch except the root.
