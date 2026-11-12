@@ -233,6 +233,17 @@ def _manifest_matches(
     return current.bundle_sha256 == content.bundle_sha256
 
 
+def check_base_version(plugin: Plugin, base_version_id: UUID | None) -> None:
+    """Refuse with PLUGIN_VERSION_STALE when ``base_version_id``, the version
+    an edit started from, is given and is not the current version."""
+    if base_version_id is not None and base_version_id != plugin.current_version_id:
+        raise OnyxError(
+            OnyxErrorCode.PLUGIN_VERSION_STALE,
+            "This skill changed since you opened it. Reload it to get the "
+            "newest version, then make your change again.",
+        )
+
+
 def add_plugin_version__no_commit(
     *,
     plugin: Plugin,
@@ -247,16 +258,10 @@ def add_plugin_version__no_commit(
     pointers. Returns None, and writes nothing, when ``skip_if_unchanged`` is
     set and the files equal the current version's files.
 
-    ``base_version_id`` is the version the edit started from. When given and
-    not the current version, the edit is refused with PLUGIN_VERSION_STALE.
+    ``base_version_id`` is checked with ``check_base_version``.
     ``previous_manifest`` supplies the current files when the current version
     has no file list yet."""
-    if base_version_id is not None and base_version_id != plugin.current_version_id:
-        raise OnyxError(
-            OnyxErrorCode.PLUGIN_VERSION_STALE,
-            "This skill changed since you opened it. Reload it to get the "
-            "newest version, then make your change again.",
-        )
+    check_base_version(plugin, base_version_id)
     current = db_session.get(PluginVersion, plugin.current_version_id)
     if current is None:
         raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "Plugin has no current version.")
@@ -308,14 +313,49 @@ def add_plugin_version__no_commit(
     return version
 
 
+def list_plugin_versions(
+    plugin_id: UUID, db_session: Session
+) -> list[tuple[PluginVersion, bool, bool]]:
+    """Every version of a plugin, newest first, with whether it is the
+    current and the published version."""
+    return [
+        (version, bool(is_current), bool(is_published))
+        for version, is_current, is_published in db_session.execute(
+            select(
+                PluginVersion,
+                PluginVersion.id == Plugin.current_version_id,
+                PluginVersion.id == Plugin.published_version_id,
+            )
+            .join(Plugin, Plugin.id == PluginVersion.plugin_id)
+            .where(PluginVersion.plugin_id == plugin_id)
+            .order_by(PluginVersion.version_number.desc())
+        ).tuples()
+    ]
+
+
+def get_plugin_version(
+    plugin_id: UUID, version_id: UUID, db_session: Session
+) -> PluginVersion:
+    """One version of the plugin. A version of another plugin is not found."""
+    version = db_session.scalar(
+        select(PluginVersion).where(
+            PluginVersion.id == version_id, PluginVersion.plugin_id == plugin_id
+        )
+    )
+    if version is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill version not found.")
+    return version
+
+
 @dataclass(frozen=True)
 class StoredVersionContent:
     """What the database holds of one version's content. ``file_manifest`` and
     ``skill_md`` are None for a version copied from a legacy skill row."""
 
     bundle_file_id: str | None
-    # Name in the frontmatter of the skill at the bundle root.
+    # Name and description in the frontmatter of the skill at the bundle root.
     name: str | None
+    description: str | None
     file_manifest: list[PluginFileEntry] | None
     skill_md: str | None
 
@@ -327,6 +367,7 @@ def get_stored_version_content(
         select(
             PluginVersion.bundle_file_id,
             PluginSkill.frontmatter["name"].astext,
+            PluginSkill.frontmatter["description"].astext,
             PluginVersion.file_manifest,
             PluginSkill.skill_md,
         )
@@ -341,10 +382,11 @@ def get_stored_version_content(
     ).one_or_none()
     if row is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill version not found.")
-    bundle_file_id, name, manifest, skill_md = row
+    bundle_file_id, name, description, manifest, skill_md = row
     return StoredVersionContent(
         bundle_file_id=bundle_file_id,
         name=name,
+        description=description,
         file_manifest=(
             [PluginFileEntry.model_validate(entry) for entry in manifest]
             if manifest is not None

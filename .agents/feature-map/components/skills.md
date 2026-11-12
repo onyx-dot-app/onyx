@@ -436,6 +436,15 @@ The library preview of an external-app skill calls the same renderer
     it. A skill delete, single or bulk, returns every version bundle and the
     route deletes them after the commit
     (`file_store/staging.py:delete_files_best_effort`).
+22. `version-history-api` **Version history uses the EDIT policy.** The
+    owner, editors and global `MANAGE_PLUGINS` list every version
+    (`GET /skills/custom/{id}/versions`), preview one
+    (`GET .../versions/{version_id}`) and restore one
+    (`POST .../versions/{version_id}/restore`); a viewer or a version of
+    another skill gets 404. `review_status` is `published` for the
+    published version, else `draft`. Restore needs
+    `base_version_id` (409 `PLUGIN_VERSION_STALE`) and saves through the
+    editor save path, so equal files add no version.
 ---
 
 ## Decisions
@@ -545,7 +554,9 @@ The library preview of an external-app skill calls the same renderer
   import sharing and plugin version writes
   (`backend/tests/integration/tests/skills/test_skill_plugin_versions.py`),
   deleting a skill deletes every version bundle
-  (`backend/tests/integration/tests/skills/test_skill_bundle_delete.py`).
+  (`backend/tests/integration/tests/skills/test_skill_bundle_delete.py`),
+  the version list, preview and restore
+  (`backend/tests/integration/tests/skills/test_skill_version_api.py`).
   `backend/tests/integration/tests/craft/k8s/` covers a real
   push.
 - By hand: edit a skill while a Craft session runs. The stale notice must
