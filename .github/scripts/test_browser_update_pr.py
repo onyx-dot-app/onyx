@@ -75,7 +75,7 @@ class BrowserUpdatePRTests(unittest.TestCase):
             binaries = Path(directory) / "bin"
             binaries.mkdir()
             fixtures = {
-                "curl": '#!/bin/sh\ncase "$*" in\n*last-known*) echo \'{"channels":{"Stable":{"version":"999.0.1.2"}}}\';;\n*linux-arm64*) printf arm64;;\n*) printf amd64;;\nesac\n',
+                "curl": '#!/bin/sh\ncase "$*" in\n*last-known*) printf \'{"channels":{"Stable":{"version":"%s"}}}\' "$STABLE";;\n*linux-arm64*) printf "%s-arm64" "$STABLE";;\n*) printf "%s-amd64" "$STABLE";;\nesac\n',
                 "gh": '#!/bin/sh\ncase "$1 $2" in\n"pr list") if [ -n "$EXISTING_PR" ] || [ -f "$CREATED_PR" ]; then echo 123; fi;;\n"pr create") touch "$CREATED_PR"; echo "pr create" >> "$PR_CALLS";;\n*) echo "$*" >> "$PR_CALLS";;\nesac\n',
                 "shuf": "#!/bin/sh\nhead -1\n",
             }
@@ -89,6 +89,7 @@ class BrowserUpdatePRTests(unittest.TestCase):
                 "RUN_URL": "https://example.com/run",
                 "PR_CALLS": str(Path(directory) / "calls"),
                 "EXISTING_PR": "",
+                "STABLE": "999.0.1.2",
                 "CREATED_PR": str(Path(directory) / "created"),
                 "BASE": "main",
                 "BRANCH": "auto/sandbox-browser/main",
@@ -128,6 +129,62 @@ class BrowserUpdatePRTests(unittest.TestCase):
                 first,
                 run(root, "git", "ls-remote", "origin", f"refs/heads/{branch}").stdout,
             )
+            env = {**env, "EXISTING_PR": "123", "STABLE": "1000.0.1.2"}
+            result = publish(env)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            refreshed = run(
+                root, "git", "ls-remote", "origin", f"refs/heads/{branch}"
+            ).stdout
+            self.assertNotEqual(first, refreshed)
+            calls = Path(env["PR_CALLS"]).read_text()
+            self.assertEqual(calls.count("pr create"), 1)
+            self.assertIn("pr edit 123", calls)
+
+            # Move the real remote after the publisher captures its lease.
+            race = run(
+                root,
+                "git",
+                "commit-tree",
+                "HEAD^{tree}",
+                "-p",
+                "HEAD",
+                "-m",
+                "Concurrent writer",
+            )
+            self.assertEqual(race.returncode, 0, race.stderr)
+            race_sha = race.stdout.strip()
+            transfer = run(
+                root,
+                "git",
+                "push",
+                "origin",
+                f"{race_sha}:refs/heads/concurrent-writer",
+            )
+            self.assertEqual(transfer.returncode, 0, transfer.stderr)
+            hook = root / ".git/hooks/post-commit"
+            hook.write_text(
+                '#!/bin/sh\ngit --git-dir="$RACE_REMOTE" update-ref "$RACE_REF" "$RACE_SHA"\n'
+            )
+            hook.chmod(0o755)
+            env = {
+                **env,
+                "STABLE": "1001.0.1.2",
+                "RACE_REMOTE": str(remote),
+                "RACE_REF": f"refs/heads/{branch}",
+                "RACE_SHA": race_sha,
+            }
+            result = publish(env)
+            hook.unlink()
+            self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("stale info", result.stderr)
+            self.assertEqual(
+                run(
+                    root, "git", "ls-remote", "origin", f"refs/heads/{branch}"
+                ).stdout.split()[0],
+                race_sha,
+            )
+            run(root, "git", "fetch", "origin")
+
             # Refuse to overwrite or auto-merge unrelated changes in an existing PR.
             run(root, "git", "checkout", "-b", "tamper", f"origin/{branch}")
             (root / "unexpected.txt").write_text("unexpected change")
@@ -136,7 +193,7 @@ class BrowserUpdatePRTests(unittest.TestCase):
             run(root, "git", "push", "origin", f"HEAD:refs/heads/{branch}")
             run(root, "git", "checkout", "main")
             result = publish({**env, "EXISTING_PR": "123"})
-            self.assertNotEqual(result.returncode, 0)
+            self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertIn("must change only install-browser.sh", result.stderr)
 
 
