@@ -190,19 +190,22 @@ class QuestionAnswerPairSnapshot(BaseModel):
         cls,
         chat_session_snapshot: ChatSessionSnapshot,
     ) -> list["QuestionAnswerPairSnapshot"]:
-        message_pairs: list[tuple[MessageSnapshot, MessageSnapshot]] = [
-            (
-                chat_session_snapshot.messages[ind - 1],
-                chat_session_snapshot.messages[ind],
-            )
-            for ind in range(1, len(chat_session_snapshot.messages), 2)
-        ]
+        # Each answer pairs with the user message before it. An automatic
+        # follow-up answers a hidden question, so it pairs with no user message.
+        message_pairs: list[tuple[MessageSnapshot | None, MessageSnapshot]] = []
+        question: MessageSnapshot | None = None
+        for message in chat_session_snapshot.messages:
+            if message.message_type == MessageType.USER:
+                question = message
+            elif message.message_type == MessageType.ASSISTANT:
+                message_pairs.append((question, message))
+                question = None
 
         return [
             cls(
                 chat_session_id=chat_session_snapshot.id,
                 message_pair_num=ind + 1,
-                user_message=user_message.message,
+                user_message=user_message.message if user_message else "",
                 accepted_inputs=ai_message.accepted_inputs,
                 ai_response=ai_message.message,
                 retrieved_documents=ai_message.documents,
@@ -210,7 +213,7 @@ class QuestionAnswerPairSnapshot(BaseModel):
                 feedback_text=ai_message.feedback_text,
                 persona_name=chat_session_snapshot.assistant_name,
                 user_email=get_display_email(chat_session_snapshot.user_email),
-                time_created=user_message.time_created,
+                time_created=(user_message or ai_message).time_created,
                 flow_type=chat_session_snapshot.flow_type,
             )
             for ind, (user_message, ai_message) in enumerate(message_pairs)
