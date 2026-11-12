@@ -21,6 +21,59 @@ def run(
     )
 
 
+class TaskPRTests(unittest.TestCase):
+    def test_publisher_excludes_pre_staged_unapproved_files(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "repo"
+            root.mkdir()
+            remote = Path(directory) / "remote.git"
+            run(root, "git", "init", "-b", "main")
+            run(root, "git", "config", "user.name", "Test")
+            run(root, "git", "config", "user.email", "test@example.com")
+            (root / "approved.txt").write_text("before")
+            (root / "delete.txt").write_text("remove me")
+            (root / "unapproved.txt").write_text("before")
+            run(root, "git", "add", ".")
+            self.assertEqual(run(root, "git", "commit", "-m", "initial").returncode, 0)
+            run(root, "git", "clone", "--bare", str(root), str(remote))
+            run(root, "git", "remote", "add", "origin", str(remote))
+            run(root, "git", "fetch", "origin")
+            (root / "approved.txt").write_text("after")
+            run(root, "git", "rm", "delete.txt")
+            (root / "unapproved.txt").write_text("after")
+            (root / "unapproved-new.txt").write_text("after")
+            run(root, "git", "add", ".")
+            binaries = Path(directory) / "bin"
+            binaries.mkdir()
+            gh = binaries / "gh"
+            gh.write_text(
+                '#!/bin/sh\nif [ "$1 $2" = "pr list" ] && [ -f "$CREATED" ]; then echo 123; fi\nif [ "$1 $2" = "pr create" ]; then touch "$CREATED"; fi\nexit 0\n'
+            )
+            gh.chmod(0o755)
+            env = {
+                **os.environ,
+                "PATH": f"{binaries}:{os.environ['PATH']}",
+                "FILES": "approved.txt delete.txt",
+                "BASE": "main",
+                "BRANCH": "auto/test",
+                "PR_TITLE": "chore: update approved file",
+                "TASK_NAME": "test",
+                "RUN_URL": "https://example.com/run",
+                "REPO_URL": "https://example.com/repo",
+                "GITHUB_OUTPUT": str(Path(directory) / "output"),
+                "CREATED": str(Path(directory) / "created"),
+                "DIFF_VALIDATOR": "",
+            }
+            result = run(root, "bash", str(SCRIPTS / "publish-task-pr.sh"), env=env)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            changed = run(
+                root, "git", "diff", "--name-only", "origin/main", "HEAD"
+            ).stdout.splitlines()
+            self.assertEqual(changed, ["approved.txt", "delete.txt"])
+            self.assertEqual((root / "unapproved.txt").read_text(), "after")
+            self.assertEqual((root / "unapproved-new.txt").read_text(), "after")
+
+
 class BrowserUpdatePRTests(unittest.TestCase):
     def test_publish_retry_and_reject_extra_changes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
