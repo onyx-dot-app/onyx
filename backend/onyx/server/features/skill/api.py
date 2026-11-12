@@ -50,6 +50,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.credentials import resolve_injection_headers
 from onyx.external_apps.token_refresh import ensure_fresh_credentials
 from onyx.file_store.file_store import FileStore, get_default_file_store
+from onyx.file_store.staging import delete_files_best_effort
 from onyx.server.features.skill.models import (
     GitHubImportedSkill,
     GitHubSkillNotImported,
@@ -106,6 +107,8 @@ from onyx.skills.push import push_skill_to_affected_sandboxes, push_skills_for_u
 from shared_configs.contextvars import get_current_tenant_id
 
 user_router = APIRouter(prefix="/skills")
+
+_BUNDLE_CLEANUP = "skill bundle cleanup"
 
 
 def _parse_skill_sharing(sharing: str | None) -> SkillShareRequest | None:
@@ -332,7 +335,7 @@ def bulk_update_skills(
     else:
         for skill_id in sorted(set(request.skill_ids)):
             try:
-                item_affected, deleted_file_id = bulk_update_skill__no_commit(
+                item_affected, item_file_ids = bulk_update_skill__no_commit(
                     skill_id, request.action, user, db_session
                 )
             except OnyxError as exc:
@@ -340,15 +343,11 @@ def bulk_update_skills(
                 continue
             succeeded.append(skill_id)
             affected |= item_affected
-            if deleted_file_id is not None:
-                deleted_file_ids.append(deleted_file_id)
+            deleted_file_ids.extend(item_file_ids)
     db_session.commit()
     push_skills_for_users(affected, db_session)
     db_session.commit()
-    if deleted_file_ids:
-        file_store = get_default_file_store()
-        for file_id in deleted_file_ids:
-            delete_bundle_blob(file_store, file_id)
+    delete_files_best_effort(deleted_file_ids, context=_BUNDLE_CLEANUP)
     return SkillBulkResponse(succeeded=succeeded, failed=failed)
 
 
@@ -1063,10 +1062,9 @@ def delete_current_user_skill(
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
 
-    affected, old_file_id = delete_skill_for_user__no_commit(skill, user, db_session)
+    affected, file_ids = delete_skill_for_user__no_commit(skill, user, db_session)
     db_session.commit()
 
     push_skills_for_users(affected, db_session)
     db_session.commit()
-    if old_file_id is not None:
-        delete_bundle_blob(get_default_file_store(), old_file_id)
+    delete_files_best_effort(file_ids, context=_BUNDLE_CLEANUP)

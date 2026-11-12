@@ -91,7 +91,6 @@ from onyx.db.plugin import (
     add_plugin_version__no_commit,
     apply_plugin_access_change__no_commit,
     create_skill_plugin__no_commit,
-    get_current_version_bundle_file_id,
     lock_skill_plugin__no_commit,
     plugin_installation_policy,
     set_plugin_preferences__no_commit,
@@ -1060,21 +1059,30 @@ def transfer_skill_ownership(
     ).raise_first_failure()
 
 
-def delete_skill(skill: Skill, db_session: Session) -> str | None:
-    """Hard-delete a skill and its plugin, and return the bundle file id of
-    its current version for caller cleanup. The caller holds the skill row
+def delete_skill(skill: Skill, db_session: Session) -> list[str]:
+    """Hard-delete a skill and its plugin, and return every bundle file of the
+    skill and its versions for caller cleanup. The caller holds the skill row
     lock."""
-    bundle_file_id: str | None = None
+    bundle_file_ids: set[str] = set()
     if skill.is_custom:
         # A skill with no plugin gets one first, so its bundle is found.
         lock_skill_plugin__no_commit(skill, db_session)
-        bundle_file_id = get_current_version_bundle_file_id(skill.id, db_session)
-        # Cascades to its versions, skills, shares and choices. Bundle blobs
-        # are left for the cleanup task.
+        bundle_file_ids.update(
+            file_id
+            for file_id in db_session.scalars(
+                select(PluginVersion.bundle_file_id).where(
+                    PluginVersion.plugin_id == skill.id
+                )
+            )
+            if file_id is not None
+        )
+        # Cascades to its versions, skills, shares and choices.
         db_session.execute(delete(Plugin).where(Plugin.id == skill.id))
+    if skill.bundle_file_id is not None:
+        bundle_file_ids.add(skill.bundle_file_id)
     db_session.delete(skill)
     db_session.flush()
-    return bundle_file_id
+    return sorted(bundle_file_ids)
 
 
 def persist_skill_validity(
@@ -1276,10 +1284,10 @@ def bulk_share_skills__no_commit(
 
 def delete_skill_for_user__no_commit(
     skill: Skill, user: User, db_session: Session
-) -> tuple[set[UUID], str | None]:
+) -> tuple[set[UUID], list[str]]:
     """Delete a skill the user may edit. Only a user with organization-wide
     MANAGE_PLUGINS can delete a published skill. Returns the affected users and
-    the bundle file id for caller cleanup."""
+    the bundle file ids for caller cleanup."""
     if skill.public_permission is not None and not has_global_permission(
         user, Permission.MANAGE_PLUGINS
     ):
@@ -1326,10 +1334,10 @@ def bulk_update_skill__no_commit(
     action: SkillBulkAction,
     user: User,
     db_session: Session,
-) -> tuple[set[UUID], str | None]:
+) -> tuple[set[UUID], list[str]]:
     """Apply one bulk enable, disable or delete to one skill inside a
     savepoint, so a failure rolls back this skill only. Returns the affected
-    users and, for a delete, the bundle file id for caller cleanup. Bulk
+    users and, for a delete, the bundle file ids for caller cleanup. Bulk
     sharing uses ``bulk_share_skills__no_commit``."""
     with db_session.begin_nested():
         if action in ("enable", "disable"):
@@ -1339,7 +1347,7 @@ def bulk_update_skill__no_commit(
                 user=user,
                 db_session=db_session,
             )
-            return {user.id}, None
+            return {user.id}, []
         skill = fetch_skill(
             skill_id,
             policy=SkillManagementPolicy.EDIT,
