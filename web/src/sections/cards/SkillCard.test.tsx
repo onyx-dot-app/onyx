@@ -456,7 +456,7 @@ test("built-in skills never expose Delete", () => {
 
 test.each([
   { permissions: [], visible: false },
-  { permissions: ["manage:skills"], visible: true },
+  { permissions: ["manage:plugins"], visible: true },
 ])(
   "only an organization-wide manager sees Delete on a published skill ($permissions)",
   ({ permissions, visible }) => {

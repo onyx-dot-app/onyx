@@ -97,7 +97,7 @@ export default function SkillCard({
 
   const { isAdmin } = useUser();
   const { isGlobalHolder: canManageOrgSkills } = usePermissionAuthority(
-    Permission.MANAGE_SKILLS
+    Permission.MANAGE_PLUGINS
   );
   const isRequired =
     item.source === "custom" && item.skill.installation_policy === "REQUIRED";

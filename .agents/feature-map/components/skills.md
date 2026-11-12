@@ -27,7 +27,7 @@
 - **Admins** set the installation policy of a custom skill: available (the user
   opts in), installed by default (on until the user opts out), or required (on,
   and the user cannot turn it off). This needs organization-wide
-  `MANAGE_SKILLS`, which only admins hold today; a group manager cannot. Only
+  `MANAGE_PLUGINS`, which only admins hold today; a group manager cannot. Only
   the same permission deletes a required skill.
 - **Bulk management.** Craft's Skills library and **Admin Panel → Skills**
   support selection of custom skills, bulk access and installation changes,
@@ -265,28 +265,28 @@ The library preview of an external-app skill calls the same renderer
     callers with no actor, so they skip the permission checks. Do not write
     `plugin__user`, `plugin__user_group`, `skill__user` or
     `skill__user_group` anywhere else.
-    Rules: a company install setting needs organization-wide `MANAGE_SKILLS`
+    Rules: a company install setting needs organization-wide `MANAGE_PLUGINS`
     (`has_global_permission`; never `has_permission`, which accepts a scoped
     grant). In `SkillShareRequest`, a missing `installation_policy` changes
     nothing, and null or AVAILABLE means the marketplace default. A group
     keeps its install setting when the change does not set one, also when its
     share is removed (the row stays with no permission). A group install
-    setting needs `MANAGE_SKILLS` for that group on a private plugin and
-    global `MANAGE_SKILLS` on a published one; it is then refused until group
+    setting needs `MANAGE_PLUGINS` for that group on a private plugin and
+    global `MANAGE_PLUGINS` on a published one; it is then refused until group
     settings ship. EDIT on a skill is not enough to change its groups: any
-    change to the group set or levels is a `MANAGE_SKILLS` action within scope
+    change to the group set or levels is a `MANAGE_PLUGINS` action within scope
     (`auth/scoped_permissions.py:assert_within_scope`, [[authorization]]).
     Without it, an owner could push a skill into any group manager's scope.
     It compares against the stored plugin group shares (rows with a
     permission), and the privacy check uses the stored visibility and the
     request, so a public-to-private change in the same request cannot get past
-    it. Publishing needs the author or global `MANAGE_SKILLS`
+    it. Publishing needs the author or global `MANAGE_PLUGINS`
     (`db/skill.py:ensure_can_edit_org_visibility`; the patch route calls it
     too). `db/skill.py:_publish_requested` checks every request for
     organization access: it refuses organization `EDITOR` and a change from
     published to private, for every route, bulk included. A publish moves the
     plugin to the Organization library (`db/plugin.py:publish_plugin__no_commit`);
-    a name clash there returns `CONFLICT`. Only global `MANAGE_SKILLS` deletes
+    a name clash there returns `CONFLICT`. Only global `MANAGE_PLUGINS` deletes
     a published or a required skill
     (`db/skill.py:delete_skill_for_user__no_commit`); the card, bulk menu and
     editor hide Delete to match. A transfer moves a private plugin to the new
@@ -482,7 +482,7 @@ The library preview of an external-app skill calls the same renderer
 - [[craft-external-apps]]: app readiness and action policy views. GitHub
   import and preview authenticate with the user's GitHub app credential
   (`server/features/skill/api.py:_github_authorization_header`).
-- [[authorization]]: `MANAGE_SKILLS` and the scoped-manager group check
+- [[authorization]]: `MANAGE_PLUGINS` and the scoped-manager group check
   (`assert_within_scope`).
 - [[file-store-and-user-files]]: bundle blobs.
 - [[image-generation]]: the image skill is available only when image

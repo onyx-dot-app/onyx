@@ -51,7 +51,7 @@ def _setting_for(group: UserGroup) -> PluginAccessChange:
         ("admin", False, OnyxErrorCode.INVALID_INPUT),
         ("admin", True, OnyxErrorCode.INVALID_INPUT),
         ("manager", False, OnyxErrorCode.INVALID_INPUT),
-        # A published plugin needs organization-wide MANAGE_SKILLS.
+        # A published plugin needs organization-wide MANAGE_PLUGINS.
         ("manager", True, OnyxErrorCode.INSUFFICIENT_PERMISSIONS),
         # A manager of another group.
         ("other_manager", False, OnyxErrorCode.INSUFFICIENT_PERMISSIONS),
