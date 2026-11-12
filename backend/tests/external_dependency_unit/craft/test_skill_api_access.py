@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import zipfile
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import MagicMock, patch
@@ -12,6 +13,7 @@ from uuid import uuid4
 import pytest
 from fastapi import UploadFile
 from pydantic import ValidationError
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import (
@@ -19,7 +21,7 @@ from onyx.db.enums import (
     SkillInstallationPolicy,
     SkillSharePermission,
 )
-from onyx.db.models import User, UserSkillPreference
+from onyx.db.models import PluginVersion, User, UserSkillPreference
 from onyx.db.skill import set_skill_enabled_for_user, skill_user_states
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -687,3 +689,52 @@ def test_full_replacement_upload_does_not_read_current_bundle(
     current_read.assert_not_called()
     editable_response.assert_called_once()
     assert editable_response.call_args.args[0].description == "New"
+
+
+def test_adding_an_unchanged_file_to_a_version_without_a_file_list_adds_none(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+) -> None:
+    owner = make_user(db_session, standard_account=True)
+    name = f"unchanged-{uuid4().hex[:8]}"
+    skill_md = build_skill_md(
+        name=name, description="Same files.", instructions_markdown="Do it."
+    ).encode("utf-8")
+    # A stored, uncompressed ZIP with its own timestamps: a rewrite of the
+    # same files gives other bytes and another hash.
+    original = io.BytesIO()
+    with zipfile.ZipFile(original, "w", compression=zipfile.ZIP_STORED) as archive:
+        for path, content in ((SKILL_MD_NAME, skill_md), ("notes.txt", b"notes")):
+            archive.writestr(
+                zipfile.ZipInfo(path, date_time=(2001, 2, 3, 4, 5, 6)), content
+            )
+    created = create_custom_skill(
+        bundle=_upload(f"{name}.zip", original.getvalue()),
+        auto_enable=False,
+        user=owner,
+        db_session=db_session,
+    )
+    # A version copied from a legacy skill row has no file list.
+    db_session.execute(
+        update(PluginVersion)
+        .where(PluginVersion.plugin_id == created.id)
+        .values(file_manifest=None)
+    )
+    db_session.flush()
+
+    with patch("onyx.server.features.skill.api._editable_skill_response"):
+        upload_current_user_skill_files(
+            created.id,
+            upload=_upload("notes.txt", b"notes"),
+            user=owner,
+            db_session=db_session,
+        )
+
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(PluginVersion)
+            .where(PluginVersion.plugin_id == created.id)
+        )
+        == 1
+    )

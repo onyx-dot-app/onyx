@@ -17130,6 +17130,13 @@
         "savingChanges": "変更を保存中...",
         "savingSkill": "スキルを保存中..."
       },
+      "staleVersion": {
+        "description": "他のユーザーが新しいバージョンを保存しました。再読み込みして取得してください。保存されていない変更は失われます。",
+        "reload": {
+          "label": "再読み込み"
+        },
+        "title": "このスキルは開いた後に変更されました"
+      },
       "toasts": {
         "created": "「{name}」を作成しました",
         "deleteFailed": "スキルの削除に失敗しました",

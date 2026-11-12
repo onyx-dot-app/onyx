@@ -17130,6 +17130,13 @@
         "savingChanges": "Änderungen werden gespeichert...",
         "savingSkill": "Skill wird gespeichert..."
       },
+      "staleVersion": {
+        "description": "Jemand hat eine neuere Version gespeichert. Laden Sie neu, um sie zu erhalten. Ihre nicht gespeicherten Änderungen gehen verloren.",
+        "reload": {
+          "label": "Neu laden"
+        },
+        "title": "Dieser Skill wurde geändert, seit Sie ihn geöffnet haben"
+      },
       "toasts": {
         "created": "„{name}“ erstellt",
         "deleteFailed": "Skill konnte nicht gelöscht werden",

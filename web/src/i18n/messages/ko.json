@@ -17130,6 +17130,13 @@
         "savingChanges": "변경 사항 저장 중...",
         "savingSkill": "스킬 저장 중..."
       },
+      "staleVersion": {
+        "description": "다른 사용자가 새 버전을 저장했습니다. 새로고침하여 가져오세요. 저장하지 않은 변경 사항은 사라집니다.",
+        "reload": {
+          "label": "새로고침"
+        },
+        "title": "이 스킬은 연 이후에 변경되었습니다"
+      },
       "toasts": {
         "created": "\"{name}\"을(를) 생성했습니다",
         "deleteFailed": "스킬을 삭제하지 못했습니다",

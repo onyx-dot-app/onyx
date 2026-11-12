@@ -102,12 +102,14 @@ Craft skips that Skill and logs a warning. The saved bundle stays unchanged. Oth
 | Maximum file count  | 500 files. Folders do not count.                                                                                                            |
 | Maximum file size   | 25 MiB per file in the extracted bundle.                                                                                                     |
 | Maximum bundle size | 100 MiB total in the extracted bundle.                                                                                                       |
+| Maximum `SKILL.md`  | 256 KiB. Split longer instructions into several files and link them from `SKILL.md`.                                                         |
 
 Onyx checks each limit separately and counts the bytes that it extracts.
 The file count includes metadata that Onyx removes: `__MACOSX/`, `.DS_Store`, `Thumbs.db`, and `._*` files.
 The ZIP limit applies to both the uploaded ZIP and the ZIP that Onyx stores after normalization.
 Standalone files use the per-file limit before compression.
 Each Skill from a GitHub repository must also pass these limits.
+The `SKILL.md` limit also applies to each edit of a saved Skill.
 Single-bundle uploads over a limit return HTTP 413 with `limit` and `limit_value`.
 Batch uploads and GitHub imports can return HTTP 200 with rejected Skills in `not_imported`,
 with a `reason` for each refusal. The ZIP file list (the names and metadata of all entries) must fit in 1 MiB.
