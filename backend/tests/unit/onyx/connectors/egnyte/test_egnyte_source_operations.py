@@ -22,6 +22,7 @@ from onyx.connectors.egnyte.source_operations import (
 from onyx.connectors.exceptions import (
     CredentialInvalidError,
     InsufficientPermissionsError,
+    RateLimitedValidationError,
 )
 
 
@@ -96,7 +97,7 @@ def test_per_second_rate_limit_is_waited_out(no_sleep: MagicMock) -> None:
     )
 
     with patch.object(requests.Session, "get", get):
-        content = _gateway().download_file(file_path="/Shared/Docs/a.txt")
+        content = _gateway().download_file(group_id="g-1")
 
     assert content.getvalue() == b"text"
     no_sleep.assert_any_call(1.0)
@@ -112,7 +113,7 @@ def test_used_up_daily_quota_fails_without_waiting(no_sleep: MagicMock) -> None:
 
     with patch.object(requests.Session, "get", get):
         with pytest.raises(EgnyteQuotaExhaustedError):
-            _gateway().download_file(file_path="/Shared/Docs/a.txt")
+            _gateway().download_file(group_id="g-1")
 
     assert get.call_count == 1
     assert all(call.args[0] < 40000 for call in no_sleep.call_args_list)
@@ -133,7 +134,7 @@ def test_each_status_maps_to_its_error(
 ) -> None:
     with patch.object(requests.Session, "get", MagicMock(return_value=response)):
         with pytest.raises(error):
-            _gateway().download_file(file_path="/Shared/Docs/a.txt")
+            _gateway().download_file(group_id="g-1")
 
 
 def test_domain_that_is_not_one_label_is_refused() -> None:
@@ -141,15 +142,33 @@ def test_domain_that_is_not_one_label_is_refused() -> None:
 
     with patch.object(requests.Session, "get", get):
         with pytest.raises(CredentialInvalidError):
-            _gateway("evil.example.com/x").download_file(file_path="/a.txt")
+            _gateway("evil.example.com/x").download_file(group_id="g-1")
 
     get.assert_not_called()
+
+
+def test_download_reads_the_file_by_its_id() -> None:
+    get = MagicMock(return_value=_response(200, b"text"))
+    with patch.object(requests.Session, "get", get):
+        _gateway().download_file(group_id="g-1")
+
+    assert get.call_args.args[0] == (
+        "https://acme.egnyte.com/pubapi/v1/fs-content/ids/file/g-1"
+    )
+
+
+def test_a_rate_limit_that_never_clears_stops_the_run(no_sleep: MagicMock) -> None:  # noqa: ARG001
+    get = MagicMock(return_value=_response(429, headers={"Retry-After": "1"}))
+
+    with patch.object(requests.Session, "get", get):
+        with pytest.raises(RateLimitedValidationError):
+            _gateway().download_file(group_id="g-1")
 
 
 def test_download_reads_only_the_start_when_bounded() -> None:
     response = _response(200, b"x" * 10_000)
     with patch.object(requests.Session, "get", MagicMock(return_value=response)):
-        content = _gateway().download_file(file_path="/Shared/big.txt", max_bytes=100)
+        content = _gateway().download_file(group_id="g-1", max_bytes=100)
 
     assert content.getvalue() == b"x" * 100
 

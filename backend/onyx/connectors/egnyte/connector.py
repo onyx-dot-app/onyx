@@ -44,6 +44,7 @@ from onyx.connectors.interfaces import (
     CheckpointOutput,
     GenerateSlimDocumentOutput,
     OAuthConnector,
+    Resolver,
     SecondsSinceUnixEpoch,
     SlimConnector,
     SlimConnectorWithPermSync,
@@ -93,6 +94,14 @@ def egnyte_document_id(group_id: str) -> str:
     return f"{_DOCUMENT_ID_PREFIX}{group_id}"
 
 
+def parse_egnyte_document_id(document_id: str) -> str | None:
+    """The file's group_id, or None for an id the walk does not make."""
+    group_id = document_id.removeprefix(_DOCUMENT_ID_PREFIX)
+    if group_id == document_id or not group_id:
+        return None
+    return group_id
+
+
 def same_path(left: str, right: str) -> bool:
     """Egnyte paths are case-insensitive."""
     return left.lower() == right.lower()
@@ -105,6 +114,10 @@ def lists_permissions(folder_path: str) -> bool:
 def normalize_folder_path(folder_path: str | None) -> str:
     """Egnyte paths start with "/", so "Shared/Docs" names "/Shared/Docs"."""
     return "/" + (folder_path or "").strip("/")
+
+
+def _is_under(path: str, folder_path: str) -> bool:
+    return folder_path == "/" or path.lower().startswith(folder_path.lower() + "/")
 
 
 def _app_base(domain: str) -> str:
@@ -200,6 +213,15 @@ def _is_fatal(error: Exception) -> bool:
     return isinstance(error, (CredentialInvalidError, UnexpectedValidationError))
 
 
+def _reindex_failure(
+    target: DocumentFailure, message: str, exception: Exception | None = None
+) -> ConnectorFailure:
+    """Keeps the target's link, so the error row still points at the file."""
+    return ConnectorFailure(
+        failed_document=target, failure_message=message, exception=exception
+    )
+
+
 class EgnyteCheckpoint(ConnectorCheckpoint):
     # Folder paths left to walk, breadth first. None until the walk starts.
     todo: list[str] | None = None
@@ -218,6 +240,7 @@ class EgnyteConnector(
     SlimConnector,
     SlimConnectorWithPermSync,
     OAuthConnector,
+    Resolver,
 ):
     supports_manual_credentials = True
     slim_listing_honors_indexing_start = True
@@ -382,7 +405,7 @@ class EgnyteConnector(
     ) -> Document | ConnectorFailure | None:
         document_id = egnyte_document_id(file.group_id)
         try:
-            content = self.ops.download_file(file_path=file.path)
+            content = self.ops.download_file(group_id=file.group_id)
             document = _build_document(
                 file,
                 _extract_text(file, content),
@@ -606,3 +629,91 @@ class EgnyteConnector(
         return self._retrieve_all_slim_docs(
             start, end, callback, include_permissions=True
         )
+
+    def _ancestor_paths(self, file_path: str) -> list[str]:
+        """The folders from the configured folder down to the file's own, in
+        Egnyte's own case, which the configured path may not match."""
+        top_depth = len([name for name in self.folder_path.split("/") if name])
+        parents = [name for name in file_path.split("/") if name][:-1]
+        return [
+            "/" + "/".join(parents[:depth])
+            for depth in range(top_depth, len(parents) + 1)
+        ]
+
+    def _reindex_document(
+        self,
+        target: DocumentFailure,
+        include_permissions: bool,
+        folders: dict[str, tuple[EgnyteFolder, ExternalAccess | None]],
+        yielded_folder_ids: set[str],
+    ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
+        document_id = target.document_id
+        group_id = parse_egnyte_document_id(document_id)
+        if group_id is None:
+            yield _reindex_failure(
+                target, f"'{document_id}' is not an Egnyte document id."
+            )
+            return
+        try:
+            file = self.ops.get_file(group_id=group_id)
+        except EgnyteApiError as e:
+            if e.status_code != 404:
+                raise
+            # The retry worker reads a missing result as a new failure, so
+            # the reason is given. Pruning removes the document.
+            yield _reindex_failure(target, f"Egnyte file {document_id} was deleted.", e)
+            return
+        if not _is_under(file.path, self.folder_path):
+            yield _reindex_failure(
+                target,
+                f"Egnyte file {file.path} is outside {self.folder_path}.",
+            )
+            return
+        if not is_indexable(file):
+            yield _reindex_failure(
+                target, f"Egnyte file {file.path} is not a supported type."
+            )
+            return
+
+        chain: list[tuple[EgnyteFolder, ExternalAccess | None]] = []
+        for path in self._ancestor_paths(file.path):
+            if path not in folders:
+                page = self._list_page(path, 0, include_permissions)
+                access = self._folder_access(page) if include_permissions else None
+                folders[path] = (page.folder, access)
+            chain.append(folders[path])
+        for folder, access in chain:
+            if folder.folder_id not in yielded_folder_ids:
+                yielded_folder_ids.add(folder.folder_id)
+                yield self._folder_node(folder, access)
+        parent, parent_access = chain[-1]
+        converted = self._convert_file(file, parent.folder_id, parent_access)
+        if converted is not None:
+            yield converted
+
+    def reindex(
+        self,
+        errors: list[ConnectorFailure],
+        include_permissions: bool = False,
+    ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
+        if include_permissions and self._directory is None:
+            self._directory = load_directory(self.ops)
+        # Folders and their nodes are shared by many failed files.
+        folders: dict[str, tuple[EgnyteFolder, ExternalAccess | None]] = {}
+        yielded_folder_ids: set[str] = set()
+        for failure in errors:
+            if failure.failed_document is None:
+                continue
+            target = failure.failed_document
+            try:
+                yield from self._reindex_document(
+                    target, include_permissions, folders, yielded_folder_ids
+                )
+            except Exception as e:
+                if _is_fatal(e):
+                    raise
+                yield _reindex_failure(
+                    target,
+                    f"Failed to read Egnyte file {target.document_id}: {e}",
+                    e,
+                )

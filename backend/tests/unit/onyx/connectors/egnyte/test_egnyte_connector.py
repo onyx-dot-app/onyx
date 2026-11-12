@@ -20,6 +20,7 @@ from onyx.connectors.egnyte.source_operations import (
 from onyx.connectors.models import (
     ConnectorFailure,
     Document,
+    DocumentFailure,
     HierarchyNode,
     SlimDocument,
 )
@@ -79,7 +80,8 @@ class _FakeEgnyte:
             files=[_file(child) for child in children if child not in self.tree],
         )
 
-    def download_file(self, *, file_path: str) -> BytesIO:
+    def download_file(self, *, group_id: str) -> BytesIO:
+        file_path = group_id.removeprefix("group:")
         self.downloads.append(file_path)
         return BytesIO(f"text of {file_path}".encode())
 
@@ -180,10 +182,10 @@ def test_failures_are_per_item_and_the_walk_goes_on() -> None:
         if folder_path == "/Shared/Locked":
             raise EgnyteApiError("boom", status_code=500)
 
-    def download_file(*, file_path: str) -> BytesIO:
-        if file_path == "/Shared/bad.txt":
+    def download_file(*, group_id: str) -> BytesIO:
+        if group_id == "group:/Shared/bad.txt":
             raise EgnyteApiError("boom", status_code=500)
-        if file_path == "/Shared/deleted.txt":
+        if group_id == "group:/Shared/deleted.txt":
             raise EgnyteApiError("gone", status_code=404)
         return BytesIO(b"ok")
 
@@ -263,3 +265,125 @@ def test_slim_listing_raises_on_a_listing_error_and_on_stop() -> None:
     fake = _FakeEgnyte({"/Shared": []})
     with pytest.raises(RuntimeError, match="stop signal"):
         list(_connector(fake).retrieve_all_slim_docs(callback=callback))
+
+
+def _failure(document_id: str) -> ConnectorFailure:
+    return ConnectorFailure(
+        failed_document=DocumentFailure(document_id=document_id),
+        failure_message="earlier failure",
+    )
+
+
+def _resolver_ops(fake: _FakeEgnyte) -> MagicMock:
+    """The fake tree, with files looked up by group_id."""
+    files = {
+        f"group:{child}": _file(child)
+        for children in fake.tree.values()
+        for child in children
+        if child not in fake.tree
+    }
+
+    def get_file(*, group_id: str) -> EgnyteFile:
+        if group_id not in files:
+            raise EgnyteApiError("gone", status_code=404)
+        return files[group_id]
+
+    return MagicMock(
+        wraps=fake,
+        get_file=MagicMock(side_effect=get_file),
+        list_folder_page=MagicMock(side_effect=fake.list_folder_page),
+        download_file=MagicMock(side_effect=fake.download_file),
+    )
+
+
+def test_reindex_reads_failed_files_by_id_under_their_folders() -> None:
+    fake = _FakeEgnyte(
+        {
+            "/Shared": ["/Shared/Sub"],
+            "/Shared/Sub": ["/Shared/Sub/a.txt", "/Shared/Sub/b.txt"],
+        }
+    )
+    ops = _resolver_ops(fake)
+
+    # The configured path need not match Egnyte's case.
+    items = list(
+        _connector(ops, folder_path="/shared").reindex(
+            [
+                _failure("egnyte-group:/Shared/Sub/a.txt"),
+                _failure("egnyte-group:/Shared/Sub/b.txt"),
+            ]
+        )
+    )
+
+    assert [
+        (item.raw_node_id, item.raw_parent_id)
+        for item in items
+        if isinstance(item, HierarchyNode)
+    ] == [("id:/Shared", None), ("id:/Shared/Sub", "id:/Shared")]
+    assert [
+        (item.id, item.parent_hierarchy_raw_node_id)
+        for item in items
+        if isinstance(item, Document)
+    ] == [
+        ("egnyte-group:/Shared/Sub/a.txt", "id:/Shared/Sub"),
+        ("egnyte-group:/Shared/Sub/b.txt", "id:/Shared/Sub"),
+    ]
+    # Each folder is listed once for both files.
+    assert ops.list_folder_page.call_count == 2
+
+
+def test_reindex_reports_deleted_and_unreadable_files() -> None:
+    fake = _FakeEgnyte(
+        {
+            "/Shared": ["/Shared/bad.txt"],
+            "/Other": ["/Other/out.txt"],
+        }
+    )
+    ops = _resolver_ops(fake)
+    ops.download_file.side_effect = EgnyteApiError("boom", status_code=500)
+
+    items = list(
+        _connector(ops).reindex(
+            [
+                _failure("egnyte-group:/Shared/deleted.txt"),
+                _failure("egnyte-group:/Other/out.txt"),
+                _failure("egnyte-group:/Shared/bad.txt"),
+                _failure("not-egnyte"),
+            ]
+        )
+    )
+
+    failures = [item for item in items if isinstance(item, ConnectorFailure)]
+    assert [f.failed_document.document_id for f in failures if f.failed_document] == [
+        "egnyte-group:/Shared/deleted.txt",
+        "egnyte-group:/Other/out.txt",
+        "egnyte-group:/Shared/bad.txt",
+        "not-egnyte",
+    ]
+    assert not [item for item in items if isinstance(item, Document)]
+
+
+def test_reindex_failures_keep_the_link_of_the_failed_document() -> None:
+    target = DocumentFailure(
+        document_id="egnyte-group:/Shared/deleted.txt",
+        document_link="https://acme.egnyte.com/navigate/file/x",
+    )
+    ops = _resolver_ops(_FakeEgnyte({"/Shared": []}))
+
+    items = list(
+        _connector(ops).reindex(
+            [ConnectorFailure(failed_document=target, failure_message="earlier")]
+        )
+    )
+
+    assert [i.failed_document for i in items if isinstance(i, ConnectorFailure)] == [
+        target
+    ]
+
+
+def test_reindex_ends_on_a_used_up_quota() -> None:
+    ops = _resolver_ops(_FakeEgnyte({"/Shared": ["/Shared/a.txt"]}))
+    ops.get_file.side_effect = EgnyteQuotaExhaustedError("quota")
+
+    with pytest.raises(EgnyteQuotaExhaustedError):
+        list(_connector(ops).reindex([_failure("egnyte-group:/Shared/a.txt")]))

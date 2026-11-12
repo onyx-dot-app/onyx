@@ -209,11 +209,10 @@ class EgnyteSourceOperations(SourceOperations):
                     body=response.text[:500],
                 )
             return response
-        raise EgnyteApiError(
+        # Every later call would wait out the same limit, so the run stops.
+        raise RateLimitedValidationError(
             f"Egnyte kept rate limiting GET {path}",
-            status_code=429,
-            method="GET",
-            url=url,
+            summary="Egnyte rate limited Onyx",
         )
 
     def _list_folder_page(
@@ -341,13 +340,24 @@ class EgnyteSourceOperations(SourceOperations):
         capabilities=(CredentialCapability.INDEXING,),
         consumes=OperationConsumes.CREDENTIAL,
     )
-    def download_file(self, *, file_path: str, max_bytes: int | None = None) -> BytesIO:
+    def get_file(self, *, group_id: str) -> EgnyteFile:
+        """A file's current metadata by its id, wherever it was moved."""
+        return EgnyteFile.model_validate(
+            self._get(f"/v1/fs/ids/file/{quote(group_id)}").json()
+        )
+
+    @source_operation(
+        capabilities=(CredentialCapability.INDEXING,),
+        consumes=OperationConsumes.CREDENTIAL,
+    )
+    def download_file(self, *, group_id: str, max_bytes: int | None = None) -> BytesIO:
         """The latest version of a file, streamed into one buffer so a large
         file is held in memory once. With ``max_bytes``, only the start of
-        the file is read."""
+        the file is read. The id, unlike the path, cannot name another file
+        after a move."""
         buffer = BytesIO()
         chunk_size = min(max_bytes or _DOWNLOAD_CHUNK_BYTES, _DOWNLOAD_CHUNK_BYTES)
-        response = self._get(f"/v1/fs-content/{_fs_path(file_path)}", stream=True)
+        response = self._get(f"/v1/fs-content/ids/file/{quote(group_id)}", stream=True)
         with response:
             for chunk in response.iter_content(chunk_size=chunk_size):
                 buffer.write(chunk)

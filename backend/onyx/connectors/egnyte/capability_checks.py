@@ -164,7 +164,9 @@ class _FilesCheck(CapabilityCheck[EgnyteConnectorConfig]):
             sample: EgnyteFile | None = find_sample_file(gateway, folder_path)
             if sample is None:
                 return False
-            gateway.download_file(file_path=sample.path, max_bytes=_PROBE_BYTES)
+            # Failed files are read again by id.
+            gateway.get_file(group_id=sample.group_id)
+            gateway.download_file(group_id=sample.group_id, max_bytes=_PROBE_BYTES)
             return True
 
         if probe(download_sample, f"Onyx could not read files in {folder_path}."):
