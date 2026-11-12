@@ -416,7 +416,10 @@ def fetch_skill(
     db_session: Session,
     user: User,
     lock_for_update: bool = False,
+    allow_key_share: bool = False,
 ) -> Skill | None:
+    """``allow_key_share`` takes FOR NO KEY UPDATE, so foreign-key checks of
+    rows that reference the skill do not wait for this lock."""
     stmt = _skill_select_for_management_policy(
         policy=policy,
         db_session=db_session,
@@ -424,7 +427,7 @@ def fetch_skill(
         order_by_name=False,
     ).where(Skill.id == skill_id)
     if lock_for_update:
-        stmt = stmt.with_for_update(of=Skill)
+        stmt = stmt.with_for_update(of=Skill, key_share=allow_key_share)
     return db_session.scalars(stmt).one_or_none()
 
 
@@ -685,12 +688,16 @@ def set_skill_enabled_for_user(
     db_session: Session,
 ) -> Skill:
     _lock_user_skill_preferences(user.id, db_session)
+    # Another user's switch inserts a preference for this skill while it holds
+    # a plugin lock this call waits for. A FOR UPDATE here blocks that
+    # foreign-key check and the two switches deadlock.
     skill = fetch_skill(
         skill_id,
         policy=SkillManagementPolicy.VIEW,
         user=user,
         db_session=db_session,
         lock_for_update=True,
+        allow_key_share=True,
     )
     if skill is None:
         raise OnyxError(

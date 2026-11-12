@@ -6,7 +6,6 @@ models agree."""
 
 import hashlib
 from collections.abc import Iterable
-from typing import Any
 from uuid import UUID
 
 from sqlalchemy import text
@@ -14,17 +13,18 @@ from sqlalchemy.orm import Session
 
 ORGANIZATION_LIBRARY_ID = UUID("00000000-0000-4000-8000-00000000011b")
 
+# (user id or group id, permission or enabled flag)
+AccessRow = tuple[UUID | int, str | bool]
+
 
 def user_uploads_id(user_id: UUID | str) -> UUID:
     return UUID(hashlib.md5(f"user_uploads:{user_id}".encode()).hexdigest())
 
 
-def _rows(
-    db_session: Session, sql: str, ids: list[UUID]
-) -> dict[UUID, set[tuple[Any, ...]]]:
-    result: dict[UUID, set[tuple[Any, ...]]] = {skill_id: set() for skill_id in ids}
-    for row in db_session.execute(text(sql), {"ids": ids}):
-        result[row[0]].add(tuple(row[1:]))
+def _rows(db_session: Session, sql: str, ids: list[UUID]) -> dict[UUID, set[AccessRow]]:
+    result: dict[UUID, set[AccessRow]] = {skill_id: set() for skill_id in ids}
+    for skill_id, target_id, value in db_session.execute(text(sql), {"ids": ids}):
+        result[skill_id].add((target_id, value))
     return result
 
 

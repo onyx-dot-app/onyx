@@ -2,10 +2,11 @@
 code changed after plugin versions were written (88184258ae59), but before
 access writes went to the plugin tables. Everything rolls back with the test."""
 
-from typing import Any
+from collections.abc import Generator
 from uuid import UUID, uuid4
 
-from sqlalchemy import text
+import pytest
+from sqlalchemy import Engine, text
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import SkillInstallationPolicy, SkillSharePermission
@@ -28,14 +29,26 @@ from tests.utils.plugin_access import (
 )
 
 
-def _version_count(db_session: Session, plugin_id: UUID) -> Any:
+@pytest.fixture
+def migration_session(isolated_engine: Engine) -> Generator[Session, None, None]:
+    with Session(bind=isolated_engine) as session:
+        try:
+            yield session
+        finally:
+            session.rollback()
+
+
+def _version_count(db_session: Session, plugin_id: UUID) -> int:
     return db_session.execute(
         text("SELECT count(*) FROM plugin_version WHERE plugin_id = :id"),
         {"id": plugin_id},
     ).scalar_one()
 
 
-def test_access_resync_matches_plugin_rows_to_skill_rows(db_session: Session) -> None:
+def test_access_resync_matches_plugin_rows_to_skill_rows(
+    migration_session: Session,
+) -> None:
+    db_session = migration_session
     backfill = _load("cdec9dd9ca3d_add_plugin_tables_and_backfill.py")
     version_resync = _load("88184258ae59_resync_plugin_tables_from_skills_after_.py")
     access_resync = _load("4ea385d01d75_resync_plugin_tables_from_skills_after_.py")
