@@ -286,10 +286,10 @@ termination grace period is much shorter, so it ends running turns first
    cancellation signal; the turn keeps its admission until owned work drains.
    MCP calls cancel their request coroutine and drain it before returning
    ([[mcp-and-custom-tools#cancel-in-flight-request]]). The stop key is per stream ID, so a late
-   stop cannot cancel the next message when the caller passes `stream_id`, as
-   the web client does. Without `stream_id`, Stop targets the stream in flight
-   at request time, or the turn in preparation
-   ([[#stop-before-launch]]). Replay shows `user_cancelled` from the saved
+   stop cannot cancel the next message when an API caller passes `stream_id`.
+   The web client omits `stream_id`: Stop targets the chat's current turn, the
+   stream in flight at request time or the turn in preparation, and pauses the
+   queue when no turn runs ([[#stop-before-launch]]). Replay shows `user_cancelled` from the saved
    `RunStatus.CANCELLED`; only legacy rows match the stop sentence by text
    ([[chat-persistence]]), except a saved `DEADLINE` failure replays as `timed_out`.
 9. `non-user-cancel` **Deadlines have their own stop reason.** Response runs

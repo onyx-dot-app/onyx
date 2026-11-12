@@ -434,7 +434,8 @@ up its own branding.
    `useChatSessionQueue`. It does not wait for rendering or call normal send
    when a response ends. SWR owns the pending-list cache. Accepted between-step
    inputs use the same ordered packets for live display and reload. A failed
-   POST returns the text to an empty composer. Editing waits for DELETE to
+   POST returns the text to the composer, ahead of any text typed since, or to
+   that chat's draft when the chat is no longer open. Editing waits for DELETE to
    return the withdrawn text and makes that chat's composer read-only
    meanwhile, so typed text cannot collide with it. If the user switched chats
    during the request, the returned text goes to the original chat's draft. A conflict refreshes the list without
