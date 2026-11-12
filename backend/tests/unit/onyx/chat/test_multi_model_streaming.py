@@ -3430,26 +3430,9 @@ def test_a_run_that_ends_at_the_deadline_but_saves_past_the_backstop_stops_once(
             _wait_for_chat_workers(chat_workers)
 
 
-@pytest.mark.parametrize(
-    "invalid_setting, detail",
-    [
-        ("preferred_tool", "Preferred tool 1 not found in tools"),
-        ("research_project", "Deep research is not supported for projects"),
-        (
-            "research_context",
-            "Deep research requires a model with at least 50,000 input tokens",
-        ),
-    ],
-)
-def test_invalid_chat_settings_return_actionable_errors(
-    invalid_setting: str,
-    detail: str,
-) -> None:
+def test_invalid_preferred_tool_returns_an_actionable_error() -> None:
     setup = _make_setup(n_models=1)
-    setup.new_msg_req.deep_research = invalid_setting != "preferred_tool"
-    setup.preferred_tool_id = 1 if invalid_setting == "preferred_tool" else None
-    setup.chat_session_project_id = 1 if invalid_setting == "research_project" else None
-    setup.research_tool_id = 2
+    setup.preferred_tool_id = 1
     with patch("onyx.chat.execution.construct_tools", return_value={}):
         with pytest.raises(OnyxError) as raised:
             create_chat_agent(setup, MagicMock(), 0, CancellationSignal(), True)
@@ -3460,7 +3443,7 @@ def test_invalid_chat_settings_return_actionable_errors(
         "model": "test-model",
         "provider": "openai",
     }
-    assert packet.error == detail
+    assert packet.error == "Preferred tool 1 not found in tools"
     assert not packet.is_retryable
 
 

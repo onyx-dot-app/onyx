@@ -5,23 +5,34 @@ import type { ChatPluginReference } from "@/lib/plugins/types";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import type { ToolSnapshot } from "@/lib/tools/types";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
+import { CODING_AGENT_TOOL_ID } from "@/lib/tools/constants";
 
 export interface ChatPlugin {
   plugin: Exclude<MemberPlugin, { kind: "external-app" }>;
   toolIds: number[];
 }
 
+/** Incognito chats run no child agents, so the coding agent is unavailable. */
+export function isBlockedInIncognito(
+  tool: Pick<ToolSnapshot, "in_code_tool_id">,
+  incognito: boolean
+): boolean {
+  return incognito && tool.in_code_tool_id === CODING_AGENT_TOOL_ID;
+}
+
 export function effectiveChatPreferredToolId({
   requestedToolId,
   agent,
   plugins,
+  incognito = false,
 }: {
   requestedToolId: number | null;
   agent: Pick<MinimalAgent, "id" | "tools"> | undefined;
   plugins: readonly MemberPlugin[];
+  incognito?: boolean;
 }): number | null {
   const tool = agent?.tools.find((entry) => entry.id === requestedToolId);
-  if (!tool) return null;
+  if (!tool || isBlockedInIncognito(tool, incognito)) return null;
   if (agent?.id === DEFAULT_AGENT_ID && !tool.in_code_tool_id) {
     const available = plugins.some((plugin) => {
       switch (plugin.kind) {

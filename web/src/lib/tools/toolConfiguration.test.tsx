@@ -30,9 +30,15 @@ jest.mock("@/lib/agents/hooks", () => ({
   useActiveAgent: () => undefined,
 }));
 
+let mockIncognitoEnabled = false;
+jest.mock("@/providers/IncognitoProvider", () => ({
+  useIncognito: () => ({ incognitoEnabled: mockIncognitoEnabled }),
+}));
+
 beforeEach(() => {
   sessionStorage.clear();
   mockChatId = "abc";
+  mockIncognitoEnabled = false;
 });
 
 function source(internalName: ValidSources, uniqueKey: string): SourceMetadata {
@@ -271,4 +277,25 @@ test("Deep Research and a tool preference are mutually exclusive", () => {
   act(() => result.current.configuration.setToolState(2, () => "preferred"));
   expect(result.current.research.deepResearchEnabled).toBe(false);
   expect(result.current.configuration.preferredToolId).toBe(2);
+});
+
+test("incognito masks Deep Research and leaving incognito restores it", () => {
+  const { result, rerender } = renderHook(() =>
+    useDeepResearchToggle({
+      chatSessionId: "abc",
+      agentId: 1,
+      toolConfiguration: {
+        preferredToolId: null,
+        clearPreferredTool: jest.fn(),
+      },
+    })
+  );
+  act(() => result.current.toggleDeepResearch());
+  expect(result.current.deepResearchEnabled).toBe(true);
+  mockIncognitoEnabled = true;
+  rerender();
+  expect(result.current.deepResearchEnabled).toBe(false);
+  mockIncognitoEnabled = false;
+  rerender();
+  expect(result.current.deepResearchEnabled).toBe(true);
 });
