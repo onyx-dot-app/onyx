@@ -5,8 +5,7 @@ ended list. State model: microvm/README.md, "Sandbox state model".
 """
 
 import time
-from collections.abc import Callable
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
