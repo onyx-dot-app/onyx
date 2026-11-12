@@ -129,7 +129,7 @@ def test_document_set_denial_precedes_session_and_model_creation() -> None:
     with (
         patch("onyx.chat.process_message.get_session_with_current_tenant"),
         patch(
-            "onyx.chat.process_message.filter_document_set_names_by_user_access",
+            "onyx.db.document_set.filter_document_set_names_by_user_access",
             return_value=[],
         ),
         patch(
