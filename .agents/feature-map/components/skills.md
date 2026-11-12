@@ -152,7 +152,10 @@ write in `db/skill.py`, `db/external_app.py` and
 mirrors it. Lock order: the skill row, then the plugin row; many in id order.
 A skill switch locks its target skill `FOR NO KEY UPDATE`: another user's
 switch inserts a preference for that skill while it holds a plugin lock, and
-a `FOR UPDATE` blocks that foreign-key check into a deadlock.
+a `FOR UPDATE` blocks that foreign-key check into a deadlock. App connect
+locks the app row `FOR KEY SHARE`, the user, the app's skill rows
+`FOR KEY SHARE`, then the plugin rows, so it queues behind an app edit or an
+admin setting change instead of a deadlock.
 
 **The runtime gate.** `db/skill.py:list_runtime_skills_for_user` decides what
 a sandbox gets. It combines visibility (`skill_visible_to_user`), enablement

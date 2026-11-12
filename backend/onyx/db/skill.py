@@ -68,6 +68,7 @@ from onyx.db.external_app import (
     get_skill_external_app_dependencies,
 )
 from onyx.db.models import (
+    ExternalApp,
     ExternalApp__Skill,
     Marketplace,
     Plugin,
@@ -1031,7 +1032,17 @@ def connect_external_app_within_skill_limit__no_commit(
     When the app's skills would put the user past the skill limit, leave off
     the ones that do not fit, in name order, with a saved "off" choice, and
     return their ids. Turning one on later runs the limit check again. A
-    Required skill cannot be left off; the run-time rule applies to it."""
+    Required skill cannot be left off; the run-time rule applies to it.
+
+    Lock order, shared with app edits and toggles: the app row (the
+    credential's foreign key), the user, skill rows, plugin rows, then the
+    skill limit lock. Every write after the limit lock is on rows this
+    transaction already holds."""
+    db_session.execute(
+        select(ExternalApp.id)
+        .where(ExternalApp.id == external_app_id)
+        .with_for_update(read=True, key_share=True)
+    )
     _lock_user_skill_preferences(user.id, db_session)
     plugin_ids = _lock_custom_skill_plugins(
         db_session.scalars(
@@ -1080,8 +1091,12 @@ def connect_external_app_within_skill_limit__no_commit(
 def _lock_custom_skill_plugins(
     skill_ids: Iterable[UUID], db_session: Session
 ) -> list[UUID]:
-    """Lock the plugins of the custom skills among ``skill_ids``, in id order,
-    and return their ids. Built-in skills have no plugin."""
+    """Lock the custom skills among ``skill_ids``, then their plugins, each in
+    id order, and return the plugin ids. Built-in skills have no plugin.
+
+    The skill rows take FOR KEY SHARE, the lock the legacy choice write takes
+    later. Taken before the plugin rows, it waits for an admin change that
+    holds the skill row and wants the plugin row, instead of a deadlock."""
     ids = set(skill_ids)
     if not ids:
         return []
@@ -1089,6 +1104,7 @@ def _lock_custom_skill_plugins(
         select(Skill)
         .where(Skill.id.in_(ids), Skill.built_in_skill_id.is_(None))
         .order_by(Skill.id)
+        .with_for_update(of=Skill, read=True, key_share=True)
     ).all()
     return [lock_skill_plugin__no_commit(skill, db_session).id for skill in skills]
 
