@@ -59,17 +59,23 @@ export const SlackTokensForm = ({
           if (refreshSlackBot) {
             refreshSlackBot();
           }
-          const responseJson = await response.json();
+          const responseJson = await response.json().catch(() => ({}));
           const botId = isUpdate ? existingSlackBotId : responseJson.id;
           toast.success(
             isUpdate
               ? t("tokensForm.updated.toast")
               : t("tokensForm.created.toast")
           );
-          navigation.go(`/admin/bots/${encodeURIComponent(botId)}`);
+          if (botId) {
+            navigation.go(`/admin/bots/${encodeURIComponent(botId)}`);
+          }
         } else {
-          const responseJson = await response.json();
-          let errorMsg = responseJson.detail || responseJson.message;
+          const responseJson = await response.json().catch(() => ({}));
+          let errorMsg =
+            (typeof responseJson?.detail === "string" && responseJson.detail) ||
+            (typeof responseJson?.message === "string" && responseJson.message) ||
+            response.statusText ||
+            t("error.unknownOccurred.message");
 
           if (errorMsg.includes("Invalid bot token:")) {
             errorMsg = t("tokensForm.invalidBotToken.message");
