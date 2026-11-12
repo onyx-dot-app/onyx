@@ -48,4 +48,13 @@ test("text that reaches the composer without a key ends queue navigation", () =>
   expect(consumed).toBe(false);
   expect(onSendNow).not.toHaveBeenCalled();
   expect(onRemove).not.toHaveBeenCalled();
+
+  // Clearing the text does not highlight the message again.
+  rerender({ inputIsEmpty: true });
+  expect(result.current.highlightedId).toBeNull();
+  act(() => {
+    consumed = result.current.handleKeyDown(keyDown("Backspace"));
+  });
+  expect(consumed).toBe(false);
+  expect(onRemove).not.toHaveBeenCalled();
 });
