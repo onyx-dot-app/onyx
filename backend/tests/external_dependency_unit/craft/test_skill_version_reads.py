@@ -20,9 +20,10 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import SandboxStatus, SkillInstallationPolicy, SkillSharePermission
+from onyx.db.engine.sql_engine import get_session_with_tenant
+from onyx.db.enums import SkillInstallationPolicy, SkillSharePermission
 from onyx.db.file_record import FileRecordNotFoundError
-from onyx.db.models import Plugin, PluginVersion, Sandbox, Skill, User
+from onyx.db.models import Plugin, PluginVersion, Skill, User
 from onyx.db.skill import (
     SkillSharingChange,
     create_custom_skill__no_commit,
@@ -30,6 +31,7 @@ from onyx.db.skill import (
     replace_skill_shares,
     set_skill_installation_policy,
 )
+from onyx.db.users import delete_user_from_db__no_commit
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.skill.api import (
     fetch_custom_skill_for_edit,
@@ -38,6 +40,7 @@ from onyx.server.features.skill.api import (
 )
 from onyx.skills.ingest import delete_bundle_blob, ingest_skill_bundle
 from onyx.skills.push import build_skills_fileset_for_user, push_skills_for_users
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.craft.db_helpers import make_sandbox, make_user
 
 
@@ -72,6 +75,32 @@ def bundle_ids() -> Iterator[list[str]]:
         delete_bundle_blob(file_store, bundle_file_id)
 
 
+@pytest.fixture(scope="module")
+def created_user_ids() -> Iterator[list[UUID]]:
+    """Users the module made. They go after the last test, once the skill
+    table restore has removed the plugins that their marketplaces hold."""
+    ids: list[UUID] = []
+    yield ids
+    with get_session_with_tenant(
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+    ) as session:
+        for user_id in ids:
+            user = session.get(User, user_id)
+            if user is not None:
+                delete_user_from_db__no_commit(user, session)
+        session.commit()
+
+
+@pytest.fixture
+def new_user(db_session: Session, created_user_ids: list[UUID]) -> Callable[[], User]:
+    def _make() -> User:
+        user = make_user(db_session, standard_account=True)
+        created_user_ids.append(user.id)
+        return user
+
+    return _make
+
+
 @pytest.fixture
 def file_store_reads(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     """Record each file store read, and still serve it."""
@@ -100,13 +129,14 @@ def published_skill(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
     bundle_ids: list[str],
+    new_user: Callable[[], User],
 ) -> _PublishedSkill:
     """A published skill at version 2 whose organization still runs version 1,
     as after a save before "Publish update" exists. Installed by default, so
     every user who sees it runs it."""
-    author = make_user(db_session, standard_account=True)
-    recipient = make_user(db_session, standard_account=True)
-    org_only = make_user(db_session, standard_account=True)
+    author = new_user()
+    recipient = new_user()
+    org_only = new_user()
     name = f"versioned-{author.id.hex[:8]}"
     file_store = get_default_file_store()
 
@@ -207,10 +237,6 @@ def test_push_sends_each_user_the_version_they_run(
     db_session: Session,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    for sandbox in db_session.scalars(
-        select(Sandbox).where(Sandbox.status == SandboxStatus.RUNNING)
-    ):
-        sandbox.status = SandboxStatus.TERMINATED
     org_sandbox = make_sandbox(db_session, published_skill.org_only)
     recipient_sandbox = make_sandbox(db_session, published_skill.recipient)
     db_session.commit()
@@ -265,8 +291,9 @@ def test_editor_and_preview_open_the_bundle_of_a_backfilled_version(
     seeded_skill: Callable[..., Skill],
     db_session: Session,
     file_store_reads: list[str],
+    new_user: Callable[[], User],
 ) -> None:
-    author = make_user(db_session, standard_account=True)
+    author = new_user()
     db_session.commit()
     skill = seeded_skill(
         f"backfilled-{author.id.hex[:8]}",
@@ -301,8 +328,9 @@ def test_backfilled_version_lists_name_and_description_without_file_store_read(
     seeded_skill: Callable[..., Skill],
     db_session: Session,
     file_store_reads: list[str],
+    new_user: Callable[[], User],
 ) -> None:
-    viewer = make_user(db_session, standard_account=True)
+    viewer = new_user()
     db_session.commit()
     skill = seeded_skill(f"listed-{viewer.id.hex[:8]}", public=True)
 
