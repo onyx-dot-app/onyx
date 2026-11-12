@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
 from onyx.configs.constants import MessageType
 from onyx.context.models import UserMemoryContext
-from onyx.context.search.models import PersonaSearchInfo, SearchDoc
+from onyx.context.search.models import BaseFilters, PersonaSearchInfo, SearchDoc
 from onyx.file_store.models import (
     install_lazy_content_loader,
     maybe_materialize_lazy_content,
@@ -105,12 +105,14 @@ class PersonaToolConfiguration(BaseModel):
 
 
 class ChatToolSelection(BaseModel):
-    """The tools the user selected for a chat; every later turn uses them."""
+    """The tools and search filters the user selected for a chat; every later
+    turn uses them."""
 
     model_config = ConfigDict(extra="forbid")
 
     allowed_tool_ids: list[int] | None = None
     preferred_tool_id: int | None = None
+    internal_search_filters: BaseFilters | None = None
 
 
 class ToolCallException(Exception):

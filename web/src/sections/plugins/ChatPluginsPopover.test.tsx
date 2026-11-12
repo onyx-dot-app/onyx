@@ -48,7 +48,7 @@ jest.mock("@/lib/navigation/hooks", () => ({
   }),
 }));
 jest.mock("@/lib/agents/hooks", () => ({
-  useActiveAgent: () => ({ id: 5 }),
+  useActiveAgent: () => ({ id: 5, tools: [] }),
 }));
 jest.mock("@/lib/settings/hooks", () => ({
   useSettings: () => ({ vectorDbEnabled: true }),

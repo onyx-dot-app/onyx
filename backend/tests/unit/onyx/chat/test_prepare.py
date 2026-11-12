@@ -29,7 +29,7 @@ from onyx.chat.process_message import (
 from onyx.chat.prompt_utils import build_chat_prompt, prepare_prompt
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
 from onyx.context.models import UserInfo, UserMemoryContext
-from onyx.context.search.models import PersonaSearchInfo
+from onyx.context.search.models import BaseFilters, PersonaSearchInfo
 from onyx.db.enums import IncognitoRecordMode
 from onyx.db.models import (
     ChatMessage,
@@ -599,6 +599,7 @@ def test_a_sent_turn_saves_its_tool_selection_and_model_choice(
     _mock_chat_preparation: None,
 ) -> None:
     override = LLMOverride(model_provider="Provider", model_version="chosen-model")
+    filters = BaseFilters(document_set=["Handbook"])
     with (
         patch(
             "onyx.chat.process_message.set_chat_session_tool_selection__no_commit"
@@ -613,6 +614,7 @@ def test_a_sent_turn_saves_its_tool_selection_and_model_choice(
                 chat_session_id=chat_session.id,
                 allowed_tool_ids=[3],
                 preferred_tool_id=3,
+                internal_search_filters=filters,
                 llm_override=override,
             ),
             User(id=uuid4(), email="reader@example.com"),
@@ -621,7 +623,11 @@ def test_a_sent_turn_saves_its_tool_selection_and_model_choice(
     save_tools.assert_called_once_with(
         ANY,
         chat_session.id,
-        ChatToolSelection(allowed_tool_ids=[3], preferred_tool_id=3),
+        ChatToolSelection(
+            allowed_tool_ids=[3],
+            preferred_tool_id=3,
+            internal_search_filters=filters,
+        ),
     )
     save_model.assert_called_once_with(ANY, chat_session.id, override)
     setup.admission.release()
