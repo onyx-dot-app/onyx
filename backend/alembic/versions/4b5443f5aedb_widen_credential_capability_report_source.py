@@ -1,7 +1,7 @@
 """widen credential_capability_report.source
 
 Revision ID: 4b5443f5aedb
-Revises: c3e8a1f5d702
+Revises: cdec9dd9ca3d
 Create Date: 2026-09-24 00:00:00.000000
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "4b5443f5aedb"
-down_revision = "c3e8a1f5d702"
+down_revision = "cdec9dd9ca3d"
 branch_labels = None
 depends_on = None
 
