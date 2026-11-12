@@ -12147,6 +12147,10 @@
         "version": {
           "label": "v{number}",
           "tooltip": "Aktuelle Version: {number}"
+        },
+        "unpublished": {
+          "label": "Unveröffentlichte Änderungen",
+          "tooltip": "Die Organisation nutzt noch Version {number}."
         }
       },
       "toggle": {
@@ -17404,7 +17408,8 @@
         "columns": {
           "version": "Version",
           "madeBy": "Erstellt von",
-          "date": "Datum"
+          "date": "Datum",
+          "status": "Status"
         },
         "versionLabel": "Version {number}",
         "currentBadge": "Aktuell",
@@ -17436,6 +17441,22 @@
             "title": "Diese Version konnte nicht geladen werden",
             "description": "Versuchen Sie es später erneut."
           }
+        },
+        "status": {
+          "draft": "Entwurf",
+          "pending": "Prüfung ausstehend",
+          "published": "Veröffentlicht",
+          "denied": "Abgelehnt",
+          "superseded": "Ersetzt"
+        },
+        "unpublishedBadge": "Unveröffentlichte Änderungen",
+        "organizationRuns": "Die Organisation nutzt Version {number}.",
+        "waitingForReview": "Wartet auf Prüfung",
+        "publishUpdate": {
+          "label": "Update veröffentlichen",
+          "successToast": "Version {number} für die Organisation veröffentlicht.",
+          "failedToast": "Dieses Update konnte nicht veröffentlicht werden.",
+          "offNotice": "Die Veröffentlichung ist deaktiviert. Bitten Sie einen Admin, dieses Update zu veröffentlichen."
         }
       }
     },

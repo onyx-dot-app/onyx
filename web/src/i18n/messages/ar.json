@@ -12147,6 +12147,10 @@
         "version": {
           "label": "v{number}",
           "tooltip": "الإصدار الحالي: {number}"
+        },
+        "unpublished": {
+          "label": "تغييرات غير منشورة",
+          "tooltip": "لا تزال المؤسسة تستخدم الإصدار {number}."
         }
       },
       "toggle": {
@@ -17404,7 +17408,8 @@
         "columns": {
           "version": "الإصدار",
           "madeBy": "أنشأها",
-          "date": "التاريخ"
+          "date": "التاريخ",
+          "status": "الحالة"
         },
         "versionLabel": "الإصدار {number}",
         "currentBadge": "الحالي",
@@ -17436,6 +17441,22 @@
             "title": "تعذّر تحميل هذا الإصدار",
             "description": "حاول مرة أخرى لاحقًا."
           }
+        },
+        "status": {
+          "draft": "مسودة",
+          "pending": "بانتظار المراجعة",
+          "published": "منشور",
+          "denied": "مرفوض",
+          "superseded": "مستبدل"
+        },
+        "unpublishedBadge": "تغييرات غير منشورة",
+        "organizationRuns": "تستخدم المؤسسة الإصدار {number}.",
+        "waitingForReview": "بانتظار المراجعة",
+        "publishUpdate": {
+          "label": "نشر التحديث",
+          "successToast": "تم نشر الإصدار {number} للمؤسسة.",
+          "failedToast": "تعذّر نشر هذا التحديث.",
+          "offNotice": "النشر متوقف. اطلب من مسؤول نشر هذا التحديث."
         }
       }
     },

@@ -416,8 +416,9 @@ The library preview of an external-app skill calls the same renderer
     transaction they lock the skill row, then the plugin row, add the next
     `plugin_version` with its file list (`skills/bundle.py:compute_bundle_manifest`)
     and `plugin_skill` row, move `current_version_id`, and copy the bundle,
-    name and description to the legacy skill row. A save on a plugin in the
-    Organization library also moves `published_version_id`. An editor save
+    name and description to the legacy skill row. A save never moves
+    `published_version_id`: on a published skill the organization keeps the
+    published version until a publish update ([[#publishing-review]]). An editor save
     whose file list equals the current version's adds no version, and the
     route deletes the new blob. A version copied from a legacy row has no
     file list, so editor routes pass `previous_manifest`, the list of the
@@ -504,9 +505,14 @@ The library preview of an external-app skill calls the same renderer
     `publish_plugin__no_commit` with the version, "raise" on a name clash) and
     denies them. Approve refuses a version that is not newer than the
     published one. Moving the published pointer does not clear a pending
-    request; approve refuses it if it is now older. Until the phase 1 rule in
-    `add_plugin_version__no_commit` goes, a save on a published skill still
-    publishes at once.
+    request; approve refuses it if it is now older. Only the author or global
+    `MANAGE_PLUGINS` publishes or publishes an update
+    (`db/skill.py:ensure_can_edit_org_visibility`); an editor saves versions
+    only. The skill dialog's Versions tab shows each `review_status`, an
+    **Unpublished changes** badge when `current_version_number` is newer than
+    `published_version_number`, and **Publish update** (or **Waiting for
+    review** while a version is pending) for the author and organization-wide
+    managers.
 
 ---
 

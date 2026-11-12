@@ -87,6 +87,44 @@ export class SkillsLibraryPage {
       .click();
   }
 
+  async expectCardUnpublishedChanges(
+    name: string,
+    shown: boolean
+  ): Promise<void> {
+    const badge = this.card(name).getByText("Unpublished changes", {
+      exact: true,
+    });
+    if (shown) await expect(badge).toBeVisible();
+    else await expect(badge).toHaveCount(0);
+  }
+
+  get publishUpdateButton(): Locator {
+    return this.dialog.getByRole("button", { name: "Publish update" });
+  }
+
+  async expectUnpublishedChanges(shown: boolean): Promise<void> {
+    const badge = this.dialog.getByText("Unpublished changes", { exact: true });
+    if (shown) await expect(badge).toBeVisible();
+    else await expect(badge).toHaveCount(0);
+  }
+
+  async publishUpdate(): Promise<void> {
+    await this.publishUpdateButton.click();
+  }
+
+  async expectNoPublishUpdate(): Promise<void> {
+    await expect(this.publishUpdateButton).toHaveCount(0);
+  }
+
+  async expectVersionStatus(
+    versionNumber: number,
+    status: string
+  ): Promise<void> {
+    await expect(
+      this.versionRow(versionNumber).getByText(status, { exact: true })
+    ).toBeVisible();
+  }
+
   async expectToast(text: string): Promise<void> {
     await expect(this.page.getByText(text, { exact: true })).toBeVisible();
   }

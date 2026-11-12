@@ -1,8 +1,4 @@
-"""Publish, publish update and admin review under the Publishing setting.
-
-Until the phase 1 rule goes, a save on a published skill also publishes the
-new version. A published skill with unpublished changes is made by approving
-an older pending version (``_published_with_newer_draft``)."""
+"""Publish, publish update and admin review under the Publishing setting."""
 
 import json
 from collections.abc import Generator
@@ -75,12 +71,12 @@ def _version_id(skill_id: UUID, number: int, user: DATestUser) -> UUID:
 
 def _published_with_newer_draft(owner: DATestUser, admin: DATestUser) -> SkillResponse:
     """A published skill whose organization runs version 1 while the owner
-    has version 2."""
-    _set_publishing(admin, PluginPublishingPolicy.REQUIRES_REVIEW)
+    has version 2. Leaves the Publishing setting at REQUIRES_REVIEW."""
+    _set_publishing(admin, PluginPublishingPolicy.OPEN)
     skill = SkillManager.create_custom(owner, description="Version one")
     SkillManager.publish(skill.id, owner)
     _save(skill, owner, "Version two")
-    SkillManager.review(skill.id, _version_id(skill.id, 1, owner), "approve", admin)
+    _set_publishing(admin, PluginPublishingPolicy.REQUIRES_REVIEW)
     skill = SkillManager.get_for_user(skill.id, owner)
     assert skill.public_permission == SkillSharePermission.VIEWER
     assert (skill.published_version_number, skill.current_version_number) == (1, 2)
@@ -328,8 +324,8 @@ def test_approve_refuses_a_version_not_newer_than_the_published_one(
 ) -> None:
     published = _published_with_newer_draft(owner, admin_user)
     SkillManager.publish(published.id, owner)
-    # The phase 1 rule publishes this save at once.
     _save(published, owner, "Version three")
+    SkillManager.publish(published.id, admin_user)
     assert SkillManager.get_for_user(published.id, owner).published_version_number == 3
 
     response = SkillManager.review_response(

@@ -24,6 +24,8 @@ import {
 } from "@/lib/skills/sharing";
 import type { GitHubSkillsImportResult } from "@/lib/skills/types";
 import { useUser } from "@/providers/UserProvider";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
 
 interface CreateSkillModalProps {
   open: boolean;
@@ -61,6 +63,9 @@ export function CreateSkillModalContent({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const busy = preparing || inspecting;
   const { isAdmin, user } = useUser();
+  const { isGlobalHolder: isOrganizationManager } = usePermissionAuthority(
+    Permission.MANAGE_PLUGINS
+  );
   const [batchFiles, setBatchFiles] = useState<File[]>([]);
   const [result, setResult] = useState<GitHubSkillsImportResult | null>(null);
   const [sharing, setSharing] = useState<SkillSharingDraft | null>(null);
@@ -98,7 +103,9 @@ export function CreateSkillModalContent({
       try {
         const imported = await uploadSkillBundles(
           batchFiles,
-          sharing ? serializeSkillSharing(sharing, isAdmin) : undefined
+          sharing
+            ? serializeSkillSharing(sharing, isAdmin, isOrganizationManager)
+            : undefined
         );
         setResult(imported);
         onDirtyChange?.(false);

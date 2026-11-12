@@ -509,18 +509,44 @@ def test_response_version_id_matches_the_fields_it_shows(user: DATestUser) -> No
     assert response.description == "v2"
 
 
-def test_save_on_published_plugin_moves_both_pointers(user: DATestUser) -> None:
+def _instructions_seen_by(viewer: DATestUser, skill_id: str) -> str:
+    response = client.get(
+        f"{API_SERVER_URL}/skills/{skill_id}/preview", headers=viewer.headers
+    )
+    response.raise_for_status()
+    return response.json()["instructions_markdown"]
+
+
+def test_save_on_published_plugin_waits_for_publish_update(user: DATestUser) -> None:
+    """A save on a published skill moves only current_version_id. The
+    organization runs the published version until "Publish update"."""
+    org_member = UserManager.create(name=f"org_member_{uuid4().hex[:8]}")
     name = f"published-{uuid4().hex[:8]}"
     created = _create_from_editor(user, name, public=True)
     state = _state(created["id"])
     assert state.marketplace_id == _ORGANIZATION_LIBRARY_ID
     assert state.published_version_id == state.current_version_id
+    first_version_id = state.current_version_id
 
-    _patch(user, created["id"], {"description": "Published edit"}).raise_for_status()
+    _patch(
+        user, created["id"], {"instructions_markdown": "Published edit."}
+    ).raise_for_status()
     state = _state(created["id"])
     assert len(state.versions) == 2
     assert state.current.number == 2
+    assert state.published_version_id == first_version_id
+    assert _instructions_seen_by(org_member, created["id"]) == "Editor instructions."
+    assert _instructions_seen_by(user, created["id"]) == "Published edit."
+
+    client.post(
+        f"{API_SERVER_URL}/skills/custom/{created['id']}/publish",
+        json={"base_version_id": str(state.current_version_id)},
+        headers=user.headers,
+    ).raise_for_status()
+    state = _state(created["id"])
+    assert len(state.versions) == 2
     assert state.published_version_id == state.current_version_id
+    assert _instructions_seen_by(org_member, created["id"]) == "Published edit."
 
 
 def test_save_on_private_plugin_keeps_published_pointer(user: DATestUser) -> None:

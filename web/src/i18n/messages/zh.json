@@ -12147,6 +12147,10 @@
         "version": {
           "label": "v{number}",
           "tooltip": "当前版本：{number}"
+        },
+        "unpublished": {
+          "label": "未发布的更改",
+          "tooltip": "组织仍在使用版本 {number}。"
         }
       },
       "toggle": {
@@ -17404,7 +17408,8 @@
         "columns": {
           "version": "版本",
           "madeBy": "创建者",
-          "date": "日期"
+          "date": "日期",
+          "status": "状态"
         },
         "versionLabel": "版本 {number}",
         "currentBadge": "当前",
@@ -17436,6 +17441,22 @@
             "title": "无法加载此版本",
             "description": "请稍后重试。"
           }
+        },
+        "status": {
+          "draft": "草稿",
+          "pending": "待审核",
+          "published": "已发布",
+          "denied": "已拒绝",
+          "superseded": "已替换"
+        },
+        "unpublishedBadge": "未发布的更改",
+        "organizationRuns": "组织使用版本 {number}。",
+        "waitingForReview": "等待审核",
+        "publishUpdate": {
+          "label": "发布更新",
+          "successToast": "已将版本 {number} 发布到组织。",
+          "failedToast": "无法发布此更新。",
+          "offNotice": "发布已关闭。请让管理员发布此更新。"
         }
       }
     },

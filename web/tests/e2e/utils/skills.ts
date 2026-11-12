@@ -17,7 +17,8 @@ export function uniqueSkillName(prefix: string): string {
 export async function createSkill(
   request: APIRequestContext,
   name: string,
-  instructions: string
+  instructions: string,
+  options: { publish?: boolean } = {}
 ): Promise<CreatedSkill> {
   const res = await request.post("/api/skills/custom/editor", {
     multipart: {
@@ -25,6 +26,9 @@ export async function createSkill(
       description: `E2E skill ${name}`,
       instructions_markdown: instructions,
       auto_enable: "true",
+      ...(options.publish
+        ? { sharing: JSON.stringify({ public_permission: "VIEWER" }) }
+        : {}),
     },
   });
   expect(res.ok(), await res.text()).toBeTruthy();
@@ -41,4 +45,36 @@ export async function editSkillInstructions(
   });
   expect(res.ok(), await res.text()).toBeTruthy();
   return res.json();
+}
+
+export async function shareSkillWithEditor(
+  request: APIRequestContext,
+  skillId: string,
+  userId: string
+): Promise<void> {
+  const res = await request.patch(`/api/skills/custom/${skillId}/share`, {
+    data: { user_shares: [{ user_id: userId, permission: "EDITOR" }] },
+  });
+  expect(res.ok(), await res.text()).toBeTruthy();
+}
+
+export type PublishingPolicy = "OPEN" | "REQUIRES_REVIEW" | "OFF";
+
+/** Set the admin Publishing setting. `adminRequest` must be an admin session. */
+export async function setPublishing(
+  adminRequest: APIRequestContext,
+  policy: PublishingPolicy
+): Promise<void> {
+  const res = await adminRequest.patch("/api/admin/settings", {
+    data: { plugin_publishing: policy },
+  });
+  expect(res.ok(), await res.text()).toBeTruthy();
+}
+
+export async function currentUserId(
+  request: APIRequestContext
+): Promise<string> {
+  const res = await request.get("/api/me");
+  expect(res.ok(), await res.text()).toBeTruthy();
+  return (await res.json()).id;
 }

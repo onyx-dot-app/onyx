@@ -17,39 +17,74 @@ import { Content, Section, toast } from "@opal/layouts";
 import { SvgArrowLeft, SvgHistory } from "@opal/icons";
 import { errorHandlingFetcher, fetchErrorDetail } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { isSkillVersionStale, restoreSkillVersion } from "@/lib/skills/api";
+import {
+  isSkillVersionStale,
+  publishSkill,
+  restoreSkillVersion,
+} from "@/lib/skills/api";
+import { hasUnpublishedChanges } from "@/lib/skills/sharing";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
+import { useSettings } from "@/lib/settings/hooks";
+import { PluginPublishingPolicy } from "@/lib/settings/types";
 import type {
+  CustomSkill,
   SkillEditableDetail,
   SkillVersion,
   SkillVersionPreview,
+  SkillVersionReviewStatus,
 } from "@/lib/skills/types";
 import { SkillInstructionsPanel } from "@/sections/modals/SkillPreviewModal";
 
 const VERSIONS_PAGE_SIZE = 50;
 
 interface SkillVersionsTabProps {
-  skillId: string;
-  /** Called after a restore adds a version. */
-  onRestored: (restored: SkillEditableDetail) => void;
+  skill: CustomSkill;
+  /** The author or an organization-wide manager: may publish an update. */
+  canPublish: boolean;
+  /** Called after a restore or a publish changes the skill. */
+  onChanged: () => void;
+  /** Called with the new current version after a restore. */
+  onRestored?: (restored: SkillEditableDetail) => void;
   /** The open editor has unsaved changes that a restore would replace. */
   restoreBlocked?: boolean;
 }
 
 function canRestore(version: SkillVersion): boolean {
-  return version.bundle_kept && !version.is_current;
+  return (
+    version.bundle_kept &&
+    !version.is_current &&
+    version.review_status !== "denied"
+  );
 }
 
+const REVIEW_STATUS_COLORS = {
+  draft: "default",
+  pending: "pending",
+  published: "success",
+  denied: "error",
+  superseded: "default",
+} as const satisfies Record<SkillVersionReviewStatus, string>;
+
 export default function SkillVersionsTab({
-  skillId,
+  skill,
+  canPublish,
+  onChanged,
   onRestored,
   restoreBlocked = false,
 }: SkillVersionsTabProps) {
+  const skillId = skill.id;
   const t = useTranslations("skills.modals.versions");
   const editorCopy = useTranslations("skills.editor");
   const format = useFormatter();
   const [previewVersionId, setPreviewVersionId] = useState<string | null>(null);
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [isStale, setIsStale] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const { isGlobalHolder: isOrganizationManager } = usePermissionAuthority(
+    Permission.MANAGE_PLUGINS
+  );
+  const { plugin_publishing: publishingPolicy } = useSettings();
   const {
     data: pages,
     error,
@@ -96,7 +131,8 @@ export default function SkillVersionsTab({
             newNumber: restored.current_version_number ?? 0,
           })
         );
-        onRestored(restored);
+        onRestored?.(restored);
+        onChanged();
       }
       setPreviewVersionId(null);
       await refreshVersions();
@@ -114,10 +150,48 @@ export default function SkillVersionsTab({
     }
   }
 
+  async function handlePublishUpdate() {
+    if (!currentVersion || publishing) return;
+    setPublishing(true);
+    try {
+      const published = await publishSkill(skillId, currentVersion.id);
+      if (
+        published.published_version_number === currentVersion.version_number
+      ) {
+        toast.success(
+          t("publishUpdate.successToast", {
+            number: currentVersion.version_number,
+          })
+        );
+      }
+      onChanged();
+      await refreshVersions();
+    } catch (err) {
+      if (isSkillVersionStale(err)) {
+        setIsStale(true);
+        return;
+      }
+      console.error("Failed to publish skill update", err);
+      toast.error(
+        err instanceof Error ? err.message : t("publishUpdate.failedToast")
+      );
+    } finally {
+      setPublishing(false);
+    }
+  }
+
   async function handleReloadStale() {
     await refreshVersions();
+    onChanged();
     setIsStale(false);
   }
+
+  const unpublishedChanges = hasUnpublishedChanges(skill);
+  const publishingOff =
+    !isOrganizationManager && publishingPolicy === PluginPublishingPolicy.OFF;
+  const isPending =
+    skill.pending_version_number !== null &&
+    skill.pending_version_number === skill.current_version_number;
 
   function restoreButton(version: SkillVersion) {
     if (!canRestore(version)) return null;
@@ -157,9 +231,21 @@ export default function SkillVersionsTab({
     },
     {
       kind: "data",
+      field: "review_status",
+      title: t("columns.status"),
+      weight: 20,
+      cell: (status) => (
+        <Badge
+          title={t(`status.${status}`)}
+          color={REVIEW_STATUS_COLORS[status]}
+        />
+      ),
+    },
+    {
+      kind: "data",
       field: "created_by_email",
       title: t("columns.madeBy"),
-      weight: 36,
+      weight: 30,
       truncate: true,
       cell: (email) => (
         <Text font="main-ui-body" color="text-03" maxLines={1}>
@@ -233,6 +319,50 @@ export default function SkillVersionsTab({
             </Button>
           }
         />
+      )}
+      {(unpublishedChanges || (canPublish && isPending)) && (
+        <Section
+          flexDirection="row"
+          justifyContent="between"
+          height="auto"
+          gap={2}
+          wrap
+        >
+          <Section
+            flexDirection="row"
+            justifyContent="start"
+            width="auto"
+            height="auto"
+            gap={1}
+            wrap
+          >
+            {unpublishedChanges && (
+              <Badge title={t("unpublishedBadge")} color="warning" size={5} />
+            )}
+            {skill.published_version_number !== null && (
+              <Text font="secondary-body" color="text-03">
+                {t("organizationRuns", {
+                  number: skill.published_version_number,
+                })}
+              </Text>
+            )}
+          </Section>
+          {canPublish &&
+            (isPending ? (
+              <Badge title={t("waitingForReview")} color="pending" size={6} />
+            ) : unpublishedChanges && publishingOff ? (
+              <Text font="secondary-body" color="text-03">
+                {t("publishUpdate.offNotice")}
+              </Text>
+            ) : unpublishedChanges ? (
+              <Button
+                disabled={publishing || isStale || !currentVersion}
+                onClick={() => void handlePublishUpdate()}
+              >
+                {t("publishUpdate.label")}
+              </Button>
+            ) : null)}
+        </Section>
       )}
       {previewVersion ? (
         <SkillVersionPreviewView

@@ -12,6 +12,7 @@ import useShareableGroups, {
 import useShareableUsers from "@/hooks/useShareableUsers";
 import { Content, Section, toast } from "@opal/layouts";
 import { useUser } from "@/providers/UserProvider";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Modal } from "@opal/components";
 import { AddPeoplePicker } from "@/sections/modals/AddPeoplePicker";
 import { ShareAccessRow } from "@/sections/modals/ShareAccessRow";
@@ -41,10 +42,11 @@ import type {
   SkillInstallationPolicy,
 } from "@/lib/skills/types";
 import {
+  canChangeOrganizationAccess,
   serializeSkillSharing,
   type SkillSharingDraft,
 } from "@/lib/skills/sharing";
-import type { MinimalUserSnapshot } from "@/lib/types";
+import { Permission, type MinimalUserSnapshot } from "@/lib/types";
 import {
   Button,
   Card,
@@ -127,6 +129,9 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
   });
   const { data: shareableGroupsData } = useShareableGroups();
   const { isAdmin, user: currentUser } = useUser();
+  const { isGlobalHolder: isOrganizationManager } = usePermissionAuthority(
+    Permission.MANAGE_PLUGINS
+  );
   const { mutate } = useSWRConfig();
 
   const [draftState, setDraftState] = useState<SkillShareDraftState | null>(
@@ -196,9 +201,9 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
   const canEditShares =
     skill?.user_permission === "OWNER" || skill?.user_permission === "EDITOR";
   const canEditOrgVisibility =
-    !skill?.external_app &&
-    (skill?.user_permission === "OWNER" ||
-      (isAdmin && skill?.user_permission === "EDITOR"));
+    !!skill &&
+    !skill.external_app &&
+    canChangeOrganizationAccess(skill, isOrganizationManager);
   // Publishing is one-way: a saved published skill shows no private option.
   const isPublished = props.mode === "edit" && initialState?.isPublic === true;
   const isPublishing = !!effectiveState?.isPublic && !isPublished;
@@ -362,7 +367,11 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
         closeModal();
         return;
       }
-      const payload = serializeSkillSharing(nextDraft, isAdmin);
+      const payload = serializeSkillSharing(
+        nextDraft,
+        isAdmin,
+        isOrganizationManager
+      );
       await updateSkillShares(props.skillId, payload);
       void refreshSkill();
       toast.success(t("share.savedToast.message"));
@@ -378,11 +387,10 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     }
   }
 
-  function handleVersionRestored(restored: SkillEditableDetail) {
+  function handleVersionsChanged() {
     if (props.mode !== "edit") return;
     void refreshSkill();
     void mutate(SWR_KEYS.userSkillPreview(props.skillId));
-    props.onVersionRestored?.(restored);
     props.onSaved();
   }
 
@@ -824,11 +832,18 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
               </Tabs.Content>
               {canEditShares && (
                 <Tabs.Content value="versions">
-                  <SkillVersionsTab
-                    skillId={props.skillId}
-                    onRestored={handleVersionRestored}
-                    restoreBlocked={props.restoreBlocked}
-                  />
+                  {loadedSkill && (
+                    <SkillVersionsTab
+                      skill={loadedSkill}
+                      canPublish={canChangeOrganizationAccess(
+                        loadedSkill,
+                        isOrganizationManager
+                      )}
+                      onChanged={handleVersionsChanged}
+                      onRestored={props.onVersionRestored}
+                      restoreBlocked={props.restoreBlocked}
+                    />
+                  )}
                 </Tabs.Content>
               )}
             </Tabs>

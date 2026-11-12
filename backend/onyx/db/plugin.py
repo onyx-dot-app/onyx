@@ -1,9 +1,8 @@
 """DB operations for plugins, their versions and marketplaces.
 
 A version never changes. Each change to a plugin's files adds a version and
-moves ``plugin.current_version_id``. In phase 1 a change to a plugin in the
-Organization library also moves ``published_version_id``, so an edit reaches
-the organization at once, as before plugins.
+moves ``plugin.current_version_id``. The organization keeps the version in
+``published_version_id`` until a publish update moves it.
 
 Access is on the plugin: shares, the install setting, the user choice and
 publishing. ``apply_plugin_access_change__no_commit`` is the one write path
@@ -447,7 +446,7 @@ def add_plugin_version__no_commit(
     previous_manifest: Callable[[], list[PluginFileEntry]] | None = None,
 ) -> AddedPluginVersion | None:
     """Add the next version of a plugin locked with ``lock_plugin``, move its
-    pointers and prune old bundles. Returns None, and writes nothing, when
+    current_version_id and prune old bundles. Returns None, and writes nothing, when
     ``skip_if_unchanged`` is set and the files equal the current version's
     files.
 
@@ -495,11 +494,6 @@ def add_plugin_version__no_commit(
         db_session=db_session,
     )
     plugin.current_version_id = version.id
-    marketplace_kind = db_session.scalar(
-        select(Marketplace.kind).where(Marketplace.id == plugin.marketplace_id)
-    )
-    if marketplace_kind == MarketplaceKind.ORGANIZATION_LIBRARY:
-        set_published_version__no_commit(plugin, version.id, db_session)
     if plugin_version_kind(skill.path for skill in content.skills) == "skill":
         plugin.description = content.skills[0].description
     db_session.flush()

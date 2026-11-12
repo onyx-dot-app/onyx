@@ -12147,6 +12147,10 @@
         "version": {
           "label": "v{number}",
           "tooltip": "現在のバージョン: {number}"
+        },
+        "unpublished": {
+          "label": "未公開の変更",
+          "tooltip": "組織はまだバージョン {number} を使用しています。"
         }
       },
       "toggle": {
@@ -17404,7 +17408,8 @@
         "columns": {
           "version": "バージョン",
           "madeBy": "作成者",
-          "date": "日付"
+          "date": "日付",
+          "status": "ステータス"
         },
         "versionLabel": "バージョン {number}",
         "currentBadge": "現在",
@@ -17436,6 +17441,22 @@
             "title": "このバージョンを読み込めませんでした",
             "description": "後でもう一度お試しください。"
           }
+        },
+        "status": {
+          "draft": "下書き",
+          "pending": "レビュー待ち",
+          "published": "公開済み",
+          "denied": "却下",
+          "superseded": "置き換え済み"
+        },
+        "unpublishedBadge": "未公開の変更",
+        "organizationRuns": "組織はバージョン {number} を使用しています。",
+        "waitingForReview": "レビュー待ち",
+        "publishUpdate": {
+          "label": "更新を公開",
+          "successToast": "バージョン {number} を組織に公開しました。",
+          "failedToast": "この更新を公開できませんでした。",
+          "offNotice": "公開はオフになっています。このアップデートの公開を管理者に依頼してください。"
         }
       }
     },

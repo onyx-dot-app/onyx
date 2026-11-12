@@ -264,7 +264,11 @@ export default function SkillEditorPage({
             auto_enable: isCreatingForApp ? false : !createDisabled,
             external_app_id: externalAppId,
             sharing: creationSharing
-              ? serializeSkillSharing(creationSharing, isAdmin)
+              ? serializeSkillSharing(
+                  creationSharing,
+                  isAdmin,
+                  canManageOrgSkills
+                )
               : undefined,
           },
           pendingFilesUpload?.file

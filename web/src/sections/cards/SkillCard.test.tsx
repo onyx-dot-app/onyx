@@ -64,6 +64,8 @@ function custom(overrides: Partial<CustomSkill> = {}): CustomSkillCardItem {
     external_app: null,
     current_version_id: null,
     current_version_number: null,
+    published_version_number: null,
+    pending_version_number: null,
     ...overrides,
   };
   return {
@@ -238,6 +240,43 @@ describe("SkillCard", () => {
     expect(screen.getByText("v7")).toBeInTheDocument();
     rerender(<SkillCard item={custom({ current_version_number: null })} />);
     expect(screen.queryByText(/^v\d+$/)).not.toBeInTheDocument();
+  });
+
+  it("shows Unpublished changes when the current version is newer than the published one", () => {
+    const { rerender } = render(
+      <SkillCard
+        item={custom({
+          public_permission: "VIEWER",
+          current_version_number: 3,
+          published_version_number: 2,
+        })}
+      />
+    );
+    expect(screen.getByText("Unpublished changes")).toBeInTheDocument();
+    rerender(
+      <SkillCard
+        item={custom({
+          public_permission: "VIEWER",
+          current_version_number: 3,
+          published_version_number: 3,
+        })}
+      />
+    );
+    expect(screen.queryByText("Unpublished changes")).not.toBeInTheDocument();
+  });
+
+  it("hides Unpublished changes from viewers, who run the published version", () => {
+    render(
+      <SkillCard
+        item={custom({
+          public_permission: "VIEWER",
+          user_permission: "VIEWER",
+          current_version_number: 3,
+          published_version_number: 2,
+        })}
+      />
+    );
+    expect(screen.queryByText("Unpublished changes")).not.toBeInTheDocument();
   });
 
   it("hides the version number from viewers, who may run the published version", () => {

@@ -9,6 +9,8 @@ import ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
 import { customFixture } from "@/lib/skills/__fixtures__/picker";
 
 let mockIsAdmin = true;
+let mockPublishing = "OPEN";
+let mockIsManager = false;
 const mockUpdateSkillShares = jest.fn();
 const mockLoadSkill = jest.fn();
 jest.mock("@/lib/fetcher", () => ({
@@ -17,6 +19,15 @@ jest.mock("@/lib/fetcher", () => ({
 
 jest.mock("@/providers/UserProvider", () => ({
   useUser: () => ({ isAdmin: mockIsAdmin, user: null }),
+}));
+jest.mock("@/lib/settings/hooks", () => ({
+  useSettings: () => ({ plugin_publishing: mockPublishing }),
+}));
+jest.mock("@/lib/permissions/hooks", () => ({
+  usePermissionAuthority: () => ({
+    isGlobalHolder: mockIsAdmin || mockIsManager,
+    isScopedManager: false,
+  }),
 }));
 jest.mock("@/hooks/useShareableUsers", () => ({
   __esModule: true,
@@ -34,6 +45,7 @@ jest.mock("@/lib/skills/api", () => ({
 describe("ShareSkillModal", () => {
   beforeEach(() => {
     mockIsAdmin = true;
+    mockIsManager = false;
     mockLoadSkill
       .mockReset()
       .mockResolvedValue(customFixture({ user_permission: "OWNER" }));
@@ -257,6 +269,26 @@ describe("ShareSkillModal", () => {
       );
     }
   );
+
+  it("lets a non-admin editor with organization-wide manage:plugins publish", async () => {
+    mockIsAdmin = false;
+    mockIsManager = true;
+    mockLoadSkill.mockResolvedValue(
+      customFixture({ user_permission: "EDITOR", public_permission: null })
+    );
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        open
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+      />
+    );
+    expect(
+      await screen.findByRole("button", { name: "Change sharing scope" })
+    ).toBeEnabled();
+  });
 
   it("shows a published skill as Organization with no way to make it private", async () => {
     mockLoadSkill.mockResolvedValue(

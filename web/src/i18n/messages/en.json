@@ -12147,6 +12147,10 @@
         "version": {
           "label": "v{number}",
           "tooltip": "Current version: {number}"
+        },
+        "unpublished": {
+          "label": "Unpublished changes",
+          "tooltip": "The organization still runs version {number}."
         }
       },
       "toggle": {
@@ -17404,7 +17408,8 @@
         "columns": {
           "version": "Version",
           "madeBy": "Made by",
-          "date": "Date"
+          "date": "Date",
+          "status": "Status"
         },
         "versionLabel": "Version {number}",
         "currentBadge": "Current",
@@ -17436,6 +17441,22 @@
             "title": "Couldn't load this version",
             "description": "Try again later."
           }
+        },
+        "status": {
+          "draft": "Draft",
+          "pending": "Pending review",
+          "published": "Published",
+          "denied": "Denied",
+          "superseded": "Superseded"
+        },
+        "unpublishedBadge": "Unpublished changes",
+        "organizationRuns": "The organization runs version {number}.",
+        "waitingForReview": "Waiting for review",
+        "publishUpdate": {
+          "label": "Publish update",
+          "successToast": "Published version {number} to the organization.",
+          "failedToast": "Couldn't publish this update.",
+          "offNotice": "Publishing is turned off. Ask an admin to publish this update."
         }
       }
     },

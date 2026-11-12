@@ -12147,6 +12147,10 @@
         "version": {
           "label": "v{number}",
           "tooltip": "Version actuelle : {number}"
+        },
+        "unpublished": {
+          "label": "Modifications non publiées",
+          "tooltip": "L'organisation utilise encore la version {number}."
         }
       },
       "toggle": {
@@ -17404,7 +17408,8 @@
         "columns": {
           "version": "Version",
           "madeBy": "Créée par",
-          "date": "Date"
+          "date": "Date",
+          "status": "Statut"
         },
         "versionLabel": "Version {number}",
         "currentBadge": "Actuelle",
@@ -17436,6 +17441,22 @@
             "title": "Impossible de charger cette version",
             "description": "Réessayez plus tard."
           }
+        },
+        "status": {
+          "draft": "Brouillon",
+          "pending": "Examen en attente",
+          "published": "Publiée",
+          "denied": "Refusée",
+          "superseded": "Remplacée"
+        },
+        "unpublishedBadge": "Modifications non publiées",
+        "organizationRuns": "L'organisation utilise la version {number}.",
+        "waitingForReview": "En attente d'examen",
+        "publishUpdate": {
+          "label": "Publier la mise à jour",
+          "successToast": "Version {number} publiée pour l'organisation.",
+          "failedToast": "Impossible de publier cette mise à jour.",
+          "offNotice": "La publication est désactivée. Demandez à un administrateur de publier cette mise à jour."
         }
       }
     },

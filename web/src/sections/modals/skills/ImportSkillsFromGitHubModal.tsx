@@ -27,6 +27,8 @@ import { SvgGitHub } from "@opal/logos";
 import { cn } from "@opal/utils";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
 import { useUser } from "@/providers/UserProvider";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
 import { importGitHubSkills, previewGitHubSkills } from "@/lib/skills/api";
 import type {
   GitHubSkillNotImported,
@@ -72,6 +74,9 @@ export default function ImportSkillsFromGitHubModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { isAdmin, user } = useUser();
+  const { isGlobalHolder: isOrganizationManager } = usePermissionAuthority(
+    Permission.MANAGE_PLUGINS
+  );
   const [sharing, setSharing] = useState<SkillSharingDraft | null>(null);
   const sharingModal = useCreateModal();
   const sharingDraft =
@@ -113,7 +118,7 @@ export default function ImportSkillsFromGitHubModal({
         ? await importGitHubSkills(
             preview,
             selectedPaths,
-            serializeSkillSharing(sharing, isAdmin)
+            serializeSkillSharing(sharing, isAdmin, isOrganizationManager)
           )
         : await importGitHubSkills(preview, selectedPaths);
       setResult(nextResult);

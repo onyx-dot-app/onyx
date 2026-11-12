@@ -12147,6 +12147,10 @@
         "version": {
           "label": "v{number}",
           "tooltip": "Versão atual: {number}"
+        },
+        "unpublished": {
+          "label": "Alterações não publicadas",
+          "tooltip": "A organização ainda usa a versão {number}."
         }
       },
       "toggle": {
@@ -17404,7 +17408,8 @@
         "columns": {
           "version": "Versão",
           "madeBy": "Criada por",
-          "date": "Data"
+          "date": "Data",
+          "status": "Status"
         },
         "versionLabel": "Versão {number}",
         "currentBadge": "Atual",
@@ -17436,6 +17441,22 @@
             "title": "Não foi possível carregar esta versão",
             "description": "Tente novamente mais tarde."
           }
+        },
+        "status": {
+          "draft": "Rascunho",
+          "pending": "Revisão pendente",
+          "published": "Publicada",
+          "denied": "Recusada",
+          "superseded": "Substituída"
+        },
+        "unpublishedBadge": "Alterações não publicadas",
+        "organizationRuns": "A organização usa a versão {number}.",
+        "waitingForReview": "Aguardando revisão",
+        "publishUpdate": {
+          "label": "Publicar atualização",
+          "successToast": "Versão {number} publicada para a organização.",
+          "failedToast": "Não foi possível publicar esta atualização.",
+          "offNotice": "A publicação está desativada. Peça a um administrador para publicar esta atualização."
         }
       }
     },
