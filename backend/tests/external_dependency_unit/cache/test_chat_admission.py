@@ -75,14 +75,16 @@ def test_stop_targets_the_turn_that_holds_admission(cache: CacheBackend) -> None
     session_id = uuid4()
     first, second = ChatTurnAdmission(cache), ChatTurnAdmission(cache)
     preparation_stop = f"chatprocessing_preparation_stop_{session_id}"
-    idle_stops: list[None] = []
+    pauses: list[None] = []
     try:
-        stop_current_turn(session_id, cache, when_idle=lambda: idle_stops.append(None))
-        assert idle_stops == [None]
+        stop_current_turn(session_id, cache, pause_queue=lambda: pauses.append(None))
+        assert pauses == [None]
         first.claim(session_id)
         finished = current_turn_owner(session_id, cache)
         assert finished is not None
-        stop_current_turn(session_id, cache)
+        # A Stop pauses the queue whether or not a turn holds admission.
+        stop_current_turn(session_id, cache, pause_queue=lambda: pauses.append(None))
+        assert pauses == [None, None]
         # The preparation Stop lasts as long as the admission it targets.
         cache.expire(preparation_stop, 5)
         first.refresh()
@@ -96,7 +98,6 @@ def test_stop_targets_the_turn_that_holds_admission(cache: CacheBackend) -> None
         assert not is_stop_requested(session_id, cache, stream_id=21)
         stop_current_turn(session_id, cache)
         assert is_stop_requested(session_id, cache, stream_id=21)
-        assert idle_stops == [None]
     finally:
         first.release()
         second.release()

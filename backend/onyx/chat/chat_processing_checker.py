@@ -194,22 +194,21 @@ def stop_current_turn(
     cache: CacheBackend,
     *,
     owner: bytes | None = None,
-    when_idle: Callable[[], None] | None = None,
+    pause_queue: Callable[[], None] | None = None,
 ) -> None:
     """Stop the turn that holds admission, under the lock that releases and claims it.
 
     With `owner`, only that turn stops; a turn that started later keeps running.
-    A turn that is still preparing stops when it publishes. When no turn holds
-    admission, `when_idle` runs before any queued turn can claim it.
+    A turn that is still preparing stops when it publishes. `pause_queue` runs
+    first, so no queued turn can claim admission between the pause and the stop,
+    whether or not a turn holds admission.
     """
     lock = _admission_lock(cache, chat_session_id)
     try:
+        if pause_queue is not None:
+            pause_queue()
         current = current_turn_owner(chat_session_id, cache)
-        if current is None:
-            if when_idle is not None:
-                when_idle()
-            return
-        if owner is not None and current != owner:
+        if current is None or (owner is not None and current != owner):
             return
         stream_id = get_processing_stream_id(chat_session_id, cache)
         if stream_id is not None:

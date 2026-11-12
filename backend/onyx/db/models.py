@@ -3564,6 +3564,10 @@ class ChatSession(Base):
     tool_selection: Mapped[ChatToolSelection | None] = mapped_column(
         PydanticType(ChatToolSelection), nullable=True
     )
+    # When the user stopped the chat; queued turns wait until the next turn starts.
+    queue_paused_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     time_updated: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

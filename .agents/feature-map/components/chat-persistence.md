@@ -181,8 +181,9 @@ concurrent promotion. `db/chat_inputs.py:next_queued_turn` reads the next root
 turn and `accept_queued_turn__no_commit` consumes it with the user-message
 insert under the session lock. A branch whose tip is a question, not a
 response, is not ready for a queued turn. Interrupts take priority and may start after
-any terminal response; ordinary queued turns require completion or the step
-limit (`db/chat_inputs.py:can_start_input`).
+any terminal response; ordinary queued turns wait while Stop paused the queue
+(`chat_session.queue_paused_at`) or the latest response failed
+(`db/chat_inputs.py:can_start_input`).
 Inbox writers lock the session before the response. The session lock
 uses `NO KEY UPDATE` so response and tool foreign-key checks can proceed.
 Pending text is limited to `db/chat_inputs.py:MAX_PENDING_MESSAGE_BYTES` per

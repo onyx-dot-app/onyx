@@ -188,9 +188,13 @@ not cancelled, refreshes the admission lease every 5 s, and lets each
 preparation that has not started a run. When no response worker and no
 owned run remains, it finishes delivery and then releases the admission. A child
 run's owner lease also keeps the turn and its admission alive.
-Before release it reads Stop one last time. A Stop that arrived after an answer
-finished saves that answer as `CANCELLED`, so the queue pauses
-(`db/chat_inputs.py:cancel_completed_responses__no_commit`).
+Before release it reads Stop one last time. A Stop of the turn, even one that
+arrived after its answer finished, pauses the queue
+(`chat_session.queue_paused_at`, `db/chat_inputs.py:pause_chat_queue__no_commit`);
+saved answers keep their status. Stop without a stream ID pauses the queue under
+the admission lock whether or not a turn runs, so a Stop that finds no turn, or
+a turn without a stream, is not lost. The next turn that reserves a response
+clears the pause (`db/chat.py:reserve_chat_response_ids`).
 After release, `chat/process_message.py:dispatch_pending_chat_messages` starts
 the next queued turn. `db/chat_inputs.py:read_chat_inbox` always reads the selected branch; it
 reads the queued turn and the running root response only when the
@@ -210,8 +214,8 @@ the agent's tools. Deep Research is a choice of each message, not of the chat:
 a queued or interrupting message stores `chat_input.deep_research`, and its
 turn starts as Deep Research when it is set. The model works the same way, as
 the web saves it only with a sent message: `chat_input.llm_override` holds the
-model the picker showed (NULL for a multi-model comparison, which uses the
-chat's saved model), and the turn saves it as the chat's model when it starts.
+model the picker showed, and the turn saves it as the chat's model when it
+starts. The composer does not queue during a multi-model comparison.
 Child agents keep their own tool configuration. If the queue head changes before acceptance, preparation ends with a
 conflict, and the next trigger dispatches again. Consuming the inbox row
 prevents delivery twice. If automatic preparation fails, a saved error response

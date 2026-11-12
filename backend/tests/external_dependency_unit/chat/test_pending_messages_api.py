@@ -29,6 +29,7 @@ from onyx.chat.models import PendingChatMessage, ResponseOwner
 from onyx.chat.presentation import replay_response
 from onyx.chat.process_message import (
     dispatch_pending_chat_messages,
+    handle_multi_model_stream,
     handle_stream_message_objects,
 )
 from onyx.chat.run_store import RESPONSE_OWNER_KEY_PREFIX
@@ -37,8 +38,8 @@ from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
 from onyx.db.chat import reserve_chat_response_ids
 from onyx.db.chat_inputs import (
     MAX_PENDING_MESSAGE_BYTES,
-    cancel_completed_responses__no_commit,
     consume_inputs__no_commit,
+    pause_chat_queue__no_commit,
     read_run_inputs,
     submit_human_message__no_commit,
     withdraw_human_message__no_commit,
@@ -237,14 +238,20 @@ def test_input_changed_after_a_run_read_it_is_not_accepted(
     assert client.get(path).json() == remaining
 
 
-@pytest.mark.parametrize("status", [RunStatus.CANCELLED, RunStatus.ERROR])
-def test_late_send_is_queued_and_waits_after_unsuccessful_execution(
+@pytest.mark.parametrize(
+    ("status", "stopped"),
+    [(RunStatus.COMPLETE, True), (RunStatus.CANCELLED, True), (RunStatus.ERROR, False)],
+)
+def test_late_send_is_queued_and_waits_after_a_stop_or_failure(
     client: TestClient,
     response: ChatMessage,
     db_session: Session,
     status: RunStatus,
+    stopped: bool,
 ) -> None:
     response.response_status = status
+    if stopped:
+        pause_chat_queue__no_commit(db_session, response.chat_session_id)
     db_session.commit()
     path = f"/chat/chat-session/{response.chat_session_id}/pending-messages"
     for delivery in ("send", "queue"):
@@ -1153,8 +1160,11 @@ def test_stop_after_the_answer_finishes_pauses_the_queue(
         db_session.expire_all()
         stopped = db_session.get(ChatMessage, response.id)
         assert stopped is not None
-        assert stopped.response_status == RunStatus.CANCELLED
+        # The finished answer keeps its status; Stop pauses the queue instead.
+        assert stopped.response_status == RunStatus.COMPLETE
         assert stopped.message == "Full answer"
+        db_session.refresh(chat)
+        assert chat.queue_paused_at is not None
         # Stop pauses the queue; the queued message waits for the user.
         assert len(requests) == 1
         assert [message["id"] for message in client.get(path).json()] == [
@@ -1249,7 +1259,9 @@ def test_stop_after_the_last_stop_check_pauses_the_queue(
             )
         )
         assert finished is not None
-        assert finished.response_status == RunStatus.CANCELLED
+        assert finished.response_status == RunStatus.COMPLETE
+        db_session.refresh(chat)
+        assert chat.queue_paused_at is not None
         assert len(requests) == 1
         assert [message["id"] for message in client.get(path).json()] == [
             queued.json()["id"]
@@ -1437,15 +1449,124 @@ def test_status_repairs_a_running_root_whose_owner_is_gone(
     ]
 
 
-def test_stop_after_a_step_limit_pauses_the_queue(
+@pytest.mark.parametrize("status", [RunStatus.COMPLETE, RunStatus.LIMIT])
+def test_idle_stop_pauses_the_queue_and_keeps_the_answer(
+    client: TestClient,
+    response: ChatMessage,
+    owner: User,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+    status: RunStatus,
+) -> None:
+    chat_id = response.chat_session_id
+    response.response_status = status
+    db_session.commit()
+    monkeypatch.setattr(chat_backend, "dispatch_pending_chat_messages", lambda *_: None)
+    # With nothing queued, Stop still pauses the queue the next message joins.
+    chat_backend.stop_chat_session(chat_id, None, owner, db_session)
+    queued = client.post(
+        f"/chat/chat-session/{chat_id}/pending-messages",
+        json={"message": "Do this later", "delivery": "queue"},
+    )
+    assert queued.status_code == 200, queued.text
+    db_session.expire_all()
+    stopped = db_session.get(ChatMessage, response.id)
+    assert stopped is not None
+    assert stopped.response_status == status
+    assert not chat_backend.get_chat_session_processing_status(
+        chat_id, BackgroundTasks(), _NO_HEADERS, owner
+    ).has_startable_input
+
+    # A new turn resumes the queue.
+    reserve_chat_response_ids(db_session, chat_id, response.id, ["Model"])
+    db_session.commit()
+    paused_chat = db_session.get(ChatSession, chat_id)
+    assert paused_chat is not None
+    assert paused_chat.queue_paused_at is None
+
+
+def test_stop_of_a_multi_model_turn_pauses_the_queue(
+    client: TestClient,
+    chat: ChatSession,
+    owner: User,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A Stop that reaches a multi-model turn after both answers finish keeps them."""
+    path = f"/chat/chat-session/{chat.id}/pending-messages"
+    entered, release = Event(), Event()
+    requests: list[GenerationRequest] = []
+
+    def generate(
+        request: GenerationRequest, _cancellation: CancellationSignal
+    ) -> AssistantMessage:
+        requests.append(request)
+        if len(requests) == 2:
+            entered.set()
+        assert release.wait(30)
+        return AssistantMessage(content=[TextContent(text="Full answer")])
+
+    model = QueueTestLLM(generate)
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
+    )
+    # The answers finish before the turn's control thread reads Stop.
+    monkeypatch.setattr("onyx.chat.execution._CANCEL_POLL_INTERVAL_S", 30)
+    stream = handle_multi_model_stream(
+        new_msg_req=SendMessageRequest(
+            message="Initial question", chat_session_id=chat.id
+        ),
+        user=owner,
+        llm_overrides=[
+            LLMOverride(model_provider="openai", model_version="first"),
+            LLMOverride(model_provider="openai", model_version="second"),
+        ],
+    )
+    assert isinstance(stream, Generator)
+    try:
+        next(stream)
+        stream.close()
+        assert entered.wait(15)
+        queued = client.post(
+            path, json={"message": "Do this later", "delivery": "queue"}
+        )
+        assert queued.status_code == 200, queued.text
+        chat_backend.stop_chat_session(chat.id, None, owner, db_session)
+        release.set()
+        assert chat_turn_work.wait_idle(timeout=30)
+        db_session.expire_all()
+        responses = list(
+            db_session.scalars(
+                select(ChatMessage).where(
+                    ChatMessage.chat_session_id == chat.id,
+                    ChatMessage.message_type == MessageType.ASSISTANT,
+                )
+            )
+        )
+        assert [row.response_status for row in responses] == [
+            RunStatus.COMPLETE,
+            RunStatus.COMPLETE,
+        ]
+        assert len(requests) == 2
+        assert [message["id"] for message in client.get(path).json()] == [
+            queued.json()["id"]
+        ]
+    finally:
+        release.set()
+        stream.close()
+        assert chat_turn_work.wait_idle(timeout=30)
+
+
+def test_stop_while_a_turn_holds_admission_without_a_stream_pauses_the_queue(
     client: TestClient,
     response: ChatMessage,
     owner: User,
     db_session: Session,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """A turn that has no stream, such as one still preparing, does not lose a Stop."""
     chat_id = response.chat_session_id
-    response.response_status = RunStatus.LIMIT
+    response.response_status = RunStatus.COMPLETE
     db_session.commit()
     monkeypatch.setattr(chat_backend, "dispatch_pending_chat_messages", lambda *_: None)
     queued = client.post(
@@ -1453,17 +1574,12 @@ def test_stop_after_a_step_limit_pauses_the_queue(
         json={"message": "Do this later", "delivery": "queue"},
     )
     assert queued.status_code == 200, queued.text
-    tasks = BackgroundTasks()
-    assert chat_backend.get_chat_session_processing_status(
-        chat_id, tasks, _NO_HEADERS, owner
-    ).has_startable_input
-
-    cancel_completed_responses__no_commit(db_session, chat_id, [response.id])
-    db_session.commit()
-    db_session.expire_all()
-    stopped = db_session.get(ChatMessage, response.id)
-    assert stopped is not None
-    assert stopped.response_status == RunStatus.CANCELLED
+    admission = ChatTurnAdmission(get_cache_backend())
+    admission.claim(chat_id)
+    try:
+        chat_backend.stop_chat_session(chat_id, None, owner, db_session)
+    finally:
+        admission.release()
     assert not chat_backend.get_chat_session_processing_status(
         chat_id, BackgroundTasks(), _NO_HEADERS, owner
     ).has_startable_input
@@ -1489,9 +1605,26 @@ def test_interrupt_during_preparation_stops_the_turn_when_it_publishes(
 ) -> None:
     path = f"/chat/chat-session/{chat.id}/pending-messages"
     preparing, release = Event(), Event()
-    model = QueueTestLLM(
-        lambda _request, _signal: AssistantMessage(content=[TextContent(text="Done")])
-    )
+
+    class StoppableModel(QueueTestLLM):
+        @override
+        def stream(
+            self, request: GenerationRequest, context: GenerationContext | None = None
+        ) -> Generator[GenerationEvent, None, None]:
+            # The first answer runs until the interrupt's Stop reaches its stream.
+            assert context is not None and context.cancellation is not None
+            stopped = Event()
+            yield GenerationStartEvent()
+            with context.cancellation.on_cancel(stopped.set):
+                assert stopped.wait(30)
+            context.cancellation.check()
+
+    def answer(
+        _request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        return AssistantMessage(content=[TextContent(text="Done")])
+
+    first_model, model = StoppableModel(answer), QueueTestLLM(answer)
     calls: list[None] = []
 
     def prepare_model(**_kwargs: object) -> QueueTestLLM:
@@ -1499,6 +1632,7 @@ def test_interrupt_during_preparation_stops_the_turn_when_it_publishes(
         if len(calls) == 1:
             preparing.set()
             assert release.wait(30)
+            return first_model
         return model
 
     monkeypatch.setattr("onyx.chat.process_message.get_llm_for_persona", prepare_model)

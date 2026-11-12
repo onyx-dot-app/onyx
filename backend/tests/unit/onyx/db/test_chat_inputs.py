@@ -6,7 +6,7 @@ from onyx.agents.models import MessageDelivery, RunStatus
 from onyx.db.chat_inputs import can_start_input
 
 _TARGETED = 7
-# Stop and failure pause the queue; only interrupts and untargeted sends start.
+# Stop and failure hold the queue; only interrupts and untargeted sends start.
 _STARTS_AFTER_PAUSE = {
     (MessageDelivery.INTERRUPT, None),
     (MessageDelivery.INTERRUPT, _TARGETED),
@@ -15,17 +15,25 @@ _STARTS_AFTER_PAUSE = {
 
 
 @pytest.mark.parametrize(
-    ("status", "delivery", "target"),
-    product([None, *RunStatus], [None, *MessageDelivery], [None, _TARGETED]),
+    ("status", "delivery", "target", "paused"),
+    product(
+        [None, *RunStatus],
+        [None, *MessageDelivery],
+        [None, _TARGETED],
+        [False, True],
+    ),
 )
 def test_can_start_input(
-    status: RunStatus | None, delivery: MessageDelivery | None, target: int | None
+    status: RunStatus | None,
+    delivery: MessageDelivery | None,
+    target: int | None,
+    paused: bool,
 ) -> None:
     if status in (RunStatus.RUNNING, RunStatus.SUSPENDED):
         expected = False
-    elif status in (RunStatus.CANCELLED, RunStatus.ERROR):
+    elif paused or status == RunStatus.ERROR:
         expected = (delivery, target) in _STARTS_AFTER_PAUSE
     else:
-        # No previous run, a complete run, and a step limit leave the queue open.
+        # A finished, limited, or cancelled run leaves an unpaused queue open.
         expected = True
-    assert can_start_input(delivery, target, status) is expected
+    assert can_start_input(delivery, target, status, queue_paused=paused) is expected

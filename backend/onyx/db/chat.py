@@ -945,6 +945,15 @@ def reserve_chat_response_ids(
         .where(ChatSession.id == chat_session_id)
         .with_for_update(key_share=True)
     )
+    # A new turn resumes a queue that Stop paused.
+    db_session.execute(
+        update(ChatSession)
+        .where(
+            ChatSession.id == chat_session_id,
+            ChatSession.queue_paused_at.is_not(None),
+        )
+        .values(queue_paused_at=None)
+    )
     reserved: list[ChatMessage] = []
     for display_name in model_display_names:
         msg = ChatMessage(

@@ -87,7 +87,6 @@ from onyx.db.chat import (
     get_chat_sessions_by_user,
     get_incognito_session_ids_for_user,
     get_owned_chat_session,
-    get_selected_branch,
     set_as_latest_chat_message,
     set_chat_session_tool_selection__no_commit,
     set_preferred_response,
@@ -95,10 +94,10 @@ from onyx.db.chat import (
     update_chat_session,
 )
 from onyx.db.chat_inputs import (
-    cancel_completed_responses__no_commit,
     get_human_input_session,
     interrupt_human_message__no_commit,
     list_human_messages,
+    pause_chat_queue__no_commit,
     read_chat_inbox,
     submit_human_message__no_commit,
     withdraw_human_message__no_commit,
@@ -1661,8 +1660,8 @@ def stop_chat_session(
 ) -> StopChatResponse:
     """Stop one stream, or without `stream_id` the chat's current turn.
 
-    Without `stream_id`, a Stop that finds no turn running pauses the queue by
-    saving the selected finished response as stopped.
+    Without `stream_id`, Stop also pauses the queue, whether or not a turn is
+    running; saved responses keep their status.
     """
     try:
         get_chat_session_by_id(
@@ -1678,14 +1677,10 @@ def stop_chat_session(
     if stream_id is None:
 
         def pause_queue() -> None:
-            selected, _ = get_selected_branch(db_session, chat_session_id)
-            if selected is not None:
-                cancel_completed_responses__no_commit(
-                    db_session, chat_session_id, [selected.id]
-                )
-                db_session.commit()
+            pause_chat_queue__no_commit(db_session, chat_session_id)
+            db_session.commit()
 
-        stop_current_turn(chat_session_id, get_cache_backend(), when_idle=pause_queue)
+        stop_current_turn(chat_session_id, get_cache_backend(), pause_queue=pause_queue)
     else:
         request_stop(chat_session_id, get_cache_backend(), stream_id=stream_id)
     return StopChatResponse(message="Chat session stopped")

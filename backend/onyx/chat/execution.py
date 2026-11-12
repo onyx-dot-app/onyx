@@ -47,7 +47,7 @@ from onyx.configs.chat_configs import (
     SKIP_DEEP_RESEARCH_CLARIFICATION,
 )
 from onyx.configs.constants import DEFAULT_PERSONA_ID, DocumentSource
-from onyx.db.chat_inputs import cancel_completed_responses__no_commit
+from onyx.db.chat_inputs import pause_chat_queue__no_commit
 from onyx.db.chat_subagents import load_chat_branch
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import record_mode_persists_content
@@ -412,7 +412,7 @@ class ChatTurnExecution:
 
     def _clear_processing_status(self) -> bool:
         def save_late_stop() -> None:
-            # A Stop that arrived after the answer finished still pauses the queue.
+            # A Stop of this turn, even after its answer finished, pauses the queue.
             if not (
                 self._stopped_by_user
                 or is_stop_requested(
@@ -423,13 +423,8 @@ class ChatTurnExecution:
             ):
                 return
             self._stopped_by_user = True
-            # Saves have drained, so no writer can replace this status.
             with get_session_with_current_tenant() as session:
-                cancel_completed_responses__no_commit(
-                    session,
-                    self.setup.chat_session_id,
-                    [response.message_id for response in self.setup.responses],
-                )
+                pause_chat_queue__no_commit(session, self.setup.chat_session_id)
                 session.commit()
 
         try:

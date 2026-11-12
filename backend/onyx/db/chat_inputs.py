@@ -3,10 +3,9 @@
 A row is pending until a step or a new turn consumes it; consuming deletes it.
 """
 
-from collections.abc import Collection
 from uuid import UUID, uuid4
 
-from sqlalchemy import Select, delete, func, select, update
+from sqlalchemy import Select, delete, func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -62,45 +61,31 @@ def lock_agent(session: Session, agent_id: str) -> ChatSession:
     return agent
 
 
-def _pauses_queue(latest_status: RunStatus | None) -> bool:
-    """Stop, interruption, and failure pause a recipient's queued work; a step limit does not."""
-    return latest_status in (RunStatus.CANCELLED, RunStatus.ERROR)
-
-
 def can_start_input(
     delivery: MessageDelivery | None,
     target_response_id: int | None,
     latest_status: RunStatus | None,
+    *,
+    queue_paused: bool,
 ) -> bool:
     """Whether pending input starts its recipient's next run.
 
-    A recipient without a previous run has no latest status. After a pause,
-    interruption and sends to an idle recipient still start.
+    A recipient without a previous run has no latest status. Stop pauses the
+    queue, and a failed latest run holds it too; a step limit does not. While
+    held, interruption and sends to an idle recipient still start.
     """
     if latest_status is not None and not latest_status.is_terminal:
         return False
     return (
-        not _pauses_queue(latest_status)
+        not (queue_paused or latest_status == RunStatus.ERROR)
         or delivery == MessageDelivery.INTERRUPT
         or (delivery == MessageDelivery.SEND and target_response_id is None)
     )
 
 
-def cancel_completed_responses__no_commit(
-    session: Session, chat_session_id: UUID, response_ids: Collection[int]
-) -> None:
-    """Save a Stop that arrived after the response finished; it pauses the queue."""
-    lock_agent(session, str(chat_session_id))
-    session.execute(
-        update(ChatMessage)
-        .where(
-            ChatMessage.chat_session_id == chat_session_id,
-            ChatMessage.message_type == MessageType.ASSISTANT,
-            ChatMessage.response_status.in_([RunStatus.COMPLETE, RunStatus.LIMIT]),
-            ChatMessage.id.in_(response_ids),
-        )
-        .values(response_status=RunStatus.CANCELLED)
-    )
+def pause_chat_queue__no_commit(session: Session, chat_session_id: UUID) -> None:
+    """Record a Stop: queued turns wait until the next turn starts."""
+    lock_agent(session, str(chat_session_id)).queue_paused_at = func.now()
 
 
 def get_human_input_session(
@@ -317,7 +302,17 @@ def next_queued_turn(
         )
         .limit(1)
     )
-    if row is None or not can_start_input(row.delivery, row.target_response_id, status):
+    if row is None:
+        return None
+    paused_at = session.scalar(
+        select(ChatSession.queue_paused_at).where(ChatSession.id == chat_session_id)
+    )
+    if not can_start_input(
+        row.delivery,
+        row.target_response_id,
+        status,
+        queue_paused=paused_at is not None,
+    ):
         return None
     return QueuedChatTurn(
         parent_response_id=selected.id if selected is not None else None,

@@ -25,6 +25,11 @@ def upgrade() -> None:
             server_default=sa.false(),
         ),
     )
+    # Set by Stop; a paused queue starts no queued turn until the next turn starts.
+    op.add_column(
+        "chat_session",
+        sa.Column("queue_paused_at", sa.DateTime(timezone=True), nullable=True),
+    )
     op.create_table(
         "chat_input",
         sa.Column("id", sa.Integer(), primary_key=True),
@@ -64,4 +69,5 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_table("chat_input")
+    op.drop_column("chat_session", "queue_paused_at")
     op.drop_column("user", "interrupt_on_send")
