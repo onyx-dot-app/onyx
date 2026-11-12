@@ -707,39 +707,48 @@ def host_agent_work(
     scan, so hosts and turns do not start the same work. It runs on the calling
     thread until the agents it started release their leases.
     """
-    try:
-        response = setup.responses[0]
-        chat_agent = create_chat_agent(
-            setup,
-            user,
-            0,
-            CancellationSignal(),
-            load_settings().auto_detect_search_filters is not False,
-            with_subagents=True,
-        )
-        if not isinstance(chat_agent, ChatAgent):
-            raise ValueError("Agent work requires a chat agent")
-        store, _ = bind_run_store(
-            setup,
-            user,
-            response_id=response.message_id,
-            llm=response.llm,
-            tools=chat_agent.configured_tools,
-            coordinator=AgentCoordinator(),
-            follow_up_steps=chat_agent.max_steps,
-            with_subagents=True,
-            root_response=None,
-            on_child_released=dispatch_pending_messages,
-        )
-        store.poll_control()
-    finally:
-        setup.admission.release()
-    while store.has_owned_work:
-        time.sleep(_CANCEL_POLL_INTERVAL_S)
+    # The trace makes hosted model calls count toward usage records and limits.
+    with trace(
+        "chat",
+        group_id=str(setup.chat_session_id),
+        metadata=ChatTraceMetadata(
+            chat_session_id=str(setup.chat_session_id),
+            user_id=setup.user_identity.user_id,
+        ).model_dump(),
+    ):
         try:
+            response = setup.responses[0]
+            chat_agent = create_chat_agent(
+                setup,
+                user,
+                0,
+                CancellationSignal(),
+                load_settings().auto_detect_search_filters is not False,
+                with_subagents=True,
+            )
+            if not isinstance(chat_agent, ChatAgent):
+                raise ValueError("Agent work requires a chat agent")
+            store, _ = bind_run_store(
+                setup,
+                user,
+                response_id=response.message_id,
+                llm=response.llm,
+                tools=chat_agent.configured_tools,
+                coordinator=AgentCoordinator(),
+                follow_up_steps=chat_agent.max_steps,
+                with_subagents=True,
+                root_response=None,
+                on_child_released=dispatch_pending_messages,
+            )
             store.poll_control()
-        except Exception:
-            logger.exception("Agent host control failed; will retry")
+        finally:
+            setup.admission.release()
+        while store.has_owned_work:
+            time.sleep(_CANCEL_POLL_INTERVAL_S)
+            try:
+                store.poll_control()
+            except Exception:
+                logger.exception("Agent host control failed; will retry")
 
 
 def create_chat_agent(

@@ -32,6 +32,7 @@ from onyx.chat.execution import (
     ChatTurnExecution,
     chat_turn_work,
     create_chat_agent,
+    host_agent_work,
     start_chat_turn,
 )
 from onyx.chat.models import (
@@ -3617,3 +3618,27 @@ def test_user_stop_after_run_deadline_keeps_live_and_saved_timeout(
         finally:
             turn.delivery.reader.close()
             _wait_for_chat_workers(chat_workers)
+
+
+def test_an_agent_host_runs_its_agents_inside_a_trace() -> None:
+    """Generation spans record usage only inside a trace."""
+    from onyx.tracing.framework.scope import Scope
+
+    setup = _make_setup(n_models=1)
+    setup.chat_session_id = uuid4()
+    setup.user_identity.user_id = str(uuid4())
+    traces: list[object | None] = []
+    store = MagicMock()
+    store.has_owned_work = False
+    store.poll_control.side_effect = lambda: traces.append(Scope.get_current_trace())
+    with (
+        patch(
+            "onyx.chat.execution.create_chat_agent",
+            return_value=MagicMock(spec=ChatAgent, configured_tools=[], max_steps=3),
+        ),
+        patch("onyx.chat.execution.bind_run_store", return_value=(store, None)),
+        patch("onyx.chat.execution.load_settings"),
+    ):
+        host_agent_work(setup, MagicMock(), lambda: None)
+    assert traces and traces[0] is not None
+    setup.admission.release.assert_called_once()
