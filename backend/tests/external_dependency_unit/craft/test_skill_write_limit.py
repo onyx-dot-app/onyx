@@ -64,9 +64,9 @@ def _fill(db_session: Session, user: User, free_bytes: int) -> UUID:
     )
 
 
-def _usage(db_session: Session, user: User) -> int:
+def _usage(db_session: Session, user: User, plugin_id: UUID) -> int:
     return (
-        plugin_usage_by_user(User.__table__.c.id == user.id, db_session)
+        plugin_usage_by_user(User.__table__.c.id == user.id, db_session, [plugin_id])
         .get(user.id, SkillUsage())
         .bytes
     )
@@ -84,10 +84,10 @@ def test_backfilled_version_counts_as_zero(db_session: Session) -> None:
         )
         is None
     )
-    assert _usage(db_session, user) == 0
+    assert _usage(db_session, user, skill.id) == 0
 
     _set_size(db_session, skill.id, 3 * _MB, 7)
-    assert _usage(db_session, user) == 3 * _MB
+    assert _usage(db_session, user, skill.id) == 3 * _MB
 
 
 def test_already_over_user_gets_a_warning(db_session: Session) -> None:
