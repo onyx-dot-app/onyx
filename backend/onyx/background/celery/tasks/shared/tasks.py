@@ -281,19 +281,19 @@ def _cleanup_documents(
             active_search_settings.secondary,
         )
 
-        # Phase 2: document-index I/O — no DB connection held.
+        # Phase 2: document-index I/O with no DB connection held, each step followed
+        # by its PG writeback in a fresh transaction. Deletes complete before the
+        # update, so an update that exhausts retries leaves only the shared docs
+        # for the fallback to unlink.
         if plan.delete_ids:
             document_index.delete_documents(plan.delete_ids)
-        if plan.update_requests:
-            document_index.update(plan.update_requests)
-
-        # Phase 3: write back to PG in fresh transactions.
-        if plan.delete_ids:
             with get_session_with_current_tenant() as db_session:
                 delete_documents_complete(
                     db_session=db_session,
                     document_ids=plan.delete_ids,
                 )
+        if plan.update_requests:
+            document_index.update(plan.update_requests)
         if plan.update_ids:
             if plan.update_modified_at is None:
                 raise RuntimeError("Updated docs were planned without a watermark")

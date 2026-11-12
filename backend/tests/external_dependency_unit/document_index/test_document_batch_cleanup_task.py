@@ -2,7 +2,8 @@
 Postgres, Redis and OpenSearch: one batch deletes the docs only this cc_pair
 holds, re-syncs the docs another cc_pair still holds, skips ids already gone,
 records and clears port orphan candidates, and on the last retry hands every
-remaining doc to reconciliation and counts each as a failed prune doc."""
+remaining doc to reconciliation and counts each as a failed prune doc. A shared
+doc whose update keeps failing does not stop the exclusive docs from deleting."""
 
 from collections.abc import Generator
 from unittest.mock import MagicMock, patch
@@ -250,3 +251,32 @@ def test_last_retry_hands_every_doc_to_reconciliation_and_counts_prune_failures(
 
     # The missing id is not a failed doc.
     assert RedisConnector(TENANT_ID, batch.pair.id).prune.failed_docs == 3
+
+
+def test_failed_shared_update_still_completes_exclusive_deletes(
+    db_session: Session,
+    batch: _Batch,
+    opensearch_index: OpenSearchDocumentIndex,
+) -> None:
+    with (
+        patch(
+            f"{TASKS_MODULE}.get_default_document_index",
+            return_value=opensearch_index,
+        ),
+        patch.object(
+            opensearch_index, "update", side_effect=RuntimeError("update failed")
+        ),
+    ):
+        result = _run_cleanup(batch, prune_cc_pair_id=batch.pair.id)
+
+    assert result.successful(), result.traceback
+    assert result.result is False
+
+    # The exclusive docs are fully deleted, not left as unlinked rows.
+    for doc_id in batch.exclusive_ids:
+        assert get_doc_row(db_session, doc_id) is None
+    assert opensearch_index.get_documents_with_any_chunk(batch.exclusive_ids) == set()
+
+    # Only the shared doc falls to reconciliation.
+    assert _connector_counts(db_session, [batch.shared_id]) == {batch.shared_id: 1}
+    assert RedisConnector(TENANT_ID, batch.pair.id).prune.failed_docs == 1
