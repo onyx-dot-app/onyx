@@ -240,6 +240,8 @@ export async function* sendMessage({
     // Default to "unknown" for consistency with backend; callers should set explicitly
     origin: origin ?? "unknown",
     additional_context: additionalContext ?? null,
+    // The web chat shows responses that background agents start later.
+    accepts_follow_ups: true,
   };
 
   const body = JSON.stringify(payload);

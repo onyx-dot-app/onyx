@@ -238,7 +238,8 @@ scanning, dispatch from `/status` or a pending-message route starts an agent
 host (`chat/execution.py:host_agent_work`): the selected response's setup
 without a root run, which starts the work and keeps the leases. Only
 callers that deliver follow-ups (`delivers_follow_ups`, false for
-`run_chat_turn`) offer agent tools. Foreground children still drain with their parent. API shutdown
+`run_chat_turn`), for a client that shows them (`SendMessageRequest.accepts_follow_ups`,
+which the web chat and server-started turns set), offer agent tools. Foreground children still drain with their parent. API shutdown
 waits up to `CHAT_EXECUTION_TIMEOUT_S` for `chat/execution.py:chat_turn_work`,
 then closes database and tracing services; it does not cancel turns. The pod's
 termination grace period is much shorter, so it ends running turns first

@@ -338,6 +338,7 @@ def test_background_agent_result_wakes_the_idle_chat(
             llm_override=LLMOverride(
                 model_configuration_id=chosen.model_configuration_ids[0]
             ),
+            accepts_follow_ups=True,
         )
         assert started.error is None
         assert started.full_message == "Research started."
@@ -526,7 +527,9 @@ def test_incognito_chat_has_no_child_agents(
         conditions=RequestConditions(prompt_contains=[nonce]),
     )
     normal = ChatSessionManager.create(user_performing_action=admin_user)
-    ChatSessionManager.send_message(normal.id, f"Normal chat. {nonce}", admin_user)
+    ChatSessionManager.send_message(
+        normal.id, f"Normal chat. {nonce}", admin_user, accepts_follow_ups=True
+    )
     created = client.post(
         f"{API_SERVER_URL}/chat/create-chat-session",
         json=ChatSessionCreationRequest(persona_id=0, incognito=True).model_dump(
@@ -552,7 +555,7 @@ def test_incognito_chat_has_no_child_agents(
             if message.message_type in (MessageType.USER, MessageType.ASSISTANT)
         ]
         private = ChatSessionManager.send_message(
-            private_id, f"Private chat. {nonce}", admin_user
+            private_id, f"Private chat. {nonce}", admin_user, accepts_follow_ups=True
         )
         assert private.full_message == "Private answer."
     finally:
