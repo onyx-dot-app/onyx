@@ -111,8 +111,19 @@ function isNeutralConfiguration(configuration: ChatConfiguration): boolean {
   );
 }
 
+interface EditedHalves {
+  tools: boolean;
+  filters: boolean;
+}
+
+const UNEDITED: EditedHalves = { tools: false, filters: false };
+
 const STORAGE_PREFIX = "onyx:tools";
 const TOOL_SELECTION_SYNC_MS = 300;
+
+// Saves for one chat run one at a time across every composer, so the server
+// keeps the latest selection even when a composer remounts mid-save.
+const toolSelectionSaves = new Map<string, Promise<void>>();
 
 function chatKey(chatSessionId: string): string {
   return `${STORAGE_PREFIX}:chat:${chatSessionId}`;
@@ -433,20 +444,20 @@ export function useToolConfiguration(
   }, [newChatWithAgentId, appPosition, activeAgent]);
 
   // Tagged with the key it was read for, so a write cannot land on the entry
-  // the composer has since moved to. `edited` records whether the user has
-  // changed the configuration since it was read for this key.
+  // the composer has since moved to. `edited` records which halves the user
+  // has changed since the configuration was read for this key.
   const [entry, setEntry] = useState<{
     key: string | null;
     configuration: ChatConfiguration;
-    edited: boolean;
-  }>({ key: null, configuration: NEUTRAL, edited: false });
+    edited: EditedHalves;
+  }>({ key: null, configuration: NEUTRAL, edited: UNEDITED });
 
   // Storage is only reachable on the client, so the first paint shows neutral
   // and this corrects it. Every later key change comes from the user moving
   // between chats, which is many frames after anything can be sent.
   useEffect(() => {
     if (key === null) {
-      setEntry({ key, configuration: NEUTRAL, edited: false });
+      setEntry({ key, configuration: NEUTRAL, edited: UNEDITED });
       return;
     }
     const stored = readConfiguration(key);
@@ -456,11 +467,11 @@ export function useToolConfiguration(
     if (!isChatKey(key) && !isNeutralConfiguration(stored)) {
       clearConfiguration(key);
     }
-    setEntry({ key, configuration: stored, edited: false });
+    setEntry({ key, configuration: stored, edited: UNEDITED });
   }, [key]);
 
   const configuration = entry.key === key ? entry.configuration : NEUTRAL;
-  const edited = entry.key === key && entry.edited;
+  const edited = entry.key === key ? entry.edited : UNEDITED;
   const ready = key !== null && entry.key === key;
 
   // Written from an effect rather than inside the setter, so two changes made
@@ -490,7 +501,11 @@ export function useToolConfiguration(
         // behind. A new one every time is a change to everything reading it,
         // and a caller that writes what it reads would never settle.
         if (tools === current.tools) return previous;
-        return { key, configuration: { ...current, tools }, edited: true };
+        return {
+          key,
+          configuration: { ...current, tools },
+          edited: { ...previous.edited, tools: true },
+        };
       });
     },
     [key]
@@ -504,7 +519,11 @@ export function useToolConfiguration(
         const current = previous.configuration;
         const filters = change(current.filters);
         if (filters === current.filters) return previous;
-        return { key, configuration: { ...current, filters }, edited: true };
+        return {
+          key,
+          configuration: { ...current, filters },
+          edited: { ...previous.edited, filters: true },
+        };
       });
     },
     [key]
@@ -584,7 +603,9 @@ export function useToolConfiguration(
     activeAgent,
     configuration.filters
   );
-  // The fields a normal send carries, built the same way.
+  // The fields a normal send carries, built the same way. Only the halves the
+  // user changed are sent: this composer may not hold the chat's saved
+  // selection, and the server keeps the fields a save leaves out.
   const toolSelection =
     ready &&
     chatSessionId !== null &&
@@ -593,14 +614,16 @@ export function useToolConfiguration(
     user !== null &&
     !user.is_anonymous_user
       ? JSON.stringify({
-          allowed_tool_ids:
-            enabledChatToolIds(activeAgent.tools, handle) ?? null,
-          preferred_tool_id: effectiveChatPreferredToolId({
-            requestedToolId: handle.preferredToolId,
-            agent: activeAgent,
-            plugins,
+          ...(edited.tools && {
+            allowed_tool_ids:
+              enabledChatToolIds(activeAgent.tools, handle) ?? null,
+            preferred_tool_id: effectiveChatPreferredToolId({
+              requestedToolId: handle.preferredToolId,
+              agent: activeAgent,
+              plugins,
+            }),
           }),
-          internal_search_filters: searchFilters,
+          ...(edited.filters && { internal_search_filters: searchFilters }),
         })
       : null;
   const savedSelection = useRef<{
@@ -612,13 +635,11 @@ export function useToolConfiguration(
     timer: ReturnType<typeof setTimeout>;
     send: () => void;
   } | null>(null);
-  // Saves run one at a time, so the server keeps the latest selection.
-  const saveQueue = useRef<Promise<void>>(Promise.resolve());
   useEffect(() => {
     // Only a change the user makes is saved; the chat already has the
     // selection it was opened with. A change made before the chat details
     // load is saved once they do.
-    if (toolSelection === null || !edited) return;
+    if (toolSelection === null || (!edited.tools && !edited.filters)) return;
     const previous = savedSelection.current;
     if (
       previous.chatSessionId === chatSessionId &&
@@ -635,18 +656,25 @@ export function useToolConfiguration(
     }
     const send = () => {
       if (pendingSave.current?.url === url) pendingSave.current = null;
-      saveQueue.current = saveQueue.current.then(async () => {
-        try {
-          const response = await fetch(url, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: toolSelection,
-          });
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        } catch (error: unknown) {
-          console.error("Could not save the chat's tool selection", error);
-          toast.error(t("toolsPopover.selectionSaveFailed"));
+      const save = (toolSelectionSaves.get(url) ?? Promise.resolve()).then(
+        async () => {
+          try {
+            const response = await fetch(url, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: toolSelection,
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          } catch (error: unknown) {
+            console.error("Could not save the chat's tool selection", error);
+            toast.error(t("toolsPopover.selectionSaveFailed"));
+          }
         }
+      );
+      toolSelectionSaves.set(url, save);
+      void save.then(() => {
+        if (toolSelectionSaves.get(url) === save)
+          toolSelectionSaves.delete(url);
       });
     };
     pendingSave.current = {

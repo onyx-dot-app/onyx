@@ -1473,15 +1473,15 @@ def update_chat_tool_selection(
     user: User = Depends(require_permission(Permission.WRITE_CHAT)),
     db_session: Session = Depends(get_session),
 ) -> ChatToolSelection:
-    """Save the tools the user selected for an existing chat."""
+    """Save the fields of the chat's tool selection that the body sets."""
     if user.is_anonymous or user.id is None:
         raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Sign in to save a tool selection")
     chat_session = get_owned_chat_session(session_id, user.id, db_session)
     if chat_session is None or chat_session.deleted:
         raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND, "Chat session not found")
-    set_chat_session_tool_selection__no_commit(db_session, session_id, body)
+    saved = set_chat_session_tool_selection__no_commit(db_session, session_id, body)
     db_session.commit()
-    return body
+    return saved or body
 
 
 @router.post("/stop-chat-session/{chat_session_id}", tags=PUBLIC_API_TAGS)

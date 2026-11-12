@@ -384,7 +384,6 @@ test("a tool change in an existing chat saves the chat's tool selection once", a
     expect(JSON.parse(String(init?.body))).toEqual({
       allowed_tool_ids: [1],
       preferred_tool_id: 1,
-      internal_search_filters: NO_FILTERS,
     });
   } finally {
     fetchSpy.mockRestore();
@@ -422,8 +421,43 @@ test("a tool-selection save waits for the save before it", async () => {
     expect(JSON.parse(String(patches()[1]![1]?.body))).toEqual({
       allowed_tool_ids: [1],
       preferred_tool_id: 1,
-      internal_search_filters: NO_FILTERS,
     });
+  } finally {
+    fetchSpy.mockRestore();
+  }
+});
+
+test("a remounted composer's save waits for the save before it", async () => {
+  openSavedChat();
+  let finishFirst: (response: Response) => void = () => {};
+  let patchCount = 0;
+  const fetchSpy = jest
+    .spyOn(global, "fetch")
+    .mockImplementation(async (_url, init) => {
+      if (init?.method !== "PATCH") return new Response(JSON.stringify([]));
+      patchCount += 1;
+      if (patchCount > 1) return new Response(null, { status: 200 });
+      return new Promise<Response>((resolve) => {
+        finishFirst = resolve;
+      });
+    });
+  const patches = () =>
+    fetchSpy.mock.calls.filter(([, init]) => init?.method === "PATCH");
+  try {
+    const first = renderHook(() => useToolConfiguration());
+    await waitFor(() => expect(first.result.current.ready).toBe(true));
+    act(() => first.result.current.toggleToolState(2, "disabled"));
+    await waitFor(() => expect(patches()).toHaveLength(1));
+    first.unmount();
+
+    const second = renderHook(() => useToolConfiguration());
+    await waitFor(() => expect(second.result.current.ready).toBe(true));
+    act(() => second.result.current.toggleToolState(1, "preferred"));
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(patches()).toHaveLength(1);
+
+    finishFirst(new Response(null, { status: 200 }));
+    await waitFor(() => expect(patches()).toHaveLength(2));
   } finally {
     fetchSpy.mockRestore();
   }
@@ -459,7 +493,7 @@ test("a failed tool-selection save warns the user", async () => {
   }
 });
 
-test("a filter change in an existing chat saves the chat's search filters", async () => {
+test("a filter change in an existing chat saves only the chat's search filters", async () => {
   openSavedChat();
   const fetchSpy = jest
     .spyOn(global, "fetch")
@@ -477,9 +511,8 @@ test("a filter change in an existing chat saves the chat's search filters", asyn
       }))
     );
     await waitFor(() => expect(patches()).toHaveLength(1));
+    // The tools this composer holds may not be the chat's saved tools.
     expect(JSON.parse(String(patches()[0]![1]?.body))).toEqual({
-      allowed_tool_ids: null,
-      preferred_tool_id: null,
       internal_search_filters: { ...NO_FILTERS, document_set: ["Handbook"] },
     });
   } finally {
@@ -506,7 +539,6 @@ test("a tool change made before the chat details load is saved once they do", as
     expect(JSON.parse(String(patches()[0]![1]?.body))).toEqual({
       allowed_tool_ids: [1],
       preferred_tool_id: null,
-      internal_search_filters: NO_FILTERS,
     });
   } finally {
     fetchSpy.mockRestore();

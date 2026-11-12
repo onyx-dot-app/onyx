@@ -945,13 +945,27 @@ def set_chat_session_llm_override__no_commit(
 
 def set_chat_session_tool_selection__no_commit(
     db_session: Session, chat_session_id: UUID, tool_selection: ChatToolSelection
-) -> None:
-    """Save the tools the user selected for this chat."""
-    db_session.execute(
-        update(ChatSession)
+) -> ChatToolSelection | None:
+    """Save the fields set on `tool_selection`; unset fields keep their saved values.
+
+    A chat that keeps no content saves no selection, because search filters
+    carry user choices such as tag values. Returns the saved selection.
+    """
+    chat_session = db_session.scalar(
+        select(ChatSession)
         .where(ChatSession.id == chat_session_id)
-        .values(tool_selection=tool_selection)
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
+    if chat_session is None or not record_mode_persists_content(
+        chat_session.incognito_record_mode
+    ):
+        return None
+    saved = chat_session.tool_selection or ChatToolSelection()
+    chat_session.tool_selection = ChatToolSelection.model_validate(
+        saved.model_dump() | tool_selection.model_dump(exclude_unset=True)
+    )
+    return chat_session.tool_selection
 
 
 def set_preferred_response(
