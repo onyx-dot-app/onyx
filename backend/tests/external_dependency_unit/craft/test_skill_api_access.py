@@ -22,7 +22,11 @@ from onyx.db.enums import (
     SkillSharePermission,
 )
 from onyx.db.models import PluginVersion, User, UserSkillPreference
-from onyx.db.skill import set_skill_enabled_for_user, skill_user_states
+from onyx.db.skill import (
+    set_skill_enabled_for_user,
+    set_skill_installation_policy,
+    skill_user_states,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.skill.api import (
@@ -423,8 +427,7 @@ def test_admin_can_set_installation_policy(
 ) -> None:
     admin = make_user(db_session, is_admin=True)
     skill = make_skill(db_session, is_public=True)
-    skill.installation_policy = SkillInstallationPolicy.REQUIRED
-    db_session.flush()
+    set_skill_installation_policy(skill, SkillInstallationPolicy.REQUIRED, db_session)
     push = MagicMock()
     monkeypatch.setattr("onyx.server.features.skill.api.push_skills_for_users", push)
     response = share_current_user_skill(
@@ -457,8 +460,7 @@ def test_required_skill_owner_cannot_delete_but_can_change_audience(
 ) -> None:
     owner = make_user(db_session, standard_account=True)
     skill = make_skill(db_session, is_public=False, author_user_id=owner.id)
-    skill.installation_policy = SkillInstallationPolicy.REQUIRED
-    db_session.flush()
+    set_skill_installation_policy(skill, SkillInstallationPolicy.REQUIRED, db_session)
     with pytest.raises(OnyxError):
         delete_current_user_skill(skill.id, user=owner, db_session=db_session)
     response = patch_current_user_skill(
@@ -606,8 +608,7 @@ def test_sharing_without_policy_preserves_existing_policy(
 ) -> None:
     owner = make_user(db_session, is_admin=is_admin, standard_account=not is_admin)
     skill = make_skill(db_session, author_user_id=owner.id)
-    skill.installation_policy = SkillInstallationPolicy.REQUIRED
-    db_session.flush()
+    set_skill_installation_policy(skill, SkillInstallationPolicy.REQUIRED, db_session)
     monkeypatch.setattr(
         "onyx.server.features.skill.api.push_skills_for_users", MagicMock()
     )

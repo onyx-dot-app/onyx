@@ -33,6 +33,8 @@ from onyx.db.models import (
     UserGroup,
     UserGroup__ConnectorCredentialPair,
 )
+from onyx.db.plugin import lock_skill_plugin__no_commit
+from onyx.db.skill import set_skill_public_permission
 from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
 from onyx.server.features.skill.models import SkillResponse, SkillUserShareRequest
 from onyx.skills.built_in import BUILT_IN_SKILLS, BuiltInSkillDefinition
@@ -281,6 +283,7 @@ def _seed_custom_skill(
     if group is not None:
         db_session.add(Skill__UserGroup(skill_id=skill.id, user_group_id=group.id))
         db_session.flush()
+    lock_skill_plugin__no_commit(skill, db_session)
     db_session.commit()
     db_session.refresh(skill)
     return skill
@@ -374,7 +377,11 @@ class TestSkillPush:
             db_session.expire_all()
             skill = db_session.get(Skill, skill_response.id)
             assert skill is not None
-            skill.public_permission = SkillSharePermission.VIEWER
+            set_skill_public_permission(
+                skill=skill,
+                public_permission=SkillSharePermission.VIEWER,
+                db_session=db_session,
+            )
             db_session.add(
                 ExternalApp__Skill(external_app_id=app.id, skill_id=skill.id)
             )

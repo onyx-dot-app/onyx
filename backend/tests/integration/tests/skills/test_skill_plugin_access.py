@@ -583,10 +583,13 @@ def test_only_a_manager_can_delete_a_published_skill(
 # --- Skills with no plugin row -----------------------------------------------
 
 
-@pytest.mark.parametrize("change", ["share", "publish", "policy", "enable", "transfer"])
+@pytest.mark.parametrize("change", ["share", "publish", "policy"])
 def test_access_write_on_skill_without_plugin_row_converges(
     owner: DATestUser, admin_user: DATestUser, change: str
 ) -> None:
+    """Reads come from the plugin tables, so a skill with no plugin row is
+    hidden from everyone but an admin. The re-sync migration leaves none; an
+    admin write on one still makes the plugin from the legacy rows first."""
     viewer = _user("converge_viewer")
     skill = SkillManager.create_custom(owner, name=_name("converge"))
     SkillManager.share(
@@ -599,25 +602,17 @@ def test_access_write_on_skill_without_plugin_row_converges(
         ],
     )
     _drop_plugin(skill.id)
+    hidden = client.get(
+        f"{API_SERVER_URL}/skills/custom/{skill.id}/share", headers=owner.headers
+    )
+    assert hidden.status_code == 404
 
     if change == "share":
-        response = _share(
-            owner,
-            skill.id,
-            {"group_shares": []},
-        )
+        response = _share(admin_user, skill.id, {"group_shares": []})
     elif change == "publish":
-        response = _share(owner, skill.id, {"public_permission": "VIEWER"})
-    elif change == "policy":
-        response = _share(admin_user, skill.id, {"installation_policy": "DEFAULT"})
-    elif change == "enable":
-        response = client.put(
-            f"{API_SERVER_URL}/skills/{skill.id}/enabled",
-            json={"enabled": False},
-            headers=owner.headers,
-        )
+        response = _share(admin_user, skill.id, {"public_permission": "VIEWER"})
     else:
-        response = _transfer(owner, skill.id, viewer.id)
+        response = _share(admin_user, skill.id, {"installation_policy": "DEFAULT"})
     response.raise_for_status()
 
     # The plugin is made from the legacy rows, with the shares and choices

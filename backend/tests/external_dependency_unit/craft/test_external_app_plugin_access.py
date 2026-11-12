@@ -52,7 +52,7 @@ def test_associate_publishes_the_plugin(
 ) -> None:
     owner = make_user(db_session, standard_account=True)
     viewer = make_user(db_session, standard_account=True)
-    skill = make_skill(db_session, author_user_id=owner.id)
+    skill = make_skill(db_session, author_user_id=owner.id, with_plugin=False)
     db_session.add_all(
         [
             UserSkillPreference(user_id=owner.id, skill_id=skill.id, name=skill.name),
@@ -77,13 +77,15 @@ def test_associate_with_a_used_name_returns_conflict(
     db_session: Session,
     test_user: User,  # noqa: ARG001
 ) -> None:
-    published = make_skill(db_session, author_user_id=make_user(db_session).id)
+    published = make_skill(
+        db_session, author_user_id=make_user(db_session).id, with_plugin=False
+    )
     set_skill_public_permission(
         skill=published,
         public_permission=SkillSharePermission.VIEWER,
         db_session=db_session,
     )
-    clash = make_skill(db_session, name=published.name)
+    clash = make_skill(db_session, name=published.name, with_plugin=False)
     app_id = _make_app(db_session)
 
     with pytest.raises(OnyxError) as exc:
@@ -107,7 +109,10 @@ def test_replace_associations_publishes_each_plugin(
     test_user: User,  # noqa: ARG001
 ) -> None:
     owner = make_user(db_session, standard_account=True)
-    skills = [make_skill(db_session, author_user_id=owner.id) for _ in range(2)]
+    skills = [
+        make_skill(db_session, author_user_id=owner.id, with_plugin=False)
+        for _ in range(2)
+    ]
 
     replace_custom_skill_associations__no_commit(
         db_session,
@@ -125,7 +130,7 @@ def test_delete_app_resets_install_setting_and_choices(
     test_user: User,  # noqa: ARG001
 ) -> None:
     owner = make_user(db_session, standard_account=True)
-    skill = make_skill(db_session, author_user_id=owner.id)
+    skill = make_skill(db_session, author_user_id=owner.id, with_plugin=False)
     app_id = _make_app(db_session)
     associate_custom_skill_with_external_app__no_commit(
         db_session, external_app_id=app_id, skill_id=skill.id
@@ -153,8 +158,8 @@ def test_disconnect_removes_only_enabled_choices(
 ) -> None:
     owner = make_user(db_session, standard_account=True)
     other = make_user(db_session, standard_account=True)
-    enabled = make_skill(db_session, author_user_id=owner.id)
-    disabled = make_skill(db_session, author_user_id=owner.id)
+    enabled = make_skill(db_session, author_user_id=owner.id, with_plugin=False)
+    disabled = make_skill(db_session, author_user_id=owner.id, with_plugin=False)
     app_id = _make_app(db_session)
     replace_custom_skill_associations__no_commit(
         db_session, external_app_id=app_id, skill_ids=[enabled.id, disabled.id]

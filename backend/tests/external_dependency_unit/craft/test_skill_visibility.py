@@ -124,18 +124,28 @@ class TestSkillVisibility:
                 db_session=db_session,
             )
 
-        # Until reads move to the plugin tables, an organization EDITOR row
-        # written before still grants edit access.
+        # An organization EDITOR row written before plugins gives the
+        # organization view access only.
         skill.public_permission = SkillSharePermission.EDITOR
         db_session.flush()
-        editor_result = fetch_skill(
-            skill.id,
-            policy=SkillManagementPolicy.EDIT,
-            user=user,
-            db_session=db_session,
+        assert (
+            fetch_skill(
+                skill.id,
+                policy=SkillManagementPolicy.EDIT,
+                user=user,
+                db_session=db_session,
+            )
+            is None
         )
-        assert editor_result is not None
-        assert editor_result.id == skill.id
+        assert (
+            fetch_skill(
+                skill.id,
+                policy=SkillManagementPolicy.VIEW,
+                user=user,
+                db_session=db_session,
+            )
+            is not None
+        )
 
     def test_user_loses_skill_after_group_removal(
         self,
