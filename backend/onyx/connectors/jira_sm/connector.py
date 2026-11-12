@@ -237,7 +237,7 @@ class JiraSmConnector(
 
         for batch in chunked(issue_keys, self._batch_size):
             if callback is not None and callback.should_stop():
-                break
+                raise RuntimeError("JSM slim enumeration: stop signal detected")
             yield [SlimDocument(id=self._make_doc_id(key)) for key in batch]
 
     # ── Permission sync ──────────────────────────────────────────────
