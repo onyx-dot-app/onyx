@@ -567,6 +567,8 @@ An input accepted between steps belongs to the step that read it. It is stored i
 response is the only `chat_message`. History, replay, rendering, and exports must show the input at
 the step where the model read it, and acceptance happens exactly once, in that step's transaction.
 `.agents/feature-map/components/chat-persistence.md` gives the routing rule for each input.
+Agent messages follow the same two paths. Child results go into the recipient's `inputs`. An
+automatic follow-up starts under a hidden `AGENT_RESULTS` `chat_message` instead of a USER one.
 
 `chat_input` is the inbox of pending messages and unread child results. Consuming a row deletes it.
 A step deletes its rows in the transaction that saves the step, so each message is accepted once.

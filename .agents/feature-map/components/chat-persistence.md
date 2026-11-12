@@ -184,6 +184,10 @@ one place at any moment. The delivery and the reader decide its path:
 | `send` that a running step reads | `chat_input` row → deleted when the step accepts it → `chat_response_item.inputs` of the reading step, in the same transaction |
 | `queue`, `interrupt`, or a `send` that no step can read | `chat_input` row → deleted when a turn accepts it → a USER `chat_message` that starts the new turn, in the same transaction |
 
+Agent messages follow the same two paths. Child results go into the
+recipient's `inputs`. An automatic follow-up starts under a hidden
+`AGENT_RESULTS` `chat_message` instead of a USER one.
+
 A step deletes the rows it accepts (`db/chat_inputs.py:consume_inputs__no_commit`)
 in the transaction that writes `ChatResponseItem.inputs`, the typed list of
 accepted messages. Starting a new run moves its pending instruction into the

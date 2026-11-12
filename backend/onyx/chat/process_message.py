@@ -838,8 +838,9 @@ def dispatch_pending_chat_messages(
                         llm_override=queued_turn.message.llm_override
                         if queued_turn.message is not None
                         else None,
-                        # Only clients that show follow-ups queue turns or
-                        # start the agents whose results wake the chat.
+                        # Turns the server starts deliver their follow-ups through
+                        # the chat, so they offer agent tools. The pending route
+                        # does not check the client's `accepts_follow_ups`.
                         accepts_follow_ups=True,
                     ),
                     user=user,
