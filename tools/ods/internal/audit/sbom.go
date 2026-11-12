@@ -39,6 +39,7 @@ func ScanSBOM(image, inventory string, stderr io.Writer) ([]Finding, error) {
 	}
 	var inventoryData struct {
 		Components []struct {
+			Type    string `json:"type"`
 			Name    string `json:"name"`
 			Version string `json:"version"`
 			CPE     string `json:"cpe"`
@@ -51,6 +52,11 @@ func ScanSBOM(image, inventory string, stderr io.Writer) ([]Finding, error) {
 		return nil, fmt.Errorf("required SBOM has no components")
 	}
 	for _, component := range inventoryData.Components {
+		switch component.Type {
+		case "application", "framework", "library", "machine-learning-model", "firmware":
+		default:
+			return nil, fmt.Errorf("unsupported SBOM package type %q", component.Type)
+		}
 		if component.Name == "" || component.Version == "" || component.CPE == "" {
 			return nil, fmt.Errorf("SBOM component requires name, version and CPE")
 		}
@@ -91,6 +97,9 @@ func grypeFindings(data []byte, manifest string) ([]Finding, error) {
 					Versions []string `json:"versions"`
 				} `json:"fix"`
 			} `json:"vulnerability"`
+			RelatedVulnerabilities []struct {
+				ID string `json:"id"`
+			} `json:"relatedVulnerabilities"`
 			Artifact struct {
 				Name    string `json:"name"`
 				Version string `json:"version"`
@@ -110,7 +119,11 @@ func grypeFindings(data []byte, manifest string) ([]Finding, error) {
 		if v.ID == "" || a.Name == "" {
 			return nil, fmt.Errorf("incomplete Grype match")
 		}
-		findings = append(findings, Finding{ID: v.ID, Ecosystem: a.Type, Package: a.Name, Version: a.Version,
+		var aliases []string
+		for _, related := range match.RelatedVulnerabilities {
+			aliases = append(aliases, related.ID)
+		}
+		findings = append(findings, Finding{Aliases: aliases, ID: v.ID, Ecosystem: a.Type, Package: a.Name, Version: a.Version,
 			Severity: ParseSeverity(v.Severity), Title: v.Description, URL: v.DataSource, Source: "grype-sbom",
 			FixedIn: strings.Join(v.Fix.Versions, ", "), Manifest: manifest})
 	}
