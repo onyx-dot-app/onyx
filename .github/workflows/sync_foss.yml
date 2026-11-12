@@ -43,7 +43,7 @@ jobs:
 
       - name: Push to FOSS repo
         env:
-          FOSS_REPO_URL: git@github.com:onyx-dot-app/onyx-foss.git
+          FOSS_REPO_URL: https://x-access-token:${{ secrets.GH_PAT }}@github.com/onyx-dot-app/onyx-foss.git
         run: |
           cd /tmp/foss_repo
           git remote add public "$FOSS_REPO_URL"
