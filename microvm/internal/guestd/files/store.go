@@ -51,6 +51,12 @@ const (
 	writePrefix   = ".craft-write-"
 )
 
+// TopFilesRoot is the archive directory that holds the session's top-level
+// regular files. Restore moves its files back to the top level. A daemon
+// without this rule restores it as a normal directory, so its restore does
+// not fail. Capture skips a session directory with this name.
+const TopFilesRoot = ".onyx-top-level"
+
 // DefaultCaptureRoots are the session directories that a save holds.
 var DefaultCaptureRoots = []string{"attachments"}
 

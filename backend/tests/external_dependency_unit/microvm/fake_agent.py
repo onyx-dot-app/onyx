@@ -62,6 +62,9 @@ _DAEMON_REASON_CODES: dict[SandboxDaemonErrorReason, grpc.StatusCode] = {
     SandboxDaemonErrorReason.EXECUTION_CAP_REACHED: grpc.StatusCode.RESOURCE_EXHAUSTED,
 }
 
+# The guest daemon's files.TopFilesRoot.
+TOP_FILES_ROOT = ".onyx-top-level"
+
 
 def _abort(
     context: grpc.ServicerContext,
@@ -417,6 +420,11 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
                 for path, data in selected.items()
                 if not _skipped(path, exclude, skip_hidden=False)
             }
+            # Like the daemon: top-level files go under TOP_FILES_ROOT.
+            members = {
+                p if "/" in p else f"{TOP_FILES_ROOT}/{p}": d
+                for p, d in members.items()
+            }
             archive = _zip(members)
             capture_id = self.next_id("cap")
             self.captures[capture_id] = archive
@@ -498,7 +506,10 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
                 abort_with_reason(
                     context, HostAgentErrorReason.ARCHIVE_MISMATCH, "other archive"
                 )
-            members = _unzip(archive)
+            archived = _unzip(archive)
+            members = {
+                p.removeprefix(f"{TOP_FILES_ROOT}/"): d for p, d in archived.items()
+            }
             roots = {p.split("/", 1)[0] for p in members}
             for key in [
                 k
@@ -512,7 +523,7 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
             return hostagent_pb2.RestoreSessionResponse(
                 files=len(members),
                 expanded_bytes=sum(len(d) for d in members.values()),
-                roots=sorted({p.split("/", 1)[0] for p in members}),
+                roots=sorted({p.split("/", 1)[0] for p in archived}),
             )
 
     def PutManagedImage(  # noqa: N802

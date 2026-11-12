@@ -134,19 +134,53 @@ func (s *Store) Restore(ctx context.Context, spec RestoreSpec, r io.Reader) (Res
 		return sum, fmt.Errorf("%w: got %d bytes with sha256 %s, the header says %d bytes with %s",
 			ErrArchive, hr.n, got, spec.Size, want)
 	}
+	swap, err := x.liftTopFiles(roots)
+	if err != nil {
+		return sum, err
+	}
 	if err := x.finish(); err != nil {
 		return sum, err
 	}
 
-	if err := swapRoots(root, staging, roots, x.present); err != nil {
+	if err := swapRoots(root, staging, swap, x.present); err != nil {
 		return sum, err
 	}
 	for _, r := range roots {
-		if x.present[r] {
+		if x.present[r] || (r == TopFilesRoot && len(x.topFiles) > 0) {
 			sum.Roots = append(sum.Roots, r)
 		}
 	}
 	return sum, nil
+}
+
+// liftTopFiles moves the files under TopFilesRoot to the top of the staging
+// directory, so that the swap puts each one in place as its own root. It
+// returns the names to swap.
+func (x *extractor) liftTopFiles(roots []string) ([]string, error) {
+	swap := make([]string, 0, len(roots)+len(x.topFiles))
+	for _, r := range roots {
+		if r != TopFilesRoot {
+			swap = append(swap, r)
+		}
+	}
+	if !x.present[TopFilesRoot] {
+		return swap, nil
+	}
+	for _, f := range x.topFiles {
+		if x.present[f] {
+			return nil, fmt.Errorf("%w: %s/%s: the archive also has a root %q", ErrArchive, TopFilesRoot, f, f)
+		}
+		if err := x.root.Rename(TopFilesRoot+"/"+f, f); err != nil {
+			return nil, err
+		}
+		x.present[f] = true
+		swap = append(swap, f)
+	}
+	delete(x.present, TopFilesRoot)
+	if err := x.root.Remove(TopFilesRoot); err != nil {
+		return nil, err
+	}
+	return swap, nil
 }
 
 // rename is root.Rename; tests replace it to inject failures.
@@ -329,6 +363,8 @@ type extractor struct {
 	budget  *budgetReader
 	// own gives a restored file or directory to the configured owner.
 	own func(name string) error
+	// topFiles are the file names under TopFilesRoot.
+	topFiles []string
 }
 
 // entry counts one member, or one parent directory that a member needs.
@@ -414,7 +450,18 @@ func (x *extractor) memberName(h *tar.Header) (string, error) {
 	if !x.allowed[parts[0]] {
 		return "", bad("not under a capture root")
 	}
-	// A capture root is a directory or a regular file; run rejects other types.
+	if len(parts) == 1 && h.Typeflag != tar.TypeDir {
+		return "", bad("a capture root must be a directory")
+	}
+	if parts[0] == TopFilesRoot && len(parts) > 1 {
+		f := parts[1]
+		switch {
+		case len(parts) > 2 || h.Typeflag != tar.TypeReg:
+			return "", bad("only regular files go in " + TopFilesRoot)
+		case f == TopFilesRoot || strings.HasPrefix(f, ".craft-"):
+			return "", bad("reserved file name")
+		}
+	}
 	return n, nil
 }
 
@@ -449,7 +496,9 @@ func (x *extractor) run(ctx context.Context, tr *tar.Reader) error {
 			if err := x.mkdir(name); err != nil {
 				return err
 			}
-			x.dirs = append(x.dirs, dirMode{name: name, mode: mode, hdr: h})
+			if name != TopFilesRoot {
+				x.dirs = append(x.dirs, dirMode{name: name, mode: mode, hdr: h})
+			}
 		case tar.TypeReg:
 			if h.Size < 0 {
 				return fmt.Errorf("%w: member %q: negative size", ErrArchive, h.Name)
@@ -463,6 +512,9 @@ func (x *extractor) run(ctx context.Context, tr *tar.Reader) error {
 				return err
 			}
 			x.sum.Files++
+			if top, f, ok := strings.Cut(name, "/"); ok && top == TopFilesRoot {
+				x.topFiles = append(x.topFiles, f)
+			}
 		default:
 			// Links, devices, FIFOs, sparse and other members.
 			return fmt.Errorf("%w: member %q: type %q is not allowed", ErrArchive, h.Name, h.Typeflag)

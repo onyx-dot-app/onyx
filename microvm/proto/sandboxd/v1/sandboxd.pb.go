@@ -3463,6 +3463,11 @@ type CaptureSessionRequest struct {
 	SessionId string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	// Capture roots: names of directories or regular files in the session
 	// directory. Empty means the daemon's --capture-dirs (attachments).
+	// Regular files go in the archive under the directory ".onyx-top-level",
+	// and the summary roots name ".onyx-top-level" instead of the files.
+	// Restore moves them back to the top level. A daemon without this rule
+	// restores ".onyx-top-level" as a directory. A ".onyx-top-level" root is
+	// skipped.
 	Roots []string `protobuf:"bytes,2,rep,name=roots,proto3" json:"roots,omitempty"`
 	// Names skipped at any depth. Empty means the daemon's --capture-exclude
 	// (node_modules, .venv, caches, ...). A directory with pyvenv.cfg is
@@ -3546,7 +3551,7 @@ type CaptureSummary struct {
 	Skipped int64 `protobuf:"varint,7,opt,name=skipped,proto3" json:"skipped,omitempty"`
 	// Files that shrank during the capture. Their tail is zero-filled.
 	Changed int64 `protobuf:"varint,8,opt,name=changed,proto3" json:"changed,omitempty"`
-	// Capture roots that exist and are in the archive.
+	// Capture roots that exist and are in the archive. Pass them to restore.
 	Roots         []string `protobuf:"bytes,9,rep,name=roots,proto3" json:"roots,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

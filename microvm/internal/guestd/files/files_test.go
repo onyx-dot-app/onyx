@@ -589,46 +589,135 @@ func TestCaptureRestoreFileRoots(t *testing.T) {
 	s, base := newStore(t, Config{})
 	put(t, base, "work/a.txt", "a")
 	put(t, base, "report.py", "print(1)")
+	put(t, base, "notes.md", "n")
 	if err := os.Chmod(filepath.Join(base, "report.py"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Symlink("/etc/passwd", filepath.Join(base, "pw")); err != nil {
 		t.Fatal(err)
 	}
-	roots := []string{"work", "report.py", "pw", "missing.txt"}
+	put(t, base, TopFilesRoot+"/x.txt", "a session directory with the reserved name")
+	roots := []string{"work", "report.py", "notes.md", "pw", "missing.txt", TopFilesRoot}
 	archive, cs := capture(t, s, CaptureSpec{SessionID: sid, Roots: roots})
-	if got := strings.Join(tarNames(t, archive), ","); got != "work/,work/a.txt,report.py" {
+	want := "work/,work/a.txt,.onyx-top-level/,.onyx-top-level/report.py,.onyx-top-level/notes.md"
+	if got := strings.Join(tarNames(t, archive), ","); got != want {
 		t.Fatalf("archive = %s", got)
 	}
-	if strings.Join(cs.Roots, ",") != "work,report.py" || cs.Files != 2 || cs.Skipped != 1 {
+	if strings.Join(cs.Roots, ",") != "work,"+TopFilesRoot || cs.Files != 3 || cs.Skipped != 2 {
 		t.Fatalf("summary %+v", cs)
 	}
 
-	// A file root replaces an old file or directory of the same name.
+	// A daemon without TopFilesRoot restores it as a directory root.
+	if got := strings.Join(oldRestoreFiles(t, archive, cs.Roots), ","); got != "work/a.txt,.onyx-top-level/report.py,.onyx-top-level/notes.md" {
+		t.Fatalf("old restore = %s", got)
+	}
+
+	// A top-level file replaces an old file or directory of the same name.
 	other := "a6f1b1a2-0000-4000-8000-000000000009"
 	ob := filepath.Join(filepath.Dir(base), other)
 	put(t, ob, "report.py/old.txt", "old dir")
+	put(t, ob, "notes.md", "old")
 	put(t, ob, "keep.txt", "keep")
-	rs, err := restore(s, other, archive, RestoreSpec{Roots: roots})
+	rs, err := restore(s, other, archive, RestoreSpec{Roots: cs.Roots})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(rs.Roots, ",") != "work,report.py" || rs.Files != 2 {
+	if strings.Join(rs.Roots, ",") != "work,"+TopFilesRoot || rs.Files != 3 {
 		t.Fatalf("restore %+v", rs)
 	}
 	fi, err := os.Lstat(filepath.Join(ob, "report.py"))
 	if err != nil || !fi.Mode().IsRegular() || fi.Mode().Perm() != 0o700 {
 		t.Fatalf("report.py %v %v", fi, err)
 	}
-	if b, _ := os.ReadFile(filepath.Join(ob, "report.py")); string(b) != "print(1)" {
-		t.Fatalf("report.py = %q", b)
+	for rel, data := range map[string]string{"report.py": "print(1)", "notes.md": "n", "keep.txt": "keep", "work/a.txt": "a"} {
+		if b, _ := os.ReadFile(filepath.Join(ob, rel)); string(b) != data {
+			t.Fatalf("%s = %q", rel, b)
+		}
 	}
-	if b, _ := os.ReadFile(filepath.Join(ob, "keep.txt")); string(b) != "keep" {
-		t.Fatal("a file outside the capture roots changed")
+	ents, _ := os.ReadDir(ob)
+	var names []string
+	for _, e := range ents {
+		names = append(names, e.Name())
 	}
-	// A file root must be in the request's roots.
+	if got := strings.Join(names, ","); got != "keep.txt,notes.md,report.py,work" {
+		t.Fatalf("session = %s", got)
+	}
+	// TopFilesRoot must be in the request's roots.
 	if _, err := restore(s, other, archive, RestoreSpec{Roots: []string{"work"}}); !errors.Is(err, ErrArchive) {
-		t.Fatalf("file root not requested: %v", err)
+		t.Fatalf("top files not requested: %v", err)
+	}
+}
+
+// oldRestoreFiles applies the member rules of a daemon before TopFilesRoot
+// (each member under a requested root, a single-part member is a directory,
+// only directories and regular files) and returns the files it would write.
+func oldRestoreFiles(t *testing.T, archive []byte, roots []string) []string {
+	t.Helper()
+	allowed := setOf(roots)
+	zr, err := zstd.NewReader(bytes.NewReader(archive))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer zr.Close()
+	tr := tar.NewReader(zr)
+	var files []string
+	for {
+		h, err := tr.Next()
+		if errors.Is(err, io.EOF) {
+			return files
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		n := strings.TrimSuffix(h.Name, "/")
+		parts := strings.Split(n, "/")
+		if !allowed[parts[0]] {
+			t.Fatalf("old daemon: %q is not under a capture root", h.Name)
+		}
+		if len(parts) == 1 && h.Typeflag != tar.TypeDir {
+			t.Fatalf("old daemon: a capture root must be a directory: %q", h.Name)
+		}
+		switch h.Typeflag {
+		case tar.TypeDir:
+		case tar.TypeReg:
+			files = append(files, n)
+		default:
+			t.Fatalf("old daemon: type %q", h.Typeflag)
+		}
+	}
+}
+
+func TestRestoreTopFilesRules(t *testing.T) {
+	s, base := newStore(t, Config{CaptureRoots: []string{"work", TopFilesRoot}})
+	dir := func(n string) member { return member{h: tar.Header{Typeflag: tar.TypeDir, Name: n}} }
+	reg := func(n, d string) member { return member{h: tar.Header{Typeflag: tar.TypeReg, Name: n}, data: d} }
+	top := TopFilesRoot + "/"
+	cases := map[string][]member{
+		"file root":        {reg("work", "x")},
+		"top files a file": {reg(TopFilesRoot, "x")},
+		"nested":           {dir(top), dir(top + "d/"), reg(top+"d/a", "x")},
+		"dir in top":       {dir(top), dir(top + "d/")},
+		"reserved name":    {dir(top), reg(top+TopFilesRoot, "x")},
+		"craft name":       {dir(top), reg(top+".craft-old-1", "x")},
+		"also a root":      {dir("work/"), reg("work/a", "x"), dir(top), reg(top+"work", "x")},
+	}
+	other := "a6f1b1a2-0000-4000-8000-00000000000a"
+	for name, ms := range cases {
+		if _, err := restore(s, other, makeArchive(t, ms), RestoreSpec{}); !errors.Is(err, ErrArchive) {
+			t.Errorf("%s: %v, want ErrArchive", name, err)
+		}
+	}
+	ents, _ := os.ReadDir(filepath.Join(filepath.Dir(base), other))
+	if len(ents) != 0 {
+		t.Fatalf("failed restores left %v", ents)
+	}
+	// A read-only TopFilesRoot mode does not stop the move of its files.
+	ok := makeArchive(t, []member{{h: tar.Header{Typeflag: tar.TypeDir, Name: top, Mode: 0o500}}, reg(top+"a", "x")})
+	if _, err := restore(s, other, ok, RestoreSpec{}); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(filepath.Dir(base), other, "a")); string(b) != "x" {
+		t.Fatalf("a = %q", b)
 	}
 }
 
@@ -710,6 +799,7 @@ func TestRestoreSafety(t *testing.T) {
 		"absolute":       {[]member{reg("/tmp/victim", "x")}, ErrArchive},
 		"unclean":        {[]member{reg("work//a", "x")}, ErrArchive},
 		"other root":     {[]member{reg("etc/passwd", "x")}, ErrArchive},
+		"root is a file": {[]member{reg("work", "x")}, ErrArchive},
 		"symlink":        {[]member{dir("work/"), {h: tar.Header{Typeflag: tar.TypeSymlink, Name: "work/l", Linkname: victim}}}, ErrArchive},
 		"hardlink":       {[]member{dir("work/"), {h: tar.Header{Typeflag: tar.TypeLink, Name: "work/l", Linkname: "work/a"}}}, ErrArchive},
 		"char device":    {[]member{dir("work/"), {h: tar.Header{Typeflag: tar.TypeChar, Name: "work/null", Devmajor: 1, Devminor: 3}}}, ErrArchive},

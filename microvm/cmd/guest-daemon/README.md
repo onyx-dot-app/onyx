@@ -175,11 +175,15 @@ Session saves:
   ~2 GB/s against ~220 MB/s for `default`, and the T2 archive was not larger), and leaves out `--capture-exclude` names at any depth
   (`node_modules`, `.venv`, `venv`, `__pycache__`, `.next`, caches, ...) and every directory with
   `pyvenv.cfg`. Symlinks, special files and names that are not UTF-8 are skipped. The request can set its own roots and exclude
-  list. The last message is the summary with the stream's SHA-256. Limits (A6): 1 GiB stored, 4 GiB of
+  list. A root is a directory or a regular file. Regular-file roots go in the archive under the
+  reserved directory `.onyx-top-level`, and the summary names `.onyx-top-level` as their root. A
+  daemon without this rule restores `.onyx-top-level` as a directory, so its restore does not fail.
+  Capture skips a session directory named `.onyx-top-level`. The last message is the summary with the stream's SHA-256. Limits (A6): 1 GiB stored, 4 GiB of
   files, 500,000 entries (`--capture-max-*`); a request can only lower them.
 - `RestoreSession` takes a header (exact size, SHA-256, roots, limits), then the archive. It extracts
   into `.craft-restore-<random>` in the session directory, then checks size and SHA-256 of the whole
-  stream, then swaps each root that the archive has into place. It refuses (`ARCHIVE_INVALID`) absolute
+  stream, then swaps each root that the archive has into place. Each file in `.onyx-top-level` is a
+  root of its own: it replaces the top-level file or directory of that name. It refuses (`ARCHIVE_INVALID`) absolute
   names, `..`, unclean names, names outside the roots, links, devices, FIFOs, sparse members and
   duplicate files, and stops at the limits (`LIMIT_EXCEEDED`), at a zstd window over 64 MiB and at a
   decoded stream larger than the files plus 16 KiB per member and 64 KiB after the tar end. Modes are
