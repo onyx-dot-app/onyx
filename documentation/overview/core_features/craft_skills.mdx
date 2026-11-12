@@ -279,6 +279,18 @@ See [Manage several Skills](/admins/managing_features/craft_skills#manage-severa
     A custom Skill cannot use the same identifier as an existing or built-in Skill.
   </Accordion>
 
+  <Accordion title="A session says that Skills did not load">
+    Your Skills must fit in the session: 900 MB and 10,000 files. Onyx left out the Skills in the list,
+    so the agent cannot use them in this session. Select **Manage skills** and turn off Skills you do not need.
+    Then select **Reload** in the session. The notice shows again only when a different set of Skills does not load.
+  </Accordion>
+
+  <Accordion title="A change says it puts me past the skill limit">
+    The Skills that you have on can use at most 500 MB and 5,000 files.
+    The error shows the size and file count that the change would give you. Turn off Skills you do not use,
+    then try again. When you connect an App, Skills that do not fit stay off, and a notice lists them with their sizes.
+  </Accordion>
+
   <Accordion title="My SKILL.md is too large">
     A `SKILL.md` can be at most 256 KiB. This limit applies to uploads, GitHub imports, and edits.
     Split the instructions into several files in the Skill, and link them from `SKILL.md`.

@@ -83,7 +83,9 @@ the flow through `lib/oauth/launch.ts:launchOAuth`: a new tab on the web, the
 system browser in the desktop app. It waits for the provider callback page to
 report the OAuth `state`. The attempt ends on completion, on cancel, or after
 ten minutes. The caller then checks the saved connection before it reports
-success. `/app/plugins/oauth/complete` is only the landing page for a callback
+success. An external app's callback also reports the app skills the skill
+limit left off (`skillsLeftOff` in the completion message), and
+`connectMemberPlugin` returns them for the dialog to show. `/app/plugins/oauth/complete` is only the landing page for a callback
 that no waiting page closed; it checks the saved connection and shows the
 result.
 

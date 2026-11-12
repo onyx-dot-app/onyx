@@ -15901,6 +15901,13 @@
       "resetDefaults": "全部重置为默认值",
       "resetAll": "全部重置为工作区默认值",
       "workspaceDisabledTooltip": "管理员已在工作区中禁用此操作。"
+    },
+    "skillRuntimeNotice": {
+      "title": "{count, plural, other {# 个技能未加载}}",
+      "description": "你的技能必须在 {maxSize} 和 {maxFiles, number} 个文件以内。这些技能放不下，因此此会话无法使用它们。关闭不需要的技能以腾出空间。",
+      "listLabel": "未加载的技能",
+      "manage": "管理技能",
+      "dismiss": "关闭"
     }
   },
   "knowledge": {
@@ -17782,6 +17789,33 @@
       },
       "card": "群组：{groups}",
       "entry": "{name}：{policy}"
+    },
+    "limit": {
+      "omission": {
+        "size": "{name}：{size}",
+        "withFiles": "{name}：{size}，{files, plural, other {# 个文件}}"
+      },
+      "refused": {
+        "you": "此更改会使你超出技能上限。你将使用 {maxSize} 中的 {size}，以及 {maxFiles, number} 个文件中的 {files, number} 个。关闭不使用的技能，然后重试。",
+        "youAndUsers": "此更改会使你和另外 {others, plural, other {# 位用户}}超出技能上限。你将使用 {maxSize} 中的 {size}，以及 {maxFiles, number} 个文件中的 {files, number} 个。关闭不使用的技能，或选择范围更小的设置。",
+        "users": "此更改会使 {count, plural, other {# 位用户}}超出 {maxSize} 或 {maxFiles, number} 个文件的技能上限。选择范围更小的设置，或请他们关闭一些技能。"
+      },
+      "leftOff": {
+        "title": "{count, plural, other {# 个技能保持关闭}}",
+        "description": "应用已连接。这些技能会使你超出 {maxSize} 的技能上限，因此保持关闭。关闭其他技能以腾出空间，然后开启这些技能。",
+        "listLabel": "保持关闭的技能"
+      },
+      "banner": {
+        "title": "{count, plural, other {# 位用户超出技能上限}}",
+        "description": "技能超过 {maxSize} 或 {maxFiles, number} 个文件的用户无法开启更多技能。每个会话最多加载 {runtimeSize} 的技能，其余的不加载。更改群组设置，或请用户关闭一些技能。",
+        "tableLabel": "超出技能上限的用户",
+        "columns": {
+          "user": "用户",
+          "size": "技能大小",
+          "files": "文件",
+          "notLoaded": "未加载"
+        }
+      }
     }
   },
   "opensearchHealth": {

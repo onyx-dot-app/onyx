@@ -35,7 +35,11 @@ from onyx.server.features.build.db.build_session import (
     reserve_nextjs_port__no_commit,
     session_runtime_stale,
 )
-from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
+from onyx.server.features.build.db.sandbox import (
+    SandboxSkillsState,
+    get_sandbox_by_user_id,
+    set_sandbox_skills_states__no_commit,
+)
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.user_library import (
     USER_LIBRARY_MOUNT_PATH,
@@ -47,6 +51,7 @@ from onyx.server.features.build.sandbox.util.mcp_config import (
 )
 from onyx.server.features.build.session import locks as session_locks
 from onyx.server.features.build.session.api import (
+    get_session_details,
     reload_session_skills,
     restore_session,
 )
@@ -61,6 +66,11 @@ from onyx.server.features.build.session.sandbox_lifecycle import (
     push_managed_content,
     record_managed_content_hashes__no_commit,
     refresh_mcp_config_hashes_for_users,
+)
+from onyx.skills.limits import (
+    SKILL_RUNTIME_MAX_BYTES,
+    SKILL_RUNTIME_MAX_FILES,
+    SkillOmission,
 )
 from onyx.skills.push import compute_skill_runtime_hash
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
@@ -509,6 +519,61 @@ class TestDeleteSessionCascade:
             db_session.query(Artifact).filter(Artifact.id == artifact_id).one_or_none()
             is None
         )
+
+
+class TestSessionSkillOmissions:
+    def test_session_read_returns_sandbox_omissions(
+        self,
+        db_session: Session,
+        test_user: User,
+        sandbox: Callable[..., Sandbox],
+    ) -> None:
+        sandbox_row = sandbox(user=test_user, status=SandboxStatus.RUNNING)
+        session_row = BuildSession(
+            user_id=test_user.id, status=BuildSessionStatus.ACTIVE
+        )
+        db_session.add(session_row)
+        db_session.commit()
+
+        response = get_session_details(
+            session_row.id, test_user, db_session, check_workspace=False
+        )
+        assert response.skill_omissions is None
+
+        omission = SkillOmission(
+            plugin_id=uuid4(),
+            name="big-skill",
+            bytes=600 * 1024 * 1024,
+            files=12,
+            reason="bytes",
+        )
+        set_sandbox_skills_states__no_commit(
+            db_session,
+            {
+                sandbox_row.id: SandboxSkillsState(
+                    skills_hash="hash", omissions=(omission,)
+                )
+            },
+        )
+        db_session.commit()
+
+        response = get_session_details(
+            session_row.id, test_user, db_session, check_workspace=False
+        )
+        assert response.skill_omissions is not None
+        assert response.skill_omissions.skills == [omission]
+        assert response.skill_omissions.max_bytes == SKILL_RUNTIME_MAX_BYTES
+        assert response.skill_omissions.max_files == SKILL_RUNTIME_MAX_FILES
+        body = response.model_dump(mode="json")["skill_omissions"]
+        assert body["skills"] == [
+            {
+                "plugin_id": str(omission.plugin_id),
+                "name": "big-skill",
+                "bytes": 600 * 1024 * 1024,
+                "files": 12,
+                "reason": "bytes",
+            }
+        ]
 
 
 class TestReloadSessionSkills:

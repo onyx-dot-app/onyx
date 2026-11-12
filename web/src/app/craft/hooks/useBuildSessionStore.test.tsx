@@ -1271,6 +1271,7 @@ describe("Session loading and restoration", () => {
       agent_provider: null,
       agent_model: null,
       skills_stale: false,
+      skill_omissions: null,
       nextjs_port: null,
       session_loaded_in_sandbox: false,
       sandbox: {
@@ -2019,10 +2020,12 @@ describe("Session loading and restoration", () => {
       mockedApi.fetchSession.mockResolvedValue({
         ...sleepingSession(),
         skills_stale: true,
+        skill_omissions: null,
       } as never);
       mockedApi.restoreSession.mockResolvedValue({
         ...runningSession(),
         skills_stale: false,
+        skill_omissions: null,
       } as never);
 
       await useBuildSessionStore.getState().loadSession(SESSION_ID);
@@ -2553,6 +2556,7 @@ describe("Session loading and restoration", () => {
       mockedApi.fetchSession.mockResolvedValue({
         ...runningSession(),
         skills_stale: true,
+        skill_omissions: null,
       } as never);
       useBuildSessionStore.getState().createSession(SESSION_ID, {
         status: "running",
@@ -2581,6 +2585,7 @@ describe("Session loading and restoration", () => {
       mockedApi.fetchSession.mockResolvedValue({
         ...runningSession(),
         skills_stale: false,
+        skill_omissions: null,
       } as never);
       useBuildSessionStore
         .getState()
@@ -2598,6 +2603,7 @@ describe("Session loading and restoration", () => {
       mockedApi.fetchSession.mockResolvedValue({
         ...runningSession(),
         skills_stale: true,
+        skill_omissions: null,
       } as never);
       mockedApi.fetchMessages.mockReturnValue(messages.promise as never);
 
@@ -3540,6 +3546,7 @@ describe("session history races and discarded queued starts", () => {
       agent_provider: null,
       agent_model: null,
       skills_stale: false,
+      skill_omissions: null,
       session_loaded_in_sandbox: true,
     });
   });
@@ -4074,6 +4081,7 @@ describe("Session naming", () => {
     agent_provider: null,
     agent_model: null,
     skills_stale: false,
+    skill_omissions: null,
   };
   beforeEach(() => {
     useBuildSessionStore.setState({

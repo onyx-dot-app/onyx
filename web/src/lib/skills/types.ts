@@ -3,6 +3,8 @@
  * `backend/onyx/server/features/skill/models.py`.
  */
 
+import type { SkillLimitDetails } from "@/lib/skills/limits";
+
 export type SkillInstallationPolicy =
   | "AVAILABLE"
   | "DEFAULT"
@@ -200,6 +202,8 @@ export interface GitHubSkillNotImported {
   path: string;
   name: string;
   reason: string;
+  /** Set when the skill limit refused the skill. */
+  skill_limit?: SkillLimitDetails | null;
 }
 
 export interface GitHubSkillsImportResult {

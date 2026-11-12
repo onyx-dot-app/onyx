@@ -15901,6 +15901,13 @@
       "resetDefaults": "Reset all to defaults",
       "resetAll": "Reset all to workspace defaults",
       "workspaceDisabledTooltip": "An admin disabled this action for the workspace."
+    },
+    "skillRuntimeNotice": {
+      "title": "{count, plural, one {# skill did not load} other {# skills did not load}}",
+      "description": "Your skills must fit in {maxSize} and {maxFiles, number} files. These skills did not fit, so this session cannot use them. Turn off skills you do not need to make room.",
+      "listLabel": "Skills that did not load",
+      "manage": "Manage skills",
+      "dismiss": "Dismiss"
     }
   },
   "knowledge": {
@@ -17782,6 +17789,33 @@
       },
       "card": "Groups: {groups}",
       "entry": "{name}: {policy}"
+    },
+    "limit": {
+      "omission": {
+        "size": "{name}: {size}",
+        "withFiles": "{name}: {size}, {files, plural, one {# file} other {# files}}"
+      },
+      "refused": {
+        "you": "This change puts you past the skill limit. You would use {size} of {maxSize} and {files, number} of {maxFiles, number} files. Turn off skills you do not use, then try again.",
+        "youAndUsers": "This change puts you and {others, plural, one {# other user} other {# other users}} past the skill limit. You would use {size} of {maxSize} and {files, number} of {maxFiles, number} files. Turn off skills you do not use, or choose a narrower setting.",
+        "users": "This change puts {count, plural, one {# user} other {# users}} past the skill limit of {maxSize} or {maxFiles, number} files. Choose a narrower setting, or ask them to turn off skills."
+      },
+      "leftOff": {
+        "title": "{count, plural, one {# skill stayed off} other {# skills stayed off}}",
+        "description": "The app is connected. These skills would put you past the {maxSize} skill limit, so they stay off. Turn off other skills to make room, then turn these on.",
+        "listLabel": "Skills that stayed off"
+      },
+      "banner": {
+        "title": "{count, plural, one {# user is past the skill limit} other {# users are past the skill limit}}",
+        "description": "A user past {maxSize} or {maxFiles, number} files of skills cannot turn on more. Each session loads skills up to {runtimeSize} and leaves out the rest. Change group settings, or ask users to turn off skills.",
+        "tableLabel": "Users past the skill limit",
+        "columns": {
+          "user": "User",
+          "size": "Skill Size",
+          "files": "Files",
+          "notLoaded": "Did Not Load"
+        }
+      }
     }
   },
   "opensearchHealth": {

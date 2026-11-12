@@ -26,6 +26,7 @@ import type { GitHubSkillsImportResult } from "@/lib/skills/types";
 import { useUser } from "@/providers/UserProvider";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
+import { useSkillLimitCopy } from "@/lib/skills/limits";
 
 interface CreateSkillModalProps {
   open: boolean;
@@ -57,6 +58,7 @@ export function CreateSkillModalContent({
   validateDraft,
 }: CreateSkillModalContentProps) {
   const t = useTranslations("skills.modals");
+  const { describeError, refusal } = useSkillLimitCopy();
   const [bundle, setBundle] = useState<PreparedSkillBundle | null>(null);
   const [preparing, setPreparing] = useState(false);
   const [inspecting, setInspecting] = useState(false);
@@ -111,9 +113,7 @@ export function CreateSkillModalContent({
         onDirtyChange?.(false);
         if (imported.imported.length > 0) onImported?.();
       } catch (error) {
-        setErrorMessage(
-          error instanceof Error ? error.message : t("create.readError.message")
-        );
+        setErrorMessage(describeError(error, t("create.readError.message")));
       } finally {
         setInspecting(false);
       }
@@ -244,7 +244,9 @@ export function CreateSkillModalContent({
               >
                 {t("create.batch.failure", {
                   name: item.name,
-                  reason: item.reason,
+                  reason: item.skill_limit
+                    ? refusal(item.skill_limit)
+                    : item.reason,
                 })}
               </Text>
             ))}

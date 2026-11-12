@@ -363,12 +363,16 @@ Onyx refuses a change that puts an active user past either limit:
 | An admin sets **Required** or **Installed by default**, for the organization or a group | Refused if a member goes past the limit. |
 | An admin shares a Skill with a group, changes **Default Access**, publishes, approves, or transfers a Skill | Refused if a user goes past the limit. |
 | An admin sets **Available to install** | Allowed. Members get the Skill only when they turn it on. |
-| A user connects an App that a Skill needs | The App connects. Skills that do not fit stay off, and the response lists them. |
+| A user connects an App that a Skill needs | The App connects. Skills that do not fit stay off, and a notice lists each one with its size. |
 | A user joins a group | Always allowed. |
 
-The error is HTTP 413 with the code `SKILL_LIMIT_EXCEEDED`. Its `skill_limit` field gives `users_over`,
+Onyx shows the error where you made the change. A user sees the size and file count that the change would give them.
+An admin sees the number of users who would go past the limit.
+
+The API returns HTTP 413 with the code `SKILL_LIMIT_EXCEEDED`. Its `skill_limit` field gives `users_over`,
 the number of users who would go past the limit, and `max_bytes` and `max_files`. For a change to your own Skills,
-`usage` gives your size and file count after the change.
+`usage` gives your size and file count after the change. In a bulk change, an upload of many Skills, or a GitHub import,
+each refused Skill has its own `skill_limit` field.
 
 Users who are already past the limit, for example after a group join, do not block a change.
 Inactive users do not count.
@@ -394,9 +398,14 @@ Onyx then leaves out that Skill and the Skills after it in this order that do no
 
 A running session gets changed Skills at once, not at its next message. A turn that is running can read the new files.
 
-To see which users are past 500 MB or 5,000 files, call `GET /api/skills/users-over-limit`.
-You need the organization-wide `manage:plugins` permission. The response lists each user with their size, file count,
-and `skills_not_loaded`, the number of their Skills that do not fit in the sandbox.
+When Skills do not load, the user sees an error at session start. It lists each Skill that did not load with its size,
+and links to **Skills** so that the user can turn off Skills they do not need.
+The notice shows one time for each set of Skills that did not load. The session read (`GET /api/build/sessions/{id}`)
+returns them in `skill_omissions`.
+
+When users are past 500 MB or 5,000 files, the admin **Skills** page shows a banner.
+Its table lists each user with their Skill size, file count, and the number of their Skills that do not load.
+The same list is at `GET /api/skills/users-over-limit`. You need the organization-wide `manage:plugins` permission.
 
 ## Maintain a Skill
 

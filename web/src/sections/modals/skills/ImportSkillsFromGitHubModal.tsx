@@ -36,6 +36,7 @@ import type {
   GitHubSkillsPreview,
 } from "@/lib/skills/types";
 import type { ExternalAppUserResponse } from "@/app/craft/v1/apps/registry";
+import { useSkillLimitCopy } from "@/lib/skills/limits";
 
 interface ImportSkillsFromGitHubModalProps {
   open: boolean;
@@ -67,6 +68,7 @@ export default function ImportSkillsFromGitHubModal({
   onImported,
 }: ImportSkillsFromGitHubModalProps) {
   const t = useTranslations("skills.modals");
+  const { describeError } = useSkillLimitCopy();
   const [repository, setRepository] = useState("");
   const [preview, setPreview] = useState<GitHubSkillsPreview | null>(null);
   const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
@@ -126,11 +128,12 @@ export default function ImportSkillsFromGitHubModal({
     } catch (caught) {
       console.error("Failed to import skills from GitHub", caught);
       setError(
-        caught instanceof Error
-          ? caught.message
-          : preview
+        describeError(
+          caught,
+          preview
             ? t("importGithub.importError.message")
             : t("importGithub.loadError.message")
+        )
       );
     } finally {
       setLoading(false);
@@ -193,6 +196,7 @@ export function ImportSkillsFromGitHubModalView({
   onConfigureSharing,
 }: ImportSkillsFromGitHubModalViewProps) {
   const t = useTranslations("skills.modals");
+  const { refusal } = useSkillLimitCopy();
   const policyCopy = useTranslations("skills.installationPolicy");
   const importablePaths = useMemo(
     () =>
@@ -390,7 +394,9 @@ export function ImportSkillsFromGitHubModalView({
                         >
                           <Text font="main-ui-action">{item.name}</Text>
                           <Text as="p" font="secondary-body" color="text-03">
-                            {item.reason}
+                            {"skill_limit" in item && item.skill_limit
+                              ? refusal(item.skill_limit)
+                              : item.reason}
                           </Text>
                         </Section>
                       ))}

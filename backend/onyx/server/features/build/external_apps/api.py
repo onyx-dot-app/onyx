@@ -73,6 +73,7 @@ from onyx.server.features.build.external_apps.models import (
     UpsertUserCredentialsRequest,
 )
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
+from onyx.skills.limits import write_limit_notice
 from onyx.skills.push import push_skill_to_affected_sandboxes, push_skills_for_users
 from onyx.utils.encryption import mask_string
 from shared_configs.configs import MULTI_TENANT
@@ -493,7 +494,9 @@ def upsert_user_credentials(
     # Authenticating opens this user's per-user gate; refresh their sandboxes now.
     push_skills_for_users({user.id}, db_session)
     db_session.commit()
-    return ExternalAppConnectResponse(skills_left_off_for_limit=left_off)
+    return ExternalAppConnectResponse(
+        skills_left_off_for_limit=write_limit_notice(left_off)
+    )
 
 
 @router.delete("/apps/{external_app_id}/credentials")

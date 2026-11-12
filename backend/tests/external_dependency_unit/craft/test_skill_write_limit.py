@@ -158,7 +158,9 @@ def test_app_connect_leaves_the_skill_off(db_session: Session) -> None:
     left_off = connect_external_app_within_skill_limit__no_commit(
         app.id, user, connect, db_session
     )
-    assert left_off == [skill.id]
+    assert [(o.plugin_id, o.name, o.bytes, o.files, o.reason) for o in left_off] == [
+        (skill.id, skill.name, 2 * _MB, 1, "bytes")
+    ]
     preference = db_session.get(UserPluginPreference, (user.id, skill.id))
     assert preference is not None and preference.enabled is False
 

@@ -33,6 +33,7 @@ test("member OAuth reports to the waiting dialog, then lands on the completion p
   jest.mocked(completeExternalAppOAuthCallback).mockResolvedValue({
     success: true,
     external_app_id: 7,
+    skills_left_off_for_limit: null,
     return_path:
       "/app/plugins/oauth/complete?pluginKind=external-app&pluginId=7&attempt=nonce",
   });
@@ -51,9 +52,11 @@ test("member OAuth reports to the waiting dialog, then lands on the completion p
 });
 
 test("legacy SetupCard OAuth retains its original popup message and close", async () => {
-  jest
-    .mocked(completeExternalAppOAuthCallback)
-    .mockResolvedValue({ success: true, external_app_id: 7 });
+  jest.mocked(completeExternalAppOAuthCallback).mockResolvedValue({
+    success: true,
+    external_app_id: 7,
+    skills_left_off_for_limit: null,
+  });
   render(<ExternalAppsOAuthCallbackPage />);
   await waitFor(() =>
     expect(window.opener.postMessage).toHaveBeenCalledWith(
@@ -69,6 +72,7 @@ test("rejects an external return URL without signalling success", async () => {
   jest.mocked(completeExternalAppOAuthCallback).mockResolvedValue({
     success: true,
     external_app_id: 7,
+    skills_left_off_for_limit: null,
     return_path: "https://example.com/app/plugins/oauth/complete",
   });
   render(<ExternalAppsOAuthCallbackPage />);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useSyncExternalStore } from "react";
+import { useEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
 import type { Route } from "next";
 import { SvgRefreshCw } from "@opal/icons";
 import { useNavigation } from "@opal/navigation/hooks";
@@ -36,6 +36,8 @@ export interface ToastOptions {
   /** Shows the close button. @default true */
   dismissible?: boolean;
   action?: ToastAction;
+  /** Extra content below the description, such as a list or buttons. */
+  content?: ReactNode;
 }
 
 export interface Toast extends ToastOptions {

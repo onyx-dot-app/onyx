@@ -63,6 +63,7 @@ import AgentSwitcher from "@/app/craft/components/AgentSwitcher";
 import SubagentView from "@/app/craft/components/SubagentView";
 import SandboxStatusIndicator from "@/app/craft/components/SandboxStatusIndicator";
 import SkillsStaleNotice from "@/app/craft/components/SkillsStaleNotice";
+import SkillRuntimeNotice from "@/app/craft/components/SkillRuntimeNotice";
 import { SvgSidebar, SvgChevronDown, SvgStopCircle } from "@opal/icons";
 import { Button, MessageCard } from "@opal/components";
 import { useBuildContext } from "@/app/craft/contexts/BuildContext";
@@ -780,6 +781,7 @@ function ChatPanelContent({
                         />
                       </div>
                     )}
+                    {sessionId && <SkillRuntimeNotice sessionId={sessionId} />}
                     {sessionId && session?.skillsStale && (
                       <div className="pb-2">
                         <SkillsStaleNotice

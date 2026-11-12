@@ -29,6 +29,7 @@ import {
   useGroupPolicyOptions,
   type PolicyChoice,
 } from "@/lib/skills/installationPolicy";
+import { useSkillLimitCopy } from "@/lib/skills/limits";
 
 interface GroupPluginsTabProps {
   groupId: number;
@@ -38,6 +39,7 @@ interface GroupPluginsTabProps {
  * saves on its own; the group form's Save never sends them. */
 export default function GroupPluginsTab({ groupId }: GroupPluginsTabProps) {
   const t = useTranslations("admin.groups.plugins");
+  const { errorMessage } = useSkillLimitCopy();
   const { data, error, refresh, setPolicy } = useUserGroupPlugins(groupId);
   const addModal = useCreateModal();
 
@@ -50,7 +52,11 @@ export default function GroupPluginsTab({ groupId }: GroupPluginsTabProps) {
       toast.success(t("toasts.saved"));
       return true;
     } catch (saveError) {
-      toast.error(fetchErrorDetail(saveError) ?? t("toasts.saveFailed"));
+      toast.error(
+        errorMessage(saveError) ??
+          fetchErrorDetail(saveError) ??
+          t("toasts.saveFailed")
+      );
       return false;
     }
   }

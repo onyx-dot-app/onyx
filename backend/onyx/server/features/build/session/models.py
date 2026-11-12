@@ -18,6 +18,7 @@ from onyx.server.features.build.db.build_session import session_runtime_stale
 from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     MANIFEST_MAX_ENTRIES,
 )
+from onyx.skills.limits import SkillLimitNotice, runtime_limit_notice
 
 if TYPE_CHECKING:
     from onyx.db.models import Artifact, BuildSession, Sandbox
@@ -170,6 +171,8 @@ class SessionResponse(BaseModel):
     agent_provider: str | None
     agent_model: str | None
     skills_stale: bool
+    # Plugins the run-time skill limit left out of the user's sandbox.
+    skill_omissions: SkillLimitNotice | None
 
     @classmethod
     def from_model(
@@ -197,6 +200,11 @@ class SessionResponse(BaseModel):
             agent_provider=session.agent_provider,
             agent_model=session.agent_model,
             skills_stale=session_runtime_stale(session, sandbox),
+            skill_omissions=(
+                runtime_limit_notice(list(sandbox.skill_omissions))
+                if sandbox is not None
+                else None
+            ),
         )
 
 

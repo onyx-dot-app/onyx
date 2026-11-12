@@ -53,6 +53,7 @@ import {
   memberPluginName,
   type MemberPlugin,
 } from "@/lib/plugins/member";
+import { useSkillLimitCopy } from "@/lib/skills/limits";
 
 interface MemberPluginDetailModalProps {
   plugin: MemberPlugin;
@@ -224,6 +225,7 @@ export function MemberPluginDetailContent({
   onDisconnected,
 }: MemberPluginDetailModalProps) {
   const t = useTranslations("actions.memberPlugins");
+  const { describeError } = useSkillLimitCopy();
   const navigation = useNavigation();
   const craftEnabled = useSettings().onyx_craft_enabled === true;
   const actions = useTranslations("actions");
@@ -442,9 +444,7 @@ export function MemberPluginDetailContent({
       }
       onClose();
     } catch (error) {
-      setSaveError(
-        error instanceof Error ? error.message : t("defaults.saveFailed")
-      );
+      setSaveError(describeError(error, t("defaults.saveFailed")));
     } finally {
       setSaving(false);
     }

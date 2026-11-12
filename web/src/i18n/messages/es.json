@@ -15901,6 +15901,13 @@
       "resetDefaults": "Restablecer todos los valores predeterminados",
       "resetAll": "Restablecer todo a los valores del espacio de trabajo",
       "workspaceDisabledTooltip": "Un administrador desactivó esta acción para el espacio de trabajo."
+    },
+    "skillRuntimeNotice": {
+      "title": "{count, plural, one {# skill no se cargó} other {# skills no se cargaron}}",
+      "description": "Tus skills deben caber en {maxSize} y {maxFiles, number} archivos. Estos skills no cupieron, así que esta sesión no puede usarlos. Desactiva los skills que no necesites para liberar espacio.",
+      "listLabel": "Skills que no se cargaron",
+      "manage": "Gestionar skills",
+      "dismiss": "Descartar"
     }
   },
   "knowledge": {
@@ -17782,6 +17789,33 @@
       },
       "card": "Grupos: {groups}",
       "entry": "{name}: {policy}"
+    },
+    "limit": {
+      "omission": {
+        "size": "{name}: {size}",
+        "withFiles": "{name}: {size}, {files, plural, one {# archivo} other {# archivos}}"
+      },
+      "refused": {
+        "you": "Este cambio te lleva por encima del límite de skills. Usarías {size} de {maxSize} y {files, number} de {maxFiles, number} archivos. Desactiva los skills que no uses y vuelve a intentarlo.",
+        "youAndUsers": "Este cambio te lleva a ti y a {others, plural, one {# usuario más} other {# usuarios más}} por encima del límite de skills. Usarías {size} de {maxSize} y {files, number} de {maxFiles, number} archivos. Desactiva los skills que no uses o elige una configuración más limitada.",
+        "users": "Este cambio lleva a {count, plural, one {# usuario} other {# usuarios}} por encima del límite de skills de {maxSize} o {maxFiles, number} archivos. Elige una configuración más limitada o pídeles que desactiven skills."
+      },
+      "leftOff": {
+        "title": "{count, plural, one {# skill sigue desactivado} other {# skills siguen desactivados}}",
+        "description": "La app está conectada. Estos skills te llevarían por encima del límite de skills de {maxSize}, así que siguen desactivados. Desactiva otros skills para liberar espacio y luego activa estos.",
+        "listLabel": "Skills que siguen desactivados"
+      },
+      "banner": {
+        "title": "{count, plural, one {# usuario supera el límite de skills} other {# usuarios superan el límite de skills}}",
+        "description": "Un usuario con más de {maxSize} o {maxFiles, number} archivos de skills no puede activar más. Cada sesión carga skills hasta {runtimeSize} y omite el resto. Cambia la configuración de los grupos o pide a los usuarios que desactiven skills.",
+        "tableLabel": "Usuarios por encima del límite de skills",
+        "columns": {
+          "user": "Usuario",
+          "size": "Tamaño de Skills",
+          "files": "Archivos",
+          "notLoaded": "No Cargados"
+        }
+      }
     }
   },
   "opensearchHealth": {

@@ -80,6 +80,7 @@ import { markdown } from "@opal/utils";
 import { SkillPreviewDetails } from "@/sections/modals/SkillPreviewModal";
 import { usePublishAction } from "@/lib/skills/hooks";
 import SkillVersionsTab from "@/sections/modals/skills/SkillVersionsTab";
+import { useSkillLimitCopy } from "@/lib/skills/limits";
 
 type ShareModalView = "share" | "transfer";
 
@@ -130,6 +131,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
   const skill = props.mode === "create" ? props.draft : loadedSkill;
   const t = useTranslations("skills.modals");
   const skillCopy = useTranslations("skills");
+  const { describeError } = useSkillLimitCopy();
   const permissionOptions = useSharePermissionOptions();
   const scopeOptions = useShareScopeOptions();
   const { data: shareableUsersData } = useShareableUsers({
@@ -434,9 +436,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
       closeModal();
     } catch (err) {
       console.error("Failed to update skill sharing", err);
-      toast.error(
-        err instanceof Error ? err.message : t("share.saveErrorToast.message")
-      );
+      toast.error(describeError(err, t("share.saveErrorToast.message")));
     } finally {
       setSaving(false);
     }

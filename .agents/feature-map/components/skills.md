@@ -68,6 +68,22 @@
   Custom cards show Personal, Shared, or Organization access from
   `public_permission` and the server's `is_personal`; share-detail arrays can
   be hidden, so empty arrays do not mean a skill is personal.
+- **Skill limit notices.** A refused write (413 `SKILL_LIMIT_EXCEEDED`) shows
+  its error where the user made the change: a user sees their size and file
+  count after the change, an admin the number of users who would go over. One
+  formatter, `web/src/lib/skills/limits.ts:useSkillLimitCopy`, reads
+  `skill_limit` from a skills API error (`responseBody`) or a `FetchError`;
+  per-item failures (bulk, batch upload, GitHub import) carry their own
+  `skill_limit`. At session start, `SkillRuntimeNotice`
+  (`web/src/app/craft/components/`) raises one error toast when
+  `SessionResponse.skill_omissions` lists skills the run-time rule left out:
+  count, 900 MB, each skill with its size, **Manage skills** and **Dismiss**.
+  It waits while the session is stale and shows once for each omission set
+  (`skillOmissionsKey`). App connect shows the skills it left off
+  (`web/src/sections/skills/SkillOmissionList.tsx:useSkillsLeftOffToast`),
+  also through an OAuth completion message. The admin Skills page shows
+  `SkillLimitUsersBanner` (`web/src/sections/skills/`) when
+  `GET /skills/users-over-limit` lists users.
 - **Skill dialog.** Owners and editors open custom cards in a single
   Details/Sharing dialog. Share actions open its Sharing tab directly. Draft
   sharing edits survive tab switches. Other recipients and built-in skills
@@ -632,13 +648,16 @@ The library preview of an external-app skill calls the same renderer
     (`lock_skill_limit`, wait logged), measures them again and reads full
     totals only for users whose share grew. Refuse only under -> over (413
     `SKILL_LIMIT_EXCEEDED`, body `skill_limit`: `users_over`, `usage` for the
-    acting user, `max_bytes`, `max_files`); already over is a logged warning;
+    acting user, `max_bytes`, `max_files`; a per-item failure in bulk,
+    batch upload or GitHub import carries the same `skill_limit` through
+    `db/skill_limit.py:skill_limit_refusal`); already over is a logged warning;
     inactive users and bot/external accounts do not count. The lock is taken
     after the write's row locks and nothing waits for a row lock while it is
     held. A nested check joins the session's outer one. App connect
     (`db/skill.py:connect_external_app_within_skill_limit__no_commit`)
     connects and saves an off choice for app skills that do not fit; the
-    response lists them in `skills_left_off_for_limit`. Group membership
+    response lists them in `skills_left_off_for_limit` (`SkillLimitNotice`:
+    each `SkillOmission` with its write-limit size and reason, and the limits). Group membership
     changes are never checked: the run-time rule applies.
 26. `runtime-skill-limit` **A sandbox gets every plugin that fits in 900 MB
     and 10,000 files.** `skills/push.py:build_user_skills_payload` applies it,
@@ -655,7 +674,9 @@ The library preview of an external-app skill calls the same renderer
     `plugin.id`. Whole plugins only, after the name order. Left-out plugins
     (`SkillOmission`: id, name, charged bytes, files, reason) go to
     `sandbox.skill_omissions` together with `skills_hash`, so they describe
-    the content on that disk. `GET /skills/users-over-limit` (`MANAGE_PLUGINS`,
+    the content on that disk. `SessionResponse.skill_omissions`
+    (`SkillLimitNotice` with the run-time limits, or null) carries them to the
+    session UI on every session read. `GET /skills/users-over-limit` (`MANAGE_PLUGINS`,
     `db/skill_limit.py:users_past_write_limit`) lists active users past the
     write limit with their size, files and the count of plugins that do not
     load (sizes only, no bundle opened). The transport cap (900 MiB of sent
@@ -796,6 +817,13 @@ The library preview of an external-app skill calls the same renderer
   the write limit through the API, and
   `backend/tests/external_dependency_unit/craft/test_skill_write_limit.py`
   the warning, app connect, backfilled sizes and the lock wait.
+  `backend/tests/external_dependency_unit/craft/test_session_lifecycle.py`
+  (`TestSessionSkillOmissions`) covers `skill_omissions` on the session read.
+  Jest: `web/src/app/craft/components/SkillRuntimeNotice.test.tsx`,
+  `web/src/lib/skills/limits.test.tsx`,
+  `web/src/sections/skills/SkillLimitUsersBanner.test.tsx`,
+  `web/src/sections/skills/SkillOmissionList.test.tsx` and the refused toggle
+  and bulk cases in `web/src/views/SkillsPage.test.tsx`.
   `backend/tests/integration/tests/craft/k8s/` covers a real
   push.
 - By hand: edit a skill while a Craft session runs. The stale notice must

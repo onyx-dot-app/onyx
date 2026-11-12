@@ -15901,6 +15901,13 @@
       "resetDefaults": "すべて既定値に戻す",
       "resetAll": "すべてワークスペースの既定値に戻す",
       "workspaceDisabledTooltip": "管理者がワークスペースでこのアクションを無効にしました。"
+    },
+    "skillRuntimeNotice": {
+      "title": "{count, plural, other {# 件のスキルを読み込めませんでした}}",
+      "description": "スキルは {maxSize} かつ {maxFiles, number} ファイル以内に収める必要があります。これらのスキルは収まらなかったため、このセッションでは使用できません。不要なスキルをオフにして空きを作ってください。",
+      "listLabel": "読み込めなかったスキル",
+      "manage": "スキルを管理",
+      "dismiss": "閉じる"
     }
   },
   "knowledge": {
@@ -17782,6 +17789,33 @@
       },
       "card": "グループ: {groups}",
       "entry": "{name}: {policy}"
+    },
+    "limit": {
+      "omission": {
+        "size": "{name}: {size}",
+        "withFiles": "{name}: {size}、{files, plural, other {# ファイル}}"
+      },
+      "refused": {
+        "you": "この変更によりスキルの上限を超えます。使用量は {maxSize} 中 {size}、{maxFiles, number} ファイル中 {files, number} ファイルになります。使っていないスキルをオフにしてから、もう一度お試しください。",
+        "youAndUsers": "この変更により、あなたと他の {others, plural, other {# 人のユーザー}}がスキルの上限を超えます。使用量は {maxSize} 中 {size}、{maxFiles, number} ファイル中 {files, number} ファイルになります。使っていないスキルをオフにするか、より限定的な設定を選んでください。",
+        "users": "この変更により {count, plural, other {# 人のユーザー}}が {maxSize} または {maxFiles, number} ファイルのスキル上限を超えます。より限定的な設定を選ぶか、スキルをオフにするよう依頼してください。"
+      },
+      "leftOff": {
+        "title": "{count, plural, other {# 件のスキルはオフのままです}}",
+        "description": "アプリは接続されました。これらのスキルをオンにすると {maxSize} のスキル上限を超えるため、オフのままです。ほかのスキルをオフにして空きを作ってから、これらをオンにしてください。",
+        "listLabel": "オフのままのスキル"
+      },
+      "banner": {
+        "title": "{count, plural, other {# 人のユーザーがスキルの上限を超えています}}",
+        "description": "スキルが {maxSize} または {maxFiles, number} ファイルを超えているユーザーは、これ以上スキルをオンにできません。各セッションは {runtimeSize} までのスキルを読み込み、残りは除外します。グループ設定を変更するか、ユーザーにスキルをオフにするよう依頼してください。",
+        "tableLabel": "スキルの上限を超えているユーザー",
+        "columns": {
+          "user": "ユーザー",
+          "size": "スキルのサイズ",
+          "files": "ファイル",
+          "notLoaded": "未読み込み"
+        }
+      }
     }
   },
   "opensearchHealth": {

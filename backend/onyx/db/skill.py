@@ -137,8 +137,10 @@ from onyx.db.utils import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.skills import limits
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.ingest import IngestedBundle
+from onyx.skills.limits import SkillOmission
 from onyx.skills.models import PluginFileEntry
 
 
@@ -1027,11 +1029,11 @@ def connect_external_app_within_skill_limit__no_commit(
     user: User,
     connect: Callable[[], object],
     db_session: Session,
-) -> list[UUID]:
+) -> list[SkillOmission]:
     """Run ``connect``, which stores the user's app credentials, and keep it.
     When the app's skills would put the user past the skill limit, leave off
     the ones that do not fit, in name order, with a saved "off" choice, and
-    return their ids. Turning one on later runs the limit check again. A
+    return them with their usage and the limit they would break. Turning one on later runs the limit check again. A
     Required skill cannot be left off; the run-time rule applies to it.
 
     Lock order, shared with app edits and toggles: the app row (the
@@ -1068,15 +1070,29 @@ def connect_external_app_within_skill_limit__no_commit(
     for usage in app_usage.values():
         kept -= usage
     left_off: list[UUID] = []
+    omissions: list[SkillOmission] = []
     for plugin_id in sorted(
         app_usage, key=lambda plugin_id: (states[plugin_id].skill_names, plugin_id)
     ):
         usage = app_usage[plugin_id]
-        required = (
-            states[plugin_id].installation_policy == PluginInstallationPolicy.REQUIRED
-        )
-        if (kept + usage).is_over_write_limit and not required:
+        state = states[plugin_id]
+        required = state.installation_policy == PluginInstallationPolicy.REQUIRED
+        total = kept + usage
+        if total.is_over_write_limit and not required:
             left_off.append(plugin_id)
+            omissions.append(
+                SkillOmission(
+                    plugin_id=plugin_id,
+                    name=state.skill_names[0] if state.skill_names else "",
+                    bytes=usage.bytes,
+                    files=usage.files,
+                    reason=(
+                        "bytes"
+                        if total.bytes > limits.SKILL_WRITE_MAX_BYTES
+                        else "files"
+                    ),
+                )
+            )
         else:
             kept += usage
     if left_off:
@@ -1085,7 +1101,7 @@ def connect_external_app_within_skill_limit__no_commit(
             select(Skill).where(Skill.id.in_(left_off)).order_by(Skill.id)
         ):
             _write_legacy_choice__no_commit(user.id, skill, False, db_session)
-    return left_off
+    return omissions
 
 
 def _lock_custom_skill_plugins(
@@ -1440,8 +1456,8 @@ def share_skill__no_commit(
 @dataclass(frozen=True)
 class SkillBulkShareResult:
     succeeded: list[UUID]
-    # Skill id and the reason, in skill id order.
-    failed: list[tuple[UUID, str]]
+    # Skill id and the refusal, in skill id order.
+    failed: list[tuple[UUID, OnyxError]]
     affected_user_ids: set[UUID]
 
 
@@ -1455,7 +1471,7 @@ def bulk_share_skills__no_commit(
     are add-only. A skill the user cannot edit, or whose change is refused or
     fails, is reported and changes nothing; the other skills still change. A
     refusal for the whole set fails every skill."""
-    failed: dict[UUID, str] = {}
+    failed: dict[UUID, OnyxError] = {}
     candidates: list[UUID] = []
     for skill_id in sorted(set(skill_ids)):
         skill = fetch_skill(
@@ -1466,12 +1482,12 @@ def bulk_share_skills__no_commit(
             lock_for_update=True,
         )
         if skill is None:
-            failed[skill_id] = "Skill not found"
+            failed[skill_id] = OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
             continue
         try:
             _check_skill_access_change(skill, change, user, db_session)
         except OnyxError as exc:
-            failed[skill_id] = exc.detail
+            failed[skill_id] = exc
             continue
         candidates.append(skill_id)
 
@@ -1486,11 +1502,9 @@ def bulk_share_skills__no_commit(
                     db_session,
                 )
         except OnyxError as exc:
-            failed |= dict.fromkeys(candidates, exc.detail)
+            failed |= dict.fromkeys(candidates, exc)
         else:
-            failed |= {
-                skill_id: exc.detail for skill_id, exc in result.failures.items()
-            }
+            failed |= result.failures
             affected = result.affected_user_ids
     return SkillBulkShareResult(
         succeeded=[skill_id for skill_id in candidates if skill_id not in failed],

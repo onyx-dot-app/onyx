@@ -75,17 +75,60 @@ def runtime_keep_key(
 
 
 class SkillOmission(BaseModel):
-    """A plugin the run-time limit left out of a sandbox."""
+    """A plugin that a skill limit left out: out of a sandbox (run-time
+    limit) or turned off at app connect (write limit)."""
 
     model_config = ConfigDict(frozen=True)
 
     plugin_id: UUID
     name: str
-    # Charged size and file count of the version the user runs.
+    # Size and file count of the version the user runs (charged size for the
+    # run-time limit).
     bytes: int
     files: int
-    # The run-time limit it would break.
+    # The limit it would break.
     reason: Literal["bytes", "files"]
+
+
+class SkillLimitNotice(BaseModel):
+    """The plugins a skill limit left out, and that limit."""
+
+    skills: list[SkillOmission]
+    max_bytes: int
+    max_files: int
+
+
+class SkillUsageModel(BaseModel):
+    bytes: int
+    files: int
+
+
+class SkillLimitRefusal(BaseModel):
+    """Why a write was refused: the number of users it puts past the write
+    limits, and the acting user's usage after it when they are one of them."""
+
+    users_over: int
+    usage: SkillUsageModel | None
+    max_bytes: int
+    max_files: int
+
+
+def write_limit_notice(skills: list[SkillOmission]) -> SkillLimitNotice | None:
+    if not skills:
+        return None
+    return SkillLimitNotice(
+        skills=skills, max_bytes=SKILL_WRITE_MAX_BYTES, max_files=SKILL_WRITE_MAX_FILES
+    )
+
+
+def runtime_limit_notice(skills: list[SkillOmission]) -> SkillLimitNotice | None:
+    if not skills:
+        return None
+    return SkillLimitNotice(
+        skills=skills,
+        max_bytes=SKILL_RUNTIME_MAX_BYTES,
+        max_files=SKILL_RUNTIME_MAX_FILES,
+    )
 
 
 def runtime_omission_reason(

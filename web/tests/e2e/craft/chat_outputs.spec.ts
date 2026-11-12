@@ -199,6 +199,7 @@ for (const completionTransport of ["stream", "recovery"] as const) {
       agent_provider: null,
       agent_model: null,
       skills_stale: false,
+      skill_omissions: null,
       session_loaded_in_sandbox: true,
     };
     const messages: ApiMessageResponse[] = (["user", "assistant"] as const).map(

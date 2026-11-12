@@ -59,6 +59,7 @@ import ImportSkillsFromGitHubModal from "@/sections/modals/skills/ImportSkillsFr
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 import SkillPreviewModal from "@/sections/modals/SkillPreviewModal";
 import SkillReviewRequests from "@/sections/skills/SkillReviewRequests";
+import SkillLimitUsersBanner from "@/sections/skills/SkillLimitUsersBanner";
 import type { BuiltinSkill, CustomSkill } from "@/lib/skills/types";
 import { stageSkillCreationDraft } from "@/lib/skills/creationDraft";
 import {
@@ -69,6 +70,7 @@ import {
   setSkillEnabled,
 } from "@/lib/skills/api";
 import { useSettings } from "@/lib/settings/hooks";
+import { useSkillLimitCopy } from "@/lib/skills/limits";
 
 interface SkillsPageProps {
   admin?: boolean;
@@ -77,6 +79,7 @@ interface SkillsPageProps {
 export default function SkillsPage({ admin = false }: SkillsPageProps) {
   const t = useTranslations("skills");
   const bulkCopy = useTranslations("skills.bulk");
+  const { describeError, refusal } = useSkillLimitCopy();
   const { isAdmin } = useUser();
   const { isGlobalHolder: canManageOrgSkills } = usePermissionAuthority(
     Permission.MANAGE_PLUGINS
@@ -272,14 +275,13 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         return;
       }
       toast.error(
-        error instanceof Error
-          ? error.message
-          : t(
-              enabled
-                ? "page.toasts.enableFailed"
-                : "page.toasts.disableFailed",
-              { name: item.name }
-            )
+        describeError(
+          error,
+          t(
+            enabled ? "page.toasts.enableFailed" : "page.toasts.disableFailed",
+            { name: item.name }
+          )
+        )
       );
     } finally {
       setOptimisticEnabledById((current) => {
@@ -473,7 +475,9 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
           name:
             targets.find((item) => item.id === failure.skill_id)?.name ??
             failure.skill_id,
-          detail: failure.detail,
+          detail: failure.skillLimit
+            ? refusal(failure.skillLimit)
+            : failure.detail,
         }))
       );
       if (result.succeeded.length)
@@ -485,7 +489,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         mutate(SWR_KEYS.buildExternalAppsAdmin),
       ]);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : bulkCopy("failed"));
+      toast.error(describeError(error, bulkCopy("failed")));
     } finally {
       setBulkBusy(false);
     }
@@ -619,6 +623,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
       </SettingsLayouts.Header>
 
       <SettingsLayouts.Body>
+        {admin && canManageOrgSkills && <SkillLimitUsersBanner />}
         {canManageOrgSkills && (admin || !isAdmin) && (
           <SkillReviewRequests onReviewed={() => void revalidateSkills()} />
         )}

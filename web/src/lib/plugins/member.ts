@@ -38,6 +38,7 @@ import {
   upsertUserCredentials,
 } from "@/app/craft/services/externalAppsService";
 import { useSettings } from "@/lib/settings/hooks";
+import type { SkillLimitNotice } from "@/lib/skills/limits";
 
 export { MemberPluginConnectionError } from "@/lib/plugins/memberConnection";
 
@@ -412,13 +413,14 @@ export async function saveMemberOpenAPIPreferences(
   await refreshMemberPluginCaches(mutateCache);
 }
 
+/** Connects the plugin. Returns the app skills left off for the skill limit. */
 export async function connectMemberPlugin(
   plugin: MemberPlugin,
   credentialValues?: Record<string, string>,
   options: MemberPluginConnectOptions = {}
-): Promise<void> {
+): Promise<SkillLimitNotice | null> {
   const connection = plugin.connection;
-  if (connection.kind === "connected") return;
+  if (connection.kind === "connected") return null;
   if (connection.kind !== "oauth" && connection.kind !== "credentials") {
     throw new MemberPluginConnectionError("unconfigured");
   }
@@ -427,13 +429,17 @@ export async function connectMemberPlugin(
       throw new MemberPluginConnectionError("credentials_required");
     }
   }
+  let skillsLeftOff: SkillLimitNotice | null = null;
   const saveCredentials = async () => {
     if (
       plugin.kind === "external-app" &&
       credentialValues &&
       connection.kind === "credentials"
     ) {
-      await upsertUserCredentials(plugin.app.id, credentialValues);
+      skillsLeftOff = await upsertUserCredentials(
+        plugin.app.id,
+        credentialValues
+      );
     }
     if (
       plugin.kind === "mcp" &&
@@ -449,7 +455,7 @@ export async function connectMemberPlugin(
   };
   try {
     if (connection.kind === "oauth" || connection.thenOAuth) {
-      await runMemberPluginOAuth(
+      const oauthLeftOff = await runMemberPluginOAuth(
         memberPluginReference(plugin),
         async (returnPath) => {
           await saveCredentials();
@@ -483,6 +489,7 @@ export async function connectMemberPlugin(
         },
         options
       );
+      skillsLeftOff = oauthLeftOff ?? skillsLeftOff;
     } else {
       if (options.signal?.aborted)
         throw new MemberPluginConnectionError("cancelled");
@@ -491,6 +498,7 @@ export async function connectMemberPlugin(
     if (options.signal?.aborted)
       throw new MemberPluginConnectionError("cancelled");
     await verifyMemberPluginConnection(memberPluginReference(plugin), options);
+    return skillsLeftOff;
   } finally {
     await refreshMemberPluginCaches();
   }

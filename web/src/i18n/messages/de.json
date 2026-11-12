@@ -15901,6 +15901,13 @@
       "resetDefaults": "Alle auf Standardwerte zurücksetzen",
       "resetAll": "Alle auf Workspace-Standardwerte zurücksetzen",
       "workspaceDisabledTooltip": "Ein Admin hat diese Aktion für den Workspace deaktiviert."
+    },
+    "skillRuntimeNotice": {
+      "title": "{count, plural, one {# Skill wurde nicht geladen} other {# Skills wurden nicht geladen}}",
+      "description": "Ihre Skills müssen in {maxSize} und {maxFiles, number} Dateien passen. Diese Skills passten nicht, daher kann diese Sitzung sie nicht verwenden. Deaktivieren Sie Skills, die Sie nicht brauchen, um Platz zu schaffen.",
+      "listLabel": "Skills, die nicht geladen wurden",
+      "manage": "Skills verwalten",
+      "dismiss": "Schließen"
     }
   },
   "knowledge": {
@@ -17782,6 +17789,33 @@
       },
       "card": "Gruppen: {groups}",
       "entry": "{name}: {policy}"
+    },
+    "limit": {
+      "omission": {
+        "size": "{name}: {size}",
+        "withFiles": "{name}: {size}, {files, plural, one {# Datei} other {# Dateien}}"
+      },
+      "refused": {
+        "you": "Diese Änderung bringt Sie über das Skill-Limit. Sie würden {size} von {maxSize} und {files, number} von {maxFiles, number} Dateien belegen. Deaktivieren Sie Skills, die Sie nicht verwenden, und versuchen Sie es erneut.",
+        "youAndUsers": "Diese Änderung bringt Sie und {others, plural, one {# weiteren Benutzer} other {# weitere Benutzer}} über das Skill-Limit. Sie würden {size} von {maxSize} und {files, number} von {maxFiles, number} Dateien belegen. Deaktivieren Sie Skills, die Sie nicht verwenden, oder wählen Sie eine engere Einstellung.",
+        "users": "Diese Änderung bringt {count, plural, one {# Benutzer} other {# Benutzer}} über das Skill-Limit von {maxSize} oder {maxFiles, number} Dateien. Wählen Sie eine engere Einstellung oder bitten Sie sie, Skills zu deaktivieren."
+      },
+      "leftOff": {
+        "title": "{count, plural, one {# Skill bleibt deaktiviert} other {# Skills bleiben deaktiviert}}",
+        "description": "Die App ist verbunden. Diese Skills würden Sie über das Skill-Limit von {maxSize} bringen, daher bleiben sie deaktiviert. Deaktivieren Sie andere Skills, um Platz zu schaffen, und aktivieren Sie dann diese.",
+        "listLabel": "Skills, die deaktiviert bleiben"
+      },
+      "banner": {
+        "title": "{count, plural, one {# Benutzer ist über dem Skill-Limit} other {# Benutzer sind über dem Skill-Limit}}",
+        "description": "Ein Benutzer mit mehr als {maxSize} oder {maxFiles, number} Dateien an Skills kann keine weiteren aktivieren. Jede Sitzung lädt Skills bis {runtimeSize} und lässt den Rest weg. Ändern Sie Gruppeneinstellungen oder bitten Sie Benutzer, Skills zu deaktivieren.",
+        "tableLabel": "Benutzer über dem Skill-Limit",
+        "columns": {
+          "user": "Benutzer",
+          "size": "Skill-Größe",
+          "files": "Dateien",
+          "notLoaded": "Nicht Geladen"
+        }
+      }
     }
   },
   "opensearchHealth": {

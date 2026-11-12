@@ -39,6 +39,7 @@ from onyx.server.features.build.external_apps.models import (
     OAuthCallbackResponse,
     OAuthStartResponse,
 )
+from onyx.skills.limits import write_limit_notice
 from onyx.skills.push import push_skills_for_users
 from onyx.utils.logger import setup_logger
 
@@ -319,5 +320,5 @@ def handle_external_app_oauth_callback(
         success=True,
         external_app_id=app.id,
         return_path=payload.return_path,
-        skills_left_off_for_limit=left_off,
+        skills_left_off_for_limit=write_limit_notice(left_off),
     )

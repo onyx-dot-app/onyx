@@ -18,6 +18,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { reviewSkillVersion } from "@/lib/skills/api";
 import type { SkillReviewRequest } from "@/lib/skills/types";
+import { useSkillLimitCopy } from "@/lib/skills/limits";
 
 interface SkillReviewRequestsProps {
   /** Called after an approve or a deny changes a skill. */
@@ -28,6 +29,7 @@ export default function SkillReviewRequests({
   onReviewed,
 }: SkillReviewRequestsProps) {
   const t = useTranslations("skills.reviewRequests");
+  const { describeError } = useSkillLimitCopy();
   const format = useFormatter();
   const [busyVersionId, setBusyVersionId] = useState<string | null>(null);
   const {
@@ -57,7 +59,7 @@ export default function SkillReviewRequests({
       onReviewed();
     } catch (err) {
       console.error(`Failed to ${decision} skill publish request`, err);
-      toast.error(err instanceof Error ? err.message : t("failedToast"));
+      toast.error(describeError(err, t("failedToast")));
     } finally {
       setBusyVersionId(null);
       await refreshRequests();

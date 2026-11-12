@@ -15901,6 +15901,13 @@
       "resetDefaults": "모두 기본값으로 재설정",
       "resetAll": "모두 워크스페이스 기본값으로 재설정",
       "workspaceDisabledTooltip": "관리자가 워크스페이스에서 이 작업을 비활성화했습니다."
+    },
+    "skillRuntimeNotice": {
+      "title": "{count, plural, other {스킬 #개를 불러오지 못했습니다}}",
+      "description": "스킬은 {maxSize} 및 파일 {maxFiles, number}개 이내여야 합니다. 이 스킬들은 들어가지 않아 이 세션에서 사용할 수 없습니다. 필요 없는 스킬을 끄고 공간을 확보하세요.",
+      "listLabel": "불러오지 못한 스킬",
+      "manage": "스킬 관리",
+      "dismiss": "닫기"
     }
   },
   "knowledge": {
@@ -17782,6 +17789,33 @@
       },
       "card": "그룹: {groups}",
       "entry": "{name}: {policy}"
+    },
+    "limit": {
+      "omission": {
+        "size": "{name}: {size}",
+        "withFiles": "{name}: {size}, {files, plural, other {파일 #개}}"
+      },
+      "refused": {
+        "you": "이 변경으로 스킬 한도를 넘습니다. 사용량이 {maxSize} 중 {size}, 파일 {maxFiles, number}개 중 {files, number}개가 됩니다. 사용하지 않는 스킬을 끈 다음 다시 시도하세요.",
+        "youAndUsers": "이 변경으로 회원님과 다른 {others, plural, other {사용자 #명}}이 스킬 한도를 넘습니다. 사용량이 {maxSize} 중 {size}, 파일 {maxFiles, number}개 중 {files, number}개가 됩니다. 사용하지 않는 스킬을 끄거나 더 좁은 설정을 선택하세요.",
+        "users": "이 변경으로 {count, plural, other {사용자 #명}}이 {maxSize} 또는 파일 {maxFiles, number}개의 스킬 한도를 넘습니다. 더 좁은 설정을 선택하거나 스킬을 끄도록 요청하세요."
+      },
+      "leftOff": {
+        "title": "{count, plural, other {스킬 #개가 꺼진 상태로 남았습니다}}",
+        "description": "앱이 연결되었습니다. 이 스킬들을 켜면 {maxSize} 스킬 한도를 넘으므로 꺼진 상태로 남습니다. 다른 스킬을 꺼서 공간을 확보한 다음 이 스킬들을 켜세요.",
+        "listLabel": "꺼진 상태로 남은 스킬"
+      },
+      "banner": {
+        "title": "{count, plural, other {사용자 #명이 스킬 한도를 넘었습니다}}",
+        "description": "스킬이 {maxSize} 또는 파일 {maxFiles, number}개를 넘은 사용자는 스킬을 더 켤 수 없습니다. 각 세션은 {runtimeSize}까지 스킬을 불러오고 나머지는 제외합니다. 그룹 설정을 변경하거나 사용자에게 스킬을 끄도록 요청하세요.",
+        "tableLabel": "스킬 한도를 넘은 사용자",
+        "columns": {
+          "user": "사용자",
+          "size": "스킬 크기",
+          "files": "파일",
+          "notLoaded": "불러오지 못함"
+        }
+      }
     }
   },
   "opensearchHealth": {

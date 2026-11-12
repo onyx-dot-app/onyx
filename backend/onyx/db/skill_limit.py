@@ -45,7 +45,13 @@ from onyx.skills.built_in import (
     BUILT_IN_SKILL_USAGE,
     BUILT_IN_SKILLS,
 )
-from onyx.skills.limits import SkillUsage, runtime_keep_key, runtime_omission_reason
+from onyx.skills.limits import (
+    SkillLimitRefusal,
+    SkillUsage,
+    SkillUsageModel,
+    runtime_keep_key,
+    runtime_omission_reason,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -115,22 +121,29 @@ def skill_limit_error(
             f"past the skill limit of {max_mb} MB or "
             f"{limits.SKILL_WRITE_MAX_FILES:,} files."
         )
+    refusal = SkillLimitRefusal(
+        users_over=len(users_over),
+        usage=(
+            SkillUsageModel(bytes=actor_usage.bytes, files=actor_usage.files)
+            if actor_usage is not None
+            else None
+        ),
+        max_bytes=limits.SKILL_WRITE_MAX_BYTES,
+        max_files=limits.SKILL_WRITE_MAX_FILES,
+    )
     return OnyxError(
         OnyxErrorCode.SKILL_LIMIT_EXCEEDED,
         detail,
-        extra={
-            "skill_limit": {
-                "users_over": len(users_over),
-                "usage": (
-                    {"bytes": actor_usage.bytes, "files": actor_usage.files}
-                    if actor_usage is not None
-                    else None
-                ),
-                "max_bytes": limits.SKILL_WRITE_MAX_BYTES,
-                "max_files": limits.SKILL_WRITE_MAX_FILES,
-            }
-        },
+        extra={"skill_limit": refusal.model_dump(mode="json")},
     )
+
+
+def skill_limit_refusal(exc: OnyxError) -> SkillLimitRefusal | None:
+    """The ``skill_limit`` of a SKILL_LIMIT_EXCEEDED error, for a response
+    that reports one failed item rather than the whole request."""
+    if exc.error_code is not OnyxErrorCode.SKILL_LIMIT_EXCEEDED or not exc.extra:
+        return None
+    return SkillLimitRefusal.model_validate(exc.extra["skill_limit"])
 
 
 class SkillLimitCheck:
