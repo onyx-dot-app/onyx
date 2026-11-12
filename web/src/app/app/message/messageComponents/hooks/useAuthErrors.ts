@@ -14,9 +14,12 @@ export interface AuthError {
 }
 
 export function useAuthErrors(rawPackets: Packet[]): AuthError[] {
-  // Keyed on the packet array so re-renders between packet batches reuse
-  // the same result identity instead of rescanning.
-  return useMemo(() => computeAuthErrors(rawPackets), [rawPackets]);
+  // Streams append to the same array, so its length keys the result too.
+  const packetCount = rawPackets.length;
+  return useMemo(
+    () => computeAuthErrors(rawPackets.slice(0, packetCount)),
+    [rawPackets, packetCount]
+  );
 }
 
 // A tool call's start and delta packets share one placement.
