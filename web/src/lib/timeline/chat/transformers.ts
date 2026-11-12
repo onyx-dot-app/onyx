@@ -5,7 +5,6 @@ import {
   isGroupEndPacket,
 } from "@/lib/timeline/chat/packetHelpers";
 import { PacketType } from "@/app/app/services/streamingModels";
-import { groupTimelineEntries } from "@/lib/timeline/entries";
 import type {
   TimelineEntry,
   TimelineEntryStatus,
@@ -35,13 +34,12 @@ export interface TransformedStep {
 }
 
 /**
- * Group steps by turn_index for detecting parallel tools
+ * One step of the timeline. The timeline is linear: steps that share a turn
+ * (parallel tool calls) render one after another, not as tabs.
  */
 export interface TurnGroup {
   turnIndex: number;
   steps: TransformedStep[];
-  /** True if multiple steps have the same turn_index (parallel execution) */
-  isParallel: boolean;
 }
 
 /**
@@ -71,50 +69,13 @@ export function transformPacketGroups(
 }
 
 /**
- * Group transformed steps by turn_index to detect parallel tools
- *
- * @example
- * // Input: TransformedStep[]
- * // ┌──────────────────────────────────────────┐
- * // │ [0] key="0-0" turnIndex=0 tabIndex=0     │
- * // │ [1] key="0-1" turnIndex=0 tabIndex=1     │
- * // │ [2] key="1-0" turnIndex=1 tabIndex=0     │
- * // └──────────────────────────────────────────┘
- * //
- * // Step 1: Build Map<turnIndex, TransformedStep[]>
- * // ┌─────────────────────────────────────────────┐
- * // │ turnMap = {                                 │
- * // │   0 → [step(0-0), step(0-1)]               │
- * // │   1 → [step(1-0)]                          │
- * // │ }                                          │
- * // └─────────────────────────────────────────────┘
- * //
- * // Step 2: Sort turn indices & steps by tabIndex
- * //
- * // Step 3: Build TurnGroup[] with isParallel flag
- * // ┌─────────────────────────────────────────────┐
- * // │ Output: TurnGroup[]                         │
- * // ├─────────────────────────────────────────────┤
- * // │ [0] turnIndex=0                             │
- * // │     steps=[0-0, 0-1]                        │
- * // │     isParallel=true  ← 2 steps = parallel   │
- * // │                                             │
- * // │ [1] turnIndex=1                             │
- * // │     steps=[1-0]                             │
- * // │     isParallel=false ← 1 step = sequential  │
- * // └─────────────────────────────────────────────┘
+ * Orders steps by turn, then tab, and gives each step its own group. Parallel
+ * calls keep their arrival order and render as separate steps.
  */
 export function groupStepsByTurn(steps: TransformedStep[]): TurnGroup[] {
-  const ordered = [...steps].sort(
-    (a, b) => a.turnIndex - b.turnIndex || a.tabIndex - b.tabIndex
-  );
-  return groupTimelineEntries(ordered.map(toChatTimelineEntry)).map(
-    (group) => ({
-      turnIndex: group.entries[0]?.payload.turnIndex ?? 0,
-      steps: group.entries.map((entry) => entry.payload),
-      isParallel: group.isParallel,
-    })
-  );
+  return [...steps]
+    .sort((a, b) => a.turnIndex - b.turnIndex || a.tabIndex - b.tabIndex)
+    .map((step) => ({ turnIndex: step.turnIndex, steps: [step] }));
 }
 
 function chatStepStatus(step: TransformedStep): TimelineEntryStatus {
@@ -124,14 +85,14 @@ function chatStepStatus(step: TransformedStep): TimelineEntryStatus {
   return step.packets.some(isGroupEndPacket) ? "done" : "streaming";
 }
 
-/** A chat step as a timeline entry; parallel tabs share their section's group. */
+/** A chat step as a timeline entry. */
 export function toChatTimelineEntry(
   step: TransformedStep
 ): TimelineEntry<TransformedStep> {
   return {
     id: step.key,
     status: chatStepStatus(step),
-    groupId: String(step.turnIndex),
+    groupId: null,
     payload: step,
   };
 }
@@ -139,10 +100,11 @@ export function toChatTimelineEntry(
 export function toChatTimelineGroup(
   turnGroup: TurnGroup
 ): TimelineGroup<TransformedStep> {
+  const entries = turnGroup.steps.map(toChatTimelineEntry);
   return {
-    id: String(turnGroup.turnIndex),
-    entries: turnGroup.steps.map(toChatTimelineEntry),
-    isParallel: turnGroup.isParallel,
+    id: entries[0]?.id ?? String(turnGroup.turnIndex),
+    entries,
+    isParallel: false,
   };
 }
 

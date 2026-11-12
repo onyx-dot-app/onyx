@@ -346,7 +346,6 @@ export function usePacedTurnGroups(
         result.push({
           turnIndex: turnGroup.turnIndex,
           steps: revealedSteps,
-          isParallel: revealedSteps.length > 1,
         });
       }
     }

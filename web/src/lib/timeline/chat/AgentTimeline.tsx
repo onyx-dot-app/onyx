@@ -20,14 +20,12 @@ import {
 import {
   isResearchAgentPackets,
   isSearchToolPackets,
-  stepSupportsCollapsedStreaming,
   stepHasCollapsedStreamingContent,
 } from "@/lib/timeline/chat/packetHelpers";
 import { useTimelineStepState } from "@/lib/timeline/chat/hooks/useTimelineStepState";
 import { StreamingHeader } from "@/lib/timeline/chat/headers/StreamingHeader";
 import { CompletedHeader } from "@/lib/timeline/chat/headers/CompletedHeader";
 import { StoppedHeader } from "@/lib/timeline/chat/headers/StoppedHeader";
-import { ParallelStreamingHeader } from "@/lib/timeline/chat/headers/ParallelStreamingHeader";
 import { useStreamingStartTime } from "@/app/app/stores/useChatSessionStore";
 import { ExpandedTimelineContent } from "./ExpandedTimelineContent";
 import { CollapsedStreamingContent } from "./CollapsedStreamingContent";
@@ -144,7 +142,6 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   const {
     totalSteps,
     isSingleStep,
-    lastTurnGroup,
     lastStep,
     lastStepIsResearchAgent,
     lastStepIsCodingAgent,
@@ -161,35 +158,18 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     [lastStep]
   );
 
-  const { isExpanded, handleToggle, parallelActiveTab, setParallelActiveTab } =
-    useTimelineExpansion(stopPacketSeen, lastTurnGroup, hasDisplayContent);
+  const { isExpanded, handleToggle } = useTimelineExpansion(
+    stopPacketSeen,
+    hasDisplayContent
+  );
 
   // Streaming duration tracking
   const streamingStartTime = useStreamingStartTime();
-
-  // Parallel step analysis for collapsed streaming view
-  const parallelActiveStep = useMemo(() => {
-    if (!lastTurnGroup?.isParallel) return null;
-    return (
-      lastTurnGroup.steps.find((s) => s.key === parallelActiveTab) ??
-      lastTurnGroup.steps[0]
-    );
-  }, [lastTurnGroup, parallelActiveTab]);
-
-  const parallelActiveStepSupportsCollapsedStreaming = useMemo(() => {
-    if (!parallelActiveStep) return false;
-    return stepSupportsCollapsedStreaming(parallelActiveStep.packets);
-  }, [parallelActiveStep]);
 
   const lastStepHasCollapsedContent = useMemo(() => {
     if (!lastStep) return false;
     return stepHasCollapsedStreamingContent(lastStep.packets);
   }, [lastStep]);
-
-  const parallelActiveStepHasCollapsedContent = useMemo(() => {
-    if (!parallelActiveStep) return false;
-    return stepHasCollapsedStreamingContent(parallelActiveStep.packets);
-  }, [parallelActiveStep]);
 
   const stoppedStepsCount = useMemo(() => {
     if (!stopPacketSeen || !userStopped) {
@@ -212,8 +192,6 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   const {
     uiState,
     showCollapsedCompact,
-    showCollapsedParallel,
-    showParallelTabs,
     showDoneStep,
     showStoppedStep,
     hasDoneIndicator,
@@ -225,15 +203,11 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     hasDisplayContent,
     userStopped,
     isExpanded,
-    lastTurnGroup,
     lastStep,
     lastStepSupportsCollapsedStreaming,
     lastStepHasCollapsedContent,
     lastStepIsResearchAgent,
-    parallelActiveStepSupportsCollapsedStreaming,
-    parallelActiveStepHasCollapsedContent,
     finalAnswerComing,
-    codeModeWorking,
   });
 
   const headerIsInteractive = useMemo(() => {
@@ -259,22 +233,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   // Header selection based on UI state
   const renderHeader = useCallback(() => {
     switch (uiState) {
-      case TimelineUIState.STREAMING_PARALLEL:
-        // Only show parallel header when collapsed (showParallelTabs includes !isExpanded check)
-        if (showParallelTabs && lastTurnGroup) {
-          return (
-            <ParallelStreamingHeader
-              steps={lastTurnGroup.steps}
-              activeTab={parallelActiveTab}
-              onTabChange={setParallelActiveTab}
-              collapsible={collapsible}
-              isExpanded={isExpanded}
-              onToggle={handleToggle}
-            />
-          );
-        }
-      // falls through to sequential header when expanded or no lastTurnGroup
-      case TimelineUIState.STREAMING_SEQUENTIAL:
+      case TimelineUIState.STREAMING:
         return (
           <StreamingHeader
             headerText={headerText}
@@ -322,10 +281,6 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     }
   }, [
     uiState,
-    showParallelTabs,
-    lastTurnGroup,
-    parallelActiveTab,
-    setParallelActiveTab,
     collapsible,
     isExpanded,
     handleToggle,
@@ -386,16 +341,6 @@ export const AgentTimeline = React.memo(function AgentTimeline({
           chatState={chatState}
           stopReason={stopReason}
           renderTypeOverride={collapsedRenderTypeOverride}
-        />
-      )}
-
-      {/* Collapsed streaming view - parallel tools compact mode */}
-      {showCollapsedParallel && parallelActiveStep && (
-        <CollapsedStreamingContent
-          step={parallelActiveStep}
-          chatState={chatState}
-          stopReason={stopReason}
-          renderTypeOverride={RenderType.HIGHLIGHT}
         />
       )}
 

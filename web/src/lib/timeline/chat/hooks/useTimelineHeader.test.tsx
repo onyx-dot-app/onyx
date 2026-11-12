@@ -23,7 +23,6 @@ function group(packets: Packet[]): TurnGroup[] {
   return [
     {
       turnIndex: 0,
-      isParallel: false,
       steps: [
         {
           key: "0-0",
