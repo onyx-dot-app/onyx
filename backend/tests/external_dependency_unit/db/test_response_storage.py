@@ -4048,3 +4048,70 @@ def test_a_later_turns_run_saves_under_an_earlier_turns_sender(
     saved = db_session.get(ChatMessage, run_id)
     assert saved is not None
     assert [item.message.text for item in saved.response_items] == ["Partial"]
+
+
+def test_a_run_whose_previous_run_is_off_the_branch_is_not_selected(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    """An earlier turn's agent can continue a later turn's agent; a sibling of
+    the later turn sees neither run."""
+    first_turn = _response(db_session, conversation)
+    sender = _child_record(
+        db_session,
+        _record(first_turn),
+        uuid4(),
+        "sender",
+        path="/root/sender",
+        tool_name="spawn_agent",
+    )
+    later_turn = _response(db_session, conversation, "Later", previous=first_turn)
+    recipient = _child_record(
+        db_session,
+        _record(later_turn),
+        uuid4(),
+        "recipient",
+        path="/root/recipient",
+        tool_name="spawn_agent",
+    )
+    save_response_record__no_commit(db_session, later_turn.id, recipient)
+    sender.steps = _steps(
+        sender.run_id,
+        [
+            AssistantMessage(
+                content=[ToolCall(id="message", name="send_message", arguments={})]
+            )
+        ],
+    )
+    save_response_record__no_commit(db_session, first_turn.id, sender)
+    run_id = reserve_child_response__no_commit(
+        db_session,
+        later_turn.id,
+        agent=AgentInfo(
+            id=recipient.agent_id or "",
+            path=recipient.agent_path,
+            parent_id=str(conversation.id),
+            description="",
+            restoration_config=None,
+        ),
+        instruction=UserMessage(content="Continue"),
+        previous_response_id=int(recipient.run_id),
+        parent_response_id=int(sender.run_id),
+        parent_message_id=f"{sender.run_id}:0",
+        parent_tool_call_id="message",
+        delivers_result=True,
+    )
+    db_session.flush()
+    agent_id = recipient.agent_id or ""
+    later_branch = ChatBranch(
+        chat_session_id=conversation.id, message_ids=[first_turn.id, later_turn.id]
+    )
+    latest = chat_subagents.latest_agent_response(db_session, later_branch, agent_id)
+    assert latest is not None and latest.id == run_id
+
+    sibling_branch = ChatBranch(
+        chat_session_id=conversation.id, message_ids=[first_turn.id]
+    )
+    assert (
+        chat_subagents.latest_agent_response(db_session, sibling_branch, agent_id)
+        is None
+    )
