@@ -122,7 +122,8 @@ class JiraServiceManagementClient:
             for val in values:
                 created_epoch_ms = val.get("createdDate", {}).get("epochMillis")
                 updated_epoch_ms = val.get("updatedDate", {}).get("epochMillis")
-                ref_epoch = (updated_epoch_ms or created_epoch_ms or 0) // 1000
+                status_epoch_ms = val.get("currentStatus", {}).get("statusDate", {}).get("epochMillis")
+                ref_epoch = (updated_epoch_ms or status_epoch_ms or created_epoch_ms or 0) // 1000
 
                 if start_epoch and ref_epoch < start_epoch:
                     continue
@@ -142,8 +143,10 @@ class JiraServiceManagementClient:
                             description = str(val_content)
 
                 created_iso = val.get("createdDate", {}).get("iso8601", "")
+                status_iso = val.get("currentStatus", {}).get("statusDate", {}).get("iso8601")
                 updated_iso = (
                     val.get("updatedDate", {}).get("iso8601")
+                    or status_iso
                     or created_iso
                 )
 
