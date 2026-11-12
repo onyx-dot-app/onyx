@@ -34,6 +34,7 @@ from onyx.chat.process_message import (
 )
 from onyx.chat.run_store import RESPONSE_OWNER_KEY_PREFIX
 from onyx.chat.stop_signal_checker import request_stop
+from onyx.chat.stream_buffer import StreamBufferWriter
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
 from onyx.context.search.models import BaseFilters
 from onyx.db.chat import reserve_chat_response_ids
@@ -74,6 +75,7 @@ from onyx.server.query_and_chat import chat_backend
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.server.query_and_chat.streaming_models import (
     CodeModeStart,
+    StreamingError,
     UserMessagePacket,
 )
 from onyx.tools.models import ChatToolSelection
@@ -1118,6 +1120,43 @@ def test_late_send_after_a_finished_response_starts_the_next_turn(
     assert answer.response_status == RunStatus.COMPLETE
     assert answer.message == "Next answer"
     assert client.get(path).json() == []
+
+
+def test_a_send_right_after_the_stream_ends_is_admitted(
+    chat: ChatSession, owner: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A client that reads the stream to its end can send again at once."""
+    model = QueueTestLLM(
+        lambda _request, _signal: AssistantMessage(content=[TextContent(text="Hi")])
+    )
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
+    )
+    # Hold the last replay write, which runs after the reader sees the end.
+    replay_done = Event()
+    mark_done = StreamBufferWriter.mark_done
+
+    def held_mark_done(writer: StreamBufferWriter) -> None:
+        replay_done.wait(10)
+        mark_done(writer)
+
+    monkeypatch.setattr(StreamBufferWriter, "mark_done", held_mark_done)
+    try:
+        for message in ("First", "Second"):
+            errors = [
+                packet
+                for packet in handle_stream_message_objects(
+                    new_msg_req=SendMessageRequest(
+                        message=message, chat_session_id=chat.id
+                    ),
+                    user=owner,
+                )
+                if isinstance(packet, StreamingError)
+            ]
+            assert errors == [], message
+    finally:
+        replay_done.set()
+    assert chat_turn_work.wait_idle(timeout=30)
 
 
 def test_send_during_preparation_goes_to_the_preparing_turn(

@@ -106,7 +106,7 @@ _stream_chat_turn               ChatTurnExecution.run                ChatTurnExe
     publish IDs to ChatDelivery     leases every 10 s (content kept)     persistence view; register saved agents
     start control thread          _poll_responses: outcomes, idle      Agent.start(background=False)
   yield from ChatStream (reader)  all drained: OverallStop (user Stop or deadline)   ResponsePresenter -> Emitter -> ChatDelivery
-                                    delivery.finish, admission.release RunStore.save -> ChatResponsePersistence
+                                    admission.release, delivery.finish RunStore.save -> ChatResponsePersistence
 ```
 
 **Layers.** `chat/process_message.py` validates the request, loads history and
@@ -188,7 +188,8 @@ not cancelled, refreshes the admission lease every 5 s, and lets each
 `CHAT_EXECUTION_TIMEOUT_S` each response run cancels itself with a saved
 `DEADLINE` failure. The turn cancels remaining work 30 seconds later, including
 preparation that has not started a run. When no response worker and no
-owned run remains, it finishes delivery and then releases the admission. A child
+owned run remains, it releases the admission and then finishes delivery, so a
+client that sees the stream end can send again at once. A child
 run's owner lease also keeps the turn and its admission alive.
 Before release it reads Stop one last time. A Stop of the turn, even one that
 arrived after its answer finished, pauses the queue
@@ -313,8 +314,8 @@ termination grace period is much shorter, so it ends running turns first
 11. `session-admission` **One turn owns a session at a time.**
     `chat/chat_processing_checker.py:ChatTurnAdmission` sets an owner key with a
     120 s lease during preparation and a 60 s lease after launch. The control
-    thread renews it every 5 s and releases it only after workers, saves and
-    delivery drain. A second send fails with `CONFLICT`. A process crash blocks
+    thread renews it every 5 s and releases it after workers and saves drain,
+    before the stream ends. A second send fails with `CONFLICT`. A process crash blocks
     new sends until the lease expires. A lost lease cancels the turn. The
     processing fence holds the stream ID for Stop and resume; "is processing"
     reads the owner key. Session details report `is_processing=True` when the

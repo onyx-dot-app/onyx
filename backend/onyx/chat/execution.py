@@ -221,6 +221,7 @@ class ChatTurnExecution:
         )
         self._auto_filters = False
         self._stopped_by_user = False
+        self._admission_released = False
         # Each model gets one stop, including models still preparing at cancellation.
         self._stopped_models: set[int] = set()
         self._response_stops: dict[int, OverallStop] = {}
@@ -237,28 +238,27 @@ class ChatTurnExecution:
         if self._response_future is not None:
             self._response_future.set_exception(error)
 
-        def clear_status() -> None:
+        def clear_status_then_finish() -> None:
+            # The chat is released before its stream ends, so a client that sees
+            # the end can send again at once.
             try:
                 self._clear_processing_status()
             finally:
-                chat_turn_work.finished()
-
-        def delivery_finished(_future: Future[None]) -> None:
-            try:
-                start_thread_future(
-                    clear_status, name="chat-status-cleanup", daemon=False
-                )
-            except Exception:
-                logger.exception(
-                    "Rejected chat processing status cleanup could not start"
-                )
-                clear_status()
+                try:
+                    self.delivery.finish()
+                finally:
+                    self.delivery.finished.add_done_callback(
+                        lambda _future: chat_turn_work.finished()
+                    )
 
         # No control thread exists to observe cleanup for a rejected turn.
         try:
-            self.delivery.finish()
-        finally:
-            self.delivery.finished.add_done_callback(delivery_finished)
+            start_thread_future(
+                clear_status_then_finish, name="chat-status-cleanup", daemon=False
+            )
+        except Exception:
+            logger.exception("Rejected chat processing status cleanup could not start")
+            clear_status_then_finish()
 
     def _publish(self, packet: Packet) -> None:
         if not self.cancellation.cancelled:
@@ -336,8 +336,12 @@ class ChatTurnExecution:
                 logger.exception("Chat response polling failed; draining active work")
             with self._lock:
                 stores = tuple(self._stores)
-            if not self._response_workers and not any(
-                store.has_owned_work for store in stores
+            if (
+                not self._response_workers
+                and not any(store.has_owned_work for store in stores)
+                # Saves have drained; release the chat before the stream ends,
+                # so a client that sees the end can send again at once.
+                and (self._admission_released or self._clear_processing_status())
             ):
                 if not self.delivery.is_closing:
                     stop = self._turn_stop()
@@ -357,7 +361,7 @@ class ChatTurnExecution:
                                 )
                             )
                     self.delivery.finish()
-                if self.delivery.finished.done() and self._clear_processing_status():
+                if self.delivery.finished.done():
                     return
             self._completion_changed.wait(_CANCEL_POLL_INTERVAL_S)
 
@@ -432,6 +436,7 @@ class ChatTurnExecution:
         except Exception:
             logger.exception("Failed to clear chat processing status; will retry")
             return False
+        self._admission_released = True
         if self._dispatch_pending_messages is not None:
             # Start queued input once the chat is idle.
             try:
