@@ -39,7 +39,13 @@ class EmailHeaders(BaseModel):
             decoded_value, encoding = email.header.decode_header(value)[0]
             if isinstance(decoded_value, bytes):
                 encoding = encoding or "utf-8"
-                return decoded_value.decode(encoding, errors="replace")
+                try:
+                    return decoded_value.decode(encoding, errors="replace")
+                except LookupError:
+                    # Bogus charset labels such as "unknown-8bit" are not
+                    # registered Python codecs and raise LookupError, which
+                    # errors="replace" does not cover.
+                    return decoded_value.decode("utf-8", errors="replace")
             elif isinstance(decoded_value, str):
                 return decoded_value
             else:
