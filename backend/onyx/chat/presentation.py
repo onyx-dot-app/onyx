@@ -61,7 +61,7 @@ from onyx.server.query_and_chat.streaming_models import (
     Packet,
     UserMessagePacket,
 )
-from onyx.tools.constants import SPAWN_AGENT_TOOL_NAME
+from onyx.tools.constants import SEND_MESSAGE_TOOL_NAME, SPAWN_AGENT_TOOL_NAME
 from onyx.tools.models import (
     CustomToolCallSummary,
     CustomToolUserFileSnapshot,
@@ -585,8 +585,9 @@ def replay_response(
             )
             packets.extend(renderer_of_call.start())
             for child in response.child_runs:
+                # Agent tools start background runs, whose output arrives separately.
                 if (
-                    call.name == SPAWN_AGENT_TOOL_NAME
+                    call.name in (SPAWN_AGENT_TOOL_NAME, SEND_MESSAGE_TOOL_NAME)
                     or child.parent_message_id != message_id
                     or child.parent_tool_call_id != call.id
                 ):
