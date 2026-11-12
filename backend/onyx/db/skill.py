@@ -32,7 +32,7 @@ roll back atomically.
 """
 
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 from typing import Any, Literal
 from uuid import UUID
@@ -89,11 +89,13 @@ from onyx.db.plugin import (
     PluginUserGrant,
     add_plugin_version__no_commit,
     apply_plugin_access_change__no_commit,
+    check_base_version,
     create_skill_plugin__no_commit,
     delete_plugin__no_commit,
     lock_skill_plugin__no_commit,
     persist_plugin_version_validity__no_commit,
     plugin_installation_policy,
+    publish_plugin__no_commit,
     set_plugin_preferences__no_commit,
     transfer_plugin__no_commit,
 )
@@ -107,6 +109,12 @@ from onyx.db.plugin_access import (
     skill_name_in_version,
     version_is_valid,
     version_user_runs,
+)
+from onyx.db.plugin_review import (
+    deny_review__no_commit,
+    publish_action_for,
+    request_review__no_commit,
+    version_to_approve,
 )
 from onyx.db.scoped_permissions import (
     scoped_group_ids_subquery,
@@ -664,8 +672,8 @@ def create_custom_skill__no_commit(
     the access change affects."""
     created_public = external_app_id is not None or (
         change is not None
-        and change.set_public_permission
-        and change.public_permission == SkillSharePermission.VIEWER
+        and _publishes(change)
+        and publish_action_for(user) == "publish"
     )
     skill = add_new_skill__no_commit(
         Skill(
@@ -1197,6 +1205,96 @@ def _check_skill_access_change(
         _publish_requested(skill, change.public_permission, db_session)
 
 
+def _publishes(change: SkillSharingChange) -> bool:
+    return (
+        change.set_public_permission
+        and change.public_permission == SkillSharePermission.VIEWER
+    )
+
+
+def _without_publish(change: SkillSharingChange) -> SkillSharingChange:
+    return replace(change, public_permission=None, set_public_permission=False)
+
+
+def _publish_needs_review(skill: Skill, change: SkillSharingChange, user: User) -> bool:
+    """Whether the change publishes a private skill and the Publishing setting
+    makes that a review request. Raises when the setting refuses it."""
+    if not _publishes(change) or skill.public_permission is not None:
+        return False
+    return publish_action_for(user) == "request_review"
+
+
+def request_skill_review__no_commit(
+    skill: Skill, user: User, db_session: Session
+) -> None:
+    """Ask to publish the current version of a skill. The caller holds the
+    skill row lock."""
+    plugin = lock_skill_plugin__no_commit(skill, db_session)
+    request_review__no_commit(plugin, plugin.current_version_id, user, db_session)
+
+
+def publish_skill__no_commit(
+    skill: Skill,
+    base_version_id: UUID | None,
+    user: User,
+    db_session: Session,
+) -> set[UUID]:
+    """Publish the current version of a skill: a first publish for a private
+    skill, a publish update for a published one. Only the author or an
+    organization-wide manager publishes. Under the Publishing setting this can
+    make a review request instead, or be refused. The caller holds the skill
+    row lock. Returns the affected users."""
+    ensure_can_edit_org_visibility(skill, user)
+    plugin = lock_skill_plugin__no_commit(skill, db_session)
+    check_base_version(plugin, base_version_id)
+    if skill.public_permission is None:
+        return share_skill__no_commit(
+            skill,
+            SkillSharingChange(
+                public_permission=SkillSharePermission.VIEWER,
+                set_public_permission=True,
+            ),
+            user,
+            db_session,
+        )
+    if plugin.published_version_id == plugin.current_version_id:
+        return set()
+    if publish_action_for(user) == "request_review":
+        request_review__no_commit(plugin, plugin.current_version_id, user, db_session)
+        return set()
+    before = affected_user_ids_for_plugins([plugin.id], db_session)
+    publish_plugin__no_commit(
+        plugin.id, "raise", db_session, version_id=plugin.current_version_id
+    )
+    return before | affected_user_ids_for_plugins([plugin.id], db_session)
+
+
+def approve_skill_review__no_commit(
+    skill: Skill, version_id: UUID, db_session: Session
+) -> set[UUID]:
+    """Publish the pending version of a skill. A first publish moves the skill
+    to the Organization library, and a name clash there is refused with
+    CONFLICT. The caller holds the skill row lock. Returns the affected
+    users."""
+    plugin = lock_skill_plugin__no_commit(skill, db_session)
+    version = version_to_approve(plugin, version_id, db_session)
+    before = affected_user_ids_for_plugins([plugin.id], db_session)
+    if skill.public_permission is None:
+        skill.public_permission = SkillSharePermission.VIEWER
+        db_session.flush()
+    publish_plugin__no_commit(plugin.id, "raise", db_session, version_id=version.id)
+    return before | affected_user_ids_for_plugins([plugin.id], db_session)
+
+
+def deny_skill_review__no_commit(
+    skill: Skill, version_id: UUID, db_session: Session
+) -> None:
+    """The caller holds the skill row lock."""
+    deny_review__no_commit(
+        lock_skill_plugin__no_commit(skill, db_session), version_id, db_session
+    )
+
+
 def share_skill__no_commit(
     skill: Skill,
     change: SkillSharingChange,
@@ -1207,6 +1305,9 @@ def share_skill__no_commit(
     every user whose sandbox is affected, before or after the change. Supplied
     user and group shares replace the current ones."""
     _check_skill_access_change(skill, change, user, db_session)
+    review = _publish_needs_review(skill, change, user)
+    if review:
+        change = _without_publish(change)
     result = apply_plugin_access_change__no_commit(
         [skill.id],
         _plugin_access_change(change, PluginAccessMode.REPLACE),
@@ -1214,6 +1315,8 @@ def share_skill__no_commit(
         db_session,
     )
     result.raise_first_failure()
+    if review:
+        request_skill_review__no_commit(skill, user, db_session)
     return result.affected_user_ids
 
 
@@ -1237,6 +1340,7 @@ def bulk_share_skills__no_commit(
     refusal for the whole set fails every skill."""
     failed: dict[UUID, str] = {}
     candidates: list[UUID] = []
+    review_skills: list[Skill] = []
     for skill_id in sorted(set(skill_ids)):
         skill = fetch_skill(
             skill_id,
@@ -1250,6 +1354,8 @@ def bulk_share_skills__no_commit(
             continue
         try:
             _check_skill_access_change(skill, change, user, db_session)
+            if _publish_needs_review(skill, change, user):
+                review_skills.append(skill)
         except OnyxError as exc:
             failed[skill_id] = exc.detail
             continue
@@ -1257,11 +1363,14 @@ def bulk_share_skills__no_commit(
 
     affected: set[UUID] = set()
     if candidates:
+        # The Publishing setting depends on the user only, so it makes every
+        # private skill in the set a review request, or none.
+        applied = _without_publish(change) if review_skills else change
         try:
             with db_session.begin_nested():
                 result = apply_plugin_access_change__no_commit(
                     candidates,
-                    _plugin_access_change(change, PluginAccessMode.ADD_ONLY),
+                    _plugin_access_change(applied, PluginAccessMode.ADD_ONLY),
                     user,
                     db_session,
                 )
@@ -1272,6 +1381,9 @@ def bulk_share_skills__no_commit(
                 skill_id: exc.detail for skill_id, exc in result.failures.items()
             }
             affected = result.affected_user_ids
+            for skill in review_skills:
+                if skill.id not in failed:
+                    request_skill_review__no_commit(skill, user, db_session)
     return SkillBulkShareResult(
         succeeded=[skill_id for skill_id in candidates if skill_id not in failed],
         failed=sorted(failed.items()),

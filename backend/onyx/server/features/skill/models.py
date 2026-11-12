@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import (
+    PluginReviewStatus,
     SkillAccessLevel,
     SkillInstallationPolicy,
     SkillSharePermission,
@@ -15,6 +16,7 @@ from onyx.db.enums import (
 from onyx.db.models import Skill
 from onyx.db.plugin import PluginVersionSummary
 from onyx.db.plugin_access import PluginAccess
+from onyx.db.plugin_review import PluginReviewRequest
 from onyx.db.skill import SkillSharingChange
 from onyx.db.utils import UNSET
 from onyx.server.models import MinimalUserSnapshot
@@ -70,6 +72,10 @@ class SkillResponse(BaseModel):
     # Edits send it back as base_version_id. None for built-ins.
     current_version_id: UUID | None = None
     current_version_number: int | None = None
+    # The version the organization runs. None while the skill is private.
+    published_version_number: int | None = None
+    # The version that waits for an admin's review, if any.
+    pending_version_number: int | None = None
 
     @classmethod
     def from_builtin(
@@ -163,6 +169,12 @@ class SkillResponse(BaseModel):
             external_app=external_app,
             current_version_id=current_version_id,
             current_version_number=current_version_number,
+            published_version_number=(
+                access.published_version_number if access is not None else None
+            ),
+            pending_version_number=(
+                access.pending_version_number if access is not None else None
+            ),
         )
 
 
@@ -237,6 +249,7 @@ class SkillVersionResponse(BaseModel):
     # False when retention removed the files; such a version cannot be restored.
     bundle_kept: bool
     is_current: bool
+    review_status: PluginReviewStatus
 
     @classmethod
     def from_summary(cls, summary: PluginVersionSummary) -> "SkillVersionResponse":
@@ -250,6 +263,7 @@ class SkillVersionResponse(BaseModel):
             unpacked_size_bytes=summary.unpacked_size_bytes,
             bundle_kept=summary.bundle_kept,
             is_current=summary.is_current,
+            review_status=summary.review_status,
         )
 
 
@@ -265,6 +279,38 @@ class SkillVersionRestoreRequest(BaseModel):
 
     # The current version the restore starts from. 409 when it is not current.
     base_version_id: UUID
+
+
+class SkillPublishRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # The current version the user saw. 409 when it is not current.
+    base_version_id: UUID | None = None
+
+
+class SkillReviewRequestResponse(BaseModel):
+    skill_id: UUID
+    name: str | None
+    version_id: UUID
+    version_number: int
+    # None for a first publish.
+    published_version_number: int | None
+    requested_by_user_id: UUID | None
+    requested_by_email: str | None
+    requested_at: datetime.datetime | None
+
+    @classmethod
+    def from_request(cls, request: PluginReviewRequest) -> "SkillReviewRequestResponse":
+        return cls(
+            skill_id=request.plugin_id,
+            name=request.name,
+            version_id=request.version_id,
+            version_number=request.version_number,
+            published_version_number=request.published_version_number,
+            requested_by_user_id=request.requested_by_user_id,
+            requested_by_email=request.requested_by_email,
+            requested_at=request.requested_at,
+        )
 
 
 class SkillBundleInspectResponse(BaseModel):

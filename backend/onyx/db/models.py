@@ -116,6 +116,7 @@ from onyx.db.enums import (
     PermissionSyncStatus,
     PersonaSharePermission,
     PluginInstallationPolicy,
+    PluginReviewStatus,
     PortAttemptStatus,
     ProcessingMode,
     ReceiptStatus,
@@ -5655,6 +5656,23 @@ class PluginVersion(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+    review_status: Mapped[PluginReviewStatus] = mapped_column(
+        Enum(
+            PluginReviewStatus,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=False,
+        server_default=PluginReviewStatus.DRAFT.value,
+    )
+    review_requested_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    review_requested_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     __table_args__ = (
         UniqueConstraint(
@@ -5662,6 +5680,12 @@ class PluginVersion(Base):
         ),
         # Target of the plugin's composite version pointers.
         UniqueConstraint("id", "plugin_id", name="uq_plugin_version_id_plugin"),
+        Index(
+            "uq_plugin_version_one_pending",
+            "plugin_id",
+            unique=True,
+            postgresql_where=text("review_status = 'pending'"),
+        ),
     )
 
 

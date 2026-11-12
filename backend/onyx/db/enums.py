@@ -1028,6 +1028,27 @@ class MarketplaceKind(str, PyEnum):
     ORGANIZATION_LIBRARY = "organization_library"
 
 
+class PluginReviewStatus(str, PyEnum):
+    """Publishing state of one plugin version. At most one version of a
+    plugin is pending."""
+
+    DRAFT = "draft"
+    PENDING = "pending"
+    PUBLISHED = "published"
+    DENIED = "denied"
+    # Was published or pending, and a newer version took its place.
+    SUPERSEDED = "superseded"
+
+
+class PluginPublishingPolicy(str, PyEnum):
+    """The admin Publishing setting. It governs owners and editors; an
+    organization-wide plugin manager always publishes at once."""
+
+    OPEN = "OPEN"
+    REQUIRES_REVIEW = "REQUIRES_REVIEW"
+    OFF = "OFF"
+
+
 class PluginInstallationPolicy(str, PyEnum):
     """Install setting of a plugin, a group override or a marketplace default.
     Writes refuse NOT_AVAILABLE until group install settings ship."""

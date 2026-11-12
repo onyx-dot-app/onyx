@@ -15,6 +15,14 @@ export enum QueryHistoryType {
   NORMAL = "normal",
 }
 
+// Who can publish skills to the organization. Organization-wide skill
+// managers always publish at once.
+export enum PluginPublishingPolicy {
+  OPEN = "OPEN",
+  REQUIRES_REVIEW = "REQUIRES_REVIEW",
+  OFF = "OFF",
+}
+
 export interface Settings {
   anonymous_user_enabled: boolean;
   invite_only_enabled: boolean;
@@ -89,6 +97,8 @@ export interface Settings {
   // Workspace-wide instructions injected into every Craft agent's system
   // prompt (AGENTS.md).
   craft_instructions?: string | null;
+
+  plugin_publishing?: PluginPublishingPolicy;
 
   // Dev/debug flag: when true, the Craft UI renders an "Opencode pod logs"
   // button that streams the user's sandbox pod logs in real time. Backed

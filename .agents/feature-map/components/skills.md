@@ -285,7 +285,9 @@ The library preview of an external-app skill calls the same renderer
     (`db/skill.py:ensure_can_edit_org_visibility`; the patch route calls it
     too). `db/skill.py:_publish_requested` checks every request for
     organization access: it refuses organization `EDITOR` and a change from
-    published to private, for every route, bulk included. A publish moves the
+    published to private, for every route, bulk included. The admin
+    Publishing setting then decides what a publish does
+    ([[#publishing-review]]). A publish moves the
     plugin to the Organization library (`db/plugin.py:publish_plugin__no_commit`);
     a name clash there returns `CONFLICT`. Only global `MANAGE_PLUGINS` deletes
     a published or a required skill
@@ -434,8 +436,9 @@ The library preview of an external-app skill calls the same renderer
 21. `bundle-retention` **A plugin keeps ten bundles, and every version row.**
     `db/plugin.py:prune_plugin_bundles__no_commit` runs in
     `add_plugin_version__no_commit`, under the plugin lock and in the same
-    transaction. It keeps the bundles of the current version, the published
-    version and the newest `BUNDLES_KEPT` versions, the bundle that the
+    transaction. It keeps the bundles of the current, published and pending
+    versions, the newest older versions up to `BUNDLES_KEPT` bundles (denied
+    versions count last, so they are pruned first), the bundle that the
     legacy skill row uses, and the bundle of a version with no stored file
     list or root `skill_md` (reads of it still open the bundle). Other
     versions get `bundle_file_id` NULL and keep `bundle_sha256`, the file list
@@ -469,6 +472,36 @@ The library preview of an external-app skill calls the same renderer
     prunes like any save ([[#bundle-retention]]). A version with no bundle
     gets 404 `skills/content.py:VERSION_FILES_NOT_KEPT`. Skill responses carry
     `current_version_number`.
+23. `publishing-review` **The Publishing setting governs every publish by
+    authors.** Only the author or a user with global `MANAGE_PLUGINS`
+    publishes or publishes an update (`ensure_can_edit_org_visibility`); an
+    editor saves versions but cannot publish them. `Settings.plugin_publishing` is `OPEN`,
+    `REQUIRES_REVIEW` or `OFF` (default `OPEN`).
+    `db/plugin_review.py:publish_action_for` reads it once per publish, and a
+    failed settings read stops the publish (it does not fall back to `OPEN`); a user
+    with global `MANAGE_PLUGINS` always publishes at once. Every path that
+    publishes a private skill asks it: `POST /skills/custom/{id}/publish`, the
+    share route, PATCH, bulk share, batch upload, editor create and GitHub
+    import (`db/skill.py:_publish_needs_review`, and `created_public` in
+    `create_custom_skill__no_commit`). The external app link and the community
+    downgrade do not. `OFF` refuses with 403. `REQUIRES_REVIEW` leaves the
+    skill private and makes its current version `pending`. The publish route
+    also does a publish update for a published skill: it moves
+    `published_version_id` to the current version, or makes it pending.
+    `plugin_version.review_status` is `draft`, `pending`, `published`,
+    `denied` or `superseded`. `db/plugin.py:set_published_version__no_commit`
+    is the one writer of `published_version_id` after create: the new version
+    becomes `published`, the old one `superseded`. A newer request makes the
+    pending one `superseded`; the partial unique index
+    `uq_plugin_version_one_pending` allows one per plugin. Global
+    `MANAGE_PLUGINS` lists requests (`GET /skills/review-requests`), approves
+    (`db/skill.py:approve_skill_review__no_commit`, which calls
+    `publish_plugin__no_commit` with the version, "raise" on a name clash) and
+    denies them. Approve refuses a version that is not newer than the
+    published one. Moving the published pointer does not clear a pending
+    request; approve refuses it if it is now older. Until the phase 1 rule in
+    `add_plugin_version__no_commit` goes, a save on a published skill still
+    publishes at once.
 
 ---
 
@@ -580,8 +613,10 @@ The library preview of an external-app skill calls the same renderer
   (`backend/tests/integration/tests/skills/test_skill_plugin_versions.py`),
   bundle retention and deletes
   (`backend/tests/integration/tests/skills/test_skill_bundle_retention.py`),
-  and the version list, preview and restore
-  (`backend/tests/integration/tests/skills/test_skill_version_api.py`).
+  the version list, preview and restore
+  (`backend/tests/integration/tests/skills/test_skill_version_api.py`), and
+  publish, review and the Publishing setting
+  (`backend/tests/integration/tests/skills/test_skill_publish_review.py`).
   `backend/tests/external_dependency_unit/craft/test_skill_bundle_cleanup.py`
   covers the orphan bundle cleanup and the read of a pruned bundle.
   `backend/tests/integration/tests/craft/k8s/` covers a real
