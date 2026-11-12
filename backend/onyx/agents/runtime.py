@@ -1608,6 +1608,12 @@ def _advance_step(
             or run._generation_context.stall_timeout_s,
         }
     )
+    # Compaction tells the task question from later input by this metadata.
+    if any(
+        not isinstance(message.metadata, InputMessageMetadata)
+        for message in prepared.input_messages or []
+    ):
+        raise ValueError("Between-step input needs InputMessageMetadata")
     inputs = [
         message.model_copy(
             deep=True,
@@ -1616,12 +1622,11 @@ def _advance_step(
                 # History keeps provenance only; content metadata served preparation.
                 "metadata": message.metadata.model_copy(
                     update={"content_metadata": None}
-                )
-                if isinstance(message.metadata, InputMessageMetadata)
-                else message.metadata,
+                ),
             },
         )
         for index, message in enumerate(prepared.input_messages or [])
+        if isinstance(message.metadata, InputMessageMetadata)
     ]
     source = [
         *run._history.messages,

@@ -156,6 +156,7 @@ It receives conversation history, this run's input and output, the step budget, 
 The runtime accepts them before the next model call, including when no preparation callback exists.
 A feature can return `PreparedStep.input_messages` to transform their content.
 Preserve each input's identity, provenance, and order. The runtime records accepted inputs with their step.
+Each input needs `InputMessageMetadata`; the runtime rejects untagged input, because compaction keeps the latest untagged user message as the task.
 `InputMessageMetadata.content_metadata` reaches preparation only; accepted history keeps the source and source run.
 Acceptance belongs to `RunOwnership.accept_inputs`; if it declines, the runtime prepares the step again.
 When the model gives no further tool calls, `RunOwnership.has_unread_inputs` decides whether unread input continues the run while steps remain.

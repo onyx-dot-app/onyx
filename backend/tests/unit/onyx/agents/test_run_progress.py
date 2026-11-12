@@ -11,6 +11,7 @@ from onyx.agents.models import (
     InputSource,
     PreparedStep,
     RunAction,
+    RunFailureKind,
     RunProgress,
     RunState,
     RunStatus,
@@ -18,7 +19,7 @@ from onyx.agents.models import (
     StepRecord,
     ToolExecutionRecord,
 )
-from onyx.agents.runtime import Agent, Run
+from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.interfaces import GenerationContext
@@ -191,6 +192,33 @@ def test_step_inputs_reach_the_model_and_survive_partial_generation(
         )
         == 1
     )
+
+
+def test_untagged_step_input_is_rejected_before_the_model_call() -> None:
+    """Compaction keeps the latest untagged user message as the task question."""
+    requests: list[GenerationRequest] = []
+
+    def reply(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        requests.append(request)
+        return AssistantMessage(content=[TextContent(text="Answer")])
+
+    agent = Agent(
+        FakeModelClient(reply),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        prepare_step=lambda _: PreparedStep(
+            input_messages=[UserMessage(content="Untagged instruction")]
+        ),
+    )
+    run = agent.start(
+        messages=[UserMessage(content="Do the work")], max_steps=2, background=False
+    )
+    assert run.wait_for_idle(5)
+    with pytest.raises(RunFailed) as failed:
+        run.result()
+    assert failed.value.failure.kind == RunFailureKind.EXECUTION
+    assert requests == []
 
 
 def test_final_answer_on_the_last_step_ignores_unread_input() -> None:
