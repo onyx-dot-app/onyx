@@ -153,16 +153,27 @@ def test_old_published_version_keeps_its_bundle(basic_user: DATestUser) -> None:
     assert _existing_files({published_file_id}) == {published_file_id}
 
 
-def test_backfilled_version_keeps_its_bundle_past_the_limit(
-    basic_user: DATestUser,
+@pytest.mark.parametrize("missing", ["file_manifest", "skill_md"])
+def test_version_without_stored_content_keeps_its_bundle_past_the_limit(
+    basic_user: DATestUser, missing: str
 ) -> None:
     skill = _skill_with_versions(basic_user, 1)
     with get_session_with_current_tenant() as db_session:
-        db_session.execute(
-            update(PluginVersion)
-            .where(PluginVersion.plugin_id == skill.id)
-            .values(file_manifest=null())
-        )
+        version_id = db_session.scalars(
+            select(PluginVersion.id).where(PluginVersion.plugin_id == skill.id)
+        ).one()
+        if missing == "file_manifest":
+            db_session.execute(
+                update(PluginVersion)
+                .where(PluginVersion.id == version_id)
+                .values(file_manifest=null())
+            )
+        else:
+            db_session.execute(
+                update(PluginSkill)
+                .where(PluginSkill.plugin_version_id == version_id)
+                .values(skill_md=None)
+            )
         db_session.commit()
     backfilled_file_id = _bundles_by_version(skill.id)[1]
     assert backfilled_file_id is not None
