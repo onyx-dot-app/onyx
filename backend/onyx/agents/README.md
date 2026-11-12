@@ -694,7 +694,7 @@ An expired owner is reported as interrupted when its response is inspected. Unce
 
 Released runs have no local execution owner. Stop requests use the application’s run-ID route.
 Closing the old coordinator does not cancel execution claimed by another pod.
-Incognito runs have no run ownership, directory or child agents, and write no durable execution checkpoints.
+Incognito runs have no child agents. `USAGE_ONLY` incognito runs also have no run ownership or directory, and write no durable execution checkpoints. `FULL_HISTORY` incognito runs keep content, so they use `ChatRunStore` and `ChatAgentDirectory`.
 
 Checkpoint file data uses existing file-store references. Generated files are stored under the chat session before transfer.
 Deleting the chat removes those files. Tool execution loads file contents when needed.
