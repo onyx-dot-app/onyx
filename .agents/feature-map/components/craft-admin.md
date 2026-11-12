@@ -40,7 +40,10 @@ default model. Instructions appear in each new session's `AGENTS.md` under an
 template the text is added to. With no Craft default model, sessions use the
 workspace chat default, and the page shows that model as inherited. The
 **Skill Publishing** select sets `Settings.plugin_publishing` (Open,
-Requires review, Off); [[skills#publishing-review]] owns what it does.
+Requires review, Off); [[skills#publishing-review]] owns what it does. The
+same card has **Default Access** (the Organization library default, stored on
+the marketplace row) and the **Sharing** switch (`Settings.plugin_sharing`);
+[[skills#sharing-single-entry]] owns their rules.
 
 In this document "workspace" always means the tenant-wide scope (workspace
 default, workspace policy). The sandbox directory of a session is the "session

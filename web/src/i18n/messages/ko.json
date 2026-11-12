@@ -5201,6 +5201,38 @@
         },
         "saveError": {
           "message": "게시 설정을 저장할 수 없습니다."
+        },
+        "defaultAccess": {
+          "title": "기본 액세스",
+          "description": "자체 설정이 없는 모든 게시된 스킬에 적용됩니다. 나중에 게시되는 스킬도 포함됩니다. {setting}",
+          "available": {
+            "label": "사용 가능",
+            "description": "멤버가 찾아서 원하면 켭니다."
+          },
+          "default": {
+            "label": "기본으로 설치됨",
+            "description": "모든 멤버에게 설치됩니다. 멤버는 끌 수 있습니다."
+          },
+          "notAvailable": {
+            "label": "사용 불가",
+            "description": "숨겨집니다. 멤버는 찾거나 켤 수 없습니다."
+          },
+          "saveSuccess": {
+            "message": "기본 액세스를 저장했습니다."
+          },
+          "saveError": {
+            "message": "기본 액세스를 저장할 수 없습니다."
+          }
+        },
+        "sharing": {
+          "title": "공유",
+          "description": "멤버는 스킬을 사람 및 그룹과 공유할 수 있습니다. 관리자는 항상 공유할 수 있습니다.",
+          "saveSuccess": {
+            "message": "공유 설정을 저장했습니다."
+          },
+          "saveError": {
+            "message": "공유 설정을 저장할 수 없습니다."
+          }
         }
       }
     },
@@ -17399,7 +17431,9 @@
           "availableDescription": "사용자는 언제든지 설치하거나 제거할 수 있습니다.",
           "defaultDescription": "자동으로 설치됩니다. 사용자는 언제든지 비활성화하거나 제거할 수 있습니다.",
           "requiredDescription": "자동으로 설치됩니다. 사용자는 비활성화하거나 제거할 수 없습니다.",
-          "description": "액세스 권한이 있는 모든 사용자의 스킬 설치 방법을 선택하세요."
+          "description": "액세스 권한이 있는 모든 사용자의 스킬 설치 방법을 선택하세요.",
+          "notAvailable": "사용 불가",
+          "notAvailableDescription": "숨겨집니다. 멤버는 찾거나 켤 수 없습니다."
         },
         "description": "이 스킬을 사용할 수 있는 사용자와 설치 방법을 선택하세요.",
         "accessTitle": "액세스 범위",

@@ -99,6 +99,8 @@ export interface Settings {
   craft_instructions?: string | null;
 
   plugin_publishing?: PluginPublishingPolicy;
+  // Whether members can share skills with people and groups. Admins always can.
+  plugin_sharing?: boolean;
 
   // Dev/debug flag: when true, the Craft UI renders an "Opencode pod logs"
   // button that streams the user's sandbox pod logs in real time. Backed

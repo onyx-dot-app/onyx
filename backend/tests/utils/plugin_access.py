@@ -68,12 +68,17 @@ def plugin_access_mismatches(
             continue
         if plugin.author_user_id != skill.author_user_id:
             problems.append(f"{skill_id}: author differs")
+        # The legacy column has no NOT_AVAILABLE; it holds AVAILABLE then.
         expected_policy = (
             None
             if skill.installation_policy == "AVAILABLE"
             else skill.installation_policy
         )
-        if plugin.installation_policy != expected_policy:
+        if plugin.installation_policy not in (
+            (expected_policy, "NOT_AVAILABLE")
+            if expected_policy is None
+            else (expected_policy,)
+        ):
             problems.append(
                 f"{skill_id}: install setting {plugin.installation_policy} "
                 f"!= {expected_policy}"
@@ -101,9 +106,11 @@ def plugin_access_mismatches(
             "group shares",
             "SELECT skill_id, user_group_id, permission FROM skill__user_group "
             "WHERE skill_id = ANY(:ids)",
-            # A row with no permission holds only a group install setting.
+            # A row with no permission holds only a group install setting, and
+            # a row with NOT_AVAILABLE grants nothing.
             "SELECT plugin_id, user_group_id, permission FROM plugin__user_group "
-            "WHERE plugin_id = ANY(:ids) AND permission IS NOT NULL",
+            "WHERE plugin_id = ANY(:ids) AND permission IS NOT NULL "
+            "AND installation_policy IS DISTINCT FROM 'NOT_AVAILABLE'",
         ),
         (
             "choices",

@@ -9,6 +9,8 @@
 import type {
   CustomSkill,
   GitHubSkillsImportResult,
+  OrganizationLibraryDefaultAccess,
+  OrganizationLibraryDefaultPolicy,
   GitHubSkillsPreview,
   Skill,
   SkillBundleContents,
@@ -333,4 +335,16 @@ export async function deleteUserSkill(skillId: string): Promise<void> {
     method: "DELETE",
   });
   await handle<void>(res);
+}
+
+/** Set the install setting of every published skill with no own setting. */
+export async function setOrganizationLibraryDefaultAccess(
+  policy: OrganizationLibraryDefaultPolicy
+): Promise<OrganizationLibraryDefaultAccess> {
+  const res = await fetch("/api/skills/organization-library/default-access", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ installation_policy: policy }),
+  });
+  return handle<OrganizationLibraryDefaultAccess>(res);
 }

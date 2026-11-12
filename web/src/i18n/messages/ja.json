@@ -5201,6 +5201,38 @@
         },
         "saveError": {
           "message": "公開設定を保存できませんでした。"
+        },
+        "defaultAccess": {
+          "title": "デフォルトのアクセス",
+          "description": "独自の設定がない公開済みスキルすべてに適用されます。後から公開されるスキルも含みます。 {setting}",
+          "available": {
+            "label": "利用可能",
+            "description": "メンバーが見つけて、必要なら有効にします。"
+          },
+          "default": {
+            "label": "デフォルトでインストール",
+            "description": "すべてのメンバーにインストールされます。メンバーは無効にできます。"
+          },
+          "notAvailable": {
+            "label": "利用不可",
+            "description": "非表示。メンバーは見つけることも有効にすることもできません。"
+          },
+          "saveSuccess": {
+            "message": "デフォルトのアクセスを保存しました。"
+          },
+          "saveError": {
+            "message": "デフォルトのアクセスを保存できませんでした。"
+          }
+        },
+        "sharing": {
+          "title": "共有",
+          "description": "メンバーはスキルをユーザーやグループと共有できます。管理者は常に共有できます。",
+          "saveSuccess": {
+            "message": "共有設定を保存しました。"
+          },
+          "saveError": {
+            "message": "共有設定を保存できませんでした。"
+          }
         }
       }
     },
@@ -17399,7 +17431,9 @@
           "availableDescription": "ユーザーはいつでもインストールまたはアンインストールできます。",
           "defaultDescription": "自動でインストールされます。ユーザーはいつでも無効化またはアンインストールできます。",
           "requiredDescription": "自動でインストールされます。ユーザーは無効化またはアンインストールできません。",
-          "description": "アクセス権を持つ全員に対するスキルのインストール方法を選択します。"
+          "description": "アクセス権を持つ全員に対するスキルのインストール方法を選択します。",
+          "notAvailable": "利用不可",
+          "notAvailableDescription": "非表示。メンバーは見つけることも有効にすることもできません。"
         },
         "description": "このスキルを使用できるユーザーとインストール方法を選択します。",
         "accessTitle": "アクセス範囲",

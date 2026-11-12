@@ -55,7 +55,6 @@ from onyx.db.enums import (
     PluginInstallationPolicy,
     PluginReviewStatus,
     SandboxStatus,
-    SkillInstallationPolicy,
     SkillSharePermission,
 )
 from onyx.db.models import (
@@ -588,17 +587,19 @@ class PluginAccess:
     user_shares: tuple[PluginUserShare, ...]
     group_shares: tuple[PluginGroupShare, ...]
 
+    # The default of the plugin's marketplace.
+    marketplace_default_policy: PluginInstallationPolicy
+
     @property
-    def skill_installation_policy(self) -> SkillInstallationPolicy:
-        """The plugin's own company setting as the skills API shows it. No
-        setting maps to AVAILABLE, as it did before plugins. The skills API
-        cannot show NOT_AVAILABLE until group install settings ship."""
-        if self.installation_policy in (
-            PluginInstallationPolicy.DEFAULT,
-            PluginInstallationPolicy.REQUIRED,
-        ):
-            return SkillInstallationPolicy(self.installation_policy.value)
-        return SkillInstallationPolicy.AVAILABLE
+    def own_installation_policy(self) -> PluginInstallationPolicy:
+        """The plugin's own setting as the skills API shows and writes it. No
+        setting shows as AVAILABLE, and AVAILABLE writes "no setting"."""
+        return self.installation_policy or PluginInstallationPolicy.AVAILABLE
+
+    @property
+    def company_installation_policy(self) -> PluginInstallationPolicy:
+        """The plugin's own setting, else its marketplace default."""
+        return self.installation_policy or self.marketplace_default_policy
 
 
 def load_plugin_access(
@@ -622,6 +623,7 @@ def load_plugin_access(
             author.c.is_active,
             plugin_is_published(Marketplace),
             Plugin.installation_policy,
+            Marketplace.default_installation_policy,
             Plugin.current_version_id,
             current.version_number,
             published.version_number,
@@ -685,14 +687,15 @@ def load_plugin_access(
             author_is_active=bool(row[3]),
             published=bool(row[4]),
             installation_policy=row[5],
-            current_version_id=row[6],
-            current_version_number=row[7],
-            published_version_number=row[8],
-            pending_version_number=row[9],
-            version_user_runs=row[10],
-            name=row[11],
-            description=row[12],
-            is_valid=row[13],
+            marketplace_default_policy=row[6],
+            current_version_id=row[7],
+            current_version_number=row[8],
+            published_version_number=row[9],
+            pending_version_number=row[10],
+            version_user_runs=row[11],
+            name=row[12],
+            description=row[13],
+            is_valid=row[14],
             user_shares=tuple(user_shares.get(row[0], ())),
             group_shares=tuple(group_shares.get(row[0], ())),
         )

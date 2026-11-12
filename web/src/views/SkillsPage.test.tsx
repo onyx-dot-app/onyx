@@ -170,6 +170,8 @@ function customSkill(id: string, name: string): CustomSkill {
     enabled: false,
     can_toggle: true,
     installation_policy: "AVAILABLE",
+    company_installation_policy: null,
+    effective_installation_policy: null,
     author_user_id: "owner-id",
     author_email: "owner@example.com",
     owner: { id: "owner-id", email: "owner@example.com" },

@@ -462,7 +462,7 @@ export function ImportSkillsFromGitHubModalView({
                   {isAdmin && (
                     <Text font="secondary-body" color="text-03">
                       {t(
-                        `share.installation.${({ AVAILABLE: "available", DEFAULT: "default", REQUIRED: "required" } as const)[sharing.installation_policy]}`
+                        `share.installation.${({ AVAILABLE: "available", DEFAULT: "default", REQUIRED: "required", NOT_AVAILABLE: "notAvailable" } as const)[sharing.installation_policy]}`
                       )}
                     </Text>
                   )}

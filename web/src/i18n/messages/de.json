@@ -5201,6 +5201,38 @@
         },
         "saveError": {
           "message": "Die Veröffentlichungseinstellung konnte nicht gespeichert werden."
+        },
+        "defaultAccess": {
+          "title": "Standardzugriff",
+          "description": "Gilt für jeden veröffentlichten Skill ohne eigene Einstellung, auch für später veröffentlichte Skills. {setting}",
+          "available": {
+            "label": "Verfügbar",
+            "description": "Mitglieder finden es und aktivieren es bei Bedarf."
+          },
+          "default": {
+            "label": "Standardmäßig installiert",
+            "description": "Für jedes Mitglied installiert. Mitglieder können es deaktivieren."
+          },
+          "notAvailable": {
+            "label": "Nicht verfügbar",
+            "description": "Ausgeblendet. Mitglieder können es nicht finden oder aktivieren."
+          },
+          "saveSuccess": {
+            "message": "Standardzugriff gespeichert."
+          },
+          "saveError": {
+            "message": "Standardzugriff konnte nicht gespeichert werden."
+          }
+        },
+        "sharing": {
+          "title": "Teilen",
+          "description": "Mitglieder können Skills mit Personen und Gruppen teilen. Admins können immer teilen.",
+          "saveSuccess": {
+            "message": "Einstellung zum Teilen gespeichert."
+          },
+          "saveError": {
+            "message": "Die Einstellung zum Teilen konnte nicht gespeichert werden."
+          }
         }
       }
     },
@@ -17399,7 +17431,9 @@
           "availableDescription": "Nutzer können jederzeit installieren oder deinstallieren.",
           "defaultDescription": "Automatisch installiert. Nutzer können jederzeit deaktivieren oder deinstallieren.",
           "requiredDescription": "Automatisch installiert. Nutzer können nicht deaktivieren oder deinstallieren.",
-          "description": "Wählen Sie, wie dieser Skill für alle Personen mit Zugriff installiert wird."
+          "description": "Wählen Sie, wie dieser Skill für alle Personen mit Zugriff installiert wird.",
+          "notAvailable": "Nicht verfügbar",
+          "notAvailableDescription": "Ausgeblendet. Mitglieder können es nicht finden oder aktivieren."
         },
         "description": "Wählen Sie, wer diesen Skill nutzen kann und wie er installiert wird.",
         "accessTitle": "Wer hat Zugriff",

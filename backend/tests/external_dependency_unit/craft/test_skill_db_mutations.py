@@ -16,6 +16,7 @@ from onyx.db.models import (
     Skill,
     Skill__User,
     Skill__UserGroup,
+    UserPluginPreference,
     UserSkillPreference,
 )
 from onyx.db.plugin import (
@@ -767,9 +768,11 @@ def test_published_default_keeps_its_name_over_a_shared_selection(
     assert preference is not None and preference.enabled
 
 
-def test_replacement_clears_inaccessible_selection_and_effective_default(
+def test_replacement_clears_effective_default_and_keeps_hidden_choice(
     db_session: Session,
 ) -> None:
+    """A switch turns off the visible same-name skill only. The kept choice of
+    a skill the user can no longer see neither blocks it nor changes."""
     user = make_user(db_session)
     owner = make_user(db_session)
     previous = make_skill(db_session, is_public=False, author_user_id=owner.id)
@@ -791,13 +794,21 @@ def test_replacement_clears_inaccessible_selection_and_effective_default(
         user=user,
         db_session=db_session,
     )
-    for skill in (previous, default):
-        preference = db_session.get(UserSkillPreference, (user.id, skill.id))
-        assert preference is not None and not preference.enabled
+    default_choice = db_session.get(UserPluginPreference, (user.id, default.id))
+    assert default_choice is not None and not default_choice.enabled
+    hidden_choice = db_session.get(UserPluginPreference, (user.id, previous.id))
+    assert hidden_choice is not None and hidden_choice.enabled
     set_skill_enabled_for_user(
         skill_id=replacement.id, enabled=False, user=user, db_session=db_session
     )
+    set_skill_enabled_for_user(
+        skill_id=default.id, enabled=False, user=user, db_session=db_session
+    )
     share_skill_with_user(db_session, previous, user)
+    assert skill_user_states(user, [previous.id], db_session)[previous.id].enabled
+    set_skill_enabled_for_user(
+        skill_id=previous.id, enabled=False, user=user, db_session=db_session
+    )
     assert not any(
         state.enabled
         for state in skill_user_states(

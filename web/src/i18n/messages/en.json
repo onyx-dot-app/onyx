@@ -5201,6 +5201,38 @@
         },
         "saveError": {
           "message": "Couldn't save the Publishing setting."
+        },
+        "defaultAccess": {
+          "title": "Default Access",
+          "description": "Applies to every published skill that doesn't have its own setting, including skills published later. {setting}",
+          "available": {
+            "label": "Available",
+            "description": "Members find it and turn it on if they want it."
+          },
+          "default": {
+            "label": "Installed by default",
+            "description": "Installed for every member. Members can turn it off."
+          },
+          "notAvailable": {
+            "label": "Not available",
+            "description": "Hidden. Members can't find or turn it on."
+          },
+          "saveSuccess": {
+            "message": "Default access saved."
+          },
+          "saveError": {
+            "message": "Couldn't save Default access."
+          }
+        },
+        "sharing": {
+          "title": "Sharing",
+          "description": "Members can share skills with people and groups. Admins can always share.",
+          "saveSuccess": {
+            "message": "Sharing setting saved."
+          },
+          "saveError": {
+            "message": "Couldn't save the Sharing setting."
+          }
         }
       }
     },
@@ -17399,7 +17431,9 @@
           "availableDescription": "Users can install or uninstall anytime.",
           "defaultDescription": "Installed automatically. Users can disable or uninstall anytime.",
           "requiredDescription": "Installed automatically. Users cannot disable or uninstall.",
-          "description": "Choose how this skill is installed for everyone with access."
+          "description": "Choose how this skill is installed for everyone with access.",
+          "notAvailable": "Not available",
+          "notAvailableDescription": "Hidden. Members can't find or turn it on."
         },
         "description": "Choose who can use this skill and how it is installed.",
         "accessTitle": "Who can access",

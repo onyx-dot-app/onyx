@@ -51,6 +51,8 @@ function custom(overrides: Partial<CustomSkill> = {}): CustomSkillCardItem {
     enabled: true,
     can_toggle: true,
     installation_policy: "AVAILABLE",
+    company_installation_policy: null,
+    effective_installation_policy: null,
     author_user_id: "user-id",
     author_email: "owner@example.com",
     owner: { id: "user-id", email: "owner@example.com" },

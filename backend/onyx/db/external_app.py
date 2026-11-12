@@ -716,8 +716,9 @@ def delete_external_app(
 ) -> None:
     """Delete an app, detach custom skills, and remove provider-owned skills.
 
-    Detached custom skills remain organization-visible but become ordinary
-    disabled skills. Flush only; the caller owns the transaction.
+    Detached custom skills stay published. Their company setting goes back to
+    the Organization library default, group settings stay, and every user
+    choice is deleted. Flush only; the caller owns the transaction.
     """
     app = get_external_app_by_id(db_session, external_app_id)
     if app is None:

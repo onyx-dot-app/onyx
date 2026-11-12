@@ -32,7 +32,7 @@ roll back atomically.
 """
 
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Any, Literal
@@ -71,6 +71,7 @@ from onyx.db.models import (
     ExternalApp__Skill,
     Marketplace,
     Plugin,
+    Plugin__User,
     Plugin__UserGroup,
     PluginVersion,
     Sandbox,
@@ -79,7 +80,6 @@ from onyx.db.models import (
     Skill__UserGroup,
     User,
     User__UserGroup,
-    UserPluginPreference,
     UserSkillPreference,
 )
 from onyx.db.plugin import (
@@ -121,10 +121,17 @@ from onyx.db.plugin_review import (
     pending_version,
 )
 from onyx.db.scoped_permissions import (
+    managed_group_member_ids_subquery,
     scoped_group_ids_subquery,
     within_managed_scope_clause,
 )
-from onyx.db.utils import UNSET, UnsetType, is_fk_violation, is_set
+from onyx.db.utils import (
+    UNSET,
+    UnsetType,
+    is_fk_violation,
+    is_set,
+    is_unique_violation,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.built_in import BUILT_IN_SKILLS
@@ -169,6 +176,9 @@ class RuntimeSkill:
 class SkillUserState:
     enabled: bool
     can_toggle: bool
+    # The install setting for the user. None for a built-in or a skill the
+    # user cannot see.
+    installation_policy: PluginInstallationPolicy | None
     external_app_dependency: SkillExternalAppDependencyState | None
     # Set when the name order hides the skill for the user.
     name_hidden: HiddenSkillName | None
@@ -249,14 +259,27 @@ def _is_group_shared_only_within_managed_scope(user: User) -> ColumnElement[bool
     """A scoped manager may edit a skill only when every group it is shared with
     is one they manage, and it isn't published org-wide. Delegates to the shared
     read-side helper so this can't drift from the write-side GATE 2. Only group
-    rows with a permission count."""
-    return within_managed_scope_clause(
-        resource_id_col=Skill.id,
-        junction_resource_col=Plugin__UserGroup.plugin_id,
-        junction_group_col=Plugin__UserGroup.user_group_id,
-        non_public_clause=and_(Skill.built_in_skill_id.is_(None), ~_is_published()),
-        managed_subq=scoped_group_ids_subquery(user),
-        junction_live_clause=Plugin__UserGroup.permission.is_not(None),
+    rows with a permission count. Every direct user share must also go to a
+    member of a managed group."""
+    managed = scoped_group_ids_subquery(user)
+    share_outside_scope = (
+        select(Plugin__User.plugin_id)
+        .where(
+            Plugin__User.plugin_id == Skill.id,
+            Plugin__User.user_id.notin_(managed_group_member_ids_subquery(user)),
+        )
+        .exists()
+    )
+    return and_(
+        within_managed_scope_clause(
+            resource_id_col=Skill.id,
+            junction_resource_col=Plugin__UserGroup.plugin_id,
+            junction_group_col=Plugin__UserGroup.user_group_id,
+            non_public_clause=and_(Skill.built_in_skill_id.is_(None), ~_is_published()),
+            managed_subq=managed,
+            junction_live_clause=Plugin__UserGroup.permission.is_not(None),
+        ),
+        ~share_outside_scope,
     )
 
 
@@ -620,7 +643,8 @@ def add_new_skill__no_commit(
 
 
 def _lock_user_skill_preferences(user_id: UUID, db_session: Session) -> None:
-    # Serialize preference changes without blocking foreign-key reads from sharing.
+    """Serialize one user's user_plugin_preference writes on the user row,
+    without blocking the foreign-key reads of sharing writes."""
     db_session.execute(
         select(User.__table__.c.id)
         .where(User.__table__.c.id == user_id)
@@ -647,18 +671,38 @@ def enable_new_skill_if_name_available__no_commit(
             selection.other_skills_named(name, skill.id) for name in state.skill_names
         ):
             return False
-    inserted_user_id = db_session.scalar(
-        insert(UserSkillPreference)
-        .values(user_id=user_id, skill_id=skill.id, name=skill.name, enabled=True)
-        .on_conflict_do_nothing()
-        .returning(UserSkillPreference.user_id)
-    )
-    if inserted_user_id is None:
-        return False
     if skill.is_custom:
         plugin = lock_skill_plugin__no_commit(skill, db_session)
         set_plugin_preferences__no_commit(user_id, [plugin.id], True, db_session)
+    _write_legacy_choice__no_commit(user_id, skill, True, db_session)
     return True
+
+
+def _write_legacy_choice__no_commit(
+    user_id: UUID, skill: Skill, enabled: bool, db_session: Session
+) -> None:
+    """Mirror a choice to the legacy user_skill_preference row. Reads use
+    user_plugin_preference. The legacy index uq_user_skill_preference_name
+    allows one enabled row per name, and a hidden plugin's kept choice can
+    hold that name; the legacy row then keeps its old value."""
+    try:
+        with db_session.begin_nested():
+            db_session.execute(
+                insert(UserSkillPreference)
+                .values(
+                    user_id=user_id, skill_id=skill.id, name=skill.name, enabled=enabled
+                )
+                .on_conflict_do_update(
+                    index_elements=[
+                        UserSkillPreference.user_id,
+                        UserSkillPreference.skill_id,
+                    ],
+                    set_={"enabled": enabled},
+                )
+            )
+    except IntegrityError as exc:
+        if not is_unique_violation(exc, "uq_user_skill_preference_name"):
+            raise
 
 
 def create_custom_skill__no_commit(
@@ -841,6 +885,7 @@ def skill_user_states(
             states[skill_id] = SkillUserState(
                 enabled=True,
                 can_toggle=False,
+                installation_policy=None,
                 external_app_dependency=external_app_dependencies.get(skill_id),
                 name_hidden=None,
             )
@@ -849,6 +894,9 @@ def skill_user_states(
         enabled = selection.enabled(skill_id)
         states[skill_id] = SkillUserState(
             enabled=enabled,
+            installation_policy=state.installation_policy
+            if state is not None
+            else None,
             can_toggle=state is not None
             and state.version_is_valid is not False
             and state.installation_policy != PluginInstallationPolicy.REQUIRED
@@ -903,6 +951,8 @@ def set_skill_enabled_for_user(
         skill_name = (
             target.skill_names[0] if target and target.skill_names else skill.name
         )
+        # Only skills the user can see conflict. A hidden plugin's kept choice
+        # neither blocks the switch nor changes.
         others = selection.other_skills_named(skill_name, skill.id)
         if any(
             other.installation_policy == PluginInstallationPolicy.REQUIRED
@@ -912,19 +962,7 @@ def set_skill_enabled_for_user(
                 OnyxErrorCode.SKILL_NAME_CONFLICT,
                 "A required skill already uses this name.",
             )
-        # A saved choice of a skill the user cannot see still holds the name
-        # in the legacy preference index.
-        saved_choices = db_session.scalars(
-            select(Skill.id)
-            .join(UserPluginPreference, UserPluginPreference.plugin_id == Skill.id)
-            .where(
-                UserPluginPreference.user_id == user.id,
-                UserPluginPreference.enabled.is_(True),
-                Skill.id != skill.id,
-                _runtime_name(user) == skill_name,
-            )
-        )
-        conflicts = sorted({other.plugin_id for other in others} | set(saved_choices))
+        conflicts = sorted({other.plugin_id for other in others})
         if conflicts and not replace_conflict:
             raise OnyxError(
                 OnyxErrorCode.SKILL_NAME_CONFLICT,
@@ -938,39 +976,15 @@ def set_skill_enabled_for_user(
         if plugin_id != skill.id
     ]
     if conflicts:
-        db_session.execute(
-            insert(UserSkillPreference)
-            .values(
-                [
-                    {
-                        "user_id": user.id,
-                        "skill_id": conflict,
-                        "name": skill.name,
-                        "enabled": False,
-                    }
-                    for conflict in conflicts
-                ]
-            )
-            .on_conflict_do_update(
-                index_elements=[
-                    UserSkillPreference.user_id,
-                    UserSkillPreference.skill_id,
-                ],
-                set_={"enabled": False},
-            )
-        )
         set_plugin_preferences__no_commit(
             user.id, conflict_plugin_ids, False, db_session
         )
-    db_session.execute(
-        insert(UserSkillPreference)
-        .values(user_id=user.id, skill_id=skill.id, name=skill.name, enabled=enabled)
-        .on_conflict_do_update(
-            index_elements=[UserSkillPreference.user_id, UserSkillPreference.skill_id],
-            set_={"enabled": enabled},
-        )
-    )
+        for conflict in db_session.scalars(
+            select(Skill).where(Skill.id.in_(conflicts)).order_by(Skill.id)
+        ):
+            _write_legacy_choice__no_commit(user.id, conflict, False, db_session)
     set_plugin_preferences__no_commit(user.id, [skill.id], enabled, db_session)
+    _write_legacy_choice__no_commit(user.id, skill, enabled, db_session)
     return skill
 
 
@@ -1144,9 +1158,14 @@ class SkillSharingChange:
 
     public_permission: SkillSharePermission | None = None
     set_public_permission: bool = False
-    installation_policy: SkillInstallationPolicy | None | UnsetType = UNSET
+    installation_policy: PluginInstallationPolicy | None | UnsetType = UNSET
     user_shares: Mapping[UUID, SkillSharePermission] | None = None
     group_shares: Mapping[int, SkillSharePermission] | None = None
+    # Group install settings for groups in ``group_shares``. A group left out
+    # keeps its setting; None removes it.
+    group_installation_policies: Mapping[int, PluginInstallationPolicy | None] = field(
+        default_factory=dict
+    )
 
 
 SkillBulkAction = Literal["enable", "disable", "delete"]
@@ -1176,11 +1195,17 @@ def _user_grants(
 
 def _group_grants(
     shares: Mapping[int, SkillSharePermission] | None,
+    policies: Mapping[int, PluginInstallationPolicy | None] | None = None,
 ) -> tuple[PluginGroupGrant, ...] | None:
     if shares is None:
         return None
+    policies = policies or {}
     return tuple(
-        PluginGroupGrant(group_id=group_id, permission=permission)
+        PluginGroupGrant(
+            group_id=group_id,
+            permission=permission,
+            installation_policy=(policies[group_id] if group_id in policies else UNSET),
+        )
         for group_id, permission in shares.items()
     )
 
@@ -1195,11 +1220,13 @@ def _plugin_access_change(
     policy = change.installation_policy
     return PluginAccessChange(
         user_grants=_user_grants(change.user_shares),
-        group_grants=_group_grants(change.group_shares),
+        group_grants=_group_grants(
+            change.group_shares, change.group_installation_policies
+        ),
         publish=change.set_public_permission
         and change.public_permission == SkillSharePermission.VIEWER,
         company_installation_policy=(
-            plugin_installation_policy(policy) if policy is not None else None
+            None if policy == PluginInstallationPolicy.AVAILABLE else policy
         )
         if is_set(policy)
         else UNSET,
@@ -1347,6 +1374,33 @@ def bulk_share_skills__no_commit(
     )
 
 
+def _is_required_for_anyone(skill_id: UUID, db_session: Session) -> bool:
+    """The company setting (own, else the marketplace default) or a group
+    setting of the skill's plugin is REQUIRED."""
+    required = PluginInstallationPolicy.REQUIRED
+    return bool(
+        db_session.scalar(
+            select(
+                or_(
+                    exists().where(
+                        Plugin.id == skill_id,
+                        Marketplace.id == Plugin.marketplace_id,
+                        func.coalesce(
+                            Plugin.installation_policy,
+                            Marketplace.default_installation_policy,
+                        )
+                        == required,
+                    ),
+                    exists().where(
+                        Plugin__UserGroup.plugin_id == skill_id,
+                        Plugin__UserGroup.installation_policy == required,
+                    ),
+                )
+            )
+        )
+    )
+
+
 def delete_skill_for_user__no_commit(
     skill: Skill, user: User, db_session: Session
 ) -> tuple[set[UUID], list[str]]:
@@ -1360,10 +1414,9 @@ def delete_skill_for_user__no_commit(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "This skill is published to the organization. Only an admin can delete it.",
         )
-    if (
-        skill.installation_policy == SkillInstallationPolicy.REQUIRED
-        and not has_global_permission(user, Permission.MANAGE_PLUGINS)
-    ):
+    if not has_global_permission(
+        user, Permission.MANAGE_PLUGINS
+    ) and _is_required_for_anyone(skill.id, db_session):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "Only an organization-wide skill manager can delete a required skill.",

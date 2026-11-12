@@ -5201,6 +5201,38 @@
         },
         "saveError": {
           "message": "No se pudo guardar la configuración de publicación."
+        },
+        "defaultAccess": {
+          "title": "Acceso predeterminado",
+          "description": "Se aplica a cada skill publicado que no tiene su propia configuración, incluidos los que se publiquen después. {setting}",
+          "available": {
+            "label": "Disponible",
+            "description": "Los miembros lo encuentran y lo activan si lo necesitan."
+          },
+          "default": {
+            "label": "Instalado por defecto",
+            "description": "Instalado para cada miembro. Los miembros pueden desactivarlo."
+          },
+          "notAvailable": {
+            "label": "No disponible",
+            "description": "Oculto. Los miembros no pueden encontrarlo ni activarlo."
+          },
+          "saveSuccess": {
+            "message": "Acceso predeterminado guardado."
+          },
+          "saveError": {
+            "message": "No se pudo guardar el acceso predeterminado."
+          }
+        },
+        "sharing": {
+          "title": "Compartir",
+          "description": "Los miembros pueden compartir skills con personas y grupos. Los administradores siempre pueden compartir.",
+          "saveSuccess": {
+            "message": "Configuración de uso compartido guardada."
+          },
+          "saveError": {
+            "message": "No se pudo guardar la configuración de uso compartido."
+          }
         }
       }
     },
@@ -17399,7 +17431,9 @@
           "availableDescription": "Los usuarios pueden instalar o desinstalar en cualquier momento.",
           "defaultDescription": "Se instala automáticamente. Los usuarios pueden desactivar o desinstalar en cualquier momento.",
           "requiredDescription": "Se instala automáticamente. Los usuarios no pueden desactivar ni desinstalar.",
-          "description": "Elige cómo se instala esta habilidad para quienes tienen acceso."
+          "description": "Elige cómo se instala esta habilidad para quienes tienen acceso.",
+          "notAvailable": "No disponible",
+          "notAvailableDescription": "Oculto. Los miembros no pueden encontrarlo ni activarlo."
         },
         "description": "Elige quién puede usar esta habilidad y cómo se instala.",
         "accessTitle": "Quién puede acceder",

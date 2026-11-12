@@ -8,8 +8,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import (
+    PluginInstallationPolicy,
     SkillAccessLevel,
-    SkillInstallationPolicy,
     SkillSharePermission,
 )
 from onyx.db.models import Skill
@@ -52,7 +52,13 @@ class SkillResponse(BaseModel):
 
     enabled: bool
     can_toggle: bool
-    installation_policy: SkillInstallationPolicy = SkillInstallationPolicy.AVAILABLE
+    # The skill's own company setting; AVAILABLE when it has none.
+    installation_policy: PluginInstallationPolicy = PluginInstallationPolicy.AVAILABLE
+    # The own setting, else the default of the skill's marketplace.
+    company_installation_policy: PluginInstallationPolicy | None = None
+    # The setting for the caller, after group settings and shares. None for
+    # built-ins.
+    effective_installation_policy: PluginInstallationPolicy | None = None
     author_user_id: UUID | None = None
     author_email: str | None = None
     owner: MinimalUserSnapshot | None = None
@@ -105,6 +111,7 @@ class SkillResponse(BaseModel):
         *,
         enabled: bool,
         can_toggle: bool = True,
+        effective_installation_policy: PluginInstallationPolicy | None = None,
         user_permission: SkillAccessLevel | None = None,
         include_share_details: bool = False,
         external_app: SkillExternalAppDependencyResponse | None = None,
@@ -140,10 +147,14 @@ class SkillResponse(BaseModel):
             ),
             is_valid=access.is_valid if access is not None else None,
             installation_policy=(
-                access.skill_installation_policy
+                access.own_installation_policy
                 if access is not None
-                else SkillInstallationPolicy.AVAILABLE
+                else PluginInstallationPolicy.AVAILABLE
             ),
+            company_installation_policy=(
+                access.company_installation_policy if access is not None else None
+            ),
+            effective_installation_policy=effective_installation_policy,
             enabled=enabled,
             can_toggle=can_toggle,
             author_user_id=author_user_id,
@@ -326,6 +337,12 @@ class GitHubSkillsImportResponse(BaseModel):
     not_imported: list[GitHubSkillNotImported]
 
 
+class OrganizationLibraryDefaultAccess(BaseModel):
+    """The install setting of every published skill with no own setting."""
+
+    installation_policy: PluginInstallationPolicy
+
+
 class SkillEnableRequest(BaseModel):
     enabled: bool
     replace_conflict: bool = False
@@ -401,13 +418,15 @@ class SkillUserShareRequest(BaseModel):
 class SkillGroupShareRequest(BaseModel):
     group_id: int
     permission: SkillSharePermission
+    # Missing: unchanged. Null: the group follows the company setting.
+    installation_policy: PluginInstallationPolicy | None = None
 
 
 class SkillShareRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    # Missing: unchanged. Null: the marketplace default.
-    installation_policy: SkillInstallationPolicy | None = None
+    # Missing: unchanged. Null or AVAILABLE: the marketplace default.
+    installation_policy: PluginInstallationPolicy | None = None
 
     user_shares: list[SkillUserShareRequest] | None = None
     group_shares: list[SkillGroupShareRequest] | None = None
@@ -431,6 +450,15 @@ class SkillShareRequest(BaseModel):
                 {share.group_id: share.permission for share in self.group_shares}
                 if self.group_shares is not None
                 else None
+            ),
+            group_installation_policies=(
+                {
+                    share.group_id: share.installation_policy
+                    for share in self.group_shares
+                    if "installation_policy" in share.model_fields_set
+                }
+                if self.group_shares is not None
+                else {}
             ),
         )
 

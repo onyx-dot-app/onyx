@@ -3,7 +3,12 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from onyx.db.enums import Permission, SkillAccessLevel, SkillSharePermission
+from onyx.db.enums import (
+    Permission,
+    PluginInstallationPolicy,
+    SkillAccessLevel,
+    SkillSharePermission,
+)
 from onyx.db.models import Skill, User
 from onyx.db.plugin_access import PluginAccess, PluginGroupShare, PluginUserShare
 from onyx.db.skill import ensure_can_edit_org_visibility
@@ -41,6 +46,7 @@ class _Case:
             author_is_active=True,
             published=self.published,
             installation_policy=None,
+            marketplace_default_policy=PluginInstallationPolicy.AVAILABLE,
             current_version_id=self.skill.id,
             current_version_number=1,
             published_version_number=1 if self.published else None,
@@ -102,9 +108,15 @@ def _permission(
     user: User,
     user_group_ids: set[int],
     managed_user_group_ids: set[int] | None = None,
+    managed_member_ids: set[UUID] | None = None,
 ) -> SkillAccessLevel | None:
     return user_permission_for_skill(
-        case.skill, case.access(), user, user_group_ids, managed_user_group_ids
+        case.skill,
+        case.access(),
+        user,
+        user_group_ids,
+        managed_user_group_ids,
+        managed_member_ids,
     )
 
 
@@ -280,6 +292,37 @@ def test_curator_can_edit_skill_shared_with_curated_groups() -> None:
             managed_user_group_ids={1},
         )
         == SkillAccessLevel.EDITOR
+    )
+
+
+def test_curator_cannot_edit_skill_shared_with_a_user_outside_curated_groups() -> None:
+    """R17: a direct user share must go to a member of a managed group."""
+    author = _user()
+    curator = _user()
+    member = uuid4()
+    skill = _skill(author)
+    _share_with_groups(skill, [1])
+    _share_with_user(skill, member)
+
+    assert (
+        _permission(
+            skill,
+            curator,
+            user_group_ids={1},
+            managed_user_group_ids={1},
+            managed_member_ids={member},
+        )
+        == SkillAccessLevel.EDITOR
+    )
+    assert (
+        _permission(
+            skill,
+            curator,
+            user_group_ids={1},
+            managed_user_group_ids={1},
+            managed_member_ids=set(),
+        )
+        == SkillAccessLevel.VIEWER
     )
 
 

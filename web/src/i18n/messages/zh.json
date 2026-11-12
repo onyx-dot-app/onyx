@@ -5201,6 +5201,38 @@
         },
         "saveError": {
           "message": "无法保存发布设置。"
+        },
+        "defaultAccess": {
+          "title": "默认访问权限",
+          "description": "适用于每个没有自身设置的已发布技能，包括以后发布的技能。 {setting}",
+          "available": {
+            "label": "可用",
+            "description": "成员可以找到并按需启用。"
+          },
+          "default": {
+            "label": "默认安装",
+            "description": "为每个成员安装。成员可以关闭。"
+          },
+          "notAvailable": {
+            "label": "不可用",
+            "description": "已隐藏。成员无法找到或启用。"
+          },
+          "saveSuccess": {
+            "message": "默认访问权限已保存。"
+          },
+          "saveError": {
+            "message": "无法保存默认访问权限。"
+          }
+        },
+        "sharing": {
+          "title": "共享",
+          "description": "成员可以与他人和群组共享技能。管理员始终可以共享。",
+          "saveSuccess": {
+            "message": "共享设置已保存。"
+          },
+          "saveError": {
+            "message": "无法保存共享设置。"
+          }
         }
       }
     },
@@ -17399,7 +17431,9 @@
           "availableDescription": "用户可以随时安装或卸载。",
           "defaultDescription": "自动安装。用户可以随时禁用或卸载。",
           "requiredDescription": "自动安装。用户无法禁用或卸载。",
-          "description": "选择此技能对所有有访问权限的用户的安装方式。"
+          "description": "选择此技能对所有有访问权限的用户的安装方式。",
+          "notAvailable": "不可用",
+          "notAvailableDescription": "已隐藏。成员无法找到或启用。"
         },
         "description": "选择谁可以使用此技能及其安装方式。",
         "accessTitle": "谁可以访问",

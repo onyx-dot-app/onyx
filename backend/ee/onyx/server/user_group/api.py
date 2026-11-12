@@ -17,6 +17,7 @@ from ee.onyx.db.user_group import (
     fetch_user_group,
     fetch_user_group_for_snapshot,
     fetch_user_group_member_counts,
+    fetch_user_group_member_ids,
     fetch_user_groups,
     fetch_user_groups_for_user,
     insert_user_group,
@@ -84,6 +85,7 @@ from onyx.db.user_group import (
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.security.store import get_security_settings
+from onyx.skills.push import push_skills_after_membership_change
 from onyx.utils.audit import (
     AuditAction,
     AuditOutcome,
@@ -328,6 +330,7 @@ def create_user_group(
             "cc_pair_ids": list(user_group.cc_pair_ids),
         },
     )
+    push_skills_after_membership_change(user_group.user_ids, db_session)
 
     return UserGroup.from_model(
         db_user_group,
@@ -414,18 +417,24 @@ def patch_user_group(
     ),
     db_session: Session = Depends(get_session),
 ) -> UserGroup:
+    members_before = fetch_user_group_member_ids(db_session, user_group_id)
     try:
-        return UserGroup.from_model(
-            update_user_group(
-                db_session=db_session,
-                user=user,
-                user_group_id=user_group_id,
-                user_group_update=user_group_update,
-            ),
-            mask_credential_prefix=get_security_settings().mask_credential_prefix,
+        db_user_group = update_user_group(
+            db_session=db_session,
+            user=user,
+            user_group_id=user_group_id,
+            user_group_update=user_group_update,
         )
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
+    push_skills_after_membership_change(
+        members_before ^ fetch_user_group_member_ids(db_session, user_group_id),
+        db_session,
+    )
+    return UserGroup.from_model(
+        db_user_group,
+        mask_credential_prefix=get_security_settings().mask_credential_prefix,
+    )
 
 
 @router.put("/admin/user-group/{user_group_id}/data-access-cc-pairs")
@@ -541,18 +550,24 @@ def add_users(
     ),
     db_session: Session = Depends(get_session),
 ) -> UserGroup:
+    members_before = fetch_user_group_member_ids(db_session, user_group_id)
     try:
-        return UserGroup.from_model(
-            add_users_to_user_group(
-                db_session=db_session,
-                user=user,
-                user_group_id=user_group_id,
-                user_ids=add_users_request.user_ids,
-            ),
-            mask_credential_prefix=get_security_settings().mask_credential_prefix,
+        db_user_group = add_users_to_user_group(
+            db_session=db_session,
+            user=user,
+            user_group_id=user_group_id,
+            user_ids=add_users_request.user_ids,
         )
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
+    push_skills_after_membership_change(
+        fetch_user_group_member_ids(db_session, user_group_id) - members_before,
+        db_session,
+    )
+    return UserGroup.from_model(
+        db_user_group,
+        mask_credential_prefix=get_security_settings().mask_credential_prefix,
+    )
 
 
 @router.delete("/admin/user-group/{user_group_id}")
@@ -567,12 +582,14 @@ def delete_user_group(
     # Deletion drops every membership, so capture the roster before it runs.
     existing = fetch_user_group(db_session, user_group_id)
     group_name = existing.name if existing else None
-    member_ids = [str(member.id) for member in existing.users] if existing else []
+    member_uuids = [member.id for member in existing.users] if existing else []
+    member_ids = [str(member_id) for member_id in member_uuids]
 
     try:
         prepare_user_group_for_deletion(db_session, user_group_id)
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
+    push_skills_after_membership_change(member_uuids, db_session)
 
     emit_audit_event(
         AuditAction.USER_GROUP_DELETE,

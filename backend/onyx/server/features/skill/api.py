@@ -23,10 +23,12 @@ from onyx.db.external_app import (
 from onyx.db.models import Skill, User
 from onyx.db.plugin import (
     AddedPluginVersion,
+    get_organization_library_default,
     get_plugin_current_version_id,
     get_plugin_version,
     list_plugin_versions,
     lock_skill_plugin__no_commit,
+    set_organization_library_default__no_commit,
 )
 from onyx.db.plugin_review import list_review_requests
 from onyx.db.skill import (
@@ -64,6 +66,7 @@ from onyx.server.features.skill.models import (
     GitHubSkillsImportResponse,
     GitHubSkillsPreviewRequest,
     GitHubSkillsPreviewResponse,
+    OrganizationLibraryDefaultAccess,
     SkillBulkActionRequest,
     SkillBulkFailure,
     SkillBulkResponse,
@@ -411,6 +414,33 @@ def list_skill_review_requests(
         )
         for request in list_review_requests(db_session)
     ]
+
+
+@user_router.get("/organization-library/default-access")
+def get_organization_library_default_access(
+    _: User = Depends(require_permission(Permission.MANAGE_PLUGINS)),
+    db_session: Session = Depends(get_session),
+) -> OrganizationLibraryDefaultAccess:
+    return OrganizationLibraryDefaultAccess(
+        installation_policy=get_organization_library_default(db_session)
+    )
+
+
+@user_router.put("/organization-library/default-access")
+def set_organization_library_default_access(
+    request: OrganizationLibraryDefaultAccess,
+    _: User = Depends(require_permission(Permission.MANAGE_PLUGINS)),
+    db_session: Session = Depends(get_session),
+) -> OrganizationLibraryDefaultAccess:
+    affected = set_organization_library_default__no_commit(
+        request.installation_policy, db_session
+    )
+    db_session.commit()
+    push_skills_for_users(affected, db_session)
+    db_session.commit()
+    return OrganizationLibraryDefaultAccess(
+        installation_policy=request.installation_policy
+    )
 
 
 @user_router.get("/{skill_id}")

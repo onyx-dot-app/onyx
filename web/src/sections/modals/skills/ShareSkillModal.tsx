@@ -586,6 +586,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
                       AVAILABLE: "availableDescription",
                       DEFAULT: "defaultDescription",
                       REQUIRED: "requiredDescription",
+                      NOT_AVAILABLE: "notAvailableDescription",
                     } as const
                   )[installationPolicy]
                 }`

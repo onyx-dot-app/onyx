@@ -1,8 +1,8 @@
 """Single share and bulk share apply one access change to the plugin of each
 skill, with one set of rules.
 
-The API refuses group install settings until group settings ship, so these
-tests write such rows directly and read the plugin rows from the database."""
+Some tests write group install settings directly and read the plugin rows
+from the database."""
 
 from collections.abc import Generator
 from typing import Any

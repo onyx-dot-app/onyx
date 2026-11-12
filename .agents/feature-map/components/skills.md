@@ -25,10 +25,18 @@
   shares with users or groups as viewer or editor, publishes to the
   organization, or transfers ownership.
 - **Admins** set the installation policy of a custom skill: available (the user
-  opts in), installed by default (on until the user opts out), or required (on,
-  and the user cannot turn it off). This needs organization-wide
-  `MANAGE_PLUGINS`, which only admins hold today; a group manager cannot. Only
-  the same permission deletes a required skill.
+  opts in), installed by default (on until the user opts out), required (on,
+  and the user cannot turn it off), or not available (hidden). This needs
+  organization-wide `MANAGE_PLUGINS`, which only admins hold today. A group
+  setting (`SkillGroupShareRequest.installation_policy`) replaces it for that
+  group's members; a group manager sets it only for their groups, on a private
+  skill shared only within them. Only organization-wide `MANAGE_PLUGINS`
+  deletes a skill that is required for anyone.
+- **Admin skill policies** on Admin Panel → Craft → Preferences: Skill
+  Publishing ([[#publishing-review]]), **Default Access** (the Organization
+  library default for published skills with no own setting: Available,
+  Installed by default or Not available; never Required) and **Sharing** (off:
+  only organization-wide managers add user or group shares).
 - **Bulk management.** Craft's Skills library and **Admin Panel → Skills**
   support selection of custom skills, bulk access and installation changes,
   personal enable/disable, and confirmed deletion. Admins see all manageable
@@ -55,8 +63,10 @@ When it fails:
   `.template` file is rejected with a message. A direct upload over a size or
   file count limit is rejected with a 413 that names the limit. Batch uploads
   list the Skill in `not_imported`, and a GitHub preview marks it unavailable.
-- Turning on a skill whose name another enabled skill uses returns a name
-  conflict. The client can retry with `replace_conflict` to switch skills.
+- Turning on a skill whose name another enabled skill the user can see uses
+  returns a name conflict. The client can retry with `replace_conflict` to
+  switch skills. The kept choice of a skill the user can no longer see neither
+  blocks the switch nor changes.
 - When two enabled skills still share a name, for example after a share or a
   publish, the sandbox gets one of them by the name order. The other shows as
   off. The push does not fail.
@@ -195,7 +205,10 @@ The library preview of an external-app skill calls the same renderer
    nothing. A group row whose own setting is `NOT_AVAILABLE` grants nothing
    either. The author and a direct share get at least available, also past a
    group `NOT_AVAILABLE`. Built-in skills have no plugin and keep their skill
-   rows.
+   rows. A scoped manager edits a private skill only when every group share is
+   in their groups and every user share goes to a member of those groups
+   (`db/skill.py:_is_group_shared_only_within_managed_scope`, mirrored in
+   `server/features/skill/response_helpers.py:user_permission_for_skill`).
 4. `enablement-not-preference-row` **Never infer enablement from a preference
    row.** Use `db/plugin_access.py:load_user_plugin_states`. It reads
    `user_plugin_preference` and the install setting that applies to the user
@@ -204,13 +217,21 @@ The library preview of an external-app skill calls the same renderer
    least available for the author or with a share). Disable writes `enabled=False`; it does
    not delete the row. A required policy overrides an opt-out without deleting
    it, so the opt-out returns when the policy goes back to default.
-5. `name-uniqueness-in-db` **Name uniqueness is in the database.** The partial
-   unique index `uq_user_skill_preference_name` allows one enabled choice per
-   user and name. `uq_skill_automatic_name` allows one default or required
-   skill per name in the tenant. Every write that enables a preference first
-   takes `db/skill.py:_lock_user_skill_preferences`, a `FOR NO KEY UPDATE`
-   lock on the user row. The lock orders concurrent enables of one name, so
-   the second one gets `SKILL_NAME_CONFLICT`, not an `IntegrityError`. The
+5. `name-uniqueness-in-db` **Only plugin.name is unique, per marketplace.**
+   `uq_plugin_marketplace_name`: a new plugin with a used name takes the next
+   free name (`db/plugin.py:free_plugin_name`), also when a concurrent create
+   takes it first (`create_plugin__no_commit` retries). Publish and transfer
+   refuse a clash with `CONFLICT`. Skill names repeat across plugins; never
+   compare one with `plugin.name`. The legacy index
+   `uq_skill_automatic_name` allows one default or required skill row per
+   name, so the dual write stores `AVAILABLE` for `NOT_AVAILABLE` and for no
+   setting. The legacy `uq_user_skill_preference_name` allows one enabled
+   legacy choice per user and name; `db/skill.py:_write_legacy_choice__no_commit`
+   skips a legacy row it refuses, because reads use `user_plugin_preference`.
+   A toggle conflicts only with skills the user can see. Every write that
+   enables a preference first takes `db/skill.py:_lock_user_skill_preferences`,
+   a `FOR NO KEY UPDATE` lock on the user row. The lock orders concurrent
+   enables of one name, so the second one gets `SKILL_NAME_CONFLICT`. The
    lock does not block the `FOR KEY SHARE` locks that foreign-key checks take,
    so sharing writes that reference the user still run. A new preference
    writer, such as an auto-enable, must take the same lock.
@@ -291,9 +312,19 @@ The library preview of an external-app skill calls the same renderer
     nothing, and null or AVAILABLE means the marketplace default. A group
     keeps its install setting when the change does not set one, also when its
     share is removed (the row stays with no permission). A group install
-    setting needs `MANAGE_PLUGINS` for that group on a private plugin and
-    global `MANAGE_PLUGINS` on a published one; it is then refused until group
-    settings ship. EDIT on a skill is not enough to change its groups: any
+    setting needs global `MANAGE_PLUGINS`, or `MANAGE_PLUGINS` for that group
+    on a private plugin whose group and user shares all stay within the
+    actor's groups (`db/plugin.py:_check_scoped_group_setting`). A group row
+    cannot be `EDITOR` with `NOT_AVAILABLE`. With `Settings.plugin_sharing`
+    off, only global `MANAGE_PLUGINS` adds a share or changes its level
+    (`db/plugin.py:_check_sharing_setting`); removing one stays allowed. The
+    legacy group rows leave out a row with `NOT_AVAILABLE`. A group
+    membership change (group API, SCIM) pushes to the users who joined or
+    left (`skills/push.py:push_skills_after_membership_change`). The
+    Organization library default is written by
+    `db/plugin.py:set_organization_library_default__no_commit`, which refuses
+    `REQUIRED` and returns the affected users. EDIT on a skill is not enough
+    to change its groups: any
     change to the group set or levels is a `MANAGE_PLUGINS` action within scope
     (`auth/scoped_permissions.py:assert_within_scope`, [[authorization]]).
     Without it, an owner could push a skill into any group manager's scope.
@@ -531,10 +562,12 @@ The library preview of an external-app skill calls the same renderer
     select on Admin Panel → Craft → Preferences
     (`web/src/views/admin/CraftPreferencesPage/SkillPublishingCard.tsx`, saved
     with `updateAdminSettings({ plugin_publishing })` so the PATCH changes only
-    that field), and **Publish Requests** with Approve and Deny on Admin Panel
-    → Skills (`web/src/sections/skills/SkillReviewRequests.tsx`; a global
-    manager without full admin sees it on the Craft Skills page); an approve
-    error such as a name clash shows the server detail.
+    that field; the same card holds **Default Access**, saved with
+    `PUT /skills/organization-library/default-access`, and **Sharing**, saved
+    as `plugin_sharing`), and **Publish Requests** with Approve and Deny on
+    Admin Panel → Skills (`web/src/sections/skills/SkillReviewRequests.tsx`; a
+    global manager without full admin sees it on the Craft Skills page); an
+    approve error such as a name clash shows the server detail.
 ---
 
 ## Decisions
@@ -571,8 +604,6 @@ The library preview of an external-app skill calls the same renderer
   drops every failure ([[#push-holds-row-locks]]), so the change commits
   anyway. If that commit fails, the sandboxes hold files that the database
   does not.
-- **Membership changes do not push.** A user added to a group that a skill is
-  shared with gets it at the next push, session start or reload.
 
 ---
 
@@ -652,6 +683,11 @@ The library preview of an external-app skill calls the same renderer
   (`backend/tests/integration/tests/skills/test_skill_publish_review.py`).
   `backend/tests/external_dependency_unit/craft/test_skill_pruned_version_read.py`
   covers the read of a pruned bundle.
+  `backend/tests/external_dependency_unit/craft/test_plugin_access_change.py`
+  and `backend/tests/external_dependency_unit/craft/test_plugin_setting_writes.py`
+  cover the setting and name rules of
+  writes; `backend/tests/integration/tests/skills/test_skill_setting_writes.py`
+  covers Default Access, Not available, Sharing and the response fields.
   `backend/tests/integration/tests/craft/k8s/` covers a real
   push.
 - By hand: edit a skill while a Craft session runs. The stale notice must

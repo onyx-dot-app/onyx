@@ -6,6 +6,7 @@ GATE 2 write gate) lives in ``onyx/auth/scoped_permissions.py``.
 """
 
 from typing import TypeVar
+from uuid import UUID
 
 from sqlalchemy import ColumnElement, Select, and_, select
 from sqlalchemy.orm import InstrumentedAttribute, Session
@@ -38,6 +39,17 @@ def scoped_group_ids_subquery(user: User) -> Select:
 def fetch_managed_group_ids(user: User, db_session: Session) -> set[int]:
     """Execute ``scoped_group_ids_subquery`` — the ids of groups ``user`` manages."""
     return set(db_session.scalars(scoped_group_ids_subquery(user)).all())
+
+
+def managed_group_member_ids_subquery(user: User) -> Select:
+    """Subquery of the members of the groups ``user`` manages."""
+    return select(User__UserGroup.user_id).where(
+        User__UserGroup.user_group_id.in_(scoped_group_ids_subquery(user))
+    )
+
+
+def fetch_managed_group_member_ids(user: User, db_session: Session) -> set[UUID]:
+    return set(db_session.scalars(managed_group_member_ids_subquery(user)).all())
 
 
 def within_managed_scope_clause(

@@ -5201,6 +5201,38 @@
         },
         "saveError": {
           "message": "Impossible d'enregistrer le paramètre de publication."
+        },
+        "defaultAccess": {
+          "title": "Accès par défaut",
+          "description": "S'applique à chaque skill publié sans réglage propre, y compris ceux publiés plus tard. {setting}",
+          "available": {
+            "label": "Disponible",
+            "description": "Les membres le trouvent et l'activent s'ils le souhaitent."
+          },
+          "default": {
+            "label": "Installé par défaut",
+            "description": "Installé pour chaque membre. Les membres peuvent le désactiver."
+          },
+          "notAvailable": {
+            "label": "Non disponible",
+            "description": "Masqué. Les membres ne peuvent ni le trouver ni l'activer."
+          },
+          "saveSuccess": {
+            "message": "Accès par défaut enregistré."
+          },
+          "saveError": {
+            "message": "Impossible d'enregistrer l'accès par défaut."
+          }
+        },
+        "sharing": {
+          "title": "Partage",
+          "description": "Les membres peuvent partager des skills avec des personnes et des groupes. Les administrateurs peuvent toujours partager.",
+          "saveSuccess": {
+            "message": "Réglage de partage enregistré."
+          },
+          "saveError": {
+            "message": "Impossible d'enregistrer le réglage de partage."
+          }
         }
       }
     },
@@ -17399,7 +17431,9 @@
           "availableDescription": "Les utilisateurs peuvent installer ou désinstaller à tout moment.",
           "defaultDescription": "Installé automatiquement. Les utilisateurs peuvent désactiver ou désinstaller à tout moment.",
           "requiredDescription": "Installé automatiquement. Les utilisateurs ne peuvent ni désactiver ni désinstaller.",
-          "description": "Choisissez comment cette compétence est installée pour les personnes ayant accès."
+          "description": "Choisissez comment cette compétence est installée pour les personnes ayant accès.",
+          "notAvailable": "Non disponible",
+          "notAvailableDescription": "Masqué. Les membres ne peuvent ni le trouver ni l'activer."
         },
         "description": "Choisissez qui peut utiliser cette compétence et comment elle est installée.",
         "accessTitle": "Qui peut accéder",
