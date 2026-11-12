@@ -2390,7 +2390,7 @@ def test_one_shot_turns_offer_no_agent_tools(
     assert SPAWN_AGENT_TOOL_NAME not in unshown
 
 
-def test_stop_subagents_interrupts_running_agents_without_waking_the_root(
+def test_stop_subagents_interrupts_unfinished_agents_without_waking_the_root(
     client: TestClient,
     chat: ChatSession,
     owner: User,
@@ -2469,3 +2469,11 @@ def test_stop_subagents_interrupts_running_agents_without_waking_the_root(
     assert client.post(f"/chat/chat-session/{chat.id}/stop-subagents").json() == {
         "stopped_count": 0
     }
+    # A suspended agent waits for its children and would resume; Stop ends it too.
+    worker.response_status = RunStatus.SUSPENDED
+    db_session.commit()
+    assert client.post(f"/chat/chat-session/{chat.id}/stop-subagents").json() == {
+        "stopped_count": 1
+    }
+    db_session.expire_all()
+    assert worker.response_status == RunStatus.CANCELLED

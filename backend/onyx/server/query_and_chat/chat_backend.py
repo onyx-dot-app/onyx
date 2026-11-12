@@ -104,7 +104,7 @@ from onyx.db.chat_inputs import (
     withdraw_human_message__no_commit,
 )
 from onyx.db.chat_search import search_chat_sessions
-from onyx.db.chat_subagents import running_agent_response_ids
+from onyx.db.chat_subagents import unfinished_agent_response_ids
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import LLMModelFlowType, Permission, record_mode_persists_content
 from onyx.db.feedback import create_chat_message_feedback, remove_chat_message_feedback
@@ -1664,15 +1664,15 @@ def stop_chat_subagents(
     user: User = Depends(require_permission(Permission.WRITE_CHAT)),
     db_session: Session = Depends(get_session),
 ) -> StopSubagentsResponse:
-    """Interrupt every running agent on the selected branch; the root keeps running.
+    """Interrupt every unfinished agent on the selected branch; the root keeps running.
 
     Interrupted runs report no result, so they wake no agent.
     """
     get_human_input_session(db_session, session_id, user)
     _, branch = get_selected_branch(db_session, session_id)
-    running = running_agent_response_ids(db_session, branch)
-    interrupt_agent_runs(get_cache_backend(), get_current_tenant_id(), running)
-    return StopSubagentsResponse(stopped_count=len(running))
+    unfinished = unfinished_agent_response_ids(db_session, branch)
+    interrupt_agent_runs(get_cache_backend(), get_current_tenant_id(), unfinished)
+    return StopSubagentsResponse(stopped_count=len(unfinished))
 
 
 @router.post("/stop-chat-session/{chat_session_id}", tags=PUBLIC_API_TAGS)

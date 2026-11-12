@@ -752,6 +752,18 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory):
                 logger.exception("Could not undo a reserved response")
             raise
 
+    def _lock_background_capacity(self, session: Session) -> bool:
+        """Lock the chat; return whether its branch can run another background agent.
+
+        The chat lock comes before response locks, as on the input paths, and
+        orders concurrent starts around the count.
+        """
+        lock_agent(session, str(self.chat_session_id))
+        return (
+            count_running_agents(session, self._input_branch.message_ids)
+            < MAX_RUNNING_AGENTS
+        )
+
     def reserve_run_id(
         self,
         *,
@@ -780,6 +792,9 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory):
             ):
                 raise ValueError("Child run has no parent invocation")
             with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                if not self._lock_background_capacity(session):
+                    # The work stays in the inbox; a later scan starts it.
+                    raise _MessageChanged("The chat runs its maximum of agents")
                 reserved = reserve_inbox_run__no_commit(
                     session,
                     self._input_branch,
@@ -829,21 +844,15 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory):
         with _ownership_lock(self.cache, parent_response_id):
             self._require_owner(parent)
             with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                if delivers_result and not self._lock_background_capacity(session):
+                    raise ValueError(
+                        f"{MAX_RUNNING_AGENTS} agents are already running in "
+                        "this chat. Wait for one to finish, or interrupt one, "
+                        "before you start another."
+                    )
                 check_checkpoint_owner__no_commit(
                     session, parent_response_id, parent.owner.ownership_version
                 )
-                if delivers_result:
-                    # The chat lock orders concurrent spawns around the count.
-                    lock_agent(session, str(self.chat_session_id))
-                    if (
-                        count_running_agents(session, self._input_branch.message_ids)
-                        >= MAX_RUNNING_AGENTS
-                    ):
-                        raise ValueError(
-                            f"{MAX_RUNNING_AGENTS} agents are already running in "
-                            "this chat. Wait for one to finish, or interrupt one, "
-                            "before you start another."
-                        )
                 message_id = reserve_child_response__no_commit(
                     session,
                     parent.owner.root_message_id,

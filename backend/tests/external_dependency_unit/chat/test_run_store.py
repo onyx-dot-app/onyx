@@ -76,7 +76,13 @@ from onyx.db.chat_checkpoint import (
     claim_checkpoint__no_commit,
     release_checkpoint_claim__no_commit,
 )
-from onyx.db.chat_inputs import agent_result_states, next_queued_turn, pending_inputs
+from onyx.db.chat_inputs import (
+    agent_result_states,
+    lock_agent,
+    next_queued_turn,
+    pending_inputs,
+    submit_human_message__no_commit,
+)
 from onyx.db.chat_response import (
     read_chat_execution,
     read_response__no_commit,
@@ -3125,6 +3131,135 @@ def test_spawning_stops_at_the_running_agent_cap(
     finally:
         release.set()
         assert coordinator.close(timeout=30)
+
+
+def test_spawn_takes_the_chat_lock_before_its_parent_response(
+    branch: tuple[UUID, int], user_message: UserMessage
+) -> None:
+    """A spawn and a user's send to the spawning response lock in one order."""
+    owner = unpolled_store(branch)
+    coordinator = AgentCoordinator()
+    release = threading.Event()
+    spawn_locking = threading.Event()
+    original_lock = run_store.lock_agent
+
+    def signal_lock(session: Session, agent_id: str) -> ChatSession:
+        spawn_locking.set()
+        return original_lock(session, agent_id)
+
+    def blocked(*_: object) -> AssistantMessage:
+        assert release.wait(30)
+        return text("Done")
+
+    root = spawning_root(
+        branch,
+        lambda: fake_agent(blocked),
+        name="worker",
+        instruction="Task",
+        answer="Started",
+    )
+    view = owner.bind(coordinator, build_agent=never_restore("No restore expected"))
+    try:
+        with (
+            get_session_with_tenant(
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+            ) as sending,
+            patch.object(run_store, "lock_agent", side_effect=signal_lock),
+        ):
+            # The user's send holds the chat lock while the spawn starts.
+            lock_agent(sending, str(branch[0]))
+            run = root.start(messages=[user_message], max_steps=3, coordinator=view)
+            assert spawn_locking.wait(10)
+            pending = submit_human_message__no_commit(
+                sending,
+                branch[0],
+                message="Steer",
+                delivery=MessageDelivery.SEND,
+                target_response_id=branch[1],
+                turn_preparing=False,
+            )
+            assert pending.target_response_id == branch[1]
+            sending.commit()
+            assert run.result(timeout=30).output.text == "Started"
+        spawned = run.snapshot().steps[0].tools["worker"].result
+        assert spawned is not None and not spawned.is_error
+    finally:
+        release.set()
+        assert coordinator.close(timeout=30)
+
+
+def test_inbox_work_waits_while_the_branch_runs_the_agent_cap(
+    branch: tuple[UUID, int],
+    db_session: Session,
+    user_message: UserMessage,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An idle agent's inbox run counts against the cap and starts once a slot frees."""
+    monkeypatch.setattr("onyx.chat.run_store.INPUT_POLL_SECONDS", 0)
+    owner = unpolled_store(branch)
+    coordinator = AgentCoordinator()
+    view = owner.bind(coordinator, build_agent=never_restore("Unexpected restoration"))
+    child_messages: list[list[str]] = []
+    spawned: list[SpawnResult] = []
+
+    def child_reply(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        child_messages.append([message.text for message in request.messages])
+        return text("Child answer")
+
+    def delegate(invocation: ToolInvocation) -> ToolResult:
+        child = invocation.agents.spawn_agent(
+            fake_agent(child_reply),
+            name="worker",
+            description="Collect evidence",
+            messages=[UserMessage(content="Initial task")],
+            max_steps=1,
+            restoration_config=ChatConfiguration(kind="chat"),
+            lifetime=AgentLifetime.BACKGROUND,
+        )
+        spawned.append(child)
+        coordinator.completion(child.run_id).result(timeout=10)
+        invocation.agents.send_message(
+            child.agent_id,
+            message="Follow up",
+            delivery=MessageDelivery.QUEUE,
+            max_steps=1,
+        )
+        return ToolResult(content="Queued")
+
+    root = delegating_root(
+        branch, agent_tool("delegate", delegate), answer="Root answer"
+    )
+    try:
+        run = root.start(messages=[user_message], max_steps=2, coordinator=view)
+        assert run.result(timeout=10).output.text == "Root answer"
+        assert run.wait_for_idle(timeout=10)
+        coordinator.completion(run.id).result(timeout=10)
+        with patch(
+            "onyx.chat.run_store.count_running_agents",
+            return_value=run_store.MAX_RUNNING_AGENTS,
+        ):
+            owner.poll_control()
+        child = next(
+            info for info in view.discover_agents() if info.id == spawned[0].agent_id
+        )
+        assert child.latest_run_id == spawned[0].run_id
+        assert pending_agent_messages(db_session, child.id) == 1
+        assert owner.has_owned_work
+        owner.poll_control()
+        child = next(
+            info for info in view.discover_agents() if info.id == spawned[0].agent_id
+        )
+        assert child.latest_run_id is not None
+        assert child.latest_run_id != spawned[0].run_id
+        assert (
+            coordinator.completion(child.latest_run_id).result(timeout=10).status
+            == RunStatus.COMPLETE
+        )
+        assert "Follow up" in child_messages[1]
+    finally:
+        assert coordinator.close(timeout=10)
 
 
 def test_runs_that_agents_start_check_the_token_rate_limit(

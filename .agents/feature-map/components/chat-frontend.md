@@ -45,7 +45,7 @@
 - **Subagents can continue after the answer ends.** A small activity indicator
   stays visible while background work remains. It shares a row with the
   pending-input hint. Its Stop subagents button interrupts every running
-  subagent on the selected branch. The input stays usable. While
+  or suspended subagent on the selected branch. The input stays usable. While
   subagents run, status polling finds automatic follow-up responses in an idle
   chat and loads them through the normal refresh and replay path. Internal
   agent results do not become user message bubbles. A "Subagent results received" divider shows above each
