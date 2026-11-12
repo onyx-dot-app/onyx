@@ -901,6 +901,12 @@ class Run:
         return not self._released and not self._state.status.is_terminal
 
     @property
+    def on_final_step(self) -> bool:
+        """Whether the current step is the last one the run's step limit allows."""
+        progress = self._state.progress
+        return progress is not None and progress.step_index + 1 >= progress.step_limit
+
+    @property
     def event_context(self) -> _Ancestry:
         run_state = self._state
         return _Ancestry(
