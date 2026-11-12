@@ -22,6 +22,7 @@ from onyx.db.plugin import (
     PluginAccessChange,
     PluginAccessMode,
     PluginGroupGrant,
+    PluginGroupSetting,
     PluginUserGrant,
     apply_plugin_access_change__no_commit,
 )
@@ -311,6 +312,103 @@ def test_owner_removing_a_group_share_keeps_its_setting(
             [other.id], _setting_for(group, None), member_owner, db_session
         )
     assert exc_info.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
+
+
+def _group_setting(
+    group: UserGroup, policy: PluginInstallationPolicy | None
+) -> PluginAccessChange:
+    return PluginAccessChange(
+        group_settings=(
+            PluginGroupSetting(group_id=group.id, installation_policy=policy),
+        )
+    )
+
+
+def test_group_setting_without_a_share(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+) -> None:
+    """A group setting alone makes a setting-only row, keeps the permission of
+    a share, and removing it deletes a row with no permission."""
+    admin = make_user(db_session, is_admin=True)
+    group = make_group(db_session)
+    published = make_skill(db_session, is_public=True)
+
+    apply_plugin_access_change__no_commit(
+        [published.id],
+        _group_setting(group, PluginInstallationPolicy.REQUIRED),
+        admin,
+        db_session,
+    ).raise_first_failure()
+    row = _group_row(db_session, published.id, group)
+    assert row is not None
+    assert row.permission is None
+    assert row.installation_policy == PluginInstallationPolicy.REQUIRED
+    assert (
+        db_session.scalar(
+            select(Skill__UserGroup).where(Skill__UserGroup.skill_id == published.id)
+        )
+        is None
+    )
+
+    apply_plugin_access_change__no_commit(
+        [published.id], _group_setting(group, None), admin, db_session
+    ).raise_first_failure()
+    db_session.expire_all()
+    assert _group_row(db_session, published.id, group) is None
+
+    shared = make_skill(db_session)
+    apply_plugin_access_change__no_commit(
+        [shared.id], _setting_for(group, None), admin, db_session
+    ).raise_first_failure()
+    apply_plugin_access_change__no_commit(
+        [shared.id],
+        _group_setting(group, PluginInstallationPolicy.NOT_AVAILABLE),
+        admin,
+        db_session,
+    ).raise_first_failure()
+    apply_plugin_access_change__no_commit(
+        [shared.id], _group_setting(group, None), admin, db_session
+    ).raise_first_failure()
+    db_session.expire_all()
+    row = _group_row(db_session, shared.id, group)
+    assert row is not None
+    assert row.permission == SkillSharePermission.VIEWER
+    assert row.installation_policy is None
+
+
+def test_group_setting_alone_follows_the_setting_rules(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+) -> None:
+    group = make_group(db_session)
+    manager = _manager_of(db_session, group)
+    published = make_skill(db_session, is_public=True, author_user_id=manager.id)
+    with pytest.raises(OnyxError) as exc_info:
+        apply_plugin_access_change__no_commit(
+            [published.id],
+            _group_setting(group, PluginInstallationPolicy.DEFAULT),
+            manager,
+            db_session,
+        )
+    assert exc_info.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
+
+    admin = make_user(db_session, is_admin=True)
+    editor = make_skill(db_session)
+    apply_plugin_access_change__no_commit(
+        [editor.id],
+        _setting_for(group, None, SkillSharePermission.EDITOR),
+        admin,
+        db_session,
+    ).raise_first_failure()
+    with pytest.raises(OnyxError) as exc_info:
+        apply_plugin_access_change__no_commit(
+            [editor.id],
+            _group_setting(group, PluginInstallationPolicy.NOT_AVAILABLE),
+            admin,
+            db_session,
+        )
+    assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
 
 
 def test_member_share_is_refused_while_sharing_is_off(
