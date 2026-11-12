@@ -1,5 +1,5 @@
 import { useLocale, useTranslations } from "next-intl";
-import { SvgSearch, SvgSearchMenu } from "@opal/icons";
+import { SvgSearchMenu } from "@opal/icons";
 import { SearchToolPacket } from "@/app/app/services/streamingModels";
 import {
   MessageRenderer,
@@ -7,8 +7,14 @@ import {
 } from "@/app/app/message/messageComponents/types";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { OnyxDocument } from "@/lib/search/types";
-import { ValidSources } from "@/lib/connectors/types/source";
-import { SearchChipList, SourceInfo } from "./SearchChipList";
+import {
+  SearchChipList,
+  SourceInfo,
+} from "@/lib/timeline/components/bodies/SearchChipList";
+import {
+  RetrievalBody,
+  queryToSourceInfo,
+} from "@/lib/timeline/components/bodies/RetrievalBody";
 import {
   formatSearchHeader,
   constructCurrentSearchState,
@@ -19,13 +25,6 @@ import {
   getMetadataTags,
 } from "./searchStateUtils";
 import { Text } from "@opal/components";
-
-const queryToSourceInfo = (query: string, index: number): SourceInfo => ({
-  id: `query-${index}`,
-  title: query,
-  sourceType: ValidSources.Web,
-  icon: SvgSearch,
-});
 
 const resultToSourceInfo = (doc: OnyxDocument): SourceInfo => ({
   id: doc.document_id,
@@ -207,53 +206,12 @@ export const InternalSearchToolRenderer: MessageRenderer<
       supportsCollapsible: true,
       timelineLayout: "timeline",
       content: (
-        <div className="flex flex-col">
-          {!isCompact && (
-            <SearchChipList
-              items={queries}
-              initialCount={INITIAL_QUERIES_TO_SHOW}
-              expansionCount={QUERIES_PER_EXPANSION}
-              getKey={(_, index) => index}
-              toSourceInfo={queryToSourceInfo}
-              emptyState={!stopPacketSeen ? <BlinkingBar /> : undefined}
-              showDetailsCard={false}
-              isQuery={true}
-            />
-          )}
-
-          {(results.length > 0 || queries.length > 0) && (
-            <>
-              {!isCompact && (
-                <Text as="p" font="main-ui-muted" color="text-04">
-                  {t("internalSearch.reading.status")}
-                </Text>
-              )}
-              <SearchChipList
-                items={results}
-                initialCount={INITIAL_RESULTS_TO_SHOW}
-                expansionCount={RESULTS_PER_EXPANSION}
-                getKey={(doc: OnyxDocument, index: number) =>
-                  doc.document_id ?? `result-${index}`
-                }
-                toSourceInfo={(doc: OnyxDocument) => resultToSourceInfo(doc)}
-                onClick={(doc: OnyxDocument) => {
-                  if (doc.link) {
-                    window.open(doc.link, "_blank", "noopener,noreferrer");
-                  }
-                }}
-                emptyState={
-                  !isComplete ? (
-                    <BlinkingBar />
-                  ) : (
-                    <Text as="p" font="main-ui-muted" color="text-03">
-                      {t("internalSearch.noResults.text")}
-                    </Text>
-                  )
-                }
-              />
-            </>
-          )}
-        </div>
+        <RetrievalBody
+          queries={queries}
+          results={results.map(resultToSourceInfo)}
+          isComplete={isComplete}
+          compact={isCompact}
+        />
       ),
     },
   ]);

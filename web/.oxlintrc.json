@@ -413,7 +413,7 @@
         "src/lib/timeline/chat/renderers/fetch/FetchToolRenderer.tsx",
         "src/lib/timeline/chat/renderers/memory/MemoryToolRenderer.tsx",
         "src/lib/timeline/chat/renderers/search/InternalSearchToolRenderer.tsx",
-        "src/lib/timeline/chat/renderers/search/SearchChipList.tsx",
+        "src/lib/timeline/components/bodies/SearchChipList.tsx",
         "src/lib/timeline/chat/renderers/search/WebSearchToolRenderer.tsx",
         "src/app/app/settings/layout.tsx",
         "src/app/app/settings/usage/UsageSettings.tsx",
