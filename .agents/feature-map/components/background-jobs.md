@@ -169,8 +169,11 @@ it runs.
   runs hourly on the primary queue under a beat lock, also for gated tenants.
   Without Celery, `background/periodic_poller.py:_run_orphan_skill_bundle_cleanup`
   runs it hourly with a one-minute budget.
-  `repair_backfilled_plugin_versions_task` runs every 15 minutes on the same
-  queue; it has work only after a deploy or a size limit change.
+  `repair_backfilled_plugin_versions_task` runs on the same queue with a
+  15-minute base interval (cloud multiplies it by `beat_multiplier`, default
+  8); it has work only after a deploy or a size limit change. Without Celery,
+  `background/periodic_poller.py:_run_plugin_version_repair` runs it every
+  15 minutes.
 - License reclaim ([[billing]]): the license middleware schedules
   `reclaim_license_task` when the cache backend is Redis. Otherwise
   `background/periodic_poller.py:_run_license_reclaim` runs it on the poller's

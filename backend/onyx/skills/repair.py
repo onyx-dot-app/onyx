@@ -1,8 +1,6 @@
 """Content of plugin versions copied from legacy skill rows, read from their
 stored bundles by the same rules as a save."""
 
-from dataclasses import dataclass
-
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
 from onyx.skills.bundle import (
@@ -13,17 +11,8 @@ from onyx.skills.bundle import (
     open_bundle_zip,
 )
 from onyx.skills.metadata import parse_skill_document
-from onyx.skills.models import PluginVersionContent
+from onyx.skills.models import StoredVersionRepair
 from onyx.skills.validation import validate_stored_custom_skill
-
-
-@dataclass(frozen=True)
-class StoredVersionRepair:
-    # Set when the bundle is valid.
-    content: PluginVersionContent | None
-    is_valid: bool | None
-    over_limits: bool
-    detail: str | None
 
 
 def read_stored_version_content(

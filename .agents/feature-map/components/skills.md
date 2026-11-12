@@ -456,9 +456,12 @@ The library preview of an external-app skill calls the same renderer
 22. `version-repair` **A task fills the content of backfilled versions.**
     `background/celery/tasks/skills/tasks.py:repair_backfilled_plugin_versions`
     reads the bundle of each version that has a bundle, no file list and
-    `is_valid` not false. Beat sends it to each tenant every 15 minutes, as
-    the `cc_pair_ids_backfill` task does; once every version is filled, one
-    query finds no work. It writes the file list, sizes, file count,
+    `is_valid` not false. Beat sends it to each tenant on a 15-minute base
+    interval, as the `cc_pair_ids_backfill` task does; cloud multiplies the
+    interval by `beat_multiplier` (default 8, so two hours). Lite runs it every
+    15 minutes from the API server poller
+    (`background/periodic_poller.py:_run_plugin_version_repair`). Once every
+    version is filled, one query finds no work. It writes the file list, sizes, file count,
     `skill_md` and `frontmatter` by the rules of a save
     (`skills/repair.py:read_stored_version_content`); a SKILL.md over 256 KiB
     keeps `skill_md` NULL. A corrupt or missing bundle sets `is_valid` false.

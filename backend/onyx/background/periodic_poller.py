@@ -142,6 +142,16 @@ def _run_orphan_skill_bundle_cleanup() -> None:
     )
 
 
+def _run_plugin_version_repair() -> None:
+    from onyx.background.celery.tasks.skills.tasks import (
+        repair_backfilled_plugin_versions,
+    )
+
+    repair_backfilled_plugin_versions(
+        time_budget_s=_PLUGIN_VERSION_REPAIR_BUDGET_SECONDS
+    )
+
+
 _CACHE_CLEANUP_INTERVAL_SECONDS = 300
 _OAUTH_PROVIDER_CLEANUP_INTERVAL_SECONDS = 24 * 3600
 # The lead-up reclaim rate. No beat runs here, so this thread sets the cadence.
@@ -149,6 +159,8 @@ _LICENSE_RECLAIM_INTERVAL_SECONDS = 6 * 3600
 _ORPHAN_SKILL_BUNDLE_CLEANUP_INTERVAL_SECONDS = 3600
 # Short, because the cleanup holds up the recovery loop while it runs.
 _ORPHAN_SKILL_BUNDLE_CLEANUP_BUDGET_SECONDS = 60
+_PLUGIN_VERSION_REPAIR_INTERVAL_SECONDS = 15 * 60
+_PLUGIN_VERSION_REPAIR_BUDGET_SECONDS = 60
 
 
 def _build_periodic_tasks() -> list[_PeriodicTaskDef]:
@@ -216,6 +228,14 @@ def _build_periodic_tasks() -> list[_PeriodicTaskDef]:
             interval_seconds=_ORPHAN_SKILL_BUNDLE_CLEANUP_INTERVAL_SECONDS,
             lock_id=PERIODIC_TASK_LOCK_BASE + 6,
             run_fn=_run_orphan_skill_bundle_cleanup,
+        )
+    )
+    tasks.append(
+        _PeriodicTaskDef(
+            name="plugin-version-repair",
+            interval_seconds=_PLUGIN_VERSION_REPAIR_INTERVAL_SECONDS,
+            lock_id=PERIODIC_TASK_LOCK_BASE + 7,
+            run_fn=_run_plugin_version_repair,
         )
     )
     if not DISABLE_TELEMETRY:

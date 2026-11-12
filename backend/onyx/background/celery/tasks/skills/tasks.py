@@ -2,7 +2,7 @@ import time
 from uuid import UUID
 
 from celery import Task, shared_task
-from pydantic import BaseModel, ValidationError
+from pydantic import ValidationError
 
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.cache.factory import get_cache_backend
@@ -23,6 +23,7 @@ from onyx.file_store.staging import delete_files_best_effort
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.skills import bundle
+from onyx.skills.models import OverLimitVersions
 from onyx.skills.repair import read_stored_version_content
 
 _CLEANUP_BATCH_SIZE = 100
@@ -97,15 +98,10 @@ STORED_BUNDLE_LIMITS = [
 ]
 
 
-class _OverLimitVersions(BaseModel):
-    limits: list[int]
-    version_ids: list[UUID]
-
-
 def _load_over_limit_version_ids() -> set[UUID]:
     try:
         stored = get_kv_store().load(KV_PLUGIN_VERSION_REPAIR_OVER_LIMITS_KEY)
-        over_limits = _OverLimitVersions.model_validate(stored)
+        over_limits = OverLimitVersions.model_validate(stored)
     except (KvKeyNotFoundError, ValidationError):
         return set()
     if over_limits.limits != STORED_BUNDLE_LIMITS:
@@ -174,7 +170,7 @@ def repair_backfilled_plugin_versions(
     if over_limits_changed:
         get_kv_store().store(
             KV_PLUGIN_VERSION_REPAIR_OVER_LIMITS_KEY,
-            _OverLimitVersions(
+            OverLimitVersions(
                 limits=STORED_BUNDLE_LIMITS, version_ids=sorted(over_limit_ids)
             ).model_dump(mode="json"),
         )

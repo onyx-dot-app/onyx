@@ -1,5 +1,6 @@
 import re
 from typing import Any, Final
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
 
@@ -135,6 +136,24 @@ class PluginVersionContent(BaseModel):
     unpacked_size_bytes: int | None
     file_count: int | None
     skills: list[PluginSkillContent]
+
+
+class StoredVersionRepair(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    # Set when the bundle is valid.
+    content: PluginVersionContent | None
+    is_valid: bool | None
+    over_limits: bool
+    detail: str | None
+
+
+class OverLimitVersions(BaseModel):
+    """The plugin versions the repair skips, and the size limits it read
+    them under."""
+
+    limits: list[int]
+    version_ids: list[UUID]
 
 
 class CustomSkillBundleContents(BaseModel):
