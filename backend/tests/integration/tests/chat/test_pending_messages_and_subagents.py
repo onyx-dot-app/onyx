@@ -27,6 +27,7 @@ from tests.integration.common_utils.managers.llm_provider import LLMProviderMana
 from tests.integration.common_utils.managers.mock_llm import (
     MockLLMManager,
     MockLLMScript,
+    requires_code_mode,
 )
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.test_models import DATestUser
@@ -398,6 +399,79 @@ def test_background_agent_result_wakes_the_idle_chat(
     root_requests = mock_llm.requests_in(nonce)
     assert len(root_requests) == 4
     assert {request.body["model"] for request in root_requests} == {CHOSEN_MODEL}
+
+
+@requires_code_mode(True)
+def test_a_background_agent_runs_programs_in_code_mode(
+    admin_user: DATestUser, mock_llm: MockLLMScript
+) -> None:
+    """In code mode the root keeps `spawn_agent` as a tool of its own, and the
+    child calls tools from its own `execute_code` programs."""
+    nonce = uuid4().hex
+    child_task = f"Compute the answer. {uuid4().hex}"
+    mock_llm.conversation(
+        nonce,
+        Reply(
+            tool_calls=[
+                ToolCall(
+                    id="spawn-compute",
+                    name=SPAWN_AGENT_TOOL_NAME,
+                    arguments={"name": "compute", "instruction": child_task},
+                )
+            ],
+            conditions=RequestConditions(
+                offers=[SPAWN_AGENT_TOOL_NAME, "execute_code"]
+            ),
+        ),
+        Reply(
+            text="Computing in the background.",
+            conditions=RequestConditions(has_results_for=["spawn-compute"]),
+        ),
+        Reply(
+            text="The child computed forty-two.",
+            conditions=RequestConditions(prompt_contains=["Child program printed"]),
+        ),
+        conditions=RequestConditions(prompt_contains=[nonce]),
+    )
+    mock_llm.conversation(
+        child_task,
+        Reply(
+            tool_calls=[
+                ToolCall(
+                    id="child-program",
+                    name="execute_code",
+                    arguments={"code": "print(6 * 7)"},
+                )
+            ],
+            conditions=RequestConditions(offers=["execute_code"]),
+        ),
+        Reply(
+            text="Child program printed 42.",
+            conditions=RequestConditions(has_results_for=["child-program"]),
+        ),
+        conditions=RequestConditions(prompt_contains=[child_task]),
+    )
+    session = ChatSessionManager.create(user_performing_action=admin_user)
+    started = ChatSessionManager.send_message(
+        session.id,
+        f"Compute in the background. {nonce}",
+        admin_user,
+        accepts_follow_ups=True,
+    )
+    assert started.error is None
+    assert started.full_message == "Computing in the background."
+
+    def follow_up_finished() -> bool:
+        detail = _detail(session.id, admin_user)
+        return (
+            "The child computed forty-two." in _texts(detail, MessageType.ASSISTANT)
+            and not detail.is_processing
+            and not _status(session.id, admin_user).has_active_subagents
+        )
+
+    _wait_until(follow_up_finished, "the child result is answered")
+    _, child_answer_request = mock_llm.requests_in(child_task)
+    assert "42" in (child_answer_request.tool_result("child-program") or "")
 
 
 def test_turns_the_server_starts_use_the_current_tool_selection(

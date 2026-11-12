@@ -32,6 +32,7 @@ from onyx.agents.models import (
     RunStatus,
     StepInput,
     ToolCallContext,
+    messages_from_steps,
 )
 from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import (
@@ -335,10 +336,12 @@ def chat_agent(
     create_subagent: Callable[[], Agent] | None = None,
     chat_files: list[ChatFile] | None = None,
     tools: Sequence[Tool] = (),
+    code_mode: bool = False,
 ) -> ChatAgent:
     state = state or AgentState()
     return ChatAgent(
         create_subagent=create_subagent,
+        code_mode=code_mode,
         messages=state.messages,
         checkpoint=state.checkpoint,
         agent_id=agent_id,
@@ -2434,7 +2437,10 @@ def test_chat_parent_works_while_its_child_runs_and_reads_the_result(
     branch: tuple[UUID, int],
     db_session: Session,
     user_message: UserMessage,
+    code_mode: bool,
 ) -> None:
+    """In code mode the parent's work runs in a program; the child's result still
+    arrives at the next step boundary, after the program's result."""
     owner = store(branch)
     coordinator = AgentCoordinator()
     child_entered, release_child = threading.Event(), threading.Event()
@@ -2463,6 +2469,17 @@ def test_chat_parent_works_while_its_child_runs_and_reads_the_result(
         if len(parent_requests) == 1:
             return calls(spawn_call("spawn", "investigate", "Independent task"))
         if len(parent_requests) == 2:
+            if code_mode:
+                return calls(
+                    ToolCall(
+                        id="work",
+                        name="execute_code",
+                        arguments={
+                            "code": "print(await echo(value='x'))",
+                            "yield_time_ms": 30000,
+                        },
+                    )
+                )
             return calls(ToolCall(id="work", name="echo", arguments={"value": "x"}))
         return text("Parent answer")
 
@@ -2472,6 +2489,7 @@ def test_chat_parent_works_while_its_child_runs_and_reads_the_result(
             agent_id=agent_id,
             tools=[WorkTool()],
             create_subagent=make_agent,
+            code_mode=code_mode,
         )
 
     view = owner.bind(coordinator, build_agent=never_restore("No resume expected"))
@@ -2481,14 +2499,35 @@ def test_chat_parent_works_while_its_child_runs_and_reads_the_result(
         )
         assert run.result(timeout=15).output.text == "Parent answer"
         assert run.wait_for_idle(timeout=10)
-        # The child's answer reaches the parent after its work, as a new input.
-        assert any(
-            isinstance(message, UserMessage) and "Child answer" in message.text
-            for message in parent_requests[-1].messages
-        )
+        # Agent tools stay direct tools; in code mode the work tool is a function.
+        offered = {tool.name for tool in parent_requests[0].tools or []}
+        assert {"spawn_agent", "send_message"} <= offered
+        assert ("execute_code" in offered) is code_mode
+        assert ("echo" in offered) is not code_mode
+        # The child's answer reaches the parent after its work, as a new input
+        # right after the work's result.
+        last = parent_requests[-1].messages
+        [answer_index] = [
+            index
+            for index, message in enumerate(last)
+            if isinstance(message, UserMessage) and "Child answer" in message.text
+        ]
+        previous = last[answer_index - 1]
+        assert isinstance(previous, ToolResultMessage)
+        assert previous.tool_call_id == "work"
         assert not any(
             "Child answer" in message.text for message in parent_requests[1].messages
         )
+        # The saved steps rebuild the same order.
+        rebuilt = messages_from_steps(run.snapshot().steps)
+        [rebuilt_index] = [
+            index
+            for index, message in enumerate(rebuilt)
+            if isinstance(message, UserMessage) and "Child answer" in message.text
+        ]
+        rebuilt_previous = rebuilt[rebuilt_index - 1]
+        assert isinstance(rebuilt_previous, ToolResultMessage)
+        assert rebuilt_previous.tool_call_id == "work"
         # The child sees its instruction, not the parent's conversation.
         assert len(child_requests) == 1
         assert all(

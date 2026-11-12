@@ -6,7 +6,7 @@ import {
   releaseMockLlmGate,
 } from "@tests/e2e/utils/mockLlm";
 
-test("separate background results reach an idle chat and survive reload", async ({
+test("separate background results reach an idle chat and survive reload @code-mode", async ({
   api,
   chatPage,
   page,
