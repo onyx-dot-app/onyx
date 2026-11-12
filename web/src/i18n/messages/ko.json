@@ -6270,6 +6270,10 @@
           "syncing": "이 그룹은 현재 동기화 중입니다. 잠시 후 다시 시도하세요.",
           "updateFailed": "그룹 업데이트에 실패했습니다",
           "updated": "그룹 \"{name}\"을(를) 업데이트했습니다"
+        },
+        "tabs": {
+          "group": "그룹",
+          "plugins": "플러그인"
         }
       },
       "form": {
@@ -6425,6 +6429,69 @@
           "name": "기본",
           "description": "기본 권한을 가진 모든 사용자의 기본 그룹입니다."
         }
+      },
+      "plugins": {
+        "intro": "이 그룹 구성원에게 각 플러그인을 설치하는 방식을 설정합니다.",
+        "inheritance": "기본적으로 모든 그룹은 조직 설정을 사용합니다.",
+        "conflicts": "그룹 설정은 더 엄격하더라도 해당 구성원에 대해 조직 설정을 대체합니다. 여러 그룹에 속한 구성원은 가장 개방적인 설정을 받습니다.",
+        "policy": {
+          "REQUIRED": {
+            "label": "필수",
+            "description": "설치되어 항상 켜져 있습니다. 구성원이 끌 수 없습니다."
+          },
+          "DEFAULT": {
+            "label": "기본 설치",
+            "description": "모든 구성원에게 설치됩니다. 구성원이 끌 수 있습니다."
+          },
+          "AVAILABLE": {
+            "label": "사용 가능",
+            "description": "구성원이 찾아서 원하면 켭니다."
+          },
+          "NOT_AVAILABLE": {
+            "label": "사용 불가",
+            "description": "숨겨집니다. 구성원이 찾거나 켤 수 없습니다."
+          }
+        },
+        "option": {
+          "inherit": "조직 설정({policy})",
+          "inheritDescription": "그룹 설정이 없습니다. 그룹은 조직 설정을 사용합니다."
+        },
+        "row": {
+          "shared": "이 그룹과 공유됨",
+          "sharedPublished": "게시되었으며 이 그룹과 공유됨",
+          "settingOnly": "그룹 설정만",
+          "inherited": "조직 설정 사용: {policy}.",
+          "overridden": "그룹 설정: {policy}. 조직 설정: {company}.",
+          "select": "{name} 설정",
+          "remove": "이 그룹에서 {name} 제거",
+          "readOnly": "조직 전체 플러그인 관리자만 이 설정을 변경할 수 있습니다."
+        },
+        "add": {
+          "button": "플러그인 추가",
+          "title": "플러그인 추가",
+          "description": "플러그인과 이 그룹의 설정을 선택하세요. 비공개 플러그인은 그룹과 공유됩니다.",
+          "plugin": {
+            "label": "플러그인",
+            "placeholder": "플러그인 선택",
+            "published": "게시됨"
+          },
+          "setting": {
+            "label": "설정",
+            "placeholder": "설정 선택"
+          },
+          "submit": "추가",
+          "noCandidates": "관리할 수 있는 모든 플러그인이 이미 이 그룹에 있습니다."
+        },
+        "toasts": {
+          "saved": "설정이 저장되었습니다.",
+          "saveFailed": "설정을 저장하지 못했습니다."
+        },
+        "empty": {
+          "title": "이 그룹에 플러그인이 없습니다",
+          "description": "플러그인을 추가하여 이 그룹에 설치되는 방식을 설정하세요."
+        },
+        "loadFailed": "이 그룹의 플러그인을 불러오지 못했습니다.",
+        "retry": "다시 시도"
       }
     },
     "hooks": {

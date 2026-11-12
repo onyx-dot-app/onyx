@@ -6270,6 +6270,10 @@
           "syncing": "Diese Gruppe wird gerade synchronisiert. Bitte warten Sie einen Moment und versuchen Sie es erneut.",
           "updateFailed": "Die Gruppe konnte nicht aktualisiert werden",
           "updated": "Gruppe \"{name}\" aktualisiert"
+        },
+        "tabs": {
+          "group": "Gruppe",
+          "plugins": "Plugins"
         }
       },
       "form": {
@@ -6425,6 +6429,69 @@
           "name": "Basis",
           "description": "Standardgruppe für alle Benutzer mit Basisberechtigungen."
         }
+      },
+      "plugins": {
+        "intro": "Legen Sie fest, wie jedes Plugin für die Mitglieder dieser Gruppe installiert wird.",
+        "inheritance": "Standardmäßig verwendet jede Gruppe die Einstellung der Organisation.",
+        "conflicts": "Eine Gruppeneinstellung ersetzt die Einstellung der Organisation für ihre Mitglieder, auch wenn sie strenger ist. Ein Mitglied in mehreren Gruppen erhält die offenste Einstellung.",
+        "policy": {
+          "REQUIRED": {
+            "label": "Erforderlich",
+            "description": "Installiert und immer aktiv. Mitglieder können es nicht deaktivieren."
+          },
+          "DEFAULT": {
+            "label": "Standardmäßig installiert",
+            "description": "Für jedes Mitglied installiert. Mitglieder können es deaktivieren."
+          },
+          "AVAILABLE": {
+            "label": "Verfügbar",
+            "description": "Mitglieder finden es und aktivieren es bei Bedarf."
+          },
+          "NOT_AVAILABLE": {
+            "label": "Nicht verfügbar",
+            "description": "Ausgeblendet. Mitglieder können es weder finden noch aktivieren."
+          }
+        },
+        "option": {
+          "inherit": "Einstellung der Organisation ({policy})",
+          "inheritDescription": "Keine Gruppeneinstellung. Die Gruppe verwendet die Einstellung der Organisation."
+        },
+        "row": {
+          "shared": "Mit dieser Gruppe geteilt",
+          "sharedPublished": "Veröffentlicht und mit dieser Gruppe geteilt",
+          "settingOnly": "Nur Gruppeneinstellung",
+          "inherited": "Verwendet die Einstellung der Organisation: {policy}.",
+          "overridden": "Gruppeneinstellung: {policy}. Einstellung der Organisation: {company}.",
+          "select": "Einstellung für {name}",
+          "remove": "{name} aus dieser Gruppe entfernen",
+          "readOnly": "Nur ein organisationsweiter Plugin-Manager kann diese Einstellung ändern."
+        },
+        "add": {
+          "button": "Plugins hinzufügen",
+          "title": "Plugin hinzufügen",
+          "description": "Wählen Sie ein Plugin und die Einstellung für diese Gruppe. Ein privates Plugin wird mit der Gruppe geteilt.",
+          "plugin": {
+            "label": "Plugin",
+            "placeholder": "Plugin auswählen",
+            "published": "Veröffentlicht"
+          },
+          "setting": {
+            "label": "Einstellung",
+            "placeholder": "Einstellung auswählen"
+          },
+          "submit": "Hinzufügen",
+          "noCandidates": "Jedes Plugin, das Sie verwalten können, ist bereits in dieser Gruppe."
+        },
+        "toasts": {
+          "saved": "Einstellung gespeichert.",
+          "saveFailed": "Einstellung konnte nicht gespeichert werden."
+        },
+        "empty": {
+          "title": "Keine Plugins in dieser Gruppe",
+          "description": "Fügen Sie ein Plugin hinzu, um festzulegen, wie es für diese Gruppe installiert wird."
+        },
+        "loadFailed": "Die Plugins dieser Gruppe konnten nicht geladen werden.",
+        "retry": "Erneut versuchen"
       }
     },
     "hooks": {

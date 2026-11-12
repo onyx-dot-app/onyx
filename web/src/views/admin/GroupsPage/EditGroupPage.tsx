@@ -14,6 +14,7 @@ import {
   MessageCard,
   InputSwitch,
   Table,
+  Tabs,
   useCreateModal,
   type TableColumn,
 } from "@opal/components";
@@ -40,10 +41,11 @@ import {
   isNotFoundError,
   skipRetryOnAuthError,
 } from "@/lib/fetcher";
-import { AccountType } from "@/lib/types";
+import { AccountType, Permission } from "@/lib/types";
 import type { SecuritySettings, UserGroup } from "@/lib/types";
 import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Tier } from "@/lib/tiers/types";
 import { tierAtLeast } from "@/lib/tiers/utils";
 import type { MemberRow } from "./types";
@@ -69,6 +71,7 @@ import { userGroupUrl } from "@/hooks/useGroups";
 import SharedGroupResources from "@/views/admin/GroupsPage/SharedGroupResources";
 import GroupPermissionsSection from "./GroupPermissionsSection";
 import GroupSpendingLimitsSection from "./GroupSpendingLimitsSection";
+import GroupPluginsTab from "@/views/admin/GroupsPage/GroupPluginsTab";
 import { can } from "@/lib/permissions/resource-actions";
 
 // ---------------------------------------------------------------------------
@@ -88,6 +91,9 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   const currentUserId = user?.id;
   const isEnterpriseTier = tierAtLeast(settings.tier, Tier.ENTERPRISE);
   const tokenLimitsDisabledTooltip = markdown(t("tokenLimits.disabledTooltip"));
+  // Plugin settings need manage:plugins, not group management rights; the
+  // server checks the group and each row.
+  const pluginsAuthority = usePermissionAuthority(Permission.MANAGE_PLUGINS);
 
   // Fetch the group data — poll every 5s while syncing so the UI updates
   // automatically when the backend finishes processing the previous edit.
@@ -109,6 +115,10 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   const isDefaultGroup = group?.is_default ?? false;
 
   const isSyncing = group != null && !group.is_up_to_date;
+  const showPluginsTab =
+    !isDefaultGroup &&
+    (settings.onyx_craft_available ?? false) &&
+    (pluginsAuthority.isGlobalHolder || pluginsAuthority.isScopedManager);
 
   // Fetch permissions for this group (admin only)
   const { data: groupPermissions, isLoading: permissionsLoading } = useSWR<
@@ -563,7 +573,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
 
         <SettingsLayouts.Body>
           {group && (
-            <>
+            <EditGroupTabs groupId={groupId} showPlugins={showPluginsTab}>
               {isDefaultGroup && (
                 <MessageCard
                   variant="info"
@@ -749,7 +759,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                   </Section>
                 </Card>
               )}
-            </>
+            </EditGroupTabs>
           )}
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>
@@ -786,6 +796,35 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
         </ConfirmationModalLayout>
       </deleteModal.Provider>
     </>
+  );
+}
+
+interface EditGroupTabsProps {
+  groupId: number;
+  showPlugins: boolean;
+  /** The group form. It stays mounted on the Plugins tab to keep its drafts. */
+  children: React.ReactNode;
+}
+
+function EditGroupTabs({ groupId, showPlugins, children }: EditGroupTabsProps) {
+  const t = useTranslations("admin.groups.edit.tabs");
+  const [tab, setTab] = useState("group");
+  if (!showPlugins) return <>{children}</>;
+  return (
+    <Tabs value={tab} onValueChange={setTab} gap={6}>
+      <Tabs.List>
+        <Tabs.Trigger value="group">{t("group")}</Tabs.Trigger>
+        <Tabs.Trigger value="plugins">{t("plugins")}</Tabs.Trigger>
+      </Tabs.List>
+      <Tabs.Content value="group" keepMounted>
+        <Section gap={8} height="auto" alignItems="stretch">
+          {children}
+        </Section>
+      </Tabs.Content>
+      <Tabs.Content value="plugins">
+        <GroupPluginsTab groupId={groupId} />
+      </Tabs.Content>
+    </Tabs>
   );
 }
 

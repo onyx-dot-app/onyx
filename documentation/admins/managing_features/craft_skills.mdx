@@ -291,6 +291,28 @@ A member in several groups gets the most open policy, in this order: **Required*
 **Available**, **Not available**. Groups give access. They are not a security boundary:
 a person with a direct share still sees the Skill.
 
+To set a group policy:
+
+<Steps>
+  <Step title="Open the group">
+    Open **Admin Panel → Groups**, select the group, and select the **Plugins** tab.
+  </Step>
+
+  <Step title="Choose a policy">
+    Each row is a Skill and its policy for this group. Choose **Organization setting** to use the organization setting,
+    or choose **Required**, **Installed by default**, **Available**, or **Not available**.
+    Onyx saves the change at once.
+  </Step>
+
+  <Step title="Add a Skill">
+    Select **Add plugins**, choose a Skill and a policy, and select **Add**. A private Skill is shared with the group.
+    A published Skill needs a policy.
+  </Step>
+</Steps>
+
+To remove a group policy from a Skill that is not shared with the group, select the remove icon on its row.
+Members get the change at their next session.
+
 A published Skill can have a group policy without a share. A group with **Can edit** cannot get **Not available**.
 Only users with the organization-wide `manage:plugins` permission set a group policy on a published Skill.
 A Group Manager sets the policy only for their groups, on a private Skill that is shared only within those groups.

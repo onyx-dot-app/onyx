@@ -6270,6 +6270,10 @@
           "syncing": "此用户组正在同步。请稍候再试。",
           "updateFailed": "更新用户组失败",
           "updated": "已更新用户组“{name}”"
+        },
+        "tabs": {
+          "group": "群组",
+          "plugins": "插件"
         }
       },
       "form": {
@@ -6425,6 +6429,69 @@
           "name": "基本",
           "description": "所有用户的默认组，拥有基本权限。"
         }
+      },
+      "plugins": {
+        "intro": "设置每个插件为此群组成员安装的方式。",
+        "inheritance": "默认情况下，每个群组都使用组织设置。",
+        "conflicts": "群组设置会为其成员替换组织设置，即使更严格也是如此。属于多个群组的成员获得最开放的设置。",
+        "policy": {
+          "REQUIRED": {
+            "label": "必需",
+            "description": "已安装且始终开启。成员无法关闭。"
+          },
+          "DEFAULT": {
+            "label": "默认安装",
+            "description": "为每位成员安装。成员可以关闭。"
+          },
+          "AVAILABLE": {
+            "label": "可用",
+            "description": "成员可以找到它，并按需开启。"
+          },
+          "NOT_AVAILABLE": {
+            "label": "不可用",
+            "description": "已隐藏。成员无法找到或开启。"
+          }
+        },
+        "option": {
+          "inherit": "组织设置（{policy}）",
+          "inheritDescription": "没有群组设置。群组使用组织设置。"
+        },
+        "row": {
+          "shared": "已与此群组共享",
+          "sharedPublished": "已发布并与此群组共享",
+          "settingOnly": "仅群组设置",
+          "inherited": "使用组织设置：{policy}。",
+          "overridden": "群组设置：{policy}。组织设置：{company}。",
+          "select": "{name} 的设置",
+          "remove": "从此群组移除 {name}",
+          "readOnly": "只有组织范围的插件管理员可以更改此设置。"
+        },
+        "add": {
+          "button": "添加插件",
+          "title": "添加插件",
+          "description": "选择一个插件和此群组的设置。私有插件会与群组共享。",
+          "plugin": {
+            "label": "插件",
+            "placeholder": "选择插件",
+            "published": "已发布"
+          },
+          "setting": {
+            "label": "设置",
+            "placeholder": "选择设置"
+          },
+          "submit": "添加",
+          "noCandidates": "你可以管理的所有插件都已在此群组中。"
+        },
+        "toasts": {
+          "saved": "设置已保存。",
+          "saveFailed": "无法保存设置。"
+        },
+        "empty": {
+          "title": "此群组中没有插件",
+          "description": "添加插件以设置它为此群组安装的方式。"
+        },
+        "loadFailed": "无法加载此群组的插件。",
+        "retry": "重试"
       }
     },
     "hooks": {

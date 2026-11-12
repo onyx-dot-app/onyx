@@ -6270,6 +6270,10 @@
           "syncing": "Ce groupe est en cours de synchronisation. Patientez un instant et réessayez.",
           "updateFailed": "Échec de la mise à jour du groupe",
           "updated": "Groupe \"{name}\" mis à jour"
+        },
+        "tabs": {
+          "group": "Groupe",
+          "plugins": "Plugins"
         }
       },
       "form": {
@@ -6425,6 +6429,69 @@
           "name": "Basique",
           "description": "Groupe par défaut pour tous les utilisateurs avec des autorisations de base."
         }
+      },
+      "plugins": {
+        "intro": "Définissez comment chaque plugin est installé pour les membres de ce groupe.",
+        "inheritance": "Par défaut, chaque groupe utilise le paramètre de l'organisation.",
+        "conflicts": "Un paramètre de groupe remplace celui de l'organisation pour ses membres, même s'il est plus strict. Un membre de plusieurs groupes obtient le paramètre le plus ouvert.",
+        "policy": {
+          "REQUIRED": {
+            "label": "Obligatoire",
+            "description": "Installé et toujours actif. Les membres ne peuvent pas le désactiver."
+          },
+          "DEFAULT": {
+            "label": "Installé par défaut",
+            "description": "Installé pour chaque membre. Les membres peuvent le désactiver."
+          },
+          "AVAILABLE": {
+            "label": "Disponible",
+            "description": "Les membres le trouvent et l'activent s'ils le souhaitent."
+          },
+          "NOT_AVAILABLE": {
+            "label": "Non disponible",
+            "description": "Masqué. Les membres ne peuvent ni le trouver ni l'activer."
+          }
+        },
+        "option": {
+          "inherit": "Paramètre de l'organisation ({policy})",
+          "inheritDescription": "Aucun paramètre de groupe. Le groupe utilise le paramètre de l'organisation."
+        },
+        "row": {
+          "shared": "Partagé avec ce groupe",
+          "sharedPublished": "Publié et partagé avec ce groupe",
+          "settingOnly": "Paramètre de groupe uniquement",
+          "inherited": "Utilise le paramètre de l'organisation : {policy}.",
+          "overridden": "Paramètre du groupe : {policy}. Paramètre de l'organisation : {company}.",
+          "select": "Paramètre pour {name}",
+          "remove": "Retirer {name} de ce groupe",
+          "readOnly": "Seul un gestionnaire de plugins à l'échelle de l'organisation peut modifier ce paramètre."
+        },
+        "add": {
+          "button": "Ajouter des plugins",
+          "title": "Ajouter un Plugin",
+          "description": "Choisissez un plugin et le paramètre pour ce groupe. Un plugin privé est partagé avec le groupe.",
+          "plugin": {
+            "label": "Plugin",
+            "placeholder": "Sélectionnez un plugin",
+            "published": "Publié"
+          },
+          "setting": {
+            "label": "Paramètre",
+            "placeholder": "Sélectionnez un paramètre"
+          },
+          "submit": "Ajouter",
+          "noCandidates": "Tous les plugins que vous pouvez gérer sont déjà dans ce groupe."
+        },
+        "toasts": {
+          "saved": "Paramètre enregistré.",
+          "saveFailed": "Échec de l'enregistrement du paramètre."
+        },
+        "empty": {
+          "title": "Aucun plugin dans ce groupe",
+          "description": "Ajoutez un plugin pour définir comment il est installé pour ce groupe."
+        },
+        "loadFailed": "Échec du chargement des plugins de ce groupe.",
+        "retry": "Réessayer"
       }
     },
     "hooks": {

@@ -6270,6 +6270,10 @@
           "syncing": "This group is currently syncing. Please wait a moment and try again.",
           "updateFailed": "Failed to update group",
           "updated": "Group \"{name}\" updated"
+        },
+        "tabs": {
+          "group": "Group",
+          "plugins": "Plugins"
         }
       },
       "form": {
@@ -6425,6 +6429,69 @@
           "name": "Basic",
           "description": "Default group for all users with basic permissions."
         }
+      },
+      "plugins": {
+        "intro": "Set how each plugin is installed for the members of this group.",
+        "inheritance": "By default, every group uses the organization setting.",
+        "conflicts": "A group setting replaces the organization setting for its members, also when it is stricter. A member in several groups gets the most open setting.",
+        "policy": {
+          "REQUIRED": {
+            "label": "Required",
+            "description": "Installed and always on. Members can't turn it off."
+          },
+          "DEFAULT": {
+            "label": "Installed by default",
+            "description": "Installed for every member. Members can turn it off."
+          },
+          "AVAILABLE": {
+            "label": "Available",
+            "description": "Members find it and turn it on if they want it."
+          },
+          "NOT_AVAILABLE": {
+            "label": "Not available",
+            "description": "Hidden. Members can't find or turn it on."
+          }
+        },
+        "option": {
+          "inherit": "Organization setting ({policy})",
+          "inheritDescription": "No group setting. The group uses the organization setting."
+        },
+        "row": {
+          "shared": "Shared with this group",
+          "sharedPublished": "Published and shared with this group",
+          "settingOnly": "Group setting only",
+          "inherited": "Uses the organization setting: {policy}.",
+          "overridden": "Group setting: {policy}. Organization setting: {company}.",
+          "select": "Setting for {name}",
+          "remove": "Remove {name} from this group",
+          "readOnly": "Only an organization-wide plugin manager can change this setting."
+        },
+        "add": {
+          "button": "Add plugins",
+          "title": "Add a Plugin",
+          "description": "Choose a plugin and the setting for this group. A private plugin is shared with the group.",
+          "plugin": {
+            "label": "Plugin",
+            "placeholder": "Select a plugin",
+            "published": "Published"
+          },
+          "setting": {
+            "label": "Setting",
+            "placeholder": "Select a setting"
+          },
+          "submit": "Add",
+          "noCandidates": "Every plugin you can manage is already in this group."
+        },
+        "toasts": {
+          "saved": "Setting saved.",
+          "saveFailed": "Failed to save the setting."
+        },
+        "empty": {
+          "title": "No plugins in this group",
+          "description": "Add a plugin to set how it is installed for this group."
+        },
+        "loadFailed": "Failed to load the plugins of this group.",
+        "retry": "Retry"
       }
     },
     "hooks": {

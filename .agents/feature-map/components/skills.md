@@ -34,7 +34,10 @@
   settings through `GET /manage/admin/user-group/{id}/plugins` and
   `PUT .../plugins/{plugin_id}` (EE, `ee/onyx/server/user_group/api.py`): a
   published skill gets a setting-only row; a private skill the group does not
-  have yet is shared as viewer. Only organization-wide `MANAGE_PLUGINS`
+  have yet is shared as viewer. The **Plugins** tab of the group page
+  (`web/src/views/admin/GroupsPage/GroupPluginsTab.tsx`, shown with
+  `manage:plugins` while Craft is available) edits them; each row saves on
+  its own, apart from the group form's Save. Only organization-wide `MANAGE_PLUGINS`
   deletes a skill that is required for anyone.
 - **Admin skill policies** on Admin Panel → Craft → Preferences: Skill
   Publishing ([[#publishing-review]]), **Default Access** (the Organization
