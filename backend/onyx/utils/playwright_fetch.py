@@ -12,11 +12,17 @@ Two consumers:
 """
 
 import base64
-from collections.abc import Iterator
+import threading
+import time
+import uuid
+from collections.abc import Callable, Iterator, Sequence
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from contextlib import contextmanager
 from typing import NotRequired, TypedDict, cast
 from urllib.parse import urlsplit
 
+import psutil
 from playwright.sync_api import (
     BrowserContext,
     CDPSession,
@@ -24,10 +30,14 @@ from playwright.sync_api import (
     Playwright,
     sync_playwright,
 )
+from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from pydantic import BaseModel
 
 from onyx.configs.app_configs import (
+    OPEN_URL_PLAYWRIGHT_MAX_CONCURRENCY,
+    OPEN_URL_PLAYWRIGHT_MAX_MEMORY_MB,
+    OPEN_URL_PLAYWRIGHT_TIMEOUT_SECONDS,
     WEB_CONNECTOR_OAUTH_CLIENT_ID,
     WEB_CONNECTOR_OAUTH_CLIENT_SECRET,
     WEB_CONNECTOR_OAUTH_TOKEN_URL,
@@ -83,7 +93,10 @@ class RenderedPage(BaseModel):
     status: int | None = None
 
 
-def start_playwright() -> tuple[Playwright, BrowserContext]:
+def start_playwright(
+    extra_browser_args: Sequence[str] = (),
+    launch_timeout_ms: float | None = None,
+) -> tuple[Playwright, BrowserContext]:
     """Launch a Playwright Chromium context tuned to look like a real browser.
 
     Used by both the long-lived web-connector crawl and the one-shot
@@ -91,7 +104,20 @@ def start_playwright() -> tuple[Playwright, BrowserContext]:
     `context.close()` + `playwright.stop()` when done.
     """
     playwright = sync_playwright().start()
+    try:
+        context = _launch_context(playwright, extra_browser_args, launch_timeout_ms)
+    except BaseException:
+        # The caller never receives `playwright`, so stop its driver here.
+        playwright.stop()
+        raise
+    return playwright, context
 
+
+def _launch_context(
+    playwright: Playwright,
+    extra_browser_args: Sequence[str],
+    launch_timeout_ms: float | None,
+) -> BrowserContext:
     browser = playwright.chromium.launch(
         headless=True,
         args=[
@@ -99,7 +125,9 @@ def start_playwright() -> tuple[Playwright, BrowserContext]:
             "--disable-blink-features=AutomationControlled",
             "--disable-features=IsolateOrigins,site-per-process",
             "--disable-site-isolation-trials",
+            *extra_browser_args,
         ],
+        timeout=launch_timeout_ms,
     )
 
     context = browser.new_context(
@@ -144,7 +172,7 @@ def start_playwright() -> tuple[Playwright, BrowserContext]:
         });
     """)
 
-    return playwright, context
+    return context
 
 
 def get_connector_oauth_header() -> str | None:
@@ -169,7 +197,10 @@ def get_connector_oauth_header() -> str | None:
 
 
 @contextmanager
-def playwright_session() -> Iterator[BrowserContext]:
+def playwright_session(
+    extra_browser_args: Sequence[str] = (),
+    launch_timeout_ms: float | None = None,
+) -> Iterator[BrowserContext]:
     """Context-manager wrapper around `start_playwright()` for one-shot use.
 
     Yields a `BrowserContext` and guarantees both the context and the
@@ -183,7 +214,7 @@ def playwright_session() -> Iterator[BrowserContext]:
     playwright: Playwright | None = None
     context: BrowserContext | None = None
     try:
-        playwright, context = start_playwright()
+        playwright, context = start_playwright(extra_browser_args, launch_timeout_ms)
         yield context
     finally:
         if context is not None:
@@ -259,6 +290,39 @@ def _ssrf_allows(
         return False
 
 
+_lookup_pool = ThreadPoolExecutor(
+    max_workers=8, thread_name_prefix="playwright-fallback-lookup"
+)
+
+
+def _ssrf_allows_within(
+    url: str,
+    seconds: float,
+    *,
+    allow_private_network: bool,
+    allow_loopback: bool = False,
+) -> bool:
+    """`_ssrf_allows` that fails closed when its DNS lookup takes too long.
+
+    A blocked lookup would also block Playwright's event loop, which a
+    browser kill cannot interrupt.
+    """
+    if seconds <= 0:
+        return False
+    future = _lookup_pool.submit(
+        _ssrf_allows,
+        url,
+        allow_private_network=allow_private_network,
+        allow_loopback=allow_loopback,
+    )
+    try:
+        return future.result(timeout=seconds)
+    except FutureTimeoutError:
+        # Drop the lookup if it is still queued behind stalled ones.
+        future.cancel()
+        return False
+
+
 class _ResponseStream(TypedDict):
     stream: str
 
@@ -329,13 +393,17 @@ def install_ssrf_guard(
     allow_loopback: bool = False,
     authorization_header: str | None = None,
     authorization_url: str | None = None,
+    max_paused_requests: int | None = None,
+    on_request_limit: Callable[[], None] | None = None,
+    lookup_seconds: Callable[[], float] | None = None,
 ) -> None:
     if allow_private_network:
         page.context.grant_permissions(["local-network-access"])
     session = page.context.new_cdp_session(page)
     session.send("Network.setCacheDisabled", {"cacheDisabled": True})
+    paused_requests = 0
 
-    def guard_request(event: _PausedRequest) -> None:
+    def handle_paused(event: _PausedRequest) -> None:
         if "responseStatusCode" in event:
             headers = event.get("responseHeaders", []) + [
                 _Header(name="Content-Security-Policy", value="worker-src 'none'")
@@ -366,12 +434,29 @@ def install_ssrf_guard(
             )
             return
 
+        nonlocal paused_requests
+        paused_requests += 1
+        if max_paused_requests is not None and paused_requests > max_paused_requests:
+            # The browser is about to be killed; a CDP call per queued event
+            # only slows the drain.
+            if paused_requests == max_paused_requests + 1 and on_request_limit:
+                on_request_limit()
+            return
         url = event["request"]["url"]
-        if not _ssrf_allows(
-            url,
-            allow_private_network=allow_private_network,
-            allow_loopback=allow_loopback,
-        ):
+        if lookup_seconds is None:
+            allowed = _ssrf_allows(
+                url,
+                allow_private_network=allow_private_network,
+                allow_loopback=allow_loopback,
+            )
+        else:
+            allowed = _ssrf_allows_within(
+                url,
+                lookup_seconds(),
+                allow_private_network=allow_private_network,
+                allow_loopback=allow_loopback,
+            )
+        if not allowed:
             session.send(
                 "Fetch.failRequest",
                 {"requestId": event["requestId"], "errorReason": "BlockedByClient"},
@@ -403,6 +488,20 @@ def install_ssrf_guard(
             )
         else:
             session.send("Fetch.continueRequest", {"requestId": event["requestId"]})
+
+    def guard_request(event: _PausedRequest) -> None:
+        try:
+            handle_paused(event)
+        except PlaywrightError:
+            # Usually the page closed. Otherwise do not leave the request paused.
+            logger.debug("Could not answer a paused request", exc_info=True)
+            try:
+                session.send(
+                    "Fetch.failRequest",
+                    {"requestId": event["requestId"], "errorReason": "Aborted"},
+                )
+            except PlaywrightError:
+                pass
 
     # Playwright route handlers do not run for subsequent HTTP redirect hops.
     session.on("Fetch.requestPaused", guard_request)
@@ -438,6 +537,119 @@ def read_bounded_page_html(page: Page) -> str | None:
     return html
 
 
+# A page that sends requests without end can keep the guard busy forever.
+MAX_FALLBACK_PAUSED_REQUESTS = 1000
+_WATCHDOG_POLL_SECONDS = 0.25
+_fallback_slots = threading.BoundedSemaphore(OPEN_URL_PLAYWRIGHT_MAX_CONCURRENCY)
+# Last memory sample of each running fallback browser, for the shared budget.
+_browser_memory: dict["_BrowserWatchdog", int] = {}
+_browser_memory_lock = threading.Lock()
+
+
+class _BrowserWatchdog:
+    """Kills one fallback browser when it passes its time limit, or when all
+    fallback browsers together pass the memory budget and it is the largest.
+
+    The sync Playwright API is not thread-safe, so this thread finds the
+    browser by a unique launch flag and kills its processes. The Playwright
+    calls that wait on that browser then fail, and the render returns.
+    """
+
+    def __init__(self, timeout_seconds: int, max_memory_bytes: int) -> None:
+        self.launch_flag = f"--onyx-render-id={uuid.uuid4().hex}"
+        self.stop_reason: str | None = None
+        self._timeout_seconds = timeout_seconds
+        self._deadline = time.monotonic() + timeout_seconds
+        self._max_memory_bytes = max_memory_bytes
+        self._requested_reason: str | None = None
+        self._browser: psutil.Process | None = None
+        self._done = threading.Event()
+        self._thread = threading.Thread(
+            target=self._run, name="playwright-fallback-watchdog", daemon=True
+        )
+
+    def __enter__(self) -> "_BrowserWatchdog":
+        self._thread.start()
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self._done.set()
+        self._thread.join()
+        with _browser_memory_lock:
+            _browser_memory.pop(self, None)
+
+    def remaining_seconds(self) -> float:
+        return max(0.0, self._deadline - time.monotonic())
+
+    def request_stop(self, reason: str) -> None:
+        self._requested_reason = reason
+
+    def _find_browser(self) -> psutil.Process | None:
+        matches: dict[int, psutil.Process] = {}
+        for proc in psutil.Process().children(recursive=True):
+            try:
+                if self.launch_flag in proc.cmdline():
+                    matches[proc.pid] = proc
+            except psutil.Error:
+                continue
+        for proc in matches.values():
+            try:
+                if proc.ppid() not in matches:
+                    return proc
+            except psutil.Error:
+                continue
+        return None
+
+    def _browser_processes(self, browser: psutil.Process) -> list[psutil.Process]:
+        try:
+            return [browser, *browser.children(recursive=True)]
+        except psutil.Error:
+            return [browser]
+
+    def _memory_bytes(self, browser: psutil.Process) -> int:
+        total = 0
+        for proc in self._browser_processes(browser):
+            try:
+                total += proc.memory_info().rss
+            except psutil.Error:
+                continue
+        return total
+
+    def _limit_reason(self) -> str | None:
+        if self._requested_reason is not None:
+            return self._requested_reason
+        if time.monotonic() > self._deadline:
+            return f"passed the {self._timeout_seconds}s time limit"
+        if self._browser is not None and self._max_memory_bytes > 0:
+            memory = self._memory_bytes(self._browser)
+            with _browser_memory_lock:
+                _browser_memory[self] = memory
+                total = sum(_browser_memory.values())
+                largest = max(_browser_memory.values())
+            if total > self._max_memory_bytes and memory == largest:
+                return (
+                    f"fallback browsers used {total >> 20} MiB "
+                    f"(this one {memory >> 20} MiB), "
+                    f"over the {self._max_memory_bytes >> 20} MiB limit"
+                )
+        return None
+
+    def _run(self) -> None:
+        while not self._done.wait(_WATCHDOG_POLL_SECONDS):
+            if self._browser is None:
+                self._browser = self._find_browser()
+            reason = self._limit_reason()
+            if reason is None or self._browser is None:
+                continue
+            self.stop_reason = reason
+            for proc in self._browser_processes(self._browser):
+                try:
+                    proc.kill()
+                except psutil.Error:
+                    continue
+            return
+
+
 def fetch_rendered_html(
     url: str,
     *,
@@ -453,16 +665,22 @@ def fetch_rendered_html(
     right tool for high-volume crawling (use a long-lived `BrowserContext`
     via `start_playwright()` instead).
 
+    The render is bounded by `OPEN_URL_PLAYWRIGHT_TIMEOUT_SECONDS` and
+    `MAX_FALLBACK_PAUSED_REQUESTS`, and all fallback browsers in the process
+    share `OPEN_URL_PLAYWRIGHT_MAX_MEMORY_MB`; past a limit the browser is
+    killed and this returns None. At most `OPEN_URL_PLAYWRIGHT_MAX_CONCURRENCY`
+    renders run at once per process.
+
     When ``allow_private_network`` is True, the private-IP guard is skipped
     so operators on trusted networks can render URLs that resolve to RFC1918
     addresses. Scheme/credential/blocked-hostname checks still apply.
 
     Returns:
         RenderedPage on success, or None if navigation failed entirely
-        (including SSRF rejection of the URL). A non-None return with a
-        4xx/5xx `status` is still possible — the caller can decide whether
-        to use the rendered HTML (challenge pages often render real content
-        after JS executes despite the original 4xx status code).
+        (including SSRF rejection of the URL or a passed limit). A non-None
+        return with a 4xx/5xx `status` is still possible — the caller can
+        decide whether to use the rendered HTML (challenge pages often render
+        real content after JS executes despite the original 4xx status code).
     """
     # Playwright bypasses our `requests`-level SSRF protection, so revalidate
     # the URL here before letting Chromium navigate to it. Note: there is a
@@ -472,73 +690,123 @@ def fetch_rendered_html(
         logger.warning("Refusing Playwright fallback for %s", url)
         return None
 
-    try:
-        with playwright_session() as context:
-            page = context.new_page()
-            install_ssrf_guard(page, allow_private_network=allow_private_network)
-            try:
-                # Use "commit" instead of "domcontentloaded" to avoid hanging
-                # on bot-detection pages that may never fire domcontentloaded.
-                response = page.goto(
-                    url,
-                    timeout=navigation_timeout_ms,
-                    wait_until="commit",
-                )
-
-                cf_ray = response.header_value("cf-ray") if response else None
-                status = response.status if response else None
-
-                if status is not None and _looks_like_bot_challenge(status, cf_ray):
-                    page.wait_for_timeout(bot_challenge_grace_ms)
-
-                # Best-effort wait for network to settle (SPA / CF challenge JS).
-                try:
-                    page.wait_for_load_state(
-                        "networkidle", timeout=bot_challenge_grace_ms
-                    )
-                except PlaywrightTimeoutError:
-                    pass
-
-                final_url = page.url
-                if not _ssrf_allows(
-                    final_url, allow_private_network=allow_private_network
-                ):
-                    logger.warning(
-                        "Playwright fallback ended on a disallowed destination"
-                    )
-                    return None
-
-                html = read_bounded_page_html(page)
-                if html is None:
-                    return None
-                last_modified = (
-                    response.header_value("Last-Modified") if response else None
-                )
-                return RenderedPage(
-                    html=html,
-                    final_url=final_url,
-                    last_modified=last_modified,
-                    status=status,
-                )
-            finally:
-                page.close()
-    except Exception as exc:
-        msg = str(exc)
-        if "Executable doesn't exist" in msg:
-            # Friendlier message for the common "venv has Playwright but
-            # Chromium binary not installed" footgun. Production Docker
-            # images install it during build (see backend/Dockerfile),
-            # but local dev `pip install`s won't.
-            logger.warning(
-                "Playwright fallback unavailable for %s: Chromium binary not "
-                "installed. Run `playwright install chromium` in your venv.",
-                url,
-            )
-        else:
-            logger.warning(
-                "Playwright fallback failed to render %s (%s: %s)",
-                url,
-                exc.__class__.__name__,
-                msg.splitlines()[0] if msg else "",
-            )
+    if not _fallback_slots.acquire(timeout=OPEN_URL_PLAYWRIGHT_TIMEOUT_SECONDS):
+        logger.warning(
+            "Skipping Playwright fallback for %s: %d renders already running",
+            url,
+            OPEN_URL_PLAYWRIGHT_MAX_CONCURRENCY,
+        )
         return None
+    try:
+        with _BrowserWatchdog(
+            OPEN_URL_PLAYWRIGHT_TIMEOUT_SECONDS,
+            OPEN_URL_PLAYWRIGHT_MAX_MEMORY_MB * 1024 * 1024,
+        ) as watchdog:
+            try:
+                rendered = _render_page(
+                    url,
+                    watchdog=watchdog,
+                    navigation_timeout_ms=navigation_timeout_ms,
+                    bot_challenge_grace_ms=bot_challenge_grace_ms,
+                    allow_private_network=allow_private_network,
+                )
+            except Exception as exc:
+                if watchdog.stop_reason is None:
+                    _log_render_failure(url, exc)
+                rendered = None
+        if watchdog.stop_reason is not None:
+            logger.warning(
+                "Stopped Playwright fallback for %s: %s", url, watchdog.stop_reason
+            )
+            return None
+        return rendered
+    finally:
+        _fallback_slots.release()
+
+
+def _render_page(
+    url: str,
+    *,
+    watchdog: _BrowserWatchdog,
+    navigation_timeout_ms: int,
+    bot_challenge_grace_ms: int,
+    allow_private_network: bool,
+) -> RenderedPage | None:
+    with playwright_session(
+        # Playwright reads a timeout of 0 as no timeout.
+        [watchdog.launch_flag],
+        max(1.0, watchdog.remaining_seconds() * 1000),
+    ) as context:
+        page = context.new_page()
+        install_ssrf_guard(
+            page,
+            allow_private_network=allow_private_network,
+            max_paused_requests=MAX_FALLBACK_PAUSED_REQUESTS,
+            on_request_limit=lambda: watchdog.request_stop(
+                f"page sent more than {MAX_FALLBACK_PAUSED_REQUESTS} requests"
+            ),
+            lookup_seconds=watchdog.remaining_seconds,
+        )
+        try:
+            # Use "commit" instead of "domcontentloaded" to avoid hanging
+            # on bot-detection pages that may never fire domcontentloaded.
+            response = page.goto(
+                url,
+                timeout=navigation_timeout_ms,
+                wait_until="commit",
+            )
+
+            cf_ray = response.header_value("cf-ray") if response else None
+            status = response.status if response else None
+
+            if status is not None and _looks_like_bot_challenge(status, cf_ray):
+                page.wait_for_timeout(bot_challenge_grace_ms)
+
+            # Best-effort wait for network to settle (SPA / CF challenge JS).
+            try:
+                page.wait_for_load_state("networkidle", timeout=bot_challenge_grace_ms)
+            except PlaywrightTimeoutError:
+                pass
+
+            final_url = page.url
+            if not _ssrf_allows_within(
+                final_url,
+                watchdog.remaining_seconds(),
+                allow_private_network=allow_private_network,
+            ):
+                logger.warning("Playwright fallback ended on a disallowed destination")
+                return None
+
+            html = read_bounded_page_html(page)
+            if html is None:
+                return None
+            last_modified = response.header_value("Last-Modified") if response else None
+            return RenderedPage(
+                html=html,
+                final_url=final_url,
+                last_modified=last_modified,
+                status=status,
+            )
+        finally:
+            page.close()
+
+
+def _log_render_failure(url: str, exc: Exception) -> None:
+    msg = str(exc)
+    if "Executable doesn't exist" in msg:
+        # Friendlier message for the common "venv has Playwright but
+        # Chromium binary not installed" footgun. Production Docker
+        # images install it during build (see backend/Dockerfile),
+        # but local dev `pip install`s won't.
+        logger.warning(
+            "Playwright fallback unavailable for %s: Chromium binary not "
+            "installed. Run `playwright install chromium` in your venv.",
+            url,
+        )
+    else:
+        logger.warning(
+            "Playwright fallback failed to render %s (%s: %s)",
+            url,
+            exc.__class__.__name__,
+            msg.splitlines()[0] if msg else "",
+        )
