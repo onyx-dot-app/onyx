@@ -40,7 +40,7 @@ from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.db.chat_response import save_chat_response_to_db
 from onyx.db.enums import IncognitoRecordMode
-from onyx.db.models import ChatMessage, ChatSession
+from onyx.db.models import ChatMessage, ChatSession, User
 from onyx.file_store.models import ExtractedContextFiles
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import LLMUserIdentity
@@ -364,6 +364,7 @@ def test_agent_lookup_uses_its_tenant_and_restores_the_callers_context(
             visible_response_ids=[],
             cache=cache,
             follow_up_steps=4,
+            user=User(),
             control_cache=cache,
         )
         CURRENT_TENANT_ID_CONTEXTVAR.set("caller-tenant")

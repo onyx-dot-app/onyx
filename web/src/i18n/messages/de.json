@@ -12506,6 +12506,9 @@
           "interruptLabel": "Unterbrechen",
           "waitHint": "Warten Sie, bis die Antwort fertig ist.",
           "ctrlKey": "Strg"
+        },
+        "stopSubagentsButton": {
+          "label": "Unteragenten stoppen"
         }
       },
       "baseInputBar": {
@@ -12639,7 +12642,8 @@
         "withdrawFailed": "Die ausstehende Nachricht konnte nicht entfernt werden.",
         "loadFailed": "Ausstehende Nachrichten konnten nicht geladen werden.",
         "alreadyAccepted": "Diese Nachricht wurde bereits angenommen und ist nicht mehr ausstehend.",
-        "interruptFailed": "Diese Nachricht konnte nicht sofort gesendet werden. Sie bleibt ausstehend."
+        "interruptFailed": "Diese Nachricht konnte nicht sofort gesendet werden. Sie bleibt ausstehend.",
+        "stopSubagentsFailed": "Die Unteragenten konnten nicht gestoppt werden."
       }
     },
     "mcpApiKey": {

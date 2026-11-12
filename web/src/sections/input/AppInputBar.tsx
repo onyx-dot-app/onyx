@@ -862,6 +862,14 @@ const AppInputBar = React.memo(
                 <Text font="secondary-body" color="text-03" maxLines={1}>
                   {t("appInputBar.subagentsWorking")}
                 </Text>
+                <Button
+                  icon={SvgStop}
+                  prominence="tertiary"
+                  size="xs"
+                  aria-label={t("appInputBar.stopSubagentsButton.label")}
+                  tooltip={t("appInputBar.stopSubagentsButton.label")}
+                  onClick={() => void queue.stopSubagents()}
+                />
               </Section>
             )}
             {hasPendingInput && (

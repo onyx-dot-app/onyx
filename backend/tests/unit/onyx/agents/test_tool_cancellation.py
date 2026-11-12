@@ -5,9 +5,9 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from onyx.agents.agent_coordination import AgentCoordinator
+from onyx.agents.agent_coordination import MAX_CHILD_DEPTH, AgentCoordinator
 from onyx.agents.events import AgentEvent, ToolUpdateEvent
-from onyx.agents.models import RunState, RunStatus
+from onyx.agents.models import AgentInfo, RunState, RunStatus
 from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import AgentTool, ChildRunWait, ToolInvocation
 from onyx.llm.cancellation import (
@@ -78,7 +78,7 @@ def test_nested_child_runs_complete_without_parent_deadlock() -> None:
             ],
         )
 
-    root = nested(3)
+    root = nested(MAX_CHILD_DEPTH)
     events: list[AgentEvent] = []
     runs: list[Run] = []
     assert (
@@ -93,11 +93,14 @@ def test_nested_child_runs_complete_without_parent_deadlock() -> None:
     )
     snapshot = runs[-1].snapshot()
     assert snapshot is not None
-    assert len([event for event in events if event.type == "agent_start"]) == 4
+    assert (
+        len([event for event in events if event.type == "agent_start"])
+        == MAX_CHILD_DEPTH + 1
+    )
     assert [
         event.progress.content for event in events if event.type == "tool_update"
-    ] == ["leaf"] * 3
-    for _ in range(3):
+    ] == ["leaf"] * MAX_CHILD_DEPTH
+    for _ in range(MAX_CHILD_DEPTH):
         assert len(snapshot.child_runs) == 1
         child = snapshot.child_runs[0]
         assert child.parent_run_id == snapshot.run_id
@@ -545,3 +548,43 @@ def test_cancelled_run_rejects_tool_result_while_waiting_for_child(
         release_tool.set()
         release_child.set()
         assert coordinator.close(3)
+
+
+def test_agents_at_the_nesting_limit_cannot_start_agents() -> None:
+    """The root, its children, and their children can run; no deeper agent."""
+    leaf = Agent(
+        FakeModelClient(lambda *_: AssistantMessage(content=[TextContent(text="x")])),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+    )
+    coordinator = AgentCoordinator()
+    parent_id = "root"
+    coordinator.register(
+        AgentInfo(
+            id=parent_id,
+            path="/root",
+            parent_id=None,
+            description="",
+            restoration_config=None,
+        )
+    )
+    for depth in range(MAX_CHILD_DEPTH):
+        child = Agent(
+            FakeModelClient(lambda *_: AssistantMessage(content=[])),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        )
+        coordinator.register_child(
+            child,
+            parent_id=parent_id,
+            name=f"level{depth + 1}",
+            description="",
+            restoration_config=None,
+        )
+        parent_id = child.id
+    with pytest.raises(ValueError, match="nesting limit"):
+        coordinator.register_child(
+            leaf,
+            parent_id=parent_id,
+            name="too-deep",
+            description="",
+            restoration_config=None,
+        )

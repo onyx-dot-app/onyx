@@ -12506,6 +12506,9 @@
           "interruptLabel": "Interrumpir",
           "waitHint": "Espera a que termine la respuesta.",
           "ctrlKey": "Ctrl"
+        },
+        "stopSubagentsButton": {
+          "label": "Detener subagentes"
         }
       },
       "baseInputBar": {
@@ -12639,7 +12642,8 @@
         "withdrawFailed": "No se pudo eliminar el mensaje pendiente.",
         "loadFailed": "No se pudieron cargar los mensajes pendientes.",
         "alreadyAccepted": "Este mensaje ya fue aceptado y ya no está pendiente.",
-        "interruptFailed": "No se pudo enviar este mensaje ahora. Sigue pendiente."
+        "interruptFailed": "No se pudo enviar este mensaje ahora. Sigue pendiente.",
+        "stopSubagentsFailed": "No se pudieron detener los subagentes."
       }
     },
     "mcpApiKey": {

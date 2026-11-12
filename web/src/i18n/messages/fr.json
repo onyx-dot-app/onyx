@@ -12506,6 +12506,9 @@
           "interruptLabel": "Interrompre",
           "waitHint": "Attendez la fin de la réponse.",
           "ctrlKey": "Ctrl"
+        },
+        "stopSubagentsButton": {
+          "label": "Arrêter les sous-agents"
         }
       },
       "baseInputBar": {
@@ -12639,7 +12642,8 @@
         "withdrawFailed": "Impossible de retirer le message en attente.",
         "loadFailed": "Impossible de charger les messages en attente.",
         "alreadyAccepted": "Ce message a déjà été accepté et n’est plus en attente.",
-        "interruptFailed": "Impossible d’envoyer ce message maintenant. Il reste en attente."
+        "interruptFailed": "Impossible d’envoyer ce message maintenant. Il reste en attente.",
+        "stopSubagentsFailed": "Impossible d'arrêter les sous-agents."
       }
     },
     "mcpApiKey": {

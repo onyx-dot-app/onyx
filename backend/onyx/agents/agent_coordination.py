@@ -47,7 +47,8 @@ logger = setup_logger()
 
 COORDINATOR_CLOSE_TIMEOUT_SECONDS = 60.0
 MAX_LOADED_AGENTS = 64
-MAX_CHILD_DEPTH = 8
+# The root, its children, and their children.
+MAX_CHILD_DEPTH = 2
 REMOTE_POLL_SECONDS = 1.0
 CHILD_TERMINAL_TIMEOUT_SECONDS = 18.0
 
@@ -805,7 +806,10 @@ class AgentCoordinator:
                 depth += 1
                 ancestor = self._state.registrations[ancestor.parent_id]
             if depth >= MAX_CHILD_DEPTH:
-                raise ValueError("Agent nesting limit exceeded")
+                raise ValueError(
+                    f"Agent nesting limit reached: agents {MAX_CHILD_DEPTH} levels "
+                    "below the root cannot start agents"
+                )
             if agent.id in self._state.registrations or not self._make_room_locked(
                 agent.id
             ):

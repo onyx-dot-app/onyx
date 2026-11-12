@@ -22,6 +22,7 @@ from onyx.cache.interface import CacheBackend
 from onyx.chat import run_store
 from onyx.chat.models import AgentResultState, ChatResponseSnapshot, ResponseOwner
 from onyx.chat.run_store import ChatRunStore, _OwnedRun, _OwnerLease
+from onyx.db.models import User
 from onyx.llm.models import AssistantMessage, ToolResultMessage
 from onyx.llm.models import ToolCall as ModelToolCall
 
@@ -49,6 +50,7 @@ def ownership(
         visible_response_ids=[],
         cache=cache,
         follow_up_steps=4,
+        user=User(),
         control_cache=cache,
     )
     lease = _OwnerLease(ResponseOwner(token=uuid4(), root_message_id=1))
@@ -163,7 +165,7 @@ def test_root_and_child_control_calls_use_the_callers_thread(
     def read_stop(key: str) -> bool:
         assert threading.current_thread() is calling_thread
         checks.append(key)
-        return key == store._stop_key(2)
+        return key == run_store._stop_key(2)
 
     def renew(key: str, _value: bytes, _ttl: int) -> bool:
         assert threading.current_thread() is calling_thread
@@ -174,7 +176,7 @@ def test_root_and_child_control_calls_use_the_callers_thread(
     cache.renew_if_value.side_effect = renew
     clock.now = 10
     store.poll_control()
-    assert checks == [store._stop_key(1), store._stop_key(2)]
+    assert checks == [run_store._stop_key(1), run_store._stop_key(2)]
     assert renewals == [run_store._owner_key(1), run_store._owner_key(2)]
     root.cancel.assert_not_called()
     child.cancel.assert_called_once()
@@ -193,6 +195,7 @@ def test_saved_child_tool_calls_keep_their_tool_id_and_display_name(
         cache=cache,
         follow_up_steps=4,
         control_cache=cache,
+        user=User(),
         tool_ids={name: 7},
     )
     call = ModelToolCall(id="call", name=name, arguments={})
@@ -250,6 +253,7 @@ def test_every_step_receives_a_bounded_number_of_child_results(
         cache=cache,
         follow_up_steps=4,
         control_cache=cache,
+        user=User(),
     )
     finished = [
         AgentResultState(

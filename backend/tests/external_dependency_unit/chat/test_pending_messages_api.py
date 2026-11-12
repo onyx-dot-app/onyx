@@ -167,7 +167,9 @@ def app(db_session: Session, owner: User) -> FastAPI:
     app.include_router(chat_backend.router)
     register_onyx_exception_handlers(app)
     for route in app.routes:
-        if not isinstance(route, APIRoute) or "pending-messages" not in route.path:
+        if not isinstance(route, APIRoute) or not (
+            "pending-messages" in route.path or "stop-subagents" in route.path
+        ):
             continue
         for dependency in route.dependant.dependencies:
             if dependency.name == "user":
@@ -2386,3 +2388,84 @@ def test_one_shot_turns_offer_no_agent_tools(
     assert SPAWN_AGENT_TOOL_NAME not in one_shot
     assert SPAWN_AGENT_TOOL_NAME in streamed
     assert SPAWN_AGENT_TOOL_NAME not in unshown
+
+
+def test_stop_subagents_interrupts_running_agents_without_waking_the_root(
+    client: TestClient,
+    chat: ChatSession,
+    owner: User,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    started, release = Event(), Event()
+
+    def generate(
+        request: GenerationRequest, signal: CancellationSignal
+    ) -> AssistantMessage:
+        texts = [message.text for message in request.messages]
+        if "Long task" in texts:
+            started.set()
+            # The worker runs until its Stop arrives.
+            with signal.on_cancel(release.set):
+                assert release.wait(30)
+            return AssistantMessage(content=[TextContent(text="Too late")])
+        if any(isinstance(message, ToolResultMessage) for message in request.messages):
+            return AssistantMessage(content=[TextContent(text="Started")])
+        return AssistantMessage(
+            content=[
+                ModelToolCall(
+                    id="spawn",
+                    name=SPAWN_AGENT_TOOL_NAME,
+                    arguments={"name": "worker", "instruction": "Long task"},
+                )
+            ]
+        )
+
+    monkeypatch.setattr("onyx.chat.execution.construct_tools", lambda **_kwargs: {})
+    model = QueueTestLLM(generate)
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
+    )
+    try:
+        for _packet in handle_stream_message_objects(
+            new_msg_req=SendMessageRequest(
+                message="Start a worker",
+                chat_session_id=chat.id,
+                accepts_follow_ups=True,
+            ),
+            user=owner,
+        ):
+            pass
+        assert started.wait(15)
+        stopped = client.post(f"/chat/chat-session/{chat.id}/stop-subagents")
+        assert stopped.status_code == 200, stopped.text
+        assert stopped.json() == {"stopped_count": 1}
+        assert chat_turn_work.wait_idle(timeout=30)
+    finally:
+        release.set()
+    db_session.expire_all()
+    worker = db_session.scalar(
+        select(ChatMessage)
+        .join(ChatSession, ChatSession.id == ChatMessage.chat_session_id)
+        .where(
+            ChatSession.spawned_by_message_id.in_(
+                select(ChatMessage.id).where(ChatMessage.chat_session_id == chat.id)
+            ),
+            ChatMessage.message_type == MessageType.ASSISTANT,
+        )
+    )
+    assert worker is not None
+    assert worker.response_status == RunStatus.CANCELLED
+    # The interrupted run reports no result, so the root gets no follow-up.
+    assert (
+        db_session.scalar(
+            select(ChatMessage.id).where(
+                ChatMessage.chat_session_id == chat.id,
+                ChatMessage.message_type == MessageType.AGENT_RESULTS,
+            )
+        )
+        is None
+    )
+    assert client.post(f"/chat/chat-session/{chat.id}/stop-subagents").json() == {
+        "stopped_count": 0
+    }

@@ -12506,6 +12506,9 @@
           "interruptLabel": "중단",
           "waitHint": "응답이 끝날 때까지 기다리세요.",
           "ctrlKey": "Ctrl"
+        },
+        "stopSubagentsButton": {
+          "label": "하위 에이전트 중지"
         }
       },
       "baseInputBar": {
@@ -12639,7 +12642,8 @@
         "withdrawFailed": "대기 중인 메시지를 삭제하지 못했습니다.",
         "loadFailed": "대기 중인 메시지를 불러오지 못했습니다.",
         "alreadyAccepted": "이 메시지는 이미 수락되어 더 이상 대기 중이 아닙니다.",
-        "interruptFailed": "지금 메시지를 전송하지 못했습니다. 메시지는 대기 중입니다."
+        "interruptFailed": "지금 메시지를 전송하지 못했습니다. 메시지는 대기 중입니다.",
+        "stopSubagentsFailed": "하위 에이전트를 중지할 수 없습니다."
       }
     },
     "mcpApiKey": {

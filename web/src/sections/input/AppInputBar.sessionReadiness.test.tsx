@@ -1000,3 +1000,40 @@ test("a failed submission that ends after the composer closes goes to the chat's
     )
   );
 });
+
+test("Stop subagents interrupts background work and refreshes the status", async () => {
+  let active = true;
+  fetchSpy.mockImplementation(async (url, init) => {
+    const path = String(url);
+    if (path.endsWith("/stop-subagents")) {
+      active = false;
+      return new Response(JSON.stringify(null));
+    }
+    if (path.endsWith("/status"))
+      return new Response(
+        JSON.stringify({
+          is_processing: false,
+          current_stream: null,
+          has_active_subagents: active,
+          has_startable_input: false,
+          latest_response_id: 2,
+        })
+      );
+    return new Response(JSON.stringify(init?.method ? null : pending));
+  });
+  const user = setupUser();
+  render(<ChatInput {...props("input")} initialMessage="" />);
+  await user.click(
+    await screen.findByRole("button", { name: "Stop subagents" })
+  );
+  await waitFor(() =>
+    expect(screen.queryByTestId("subagent-activity")).not.toBeInTheDocument()
+  );
+  expect(
+    fetchSpy.mock.calls.filter(
+      ([url, init]) =>
+        String(url) === "/api/chat/chat-session/session/stop-subagents" &&
+        init?.method === "POST"
+    )
+  ).toHaveLength(1);
+});

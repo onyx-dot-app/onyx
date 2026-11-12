@@ -521,6 +521,25 @@ def _results_on_branch(branch_ids: Collection[int]) -> ColumnElement[bool]:
     )
 
 
+def count_running_agents(session: Session, branch_ids: Collection[int]) -> int:
+    """Count the branch's running background agent runs.
+
+    Each such run has an unread result row from its reservation.
+    """
+    return (
+        session.scalar(
+            select(func.count())
+            .select_from(ChatInput)
+            .join(ChatMessage, ChatMessage.id == ChatInput.source_response_id)
+            .where(
+                _results_on_branch(branch_ids),
+                ChatMessage.response_status == RunStatus.RUNNING,
+            )
+        )
+        or 0
+    )
+
+
 def agent_result_states(
     session: Session,
     visible_ids: Collection[int],

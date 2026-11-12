@@ -175,6 +175,19 @@ def selected_responses(branch: ChatBranch) -> CTE:
     )
 
 
+def running_agent_response_ids(db_session: Session, branch: ChatBranch) -> list[int]:
+    """The branch's running agent runs, without the root's runs."""
+    selected = selected_responses(branch)
+    return list(
+        db_session.scalars(
+            select(selected.c.id).where(
+                selected.c.chat_session_id != branch.chat_session_id,
+                selected.c.status == RunStatus.RUNNING,
+            )
+        )
+    )
+
+
 def latest_agent_responses(
     db_session: Session, branch: ChatBranch, agent_ids: Collection[str]
 ) -> dict[str, ChatMessage]:

@@ -591,6 +591,7 @@
   "POST /build/user-library/upload-zip": "basic",
   "POST /chat/chat-session/{session_id}/pending-messages": "current_chat_accessible_user, write:chat",
   "POST /chat/chat-session/{session_id}/pending-messages/{message_id}/interrupt": "current_chat_accessible_user, write:chat",
+  "POST /chat/chat-session/{session_id}/stop-subagents": "write:chat",
   "POST /chat/create-chat-message-feedback": "current_chat_accessible_user",
   "POST /chat/create-chat-session": "write:chat +anonymous",
   "POST /chat/end-incognito-session/{session_id}": "basic",

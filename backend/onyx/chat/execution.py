@@ -665,6 +665,7 @@ def bind_run_store(
         visible_response_ids=branch.message_ids,
         cache=get_cache_backend(),
         follow_up_steps=follow_up_steps,
+        user=user,
         restore_subagent=partial(
             restore_subagent,
             setup=setup,
