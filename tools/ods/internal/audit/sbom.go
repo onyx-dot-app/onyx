@@ -8,14 +8,30 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 const grypeImage = "anchore/grype:v0.121.1@sha256:6b06708b036f74b2cd70e94b706b4586af96d1932e6ac46255940b2e39dd44a9"
 
-// ScanSBOM scans an explicit inventory for software outside package managers.
+type sbomComponent struct {
+	Type       string            `json:"type"`
+	Name       string            `json:"name"`
+	Version    string            `json:"version"`
+	CPE        string            `json:"cpe"`
+	PURL       string            `json:"purl"`
+	BOMRef     string            `json:"bom-ref"`
+	Group      string            `json:"group"`
+	Properties []json.RawMessage `json:"properties"`
+}
+
+type sbomResult struct {
+	Findings        []Finding
+	ScannedPackages []ScannedPackage
+	Components      []sbomComponent
+}
+
+// scanSBOM scans an explicit inventory for software outside package managers.
 // The inventory must exist in the image; a failed extraction never means clean.
-func ScanSBOM(image, inventory string, stderr io.Writer, policy UpdatePolicy) (*Result, error) {
+func scanSBOM(image, inventory string, stderr io.Writer) (*sbomResult, error) {
 	directory, err := os.MkdirTemp("", "ods-sbom-*")
 	if err != nil {
 		return nil, err
@@ -39,16 +55,7 @@ func ScanSBOM(image, inventory string, stderr io.Writer, policy UpdatePolicy) (*
 		return nil, err
 	}
 	var inventoryData struct {
-		Components []struct {
-			Type       string            `json:"type"`
-			Name       string            `json:"name"`
-			Version    string            `json:"version"`
-			CPE        string            `json:"cpe"`
-			PURL       string            `json:"purl"`
-			BOMRef     string            `json:"bom-ref"`
-			Group      string            `json:"group"`
-			Properties []json.RawMessage `json:"properties"`
-		} `json:"components"`
+		Components []sbomComponent `json:"components"`
 	}
 	if err := json.Unmarshal(data, &inventoryData); err != nil {
 		return nil, err
@@ -56,7 +63,6 @@ func ScanSBOM(image, inventory string, stderr io.Writer, policy UpdatePolicy) (*
 	if len(inventoryData.Components) == 0 {
 		return nil, fmt.Errorf("required SBOM has no components")
 	}
-	var updates []UpdateStatus
 	var packages []ScannedPackage
 	for _, component := range inventoryData.Components {
 		switch component.Type {
@@ -75,18 +81,6 @@ func ScanSBOM(image, inventory string, stderr io.Writer, policy UpdatePolicy) (*
 		// Leave other identities unclaimed rather than close an unrelated alert.
 		if component.PURL == "" && !strings.HasPrefix(component.BOMRef, "pkg:") && component.Group == "" && len(component.Properties) == 0 {
 			packages = append(packages, ScannedPackage{Ecosystem: "UnknownPackage", Package: component.Name})
-		}
-		if policy != nil {
-			if _, ok := policy[component.Name]; !ok {
-				return nil, fmt.Errorf("missing update policy for %s", component.Name)
-			}
-		}
-		if entry, ok := policy[component.Name]; ok {
-			status, err := CheckUpdate(component.Name, component.Version, entry, time.Now())
-			if err != nil {
-				return nil, err
-			}
-			updates = append(updates, status)
 		}
 	}
 	args := []string{"run", "--rm", "--env", "GRYPE_CHECK_FOR_APP_UPDATE=false", "--mount", "type=bind,source=" + directory + ",target=/inventory,readonly"}
@@ -108,7 +102,7 @@ func ScanSBOM(image, inventory string, stderr io.Writer, policy UpdatePolicy) (*
 	if err != nil {
 		return nil, err
 	}
-	return &Result{Findings: findings, Updates: updates, ScannedPackages: packages}, nil
+	return &sbomResult{Findings: findings, ScannedPackages: packages, Components: inventoryData.Components}, nil
 }
 
 func grypeFindings(data []byte, manifest string) ([]Finding, error) {

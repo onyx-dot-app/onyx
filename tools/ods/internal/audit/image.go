@@ -58,12 +58,24 @@ func RunImage(opts ImageOptions) (*Result, error) {
 		}
 	}
 	for _, inventory := range opts.SBOMs {
-		extra, err := ScanSBOM(opts.Image, inventory, opts.Stderr, policy)
+		extra, err := scanSBOM(opts.Image, inventory, opts.Stderr)
 		if err != nil {
 			return nil, err
 		}
 		findings = append(findings, extra.Findings...)
-		updates = append(updates, extra.Updates...)
+		if policy != nil {
+			for _, component := range extra.Components {
+				entry, ok := policy[component.Name]
+				if !ok {
+					return nil, fmt.Errorf("missing update policy for %s", component.Name)
+				}
+				status, err := CheckUpdate(component.Name, component.Version, entry, time.Now())
+				if err != nil {
+					return nil, err
+				}
+				updates = append(updates, status)
+			}
+		}
 		packages = append(packages, extra.ScannedPackages...)
 	}
 
