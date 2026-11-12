@@ -124,6 +124,7 @@ def test_settings_endpoint_works(
     assert resp.status_code == 200
     data = resp.json()
     assert data["vector_db_enabled"] is False
+    assert data["is_playground"] is False
 
 
 def test_document_set_list_works(
