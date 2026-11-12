@@ -9,6 +9,7 @@ from onyx.agents.models import MessageDelivery
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentLifetime, ToolInvocation
 from onyx.configs.chat_configs import CHAT_EXECUTION_TIMEOUT_S
+from onyx.db.chat_inputs import MAX_PENDING_MESSAGE_BYTES
 from onyx.llm.models import ToolDefinition, ToolResult, UserMessage
 from onyx.tools.constants import SEND_MESSAGE_TOOL_NAME, SPAWN_AGENT_TOOL_NAME
 from onyx.tools.interface import Tool, parse_tool_arguments
@@ -24,6 +25,9 @@ from onyx.tools.tool_implementations.subagents.models import (
     SpawnAgentInput,
     SubagentSelection,
 )
+
+# An agent name is a path segment shown in agent lists and the UI.
+MAX_AGENT_NAME_BYTES = 256
 
 
 class _SubagentTool(Tool):
@@ -58,6 +62,18 @@ class SpawnAgentTool(_SubagentTool):
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
         request = parse_tool_arguments(SpawnAgentInput, invocation.arguments)
+        # The instruction becomes the child's first message, so it has the
+        # limit of a message sent to an agent.
+        for field, value, limit in (
+            ("name", request.name, MAX_AGENT_NAME_BYTES),
+            ("instruction", request.instruction, MAX_PENDING_MESSAGE_BYTES),
+        ):
+            if len(value.encode()) > limit:
+                raise ToolCallException(
+                    f"Agent {field} exceeds {limit} bytes.",
+                    f"The {field} can have at most {limit} bytes. Shorten it and "
+                    "call spawn_agent again.",
+                )
         started = invocation.agents.spawn_agent(
             self.create_agent(),
             name=request.name,
