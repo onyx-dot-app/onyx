@@ -189,9 +189,9 @@ Before release it reads Stop one last time. A Stop that arrived after an answer
 finished saves that answer as `CANCELLED`, so the queue pauses
 (`db/chat_inputs.py:cancel_completed_responses__no_commit`).
 After release, `chat/process_message.py:dispatch_pending_chat_messages` starts
-the next queued turn. `db/chat_inputs.py:read_chat_inbox` reads the selected
-branch's queued turn; it reads the branch only when the conversation has an
-inbox row. With admission free, dispatch saves a selected root response that is
+the next queued turn. `db/chat_inputs.py:read_chat_inbox` always reads the selected branch; it
+reads the queued turn and the running root response only when the
+conversation has an inbox row. With admission free, dispatch saves a selected root response that is
 still `RUNNING` without an owner as interrupted
 (`chat/run_store.py:interrupt_ownerless_responses`). It starts a response with
 current session settings and fresh authorization checks. A queued turn whose
