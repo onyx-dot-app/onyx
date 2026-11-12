@@ -56,6 +56,7 @@ Neighbours own the rest:
 browser iframe  GET /api/build/sessions/{id}/webapp/{path}
   webapp_proxy.py:get_webapp                 public route, auth inside the handler
     _check_webapp_access                     cached grant, else DB scope check
+    mark_preview_activity                    cache mark; the idle reaper counts it
     _proxy_request                           GET only, headers filtered
       _get_sandbox_url                       cached URL, else get_webapp_target_async
         SandboxManager.get_webapp_url        in-cluster address of the pod

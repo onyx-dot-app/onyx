@@ -65,7 +65,7 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
     from onyx.server.features.build.session.locks import get_session_creation_lock
     from onyx.server.features.build.session.sandbox_lifecycle import (
         create_session_snapshot_keep_latest,
-        is_sandbox_idle,
+        is_sandbox_idle_after_preview_activity,
         list_snapshotable_session_workspaces,
         sleep_sandbox,
     )
@@ -129,7 +129,9 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                     sandbox_id = sandbox.id
 
                     try:
-                        if is_sandbox_idle(sandbox, now):
+                        if is_sandbox_idle_after_preview_activity(
+                            db_session, sandbox, now
+                        ):
                             session_creation_lock = get_session_creation_lock(
                                 redis_client, sandbox.user_id
                             )
