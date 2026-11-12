@@ -27,7 +27,7 @@ from enum import Enum
 from typing import Literal
 from uuid import UUID, uuid4
 
-from sqlalchemy import delete, func, select, tuple_
+from sqlalchemy import and_, delete, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -308,27 +308,89 @@ def add_plugin_version__no_commit(
     return version
 
 
-def get_version_ids_for_bundles(
-    plugin_bundles: Mapping[UUID, str | None], db_session: Session
-) -> dict[UUID, UUID]:
-    """For each plugin id, the newest version that holds the given bundle.
+@dataclass(frozen=True)
+class StoredVersionContent:
+    """What the database holds of one version's content. ``file_manifest`` and
+    ``skill_md`` are None for a version copied from a legacy skill row before
+    the repair task fills them."""
 
-    A response that shows a skill's files from its legacy bundle returns this
-    id as the edit base. The id then always matches the files shown, also when
-    a save commits between the two reads; that save makes the base stale."""
-    pairs = {
-        (plugin_id, bundle_file_id)
-        for plugin_id, bundle_file_id in plugin_bundles.items()
-        if bundle_file_id is not None
-    }
-    if not pairs:
+    bundle_file_id: str | None
+    # Name in the frontmatter of the skill at the bundle root.
+    name: str | None
+    file_manifest: list[PluginFileEntry] | None
+    skill_md: str | None
+
+
+def get_stored_version_content(
+    version_id: UUID, db_session: Session
+) -> StoredVersionContent:
+    row = db_session.execute(
+        select(
+            PluginVersion.bundle_file_id,
+            PluginSkill.frontmatter["name"].astext,
+            PluginVersion.file_manifest,
+            PluginSkill.skill_md,
+        )
+        .outerjoin(
+            PluginSkill,
+            and_(
+                PluginSkill.plugin_version_id == PluginVersion.id,
+                PluginSkill.path == "",
+            ),
+        )
+        .where(PluginVersion.id == version_id)
+    ).one_or_none()
+    if row is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill version not found.")
+    bundle_file_id, name, manifest, skill_md = row
+    return StoredVersionContent(
+        bundle_file_id=bundle_file_id,
+        name=name,
+        file_manifest=(
+            [PluginFileEntry.model_validate(entry) for entry in manifest]
+            if manifest is not None
+            else None
+        ),
+        skill_md=skill_md,
+    )
+
+
+def get_plugin_current_version_id(plugin_id: UUID, db_session: Session) -> UUID | None:
+    return db_session.scalar(
+        select(Plugin.current_version_id).where(Plugin.id == plugin_id)
+    )
+
+
+def get_current_version_bundle_file_id(
+    plugin_id: UUID, db_session: Session
+) -> str | None:
+    return db_session.scalar(
+        select(PluginVersion.bundle_file_id)
+        .join(Plugin, Plugin.current_version_id == PluginVersion.id)
+        .where(Plugin.id == plugin_id)
+    )
+
+
+def get_plugin_version_validity(
+    plugin_ids: Iterable[UUID],
+    pointer: Literal["current", "organization"],
+    db_session: Session,
+) -> dict[UUID, bool | None]:
+    """``is_valid`` of one version of each plugin: the current version, or the
+    version the organization runs (published, else current)."""
+    ids = set(plugin_ids)
+    if not ids:
         return {}
+    version_id = (
+        Plugin.current_version_id
+        if pointer == "current"
+        else func.coalesce(Plugin.published_version_id, Plugin.current_version_id)
+    )
     rows = db_session.execute(
-        select(PluginVersion.plugin_id, PluginVersion.id)
-        .where(tuple_(PluginVersion.plugin_id, PluginVersion.bundle_file_id).in_(pairs))
-        .order_by(PluginVersion.version_number)
+        select(Plugin.id, PluginVersion.is_valid)
+        .join(PluginVersion, PluginVersion.id == version_id)
+        .where(Plugin.id.in_(ids))
     ).tuples()
-    # Ordered by version number, so the newest version is written last.
     return dict(rows.all())
 
 

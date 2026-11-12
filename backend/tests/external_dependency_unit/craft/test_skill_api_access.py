@@ -375,7 +375,7 @@ def test_remove_file_authorizes_before_reading_bundle(
     )
     read_bundle = MagicMock()
     monkeypatch.setattr(
-        "onyx.server.features.skill.api.read_custom_skill_bundle_bytes",
+        "onyx.server.features.skill.api.read_skill_bundle_blob",
         read_bundle,
     )
 
@@ -404,7 +404,7 @@ def test_remove_file_rejects_empty_path_before_reading_bundle(
     )
     read_bundle = MagicMock()
     monkeypatch.setattr(
-        "onyx.server.features.skill.api.read_custom_skill_bundle_bytes",
+        "onyx.server.features.skill.api.read_skill_bundle_blob",
         read_bundle,
     )
 
@@ -546,7 +546,7 @@ def test_sharing_metadata_requires_edit_access_without_reading_bundle(
         side_effect=AssertionError("Sharing must not read the bundle")
     )
     monkeypatch.setattr(
-        "onyx.server.features.skill.api.read_custom_skill_bundle_bytes", read_bundle
+        "onyx.server.features.skill.api.read_skill_bundle_blob", read_bundle
     )
     if editor:
         response = fetch_custom_skill_sharing(
@@ -696,7 +696,7 @@ def test_full_replacement_upload_does_not_read_current_bundle(
     )
     current_read = MagicMock(side_effect=AssertionError("current bundle was read"))
     monkeypatch.setattr(
-        "onyx.server.features.skill.api.read_custom_skill_bundle_bytes",
+        "onyx.server.features.skill.api.read_skill_bundle_blob",
         current_read,
     )
 

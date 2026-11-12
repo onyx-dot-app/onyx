@@ -21,6 +21,11 @@ from onyx.db.external_app import (
     get_external_app_by_id,
 )
 from onyx.db.models import Skill, User
+from onyx.db.plugin import (
+    get_plugin_current_version_id,
+    get_stored_version_content,
+    lock_skill_plugin__no_commit,
+)
 from onyx.db.skill import (
     SkillManagementPolicy,
     SkillSharingChange,
@@ -87,7 +92,7 @@ from onyx.skills.bundle import (
     rewrite_custom_bundle_skill_md,
     update_custom_bundle_files,
 )
-from onyx.skills.content import read_custom_skill_bundle_bytes
+from onyx.skills.content import read_skill_bundle_blob, read_version_contents
 from onyx.skills.ingest import (
     IngestedBundle,
     delete_bundle_blob,
@@ -213,19 +218,34 @@ def _github_authorization_header(user: User) -> str | None:
         ).get("Authorization")
 
 
+def _bundle_to_edit(skill: Skill, db_session: Session) -> bytes:
+    """The bundle of the version an edit starts from. The caller holds the
+    skill row lock, and every save takes it first, so the current version
+    cannot move under the edit. A skill with no plugin gets one from its
+    legacy row first, as the save does."""
+    plugin = lock_skill_plugin__no_commit(skill, db_session)
+    stored = get_stored_version_content(plugin.current_version_id, db_session)
+    return read_skill_bundle_blob(
+        stored.bundle_file_id, stored.name or str(plugin.current_version_id)
+    )
+
+
 def _editable_skill_response(
     skill: Skill,
     user: User,
     db_session: Session,
 ) -> SkillEditableDetailResponse:
-    bundle_bytes = read_custom_skill_bundle_bytes(skill)
+    version_id = get_plugin_current_version_id(skill.id, db_session)
+    if version_id is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill has no plugin version.")
+    bundle_contents = read_version_contents(version_id, db_session)
     response = skill_response_for_user(
         skill,
         user,
         db_session,
         include_share_details=True,
+        shown_version_id=version_id,
     )
-    bundle_contents = inspect_custom_bundle(bundle_bytes)
     return SkillEditableDetailResponse(
         **response.model_dump(),
         instructions_markdown=bundle_contents.instructions_markdown,
@@ -258,7 +278,7 @@ def _replace_skill_bundle_from_editor(
             user=user,
             skip_if_unchanged=True,
             previous_manifest=lambda: compute_bundle_manifest(
-                read_custom_skill_bundle_bytes(skill)
+                _bundle_to_edit(skill, db_session)
             ),
             db_session=db_session,
         )
@@ -748,7 +768,7 @@ def upload_current_user_skill_files(
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
 
     updated_bundle_bytes = update_custom_bundle_files(
-        lambda: read_custom_skill_bundle_bytes(skill),
+        lambda: _bundle_to_edit(skill, db_session),
         read_bundle_file(upload.file, filename=upload.filename),
         filename=upload.filename,
     )
@@ -778,7 +798,7 @@ def remove_current_user_skill_file(
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Skill file path cannot be empty")
 
     updated_bundle_bytes = update_custom_bundle_files(
-        read_custom_skill_bundle_bytes(skill),
+        _bundle_to_edit(skill, db_session),
         remove_path=path,
     )
     return _replace_skill_bundle_from_editor(
@@ -820,7 +840,7 @@ def patch_current_user_skill(
 
     try:
         if file_store is not None:
-            old_bundle_bytes = read_custom_skill_bundle_bytes(skill, file_store)
+            old_bundle_bytes = _bundle_to_edit(skill, db_session)
             description = (
                 patch_req.description
                 if patch_req.description is not None

@@ -30,6 +30,7 @@ from onyx.db.models import (
 )
 from onyx.db.plugin import (
     delete_plugin_preferences__no_commit,
+    get_plugin_version_validity,
     lock_skill_plugin__no_commit,
     publish_plugin__no_commit,
 )
@@ -435,7 +436,12 @@ def associate_custom_skill_with_external_app__no_commit(
             OnyxErrorCode.INVALID_INPUT,
             "Built-in skills cannot be associated through the admin workflow.",
         )
-    if skill.is_valid is False:
+    # A skill with no plugin gets one first, so its validity is read too.
+    plugin = lock_skill_plugin__no_commit(skill, db_session)
+    if (
+        get_plugin_version_validity([skill.id], "current", db_session).get(skill.id)
+        is False
+    ):
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             f"Invalid skill '{skill.name}' cannot be associated with an app.",
@@ -470,7 +476,6 @@ def associate_custom_skill_with_external_app__no_commit(
             (f"App '{app.name}' already has an associated skill named '{skill.name}'."),
         )
 
-    plugin = lock_skill_plugin__no_commit(skill, db_session)
     skill.public_permission = SkillSharePermission.VIEWER
     db_session.add(ExternalApp__Skill(external_app_id=app.id, skill_id=skill.id))
     db_session.flush()
@@ -527,8 +532,15 @@ def replace_custom_skill_associations__no_commit(
             OnyxErrorCode.INVALID_INPUT,
             "Built-in skills cannot be associated through the admin workflow.",
         )
+    # target_skills is in id order, so the plugins lock in id order. A skill
+    # with no plugin gets one first, so its validity is read too.
+    plugin_ids = [
+        lock_skill_plugin__no_commit(skill, db_session).id for skill in target_skills
+    ]
+    # Associating publishes the current version.
+    validity = get_plugin_version_validity(target_ids, "current", db_session)
     invalid_skill = next(
-        (skill for skill in target_skills if skill.is_valid is False),
+        (skill for skill in target_skills if validity.get(skill.id) is False),
         None,
     )
     if invalid_skill is not None:
@@ -585,10 +597,6 @@ def replace_custom_skill_associations__no_commit(
             )
         )
 
-    # target_skills is in id order, so the plugins lock in id order.
-    plugin_ids = [
-        lock_skill_plugin__no_commit(skill, db_session).id for skill in target_skills
-    ]
     for skill in target_skills:
         skill.public_permission = SkillSharePermission.VIEWER
         if skill.id not in current_ids:

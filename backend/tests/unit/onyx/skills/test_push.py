@@ -11,6 +11,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.models import Skill, User
+from onyx.db.skill import RuntimeSkill, RuntimeSkillVersion
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
@@ -36,15 +37,23 @@ def _skill(
     *,
     name: str = "canonical-name",
     is_valid: bool | None = None,
-) -> Skill:
-    return cast(
-        Skill,
-        SimpleNamespace(
-            id=uuid4(),
-            name=name,
-            bundle_file_id="bundle-id",
-            built_in_skill_id=None,
-            is_valid=is_valid,
+) -> RuntimeSkill:
+    """A custom skill with the version the user runs. The legacy row holds a
+    different name and no bundle, so a read of it fails the test."""
+    return RuntimeSkill(
+        skill=cast(
+            Skill,
+            SimpleNamespace(
+                id=uuid4(),
+                name="legacy-row-name",
+                bundle_file_id=None,
+                built_in_skill_id=None,
+                is_valid=False,
+            ),
+        ),
+        name=name,
+        version=RuntimeSkillVersion(
+            id=uuid4(), bundle_file_id="bundle-id", is_valid=is_valid
         ),
     )
 
@@ -90,11 +99,10 @@ def test_assemble_classifies_and_hydrates_valid_unclassified_skill(
     assert files["canonical-name/scripts/run.py"] == b"print('hello')\n"
     assert b"license: Apache-2.0" in files["canonical-name/SKILL.md"]
     assert b"x-custom: retained" in files["canonical-name/SKILL.md"]
-    assert skill.is_valid is None
     persist.assert_called_once_with(
         [
             push.SkillValidityUpdate(
-                skill_id=skill.id,
+                skill_id=skill.skill.id,
                 bundle_file_id="bundle-id",
                 is_valid=True,
             )
@@ -117,11 +125,10 @@ def test_assemble_marks_invalid_legacy_name_and_does_not_hydrate(
     files = push._assemble_fileset([skill], user, MagicMock(spec=Session))
 
     assert files == {}
-    assert skill.is_valid is None
     persist.assert_called_once_with(
         [
             push.SkillValidityUpdate(
-                skill_id=skill.id,
+                skill_id=skill.skill.id,
                 bundle_file_id="bundle-id",
                 is_valid=False,
             )
@@ -329,7 +336,7 @@ def test_assemble_skips_oversized_expansion_and_keeps_other_skills(
     assert files["healthy/scripts/run.py"] == b"print('hello')\n"
     replacement.assert_not_called()
     assert len(validity_updates) == 1
-    assert validity_updates[0].skill_id == oversized.id
+    assert validity_updates[0].skill_id == oversized.skill.id
     assert validity_updates[0].bundle_file_id == "bundle-id"
     assert validity_updates[0].is_valid is True
     file_store.save_file.assert_not_called()

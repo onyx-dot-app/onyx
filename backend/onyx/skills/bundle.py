@@ -7,7 +7,7 @@ import io
 import stat
 import sys
 import zipfile
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from contextlib import ExitStack
 from copy import copy
 from dataclasses import dataclass
@@ -196,6 +196,21 @@ def inspect_custom_bundle(zip_bytes: bytes) -> CustomSkillBundleContents:
     return CustomSkillBundleContents(
         instructions_markdown=strip_skill_md_frontmatter(skill_md),
         files=sorted_files,
+    )
+
+
+def custom_bundle_contents_from_stored(
+    skill_md: str, file_manifest: Iterable[PluginFileEntry]
+) -> CustomSkillBundleContents:
+    """The same contents as ``inspect_custom_bundle``, from the SKILL.md text
+    and file list a version stores in the database."""
+    return CustomSkillBundleContents(
+        instructions_markdown=strip_skill_md_frontmatter(skill_md),
+        files=[
+            SkillBundleFile(path=entry.path, size=entry.size)
+            for entry in sorted(file_manifest, key=lambda entry: entry.path)
+            if entry.path != SKILL_MD_NAME and not _is_ignored_bundle_path(entry.path)
+        ],
     )
 
 
