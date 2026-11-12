@@ -331,7 +331,10 @@ The library preview of an external-app skill calls the same renderer
     name and description to the legacy skill row. A save on a plugin in the
     Organization library also moves `published_version_id`. An editor save
     whose file list equals the current version's adds no version, and the
-    route deletes the new blob. A bundle upload always adds one. An edit
+    route deletes the new blob. A version copied from a legacy row has no
+    file list, so editor routes pass `previous_manifest`, the list of the
+    stored bundle; the bytes of a rewritten ZIP differ even when its files
+    do not. A bundle upload always adds one. An edit
     request may carry `base_version_id`; if it is not the current version,
     the edit gets 409 `PLUGIN_VERSION_STALE`. Skill responses return as
     `current_version_id` the version that holds the bundle they show
