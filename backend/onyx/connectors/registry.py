@@ -38,6 +38,7 @@ from onyx.connectors.highspot.config import HighspotConnectorConfig
 from onyx.connectors.hubspot.config import HubSpotConnectorConfig
 from onyx.connectors.imap.config import ImapConnectorConfig
 from onyx.connectors.jira.config import JiraConnectorConfig
+from onyx.connectors.jira_sm.config import JiraSmConnectorConfig
 from onyx.connectors.linear.config import LinearConnectorConfig
 from onyx.connectors.loopio.config import LoopioConnectorConfig
 from onyx.connectors.lumapps.config import LumAppsConnectorConfig
@@ -130,6 +131,11 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.jira.connector",
         class_name="JiraConnector",
         config_class=JiraConnectorConfig,
+    ),
+    DocumentSource.JIRA_SM: ConnectorMapping(
+        module_path="onyx.connectors.jira_sm.connector",
+        class_name="JiraSmConnector",
+        config_class=JiraSmConnectorConfig,
     ),
     DocumentSource.PRODUCTBOARD: ConnectorMapping(
         module_path="onyx.connectors.productboard.connector",
