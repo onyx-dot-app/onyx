@@ -269,7 +269,8 @@ termination grace period is much shorter, so it ends running turns first
    ([[mcp-and-custom-tools#cancel-in-flight-request]]). The stop key is per stream ID, so a late
    stop cannot cancel the next message when the caller passes `stream_id`, as
    the web client does. Without `stream_id`, Stop targets the stream in flight
-   at request time. Replay shows `user_cancelled` from the saved
+   at request time, or the turn in preparation
+   ([[#stop-before-launch]]). Replay shows `user_cancelled` from the saved
    `RunStatus.CANCELLED`; only legacy rows match the stop sentence by text
    ([[chat-persistence]]), except a saved `DEADLINE` failure replays as `timed_out`.
 9. `non-user-cancel` **Deadlines have their own stop reason.** Response runs
@@ -281,11 +282,15 @@ termination grace period is much shorter, so it ends running turns first
    an earlier response deadline. The first cancellation reason wins.
    Lost admission and control failures still
    end without a live stop packet; they are not classified as deadlines.
-10. `stop-before-launch` **Stop does nothing before launch.** During setup the
-    fence holds no stream ID, and launch clears any earlier stop key for the
-    stream ID. A client must wait for the message-ID packet before it sends
-    Stop, or abort the request itself, as `web/src/lib/chat/stopChatSession.ts`
-    does.
+10. `stop-before-launch` **A Stop during setup applies at launch.** During
+    setup the fence holds no stream ID, and launch clears any earlier stop key
+    for the stream ID. A Stop without `stream_id`, and an `interrupt` pending
+    message, call `chat/chat_processing_checker.py:stop_current_turn`. Under the
+    admission lock it stops the stream in flight, or records a preparation Stop
+    that `ChatTurnAdmission.publish` turns into a stop key for the new stream.
+    `claim` discards a preparation Stop that no turn launched. A Stop with a
+    `stream_id` still needs the message-ID packet first, or the client aborts
+    the request itself, as `web/src/lib/chat/stopChatSession.ts` does.
 11. `session-admission` **One turn owns a session at a time.**
     `chat/chat_processing_checker.py:ChatTurnAdmission` sets an owner key with a
     120 s lease during preparation and a 60 s lease after launch. The control

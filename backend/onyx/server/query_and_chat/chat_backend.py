@@ -31,6 +31,7 @@ from onyx.chat.chat_processing_checker import (
     ADMISSION_CACHE_TIMEOUT_S,
     get_processing_stream_id,
     is_chat_session_processing,
+    stop_current_turn,
 )
 from onyx.chat.chat_utils import (
     convert_chat_history_basic,
@@ -1534,7 +1535,7 @@ def submit_pending_chat_message(
     )
     db_session.commit()
     if pending.delivery == MessageDelivery.INTERRUPT:
-        _stop_processing_stream(session_id)
+        stop_current_turn(session_id, get_cache_backend())
     dispatch_pending_chat_messages(session_id, user.id)
     return pending
 
@@ -1577,7 +1578,7 @@ def interrupt_with_pending_chat_message(
     get_human_input_session(db_session, session_id, user)
     pending = interrupt_human_message__no_commit(db_session, session_id, message_id)
     db_session.commit()
-    _stop_processing_stream(session_id)
+    stop_current_turn(session_id, get_cache_backend())
     dispatch_pending_chat_messages(session_id, user.id)
     return pending
 
@@ -1600,13 +1601,6 @@ def update_chat_tool_selection(
     return saved or body
 
 
-def _stop_processing_stream(chat_session_id: UUID) -> None:
-    cache = get_cache_backend()
-    stream_id = get_processing_stream_id(chat_session_id, cache)
-    if stream_id is not None:
-        request_stop(chat_session_id, cache, stream_id=stream_id)
-
-
 @router.post("/stop-chat-session/{chat_session_id}", tags=PUBLIC_API_TAGS)
 def stop_chat_session(
     chat_session_id: UUID,
@@ -1627,7 +1621,7 @@ def stop_chat_session(
         ) from error
 
     if stream_id is None:
-        _stop_processing_stream(chat_session_id)
+        stop_current_turn(chat_session_id, get_cache_backend())
     else:
         request_stop(chat_session_id, get_cache_backend(), stream_id=stream_id)
     return StopChatResponse(message="Chat session stopped")
