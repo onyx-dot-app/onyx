@@ -5,6 +5,7 @@ ended list. State model: microvm/README.md, "Sandbox state model".
 """
 
 import time
+from collections.abc import Callable
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -70,7 +71,14 @@ NOW = int(time.time())
 
 
 class AlwaysSaved(SandboxCheckpointer):
-    def save_checkpoint(self, *, tenant_id: str, sandbox_id: UUID, vm: AgentVm) -> bool:  # noqa: ARG002
+    def save_checkpoint(
+        self,
+        *,
+        tenant_id: str,  # noqa: ARG002
+        sandbox_id: UUID,  # noqa: ARG002
+        vm: AgentVm,  # noqa: ARG002
+        renew_lease: Callable[[], None],  # noqa: ARG002
+    ) -> bool:
         return True
 
 

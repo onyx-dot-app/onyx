@@ -8,6 +8,7 @@ from collections.abc import Callable, Generator
 from typing import Protocol
 from uuid import UUID, uuid4
 
+import grpc
 import pytest
 from pydantic import SecretStr
 
@@ -15,6 +16,11 @@ from onyx.cache.factory import get_cache_backend, get_shared_cache_backend
 from onyx.cache.interface import CacheBackend
 from onyx.microvm import placement, registry
 from onyx.microvm.configs import SANDBOX_FC_IDLE_TIMEOUT_SECONDS
+from onyx.microvm.daemon_client import (
+    SandboxDaemonClient,
+    SandboxDaemonError,
+    SandboxDaemonErrorReason,
+)
 from onyx.microvm.generated.hostagent.v1 import hostagent_pb2
 from onyx.microvm.lifecycle import (
     NoCheckpointSupport,
@@ -38,6 +44,7 @@ from onyx.server.features.build.sandbox.firecracker.session_saves import (
     SessionArchiveStore,
 )
 from onyx.server.features.build.sandbox.harness_base import (
+    ExecCapReachedError,
     ExecSessionEndedError,
     HarnessSandboxError,
     HarnessSandboxRef,
@@ -415,11 +422,104 @@ def test_a_session_is_not_recorded_on_a_vm_that_stopped_during_its_setup(
     assert harness_state.sessions_on_instance(
         tenant_cache, ref.sandbox_id, instance
     ) == [ref.session_id]
-    # The setup made the session directory with a command of the session.
-    assert any(
-        e.argv == ["true"] and e.session_id == str(ref.session_id)
-        for e in node.agent.executions[str(ref.sandbox_id)].values()
-    )
+    # The setup takes no command slot.
+    assert node.agent.executions.get(str(ref.sandbox_id), {}) == {}
+
+
+def test_file_calls_of_a_new_session_work_when_command_slots_are_full(
+    make_sandbox: MakeSandbox,
+    node: RunningFakeAgent,
+    ref: HarnessSandboxRef,
+) -> None:
+    sandbox = make_sandbox()
+    node.agent.max_running_executions = 1
+    first = collect_exec_result(sandbox.exec_command(ref, "cat", yield_time_ms=250))
+    assert first.exec_session_id is not None
+
+    other = ref.model_copy(update={"session_id": uuid4()})
+    sandbox.write_file(other, "a.txt", b"x")
+    assert sandbox.read_file(other, "a.txt", max_bytes=10) == b"x"
+    another = ref.model_copy(update={"session_id": uuid4()})
+    with pytest.raises(ExecCapReachedError):
+        collect_exec_result(sandbox.exec_command(another, "echo hi"))
+
+
+def test_a_session_without_a_directory_saves_nothing_and_keeps_its_save(
+    monkeypatch: pytest.MonkeyPatch,
+    tenant_cache: CacheBackend,
+    make_sandbox: MakeSandbox,
+    node: RunningFakeAgent,
+    ref: HarnessSandboxRef,
+) -> None:
+    def no_directory(*_args: object, **_kwargs: object) -> None:
+        raise SandboxDaemonError(
+            grpc.StatusCode.NOT_FOUND,
+            "no session",
+            SandboxDaemonErrorReason.FILE_NOT_FOUND,
+        )
+
+    sandbox = make_sandbox()
+    sandbox.write_file(ref, "src/a.txt", b"x")
+    assert _sleep(sandbox, ref.sandbox_id) is VmStopOutcome.STOPPED
+    saved = harness_state.get_session_save(tenant_cache, ref.session_id)
+    assert saved is not None and saved.file_id is not None
+
+    # The next VM has no directory for the session: the save stays.
+    with pytest.raises(SandboxDaemonError):
+        sandbox.read_file(ref, "missing.txt", max_bytes=10)
+    monkeypatch.setattr(SandboxDaemonClient, "list_files", no_directory)
+    assert _sleep(sandbox, ref.sandbox_id) is VmStopOutcome.STOPPED
+    assert harness_state.get_session_save(tenant_cache, ref.session_id) == saved
+    assert node.agent.objects.get(saved.file_id) is not None
+
+    # A session with no save and no directory commits an empty save.
+    fresh = ref.model_copy(update={"session_id": uuid4()})
+    try:
+        monkeypatch.undo()
+        sandbox.write_file(fresh, "b.txt", b"y")
+        monkeypatch.setattr(SandboxDaemonClient, "list_files", no_directory)
+        assert _sleep(sandbox, ref.sandbox_id) is VmStopOutcome.STOPPED
+        empty = harness_state.get_session_save(tenant_cache, fresh.session_id)
+        assert empty is not None and empty.file_id is None
+    finally:
+        tenant_cache.delete(harness_state.SESSION_SAVE_PREFIX + str(fresh.session_id))
+
+
+def test_a_stop_that_loses_the_sandbox_lock_during_saves_keeps_the_vm(
+    tenant_cache: CacheBackend,
+    make_sandbox: MakeSandbox,
+    node: RunningFakeAgent,
+    store: FakeArchiveStore,
+    ref: HarnessSandboxRef,
+) -> None:
+    sandbox = make_sandbox()
+    second = ref.model_copy(update={"session_id": uuid4()})
+    sandbox.write_file(ref, "src/a.txt", b"x")
+    sandbox.write_file(second, "src/b.txt", b"y")
+
+    def lease_expires() -> None:
+        store.on_presign = None
+        tenant_cache.delete(placement._PLACEMENT_LOCK_PREFIX + str(ref.sandbox_id))
+
+    store.on_presign = lease_expires
+    try:
+        assert _sleep(sandbox, ref.sandbox_id) is VmStopOutcome.KEPT_NO_CHECKPOINT
+        assert node.agent.stop_calls == []
+        saves = [
+            harness_state.get_session_save(tenant_cache, r.session_id)
+            for r in (ref, second)
+        ]
+        # The first save commits; the second never starts.
+        assert sum(s is not None for s in saves) == 1
+        assert len(store.presign_tenants) == 1
+    finally:
+        tenant_cache.delete(harness_state.SESSION_SAVE_PREFIX + str(second.session_id))
+
+
+def test_the_idle_stop_executor_starts_on_first_use(
+    make_sandbox: MakeSandbox,
+) -> None:
+    assert make_sandbox().idle_stop._executor is None
 
 
 def test_a_file_store_config_error_turns_eviction_off(

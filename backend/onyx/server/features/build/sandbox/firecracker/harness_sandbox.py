@@ -119,7 +119,6 @@ from onyx.server.features.build.sandbox.models import (
     SandboxProvisionContentionError,
 )
 from onyx.utils.logger import setup_logger
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
 
@@ -379,8 +378,8 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
     def _session_vm(
         self, ref: HarnessSandboxRef
     ) -> tuple[PlacedVm, SandboxDaemonClient]:
-        """The running VM and its daemon, with the session directory made
-        and its last save restored, once per VM instance."""
+        """The running VM and its daemon, with the session's last save
+        restored once per VM instance. Uses no command slot."""
         placed = self._place(ref)
         daemon = sandbox_daemon(self._client_factory, placed)
         tenant_cache = get_cache_backend(tenant_id=ref.tenant_id)
@@ -399,15 +398,6 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         ):
             if set_up():
                 return placed, daemon
-            # A command with the session makes its directory, so an idle
-            # stop can list it even when no call wrote a file.
-            made = list(
-                daemon.run(ExecCommand(argv=["true"], session_id=str(ref.session_id)))
-            )
-            if not isinstance(made[-1], ExecResult) or made[-1].exit_code != 0:
-                raise HarnessSandboxError(
-                    f"could not create {session_workspace(ref.session_id)}"
-                )
             if self._archive_store is not None:
                 try:
                     with tenant_scope(ref.tenant_id):
@@ -719,8 +709,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         data = self.read_file(ref, rel, max_bytes=PUBLISH_MAX_BYTES)
         name = display_name or posixpath.basename(rel)
         # The file store keys and records the file under the context tenant.
-        token = CURRENT_TENANT_ID_CONTEXTVAR.set(ref.tenant_id)
-        try:
+        with tenant_scope(ref.tenant_id):
             return get_default_file_store().save_file(
                 content=BytesIO(data),
                 display_name=name,
@@ -732,5 +721,3 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                     "path": rel,
                 },
             )
-        finally:
-            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)

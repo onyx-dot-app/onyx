@@ -76,16 +76,15 @@ SAVE_EXCLUDED_ROOTS: frozenset[str] = frozenset(
         ".parcel-cache",
     }
 )
-# A stop saves every session of the VM within this time.
-SESSION_SAVE_MAX_SECONDS = 30 * 60.0
+# One session's save (capture and upload, 15 min each at most) ends within
+# this time. A stop renews its sandbox lock for each session.
+SESSION_SAVE_MAX_SECONDS = 35 * 60.0
 _ARCHIVE_FILE_TYPE = "application/zstd"
 _ARCHIVE_DISPLAY_NAME = "craft-session-save.tar.zst"
 
 _IDLE_STOP_LOCKED_RETRIES = 5
 _IDLE_STOP_LOCKED_PAUSE_SECONDS = 0.2
-_IDLE_STOP_EXECUTOR = ThreadPoolExecutor(
-    max_workers=4, thread_name_prefix="fc-idle-stop"
-)
+_IDLE_STOP_WORKERS = 4
 
 
 class SessionSaveError(HarnessSandboxError):
@@ -192,13 +191,21 @@ def save_session(
     Raises on any failure; the old save stays committed. An upload that
     fails leaves the capture on the node until it expires."""
     previous = get_session_save(cache, session_id)
-    listing = daemon.list_files(session_id=str(session_id))
-    if listing.truncated:
+    try:
+        listing = daemon.list_files(session_id=str(session_id))
+    except SandboxDaemonError as e:
+        if e.reason is not SandboxDaemonErrorReason.FILE_NOT_FOUND:
+            raise
+        # No call made the session directory on this VM: nothing changed.
+        if previous is not None:
+            return previous
+        listing = None
+    if listing is not None and listing.truncated:
         # A partial list would save a partial session.
         raise SessionSaveError(f"session {session_id} has too many entries to save")
     roots = sorted(
         e.name
-        for e in listing.entries
+        for e in (listing.entries if listing is not None else [])
         if e.type is FileType.DIRECTORY
         and e.name not in SAVE_EXCLUDED_ROOTS
         and not e.name.startswith(".craft-")
@@ -278,7 +285,14 @@ class SessionSaveCheckpointer(SandboxCheckpointer):
         self._client_factory = client_factory
         self._activity = activity
 
-    def save_checkpoint(self, *, tenant_id: str, sandbox_id: UUID, vm: AgentVm) -> bool:
+    def save_checkpoint(
+        self,
+        *,
+        tenant_id: str,
+        sandbox_id: UUID,
+        vm: AgentVm,
+        renew_lease: Callable[[], None],
+    ) -> bool:
         if self._activity.is_busy(tenant_id=tenant_id, sandbox_id=sandbox_id):
             return False
         tenant_cache = get_cache_backend(tenant_id=tenant_id)
@@ -306,6 +320,8 @@ class SessionSaveCheckpointer(SandboxCheckpointer):
         )
         with tenant_scope(tenant_id):
             for session_id in sessions:
+                # Raises when the stop lost the lock: no later commit.
+                renew_lease()
                 try:
                     save_session(
                         tenant_cache, agent, daemon, self._store, instance, session_id
@@ -330,12 +346,25 @@ class BackgroundIdleStop(SandboxCheckpointer):
     def __init__(self, stop_if_idle: Callable[[str, UUID], VmStopOutcome]) -> None:
         self._stop_if_idle = stop_if_idle
         self._lock = threading.Lock()
+        self._executor: ThreadPoolExecutor | None = None
         self.running: dict[UUID, Future[None]] = {}
 
-    def save_checkpoint(self, *, tenant_id: str, sandbox_id: UUID, vm: AgentVm) -> bool:  # noqa: ARG002
+    def save_checkpoint(
+        self,
+        *,
+        tenant_id: str,
+        sandbox_id: UUID,
+        vm: AgentVm,  # noqa: ARG002
+        renew_lease: Callable[[], None],  # noqa: ARG002
+    ) -> bool:
         with self._lock:
             if sandbox_id not in self.running:
-                self.running[sandbox_id] = _IDLE_STOP_EXECUTOR.submit(
+                if self._executor is None:
+                    self._executor = ThreadPoolExecutor(
+                        max_workers=_IDLE_STOP_WORKERS,
+                        thread_name_prefix="fc-idle-stop",
+                    )
+                self.running[sandbox_id] = self._executor.submit(
                     self._run, tenant_id, sandbox_id
                 )
         return False

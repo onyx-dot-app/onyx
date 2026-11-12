@@ -21,10 +21,11 @@ exist, the defaults (`NoCheckpointSupport`, `UnknownActivity`) keep every VM.
 import abc
 import random
 import time
+from collections.abc import Callable
 from enum import Enum
 from uuid import UUID
 
-from onyx.cache.interface import CacheBackend
+from onyx.cache.interface import CacheBackend, CacheLockLostError
 from onyx.microvm.agent_client import (
     HostAgentClientFactory,
     HostAgentError,
@@ -56,12 +57,21 @@ class SandboxCheckpointer(abc.ABC):
     # False: no VM is stopped automatically, so callers skip the agent calls.
     supported: bool = True
 
-    # How long a stop holds the sandbox lock for one save_checkpoint.
+    # How long one step of save_checkpoint may hold the sandbox lock.
     save_lease_seconds: float = 60.0
 
     @abc.abstractmethod
-    def save_checkpoint(self, *, tenant_id: str, sandbox_id: UUID, vm: AgentVm) -> bool:
-        """True only when the VM's state is saved and committed."""
+    def save_checkpoint(
+        self,
+        *,
+        tenant_id: str,
+        sandbox_id: UUID,
+        vm: AgentVm,
+        renew_lease: Callable[[], None],
+    ) -> bool:
+        """True only when the VM's state is saved and committed. Call
+        `renew_lease` before each step that can take save_lease_seconds; it
+        raises CacheLockLostError when the stop lost the sandbox lock."""
         raise NotImplementedError
 
 
@@ -70,7 +80,14 @@ class NoCheckpointSupport(SandboxCheckpointer):
 
     supported = False
 
-    def save_checkpoint(self, *, tenant_id: str, sandbox_id: UUID, vm: AgentVm) -> bool:  # noqa: ARG002
+    def save_checkpoint(
+        self,
+        *,
+        tenant_id: str,  # noqa: ARG002
+        sandbox_id: UUID,  # noqa: ARG002
+        vm: AgentVm,  # noqa: ARG002
+        renew_lease: Callable[[], None],  # noqa: ARG002
+    ) -> bool:
         return False
 
 
@@ -243,9 +260,16 @@ def stop_sandbox_vm(
             )
             if vm is None:
                 return gone()
-            lock.extend(checkpointer.save_lease_seconds + 60)
+
+            def renew_lease() -> None:
+                lock.extend(checkpointer.save_lease_seconds + 60)
+
+            renew_lease()
             if not checkpointer.save_checkpoint(
-                tenant_id=tenant_id, sandbox_id=sandbox_id, vm=vm
+                tenant_id=tenant_id,
+                sandbox_id=sandbox_id,
+                vm=vm,
+                renew_lease=renew_lease,
             ):
                 return VmStopOutcome.KEPT_NO_CHECKPOINT
             # The checkpoint can take a while: check liveness again.
@@ -266,6 +290,10 @@ def stop_sandbox_vm(
             if e.reason is None:
                 return VmStopOutcome.NODE_UNREACHABLE
             raise
+        except CacheLockLostError:
+            # Another caller may own the sandbox now: keep the VM.
+            logger.warning("sandbox_fc_stop_lock_lost sandbox=%s", sandbox_id)
+            return VmStopOutcome.KEPT_NO_CHECKPOINT
         forget_placement(
             shared_cache,
             tenant_cache,
