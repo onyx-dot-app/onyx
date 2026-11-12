@@ -1,5 +1,5 @@
-# Generated from microvm/proto/sandboxd/v1/sandboxd.proto (blob 9461f25efa5996eca03ea481c4a5baebd6183b4e)
-# at commit 2d160151ce by backend/onyx/microvm/generated/regenerate.sh. Do not edit.
+# Generated from microvm/proto/sandboxd/v1/sandboxd.proto (blob 0451c130fd32223c83af8b265d7c81ddf2adbd4c)
+# at commit 74292f03c9 by backend/onyx/microvm/generated/regenerate.sh. Do not edit.
 import datetime
 
 from google.protobuf import duration_pb2 as _duration_pb2
