@@ -1119,25 +1119,35 @@ test("a tool step after an accepted user message follows that message", async ()
 
 test("an auth error after an accepted user message shows its card without an answer", async () => {
   seedSessionAwaitingAnswer();
-  const authError = (turn_index: number): Packet => ({
-    placement: { turn_index, tab_index: 0 },
-    obj: {
-      type: PacketType.CUSTOM_TOOL_DELTA,
-      tool_name: "custom__7__get_user",
-      display_name: "get_user",
-      tool_id: 7,
-      response_type: "text",
-      error: {
-        is_auth_error: true,
-        is_unreachable: false,
-        status_code: 401,
-        message: "unauthorized",
+  const authError = (turn_index: number): Packet[] => [
+    {
+      placement: { turn_index, tab_index: 0 },
+      obj: {
+        type: PacketType.CUSTOM_TOOL_START,
+        tool_name: "custom__7__get_user",
+        display_name: "Get user",
+        tool_id: 7,
       },
     },
-  });
+    {
+      placement: { turn_index, tab_index: 0 },
+      obj: {
+        type: PacketType.CUSTOM_TOOL_DELTA,
+        tool_name: "custom__7__get_user",
+        tool_id: 7,
+        response_type: "text",
+        error: {
+          is_auth_error: true,
+          is_unreachable: false,
+          status_code: 401,
+          message: "unauthorized",
+        },
+      },
+    },
+  ];
   const packets: Packet[] = [
     ...answerPackets.slice(0, 2),
-    authError(1),
+    ...authError(1),
     {
       placement: { turn_index: 2, tab_index: 0 },
       obj: {
@@ -1146,7 +1156,7 @@ test("an auth error after an accepted user message shows its card without an ans
         message: "Try again",
       },
     },
-    authError(3),
+    ...authError(3),
     {
       placement: { turn_index: 3, tab_index: 0 },
       obj: { type: PacketType.STOP, stop_reason: StopReason.FINISHED },
@@ -1165,7 +1175,7 @@ test("an auth error after an accepted user message shows its card without an ans
   );
   try {
     const bubble = await screen.findByText("Try again");
-    const cards = await screen.findAllByText("Connect get_user");
+    const cards = await screen.findAllByText("Connect Get user");
     expect(cards).toHaveLength(2);
     expect(
       bubble.compareDocumentPosition(cards[1]!) &

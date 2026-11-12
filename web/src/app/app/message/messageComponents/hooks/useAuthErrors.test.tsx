@@ -90,7 +90,12 @@ describe("useAuthErrors", () => {
   });
 
   it("reports errors appended to the same packet array", () => {
-    const packets: Packet[] = [authError("custom__7__get_user", "get_user", 7)];
+    const packets: Packet[] = authError(
+      0,
+      "custom__7__get_user",
+      "Get user",
+      7
+    );
     const { result, rerender } = renderHook(() => useAuthErrors(packets));
     expect(result.current).toHaveLength(1);
 
@@ -104,13 +109,13 @@ describe("useAuthErrors", () => {
           message: "Try again",
         },
       },
-      authError("custom__7__get_user", "get_user", 7, 2)
+      ...authError(2, "custom__7__get_user", "Get user", 7)
     );
     rerender();
 
     expect(result.current).toEqual([
-      { turnIndex: 0, toolName: "get_user", toolId: 7 },
-      { turnIndex: 2, toolName: "get_user", toolId: 7 },
+      { turnIndex: 0, toolName: "Get user", toolId: 7 },
+      { turnIndex: 2, toolName: "Get user", toolId: 7 },
     ]);
   });
 });
