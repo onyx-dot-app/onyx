@@ -9,6 +9,8 @@ from pydantic import BaseModel, ValidationError
 from onyx.agents.models import (
     AgentState,
     ExecutionStatus,
+    InputMessageMetadata,
+    InputSource,
     PreparedStep,
     RunState,
     RunStatus,
@@ -44,6 +46,30 @@ from tests.unit.onyx.agents.fakes import FakeModelClient, run_agent
 
 class ApplicationData(BaseModel):
     private_field: str = "application-only"
+
+
+def test_response_capture_keeps_input_provenance_without_transient_payloads() -> None:
+    metadata = InputMessageMetadata(
+        source=InputSource.HUMAN, content_metadata=ApplicationData()
+    )
+    agent = Agent(
+        FakeModelClient(
+            lambda *_: AssistantMessage(content=[TextContent(text="Answer")])
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        prepare_step=lambda _input: PreparedStep(
+            input_messages=[
+                UserMessage(id="delivery", content="Accepted input", metadata=metadata)
+            ]
+        ),
+    )
+    runs: list[Run] = []
+    run_agent(agent, runs=runs, max_steps=1)
+    restored = response_snapshot(response_record(runs[0].snapshot()))
+    accepted = restored.steps[0].input_messages[0]
+    assert accepted.id == "delivery" and accepted.text == "Accepted input"
+    assert accepted.metadata == InputMessageMetadata(source=InputSource.HUMAN)
+    assert metadata.content_metadata == ApplicationData()
 
 
 @pytest.mark.parametrize("cancelled", [False, True])

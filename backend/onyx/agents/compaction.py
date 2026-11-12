@@ -10,7 +10,12 @@ if TYPE_CHECKING:
 
 
 from onyx.agents.execution_records import completed_tool_call_ids
-from onyx.agents.models import CompactionCheckpoint, CompactionMetadata, ContextBudget
+from onyx.agents.models import (
+    CompactionCheckpoint,
+    CompactionMetadata,
+    ContextBudget,
+    InputMessageMetadata,
+)
 from onyx.configs.model_configs import GEN_AI_INPUT_TOKEN_SAFETY_MARGIN
 from onyx.llm.interfaces import LLM, GenerationContext
 from onyx.llm.models import (
@@ -165,17 +170,24 @@ def working_messages(
     if checkpoint is None:
         return list(messages)
     boundary = checkpoint_boundary(messages, checkpoint, input_start=input_start)
+    return messages_after_compaction(messages, boundary, summary=checkpoint.summary)
+
+
+def messages_after_compaction(
+    messages: list[Message], boundary: int, *, summary: str
+) -> list[Message]:
+    """Apply a validated cutoff while preserving system messages and the user's task."""
     prefix = messages[:boundary]
     retained: list[Message] = [m for m in prefix if isinstance(m, SystemMessage)]
-    if checkpoint.summary:
-        retained.append(
-            SystemMessage(content=f"Conversation summary:\n{checkpoint.summary}")
-        )
+    if summary:
+        retained.append(SystemMessage(content=f"Conversation summary:\n{summary}"))
+    # Between-step input does not replace the question that started this task.
     latest_user = next(
         (
             index
             for index in range(len(messages) - 1, -1, -1)
             if isinstance(messages[index], UserMessage)
+            and not isinstance(messages[index].metadata, InputMessageMetadata)
         ),
         None,
     )

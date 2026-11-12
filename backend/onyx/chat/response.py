@@ -4,7 +4,13 @@ from collections.abc import Mapping, Sequence
 
 from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
 
-from onyx.agents.models import AgentInfo, RunState, StepRecord, ToolExecutionRecord
+from onyx.agents.models import (
+    AgentInfo,
+    InputMessageMetadata,
+    RunState,
+    StepRecord,
+    ToolExecutionRecord,
+)
 from onyx.chat.models import ChatMessageMetadata, MessageRendering, ResponseRecord
 from onyx.chat.tool_results import restored_result_details, saved_result_details
 from onyx.context.search.models import SearchDoc
@@ -161,7 +167,10 @@ def restore_response_sources(
 
 
 def _saved_message[T: Message](message: T) -> T:
-    update: dict[str, BaseModel | None] = {"metadata": None}
+    # Input provenance is saved; the runtime already dropped its content metadata.
+    update: dict[str, BaseModel | None] = (
+        {} if isinstance(message.metadata, InputMessageMetadata) else {"metadata": None}
+    )
     if isinstance(message, ToolResultMessage):
         update["details"] = saved_result_details(message.details)
     return message.model_copy(update=update).model_copy(deep=True)
@@ -169,6 +178,7 @@ def _saved_message[T: Message](message: T) -> T:
 
 def _saved_step(step: StepRecord) -> StepRecord:
     return StepRecord(
+        input_messages=[_saved_message(message) for message in step.input_messages],
         message=_saved_message(step.message),
         generation_status=step.generation_status,
         tools={

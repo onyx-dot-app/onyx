@@ -32,6 +32,13 @@ document does not repeat it.
   `ToolInvocation.agents.spawn_agent`. The tool returns a `ChildRunWait` and
   sets `result_from_children` instead of blocking, and the parent run suspends
   until the child ends.
+- **Inputs between steps.** Before a model call the runtime reads submitted
+  messages through `RunOwnership.receive_inputs`, and `RunOwnership.accept_inputs`
+  records them with the step. Accepted inputs retain their identity and source
+  in saved history. `MessageStartEvent.input_messages` contains the inputs
+  durably accepted by that step; it excludes instructions still queued or
+  withdrawn before acceptance. `chat/run_store.py:ChatRunStore` sends no inputs:
+  `receive_inputs` returns an empty list.
 - [[tools-framework]]: `tools/interface.py:Tool.bind` turns each chat `Tool`
   into an `AgentTool`.
 - **A backend developer who builds a feature on the runtime.** Start from the

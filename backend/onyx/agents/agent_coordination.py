@@ -17,7 +17,7 @@ from onyx.agents.concurrency import (
     ExecutionWork,
     wait_operation,
 )
-from onyx.agents.models import AgentInfo, RunResult, RunState, RunStatus
+from onyx.agents.models import AgentInfo, RunResult, RunState, RunStatus, StepRecord
 from onyx.agents.runtime import (
     Agent,
     Run,
@@ -34,7 +34,7 @@ from onyx.agents.tools import (
     SpawnResult,
 )
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
-from onyx.llm.models import Message
+from onyx.llm.models import Message, UserMessage
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -52,7 +52,7 @@ class RunStore(Protocol):
 
 
 class RunOwnership(Protocol):
-    """Reserve execution until workers drain, or undo a failed start."""
+    """Reserve execution until workers drain, or undo a failed start; own the inbox."""
 
     def reserve_run_id(
         self,
@@ -70,6 +70,18 @@ class RunOwnership(Protocol):
     def release(self, run_id: str) -> None: ...
 
     def abort_start(self, run_id: str) -> None: ...
+
+    def receive_inputs(self, run: Run) -> list[UserMessage]:
+        """Read the run's unread messages for its next step."""
+        ...
+
+    def accept_inputs(self, run: Run, step: StepRecord) -> bool:
+        """Persist the proposed step, or return false if input removal won."""
+        ...
+
+    def has_unread_inputs(self, run: Run) -> bool:
+        """Whether messages sent to this run wait unread; they continue the run."""
+        ...
 
 
 class AgentDirectory(Protocol):
@@ -137,7 +149,7 @@ class AgentCoordinator:
         self._visible_run_ids: set[str] = set()
         self._directory = directory
         self._store = store
-        self._ownership = ownership
+        self.ownership = ownership
 
     def view(
         self,
@@ -152,7 +164,7 @@ class AgentCoordinator:
         view = AgentCoordinator(
             directory=directory if directory is not None else self._directory,
             store=store if store is not None else self._store,
-            ownership=ownership if ownership is not None else self._ownership,
+            ownership=ownership if ownership is not None else self.ownership,
         )
         view._state = self._state
         with self._state.lock:
@@ -190,8 +202,8 @@ class AgentCoordinator:
         try:
             if binding is not None:
                 binding.close(released_run_ids=binding.children)
-            if self._ownership is not None:
-                self._ownership.release(run.id)
+            if self.ownership is not None:
+                self.ownership.release(run.id)
         except BaseException as error:
             completion.set_exception(error)
             raise
@@ -474,7 +486,7 @@ class AgentCoordinator:
         parent_message_id: str | None,
         parent_tool_call_id: str | None,
     ) -> str:
-        if self._ownership is None:
+        if self.ownership is None:
             return str(uuid4())
         with self._state.lock:
             self.check_open()
@@ -489,7 +501,7 @@ class AgentCoordinator:
                     description="",
                     restoration_config=None,
                 )
-        return self._ownership.reserve_run_id(
+        return self.ownership.reserve_run_id(
             agent=info,
             messages=messages,
             previous_run_id=previous_run_id,
@@ -499,18 +511,18 @@ class AgentCoordinator:
         )
 
     def begin(self, run: Run) -> None:
-        if self._ownership is not None:
-            self._ownership.register(run)
+        if self.ownership is not None:
+            self.ownership.register(run)
 
     def abort_start(self, run_id: str) -> None:
-        if self._ownership is not None:
-            self._ownership.abort_start(run_id)
+        if self.ownership is not None:
+            self.ownership.abort_start(run_id)
 
     def finish(self, run: Run) -> None:
         """Release execution ownership after terminal output is saved."""
         try:
-            if self._ownership is not None:
-                self._ownership.release(run.id)
+            if self.ownership is not None:
+                self.ownership.release(run.id)
         finally:
             self.release(run)
 

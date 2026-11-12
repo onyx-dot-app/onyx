@@ -25,6 +25,7 @@ from onyx.llm.models import (
     ToolDefinition,
     ToolResult,
     ToolResultMessage,
+    UserMessage,
 )
 
 
@@ -67,6 +68,22 @@ class RunFailure(BaseModel):
     kind: RunFailureKind
     message: str
     llm_error: LLMErrorInfo | None = None
+
+
+class InputSource(str, Enum):
+    HUMAN = "human"
+
+
+class InputMessageMetadata(BaseModel):
+    """Input provenance survives flattened conversation history and compaction.
+
+    Content metadata reaches step preparation only; accepted history omits it.
+    """
+
+    type: Literal["agent_input"] = "agent_input"
+    source: InputSource
+    source_run_id: str | None = None
+    content_metadata: SerializeAsAny[BaseModel] | None = None
 
 
 class ContextBudget(BaseModel):
@@ -121,10 +138,11 @@ class CompactionMetadata(BaseModel):
 
 
 class PreparedStep(BaseModel):
-    """Step settings; permissions restrict the configured tools without changing schemas."""
+    """Incoming messages and generation settings; permissions preserve tool schemas."""
 
     model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True, frozen=True)
     system_prompt: str = ""
+    input_messages: list[UserMessage] | None = None
     allowed_tool_names: frozenset[str] | None = None
     tool_phase: str | None = None
     options: GenerationOptions = Field(default_factory=GenerationOptions)
@@ -190,6 +208,7 @@ class StepInput(BaseModel):
     messages: list[Message]
     step: AgentStep
     previous: StepResult | None = None
+    received_inputs: list[UserMessage] = Field(default_factory=list)
 
 
 class RunResult(BaseModel):
@@ -226,10 +245,11 @@ class ToolExecutionRecord(BaseModel):
 
 
 class StepRecord(BaseModel):
-    """One model generation and the executions of its tool calls."""
+    """Inputs accepted before one generation, its message, and its tool executions."""
 
     model_config = ConfigDict(extra="forbid")
 
+    input_messages: list[UserMessage] = Field(default_factory=list)
     message: AssistantMessage
     generation_status: ExecutionStatus
     tools: dict[str, ToolExecutionRecord] = Field(default_factory=dict)
@@ -239,6 +259,7 @@ def messages_from_steps(steps: list[StepRecord]) -> list[Message]:
     """Return message references in model order, regardless of tool completion order."""
     messages: list[Message] = []
     for step in steps:
+        messages.extend(step.input_messages)
         messages.append(step.message)
         for call in step.message.tool_calls:
             execution = step.tools.get(call.id)

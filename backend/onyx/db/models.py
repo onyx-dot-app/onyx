@@ -54,7 +54,7 @@ from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.types import LargeBinary, TypeDecorator
 from typing_extensions import TypedDict  # noreorder
 
-from onyx.agents.models import ExecutionStatus, RunFailure, RunStatus
+from onyx.agents.models import ExecutionStatus, InputSource, RunFailure, RunStatus
 from onyx.auth.schemas import UserRole
 from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.configs.constants import (
@@ -3748,6 +3748,15 @@ class ChatMessage(Base):
     )
 
 
+class AcceptedChatInput(BaseModel):
+    """A message a model generation accepted, with its provenance."""
+
+    id: str
+    source: InputSource
+    source_run_id: str | None = None
+    content: str
+
+
 class ChatResponseItem(Base):
     """One recorded model generation and its display settings."""
 
@@ -3774,6 +3783,12 @@ class ChatResponseItem(Base):
     step_index: Mapped[int] = mapped_column(Integer)
     message: Mapped[AssistantMessage] = mapped_column(
         PydanticType(AssistantMessage, sanitize_strings=True, none_as_null=True),
+    )
+    # Messages this generation accepted before it started, in model order.
+    inputs: Mapped[list[AcceptedChatInput]] = mapped_column(
+        PydanticListType(AcceptedChatInput),
+        default=list,
+        server_default=text("'[]'::jsonb"),
     )
     generation_status: Mapped[ExecutionStatus] = mapped_column(
         Enum(

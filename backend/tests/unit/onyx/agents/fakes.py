@@ -11,7 +11,13 @@ from onyx.agents.agent_coordination import (
     RunStore,
 )
 from onyx.agents.events import AgentEvent
-from onyx.agents.models import AgentInfo, RunResult, RunState, RunStatus
+from onyx.agents.models import (
+    AgentInfo,
+    RunResult,
+    RunState,
+    RunStatus,
+    StepRecord,
+)
 from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import ToolInvocation
 from onyx.llm.cancellation import CancellationSignal
@@ -33,6 +39,7 @@ from onyx.llm.models import (
     ToolCallStartEvent,
     ToolDefinition,
     ToolResult,
+    UserMessage,
     apply_generation_event,
 )
 from onyx.llm.multi_llm import LitellmLLM
@@ -96,10 +103,16 @@ class FakeRunOwnership(RunOwnership):
         register: Callable[[Run], None] | None = None,
         release: Callable[[str], None] | None = None,
         abort_start: Callable[[str], None] | None = None,
+        receive_inputs: Callable[[Run], list[UserMessage]] | None = None,
+        accept_inputs: Callable[[Run, StepRecord], bool] | None = None,
+        has_unread_inputs: bool = False,
     ) -> None:
         self._register = register
         self._release = release
         self._abort_start = abort_start
+        self._receive_inputs = receive_inputs
+        self._accept_inputs = accept_inputs
+        self._has_unread_inputs = has_unread_inputs
 
     @override
     def reserve_run_id(
@@ -125,6 +138,18 @@ class FakeRunOwnership(RunOwnership):
     def abort_start(self, run_id: str) -> None:
         if self._abort_start is not None:
             self._abort_start(run_id)
+
+    @override
+    def receive_inputs(self, run: Run) -> list[UserMessage]:
+        return self._receive_inputs(run) if self._receive_inputs else []
+
+    @override
+    def accept_inputs(self, run: Run, step: StepRecord) -> bool:
+        return self._accept_inputs(run, step) if self._accept_inputs else True
+
+    @override
+    def has_unread_inputs(self, run: Run) -> bool:  # noqa: ARG002
+        return self._has_unread_inputs
 
 
 class ScriptedLLM(LitellmLLM):
