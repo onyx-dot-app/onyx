@@ -3525,9 +3525,12 @@ class ChatSession(Base):
         "UserProject", back_populates="chat_sessions", foreign_keys=[project_id]
     )
 
-    # The latest model override the user chose: set by chat seeding and by each
-    # single-model turn the user sends. It takes precedence over the persona.
-    # Overrides in a `send-message` call take precedence over it.
+    # the latest "overrides" specified by the user. These take precedence over
+    # the attached persona. However, overrides specified directly in the
+    # `send-message` call will take precedence over these.
+    # NOTE: currently only used by the chat seeding flow, will be used in the
+    # future once we allow users to override default values via the Chat UI
+    # itself
     llm_override: Mapped[LLMOverride | None] = mapped_column(
         PydanticType(LLMOverride), nullable=True
     )

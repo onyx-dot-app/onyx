@@ -529,6 +529,10 @@ def get_chat_session(
         is_processing=is_processing,
         incognito=chat_session.incognito_record_mode is not None,
         has_older_messages=has_older_messages,
+        # Only the owner's composer reads the selection; a shared view shows none.
+        tool_selection=chat_session.tool_selection
+        if user_id is not None and chat_session.user_id == user_id
+        else None,
     )
 
 
@@ -1472,16 +1476,22 @@ def update_chat_tool_selection(
     body: ChatToolSelection,
     user: User = Depends(require_permission(Permission.WRITE_CHAT)),
     db_session: Session = Depends(get_session),
-) -> ChatToolSelection:
-    """Save the fields of the chat's tool selection that the body sets."""
+) -> ChatToolSelection | None:
+    """Save the fields of the chat's tool selection that the body sets.
+
+    Returns the stored selection, or None for a chat that stores none.
+    """
     if user.is_anonymous or user.id is None:
         raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Sign in to save a tool selection")
     chat_session = get_owned_chat_session(session_id, user.id, db_session)
     if chat_session is None or chat_session.deleted:
         raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND, "Chat session not found")
-    saved = set_chat_session_tool_selection__no_commit(db_session, session_id, body)
-    db_session.commit()
-    return saved or body
+    stored = set_chat_session_tool_selection__no_commit(
+        db_session, session_id, body, user
+    )
+    if db_session.dirty:
+        db_session.commit()
+    return stored
 
 
 @router.post("/stop-chat-session/{chat_session_id}", tags=PUBLIC_API_TAGS)

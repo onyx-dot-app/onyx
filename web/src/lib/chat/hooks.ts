@@ -182,9 +182,8 @@ export function useSendChatMessageFromURL({
         tagValues.length > 0
           ? tags.filter((tag) => tagValues.includes(tag.tag_value))
           : current.tags,
-      timeRange: hasRange
-        ? { from: from.toISOString(), to: to.toISOString() }
-        : current.timeRange,
+      // A search sends only the start of a range.
+      timeRange: hasRange ? { from: from.toISOString() } : current.timeRange,
     }));
 
     // Dropped before the replace so a refresh does not resend.

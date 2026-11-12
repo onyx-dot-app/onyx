@@ -7,11 +7,12 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import type {
   ChatSearchFilters,
+  ChatToolSelection,
   ToolSnapshot,
   ToolState,
 } from "@/lib/tools/types";
 export type { ChatSearchFilters } from "@/lib/tools/types";
-import type { Tag } from "@/lib/types";
+import type { TagSelection } from "@/lib/searchFilters/types";
 import { useAppPosition } from "@/lib/navigation/hooks";
 import { useActiveAgent } from "@/lib/agents/hooks";
 import { toast } from "@opal/layouts";
@@ -111,19 +112,15 @@ function isNeutralConfiguration(configuration: ChatConfiguration): boolean {
   );
 }
 
-interface EditedHalves {
-  tools: boolean;
-  filters: boolean;
-}
-
-const UNEDITED: EditedHalves = { tools: false, filters: false };
-
 const STORAGE_PREFIX = "onyx:tools";
 const TOOL_SELECTION_SYNC_MS = 300;
 
 // Saves for one chat run one at a time across every composer, so the server
 // keeps the latest selection even when a composer remounts mid-save.
 const toolSelectionSaves = new Map<string, Promise<void>>();
+// The configuration a send chose for the chat it created, picked up once by
+// the composer that moves onto that chat.
+const handedOffConfigurations = new Map<string, ChatConfiguration>();
 
 function chatKey(chatSessionId: string): string {
   return `${STORAGE_PREFIX}:chat:${chatSessionId}`;
@@ -187,28 +184,25 @@ function isStringArray(value: unknown): value is string[] {
   );
 }
 
-/** A stored row is kept only when it is exactly the shape of a {@link Tag}. */
-function isTag(value: unknown): value is Tag {
+/** A stored row is kept only when it names a tag's key and value. */
+function isTagSelection(value: unknown): value is TagSelection {
   return (
     isRecord(value) &&
     typeof value.tag_key === "string" &&
-    typeof value.tag_value === "string" &&
-    typeof value.source === "string"
+    typeof value.tag_value === "string"
   );
 }
 
-function isTagArray(value: unknown): value is Tag[] {
-  return isUnknownArray(value) && value.every(isTag);
+function isTagSelectionArray(value: unknown): value is TagSelection[] {
+  return isUnknownArray(value) && value.every(isTagSelection);
 }
 
 /** The filter half of {@link parseConfiguration}, on an already-checked object. */
 function parseFilters(entries: Record<string, unknown>): ChatSearchFilters {
   const range = entries.timeRange;
   const timeRange =
-    isRecord(range) &&
-    typeof range.from === "string" &&
-    typeof range.to === "string"
-      ? { from: range.from, to: range.to }
+    isRecord(range) && typeof range.from === "string"
+      ? { from: range.from }
       : null;
 
   return {
@@ -218,7 +212,9 @@ function parseFilters(entries: Record<string, unknown>): ChatSearchFilters {
     documentSets: isStringArray(entries.documentSets)
       ? entries.documentSets
       : [],
-    tags: isTagArray(entries.tags) ? entries.tags : [],
+    tags: isTagSelectionArray(entries.tags)
+      ? entries.tags.map(({ tag_key, tag_value }) => ({ tag_key, tag_value }))
+      : [],
     timeRange,
   };
 }
@@ -359,10 +355,11 @@ export interface ToolConfigurationHandle {
   disabledToolIds: number[];
 
   /**
-   * Whether writes land yet: the composer's key has resolved and its stored
-   * configuration has been read back. Until then `setToolState` and
-   * `setFilters` are silently dropped, so a caller sequencing work on a
-   * fresh mount — the deep-link send — must wait for this.
+   * Whether writes land yet: the composer's key has resolved and its
+   * configuration has been read — from the server for an existing chat, from
+   * session storage otherwise. Until then `setToolState` and `setFilters`
+   * are silently dropped, so a caller sequencing work on a fresh mount — the
+   * deep-link send — must wait for this.
    */
   ready: boolean;
 
@@ -382,8 +379,8 @@ export interface ToolConfigurationHandle {
 
   /**
    * Called by the send path once the message it is sending has created the
-   * chat. Puts this configuration on that chat, which is where it starts
-   * being kept.
+   * chat. Carries this configuration onto that chat, whose composer saves it
+   * on the server.
    */
   handOffTo: (chatSessionId: string) => void;
 
@@ -398,10 +395,15 @@ export interface ToolConfigurationHandle {
 /**
  * The tools and search filters this chat will send its next message with.
  *
- * Only a chat that exists keeps its configuration. What is chosen for a chat
- * that does not exist yet — a new session, a new agent chat, a new project
- * chat — lives as long as the composer does and no longer: leaving and coming
- * back starts neutral, because there was never anything to come back to.
+ * Only a chat that exists keeps its configuration, and the server owns it: the
+ * chat-session detail returns it, and the tool-selection PATCH is its only
+ * writer. A send never changes it, so a one-message choice such as Deep
+ * Research cannot leak into the chat. The server keeps nothing for a chat that
+ * stores no content, so this tab holds that chat's only copy. What is chosen
+ * for a chat that does not exist yet — a new session, a new agent chat, a new
+ * project chat — lives as long as the composer does and no longer: leaving
+ * and coming back starts neutral, because there was never anything to come
+ * back to.
  *
  * The exception is a send that navigates in order to send. The agent viewer
  * hands off to `/app` rather than sending in place, so its configuration is
@@ -443,46 +445,97 @@ export function useToolConfiguration(
       : `${STORAGE_PREFIX}:new:${activeAgent.id}:${projectId}`;
   }, [newChatWithAgentId, appPosition, activeAgent]);
 
+  const { user } = useUser();
+  const { plugins } = useMemberPlugins({
+    agentId: activeAgent?.id,
+    surface: "chat",
+  });
+  const chatSessionId =
+    newChatWithAgentId === undefined ? appPosition.chat() : null;
+  // The server's selection for an existing chat; undefined until its details
+  // load.
+  const savedSelection = useChatSessionStore((state) =>
+    chatSessionId === null
+      ? undefined
+      : state.sessions.get(chatSessionId)?.toolSelection
+  );
+  const agentTools = activeAgent?.tools;
+
   // Tagged with the key it was read for, so a write cannot land on the entry
-  // the composer has since moved to. `edited` records which halves the user
-  // has changed since the configuration was read for this key.
+  // the composer has since moved to. `local` marks choices this composer made
+  // or carried over, which the server's copy no longer replaces; `saved` is
+  // the server's copy an entry was read from.
   const [entry, setEntry] = useState<{
     key: string | null;
     configuration: ChatConfiguration;
-    edited: EditedHalves;
-  }>({ key: null, configuration: NEUTRAL, edited: UNEDITED });
+    local: boolean;
+    saved?: ChatToolSelection | null;
+  }>({ key: null, configuration: NEUTRAL, local: false });
 
-  // Storage is only reachable on the client, so the first paint shows neutral
-  // and this corrects it. Every later key change comes from the user moving
-  // between chats, which is many frames after anything can be sent.
+  // Storage and the chat's details are only reachable on the client, so the
+  // first paint shows neutral and this corrects it. Every later key change
+  // comes from the user moving between chats, which is many frames after
+  // anything can be sent.
   useEffect(() => {
     if (key === null) {
-      setEntry({ key, configuration: NEUTRAL, edited: UNEDITED });
+      setEntry({ key, configuration: NEUTRAL, local: false });
       return;
     }
-    const stored = readConfiguration(key);
-    // A chat that does not exist yet keeps nothing, so anything found under
-    // its key was handed over by a send on its way here. Taken once, then
-    // removed, so returning later starts neutral.
-    if (!isChatKey(key) && !isNeutralConfiguration(stored)) {
+    if (!isChatKey(key)) {
+      // Kept only until it is read: a chat that does not exist yet keeps
+      // nothing.
+      setEntry({ key, configuration: readConfiguration(key), local: false });
       clearConfiguration(key);
+      return;
     }
-    setEntry({ key, configuration: stored, edited: UNEDITED });
-  }, [key]);
+    const handedOff = handedOffConfigurations.get(key);
+    if (handedOff !== undefined) {
+      handedOffConfigurations.delete(key);
+      setEntry({ key, configuration: handedOff, local: true });
+      return;
+    }
+    if (savedSelection === undefined || agentTools === undefined) return;
+    setEntry((previous) => {
+      if (
+        previous.key === key &&
+        (previous.local || previous.saved === savedSelection)
+      ) {
+        return previous;
+      }
+      const tools: Record<number, ToolState> = {};
+      const allowed = savedSelection?.allowed_tool_ids ?? null;
+      if (allowed !== null) {
+        for (const tool of agentTools) {
+          if (!allowed.includes(tool.id)) tools[tool.id] = "disabled";
+        }
+      }
+      const preferred = savedSelection?.preferred_tool_id ?? null;
+      if (preferred !== null) tools[preferred] = "preferred";
+      const filters = savedSelection?.internal_search_filters ?? null;
+      const rangeStart = filters?.updated_at_range?.start ?? null;
+      return {
+        key,
+        configuration: {
+          tools,
+          filters: {
+            selectedSources: filters?.source_type ?? null,
+            documentSets: filters?.document_set ?? [],
+            tags: (filters?.tags ?? []).map(({ tag_key, tag_value }) => ({
+              tag_key,
+              tag_value,
+            })),
+            timeRange:
+              rangeStart === null ? null : { from: String(rangeStart) },
+          },
+        },
+        local: false,
+        saved: savedSelection,
+      };
+    });
+  }, [key, savedSelection, agentTools]);
 
   const configuration = entry.key === key ? entry.configuration : NEUTRAL;
-  const edited = entry.key === key ? entry.edited : UNEDITED;
   const ready = key !== null && entry.key === key;
-
-  // Written from an effect rather than inside the setter, so two changes made
-  // in one tick compose instead of the later one landing on what the earlier
-  // one replaced. Only a chat that exists is written: everything else is held
-  // for as long as the composer lives and then let go.
-  useEffect(() => {
-    if (entry.key !== null && isChatKey(entry.key)) {
-      writeConfiguration(entry.key, entry.configuration);
-    }
-  }, [entry]);
 
   const setToolState = useCallback(
     (
@@ -491,9 +544,9 @@ export function useToolConfiguration(
     ) => {
       if (key === null) return;
       setEntry((previous) => {
-        // Between a key change and its storage read, a write would land on
-        // NEUTRAL and then be clobbered by the read. `ready` documents that
-        // writes are dropped in that window; this is the drop.
+        // Between a key change and its read, a write would land on NEUTRAL
+        // and then be clobbered by the read. `ready` documents that writes
+        // are dropped in that window; this is the drop.
         if (previous.key !== key) return previous;
         const current = previous.configuration;
         const tools = withToolState(current.tools, toolId, change);
@@ -501,11 +554,7 @@ export function useToolConfiguration(
         // behind. A new one every time is a change to everything reading it,
         // and a caller that writes what it reads would never settle.
         if (tools === current.tools) return previous;
-        return {
-          key,
-          configuration: { ...current, tools },
-          edited: { ...previous.edited, tools: true },
-        };
+        return { key, configuration: { ...current, tools }, local: true };
       });
     },
     [key]
@@ -519,21 +568,17 @@ export function useToolConfiguration(
         const current = previous.configuration;
         const filters = change(current.filters);
         if (filters === current.filters) return previous;
-        return {
-          key,
-          configuration: { ...current, filters },
-          edited: { ...previous.edited, filters: true },
-        };
+        return { key, configuration: { ...current, filters }, local: true };
       });
     },
     [key]
   );
 
-  // Both land before the position that follows reaches this hook, so the key
-  // change reads the configuration back where it was left.
+  // Lands before the position that follows reaches this hook, so the key
+  // change picks the configuration up.
   const handOffTo = useCallback(
-    (chatSessionId: string) =>
-      writeConfiguration(chatKey(chatSessionId), configuration),
+    (newChatSessionId: string) =>
+      handedOffConfigurations.set(chatKey(newChatSessionId), configuration),
     [configuration]
   );
 
@@ -583,106 +628,97 @@ export function useToolConfiguration(
     handOffToNewChatWith,
   ]);
 
-  // Turns the server starts for an existing chat use the tool selection and
-  // search filters saved on the chat. A new chat saves them on its first
-  // send; incognito and anonymous chats keep nothing.
+  // A choice made in an existing chat is saved on the server, which decides
+  // whether the chat keeps it. Only a signed-in user saves.
   const t = useTranslations("actions");
-  const { user } = useUser();
-  const { plugins } = useMemberPlugins({
-    agentId: activeAgent?.id,
-    surface: "chat",
-  });
-  const chatSessionId =
-    newChatWithAgentId === undefined ? appPosition.chat() : null;
-  const incognito = useChatSessionStore((state) =>
-    chatSessionId === null
-      ? undefined
-      : state.sessions.get(chatSessionId)?.incognito
-  );
   const searchFilters = useChatSearchFiltersRequest(
     activeAgent,
     configuration.filters
   );
-  // The fields a normal send carries, built the same way. Only the halves the
-  // user changed are sent: this composer may not hold the chat's saved
-  // selection, and the server keeps the fields a save leaves out.
-  const toolSelection =
+  const selection: ChatToolSelection | null =
     ready &&
+    entry.local &&
     chatSessionId !== null &&
     activeAgent !== undefined &&
-    incognito === false &&
     user !== null &&
     !user.is_anonymous_user
-      ? JSON.stringify({
-          ...(edited.tools && {
-            allowed_tool_ids:
-              enabledChatToolIds(activeAgent.tools, handle) ?? null,
-            preferred_tool_id: effectiveChatPreferredToolId({
-              requestedToolId: handle.preferredToolId,
-              agent: activeAgent,
-              plugins,
-            }),
+      ? {
+          // The fields a send carries, built the same way.
+          allowed_tool_ids:
+            enabledChatToolIds(activeAgent.tools, handle) ?? null,
+          preferred_tool_id: effectiveChatPreferredToolId({
+            requestedToolId: handle.preferredToolId,
+            agent: activeAgent,
+            plugins,
           }),
-          ...(edited.filters && { internal_search_filters: searchFilters }),
-        })
+          internal_search_filters: searchFilters,
+        }
       : null;
-  const savedSelection = useRef<{
-    chatSessionId: string | null;
-    body: string | null;
-  }>({ chatSessionId: null, body: null });
+  const body = selection === null ? null : JSON.stringify(selection);
   const pendingSave = useRef<{
-    url: string;
+    chatSessionId: string;
     timer: ReturnType<typeof setTimeout>;
     send: () => void;
   } | null>(null);
   useEffect(() => {
-    // Only a change the user makes is saved; the chat already has the
-    // selection it was opened with. A change made before the chat details
-    // load is saved once they do.
-    if (toolSelection === null || (!edited.tools && !edited.filters)) return;
-    const previous = savedSelection.current;
-    if (
-      previous.chatSessionId === chatSessionId &&
-      previous.body === toolSelection
-    )
-      return;
-    savedSelection.current = { chatSessionId, body: toolSelection };
-    const url = `/api/chat/chat-session/${chatSessionId}/tool-selection`;
+    if (body === null || chatSessionId === null) return;
     const pending = pendingSave.current;
     if (pending) {
       clearTimeout(pending.timer);
       // A change for another chat is not superseded by this one.
-      if (pending.url !== url) pending.send();
+      if (pending.chatSessionId !== chatSessionId) pending.send();
     }
     const send = () => {
-      if (pendingSave.current?.url === url) pendingSave.current = null;
-      const save = (toolSelectionSaves.get(url) ?? Promise.resolve()).then(
-        async () => {
-          try {
-            const response = await fetch(url, {
+      if (pendingSave.current?.chatSessionId === chatSessionId) {
+        pendingSave.current = null;
+      }
+      const save = (
+        toolSelectionSaves.get(chatSessionId) ?? Promise.resolve()
+      ).then(async () => {
+        try {
+          const response = await fetch(
+            `/api/chat/chat-session/${chatSessionId}/tool-selection`,
+            {
               method: "PATCH",
               headers: { "Content-Type": "application/json" },
-              body: toolSelection,
-            });
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          } catch (error: unknown) {
-            console.error("Could not save the chat's tool selection", error);
-            toast.error(t("toolsPopover.selectionSaveFailed"));
-          }
+              body,
+            }
+          );
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const stored: ChatToolSelection | null = await response.json();
+          const sent: ChatToolSelection = JSON.parse(body);
+          // A chat that stores no content keeps its selection only here.
+          useChatSessionStore.getState().updateSessionData(chatSessionId, {
+            toolSelection: stored ?? sent,
+          });
+        } catch (error: unknown) {
+          console.error("Could not save the chat's tool selection", error);
+          toast.error(t("toolsPopover.selectionSaveFailed"));
         }
-      );
-      toolSelectionSaves.set(url, save);
+      });
+      toolSelectionSaves.set(chatSessionId, save);
       void save.then(() => {
-        if (toolSelectionSaves.get(url) === save)
-          toolSelectionSaves.delete(url);
+        if (toolSelectionSaves.get(chatSessionId) === save) {
+          toolSelectionSaves.delete(chatSessionId);
+        }
       });
     };
     pendingSave.current = {
-      url,
+      chatSessionId,
       timer: setTimeout(send, TOOL_SELECTION_SYNC_MS),
       send,
     };
-  }, [chatSessionId, toolSelection, edited, t]);
+  }, [chatSessionId, body, t]);
+  // A composer that closes before its save is due sends it at once.
+  useEffect(
+    () => () => {
+      const pending = pendingSave.current;
+      if (pending === null) return;
+      clearTimeout(pending.timer);
+      pending.send();
+    },
+    []
+  );
 
   return handle;
 }

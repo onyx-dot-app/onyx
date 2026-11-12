@@ -5,6 +5,7 @@ import {
 } from "@/lib/search/types";
 import { Packet } from "./services/streamingModels";
 import { ReasoningEffortOverride } from "@/lib/languageModels/types";
+import type { ChatToolSelection } from "@/lib/tools/types";
 
 export type FeedbackType = "like" | "dislike";
 
@@ -226,6 +227,8 @@ export interface BackendChatSession {
   incognito?: boolean;
   // Set on a paged load when the current branch has messages before the page.
   has_older_messages?: boolean;
+  // The owner's saved tools and search filters; null means the agent's tools.
+  tool_selection?: ChatToolSelection | null;
 }
 
 export function toChatSession(backend: BackendChatSession): ChatSession {

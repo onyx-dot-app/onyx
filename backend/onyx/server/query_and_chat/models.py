@@ -14,6 +14,7 @@ from onyx.file_store.models import FileDescriptor
 from onyx.llm.models import GenerationRequestParams
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat.streaming_models import Packet, StreamingError
+from onyx.tools.models import ChatToolSelection
 
 AUTO_PLACE_AFTER_LATEST_MESSAGE = -1
 
@@ -314,6 +315,8 @@ class ChatSessionDetailResponse(BaseModel):
     incognito: bool = False
     # Set on a paged load when the current branch has messages before the page.
     has_older_messages: bool = False
+    # The owner's saved tools and search filters; NULL means the agent's tools.
+    tool_selection: ChatToolSelection | None = None
 
 
 class AdminSearchRequest(BaseModel):

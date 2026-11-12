@@ -1,4 +1,4 @@
-import { renderHook, act, waitFor } from "@testing-library/react";
+import { renderHook, act, waitFor, cleanup } from "@testing-library/react";
 import {
   type SourceMetadata,
   ValidSources,
@@ -6,7 +6,7 @@ import {
 import { useToolConfiguration } from "@/lib/tools/hooks";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
 import type { MinimalAgent } from "@/lib/agents/types";
-import type { ToolSnapshot } from "@/lib/tools/types";
+import type { ChatToolSelection, ToolSnapshot } from "@/lib/tools/types";
 import type { User } from "@/lib/types";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { toast } from "@opal/layouts";
@@ -17,11 +17,9 @@ import {
   normalizeSourceSelection,
 } from "@/lib/searchFilters/utils";
 
-const CHAT_KEY = "onyx:tools:chat:abc";
-
 // Mutable so a test can move the composer between chats; the hook re-keys
 // from what useAppPosition reports on each render.
-let mockChatId = "abc";
+let mockChatId: string | null = "abc";
 
 jest.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }));
 jest.mock("@/lib/navigation/hooks", () => ({
@@ -59,6 +57,17 @@ beforeEach(() => {
   mockIncognitoEnabled = false;
   mockActiveAgent = undefined;
   mockUser = SIGNED_IN;
+  echoSaves();
+});
+
+// A composer that closes sends its due save, so each test's saves finish
+// against its own fetch mock.
+afterEach(async () => {
+  cleanup();
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  jest.restoreAllMocks();
 });
 
 function source(internalName: ValidSources, uniqueKey: string): SourceMetadata {
@@ -68,13 +77,86 @@ function source(internalName: ValidSources, uniqueKey: string): SourceMetadata {
 const NOTION = source(ValidSources.Notion, "notion");
 const SLACK = source(ValidSources.Slack, "slack");
 
-describe("useToolConfiguration: stored shapes", () => {
+const tool = (id: number): ToolSnapshot => ({
+  id,
+  name: `tool_${id}`,
+  display_name: `Tool ${id}`,
+  description: "",
+  definition: null,
+  custom_headers: null,
+  in_code_tool_id: null,
+  passthrough_auth: false,
+  mcp_server_id: null,
+  enabled: true,
+  chat_selectable: true,
+  agent_creation_selectable: true,
+  default_enabled: true,
+});
+
+const AGENT: MinimalAgent = {
+  id: 7,
+  name: "Agent",
+  description: "",
+  tools: [tool(1), tool(2)],
+  starter_messages: null,
+  document_sets: [],
+  is_public: true,
+  is_listed: true,
+  display_priority: null,
+  is_featured: false,
+  builtin_persona: false,
+  owner: null,
+  owner_group: null,
+  user_permission: null,
+};
+
+const NO_FILTERS = {
+  source_type: null,
+  document_set: null,
+  updated_at_range: null,
+  tags: [],
+};
+
+/** Opens existing chats whose details carry these saved selections. */
+function openSavedChats(
+  saved: Record<string, ChatToolSelection | null> = { abc: null },
+  incognito: boolean = false
+): void {
+  mockActiveAgent = AGENT;
+  useChatSessionStore.setState({ sessions: new Map(), currentSessionId: null });
+  for (const [chatSessionId, toolSelection] of Object.entries(saved)) {
+    useChatSessionStore
+      .getState()
+      .createSession(chatSessionId, { incognito, toolSelection });
+  }
+}
+
+/** Answers each PATCH with the selection it sent, as a chat that keeps content does. */
+function echoSaves(
+  answer: (sent: ChatToolSelection) => ChatToolSelection | null = (sent) => sent
+): jest.SpyInstance {
+  return jest
+    .spyOn(global, "fetch")
+    .mockImplementation(async (_url, init) =>
+      init?.method === "PATCH"
+        ? new Response(JSON.stringify(answer(JSON.parse(String(init.body)))))
+        : new Response(JSON.stringify([]))
+    );
+}
+
+function patchesOf(fetchSpy: jest.SpyInstance): [unknown, RequestInit][] {
+  return fetchSpy.mock.calls.filter(
+    ([, init]: [unknown, RequestInit | undefined]) => init?.method === "PATCH"
+  );
+}
+
+describe("useToolConfiguration: a chat that does not exist yet", () => {
   test("the pre-filters flat shape still reads as the tool map", () => {
     sessionStorage.setItem(
-      CHAT_KEY,
+      "onyx:tools:new:7",
       JSON.stringify({ 1: "preferred", 2: "disabled" })
     );
-    const { result } = renderHook(() => useToolConfiguration());
+    const { result } = renderHook(() => useToolConfiguration(7));
 
     expect(result.current.preferredToolId).toBe(1);
     expect(result.current.disabledToolIds).toEqual([2]);
@@ -86,70 +168,121 @@ describe("useToolConfiguration: stored shapes", () => {
     "obsolete forced selections are dropped in stored shape (nested=%s)",
     (nested) => {
       sessionStorage.setItem(
-        CHAT_KEY,
+        "onyx:tools:new:7",
         JSON.stringify(
           nested
             ? { tools: { 1: "forced", 2: "disabled" } }
             : { 1: "forced", 2: "disabled" }
         )
       );
-      const { result } = renderHook(() => useToolConfiguration());
+      const { result } = renderHook(() => useToolConfiguration(7));
       expect(result.current.preferredToolId).toBeNull();
       expect(result.current.disabledToolIds).toEqual([2]);
     }
   );
 
-  test("filters ride the snapshot through storage", () => {
-    const { result, unmount } = renderHook(() => useToolConfiguration());
+  test("a hand-off to a new chat carries the filters and is read once", () => {
+    const { result, unmount } = renderHook(() => useToolConfiguration(7));
     act(() => {
       result.current.setFilters((current) => ({
         ...current,
         selectedSources: ["notion"],
       }));
     });
+    act(() => result.current.handOffToNewChatWith(7));
     unmount();
 
-    const { result: reread } = renderHook(() => useToolConfiguration());
+    const { result: reread, unmount: leave } = renderHook(() =>
+      useToolConfiguration(7)
+    );
     expect(reread.current.filters.selectedSources).toEqual(["notion"]);
+    leave();
+    const { result: again } = renderHook(() => useToolConfiguration(7));
+    expect(again.current.filters.selectedSources).toBeNull();
   });
 });
 
-describe("useToolConfiguration: chat scoping", () => {
-  test("each chat keeps its own configuration", () => {
+describe("useToolConfiguration: an existing chat", () => {
+  test("reads its selection from the chat's details, not from storage", () => {
+    sessionStorage.setItem(
+      "onyx:tools:chat:abc",
+      JSON.stringify({ tools: { 2: "preferred" } })
+    );
+    openSavedChats({
+      abc: {
+        allowed_tool_ids: [1],
+        preferred_tool_id: 1,
+        internal_search_filters: {
+          source_type: ["notion"],
+          document_set: ["Handbook"],
+          updated_at_range: { start: "2026-01-01T00:00:00Z", end: null },
+          tags: [{ tag_key: "team", tag_value: "sales" }],
+        },
+      },
+    });
+    const { result } = renderHook(() => useToolConfiguration());
+
+    expect(result.current.ready).toBe(true);
+    expect(result.current.preferredToolId).toBe(1);
+    expect(result.current.disabledToolIds).toEqual([2]);
+    expect(result.current.filters).toEqual({
+      selectedSources: ["notion"],
+      documentSets: ["Handbook"],
+      tags: [{ tag_key: "team", tag_value: "sales" }],
+      timeRange: { from: "2026-01-01T00:00:00Z" },
+    });
+  });
+
+  test("drops writes until its details load", () => {
+    openSavedChats({});
+    const { result, rerender } = renderHook(() => useToolConfiguration());
+    expect(result.current.ready).toBe(false);
+    act(() => result.current.toggleToolState(2, "disabled"));
+    expect(result.current.disabledToolIds).toEqual([]);
+
+    act(() =>
+      useChatSessionStore
+        .getState()
+        .createSession("abc", { incognito: false, toolSelection: null })
+    );
+    rerender();
+    expect(result.current.ready).toBe(true);
+    expect(result.current.disabledToolIds).toEqual([]);
+  });
+
+  test("each chat keeps its own saved selection", async () => {
+    openSavedChats({ abc: null, other: null });
+    const fetchSpy = echoSaves();
     const { result, rerender } = renderHook(() => useToolConfiguration());
     act(() => {
       result.current.setFilters((current) => ({
         ...current,
-        selectedSources: ["notion"],
+        documentSets: ["Handbook"],
       }));
     });
-    act(() => result.current.toggleToolState(7, "preferred"));
+    act(() => result.current.toggleToolState(1, "preferred"));
+    await waitFor(() => expect(patchesOf(fetchSpy)).toHaveLength(1));
+    await waitFor(() =>
+      expect(
+        useChatSessionStore.getState().sessions.get("abc")?.toolSelection
+      ).not.toBeNull()
+    );
 
-    // Another chat reads its own (neutral) configuration...
     mockChatId = "other";
     rerender();
-    expect(result.current.filters.selectedSources).toBeNull();
+    expect(result.current.filters.documentSets).toEqual([]);
     expect(result.current.preferredToolId).toBeNull();
-
-    // ...and edits it without touching the first chat's.
-    act(() => {
-      result.current.setFilters((current) => ({
-        ...current,
-        selectedSources: [],
-      }));
-    });
 
     mockChatId = "abc";
     rerender();
-    expect(result.current.filters.selectedSources).toEqual(["notion"]);
-    expect(result.current.preferredToolId).toBe(7);
+    expect(result.current.filters.documentSets).toEqual(["Handbook"]);
+    expect(result.current.preferredToolId).toBe(1);
   });
-});
 
-describe("useToolConfiguration: orthogonal axes", () => {
   test("editing sources never touches a preferred pin", () => {
+    openSavedChats();
     const { result } = renderHook(() => useToolConfiguration());
-    act(() => result.current.toggleToolState(7, "preferred"));
+    act(() => result.current.toggleToolState(1, "preferred"));
     act(() => {
       result.current.setFilters((current) => ({
         ...current,
@@ -163,10 +296,11 @@ describe("useToolConfiguration: orthogonal axes", () => {
       }));
     });
 
-    expect(result.current.preferredToolId).toBe(7);
+    expect(result.current.preferredToolId).toBe(1);
   });
 
   test("tool state changes never touch the source selection", () => {
+    openSavedChats();
     const { result } = renderHook(() => useToolConfiguration());
     act(() => {
       result.current.setFilters((current) => ({
@@ -174,15 +308,17 @@ describe("useToolConfiguration: orthogonal axes", () => {
         selectedSources: ["notion"],
       }));
     });
-    act(() => result.current.toggleToolState(7, "preferred"));
-    act(() => result.current.toggleToolState(7, "preferred"));
-    act(() => result.current.toggleToolState(8, "disabled"));
+    act(() => result.current.toggleToolState(1, "preferred"));
+    act(() => result.current.toggleToolState(1, "preferred"));
+    act(() => result.current.toggleToolState(2, "disabled"));
 
     expect(result.current.filters.selectedSources).toEqual(["notion"]);
   });
 });
 
 describe("selectedSourcesFrom: positive-selection semantics", () => {
+  beforeEach(() => openSavedChats());
+
   const configured = [NOTION, SLACK];
 
   test("an untouched selection means no source filter at all", () => {
@@ -259,7 +395,10 @@ describe("toggleSourceSelection: edit-boundary normalization", () => {
   });
 });
 
-test("tool preference persists through chat handoff and reload", () => {
+test("a send's chosen tools carry over to the chat it creates and are saved there", async () => {
+  openSavedChats({});
+  mockChatId = null;
+  const fetchSpy = echoSaves();
   const { result, rerender, unmount } = renderHook(() =>
     useToolConfiguration()
   );
@@ -268,24 +407,38 @@ test("tool preference persists through chat handoff and reload", () => {
     result.current.setToolState(2, () => "disabled");
   });
   act(() => result.current.handOffTo("created"));
-  expect(result.current.preferredToolId).toBe(1);
   mockChatId = "created";
   rerender();
+  expect(result.current.ready).toBe(true);
   expect(result.current.preferredToolId).toBe(1);
   expect(result.current.disabledToolIds).toEqual([2]);
+  await waitFor(() => expect(patchesOf(fetchSpy)).toHaveLength(1));
+  const [url, init] = patchesOf(fetchSpy)[0]!;
+  expect(url).toBe("/api/chat/chat-session/created/tool-selection");
+  expect(JSON.parse(String(init.body))).toEqual({
+    allowed_tool_ids: [1],
+    preferred_tool_id: 1,
+    internal_search_filters: NO_FILTERS,
+  });
+  await waitFor(() =>
+    expect(
+      useChatSessionStore.getState().sessions.get("created")?.toolSelection
+    ).toBeTruthy()
+  );
   unmount();
+
   const reloaded = renderHook(() => useToolConfiguration());
   expect(reloaded.result.current.preferredToolId).toBe(1);
-  act(() => reloaded.result.current.clearPreferredTool());
-  expect(reloaded.result.current.preferredToolId).toBeNull();
+  expect(reloaded.result.current.disabledToolIds).toEqual([2]);
 });
 
 test("Deep Research and a tool preference are mutually exclusive", () => {
+  openSavedChats();
   const { result } = renderHook(() => {
     const configuration = useToolConfiguration();
     const research = useDeepResearchToggle({
       chatSessionId: "abc",
-      agentId: 1,
+      agentId: 7,
       toolConfiguration: configuration,
     });
     return { configuration, research };
@@ -320,78 +473,33 @@ test("incognito masks Deep Research and leaving incognito restores it", () => {
   expect(result.current.deepResearchEnabled).toBe(true);
 });
 
-function openSavedChat(loaded: boolean = true): void {
-  const tool = (id: number): ToolSnapshot => ({
-    id,
-    name: `tool_${id}`,
-    display_name: `Tool ${id}`,
-    description: "",
-    definition: null,
-    custom_headers: null,
-    in_code_tool_id: null,
-    passthrough_auth: false,
-    mcp_server_id: null,
-    enabled: true,
-    chat_selectable: true,
-    agent_creation_selectable: true,
-    default_enabled: true,
+test("a tool change in an existing chat saves the chat's full selection once", async () => {
+  openSavedChats({
+    abc: {
+      allowed_tool_ids: null,
+      preferred_tool_id: null,
+      internal_search_filters: { ...NO_FILTERS, document_set: ["Handbook"] },
+    },
   });
-  mockActiveAgent = {
-    id: 7,
-    name: "Agent",
-    description: "",
-    tools: [tool(1), tool(2)],
-    starter_messages: null,
-    document_sets: [],
-    is_public: true,
-    is_listed: true,
-    display_priority: null,
-    is_featured: false,
-    builtin_persona: false,
-    owner: null,
-    owner_group: null,
-    user_permission: null,
-  };
-  useChatSessionStore.setState({ sessions: new Map(), currentSessionId: null });
-  if (loaded) {
-    useChatSessionStore.getState().createSession("abc", { incognito: false });
-  }
-}
+  const fetchSpy = echoSaves();
+  const { result } = renderHook(() => useToolConfiguration());
+  expect(result.current.ready).toBe(true);
 
-const NO_FILTERS = {
-  source_type: null,
-  document_set: null,
-  updated_at_range: null,
-  tags: [],
-};
-
-test("a tool change in an existing chat saves the chat's tool selection once", async () => {
-  openSavedChat();
-  const fetchSpy = jest
-    .spyOn(global, "fetch")
-    .mockImplementation(async () => new Response(JSON.stringify([])));
-  const patches = () =>
-    fetchSpy.mock.calls.filter(([, init]) => init?.method === "PATCH");
-  try {
-    const { result } = renderHook(() => useToolConfiguration());
-    await waitFor(() => expect(result.current.ready).toBe(true));
-
-    act(() => result.current.toggleToolState(2, "disabled"));
-    act(() => result.current.toggleToolState(1, "preferred"));
-    await waitFor(() => expect(patches()).toHaveLength(1));
-    const [url, init] = patches()[0]!;
-    expect(url).toBe("/api/chat/chat-session/abc/tool-selection");
-    expect(JSON.parse(String(init?.body))).toEqual({
-      allowed_tool_ids: [1],
-      preferred_tool_id: 1,
-    });
-  } finally {
-    fetchSpy.mockRestore();
-  }
+  act(() => result.current.toggleToolState(2, "disabled"));
+  act(() => result.current.toggleToolState(1, "preferred"));
+  await waitFor(() => expect(patchesOf(fetchSpy)).toHaveLength(1));
+  const [url, init] = patchesOf(fetchSpy)[0]!;
+  expect(url).toBe("/api/chat/chat-session/abc/tool-selection");
+  // The composer holds the saved filters, so a tool change keeps them.
+  expect(JSON.parse(String(init.body))).toEqual({
+    allowed_tool_ids: [1],
+    preferred_tool_id: 1,
+    internal_search_filters: { ...NO_FILTERS, document_set: ["Handbook"] },
+  });
 });
 
 test("a tool-selection save waits for the save before it", async () => {
-  openSavedChat();
+  openSavedChats();
   let finishFirst: (response: Response) => void = () => {};
   let patchCount = 0;
   const fetchSpy = jest
@@ -399,36 +507,29 @@ test("a tool-selection save waits for the save before it", async () => {
     .mockImplementation(async (_url, init) => {
       if (init?.method !== "PATCH") return new Response(JSON.stringify([]));
       patchCount += 1;
-      if (patchCount > 1) return new Response(null, { status: 200 });
+      if (patchCount > 1) return new Response(String(init.body));
       return new Promise<Response>((resolve) => {
         finishFirst = resolve;
       });
     });
-  const patches = () =>
-    fetchSpy.mock.calls.filter(([, init]) => init?.method === "PATCH");
-  try {
-    const { result } = renderHook(() => useToolConfiguration());
-    await waitFor(() => expect(result.current.ready).toBe(true));
+  const { result } = renderHook(() => useToolConfiguration());
 
-    act(() => result.current.toggleToolState(2, "disabled"));
-    await waitFor(() => expect(patches()).toHaveLength(1));
-    act(() => result.current.toggleToolState(1, "preferred"));
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    expect(patches()).toHaveLength(1);
+  act(() => result.current.toggleToolState(2, "disabled"));
+  await waitFor(() => expect(patchesOf(fetchSpy)).toHaveLength(1));
+  act(() => result.current.toggleToolState(1, "preferred"));
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  expect(patchesOf(fetchSpy)).toHaveLength(1);
 
-    finishFirst(new Response(null, { status: 200 }));
-    await waitFor(() => expect(patches()).toHaveLength(2));
-    expect(JSON.parse(String(patches()[1]![1]?.body))).toEqual({
-      allowed_tool_ids: [1],
-      preferred_tool_id: 1,
-    });
-  } finally {
-    fetchSpy.mockRestore();
-  }
+  finishFirst(new Response(JSON.stringify(null)));
+  await waitFor(() => expect(patchesOf(fetchSpy)).toHaveLength(2));
+  expect(JSON.parse(String(patchesOf(fetchSpy)[1]![1].body))).toMatchObject({
+    allowed_tool_ids: [1],
+    preferred_tool_id: 1,
+  });
 });
 
 test("a remounted composer's save waits for the save before it", async () => {
-  openSavedChat();
+  openSavedChats();
   let finishFirst: (response: Response) => void = () => {};
   let patchCount = 0;
   const fetchSpy = jest
@@ -436,36 +537,29 @@ test("a remounted composer's save waits for the save before it", async () => {
     .mockImplementation(async (_url, init) => {
       if (init?.method !== "PATCH") return new Response(JSON.stringify([]));
       patchCount += 1;
-      if (patchCount > 1) return new Response(null, { status: 200 });
+      if (patchCount > 1) return new Response(String(init.body));
       return new Promise<Response>((resolve) => {
         finishFirst = resolve;
       });
     });
-  const patches = () =>
-    fetchSpy.mock.calls.filter(([, init]) => init?.method === "PATCH");
-  try {
-    const first = renderHook(() => useToolConfiguration());
-    await waitFor(() => expect(first.result.current.ready).toBe(true));
-    act(() => first.result.current.toggleToolState(2, "disabled"));
-    await waitFor(() => expect(patches()).toHaveLength(1));
-    first.unmount();
+  const first = renderHook(() => useToolConfiguration());
+  act(() => first.result.current.toggleToolState(2, "disabled"));
+  await waitFor(() => expect(patchesOf(fetchSpy)).toHaveLength(1));
+  first.unmount();
 
-    const second = renderHook(() => useToolConfiguration());
-    await waitFor(() => expect(second.result.current.ready).toBe(true));
-    act(() => second.result.current.toggleToolState(1, "preferred"));
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    expect(patches()).toHaveLength(1);
+  const second = renderHook(() => useToolConfiguration());
+  expect(second.result.current.ready).toBe(true);
+  act(() => second.result.current.toggleToolState(1, "preferred"));
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  expect(patchesOf(fetchSpy)).toHaveLength(1);
 
-    finishFirst(new Response(null, { status: 200 }));
-    await waitFor(() => expect(patches()).toHaveLength(2));
-  } finally {
-    fetchSpy.mockRestore();
-  }
+  finishFirst(new Response(JSON.stringify(null)));
+  await waitFor(() => expect(patchesOf(fetchSpy)).toHaveLength(2));
 });
 
 test("a failed tool-selection save warns the user", async () => {
-  openSavedChat();
-  const fetchSpy = jest
+  openSavedChats();
+  jest
     .spyOn(global, "fetch")
     .mockImplementation(async (_url, init) =>
       init?.method === "PATCH"
@@ -473,110 +567,45 @@ test("a failed tool-selection save warns the user", async () => {
         : new Response(JSON.stringify([]))
     );
   const errorToast = jest.spyOn(toast, "error").mockReturnValue("toast-id");
-  const consoleError = jest
-    .spyOn(console, "error")
-    .mockImplementation(() => {});
-  try {
-    const { result } = renderHook(() => useToolConfiguration());
-    await waitFor(() => expect(result.current.ready).toBe(true));
-
-    act(() => result.current.toggleToolState(2, "disabled"));
-    await waitFor(() =>
-      expect(errorToast).toHaveBeenCalledWith(
-        "toolsPopover.selectionSaveFailed"
-      )
-    );
-  } finally {
-    fetchSpy.mockRestore();
-    errorToast.mockRestore();
-    consoleError.mockRestore();
-  }
-});
-
-test("a filter change in an existing chat saves only the chat's search filters", async () => {
-  openSavedChat();
-  const fetchSpy = jest
-    .spyOn(global, "fetch")
-    .mockImplementation(async () => new Response(JSON.stringify([])));
-  const patches = () =>
-    fetchSpy.mock.calls.filter(([, init]) => init?.method === "PATCH");
-  try {
-    const { result } = renderHook(() => useToolConfiguration());
-    await waitFor(() => expect(result.current.ready).toBe(true));
-
-    act(() =>
-      result.current.setFilters((current) => ({
-        ...current,
-        documentSets: ["Handbook"],
-      }))
-    );
-    await waitFor(() => expect(patches()).toHaveLength(1));
-    // The tools this composer holds may not be the chat's saved tools.
-    expect(JSON.parse(String(patches()[0]![1]?.body))).toEqual({
-      internal_search_filters: { ...NO_FILTERS, document_set: ["Handbook"] },
-    });
-  } finally {
-    fetchSpy.mockRestore();
-  }
-});
-
-test("a tool change made before the chat details load is saved once they do", async () => {
-  openSavedChat(false);
-  const fetchSpy = jest
-    .spyOn(global, "fetch")
-    .mockImplementation(async () => new Response(JSON.stringify([])));
-  const patches = () =>
-    fetchSpy.mock.calls.filter(([, init]) => init?.method === "PATCH");
-  try {
-    const { result } = renderHook(() => useToolConfiguration());
-    await waitFor(() => expect(result.current.ready).toBe(true));
-
-    act(() => result.current.toggleToolState(2, "disabled"));
-    act(() =>
-      useChatSessionStore.getState().createSession("abc", { incognito: false })
-    );
-    await waitFor(() => expect(patches()).toHaveLength(1));
-    expect(JSON.parse(String(patches()[0]![1]?.body))).toEqual({
-      allowed_tool_ids: [1],
-      preferred_tool_id: null,
-    });
-  } finally {
-    fetchSpy.mockRestore();
-  }
+  jest.spyOn(console, "error").mockImplementation(() => {});
+  const { result } = renderHook(() => useToolConfiguration());
+  act(() => result.current.toggleToolState(2, "disabled"));
+  await waitFor(() =>
+    expect(errorToast).toHaveBeenCalledWith("toolsPopover.selectionSaveFailed")
+  );
 });
 
 test("opening a chat saves nothing until the user changes a tool", async () => {
-  openSavedChat();
-  const fetchSpy = jest
-    .spyOn(global, "fetch")
-    .mockImplementation(async () => new Response(JSON.stringify([])));
-  try {
-    const { result } = renderHook(() => useToolConfiguration());
-    await waitFor(() => expect(result.current.ready).toBe(true));
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    expect(
-      fetchSpy.mock.calls.filter(([, init]) => init?.method === "PATCH")
-    ).toHaveLength(0);
-  } finally {
-    fetchSpy.mockRestore();
-  }
+  openSavedChats();
+  const fetchSpy = echoSaves();
+  const { result } = renderHook(() => useToolConfiguration());
+  expect(result.current.ready).toBe(true);
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  expect(patchesOf(fetchSpy)).toHaveLength(0);
 });
 
 test("a tool change saves nothing until the user is known", async () => {
-  openSavedChat();
+  openSavedChats();
   mockUser = null;
-  const fetchSpy = jest
-    .spyOn(global, "fetch")
-    .mockImplementation(async () => new Response(JSON.stringify([])));
-  try {
-    const { result } = renderHook(() => useToolConfiguration());
-    await waitFor(() => expect(result.current.ready).toBe(true));
-    act(() => result.current.toggleToolState(2, "disabled"));
-    await new Promise((resolve) => setTimeout(resolve, 500));
+  const fetchSpy = echoSaves();
+  const { result } = renderHook(() => useToolConfiguration());
+  act(() => result.current.toggleToolState(2, "disabled"));
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  expect(patchesOf(fetchSpy)).toHaveLength(0);
+});
+
+test("an incognito chat sends its selection and keeps it when the server stores none", async () => {
+  openSavedChats({ abc: null }, true);
+  const fetchSpy = echoSaves(() => null);
+  const { result, unmount } = renderHook(() => useToolConfiguration());
+  act(() => result.current.toggleToolState(2, "disabled"));
+  await waitFor(() => expect(patchesOf(fetchSpy)).toHaveLength(1));
+  await waitFor(() =>
     expect(
-      fetchSpy.mock.calls.filter(([, init]) => init?.method === "PATCH")
-    ).toHaveLength(0);
-  } finally {
-    fetchSpy.mockRestore();
-  }
+      useChatSessionStore.getState().sessions.get("abc")?.toolSelection
+    ).toMatchObject({ allowed_tool_ids: [1] })
+  );
+  unmount();
+  const reopened = renderHook(() => useToolConfiguration());
+  expect(reopened.result.current.disabledToolIds).toEqual([2]);
 });

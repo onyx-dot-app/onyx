@@ -14,6 +14,7 @@ import {
   MessageTreeState,
 } from "../services/messageTree";
 import { useMemo } from "react";
+import type { ChatToolSelection } from "@/lib/tools/types";
 
 interface ChatSessionData {
   sessionId: string;
@@ -49,6 +50,9 @@ interface ChatSessionData {
   personaId?: number;
   // Pinned at creation server-side, so it outlives the live UI toggle.
   incognito?: boolean;
+  // The chat's saved tools and search filters, owned by the server; the tab's
+  // only copy for a chat that stores no content. Undefined until known.
+  toolSelection?: ChatToolSelection | null;
 
   // Streaming duration tracking
   streamingStartTime?: number;
@@ -636,6 +640,9 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
       description: backendSession?.description,
       personaId: backendSession?.persona_id,
       incognito: backendSession?.incognito ?? false,
+      ...(backendSession && {
+        toolSelection: backendSession.tool_selection ?? null,
+      }),
     };
 
     const existingSession = get().sessions.get(sessionId);
