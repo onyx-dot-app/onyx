@@ -169,9 +169,10 @@ def test_app_connect_leaves_the_skill_off(db_session: Session) -> None:
 def test_concurrent_writes_wait_for_the_lock(
     db_session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Twenty users turn on a skill at the same time. Each write waits in line
-    for the tenant-wide lock. The waits are logged for the PR."""
-    writers = 20
+    """Ten users turn on a skill at the same time. Each write waits in line
+    for the tenant-wide lock. The waits are logged for the PR. Ten writers fit
+    the test engine's pool next to the test session."""
+    writers = 10
     users = [make_user(db_session, standard_account=True) for _ in range(writers)]
     skills = [make_skill(db_session, author_user_id=user.id) for user in users]
     for skill in skills:
@@ -195,7 +196,7 @@ def test_concurrent_writes_wait_for_the_lock(
             with get_session_with_current_tenant() as session:
                 user = session.get(User, user_id)
                 assert user is not None
-                barrier.wait()
+                barrier.wait(timeout=60)
                 set_skill_enabled_for_user(
                     skill_id=skill_id, enabled=True, user=user, db_session=session
                 )
