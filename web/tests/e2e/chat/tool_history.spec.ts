@@ -56,11 +56,11 @@ test("custom tool output and answer survive a history reload", async ({
     await chatPage.inputBar.send();
     await chatPage.expectCompleteAnswers(1);
     await chatPage.expectAnswerParagraph("The health check returned ok.");
-    await chatPage.expectCustomToolResult(toolName, '"status": "ok"');
+    await chatPage.expectCustomToolResult(operation, '"status": "ok"');
     await chatPage.reload();
     await chatPage.expectCompleteAnswers(1);
     await chatPage.expectAnswerParagraph("The health check returned ok.");
-    await chatPage.expectCustomToolResult(toolName, '"status": "ok"');
+    await chatPage.expectCustomToolResult(operation, '"status": "ok"');
   } finally {
     if (sessionId) await api.deleteChatSession(sessionId);
     if (agentId !== undefined) await adminApi.deleteAgent(agentId);

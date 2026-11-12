@@ -20,6 +20,7 @@ import { CodeBlock } from "@/app/app/message/CodeBlock";
 import hljs from "highlight.js/lib/core";
 import json from "highlight.js/lib/languages/json";
 import { IoBlockLabel } from "@/app/app/message/messageComponents/IoBlockLabel";
+import { externalToolLabel } from "@/app/app/message/messageComponents/toolDisplayHelpers";
 
 // Lazy registration for hljs JSON language
 function ensureHljsRegistered() {
@@ -68,8 +69,10 @@ function constructCustomToolState(
       p.obj.type === PacketType.SECTION_END || p.obj.type === PacketType.ERROR
   )?.obj as SectionEnd | null;
 
-  const toolName =
-    toolStart?.tool_name || toolDeltas[0]?.tool_name || fallbackToolName;
+  const qualifiedName = toolStart?.tool_name || toolDeltas[0]?.tool_name;
+  const toolName = qualifiedName
+    ? externalToolLabel(qualifiedName)
+    : fallbackToolName;
   const toolArgsPacket = packets.find(
     (p) => p.obj.type === PacketType.CUSTOM_TOOL_ARGS
   )?.obj as CustomToolArgs | null;

@@ -294,7 +294,9 @@ Their control functions, such as `think_tool`, `generate_report` and
    `custom__<tool id>__<operation>`. The ID comes first, so a user-chosen name
    cannot make two tools collide.
    Names fit 64 characters; sanitation and truncation add a stable hash.
-   Execution retains the original upstream name.
+   Execution retains the original upstream name. The web timeline labels a
+   call with the operation or tool part of the name
+   (`web/src/app/app/message/messageComponents/toolDisplayHelpers.tsx:externalToolLabel`).
 11. `replay-by-class-name` **Replay finds a tool by its name or its class
    name.** Saved responses replay by tool name
    ([[#renderer-dispatches-by-name]]). Older messages with no saved response
