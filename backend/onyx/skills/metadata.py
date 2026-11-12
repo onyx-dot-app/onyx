@@ -10,7 +10,7 @@ from collections.abc import Mapping
 from typing import Any, Final
 
 import yaml
-from pydantic import ValidationError
+from pydantic import JsonValue, ValidationError
 from yaml.constructor import ConstructorError
 from yaml.events import AliasEvent
 from yaml.nodes import MappingNode, Node, ScalarNode
@@ -205,10 +205,16 @@ def _is_jsonb_string(value: str) -> bool:
     return True
 
 
-def _jsonb_value(value: Any) -> Any:
+def _jsonb_value(value: object) -> JsonValue:
     if value is None or isinstance(value, bool):
         return value
     if isinstance(value, int):
+        # A hex YAML integer skips Python's digit limit on parse, but JSON
+        # writes it in decimal, which the limit refuses.
+        try:
+            str(value)
+        except ValueError:
+            raise _NotJsonbSafe from None
         return value
     if isinstance(value, float):
         if not math.isfinite(value):
@@ -229,10 +235,10 @@ def _jsonb_value(value: Any) -> Any:
     raise _NotJsonbSafe
 
 
-def _jsonb_mapping(mapping: Mapping[Any, Any]) -> dict[str, Any]:
+def _jsonb_mapping(mapping: Mapping[Any, object]) -> dict[str, JsonValue]:
     """Keep each entry JSONB can hold. Drop an entry whose key is not a string
     or whose value (a list, for example) holds a value JSONB cannot hold."""
-    converted: dict[str, Any] = {}
+    converted: dict[str, JsonValue] = {}
     for key, item in mapping.items():
         if not isinstance(key, str) or not _is_jsonb_string(key):
             continue
@@ -243,12 +249,12 @@ def _jsonb_mapping(mapping: Mapping[Any, Any]) -> dict[str, Any]:
     return converted
 
 
-def frontmatter_for_jsonb(document: SkillDocument) -> dict[str, Any]:
+def frontmatter_for_jsonb(document: SkillDocument) -> dict[str, JsonValue]:
     """Return a copy of the parsed frontmatter that a JSONB column can hold,
     with dates as ISO strings. A value JSONB cannot hold is dropped and every
     other key is kept. name and description are always the validated
     strings."""
-    required = {
+    required: dict[str, JsonValue] = {
         "name": document.metadata.name,
         "description": document.metadata.description,
     }

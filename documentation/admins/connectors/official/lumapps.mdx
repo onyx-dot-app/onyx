@@ -17,7 +17,7 @@ It indexes only the content that service user can read, so that user's access de
 | Live only   | Only content LumApps reports as live is indexed. Archived and unpublished content is skipped.                           |
 | Metadata    | Metadata values are resolved to their labels, so a tag reads as its name rather than its internal id.                    |
 | Language    | Content and metadata labels are read in one language. See **Language** below.                                           |
-| Permissions | Not available. **Sync with LumApps** (permission sync) is not offered, so **Document Access** can only be **Everyone in Your Organization** or **Specific Groups**. |
+| Permissions | Not available. **Sync with LumApps** (permission sync) is not offered, so **Document Access** can only be **Everyone in Your Organization**, **Specific Groups**, or **Only Me**. |
 
 Indexing is checkpointed, so a large intranet is covered across several attempts rather than one long run.
 
@@ -58,8 +58,10 @@ You need:
   </Step>
 
   <Step title="Choose the access type">
-    Under **Document Access**, select **Everyone in Your Organization** or **Specific Groups**.
-    **Specific Groups** needs the Business or Enterprise tier on Onyx Cloud, or the Enterprise Edition when self-hosted.
+    Under **Document Access**, select **Everyone in Your Organization**, **Specific Groups**, or **Only Me**.
+    **Specific Groups** and **Only Me** need the Business or Enterprise tier on Onyx Cloud,
+    or the Enterprise Edition when self-hosted.
+    See [Document Access Controls](/admins/connectors/overview#document-access-controls) for what each option means.
   </Step>
 
   <Step title="Connect and verify">

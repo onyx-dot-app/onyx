@@ -1,7 +1,7 @@
 import re
 from typing import Any, Final
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
 
 SKILL_NAME_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 GITHUB_SKILL_MAX_COUNT: Final[int] = 500
@@ -82,6 +82,13 @@ class PluginFileEntry(BaseModel):
     sha256: str
 
 
+def _frontmatter_string(frontmatter: dict[str, JsonValue], key: str) -> str:
+    value = frontmatter.get(key)
+    if not isinstance(value, str):
+        raise ValueError(f"frontmatter must hold a string '{key}'")
+    return value
+
+
 class PluginSkillContent(BaseModel):
     """One skill in a plugin version, as written to a plugin_skill row."""
 
@@ -91,16 +98,24 @@ class PluginSkillContent(BaseModel):
     path: str
     # None only for a version copied from a legacy skill row.
     skill_md: str | None
-    # Always holds the validated name and description strings.
-    frontmatter: dict[str, Any]
+    frontmatter: dict[str, JsonValue]
+
+    @field_validator("frontmatter")
+    @classmethod
+    def _holds_name_and_description(
+        cls, frontmatter: dict[str, JsonValue]
+    ) -> dict[str, JsonValue]:
+        _frontmatter_string(frontmatter, "name")
+        _frontmatter_string(frontmatter, "description")
+        return frontmatter
 
     @property
     def name(self) -> str:
-        return self.frontmatter["name"]
+        return _frontmatter_string(self.frontmatter, "name")
 
     @property
     def description(self) -> str:
-        return self.frontmatter["description"]
+        return _frontmatter_string(self.frontmatter, "description")
 
 
 class PluginVersionContent(BaseModel):

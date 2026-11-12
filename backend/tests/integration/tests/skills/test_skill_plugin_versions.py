@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import UUID, uuid4
 
+import httpx
 import pytest
 from sqlalchemy import select
 
@@ -131,7 +132,7 @@ def _patch(
     user: DATestUser,
     skill_id: str,
     body: dict[str, Any],
-) -> Any:
+) -> httpx.Response:
     return client.patch(
         f"{API_SERVER_URL}/skills/custom/{skill_id}",
         json=body,
@@ -144,7 +145,7 @@ def _replace(
     skill_id: str,
     bundle: bytes,
     base_version_id: str | None = None,
-) -> Any:
+) -> httpx.Response:
     files: dict[str, tuple[str | None, object, str | None]] = {
         "bundle": ("bundle.zip", io.BytesIO(bundle), "application/zip")
     }
@@ -163,7 +164,7 @@ def _add_file(
     filename: str,
     content: bytes,
     base_version_id: str | None = None,
-) -> Any:
+) -> httpx.Response:
     files: dict[str, tuple[str | None, object, str | None]] = {
         "upload": (filename, io.BytesIO(content), "application/octet-stream")
     }
@@ -178,7 +179,7 @@ def _add_file(
 
 def _remove_file(
     user: DATestUser, skill_id: str, path: str, base_version_id: str | None = None
-) -> Any:
+) -> httpx.Response:
     params = {"path": path}
     if base_version_id is not None:
         params["base_version_id"] = base_version_id
