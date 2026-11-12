@@ -1305,7 +1305,8 @@ class _ToolControl(AgentControl):
                 coordinator.ownership.withdraw_result(
                     target.latest_run_id, target.parent_id
                 )
-            # Its spawner is the agent that addresses the run for cancellation.
+            # Cancelling the run also cancels its tool calls and foreground
+            # children; agents it started in the background keep running.
             coordinator.cancel_child(target.latest_run_id, target.parent_id)
         self.owner.check_tool_active(self.active)
         return target

@@ -51,7 +51,8 @@ document does not repeat it.
   `send_message` stores the instruction through `RunOwnership.submit_message`; it targets the next step or starts
   an idle child with fresh limits. Messaging requires run ownership.
   `send_message(delivery="queue")` waits for normal completion or the step limit; Stop and failure
-  pause queued work. `interrupt_agent` cancels one agent's active run, not the runs below it; the run
+  pause queued work. `interrupt_agent` cancels one agent's active run, including its in-flight
+  tool calls and foreground children; agents it started in the background keep running. The run
   reports no result (`RunOwnership.withdraw_result`), and its conversation remains. The caller
   and the root cannot be interrupted. `list_agents` shows the whole branch tree and marks the caller.
   Chat starts a follow-up response when an idle parent has unread child results.
