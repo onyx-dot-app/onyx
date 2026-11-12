@@ -411,6 +411,16 @@ Its only instantiation in the codebase is inside
 `warm_up_cross_encoder` (`search_nlp_models.py`), a function whose own docstring
 comment reads `# No longer used`. See §9.
 
+**New self-hosted indexes preload their search files.**
+`DocumentSchema.get_index_settings_based_on_environment` sets
+`index.store.preload` to the vectors, HNSW graph, postings, terms, doc
+values and compound files. When a shard opens, OpenSearch reads them in one
+sequential pass. Without it, the first searches after a restart each wait on
+thousands of random reads, and search stays slow for minutes. A quantized
+index preloads `.veq`, not the float32 `.vec`, so it keeps its memory saving.
+Stored text is not preloaded: only the top hits read it. AWS managed indexes
+do not set it. The setting applies only when the index is created.
+
 ---
 
 ## 5. Contracts and invariants
