@@ -14482,7 +14482,7 @@
         "promote": {
           "cancelButton": "取消",
           "confirmButton": "设为组织范围可用",
-          "description": "与应用关联的技能必须对所有人可用。此更改将在保存应用时生效。",
+          "description": "与应用关联的技能必须对所有人可用。保存应用时，该技能会发布到组织。发布后无法撤销。",
           "title": "将“{name}”设为组织范围可用？"
         },
         "search": {
@@ -17337,9 +17337,6 @@
           "message": "正在加载共享详情…"
         },
         "noOwnerTitle": "没有有效的所有者",
-        "organizationPermissionMenu": {
-          "ariaLabel": "更改组织权限"
-        },
         "ownerLabel": "所有者",
         "permissionMenu": {
           "ariaLabel": "更新 {name} 的访问权限"
@@ -17380,7 +17377,15 @@
         "peopleTitle": "有访问权限的人员",
         "manageIndividualAccess": "管理单独访问权限",
         "individualAccessTitle": "单独访问权限",
-        "ownershipTitle": "所有权"
+        "ownershipTitle": "所有权",
+        "published": {
+          "title": "组织",
+          "description": "已发布。组织中的所有人都可以使用此技能。"
+        },
+        "publishWarning": {
+          "title": "发布后无法撤销",
+          "description": "保存后，组织中的所有人都可以使用此技能。您无法再将其设为私有。只有管理员可以删除它。"
+        }
       },
       "placeholders": {
         "githubRepository": "suoyouzhe/cangku 或 https://github.com/suoyouzhe/cangku"
@@ -17540,10 +17545,13 @@
       "shareDescription": "将这些更改应用于每个所选技能。未更改的设置将保留当前值。",
       "unchanged": "保持不变",
       "everyone": "组织中的所有人",
-      "invitedOnly": "受邀人员和群组",
       "addAccessDescription": "将这些人员和群组添加到每个所选技能。列出的人员和群组将获得所选权限。其他人保持当前访问权限不变。",
       "apply": "{count, plural, one {应用于 # 个技能} other {应用于 # 个技能}}",
-      "moreActions": "更多操作"
+      "moreActions": "更多操作",
+      "publishWarning": {
+        "title": "发布后无法撤销",
+        "description": "应用后，组织中的所有人都可以使用所选技能。已发布的技能无法再设为私有。只有管理员可以删除它们。"
+      }
     }
   },
   "opensearchHealth": {

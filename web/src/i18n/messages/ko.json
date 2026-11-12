@@ -14482,7 +14482,7 @@
         "promote": {
           "cancelButton": "취소",
           "confirmButton": "조직 전체에 공개",
-          "description": "앱에 연결된 스킬은 모든 사용자가 사용할 수 있어야 합니다. 이 변경 사항은 앱을 저장할 때 적용됩니다.",
+          "description": "앱에 연결된 스킬은 모든 사용자가 사용할 수 있어야 합니다. 앱을 저장하면 스킬이 조직에 게시됩니다. 게시는 취소할 수 없습니다.",
           "title": "\"{name}\"을(를) 조직 전체에 공개할까요?"
         },
         "search": {
@@ -17337,9 +17337,6 @@
           "message": "공유 정보를 불러오는 중..."
         },
         "noOwnerTitle": "활성 소유자 없음",
-        "organizationPermissionMenu": {
-          "ariaLabel": "조직 권한 변경"
-        },
         "ownerLabel": "소유자",
         "permissionMenu": {
           "ariaLabel": "{name}의 접근 권한 변경"
@@ -17380,7 +17377,15 @@
         "peopleTitle": "액세스 권한이 있는 사용자",
         "manageIndividualAccess": "개별 액세스 관리",
         "individualAccessTitle": "개별 액세스",
-        "ownershipTitle": "소유권"
+        "ownershipTitle": "소유권",
+        "published": {
+          "title": "조직",
+          "description": "게시됨. 조직의 모든 사용자가 이 스킬을 사용할 수 있습니다."
+        },
+        "publishWarning": {
+          "title": "게시는 취소할 수 없습니다",
+          "description": "저장하면 조직의 모든 사용자가 이 스킬을 사용할 수 있습니다. 다시 비공개로 만들 수 없습니다. 관리자만 삭제할 수 있습니다."
+        }
       },
       "placeholders": {
         "githubRepository": "soyuja/jeojangso 또는 https://github.com/soyuja/jeojangso"
@@ -17540,10 +17545,13 @@
       "shareDescription": "선택한 모든 스킬에 변경 사항을 적용합니다. 변경하지 않은 설정은 현재 값을 유지합니다.",
       "unchanged": "변경하지 않음",
       "everyone": "조직의 모든 사용자",
-      "invitedOnly": "초대한 사용자 및 그룹",
       "addAccessDescription": "선택한 모든 스킬에 이 사용자와 그룹을 추가합니다. 지정한 사용자와 그룹에는 선택한 권한이 적용됩니다. 그 외 사용자는 현재 액세스 권한을 유지합니다.",
       "apply": "{count, plural, one {스킬 #개에 적용} other {스킬 #개에 적용}}",
-      "moreActions": "추가 작업"
+      "moreActions": "추가 작업",
+      "publishWarning": {
+        "title": "게시는 취소할 수 없습니다",
+        "description": "적용하면 조직의 모든 사용자가 선택한 스킬을 사용할 수 있습니다. 게시된 스킬은 다시 비공개로 만들 수 없습니다. 관리자만 삭제할 수 있습니다."
+      }
     }
   },
   "opensearchHealth": {

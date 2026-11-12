@@ -14482,7 +14482,7 @@
         "promote": {
           "cancelButton": "キャンセル",
           "confirmButton": "組織全体で利用可能にする",
-          "description": "アプリに関連付けられたスキルは全員が利用できる必要があります。この変更はアプリの保存時に適用されます。",
+          "description": "アプリに関連付けられたスキルは全員が利用できる必要があります。アプリを保存すると、スキルが組織に公開されます。公開は取り消せません。",
           "title": "「{name}」を組織全体で利用可能にしますか？"
         },
         "search": {
@@ -17337,9 +17337,6 @@
           "message": "共有設定を読み込み中..."
         },
         "noOwnerTitle": "有効な所有者がいません",
-        "organizationPermissionMenu": {
-          "ariaLabel": "組織の権限を変更"
-        },
         "ownerLabel": "所有者",
         "permissionMenu": {
           "ariaLabel": "{name} のアクセス権を更新"
@@ -17380,7 +17377,15 @@
         "peopleTitle": "アクセスできるユーザー",
         "manageIndividualAccess": "個別のアクセスを管理",
         "individualAccessTitle": "個別のアクセス",
-        "ownershipTitle": "所有権"
+        "ownershipTitle": "所有権",
+        "published": {
+          "title": "組織",
+          "description": "公開済み。組織内の全員がこのスキルを使用できます。"
+        },
+        "publishWarning": {
+          "title": "公開は取り消せません",
+          "description": "保存すると、組織内の全員がこのスキルを使用できます。非公開に戻すことはできません。削除できるのは管理者のみです。"
+        }
       },
       "placeholders": {
         "githubRepository": "ona/ripojitori または https://github.com/ona/ripojitori"
@@ -17540,10 +17545,13 @@
       "shareDescription": "選択したすべてのスキルに変更を適用します。変更しない設定は現在の値を維持します。",
       "unchanged": "変更しない",
       "everyone": "組織内の全員",
-      "invitedOnly": "招待されたユーザーとグループ",
       "addAccessDescription": "選択したすべてのスキルに、これらのユーザーとグループを追加します。指定したユーザーとグループには選択した権限が設定されます。それ以外のユーザーの現在のアクセス権は変わりません。",
       "apply": "{count, plural, one {# 件のスキルに適用} other {# 件のスキルに適用}}",
-      "moreActions": "その他の操作"
+      "moreActions": "その他の操作",
+      "publishWarning": {
+        "title": "公開は取り消せません",
+        "description": "適用すると、組織内の全員が選択したスキルを使用できます。公開したスキルを非公開に戻すことはできません。削除できるのは管理者のみです。"
+      }
     }
   },
   "opensearchHealth": {

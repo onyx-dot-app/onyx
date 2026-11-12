@@ -102,6 +102,16 @@ session start: sandbox_lifecycle.py:build_managed_content_payload
   uses the same payload and hash, before the sandbox is RUNNING
 ```
 
+**Two data models.** Each custom skill is also a plugin with the same id
+(`db/plugin.py`). Every write goes to the legacy skill rows and the plugin
+rows in one transaction; every read still uses the skill rows. Each access
+write in `db/skill.py`, `db/external_app.py` and
+`ee/onyx/db/community_downgrade.py` calls one `db/plugin.py` helper that
+mirrors it. Lock order: the skill row, then the plugin row; many in id order.
+A skill switch locks its target skill `FOR NO KEY UPDATE`: another user's
+switch inserts a preference for that skill while it holds a plugin lock, and
+a `FOR UPDATE` blocks that foreign-key check into a deadlock.
+
 **The runtime gate.** `db/skill.py:list_runtime_skills_for_user` decides what
 a sandbox gets. It combines visibility (`skill_visible_to_user`), enablement
 (`_is_enabled_for_user`), app readiness, bundle validity (`is_valid` not
@@ -197,7 +207,12 @@ The library preview of an external-app skill calls the same renderer
    such check.
 10. `app-skill-org-visible` **An app skill stays visible to the
     organization.** `db/skill.py:set_skill_public_permission` accepts only `VIEWER` for a
-    skill linked to an external app. A private custom skill must have an
+    skill linked to an external app. The app link
+    (`db/external_app.py:associate_custom_skill_with_external_app__no_commit`,
+    `replace_custom_skill_associations__no_commit`) publishes the skill through
+    `db/plugin.py:publish_plugin__no_commit`, and a name clash in the
+    Organization library returns `CONFLICT`. Publishing is one-way, so an
+    unlinked skill stays published. A private custom skill must have an
     owner: `ck_private_skill_has_owner` rejects a private skill with no
     author, so transfer or delete private skills before their owner is
     removed.
@@ -223,7 +238,15 @@ The library preview of an external-app skill calls the same renderer
     public-to-private change in the same request cannot get past it. A
     `public_permission` change needs the author or global `MANAGE_SKILLS`
     (`db/skill.py:ensure_can_edit_org_visibility`; the patch route calls it
-    too). A new sharing entry point must call `share_skill__no_commit`, not
+    too). `db/skill.py:set_skill_public_permission` is the one entry for
+    publishing. It refuses organization `EDITOR` and a change from published to
+    private, for every route, bulk included. A publish moves the plugin to the
+    Organization library (`db/plugin.py:publish_plugin__no_commit`); a name
+    clash there returns `CONFLICT`. Only global `MANAGE_SKILLS` deletes a
+    published skill (`db/skill.py:delete_skill_for_user__no_commit`); the
+    card, bulk menu and editor hide Delete to match. A
+    transfer moves a private plugin to the new owner's "My uploads", and a name
+    clash there returns `CONFLICT`. A new sharing entry point must call `share_skill__no_commit`, not
     `db/skill.py:replace_skill_shares`.
     Agents apply a looser form of the rule
     ([[agents-personas#group-share-needs-manage-agents]]).
@@ -315,10 +338,11 @@ The library preview of an external-app skill calls the same renderer
     delete removes the plugins in that user's "My uploads"
     (`db/plugin.py:delete_user_upload_plugins__no_commit`), because a stale
     copy there would block the delete. So a live skill can have no plugin
-    row; the next file change makes one from the legacy row first. Shares,
-    publishing, install settings, choices and transfers write only the skill
-    rows, so those plugin columns go stale until a later re-sync. A re-sync
-    migration runs before reads move to the plugin tables. Every read still
+    row; the next write makes one from the legacy rows first
+    (`db/plugin.py:lock_skill_plugin__no_commit`), with its shares and
+    choices. Shares, publishing, install settings, choices and transfers also
+    write the plugin rows. A re-sync migration runs before reads move to the
+    plugin tables, to fix rows that older code left stale. Every read still
     uses the skill rows.
 20. `bundle-change-adds-version` **A file change adds a plugin version and
     keeps the old bundle.** Each create and each change to a custom skill's

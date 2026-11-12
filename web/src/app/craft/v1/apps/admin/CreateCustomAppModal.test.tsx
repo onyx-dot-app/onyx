@@ -572,7 +572,7 @@ describe("CreateCustomAppModal", () => {
     );
     expect(
       screen.getByText(
-        "App-associated skills must be available to everyone. This change is applied when you save the app."
+        "App-associated skills must be available to everyone. When you save the app, the skill is published to the organization. Publishing cannot be undone."
       )
     ).toBeInTheDocument();
     expect(externalAppsService.updateExternalApp).not.toHaveBeenCalled();
