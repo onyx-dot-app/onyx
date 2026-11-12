@@ -29,7 +29,7 @@ from onyx.connectors.interfaces import (
     SlimConnector,
     SlimConnectorWithPermSync,
 )
-from onyx.connectors.jira.atlassian_query import has_order_by
+from onyx.connectors.atlassian_query import has_order_by
 from onyx.connectors.jira.models import JiraIssueIdPage
 from onyx.connectors.jira.source_operations import (
     JiraApiError,
@@ -129,8 +129,8 @@ class JiraSmConnector(
         elif self.jira_project:
             clauses.append(f"project = {self.jira_project}")
         else:
-            # Default: all projects (user should specify a project for JSM)
-            clauses.append("project is not EMPTY")
+            # Default: restrict to service-desk (JSM) projects only
+            clauses.append("project in (select projectkey from "com.atlassian.jira.project.type" where type = 'service_desk')")
 
         if start:
             clauses.append(f"updated >= '{start.strftime('%Y-%m-%d %H:%M:%S')}'")
@@ -168,8 +168,10 @@ class JiraSmConnector(
     def poll_source(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
     ) -> Generator[Iterable[Document] | CheckpointOutput, None, None]:
-        start_dt = datetime.fromtimestamp(start, tz=timezone.utc)
-        end_dt = datetime.fromtimestamp(end, tz=timezone.utc)
+        # Jira interprets JQL dates in the site's configured timezone.
+        # We pass naive local-time strings; Jira resolves them server-side.
+        start_dt = datetime.fromtimestamp(start)
+        end_dt = datetime.fromtimestamp(end)
         jql = self._build_jql(start=start_dt, end=end_dt)
         logger.info(f"JSM poll: JQL = {jql}")
 
@@ -193,29 +195,36 @@ class JiraSmConnector(
 
     @override
     def load_from_checkpoint_with_perm_sync(
-        self, checkpoint: ConnectorCheckpoint | None
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: ConnectorCheckpoint | None,
     ) -> Generator[Iterable[Document] | CheckpointOutput, None, None]:
-        # JSM does not support checkpointed loading; fall through to full load.
+        # JSM does not support incremental checkpointing; do a full load.
         yield from self.load_from_state()
 
     # ── Slim (pruning / perm sync) ───────────────────────────────────
 
     @override
-    def generate_slim_documents(self) -> Generator[GenerateSlimDocumentOutput, None, None]:
+    def generate_slim_documents(self) -> GenerateSlimDocumentOutput:
         jql = self._build_jql()
         try:
             issue_keys = self._fetch_all_issue_keys(jql)
         except JiraApiError as e:
             if e.status_code in (401, 403):
                 raise CredentialExpiredError(str(e))
-            return
+            raise
 
         for batch in chunked(issue_keys, self._batch_size):
-            slim_docs = [SlimDocument(id=self._make_doc_id(key)) for key in batch]
-            yield GenerateSlimDocumentOutput(slim_documents=slim_docs)
+            yield [SlimDocument(id=self._make_doc_id(key)) for key in batch]
 
     @override
-    def retrieve_all_slim_docs_perm_sync(self) -> Generator[GenerateSlimDocumentOutput, None, None]:
+    def retrieve_all_slim_docs_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
         yield from self.generate_slim_documents()
 
     # ── Permission sync ──────────────────────────────────────────────
@@ -267,7 +276,7 @@ class JiraSmConnector(
                     if key:
                         issue_keys.append(key)
                 start_at += len(issues)
-                if not issues or start_at >= len(issues) * 10:
+                if not issues:
                     break
 
         return issue_keys
