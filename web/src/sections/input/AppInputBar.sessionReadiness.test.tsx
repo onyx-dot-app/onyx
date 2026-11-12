@@ -161,6 +161,15 @@ beforeEach(() => {
             latest_response_id: 2,
           })
         );
+      if (method === "POST" && String(url).endsWith("/interrupt")) {
+        const id = String(url).split("/").at(-2);
+        const item = pending.find((message) => message.id === id);
+        pending = pending.filter((message) => message.id !== id);
+        return new Response(
+          JSON.stringify(item ?? { detail: "Already accepted" }),
+          { status: item ? 200 : 409 }
+        );
+      }
       if (method === "POST") {
         const body: Omit<PendingChatMessage, "id"> = JSON.parse(
           String(init?.body)
@@ -680,6 +689,10 @@ test("Send now works after a keyboard highlight", async () => {
     screen.getByRole("button", { name: "Send now: Queued follow-up" })
   );
   await waitFor(() => expect(interruptRequests()).toHaveLength(1));
+  // The interrupted message leaves the queue.
+  await waitFor(() =>
+    expect(screen.queryByTestId("queued-message-bar")).not.toBeInTheDocument()
+  );
 });
 
 test("Enter on a highlighted message that left the queue does not reach the next one", async () => {
