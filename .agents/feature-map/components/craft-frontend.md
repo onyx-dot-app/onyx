@@ -108,6 +108,14 @@ packet was missed. It then reads messages, checks for a successor turn
 inventory read, and replaces the live stream items with saved history. A
 scheduled run settles on its saved run status instead.
 
+**Live timeline.** The stream processor also turns each packet into ACP
+timeline events (`web/src/lib/timeline/craft/events.ts:craftPacketToEvents`)
+and appends them to the session's `timelineEvents`. `BuildMessageList` renders
+the in-progress turn from the reducer (`web/src/lib/timeline/reducer.ts`) when
+it receives `timelineEvents`; saved messages and subagent views still render
+from `streamItems`. Both live states are cleared and restored together, so a
+change to one must change the other.
+
 **The queue.** `enqueueMessage` adds to `queuedMessages`. The dispatcher in
 `web/src/app/craft/hooks/useBuildStreaming.ts` subscribes to the store and
 calls `claimQueuedMessage`, which marks the head `starting` inside one store
