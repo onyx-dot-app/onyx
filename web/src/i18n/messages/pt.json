@@ -5197,30 +5197,18 @@
           "description": "Somente administradores publicam habilidades na organização."
         },
         "saveSuccess": {
-          "message": "Configuração de publicação salva."
+          "message": "Configuração salva."
         },
         "saveError": {
-          "message": "Não foi possível salvar a configuração de publicação."
+          "message": "Falha ao salvar a configuração."
         },
         "defaultAccess": {
           "title": "Acesso padrão",
-          "description": "Aplica-se a cada skill publicado sem configuração própria, incluindo os publicados depois. {setting}",
-          "saveSuccess": {
-            "message": "Acesso padrão salvo."
-          },
-          "saveError": {
-            "message": "Não foi possível salvar o acesso padrão."
-          }
+          "description": "Aplica-se a cada skill publicado sem configuração própria, incluindo os publicados depois."
         },
         "sharing": {
           "title": "Compartilhamento",
-          "description": "Os membros podem compartilhar skills com pessoas e grupos. Os administradores sempre podem compartilhar.",
-          "saveSuccess": {
-            "message": "Configuração de compartilhamento salva."
-          },
-          "saveError": {
-            "message": "Não foi possível salvar a configuração de compartilhamento."
-          }
+          "description": "Os membros podem compartilhar skills com pessoas e grupos. Os administradores sempre podem compartilhar."
         }
       }
     },
@@ -6419,18 +6407,9 @@
         }
       },
       "plugins": {
-        "intro": "Defina como cada plugin é instalado para os membros deste grupo.",
-        "inheritance": "Por padrão, cada grupo usa a configuração da organização.",
-        "conflicts": "Uma configuração de grupo substitui a da organização para seus membros, mesmo quando é mais restrita. Um membro de vários grupos recebe a configuração mais aberta.",
+        "description": "Defina como cada plugin é instalado para os membros deste grupo. Uma configuração de grupo substitui a da organização para seus membros, mesmo quando é mais restrita. Um membro de vários grupos recebe a configuração mais aberta.",
         "row": {
-          "shared": "Compartilhado com este grupo",
-          "sharedPublished": "Publicado e compartilhado com este grupo",
-          "settingOnly": "Somente configuração de grupo",
-          "inherited": "Usa a configuração da organização: {policy}.",
-          "overridden": "Configuração do grupo: {policy}. Configuração da organização: {company}.",
-          "select": "Configuração de {name}",
-          "remove": "Remover {name} deste grupo",
-          "readOnly": "Somente um gerente de plugins de toda a organização pode alterar esta configuração."
+          "access": "{access, select, settingOnly {Somente configuração de grupo} published {Publicado e compartilhado com este grupo} other {Compartilhado com este grupo}}"
         },
         "add": {
           "button": "Adicionar plugins",
@@ -15904,8 +15883,7 @@
     },
     "skillRuntimeNotice": {
       "title": "{count, plural, one {# skill não foi carregado} other {# skills não foram carregados}}",
-      "description": "Seus skills precisam caber em {maxSize} e {maxFiles, number} arquivos. Estes skills não couberam, então esta sessão não pode usá-los. Desative os skills de que você não precisa para liberar espaço.",
-      "listLabel": "Skills que não foram carregados",
+      "description": "Esta sessão não pode usar {names}. Seus skills precisam caber em {maxSize} e {maxFiles, number} arquivos. Desative os skills de que você não precisa para liberar espaço.",
       "manage": "Gerenciar skills",
       "dismiss": "Dispensar"
     }
@@ -17774,12 +17752,9 @@
         "description": "Oculto. Os membros não podem encontrá-lo nem ativá-lo."
       },
       "inherit": {
-        "group": "Configuração da organização ({policy})",
-        "groupAny": "Configuração da organização",
-        "groupDescription": "Sem configuração de grupo. O grupo usa a configuração da organização.",
-        "organization": "Padrão da organização ({policy})",
-        "organizationAny": "Padrão da organização",
-        "organizationDescription": "Sem configuração própria. A skill usa o acesso padrão, também depois que um administrador o altera."
+        "label": "{scope, select, group {Configuração da organização} other {Acesso padrão}}",
+        "labelWithPolicy": "{scope, select, group {Configuração da organização ({policy})} other {Acesso padrão ({policy})}}",
+        "description": "{scope, select, group {Sem configuração de grupo. O grupo usa a configuração da organização.} other {Sem configuração própria. A skill usa o acesso padrão, também depois que um administrador o altera.}}"
       }
     },
     "groups": {
@@ -17791,30 +17766,14 @@
       "entry": "{name}: {policy}"
     },
     "limit": {
-      "omission": {
-        "size": "{name}: {size}",
-        "withFiles": "{name}: {size}, {files, plural, one {# arquivo} other {# arquivos}}"
-      },
       "refused": {
-        "you": "Esta alteração coloca você acima do limite de skills. Você usaria {size} de {maxSize} e {files, number} de {maxFiles, number} arquivos. Desative os skills que você não usa e tente novamente.",
-        "youAndUsers": "Esta alteração coloca você e {others, plural, one {# outro usuário} other {# outros usuários}} acima do limite de skills. Você usaria {size} de {maxSize} e {files, number} de {maxFiles, number} arquivos. Desative os skills que você não usa ou escolha uma configuração mais restrita.",
+        "you": "Esta alteração coloca você acima do limite de skills de {maxSize} ou {maxFiles, number} arquivos. Desative os skills que você não usa e tente novamente.",
         "users": "Esta alteração coloca {count, plural, one {# usuário} other {# usuários}} acima do limite de skills de {maxSize} ou {maxFiles, number} arquivos. Escolha uma configuração mais restrita ou peça que desativem skills."
-      },
-      "leftOff": {
-        "title": "{count, plural, one {# skill continua desativado} other {# skills continuam desativados}}",
-        "description": "O app está conectado. Estes skills colocariam você acima do limite de skills de {maxSize}, então continuam desativados. Desative outros skills para liberar espaço e depois ative estes.",
-        "listLabel": "Skills que continuam desativados"
       },
       "banner": {
         "title": "{count, plural, one {# usuário está acima do limite de skills} other {# usuários estão acima do limite de skills}}",
-        "description": "Um usuário acima de {maxSize} ou {maxFiles, number} arquivos de skills não pode ativar mais. Cada sessão carrega skills até {runtimeSize} e deixa o resto de fora. Altere as configurações dos grupos ou peça aos usuários que desativem skills.",
-        "tableLabel": "Usuários acima do limite de skills",
-        "columns": {
-          "user": "Usuário",
-          "size": "Tamanho dos Skills",
-          "files": "Arquivos",
-          "notLoaded": "Não Carregados"
-        }
+        "description": "Um usuário acima de {maxSize} ou {maxFiles, number} arquivos de skills não pode ativar mais. Altere as configurações dos grupos ou peça aos usuários que desativem skills.",
+        "user": "{email}: {size}, {files, plural, one {# arquivo} other {# arquivos}}, {notLoaded, plural, one {# skill não carregou} other {# skills não carregaram}}"
       }
     }
   },

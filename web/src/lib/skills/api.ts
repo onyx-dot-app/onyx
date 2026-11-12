@@ -18,7 +18,6 @@ import type {
   SkillSharePermission,
   SkillInstallationPolicy,
 } from "@/lib/skills/types";
-import { skillLimitOf, type SkillLimitDetails } from "@/lib/skills/limits";
 
 async function handle<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -103,23 +102,9 @@ export type BulkSkillRequest = {
   | { action: "enable" | "disable" | "delete" }
 );
 
-interface BulkSkillResponse {
-  succeeded: string[];
-  failed: {
-    skill_id: string;
-    detail: string;
-    skill_limit?: SkillLimitDetails | null;
-  }[];
-}
-
 export interface BulkSkillResult {
   succeeded: string[];
-  failed: {
-    skill_id: string;
-    detail: string;
-    /** Set when the batch was refused for the skill limit. */
-    skillLimit?: SkillLimitDetails;
-  }[];
+  failed: { skill_id: string; detail: string }[];
 }
 
 export async function bulkUpdateSkills(
@@ -130,7 +115,7 @@ export async function bulkUpdateSkills(
   for (let offset = 0; offset < request.skill_ids.length; offset += batchSize) {
     const skill_ids = request.skill_ids.slice(offset, offset + batchSize);
     try {
-      const batch = await handle<BulkSkillResponse>(
+      const batch = await handle<BulkSkillResult>(
         await fetch("/api/skills/bulk", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -138,18 +123,11 @@ export async function bulkUpdateSkills(
         })
       );
       result.succeeded.push(...batch.succeeded);
-      result.failed.push(
-        ...batch.failed.map((failure) => ({
-          skill_id: failure.skill_id,
-          detail: failure.detail,
-          skillLimit: failure.skill_limit ?? undefined,
-        }))
-      );
+      result.failed.push(...batch.failed);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
-      const skillLimit = skillLimitOf(error) ?? undefined;
       result.failed.push(
-        ...skill_ids.map((skill_id) => ({ skill_id, detail, skillLimit }))
+        ...skill_ids.map((skill_id) => ({ skill_id, detail }))
       );
     }
   }

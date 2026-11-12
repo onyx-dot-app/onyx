@@ -79,7 +79,7 @@ interface SkillsPageProps {
 export default function SkillsPage({ admin = false }: SkillsPageProps) {
   const t = useTranslations("skills");
   const bulkCopy = useTranslations("skills.bulk");
-  const { describeError, refusal } = useSkillLimitCopy();
+  const { describeError } = useSkillLimitCopy();
   const { isAdmin } = useUser();
   const { isGlobalHolder: canManageOrgSkills } = usePermissionAuthority(
     Permission.MANAGE_PLUGINS
@@ -475,9 +475,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
           name:
             targets.find((item) => item.id === failure.skill_id)?.name ??
             failure.skill_id,
-          detail: failure.skillLimit
-            ? refusal(failure.skillLimit)
-            : failure.detail,
+          detail: failure.detail,
         }))
       );
       if (result.succeeded.length)

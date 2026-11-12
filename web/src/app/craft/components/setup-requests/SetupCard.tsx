@@ -25,8 +25,6 @@ import {
 } from "@/app/craft/v1/apps/registry";
 import UserCredentialsModal from "@/app/craft/v1/apps/UserCredentialsModal";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { useSkillsLeftOffToast } from "@/sections/skills/SkillOmissionList";
-import { isSkillLimitNotice } from "@/lib/skills/limits";
 
 interface SetupCardProps {
   // Correlation id for the parked `connect_app` request (from the packet).
@@ -55,7 +53,6 @@ export default function SetupCard({
   userApp,
 }: SetupCardProps) {
   const t = useTranslations("craft.setupCard");
-  const showSkillsLeftOff = useSkillsLeftOffToast();
   const tActionPolicies = useTranslations("craft.actionPolicies");
   const navigation = useNavigation();
   const { mutate } = useSWRConfig();
@@ -138,9 +135,6 @@ export default function SetupCard({
       const data = event.data as Partial<OAuthPopupMessage> | undefined;
       if (data?.source !== OAUTH_POPUP_MESSAGE_SOURCE) return;
       if (data.externalAppId !== externalAppId) return;
-      showSkillsLeftOff(
-        isSkillLimitNotice(data.skillsLeftOff) ? data.skillsLeftOff : null
-      );
       finish(true);
     }
 
@@ -304,11 +298,7 @@ export default function SetupCard({
             logo={getAppTypeLogo(userApp.app_type)}
             credentialKeys={userApp.credential_keys}
             credentialValues={userApp.credential_values}
-            save={async (values) => {
-              showSkillsLeftOff(
-                await upsertUserCredentials(userApp.id, values)
-              );
-            }}
+            save={(values) => upsertUserCredentials(userApp.id, values)}
           />
         )}
       </div>

@@ -6,7 +6,6 @@ import {
   type OAuthFailureDetail,
   type OAuthLaunchFailure,
 } from "@/lib/oauth/launch";
-import type { SkillLimitNotice } from "@/lib/skills/limits";
 
 export type MemberPluginConnectionFailure =
   | "popup_blocked"
@@ -53,7 +52,7 @@ export async function runMemberPluginOAuth(
   reference: PluginReference,
   start: (returnPath: string) => Promise<string | null>,
   { signal, agentId, surface }: MemberPluginConnectOptions = {}
-): Promise<SkillLimitNotice | null> {
+): Promise<void> {
   if (signal?.aborted) throw new MemberPluginConnectionError("cancelled");
   const query = new URLSearchParams({
     pluginKind: reference.kind,
@@ -63,8 +62,7 @@ export async function runMemberPluginOAuth(
   if (surface !== undefined) query.set("surface", surface);
   const returnPath = `/app/plugins/oauth/complete?${query.toString()}`;
   try {
-    const completion = await launchOAuth(() => start(returnPath), { signal });
-    return completion.skillsLeftOff ?? null;
+    await launchOAuth(() => start(returnPath), { signal });
   } catch (error) {
     if (error instanceof MemberPluginConnectionError) throw error;
     throw new MemberPluginConnectionError(

@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@tests/setup/test-utils";
+import { render, screen, waitFor } from "@tests/setup/test-utils";
 import SkillLimitUsersBanner from "@/sections/skills/SkillLimitUsersBanner";
 import type { SkillLimitUsersResponse } from "@/lib/skills/limits";
 
@@ -54,21 +54,19 @@ describe("SkillLimitUsersBanner", () => {
     expect(mockFetch).toHaveBeenCalledWith("/api/skills/users-over-limit");
     expect(
       screen.getByText(
-        /A user past 500 MB or 5,000 files of skills cannot turn on more.*up to 900 MB/
+        "A user past 500 MB or 5,000 files of skills cannot turn on more. Change group settings, or ask users to turn off skills."
       )
     ).toBeInTheDocument();
-    const table = screen.getByRole("table", {
-      name: "Users past the skill limit",
-    });
-    for (const header of ["User", "Skill Size", "Files", "Did Not Load"]) {
-      expect(within(table).getByText(header)).toBeInTheDocument();
-    }
-    const big = within(table).getByText("big@example.com").closest("tr")!;
-    expect(within(big).getByText("950 MB")).toBeInTheDocument();
-    expect(within(big).getByText("1,200")).toBeInTheDocument();
-    expect(within(big).getByText("2")).toBeInTheDocument();
-    const files = within(table).getByText("files@example.com").closest("tr")!;
-    expect(within(files).getByText("5,001")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "big@example.com: 950 MB, 1,200 files, 2 skills did not load"
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "files@example.com: 20 MB, 5,001 files, 0 skills did not load"
+      )
+    ).toBeInTheDocument();
   });
 
   it("shows nothing when no user is past the limit", async () => {

@@ -5197,30 +5197,18 @@
           "description": "Seuls les administrateurs publient des compétences pour l'organisation."
         },
         "saveSuccess": {
-          "message": "Paramètre de publication enregistré."
+          "message": "Paramètre enregistré."
         },
         "saveError": {
-          "message": "Impossible d'enregistrer le paramètre de publication."
+          "message": "Échec de l'enregistrement du paramètre."
         },
         "defaultAccess": {
           "title": "Accès par défaut",
-          "description": "S'applique à chaque skill publié sans réglage propre, y compris ceux publiés plus tard. {setting}",
-          "saveSuccess": {
-            "message": "Accès par défaut enregistré."
-          },
-          "saveError": {
-            "message": "Impossible d'enregistrer l'accès par défaut."
-          }
+          "description": "S'applique à chaque skill publié sans réglage propre, y compris ceux publiés plus tard."
         },
         "sharing": {
           "title": "Partage",
-          "description": "Les membres peuvent partager des skills avec des personnes et des groupes. Les administrateurs peuvent toujours partager.",
-          "saveSuccess": {
-            "message": "Réglage de partage enregistré."
-          },
-          "saveError": {
-            "message": "Impossible d'enregistrer le réglage de partage."
-          }
+          "description": "Les membres peuvent partager des skills avec des personnes et des groupes. Les administrateurs peuvent toujours partager."
         }
       }
     },
@@ -6419,18 +6407,9 @@
         }
       },
       "plugins": {
-        "intro": "Définissez comment chaque plugin est installé pour les membres de ce groupe.",
-        "inheritance": "Par défaut, chaque groupe utilise le paramètre de l'organisation.",
-        "conflicts": "Un paramètre de groupe remplace celui de l'organisation pour ses membres, même s'il est plus strict. Un membre de plusieurs groupes obtient le paramètre le plus ouvert.",
+        "description": "Définissez comment chaque plugin est installé pour les membres de ce groupe. Un paramètre de groupe remplace celui de l'organisation pour ses membres, même s'il est plus strict. Un membre de plusieurs groupes obtient le paramètre le plus ouvert.",
         "row": {
-          "shared": "Partagé avec ce groupe",
-          "sharedPublished": "Publié et partagé avec ce groupe",
-          "settingOnly": "Paramètre de groupe uniquement",
-          "inherited": "Utilise le paramètre de l'organisation : {policy}.",
-          "overridden": "Paramètre du groupe : {policy}. Paramètre de l'organisation : {company}.",
-          "select": "Paramètre pour {name}",
-          "remove": "Retirer {name} de ce groupe",
-          "readOnly": "Seul un gestionnaire de plugins à l'échelle de l'organisation peut modifier ce paramètre."
+          "access": "{access, select, settingOnly {Paramètre de groupe uniquement} published {Publié et partagé avec ce groupe} other {Partagé avec ce groupe}}"
         },
         "add": {
           "button": "Ajouter des plugins",
@@ -15904,8 +15883,7 @@
     },
     "skillRuntimeNotice": {
       "title": "{count, plural, one {# skill n’a pas été chargé} other {# skills n’ont pas été chargés}}",
-      "description": "Vos skills doivent tenir dans {maxSize} et {maxFiles, number} fichiers. Ces skills n’y tenaient pas, cette session ne peut donc pas les utiliser. Désactivez les skills dont vous n’avez pas besoin pour libérer de la place.",
-      "listLabel": "Skills non chargés",
+      "description": "Cette session ne peut pas utiliser {names}. Vos skills doivent tenir dans {maxSize} et {maxFiles, number} fichiers. Désactivez les skills dont vous n’avez pas besoin pour libérer de la place.",
       "manage": "Gérer les skills",
       "dismiss": "Ignorer"
     }
@@ -17774,12 +17752,9 @@
         "description": "Masqué. Les membres ne peuvent ni le trouver ni l'activer."
       },
       "inherit": {
-        "group": "Paramètre de l'organisation ({policy})",
-        "groupAny": "Paramètre de l'organisation",
-        "groupDescription": "Aucun paramètre de groupe. Le groupe utilise le paramètre de l'organisation.",
-        "organization": "Valeur par défaut de l'organisation ({policy})",
-        "organizationAny": "Valeur par défaut de l'organisation",
-        "organizationDescription": "Aucun paramètre propre. La compétence utilise l'accès par défaut, même après une modification par un administrateur."
+        "label": "{scope, select, group {Paramètre de l'organisation} other {Accès par défaut}}",
+        "labelWithPolicy": "{scope, select, group {Paramètre de l'organisation ({policy})} other {Accès par défaut ({policy})}}",
+        "description": "{scope, select, group {Aucun paramètre de groupe. Le groupe utilise le paramètre de l'organisation.} other {Aucun paramètre propre. La compétence utilise l'accès par défaut, même après une modification par un administrateur.}}"
       }
     },
     "groups": {
@@ -17791,30 +17766,14 @@
       "entry": "{name} : {policy}"
     },
     "limit": {
-      "omission": {
-        "size": "{name} : {size}",
-        "withFiles": "{name} : {size}, {files, plural, one {# fichier} other {# fichiers}}"
-      },
       "refused": {
-        "you": "Cette modification vous fait dépasser la limite de skills. Vous utiliseriez {size} sur {maxSize} et {files, number} fichiers sur {maxFiles, number}. Désactivez les skills que vous n’utilisez pas, puis réessayez.",
-        "youAndUsers": "Cette modification vous fait dépasser la limite de skills, ainsi qu’à {others, plural, one {# autre utilisateur} other {# autres utilisateurs}}. Vous utiliseriez {size} sur {maxSize} et {files, number} fichiers sur {maxFiles, number}. Désactivez les skills que vous n’utilisez pas, ou choisissez un paramètre plus restreint.",
+        "you": "Cette modification vous fait dépasser la limite de skills de {maxSize} ou {maxFiles, number} fichiers. Désactivez les skills que vous n’utilisez pas, puis réessayez.",
         "users": "Cette modification fait dépasser à {count, plural, one {# utilisateur} other {# utilisateurs}} la limite de skills de {maxSize} ou {maxFiles, number} fichiers. Choisissez un paramètre plus restreint, ou demandez-leur de désactiver des skills."
-      },
-      "leftOff": {
-        "title": "{count, plural, one {# skill reste désactivé} other {# skills restent désactivés}}",
-        "description": "L’app est connectée. Ces skills vous feraient dépasser la limite de skills de {maxSize}, ils restent donc désactivés. Désactivez d’autres skills pour libérer de la place, puis activez ceux-ci.",
-        "listLabel": "Skills qui restent désactivés"
       },
       "banner": {
         "title": "{count, plural, one {# utilisateur dépasse la limite de skills} other {# utilisateurs dépassent la limite de skills}}",
-        "description": "Un utilisateur au-delà de {maxSize} ou {maxFiles, number} fichiers de skills ne peut pas en activer davantage. Chaque session charge des skills jusqu’à {runtimeSize} et omet le reste. Modifiez les paramètres des groupes, ou demandez aux utilisateurs de désactiver des skills.",
-        "tableLabel": "Utilisateurs au-delà de la limite de skills",
-        "columns": {
-          "user": "Utilisateur",
-          "size": "Taille des Skills",
-          "files": "Fichiers",
-          "notLoaded": "Non Chargés"
-        }
+        "description": "Un utilisateur au-delà de {maxSize} ou {maxFiles, number} fichiers de skills ne peut pas en activer davantage. Modifiez les paramètres des groupes, ou demandez aux utilisateurs de désactiver des skills.",
+        "user": "{email} : {size}, {files, plural, one {# fichier} other {# fichiers}}, {notLoaded, plural, one {# skill non chargé} other {# skills non chargés}}"
       }
     }
   },

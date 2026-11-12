@@ -170,10 +170,8 @@ function customSkill(id: string, name: string): CustomSkill {
     enabled: false,
     can_toggle: true,
     installation_policy: "AVAILABLE",
-    company_installation_policy: null,
     default_installation_policy: null,
     group_summaries: [],
-    effective_installation_policy: null,
     author_user_id: "owner-id",
     author_email: "owner@example.com",
     owner: { id: "owner-id", email: "owner@example.com" },
@@ -859,7 +857,7 @@ describe("SkillsPage preference toggles", () => {
     expect(mockToastError).toHaveBeenCalledWith("Preference update failed");
   });
 
-  it("shows a user their usage when the skill limit refuses a toggle", async () => {
+  it("shows a user the limit when the skill limit refuses a toggle", async () => {
     const user = setupUser();
     const refused = Object.assign(new Error("Refused"), {
       errorCode: "SKILL_LIMIT_EXCEEDED",
@@ -881,38 +879,9 @@ describe("SkillsPage preference toggles", () => {
 
     await waitFor(() =>
       expect(mockToastError).toHaveBeenCalledWith(
-        "This change puts you past the skill limit. You would use 520 MB of 500 MB and 140 of 5,000 files. Turn off skills you do not use, then try again."
+        "This change puts you past the skill limit of 500 MB or 5,000 files. Turn off skills you do not use, then try again."
       )
     );
-  });
-
-  it("shows an admin the number of users when the skill limit refuses a bulk change", async () => {
-    mockBulkUpdateSkills.mockResolvedValue({
-      succeeded: [],
-      failed: ["first-id", "second-id"].map((skill_id) => ({
-        skill_id,
-        detail: "Refused",
-        skillLimit: {
-          users_over: 12,
-          usage: null,
-          max_bytes: 500 * 1024 * 1024,
-          max_files: 5000,
-        },
-      })),
-    });
-    render(<SkillsPage />);
-    const user = setupUser();
-    await user.click(
-      screen.getByRole("checkbox", { name: "Select all visible custom skills" })
-    );
-    await user.click(screen.getByRole("button", { name: "More actions" }));
-    await user.click(screen.getByText("Enable for me", { exact: true }));
-
-    expect(
-      await screen.findByText(
-        /first-skill: This change puts 12 users past the skill limit of 500 MB or 5,000 files\./
-      )
-    ).toBeInTheDocument();
   });
 
   it("keeps a successful update when background revalidation fails", async () => {

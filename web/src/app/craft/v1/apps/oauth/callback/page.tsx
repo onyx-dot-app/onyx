@@ -62,9 +62,8 @@ function ExternalAppsOAuthCallbackPageContent() {
 
     async function exchange(code: string, state: string) {
       try {
-        const { external_app_id, return_path, skills_left_off_for_limit } =
+        const { external_app_id, return_path } =
           await completeExternalAppOAuthCallback(code, state);
-        const skillsLeftOff = skills_left_off_for_limit ?? undefined;
         setStatus("success");
         if (return_path) {
           const target = new URL(return_path, window.location.origin);
@@ -76,16 +75,7 @@ function ExternalAppsOAuthCallbackPageContent() {
           }
           // The member plugin dialog waits on this state; it verifies the
           // connection itself.
-          if (
-            reportOAuthCallback(
-              state,
-              true,
-              undefined,
-              undefined,
-              skillsLeftOff
-            )
-          )
-            return;
+          if (reportOAuthCallback(state, true)) return;
           target.searchParams.set("message", "oauth_connected");
           navigation.go(`${target.pathname}?${target.searchParams}`, {
             replace: true,
@@ -100,18 +90,14 @@ function ExternalAppsOAuthCallbackPageContent() {
             {
               source: OAUTH_POPUP_MESSAGE_SOURCE,
               externalAppId: external_app_id,
-              ...(skillsLeftOff && { skillsLeftOff }),
             },
             window.location.origin
           );
-          notifyOAuthComplete(state, true, undefined, undefined, skillsLeftOff);
+          notifyOAuthComplete(state);
           window.close();
           return;
         }
-        if (
-          reportOAuthCallback(state, true, undefined, undefined, skillsLeftOff)
-        )
-          return;
+        if (reportOAuthCallback(state, true)) return;
         await globalMutate(SWR_KEYS.buildExternalApps);
         setTimeout(
           () =>

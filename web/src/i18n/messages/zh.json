@@ -5197,30 +5197,18 @@
           "description": "只有管理员可以将技能发布到组织。"
         },
         "saveSuccess": {
-          "message": "已保存发布设置。"
+          "message": "设置已保存。"
         },
         "saveError": {
-          "message": "无法保存发布设置。"
+          "message": "无法保存设置。"
         },
         "defaultAccess": {
           "title": "默认访问权限",
-          "description": "适用于每个没有自身设置的已发布技能，包括以后发布的技能。 {setting}",
-          "saveSuccess": {
-            "message": "默认访问权限已保存。"
-          },
-          "saveError": {
-            "message": "无法保存默认访问权限。"
-          }
+          "description": "适用于每个没有自身设置的已发布技能，包括以后发布的技能。"
         },
         "sharing": {
           "title": "共享",
-          "description": "成员可以与他人和群组共享技能。管理员始终可以共享。",
-          "saveSuccess": {
-            "message": "共享设置已保存。"
-          },
-          "saveError": {
-            "message": "无法保存共享设置。"
-          }
+          "description": "成员可以与他人和群组共享技能。管理员始终可以共享。"
         }
       }
     },
@@ -6419,18 +6407,9 @@
         }
       },
       "plugins": {
-        "intro": "设置每个插件为此群组成员安装的方式。",
-        "inheritance": "默认情况下，每个群组都使用组织设置。",
-        "conflicts": "群组设置会为其成员替换组织设置，即使更严格也是如此。属于多个群组的成员获得最开放的设置。",
+        "description": "设置每个插件为此群组成员安装的方式。群组设置会为其成员替换组织设置，即使更严格也是如此。属于多个群组的成员获得最开放的设置。",
         "row": {
-          "shared": "已与此群组共享",
-          "sharedPublished": "已发布并与此群组共享",
-          "settingOnly": "仅群组设置",
-          "inherited": "使用组织设置：{policy}。",
-          "overridden": "群组设置：{policy}。组织设置：{company}。",
-          "select": "{name} 的设置",
-          "remove": "从此群组移除 {name}",
-          "readOnly": "只有组织范围的插件管理员可以更改此设置。"
+          "access": "{access, select, settingOnly {仅群组设置} published {已发布并与此群组共享} other {已与此群组共享}}"
         },
         "add": {
           "button": "添加插件",
@@ -15904,8 +15883,7 @@
     },
     "skillRuntimeNotice": {
       "title": "{count, plural, other {# 个技能未加载}}",
-      "description": "你的技能必须在 {maxSize} 和 {maxFiles, number} 个文件以内。这些技能放不下，因此此会话无法使用它们。关闭不需要的技能以腾出空间。",
-      "listLabel": "未加载的技能",
+      "description": "此会话无法使用 {names}。你的技能必须在 {maxSize} 和 {maxFiles, number} 个文件以内。关闭不需要的技能以腾出空间。",
       "manage": "管理技能",
       "dismiss": "关闭"
     }
@@ -17774,12 +17752,9 @@
         "description": "已隐藏。成员无法找到或开启。"
       },
       "inherit": {
-        "group": "组织设置（{policy}）",
-        "groupAny": "组织设置",
-        "groupDescription": "没有群组设置。群组使用组织设置。",
-        "organization": "组织默认值（{policy}）",
-        "organizationAny": "组织默认值",
-        "organizationDescription": "没有自己的设置。即使管理员更改了默认访问，技能也会使用它。"
+        "label": "{scope, select, group {组织设置} other {默认访问权限}}",
+        "labelWithPolicy": "{scope, select, group {组织设置（{policy}）} other {默认访问权限（{policy}）}}",
+        "description": "{scope, select, group {没有群组设置。群组使用组织设置。} other {没有自己的设置。即使管理员更改了默认访问，技能也会使用它。}}"
       }
     },
     "groups": {
@@ -17791,30 +17766,14 @@
       "entry": "{name}：{policy}"
     },
     "limit": {
-      "omission": {
-        "size": "{name}：{size}",
-        "withFiles": "{name}：{size}，{files, plural, other {# 个文件}}"
-      },
       "refused": {
-        "you": "此更改会使你超出技能上限。你将使用 {maxSize} 中的 {size}，以及 {maxFiles, number} 个文件中的 {files, number} 个。关闭不使用的技能，然后重试。",
-        "youAndUsers": "此更改会使你和另外 {others, plural, other {# 位用户}}超出技能上限。你将使用 {maxSize} 中的 {size}，以及 {maxFiles, number} 个文件中的 {files, number} 个。关闭不使用的技能，或选择范围更小的设置。",
+        "you": "此更改会使你超出 {maxSize} 或 {maxFiles, number} 个文件的技能上限。关闭不使用的技能，然后重试。",
         "users": "此更改会使 {count, plural, other {# 位用户}}超出 {maxSize} 或 {maxFiles, number} 个文件的技能上限。选择范围更小的设置，或请他们关闭一些技能。"
-      },
-      "leftOff": {
-        "title": "{count, plural, other {# 个技能保持关闭}}",
-        "description": "应用已连接。这些技能会使你超出 {maxSize} 的技能上限，因此保持关闭。关闭其他技能以腾出空间，然后开启这些技能。",
-        "listLabel": "保持关闭的技能"
       },
       "banner": {
         "title": "{count, plural, other {# 位用户超出技能上限}}",
-        "description": "技能超过 {maxSize} 或 {maxFiles, number} 个文件的用户无法开启更多技能。每个会话最多加载 {runtimeSize} 的技能，其余的不加载。更改群组设置，或请用户关闭一些技能。",
-        "tableLabel": "超出技能上限的用户",
-        "columns": {
-          "user": "用户",
-          "size": "技能大小",
-          "files": "文件",
-          "notLoaded": "未加载"
-        }
+        "description": "技能超过 {maxSize} 或 {maxFiles, number} 个文件的用户无法开启更多技能。更改群组设置，或请用户关闭一些技能。",
+        "user": "{email}：{size}，{files, plural, other {# 个文件}}，{notLoaded, plural, other {# 个技能未加载}}"
       }
     }
   },

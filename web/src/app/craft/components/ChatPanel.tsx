@@ -781,7 +781,12 @@ function ChatPanelContent({
                         />
                       </div>
                     )}
-                    {sessionId && <SkillRuntimeNotice sessionId={sessionId} />}
+                    {sessionId && (
+                      <SkillRuntimeNotice
+                        key={sessionId}
+                        sessionId={sessionId}
+                      />
+                    )}
                     {sessionId && session?.skillsStale && (
                       <div className="pb-2">
                         <SkillsStaleNotice

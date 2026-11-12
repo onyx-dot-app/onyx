@@ -11,7 +11,6 @@ import {
 } from "@/app/craft/v1/apps/registry";
 import { BUILD_API_BASE } from "@/app/craft/v1/constants";
 import type { ErrorResponseBody } from "@/lib/fetcher";
-import type { SkillLimitNotice } from "@/lib/skills/limits";
 
 async function readErrorDetail(
   res: Response,
@@ -144,11 +143,6 @@ interface OAuthCallbackResponse {
   success: boolean;
   external_app_id: number;
   return_path?: string | null;
-  skills_left_off_for_limit: SkillLimitNotice | null;
-}
-
-interface ExternalAppConnectResponse {
-  skills_left_off_for_limit: SkillLimitNotice | null;
 }
 
 export async function completeExternalAppOAuthCallback(
@@ -190,11 +184,10 @@ export async function postConnectAppDecision(
   }
 }
 
-/** Saves the user's credentials. Returns the app skills left off for the skill limit. */
 export async function upsertUserCredentials(
   externalAppId: number,
   userCredentials: Record<string, unknown>
-): Promise<SkillLimitNotice | null> {
+): Promise<void> {
   const res = await fetch(
     `${BUILD_API_BASE}/apps/${externalAppId}/credentials`,
     {
@@ -206,8 +199,6 @@ export async function upsertUserCredentials(
   if (!res.ok) {
     throw new Error(await readErrorDetail(res, "Failed to save credentials"));
   }
-  const body: ExternalAppConnectResponse = await res.json();
-  return body.skills_left_off_for_limit;
 }
 
 export async function disconnectUserFromApp(

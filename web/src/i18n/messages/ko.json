@@ -5197,30 +5197,18 @@
           "description": "관리자만 스킬을 조직에 게시합니다."
         },
         "saveSuccess": {
-          "message": "게시 설정을 저장했습니다."
+          "message": "설정이 저장되었습니다."
         },
         "saveError": {
-          "message": "게시 설정을 저장할 수 없습니다."
+          "message": "설정을 저장하지 못했습니다."
         },
         "defaultAccess": {
           "title": "기본 액세스",
-          "description": "자체 설정이 없는 모든 게시된 스킬에 적용됩니다. 나중에 게시되는 스킬도 포함됩니다. {setting}",
-          "saveSuccess": {
-            "message": "기본 액세스를 저장했습니다."
-          },
-          "saveError": {
-            "message": "기본 액세스를 저장할 수 없습니다."
-          }
+          "description": "자체 설정이 없는 모든 게시된 스킬에 적용됩니다. 나중에 게시되는 스킬도 포함됩니다."
         },
         "sharing": {
           "title": "공유",
-          "description": "멤버는 스킬을 사람 및 그룹과 공유할 수 있습니다. 관리자는 항상 공유할 수 있습니다.",
-          "saveSuccess": {
-            "message": "공유 설정을 저장했습니다."
-          },
-          "saveError": {
-            "message": "공유 설정을 저장할 수 없습니다."
-          }
+          "description": "멤버는 스킬을 사람 및 그룹과 공유할 수 있습니다. 관리자는 항상 공유할 수 있습니다."
         }
       }
     },
@@ -6419,18 +6407,9 @@
         }
       },
       "plugins": {
-        "intro": "이 그룹 구성원에게 각 플러그인을 설치하는 방식을 설정합니다.",
-        "inheritance": "기본적으로 모든 그룹은 조직 설정을 사용합니다.",
-        "conflicts": "그룹 설정은 더 엄격하더라도 해당 구성원에 대해 조직 설정을 대체합니다. 여러 그룹에 속한 구성원은 가장 개방적인 설정을 받습니다.",
+        "description": "이 그룹 구성원에게 각 플러그인을 설치하는 방식을 설정합니다. 그룹 설정은 더 엄격하더라도 해당 구성원에 대해 조직 설정을 대체합니다. 여러 그룹에 속한 구성원은 가장 개방적인 설정을 받습니다.",
         "row": {
-          "shared": "이 그룹과 공유됨",
-          "sharedPublished": "게시되었으며 이 그룹과 공유됨",
-          "settingOnly": "그룹 설정만",
-          "inherited": "조직 설정 사용: {policy}.",
-          "overridden": "그룹 설정: {policy}. 조직 설정: {company}.",
-          "select": "{name} 설정",
-          "remove": "이 그룹에서 {name} 제거",
-          "readOnly": "조직 전체 플러그인 관리자만 이 설정을 변경할 수 있습니다."
+          "access": "{access, select, settingOnly {그룹 설정만} published {게시되었으며 이 그룹과 공유됨} other {이 그룹과 공유됨}}"
         },
         "add": {
           "button": "플러그인 추가",
@@ -15904,8 +15883,7 @@
     },
     "skillRuntimeNotice": {
       "title": "{count, plural, other {스킬 #개를 불러오지 못했습니다}}",
-      "description": "스킬은 {maxSize} 및 파일 {maxFiles, number}개 이내여야 합니다. 이 스킬들은 들어가지 않아 이 세션에서 사용할 수 없습니다. 필요 없는 스킬을 끄고 공간을 확보하세요.",
-      "listLabel": "불러오지 못한 스킬",
+      "description": "이 세션에서는 {names}을(를) 사용할 수 없습니다. 스킬은 {maxSize} 및 파일 {maxFiles, number}개 이내여야 합니다. 필요 없는 스킬을 끄고 공간을 확보하세요.",
       "manage": "스킬 관리",
       "dismiss": "닫기"
     }
@@ -17774,12 +17752,9 @@
         "description": "숨겨집니다. 구성원이 찾거나 켤 수 없습니다."
       },
       "inherit": {
-        "group": "조직 설정({policy})",
-        "groupAny": "조직 설정",
-        "groupDescription": "그룹 설정이 없습니다. 그룹은 조직 설정을 사용합니다.",
-        "organization": "조직 기본값({policy})",
-        "organizationAny": "조직 기본값",
-        "organizationDescription": "자체 설정이 없습니다. 관리자가 변경한 후에도 스킬은 기본 액세스를 사용합니다."
+        "label": "{scope, select, group {조직 설정} other {기본 액세스}}",
+        "labelWithPolicy": "{scope, select, group {조직 설정({policy})} other {기본 액세스({policy})}}",
+        "description": "{scope, select, group {그룹 설정이 없습니다. 그룹은 조직 설정을 사용합니다.} other {자체 설정이 없습니다. 관리자가 변경한 후에도 스킬은 기본 액세스를 사용합니다.}}"
       }
     },
     "groups": {
@@ -17791,30 +17766,14 @@
       "entry": "{name}: {policy}"
     },
     "limit": {
-      "omission": {
-        "size": "{name}: {size}",
-        "withFiles": "{name}: {size}, {files, plural, other {파일 #개}}"
-      },
       "refused": {
-        "you": "이 변경으로 스킬 한도를 넘습니다. 사용량이 {maxSize} 중 {size}, 파일 {maxFiles, number}개 중 {files, number}개가 됩니다. 사용하지 않는 스킬을 끈 다음 다시 시도하세요.",
-        "youAndUsers": "이 변경으로 회원님과 다른 {others, plural, other {사용자 #명}}이 스킬 한도를 넘습니다. 사용량이 {maxSize} 중 {size}, 파일 {maxFiles, number}개 중 {files, number}개가 됩니다. 사용하지 않는 스킬을 끄거나 더 좁은 설정을 선택하세요.",
+        "you": "이 변경으로 {maxSize} 또는 파일 {maxFiles, number}개의 스킬 한도를 넘습니다. 사용하지 않는 스킬을 끈 다음 다시 시도하세요.",
         "users": "이 변경으로 {count, plural, other {사용자 #명}}이 {maxSize} 또는 파일 {maxFiles, number}개의 스킬 한도를 넘습니다. 더 좁은 설정을 선택하거나 스킬을 끄도록 요청하세요."
-      },
-      "leftOff": {
-        "title": "{count, plural, other {스킬 #개가 꺼진 상태로 남았습니다}}",
-        "description": "앱이 연결되었습니다. 이 스킬들을 켜면 {maxSize} 스킬 한도를 넘으므로 꺼진 상태로 남습니다. 다른 스킬을 꺼서 공간을 확보한 다음 이 스킬들을 켜세요.",
-        "listLabel": "꺼진 상태로 남은 스킬"
       },
       "banner": {
         "title": "{count, plural, other {사용자 #명이 스킬 한도를 넘었습니다}}",
-        "description": "스킬이 {maxSize} 또는 파일 {maxFiles, number}개를 넘은 사용자는 스킬을 더 켤 수 없습니다. 각 세션은 {runtimeSize}까지 스킬을 불러오고 나머지는 제외합니다. 그룹 설정을 변경하거나 사용자에게 스킬을 끄도록 요청하세요.",
-        "tableLabel": "스킬 한도를 넘은 사용자",
-        "columns": {
-          "user": "사용자",
-          "size": "스킬 크기",
-          "files": "파일",
-          "notLoaded": "불러오지 못함"
-        }
+        "description": "스킬이 {maxSize} 또는 파일 {maxFiles, number}개를 넘은 사용자는 스킬을 더 켤 수 없습니다. 그룹 설정을 변경하거나 사용자에게 스킬을 끄도록 요청하세요.",
+        "user": "{email}: {size}, 파일 {files, plural, other {#개}}, 불러오지 못한 스킬 {notLoaded, plural, other {#개}}"
       }
     }
   },

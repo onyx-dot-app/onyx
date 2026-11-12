@@ -754,8 +754,6 @@ export interface BuildSessionData {
   skillsStaleRevision: number;
   /** Skills the run-time limit left out of the user's sandbox. */
   skillOmissions: SkillLimitNotice | null;
-  /** The omission set the user dismissed in this session. */
-  skillOmissionsDismissedKey: string | null;
   origin: SessionOrigin;
   abortController: AbortController;
   lastAccessed: Date;
@@ -1392,7 +1390,6 @@ const createInitialSessionData = (
     skillsStale: false,
     skillsStaleRevision: 0,
     skillOmissions: null,
-    skillOmissionsDismissedKey: null,
     origin: "INTERACTIVE",
     abortController: new AbortController(),
     lastAccessed: new Date(),

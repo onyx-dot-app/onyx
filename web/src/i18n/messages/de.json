@@ -5197,30 +5197,18 @@
           "description": "Nur Admins veröffentlichen Skills für die Organisation."
         },
         "saveSuccess": {
-          "message": "Veröffentlichungseinstellung gespeichert."
+          "message": "Einstellung gespeichert."
         },
         "saveError": {
-          "message": "Die Veröffentlichungseinstellung konnte nicht gespeichert werden."
+          "message": "Einstellung konnte nicht gespeichert werden."
         },
         "defaultAccess": {
           "title": "Standardzugriff",
-          "description": "Gilt für jeden veröffentlichten Skill ohne eigene Einstellung, auch für später veröffentlichte Skills. {setting}",
-          "saveSuccess": {
-            "message": "Standardzugriff gespeichert."
-          },
-          "saveError": {
-            "message": "Standardzugriff konnte nicht gespeichert werden."
-          }
+          "description": "Gilt für jeden veröffentlichten Skill ohne eigene Einstellung, auch für später veröffentlichte Skills."
         },
         "sharing": {
           "title": "Teilen",
-          "description": "Mitglieder können Skills mit Personen und Gruppen teilen. Admins können immer teilen.",
-          "saveSuccess": {
-            "message": "Einstellung zum Teilen gespeichert."
-          },
-          "saveError": {
-            "message": "Die Einstellung zum Teilen konnte nicht gespeichert werden."
-          }
+          "description": "Mitglieder können Skills mit Personen und Gruppen teilen. Admins können immer teilen."
         }
       }
     },
@@ -6419,18 +6407,9 @@
         }
       },
       "plugins": {
-        "intro": "Legen Sie fest, wie jedes Plugin für die Mitglieder dieser Gruppe installiert wird.",
-        "inheritance": "Standardmäßig verwendet jede Gruppe die Einstellung der Organisation.",
-        "conflicts": "Eine Gruppeneinstellung ersetzt die Einstellung der Organisation für ihre Mitglieder, auch wenn sie strenger ist. Ein Mitglied in mehreren Gruppen erhält die offenste Einstellung.",
+        "description": "Legen Sie fest, wie jedes Plugin für die Mitglieder dieser Gruppe installiert wird. Eine Gruppeneinstellung ersetzt die Einstellung der Organisation für ihre Mitglieder, auch wenn sie strenger ist. Ein Mitglied in mehreren Gruppen erhält die offenste Einstellung.",
         "row": {
-          "shared": "Mit dieser Gruppe geteilt",
-          "sharedPublished": "Veröffentlicht und mit dieser Gruppe geteilt",
-          "settingOnly": "Nur Gruppeneinstellung",
-          "inherited": "Verwendet die Einstellung der Organisation: {policy}.",
-          "overridden": "Gruppeneinstellung: {policy}. Einstellung der Organisation: {company}.",
-          "select": "Einstellung für {name}",
-          "remove": "{name} aus dieser Gruppe entfernen",
-          "readOnly": "Nur ein organisationsweiter Plugin-Manager kann diese Einstellung ändern."
+          "access": "{access, select, settingOnly {Nur Gruppeneinstellung} published {Veröffentlicht und mit dieser Gruppe geteilt} other {Mit dieser Gruppe geteilt}}"
         },
         "add": {
           "button": "Plugins hinzufügen",
@@ -15904,8 +15883,7 @@
     },
     "skillRuntimeNotice": {
       "title": "{count, plural, one {# Skill wurde nicht geladen} other {# Skills wurden nicht geladen}}",
-      "description": "Ihre Skills müssen in {maxSize} und {maxFiles, number} Dateien passen. Diese Skills passten nicht, daher kann diese Sitzung sie nicht verwenden. Deaktivieren Sie Skills, die Sie nicht brauchen, um Platz zu schaffen.",
-      "listLabel": "Skills, die nicht geladen wurden",
+      "description": "Diese Sitzung kann {names} nicht verwenden. Ihre Skills müssen in {maxSize} und {maxFiles, number} Dateien passen. Deaktivieren Sie Skills, die Sie nicht brauchen, um Platz zu schaffen.",
       "manage": "Skills verwalten",
       "dismiss": "Schließen"
     }
@@ -17774,12 +17752,9 @@
         "description": "Ausgeblendet. Mitglieder können es weder finden noch aktivieren."
       },
       "inherit": {
-        "group": "Einstellung der Organisation ({policy})",
-        "groupAny": "Einstellung der Organisation",
-        "groupDescription": "Keine Gruppeneinstellung. Die Gruppe verwendet die Einstellung der Organisation.",
-        "organization": "Standard der Organisation ({policy})",
-        "organizationAny": "Standard der Organisation",
-        "organizationDescription": "Keine eigene Einstellung. Der Skill verwendet den Standardzugriff, auch nachdem ein Admin ihn ändert."
+        "label": "{scope, select, group {Einstellung der Organisation} other {Standardzugriff}}",
+        "labelWithPolicy": "{scope, select, group {Einstellung der Organisation ({policy})} other {Standardzugriff ({policy})}}",
+        "description": "{scope, select, group {Keine Gruppeneinstellung. Die Gruppe verwendet die Einstellung der Organisation.} other {Keine eigene Einstellung. Der Skill verwendet den Standardzugriff, auch nachdem ein Admin ihn ändert.}}"
       }
     },
     "groups": {
@@ -17791,30 +17766,14 @@
       "entry": "{name}: {policy}"
     },
     "limit": {
-      "omission": {
-        "size": "{name}: {size}",
-        "withFiles": "{name}: {size}, {files, plural, one {# Datei} other {# Dateien}}"
-      },
       "refused": {
-        "you": "Diese Änderung bringt Sie über das Skill-Limit. Sie würden {size} von {maxSize} und {files, number} von {maxFiles, number} Dateien belegen. Deaktivieren Sie Skills, die Sie nicht verwenden, und versuchen Sie es erneut.",
-        "youAndUsers": "Diese Änderung bringt Sie und {others, plural, one {# weiteren Benutzer} other {# weitere Benutzer}} über das Skill-Limit. Sie würden {size} von {maxSize} und {files, number} von {maxFiles, number} Dateien belegen. Deaktivieren Sie Skills, die Sie nicht verwenden, oder wählen Sie eine engere Einstellung.",
+        "you": "Diese Änderung bringt Sie über das Skill-Limit von {maxSize} oder {maxFiles, number} Dateien. Deaktivieren Sie Skills, die Sie nicht verwenden, und versuchen Sie es erneut.",
         "users": "Diese Änderung bringt {count, plural, one {# Benutzer} other {# Benutzer}} über das Skill-Limit von {maxSize} oder {maxFiles, number} Dateien. Wählen Sie eine engere Einstellung oder bitten Sie sie, Skills zu deaktivieren."
-      },
-      "leftOff": {
-        "title": "{count, plural, one {# Skill bleibt deaktiviert} other {# Skills bleiben deaktiviert}}",
-        "description": "Die App ist verbunden. Diese Skills würden Sie über das Skill-Limit von {maxSize} bringen, daher bleiben sie deaktiviert. Deaktivieren Sie andere Skills, um Platz zu schaffen, und aktivieren Sie dann diese.",
-        "listLabel": "Skills, die deaktiviert bleiben"
       },
       "banner": {
         "title": "{count, plural, one {# Benutzer ist über dem Skill-Limit} other {# Benutzer sind über dem Skill-Limit}}",
-        "description": "Ein Benutzer mit mehr als {maxSize} oder {maxFiles, number} Dateien an Skills kann keine weiteren aktivieren. Jede Sitzung lädt Skills bis {runtimeSize} und lässt den Rest weg. Ändern Sie Gruppeneinstellungen oder bitten Sie Benutzer, Skills zu deaktivieren.",
-        "tableLabel": "Benutzer über dem Skill-Limit",
-        "columns": {
-          "user": "Benutzer",
-          "size": "Skill-Größe",
-          "files": "Dateien",
-          "notLoaded": "Nicht Geladen"
-        }
+        "description": "Ein Benutzer mit mehr als {maxSize} oder {maxFiles, number} Dateien an Skills kann keine weiteren aktivieren. Ändern Sie Gruppeneinstellungen oder bitten Sie Benutzer, Skills zu deaktivieren.",
+        "user": "{email}: {size}, {files, plural, one {# Datei} other {# Dateien}}, {notLoaded, plural, one {# Skill nicht geladen} other {# Skills nicht geladen}}"
       }
     }
   },

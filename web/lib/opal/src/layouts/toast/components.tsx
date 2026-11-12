@@ -166,17 +166,11 @@ function ToastCard({
               bottomChildren={
                 truncated && expanded ? (
                   <ExpandedDetails message={t.message} />
-                ) : (
-                  t.content
-                )
+                ) : undefined
               }
             />
           ) : (
-            <MessageCard
-              {...shared}
-              onClose={close}
-              bottomChildren={t.content}
-            />
+            <MessageCard {...shared} onClose={close} />
           )}
         </div>
       </div>

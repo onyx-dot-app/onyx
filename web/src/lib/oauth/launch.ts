@@ -1,7 +1,6 @@
 import * as yup from "yup";
 import { loadPage } from "@opal/navigation";
 import { DESKTOP_STATE_SUFFIX } from "@/lib/oauth/desktopCallback";
-import { isSkillLimitNotice, type SkillLimitNotice } from "@/lib/skills/limits";
 
 export type OAuthLaunchFailure =
   | "popup_blocked"
@@ -45,7 +44,6 @@ const completionSchema = yup.object({
   state: yup.string().defined(),
   ok: yup.boolean().defined(),
   redirectPath: yup.string().optional(),
-  skillsLeftOff: yup.mixed().optional(),
   error: yup
     .object({
       title: yup.string().defined(),
@@ -58,8 +56,6 @@ const completionSchema = yup.object({
 /** What the callback page reported; `redirectPath` is where it would have redirected. */
 export interface OAuthCompletion {
   redirectPath?: string;
-  /** The app skills the connect left off for the skill limit. */
-  skillsLeftOff?: SkillLimitNotice;
 }
 
 interface DesktopBridge {
@@ -126,8 +122,7 @@ export function notifyOAuthComplete(
   state: string,
   ok = true,
   redirectPath?: string,
-  error?: OAuthFailureDetail,
-  skillsLeftOff?: SkillLimitNotice
+  error?: OAuthFailureDetail
 ): void {
   // Copy only the fields: callers may pass objects with functions, which
   // postMessage cannot clone.
@@ -141,7 +136,6 @@ export function notifyOAuthComplete(
     ok,
     redirectPath,
     error: failure,
-    skillsLeftOff,
   };
   try {
     window.opener?.postMessage(message, window.location.origin);
@@ -283,12 +277,7 @@ export function launchOAuth(
         });
         if (state === null || message.state !== state) return;
         if (message.ok)
-          finish(undefined, {
-            redirectPath: message.redirectPath,
-            skillsLeftOff: isSkillLimitNotice(message.skillsLeftOff)
-              ? message.skillsLeftOff
-              : undefined,
-          });
+          finish(undefined, { redirectPath: message.redirectPath });
         else finish(new OAuthLaunchError("failed", message.error));
       } catch {}
     }
@@ -381,11 +370,10 @@ export function reportOAuthCallback(
   state: string,
   ok: boolean,
   redirectPath?: string,
-  error?: OAuthFailureDetail,
-  skillsLeftOff?: SkillLimitNotice
+  error?: OAuthFailureDetail
 ): boolean {
   const attemptState = stripDesktopOAuthState(state);
-  notifyOAuthComplete(attemptState, ok, redirectPath, error, skillsLeftOff);
+  notifyOAuthComplete(attemptState, ok, redirectPath, error);
   return closeOAuthCallbackWindow(attemptState, ok);
 }
 

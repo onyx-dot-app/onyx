@@ -213,7 +213,7 @@ test.each([
       surface,
     });
     const outcome = connected
-      ? expect(promise).resolves.toBeNull()
+      ? expect(promise).resolves.toBeUndefined()
       : expect(promise).rejects.toMatchObject({ reason: "not_connected" });
     await waitFor(() => expect(popup.location.href).toBe(authUrl));
     notifyOAuthComplete("s1");

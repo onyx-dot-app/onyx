@@ -4,6 +4,4 @@ export const OAUTH_POPUP_MESSAGE_SOURCE = "onyx-external-app-oauth";
 export interface OAuthPopupMessage {
   source: typeof OAUTH_POPUP_MESSAGE_SOURCE;
   externalAppId: number;
-  /** The connect's `skills_left_off_for_limit`. */
-  skillsLeftOff?: unknown;
 }

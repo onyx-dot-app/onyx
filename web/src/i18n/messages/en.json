@@ -5197,30 +5197,18 @@
           "description": "Only admins publish skills to the organization."
         },
         "saveSuccess": {
-          "message": "Publishing setting saved."
+          "message": "Setting saved."
         },
         "saveError": {
-          "message": "Couldn't save the Publishing setting."
+          "message": "Couldn't save the setting."
         },
         "defaultAccess": {
           "title": "Default Access",
-          "description": "Applies to every published skill that doesn't have its own setting, including skills published later. {setting}",
-          "saveSuccess": {
-            "message": "Default access saved."
-          },
-          "saveError": {
-            "message": "Couldn't save Default access."
-          }
+          "description": "Applies to every published skill that doesn't have its own setting, including skills published later."
         },
         "sharing": {
           "title": "Sharing",
-          "description": "Members can share skills with people and groups. Admins can always share.",
-          "saveSuccess": {
-            "message": "Sharing setting saved."
-          },
-          "saveError": {
-            "message": "Couldn't save the Sharing setting."
-          }
+          "description": "Members can share skills with people and groups. Admins can always share."
         }
       }
     },
@@ -6419,18 +6407,9 @@
         }
       },
       "plugins": {
-        "intro": "Set how each plugin is installed for the members of this group.",
-        "inheritance": "By default, every group uses the organization setting.",
-        "conflicts": "A group setting replaces the organization setting for its members, also when it is stricter. A member in several groups gets the most open setting.",
+        "description": "Set how each plugin is installed for the members of this group. A group setting replaces the organization setting for its members, also when it is stricter. A member in several groups gets the most open setting.",
         "row": {
-          "shared": "Shared with this group",
-          "sharedPublished": "Published and shared with this group",
-          "settingOnly": "Group setting only",
-          "inherited": "Uses the organization setting: {policy}.",
-          "overridden": "Group setting: {policy}. Organization setting: {company}.",
-          "select": "Setting for {name}",
-          "remove": "Remove {name} from this group",
-          "readOnly": "Only an organization-wide plugin manager can change this setting."
+          "access": "{access, select, settingOnly {Group setting only} published {Published and shared with this group} other {Shared with this group}}"
         },
         "add": {
           "button": "Add plugins",
@@ -15904,8 +15883,7 @@
     },
     "skillRuntimeNotice": {
       "title": "{count, plural, one {# skill did not load} other {# skills did not load}}",
-      "description": "Your skills must fit in {maxSize} and {maxFiles, number} files. These skills did not fit, so this session cannot use them. Turn off skills you do not need to make room.",
-      "listLabel": "Skills that did not load",
+      "description": "This session cannot use {names}. Your skills must fit in {maxSize} and {maxFiles, number} files. Turn off skills you do not need to make room.",
       "manage": "Manage skills",
       "dismiss": "Dismiss"
     }
@@ -17774,12 +17752,9 @@
         "description": "Hidden. Members can't find or turn it on."
       },
       "inherit": {
-        "group": "Organization setting ({policy})",
-        "groupAny": "Organization setting",
-        "groupDescription": "No group setting. The group uses the organization setting.",
-        "organization": "Organization default ({policy})",
-        "organizationAny": "Organization default",
-        "organizationDescription": "No own setting. The skill uses Default Access, also after an admin changes it."
+        "label": "{scope, select, group {Organization setting} other {Default access}}",
+        "labelWithPolicy": "{scope, select, group {Organization setting ({policy})} other {Default access ({policy})}}",
+        "description": "{scope, select, group {No group setting. The group uses the organization setting.} other {No own setting. The skill uses Default access, also after an admin changes it.}}"
       }
     },
     "groups": {
@@ -17791,30 +17766,14 @@
       "entry": "{name}: {policy}"
     },
     "limit": {
-      "omission": {
-        "size": "{name}: {size}",
-        "withFiles": "{name}: {size}, {files, plural, one {# file} other {# files}}"
-      },
       "refused": {
-        "you": "This change puts you past the skill limit. You would use {size} of {maxSize} and {files, number} of {maxFiles, number} files. Turn off skills you do not use, then try again.",
-        "youAndUsers": "This change puts you and {others, plural, one {# other user} other {# other users}} past the skill limit. You would use {size} of {maxSize} and {files, number} of {maxFiles, number} files. Turn off skills you do not use, or choose a narrower setting.",
+        "you": "This change puts you past the skill limit of {maxSize} or {maxFiles, number} files. Turn off skills you do not use, then try again.",
         "users": "This change puts {count, plural, one {# user} other {# users}} past the skill limit of {maxSize} or {maxFiles, number} files. Choose a narrower setting, or ask them to turn off skills."
-      },
-      "leftOff": {
-        "title": "{count, plural, one {# skill stayed off} other {# skills stayed off}}",
-        "description": "The app is connected. These skills would put you past the {maxSize} skill limit, so they stay off. Turn off other skills to make room, then turn these on.",
-        "listLabel": "Skills that stayed off"
       },
       "banner": {
         "title": "{count, plural, one {# user is past the skill limit} other {# users are past the skill limit}}",
-        "description": "A user past {maxSize} or {maxFiles, number} files of skills cannot turn on more. Each session loads skills up to {runtimeSize} and leaves out the rest. Change group settings, or ask users to turn off skills.",
-        "tableLabel": "Users past the skill limit",
-        "columns": {
-          "user": "User",
-          "size": "Skill Size",
-          "files": "Files",
-          "notLoaded": "Did Not Load"
-        }
+        "description": "A user past {maxSize} or {maxFiles, number} files of skills cannot turn on more. Change group settings, or ask users to turn off skills.",
+        "user": "{email}: {size}, {files, plural, one {# file} other {# files}}, {notLoaded, plural, one {# skill did not load} other {# skills did not load}}"
       }
     }
   },

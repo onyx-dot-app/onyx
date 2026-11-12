@@ -12,7 +12,6 @@ import {
   memberPluginReference,
   type MemberPlugin,
 } from "@/lib/plugins/member";
-import { useSkillsLeftOffToast } from "@/sections/skills/SkillOmissionList";
 
 interface MemberPluginConnectionDialogProps {
   plugin: MemberPlugin;
@@ -42,7 +41,6 @@ export function MemberPluginConnectionContent({
   onConnected,
 }: Omit<MemberPluginConnectionDialogProps, "open">) {
   const t = useTranslations("actions.memberPlugins.connection");
-  const showSkillsLeftOff = useSkillsLeftOffToast();
   const name = memberPluginName(plugin);
   const formId = useId();
   const [credentials, setCredentials] = useState<Record<string, string>>({});
@@ -75,15 +73,12 @@ export function MemberPluginConnectionContent({
     controller.current = current;
     setAttempt({ kind: "pending" });
     try {
-      const skillsLeftOff = await connectMemberPlugin(plugin, credentials, {
+      await connectMemberPlugin(plugin, credentials, {
         signal: current.signal,
         agentId,
         surface,
       });
-      if (!current.signal.aborted) {
-        onConnected();
-        showSkillsLeftOff(skillsLeftOff);
-      }
+      if (!current.signal.aborted) onConnected();
     } catch (error) {
       if (!current.signal.aborted) {
         setAttempt({

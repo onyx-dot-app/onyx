@@ -5197,30 +5197,18 @@
           "description": "管理者だけがスキルを組織に公開できます。"
         },
         "saveSuccess": {
-          "message": "公開設定を保存しました。"
+          "message": "設定を保存しました。"
         },
         "saveError": {
-          "message": "公開設定を保存できませんでした。"
+          "message": "設定を保存できませんでした。"
         },
         "defaultAccess": {
           "title": "デフォルトのアクセス",
-          "description": "独自の設定がない公開済みスキルすべてに適用されます。後から公開されるスキルも含みます。 {setting}",
-          "saveSuccess": {
-            "message": "デフォルトのアクセスを保存しました。"
-          },
-          "saveError": {
-            "message": "デフォルトのアクセスを保存できませんでした。"
-          }
+          "description": "独自の設定がない公開済みスキルすべてに適用されます。後から公開されるスキルも含みます。"
         },
         "sharing": {
           "title": "共有",
-          "description": "メンバーはスキルをユーザーやグループと共有できます。管理者は常に共有できます。",
-          "saveSuccess": {
-            "message": "共有設定を保存しました。"
-          },
-          "saveError": {
-            "message": "共有設定を保存できませんでした。"
-          }
+          "description": "メンバーはスキルをユーザーやグループと共有できます。管理者は常に共有できます。"
         }
       }
     },
@@ -6419,18 +6407,9 @@
         }
       },
       "plugins": {
-        "intro": "このグループのメンバーに各プラグインをどのようにインストールするかを設定します。",
-        "inheritance": "既定では、すべてのグループが組織の設定を使用します。",
-        "conflicts": "グループ設定は、より厳しい場合でも、そのメンバーについて組織の設定を置き換えます。複数のグループに属するメンバーには、最も緩い設定が適用されます。",
+        "description": "このグループのメンバーに各プラグインをどのようにインストールするかを設定します。グループ設定は、より厳しい場合でも、そのメンバーについて組織の設定を置き換えます。複数のグループに属するメンバーには、最も緩い設定が適用されます。",
         "row": {
-          "shared": "このグループと共有",
-          "sharedPublished": "公開済みでこのグループと共有",
-          "settingOnly": "グループ設定のみ",
-          "inherited": "組織の設定を使用: {policy}。",
-          "overridden": "グループ設定: {policy}。組織の設定: {company}。",
-          "select": "{name} の設定",
-          "remove": "{name} をこのグループから削除",
-          "readOnly": "この設定を変更できるのは、組織全体のプラグイン管理者だけです。"
+          "access": "{access, select, settingOnly {グループ設定のみ} published {公開済みでこのグループと共有} other {このグループと共有}}"
         },
         "add": {
           "button": "プラグインを追加",
@@ -15904,8 +15883,7 @@
     },
     "skillRuntimeNotice": {
       "title": "{count, plural, other {# 件のスキルを読み込めませんでした}}",
-      "description": "スキルは {maxSize} かつ {maxFiles, number} ファイル以内に収める必要があります。これらのスキルは収まらなかったため、このセッションでは使用できません。不要なスキルをオフにして空きを作ってください。",
-      "listLabel": "読み込めなかったスキル",
+      "description": "このセッションでは {names} を使用できません。スキルは {maxSize} かつ {maxFiles, number} ファイル以内に収める必要があります。不要なスキルをオフにして空きを作ってください。",
       "manage": "スキルを管理",
       "dismiss": "閉じる"
     }
@@ -17774,12 +17752,9 @@
         "description": "非表示です。メンバーは見つけることもオンにすることもできません。"
       },
       "inherit": {
-        "group": "組織の設定（{policy}）",
-        "groupAny": "組織の設定",
-        "groupDescription": "グループ設定はありません。グループは組織の設定を使用します。",
-        "organization": "組織のデフォルト（{policy}）",
-        "organizationAny": "組織のデフォルト",
-        "organizationDescription": "独自の設定はありません。管理者が変更した後も、スキルはデフォルトアクセスを使用します。"
+        "label": "{scope, select, group {組織の設定} other {デフォルトのアクセス}}",
+        "labelWithPolicy": "{scope, select, group {組織の設定（{policy}）} other {デフォルトのアクセス（{policy}）}}",
+        "description": "{scope, select, group {グループ設定はありません。グループは組織の設定を使用します。} other {独自の設定はありません。管理者が変更した後も、スキルはデフォルトアクセスを使用します。}}"
       }
     },
     "groups": {
@@ -17791,30 +17766,14 @@
       "entry": "{name}: {policy}"
     },
     "limit": {
-      "omission": {
-        "size": "{name}: {size}",
-        "withFiles": "{name}: {size}、{files, plural, other {# ファイル}}"
-      },
       "refused": {
-        "you": "この変更によりスキルの上限を超えます。使用量は {maxSize} 中 {size}、{maxFiles, number} ファイル中 {files, number} ファイルになります。使っていないスキルをオフにしてから、もう一度お試しください。",
-        "youAndUsers": "この変更により、あなたと他の {others, plural, other {# 人のユーザー}}がスキルの上限を超えます。使用量は {maxSize} 中 {size}、{maxFiles, number} ファイル中 {files, number} ファイルになります。使っていないスキルをオフにするか、より限定的な設定を選んでください。",
+        "you": "この変更により {maxSize} または {maxFiles, number} ファイルのスキル上限を超えます。使っていないスキルをオフにしてから、もう一度お試しください。",
         "users": "この変更により {count, plural, other {# 人のユーザー}}が {maxSize} または {maxFiles, number} ファイルのスキル上限を超えます。より限定的な設定を選ぶか、スキルをオフにするよう依頼してください。"
-      },
-      "leftOff": {
-        "title": "{count, plural, other {# 件のスキルはオフのままです}}",
-        "description": "アプリは接続されました。これらのスキルをオンにすると {maxSize} のスキル上限を超えるため、オフのままです。ほかのスキルをオフにして空きを作ってから、これらをオンにしてください。",
-        "listLabel": "オフのままのスキル"
       },
       "banner": {
         "title": "{count, plural, other {# 人のユーザーがスキルの上限を超えています}}",
-        "description": "スキルが {maxSize} または {maxFiles, number} ファイルを超えているユーザーは、これ以上スキルをオンにできません。各セッションは {runtimeSize} までのスキルを読み込み、残りは除外します。グループ設定を変更するか、ユーザーにスキルをオフにするよう依頼してください。",
-        "tableLabel": "スキルの上限を超えているユーザー",
-        "columns": {
-          "user": "ユーザー",
-          "size": "スキルのサイズ",
-          "files": "ファイル",
-          "notLoaded": "未読み込み"
-        }
+        "description": "スキルが {maxSize} または {maxFiles, number} ファイルを超えているユーザーは、これ以上スキルをオンにできません。グループ設定を変更するか、ユーザーにスキルをオフにするよう依頼してください。",
+        "user": "{email}: {size}、{files, plural, other {# ファイル}}、読み込まれなかったスキル {notLoaded, plural, other {# 件}}"
       }
     }
   },
