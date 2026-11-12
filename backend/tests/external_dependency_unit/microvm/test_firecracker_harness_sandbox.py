@@ -458,6 +458,14 @@ def test_output_is_cut_to_max_output_tokens_head_and_tail(
     assert result.original_token_count == (len(text) + 1 + 3) // 4
 
 
+def test_output_that_the_daemon_dropped_marks_the_buffer_truncated() -> None:
+    buffer = ExecOutputBuffer()
+    buffer.add(OutputStream.STDOUT, b"a")
+    assert not buffer.truncated
+    assert "lost" in buffer.add_gap(OutputStream.STDOUT, 10)
+    assert buffer.truncated
+
+
 def test_the_output_buffer_keeps_head_and_tail_bytes() -> None:
     buffer = ExecOutputBuffer(max_bytes=10)
     assert buffer.add(OutputStream.STDOUT, b"0123") == "0123"

@@ -38,6 +38,7 @@ class ExecOutputBuffer:
         self._tail: deque[str] = deque()
         self._tail_bytes = 0
         self._dropped = 0
+        self._lost = False
         self.total_bytes = 0
         self._decoders = {
             stream: codecs.getincrementaldecoder("utf-8")(errors="replace")
@@ -54,6 +55,7 @@ class ExecOutputBuffer:
         """The daemon dropped `count` bytes of a stream before we read them.
         Bytes on each side of the gap are not one character: flush the
         decoder and start a new one."""
+        self._lost = True
         pending = self._add_text(self._decoders[stream].decode(b"", final=True))
         self._decoders[stream] = codecs.getincrementaldecoder("utf-8")(errors="replace")
         return pending + self._add_text(
@@ -101,7 +103,7 @@ class ExecOutputBuffer:
 
     @property
     def truncated(self) -> bool:
-        return self._dropped > 0
+        return self._dropped > 0 or self._lost
 
     def text(self) -> str:
         head = "".join(self._head)
