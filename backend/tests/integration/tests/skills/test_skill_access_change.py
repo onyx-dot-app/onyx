@@ -8,6 +8,7 @@ from collections.abc import Generator
 from typing import Any
 from uuid import UUID, uuid4
 
+import httpx
 import pytest
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
@@ -22,6 +23,7 @@ from onyx.db.models import (
     User__UserGroup,
 )
 from onyx.db.permissions import recompute_user_permissions__no_commit
+from onyx.server.features.skill.models import SkillBulkResponse
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -53,7 +55,9 @@ def _group(admin: DATestUser, user_ids: list[str] | None = None) -> DATestUserGr
     )
 
 
-def _share(user: DATestUser, skill_id: UUID | str, body: dict[str, Any]) -> Any:
+def _share(
+    user: DATestUser, skill_id: UUID | str, body: dict[str, Any]
+) -> httpx.Response:
     return client.patch(
         f"{API_SERVER_URL}/skills/custom/{skill_id}/share",
         json=body,
@@ -63,7 +67,7 @@ def _share(user: DATestUser, skill_id: UUID | str, body: dict[str, Any]) -> Any:
 
 def _bulk_share(
     user: DATestUser, skill_ids: list[UUID], sharing: dict[str, Any]
-) -> dict[str, Any]:
+) -> SkillBulkResponse:
     response = client.post(
         f"{API_SERVER_URL}/skills/bulk",
         json={
@@ -74,7 +78,7 @@ def _bulk_share(
         headers=user.headers,
     )
     response.raise_for_status()
-    return response.json()
+    return SkillBulkResponse.model_validate(response.json())
 
 
 def _set_group_install_setting(
@@ -173,7 +177,7 @@ def test_bulk_share_keeps_group_install_setting(admin_user: DATestUser) -> None:
         {"group_shares": [{"group_id": share_group.id, "permission": "VIEWER"}]},
     )
 
-    assert result["failed"] == []
+    assert result.failed == []
     assert _group_rows(skill.id) == {
         setting_group.id: (None, PluginInstallationPolicy.DEFAULT),
         share_group.id: (SkillSharePermission.VIEWER, None),
@@ -246,8 +250,8 @@ def test_group_manager_is_refused_outside_their_groups(
     assert single.status_code == 403
 
     result = _bulk_share(manager, [skill.id for skill in skills], outside)
-    assert result["succeeded"] == []
-    assert {UUID(failure["skill_id"]) for failure in result["failed"]} == {
+    assert result.succeeded == []
+    assert {failure.skill_id for failure in result.failed} == {
         skill.id for skill in skills
     }
     for skill in skills:
@@ -273,7 +277,7 @@ def test_group_manager_is_refused_a_company_install_setting(
     assert single.status_code == 403
 
     result = _bulk_share(manager, [skill.id], {"installation_policy": "REQUIRED"})
-    assert [UUID(failure["skill_id"]) for failure in result["failed"]] == [skill.id]
+    assert [failure.skill_id for failure in result.failed] == [skill.id]
     assert _company_settings(skill.id) == (None, "AVAILABLE")
 
 
@@ -319,21 +323,21 @@ def test_admin_changes_the_company_install_setting(admin_user: DATestUser) -> No
         admin_user, single.id, {"installation_policy": "REQUIRED"}
     ).raise_for_status()
     result = _bulk_share(admin_user, [bulk.id], {"installation_policy": "DEFAULT"})
-    assert result["failed"] == []
+    assert result.failed == []
     assert _company_settings(single.id) == ("REQUIRED", "REQUIRED")
     assert _company_settings(bulk.id) == ("DEFAULT", "DEFAULT")
 
     # A missing setting changes nothing.
     _share(admin_user, single.id, {"user_shares": []}).raise_for_status()
     result = _bulk_share(admin_user, [bulk.id], {"user_shares": []})
-    assert result["failed"] == []
+    assert result.failed == []
     assert _company_settings(single.id) == ("REQUIRED", "REQUIRED")
     assert _company_settings(bulk.id) == ("DEFAULT", "DEFAULT")
 
     # An explicit null takes the marketplace default.
     _share(admin_user, single.id, {"installation_policy": None}).raise_for_status()
     result = _bulk_share(admin_user, [bulk.id], {"installation_policy": None})
-    assert result["failed"] == []
+    assert result.failed == []
     assert _company_settings(single.id) == (None, "AVAILABLE")
     assert _company_settings(bulk.id) == (None, "AVAILABLE")
     _assert_rows_match(single.id, bulk.id)

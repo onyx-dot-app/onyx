@@ -684,16 +684,11 @@ def replace_skill_bundle(
     return version
 
 
-def _publish_requested(
+def _ensure_external_app_skill_stays_public(
     skill: Skill,
     public_permission: SkillSharePermission | None,
     db_session: Session,
-) -> bool:
-    """Check a request for organization access to a custom skill, and return
-    whether it publishes. VIEWER publishes. None keeps the skill private and is
-    refused for a published skill, because publishing is one-way.
-    Organization-wide EDITOR is refused; editors are named users and groups. A
-    skill linked to an external app stays published."""
+) -> None:
     is_associated = db_session.scalar(
         select(
             exists().where(
@@ -707,6 +702,19 @@ def _publish_requested(
             "Skills associated with an external app must remain visible to the "
             "organization with viewer access.",
         )
+
+
+def _publish_requested(
+    skill: Skill,
+    public_permission: SkillSharePermission | None,
+    db_session: Session,
+) -> bool:
+    """Check a request for organization access to a custom skill, and return
+    whether it publishes. VIEWER publishes. None keeps the skill private and is
+    refused for a published skill, because publishing is one-way.
+    Organization-wide EDITOR is refused; editors are named users and groups. A
+    skill linked to an external app stays published."""
+    _ensure_external_app_skill_stays_public(skill, public_permission, db_session)
     if public_permission == SkillSharePermission.EDITOR:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
@@ -733,6 +741,7 @@ def set_skill_public_permission(
     """Publish a custom skill (VIEWER) or keep it private (None), with no
     permission check. Routes use ``share_skill__no_commit``."""
     if not skill.is_custom:
+        _ensure_external_app_skill_stays_public(skill, public_permission, db_session)
         skill.public_permission = public_permission
         db_session.flush()
         return
