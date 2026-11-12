@@ -179,7 +179,7 @@ func Sync(opts SyncAlertsOptions) (SyncResult, error) {
 	if !opts.KeepOpen {
 		covered = coveredEcosystems(scanned)
 		for _, p := range packages {
-			covered[canonicalEcosystem(p.Ecosystem)+"/"+canonicalPackage(p.Ecosystem, p.Package)] = true
+			covered[alertKey(Finding{Ecosystem: p.Ecosystem, Package: p.Package})] = true
 		}
 	}
 	plan := planAlerts(alerts, open, covered)

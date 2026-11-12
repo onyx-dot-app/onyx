@@ -534,8 +534,9 @@ func TestSyncCleanPackageCoverage(t *testing.T) {
 			calls := fakeIssueGH(t, bin, []map[string]any{
 				{"number": 8, "url": "u8", "body": renderAlertBody(Alert{Key: "UnknownPackage/example"})},
 				{"number": 9, "url": "u9", "body": renderAlertBody(Alert{Key: "UnknownPackage/unscanned"})},
+				{"number": 10, "url": "u10", "body": renderAlertBody(Alert{Key: "PyPI/pillow"})},
 			})
-			file := writeResult(t, t.TempDir(), "image-sandbox.json", Result{ScannedPackages: []ScannedPackage{{Ecosystem: "UnknownPackage", Package: "example"}}})
+			file := writeResult(t, t.TempDir(), "image-sandbox.json", Result{ScannedPackages: []ScannedPackage{{Ecosystem: "UnknownPackage", Package: "example"}, {Ecosystem: "pip", Package: "Pillow"}}})
 			if _, err := Sync(SyncAlertsOptions{ResultFiles: []string{file}, KeepOpen: keepOpen}); err != nil {
 				t.Fatal(err)
 			}
@@ -547,7 +548,7 @@ func TestSyncCleanPackageCoverage(t *testing.T) {
 			}
 			want := []string{}
 			if !keepOpen {
-				want = []string{"8"}
+				want = []string{"8", "10"}
 			}
 			if !reflect.DeepEqual(closed, want) {
 				t.Fatalf("closed %v want %v", closed, want)
