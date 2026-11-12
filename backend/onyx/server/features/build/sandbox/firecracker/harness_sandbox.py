@@ -188,7 +188,19 @@ class FirecrackerHarnessSandbox(HarnessSandbox):
         )
         give_up_at = time.monotonic() + WAKE_RETRY_SECONDS
         delay = 0.25
-        while True:
+        pause = 0.0
+        last_error: Exception | None = None
+        # The first attempt always runs.
+        while last_error is None or time.monotonic() + pause < give_up_at:
+            if last_error is not None:
+                logger.info(
+                    "sandbox_fc_wake_retry sandbox=%s pause=%.2f error=%s",
+                    ref.sandbox_id,
+                    pause,
+                    last_error,
+                )
+                time.sleep(pause)
+                delay = min(delay * 2, 2.0)
             try:
                 placed = wake_sandbox_vm(
                     shared_cache, tenant_cache, self._client_factory, request
@@ -209,17 +221,9 @@ class FirecrackerHarnessSandbox(HarnessSandbox):
                     and e.error_code is not OnyxErrorCode.SANDBOX_CAPACITY_UNAVAILABLE
                 ):
                     raise
+                last_error = e
                 pause = random.uniform(delay / 2, delay)
-                if time.monotonic() + pause > give_up_at:
-                    raise
-                logger.info(
-                    "sandbox_fc_wake_retry sandbox=%s pause=%.2f error=%s",
-                    ref.sandbox_id,
-                    pause,
-                    e,
-                )
-                time.sleep(pause)
-                delay = min(delay * 2, 2.0)
+        raise last_error
 
     def _initialized(self, placed: PlacedVm) -> bool:
         health = sandbox_daemon(self._client_factory, placed).health()
