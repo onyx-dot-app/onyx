@@ -375,7 +375,8 @@ Agents become reachable when their signing-key registration carries
   Deployment records sandbox audit status separately and requires success before
   sandbox publication, including reuse of an existing context image.
   `.github/workflows/cve-tracking.yml` observes releases independently of pin PRs.
-  `.github/workflows/update-sandbox-browser.yml` opens browser pin updates.
+  `.github/workflows/update-sandbox-browser.yml` uses the shared task-PR workflow
+  to update main and the four newest release lines every four hours.
 
 
 - **One sandbox per user, not per session.** Sessions share a warm pod, the

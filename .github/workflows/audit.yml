@@ -153,6 +153,7 @@ jobs:
       - name: Test image resolver and gate failures
         run: |
           python3 -m unittest discover -s .github/scripts -p test_base_image_ref.py -v
+          python3 -m unittest discover -s .github/scripts -p test_browser_update_pr.py -v
 
       - name: Build browser OS stage
         run: >-
