@@ -14,8 +14,12 @@ export function processRawChatHistory(
   let agentMessageInd = 0;
 
   rawMessages.forEach((messageInfo) => {
-    const packetsForMessage = packets[agentMessageInd];
-    if (messageInfo.message_type === "assistant") {
+    // Only assistant messages own a packet list.
+    const isAssistant = messageInfo.message_type === "assistant";
+    const packetsForMessage = isAssistant
+      ? packets[agentMessageInd]
+      : undefined;
+    if (isAssistant) {
       agentMessageInd++;
     }
 
