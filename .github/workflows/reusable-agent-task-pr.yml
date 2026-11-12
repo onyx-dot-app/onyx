@@ -38,10 +38,6 @@ on:
         description: "Trusted Python script accepting base and head refs"
         type: string
         default: ""
-      workflow-permission:
-        description: "Request workflow permission when publishing release history"
-        type: boolean
-        default: false
       task-runner:
         description: "Execution adapter: script or claude-code"
         required: false
@@ -179,7 +175,6 @@ jobs:
           private-key: ${{ secrets.CHERRY_PICK_APP_PRIVATE_KEY }}
           permission-contents: write
           permission-pull-requests: write
-          permission-workflows: ${{ inputs.workflow-permission && 'write' || '' }}
 
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6

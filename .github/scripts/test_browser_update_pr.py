@@ -149,10 +149,14 @@ class BrowserUpdatePRTests(unittest.TestCase):
                 "curl": '#!/bin/sh\ncase "$*" in\n*last-known*) printf \'{"channels":{"Stable":{"version":"%s"}}}\' "$STABLE";;\n*linux-arm64*) printf "%s-arm64" "$STABLE";;\n*) printf "%s-amd64" "$STABLE";;\nesac\n',
                 "gh": """#!/bin/sh
 case "$1 $2" in
+"api --paginate")
+  if [ -n "$REVIEW_COMPLETE" ]; then echo '[[{"user":{"type":"User"}}]]';
+  else echo '[[{"user":{"type":"Bot"}}]]'; fi;;
 "pr list") if [ -n "$EXISTING_PR" ] || [ -f "$CREATED_PR" ]; then echo 123; fi;;
 "pr create") touch "$CREATED_PR"; echo "pr create" >> "$PR_CALLS";;
 "pr view")
-  if [ -f "$REVIEW_DONE" ]; then
+  if [ -n "$REVIEW_COMPLETE" ]; then echo '{"reviewRequests":[],"reviews":[]}';
+  elif [ -f "$REVIEW_DONE" ]; then
     echo '{"reviewRequests":[{"login":"reviewer"}],"reviews":[]}'
   else
     echo '{"reviewRequests":[],"reviews":[]}'
@@ -219,7 +223,7 @@ esac
             self.assertIn("notify=true", output.read_text())
             output.unlink()
             calls_before = Path(env["PR_CALLS"]).read_text().count("--add-reviewer")
-            result = publish(env)
+            result = publish({**env, "REVIEWER": "another-reviewer"})
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("notify=false", output.read_text())
             self.assertIn("pr_number=123", output.read_text())
@@ -230,6 +234,12 @@ esac
                 first,
                 run(root, "git", "ls-remote", "origin", f"refs/heads/{branch}").stdout,
             )
+            output.unlink()
+            result = publish(
+                {**env, "REVIEWER": "another-reviewer", "REVIEW_COMPLETE": "true"}
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("notify=false", output.read_text())
             # Identical output must refresh a PR if the base changed its paths.
             run(root, "git", "checkout", "main")
             intermediate = run(

@@ -46,7 +46,6 @@ jobs:
     with:
       task-name: sandbox-browser
       base: ${{ matrix.base }}
-      workflow-permission: true
       script: .github/scripts/update-browser-task.py
       diff-validator: .github/scripts/verify-browser-pin.py
       files: backend/onyx/server/features/build/sandbox/image/install-browser.sh

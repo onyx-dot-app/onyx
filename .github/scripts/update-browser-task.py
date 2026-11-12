@@ -21,5 +21,6 @@ if installer.exists():
     if version:
         args.rationale_file.write_text(
             f"\nUpdate Chrome to {version} with both archive checksums. "
-            "Dependency Audit checks native rendering on both architectures.\n"
+            "CI uses the target branch’s checks. Backport browser audit and native "
+            "rendering checks before merging release-branch updates.\n"
         )

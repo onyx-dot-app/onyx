@@ -455,7 +455,9 @@ The updater uses the shared task-PR workflow for main and four supported release
 The shared workflow owns script execution and PR publication.
 The browser validator accepts only a version increase and both checksum changes.
 Branches run independently. Identical output does not push another commit.
-Native browser rendering, screenshot, and vulnerability checks run on both architectures.
+On main, native rendering, screenshot, and vulnerability checks run on both architectures.
+Release PRs use their target branch’s checks. Backport the audit tooling and rendering
+checks before merging release-branch pin updates.
 The updater opens PRs for the normal review and merge process.
 
 Run the policy and publication tests from the repository root:

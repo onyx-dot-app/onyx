@@ -76,11 +76,12 @@ edit_args=(--body-file "$body")
 if [ -n "${REVIEWER:-}" ]; then
   needs_review=true
   if [ "$notify" = false ]; then
-    reviews="$(gh pr view "$existing" --json reviewRequests,reviews)"
-    if jq -e --arg reviewer "$REVIEWER" '
-      [.reviewRequests[]?.login, .reviews[]?.author.login]
-      | any(. != null and (ascii_downcase == ($reviewer | ascii_downcase)))
-    ' <<< "$reviews" > /dev/null; then needs_review=false; fi
+    requests="$(gh pr view "$existing" --json reviewRequests)"
+    reviews="$(gh api --paginate --slurp "repos/{owner}/{repo}/pulls/$existing/reviews")"
+    if jq -e '.reviewRequests | length > 0' <<< "$requests" > /dev/null \
+      || jq -e 'any(.[][]; .user.type == "User")' <<< "$reviews" > /dev/null; then
+      needs_review=false
+    fi
   fi
   if [ "$needs_review" = true ]; then
     edit_args+=(--add-reviewer "$REVIEWER")
