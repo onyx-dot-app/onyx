@@ -6,7 +6,13 @@ import type { PendingChatMessage } from "@/lib/chat/types";
 jest.mock("swr", () => ({ mutate: jest.fn() }));
 
 function pending(id: string): PendingChatMessage {
-  return { id, message: id, delivery: "send", target_response_id: 2 };
+  return {
+    id,
+    message: id,
+    delivery: "send",
+    target_response_id: 2,
+    deep_research: false,
+  };
 }
 
 test("a stream removes the pending input its turn accepts", async () => {

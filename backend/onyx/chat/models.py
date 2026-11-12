@@ -81,6 +81,7 @@ class PendingChatMessage(BaseModel):
     message: str
     delivery: MessageDelivery
     target_response_id: int | None
+    deep_research: bool = False
 
 
 class QueuedChatTurn(BaseModel):

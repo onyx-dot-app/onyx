@@ -183,7 +183,7 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
       busy,
       hasTargetResponse,
       needsResponseSelection,
-      submit: async (message, delivery) =>
+      submit: async (message, delivery, deepResearch) =>
         (await request(async (key) => {
           const session = sessionId
             ? useChatSessionStore.getState().sessions.get(sessionId)
@@ -199,6 +199,7 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
                   delivery,
                   target_response_id: pendingInputTarget(session?.messageTree)
                     .targetResponseId,
+                  deep_research: deepResearch,
                 }),
               }
             );

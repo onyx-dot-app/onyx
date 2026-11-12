@@ -456,7 +456,14 @@ const AppInputBar = React.memo(
       if (delivery === "interrupt") stopTTS({ manual: true });
       clearMessage();
       clearChatDraft();
-      if (await queue.submit(submitted.trim(), delivery)) return;
+      if (
+        await queue.submit(
+          submitted.trim(),
+          delivery,
+          deepResearchEnabled && showDeepResearch
+        )
+      )
+        return;
       returnText(sessionId, submitted);
     }
 

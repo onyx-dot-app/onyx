@@ -1549,3 +1549,23 @@ def test_interrupt_during_preparation_stops_the_turn_when_it_publishes(
         release.set()
         stream.close()
         assert chat_turn_work.wait_idle(timeout=30)
+
+
+def test_a_queued_message_starts_its_turn_as_deep_research(
+    client: TestClient, chat: ChatSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    started: list[SendMessageRequest] = []
+
+    def prepare(*, new_msg_req: SendMessageRequest, **_kwargs: Any) -> None:
+        started.append(new_msg_req)
+        raise OnyxError(OnyxErrorCode.CONFLICT, "Recorded the queued turn")
+
+    monkeypatch.setattr("onyx.chat.process_message.prepare_chat_turn", prepare)
+    queued = client.post(
+        f"/chat/chat-session/{chat.id}/pending-messages",
+        json={"message": "Research this", "delivery": "queue", "deep_research": True},
+    )
+    assert queued.status_code == 200, queued.text
+    assert queued.json()["deep_research"] is True
+    assert chat_turn_work.wait_idle(timeout=30)
+    assert [request.deep_research for request in started] == [True]

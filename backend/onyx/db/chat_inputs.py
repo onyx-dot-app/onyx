@@ -148,6 +148,7 @@ def _pending_human_message(row: ChatInput) -> PendingChatMessage:
         message=row.content,
         delivery=row.delivery,
         target_response_id=row.target_response_id,
+        deep_research=row.deep_research,
     )
 
 
@@ -173,6 +174,7 @@ def submit_human_message__no_commit(
     delivery: MessageDelivery,
     target_response_id: int | None,
     turn_preparing: bool,
+    deep_research: bool = False,
 ) -> PendingChatMessage:
     """Store text after authorization. Only `send` binds to a running response.
 
@@ -234,6 +236,7 @@ def submit_human_message__no_commit(
         else None,
         delivery=delivery,
         content=_pending_content(message),
+        deep_research=deep_research,
     )
     session.add(row)
     session.flush()

@@ -4,7 +4,13 @@ import { useQueuedMessageNavigation } from "@/hooks/useQueuedMessageNavigation";
 import type { PendingChatMessage } from "@/lib/chat/types";
 
 const messages: PendingChatMessage[] = [
-  { id: "queued", message: "Queued", delivery: "queue", target_response_id: 2 },
+  {
+    id: "queued",
+    message: "Queued",
+    delivery: "queue",
+    target_response_id: 2,
+    deep_research: false,
+  },
 ];
 
 function keyDown(key: string): KeyboardEvent<HTMLDivElement> {

@@ -206,6 +206,13 @@ class PendingChatMessageRequest(BaseModel):
             "The response that receives a send. Omit to use the current response."
         ),
     )
+    deep_research: bool = Field(
+        default=False,
+        description=(
+            "Start the message's turn as Deep Research when it is queued or "
+            "interrupts. A send into a running response ignores it."
+        ),
+    )
 
     @field_validator("message")
     @classmethod

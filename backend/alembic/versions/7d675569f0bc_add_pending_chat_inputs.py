@@ -44,6 +44,9 @@ def upgrade() -> None:
         ),
         sa.Column("delivery", sa.String(), nullable=True),
         sa.Column("content", sa.Text(), nullable=False),
+        sa.Column(
+            "deep_research", sa.Boolean(), nullable=False, server_default=sa.false()
+        ),
         # IS TRUE: a NULL comparison makes CHECK pass, so require a true result.
         sa.CheckConstraint(
             "(source = 'human' AND delivery IN ('send', 'queue', 'interrupt')) IS TRUE",
