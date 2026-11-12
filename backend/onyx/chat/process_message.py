@@ -436,9 +436,18 @@ def prepare_chat_turn(
                         else content_free_file_descriptors(new_msg_req.file_descriptors)
                     ),
                     db_session=db_session,
-                    commit=True,
+                    commit=False,
                 )
                 chat_history.append(user_message)
+                # The question and its responses are saved together, so a later
+                # preparation failure saves an error response that queued input
+                # can follow.
+                response_ids = reserve_chat_response_ids(
+                    db_session=db_session,
+                    chat_session_id=chat_session.id,
+                    parent_message_id=user_message.id,
+                    model_display_names=[name for _, name in selected_models],
+                )
             persona = chat_session.persona
             user_message_id = chat_history[-1].id
             context_user_files = capture_user_file_metadata(

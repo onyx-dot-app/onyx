@@ -51,10 +51,12 @@
   multi-model deep research request. The other cases end the turn with an error.
 - **When the turn fails** in setup (no access to a document set, a bad model
   setting, a Query Processing hook that rejects the message), the user sees one
-  error, and no response row is reserved. Queued input is accepted and its
-  answer reserved right after admission, so a later failure, including a rate
-  or spend limit, saves an error answer that pauses the queue instead of
-  retrying. A failure after reservation is saved
+  error, and no response row is reserved. A saved question always has its
+  answer reserved in the same transaction: queued input right after admission,
+  a send when its question is saved. A later failure, including a rate or spend
+  limit or attachment loading, therefore saves an error answer that pauses the
+  queue instead of leaving the question without an answer. A failure after
+  reservation is saved
   per model: a launch failure adds one `CHAT_STARTUP_ERROR` packet, then each
   model streams and saves its own error. Agent construction errors (preferred tool
   missing, deep research in a project or with a small model) and failures during

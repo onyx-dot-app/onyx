@@ -78,12 +78,11 @@ availability and the record mode; this component applies them.
 
 ```
 prepare_chat_turn                          chat/process_message.py
-  create_new_chat_message (user row)       queued input commits with its reserved answer;
-                                           other sends commit the user row at once
-  RedisChatHistoryStore.save_user_messages      USAGE_ONLY: Redis, before reservation
+  create_new_chat_message (user row)       commits in one transaction with
   reserve_chat_response_ids                db/chat.py: assistant row(s), placeholder
-                                           text, response_status NULL, committed;
-                                           moves the parent's active pointer to it
+                                           text, response_status NULL; moves the
+                                           parent's active pointer to it
+  RedisChatHistoryStore.save_user_messages      USAGE_ONLY: Redis, after reservation
 ChatRunStore (content-persisting only)     chat/run_store.py; each save commits alone
   register (run start)                     save_response_record__no_commit: RUNNING,
                                            no steps yet

@@ -916,6 +916,58 @@ def test_unsuccessful_or_unauthorized_dispatch_preserves_pending_messages(
         assert chat_turn_work.wait_idle(timeout=30)
 
 
+def test_send_now_starts_after_a_send_fails_during_preparation(
+    client: TestClient,
+    chat: ChatSession,
+    owner: User,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A send that fails after saving its question leaves a startable queue."""
+    path = f"/chat/chat-session/{chat.id}/pending-messages"
+    model = QueueTestLLM(
+        lambda _request, _signal: AssistantMessage(content=[TextContent(text="Done")])
+    )
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
+    )
+
+    def fail(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("File store unavailable")
+
+    with monkeypatch.context() as failing_files:
+        failing_files.setattr("onyx.chat.process_message.load_chat_files", fail)
+        for _packet in handle_stream_message_objects(
+            new_msg_req=SendMessageRequest(
+                message="Initial question", chat_session_id=chat.id
+            ),
+            user=owner,
+        ):
+            pass
+    assert chat_turn_work.wait_idle(timeout=30)
+    db_session.expire_all()
+    [failed] = db_session.scalars(
+        select(ChatMessage).where(
+            ChatMessage.chat_session_id == chat.id,
+            ChatMessage.message_type == MessageType.ASSISTANT,
+        )
+    ).all()
+    assert failed.response_status == RunStatus.ERROR
+
+    sent_now = client.post(path, json={"message": "Try again", "delivery": "interrupt"})
+    assert sent_now.status_code == 200, sent_now.text
+    assert chat_turn_work.wait_idle(timeout=30)
+    assert client.get(path).json() == []
+    db_session.expire_all()
+    questions = db_session.scalars(
+        select(ChatMessage.message).where(
+            ChatMessage.chat_session_id == chat.id,
+            ChatMessage.message_type == MessageType.USER,
+        )
+    ).all()
+    assert sorted(questions) == ["Initial question", "Try again"]
+
+
 # Each failure point follows the response reservation in turn preparation.
 @pytest.mark.parametrize(
     "failure", ["token_rate_limit", "write_access", "model_setup", "file_loading"]
