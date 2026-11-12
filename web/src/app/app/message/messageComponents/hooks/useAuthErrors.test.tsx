@@ -77,4 +77,29 @@ describe("useAuthErrors", () => {
       { turnIndex: 2, toolName: "get_user", toolId: 7 },
     ]);
   });
+
+  it("reports errors appended to the same packet array", () => {
+    const packets: Packet[] = [authError("custom__7__get_user", "get_user", 7)];
+    const { result, rerender } = renderHook(() => useAuthErrors(packets));
+    expect(result.current).toHaveLength(1);
+
+    // Streams append to the array they already passed.
+    packets.push(
+      {
+        placement: { turn_index: 1 },
+        obj: {
+          type: PacketType.USER_MESSAGE,
+          id: "accepted",
+          message: "Try again",
+        },
+      },
+      authError("custom__7__get_user", "get_user", 7, 2)
+    );
+    rerender();
+
+    expect(result.current).toEqual([
+      { turnIndex: 0, toolName: "get_user", toolId: 7 },
+      { turnIndex: 2, toolName: "get_user", toolId: 7 },
+    ]);
+  });
 });
