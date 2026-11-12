@@ -193,7 +193,11 @@ export function buildMockCodeModeCellStream({
   const answer = { turn_index: waits ? 2 : 1, tab_index: 0 };
   const callStart = (at: typeof cell) => ({
     placement: { ...at, sub_turn_index: 0 },
-    obj: { type: "custom_tool_start", tool_name: toolName },
+    obj: {
+      type: "custom_tool_start",
+      tool_name: toolName,
+      display_name: toolName,
+    },
   });
   const callEnd = (at: typeof cell) => [
     {
@@ -201,6 +205,7 @@ export function buildMockCodeModeCellStream({
       obj: {
         type: "custom_tool_delta",
         tool_name: toolName,
+        display_name: toolName,
         response_type: "text",
         data: toolOutput,
       },

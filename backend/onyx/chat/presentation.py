@@ -256,6 +256,7 @@ def project_response(
     snapshot: RunState,
     *,
     tool_ids: Mapping[str, int | None],
+    tool_labels: Mapping[str, str] | None = None,
     initial_citations: CitationMapping | None = None,
     registrations: Sequence[AgentInfo] = (),
 ) -> ChatResponseSnapshot:
@@ -263,6 +264,7 @@ def project_response(
 
     Message conversion shares citation and text handling with the live stream, so saved
     answers match streamed answers. Canonical content survives display failures.
+    `tool_labels` maps the names of called tools to their display names.
     """
     record = response_record(snapshot, registrations)
     response = ChatResponseSnapshot(
@@ -292,7 +294,7 @@ def project_response(
     except Exception:
         logger.exception("Could not collect tool history: %s", snapshot.run_id)
     try:
-        return _project_response_display(snapshot, response)
+        return _project_response_display(snapshot, response, tool_labels or {})
     except Exception:
         logger.exception("Could not format accepted response: %s", snapshot.run_id)
         return response.model_copy(
@@ -303,7 +305,7 @@ def project_response(
 
 
 def _project_response_display(
-    snapshot: RunState, response: ChatResponseSnapshot
+    snapshot: RunState, response: ChatResponseSnapshot, tool_labels: Mapping[str, str]
 ) -> ChatResponseSnapshot:
     presentation: dict[str, MessageRendering] = {}
     record = response.response
@@ -323,6 +325,11 @@ def _project_response_display(
                 message.metadata,
                 parent_tool_name=parent_tool_name,
             )
+            setting.tool_labels = {
+                call.name: tool_labels[call.name]
+                for call in message.tool_calls
+                if call.name in tool_labels
+            }
             presentation[message_id] = setting
             if node is not snapshot or setting.mode != PresentationMode.ANSWER:
                 continue
@@ -369,8 +376,10 @@ class ResponsePresenter:
         emitter: Emitter,
         *,
         tool_ids: Mapping[str, int | None] | None = None,
+        tool_labels: Mapping[str, str] | None = None,
     ) -> None:
         self.tool_ids = tool_ids or {}
+        self.tool_labels = tool_labels or {}
         self.emitter = emitter
         self.layout = ResponseLayout()
         self.renderers: dict[str, MessageRenderer] = {}
@@ -413,7 +422,10 @@ class ResponsePresenter:
             for call in calls:
                 tool_placement = renderer.tool_placement(call.id)
                 self.tools[(event.run_id, event.message_id, call.id)] = tool_renderer(
-                    call, tool_placement, self.tool_ids.get(call.name)
+                    call,
+                    tool_placement,
+                    self.tool_ids.get(call.name),
+                    self.tool_labels.get(call.name),
                 )
         elif isinstance(event, (ToolStartEvent, ToolUpdateEvent, ToolEndEvent)):
             tool = self.tools.get((event.run_id, event.message_id, event.tool_call.id))
@@ -441,6 +453,7 @@ class ResponsePresenter:
                     if renderer is not None
                     else self.layout.next_section(parent.placement if parent else None),
                     self.tool_ids.get(event.tool_call.name),
+                    self.tool_labels.get(event.tool_call.name),
                 )
             output = tool.amend(event.result)
         elif isinstance(event, AgentEndEvent):
@@ -526,7 +539,10 @@ def replay_response(
                 )
                 result = result.model_copy(update={"details": restored})
             renderer_of_call = tool_renderer(
-                call, tool_placement, record.tool_id if record is not None else None
+                call,
+                tool_placement,
+                record.tool_id if record is not None else None,
+                setting.tool_labels.get(call.name),
             )
             packets.extend(renderer_of_call.start())
             for child in response.child_runs:

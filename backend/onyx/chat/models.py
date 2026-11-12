@@ -134,6 +134,8 @@ class MessageRendering(BaseModel):
     citation_documents: dict[int, str] = Field(default_factory=dict)
     document_ids: list[str] = Field(default_factory=list)
     pre_answer_seconds: float | None = None
+    # Display names of the message's called tools, by the name the model called.
+    tool_labels: dict[str, str] = Field(default_factory=dict)
 
 
 class ResponseRecord(BaseModel):

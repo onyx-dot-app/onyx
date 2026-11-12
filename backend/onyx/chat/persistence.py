@@ -48,6 +48,7 @@ class ChatResponsePersistence(RunStore):
         self.delivery = delivery
         self.outcome = outcome
         self.tool_ids: dict[str, int | None] = {}
+        self.tool_labels: dict[str, str] = {}
         self.initial_citations: CitationMapping = {}
         self.coordinator = coordinator
         self._lock = threading.Lock()
@@ -228,6 +229,7 @@ class ChatResponsePersistence(RunStore):
         return project_response(
             snapshot,
             tool_ids=self.tool_ids,
+            tool_labels=self.tool_labels,
             initial_citations=self.initial_citations,
             registrations=self.coordinator.registrations(),
         ).model_copy(update={"delivery_failed": delivery_failed})
