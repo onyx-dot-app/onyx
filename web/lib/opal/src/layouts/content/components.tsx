@@ -25,7 +25,7 @@ import type {
   IconFunctionComponent,
   RichStr,
 } from "@opal/types";
-import { cn } from "@opal/utils";
+import { cn, isImeComposing } from "@opal/utils";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -483,7 +483,7 @@ function Content({
                   onFocus={(e) => e.currentTarget.select()}
                   onBlur={commit}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") commit();
+                    if (e.key === "Enter" && !isImeComposing(e)) commit();
                     if (e.key === "Escape") {
                       setEditValue(toPlainString(title));
                       setEditing(false);

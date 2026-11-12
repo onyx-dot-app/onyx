@@ -1,5 +1,6 @@
 "use client";
 
+import { isImeComposing } from "@opal/utils";
 import { useState, KeyboardEvent } from "react";
 import InputTypeIn from "@opal/components/inputs/texts/input-type-in/components";
 import { Tag } from "@opal/components/tag/components";
@@ -31,7 +32,7 @@ export function InputList({
   const [inputValue, setInputValue] = useState("");
 
   function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter" && !e.nativeEvent.isComposing && inputValue.trim()) {
+    if (e.key === "Enter" && !isImeComposing(e) && inputValue.trim()) {
       e.preventDefault();
       const trimmedValue = inputValue.trim();
 

@@ -20,7 +20,7 @@ import { SourceIcon } from "@/components/SourceIcon";
 import type { Connector } from "@/lib/connectors/types";
 import { HorizontalFilters } from "@/components/filters/SourceSelector";
 import { InputTypeIn } from "@opal/components";
-import { clickOnKeyDown } from "@opal/utils";
+import { clickOnKeyDown, isImeComposing } from "@opal/utils";
 
 const DocumentDisplay = ({
   document,
@@ -194,7 +194,7 @@ export function Explorer({
             if (
               event.key === "Enter" &&
               !event.shiftKey &&
-              !event.nativeEvent.isComposing
+              !isImeComposing(event)
             ) {
               onSearch(query);
               event.preventDefault();

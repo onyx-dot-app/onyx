@@ -1,5 +1,6 @@
 "use client";
 
+import { isImeComposing } from "@opal/utils";
 import { InputContainer } from "@opal/components/inputs/container";
 import "@opal/components/inputs/numbers/input-currency/styles.css";
 import React from "react";
@@ -257,7 +258,7 @@ function InputCurrency({
   ) {
     const shared = handleSegmentKeyDown(part, prevRef, nextRef);
     return (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (e.key !== "Enter") return shared(e);
+      if (e.key !== "Enter" || isImeComposing(e)) return shared(e);
       const next = nextRef?.current;
       if (next && !e.currentTarget.form) {
         e.preventDefault();

@@ -1,5 +1,6 @@
 "use client";
 
+import { isImeComposing } from "@opal/utils";
 import type { Route } from "next";
 import { listSourceMetadata } from "@/lib/connectors/utils";
 import {
@@ -198,7 +199,7 @@ export default function ConnectorsPage() {
   // then, on an empty field, leaves it.
   function handleSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     // Keys that build or cancel an IME composition belong to the IME.
-    if (e.nativeEvent.isComposing) return;
+    if (isImeComposing(e)) return;
     if (e.key === "Escape") {
       e.preventDefault();
       if (rawSearchTerm !== "") setSearchTerm("");

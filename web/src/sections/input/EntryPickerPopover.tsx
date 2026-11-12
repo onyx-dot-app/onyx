@@ -1,5 +1,6 @@
 "use client";
 
+import { isImeComposing } from "@opal/utils";
 import {
   memo,
   useEffect,
@@ -74,6 +75,7 @@ function EntryPickerPopover({
     if (!open) return;
 
     function handleKeyDown(e: KeyboardEvent) {
+      if (isImeComposing(e)) return;
       if (e.key === "ArrowDown") {
         e.preventDefault();
         e.stopPropagation();

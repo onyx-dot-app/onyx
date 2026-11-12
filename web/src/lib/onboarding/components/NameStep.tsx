@@ -1,5 +1,6 @@
 "use client";
 
+import { isImeComposing } from "@opal/utils";
 import React, { useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { Card, InputTypeIn } from "@opal/components";
@@ -27,7 +28,12 @@ const NameStep = React.memo(
     }, []);
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === "Enter" && userName && userName.trim().length > 0) {
+      if (
+        e.key === "Enter" &&
+        !isImeComposing(e) &&
+        userName &&
+        userName.trim().length > 0
+      ) {
         e.preventDefault();
         nextStep();
       }

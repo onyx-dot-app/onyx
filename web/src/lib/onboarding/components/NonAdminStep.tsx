@@ -6,7 +6,7 @@ import { IconContainer, InputTypeIn, SelectCard } from "@opal/components";
 import { updateUserPersonalization } from "@/lib/users/svc";
 import { useUser } from "@/providers/UserProvider";
 import { Button } from "@opal/components";
-import { cn } from "@opal/utils";
+import { cn, isImeComposing } from "@opal/utils";
 import { SvgCheckCircle, SvgEdit, SvgUser, SvgX } from "@opal/icons";
 import { ContentAction, InputHorizontal, Section, toast } from "@opal/layouts";
 import { Hoverable } from "@opal/core";
@@ -119,7 +119,12 @@ export default function NonAdminStep() {
                   setName(e.target.value)
                 }
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && name && name.trim().length > 0) {
+                  if (
+                    e.key === "Enter" &&
+                    !isImeComposing(e) &&
+                    name &&
+                    name.trim().length > 0
+                  ) {
                     e.preventDefault();
                     handleSave();
                   }

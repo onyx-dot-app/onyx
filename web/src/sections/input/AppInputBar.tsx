@@ -29,7 +29,7 @@ import { settleChatSession } from "@/lib/chat/settleChatSession";
 import { useDraft, draftKey } from "@/hooks/useDraft";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
 import PasteTilePopover from "@/sections/input/PasteTilePopover";
-import { cn } from "@opal/utils";
+import { cn, isImeComposing } from "@opal/utils";
 import { firstStrongTextDir } from "@/lib/rehypeDirection";
 import { Disabled } from "@opal/core";
 import { useUser } from "@/providers/UserProvider";
@@ -582,7 +582,7 @@ const AppInputBar = React.memo(
     ) {
       if (!user?.preferences?.shortcut_enabled || !showPrompts) return;
 
-      if (e.key === "Enter") {
+      if (e.key === "Enter" && !isImeComposing(e)) {
         e.preventDefault();
         if (tabbingIconIndex === sortedFilteredPrompts.length) {
           // "Create a new prompt" is selected
@@ -1001,7 +1001,7 @@ const AppInputBar = React.memo(
                           event.key === "Enter" &&
                           !showPrompts &&
                           !event.shiftKey &&
-                          !event.nativeEvent.isComposing
+                          !isImeComposing(event)
                         ) {
                           event.preventDefault();
                           const canSubmitNormally = chatState === "input";

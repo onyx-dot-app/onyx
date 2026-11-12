@@ -24,7 +24,7 @@ import {
   type SkillSharingDraft,
 } from "@/lib/skills/sharing";
 import { SvgGitHub } from "@opal/logos";
-import { cn } from "@opal/utils";
+import { cn, isImeComposing } from "@opal/utils";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
 import { useUser } from "@/providers/UserProvider";
 import { importGitHubSkills, previewGitHubSkills } from "@/lib/skills/api";
@@ -405,7 +405,8 @@ export function ImportSkillsFromGitHubModalView({
                   placeholder={t("placeholders.githubRepository")}
                   onChange={(event) => onRepositoryChange(event.target.value)}
                   onKeyDown={(event) => {
-                    if (event.key === "Enter") onSubmit();
+                    if (event.key === "Enter" && !isImeComposing(event))
+                      onSubmit();
                   }}
                 />
               </Section>

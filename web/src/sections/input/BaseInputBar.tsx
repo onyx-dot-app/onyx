@@ -17,7 +17,7 @@ import { useTranslations } from "next-intl";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
 import { getTextContent } from "@/lib/contentEditable";
 import PasteTilePopover from "@/sections/input/PasteTilePopover";
-import { cn } from "@opal/utils";
+import { cn, isImeComposing } from "@opal/utils";
 import { firstStrongTextDir } from "@/lib/rehypeDirection";
 import { Disabled } from "@opal/core";
 import { Button, Text } from "@opal/components";
@@ -261,9 +261,7 @@ const BaseInputBar = memo(
       const handleKeyDown = useCallback(
         (event: KeyboardEvent<HTMLDivElement>) => {
           const isSubmitEnter =
-            event.key === "Enter" &&
-            !event.shiftKey &&
-            !event.nativeEvent.isComposing;
+            event.key === "Enter" && !event.shiftKey && !isImeComposing(event);
           if (handleInputNavKeys(event, queueNav, handleTileKeyDown)) return;
           if (isSubmitEnter) {
             event.preventDefault();

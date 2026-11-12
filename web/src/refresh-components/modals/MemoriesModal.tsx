@@ -16,7 +16,7 @@ import {
   MAX_MEMORY_COUNT,
   LocalMemory,
 } from "@/hooks/useMemoryManager";
-import { cn } from "@opal/utils";
+import { cn, isImeComposing } from "@opal/utils";
 import { useUser } from "@/providers/UserProvider";
 import useUserPersonalization from "@/hooks/useUserPersonalization";
 import type { MemoryItem } from "@/lib/types";
@@ -100,11 +100,7 @@ function MemoryItem({
               void onBlur(originalIndex);
             }}
             onKeyDown={(e) => {
-              if (
-                e.key === "Enter" &&
-                !e.shiftKey &&
-                !e.nativeEvent.isComposing
-              ) {
+              if (e.key === "Enter" && !e.shiftKey && !isImeComposing(e)) {
                 e.preventDefault();
                 textareaRef.current?.blur();
               }

@@ -1,3 +1,4 @@
+import { isImeComposing } from "@opal/utils";
 import {
   useCallback,
   useEffect,
@@ -69,7 +70,7 @@ export function useQueuedMessageNavigation({
     (event: KeyboardEvent<HTMLDivElement>): boolean => {
       // Navigation mode: keys act on the highlighted queued message.
       if (highlightedIndex !== null) {
-        if (event.key === "Enter") {
+        if (event.key === "Enter" && !isImeComposing(event)) {
           event.preventDefault();
           const queued = messages[highlightedIndex];
           if (queued) {

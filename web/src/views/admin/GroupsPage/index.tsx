@@ -1,5 +1,6 @@
 "use client";
 
+import { isImeComposing } from "@opal/utils";
 import { useNavigation } from "@opal/navigation";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useFocusOnMount, useGridNavigation, useHotkey } from "@opal/hooks";
@@ -97,7 +98,7 @@ function GroupsPage() {
   // then, on an empty field, leaves it.
   function handleSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     // Keys that build or cancel an IME composition belong to the IME.
-    if (e.nativeEvent.isComposing) return;
+    if (isImeComposing(e)) return;
     if (e.key === "Escape") {
       e.preventDefault();
       if (searchQuery !== "") setSearchQuery("");

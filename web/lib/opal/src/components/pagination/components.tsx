@@ -8,7 +8,7 @@ import type { RichStr, WithoutStyles } from "@opal/types";
 import { Text } from "@opal/components";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { textChunks } from "@opal/components/text/chunks";
-import { cn } from "@opal/utils";
+import { cn, isImeComposing } from "@opal/utils";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 import {
   useState,
@@ -221,7 +221,7 @@ function GoToPagePopup({ totalPages, onSubmit, children }: GoToPagePopupProps) {
   }
 
   function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter") {
+    if (e.key === "Enter" && !isImeComposing(e)) {
       handleSubmit();
     }
   }

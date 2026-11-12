@@ -1,5 +1,6 @@
 "use client";
 
+import { isImeComposing } from "@opal/utils";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { FiEdit2 } from "react-icons/fi";
@@ -29,7 +30,7 @@ export function EditableValue({
             setEditedValue(e.target.value);
           }}
           onKeyDown={async (e) => {
-            if (e.key === "Enter") {
+            if (e.key === "Enter" && !isImeComposing(e)) {
               const success = await onSubmit(editedValue);
               if (success) {
                 setIsOpen(false);

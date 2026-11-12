@@ -3,7 +3,7 @@
 import * as React from "react";
 import { InputContainer } from "@opal/components/inputs/container";
 import "@opal/components/inputs/numbers/input-number/styles.css";
-import { cn } from "@opal/utils";
+import { cn, isImeComposing } from "@opal/utils";
 import { Button } from "@opal/components/buttons/button/components";
 import { Text } from "@opal/components";
 import { Interactive } from "@opal/core";
@@ -204,7 +204,7 @@ export default function InputNumber({
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     // Enter that confirms an IME composition is not a commit.
-    if (e.key !== "Enter" || e.nativeEvent.isComposing || e.keyCode === 229) {
+    if (e.key !== "Enter" || isImeComposing(e)) {
       return;
     }
     // Settle in place; an enclosing form must not submit the unclamped value.
