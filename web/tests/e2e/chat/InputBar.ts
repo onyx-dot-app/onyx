@@ -271,14 +271,13 @@ export class InputBar {
     }
   }
 
-  /**
-   * An empty composer disables send only while the chat is idle. A running
-   * turn shows an enabled Stop, and a stopping one shows "Stopping…".
-   */
+  /** The chat accepts new input, and the empty composer cannot send. */
   async expectIdle(timeout = POLL_TIMEOUT): Promise<void> {
+    await expect(this.container).toHaveAttribute("data-chat-state", "input", {
+      timeout,
+    });
     await expect(this.textbox).toHaveAttribute("data-empty", "");
-    await expect(this.sendButton).toBeDisabled({ timeout });
-    await expect(this.sendButton).toHaveText("");
+    await expect(this.sendButton).toBeDisabled();
   }
 
   async expectEmpty(): Promise<void> {

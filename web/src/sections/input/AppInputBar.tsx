@@ -1007,6 +1007,7 @@ const AppInputBar = React.memo(
           <div
             ref={containerRef}
             id="onyx-chat-input"
+            data-chat-state={chatState}
             className={cn(
               "relative w-full flex flex-col shadow-box-01 bg-background-neutral-00 rounded-16"
               // # Note (from @raunakab):
