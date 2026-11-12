@@ -442,7 +442,8 @@ The library preview of an external-app skill calls the same renderer
     the pruned files after the commit. A skill delete, single or bulk, deletes
     every bundle of the skill and its versions after the commit. A failed file
     delete only logs: `background/celery/tasks/skills/tasks.py:check_for_orphan_skill_bundle_cleanup`
-    deletes hourly each `SKILL_BUNDLE` file older than one hour
+    (one-hour base beat interval, times `beat_multiplier` on cloud) deletes
+    each `SKILL_BUNDLE` file older than one hour
     (`ORPHAN_BUNDLE_MIN_AGE`) that no plugin version and no skill row uses.
     It checks its time budget between files and leaves the rest for the next
     run. Lite runs it from the API server poller
