@@ -2077,7 +2077,7 @@ jobs:
     needs: [determine-builds, audit-gate, merge-web, merge-backend, merge-model-server]
     if: >-
       always() && !cancelled() && needs.determine-builds.outputs.is-test-run != 'true' &&
-      (needs.audit-gate.result == 'failure' || startsWith(github.ref_name, 'v'))
+      (needs.audit-gate.result == 'failure' || needs.audit-gate.outputs.sandbox-status == 'failure' || startsWith(github.ref_name, 'v'))
     runs-on: ubuntu-slim
     timeout-minutes: 5
     permissions:

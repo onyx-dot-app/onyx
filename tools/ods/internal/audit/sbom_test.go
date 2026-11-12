@@ -90,11 +90,11 @@ esac
 			t.Fatalf("%s misses maintenance result: %s", format, out.String())
 		}
 	}
-	for _, invalid := range []string{`not json`, `{"components":[{"type":"application"}]}`, `{"components":[{"type":"file","name":"example","version":"1.0.0","cpe":"cpe:2.3:a:vendor:example:1.0.0:*:*:*:*:*:*:*"}]}`, `{"components":[]}`, `{"components":[{"type":"application","name":"example","version":"1.0.0","cpe":"cpe:2.3:a:vendor:example:2.0.0:*:*:*:*:*:*:*"}]}`} {
+	for _, invalid := range []string{`not json`, `{"components":[{"type":"application"}]}`, `{"components":[{"type":"file","name":"example","version":"1.0.0","cpe":"cpe:2.3:a:vendor:example:1.0.0:*:*:*:*:*:*:*"}]}`, `{"components":[]}`, `{"components":[{"type":"application","name":"example","version":"1.0.0","cpe":"cpe:2.3:a:vendor:example:2.0.0:*:*:*:*:*:*:*"}]}`, `{"components":[{"type":"application","name":"example","version":"1.0.0","cpe":"cpe:2.3:a:vendor:example:1.0.0:*:*:*:*:*:*:*","bom-ref":"same","components":[{}]}]}`, `{"components":[{"type":"application","name":"example","version":"1.0.0","cpe":"cpe:2.3:a:vendor:example:1.0.0:*:*:*:*:*:*:*","bom-ref":"same"}],"metadata":{"component":{}}}`, `{"components":[{"type":"application","name":"example","version":"1.0.0","cpe":"cpe:2.3:a:vendor:example:1.0.0:*:*:*:*:*:*:*","bom-ref":"same"},{"type":"application","name":"example","version":"1.0.0","cpe":"cpe:2.3:a:vendor:example:1.0.0:*:*:*:*:*:*:*","bom-ref":"same"}]}`} {
 		path := write("invalid-sbom.json", invalid)
 		t.Setenv("SBOM_FIXTURE", path)
 		if _, err := RunImage(opts); err == nil {
-			t.Fatal("invalid required inventory passed")
+			t.Errorf("invalid required inventory passed: %s", invalid)
 		}
 	}
 	t.Setenv("SBOM_FIXTURE", filepath.Join(directory, "sbom.json"))

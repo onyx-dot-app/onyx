@@ -13,6 +13,7 @@ import (
 const grypeImage = "anchore/grype:v0.121.1@sha256:6b06708b036f74b2cd70e94b706b4586af96d1932e6ac46255940b2e39dd44a9"
 
 type sbomComponent struct {
+	Components []json.RawMessage `json:"components"`
 	Type       string            `json:"type"`
 	Name       string            `json:"name"`
 	Version    string            `json:"version"`
@@ -56,6 +57,9 @@ func scanSBOM(image, inventory string, stderr io.Writer) (*sbomResult, error) {
 	}
 	var inventoryData struct {
 		Components []sbomComponent `json:"components"`
+		Metadata   struct {
+			Component *json.RawMessage `json:"component"`
+		} `json:"metadata"`
 	}
 	if err := json.Unmarshal(data, &inventoryData); err != nil {
 		return nil, err
@@ -63,8 +67,21 @@ func scanSBOM(image, inventory string, stderr io.Writer) (*sbomResult, error) {
 	if len(inventoryData.Components) == 0 {
 		return nil, fmt.Errorf("required SBOM has no components")
 	}
+	if inventoryData.Metadata.Component != nil {
+		return nil, fmt.Errorf("required SBOM must list packages only in top-level components")
+	}
+	seenRefs := make(map[string]bool)
 	var packages []ScannedPackage
 	for _, component := range inventoryData.Components {
+		if len(component.Components) > 0 {
+			return nil, fmt.Errorf("required SBOM must list packages only in top-level components")
+		}
+		if component.BOMRef != "" {
+			if seenRefs[component.BOMRef] {
+				return nil, fmt.Errorf("duplicate SBOM bom-ref %q", component.BOMRef)
+			}
+			seenRefs[component.BOMRef] = true
+		}
 		switch component.Type {
 		case "application", "framework", "library", "machine-learning-model", "firmware":
 		default:
