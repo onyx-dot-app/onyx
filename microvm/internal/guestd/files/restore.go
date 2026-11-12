@@ -165,9 +165,11 @@ func (s *Store) Restore(ctx context.Context, spec RestoreSpec, r io.Reader) (Res
 // returns the names to swap.
 func (x *extractor) liftTopFiles(roots []string) ([]string, error) {
 	swap := make([]string, 0, len(roots)+len(x.topFiles))
+	inSwap := make(map[string]bool, len(roots)+len(x.topFiles))
 	for _, r := range roots {
-		if r != TopFilesRoot {
+		if r != TopFilesRoot && !inSwap[r] {
 			swap = append(swap, r)
+			inSwap[r] = true
 		}
 	}
 	if !x.present[TopFilesRoot] {
@@ -181,7 +183,11 @@ func (x *extractor) liftTopFiles(roots []string) ([]string, error) {
 			return nil, err
 		}
 		x.present[f] = true
-		swap = append(swap, f)
+		// A caller may also name the file as a root; swap it once.
+		if !inSwap[f] {
+			swap = append(swap, f)
+			inSwap[f] = true
+		}
 	}
 	delete(x.present, TopFilesRoot)
 	x.liftedTop = true

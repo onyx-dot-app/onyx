@@ -645,6 +645,14 @@ func TestCaptureRestoreFileRoots(t *testing.T) {
 	if _, err := restore(s, other, archive, RestoreSpec{Roots: []string{"work"}}); !errors.Is(err, ErrArchive) {
 		t.Fatalf("top files not requested: %v", err)
 	}
+	// A request that also names a lifted file swaps it once.
+	put(t, ob, "report.py", "current")
+	if _, err := restore(s, other, archive, RestoreSpec{Roots: append([]string{"report.py"}, cs.Roots...)}); err != nil {
+		t.Fatalf("file named twice: %v", err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(ob, "report.py")); string(b) != "print(1)" {
+		t.Fatalf("report.py = %q", b)
+	}
 }
 
 // After a daemon without TopFilesRoot restored a save, the top-level files
