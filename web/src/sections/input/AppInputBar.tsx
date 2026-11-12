@@ -265,6 +265,14 @@ const AppInputBar = React.memo(
     // doesn't re-run on every keystroke.
     const messageRef = useRef(message);
     const isRecordingRef = useRef(isRecording);
+    // Text returned after an unmount goes to the chat's draft instead.
+    const mountedRef = useRef(true);
+    useEffect(() => {
+      mountedRef.current = true;
+      return () => {
+        mountedRef.current = false;
+      };
+    }, []);
 
     useEffect(() => {
       messageRef.current = message;
@@ -419,10 +427,12 @@ const AppInputBar = React.memo(
     );
 
     // Returned text goes before any newer text, in the composer or, for a chat
-    // that is no longer open, in that chat's draft.
-    function returnText(sessionId: string | null, key: string, text: string) {
+    // that is no longer open, in that chat's own draft.
+    function returnText(sessionId: string, text: string) {
       const isOpen =
+        mountedRef.current &&
         useChatSessionStore.getState().currentSessionId === sessionId;
+      const key = draftKey("chat", sessionId);
       const newer = isOpen
         ? messageRef.current
         : (readDraft<string>(key) ?? "");
@@ -442,27 +452,26 @@ const AppInputBar = React.memo(
         return;
       const submitted = message;
       const sessionId = currentSessionId;
-      const submittedDraftKey = chatDraftStorageKey;
+      if (sessionId === null) return;
       if (delivery === "interrupt") stopTTS({ manual: true });
       clearMessage();
       clearChatDraft();
       if (await queue.submit(submitted.trim(), delivery)) return;
-      returnText(sessionId, submittedDraftKey, submitted);
+      returnText(sessionId, submitted);
     }
 
     async function withdrawPendingMessage(index: number, edit: boolean) {
       const pending = queue.messages[index];
-      if (!pending || (edit && messageRef.current.trim())) return;
       const sessionId = currentSessionId;
-      const editDraftKey = chatDraftStorageKey;
+      if (!pending || sessionId === null || (edit && messageRef.current.trim()))
+        return;
       if (edit) setEditWithdrawalSession(sessionId);
       const withdrawn = await queue.withdraw(pending.id);
       if (edit)
         setEditWithdrawalSession((current) =>
           current === sessionId ? null : current
         );
-      if (edit && withdrawn)
-        returnText(sessionId, editDraftKey, withdrawn.message);
+      if (edit && withdrawn) returnText(sessionId, withdrawn.message);
     }
 
     function interruptWithQueuedMessage(index: number) {

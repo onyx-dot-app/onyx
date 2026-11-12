@@ -64,8 +64,9 @@ jest.mock("next/navigation", () => ({
   ).nextNavigationMock,
   useRouter: () => ({}),
 }));
+let mockChatId: string | null = "session";
 jest.mock("@/lib/navigation/hooks", () => ({
-  useAppPosition: () => ({ isNewSession: () => false, chat: () => "session" }),
+  useAppPosition: () => ({ isNewSession: () => false, chat: () => mockChatId }),
 }));
 jest.mock("@/lib/settings/hooks", () => ({
   useSettings: () => ({ appName: "Onyx" }),
@@ -88,7 +89,7 @@ jest.mock("@/hooks/usePromptShortcuts", () => ({
   default: () => ({ activePromptShortcuts: [] }),
 }));
 jest.mock("@/hooks/useDraft", () => ({
-  draftKey: () => "draft",
+  draftKey: (scope: string, id: string) => `${scope}:${id}`,
   writeDraft: (...args: unknown[]) => mockWriteDraft(...args),
   readDraft: () => null,
   useDraft: () => ({
@@ -134,6 +135,7 @@ function props(chatState: AppInputBarProps["chatState"]): ComposerProps {
 }
 
 beforeEach(() => {
+  mockChatId = "session";
   mockSearchMode = false;
   mockIncognito = false;
   mockInterruptOnSend = false;
@@ -755,7 +757,75 @@ test("an edit that finishes after a chat switch returns its text to its own chat
     withdrawal.resolve(new Response(JSON.stringify(pending[0])))
   );
   await waitFor(() =>
-    expect(mockWriteDraft).toHaveBeenCalledWith("draft", "Queued follow-up")
+    expect(mockWriteDraft).toHaveBeenCalledWith(
+      "chat:session",
+      "Queued follow-up"
+    )
   );
   expect(textbox).toHaveTextContent(/^$/);
+});
+
+test.each([
+  ["a chat page", "session"],
+  ["a page without the chat in its URL", null],
+])(
+  "a failed submission after a chat switch returns its text to its own chat's draft on %s",
+  async (_page, chatId) => {
+    mockChatId = chatId;
+    const user = setupUser();
+    const submission = deferred<Response>();
+    fetchSpy.mockImplementation(async (_url, init) =>
+      init?.method === "POST"
+        ? submission.promise
+        : new Response(JSON.stringify(pending))
+    );
+    useChatSessionStore.getState().createSession("other");
+    render(<ChatInput {...props("streaming")} />);
+    await user.click(screen.getByRole("textbox", { name: "Message input" }));
+    await user.keyboard("{Control>}{Enter}{/Control}");
+    act(() => useChatSessionStore.getState().setCurrentSession("other"));
+    await act(async () =>
+      submission.resolve(new Response("{}", { status: 409 }))
+    );
+    await waitFor(() =>
+      expect(mockWriteDraft).toHaveBeenCalledWith(
+        "chat:session",
+        "Keep this draft"
+      )
+    );
+    expect(mockWriteDraft).not.toHaveBeenCalledWith(
+      "chat:new",
+      expect.anything()
+    );
+  }
+);
+
+test("a failed submission that ends after the composer closes goes to the chat's draft", async () => {
+  const user = setupUser();
+  const submission = deferred<Response>();
+  fetchSpy.mockImplementation(async (_url, init) =>
+    init?.method === "POST"
+      ? submission.promise
+      : new Response(JSON.stringify(pending))
+  );
+  // The page keeps the chat's queue while the composer closes.
+  function Page({ composerOpen }: { composerOpen: boolean }) {
+    const queue = useChatSessionQueue(true);
+    return composerOpen ? (
+      <AppInputBar {...props("streaming")} queue={queue} />
+    ) : null;
+  }
+  const view = render(<Page composerOpen />);
+  await user.click(screen.getByRole("textbox", { name: "Message input" }));
+  await user.keyboard("{Control>}{Enter}{/Control}");
+  view.rerender(<Page composerOpen={false} />);
+  await act(async () =>
+    submission.resolve(new Response("{}", { status: 409 }))
+  );
+  await waitFor(() =>
+    expect(mockWriteDraft).toHaveBeenCalledWith(
+      "chat:session",
+      "Keep this draft"
+    )
+  );
 });
