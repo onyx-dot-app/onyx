@@ -435,18 +435,24 @@ The library preview of an external-app skill calls the same renderer
     `db/plugin.py:prune_plugin_bundles__no_commit` runs in
     `add_plugin_version__no_commit`, under the plugin lock and in the same
     transaction. It keeps the bundles of the current version, the published
-    version and the newest `BUNDLES_KEPT` versions, and the bundle that the
-    legacy skill row uses. Other versions get `bundle_file_id` NULL and keep
+    version and the newest `BUNDLES_KEPT` versions, the bundle that the
+    legacy skill row uses, and the bundle of a version with no stored file
+    list (a backfilled version that the repair did not fill yet). Other versions get `bundle_file_id` NULL and keep
     `bundle_sha256`, the file list and `plugin_skill` rows. The routes delete
     the pruned files after the commit. A skill delete, single or bulk, deletes
     every bundle of the skill and its versions after the commit. A failed file
     delete only logs: `background/celery/tasks/skills/tasks.py:check_for_orphan_skill_bundle_cleanup`
     deletes hourly each `SKILL_BUNDLE` file older than one hour
     (`ORPHAN_BUNDLE_MIN_AGE`) that no plugin version and no skill row uses.
+    It checks its time budget between files and leaves the rest for the next
+    run. Lite runs it from the API server poller
+    (`background/periodic_poller.py:_run_orphan_skill_bundle_cleanup`).
     The age guard is required: an upload saves its file before its row
     commits. A read of a pruned bundle, also one that loses a race with the
     prune, gets 404 "The files of this version are no longer kept."
-    (`skills/content.py:read_skill_bundle_blob`), not a 500.
+    (`skills/content.py:read_skill_bundle_blob`), not a 500. On Azure, only a
+    `BlobNotFound` error counts as a missing file
+    (`skills/validation.py:is_missing_file_error`).
 22. `version-repair` **A task fills the content of backfilled versions.**
     `background/celery/tasks/skills/tasks.py:repair_backfilled_plugin_versions`
     reads the bundle of each version that has a bundle, no file list and

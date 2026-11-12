@@ -309,12 +309,21 @@ def _manifest_matches(
     return current.bundle_sha256 == content.bundle_sha256
 
 
+def _has_no_file_manifest() -> ColumnElement[bool]:
+    # An ORM insert of None writes JSON null; the plugin backfill writes NULL.
+    return or_(
+        PluginVersion.file_manifest.is_(None),
+        func.jsonb_typeof(PluginVersion.file_manifest) == "null",
+    )
+
+
 def prune_plugin_bundles__no_commit(plugin: Plugin, db_session: Session) -> list[str]:
     """Empty the bundle of each version that is not one of the newest
     ``BUNDLES_KEPT``, the current or the published version. The version rows
-    stay. A bundle that the legacy skill row uses is kept. Call under the
-    plugin lock. Returns the files that nothing uses now; the caller deletes
-    them after the commit."""
+    stay. A bundle that the legacy skill row uses is kept, and so is the
+    bundle of a version with no stored file list, because the bundle is the
+    only copy of its content. Call under the plugin lock. Returns the files
+    that nothing uses now; the caller deletes them after the commit."""
     kept = {
         version_id
         for version_id in (plugin.current_version_id, plugin.published_version_id)
@@ -338,6 +347,7 @@ def prune_plugin_bundles__no_commit(plugin: Plugin, db_session: Session) -> list
                 PluginVersion.plugin_id == plugin.id,
                 PluginVersion.bundle_file_id.is_not(None),
                 PluginVersion.id.not_in(kept),
+                ~_has_no_file_manifest(),
             )
         ).tuples()
         if file_id is not None and file_id != legacy_bundle_file_id
@@ -597,14 +607,6 @@ def get_orphan_skill_bundle_file_ids(
     if after_file_id is not None:
         statement = statement.where(FileRecord.file_id > after_file_id)
     return list(db_session.scalars(statement))
-
-
-def _has_no_file_manifest() -> ColumnElement[bool]:
-    # An ORM insert of None writes JSON null; the plugin backfill writes NULL.
-    return or_(
-        PluginVersion.file_manifest.is_(None),
-        func.jsonb_typeof(PluginVersion.file_manifest) == "null",
-    )
 
 
 @dataclass(frozen=True)

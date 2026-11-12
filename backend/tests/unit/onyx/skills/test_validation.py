@@ -6,13 +6,14 @@ import zipfile
 from unittest.mock import MagicMock
 
 import pytest
+from azure.core.exceptions import ResourceNotFoundError
 
 from onyx.db.file_record import FileRecordNotFoundError
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
 from onyx.skills import validation
-from onyx.skills.validation import validate_stored_custom_skill
+from onyx.skills.validation import is_missing_file_error, validate_stored_custom_skill
 
 _BUNDLE_ID = "bundle-id"
 
@@ -25,6 +26,21 @@ def test_missing_bundle_is_invalid() -> None:
 
     assert result.is_valid is False
     assert result.normalized_bundle is None
+
+
+def _azure_not_found(error_code: str) -> ResourceNotFoundError:
+    exc = ResourceNotFoundError(message="not found")
+    # azure-storage sets error_code on the instance at runtime.
+    setattr(exc, "error_code", error_code)  # noqa: B010
+    return exc
+
+
+def test_missing_azure_blob_is_a_missing_file() -> None:
+    assert is_missing_file_error(_azure_not_found("BlobNotFound"))
+
+
+def test_missing_azure_container_is_not_a_missing_file() -> None:
+    assert not is_missing_file_error(_azure_not_found("ContainerNotFound"))
 
 
 def test_transient_bundle_read_remains_unclassified() -> None:
