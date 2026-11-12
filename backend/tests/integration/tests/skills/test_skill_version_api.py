@@ -205,14 +205,14 @@ def test_restore_past_the_limit_prunes_the_oldest_bundle(owner: DATestUser) -> N
         SkillManager.patch_custom(
             skill, owner, SkillPatchRequest(description=f"Description {number}")
         )
-    history = SkillManager.list_versions(skill.id, owner)
+    history = SkillManager.list_all_versions(skill.id, owner)
     assert all(version.bundle_kept for version in history)
     second = history[-2]
 
     restored = SkillManager.restore_version(skill.id, second.id, history[0].id, owner)
 
     assert restored.description == "Description 2"
-    after = SkillManager.list_versions(skill.id, owner)
+    after = SkillManager.list_all_versions(skill.id, owner)
     assert [version.version_number for version in after] == list(
         range(BUNDLES_KEPT + 1, 0, -1)
     )
