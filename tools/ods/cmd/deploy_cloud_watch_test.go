@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"gopkg.in/yaml.v3"
+	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -236,5 +238,24 @@ func TestWatchCloudRelease_readsTheTagsRunAndJobs(t *testing.T) {
 	}
 	if calls := gh.calls(); !slices.Equal(calls, want) {
 		t.Fatalf("expected gh calls %q, got %q", want, calls)
+	}
+}
+
+func TestDispatchJobMatchesPublishedODSContract(t *testing.T) {
+	data, err := os.ReadFile("../../../.github/workflows/deployment.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var workflow struct {
+		Jobs map[string]struct {
+			Name string `yaml:"name"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal(data, &workflow); err != nil {
+		t.Fatal(err)
+	}
+	job, ok := workflow.Jobs[dispatchJobName]
+	if !ok || (job.Name != "" && job.Name != dispatchJobName) {
+		t.Fatalf("deployment must retain the job name %q watched by released ODS versions", dispatchJobName)
 	}
 }
