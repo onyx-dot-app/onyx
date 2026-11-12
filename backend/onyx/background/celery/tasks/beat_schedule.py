@@ -171,6 +171,17 @@ beat_task_templates: list[dict] = [
         },
     },
     {
+        # A no-op once every backfilled plugin version is repaired.
+        "name": "repair-backfilled-plugin-versions",
+        "task": OnyxCeleryTask.REPAIR_BACKFILLED_PLUGIN_VERSIONS,
+        "schedule": timedelta(minutes=15),
+        "options": {
+            "queue": OnyxCeleryQueues.PRIMARY,
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
+        },
+    },
+    {
         # Runs monthly (x8 in cloud, with the beat multiplier) because it rarely
         # has work. It selects by age, so the cadence does not decide what is stale.
         "name": "cleanup-stale-draft-credentials",

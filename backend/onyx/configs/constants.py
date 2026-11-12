@@ -124,6 +124,7 @@ KV_CUSTOM_ANALYTICS_SCRIPT_KEY = "__custom_analytics_script__"
 KV_KG_CONFIG_KEY = "kg_config"
 KV_CC_PAIR_IDS_BACKFILL_PROGRESS_KEY = "opensearch_cc_pair_ids_backfill_progress"
 KV_TABULAR_RECHUNK_PROGRESS_KEY = "tabular_rechunk_progress"
+KV_PLUGIN_VERSION_REPAIR_OVER_LIMITS_KEY = "plugin_version_repair_over_limits"
 
 # NOTE: we use this timeout / 4 in various places to refresh a lock
 # might be worth separating this timeout into separate timeouts for each situation
@@ -617,6 +618,7 @@ class OnyxRedisLocks:
     ORPHAN_SKILL_BUNDLE_CLEANUP_BEAT_LOCK = (
         "da_lock:check_orphan_skill_bundle_cleanup_beat"
     )
+    PLUGIN_VERSION_REPAIR_LOCK = "da_lock:repair_backfilled_plugin_versions"
     USER_FILE_DELETE_LOCK_PREFIX = "da_lock:user_file_delete"
     # Short-lived key set when a delete task is enqueued; cleared when the worker picks it up.
     # Prevents the beat from re-enqueuing the same file while a delete task is already queued.
@@ -761,6 +763,8 @@ class OnyxCeleryTask:
 
     # Skill bundle files that no plugin version or skill row uses
     CHECK_FOR_ORPHAN_SKILL_BUNDLE_CLEANUP = "check_for_orphan_skill_bundle_cleanup"
+    # File lists and SKILL.md text of plugin versions copied from skill rows
+    REPAIR_BACKFILLED_PLUGIN_VERSIONS = "repair_backfilled_plugin_versions"
 
     # chat retention
     CHECK_TTL_MANAGEMENT_TASK = "check_ttl_management_task"

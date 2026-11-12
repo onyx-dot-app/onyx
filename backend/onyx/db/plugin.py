@@ -28,7 +28,7 @@ from enum import Enum
 from typing import Literal
 from uuid import UUID, uuid4
 
-from sqlalchemy import and_, delete, exists, func, select, update
+from sqlalchemy import ColumnElement, and_, delete, exists, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -597,6 +597,121 @@ def get_orphan_skill_bundle_file_ids(
     if after_file_id is not None:
         statement = statement.where(FileRecord.file_id > after_file_id)
     return list(db_session.scalars(statement))
+
+
+def _has_no_file_manifest() -> ColumnElement[bool]:
+    # An ORM insert of None writes JSON null; the plugin backfill writes NULL.
+    return or_(
+        PluginVersion.file_manifest.is_(None),
+        func.jsonb_typeof(PluginVersion.file_manifest) == "null",
+    )
+
+
+@dataclass(frozen=True)
+class VersionToRepair:
+    version_id: UUID
+    bundle_file_id: str
+    # Name in the frontmatter of the skill at the bundle root.
+    name: str
+
+
+def get_plugin_versions_to_repair(
+    *,
+    after_version_id: UUID | None,
+    skip_version_ids: Iterable[UUID],
+    limit: int,
+    db_session: Session,
+) -> list[VersionToRepair]:
+    """Versions copied from a legacy skill row that still have no file list:
+    they have a bundle and are not known to be invalid. In id order."""
+    statement = (
+        select(
+            PluginVersion.id,
+            PluginVersion.bundle_file_id,
+            PluginSkill.frontmatter["name"].astext,
+        )
+        .join(
+            PluginSkill,
+            and_(
+                PluginSkill.plugin_version_id == PluginVersion.id,
+                PluginSkill.path == "",
+            ),
+        )
+        .where(
+            _has_no_file_manifest(),
+            PluginVersion.bundle_file_id.is_not(None),
+            PluginVersion.is_valid.is_not(False),
+        )
+        .order_by(PluginVersion.id)
+        .limit(limit)
+    )
+    if after_version_id is not None:
+        statement = statement.where(PluginVersion.id > after_version_id)
+    skip = set(skip_version_ids)
+    if skip:
+        statement = statement.where(PluginVersion.id.not_in(skip))
+    return [
+        VersionToRepair(version_id=version_id, bundle_file_id=file_id, name=name)
+        for version_id, file_id, name in db_session.execute(statement).tuples()
+        if file_id is not None
+    ]
+
+
+def repair_plugin_version__no_commit(
+    *,
+    version_id: UUID,
+    bundle_file_id: str,
+    content: PluginVersionContent,
+    db_session: Session,
+) -> bool:
+    """Fill the file list, sizes and root skill content of a version copied
+    from a legacy skill row, and mark it valid when it is unclassified. Does
+    nothing, and returns False, when the version has a file list already or no
+    longer holds this bundle."""
+    updated = db_session.execute(
+        update(PluginVersion)
+        .where(
+            PluginVersion.id == version_id,
+            PluginVersion.bundle_file_id == bundle_file_id,
+            _has_no_file_manifest(),
+        )
+        .values(
+            file_manifest=(
+                [entry.model_dump() for entry in content.file_manifest]
+                if content.file_manifest is not None
+                else None
+            ),
+            unpacked_size_bytes=content.unpacked_size_bytes,
+            file_count=content.file_count,
+            is_valid=func.coalesce(PluginVersion.is_valid, True),
+        )
+        .returning(PluginVersion.id)
+    ).scalar_one_or_none()
+    if updated is None:
+        return False
+    root = content.skills[0]
+    db_session.execute(
+        update(PluginSkill)
+        .where(
+            PluginSkill.plugin_version_id == version_id,
+            PluginSkill.path == root.path,
+        )
+        .values(skill_md=root.skill_md, frontmatter=root.frontmatter)
+    )
+    return True
+
+
+def mark_plugin_version_invalid__no_commit(
+    *, version_id: UUID, bundle_file_id: str, db_session: Session
+) -> None:
+    db_session.execute(
+        update(PluginVersion)
+        .where(
+            PluginVersion.id == version_id,
+            PluginVersion.bundle_file_id == bundle_file_id,
+        )
+        .values(is_valid=False)
+    )
 
 
 # --- Skill plugins and their access ----------------------------------------

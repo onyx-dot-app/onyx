@@ -167,6 +167,8 @@ it runs.
   [[connectors]] owns the hierarchy that the fetch loads.
 - Skill bundle cleanup ([[skills]]): `check_for_orphan_skill_bundle_cleanup`
   runs hourly on the primary queue under a beat lock, also for gated tenants.
+  `repair_backfilled_plugin_versions_task` runs every 15 minutes on the same
+  queue; it has work only after a deploy or a size limit change.
 - License reclaim ([[billing]]): the license middleware schedules
   `reclaim_license_task` when the cache backend is Redis. Otherwise
   `background/periodic_poller.py:_run_license_reclaim` runs it on the poller's

@@ -447,6 +447,20 @@ The library preview of an external-app skill calls the same renderer
     commits. A read of a pruned bundle, also one that loses a race with the
     prune, gets 404 "The files of this version are no longer kept."
     (`skills/content.py:read_skill_bundle_blob`), not a 500.
+22. `version-repair` **A task fills the content of backfilled versions.**
+    `background/celery/tasks/skills/tasks.py:repair_backfilled_plugin_versions`
+    reads the bundle of each version that has a bundle, no file list and
+    `is_valid` not false. Beat sends it to each tenant every 15 minutes, as
+    the `cc_pair_ids_backfill` task does; once every version is filled, one
+    query finds no work. It writes the file list, sizes, file count,
+    `skill_md` and `frontmatter` by the rules of a save
+    (`skills/repair.py:read_stored_version_content`); a SKILL.md over 256 KiB
+    keeps `skill_md` NULL. A corrupt or missing bundle sets `is_valid` false.
+    A bundle over a size limit stays unclassified; the KV key
+    `plugin_version_repair_over_limits` skips it until a limit in
+    `STORED_BUNDLE_LIMITS` changes. A version with no file list can hold JSON
+    `null` (an ORM insert) or SQL NULL (the backfill); the queries match both.
+    No migration reads the file store.
 
 ---
 
@@ -560,6 +574,8 @@ The library preview of an external-app skill calls the same renderer
   (`backend/tests/integration/tests/skills/test_skill_bundle_retention.py`).
   `backend/tests/external_dependency_unit/craft/test_skill_bundle_cleanup.py`
   covers the orphan bundle cleanup and the read of a pruned bundle.
+  `backend/tests/external_dependency_unit/craft/test_plugin_version_repair.py`
+  covers the repair of backfilled versions.
   `backend/tests/integration/tests/craft/k8s/` covers a real
   push.
 - By hand: edit a skill while a Craft session runs. The stale notice must

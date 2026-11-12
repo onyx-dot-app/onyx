@@ -28,6 +28,8 @@ class SkillValidationResult:
     is_valid: bool | None
     normalized_bundle: bytes | None
     detail: str | None = None
+    # Unclassified because the bundle is over a size limit, not a read error.
+    over_limits: bool = False
 
 
 def read_stored_bundle_bytes(bundle_file_id: str, file_store: FileStore) -> bytes:
@@ -104,6 +106,7 @@ def validate_stored_custom_skill(
                 is_valid=None,
                 normalized_bundle=None,
                 detail=f"stored bundle is outside the configured limits: {exc.detail}",
+                over_limits=True,
             )
         if isinstance(exc, OnyxError):
             return SkillValidationResult(
@@ -133,6 +136,7 @@ def validate_stored_custom_skill(
                 is_valid=None,
                 normalized_bundle=None,
                 detail=f"stored bundle is outside the configured limits: {exc.detail}",
+                over_limits=True,
             )
         detail = exc.detail if isinstance(exc, OnyxError) else str(exc)
         return SkillValidationResult(
