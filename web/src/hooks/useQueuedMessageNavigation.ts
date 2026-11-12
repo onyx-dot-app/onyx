@@ -49,7 +49,10 @@ export function useQueuedMessageNavigation({
   const highlightedIndex = messages.findIndex(
     (message) => message.id === selectedId
   );
-  const highlightedId = highlightedIndex === -1 ? null : selectedId;
+  // Text in the composer, however it arrived, ends navigation, so its keys
+  // edit and send that text.
+  const highlightedId =
+    highlightedIndex === -1 || !inputIsEmpty ? null : selectedId;
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>): boolean => {
