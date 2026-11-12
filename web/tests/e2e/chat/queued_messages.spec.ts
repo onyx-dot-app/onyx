@@ -153,7 +153,7 @@ pendingTest(
 );
 
 pendingTest(
-  "Enter adds an instruction after the current step",
+  "Enter adds an instruction after the current step @code-mode",
   async ({ page, chatPage, heldResponse }) => {
     const instruction = "Focus on durability";
     const submission = page.waitForResponse(
