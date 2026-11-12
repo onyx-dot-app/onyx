@@ -3,6 +3,68 @@ entries:
   onyx:
   - annotations:
       artifacthub.io/changes: |
+        - kind: added
+          description: Craft Firecracker host agent VM cap per node
+            (craft.hostAgent.maxVms, default 60 for nested virtualization). Raise
+            it or set 0 (no cap) on bare metal nodes.
+      category: Productivity
+      images: |
+        - name: webserver
+          image: docker.io/onyxdotapp/onyx-web-server:latest
+        - name: background
+          image: docker.io/onyxdotapp/onyx-backend:latest
+      licenses: MIT
+      org.opencontainers.image.source: https://github.com/onyx-dot-app/onyx
+    apiVersion: v2
+    appVersion: latest
+    created: "2026-11-12T19:49:42.509411027Z"
+    dependencies:
+    - alias: postgresql
+      condition: postgresqlOperator.enabled,postgresql.enabled
+      name: cloudnative-pg
+      repository: https://cloudnative-pg.github.io/charts
+      version: 0.26.0
+    - condition: postgresql.installCRDs,postgresqlOperator.enabled,postgresql.enabled
+      name: onyx-cnpg-crds
+      repository: file://../onyx-cnpg-crds
+      version: 0.1.0
+    - condition: opensearch.enabled
+      name: opensearch
+      repository: https://opensearch-project.github.io/helm-charts
+      version: 3.6.0
+    - alias: nginx
+      condition: nginx.enabled
+      name: ingress-nginx
+      repository: https://kubernetes.github.io/ingress-nginx
+      version: 4.13.3
+    - condition: redisOperator.enabled,redis.enabled
+      name: redis-operator
+      repository: https://ot-container-kit.github.io/helm-charts
+      version: 0.24.0
+    - condition: redis.enabled
+      name: redis
+      repository: https://ot-container-kit.github.io/helm-charts
+      version: 0.16.6
+    - condition: minio.enabled
+      name: minio
+      repository: https://charts.min.io/
+      version: 5.4.0
+    - condition: codeInterpreter.enabled
+      name: code-interpreter
+      repository: https://onyx-dot-app.github.io/python-sandbox/
+      version: 0.4.10
+    description: Onyx application and Craft sandbox deployment chart
+    digest: 50c53505a4e75021194a950ddaa50ec50fc55672df8d135c169e441d98e9e029
+    home: https://www.onyx.app/
+    name: onyx
+    sources:
+    - https://github.com/onyx-dot-app/onyx
+    type: application
+    urls:
+    - https://github.com/onyx-dot-app/onyx/releases/download/helm/onyx-0.9.42/onyx-0.9.42.tgz
+    version: 0.9.42
+  - annotations:
+      artifacthub.io/changes: |
         - kind: fixed
           description: Craft sandbox pods set NODE_USE_ENV_PROXY=1, so Node's
             built-in fetch uses the sandbox egress proxy. NO_PROXY also lists
@@ -11426,4 +11488,4 @@ entries:
     urls:
     - https://github.com/onyx-dot-app/onyx/releases/download/onyx-stack-0.2.4/onyx-stack-0.2.4.tgz
     version: 0.2.4
-generated: "2026-11-11T21:53:19.811458332Z"
+generated: "2026-11-12T19:49:42.509730788Z"
