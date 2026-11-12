@@ -22,6 +22,7 @@ from onyx.db.external_app import (
 )
 from onyx.db.models import Skill, User
 from onyx.db.plugin import (
+    AddedPluginVersion,
     get_plugin_current_version_id,
     lock_skill_plugin__no_commit,
 )
@@ -217,6 +218,13 @@ def _github_authorization_header(user: User) -> str | None:
         ).get("Authorization")
 
 
+def _delete_bundle_blobs(file_store: FileStore, file_ids: list[str]) -> None:
+    """Delete bundles after the commit that stopped using them. The orphan
+    bundle cleanup task deletes one that fails here."""
+    for file_id in file_ids:
+        delete_bundle_blob(file_store, file_id)
+
+
 def _current_version_id(skill: Skill, db_session: Session) -> UUID:
     version_id = get_plugin_current_version_id(skill.id, db_session)
     if version_id is None:
@@ -272,7 +280,7 @@ def _replace_skill_bundle_from_editor(
         # update_custom_bundle_files applied the limits that fit each edit.
         upload_limits=False,
     ) as ingested:
-        version = replace_skill_bundle(
+        added = replace_skill_bundle(
             skill=skill,
             ingested=ingested,
             base_version_id=base_version_id,
@@ -285,9 +293,10 @@ def _replace_skill_bundle_from_editor(
         )
         db_session.commit()
 
-    if version is None:
+    if added is None:
         delete_bundle_blob(file_store, ingested.bundle_file_id)
         return _editable_skill_response(skill, user, db_session)
+    _delete_bundle_blobs(file_store, added.pruned_bundle_file_ids)
     db_session.expire(skill)
     push_skill_to_affected_sandboxes(skill, db_session)
     db_session.commit()
@@ -333,7 +342,7 @@ def bulk_update_skills(
     else:
         for skill_id in sorted(set(request.skill_ids)):
             try:
-                item_affected, deleted_file_id = bulk_update_skill__no_commit(
+                item_affected, item_file_ids = bulk_update_skill__no_commit(
                     skill_id, request.action, user, db_session
                 )
             except OnyxError as exc:
@@ -341,15 +350,12 @@ def bulk_update_skills(
                 continue
             succeeded.append(skill_id)
             affected |= item_affected
-            if deleted_file_id is not None:
-                deleted_file_ids.append(deleted_file_id)
+            deleted_file_ids.extend(item_file_ids)
     db_session.commit()
     push_skills_for_users(affected, db_session)
     db_session.commit()
     if deleted_file_ids:
-        file_store = get_default_file_store()
-        for file_id in deleted_file_ids:
-            delete_bundle_blob(file_store, file_id)
+        _delete_bundle_blobs(get_default_file_store(), deleted_file_ids)
     return SkillBulkResponse(succeeded=succeeded, failed=failed)
 
 
@@ -729,7 +735,7 @@ def replace_current_user_skill_bundle(
         expected_name=skill.name,
     ) as ingested:
         # An upload always adds a version, also for the same zip.
-        replace_skill_bundle(
+        added = replace_skill_bundle(
             skill=skill,
             ingested=ingested,
             base_version_id=base_version_id,
@@ -739,6 +745,8 @@ def replace_current_user_skill_bundle(
         )
         db_session.commit()
 
+    if added is not None:
+        _delete_bundle_blobs(file_store, added.pruned_bundle_file_ids)
     db_session.expire(skill)
     push_skill_to_affected_sandboxes(skill, db_session)
     db_session.commit()
@@ -837,7 +845,7 @@ def patch_current_user_skill(
     before_affected = affected_user_ids_for_skill(skill, db_session)
     file_store = get_default_file_store() if patch_req.has_details_update else None
     new_bundle_file_id: str | None = None
-    files_changed = False
+    added: AddedPluginVersion | None = None
 
     try:
         if file_store is not None:
@@ -866,17 +874,14 @@ def patch_current_user_skill(
                 upload_limits=False,
             )
             new_bundle_file_id = ingested.bundle_file_id
-            files_changed = (
-                replace_skill_bundle(
-                    skill=skill,
-                    ingested=ingested,
-                    base_version_id=patch_req.base_version_id,
-                    user=user,
-                    skip_if_unchanged=True,
-                    previous_manifest=lambda: compute_bundle_manifest(old_bundle_bytes),
-                    db_session=db_session,
-                )
-                is not None
+            added = replace_skill_bundle(
+                skill=skill,
+                ingested=ingested,
+                base_version_id=patch_req.base_version_id,
+                user=user,
+                skip_if_unchanged=True,
+                previous_manifest=lambda: compute_bundle_manifest(old_bundle_bytes),
+                db_session=db_session,
             )
 
         if patch_req.has_db_field_update:
@@ -896,9 +901,12 @@ def patch_current_user_skill(
             delete_bundle_blob(file_store, new_bundle_file_id)
         raise
 
+    files_changed = added is not None
     if file_store is not None and new_bundle_file_id is not None and not files_changed:
         # Nothing references the bundle of an unchanged save.
         delete_bundle_blob(file_store, new_bundle_file_id)
+    if file_store is not None and added is not None:
+        _delete_bundle_blobs(file_store, added.pruned_bundle_file_ids)
 
     db_session.expire(skill)
     visibility_changed = old_public_permission != skill.public_permission
@@ -1064,10 +1072,9 @@ def delete_current_user_skill(
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
 
-    affected, old_file_id = delete_skill_for_user__no_commit(skill, user, db_session)
+    affected, file_ids = delete_skill_for_user__no_commit(skill, user, db_session)
     db_session.commit()
 
     push_skills_for_users(affected, db_session)
     db_session.commit()
-    if old_file_id is not None:
-        delete_bundle_blob(get_default_file_store(), old_file_id)
+    _delete_bundle_blobs(get_default_file_store(), file_ids)

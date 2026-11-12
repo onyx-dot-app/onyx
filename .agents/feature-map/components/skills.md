@@ -426,12 +426,27 @@ The library preview of an external-app skill calls the same renderer
     `current_version_id`, read with the name and description; the editor
     returns the id of the version whose content it read, so the editor's base
     always matches its fields. Routes no longer delete the
-    previous bundle, because older versions still point at it; a skill delete
-    removes only the current bundle, so earlier blobs stay until a cleanup
-    task exists. Each new version stores `plugin_skill.skill_md`
+    previous bundle, because older versions still point at it
+    ([[#bundle-retention]]). Each new version stores `plugin_skill.skill_md`
     ([[#bundle-size-limits]]). `skills/metadata.py:frontmatter_for_jsonb`
     drops a frontmatter value that JSONB cannot hold and keeps every other
     key; name and description are always the validated strings.
+21. `bundle-retention` **A plugin keeps ten bundles, and every version row.**
+    `db/plugin.py:prune_plugin_bundles__no_commit` runs in
+    `add_plugin_version__no_commit`, under the plugin lock and in the same
+    transaction. It keeps the bundles of the current version, the published
+    version and the newest `BUNDLES_KEPT` versions, and the bundle that the
+    legacy skill row uses. Other versions get `bundle_file_id` NULL and keep
+    `bundle_sha256`, the file list and `plugin_skill` rows. The routes delete
+    the pruned files after the commit. A skill delete, single or bulk, deletes
+    every bundle of the skill and its versions after the commit. A failed file
+    delete only logs: `background/celery/tasks/skills/tasks.py:check_for_orphan_skill_bundle_cleanup`
+    deletes hourly each `SKILL_BUNDLE` file older than one hour
+    (`ORPHAN_BUNDLE_MIN_AGE`) that no plugin version and no skill row uses.
+    The age guard is required: an upload saves its file before its row
+    commits. A read of a pruned bundle, also one that loses a race with the
+    prune, gets 404 "The files of this version are no longer kept."
+    (`skills/content.py:read_skill_bundle_blob`), not a 500.
 
 ---
 
@@ -540,7 +555,11 @@ The library preview of an external-app skill calls the same renderer
   database rules of the plugin tables.
 - `backend/tests/integration/tests/skills/` covers the API, bulk actions,
   import sharing and plugin version writes
-  (`backend/tests/integration/tests/skills/test_skill_plugin_versions.py`).
+  (`backend/tests/integration/tests/skills/test_skill_plugin_versions.py`),
+  and bundle retention and deletes
+  (`backend/tests/integration/tests/skills/test_skill_bundle_retention.py`).
+  `backend/tests/external_dependency_unit/craft/test_skill_bundle_cleanup.py`
+  covers the orphan bundle cleanup and the read of a pruned bundle.
   `backend/tests/integration/tests/craft/k8s/` covers a real
   push.
 - By hand: edit a skill while a Craft session runs. The stale notice must

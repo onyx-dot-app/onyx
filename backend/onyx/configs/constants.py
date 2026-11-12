@@ -614,6 +614,9 @@ class OnyxRedisLocks:
     STAGED_CONNECTOR_FILE_CLEANUP_BEAT_LOCK = (
         "da_lock:check_staged_connector_file_cleanup_beat"
     )
+    ORPHAN_SKILL_BUNDLE_CLEANUP_BEAT_LOCK = (
+        "da_lock:check_orphan_skill_bundle_cleanup_beat"
+    )
     USER_FILE_DELETE_LOCK_PREFIX = "da_lock:user_file_delete"
     # Short-lived key set when a delete task is enqueued; cleared when the worker picks it up.
     # Prevents the beat from re-enqueuing the same file while a delete task is already queued.
@@ -755,6 +758,9 @@ class OnyxCeleryTask:
 
     # Files uploaded for a connector edit that no applied plan claimed
     CHECK_FOR_STAGED_CONNECTOR_FILE_CLEANUP = "check_for_staged_connector_file_cleanup"
+
+    # Skill bundle files that no plugin version or skill row uses
+    CHECK_FOR_ORPHAN_SKILL_BUNDLE_CLEANUP = "check_for_orphan_skill_bundle_cleanup"
 
     # chat retention
     CHECK_TTL_MANAGEMENT_TASK = "check_ttl_management_task"
