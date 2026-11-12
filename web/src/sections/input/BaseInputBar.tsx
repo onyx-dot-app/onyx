@@ -141,16 +141,17 @@ const BaseInputBar = memo(
         disabled,
       });
 
+      const editQueuedMessage = (index: number) => {
+        const queued = queue[index];
+        if (!queued) return;
+        onRemoveQueuedMessage?.(index);
+        setMessage(queued.text);
+      };
       const queueNav = useQueuedMessageNavigation({
         messages: queue,
         inputIsEmpty: !message,
         onRemove: (index) => onRemoveQueuedMessage?.(index),
-        onEdit: (index) => {
-          const queued = queue[index];
-          if (!queued) return;
-          onRemoveQueuedMessage?.(index);
-          setMessage(queued.text);
-        },
+        onEdit: editQueuedMessage,
       });
 
       useImperativeHandle(ref, () => ({
@@ -302,6 +303,8 @@ const BaseInputBar = memo(
               messages={queue}
               highlightedId={queueNav.highlightedId}
               onDiscard={(index) => onRemoveQueuedMessage?.(index)}
+              onEdit={editQueuedMessage}
+              canEdit={!message.trim()}
             />
           )}
           <div
