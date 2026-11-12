@@ -296,8 +296,8 @@ func initRequest(sandboxID string) *pb.InitRequest {
 	ent := make([]byte, 64)
 	_, _ = rand.Read(ent)
 	return &pb.InitRequest{
-		HostTime: timestamppb.Now(), Entropy: ent,
-		Env: map[string]string{"ONYX_SANDBOX_ID": sandboxID}, SessionIds: []string{"s1"},
+		Entropy: ent,
+		Env:     map[string]string{"ONYX_SANDBOX_ID": sandboxID}, SessionIds: []string{"s1"},
 		Generation: 1, SandboxId: sandboxID, ScratchBytes: scratchGiB << 30,
 	}
 }
