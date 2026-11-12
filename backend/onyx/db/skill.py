@@ -52,7 +52,6 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased, selectinload
 
 from onyx.auth.permissions import has_global_permission, has_permission
-from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
     MarketplaceKind,
@@ -84,18 +83,20 @@ from onyx.db.models import (
     UserSkillPreference,
 )
 from onyx.db.plugin import (
+    PluginAccessChange,
+    PluginAccessMode,
+    PluginGroupGrant,
+    PluginUserGrant,
     add_plugin_version__no_commit,
+    apply_plugin_access_change__no_commit,
     create_skill_plugin__no_commit,
     lock_skill_plugin__no_commit,
-    publish_plugin__no_commit,
-    replace_plugin_group_shares__no_commit,
-    replace_plugin_user_shares__no_commit,
-    set_plugin_installation_policy__no_commit,
+    plugin_installation_policy,
     set_plugin_preferences__no_commit,
-    set_plugin_user_share__no_commit,
     transfer_plugin__no_commit,
 )
 from onyx.db.plugin_access import (
+    affected_user_ids_for_plugins,
     frontmatter_in_version,
     installation_rank_for_user,
     plugin_editable_by_user,
@@ -107,8 +108,7 @@ from onyx.db.scoped_permissions import (
     scoped_group_ids_subquery,
     within_managed_scope_clause,
 )
-from onyx.db.user_group import assert_not_shared_with_default_group
-from onyx.db.utils import is_fk_violation, is_unique_violation
+from onyx.db.utils import UNSET, UnsetType, is_fk_violation, is_set
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.built_in import BUILT_IN_SKILLS
@@ -200,14 +200,6 @@ def _plugin_of_skill_matches(build: _PluginClause[bool]) -> ColumnElement[bool]:
     )
 
 
-def _is_published() -> ColumnElement[bool]:
-    return _plugin_of_skill_matches(
-        lambda _plugin, marketplace: (
-            marketplace.kind == MarketplaceKind.ORGANIZATION_LIBRARY
-        )
-    )
-
-
 def _is_group_shared_only_within_managed_scope(user: User) -> ColumnElement[bool]:
     """A scoped manager may edit a skill only when every group it is shared with
     is one they manage, and it isn't published org-wide. Delegates to the shared
@@ -217,7 +209,14 @@ def _is_group_shared_only_within_managed_scope(user: User) -> ColumnElement[bool
         resource_id_col=Skill.id,
         junction_resource_col=Plugin__UserGroup.plugin_id,
         junction_group_col=Plugin__UserGroup.user_group_id,
-        non_public_clause=and_(Skill.built_in_skill_id.is_(None), ~_is_published()),
+        non_public_clause=and_(
+            Skill.built_in_skill_id.is_(None),
+            ~_plugin_of_skill_matches(
+                lambda _plugin, marketplace: (
+                    marketplace.kind == MarketplaceKind.ORGANIZATION_LIBRARY
+                )
+            ),
+        ),
         managed_subq=scoped_group_ids_subquery(user),
         junction_live_clause=Plugin__UserGroup.permission.is_not(None),
     )
@@ -447,19 +446,7 @@ def affected_user_ids_for_skill(skill: Skill, db_session: Session) -> set[UUID]:
             )
         )
 
-    plugin: type[Plugin] = aliased(Plugin)
-    marketplace: type[Marketplace] = aliased(Marketplace)
-    visible = (
-        select(plugin.id)
-        .join(marketplace, marketplace.id == plugin.marketplace_id)
-        .where(
-            plugin.id == skill.id,
-            plugin_visible_to_user(plugin, marketplace, Sandbox.user_id),
-        )
-        .correlate_except(plugin, marketplace)
-        .exists()
-    )
-    return set(db_session.scalars(running.where(visible)))
+    return affected_user_ids_for_plugins([skill.id], db_session)
 
 
 def list_skills(
@@ -697,19 +684,11 @@ def replace_skill_bundle(
     return version
 
 
-def set_skill_public_permission(
-    *,
+def _ensure_external_app_skill_stays_public(
     skill: Skill,
     public_permission: SkillSharePermission | None,
     db_session: Session,
 ) -> None:
-    """Publish a custom skill to the organization (VIEWER), or keep it
-    private (None). Every route that changes organization access calls this.
-
-    Publishing moves the plugin to the Organization library, and a name clash
-    there is refused with CONFLICT. Publishing is one-way: a published skill
-    cannot become private. Organization-wide EDITOR is refused; editors are
-    named users and groups."""
     is_associated = db_session.scalar(
         select(
             exists().where(
@@ -723,10 +702,19 @@ def set_skill_public_permission(
             "Skills associated with an external app must remain visible to the "
             "organization with viewer access.",
         )
-    if not skill.is_custom:
-        skill.public_permission = public_permission
-        db_session.flush()
-        return
+
+
+def _publish_requested(
+    skill: Skill,
+    public_permission: SkillSharePermission | None,
+    db_session: Session,
+) -> bool:
+    """Check a request for organization access to a custom skill, and return
+    whether it publishes. VIEWER publishes. None keeps the skill private and is
+    refused for a published skill, because publishing is one-way.
+    Organization-wide EDITOR is refused; editors are named users and groups. A
+    skill linked to an external app stays published."""
+    _ensure_external_app_skill_stays_public(skill, public_permission, db_session)
     if public_permission == SkillSharePermission.EDITOR:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
@@ -740,11 +728,27 @@ def set_skill_public_permission(
                 "This skill is published to the organization. Publishing cannot "
                 "be undone, so the skill cannot be made private.",
             )
+        return False
+    return True
+
+
+def set_skill_public_permission(
+    *,
+    skill: Skill,
+    public_permission: SkillSharePermission | None,
+    db_session: Session,
+) -> None:
+    """Publish a custom skill (VIEWER) or keep it private (None), with no
+    permission check. Routes use ``share_skill__no_commit``."""
+    if not skill.is_custom:
+        _ensure_external_app_skill_stays_public(skill, public_permission, db_session)
+        skill.public_permission = public_permission
+        db_session.flush()
         return
-    plugin = lock_skill_plugin__no_commit(skill, db_session)
-    skill.public_permission = public_permission
-    db_session.flush()
-    publish_plugin__no_commit(plugin.id, "raise", db_session)
+    if _publish_requested(skill, public_permission, db_session):
+        apply_plugin_access_change__no_commit(
+            [skill.id], PluginAccessChange(publish=True), None, db_session
+        ).raise_first_failure()
 
 
 def skill_user_states(
@@ -912,36 +916,23 @@ def set_skill_installation_policy(
     policy: SkillInstallationPolicy,
     db_session: Session,
 ) -> None:
-    if policy != SkillInstallationPolicy.AVAILABLE and not skill.is_custom:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "Installation policies apply only to custom skills.",
-        )
-    plugin = (
-        lock_skill_plugin__no_commit(skill, db_session) if skill.is_custom else None
-    )
-    try:
-        with db_session.begin_nested():
-            skill.installation_policy = policy
-            db_session.flush()
-    except IntegrityError as exc:
-        if not is_unique_violation(exc, "uq_skill_automatic_name"):
-            raise
-        raise OnyxError(
-            OnyxErrorCode.SKILL_NAME_CONFLICT,
-            "Another automatically installed skill already uses this name.",
-        ) from exc
-    if plugin is not None:
-        set_plugin_installation_policy__no_commit(plugin.id, policy, db_session)
-
-
-def _flush_shares(db_session: Session, fk_violation_detail: str) -> None:
-    try:
-        db_session.flush()
-    except IntegrityError as e:
-        if is_fk_violation(e):
-            raise OnyxError(OnyxErrorCode.INVALID_INPUT, fk_violation_detail) from e
-        raise
+    """Set the company install setting of a custom skill, with no permission
+    check. Routes use ``share_skill__no_commit``."""
+    if not skill.is_custom:
+        if policy != SkillInstallationPolicy.AVAILABLE:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "Installation policies apply only to custom skills.",
+            )
+        return
+    apply_plugin_access_change__no_commit(
+        [skill.id],
+        PluginAccessChange(
+            company_installation_policy=plugin_installation_policy(policy)
+        ),
+        None,
+        db_session,
+    ).raise_first_failure()
 
 
 def replace_skill_shares(
@@ -951,39 +942,18 @@ def replace_skill_shares(
     user_shares: Mapping[UUID, SkillSharePermission] | None = None,
     group_shares: Mapping[int, SkillSharePermission] | None = None,
 ) -> None:
-    plugin_id = (
-        lock_skill_plugin__no_commit(skill, db_session).id
-        if skill.is_custom and (user_shares is not None or group_shares is not None)
-        else None
-    )
-    if user_shares is not None:
-        db_session.execute(delete(Skill__User).where(Skill__User.skill_id == skill.id))
-        for user_id, permission in user_shares.items():
-            db_session.add(
-                Skill__User(skill_id=skill.id, user_id=user_id, permission=permission)
-            )
-        _flush_shares(db_session, "One or more user share targets do not exist.")
-        db_session.expire(skill, ["user_shares"])
-        if plugin_id is not None:
-            replace_plugin_user_shares__no_commit(plugin_id, user_shares, db_session)
-
-    if group_shares is not None:
-        assert_not_shared_with_default_group(db_session, list(group_shares))
-        db_session.execute(
-            delete(Skill__UserGroup).where(Skill__UserGroup.skill_id == skill.id)
-        )
-        for group_id, permission in group_shares.items():
-            db_session.add(
-                Skill__UserGroup(
-                    skill_id=skill.id,
-                    user_group_id=group_id,
-                    permission=permission,
-                )
-            )
-        _flush_shares(db_session, "One or more group share targets do not exist.")
-        db_session.expire(skill, ["group_shares"])
-        if plugin_id is not None:
-            replace_plugin_group_shares__no_commit(plugin_id, group_shares, db_session)
+    """Replace the user or group shares of a custom skill, with no permission
+    check. None leaves that kind unchanged. Routes use
+    ``share_skill__no_commit``."""
+    apply_plugin_access_change__no_commit(
+        [skill.id],
+        PluginAccessChange(
+            user_grants=_user_grants(user_shares),
+            group_grants=_group_grants(group_shares),
+        ),
+        None,
+        db_session,
+    ).raise_first_failure()
 
 
 def transfer_skill_ownership(
@@ -1008,30 +978,6 @@ def transfer_skill_ownership(
     plugin = lock_skill_plugin__no_commit(skill, db_session)
     try:
         skill.author_user_id = new_owner_user_id
-        db_session.execute(
-            delete(Skill__User).where(
-                Skill__User.skill_id == skill.id,
-                Skill__User.user_id == new_owner_user_id,
-            )
-        )
-        if previous_owner_user_id is not None:
-            share_upsert = (
-                insert(Skill__User)
-                .values(
-                    skill_id=skill.id,
-                    user_id=previous_owner_user_id,
-                    permission=SkillSharePermission.EDITOR,
-                )
-                .on_conflict_do_update(
-                    index_elements=[Skill__User.skill_id, Skill__User.user_id],
-                    set_={"permission": SkillSharePermission.EDITOR},
-                )
-                .returning(Skill__User)
-            )
-            db_session.scalars(
-                share_upsert,
-                execution_options={"populate_existing": True},
-            ).one()
         db_session.flush()
     except IntegrityError as e:
         if is_fk_violation(e):
@@ -1041,14 +987,25 @@ def transfer_skill_ownership(
             ) from e
         raise
     transfer_plugin__no_commit(plugin.id, new_owner_user_id, db_session)
-    set_plugin_user_share__no_commit(plugin.id, new_owner_user_id, None, db_session)
-    if previous_owner_user_id is not None:
-        set_plugin_user_share__no_commit(
-            plugin.id,
-            previous_owner_user_id,
-            SkillSharePermission.EDITOR,
-            db_session,
-        )
+    # The author has no share, so the new owner's share goes.
+    apply_plugin_access_change__no_commit(
+        [plugin.id],
+        PluginAccessChange(
+            user_grants=(
+                (
+                    PluginUserGrant(
+                        user_id=previous_owner_user_id,
+                        permission=SkillSharePermission.EDITOR,
+                    ),
+                )
+                if previous_owner_user_id is not None
+                else ()
+            ),
+            mode=PluginAccessMode.ADD_ONLY,
+        ),
+        None,
+        db_session,
+    ).raise_first_failure()
 
 
 def delete_skill(skill: Skill, db_session: Session) -> str | None:
@@ -1103,17 +1060,19 @@ def persist_skill_validity(
 
 @dataclass(frozen=True)
 class SkillSharingChange:
-    """A partial update to a skill's access. None leaves a setting unchanged;
-    set_public_permission marks public_permission as supplied."""
+    """A partial update to a skill's access, as the skills API sends it. None
+    shares leave that kind unchanged; set_public_permission marks
+    public_permission as supplied. ``installation_policy``: UNSET keeps it, and
+    None or AVAILABLE means "use the marketplace default"."""
 
     public_permission: SkillSharePermission | None = None
     set_public_permission: bool = False
-    installation_policy: SkillInstallationPolicy | None = None
+    installation_policy: SkillInstallationPolicy | None | UnsetType = UNSET
     user_shares: Mapping[UUID, SkillSharePermission] | None = None
     group_shares: Mapping[int, SkillSharePermission] | None = None
 
 
-SkillBulkAction = Literal["share", "enable", "disable", "delete"]
+SkillBulkAction = Literal["enable", "disable", "delete"]
 
 
 def ensure_can_edit_org_visibility(skill: Skill, user: User) -> None:
@@ -1127,40 +1086,54 @@ def ensure_can_edit_org_visibility(skill: Skill, user: User) -> None:
     )
 
 
-def _assert_group_share_within_scope(
-    skill: Skill,
-    change: SkillSharingChange,
-    user: User,
-    db_session: Session,
-) -> None:
-    """Changing a skill's group shares is a MANAGE_SKILLS action, matching how
-    agents treat group attachment. EDIT on the skill is not enough: an owner
-    could otherwise publish into any group and inject the skill into that group
-    manager's scope. Shares are read from the DB, never the request, so a
-    reassignment cannot escape scope. Re-sending the current set is a no-op."""
-    if change.group_shares is None:
-        return
-    current = dict(
-        db_session.execute(
-            select(Plugin__UserGroup.user_group_id, Plugin__UserGroup.permission).where(
-                Plugin__UserGroup.plugin_id == skill.id,
-                Plugin__UserGroup.permission.is_not(None),
-            )
+def _user_grants(
+    shares: Mapping[UUID, SkillSharePermission] | None,
+) -> tuple[PluginUserGrant, ...] | None:
+    if shares is None:
+        return None
+    return tuple(
+        PluginUserGrant(user_id=user_id, permission=permission)
+        for user_id, permission in shares.items()
+    )
+
+
+def _group_grants(
+    shares: Mapping[int, SkillSharePermission] | None,
+) -> tuple[PluginGroupGrant, ...] | None:
+    if shares is None:
+        return None
+    return tuple(
+        PluginGroupGrant(group_id=group_id, permission=permission)
+        for group_id, permission in shares.items()
+    )
+
+
+def _plugin_access_change(
+    change: SkillSharingChange, mode: PluginAccessMode
+) -> PluginAccessChange:
+    """The plugin change for a skills API change. Organization access is
+    checked per skill (``_publish_requested``); VIEWER publishes."""
+    policy = change.installation_policy
+    return PluginAccessChange(
+        user_grants=_user_grants(change.user_shares),
+        group_grants=_group_grants(change.group_shares),
+        publish=change.set_public_permission
+        and change.public_permission == SkillSharePermission.VIEWER,
+        company_installation_policy=(
+            plugin_installation_policy(policy) if policy is not None else None
         )
-        .tuples()
-        .all()
+        if is_set(policy)
+        else UNSET,
+        mode=mode,
     )
-    if current == dict(change.group_shares):
-        return
-    published = db_session.scalar(select(_is_published()).where(Skill.id == skill.id))
-    assert_within_scope(
-        user,
-        db_session,
-        permission=Permission.MANAGE_SKILLS,
-        current_group_ids=list(current),
-        requested_group_ids=list(change.group_shares),
-        is_non_public=not published and change.public_permission is None,
-    )
+
+
+def _check_skill_access_change(
+    skill: Skill, change: SkillSharingChange, user: User, db_session: Session
+) -> None:
+    if change.set_public_permission:
+        ensure_can_edit_org_visibility(skill, user)
+        _publish_requested(skill, change.public_permission, db_session)
 
 
 def share_skill__no_commit(
@@ -1168,60 +1141,81 @@ def share_skill__no_commit(
     change: SkillSharingChange,
     user: User,
     db_session: Session,
-    *,
-    merge_existing: bool = False,
 ) -> set[UUID]:
-    """Apply an access change and return every user whose sandbox is affected,
-    before or after the change. With merge_existing, supplied user and group
-    grants are added to the current ones instead of replacing them."""
-    if change.installation_policy is not None and not has_global_permission(
-        user, Permission.FULL_ADMIN_PANEL_ACCESS
-    ):
-        raise OnyxError(
-            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "Only admins can change skill installation policies.",
-        )
-    if change.set_public_permission:
-        ensure_can_edit_org_visibility(skill, user)
-    # Anchor on the pre-call visibility so a public->private convert plus a
-    # group-share in one request can't slip a published skill into managed scope.
-    _assert_group_share_within_scope(skill, change, user, db_session)
-
-    before = affected_user_ids_for_skill(skill, db_session)
-    if change.set_public_permission:
-        set_skill_public_permission(
-            skill=skill,
-            public_permission=change.public_permission,
-            db_session=db_session,
-        )
-    if change.installation_policy is not None:
-        set_skill_installation_policy(skill, change.installation_policy, db_session)
-
-    user_shares: dict[UUID, SkillSharePermission] | None = None
-    if change.user_shares is not None:
-        user_shares = {
-            user_id: permission
-            for user_id, permission in change.user_shares.items()
-            if user_id != skill.author_user_id
-        }
-        if merge_existing:
-            user_shares = {
-                share.user_id: share.permission for share in skill.user_shares
-            } | user_shares
-    group_shares: dict[int, SkillSharePermission] | None = None
-    if change.group_shares is not None:
-        group_shares = dict(change.group_shares)
-        if merge_existing:
-            group_shares = {
-                share.user_group_id: share.permission for share in skill.group_shares
-            } | group_shares
-    replace_skill_shares(
-        skill=skill,
-        user_shares=user_shares,
-        group_shares=group_shares,
-        db_session=db_session,
+    """Apply an access change to one skill through its plugin and return
+    every user whose sandbox is affected, before or after the change. Supplied
+    user and group shares replace the current ones."""
+    _check_skill_access_change(skill, change, user, db_session)
+    result = apply_plugin_access_change__no_commit(
+        [skill.id],
+        _plugin_access_change(change, PluginAccessMode.REPLACE),
+        user,
+        db_session,
     )
-    return before | affected_user_ids_for_skill(skill, db_session)
+    result.raise_first_failure()
+    return result.affected_user_ids
+
+
+@dataclass(frozen=True)
+class SkillBulkShareResult:
+    succeeded: list[UUID]
+    # Skill id and the reason, in skill id order.
+    failed: list[tuple[UUID, str]]
+    affected_user_ids: set[UUID]
+
+
+def bulk_share_skills__no_commit(
+    skill_ids: Iterable[UUID],
+    change: SkillSharingChange,
+    user: User,
+    db_session: Session,
+) -> SkillBulkShareResult:
+    """Apply one access change to many skills through their plugins. Shares
+    are add-only. A skill the user cannot edit, or whose change is refused or
+    fails, is reported and changes nothing; the other skills still change. A
+    refusal for the whole set fails every skill."""
+    failed: dict[UUID, str] = {}
+    candidates: list[UUID] = []
+    for skill_id in sorted(set(skill_ids)):
+        skill = fetch_skill(
+            skill_id,
+            policy=SkillManagementPolicy.EDIT,
+            user=user,
+            db_session=db_session,
+            lock_for_update=True,
+        )
+        if skill is None:
+            failed[skill_id] = "Skill not found"
+            continue
+        try:
+            _check_skill_access_change(skill, change, user, db_session)
+        except OnyxError as exc:
+            failed[skill_id] = exc.detail
+            continue
+        candidates.append(skill_id)
+
+    affected: set[UUID] = set()
+    if candidates:
+        try:
+            with db_session.begin_nested():
+                result = apply_plugin_access_change__no_commit(
+                    candidates,
+                    _plugin_access_change(change, PluginAccessMode.ADD_ONLY),
+                    user,
+                    db_session,
+                )
+        except OnyxError as exc:
+            failed |= dict.fromkeys(candidates, exc.detail)
+        else:
+            failed |= {
+                skill_id: exc.detail for skill_id, exc in result.failures.items()
+            }
+            affected = result.affected_user_ids
+    return SkillBulkShareResult(
+        succeeded=[skill_id for skill_id in candidates if skill_id not in failed],
+        failed=sorted(failed.items()),
+        affected_user_ids=affected,
+    )
 
 
 def delete_skill_for_user__no_commit(
@@ -1239,11 +1233,11 @@ def delete_skill_for_user__no_commit(
         )
     if (
         skill.installation_policy == SkillInstallationPolicy.REQUIRED
-        and not has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS)
+        and not has_global_permission(user, Permission.MANAGE_SKILLS)
     ):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "Only admins can delete required skills.",
+            "Only an organization-wide skill manager can delete a required skill.",
         )
     affected = affected_user_ids_for_skill(skill, db_session)
     return affected, delete_skill(skill, db_session)
@@ -1274,13 +1268,13 @@ def create_skill_from_bundle__no_commit(
 def bulk_update_skill__no_commit(
     skill_id: UUID,
     action: SkillBulkAction,
-    change: SkillSharingChange | None,
     user: User,
     db_session: Session,
 ) -> tuple[set[UUID], str | None]:
-    """Apply one bulk action to one skill inside a savepoint, so a failure
-    rolls back this skill only. Returns the affected users and, for a delete,
-    the bundle file id for caller cleanup."""
+    """Apply one bulk enable, disable or delete to one skill inside a
+    savepoint, so a failure rolls back this skill only. Returns the affected
+    users and, for a delete, the bundle file id for caller cleanup. Bulk
+    sharing uses ``bulk_share_skills__no_commit``."""
     with db_session.begin_nested():
         if action in ("enable", "disable"):
             set_skill_enabled_for_user(
@@ -1299,10 +1293,4 @@ def bulk_update_skill__no_commit(
         )
         if skill is None:
             raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
-        if action == "share":
-            if change is None:
-                raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Sharing is required.")
-            return share_skill__no_commit(
-                skill, change, user, db_session, merge_existing=True
-            ), None
         return delete_skill_for_user__no_commit(skill, user, db_session)

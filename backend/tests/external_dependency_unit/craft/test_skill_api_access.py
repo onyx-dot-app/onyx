@@ -12,7 +12,6 @@ from uuid import uuid4
 
 import pytest
 from fastapi import UploadFile
-from pydantic import ValidationError
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
@@ -21,12 +20,13 @@ from onyx.db.enums import (
     SkillInstallationPolicy,
     SkillSharePermission,
 )
-from onyx.db.models import PluginVersion, User, UserSkillPreference
+from onyx.db.models import PluginVersion, Skill, User, UserSkillPreference
 from onyx.db.skill import (
     set_skill_enabled_for_user,
     set_skill_installation_policy,
     skill_user_states,
 )
+from onyx.db.utils import UNSET
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.skill.api import (
@@ -45,8 +45,10 @@ from onyx.server.features.skill.api import (
 from onyx.server.features.skill.models import (
     SkillEnableRequest,
     SkillPatchRequest,
+    SkillResponse,
     SkillShareRequest,
 )
+from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.bundle import SKILL_MD_NAME, build_single_file_bundle, build_skill_md
 from tests.external_dependency_unit.craft.db_helpers import (
     add_user_to_group,
@@ -623,9 +625,30 @@ def test_sharing_without_policy_preserves_existing_policy(
     assert skill.installation_policy == SkillInstallationPolicy.REQUIRED
 
 
-def test_sharing_rejects_explicit_null_policy() -> None:
-    with pytest.raises(ValidationError):
+def test_sharing_policy_is_unchanged_when_missing_and_default_when_null() -> None:
+    assert SkillShareRequest.model_validate({}).to_change().installation_policy is UNSET
+    assert (
         SkillShareRequest.model_validate({"installation_policy": None})
+        .to_change()
+        .installation_policy
+        is None
+    )
+
+
+def test_built_in_skill_response_reports_available_policy(
+    db_session: Session,
+) -> None:
+    built_in_skill_id, definition = next(iter(BUILT_IN_SKILLS.items()))
+    skill = Skill(
+        id=uuid4(),
+        name=built_in_skill_id,
+        description="A built-in skill",
+        built_in_skill_id=built_in_skill_id,
+    )
+    response = SkillResponse.from_builtin(
+        skill, definition, db_session, enabled=True, can_toggle=True
+    )
+    assert response.installation_policy == SkillInstallationPolicy.AVAILABLE
 
 
 def test_creation_response_includes_saved_group_shares(
