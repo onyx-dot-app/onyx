@@ -231,17 +231,34 @@ function toolEvents(
   ];
 }
 
+/** The subagent session a packet came from, or `null` for the main agent. */
+export function craftChildSessionId(raw: unknown): string | null {
+  if (!isRecord(raw) || !isRecord(raw._meta)) return null;
+  const sessionId = asString(raw._meta.sessionId);
+  const parentSessionId = asString(raw._meta.parentSessionId);
+  return sessionId && parentSessionId ? sessionId : null;
+}
+
 /**
  * Returns the timeline events for one Craft packet, live or saved. Packets the
  * main timeline does not show (subagent events, approvals, artifacts, usage)
- * return no events.
+ * return no events. With `subagentSessionId`, it returns only that
+ * subagent's events, for the subagent's page.
  */
-export function craftPacketToEvents(raw: unknown): TimelineEvent[] {
+export function craftPacketToEvents(
+  raw: unknown,
+  options: { subagentSessionId?: string } = {}
+): TimelineEvent[] {
   if (!isRecord(raw)) return [];
   const meta = decodeMeta(raw._meta);
 
-  // A subagent's events belong on its own page.
-  if (meta?.sessionId !== undefined && meta.parentSessionId !== undefined) {
+  // A subagent's events belong on its own page: the main timeline leaves
+  // them out, and a subagent's timeline keeps only its own.
+  const childSessionId =
+    meta?.sessionId !== undefined && meta.parentSessionId !== undefined
+      ? meta.sessionId
+      : undefined;
+  if (childSessionId !== options.subagentSessionId) {
     return [];
   }
 

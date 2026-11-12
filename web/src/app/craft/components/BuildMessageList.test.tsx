@@ -7,7 +7,7 @@ import type {
   BuildMessage,
   OutputCard,
 } from "@/app/craft/types/streamingTypes";
-import type { StreamItem } from "@/app/craft/types/displayTypes";
+import type { TimelineEvent } from "@/lib/timeline/events";
 
 jest.mock("@/lib/app/components", () => ({
   FoldableLogo: () => <div data-testid="onyx-logo" />,
@@ -43,6 +43,28 @@ jest.mock("motion/react", () => ({
   },
 }));
 
+function text(content: string): TimelineEvent {
+  return {
+    type: "update",
+    update: {
+      sessionUpdate: "agent_message_chunk",
+      content: { type: "text", text: content },
+    },
+  };
+}
+
+function thought(content: string): TimelineEvent {
+  return {
+    type: "update",
+    update: {
+      sessionUpdate: "agent_thought_chunk",
+      content: { type: "text", text: content },
+    },
+  };
+}
+
+const endTurn: TimelineEvent = { type: "stop", stopReason: "end_turn" };
+
 function scrollRef() {
   const el = document.createElement("div");
   el.scrollTo = jest.fn();
@@ -51,7 +73,7 @@ function scrollRef() {
 
 function renderList(props: {
   messages?: BuildMessage[];
-  streamItems?: StreamItem[];
+  timelineEvents?: TimelineEvent[];
   isStreaming?: boolean;
 }) {
   return render(
@@ -59,7 +81,7 @@ function renderList(props: {
       <BuildMessageList
         sessionId="session-1"
         messages={props.messages ?? []}
-        streamItems={props.streamItems ?? []}
+        timelineEvents={props.timelineEvents ?? []}
         isStreaming={props.isStreaming}
         autoScrollEnabled={false}
         scrollContainerRef={scrollRef()}
@@ -73,36 +95,24 @@ const savedAssistantMessage: BuildMessage = {
   type: "assistant",
   content: "Final answer",
   timestamp: new Date("2026-01-01T00:00:00Z"),
-  message_metadata: {
-    streamItems: [
-      {
-        type: "thinking",
-        id: "thought-1",
-        content: "Checking the app structure.",
-        isStreaming: false,
-      },
-      {
-        type: "text",
-        id: "text-1",
-        content: "Final answer",
-        isStreaming: false,
-      },
-    ],
-  },
+  timelineEvents: [
+    thought("Checking the app structure."),
+    text("Final answer"),
+    endTurn,
+  ],
 };
 
 test("shows a cursor after refresh with only completed tools until the turn settles", () => {
-  const streamItems: StreamItem[] = [
+  const timelineEvents: TimelineEvent[] = [
     {
-      type: "tool_call",
-      id: "completed-tool",
-      toolCall: {
-        id: "completed-tool",
-        kind: "execute",
+      type: "update",
+      update: {
+        sessionUpdate: "tool_call",
+        toolCallId: "completed-tool",
         title: "Running command",
-        description: "List files",
-        command: "ls",
+        kind: "execute",
         status: "completed",
+        rawInput: { command: "ls", description: "List files" },
         rawOutput: "report.txt",
       },
     },
@@ -110,7 +120,7 @@ test("shows a cursor after refresh with only completed tools until the turn sett
   const props = {
     sessionId: "session-1",
     messages: [],
-    streamItems,
+    timelineEvents,
     scrollContainerRef: scrollRef(),
     autoScrollEnabled: false,
   };
@@ -123,9 +133,7 @@ test("shows a cursor after refresh with only completed tools until the turn sett
 test("uses the text cursor without adding a second progress cursor", () => {
   renderList({
     isStreaming: true,
-    streamItems: [
-      { type: "text", id: "text-1", content: "Writing", isStreaming: true },
-    ],
+    timelineEvents: [text("Writing")],
   });
   expect(screen.getAllByTestId("blinking-bar")).toHaveLength(1);
 });
@@ -158,7 +166,7 @@ test("renders a settled output-only turn but never places its cards before a liv
   const props = {
     sessionId: "session-1",
     messages: [message],
-    streamItems: [],
+    timelineEvents: [],
     outputCards: [output],
     onOutputOpen: jest.fn(),
     onTurnOutputsOpen: jest.fn(),
@@ -200,7 +208,7 @@ test("moves a file card to its latest persisted turn and retains an output-only 
   const props = {
     sessionId: "session-1",
     messages,
-    streamItems: [],
+    timelineEvents: [],
     autoScrollEnabled: false,
     scrollContainerRef: scrollRef(),
     onOutputOpen,
@@ -285,19 +293,9 @@ describe("BuildMessageList thinking visibility", () => {
   it("keeps completed thought packets collapsed in the active stream", () => {
     renderList({
       isStreaming: true,
-      streamItems: [
-        {
-          type: "thinking",
-          id: "settled-thought",
-          content: "Checking the app structure.",
-          isStreaming: false,
-        },
-        {
-          type: "text",
-          id: "stream-text",
-          content: "Final answer",
-          isStreaming: false,
-        },
+      timelineEvents: [
+        thought("Checking the app structure."),
+        text("Final answer"),
       ],
     });
 
@@ -311,14 +309,7 @@ describe("BuildMessageList thinking visibility", () => {
   it("shows live thought packets as collapsed progress by default", () => {
     renderList({
       isStreaming: true,
-      streamItems: [
-        {
-          type: "thinking",
-          id: "live-thought",
-          content: "Checking the app structure.",
-          isStreaming: true,
-        },
-      ],
+      timelineEvents: [thought("Checking the app structure.")],
     });
 
     expect(screen.getByText("Thinking...")).toBeInTheDocument();
@@ -333,13 +324,7 @@ describe("BuildMessageList thinking visibility", () => {
 
   it("shows stream error packets inline", () => {
     renderList({
-      streamItems: [
-        {
-          type: "error",
-          id: "error-1",
-          content: "provider model not found",
-        },
-      ],
+      timelineEvents: [{ type: "error", message: "provider model not found" }],
     });
 
     expect(screen.getByRole("alert")).toHaveTextContent(
@@ -363,7 +348,7 @@ test("keeps a finalization cursor when attachment completes before any assistant
     <BuildMessageList
       sessionId="session-1"
       messages={messages}
-      streamItems={[]}
+      timelineEvents={[]}
       scrollContainerRef={scrollRef()}
       autoScrollEnabled={false}
       isStreaming
@@ -378,7 +363,7 @@ test("keeps one assistant cursor during finalization and removes it when finaliz
   const props = {
     sessionId: "session-1",
     messages: [savedAssistantMessage],
-    streamItems: [],
+    timelineEvents: [],
     scrollContainerRef: scrollRef(),
     autoScrollEnabled: false,
   };
@@ -421,7 +406,7 @@ it.each(["report.docx", "table.xlsx", "archive.zip"])(
             ],
           },
         ]}
-        streamItems={[]}
+        timelineEvents={[]}
         isStreaming={false}
         autoScrollEnabled={false}
         scrollContainerRef={scrollRef()}

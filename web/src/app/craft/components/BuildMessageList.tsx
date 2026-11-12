@@ -26,11 +26,8 @@ import {
   BuildMessage,
   type OutputCard,
 } from "@/app/craft/types/streamingTypes";
-import { StreamItem, TodoListState } from "@/app/craft/types/displayTypes";
-import {
-  buildCraftTranscript,
-  type CraftTimelineEntry,
-} from "@/lib/timeline/craft/timelineEntries";
+import { TodoListState } from "@/app/craft/types/displayTypes";
+import type { CraftTimelineEntry } from "@/lib/timeline/craft/timelineEntries";
 import { toCraftToolCall } from "@/lib/timeline/craft/toolCall";
 import type { AcpPlanEntry } from "@/lib/timeline/acp";
 import type { TimelineEvent } from "@/lib/timeline/events";
@@ -44,12 +41,8 @@ interface BuildMessageListProps {
   sessionId: string | null;
   attachmentRefreshKey?: number;
   messages: BuildMessage[];
-  streamItems: StreamItem[];
-  /**
-   * The current turn's timeline events. When set, the in-progress turn
-   * renders from them instead of from `streamItems`.
-   */
-  timelineEvents?: TimelineEvent[];
+  /** The current turn's timeline events. */
+  timelineEvents: TimelineEvent[];
   isStreaming?: boolean;
   isFinalizing?: boolean;
   /** Whether auto-scroll is enabled (user is at bottom) */
@@ -84,7 +77,6 @@ export default function BuildMessageList({
   sessionId,
   attachmentRefreshKey = 0,
   messages,
-  streamItems,
   timelineEvents,
   isStreaming = false,
   isFinalizing = false,
@@ -119,8 +111,7 @@ export default function BuildMessageList({
     }
   }, [
     messages.length,
-    streamItems.length,
-    timelineEvents?.length,
+    timelineEvents.length,
     outputCards,
     autoScrollEnabled,
     scrollContainerRef,
@@ -137,26 +128,23 @@ export default function BuildMessageList({
   );
 
   const timelineState = useMemo(
-    () => (timelineEvents ? reduceTimelineEvents(timelineEvents) : null),
+    () => reduceTimelineEvents(timelineEvents),
     [timelineEvents]
   );
-  const hasStreamItems = timelineState
-    ? timelineState.entries.length > 0 || timelineState.plan.length > 0
-    : streamItems.length > 0;
+  const hasStreamItems =
+    timelineState.entries.length > 0 || timelineState.plan.length > 0;
   const lastMessage = messages[messages.length - 1];
   const showStreamingArea =
     hasStreamItems ||
     (isStreaming && (!isFinalizing || lastMessage?.type !== "assistant"));
   const showStreamCursor =
     isStreaming &&
-    (timelineState
-      ? !timelineState.entries.some(
-          (entry) =>
-            entry.payload.kind === "message" && entry.status === "streaming"
-        )
-      : !streamItems.some((item) => item.type === "text" && item.isStreaming));
+    !timelineState.entries.some(
+      (entry) =>
+        entry.payload.kind === "message" && entry.status === "streaming"
+    );
 
-  // Inline items, shared by the stream-item and timeline renders.
+  // Inline items between timeline steps.
   const renderConnectCard = (
     key: string,
     topMargin: string,
@@ -213,109 +201,6 @@ export default function BuildMessageList({
         <span className="min-w-0 break-words">{content}</span>
       </div>
     );
-  };
-
-  const renderStreamItems = (
-    rawItems: StreamItem[],
-    opts: {
-      isCurrentStream: boolean;
-      extractLatestTodo: boolean;
-    }
-  ): { nodes: React.ReactNode[]; pinnedTodo: TodoListState | null } => {
-    // Render items in stream order (tools, text, thinking interleaved).
-    //
-    // Filtering rules that apply first:
-    // - Only the LATEST todo_list is kept (either pinned via extractLatestTodo
-    //   or rendered inline at its original position).
-    // - Thinking remains as a collapsed timeline step so users have a durable
-    //   signal that the model spent time reasoning without opening by default.
-    let latestTodoIdx = -1;
-    rawItems.forEach((it, idx) => {
-      if (it.type === "todo_list") latestTodoIdx = idx;
-    });
-
-    const items = rawItems.filter((it, idx) => {
-      // Collapse to one todo_list per turn.
-      if (it.type === "todo_list" && idx !== latestTodoIdx) {
-        return false;
-      }
-      if (opts.extractLatestTodo && it.type === "todo_list") {
-        return false;
-      }
-      return true;
-    });
-
-    const pinnedTodo =
-      opts.extractLatestTodo && latestTodoIdx !== -1
-        ? (
-            rawItems[latestTodoIdx] as {
-              type: "todo_list";
-              todoList: TodoListState;
-            }
-          ).todoList
-        : null;
-
-    // Tool calls and thinking go on the timeline rail; every other item
-    // renders inline between rail blocks.
-    const blocks = buildCraftTranscript(items);
-
-    const nodes = blocks.map((block, idx) => {
-      if (block.kind === "steps") {
-        // The block folds closed once an assistant message follows it.
-        const followedByMessage = blocks
-          .slice(idx + 1)
-          .some((b) => b.kind === "item" && b.item.type === "text");
-        return (
-          <CraftTimeline
-            key={block.id}
-            entries={block.entries}
-            autoCollapse={followedByMessage}
-          />
-        );
-      }
-
-      // Inline item — small top margin when it follows a rail block.
-      const topMargin = blocks[idx - 1]?.kind === "steps" ? "mt-3" : "";
-      const { item } = block;
-      switch (item.type) {
-        case "text":
-          return (
-            <div key={item.id} className={cn(topMargin)}>
-              <TextChunk
-                sessionId={sessionId}
-                content={item.content}
-                isStreaming={opts.isCurrentStream && item.isStreaming}
-                onFileOpen={onFileOpen}
-              />
-            </div>
-          );
-        case "todo_list":
-          return (
-            <div key={item.id} className={cn(topMargin)}>
-              <TodoListCard
-                todoList={item.todoList}
-                defaultOpen={item.todoList.isOpen}
-              />
-            </div>
-          );
-        case "connect_app_request":
-          return renderConnectCard(
-            item.id,
-            topMargin,
-            item.requestId,
-            item.externalAppId,
-            item.reason
-          );
-        case "compaction":
-          return renderCompaction(item.id, topMargin, item.summary);
-        case "error":
-          return renderError(item.id, topMargin, item.content, item.rateLimit);
-        default:
-          return null;
-      }
-    });
-
-    return { nodes, pinnedTodo };
   };
 
   /**
@@ -429,18 +314,10 @@ export default function BuildMessageList({
       lastAssistantByTurn.get(turnIndex) !== message.id
         ? undefined
         : outputsByTurn.get(turnIndex);
-    const savedStreamItems = message.message_metadata?.streamItems as
-      | StreamItem[]
-      | undefined;
     const savedTimeline = savedTimelines.get(message.id);
     const savedRender = savedTimeline
       ? renderTimeline(savedTimeline, { isCurrentStream: false })
-      : savedStreamItems && savedStreamItems.length > 0
-        ? renderStreamItems(savedStreamItems, {
-            isCurrentStream: false,
-            extractLatestTodo: true,
-          })
-        : null;
+      : null;
     const visibleSavedRender =
       savedRender && (savedRender.pinnedTodo || savedRender.nodes.length > 0)
         ? savedRender
@@ -529,14 +406,9 @@ export default function BuildMessageList({
     return -1;
   }, [messages]);
 
-  const streamRender = !hasStreamItems
-    ? null
-    : timelineState
-      ? renderTimeline(timelineState, { isCurrentStream: true })
-      : renderStreamItems(streamItems, {
-          isCurrentStream: true,
-          extractLatestTodo: true,
-        });
+  const streamRender = hasStreamItems
+    ? renderTimeline(timelineState, { isCurrentStream: true })
+    : null;
 
   return (
     <div className="flex flex-col items-center px-4 pb-4">
