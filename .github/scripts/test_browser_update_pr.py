@@ -230,6 +230,35 @@ esac
                 first,
                 run(root, "git", "ls-remote", "origin", f"refs/heads/{branch}").stdout,
             )
+            # Identical output must refresh a PR if the base changed its paths.
+            run(root, "git", "checkout", "main")
+            intermediate = run(
+                root,
+                "bash",
+                ".github/scripts/update-sandbox-browser.sh",
+                INSTALLER,
+                env={**env, "STABLE": "998.0.1.2"},
+            )
+            self.assertEqual(intermediate.returncode, 0, intermediate.stderr)
+            run(root, "git", "add", INSTALLER)
+            run(root, "git", "commit", "-m", "intermediate base pin")
+            run(root, "git", "push", "origin", "main")
+            result = publish(env)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            current = run(
+                root, "git", "ls-remote", "origin", f"refs/heads/{branch}"
+            ).stdout
+            self.assertNotEqual(first, current)
+            self.assertEqual(
+                run(root, "git", "merge-base", "HEAD", "origin/main").stdout,
+                run(root, "git", "rev-parse", "origin/main").stdout,
+            )
+            self.assertEqual(
+                run(
+                    root, "git", "merge-tree", "--write-tree", "HEAD", "origin/main"
+                ).returncode,
+                0,
+            )
             env = {**env, "EXISTING_PR": "123", "STABLE": "1000.0.1.2"}
             result = publish(env)
             self.assertEqual(result.returncode, 0, result.stderr)
