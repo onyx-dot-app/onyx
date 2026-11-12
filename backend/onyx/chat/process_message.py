@@ -291,8 +291,11 @@ def prepare_chat_turn(
             chat_session = _load_session(new_msg_req, user, db_session)
             # Reserve the session before model setup or changes to its message tree.
             admission.claim(chat_session.id)
-            if queued_turn is not None and chat_session.tool_selection is not None:
-                # A turn the server starts uses the chat's current tools and filters.
+            if (
+                queued_turn is not None or agent_host
+            ) and chat_session.tool_selection is not None:
+                # A turn the server starts, or its agent host, uses the chat's
+                # current tools and filters.
                 new_msg_req = SendMessageRequest.model_validate(
                     new_msg_req.model_dump() | chat_session.tool_selection.model_dump()
                 )
