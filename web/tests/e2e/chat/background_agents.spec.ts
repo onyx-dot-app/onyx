@@ -1,6 +1,7 @@
 import { test, expect } from "@tests/e2e/chat/fixtures";
 import {
   addMockLlmConversation,
+  getMockLlmConversationRequests,
   mockLlmNonce,
   MOCK_LLM_DEFAULT_RESPONSE,
   releaseMockLlmGate,
@@ -179,6 +180,10 @@ test("Stop subagents ends background work", async ({ api, chatPage, page }) => {
     const session: { chat_session_id: string } = await (await created).json();
     sessionId = session.chat_session_id;
     await expect(chatPage.inputBar.subagentActivity).toBeVisible();
+    // Stop only after the child reaches the model, so its late result is real.
+    await expect
+      .poll(async () => (await getMockLlmConversationRequests(gateId)).length)
+      .toBeGreaterThan(0);
     const stopped = page.waitForResponse((response) =>
       response.url().endsWith(`/chat-session/${sessionId}/stop-subagents`)
     );
