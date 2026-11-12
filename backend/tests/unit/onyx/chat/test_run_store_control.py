@@ -20,7 +20,12 @@ from onyx.agents.models import (
 from onyx.agents.runtime import Run
 from onyx.cache.interface import CacheBackend
 from onyx.chat import run_store
-from onyx.chat.models import AgentResultState, ChatResponseSnapshot, ResponseOwner
+from onyx.chat.models import (
+    AgentResultState,
+    ChatBranch,
+    ChatResponseSnapshot,
+    ResponseOwner,
+)
 from onyx.chat.run_store import ChatRunStore, _OwnedRun, _OwnerLease
 from onyx.db.models import User
 from onyx.llm.models import AssistantMessage, ToolResultMessage
@@ -295,3 +300,36 @@ def test_every_step_receives_a_bounded_number_of_child_results(
 
     # The final step is bounded too; unread results wake the agent's next run.
     assert len(received) == run_store.MAX_AGENT_COMPLETIONS_PER_STEP
+
+
+
+def test_the_agent_cap_counts_runs_of_a_later_turn_on_the_branch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cache = MagicMock(spec=CacheBackend)
+    chat_id = uuid4()
+    store = ChatRunStore(
+        tenant_id="tenant",
+        chat_session_id=chat_id,
+        response_id=1,
+        visible_response_ids=[1],
+        cache=cache,
+        follow_up_steps=4,
+        control_cache=cache,
+        user=User(),
+    )
+    later = ChatBranch(chat_session_id=chat_id, message_ids=[3, 1])
+    counted: list[list[int]] = []
+
+    def count(_session: object, message_ids: list[int]) -> int:
+        counted.append(list(message_ids))
+        return run_store.MAX_RUNNING_AGENTS
+
+    monkeypatch.setattr(run_store, "lock_agent", lambda *_: None)
+    monkeypatch.setattr(
+        run_store, "get_selected_branch", lambda *_: (MagicMock(), later)
+    )
+    monkeypatch.setattr(run_store, "count_running_agents", count)
+
+    assert not store._lock_background_capacity(MagicMock())
+    assert counted == [[3, 1]]

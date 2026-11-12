@@ -759,6 +759,11 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory):
         orders concurrent starts around the count.
         """
         lock_agent(session, str(self.chat_session_id))
+        # A later turn can extend the branch and start agents before this store
+        # polls, so the count reads the branch under the lock.
+        self._follow_selected_branch(
+            get_selected_branch(session, self.chat_session_id)[1]
+        )
         return (
             count_running_agents(session, self._input_branch.message_ids)
             < MAX_RUNNING_AGENTS
