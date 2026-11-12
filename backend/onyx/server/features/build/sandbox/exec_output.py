@@ -93,6 +93,10 @@ class ExecOutputBuffer:
             self._tail_bytes -= removed
             self._dropped += removed
 
+    def pending_bytes(self, stream: OutputStream) -> int:
+        """Bytes of an incomplete character that the stream's decoder holds."""
+        return len(self._decoders[stream].getstate()[0])
+
     def finish(self) -> str:
         """The command ended: flush the bytes of an incomplete character.
         Returns the part to stream, as `add` does."""

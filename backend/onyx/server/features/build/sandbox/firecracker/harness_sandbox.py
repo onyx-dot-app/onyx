@@ -460,13 +460,16 @@ class FirecrackerHarnessSandbox(HarnessSandbox):
                 raise ExecSessionEndedError(record.exec_session_id) from e
             raise
         if result is None:
+            # The next call reads an incomplete character again.
             put_exec_session(
                 tenant_cache,
                 ref.sandbox_id,
                 record.model_copy(
                     update={
-                        "stdout_offset": offsets[OutputStream.STDOUT],
-                        "stderr_offset": offsets[OutputStream.STDERR],
+                        "stdout_offset": offsets[OutputStream.STDOUT]
+                        - buffer.pending_bytes(OutputStream.STDOUT),
+                        "stderr_offset": offsets[OutputStream.STDERR]
+                        - buffer.pending_bytes(OutputStream.STDERR),
                         "last_used": time.time(),
                     }
                 ),

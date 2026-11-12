@@ -369,6 +369,27 @@ def test_an_empty_write_polls_until_the_command_ends(
     assert harness_state.get_exec_session(tenant_cache, ref.sandbox_id, session) is None
 
 
+def test_a_character_split_between_polls_is_kept(
+    monkeypatch: pytest.MonkeyPatch,
+    client_factory: InsecureClientFactory,
+    sandbox: FirecrackerHarnessSandbox,
+    node: RunningFakeAgent,
+    new_ref: NewRef,
+) -> None:
+    monkeypatch.setattr(harness_sandbox, "POLL_MIN_YIELD_MS", 250)
+    ref = new_ref()
+    _, result = _run(sandbox.exec_command(ref, "cat", yield_time_ms=250))
+    session = result.exec_session_id
+    assert session is not None
+    [execution] = node.agent.executions[str(ref.sandbox_id)].values()
+    daemon = sandbox_daemon(client_factory, sandbox._place(ref))
+
+    daemon.interact(execution.execution_id, data="a€".encode()[:3])
+    assert _run(sandbox.write_stdin(ref, session))[1].output == "a"
+    daemon.interact(execution.execution_id, data="a€".encode()[3:])
+    assert _run(sandbox.write_stdin(ref, session))[1].output == "€"
+
+
 def test_ctrl_c_sends_sigint_to_the_command(
     tenant_cache: CacheBackend,
     sandbox: FirecrackerHarnessSandbox,
