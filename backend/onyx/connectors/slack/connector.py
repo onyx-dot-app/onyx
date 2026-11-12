@@ -1362,8 +1362,14 @@ class SlackConnector(
 
             channel_message_ts = checkpoint.channel_completion_map.get(channel_id)
             if channel_message_ts:
-                # Set oldest to the checkpoint timestamp to resume from where we left off
-                oldest = channel_message_ts
+                # Slack returns the newest messages first (up to _SLACK_LIMIT per
+                # page), so we walk a channel backwards in time. The checkpoint
+                # holds the oldest message already processed: resume strictly
+                # before it (``latest`` is exclusive) and keep ``oldest`` pinned
+                # to the start of the requested range. Moving ``oldest`` forward
+                # instead would request [newest_seen, end], which is empty, and
+                # silently drop every message older than the first page.
+                latest = channel_message_ts
             else:
                 # First time processing this channel - yield its hierarchy node
                 yield _channel_to_hierarchy_node(
@@ -1392,8 +1398,14 @@ class SlackConnector(
                 latest,
             )
 
-            # message_batch[0] is the newest message (Slack returns newest to oldest)
-            new_oldest = message_batch[0]["ts"] if message_batch else latest
+            # Slack returns newest to oldest, so the oldest message in the batch is
+            # the point to resume from. An empty batch means nothing is left
+            # before ``latest``.
+            new_oldest = (
+                min(message_batch, key=lambda m: float(m["ts"]))["ts"]
+                if message_batch
+                else latest
+            )
 
             num_threads_start = len(seen_thread_ts)
 
@@ -1453,12 +1465,16 @@ class SlackConnector(
 
             # calculate a percentage progress for the current channel by determining
             # how much of the time range we've processed so far
+            # we walk backwards from ``end``, so progress is how far ``new_oldest``
+            # has moved down from ``end`` towards ``range_start``
             new_oldest_seconds_epoch = SecondsSinceUnixEpoch(new_oldest)
             range_start = start or max(0, channel_created)
-            if new_oldest_seconds_epoch < range_start:
+            if new_oldest_seconds_epoch > end:
                 range_complete = 0.0
             else:
-                range_complete = new_oldest_seconds_epoch - range_start
+                range_complete = min(
+                    end - new_oldest_seconds_epoch, max(end - range_start, 0)
+                )
 
             range_total = end - range_start
             if range_total <= 0:
