@@ -43,6 +43,7 @@ from onyx.db.chat import reserve_chat_response_ids
 from onyx.db.chat_inputs import (
     MAX_PENDING_MESSAGE_BYTES,
     consume_inputs__no_commit,
+    list_human_messages,
     pause_chat_queue__no_commit,
     read_chat_inbox,
     read_run_inputs,
@@ -50,6 +51,7 @@ from onyx.db.chat_inputs import (
     withdraw_human_message__no_commit,
 )
 from onyx.db.chat_response import read_response_record
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import HookPoint, IncognitoRecordMode
 from onyx.db.models import ChatInput, ChatMessage, ChatSession, ToolCall, User
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -2147,20 +2149,22 @@ def _stream_turn(
     assert chat_turn_work.wait_idle(timeout=30)
 
 
-@pytest.mark.parametrize("over_budget", [False, True])
+@pytest.mark.parametrize("host_event", ["none", "over_budget", "stop"])
 def test_status_starts_child_work_when_no_turn_hosts_it(
     chat: ChatSession,
     owner: User,
     db_session: Session,
     monkeypatch: pytest.MonkeyPatch,
-    over_budget: bool,
+    host_event: str,
 ) -> None:
     """Child work that becomes startable after every run store exited still starts.
 
     Status counts it as active agent work, and its dispatch hosts the run. When
     the owner is over budget, the work becomes a visible failed run instead of
-    failing silently on every poll.
+    failing silently on every poll. A Stop while the host holds chat admission
+    pauses the queue, so a message queued then waits after the host ends.
     """
+    over_budget = host_event == "over_budget"
 
     def generate(
         request: GenerationRequest, _signal: CancellationSignal
@@ -2232,6 +2236,28 @@ def test_status_starts_child_work_when_no_turn_hosts_it(
         monkeypatch.setattr(
             "onyx.chat.process_message.check_token_rate_limits", over_limit
         )
+    queued_ids: list[str] = []
+    if host_event == "stop":
+        bind = execution.bind_run_store
+
+        def stop_while_hosting(*args: Any, **kwargs: Any) -> Any:
+            # The host holds chat admission here; a message and a Stop arrive.
+            with get_session_with_current_tenant() as session:
+                queued_ids.append(
+                    submit_human_message__no_commit(
+                        session,
+                        chat.id,
+                        message="Answer later",
+                        delivery=MessageDelivery.QUEUE,
+                        target_response_id=None,
+                        turn_preparing=False,
+                    ).id
+                )
+                session.commit()
+                chat_backend.stop_chat_session(chat.id, None, owner, session)
+            return bind(*args, **kwargs)
+
+        monkeypatch.setattr(execution, "bind_run_store", stop_while_hosting)
     tasks = BackgroundTasks()
     status = chat_backend.get_chat_session_processing_status(
         chat.id, tasks, _NO_HEADERS, owner
@@ -2241,6 +2267,15 @@ def test_status_starts_child_work_when_no_turn_hosts_it(
     asyncio.run(tasks())
     assert chat_turn_work.wait_idle(timeout=30)
     db_session.expire_all()
+    if host_event == "stop":
+        assert queued_ids
+        stopped = db_session.get(ChatSession, chat.id)
+        assert stopped is not None and stopped.queue_paused_at is not None
+        # The paused queue starts nothing after the host ends.
+        assert [
+            message.id for message in list_human_messages(db_session, chat.id)
+        ] == queued_ids
+        assert read_chat_inbox(db_session, chat.id).next_turn is None
     if over_budget:
         failed = db_session.scalar(
             select(ChatMessage)
