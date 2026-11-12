@@ -275,8 +275,8 @@ func (s *Store) limits(req Limits) (Limits, error) {
 
 // DefaultDeniedVMPaths are the VM paths that a call with no session ID
 // refuses: kernel interfaces and the daemon's own state (its key and Init
-// state). Commands run as root and can still reach them; this guards the
-// file API callers against mistakes.
+// state). This guards the file API callers against mistakes; the commands
+// run as the sandbox user, not root.
 var DefaultDeniedVMPaths = []string{"/proc", "/sys", "/dev", "/run/craft-fc"}
 
 // SessionDir returns the absolute directory of a session and makes it if it

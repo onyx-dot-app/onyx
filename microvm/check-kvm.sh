@@ -198,7 +198,10 @@ if [ "${lane}" = full ]; then
 
   # Root drives from build-rootfs.sh: "ca" with the proxy CA built in
   # (pass-through, template and managed drive tests), "reclaim" with the
-  # memory test daemon command, "noca" for the delivery image.
+  # memory test daemon command, "noca" for the delivery image. "ca" and
+  # "reclaim" run commands as root (--command-user=): the managed drive and
+  # memory tests remount, drop caches and read /dev/vda. "noca" keeps the
+  # production default, commands as the sandbox user.
   pull_registry=()
   [ -z "${BASE_IMAGE_REGISTRY:-}" ] || pull_registry=(--registry "${BASE_IMAGE_REGISTRY}")
   rootfs() {
@@ -208,8 +211,8 @@ if [ "${lane}" = full ]; then
       --out "${work}/rootfs-$1" "${@:2}" | tail -3
   }
   ca="${confdir}/mitmproxy-ca-cert.pem"
-  rootfs ca --ca "${ca}"
-  rootfs reclaim --ca "${ca}" --daemon-cmd "/craft-fc/bin/guest-daemon --reclaim-idle=1m"
+  rootfs ca --ca "${ca}" --daemon-cmd "/craft-fc/bin/guest-daemon --command-user="
+  rootfs reclaim --ca "${ca}" --daemon-cmd "/craft-fc/bin/guest-daemon --reclaim-idle=1m --command-user="
   rootfs noca
   pt_img="${work}/img-pt"
   mkdir -p "${pt_img}"

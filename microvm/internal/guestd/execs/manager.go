@@ -40,6 +40,8 @@ type Config struct {
 	MaxRunning int
 	EndedTTL   time.Duration // 1 h if zero
 	Isolator   Isolator
+	// Credential runs every command as this user; nil runs it as the daemon.
+	Credential *syscall.Credential
 	Log        *slog.Logger
 }
 
@@ -242,6 +244,12 @@ func (m *Manager) spawn(e *Execution, spec Spec, dir string, deadline time.Durat
 	}
 	cmd := &exec.Cmd{Path: path, Args: spec.Argv, Dir: dir, Env: spec.Env}
 	g.Prepare(cmd)
+	if m.cfg.Credential != nil {
+		if cmd.SysProcAttr == nil {
+			cmd.SysProcAttr = &syscall.SysProcAttr{}
+		}
+		cmd.SysProcAttr.Credential = m.cfg.Credential
+	}
 
 	var readers [2]*os.File
 	var closers []io.Closer

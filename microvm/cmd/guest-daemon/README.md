@@ -21,7 +21,7 @@ Code: `cmd/guest-daemon/` (main), `internal/guestd/` (API, Init, auth), `interna
 |---|---|
 | Binary | `/craft-fc/bin/guest-daemon` (static, `CGO_ENABLED=0`, read-only root) |
 | vsock port | **52** (the node agent's default `--daemon-port` for the gRPC pass-through; `Dial` always refuses it) |
-| User and env | root (decision P2), with the env `craft-init` passes from `/craft-fc/etc/guest.env`. Commands get that env, then the command defaults (`NO_COLOR=1`, `TERM=dumb`, `PAGER=cat`, `GIT_PAGER=cat`, `GH_PAGER=cat`, `LANG` and `LC_ALL` `C.UTF-8`), then the Init env, then their own. |
+| User and env | The daemon runs as root (decision P2), with the env `craft-init` passes from `/craft-fc/etc/guest.env`. Commands run as `--command-user` (default `1000:1000`, the image's `sandbox` user, with its groups from `/etc/group`). Commands get the daemon env, then `HOME`, `USER` and `LOGNAME` of that user (from `/etc/passwd`, else `/home/onyx` and `sandbox`), then the command defaults (`NO_COLOR=1`, `TERM=dumb`, `PAGER=cat`, `GIT_PAGER=cat`, `GH_PAGER=cat`, `LANG` and `LC_ALL` `C.UTF-8`), then the Init env, then their own. |
 | Supervisor | `craft-init` (PID 1) starts the daemon and restarts it when it exits. The daemon is not PID 1. |
 | cgroup v2 | Mounted at `/sys/fs/cgroup` by init. The daemon mounts it if it is missing, and makes `/sys/fs/cgroup/guestd/`. |
 | Drives | Init runs `/craft-fc/lib/attach` (scratch on `/mnt/scratch`, overlays, read-only managed drives). It does nothing if init already attached them. |
@@ -45,7 +45,8 @@ empty turns the CA install off), `--ca-nssdb` (`/home/sandbox/.pki/nssdb`; empty
 (`/usr/bin/certutil`), the file flags (`--sessions-root`,
 `--read-link-roots`, `--max-file-bytes`, `--max-zip-bytes`, `--capture-dirs`, `--capture-exclude`,
 `--capture-max-stored-bytes`, `--capture-max-expanded-bytes`, `--capture-max-entries`,
-`--capture-zstd-level`, `--file-owner`; see Files), `--listen`
+`--capture-zstd-level`, `--file-owner`; see Files), `--command-user` (`1000:1000`; empty runs commands as
+root; a daemon that is not root refuses a command user), `--listen`
 (`unix:<path>` instead of vsock, for tests; mode 0600), `--log-level`. The daemon has no TCP listener:
 the API is plaintext with a bearer key, so it is served only on vsock, through the node agent. The
 container fallback (TCP with mTLS) is not in v1.
@@ -108,7 +109,7 @@ the new drive shows at once.
 
 Commands:
 
-- Each command runs as root in its own cgroup `/sys/fs/cgroup/guestd/<execution_id>` (started there with
+- Each command runs as `--command-user` (not root) in its own cgroup `/sys/fs/cgroup/guestd/<execution_id>` (started there with
   `clone3(CLONE_INTO_CGROUP)`), in a new session.
 - With a `session_id`, the working directory defaults to the session directory (made if missing), and a
   relative `cwd` is below it. Commands are not confined: any absolute `cwd` and any path in the VM work.
