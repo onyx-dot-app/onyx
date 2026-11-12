@@ -284,7 +284,9 @@ The library preview of an external-app skill calls the same renderer
     (`db/skill.py:ensure_can_edit_org_visibility`; the patch route calls it
     too). `db/skill.py:_publish_requested` checks every request for
     organization access: it refuses organization `EDITOR` and a change from
-    published to private, for every route, bulk included. A publish moves the
+    published to private, for every route, bulk included. The admin
+    Publishing setting then decides what a publish does
+    ([[#publishing-review]]). A publish moves the
     plugin to the Organization library (`db/plugin.py:publish_plugin__no_commit`);
     a name clash there returns `CONFLICT`. Only global `MANAGE_PLUGINS` deletes
     a published or a required skill
@@ -414,8 +416,9 @@ The library preview of an external-app skill calls the same renderer
     transaction they lock the skill row, then the plugin row, add the next
     `plugin_version` with its file list (`skills/bundle.py:compute_bundle_manifest`)
     and `plugin_skill` row, move `current_version_id`, and copy the bundle,
-    name and description to the legacy skill row. A save on a plugin in the
-    Organization library also moves `published_version_id`. An editor save
+    name and description to the legacy skill row. A save never moves
+    `published_version_id`: on a published skill the organization keeps the
+    published version until a publish update ([[#publishing-review]]). An editor save
     whose file list equals the current version's adds no version, and the
     route deletes the new blob. A version copied from a legacy row has no
     file list, so editor routes pass `previous_manifest`, the list of the
@@ -441,10 +444,28 @@ The library preview of an external-app skill calls the same renderer
     (`GET /skills/custom/{id}/versions`), preview one
     (`GET .../versions/{version_id}`) and restore one
     (`POST .../versions/{version_id}/restore`); a viewer or a version of
-    another skill gets 404. `review_status` is `published` for the
-    published version, else `draft`. Restore needs
+    another skill gets 404. `review_status` is derived from the plugin
+    pointers: `published`, `pending` or `draft`. Restore needs
     `base_version_id` (409 `PLUGIN_VERSION_STALE`) and saves through the
     editor save path, so equal files add no version.
+23. `publishing-review` **The Publishing setting governs every publish by
+    authors.** Only the author or global `MANAGE_PLUGINS` publishes
+    (`db/skill.py:ensure_can_edit_org_visibility`); an editor saves versions
+    only. `db/plugin.py:publish_or_request_review__no_commit` is the one place
+    `Settings.plugin_publishing` (`OPEN`, `REQUIRES_REVIEW`, `OFF`) applies; a
+    failed settings read stops the publish. Global `MANAGE_PLUGINS` and a
+    system write (`actor` None: external app link, community downgrade,
+    approve) always publish. Every publish path calls it: the access-change
+    write path for a private plugin, `POST /skills/custom/{id}/publish` and
+    approve. A save never moves `published_version_id`. Review state is two
+    pointers on `plugin`: a request sets `pending_version_id` (a newer request
+    replaces it), and a publish or a deny clears it. There is no denied state.
+    A new skill created published takes the next free name on a clash
+    (`on_name_clash="rename"`); other publishes return CONFLICT. Requests
+    (`GET /skills/review-requests`, approve, deny) need global
+    `MANAGE_PLUGINS`; the list shows the plugin author and the version's
+    `created_at`.
+
 ---
 
 ## Decisions
@@ -556,7 +577,9 @@ The library preview of an external-app skill calls the same renderer
   deleting a skill deletes every version bundle
   (`backend/tests/integration/tests/skills/test_skill_bundle_delete.py`),
   the version list, preview and restore
-  (`backend/tests/integration/tests/skills/test_skill_version_api.py`).
+  (`backend/tests/integration/tests/skills/test_skill_version_api.py`), and
+  publish, review and the Publishing setting
+  (`backend/tests/integration/tests/skills/test_skill_publish_review.py`).
   `backend/tests/integration/tests/craft/k8s/` covers a real
   push.
 - By hand: edit a skill while a Craft session runs. The stale notice must

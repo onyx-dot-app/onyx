@@ -43,6 +43,8 @@ class _Case:
             installation_policy=None,
             current_version_id=self.skill.id,
             current_version_number=1,
+            published_version_number=1 if self.published else None,
+            pending_version_number=None,
             version_user_runs=self.skill.id,
             name=self.skill.name,
             description=self.skill.description,

@@ -31,7 +31,7 @@ Callers normally control the transaction boundary so multi-step operations can
 roll back atomically.
 """
 
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Literal
@@ -39,6 +39,7 @@ from uuid import UUID
 
 from sqlalchemy import (
     ColumnElement,
+    Row,
     Select,
     and_,
     delete,
@@ -51,6 +52,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased, selectinload
+from sqlalchemy.sql.elements import KeyedColumnElement
 
 from onyx.auth.permissions import has_global_permission, has_permission
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -84,15 +86,19 @@ from onyx.db.models import (
     UserSkillPreference,
 )
 from onyx.db.plugin import (
+    NameClashAction,
     PluginAccessChange,
     PluginAccessMode,
     PluginGroupGrant,
     PluginUserGrant,
     add_plugin_version__no_commit,
     apply_plugin_access_change__no_commit,
+    check_base_version,
     create_skill_plugin__no_commit,
+    get_plugin_version,
     lock_skill_plugin__no_commit,
     plugin_installation_policy,
+    publish_or_request_review__no_commit,
     set_plugin_preferences__no_commit,
     transfer_plugin__no_commit,
 )
@@ -648,11 +654,7 @@ def create_custom_skill__no_commit(
     the next free name there, as main allows two public skills with one name;
     others start in the author's "My uploads". Returns the skill and the users
     the access change affects."""
-    created_public = external_app_id is not None or (
-        change is not None
-        and change.set_public_permission
-        and change.public_permission == SkillSharePermission.VIEWER
-    )
+    created_public = external_app_id is not None
     skill = add_new_skill__no_commit(
         Skill(
             name=ingested.canonical_name,
@@ -674,7 +676,11 @@ def create_custom_skill__no_commit(
         )
     affected: set[UUID] = set()
     if change is not None:
-        affected = share_skill__no_commit(skill, change, user, db_session)
+        # main allows two published skills with one name, so a new skill that
+        # is published takes the next free name.
+        affected = share_skill__no_commit(
+            skill, change, user, db_session, on_name_clash="rename"
+        )
     return skill, affected
 
 
@@ -1173,7 +1179,9 @@ def _group_grants(
 
 
 def _plugin_access_change(
-    change: SkillSharingChange, mode: PluginAccessMode
+    change: SkillSharingChange,
+    mode: PluginAccessMode,
+    on_name_clash: NameClashAction = "raise",
 ) -> PluginAccessChange:
     """The plugin change for a skills API change. Organization access is
     checked per skill (``_publish_requested``); VIEWER publishes."""
@@ -1189,6 +1197,7 @@ def _plugin_access_change(
         if is_set(policy)
         else UNSET,
         mode=mode,
+        on_name_clash=on_name_clash,
     )
 
 
@@ -1200,11 +1209,92 @@ def _check_skill_access_change(
         _publish_requested(skill, change.public_permission, db_session)
 
 
+def publish_skill__no_commit(
+    skill: Skill,
+    base_version_id: UUID | None,
+    user: User,
+    db_session: Session,
+) -> set[UUID]:
+    """Publish the current version of a skill: a first publish for a private
+    skill, a publish update for a published one. Only the author or an
+    organization-wide manager publishes. Under the Publishing setting this can
+    make a review request instead, or be refused. The caller holds the skill
+    row lock. Returns the affected users."""
+    ensure_can_edit_org_visibility(skill, user)
+    plugin = lock_skill_plugin__no_commit(skill, db_session)
+    check_base_version(plugin, base_version_id)
+    if plugin.published_version_id == plugin.current_version_id:
+        return set()
+    before = affected_user_ids_for_plugins([plugin.id], db_session)
+    publish_or_request_review__no_commit(
+        plugin, skill, plugin.current_version_id, user, "raise", db_session
+    )
+    return before | affected_user_ids_for_plugins([plugin.id], db_session)
+
+
+def _lock_pending_plugin(skill: Skill, version_id: UUID, db_session: Session) -> Plugin:
+    """Lock the plugin of a skill whose pending request is ``version_id``."""
+    plugin = lock_skill_plugin__no_commit(skill, db_session)
+    get_plugin_version(plugin.id, version_id, db_session)
+    if plugin.pending_version_id != version_id:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT, "This version has no pending publish request."
+        )
+    return plugin
+
+
+def approve_skill_review__no_commit(
+    skill: Skill, version_id: UUID, db_session: Session
+) -> set[UUID]:
+    """Publish the pending version of a skill. A first publish moves the skill
+    to the Organization library, and a name clash there is refused with
+    CONFLICT. The caller holds the skill row lock. Returns the affected
+    users."""
+    plugin = _lock_pending_plugin(skill, version_id, db_session)
+    before = affected_user_ids_for_plugins([plugin.id], db_session)
+    publish_or_request_review__no_commit(
+        plugin, skill, version_id, None, "raise", db_session
+    )
+    return before | affected_user_ids_for_plugins([plugin.id], db_session)
+
+
+def deny_skill_review__no_commit(
+    skill: Skill, version_id: UUID, db_session: Session
+) -> None:
+    """Clear the pending request. The caller holds the skill row lock."""
+    _lock_pending_plugin(skill, version_id, db_session).pending_version_id = None
+    db_session.flush()
+
+
+def list_review_requests(db_session: Session) -> Sequence[Row[Any]]:
+    """Every pending request, oldest version first. Labels match the fields of
+    ``SkillReviewRequestResponse``."""
+    pending: type[PluginVersion] = aliased(PluginVersion)
+    published: type[PluginVersion] = aliased(PluginVersion)
+    author_email: KeyedColumnElement[str] = User.__table__.c.email
+    return db_session.execute(
+        select(
+            Plugin.id.label("skill_id"),
+            frontmatter_in_version("name", pending.id.expression).label("name"),
+            pending.id.label("version_id"),
+            pending.version_number.label("version_number"),
+            published.version_number.label("published_version_number"),
+            author_email.label("author_email"),
+            pending.created_at.label("version_created_at"),
+        )
+        .join(pending, pending.id == Plugin.pending_version_id)
+        .outerjoin(published, published.id == Plugin.published_version_id)
+        .outerjoin(User.__table__, User.__table__.c.id == Plugin.author_user_id)
+        .order_by(pending.created_at, pending.id)
+    ).all()
+
+
 def share_skill__no_commit(
     skill: Skill,
     change: SkillSharingChange,
     user: User,
     db_session: Session,
+    on_name_clash: NameClashAction = "raise",
 ) -> set[UUID]:
     """Apply an access change to one skill through its plugin and return
     every user whose sandbox is affected, before or after the change. Supplied
@@ -1212,7 +1302,7 @@ def share_skill__no_commit(
     _check_skill_access_change(skill, change, user, db_session)
     result = apply_plugin_access_change__no_commit(
         [skill.id],
-        _plugin_access_change(change, PluginAccessMode.REPLACE),
+        _plugin_access_change(change, PluginAccessMode.REPLACE, on_name_clash),
         user,
         db_session,
     )

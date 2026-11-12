@@ -1,20 +1,22 @@
 import io
 import zipfile
 from collections.abc import Sequence
-from typing import TypeVar
+from typing import Literal, TypeVar
 from uuid import UUID, uuid4
 
 import httpx
 from pydantic import BaseModel
 
-from onyx.db.enums import SkillSharePermission
+from onyx.db.enums import PluginPublishingPolicy, SkillSharePermission
 from onyx.server.features.skill.models import (
     SkillCreateRequest,
     SkillEditableDetailResponse,
     SkillGroupShareRequest,
     SkillPatchRequest,
     SkillPreviewResponse,
+    SkillPublishRequest,
     SkillResponse,
+    SkillReviewRequestResponse,
     SkillShareRequest,
     SkillsList,
     SkillUserShareRequest,
@@ -58,6 +60,18 @@ def build_minimal_bundle(
 
 
 class SkillManager:
+    @staticmethod
+    def set_publishing(
+        policy: PluginPublishingPolicy, user_performing_action: DATestUser
+    ) -> None:
+        response = client.patch(
+            f"{API_SERVER_URL}/admin/settings",
+            json={"plugin_publishing": policy.value},
+            headers=user_performing_action.headers,
+        )
+        response.raise_for_status()
+        assert response.json()["plugin_publishing"] == policy.value
+
     @staticmethod
     def list_versions(
         skill_id: UUID,
@@ -108,6 +122,70 @@ class SkillManager:
         )
         response.raise_for_status()
         return _response_model(response, SkillEditableDetailResponse)
+
+    @staticmethod
+    def publish_response(
+        skill_id: UUID,
+        user_performing_action: DATestUser,
+        base_version_id: UUID | None = None,
+    ) -> httpx.Response:
+        return client.post(
+            f"{API_SERVER_URL}/skills/custom/{skill_id}/publish",
+            json=SkillPublishRequest(base_version_id=base_version_id).model_dump(
+                mode="json"
+            ),
+            headers=user_performing_action.headers,
+        )
+
+    @staticmethod
+    def publish(
+        skill_id: UUID,
+        user_performing_action: DATestUser,
+        base_version_id: UUID | None = None,
+    ) -> SkillResponse:
+        response = SkillManager.publish_response(
+            skill_id, user_performing_action, base_version_id
+        )
+        response.raise_for_status()
+        return _response_model(response, SkillResponse)
+
+    @staticmethod
+    def review_response(
+        skill_id: UUID,
+        version_id: UUID,
+        decision: Literal["approve", "deny"],
+        user_performing_action: DATestUser,
+    ) -> httpx.Response:
+        return client.post(
+            f"{API_SERVER_URL}/skills/custom/{skill_id}/versions/{version_id}/{decision}",
+            headers=user_performing_action.headers,
+        )
+
+    @staticmethod
+    def review(
+        skill_id: UUID,
+        version_id: UUID,
+        decision: Literal["approve", "deny"],
+        user_performing_action: DATestUser,
+    ) -> SkillResponse:
+        response = SkillManager.review_response(
+            skill_id, version_id, decision, user_performing_action
+        )
+        response.raise_for_status()
+        return _response_model(response, SkillResponse)
+
+    @staticmethod
+    def list_review_requests(
+        user_performing_action: DATestUser,
+    ) -> list[SkillReviewRequestResponse]:
+        response = client.get(
+            f"{API_SERVER_URL}/skills/review-requests",
+            headers=user_performing_action.headers,
+        )
+        response.raise_for_status()
+        return [
+            SkillReviewRequestResponse.model_validate(item) for item in response.json()
+        ]
 
     @staticmethod
     def create_from_editor(

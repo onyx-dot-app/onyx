@@ -32,15 +32,19 @@ from onyx.db.skill import (
     SkillManagementPolicy,
     SkillSharingChange,
     affected_user_ids_for_skill,
+    approve_skill_review__no_commit,
     bulk_share_skills__no_commit,
     bulk_update_skill__no_commit,
     create_custom_skill__no_commit,
     create_skill_from_bundle__no_commit,
     delete_skill_for_user__no_commit,
+    deny_skill_review__no_commit,
     enable_new_skill_if_name_available__no_commit,
     ensure_can_edit_org_visibility,
     fetch_skill,
+    list_review_requests,
     list_skills,
+    publish_skill__no_commit,
     replace_skill_bundle,
     set_skill_enabled_for_user,
     share_skill__no_commit,
@@ -71,7 +75,9 @@ from onyx.server.features.skill.models import (
     SkillEnableRequest,
     SkillPatchRequest,
     SkillPreviewResponse,
+    SkillPublishRequest,
     SkillResponse,
+    SkillReviewRequestResponse,
     SkillShareRequest,
     SkillsList,
     SkillVersionPreviewResponse,
@@ -374,6 +380,17 @@ def set_skill_enabled_for_current_user(
     push_skills_for_users({user.id}, db_session)
     db_session.commit()
     return skill_response_for_user(skill, user, db_session)
+
+
+@user_router.get("/review-requests")
+def list_skill_review_requests(
+    _: User = Depends(require_permission(Permission.MANAGE_PLUGINS)),
+    db_session: Session = Depends(get_session),
+) -> list[SkillReviewRequestResponse]:
+    return [
+        SkillReviewRequestResponse.model_validate(row, from_attributes=True)
+        for row in list_review_requests(db_session)
+    ]
 
 
 @user_router.get("/{skill_id}")
@@ -742,9 +759,11 @@ def list_custom_skill_versions(
             created_at=version.created_at,
             created_by_email=version.created_by_email,
             is_current=is_current,
-            review_status="published" if is_published else "draft",
+            review_status=(
+                "published" if is_published else "pending" if is_pending else "draft"
+            ),
         )
-        for version, is_current, is_published in list_plugin_versions(
+        for version, is_current, is_published, is_pending in list_plugin_versions(
             skill.id, db_session
         )
     ]
@@ -795,6 +814,57 @@ def restore_custom_skill_version(
         user,
         db_session,
     )
+
+
+@user_router.post("/custom/{skill_id}/publish")
+def publish_current_user_skill(
+    skill_id: UUID,
+    request: SkillPublishRequest,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> SkillResponse:
+    """Publish the current version: to the organization for a private skill,
+    as a publish update for a published one. The Publishing setting can make
+    this a review request or refuse it."""
+    skill = _lock_editable_skill(skill_id, user, db_session)
+    affected = publish_skill__no_commit(
+        skill, request.base_version_id, user, db_session
+    )
+    db_session.commit()
+    db_session.expire(skill)
+    if affected:
+        push_skills_for_users(affected, db_session)
+        db_session.commit()
+    return skill_response_for_user(skill, user, db_session, include_share_details=True)
+
+
+@user_router.post("/custom/{skill_id}/versions/{version_id}/approve")
+def approve_skill_review(
+    skill_id: UUID,
+    version_id: UUID,
+    user: User = Depends(require_permission(Permission.MANAGE_PLUGINS)),
+    db_session: Session = Depends(get_session),
+) -> SkillResponse:
+    skill = _lock_editable_skill(skill_id, user, db_session)
+    affected = approve_skill_review__no_commit(skill, version_id, db_session)
+    db_session.commit()
+    db_session.expire(skill)
+    push_skills_for_users(affected, db_session)
+    db_session.commit()
+    return skill_response_for_user(skill, user, db_session, include_share_details=True)
+
+
+@user_router.post("/custom/{skill_id}/versions/{version_id}/deny")
+def deny_skill_review(
+    skill_id: UUID,
+    version_id: UUID,
+    user: User = Depends(require_permission(Permission.MANAGE_PLUGINS)),
+    db_session: Session = Depends(get_session),
+) -> SkillResponse:
+    skill = _lock_editable_skill(skill_id, user, db_session)
+    deny_skill_review__no_commit(skill, version_id, db_session)
+    db_session.commit()
+    return skill_response_for_user(skill, user, db_session, include_share_details=True)
 
 
 @user_router.put("/custom/{skill_id}/bundle")

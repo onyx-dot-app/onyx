@@ -81,8 +81,8 @@ def plugin_access_mismatches(
         if skill.public_permission is not None:
             if plugin.marketplace_id != ORGANIZATION_LIBRARY_ID:
                 problems.append(f"{skill_id}: public skill is not published")
-            if plugin.published_version_id != plugin.current_version_id:
-                problems.append(f"{skill_id}: published version is not current")
+            if plugin.published_version_id is None:
+                problems.append(f"{skill_id}: public skill has no published version")
         else:
             if plugin.marketplace_id != user_uploads_id(skill.author_user_id):
                 problems.append(f"{skill_id}: private skill is not in My uploads")
