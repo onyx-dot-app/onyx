@@ -145,6 +145,7 @@ beforeEach(() => {
       message: "Queued follow-up",
       delivery: "queue",
       target_response_id: 2,
+      deep_research: false,
     },
   ];
   jest.mocked(waitForChatResponseEnd).mockReset();
@@ -510,6 +511,7 @@ test("a successful queue request keeps text typed while it was pending", async (
       message: "Keep this draft",
       delivery: "queue" as const,
       target_response_id: 2,
+      deep_research: false,
     };
     pending.push(item);
     submission.resolve(new Response(JSON.stringify(item)));
@@ -699,6 +701,31 @@ test("Stop stays while another model of the turn still runs", async () => {
   expect(send).toBeDisabled();
 });
 
+test.each([
+  ["an agent with search", "SearchTool", true],
+  ["an agent without search", "ImageGenerationTool", false],
+])(
+  "a queued message keeps Deep Research for %s",
+  async (_case, inCodeToolId, expected) => {
+    const user = setupUser();
+    const activeAgent = {
+      id: 0,
+      tools: [{ id: 1, in_code_tool_id: inCodeToolId }],
+    } as AppInputBarProps["activeAgent"];
+    render(
+      <ChatInput
+        {...props("streaming")}
+        deepResearchEnabled
+        activeAgent={activeAgent}
+      />
+    );
+    await user.click(screen.getByRole("textbox", { name: "Message input" }));
+    await user.keyboard("{Control>}{Enter}{/Control}");
+    await waitFor(() => expect(pending).toHaveLength(2));
+    expect(pending.at(-1)?.deep_research).toBe(expected);
+  }
+);
+
 test("every pending write refreshes the chat status", async () => {
   const user = setupUser();
   render(<ChatInput {...props("streaming")} />);
@@ -743,6 +770,7 @@ test("Enter on a highlighted message that left the queue does not reach the next
     message: "Second follow-up",
     delivery: "queue",
     target_response_id: 2,
+    deep_research: false,
   });
   await act(async () => {
     await mutate(() => true, undefined, { revalidate: false });

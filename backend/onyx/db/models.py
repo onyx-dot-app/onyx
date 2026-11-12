@@ -3860,6 +3860,10 @@ class ChatInput(Base):
         nullable=True,
     )
     content: Mapped[str] = mapped_column(Text)
+    # A queued or interrupting human message starts its turn as Deep Research.
+    deep_research: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
 
 
 # Tool result details that saved responses, checkpoints and temporary chats keep,

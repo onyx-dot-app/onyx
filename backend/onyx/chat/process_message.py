@@ -750,6 +750,7 @@ def dispatch_pending_chat_messages(
                         message=queued_turn.message.message,
                         chat_session_id=chat_session_id,
                         parent_message_id=queued_turn.parent_response_id,
+                        deep_research=queued_turn.message.deep_research,
                     ),
                     user=user,
                     llm_overrides=None,

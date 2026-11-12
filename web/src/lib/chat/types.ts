@@ -5,6 +5,7 @@ export interface PendingChatMessage {
   message: string;
   delivery: "send" | "queue" | "interrupt";
   target_response_id: number | null;
+  deep_research: boolean;
 }
 
 export interface ChatHistoryPage {
@@ -30,9 +31,11 @@ export interface ChatSessionQueue {
   /** New input has a saved response to target. */
   hasTargetResponse: boolean;
   needsResponseSelection: boolean;
+  /** `deepResearch` starts a queued or interrupting message's turn as Deep Research. */
   submit: (
     message: string,
-    delivery: PendingChatMessage["delivery"]
+    delivery: PendingChatMessage["delivery"],
+    deepResearch: boolean
   ) => Promise<boolean>;
   withdraw: (id: string) => Promise<PendingChatMessage | null>;
   interrupt: (id: string) => Promise<void>;

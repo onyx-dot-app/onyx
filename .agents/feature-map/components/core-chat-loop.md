@@ -198,7 +198,9 @@ model. Tools work the same way: each user send and the
 `chat_session.tool_selection` (`allowed_tool_ids`, `preferred_tool_id`,
 `internal_search_filters`), and a turn the server starts uses the selection
 current when it starts. NULL means
-the agent's tools. Child agents keep their own tool configuration. If the queue head changes before acceptance, preparation ends with a
+the agent's tools. Deep Research is a choice of each message, not of the chat:
+a queued or interrupting message stores `chat_input.deep_research`, and its
+turn starts as Deep Research when it is set. Child agents keep their own tool configuration. If the queue head changes before acceptance, preparation ends with a
 conflict, and the next trigger dispatches again. Consuming the inbox row
 prevents delivery twice. If automatic preparation fails, a saved error response
 prevents repeated startup attempts. Withdrawal removes pending text atomically;
