@@ -134,10 +134,21 @@ def _run_fleet_telemetry() -> None:
     collect_snapshots(get_current_tenant_id())
 
 
+def _run_orphan_skill_bundle_cleanup() -> None:
+    from onyx.background.celery.tasks.skills.tasks import delete_orphan_skill_bundles
+
+    delete_orphan_skill_bundles(
+        time_budget_s=_ORPHAN_SKILL_BUNDLE_CLEANUP_BUDGET_SECONDS
+    )
+
+
 _CACHE_CLEANUP_INTERVAL_SECONDS = 300
 _OAUTH_PROVIDER_CLEANUP_INTERVAL_SECONDS = 24 * 3600
 # The lead-up reclaim rate. No beat runs here, so this thread sets the cadence.
 _LICENSE_RECLAIM_INTERVAL_SECONDS = 6 * 3600
+_ORPHAN_SKILL_BUNDLE_CLEANUP_INTERVAL_SECONDS = 3600
+# Short, because the cleanup holds up the recovery loop while it runs.
+_ORPHAN_SKILL_BUNDLE_CLEANUP_BUDGET_SECONDS = 60
 
 
 def _build_periodic_tasks() -> list[_PeriodicTaskDef]:
@@ -197,6 +208,14 @@ def _build_periodic_tasks() -> list[_PeriodicTaskDef]:
             interval_seconds=_OAUTH_PROVIDER_CLEANUP_INTERVAL_SECONDS,
             lock_id=PERIODIC_TASK_LOCK_BASE + 4,
             run_fn=_run_oauth_provider_cleanup,
+        )
+    )
+    tasks.append(
+        _PeriodicTaskDef(
+            name="orphan-skill-bundle-cleanup",
+            interval_seconds=_ORPHAN_SKILL_BUNDLE_CLEANUP_INTERVAL_SECONDS,
+            lock_id=PERIODIC_TASK_LOCK_BASE + 6,
+            run_fn=_run_orphan_skill_bundle_cleanup,
         )
     )
     if not DISABLE_TELEMETRY:

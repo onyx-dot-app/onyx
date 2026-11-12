@@ -8,7 +8,7 @@ from collections.abc import Generator
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, null, select, update
 
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.db.models import FileRecord, Plugin, PluginSkill, PluginVersion, Skill
@@ -151,6 +151,34 @@ def test_old_published_version_keeps_its_bundle(basic_user: DATestUser) -> None:
     assert all(bundles[number] for number in range(3, BUNDLES_KEPT + 3))
     assert published_file_id is not None
     assert _existing_files({published_file_id}) == {published_file_id}
+
+
+def test_backfilled_version_keeps_its_bundle_past_the_limit(
+    basic_user: DATestUser,
+) -> None:
+    skill = _skill_with_versions(basic_user, 1)
+    with get_session_with_current_tenant() as db_session:
+        db_session.execute(
+            update(PluginVersion)
+            .where(PluginVersion.plugin_id == skill.id)
+            .values(file_manifest=null())
+        )
+        db_session.commit()
+    backfilled_file_id = _bundles_by_version(skill.id)[1]
+    assert backfilled_file_id is not None
+
+    for number in range(2, BUNDLES_KEPT + 3):
+        SkillManager.replace_bundle(
+            skill,
+            build_minimal_bundle(skill.name, description=f"Version {number}"),
+            basic_user,
+        )
+
+    bundles = _bundles_by_version(skill.id)
+    assert len(bundles) == BUNDLES_KEPT + 2
+    assert bundles[1] == backfilled_file_id
+    assert bundles[2] is None
+    assert _existing_files({backfilled_file_id}) == {backfilled_file_id}
 
 
 def test_delete_removes_every_version_and_bundle(basic_user: DATestUser) -> None:

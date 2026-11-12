@@ -17,12 +17,12 @@ _CLEANUP_LOCK_TIMEOUT_S = _CLEANUP_TIME_BUDGET_S + 60
 
 def delete_orphan_skill_bundles(time_budget_s: float = _CLEANUP_TIME_BUDGET_S) -> int:
     """Delete orphan skill bundle files until none is left or the time is up.
-    A file that fails to delete stays and is tried again on the next run.
-    Returns how many it deleted."""
-    start = time.monotonic()
+    A file that fails to delete, or that the time left no turn for, stays and
+    is tried again on the next run. Returns how many it deleted."""
+    deadline = time.monotonic() + time_budget_s
     deleted = 0
     after_file_id: str | None = None
-    while time.monotonic() - start < time_budget_s:
+    while time.monotonic() < deadline:
         with get_session_with_current_tenant() as db_session:
             file_ids = get_orphan_skill_bundle_file_ids(
                 after_file_id=after_file_id,
@@ -32,7 +32,7 @@ def delete_orphan_skill_bundles(time_budget_s: float = _CLEANUP_TIME_BUDGET_S) -
         if not file_ids:
             break
         deleted += delete_files_best_effort(
-            file_ids, context="orphan skill bundle cleanup"
+            file_ids, context="orphan skill bundle cleanup", deadline=deadline
         )
         after_file_id = file_ids[-1]
     return deleted

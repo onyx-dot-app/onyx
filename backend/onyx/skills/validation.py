@@ -47,6 +47,15 @@ def is_missing_file_error(exc: Exception) -> bool:
     if isinstance(exc, FileRecordNotFoundError):
         return True
 
+    from azure.core.exceptions import ResourceNotFoundError
+
+    # A missing container means storage is misconfigured, not that the file is gone.
+    if isinstance(exc, ResourceNotFoundError):
+        return (
+            getattr(exc, "error_code", None)  # ods: ignore[getattr]
+            == "BlobNotFound"
+        )
+
     response = getattr(exc, "response", None)  # ods: ignore[getattr]
     if isinstance(response, dict):
         error = response.get("Error")
