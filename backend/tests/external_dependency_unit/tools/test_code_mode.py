@@ -57,6 +57,7 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
+from onyx.tools.tool_name import normalize_external_tool_name
 from tests.external_dependency_unit.answer.stream_test_utils import final_answer
 from tests.external_dependency_unit.code_mode_helpers import (
     ChatLLM,
@@ -67,6 +68,7 @@ from tests.external_dependency_unit.code_mode_helpers import (
     last_tool_text,
     saved_cells,
     send,
+    tool_step,
     wait_step,
 )
 from tests.external_dependency_unit.conftest import MakeTestUser
@@ -344,6 +346,41 @@ def test_code_mode_program_calls_mcp_tool_in_parallel(
     )
     assert len(chat_detail.packets) == 1
     _assert_code_mode_block(chat_detail.packets[0], program)
+
+
+def _tool_labels(packets: Sequence[object]) -> list[tuple[str, str]]:
+    return [
+        (packet.obj.tool_name, packet.obj.display_name)
+        for packet in packets
+        if isinstance(packet, Packet) and isinstance(packet.obj, CustomToolStart)
+    ]
+
+
+def test_saved_mcp_calls_replay_the_tool_display_name(
+    db_session: Session,
+    make_test_user: MakeTestUser,
+    mcp_server_url: str,
+) -> None:
+    user = make_test_user("tool_label_user")
+    persona, namespace = _persona_with_mcp_tool(db_session, user, mcp_server_url)
+    chat_session = create_chat_session_from_request(
+        chat_session_request=ChatSessionCreationRequest(persona_id=persona.id),
+        user=user,
+        db_session=db_session,
+    )
+    tool_name = normalize_external_tool_name(f"{namespace}__hello")
+    llm = ChatLLM(
+        [tool_step(tool_name, "call", {"name": "alpha"}), Delta(content="Done.")]
+    )
+    parts = send(chat_session.id, user, llm, "Greet alpha.", code_mode=False)
+
+    assert final_answer(parts) == "Done."
+    assert _tool_labels(parts) == [(tool_name, "hello")]
+    chat_detail = get_chat_session(
+        session_id=chat_session.id, user=user, db_session=db_session
+    )
+    assert len(chat_detail.packets) == 1
+    assert _tool_labels(chat_detail.packets[0]) == [(tool_name, "hello")]
 
 
 @pytest.mark.parametrize("temporary", [False, True])

@@ -224,7 +224,6 @@ def create_custom_tool_packets(
             placement=Placement(turn_index=turn_index, tab_index=tab_index),
             obj=CustomToolDelta(
                 tool_name=tool_name,
-                display_name=display_name,
                 tool_id=tool_id,
                 response_type=response_type,
                 data=data,

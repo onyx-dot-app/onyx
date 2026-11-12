@@ -68,8 +68,7 @@ function constructCustomToolState(
       p.obj.type === PacketType.SECTION_END || p.obj.type === PacketType.ERROR
   )?.obj as SectionEnd | null;
 
-  const toolName =
-    toolStart?.display_name || toolDeltas[0]?.display_name || fallbackToolName;
+  const toolName = toolStart?.display_name || fallbackToolName;
   const toolArgsPacket = packets.find(
     (p) => p.obj.type === PacketType.CUSTOM_TOOL_ARGS
   )?.obj as CustomToolArgs | null;

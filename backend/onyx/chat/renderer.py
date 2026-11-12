@@ -476,7 +476,7 @@ class ToolRenderer:
         self.placement = placement
         self.tool_id = tool_id
         # The tool's own display name; calls of tools without one show their name.
-        self.display_name = display_name or call.name
+        self.display_name = display_name
         self._queries: set[str] = set()
         self._documents: set[str] = set()
         self._last_details: BaseModel | None = None
@@ -504,7 +504,7 @@ class ToolRenderer:
             objects = [
                 packets.CustomToolStart(
                     tool_name=name,
-                    display_name=self.display_name,
+                    display_name=self.display_name or name,
                     tool_id=self.tool_id,
                 ),
                 packets.CustomToolArgs(
@@ -707,7 +707,6 @@ class ToolRenderer:
             objects.append(
                 packets.CustomToolDelta(
                     tool_name=details.tool_name,
-                    display_name=self.display_name,
                     tool_id=self.tool_id,
                     response_type=details.response_type,
                     data=data,
@@ -748,7 +747,6 @@ class ToolRenderer:
             objects.append(
                 packets.CustomToolDelta(
                     tool_name=self.call.name,
-                    display_name=self.display_name,
                     tool_id=self.tool_id,
                     response_type="text",
                     data=content,

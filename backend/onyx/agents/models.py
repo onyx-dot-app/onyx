@@ -223,6 +223,8 @@ class ToolExecutionRecord(BaseModel):
 
     status: ExecutionStatus
     result: ToolResultMessage | None = None
+    # The called tool's display name; None for a tool without one.
+    display_name: str | None = None
 
 
 class StepRecord(BaseModel):

@@ -205,7 +205,6 @@ export function buildMockCodeModeCellStream({
       obj: {
         type: "custom_tool_delta",
         tool_name: toolName,
-        display_name: toolName,
         response_type: "text",
         data: toolOutput,
       },

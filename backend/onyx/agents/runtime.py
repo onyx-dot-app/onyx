@@ -745,7 +745,9 @@ class Run:
         with self.execution_lock:
             return self._execution_request == ExecutionRequest.SUSPEND
 
-    def start_tool_calls(self, calls: Sequence[ToolCall]) -> None:
+    def start_tool_calls(
+        self, calls: Sequence[ToolCall], display_name: str | None
+    ) -> None:
         with self.execution_lock:
             self.cancellation_signal.check()
             record = self._state.steps[self._progress.step_index]
@@ -756,7 +758,7 @@ class Run:
                 if call.id in record.tools:
                     continue
                 record.tools[call.id] = ToolExecutionRecord(
-                    status=ExecutionStatus.RUNNING
+                    status=ExecutionStatus.RUNNING, display_name=display_name
                 )
                 self.publish_event(
                     ToolStartEvent(
@@ -764,6 +766,7 @@ class Run:
                         message_id=message_id,
                         step_index=self._progress.step_index,
                         tool_call=call,
+                        display_name=display_name,
                     )
                 )
 
@@ -1353,6 +1356,7 @@ class Run:
                         step_index=index,
                         tool_call=call,
                         result=amendment.result,
+                        display_name=execution.display_name,
                     )
                 )
         checkpoint = self._state.checkpoint

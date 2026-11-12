@@ -219,7 +219,6 @@ export interface CustomToolArgs extends BaseObj {
 export interface CustomToolDelta extends BaseObj {
   type: "custom_tool_delta";
   tool_name: string;
-  display_name?: string;
   tool_id?: number | null;
   response_type: string;
   data?: unknown;

@@ -177,6 +177,7 @@ def _saved_step(step: StepRecord) -> StepRecord:
                 result=_saved_message(execution.result)
                 if execution.result is not None
                 else None,
+                display_name=execution.display_name,
             )
             for call_id, execution in step.tools.items()
         },

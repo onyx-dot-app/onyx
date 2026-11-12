@@ -295,10 +295,11 @@ Their control functions, such as `think_tool`, `generate_report` and
    cannot make two tools collide.
    Names fit 64 characters; sanitation and truncation add a stable hash.
    Execution retains the original upstream name. Users see the tool's
-   `display_name`: `CustomToolStart` and `CustomToolDelta` carry it
-   (`chat/renderer.py:ToolRenderer`), saved responses keep it in
-   `MessageRendering.tool_labels`, and code mode calls keep it in
-   `CodeModeCall.display_name`. The web labels read only that field.
+   `display_name`. Each call's `ToolExecutionRecord.display_name` keeps it,
+   and `tool_call.display_name` saves it, so replay reads it from the call.
+   `CustomToolStart` carries it (`chat/renderer.py:ToolRenderer`), and code
+   mode calls keep it in `CodeModeCall.display_name`. Web, mobile and CLI
+   labels, including auth cards, read only the start packet's field.
 11. `replay-by-class-name` **Replay finds a tool by its name or its class
    name.** Saved responses replay by tool name
    ([[#renderer-dispatches-by-name]]). Older messages with no saved response

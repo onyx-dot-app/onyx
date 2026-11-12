@@ -1,8 +1,10 @@
 import { useMemo } from "react";
 import {
   CustomToolDelta,
+  CustomToolStart,
   Packet,
   PacketType,
+  Placement,
 } from "@/app/app/services/streamingModels";
 
 interface AuthError {
@@ -16,13 +18,28 @@ export function useAuthErrors(rawPackets: Packet[]): AuthError[] {
   return useMemo(() => computeAuthErrors(rawPackets), [rawPackets]);
 }
 
+// A tool call's start and delta packets share one placement.
+function callKey(placement: Placement): string {
+  return `${placement.turn_index}-${placement.tab_index ?? 0}-${
+    placement.sub_turn_index ?? ""
+  }`;
+}
+
 function computeAuthErrors(rawPackets: Packet[]): AuthError[] {
+  const labels = new Map<string, string>();
   const errors: AuthError[] = [];
   // Labels can repeat across tools, so deduplicate on the tool ID or the
   // qualified tool name.
   const seen = new Set<string>();
 
   for (const packet of rawPackets) {
+    if (packet.obj.type === PacketType.CUSTOM_TOOL_START) {
+      labels.set(
+        callKey(packet.placement),
+        (packet.obj as CustomToolStart).display_name
+      );
+      continue;
+    }
     if (packet.obj.type !== PacketType.CUSTOM_TOOL_DELTA) {
       continue;
     }
@@ -39,7 +56,7 @@ function computeAuthErrors(rawPackets: Packet[]): AuthError[] {
     }
     seen.add(key);
     errors.push({
-      toolName: delta.display_name,
+      toolName: labels.get(callKey(packet.placement)) ?? delta.tool_name,
       toolId: delta.tool_id ?? null,
     });
   }

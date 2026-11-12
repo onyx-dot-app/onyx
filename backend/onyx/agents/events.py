@@ -88,6 +88,7 @@ class MessageEndEvent(_MessageEvent):
 class ToolStartEvent(_MessageEvent):
     type: Literal[AgentEventType.TOOL_START] = AgentEventType.TOOL_START
     tool_call: ToolCall
+    display_name: str | None = None
 
 
 class ToolUpdateEvent(_MessageEvent):
@@ -110,6 +111,7 @@ class ToolResultAmendedEvent(_MessageEvent):
     )
     tool_call: ToolCall
     result: ToolResult
+    display_name: str | None = None
 
 
 AgentEvent = Annotated[

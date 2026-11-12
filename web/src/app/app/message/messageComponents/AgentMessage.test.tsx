@@ -583,7 +583,6 @@ test("a later report of a code mode call replaces what the step shows", async ()
     obj: {
       type: PacketType.CUSTOM_TOOL_DELTA,
       tool_name: "lookup_orders",
-      display_name: "lookup_orders",
       response_type: "text",
       data,
     },
@@ -706,7 +705,6 @@ test("an expanded step keeps its state when a call is inserted before it", async
       obj: {
         type: PacketType.CUSTOM_TOOL_DELTA,
         tool_name: toolName,
-        display_name: toolName,
         response_type: "text",
         data,
       },

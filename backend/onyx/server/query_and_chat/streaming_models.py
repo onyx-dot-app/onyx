@@ -292,7 +292,6 @@ class CustomToolDelta(BaseObj):
     type: Literal["custom_tool_delta"] = StreamingType.CUSTOM_TOOL_DELTA.value
 
     tool_name: str
-    display_name: str
     tool_id: int | None = None
     response_type: str
     # For non-file responses

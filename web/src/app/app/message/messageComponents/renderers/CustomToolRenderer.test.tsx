@@ -28,7 +28,6 @@ function packets(
       obj: {
         type: PacketType.CUSTOM_TOOL_DELTA,
         tool_name: toolName,
-        display_name: displayName,
         response_type: "text",
         error,
       },

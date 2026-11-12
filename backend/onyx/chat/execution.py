@@ -431,11 +431,7 @@ class ChatTurnExecution:
                 self.setup, self.user, index, cancellation, self._auto_filters
             )
             tool_ids = {tool.name: tool.id for tool in chat_agent.application_tools}
-            tool_labels = {
-                tool.name: tool.display_name for tool in chat_agent.application_tools
-            }
             persistence.tool_ids = dict(tool_ids)
-            persistence.tool_labels = tool_labels
             # Restored and child agents build their own tools from these.
             if isinstance(chat_agent, DeepResearchAgent):
                 # Deep research offers its tools unchanged.
@@ -532,9 +528,7 @@ class ChatTurnExecution:
                     deadline_at=self._deadline_at,
                     coordinator=coordinator,
                     event_dispatcher=self.delivery.events,
-                    on_event=ResponsePresenter(
-                        emitter, tool_ids=tool_ids, tool_labels=tool_labels
-                    ).consume,
+                    on_event=ResponsePresenter(emitter, tool_ids=tool_ids).consume,
                 )
 
             def response_saved(completion: Future[RunState]) -> None:
