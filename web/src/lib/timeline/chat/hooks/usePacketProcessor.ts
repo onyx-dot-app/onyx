@@ -27,7 +27,13 @@ import {
 export interface UsePacketProcessorResult {
   // Data
   toolGroups: GroupedPacket[];
+  /** The final answer: message text after the last tool step. */
   displayGroups: GroupedPacket[];
+  /**
+   * Message text that a later tool step follows. It renders in place, between
+   * the steps, without waiting for the final answer.
+   */
+  interimDisplayGroups: GroupedPacket[];
   toolTurnGroups: TurnGroup[];
   /** A code mode program works between tool calls; it has no step. */
   codeModeWorking: boolean;
@@ -117,21 +123,39 @@ export function usePacketProcessor(
 
   // Derive displayGroups (not state!)
   const effectiveFinalAnswerComing = state.finalAnswerComing || forceShowAnswer;
+  // Text that a later tool step of the same response section follows. A user
+  // message starts a new section.
+  const interimDisplayGroups = useMemo(() => {
+    const userTurns = state.potentialDisplayGroups
+      .filter(isUserMessageGroup)
+      .map((group) => group.turn_index);
+    return state.potentialDisplayGroups.filter(
+      (group) =>
+        !isUserMessageGroup(group) &&
+        state.toolGroups.some(
+          (tool) =>
+            tool.turn_index > group.turn_index &&
+            !userTurns.some(
+              (turn) => turn > group.turn_index && turn < tool.turn_index
+            )
+        )
+    );
+  }, [state.potentialDisplayGroups, state.toolGroups]);
   const displayGroups = useMemo(() => {
+    const answers = state.potentialDisplayGroups.filter(
+      (group) => !interimDisplayGroups.includes(group)
+    );
     if (effectiveFinalAnswerComing || state.toolGroups.length === 0) {
-      return state.potentialDisplayGroups;
+      return answers;
     }
     const acceptedThroughTurn =
-      state.potentialDisplayGroups.findLast(
-        (group) => group.packets[0]?.obj.type === PacketType.USER_MESSAGE
-      )?.turn_index ?? -1;
-    return state.potentialDisplayGroups.filter(
-      (group) => group.turn_index <= acceptedThroughTurn
-    );
+      answers.findLast(isUserMessageGroup)?.turn_index ?? -1;
+    return answers.filter((group) => group.turn_index <= acceptedThroughTurn);
   }, [
     effectiveFinalAnswerComing,
     state.toolGroups.length,
     state.potentialDisplayGroups,
+    interimDisplayGroups,
   ]);
 
   // Transform toolGroups to timeline format
@@ -157,6 +181,7 @@ export function usePacketProcessor(
     // Data
     toolGroups: state.toolGroups,
     displayGroups,
+    interimDisplayGroups,
     toolTurnGroups,
     codeModeWorking,
     citations: state.citations,
@@ -183,4 +208,8 @@ export function usePacketProcessor(
     onRenderComplete,
     markAllToolsDisplayed,
   };
+}
+
+function isUserMessageGroup(group: GroupedPacket): boolean {
+  return group.packets[0]?.obj.type === PacketType.USER_MESSAGE;
 }
