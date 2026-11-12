@@ -1364,6 +1364,9 @@
         "jira": {
           "description": "Atlassian-Issue-Tracker"
         },
+        "jira_service_management": {
+          "description": "Atlassian-Servicedesk"
+        },
         "productboard": {
           "description": "Produktmanagement"
         },
@@ -4241,6 +4244,24 @@
             "jql_query": {
               "label": "JQL-Abfrage",
               "description": "Eine benutzerdefinierte JQL-Abfrage zum Filtern von Jira-Issues.\n\nWICHTIG: Nehmen Sie keine zeitbasierten Filter in die JQL-Abfrage auf, da diese mit der Logik des Konnektors kollidieren. Verwenden Sie außerdem keine ORDER-BY-Klauseln.\n\nWeitere Details zur Syntax finden Sie in der [JQL-Dokumentation](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/) von Atlassian."
+            },
+            "comment_email_blacklist": {
+              "label": "Kommentar-E-Mail-Sperrliste",
+              "description": "Nützlich, um bestimmte Bots zu ignorieren. Fügen Sie E-Mail-Adressen von Nutzern hinzu, deren Kommentare NICHT indexiert werden sollen."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Jira Service Management-Connector konfigurieren",
+          "subtext": "Indexiert die Anfragen (Tickets) eines Jira Service Management-Projekts, einschließlich Anfragetypen und SLA-Status.",
+          "fields": {
+            "jira_base_url": {
+              "label": "Site-URL",
+              "placeholder": "https://ihre-domain.atlassian.net"
+            },
+            "project_key": {
+              "label": "Serviceprojekt-Schlüssel",
+              "description": "Der Schlüssel des zu indexierenden Jira Service Management-Projekts (z. B. 'HELP')."
             },
             "comment_email_blacklist": {
               "label": "Kommentar-E-Mail-Sperrliste",

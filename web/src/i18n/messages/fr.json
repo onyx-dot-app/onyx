@@ -1364,6 +1364,9 @@
         "jira": {
           "description": "Suivi des tickets Atlassian"
         },
+        "jira_service_management": {
+          "description": "Centre de services Atlassian"
+        },
         "productboard": {
           "description": "Gestion de produit"
         },
@@ -4241,6 +4244,24 @@
             "jql_query": {
               "label": "Requête JQL",
               "description": "Une requête JQL personnalisée pour filtrer les tickets Jira.\n\nIMPORTANT : n'incluez aucun filtre temporel dans la requête JQL, car il entrerait en conflit avec la logique du connecteur. N'incluez pas non plus de clauses ORDER BY.\n\nConsultez la [documentation JQL](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/) d'Atlassian pour plus de détails sur la syntaxe."
+            },
+            "comment_email_blacklist": {
+              "label": "Liste noire d'e-mails des commentaires",
+              "description": "Utile en général pour ignorer certains bots. Ajoutez les e-mails des utilisateurs dont les commentaires ne doivent PAS être indexés."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Configurer le connecteur Jira Service Management",
+          "subtext": "Indexe les demandes (tickets) d'un projet Jira Service Management, y compris les types de demande et l'état des SLA.",
+          "fields": {
+            "jira_base_url": {
+              "label": "URL du site",
+              "placeholder": "https://votre-domaine.atlassian.net"
+            },
+            "project_key": {
+              "label": "Clé du projet de service",
+              "description": "La clé du projet Jira Service Management à indexer (par ex. 'HELP')."
             },
             "comment_email_blacklist": {
               "label": "Liste noire d'e-mails des commentaires",

@@ -1364,6 +1364,9 @@
         "jira": {
           "description": "Gestor de issues de Atlassian"
         },
+        "jira_service_management": {
+          "description": "Mesa de servicio de Atlassian"
+        },
         "productboard": {
           "description": "Gestión de producto"
         },
@@ -4241,6 +4244,24 @@
             "jql_query": {
               "label": "Consulta JQL",
               "description": "Una consulta JQL personalizada para filtrar los issues de Jira.\n\nIMPORTANTE: No incluyas filtros basados en tiempo en la consulta JQL, ya que entrarán en conflicto con la lógica del conector. Además, no incluyas cláusulas ORDER BY.\n\nConsulta la [documentación de JQL](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/) de Atlassian para más detalles sobre la sintaxis."
+            },
+            "comment_email_blacklist": {
+              "label": "Lista negra de correos de comentarios",
+              "description": "Suele ser útil para ignorar ciertos bots. Añade los correos de los usuarios cuyos comentarios NO deben indexarse."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Configurar el conector de Jira Service Management",
+          "subtext": "Indexa las solicitudes (tickets) de un proyecto de Jira Service Management, incluidos los tipos de solicitud y el estado de los SLA.",
+          "fields": {
+            "jira_base_url": {
+              "label": "URL del sitio",
+              "placeholder": "https://tu-dominio.atlassian.net"
+            },
+            "project_key": {
+              "label": "Clave del proyecto de servicio",
+              "description": "La clave del proyecto de Jira Service Management que se indexará (p. ej., 'HELP')."
             },
             "comment_email_blacklist": {
               "label": "Lista negra de correos de comentarios",

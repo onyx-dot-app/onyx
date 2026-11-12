@@ -1364,6 +1364,9 @@
         "jira": {
           "description": "متتبع مشكلات Atlassian"
         },
+        "jira_service_management": {
+          "description": "مكتب خدمة Atlassian"
+        },
         "productboard": {
           "description": "إدارة المنتجات"
         },
@@ -4241,6 +4244,24 @@
             "jql_query": {
               "label": "استعلام JQL",
               "description": "استعلام JQL مخصص لتصفية مسائل Jira.\n\nمهم: لا تضمّن أي مرشحات زمنية في استعلام JQL لأنها تتعارض مع منطق الموصل. كذلك لا تضمّن عبارات ORDER BY.\n\nراجع [توثيق JQL](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/) من Atlassian لمزيد من التفاصيل حول الصيغة."
+            },
+            "comment_email_blacklist": {
+              "label": "قائمة حظر البريد الإلكتروني للتعليقات",
+              "description": "مفيد عادةً لتجاهل بعض الروبوتات. أضف البريد الإلكتروني للمستخدمين الذين يجب ألا تُفهرس تعليقاتهم."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "تكوين موصل Jira Service Management",
+          "subtext": "يفهرس الطلبات (التذاكر) لمشروع Jira Service Management واحد، بما في ذلك أنواع الطلبات وحالة اتفاقيات مستوى الخدمة.",
+          "fields": {
+            "jira_base_url": {
+              "label": "عنوان URL للموقع",
+              "placeholder": "https://nitaquk.atlassian.net"
+            },
+            "project_key": {
+              "label": "مفتاح مشروع الخدمة",
+              "description": "مفتاح مشروع Jira Service Management المراد فهرسته (مثل 'HELP')."
             },
             "comment_email_blacklist": {
               "label": "قائمة حظر البريد الإلكتروني للتعليقات",
