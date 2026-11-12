@@ -17,11 +17,7 @@ import type { MinimalAgent } from "@/lib/agents/types";
 import { useAppPosition } from "@/lib/navigation/hooks";
 import { useActiveAgent } from "@/lib/agents/hooks";
 import { toast } from "@opal/layouts";
-import { type MemberPlugin, useMemberPlugins } from "@/lib/plugins/member";
-import {
-  effectiveChatPreferredToolId,
-  enabledChatToolIds,
-} from "@/lib/plugins/chat";
+import { enabledChatToolIds } from "@/lib/plugins/chat";
 import { useUser } from "@/providers/UserProvider";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import {
@@ -374,11 +370,14 @@ function configurationFrom(
   };
 }
 
-/** The tool half of a selection, built the way a send builds it. */
+/**
+ * The tool half of a selection, as the user chose it. A preferred tool that
+ * is unavailable right now, such as a plugin whose catalog has not loaded, is
+ * kept: a send drops it, and a turn the server starts drops it too.
+ */
 function toolFields(
   tools: ToolConfiguration,
-  agent: MinimalAgent,
-  plugins: readonly MemberPlugin[]
+  agent: MinimalAgent
 ): Pick<ChatToolSelection, "allowed_tool_ids" | "preferred_tool_id"> {
   const ids = Object.keys(tools).map(Number);
   return {
@@ -386,11 +385,7 @@ function toolFields(
       enabledChatToolIds(agent.tools, {
         disabledToolIds: ids.filter((id) => tools[id] === "disabled"),
       }) ?? null,
-    preferred_tool_id: effectiveChatPreferredToolId({
-      requestedToolId: ids.find((id) => tools[id] === "preferred") ?? null,
-      agent,
-      plugins,
-    }),
+    preferred_tool_id: ids.find((id) => tools[id] === "preferred") ?? null,
   };
 }
 
@@ -635,10 +630,6 @@ export function useToolConfiguration(
   }, [newChatWithAgentId, appPosition, activeAgent]);
 
   const { user } = useUser();
-  const { plugins } = useMemberPlugins({
-    agentId: activeAgent?.id,
-    surface: "chat",
-  });
   const chatSessionId =
     newChatWithAgentId === undefined ? appPosition.chat() : null;
   // The server's copy of an existing chat's selection, undefined until its
@@ -689,11 +680,11 @@ export function useToolConfiguration(
     handedOffConfigurations.delete(key);
     useChatSessionStore.getState().updateSessionData(chatSessionId, {
       toolSelectionEdits: {
-        ...toolFields(handedOff.tools, activeAgent, plugins),
+        ...toolFields(handedOff.tools, activeAgent),
         ...filterFields(handedOff.filters),
       },
     });
-  }, [key, chatSessionId, activeAgent, plugins]);
+  }, [key, chatSessionId, activeAgent]);
 
   const chatConfiguration = useMemo(() => {
     const selection = effectiveSelection(savedSelection, selectionEdits);
@@ -748,7 +739,7 @@ export function useToolConfiguration(
           const tools = withToolState(current.tools, toolId, change);
           return tools === current.tools || activeAgent === undefined
             ? null
-            : toolFields(tools, activeAgent, plugins);
+            : toolFields(tools, activeAgent);
         });
         return;
       }
@@ -766,7 +757,7 @@ export function useToolConfiguration(
         return { key, configuration: { ...current, tools } };
       });
     },
-    [key, editChat, activeAgent, plugins]
+    [key, editChat, activeAgent]
   );
 
   const setFilters = useCallback(

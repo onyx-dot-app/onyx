@@ -6,6 +6,7 @@ import {
 import { flushToolSelection, useToolConfiguration } from "@/lib/tools/hooks";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
 import type { MinimalAgent } from "@/lib/agents/types";
+import { DEFAULT_AGENT_ID } from "@/lib/constants";
 import type { ChatToolSelection, ToolSnapshot } from "@/lib/tools/types";
 import type { User } from "@/lib/types";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
@@ -532,6 +533,36 @@ test("a tool change saves only the tools, so the saved filters stay as they are"
   );
   expect(result.current.filters.selectedSources).toEqual(["notion"]);
   expect(result.current.filters.documentSets).toEqual(["Handbook"]);
+});
+
+test("a tool change keeps a saved preferred plugin tool while the plugin catalog loads", async () => {
+  // In Default Chat a plugin tool is offered only once the plugin catalog
+  // says so; until it loads, the catalog is empty.
+  const mcpTool: ToolSnapshot = { ...tool(3), mcp_server_id: 9 };
+  const saved: ChatToolSelection = {
+    allowed_tool_ids: null,
+    preferred_tool_id: mcpTool.id,
+    internal_search_filters: NO_FILTERS,
+  };
+  openSavedChats({ abc: saved });
+  mockActiveAgent = {
+    ...AGENT,
+    id: DEFAULT_AGENT_ID,
+    tools: [tool(1), tool(2), mcpTool],
+  };
+  const fetchSpy = echoSaves((sent) => ({ ...saved, ...sent }));
+  const { result } = renderHook(() => useToolConfiguration());
+  expect(result.current.ready).toBe(true);
+
+  act(() => {
+    result.current.toggleToolState(2, "disabled");
+  });
+  await waitFor(() => expect(patchesOf(fetchSpy)).toHaveLength(1));
+  const [, init] = patchesOf(fetchSpy)[0]!;
+  expect(JSON.parse(String(init.body))).toEqual({
+    allowed_tool_ids: [1, mcpTool.id],
+    preferred_tool_id: mcpTool.id,
+  });
 });
 
 test("a source change is saved at once, so a reload right after keeps it", async () => {
