@@ -332,6 +332,17 @@ def test_background_agent_result_wakes_the_idle_chat(
     )
     session = ChatSessionManager.create(user_performing_action=admin_user)
     try:
+        # Like the web composer, record the sent model as the chat's model;
+        # turns that the server starts use it.
+        client.put(
+            f"{API_SERVER_URL}/chat/update-chat-session-model",
+            json={
+                "chat_session_id": str(session.id),
+                "new_alternate_model": f"{chosen.name}__{chosen.provider}__"
+                f"{CHOSEN_MODEL}__mc:{chosen.model_configuration_ids[0]}",
+            },
+            headers=admin_user.headers,
+        ).raise_for_status()
         started = ChatSessionManager.send_message(
             session.id,
             question,
