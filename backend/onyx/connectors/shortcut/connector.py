@@ -77,6 +77,13 @@ def _story_to_document(story: ShortcutStory) -> Document:
 
     sections: list[TextSection] = [TextSection(text="\n".join(header_parts))]
 
+    if story.tasks:
+        tasks_lines = ["Tasks:"]
+        for task in story.tasks:
+            status_str = "[x]" if task.complete else "[ ]"
+            tasks_lines.append(f"- {status_str} {task.description}")
+        sections.append(TextSection(text="\n".join(tasks_lines)))
+
     if story.comments:
         comments_lines = ["Comments:"]
         for comment in story.comments:
@@ -134,6 +141,15 @@ class ShortcutConnector(LoadConnector, PollConnector, CredentialsConnector):
         self.epic_ids = epic_ids
         self.batch_size = batch_size
         self.client: ShortcutClient | None = None
+        self._credentials_provider: CredentialsProviderInterface | None = None
+
+    def _get_client(self) -> ShortcutClient:
+        if self._credentials_provider:
+            credentials = self._credentials_provider.get_credentials()
+            self.load_credentials(credentials)
+        if not self.client:
+            raise ConnectorMissingCredentialError("Shortcut credentials not loaded.")
+        return self.client
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         token = credentials.get("shortcut_api_token") or credentials.get("api_token")
@@ -145,48 +161,40 @@ class ShortcutConnector(LoadConnector, PollConnector, CredentialsConnector):
     def set_credentials_provider(
         self, credentials_provider: CredentialsProviderInterface
     ) -> None:
+        self._credentials_provider = credentials_provider
         credentials = credentials_provider.get_credentials()
         self.load_credentials(credentials)
 
     def validate_connector_settings(self) -> None:
-        if not self.client:
-            raise ConnectorMissingCredentialError("Shortcut credentials not loaded.")
-        self.client.validate_credentials()
+        client = self._get_client()
+        client.validate_credentials()
 
     def load_from_state(self) -> GenerateDocumentsOutput:
-        if not self.client:
-            raise ConnectorMissingCredentialError("Shortcut credentials not loaded.")
-
+        client = self._get_client()
         batch: list[Document] = []
 
         # 1. Epics
-        try:
-            epics = self.client.get_epics()
-            for epic in epics:
-                if self.epic_ids and epic.id not in self.epic_ids:
-                    continue
-                doc = _epic_to_document(epic)
-                batch.append(doc)
-                if len(batch) >= self.batch_size:
-                    yield batch
-                    batch = []
-        except Exception as e:
-            logger.warning("Error fetching Shortcut epics: %s", e)
+        epics = client.get_epics()
+        for epic in epics:
+            if self.epic_ids and epic.id not in self.epic_ids:
+                continue
+            doc = _epic_to_document(epic)
+            batch.append(doc)
+            if len(batch) >= self.batch_size:
+                yield batch
+                batch = []
 
         # 2. Stories
-        try:
-            for story in self.client.paginate_stories(
-                project_ids=self.project_ids,
-                epic_ids=self.epic_ids,
-                batch_size=self.batch_size,
-            ):
-                doc = _story_to_document(story)
-                batch.append(doc)
-                if len(batch) >= self.batch_size:
-                    yield batch
-                    batch = []
-        except Exception as e:
-            logger.warning("Error fetching Shortcut stories: %s", e)
+        for story in client.paginate_stories(
+            project_ids=self.project_ids,
+            epic_ids=self.epic_ids,
+            batch_size=self.batch_size,
+        ):
+            doc = _story_to_document(story)
+            batch.append(doc)
+            if len(batch) >= self.batch_size:
+                yield batch
+                batch = []
 
         if batch:
             yield batch
@@ -196,11 +204,38 @@ class ShortcutConnector(LoadConnector, PollConnector, CredentialsConnector):
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
     ) -> GenerateDocumentsOutput:
-        if not self.client:
-            raise ConnectorMissingCredentialError("Shortcut credentials not loaded.")
-
+        client = self._get_client()
         batch: list[Document] = []
-        for story in self.client.paginate_stories(
+
+        # 1. Epics
+        try:
+            epics = client.get_epics()
+            for epic in epics:
+                if self.epic_ids and epic.id not in self.epic_ids:
+                    continue
+                ts = None
+                if epic.updated_at:
+                    try:
+                        ts = time_str_to_utc(epic.updated_at).timestamp()
+                    except Exception:
+                        pass
+                elif epic.created_at:
+                    try:
+                        ts = time_str_to_utc(epic.created_at).timestamp()
+                    except Exception:
+                        pass
+
+                if ts is not None and start <= ts <= end:
+                    doc = _epic_to_document(epic)
+                    batch.append(doc)
+                    if len(batch) >= self.batch_size:
+                        yield batch
+                        batch = []
+        except Exception as e:
+            logger.warning("Error polling Shortcut epics: %s", e)
+
+        # 2. Stories
+        for story in client.paginate_stories(
             project_ids=self.project_ids,
             epic_ids=self.epic_ids,
             batch_size=self.batch_size,

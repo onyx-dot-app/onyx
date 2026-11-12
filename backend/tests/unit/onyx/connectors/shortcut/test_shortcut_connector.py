@@ -9,6 +9,7 @@ from onyx.connectors.exceptions import (
 )
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.shortcut.client import ShortcutClient
+from onyx.connectors.shortcut.config import ShortcutConnectorConfig
 from onyx.connectors.shortcut.connector import (
     ShortcutConnector,
     _epic_to_document,
@@ -18,6 +19,7 @@ from onyx.connectors.shortcut.models import (
     ShortcutComment,
     ShortcutEpic,
     ShortcutStory,
+    ShortcutTask,
 )
 
 
@@ -32,6 +34,10 @@ def test_story_to_document_transformation() -> None:
         app_url="https://app.shortcut.com/workspace/story/123",
         created_at="2026-11-10T10:00:00Z",
         updated_at="2026-11-11T12:00:00Z",
+        tasks=[
+            ShortcutTask(id=1, description="Write models", complete=True),
+            ShortcutTask(id=2, description="Write tests", complete=False),
+        ],
         comments=[
             ShortcutComment(id=1, text="Initial design ready"),
             ShortcutComment(id=2, text="Implementation started"),
@@ -54,10 +60,13 @@ def test_story_to_document_transformation() -> None:
     assert doc.metadata["url"] == "https://app.shortcut.com/workspace/story/123"
     assert doc.doc_created_at is not None
     assert doc.doc_updated_at is not None
-    assert len(doc.sections) == 2
+    assert len(doc.sections) == 3
     assert "Shortcut Story #123: Implement Shortcut Connector" in doc.sections[0].text
-    assert "Comments:" in doc.sections[1].text
-    assert "- Initial design ready" in doc.sections[1].text
+    assert "Tasks:" in doc.sections[1].text
+    assert "- [x] Write models" in doc.sections[1].text
+    assert "- [ ] Write tests" in doc.sections[1].text
+    assert "Comments:" in doc.sections[2].text
+    assert "- Initial design ready" in doc.sections[2].text
 
 
 def test_epic_to_document_transformation() -> None:
@@ -109,6 +118,20 @@ def test_shortcut_client_error_handling() -> None:
             list(client.paginate_stories())
 
 
+def test_shortcut_config_batch_size_validation() -> None:
+    # Valid
+    config = ShortcutConnectorConfig(batch_size=50)
+    assert config.batch_size == 50
+
+    # Invalid < 1
+    with pytest.raises(ValueError):
+        ShortcutConnectorConfig(batch_size=0)
+
+    # Invalid > 100
+    with pytest.raises(ValueError):
+        ShortcutConnectorConfig(batch_size=101)
+
+
 def test_shortcut_connector_missing_credentials() -> None:
     connector = ShortcutConnector()
     with pytest.raises(ConnectorMissingCredentialError):
@@ -155,6 +178,12 @@ def test_shortcut_connector_poll_source() -> None:
     connector = ShortcutConnector(batch_size=10)
     connector.load_credentials({"shortcut_api_token": "valid_token"})
 
+    mock_epics = [
+        # Inside window [1000, 2000]
+        ShortcutEpic(id=10, name="Updated Epic", updated_at="1970-01-01T00:20:00Z"),  # epoch 1200
+        # Outside window
+        ShortcutEpic(id=11, name="Old Epic", updated_at="1970-01-01T00:05:00Z"),  # epoch 300
+    ]
     mock_stories = [
         # Inside window [1000, 2000]
         ShortcutStory(id=201, name="In Window", updated_at="1970-01-01T00:25:00Z"),  # epoch 1500
@@ -163,10 +192,12 @@ def test_shortcut_connector_poll_source() -> None:
     ]
 
     assert connector.client is not None
+    connector.client.get_epics = MagicMock(return_value=mock_epics)  # type: ignore
     connector.client.paginate_stories = MagicMock(return_value=iter(mock_stories))  # type: ignore
 
     batches = list(connector.poll_source(start=1000, end=2000))
     polled_docs = [doc for batch in batches for doc in batch]
 
-    assert len(polled_docs) == 1
-    assert polled_docs[0].id == "shortcut_story_201"
+    assert len(polled_docs) == 2
+    assert polled_docs[0].id == "shortcut_epic_10"
+    assert polled_docs[1].id == "shortcut_story_201"

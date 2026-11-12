@@ -14,11 +14,13 @@ from onyx.connectors.shortcut.models import (
     ShortcutComment,
     ShortcutEpic,
     ShortcutStory,
+    ShortcutTask,
 )
 from onyx.utils.retry_after import parse_retry_after_seconds
 
 _DEFAULT_SHORTCUT_API_URL = "https://api.app.shortcut.com/api/v3"
 _MAX_RETRY_AFTER_SLEEP_SECONDS = 60
+_MAX_RATE_LIMIT_RETRIES = 3
 
 
 class ShortcutClient:
@@ -39,7 +41,7 @@ class ShortcutClient:
         params: dict[str, Any] | None = None,
         json_data: dict[str, Any] | None = None,
     ) -> Any:
-        url = f"{self.base_url}{endpoint}"
+        url = endpoint if endpoint.startswith("http") else f"{self.base_url}{endpoint}"
         headers = {
             "Shortcut-Token": self.api_token,
             "Content-Type": "application/json",
@@ -47,19 +49,8 @@ class ShortcutClient:
             "User-Agent": "OnyxShortcutConnector/1.0",
         }
 
-        response = requests.request(
-            method=method,
-            url=url,
-            headers=headers,
-            params=params,
-            json=json_data,
-            timeout=REQUEST_TIMEOUT_SECONDS,
-        )
-
-        if response.status_code == 429:
-            retry_after = parse_retry_after_seconds(response.headers.get("Retry-After"))
-            sleep_sec = retry_after if retry_after and retry_after > 0 else 5
-            time.sleep(min(sleep_sec, _MAX_RETRY_AFTER_SLEEP_SECONDS))
+        response: requests.Response | None = None
+        for _ in range(_MAX_RATE_LIMIT_RETRIES):
             response = requests.request(
                 method=method,
                 url=url,
@@ -68,6 +59,15 @@ class ShortcutClient:
                 json=json_data,
                 timeout=REQUEST_TIMEOUT_SECONDS,
             )
+            if response.status_code == 429:
+                retry_after = parse_retry_after_seconds(response.headers.get("Retry-After"))
+                sleep_sec = retry_after if retry_after and retry_after > 0 else 5
+                time.sleep(min(sleep_sec, _MAX_RETRY_AFTER_SLEEP_SECONDS))
+                continue
+            break
+
+        if response is None:
+            raise RuntimeError(f"Failed to execute request to {url}")
 
         if response.status_code == 401:
             raise CredentialExpiredError(
@@ -90,8 +90,8 @@ class ShortcutClient:
         self._request("/member")
 
     def get_epics(self) -> list[ShortcutEpic]:
-        """Fetches all epics in the workspace."""
-        data = self._request("/epics")
+        """Fetches all epics in the workspace including descriptions."""
+        data = self._request("/epics", params={"includes_description": True})
         epics: list[ShortcutEpic] = []
         for item in data:
             epics.append(
@@ -115,34 +115,36 @@ class ShortcutClient:
         batch_size: int = 50,
     ) -> Generator[ShortcutStory, None, None]:
         """Paginates through stories in the workspace matching project/epic filters."""
-        next_cursor: str | None = None
+        next_path: str | None = None
 
         while True:
-            params: dict[str, Any] = {"page_size": batch_size}
-            if next_cursor:
-                params["next"] = next_cursor
+            if next_path:
+                # If next_path contains the full URL or relative path
+                if next_path.startswith("/api/v3/"):
+                    endpoint = next_path[7:]
+                else:
+                    endpoint = next_path
+                data = self._request(endpoint)
+            else:
+                params: dict[str, Any] = {"page_size": min(batch_size, 100)}
+                query_parts: list[str] = []
+                if project_ids:
+                    proj_q = " ".join(f"project:{pid}" for pid in project_ids)
+                    query_parts.append(f"({proj_q})")
+                if epic_ids:
+                    epic_q = " ".join(f"epic:{eid}" for eid in epic_ids)
+                    query_parts.append(f"({epic_q})")
 
-            query_parts: list[str] = []
-            if project_ids:
-                proj_q = " ".join(f"project:{pid}" for pid in project_ids)
-                query_parts.append(f"({proj_q})")
-            if epic_ids:
-                epic_q = " ".join(f"epic:{eid}" for eid in epic_ids)
-                query_parts.append(f"({epic_q})")
+                if query_parts:
+                    params["query"] = " ".join(query_parts)
 
-            if query_parts:
-                params["query"] = " ".join(query_parts)
+                data = self._request("/stories/search", params=params)
 
-            data = self._request("/stories/search", params=params)
             data_items = data.get("data", [])
             if not data_items:
                 break
 
             for item in data_items:
-                # Check timestamps for polling window
-                updated_at = item.get("updated_at")
-                created_at = item.get("created_at")
-
                 comments: list[ShortcutComment] = []
                 for c in item.get("comments", []):
                     comments.append(
@@ -152,6 +154,16 @@ class ShortcutClient:
                             author_id=c.get("author_id"),
                             created_at=c.get("created_at"),
                             updated_at=c.get("updated_at"),
+                        )
+                    )
+
+                tasks: list[ShortcutTask] = []
+                for t in item.get("tasks", []):
+                    tasks.append(
+                        ShortcutTask(
+                            id=t.get("id"),
+                            description=t.get("description", ""),
+                            complete=bool(t.get("complete", False)),
                         )
                     )
 
@@ -166,15 +178,15 @@ class ShortcutClient:
                     epic_id=item.get("epic_id"),
                     project_id=item.get("project_id"),
                     app_url=item.get("app_url"),
-                    created_at=created_at,
-                    updated_at=updated_at,
+                    created_at=item.get("created_at"),
+                    updated_at=item.get("updated_at"),
                     comments=comments,
+                    tasks=tasks,
                     labels=labels,
                     completed=bool(item.get("completed", False)),
-                    raw_data=item,
                 )
                 yield story
 
-            next_cursor = data.get("next")
-            if not next_cursor:
+            next_path = data.get("next")
+            if not next_path:
                 break

@@ -1,4 +1,3 @@
-from typing import Any
 from pydantic import BaseModel, Field
 from onyx.connectors.models import ConnectorCheckpoint
 
@@ -21,6 +20,12 @@ class ShortcutComment(BaseModel):
     updated_at: str | None = None
 
 
+class ShortcutTask(BaseModel):
+    id: int
+    description: str
+    complete: bool = False
+
+
 class ShortcutStory(BaseModel):
     id: int
     name: str
@@ -33,9 +38,9 @@ class ShortcutStory(BaseModel):
     created_at: str | None = None
     updated_at: str | None = None
     comments: list[ShortcutComment] = Field(default_factory=list)
+    tasks: list[ShortcutTask] = Field(default_factory=list)
     labels: list[str] = Field(default_factory=list)
     completed: bool = False
-    raw_data: dict[str, Any] = Field(default_factory=dict)
 
 
 class ShortcutConnectorCheckpoint(ConnectorCheckpoint):
