@@ -402,6 +402,8 @@ class HostAgentClient:
                     guest_kernel=t.guest_kernel,
                     firecracker_version=t.firecracker_version,
                     managed_mounts=list(t.managed_mounts),
+                    compatible=t.compatible,
+                    built_at=proto_time(t, "built_at"),
                 )
                 for t in r.templates
             ],
