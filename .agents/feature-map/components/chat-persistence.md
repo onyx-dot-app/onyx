@@ -308,8 +308,10 @@ Community downgrade clears it ([[billing]]).
    up to its last sub-agent start, under a `RUNNING` status.
    `chat/run_store.py:ChatRunStore._load_status` marks a `RUNNING` response
    with no live owner as `ERROR` (`cancel_run`: `CANCELLED`) only when a later
-   run reads it as a sub-agent. Nothing repairs a root response left
-   `RUNNING`; a reload replays it as is.
+   run reads it as a sub-agent. A root response left `RUNNING` is repaired
+   only in a conversation with an inbox row: dispatch saves it as `ERROR`
+   (`chat/run_store.py:interrupt_ownerless_responses`), which pauses the queue.
+   Otherwise a reload replays it as is.
 3. `reserved-row-resolves` **A reserved assistant row must resolve.** Once
    `ChatTurnExecution.run` starts, `chat/persistence.py:ChatResponsePersistence`
    saves every outcome: an answer, a stop, a run failure, and a startup

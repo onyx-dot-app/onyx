@@ -23,15 +23,18 @@ from onyx.agents.models import (
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.chat_processing_checker import ChatTurnAdmission
 from onyx.chat.execution import chat_turn_work
-from onyx.chat.models import PendingChatMessage
+from onyx.chat.models import PendingChatMessage, ResponseOwner
 from onyx.chat.presentation import replay_response
 from onyx.chat.process_message import (
     dispatch_pending_chat_messages,
     handle_stream_message_objects,
 )
+from onyx.chat.run_store import RESPONSE_OWNER_KEY_PREFIX
 from onyx.chat.stop_signal_checker import request_stop
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
 from onyx.db.chat_inputs import (
+    MAX_PENDING_MESSAGE_BYTES,
+    cancel_completed_responses__no_commit,
     consume_inputs__no_commit,
     read_run_inputs,
     submit_human_message__no_commit,
@@ -85,7 +88,10 @@ def chat(db_session: Session, owner: User) -> ChatSession:
 
 
 @pytest.fixture
-def response(db_session: Session, chat: ChatSession) -> ChatMessage:
+def response(
+    db_session: Session, chat: ChatSession
+) -> Generator[ChatMessage, None, None]:
+    """A running response whose owner is live, so dispatch does not repair it."""
     root = ChatMessage(
         chat_session_id=chat.id,
         message="",
@@ -116,7 +122,17 @@ def response(db_session: Session, chat: ChatSession) -> ChatMessage:
     root.latest_child_message_id = question.id
     question.latest_child_message_id = answer.id
     db_session.commit()
-    return answer
+    cache = get_cache_backend()
+    owner_key = f"{RESPONSE_OWNER_KEY_PREFIX}{answer.id}"
+    cache.set(
+        owner_key,
+        ResponseOwner(token=uuid4(), root_message_id=answer.id)
+        .model_dump_json()
+        .encode(),
+        ex=600,
+    )
+    yield answer
+    cache.delete(owner_key)
 
 
 @pytest.fixture
@@ -1026,6 +1042,91 @@ def test_stop_after_the_answer_finishes_pauses_the_queue(
         release.set()
         stream.close()
         assert chat_turn_work.wait_idle(timeout=30)
+
+
+def test_status_repairs_a_running_root_whose_owner_is_gone(
+    client: TestClient,
+    response: ChatMessage,
+    owner: User,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A queued message behind a crashed root response is not stuck."""
+    path = f"/chat/chat-session/{response.chat_session_id}/pending-messages"
+    with monkeypatch.context() as dispatcher_exits:
+        dispatcher_exits.setattr(
+            chat_backend, "dispatch_pending_chat_messages", lambda *_: None
+        )
+        queued = client.post(
+            path,
+            json={
+                "message": "Continue",
+                "delivery": "queue",
+                "target_response_id": response.id,
+            },
+        )
+        assert queued.status_code == 200, queued.text
+    get_cache_backend().delete(f"{RESPONSE_OWNER_KEY_PREFIX}{response.id}")
+    tasks = BackgroundTasks()
+    status = chat_backend.get_chat_session_processing_status(
+        response.chat_session_id, tasks, owner
+    )
+    assert not status.is_processing
+    assert not status.has_startable_input
+    assert tasks.tasks
+    asyncio.run(tasks())
+    assert chat_turn_work.wait_idle(timeout=30)
+    db_session.expire_all()
+    repaired = db_session.get(ChatMessage, response.id)
+    assert repaired is not None
+    assert repaired.response_status == RunStatus.ERROR
+    # An error pauses the queue until the user resumes it.
+    assert [message["id"] for message in client.get(path).json()] == [
+        queued.json()["id"]
+    ]
+
+
+def test_stop_after_a_step_limit_pauses_the_queue(
+    client: TestClient,
+    response: ChatMessage,
+    owner: User,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    chat_id = response.chat_session_id
+    response.response_status = RunStatus.LIMIT
+    db_session.commit()
+    monkeypatch.setattr(chat_backend, "dispatch_pending_chat_messages", lambda *_: None)
+    queued = client.post(
+        f"/chat/chat-session/{chat_id}/pending-messages",
+        json={"message": "Do this later", "delivery": "queue"},
+    )
+    assert queued.status_code == 200, queued.text
+    tasks = BackgroundTasks()
+    assert chat_backend.get_chat_session_processing_status(
+        chat_id, tasks, owner
+    ).has_startable_input
+
+    cancel_completed_responses__no_commit(db_session, chat_id, [response.id])
+    db_session.commit()
+    db_session.expire_all()
+    stopped = db_session.get(ChatMessage, response.id)
+    assert stopped is not None
+    assert stopped.response_status == RunStatus.CANCELLED
+    assert not chat_backend.get_chat_session_processing_status(
+        chat_id, BackgroundTasks(), owner
+    ).has_startable_input
+
+
+def test_pending_message_over_the_byte_limit_is_rejected(
+    client: TestClient, response: ChatMessage
+) -> None:
+    path = f"/chat/chat-session/{response.chat_session_id}/pending-messages"
+    # Each character takes two bytes, so the text is under the limit in characters.
+    message = "é" * (MAX_PENDING_MESSAGE_BYTES // 2 + 1)
+    rejected = client.post(path, json={"message": message, "delivery": "queue"})
+    assert rejected.status_code == 413, rejected.text
+    assert client.get(path).json() == []
 
 
 def test_interrupt_during_preparation_stops_the_turn_when_it_publishes(
