@@ -1057,9 +1057,12 @@ def transfer_skill_ownership(
 
 def delete_skill(skill: Skill, db_session: Session) -> str | None:
     """Hard-delete a skill and its plugin, and return the bundle file id of
-    its current version for caller cleanup."""
+    its current version for caller cleanup. The caller holds the skill row
+    lock."""
     bundle_file_id: str | None = None
     if skill.is_custom:
+        # A skill with no plugin gets one first, so its bundle is found.
+        lock_skill_plugin__no_commit(skill, db_session)
         bundle_file_id = get_current_version_bundle_file_id(skill.id, db_session)
         delete_plugin__no_commit(skill.id, db_session)
     db_session.delete(skill)
