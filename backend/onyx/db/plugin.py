@@ -321,9 +321,10 @@ def prune_plugin_bundles__no_commit(plugin: Plugin, db_session: Session) -> list
     """Empty the bundle of each version that is not one of the newest
     ``BUNDLES_KEPT``, the current or the published version. The version rows
     stay. A bundle that the legacy skill row uses is kept, and so is the
-    bundle of a version with no stored file list, because the bundle is the
-    only copy of its content. Call under the plugin lock. Returns the files
-    that nothing uses now; the caller deletes them after the commit."""
+    bundle of a version with no stored file list or root SKILL.md text,
+    because reads of that version still open the bundle. Call under the
+    plugin lock. Returns the files that nothing uses now; the caller deletes
+    them after the commit."""
     kept = {
         version_id
         for version_id in (plugin.current_version_id, plugin.published_version_id)
@@ -348,6 +349,11 @@ def prune_plugin_bundles__no_commit(plugin: Plugin, db_session: Session) -> list
                 PluginVersion.bundle_file_id.is_not(None),
                 PluginVersion.id.not_in(kept),
                 ~_has_no_file_manifest(),
+                ~exists().where(
+                    PluginSkill.plugin_version_id == PluginVersion.id,
+                    PluginSkill.path == "",
+                    PluginSkill.skill_md.is_(None),
+                ),
             )
         ).tuples()
         if file_id is not None and file_id != legacy_bundle_file_id

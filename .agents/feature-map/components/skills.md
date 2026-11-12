@@ -437,8 +437,9 @@ The library preview of an external-app skill calls the same renderer
     transaction. It keeps the bundles of the current version, the published
     version and the newest `BUNDLES_KEPT` versions, the bundle that the
     legacy skill row uses, and the bundle of a version with no stored file
-    list (a backfilled version that the repair did not fill yet). Other versions get `bundle_file_id` NULL and keep
-    `bundle_sha256`, the file list and `plugin_skill` rows. The routes delete
+    list or root `skill_md` (reads of it still open the bundle). Other
+    versions get `bundle_file_id` NULL and keep `bundle_sha256`, the file list
+    and `plugin_skill` rows. The routes delete
     the pruned files after the commit. A skill delete, single or bulk, deletes
     every bundle of the skill and its versions after the commit. A failed file
     delete only logs: `background/celery/tasks/skills/tasks.py:check_for_orphan_skill_bundle_cleanup`
