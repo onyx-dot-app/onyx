@@ -63,13 +63,20 @@ from onyx.llm.models import (
     GenerationStartEvent,
     TextContent,
     TextDeltaEvent,
+    ToolCall,
+    ToolResultMessage,
     UserMessage,
+    content_text,
 )
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat import chat_backend
 from onyx.server.query_and_chat.models import SendMessageRequest
-from onyx.server.query_and_chat.streaming_models import UserMessagePacket
+from onyx.server.query_and_chat.streaming_models import (
+    CodeModeStart,
+    UserMessagePacket,
+)
 from onyx.tools.models import ChatToolSelection
+from onyx.tools.tool_implementations.code_mode.store import ProgramStore
 from onyx.utils.threadpool_concurrency import start_thread_future
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.unit.onyx.agents.fakes import FakeModelClient
@@ -592,16 +599,36 @@ def test_interrupt_saves_partial_response_and_starts_before_queued_messages(
         assert chat_turn_work.wait_idle(timeout=30)
 
 
+@pytest.mark.parametrize("code_mode", [False, True])
 def test_submitted_messages_process_once_and_execute_without_a_browser(
     client: TestClient,
     chat: ChatSession,
     owner: User,
     db_session: Session,
     monkeypatch: pytest.MonkeyPatch,
+    code_mode: bool,
 ) -> None:
+    """A send reaches the response at its next step boundary.
+
+    With code mode, the send arrives while a program runs and the step waits
+    on it with `wait_code`; the program finishes before the next step reads it.
+    """
     path = f"/chat/chat-session/{chat.id}/pending-messages"
-    entered, release = Event(), Event()
+    entered, release, waiting = Event(), Event(), Event()
     requests: list[GenerationRequest] = []
+    # Steps of the first response before the one that reads the send.
+    steps = 2 if code_mode else 1
+    monkeypatch.setattr(execution, "CODE_MODE_ENABLED", code_mode)
+    store = ProgramStore.store
+
+    def gated_store(program_store: ProgramStore, key: object, value: object) -> None:
+        if key == "gate":
+            assert waiting.wait(30)
+            entered.set()
+            assert release.wait(30)
+        store(program_store, key, value)
+
+    monkeypatch.setattr(ProgramStore, "store", gated_store)
     queries: list[str] = []
 
     def query_hook(
@@ -624,6 +651,26 @@ def test_submitted_messages_process_once_and_execute_without_a_browser(
         request: GenerationRequest, cancellation: CancellationSignal
     ) -> AssistantMessage:
         requests.append(request)
+        if code_mode and len(requests) == 1:
+            program = "print('started')\nyield_control()\nstore('gate', 1)\n"
+            return AssistantMessage(
+                content=[
+                    ToolCall(
+                        id="start", name="execute_code", arguments={"code": program}
+                    )
+                ]
+            )
+        if code_mode and len(requests) == 2:
+            waiting.set()
+            return AssistantMessage(
+                content=[
+                    ToolCall(
+                        id="wait",
+                        name="wait_code",
+                        arguments={"cell_id": 1, "yield_time_ms": 30000},
+                    )
+                ]
+            )
         if len(requests) == 1:
             entered.set()
             assert release.wait(30)
@@ -704,26 +751,53 @@ def test_submitted_messages_process_once_and_execute_without_a_browser(
             )
         )
         assert [(row.message, row.response_status) for row in responses] == [
-            ("Answer 2", RunStatus.COMPLETE),
-            ("Answer 3", RunStatus.COMPLETE),
-            ("Answer 4", RunStatus.COMPLETE),
+            (f"Answer {steps + 1}", RunStatus.COMPLETE),
+            (f"Answer {steps + 2}", RunStatus.COMPLETE),
+            (f"Answer {steps + 3}", RunStatus.COMPLETE),
+        ]
+        replayed = [
+            list(replay_response(read_response_record(row, "root"), {}, {}, {}))
+            for row in responses
         ]
         assert [
             [
                 (packet.obj.id, packet.obj.message)
-                for packet in replay_response(
-                    read_response_record(row, "root"), {}, {}, {}
-                )
+                for packet in packets
                 if isinstance(packet.obj, UserMessagePacket)
             ]
-            for row in responses
+            for packets in replayed
         ] == [[(submitted[0].id, "Accepted Use the latest source")], [], []]
-        assert len(requests) == 4
-        assert any(
-            isinstance(message, UserMessage)
-            and message.text == "Accepted Use the latest source"
-            for message in requests[1].messages
-        )
+        # The step that read the send saves it; earlier steps saved none.
+        assert [
+            [accepted.content for accepted in item.inputs]
+            for item in sorted(
+                responses[0].response_items, key=lambda item: item.step_index
+            )
+        ] == [[]] * steps + [["Accepted Use the latest source"]]
+        assert len(requests) == steps + 3
+        # The live step and the next turn's saved history both read the send
+        # after everything the steps before it produced.
+        for request in (requests[steps], requests[steps + 1]):
+            texts = [
+                message.text if isinstance(message, UserMessage) else None
+                for message in request.messages
+            ]
+            sent = texts.index("Accepted Use the latest source")
+            before = request.messages[sent - 1]
+            if code_mode:
+                assert isinstance(before, ToolResultMessage)
+                assert before.tool_call_id == "wait"
+                assert "Execution completed in cell 1" in content_text(before.content)
+            else:
+                assert isinstance(before, AssistantMessage)
+        if code_mode:
+            # Replay shows the send after the program and before the answer.
+            positions = [
+                type(packet.obj).__name__
+                for packet in replayed[0]
+                if isinstance(packet.obj, (CodeModeStart, UserMessagePacket))
+            ]
+            assert positions == ["CodeModeStart", "CodeModeStart", "UserMessagePacket"]
         assert all(
             "Rejected instruction" not in message.text
             for request in requests

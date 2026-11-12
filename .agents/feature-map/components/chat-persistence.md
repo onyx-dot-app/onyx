@@ -162,7 +162,15 @@ the assistant's call order, not completion order. `tool_id`, `tab_index` and
 **Replay.** Neither path re-runs anything. A runtime response replays through
 `chat/presentation.py:replay_response`, which uses the same message and tool
 renderers as the live stream and reads typed results, not the tool catalog.
-`ChatInput` is the inbox of pending human messages. A step deletes the rows it accepts (`db/chat_inputs.py:consume_inputs__no_commit`)
+`ChatInput` is the inbox of pending human messages. Each message is in exactly
+one place at any moment. The delivery and the reader decide its path:
+
+| Message | Path |
+| --- | --- |
+| `send` that a running step reads | `chat_input` row → deleted when the step accepts it → `chat_response_item.inputs` of the reading step, in the same transaction |
+| `queue`, `interrupt`, or a `send` that no step can read | `chat_input` row → deleted when a turn accepts it → a USER `chat_message` that starts the new turn, in the same transaction |
+
+A step deletes the rows it accepts (`db/chat_inputs.py:consume_inputs__no_commit`)
 in the transaction that writes `ChatResponseItem.inputs`, the typed list of
 accepted messages, with their identity and source. Starting a new turn moves
 its queued text into the question tree in the same transaction.

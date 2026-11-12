@@ -3832,7 +3832,13 @@ class ChatResponseItem(Base):
 
 
 class ChatInput(Base):
-    """A pending message for a chat session; consuming it deletes the row."""
+    """A pending message for a chat session; consuming it deletes the row.
+
+    A message is in exactly one place at any moment. A step that reads a
+    `send` moves it to `ChatResponseItem.inputs`; a turn that accepts any other
+    message moves it to a USER `ChatMessage`. The routing table is in
+    `.agents/feature-map/components/chat-persistence.md`.
+    """
 
     __tablename__ = "chat_input"
     __table_args__ = (

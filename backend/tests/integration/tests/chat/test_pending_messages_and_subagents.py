@@ -167,12 +167,15 @@ def test_pending_messages_queue_withdraw_stop_and_send_now(
     status = _status(session.id, admin_user)
     assert not status.has_startable_input
     assert _pending(session.id, admin_user) == [first, sent_now, edited]
+    # The released answer can finish before the turn reads Stop. Either way
+    # the queue pauses, and a finished answer keeps its status.
     stopped = _detail(session.id, admin_user)
-    assert [
+    [stopped_status] = [
         message.response_status
         for message in stopped.messages
         if message.message_type == MessageType.ASSISTANT
-    ] == [RunStatus.CANCELLED]
+    ]
+    assert stopped_status in (RunStatus.CANCELLED, RunStatus.COMPLETE)
 
     # Send now starts its message; the rest of the queue follows in order.
     client.post(
