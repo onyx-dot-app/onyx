@@ -10619,6 +10619,32 @@
       "unexpectedError": {
         "message": "Ocurrió un error inesperado."
       },
+      "searchProviders": {
+        "exa": {
+          "subtitle": "Exa.ai"
+        },
+        "serper": {
+          "subtitle": "Serper.dev"
+        },
+        "brave": {
+          "subtitle": "Brave Search API"
+        },
+        "googlePse": {
+          "subtitle": "Google"
+        },
+        "searxng": {
+          "subtitle": "SearXNG"
+        },
+        "tavily": {
+          "subtitle": "Tavily AI"
+        },
+        "firecrawl": {
+          "subtitle": "Firecrawl Search"
+        },
+        "keenable": {
+          "subtitle": "Keenable Search API"
+        }
+      },
       "contentProviders": {
         "onyxWebCrawler": {
           "subtitle": "Rastreador web integrado. Funciona con la mayoría de las páginas, pero rinde menos en casos límite."

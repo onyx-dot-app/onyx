@@ -10619,6 +10619,32 @@
       "unexpectedError": {
         "message": "发生意外错误。"
       },
+      "searchProviders": {
+        "exa": {
+          "subtitle": "Exa.ai"
+        },
+        "serper": {
+          "subtitle": "Serper.dev"
+        },
+        "brave": {
+          "subtitle": "Brave Search API"
+        },
+        "googlePse": {
+          "subtitle": "Google"
+        },
+        "searxng": {
+          "subtitle": "SearXNG"
+        },
+        "tavily": {
+          "subtitle": "Tavily AI"
+        },
+        "firecrawl": {
+          "subtitle": "Firecrawl Search"
+        },
+        "keenable": {
+          "subtitle": "Keenable Search API"
+        }
+      },
       "contentProviders": {
         "onyxWebCrawler": {
           "subtitle": "内置网页爬虫。适用于大多数页面，但在特殊情况下性能较低。"

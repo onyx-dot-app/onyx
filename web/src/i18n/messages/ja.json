@@ -10619,6 +10619,32 @@
       "unexpectedError": {
         "message": "予期しないエラーが発生しました。"
       },
+      "searchProviders": {
+        "exa": {
+          "subtitle": "Exa.ai"
+        },
+        "serper": {
+          "subtitle": "Serper.dev"
+        },
+        "brave": {
+          "subtitle": "Brave Search API"
+        },
+        "googlePse": {
+          "subtitle": "Google"
+        },
+        "searxng": {
+          "subtitle": "SearXNG"
+        },
+        "tavily": {
+          "subtitle": "Tavily AI"
+        },
+        "firecrawl": {
+          "subtitle": "Firecrawl Search"
+        },
+        "keenable": {
+          "subtitle": "Keenable Search API"
+        }
+      },
       "contentProviders": {
         "onyxWebCrawler": {
           "subtitle": "組み込みのウェブクローラー。ほとんどのページで動作しますが、特殊なケースでは性能が落ちます。"

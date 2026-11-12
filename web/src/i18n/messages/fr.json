@@ -10619,6 +10619,32 @@
       "unexpectedError": {
         "message": "Une erreur inattendue est survenue."
       },
+      "searchProviders": {
+        "exa": {
+          "subtitle": "Exa.ai"
+        },
+        "serper": {
+          "subtitle": "Serper.dev"
+        },
+        "brave": {
+          "subtitle": "Brave Search API"
+        },
+        "googlePse": {
+          "subtitle": "Google"
+        },
+        "searxng": {
+          "subtitle": "SearXNG"
+        },
+        "tavily": {
+          "subtitle": "Tavily AI"
+        },
+        "firecrawl": {
+          "subtitle": "Firecrawl Search"
+        },
+        "keenable": {
+          "subtitle": "Keenable Search API"
+        }
+      },
       "contentProviders": {
         "onyxWebCrawler": {
           "subtitle": "Robot d'exploration intégré. Fonctionne pour la plupart des pages, mais moins performant dans les cas limites."

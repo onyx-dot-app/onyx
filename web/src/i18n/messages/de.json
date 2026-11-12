@@ -10619,6 +10619,32 @@
       "unexpectedError": {
         "message": "Ein unerwarteter Fehler ist aufgetreten."
       },
+      "searchProviders": {
+        "exa": {
+          "subtitle": "Exa.ai"
+        },
+        "serper": {
+          "subtitle": "Serper.dev"
+        },
+        "brave": {
+          "subtitle": "Brave Search API"
+        },
+        "googlePse": {
+          "subtitle": "Google"
+        },
+        "searxng": {
+          "subtitle": "SearXNG"
+        },
+        "tavily": {
+          "subtitle": "Tavily AI"
+        },
+        "firecrawl": {
+          "subtitle": "Firecrawl Search"
+        },
+        "keenable": {
+          "subtitle": "Keenable Search API"
+        }
+      },
       "contentProviders": {
         "onyxWebCrawler": {
           "subtitle": "Integrierter Web-Crawler. Funktioniert für die meisten Seiten, ist in Sonderfällen aber weniger leistungsfähig."
