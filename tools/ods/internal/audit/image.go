@@ -49,6 +49,7 @@ func RunImage(opts ImageOptions) (*Result, error) {
 	}
 
 	var updates []UpdateStatus
+	var packages []ScannedPackage
 	var policy UpdatePolicy
 	if len(opts.SBOMs) > 0 && opts.UpdatePolicyURL != "" {
 		policy, err = ReadUpdatePolicy(opts.UpdatePolicyURL)
@@ -57,12 +58,13 @@ func RunImage(opts ImageOptions) (*Result, error) {
 		}
 	}
 	for _, inventory := range opts.SBOMs {
-		extra, statuses, err := ScanSBOM(opts.Image, inventory, opts.Stderr, policy)
+		extra, err := ScanSBOM(opts.Image, inventory, opts.Stderr, policy)
 		if err != nil {
 			return nil, err
 		}
-		findings = append(findings, extra...)
-		updates = append(updates, statuses...)
+		findings = append(findings, extra.Findings...)
+		updates = append(updates, extra.Updates...)
+		packages = append(packages, extra.ScannedPackages...)
 	}
 
 	ignores, err := FetchIgnores(opts.IgnoreURL)
@@ -80,10 +82,11 @@ func RunImage(opts ImageOptions) (*Result, error) {
 	sortFindings(suppressed)
 
 	result := &Result{
-		Findings: kept,
-		Updates:  updates,
-		Ignored:  suppressed,
-		Blocking: blockingFindings(kept, opts.FailOn),
+		Findings:        kept,
+		ScannedPackages: packages,
+		Updates:         updates,
+		Ignored:         suppressed,
+		Blocking:        blockingFindings(kept, opts.FailOn),
 	}
 
 	if err := renderReport(opts.Stdout, opts.Stderr, opts.Format, result); err != nil {

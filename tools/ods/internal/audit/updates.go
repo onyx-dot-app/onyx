@@ -100,11 +100,8 @@ func ReadUpdatePolicy(location string) (UpdatePolicy, error) {
 	return policy, nil
 }
 
-// ObserveUpdate preserves each release's first observation across retries and newer releases.
-func ObserveUpdate(previous PackageUpdates, version, minimum string, now time.Time) (PackageUpdates, error) {
-	if _, err := numericVersion(version); err != nil {
-		return previous, err
-	}
+// RaiseMinimum changes only the emergency minimum, preserving observation history.
+func RaiseMinimum(previous PackageUpdates, minimum string) (PackageUpdates, error) {
 	if minimum == "" {
 		minimum = previous.Minimum
 	}
@@ -120,6 +117,21 @@ func ObserveUpdate(previous PackageUpdates, version, minimum string, now time.Ti
 			return previous, fmt.Errorf("minimum cannot decrease")
 		}
 	}
+	result := previous
+	result.Minimum = minimum
+	return result, nil
+}
+
+// ObserveUpdate preserves each release's first observation across retries and newer releases.
+func ObserveUpdate(previous PackageUpdates, version, minimum string, now time.Time) (PackageUpdates, error) {
+	if _, err := numericVersion(version); err != nil {
+		return previous, err
+	}
+	updated, err := RaiseMinimum(previous, minimum)
+	if err != nil {
+		return previous, err
+	}
+	minimum = updated.Minimum
 	if previous.CheckedAt.After(now) {
 		return previous, fmt.Errorf("observation time moved backwards")
 	}

@@ -45,6 +45,9 @@ jobs:
       - volume=80gb
       - run-id=${{ github.run_id }}-craft-runtime
       - extras=ecr-cache
+    permissions:
+      contents: read
+      id-token: write # OIDC for the shared update policy
     timeout-minutes: 45
     steps:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
@@ -72,6 +75,12 @@ jobs:
         with:
           go-version-file: tools/ods/go.mod
           cache: false
+      - name: Configure AWS credentials for audit policy
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # ratchet:aws-actions/configure-aws-credentials@v6.2.3
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+
       - name: Audit runtime and supplemental inventory
         working-directory: tools/ods
         run: go run ./odsaudit image onyxdotapp/craft-runtime:ci --sbom /opt/chrome/browser.cdx.json --sbom-only --strict

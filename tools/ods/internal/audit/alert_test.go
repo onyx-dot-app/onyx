@@ -525,3 +525,33 @@ func TestSync_failingListsEveryBlockingAlertWithItsImages(t *testing.T) {
 		t.Fatalf("a lockfile finding names no image, got %+v", res.Failing[1].Advisories[0].Images)
 	}
 }
+
+func TestSyncCleanPackageCoverage(t *testing.T) {
+	for _, keepOpen := range []bool{false, true} {
+		t.Run(strconv.FormatBool(keepOpen), func(t *testing.T) {
+			bin := fakeBinDir(t)
+			chdirNewRepo(t)
+			calls := fakeIssueGH(t, bin, []map[string]any{
+				{"number": 8, "url": "u8", "body": renderAlertBody(Alert{Key: "UnknownPackage/example"})},
+				{"number": 9, "url": "u9", "body": renderAlertBody(Alert{Key: "UnknownPackage/unscanned"})},
+			})
+			file := writeResult(t, t.TempDir(), "image-sandbox.json", Result{ScannedPackages: []ScannedPackage{{Ecosystem: "UnknownPackage", Package: "example"}}})
+			if _, err := Sync(SyncAlertsOptions{ResultFiles: []string{file}, KeepOpen: keepOpen}); err != nil {
+				t.Fatal(err)
+			}
+			closed := []string{}
+			for _, call := range calls() {
+				if len(call) > 2 && call[0] == "issue" && call[1] == "close" {
+					closed = append(closed, call[2])
+				}
+			}
+			want := []string{}
+			if !keepOpen {
+				want = []string{"8"}
+			}
+			if !reflect.DeepEqual(closed, want) {
+				t.Fatalf("closed %v want %v", closed, want)
+			}
+		})
+	}
+}

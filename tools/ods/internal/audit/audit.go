@@ -134,12 +134,19 @@ type Options struct {
 	Stderr io.Writer
 }
 
+// ScannedPackage identifies a package checked even when no vulnerability matched.
+type ScannedPackage struct {
+	Ecosystem string `json:"ecosystem"`
+	Package   string `json:"package"`
+}
+
 // Result is the outcome of an audit run.
 type Result struct {
-	Updates  []UpdateStatus `json:"updates,omitempty"`
-	Findings []Finding      `json:"findings"` // kept findings, after allowlist filtering
-	Ignored  []Finding      `json:"ignored"`  // findings suppressed by the allowlist
-	Blocking []Finding      `json:"blocking"` // kept findings at or above FailOn
+	ScannedPackages []ScannedPackage `json:"scanned_packages,omitempty"`
+	Updates         []UpdateStatus   `json:"updates,omitempty"`
+	Findings        []Finding        `json:"findings"` // kept findings, after allowlist filtering
+	Ignored         []Finding        `json:"ignored"`  // findings suppressed by the allowlist
+	Blocking        []Finding        `json:"blocking"` // kept findings at or above FailOn
 }
 
 // Run executes the selected audit backends, applies the allowlist, renders a

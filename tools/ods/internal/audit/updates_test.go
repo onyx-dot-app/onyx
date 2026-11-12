@@ -1,6 +1,8 @@
 package audit
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -56,5 +58,80 @@ func TestUpdateDeadlinesSurviveRetriesAndNewReleases(t *testing.T) {
 	}
 	if _, err := ObserveUpdate(policy, "157.0.1.1", "", now.Add(96*time.Hour)); err == nil {
 		t.Fatal("upstream rollback accepted")
+	}
+}
+
+func TestInvalidUpdatePolicyFailsClosed(t *testing.T) {
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	valid := PackageUpdates{CheckedAt: now, Minimum: "1", Releases: map[string]time.Time{"2": now}}
+	for _, tc := range []struct {
+		name             string
+		policy           PackageUpdates
+		version, minimum string
+		at               time.Time
+	}{
+		{"invalid version", valid, "x", "", now},
+		{"overflow", valid, "18446744073709551616", "", now},
+		{"invalid minimum", valid, "2", "x", now},
+		{"invalid previous minimum", PackageUpdates{Minimum: "bad"}, "2", "2", now},
+		{"clock rollback", valid, "2", "", now.Add(-time.Second)},
+		{"invalid release", PackageUpdates{Minimum: "1", CheckedAt: now, Releases: map[string]time.Time{"bad": now}}, "2", "", now},
+		{"zero release time", PackageUpdates{Minimum: "1", CheckedAt: now, Releases: map[string]time.Time{"2": {}}}, "2", "", now},
+		{"future release time", PackageUpdates{Minimum: "1", CheckedAt: now, Releases: map[string]time.Time{"2": now.Add(time.Second)}}, "2", "", now},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := ObserveUpdate(tc.policy, tc.version, tc.minimum, tc.at); err == nil {
+				t.Fatal("accepted invalid observation")
+			}
+		})
+	}
+	for _, tc := range []struct {
+		policy  PackageUpdates
+		version string
+	}{
+		{PackageUpdates{}, "1"}, {PackageUpdates{CheckedAt: now.Add(time.Second), Releases: valid.Releases}, "1"},
+		{valid, "bad"}, {PackageUpdates{CheckedAt: now, Minimum: "bad", Releases: valid.Releases}, "1"},
+		{PackageUpdates{CheckedAt: now, Minimum: "1", Releases: map[string]time.Time{"bad": now}}, "1"},
+		{PackageUpdates{CheckedAt: now, Minimum: "1", Releases: map[string]time.Time{"2": {}}}, "1"},
+	} {
+		if _, err := CheckUpdate("example", tc.version, tc.policy, now); err == nil {
+			t.Fatalf("accepted invalid policy: %+v", tc)
+		}
+	}
+	if cmp, err := compareNumericVersions("1.0.0", "1"); err != nil || cmp != 0 {
+		t.Fatalf("numeric equality: %d %v", cmp, err)
+	}
+	if cmp, err := compareNumericVersions("1", "1.0.1"); err != nil || cmp != -1 {
+		t.Fatalf("numeric order: %d %v", cmp, err)
+	}
+}
+
+func TestReadUpdatePolicyStorageFailures(t *testing.T) {
+	dir := t.TempDir()
+	for _, data := range []string{"not json", "{}", "null"} {
+		file := filepath.Join(dir, "policy.json")
+		if err := os.WriteFile(file, []byte(data), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := ReadUpdatePolicy(file); err == nil {
+			t.Fatalf("accepted %s", data)
+		}
+	}
+	t.Setenv("TMPDIR", filepath.Join(dir, "missing"))
+	if _, err := ReadUpdatePolicy("s3://bucket/policy.json"); err == nil {
+		t.Fatal("missing temp directory passed")
+	}
+	t.Setenv("TMPDIR", dir)
+	bin := fakeBinDir(t)
+	writeFakeCommand(t, bin, "aws", "#!/bin/sh\nexit 1\n")
+	if _, err := ReadUpdatePolicy("s3://bucket/policy.json"); err == nil {
+		t.Fatal("failed storage read passed")
+	}
+	writeFakeCommand(t, bin, "aws", `#!/bin/sh
+for arg in "$@"; do output="$arg"; done
+printf '%s' '{"example":{"minimum":"1"}}' > "$output"
+`)
+	if policy, err := ReadUpdatePolicy("s3://bucket/policy.json"); err != nil || policy["example"].Minimum != "1" {
+		t.Fatalf("read storage: %v %v", policy, err)
 	}
 }

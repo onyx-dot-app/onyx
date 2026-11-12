@@ -174,6 +174,44 @@ class ImageResolverTests(unittest.TestCase):
                     report = root / f"image-audit-{component}.sarif"
                     self.assertEqual(json.loads(report.read_text())["version"], "2.1.0")
 
+    def test_cached_sandbox_publication_requires_a_successful_audit(self) -> None:
+        workflow = (SCRIPT.parent.parent / "workflows/deployment.yml").read_text()
+        prepare = workflow.split("  prepare-sandbox:\n", 1)[1].split(
+            "  build-sandbox-amd64:\n", 1
+        )[0]
+        first_step = prepare.split("    steps:\n", 1)[1].split("      - ")[1]
+        self.assertIn("Require a passing sandbox audit", first_step)
+        self.assertIn(
+            "SANDBOX_STATUS: ${{ needs.audit-gate.outputs.sandbox-status }}", first_step
+        )
+        commands = first_step.split("        run: |\n", 1)[1]
+        commands = "\n".join(line[10:] for line in commands.splitlines())
+        for cached in ("true", "false"):
+            for status in ("success", "failure", ""):
+                with self.subTest(cached=cached, status=status):
+                    result = subprocess.run(
+                        ["bash", "-e", "-c", commands],
+                        env={
+                            **os.environ,
+                            "SANDBOX_STATUS": status,
+                            "CONTEXT_EXISTS": cached,
+                        },
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+                    self.assertEqual(
+                        result.returncode == 0, status == "success", result.stdout
+                    )
+        merge = workflow.split("  merge-sandbox:\n", 1)[1]
+        condition = next(
+            line for line in merge.splitlines() if line.startswith("    if:")
+        )
+        self.assertIn("needs.prepare-sandbox.result == 'success' &&", condition)
+        self.assertIn(
+            "needs.prepare-sandbox.outputs.context-exists == 'true'", condition
+        )
+
     def test_resolver_only_resolves_the_image(self) -> None:
         result = resolve_image("sandbox", 1, gate=True)
         self.assertEqual(result.returncode, 0, result.stderr)

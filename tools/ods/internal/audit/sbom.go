@@ -15,66 +15,76 @@ const grypeImage = "anchore/grype:v0.121.1@sha256:6b06708b036f74b2cd70e94b706b45
 
 // ScanSBOM scans an explicit inventory for software outside package managers.
 // The inventory must exist in the image; a failed extraction never means clean.
-func ScanSBOM(image, inventory string, stderr io.Writer, policy UpdatePolicy) ([]Finding, []UpdateStatus, error) {
+func ScanSBOM(image, inventory string, stderr io.Writer, policy UpdatePolicy) (*Result, error) {
 	directory, err := os.MkdirTemp("", "ods-sbom-*")
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	defer func() { _ = os.RemoveAll(directory) }()
 	create := exec.Command("docker", "create", "--entrypoint", "/bin/true", image)
 	create.Stderr = stderr
 	output, err := create.Output()
 	if err != nil {
-		return nil, nil, fmt.Errorf("create inventory container: %w", err)
+		return nil, fmt.Errorf("create inventory container: %w", err)
 	}
 	container := strings.TrimSpace(string(output))
 	defer func() { _ = exec.Command("docker", "rm", container).Run() }()
 	copy := exec.Command("docker", "cp", container+":"+inventory, filepath.Join(directory, "inventory.json"))
 	copy.Stderr = stderr
 	if err := copy.Run(); err != nil {
-		return nil, nil, fmt.Errorf("extract required SBOM %s: %w", inventory, err)
+		return nil, fmt.Errorf("extract required SBOM %s: %w", inventory, err)
 	}
 	data, err := os.ReadFile(filepath.Join(directory, "inventory.json"))
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	var inventoryData struct {
 		Components []struct {
-			Type    string `json:"type"`
-			Name    string `json:"name"`
-			Version string `json:"version"`
-			CPE     string `json:"cpe"`
+			Type       string            `json:"type"`
+			Name       string            `json:"name"`
+			Version    string            `json:"version"`
+			CPE        string            `json:"cpe"`
+			PURL       string            `json:"purl"`
+			BOMRef     string            `json:"bom-ref"`
+			Group      string            `json:"group"`
+			Properties []json.RawMessage `json:"properties"`
 		} `json:"components"`
 	}
 	if err := json.Unmarshal(data, &inventoryData); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if len(inventoryData.Components) == 0 {
-		return nil, nil, fmt.Errorf("required SBOM has no components")
+		return nil, fmt.Errorf("required SBOM has no components")
 	}
 	var updates []UpdateStatus
+	var packages []ScannedPackage
 	for _, component := range inventoryData.Components {
 		switch component.Type {
 		case "application", "framework", "library", "machine-learning-model", "firmware":
 		default:
-			return nil, nil, fmt.Errorf("unsupported SBOM package type %q", component.Type)
+			return nil, fmt.Errorf("unsupported SBOM package type %q", component.Type)
 		}
 		if component.Name == "" || component.Version == "" || component.CPE == "" {
-			return nil, nil, fmt.Errorf("SBOM component requires name, version and CPE")
+			return nil, fmt.Errorf("SBOM component requires name, version and CPE")
 		}
 		cpe := strings.Split(component.CPE, ":")
 		if len(cpe) != 13 || cpe[0] != "cpe" || cpe[1] != "2.3" || cpe[4] != component.Name || cpe[5] != component.Version {
-			return nil, nil, fmt.Errorf("SBOM CPE must identify the component name and installed version")
+			return nil, fmt.Errorf("SBOM CPE must identify the component name and installed version")
+		}
+		// Grype reports UnknownPackage for CPE-only inventories without package metadata.
+		// Leave other identities unclaimed rather than close an unrelated alert.
+		if component.PURL == "" && !strings.HasPrefix(component.BOMRef, "pkg:") && component.Group == "" && len(component.Properties) == 0 {
+			packages = append(packages, ScannedPackage{Ecosystem: "UnknownPackage", Package: component.Name})
 		}
 		if policy != nil {
 			if _, ok := policy[component.Name]; !ok {
-				return nil, nil, fmt.Errorf("missing update policy for %s", component.Name)
+				return nil, fmt.Errorf("missing update policy for %s", component.Name)
 			}
 		}
 		if entry, ok := policy[component.Name]; ok {
 			status, err := CheckUpdate(component.Name, component.Version, entry, time.Now())
 			if err != nil {
-				return nil, nil, err
+				return nil, err
 			}
 			updates = append(updates, status)
 		}
@@ -92,10 +102,13 @@ func ScanSBOM(image, inventory string, stderr io.Writer, policy UpdatePolicy) ([
 	scan.Stderr = stderr
 	output, err = scan.Output()
 	if err != nil {
-		return nil, nil, fmt.Errorf("scan required SBOM %s: %w", inventory, err)
+		return nil, fmt.Errorf("scan required SBOM %s: %w", inventory, err)
 	}
 	findings, err := grypeFindings(output, image+":"+inventory)
-	return findings, updates, err
+	if err != nil {
+		return nil, err
+	}
+	return &Result{Findings: findings, Updates: updates, ScannedPackages: packages}, nil
 }
 
 func grypeFindings(data []byte, manifest string) ([]Finding, error) {

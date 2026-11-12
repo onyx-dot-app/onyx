@@ -1018,6 +1018,7 @@ Stale upstream observations warn without resetting recorded deadlines.
 `--update-policy ""` disables freshness checks for CVE collection, which still scans vulnerabilities.
 
 CVE Tracking owns policy observation and S3 writes. Its manual `minimum` input raises Chrome's emergency minimum.
+It saves this minimum before upstream discovery, preserving release timestamps even if discovery fails.
 It checks main and supported release branches. Update Sandbox Browser uses the shared task-PR workflow for pin changes.
 CI builds the audit binary from source. Installed ODS commands receive these features through the normal devtools release.
 

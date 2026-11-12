@@ -149,6 +149,7 @@ type SyncResult struct {
 // record, with the error.
 func Sync(opts SyncAlertsOptions) (SyncResult, error) {
 	var blocking, scanned []Finding
+	var packages []ScannedPackage
 	for _, path := range opts.ResultFiles {
 		res, err := readResult(path)
 		if err != nil {
@@ -161,6 +162,7 @@ func Sync(opts SyncAlertsOptions) (SyncResult, error) {
 		}
 		scanned = append(scanned, res.Findings...)
 		scanned = append(scanned, res.Ignored...)
+		packages = append(packages, res.ScannedPackages...)
 	}
 	ignores, err := FetchIgnores(opts.IgnoreURL)
 	if err != nil {
@@ -176,6 +178,9 @@ func Sync(opts SyncAlertsOptions) (SyncResult, error) {
 	covered := map[string]bool{}
 	if !opts.KeepOpen {
 		covered = coveredEcosystems(scanned)
+		for _, p := range packages {
+			covered[canonicalEcosystem(p.Ecosystem)+"/"+canonicalPackage(p.Ecosystem, p.Package)] = true
+		}
 	}
 	plan := planAlerts(alerts, open, covered)
 
@@ -468,8 +473,8 @@ func planAlerts(alerts []Alert, open []trackedIssue, covered map[string]bool) al
 		if seen[is.Key] {
 			continue
 		}
-		if eco, _, _ := strings.Cut(is.Key, "/"); !covered[eco] {
-			log.Warnf("Keeping issue #%d for %s open: no scan reported any %s finding", is.Number, is.Key, eco)
+		if eco, _, _ := strings.Cut(is.Key, "/"); !covered[eco] && !covered[is.Key] {
+			log.Warnf("Keeping issue #%d for %s open: no scan covered this package or reported a %s finding", is.Number, is.Key, eco)
 			continue
 		}
 		plan.Close = append(plan.Close, is)

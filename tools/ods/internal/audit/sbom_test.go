@@ -51,7 +51,7 @@ esac
 	t.Setenv("EXPECTED_SCANNER", "docker.io/"+grypeImage)
 	t.Setenv("PATH", directory+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("SBOM_FIXTURE", write("sbom.json", `{"bomFormat":"CycloneDX","specVersion":"1.5","version":1,"components":[{"type":"application","name":"example","version":"1.0.0","cpe":"cpe:2.3:a:vendor:example:1.0.0:*:*:*:*:*:*:*"}]}`))
-	t.Setenv("GRYPE_FIXTURE", write("grype.json", `{"matches":[{"vulnerability":{"id":"CVE-TEST","severity":"Critical","description":"test finding","fix":{"versions":["1.0.1"]}},"relatedVulnerabilities":[{"id":"GHSA-alias"}],"artifact":{"name":"example","version":"1.0.0","type":"binary"}}]}`))
+	t.Setenv("GRYPE_FIXTURE", write("grype.json", `{"matches":[{"vulnerability":{"id":"CVE-TEST","severity":"Critical","description":"test finding","fix":{"versions":["1.0.1"]}},"relatedVulnerabilities":[{"id":"GHSA-alias"}],"artifact":{"name":"example","version":"1.0.0","type":"UnknownPackage"}}]}`))
 	original := scanOSImage
 	scanOSImage = func(string, bool) ([]Finding, error) { return nil, nil }
 	t.Cleanup(func() { scanOSImage = original })
@@ -103,6 +103,27 @@ esac
 		t.Fatal("missing package policy passed")
 	}
 	opts.UpdatePolicyURL = ""
+	opts.SBOMOnly = true
+	t.Setenv("GRYPE_FIXTURE", write("clean-grype.json", `{"matches":[]}`))
+	clean, err := RunImage(opts)
+	if err != nil || len(clean.Findings) != 0 || len(clean.ScannedPackages) != 1 || clean.ScannedPackages[0].Package != "example" {
+		t.Fatalf("clean inventory lost package coverage: %+v %v", clean, err)
+	}
+	t.Setenv("GRYPE_FIXTURE", filepath.Join(directory, "grype.json"))
+	opts.UpdatePolicyURL = write("invalid-policy.json", "invalid")
+	if _, err := RunImage(opts); err == nil {
+		t.Fatal("invalid policy passed")
+	}
+	opts.UpdatePolicyURL = write("invalid-entry.json", `{"example":{}}`)
+	if _, err := RunImage(opts); err == nil {
+		t.Fatal("invalid entry passed")
+	}
+	opts.UpdatePolicyURL = ""
+	opts.SBOMs = nil
+	if _, err := RunImage(opts); err == nil {
+		t.Fatal("missing SBOM passed")
+	}
+	opts.SBOMs = []string{"/inventory.cdx.json"}
 	t.Setenv("BASE_IMAGE_REGISTRY", "mirror.example")
 	t.Setenv("EXPECTED_SCANNER", "mirror.example/"+grypeImage)
 	t.Setenv("SSL_CERT_FILE", write("ca.pem", "test CA"))
