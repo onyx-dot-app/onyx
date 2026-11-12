@@ -182,6 +182,9 @@ with fresh limits; a message to the root waits for the root's next run and never
 agent's active run, except the caller's and the root's, including its in-flight tool calls and
 foreground children; agents it started in the background keep running. The
 interrupted run reports no result and starts no follow-up; its conversation remains.
+Cancellation is cooperative: the runtime signals each tool's `ToolInvocation.cancellation`
+and discards results that arrive later, but a tool that does not check the signal keeps
+running until it returns.
 Results reach the agent's spawner automatically before its next model call.
 A subagent suspends before completing until the results of children it spawned are available.
 The root can finish its response while background children continue.
