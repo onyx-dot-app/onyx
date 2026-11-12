@@ -10,6 +10,7 @@ import {
   StopReason,
 } from "@/chat/streamingModels";
 import { isDisplayPacket, isToolPacket } from "@/chat/timeline/packetUtils";
+import { customToolLabel } from "@/chat/timeline/toolDisplay";
 import { TurnGroup } from "@/chat/timeline/transformers";
 
 export interface TimelineHeaderResult {
@@ -76,7 +77,7 @@ export function useTimelineHeader(
     }
 
     if (packetType === PacketType.CUSTOM_TOOL_START) {
-      const toolName = (firstPacket.obj as CustomToolStart).tool_name;
+      const toolName = customToolLabel(firstPacket.obj as CustomToolStart);
       return {
         headerText: toolName ? `Executing ${toolName}` : "Executing tool",
         hasPackets,
