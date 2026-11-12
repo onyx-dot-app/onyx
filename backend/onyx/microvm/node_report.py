@@ -22,7 +22,6 @@ from collections.abc import Callable
 
 from onyx.cache.interface import CacheBackend, CacheLock, CacheLockLostError
 from onyx.microvm.agent_client import HostAgentClientFactory, HostAgentConfigError
-from onyx.microvm.lifecycle import NoCheckpointSupport, UnknownActivity
 from onyx.microvm.models import NodeStateReport, NodeStateReportResult
 from onyx.microvm.reconcile import reconcile_node
 from onyx.microvm.registry import (
@@ -160,6 +159,13 @@ def reconcile_node_report(
         raise NodeNotRegisteredError(report.node_id)
     # Placement counts a node whose reports stop as dead.
     record_node_report(shared_cache, node.node_id, now)
+    # Deferred: the harness sandbox imports this package. Built before the
+    # lease, so a failure here never holds it.
+    from onyx.server.features.build.sandbox.harness_factory import (
+        get_eviction_policy,
+    )
+
+    checkpointer, activity = get_eviction_policy()
     lease = node_report_lease(shared_cache, node.node_id, _LEASE_SECONDS)
     if not lease.acquire(blocking=False):
         logger.info("sandbox_fc_node_report_busy node=%s", node.node_id)
@@ -169,9 +175,8 @@ def reconcile_node_report(
         result = reconcile_node(
             shared_cache,
             client_factory,
-            # Until session saves and execution reports exist: never stop a VM automatically.
-            NoCheckpointSupport(),
-            UnknownActivity(),
+            checkpointer,
+            activity,
             node=node,
             vms=[vm.to_agent_vm() for vm in report.vms],
             ended=report.ended,

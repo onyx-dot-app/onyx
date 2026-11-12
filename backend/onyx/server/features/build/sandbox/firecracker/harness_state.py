@@ -5,6 +5,11 @@
   API pod can serve `write_stdin` from it.
 - Activity marks (each expires): the turns in progress and the parked
   approvals of the sandbox. The idle stop reads them.
+- Session instances (no TTL): per sandbox, the chat sessions set up on a VM
+  instance. The idle stop saves these sessions.
+- Session saves (no TTL): per chat session, the committed archive in the
+  file store. A new save is committed before the old file is deleted.
+- Last attempt (no TTL): an agent never creates a stopped attempt again.
 
 Writes are compare-and-set on the stored value (parallel tool calls write
 the same map). Keys without a TTL need a Redis eviction policy that never
@@ -24,10 +29,15 @@ from onyx.server.features.build.sandbox.firecracker.models import (
     ExecSessionRecord,
     ExecSessionTable,
     HarnessActivity,
+    SessionInstanceTable,
+    SessionSave,
 )
 
 EXEC_SESSIONS_PREFIX = "sandbox_fc:exec_sessions:"
 ACTIVITY_PREFIX = "sandbox_fc:harness_activity:"
+SESSION_INSTANCES_PREFIX = "sandbox_fc:session_instances:"
+SESSION_SAVE_PREFIX = "sandbox_fc:session_save:"
+LAST_ATTEMPT_PREFIX = "sandbox_fc:last_attempt:"
 _CAS_TRIES = 16
 
 _M = TypeVar("_M", bound=BaseModel)
@@ -120,3 +130,54 @@ def has_marks(cache: CacheBackend, sandbox_id: UUID) -> bool:
     activity = _read(cache, ACTIVITY_PREFIX + str(sandbox_id), HarnessActivity)
     now = time.time()
     return any(exp > now for exp in activity.marks.values())
+
+
+def sessions_on_instance(
+    cache: CacheBackend, sandbox_id: UUID, instance: tuple[int, int]
+) -> list[UUID]:
+    key = SESSION_INSTANCES_PREFIX + str(sandbox_id)
+    table = _read(cache, key, SessionInstanceTable)
+    return [UUID(sid) for sid, i in table.sessions.items() if i == instance]
+
+
+def mark_session_on_instance(
+    cache: CacheBackend, sandbox_id: UUID, session_id: UUID, instance: tuple[int, int]
+) -> None:
+    """Record a session as set up on `instance`; drop other instances."""
+
+    def change(table: SessionInstanceTable) -> SessionInstanceTable:
+        sessions = {sid: i for sid, i in table.sessions.items() if i == instance}
+        sessions[str(session_id)] = instance
+        return SessionInstanceTable(sessions=sessions)
+
+    _update(
+        cache, SESSION_INSTANCES_PREFIX + str(sandbox_id), SessionInstanceTable, change
+    )
+
+
+def get_session_save(cache: CacheBackend, session_id: UUID) -> SessionSave | None:
+    raw = cache.get(SESSION_SAVE_PREFIX + str(session_id))
+    return None if raw is None else SessionSave.model_validate_json(raw)
+
+
+def set_session_save(cache: CacheBackend, session_id: UUID, save: SessionSave) -> None:
+    cache.set(SESSION_SAVE_PREFIX + str(session_id), save.model_dump_json())
+
+
+def last_attempt(cache: CacheBackend, sandbox_id: UUID) -> int:
+    """The highest VM attempt the sandbox has had (0: none)."""
+    raw = cache.get(LAST_ATTEMPT_PREFIX + str(sandbox_id))
+    return 0 if raw is None else int(raw)
+
+
+def record_attempt(cache: CacheBackend, sandbox_id: UUID, attempt: int) -> None:
+    """Raise the stored attempt to `attempt`; it never decreases."""
+    key = LAST_ATTEMPT_PREFIX + str(sandbox_id)
+    for _ in range(_CAS_TRIES):
+        raw = cache.get(key)
+        if raw is None:
+            if cache.set_if_absent(key, str(attempt)):
+                return
+        elif int(raw) >= attempt or cache.replace_if_value(key, raw, str(attempt)):
+            return
+    raise StateContentionError(key)

@@ -408,7 +408,11 @@ def test_a_character_split_between_polls_is_kept(
     _, result = _run(sandbox.exec_command(ref, "cat", yield_time_ms=250))
     session = result.exec_session_id
     assert session is not None
-    [execution] = node.agent.executions[str(ref.sandbox_id)].values()
+    execution = next(
+        e
+        for e in node.agent.executions[str(ref.sandbox_id)].values()
+        if e.argv[-1:] == ["cat"]
+    )
     daemon = sandbox_daemon(client_factory, sandbox._place(ref))
 
     daemon.interact(execution.execution_id, data="a€".encode()[:3])
@@ -429,7 +433,11 @@ def test_ctrl_c_sends_sigint_to_the_command(
     assert session is not None
 
     _, result = _run(sandbox.write_stdin(ref, session, "last\x03"))
-    [execution] = node.agent.executions[str(ref.sandbox_id)].values()
+    execution = next(
+        e
+        for e in node.agent.executions[str(ref.sandbox_id)].values()
+        if e.argv[-1:] == ["cat"]
+    )
     assert node.agent.cancel_calls == [execution.execution_id]
     # SIGINT (Ctrl-C), not a kill of the cgroup.
     assert execution.signaled == sandboxd_pb2.CANCEL_SIGNAL_SIGINT

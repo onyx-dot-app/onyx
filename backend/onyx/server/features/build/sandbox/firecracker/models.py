@@ -25,3 +25,23 @@ class HarnessActivity(BaseModel):
     # Mark name ("turn:<chat session>", "approval:<chat session>") → Unix
     # seconds when it expires.
     marks: dict[str, float] = {}
+
+
+class SessionInstanceTable(BaseModel):
+    # Chat session ID → (attempt, generation) of the VM instance it is set
+    # up on (directory made, last save restored).
+    sessions: dict[str, tuple[int, int]] = {}
+
+
+class SessionSave(BaseModel):
+    """The committed save of one chat session's directory."""
+
+    model_config = ConfigDict(frozen=True)
+
+    # None: the session had nothing to save.
+    file_id: str | None
+    size_bytes: int
+    sha256: str
+    # Top-level directories in the archive (what a restore replaces).
+    roots: list[str]
+    saved_at: float
