@@ -16,8 +16,15 @@ import { Content, Section, toast } from "@opal/layouts";
 import { SvgArrowLeft, SvgHistory } from "@opal/icons";
 import { errorHandlingFetcher, fetchErrorDetail } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { isSkillVersionStale, restoreSkillVersion } from "@/lib/skills/api";
+import {
+  isSkillVersionStale,
+  publishSkill,
+  restoreSkillVersion,
+} from "@/lib/skills/api";
+import { hasUnpublishedChanges } from "@/lib/skills/sharing";
+import { usePublishAction } from "@/lib/skills/hooks";
 import type {
+  CustomSkill,
   SkillEditableDetail,
   SkillVersion,
   SkillVersionPreview,
@@ -25,24 +32,32 @@ import type {
 import { SkillInstructionsPanel } from "@/sections/modals/SkillPreviewModal";
 
 interface SkillVersionsTabProps {
-  skillId: string;
-  /** Called after a restore adds a version. */
-  onRestored: (restored: SkillEditableDetail) => void;
+  skill: CustomSkill;
+  /** The author or an organization-wide manager: may publish an update. */
+  canPublish: boolean;
+  /** Called after a restore or a publish changes the skill. */
+  onChanged: () => void;
+  /** Called with the new current version after a restore. */
+  onRestored?: (restored: SkillEditableDetail) => void;
   /** The open editor has unsaved changes that a restore would replace. */
   restoreBlocked?: boolean;
 }
 
 export default function SkillVersionsTab({
-  skillId,
+  skill,
+  canPublish,
+  onChanged,
   onRestored,
   restoreBlocked = false,
 }: SkillVersionsTabProps) {
+  const skillId = skill.id;
   const t = useTranslations("skills.modals.versions");
   const editorCopy = useTranslations("skills.editor");
   const format = useFormatter();
   const [previewVersionId, setPreviewVersionId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [isStale, setIsStale] = useState(false);
+  const publishAction = usePublishAction();
   const {
     data: versions = [],
     error,
@@ -76,7 +91,8 @@ export default function SkillVersionsTab({
             newNumber: restored.current_version_number ?? 0,
           })
         );
-        onRestored(restored);
+        onRestored?.(restored);
+        onChanged();
       }
       setPreviewVersionId(null);
       await refreshVersions();
@@ -94,10 +110,46 @@ export default function SkillVersionsTab({
     }
   }
 
+  async function handlePublishUpdate() {
+    if (!currentVersion || busy) return;
+    setBusy(true);
+    try {
+      const published = await publishSkill(skillId, currentVersion.id);
+      if (
+        published.published_version_number === currentVersion.version_number
+      ) {
+        toast.success(
+          t("publishUpdate.successToast", {
+            number: currentVersion.version_number,
+          })
+        );
+      }
+      onChanged();
+      await refreshVersions();
+    } catch (err) {
+      if (isSkillVersionStale(err)) {
+        setIsStale(true);
+        return;
+      }
+      console.error("Failed to publish skill update", err);
+      toast.error(
+        err instanceof Error ? err.message : t("publishUpdate.failedToast")
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleReloadStale() {
     await refreshVersions();
+    onChanged();
     setIsStale(false);
   }
+
+  const unpublishedChanges = hasUnpublishedChanges(skill);
+  const isPending = versions.some(
+    (version) => version.is_current && version.review_status === "pending"
+  );
 
   function restoreButton(version: SkillVersion) {
     if (version.is_current) return null;
@@ -132,6 +184,12 @@ export default function SkillVersionsTab({
             {t("versionLabel", { number: versionNumber })}
           </Text>
           {row.is_current && <Badge title={t("currentBadge")} color="info" />}
+          {row.review_status === "published" && (
+            <Badge title={t("status.published")} color="success" />
+          )}
+          {row.review_status === "pending" && (
+            <Badge title={t("status.pending")} color="pending" />
+          )}
         </Section>
       ),
     },
@@ -139,7 +197,7 @@ export default function SkillVersionsTab({
       kind: "data",
       field: "created_by_email",
       title: t("columns.madeBy"),
-      weight: 36,
+      weight: 30,
       truncate: true,
       cell: (email) => (
         <Text font="main-ui-body" color="text-03" maxLines={1}>
@@ -213,6 +271,22 @@ export default function SkillVersionsTab({
             </Button>
           }
         />
+      )}
+      {canPublish && unpublishedChanges && !isPending && (
+        <Section flexDirection="row" justifyContent="end" height="auto">
+          {publishAction === "off" ? (
+            <Text font="secondary-body" color="text-03">
+              {t("publishUpdate.offNotice")}
+            </Text>
+          ) : (
+            <Button
+              disabled={busy || isStale || !currentVersion}
+              onClick={() => void handlePublishUpdate()}
+            >
+              {t("publishUpdate.label")}
+            </Button>
+          )}
+        </Section>
       )}
       {previewVersion ? (
         <SkillVersionPreviewView

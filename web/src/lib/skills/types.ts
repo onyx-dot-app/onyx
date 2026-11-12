@@ -63,6 +63,10 @@ export interface Skill {
    * `base_version_id`, so a save over a newer version gets a 409. */
   current_version_id: string | null;
   current_version_number: number | null;
+  /** The version the organization runs. Null while the skill is private. */
+  published_version_number: number | null;
+  /** The version that waits for an admin's review. */
+  pending_version_number: number | null;
 }
 
 export type BuiltinSkill = Skill & {

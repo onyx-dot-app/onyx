@@ -69,6 +69,8 @@ function existingSkill(
     external_app: null,
     current_version_id: "version-1",
     current_version_number: 1,
+    published_version_number: null,
+    pending_version_number: null,
     ...overrides,
   };
 }

@@ -12143,6 +12143,10 @@
         },
         "organization": {
           "label": "조직"
+        },
+        "unpublished": {
+          "label": "게시되지 않은 변경 사항",
+          "tooltip": "조직은 아직 버전 {number}을(를) 사용합니다."
         }
       },
       "toggle": {
@@ -17428,6 +17432,16 @@
           "loadError": {
             "title": "이 버전을 불러올 수 없습니다"
           }
+        },
+        "status": {
+          "pending": "검토 대기",
+          "published": "게시됨"
+        },
+        "publishUpdate": {
+          "label": "업데이트 게시",
+          "successToast": "버전 {number}을(를) 조직에 게시했습니다.",
+          "failedToast": "이 업데이트를 게시할 수 없습니다.",
+          "offNotice": "게시가 꺼져 있습니다. 관리자에게 이 업데이트 게시를 요청하세요."
         }
       }
     },

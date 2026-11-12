@@ -12143,6 +12143,10 @@
         },
         "organization": {
           "label": "المؤسسة"
+        },
+        "unpublished": {
+          "label": "تغييرات غير منشورة",
+          "tooltip": "لا تزال المؤسسة تستخدم الإصدار {number}."
         }
       },
       "toggle": {
@@ -17428,6 +17432,16 @@
           "loadError": {
             "title": "تعذّر تحميل هذا الإصدار"
           }
+        },
+        "status": {
+          "pending": "بانتظار المراجعة",
+          "published": "منشور"
+        },
+        "publishUpdate": {
+          "label": "نشر التحديث",
+          "successToast": "تم نشر الإصدار {number} للمؤسسة.",
+          "failedToast": "تعذّر نشر هذا التحديث.",
+          "offNotice": "النشر متوقف. اطلب من مسؤول نشر هذا التحديث."
         }
       }
     },
