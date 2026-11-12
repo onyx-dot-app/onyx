@@ -1,3 +1,4 @@
+import csv
 import io
 from collections.abc import Callable
 from typing import IO, cast
@@ -177,3 +178,72 @@ class TestFileBackedXlsx:
         section = sections[0]
         assert isinstance(section, TabularSection)
         assert staged[section.csv_file_id][0].decode("utf-8") == "a,b\n1,2\n"
+
+
+class TestCsvDelimiterNormalization:
+    """A file named .csv is not always comma-separated.
+
+    Excel writes the list separator of the machine's locale -- a semicolon
+    across most of Europe -- and a tab-separated export is routinely saved as
+    .csv. The staged file is read by parsers that assume the default Excel
+    dialect, which is why `.tsv` is already re-serialized on the way in.
+    """
+
+    ROWS = ["Name;Region;Units", "Widget;EU;12", "Gadget;US;7"]
+    EXPECTED = "Name,Region,Units\nWidget,EU,12\nGadget,US,7"
+
+    def _stage(self, text: str, file_name: str = "table.csv") -> str:
+        staged, fake_stage = _make_stage_callback()
+        sections = tabular_file_to_sections(
+            io.BytesIO(text.encode("utf-8")),
+            file_name=file_name,
+            stage=fake_stage,
+        )
+        assert len(sections) == 1
+        section = sections[0]
+        assert isinstance(section, TabularSection)
+        csv_bytes, content_type = staged[section.csv_file_id]
+        assert content_type == "text/csv"
+        return csv_bytes.decode("utf-8")
+
+    @pytest.mark.parametrize("delimiter", [",", ";", "\t", "|"])
+    def test_a_csv_is_staged_comma_separated(self, delimiter: str) -> None:
+        text = "\n".join(row.replace(";", delimiter) for row in self.ROWS) + "\n"
+
+        assert self._stage(text) == self.EXPECTED
+
+    def test_bare_carriage_return_rows_are_staged_comma_separated(self) -> None:
+        text = "\r".join(self.ROWS) + "\r"
+
+        assert self._stage(text) == self.EXPECTED
+
+    def test_a_single_column_csv_is_staged_unchanged(self) -> None:
+        """Guard: a separator that does not line up across the rows is not one."""
+        text = "Note\na; b\nc; d\n"
+
+        assert self._stage(text) == "Note\na; b\nc; d"
+
+    def test_a_ragged_comma_csv_is_staged_unchanged(self) -> None:
+        """Guard: nothing is re-serialized when the comma still wins."""
+        text = "name,value\nAlice,1\nBob,2,extra\n"
+
+        assert self._stage(text) == "name,value\nAlice,1\nBob,2,extra"
+
+    def test_a_tsv_still_goes_through_the_tsv_path(self) -> None:
+        text = "\n".join(row.replace(";", "\t") for row in self.ROWS) + "\n"
+
+        assert self._stage(text, file_name="table.tsv") == self.EXPECTED
+
+    def test_a_field_longer_than_the_default_limit_is_staged_comma_separated(
+        self,
+    ) -> None:
+        """The csv field size limit is process-global, so start from Python's own."""
+        long_field = "x" * 200_000
+        text = f"name;notes\na;{long_field}\n"
+        previous = csv.field_size_limit(131_072)
+        try:
+            staged = self._stage(text)
+        finally:
+            csv.field_size_limit(previous)
+
+        assert staged == f"name,notes\na,{long_field}"
