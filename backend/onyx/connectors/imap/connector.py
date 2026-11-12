@@ -6,7 +6,7 @@ import re
 import ssl
 from datetime import datetime, timezone
 from email.message import Message
-from email.utils import parseaddr
+from email.utils import getaddresses, parseaddr
 from enum import Enum
 from typing import Any, cast
 
@@ -57,6 +57,7 @@ class CurrentMailbox(BaseModel):
 #
 # For initial checkpointing, set both fields to `None`.
 class ImapCheckpoint(ConnectorCheckpoint):
+    version: int = 1
     todo_mailboxes: list[str] | None = None
     current_mailbox: CurrentMailbox | None = None
 
@@ -145,6 +146,14 @@ class ImapConnector(
         checkpoint = copy.deepcopy(checkpoint)
         checkpoint.has_more = True
 
+        if checkpoint.version < 2:
+            # Legacy sequence-number checkpoint: re-enumerate current mailbox with UIDs
+            if checkpoint.current_mailbox:
+                if checkpoint.todo_mailboxes is not None:
+                    checkpoint.todo_mailboxes.append(checkpoint.current_mailbox.mailbox)
+                checkpoint.current_mailbox = None
+            checkpoint.version = 2
+
         mail_client = self._get_mail_client()
 
         if checkpoint.todo_mailboxes is None:
@@ -202,13 +211,35 @@ class ImapConnector(
                 )
                 continue
 
-            email_headers = EmailHeaders.from_email_msg(email_msg=email_msg)
+            try:
+                mailbox_name = checkpoint.current_mailbox.mailbox
+                username = (self._credentials or {}).get("imap_username", "user")
+                fallback_id = f"imap-{self._host}-{username}-{mailbox_name}-{email_id}"
+                email_headers = EmailHeaders.from_email_msg(
+                    email_msg=email_msg,
+                    fallback_id=fallback_id,
+                )
+            except Exception as e:
+                logger.warning(
+                    "Failed to parse email headers for email_id=%r: %s; skipping",
+                    email_id,
+                    e,
+                )
+                continue
 
-            yield _convert_email_headers_and_body_into_document(
-                email_msg=email_msg,
-                email_headers=email_headers,
-                include_perm_sync=include_perm_sync,
-            )
+            try:
+                yield _convert_email_headers_and_body_into_document(
+                    email_msg=email_msg,
+                    email_headers=email_headers,
+                    include_perm_sync=include_perm_sync,
+                )
+            except Exception as e:
+                logger.warning(
+                    "Failed to convert email message into document for email_id=%r: %s; skipping",
+                    email_id,
+                    e,
+                )
+                continue
 
         return checkpoint
 
@@ -240,7 +271,7 @@ class ImapConnector(
         )
 
     def build_dummy_checkpoint(self) -> ImapCheckpoint:
-        return ImapCheckpoint(has_more=True)
+        return ImapCheckpoint(has_more=True, version=2)
 
     def validate_checkpoint_json(self, checkpoint_json: str) -> ImapCheckpoint:
         return ImapCheckpoint.model_validate_json(json_data=checkpoint_json)
@@ -317,7 +348,7 @@ def _fetch_email_ids_in_mailbox(
     end_str = datetime.fromtimestamp(end, tz=timezone.utc).strftime("%d-%b-%Y")
     search_criteria = f'(SINCE "{start_str}" BEFORE "{end_str}")'
 
-    status, email_ids_byte_array = mail_client.search(None, search_criteria)
+    status, email_ids_byte_array = mail_client.uid("search", None, search_criteria)
 
     if status != _IMAP_OKAY_STATUS or not email_ids_byte_array:
         raise RuntimeError(f"Failed to fetch email ids; {status=}")
@@ -328,15 +359,13 @@ def _fetch_email_ids_in_mailbox(
 
 
 def _fetch_email(mail_client: imaplib.IMAP4_SSL, email_id: str) -> Message | None:
-    status, msg_data = mail_client.fetch(message_set=email_id, message_parts="(RFC822)")
+    status, msg_data = mail_client.uid("fetch", email_id, "(RFC822)")
     if status != _IMAP_OKAY_STATUS or not msg_data:
         return None
 
     data = msg_data[0]
-    if not isinstance(data, tuple):
-        raise RuntimeError(
-            f"Message data should be a tuple; instead got a {type(data)=} {data=}"
-        )
+    if data is None or not isinstance(data, tuple):
+        return None
 
     _metadata, raw_email = data
     return email.message_from_bytes(raw_email)
@@ -347,7 +376,6 @@ def _convert_email_headers_and_body_into_document(
     email_headers: EmailHeaders,
     include_perm_sync: bool,
 ) -> Document:
-    sender_name, sender_addr = _parse_singular_addr(raw_header=email_headers.sender)
     parsed_recipients = (
         _parse_addrs(raw_header=email_headers.recipients)
         if email_headers.recipients
@@ -360,10 +388,18 @@ def _convert_email_headers_and_body_into_document(
         )
         for recipient_name, recipient_addr in parsed_recipients
     }
-    if sender_addr not in expert_info_map:
-        expert_info_map[sender_addr] = BasicExpertInfo(
-            display_name=sender_name, email=sender_addr
-        )
+    if email_headers.sender:
+        try:
+            for sender_name, sender_addr in _parse_addrs(raw_header=email_headers.sender):
+                if sender_addr and sender_addr not in expert_info_map:
+                    expert_info_map[sender_addr] = BasicExpertInfo(
+                        display_name=sender_name, email=sender_addr
+                    )
+        except Exception:
+            logger.warning(
+                "Could not parse sender address %r; omitting sender from permissions",
+                email_headers.sender,
+            )
 
     email_body = _parse_email_body(email_msg=email_msg, email_headers=email_headers)
     primary_owners = list(expert_info_map.values())
@@ -438,8 +474,7 @@ def _sanitize_mailbox_names(mailboxes: list[str]) -> list[str]:
 
 
 def _parse_addrs(raw_header: str) -> list[tuple[str, str]]:
-    addrs = raw_header.split(",")
-    name_addr_pairs = [parseaddr(addr=addr) for addr in addrs if addr]
+    name_addr_pairs = getaddresses([raw_header])
     return [(name, addr) for name, addr in name_addr_pairs if addr]
 
 
@@ -448,10 +483,6 @@ def _parse_singular_addr(raw_header: str) -> tuple[str, str]:
     if not addrs:
         raise RuntimeError(
             f"Parsing email header resulted in no addresses being found; {raw_header=}"
-        )
-    elif len(addrs) >= 2:
-        raise RuntimeError(
-            f"Expected a singular address, but instead got multiple; {raw_header=} {addrs=}"
         )
 
     return addrs[0]
