@@ -79,7 +79,7 @@ export enum Permission {
   MANAGE_ACTIONS = "manage:actions",
   READ_QUERY_HISTORY = "read:query_history",
   MANAGE_USER_GROUPS = "manage:user_groups",
-  MANAGE_SKILLS = "manage:skills",
+  MANAGE_PLUGINS = "manage:plugins",
   CREATE_USER_API_KEYS = "create:user_api_keys",
   MANAGE_SERVICE_ACCOUNT_API_KEYS = "manage:service_account_api_keys",
   MANAGE_BOTS = "manage:bots",

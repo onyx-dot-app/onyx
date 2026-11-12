@@ -14482,7 +14482,7 @@
         "promote": {
           "cancelButton": "Cancelar",
           "confirmButton": "Hacer para toda la organización",
-          "description": "Las habilidades asociadas a una app deben estar disponibles para todos. Este cambio se aplica al guardar la app.",
+          "description": "Las habilidades asociadas a una app deben estar disponibles para todos. Al guardar la app, la habilidad se publica en la organización. La publicación no se puede deshacer.",
           "title": "¿Hacer que «{name}» sea para toda la organización?"
         },
         "search": {
@@ -17130,6 +17130,13 @@
         "savingChanges": "Guardando los cambios...",
         "savingSkill": "Guardando la habilidad..."
       },
+      "staleVersion": {
+        "description": "Alguien guardó una versión más reciente. Recarga para obtenerla. Se perderán los cambios no guardados.",
+        "reload": {
+          "label": "Recargar"
+        },
+        "title": "Esta habilidad cambió desde que la abriste"
+      },
       "toasts": {
         "created": "Se creó \"{name}\"",
         "deleteFailed": "No se pudo eliminar la habilidad",
@@ -17330,9 +17337,6 @@
           "message": "Cargando los detalles de uso compartido..."
         },
         "noOwnerTitle": "Sin propietario activo",
-        "organizationPermissionMenu": {
-          "ariaLabel": "Cambiar el permiso de la organización"
-        },
         "ownerLabel": "Propietario",
         "permissionMenu": {
           "ariaLabel": "Actualizar el acceso de {name}"
@@ -17373,7 +17377,15 @@
         "peopleTitle": "Personas con acceso",
         "manageIndividualAccess": "Gestionar acceso individual",
         "individualAccessTitle": "Acceso individual",
-        "ownershipTitle": "Propiedad"
+        "ownershipTitle": "Propiedad",
+        "published": {
+          "title": "Organización",
+          "description": "Publicada. Todos en la organización pueden usar esta habilidad."
+        },
+        "publishWarning": {
+          "title": "La publicación no se puede deshacer",
+          "description": "Después de guardar, todos en la organización pueden usar esta habilidad. No podrás volver a hacerla privada. Solo un administrador puede eliminarla."
+        }
       },
       "placeholders": {
         "githubRepository": "propietario/repositorio o https://github.com/propietario/repositorio"
@@ -17533,10 +17545,13 @@
       "shareDescription": "Aplica estos cambios a cada habilidad seleccionada. Los ajustes que no cambies conservan sus valores actuales.",
       "unchanged": "Mantener sin cambios",
       "everyone": "Todos en la organización",
-      "invitedOnly": "Personas y grupos invitados",
       "addAccessDescription": "Añade estas personas y grupos a cada habilidad seleccionada. Las personas y grupos que indiques reciben el permiso elegido. El resto conserva su acceso actual.",
       "apply": "{count, plural, one {Aplicar a # habilidad} other {Aplicar a # habilidades}}",
-      "moreActions": "Más acciones"
+      "moreActions": "Más acciones",
+      "publishWarning": {
+        "title": "La publicación no se puede deshacer",
+        "description": "Después de aplicar, todos en la organización pueden usar las habilidades seleccionadas. Las habilidades publicadas no se pueden volver a hacer privadas. Solo un administrador puede eliminarlas."
+      }
     }
   },
   "opensearchHealth": {

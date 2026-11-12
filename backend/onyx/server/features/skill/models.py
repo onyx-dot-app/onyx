@@ -8,12 +8,15 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import (
+    PluginInstallationPolicy,
     SkillAccessLevel,
     SkillInstallationPolicy,
     SkillSharePermission,
 )
 from onyx.db.models import Skill
+from onyx.db.plugin_access import PluginAccess
 from onyx.db.skill import SkillSharingChange
+from onyx.db.utils import UNSET
 from onyx.server.models import MinimalUserSnapshot
 from onyx.skills.built_in import BuiltInSkillDefinition
 from onyx.skills.models import GITHUB_SKILL_MAX_COUNT, SkillBundleFile
@@ -63,6 +66,9 @@ class SkillResponse(BaseModel):
     is_personal: bool = False
     user_permission: SkillAccessLevel | None = None
     external_app: SkillExternalAppDependencyResponse | None = None
+    # The plugin version of a custom skill whose files this response shows.
+    # Edits send it back as base_version_id. None for built-ins.
+    current_version_id: UUID | None = None
 
     @classmethod
     def from_builtin(
@@ -91,61 +97,74 @@ class SkillResponse(BaseModel):
     def from_custom(
         cls,
         skill: Skill,
+        access: PluginAccess | None,
         *,
         enabled: bool,
         can_toggle: bool = True,
         user_permission: SkillAccessLevel | None = None,
         include_share_details: bool = False,
         external_app: SkillExternalAppDependencyResponse | None = None,
+        current_version_id: UUID | None = None,
     ) -> "SkillResponse":
+        """Access fields come from the skill's plugin; ``access`` is None only
+        for a custom skill with no plugin, which no one but an admin sees."""
         user_shares = [
             SkillUserShare(
-                user=MinimalUserSnapshot(id=share.user.id, email=share.user.email),
+                user=MinimalUserSnapshot(id=share.user_id, email=share.email),
                 permission=share.permission,
             )
-            for share in skill.user_shares
-            if share.user is not None
+            for share in (access.user_shares if access is not None else ())
         ]
         group_shares = [
             SkillGroupShare(
-                group_id=share.user_group_id,
-                group_name=share.user_group.name,
+                group_id=share.group_id,
+                group_name=share.group_name,
                 permission=share.permission,
             )
-            for share in skill.group_shares
-            if share.user_group is not None
+            for share in (access.group_shares if access is not None else ())
         ]
-        visible_user_shares = user_shares if include_share_details else []
-        visible_group_shares = group_shares if include_share_details else []
+        author_user_id = access.author_user_id if access is not None else None
+        author_email = access.author_email if access is not None else None
+        published = access is not None and access.published
         return cls(
             source="custom",
             id=skill.id,
-            name=skill.name,
-            description=skill.description,
-            is_valid=skill.is_valid,
-            installation_policy=skill.installation_policy,
+            name=(access.name if access is not None else None) or skill.name,
+            description=(
+                access.description if access is not None else skill.description
+            ),
+            is_valid=access.is_valid if access is not None else None,
+            # The plugin's own company setting. No setting maps to AVAILABLE,
+            # as it did before plugins. The skills API cannot show
+            # NOT_AVAILABLE until group install settings ship.
+            installation_policy=(
+                SkillInstallationPolicy(access.installation_policy.value)
+                if access is not None
+                and access.installation_policy
+                in (PluginInstallationPolicy.DEFAULT, PluginInstallationPolicy.REQUIRED)
+                else SkillInstallationPolicy.AVAILABLE
+            ),
             enabled=enabled,
             can_toggle=can_toggle,
-            author_user_id=skill.author_user_id,
-            author_email=skill.author.email if skill.author is not None else None,
+            author_user_id=author_user_id,
+            author_email=author_email,
             owner=(
-                MinimalUserSnapshot(id=skill.author.id, email=skill.author.email)
-                if skill.author is not None
+                MinimalUserSnapshot(id=author_user_id, email=author_email)
+                if author_user_id is not None and author_email is not None
                 else None
             ),
-            ownership_vacant=skill.author_user_id is None
-            or skill.author is None
-            or not skill.author.is_active,
+            ownership_vacant=author_email is None
+            or access is None
+            or not access.author_is_active,
             created_at=skill.created_at,
             updated_at=skill.updated_at,
-            user_shares=visible_user_shares,
-            group_shares=visible_group_shares,
-            public_permission=skill.public_permission,
-            is_personal=skill.public_permission is None
-            and not user_shares
-            and not group_shares,
+            user_shares=user_shares if include_share_details else [],
+            group_shares=group_shares if include_share_details else [],
+            public_permission=SkillSharePermission.VIEWER if published else None,
+            is_personal=not published and not user_shares and not group_shares,
             user_permission=user_permission,
             external_app=external_app,
+            current_version_id=current_version_id,
         )
 
 
@@ -185,6 +204,7 @@ class SkillPreviewResponse(BaseModel):
     def from_custom(
         cls,
         skill: Skill,
+        access: PluginAccess | None,
         *,
         instructions_markdown: str,
         external_app: SkillExternalAppDependencyResponse | None = None,
@@ -192,9 +212,11 @@ class SkillPreviewResponse(BaseModel):
         return cls(
             source="custom",
             id=skill.id,
-            name=skill.name,
-            description=skill.description,
-            author_email=skill.author.email if skill.author is not None else None,
+            name=(access.name if access is not None else None) or skill.name,
+            description=(
+                access.description if access is not None else skill.description
+            ),
+            author_email=access.author_email if access is not None else None,
             instructions_markdown=instructions_markdown,
             external_app=external_app,
         )
@@ -283,6 +305,9 @@ class SkillPatchRequest(BaseModel):
     description: str | None = None
     instructions_markdown: str | None = None
     public_permission: SkillSharePermission | None = None
+    # The plugin version the edit starts from. When it is not the newest
+    # version, a details update is refused with 409. Omit to skip the check.
+    base_version_id: UUID | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -332,7 +357,8 @@ class SkillGroupShareRequest(BaseModel):
 class SkillShareRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    installation_policy: SkillInstallationPolicy = SkillInstallationPolicy.AVAILABLE
+    # Missing: unchanged. Null: the marketplace default.
+    installation_policy: SkillInstallationPolicy | None = None
 
     user_shares: list[SkillUserShareRequest] | None = None
     group_shares: list[SkillGroupShareRequest] | None = None
@@ -345,7 +371,7 @@ class SkillShareRequest(BaseModel):
             installation_policy=(
                 self.installation_policy
                 if "installation_policy" in self.model_fields_set
-                else None
+                else UNSET
             ),
             user_shares=(
                 {share.user_id: share.permission for share in self.user_shares}

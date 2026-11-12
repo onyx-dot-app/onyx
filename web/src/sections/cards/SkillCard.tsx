@@ -21,6 +21,8 @@ import {
   SvgUser,
 } from "@opal/icons";
 import { useUser } from "@/providers/UserProvider";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
 import { useSettings } from "@/lib/settings/hooks";
 import type {
   CustomSkill,
@@ -94,8 +96,16 @@ export default function SkillCard({
   }, [onClick, item]);
 
   const { isAdmin } = useUser();
+  const { isGlobalHolder: canManageOrgSkills } = usePermissionAuthority(
+    Permission.MANAGE_PLUGINS
+  );
   const isRequired =
     item.source === "custom" && item.skill.installation_policy === "REQUIRED";
+  // Only an organization-wide skill manager can delete a published skill.
+  const canDelete =
+    item.source === "custom" &&
+    (!isRequired || isAdmin) &&
+    (item.skill.public_permission === null || canManageOrgSkills);
 
   const authorTitle =
     item.source === "builtin" ? appName : item.author_email || appName;
@@ -260,7 +270,7 @@ export default function SkillCard({
                   aria-label={t("skill.edit.tooltip")}
                   onClick={handleEditClick}
                 />
-                {onDelete && (!isRequired || isAdmin) && (
+                {onDelete && canDelete && (
                   <Button
                     prominence="secondary"
                     variant="danger"

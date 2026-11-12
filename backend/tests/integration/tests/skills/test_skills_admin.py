@@ -11,7 +11,7 @@ from sqlalchemy import select
 from onyx.configs.constants import FileOrigin
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import SkillSharePermission
-from onyx.db.models import Skill
+from onyx.db.models import Plugin, PluginVersion, Skill
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.skill.models import SkillPatchRequest
 from onyx.skills.bundle import DEFAULT_MAX_FILE_COUNT
@@ -37,10 +37,13 @@ def _fetch_skill_row(skill_id: UUID) -> Skill | None:
 
 
 def _mark_skill_invalid(skill_id: UUID) -> None:
+    """Classify the current version invalid; readers use the version."""
     with get_session_with_current_tenant() as db_session:
-        skill = db_session.get(Skill, skill_id)
-        assert skill is not None
-        skill.is_valid = False
+        plugin = db_session.get(Plugin, skill_id)
+        assert plugin is not None
+        version = db_session.get(PluginVersion, plugin.current_version_id)
+        assert version is not None
+        version.is_valid = False
         db_session.commit()
 
 
