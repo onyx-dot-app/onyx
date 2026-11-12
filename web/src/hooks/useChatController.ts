@@ -33,7 +33,6 @@ import {
 } from "@/app/app/services/messageTree";
 import { MinimalAgent } from "@/lib/agents/types";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
-import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
 import { OnyxDocument } from "@/lib/search/types";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import {
@@ -114,7 +113,6 @@ export interface OnSubmitProps {
   // optional params
   messageIdToResend?: number;
   queryOverride?: string;
-  preferSearch?: boolean;
   isSeededChat?: boolean;
   modelOverride?: LlmDescriptor;
   regenerationRequest?: RegenerationRequest | null;
@@ -127,7 +125,6 @@ export interface OnSubmitProps {
 interface RegenerationRequest {
   messageId: number;
   parentMessage: Message;
-  preferSearch?: boolean;
 }
 
 interface UseChatControllerProps {
@@ -388,7 +385,6 @@ export default function useChatController({
       deepResearch,
       messageIdToResend,
       queryOverride,
-      preferSearch,
       isSeededChat,
       modelOverride,
       regenerationRequest,
@@ -1096,19 +1092,10 @@ export default function useChatController({
           currentMessageTreeLocal
         );
 
-        // Find the search tool's numeric ID for preferSearch
-        const searchToolNumericId = activeAgent?.tools.find(
-          (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID
-        )?.id;
-
-        // Search regeneration takes precedence over the composer's tool preference.
-        const requestedPreferredToolId = preferSearch
-          ? (searchToolNumericId ?? null)
-          : toolConfiguration.preferredToolId;
         const effectivePreferredToolId = deepResearch
           ? null
           : effectiveChatPreferredToolId({
-              requestedToolId: requestedPreferredToolId,
+              requestedToolId: toolConfiguration.preferredToolId,
               agent: activeAgent,
               plugins: memberPlugins ?? [],
             });

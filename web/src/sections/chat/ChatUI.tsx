@@ -72,9 +72,7 @@ export interface ChatUIProps {
     regenerationRequest?: {
       messageId: number;
       parentMessage: Message;
-      preferSearch?: boolean;
     };
-    preferSearch?: boolean;
     selectedModels?: SelectedModel[];
   }) => Promise<void>;
   deepResearchEnabled: boolean;
@@ -191,11 +189,7 @@ const ChatUI = React.memo(
     }, [onSubmit, deepResearchEnabled, currentMessageFiles, selectedModels]);
 
     const createRegenerator = useCallback(
-      (regenerationRequest: {
-        messageId: number;
-        parentMessage: Message;
-        preferSearch?: boolean;
-      }) => {
+      (regenerationRequest: { messageId: number; parentMessage: Message }) => {
         return async function (modelOverride: LlmDescriptor) {
           return await onSubmitRef.current({
             message: regenerationRequest.parentMessage.message,
@@ -204,7 +198,6 @@ const ChatUI = React.memo(
             modelOverride,
             messageIdToResend: regenerationRequest.parentMessage.messageId,
             regenerationRequest,
-            preferSearch: regenerationRequest.preferSearch,
           });
         };
       },
