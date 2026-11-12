@@ -14,6 +14,7 @@ export type { ChatSearchFilters } from "@/lib/tools/types";
 import type { Tag } from "@/lib/types";
 import { useAppPosition } from "@/lib/navigation/hooks";
 import { useActiveAgent } from "@/lib/agents/hooks";
+import { toast } from "@opal/layouts";
 import { useMemberPlugins } from "@/lib/plugins/member";
 import {
   effectiveChatPreferredToolId,
@@ -562,6 +563,7 @@ export function useToolConfiguration(
   // Turns the server starts for an existing chat use the tool selection saved
   // on the chat. A new chat saves it on its first send; incognito and
   // anonymous chats keep nothing.
+  const t = useTranslations("actions");
   const { user } = useUser();
   const { plugins } = useMemberPlugins({
     agentId: activeAgent?.id,
@@ -600,6 +602,8 @@ export function useToolConfiguration(
     timer: ReturnType<typeof setTimeout>;
     send: () => void;
   } | null>(null);
+  // Saves run one at a time, so the server keeps the latest selection.
+  const saveQueue = useRef<Promise<void>>(Promise.resolve());
   useEffect(() => {
     if (toolSelection === null) return;
     const previous = savedSelection.current;
@@ -619,20 +623,26 @@ export function useToolConfiguration(
     }
     const send = () => {
       if (pendingSave.current?.url === url) pendingSave.current = null;
-      void fetch(url, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: toolSelection,
-      }).catch((error: unknown) =>
-        console.error("Could not save the chat's tool selection", error)
-      );
+      saveQueue.current = saveQueue.current.then(async () => {
+        try {
+          const response = await fetch(url, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: toolSelection,
+          });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        } catch (error: unknown) {
+          console.error("Could not save the chat's tool selection", error);
+          toast.error(t("toolsPopover.selectionSaveFailed"));
+        }
+      });
     };
     pendingSave.current = {
       url,
       timer: setTimeout(send, TOOL_SELECTION_SYNC_MS),
       send,
     };
-  }, [chatSessionId, toolSelection]);
+  }, [chatSessionId, toolSelection, t]);
 
   return handle;
 }

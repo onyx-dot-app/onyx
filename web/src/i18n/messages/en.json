@@ -820,6 +820,7 @@
       "search": {
         "placeholder": "Search actions..."
       },
+      "selectionSaveFailed": "Could not save the tool selection for this chat.",
       "serverFallback": {
         "label": "server"
       },

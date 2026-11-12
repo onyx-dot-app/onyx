@@ -820,6 +820,7 @@
       "search": {
         "placeholder": "Buscar acciones..."
       },
+      "selectionSaveFailed": "No se pudo guardar la selección de herramientas de este chat.",
       "serverFallback": {
         "label": "servidor"
       },

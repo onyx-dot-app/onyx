@@ -820,6 +820,7 @@
       "search": {
         "placeholder": "Rechercher des actions..."
       },
+      "selectionSaveFailed": "Impossible d’enregistrer la sélection d’outils de ce chat.",
       "serverFallback": {
         "label": "serveur"
       },
