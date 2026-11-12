@@ -18,7 +18,7 @@ from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.chat_utils import capture_chat_history, convert_chat_history
-from onyx.chat.history_store import get_chat_history_store
+from onyx.chat.history_store import PostgresChatHistoryStore
 from onyx.chat.models import MessageRendering, ResponseRecord
 from onyx.chat.prompt_utils import prepare_prompt
 from onyx.chat.restoration import restore_chat_agent
@@ -267,11 +267,8 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
         assert persisted_run_id is not None
         saved_run_id = persisted_run_id
         branch = load_chat_branch(response_id)
-        history_store = get_chat_history_store(
-            message_id=response_id,
-            chat_session_id=session_id,
-            persist_content=True,
-            branch=branch,
+        history_store = PostgresChatHistoryStore(
+            message_id=response_id, chat_session_id=session_id, branch=branch
         )
         run_store = ChatRunStore(
             tenant_id=get_current_tenant_id(),

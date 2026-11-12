@@ -129,9 +129,9 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
 
 | Runtime interface | Chat implementation |
 |---|---|
-| `RunStore` | `chat/persistence.py:ChatResponsePersistence` saves the root response at the end and skips child runs. In a session that keeps content, `chat/run_store.py:ChatRunStore` wraps it: it saves the parent's partial record before each child reservation and saves each child when it ends. In a content-free incognito session no adapter saves children. |
-| `RunOwnership` | `ChatRunStore`, with cache leases that the turn's control thread renews. A content-free incognito run keeps local ownership only. |
-| `AgentDirectory` | `chat/subagents.py:ChatAgentDirectory`, limited to the selected branch. |
+| `RunStore` | `chat/persistence.py:ChatResponsePersistence` saves the root response at the end and skips child runs. In a session that keeps content, `chat/run_store.py:ChatRunStore` wraps it: it saves the parent's partial record before each child reservation and saves each child when it ends. Incognito sessions have no children. |
+| `RunOwnership` | `ChatRunStore`, with cache leases that the turn's control thread renews. An incognito run has no run ownership. |
+| `AgentDirectory` | `chat/subagents.py:ChatAgentDirectory`, limited to the selected branch of a saved chat. It reads saved agents through `chat/history_store.py:PostgresChatHistoryStore` and runs through `ChatRunStore`. An incognito run has no directory. |
 | Event listener | `chat/presentation.py:ResponsePresenter`. |
 | `RestorableFeature` | `ChatAgent`, `DeepResearchAgent` and `ResearchAgent`. Product calls only `capture_state`, at each suspension. `chat/restoration.py:restore_chat_agent` rebuilds them for `ChatRunStore.resume`. |
 | `AgentTool` | `tools/interface.py:Tool.bind`. |
@@ -274,7 +274,7 @@ and ignore thread-pool `submit` calls; expect no runtime matches.
     starts it as a child (`tools/tool_implementations/coding_agent/coding_agent_tool.py`).
     Return `ChildRunWait`, set `result_from_children`, and release held
     resources through `agents.add_completion_cleanup`. The chat adapters then
-    save and own the child for one run, except in content-free incognito. To
+    save and own the child for one run. Incognito chats have no children. To
     restore or rerun it, add a `restoration_config`, a `RestorableFeature` and a
     branch in `ChatAgentDirectory.restore_agent` and `restore_chat_agent`.
     `restore_agent` rebuilds only `ResearchAgent`; `restore_chat_agent` rebuilds

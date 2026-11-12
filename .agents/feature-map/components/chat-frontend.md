@@ -52,7 +52,8 @@
 - **The incognito start button** appears only on the new chat page when
   incognito is available and unlocked.
 - **A user in incognito** cannot turn incognito on or off once the session
-  exists, and answers show no rating buttons. Leaving the chat, reloading or
+  exists, and answers show no rating buttons. Deep Research and the Coding
+  Agent are greyed out and never sent. Leaving the chat, reloading or
   closing the tab ends it. If an explicit exit fails, an error shows and the user stays in
   the chat to retry.
 - **When a send fails**, the partial answer stays and an error banner follows

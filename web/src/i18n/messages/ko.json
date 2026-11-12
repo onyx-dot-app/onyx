@@ -122,6 +122,9 @@
       "authenticate": {
         "label": "인증"
       },
+      "codingAgentIncognito": {
+        "tooltip": "시크릿 모드에서는 코딩 에이전트를 사용할 수 없습니다"
+      },
       "configure": {
         "tooltip": "구성"
       },
@@ -12432,6 +12435,7 @@
         },
         "deepResearchButton": {
           "disabledTooltip": "다중 모델 모드에서는 Deep Research를 사용할 수 없습니다",
+          "incognitoTooltip": "시크릿 모드에서는 Deep Research를 사용할 수 없습니다",
           "label": "Deep Research"
         },
         "incognitoNotice": {

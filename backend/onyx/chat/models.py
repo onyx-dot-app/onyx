@@ -216,22 +216,11 @@ class ResponseLink(BaseModel):
     status: RunStatus
 
 
-class IncognitoAgentState(BaseModel):
-    parent_agent_id: str | None = None
-    agent_id: str
-    agent_path: str
-    description: str
-    configuration: ResearchConfiguration | None
-    responses: list[ResponseRecord]
-    sources: dict[int, SearchDoc] = Field(default_factory=dict)
-
-
 class IncognitoAgentResponse(BaseModel):
     run_id: str | None = None
     checkpoint: CompactionCheckpoint | None = None
     message_ids: list[str] = Field(default_factory=list)
     replay_digest: str
-    agents: list[IncognitoAgentState] = Field(default_factory=list)
 
 
 def _read_incognito_message(value: dict[str, JsonValue] | Message) -> Message:

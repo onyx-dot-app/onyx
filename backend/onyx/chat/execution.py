@@ -25,7 +25,10 @@ from onyx.chat.chat_processing_checker import (
 )
 from onyx.chat.emitter import Emitter
 from onyx.chat.errors import chat_error
-from onyx.chat.history_store import get_chat_history_store
+from onyx.chat.history_store import (
+    PostgresChatHistoryStore,
+    get_chat_history_store,
+)
 from onyx.chat.incognito import incognito_llm_request_policy
 from onyx.chat.incognito_context import incognito_session_ended
 from onyx.chat.models import ChatResponseOutcome, ChatTurnSetup, CreateChatSessionID
@@ -46,7 +49,7 @@ from onyx.configs.constants import DEFAULT_PERSONA_ID, DocumentSource
 from onyx.db.chat_subagents import load_chat_branch
 from onyx.db.enums import record_mode_persists_content
 from onyx.db.models import User
-from onyx.deep_research.agent import MIN_RESEARCH_CONTEXT_TOKENS, DeepResearchAgent
+from onyx.deep_research.agent import DeepResearchAgent
 from onyx.deep_research.tool_definitions import RESEARCH_AGENT_TOOL_NAME
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -65,6 +68,7 @@ from onyx.server.query_and_chat.streaming_models import (
     StreamingError,
 )
 from onyx.server.settings.store import load_settings
+from onyx.tools.constants import CODING_AGENT_TOOL_ID
 from onyx.tools.tool_constructor import (
     CustomToolConfig,
     FileReaderToolConfig,
@@ -448,14 +452,11 @@ class ChatTurnExecution:
             else:
                 configured_tools = chat_agent.configured_tools
                 persistence.initial_citations = dict(chat_agent.initial_citations)
-            branch = load_chat_branch(persistence.message_id)
-            if branch.chat_session_id != self.setup.chat_session_id:
-                raise ValueError("Response belongs to another chat session")
-            persist_content = record_mode_persists_content(
-                self.setup.incognito_record_mode
-            )
-            store = (
-                ChatRunStore(
+            if record_mode_persists_content(self.setup.incognito_record_mode):
+                branch = load_chat_branch(persistence.message_id)
+                if branch.chat_session_id != self.setup.chat_session_id:
+                    raise ValueError("Response belongs to another chat session")
+                store = ChatRunStore(
                     tenant_id=get_current_tenant_id(),
                     chat_session_id=self.setup.chat_session_id,
                     response_id=persistence.message_id,
@@ -463,29 +464,14 @@ class ChatTurnExecution:
                     cache=get_cache_backend(),
                     root_response=persistence,
                 )
-                if persist_content
-                else None
-            )
-            if store is not None:
                 with self._lock:
                     self._stores.append(store)
-            history_store = get_chat_history_store(
-                message_id=persistence.message_id,
-                chat_session_id=self.setup.chat_session_id,
-                visible_message_ids=branch.message_ids,
-                persist_content=persist_content,
-                branch=branch,
-            )
-            saved_agents = history_store.list_agents()
-            directory = ChatAgentDirectory(
-                history_store=history_store,
-                llm=persistence.llm,
-                tools=configured_tools,
-                user_identity=self.setup.user_identity,
-                store=store,
-            )
-            coordinator = (
-                store.bind(
+                history_store = PostgresChatHistoryStore(
+                    message_id=persistence.message_id,
+                    chat_session_id=self.setup.chat_session_id,
+                    branch=branch,
+                )
+                coordinator = store.bind(
                     persistence.coordinator,
                     build_agent=partial(
                         restore_chat_agent,
@@ -493,15 +479,19 @@ class ChatTurnExecution:
                         tools=configured_tools,
                         user_identity=self.setup.user_identity,
                     ),
-                    directory=directory,
+                    directory=ChatAgentDirectory(
+                        history_store=history_store,
+                        llm=persistence.llm,
+                        tools=configured_tools,
+                        user_identity=self.setup.user_identity,
+                        store=store,
+                    ),
                 )
-                if store is not None
-                else persistence.coordinator.view(
-                    directory=directory, store=persistence
-                )
-            )
-            for info in saved_agents:
-                coordinator.register(info)
+                for info in history_store.list_agents():
+                    coordinator.register(info)
+            else:
+                # Incognito chats have no child agents to find, restore, or own.
+                coordinator = persistence.coordinator.view(store=persistence)
             coordinator.register(
                 AgentInfo(
                     id=chat_agent.id,
@@ -634,11 +624,23 @@ def create_chat_agent(
     llm = setup.responses[response_index].llm
     with cancellation_scope(cancellation):
         cancellation.check()
+        tool_configuration = setup.tool_configuration
+        if setup.incognito_record_mode is not None:
+            # Incognito chats have no child agents, and these features run as children.
+            tool_configuration = tool_configuration.model_copy(
+                update={
+                    "tools": [
+                        tool
+                        for tool in tool_configuration.tools
+                        if tool.in_code_tool_id != CODING_AGENT_TOOL_ID
+                    ]
+                }
+            )
         filters = setup.new_msg_req.internal_search_filters
         source_types = filters.source_type if filters else None
         # Tools open DB sessions on demand, so model I/O cannot retain a connection.
         tools_by_type = construct_tools(
-            configuration=setup.tool_configuration,
+            configuration=tool_configuration,
             user=user,
             llm=llm,
             selection_llm_factory=partial(
@@ -686,18 +688,6 @@ def create_chat_agent(
         agent_id = str(setup.chat_session_id)
 
         if len(setup.responses) == 1 and setup.new_msg_req.deep_research:
-            if setup.chat_session_project_id:
-                raise OnyxError(
-                    OnyxErrorCode.BAD_REQUEST,
-                    "Deep research is not supported for projects",
-                )
-            if setup.research_tool_id is None:
-                raise ValueError("Deep research tool configuration is missing")
-            if llm.config.max_input_tokens < MIN_RESEARCH_CONTEXT_TOKENS:
-                raise OnyxError(
-                    OnyxErrorCode.BAD_REQUEST,
-                    "Deep research requires a model with at least 50,000 input tokens",
-                )
             return DeepResearchAgent(
                 agent_id=agent_id,
                 messages=list(setup.messages),
