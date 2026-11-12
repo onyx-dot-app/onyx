@@ -328,20 +328,41 @@ class JiraSourceOperations(SourceOperations):
         consumes=OperationConsumes.BOTH,
     )
     def bulk_fetch_issues(
-        self, *, issue_ids: list[str], fields: str | None = None, fast: bool = False
+        self,
+        *,
+        issue_ids: list[str],
+        fields: str | None = None,
+        fast: bool = False,
+        raise_on_missing: bool = False,
     ) -> list[dict[str, Any]]:
         """Cloud only: the raw issues for these ids (``issue/bulkfetch``), in
         batches of at most 100. ``fields`` is a comma-separated list; None
-        fetches all fields."""
+        fetches all fields. With ``raise_on_missing``, a successful response
+        that omits a requested issue (the API's ``issueErrors``) raises instead
+        of returning an incomplete list."""
         client: JIRA = self._client(fast=fast)
         raw_issues: list[dict[str, Any]] = []
         for batch in chunked(issue_ids, _JIRA_BULK_FETCH_LIMIT):
             try:
                 with _translate_errors(fast=fast):
-                    raw_issues.extend(_bulk_fetch_batch(client, list(batch), fields))
+                    fetched = _bulk_fetch_batch(client, list(batch), fields)
             except Exception as e:
                 logger.error("Error fetching issues: %s", e)
                 raise
+            if raise_on_missing:
+                fetched_ids = {str(issue.get("id")) for issue in fetched}
+                missing = [
+                    issue_id for issue_id in batch if issue_id not in fetched_ids
+                ]
+                if missing:
+                    preview = ", ".join(missing[:10])
+                    raise JiraApiError(
+                        f"Jira bulk fetch returned no issue for {len(missing)} of "
+                        f"{len(batch)} requested issues: {preview}",
+                        status_code=None,
+                        method="POST",
+                    )
+            raw_issues.extend(fetched)
         return raw_issues
 
     @source_operation(
