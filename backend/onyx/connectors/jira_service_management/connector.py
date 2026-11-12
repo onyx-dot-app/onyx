@@ -1,6 +1,7 @@
 """Jira Service Management (JSM) connector implementation."""
 
 import copy
+import json
 import math
 from datetime import datetime
 from typing import Any
@@ -30,10 +31,14 @@ from onyx.connectors.models import (
     TextSection,
 )
 
-_SEARCH_FIELDS = (
-    "summary,description,status,priority,comment,reporter,updated,customfield_10010"
+_BASE_SEARCH_FIELDS = (
+    "summary,description,status,priority,comment,reporter,updated"
 )
+_REQUEST_TYPE_SCHEMA_CUSTOM = "com.atlassian.servicedesk:vp-origin"
+_REQUEST_TYPE_SCHEMA_TYPE = "sd-customerrequesttype"
+_REQUEST_TYPE_FIELD_NAMES = frozenset({"request type", "customer request type"})
 _COMMENT_PAGE_SIZE = 100
+_MAX_BOUNDARY_SEEN_KEYS = 200
 
 
 def _escape_jql_string(value: str) -> str:
@@ -42,13 +47,13 @@ def _escape_jql_string(value: str) -> str:
 
 
 def _normalize_base_url(raw_url: str) -> str:
-    """Validate and normalize the configured JSM HTTP(S) base URL."""
+    """Validate and normalize the configured JSM HTTPS base URL."""
     candidate = raw_url.strip().rstrip("/")
     if not candidate:
         raise ConnectorValidationError("Jira Service Management base_url is required.")
     parsed = urlparse(candidate)
     if (
-        parsed.scheme.lower() not in {"http", "https"}
+        parsed.scheme.lower() != "https"
         or not parsed.hostname
         or parsed.username
         or parsed.password
@@ -56,15 +61,68 @@ def _normalize_base_url(raw_url: str) -> str:
         or parsed.fragment
     ):
         raise ConnectorValidationError(
-            "Jira Service Management base_url must be a valid HTTP(S) base URL."
+            "Jira Service Management base_url must be a valid HTTPS base URL."
         )
-    return f"{parsed.scheme.lower()}://{parsed.netloc}{parsed.path.rstrip('/')}"
+    return f"https://{parsed.netloc}{parsed.path.rstrip('/')}"
+
+
+def _comment_has_visibility_signal(comment: dict[str, Any]) -> bool:
+    """Return True when a comment payload already carries JSM visibility metadata."""
+    return (
+        isinstance(comment.get("jsdPublic"), bool)
+        or isinstance(comment.get("public"), bool)
+        or isinstance(comment.get("properties"), list)
+    )
+
+
+def _is_public_comment(comment: dict[str, Any]) -> bool:
+    """Return True only when a JSM comment is customer-visible and unrestricted."""
+    if comment.get("jsdPublic") is False or comment.get("public") is False:
+        return False
+    if comment.get("visibility"):
+        return False
+
+    properties = comment.get("properties")
+    if isinstance(properties, list):
+        for prop in properties:
+            if not isinstance(prop, dict):
+                continue
+            prop_key = str(prop.get("key") or "")
+            if prop_key not in {"sd.public.comment", "sd.allow.public.comment"}:
+                continue
+            prop_val = prop.get("value")
+            if isinstance(prop_val, str):
+                try:
+                    prop_val = json.loads(prop_val)
+                except ValueError:
+                    prop_val = None
+            if isinstance(prop_val, dict) and (
+                prop_val.get("internal") is True
+                or prop_val.get("public") is False
+                or prop_val.get("allow") is False
+            ):
+                return False
+    return True
+
+
+def _extract_request_type_name(field_value: Any) -> str:
+    """Extract a human-readable request type name from a JSM custom field value."""
+    if not isinstance(field_value, dict):
+        return ""
+    nested = field_value.get("requestType")
+    if isinstance(nested, dict):
+        nested_name = str(nested.get("name") or "").strip()
+        if nested_name:
+            return nested_name
+    direct_name = str(field_value.get("name") or "").strip()
+    return direct_name
 
 
 class JSMConnectorCheckpoint(ConnectorCheckpoint):
     """Checkpoint state for Jira Service Management token-based pagination."""
 
     next_page_token: str | None = None
+    last_updated_value: str | None = None
     seen_issue_keys: list[str] = Field(default_factory=list)
 
 
@@ -88,6 +146,8 @@ class JiraServiceManagementConnector(CheckpointedConnector[JSMConnectorCheckpoin
         self._email: str = ""
         self._api_token: str = ""
         self._resolved_project_key: str = ""
+        self._request_type_field_id: str | None = None
+        self._request_type_field_resolved: bool = False
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         """Load Atlassian user email and API token from the credential dictionary."""
@@ -109,13 +169,13 @@ class JiraServiceManagementConnector(CheckpointedConnector[JSMConnectorCheckpoin
         """Validate and deserialize persisted checkpoint JSON."""
         return JSMConnectorCheckpoint.model_validate_json(checkpoint_json)
 
-    def _get(
+    def _request_json(
         self,
         api_path: str,
         params: dict[str, Any] | None = None,
         timeout: int = 30,
-    ) -> dict[str, Any]:
-        """Execute an authenticated GET request against the validated JSM host."""
+    ) -> Any:
+        """Execute an authenticated GET request and return decoded JSON."""
         normalized_base = _normalize_base_url(self.base_url)
         clean_path = api_path if api_path.startswith("/") else f"/{api_path}"
         resp = requests.get(
@@ -134,10 +194,99 @@ class JiraServiceManagementConnector(CheckpointedConnector[JSMConnectorCheckpoin
                 "Insufficient Jira Service Management permissions (HTTP 403)."
             )
         resp.raise_for_status()
-        payload = resp.json()
+        return resp.json()
+
+    def _get(
+        self,
+        api_path: str,
+        params: dict[str, Any] | None = None,
+        timeout: int = 30,
+    ) -> dict[str, Any]:
+        """Execute an authenticated GET request returning a JSON object."""
+        payload = self._request_json(api_path, params=params, timeout=timeout)
         if not isinstance(payload, dict):
             raise ValueError("Expected JSON object from Jira Service Management API.")
         return payload
+
+    def _resolve_request_type_field_id(self, timeout: int = 15) -> str | None:
+        """Discover and cache the Jira site's Customer Request Type field ID."""
+        if self._request_type_field_resolved:
+            return self._request_type_field_id
+
+        try:
+            payload = self._request_json("/rest/api/3/field", timeout=timeout)
+        except InsufficientPermissionsError:
+            self._request_type_field_resolved = True
+            self._request_type_field_id = None
+            return None
+        except requests.HTTPError as e:
+            if e.response is not None and e.response.status_code == 404:
+                self._request_type_field_resolved = True
+                self._request_type_field_id = None
+                return None
+            raise
+
+        matched_id: str | None = None
+        if isinstance(payload, list):
+            for entry in payload:
+                if not isinstance(entry, dict):
+                    continue
+                schema = entry.get("schema")
+                if isinstance(schema, dict) and (
+                    schema.get("custom") == _REQUEST_TYPE_SCHEMA_CUSTOM
+                    or schema.get("type") == _REQUEST_TYPE_SCHEMA_TYPE
+                ):
+                    candidate = str(entry.get("id") or "").strip()
+                    if candidate:
+                        matched_id = candidate
+                        break
+
+            if matched_id is None:
+                for entry in payload:
+                    if not isinstance(entry, dict) or entry.get("custom") is not True:
+                        continue
+                    name = str(entry.get("name") or "").strip().lower()
+                    if name in _REQUEST_TYPE_FIELD_NAMES:
+                        candidate = str(entry.get("id") or "").strip()
+                        if candidate:
+                            matched_id = candidate
+                            break
+
+        self._request_type_field_id = matched_id
+        self._request_type_field_resolved = True
+        return matched_id
+
+    def _build_search_fields(self) -> str:
+        """Return comma-separated JQL search fields including site Request Type ID."""
+        request_type_field = self._resolve_request_type_field_id()
+        if request_type_field:
+            return f"{_BASE_SEARCH_FIELDS},{request_type_field}"
+        return _BASE_SEARCH_FIELDS
+
+    def _resolve_request_type_from_fields(self, fields: dict[str, Any]) -> str:
+        """Resolve a ticket's request type name from discovered or custom fields."""
+        if self._request_type_field_id:
+            resolved = _extract_request_type_name(
+                fields.get(self._request_type_field_id)
+            )
+            if resolved:
+                return resolved
+
+        default_candidate = _extract_request_type_name(fields.get("customfield_10010"))
+        if default_candidate:
+            return default_candidate
+
+        for key, val in fields.items():
+            if (
+                key.startswith("customfield_")
+                and isinstance(val, dict)
+                and "requestType" in val
+            ):
+                candidate = _extract_request_type_name(val)
+                if candidate:
+                    return candidate
+
+        return "Service Request"
 
     def _resolve_project_key(self, timeout: int = 15) -> str:
         """Resolve and validate a non-empty JSM project key scope."""
@@ -240,14 +389,20 @@ class JiraServiceManagementConnector(CheckpointedConnector[JSMConnectorCheckpoin
         issue_key: str,
         comment_field: dict[str, Any] | None,
     ) -> list[dict[str, Any]]:
-        """Return all comments for an issue, paginating the comment API if truncated."""
+        """Return public comments for an issue, excluding internal/restricted notes."""
         field_obj = comment_field or {}
         embedded_raw = field_obj.get("comments") or []
         embedded = [c for c in embedded_raw if isinstance(c, dict)]
         start_at = int(field_obj.get("startAt") or 0)
         total = int(field_obj.get("total") or len(embedded))
-        if start_at == 0 and len(embedded) >= total:
-            return embedded
+        if total == 0 and not embedded:
+            return []
+        if (
+            start_at == 0
+            and len(embedded) >= total
+            and all(_comment_has_visibility_signal(c) for c in embedded)
+        ):
+            return [c for c in embedded if _is_public_comment(c)]
 
         all_comments: list[dict[str, Any]] = []
         offset = 0
@@ -259,6 +414,7 @@ class JiraServiceManagementConnector(CheckpointedConnector[JSMConnectorCheckpoin
                     "startAt": offset,
                     "maxResults": _COMMENT_PAGE_SIZE,
                     "orderBy": "created",
+                    "expand": "properties",
                 },
                 timeout=30,
             )
@@ -269,7 +425,7 @@ class JiraServiceManagementConnector(CheckpointedConnector[JSMConnectorCheckpoin
             offset += len(batch)
             if not batch or offset >= page_total:
                 break
-        return all_comments
+        return [c for c in all_comments if _is_public_comment(c)]
 
     def _issue_to_document(self, issue: dict[str, Any]) -> Document:
         """Convert a raw JSM issue dictionary into an Onyx Document."""
@@ -291,16 +447,14 @@ class JiraServiceManagementConnector(CheckpointedConnector[JSMConnectorCheckpoin
             description = self._extract_adf_text(description)
         status_name = str((fields.get("status") or {}).get("name") or "")
         priority_name = str((fields.get("priority") or {}).get("name") or "")
-        req_type = str(
-            ((fields.get("customfield_10010") or {}).get("requestType") or {}).get(
-                "name"
-            )
-            or "Service Request"
-        )
+        req_type = self._resolve_request_type_from_fields(fields)
 
         body_parts = [
             f"Ticket: {key} - {summary}",
-            f"Status: {status_name} | Priority: {priority_name} | Request Type: {req_type}",
+            (
+                f"Status: {status_name} | Priority: {priority_name} "
+                f"| Request Type: {req_type}"
+            ),
             f"Description:\n{description}",
         ]
         if self.include_comments:
@@ -377,15 +531,31 @@ class JiraServiceManagementConnector(CheckpointedConnector[JSMConnectorCheckpoin
         """Yield JSM ticket documents for one page and return the updated checkpoint."""
         next_checkpoint = copy.deepcopy(checkpoint)
         jql = self._build_jql(start=start, end=end)
+        search_fields = self._build_search_fields()
         params: dict[str, Any] = {
             "jql": jql,
             "maxResults": self.batch_size,
-            "fields": _SEARCH_FIELDS,
+            "fields": search_fields,
         }
         if next_checkpoint.next_page_token:
             params["nextPageToken"] = next_checkpoint.next_page_token
 
-        payload = self._get("/rest/api/3/search/jql", params=params, timeout=30)
+        try:
+            payload = self._get("/rest/api/3/search/jql", params=params, timeout=30)
+        except requests.HTTPError as e:
+            if (
+                e.response is not None
+                and e.response.status_code == 400
+                and self._request_type_field_id
+            ):
+                self._request_type_field_id = None
+                params["fields"] = _BASE_SEARCH_FIELDS
+                payload = self._get(
+                    "/rest/api/3/search/jql", params=params, timeout=30
+                )
+            else:
+                raise
+
         issues = payload.get("issues") or []
         seen_keys = set(next_checkpoint.seen_issue_keys)
         normalized_base = _normalize_base_url(self.base_url)
@@ -396,15 +566,49 @@ class JiraServiceManagementConnector(CheckpointedConnector[JSMConnectorCheckpoin
                 if isinstance(issue, dict)
                 else ""
             )
-            if issue_key and issue_key in seen_keys:
+            raw_fields = issue.get("fields") if isinstance(issue, dict) else None
+            issue_updated = (
+                str(raw_fields.get("updated") or "").strip()
+                if isinstance(raw_fields, dict)
+                else ""
+            )
+            if (
+                issue_key
+                and issue_key in seen_keys
+                and (
+                    not issue_updated
+                    or next_checkpoint.last_updated_value is None
+                    or issue_updated == next_checkpoint.last_updated_value
+                )
+            ):
                 continue
             try:
                 doc = self._issue_to_document(issue)
                 if issue_key:
-                    seen_keys.add(issue_key)
-                    next_checkpoint.seen_issue_keys.append(issue_key)
+                    if (
+                        issue_updated
+                        and issue_updated != next_checkpoint.last_updated_value
+                    ):
+                        next_checkpoint.last_updated_value = issue_updated
+                        next_checkpoint.seen_issue_keys = [issue_key]
+                    else:
+                        next_checkpoint.seen_issue_keys.append(issue_key)
+                        if (
+                            len(next_checkpoint.seen_issue_keys)
+                            > _MAX_BOUNDARY_SEEN_KEYS
+                        ):
+                            next_checkpoint.seen_issue_keys = (
+                                next_checkpoint.seen_issue_keys[
+                                    -_MAX_BOUNDARY_SEEN_KEYS:
+                                ]
+                            )
+                    seen_keys = set(next_checkpoint.seen_issue_keys)
                 yield doc
-            except (CredentialInvalidError, InsufficientPermissionsError):
+            except (
+                CredentialInvalidError,
+                InsufficientPermissionsError,
+                requests.RequestException,
+            ):
                 raise
             except Exception as e:
                 if issue_key:
@@ -431,4 +635,5 @@ class JiraServiceManagementConnector(CheckpointedConnector[JSMConnectorCheckpoin
         next_checkpoint.has_more = has_more
         if not has_more:
             next_checkpoint.seen_issue_keys = []
+            next_checkpoint.last_updated_value = None
         return next_checkpoint

@@ -2,14 +2,19 @@
 
 from typing import Annotated
 
-from onyx.connectors.connector_config import ConnectorConfig
+from onyx.connectors.connector_config import (
+    BaseUrlCredentialBinding,
+    ConnectorConfig,
+)
 from onyx.connectors.field_policy import FieldClass, FieldPolicy, ScopeInclude
 
 
-class JiraServiceManagementConnectorConfig(ConnectorConfig):
+class JiraServiceManagementConnectorConfig(
+    BaseUrlCredentialBinding,
+    ConnectorConfig,
+):
     """Typed shape of Jira Service Management ``connector_specific_config``."""
 
-    base_url: Annotated[str, FieldPolicy(FieldClass.IDENTITY)]
     project_key: Annotated[
         str,
         FieldPolicy(
