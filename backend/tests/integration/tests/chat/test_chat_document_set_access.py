@@ -25,7 +25,10 @@ from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.document_set import DocumentSetManager
-from tests.integration.common_utils.managers.mock_llm import MockLLMScript
+from tests.integration.common_utils.managers.mock_llm import (
+    MockLLMScript,
+    tool_call_reply,
+)
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.managers.tool import ToolManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
@@ -62,18 +65,13 @@ def _setup_search_infrastructure(
     A blocked request may fail before any LLM call, so its replies are optional."""
     mock_llm.conversation(
         "chat",
-        Reply(
-            tool_calls=[
-                ToolCall(
-                    id=_SEARCH_CALL_ID,
-                    name="internal_search",
-                    arguments={"queries": ["test query"]},
-                )
-            ],
-            conditions=RequestConditions(
-                offers=["internal_search"],
-                tool_choice="auto",
+        tool_call_reply(
+            ToolCall(
+                id=_SEARCH_CALL_ID,
+                name="internal_search",
+                arguments={"queries": ["test query"]},
             ),
+            tool_choice="auto",
             required=search_expected,
         ),
         Reply(

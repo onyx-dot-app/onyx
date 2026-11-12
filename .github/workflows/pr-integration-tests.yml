@@ -196,16 +196,23 @@ jobs:
           if [[ "$ONEDRIVE_CHANGED" == "true" ]]; then
             connector_dirs="$connector_dirs onedrive"
           fi
+          # The chat suites run a second time with code mode on, where the model
+          # calls most tools from `execute_code` programs.
+          code_mode_dirs="chat llm_workflows streaming_endpoints tools"
           # The daily run covers only the suites that PRs skip by default.
           if [[ "$EVENT_NAME" == "schedule" || "$EVENT_NAME" == "workflow_dispatch" ]]; then
             tests_dirs="reindex_port"
             connector_dirs=""
+            code_mode_dirs=""
           fi
 
           # Create JSON array with directory info
           all_dirs=""
           for dir in $tests_dirs; do
             all_dirs="$all_dirs{\"path\":\"tests/$dir\",\"name\":\"tests-$dir\"},"
+          done
+          for dir in $code_mode_dirs; do
+            all_dirs="$all_dirs{\"path\":\"tests/$dir\",\"name\":\"tests-$dir-code-mode\",\"code_mode\":true},"
           done
           for dir in $connector_dirs; do
             all_dirs="$all_dirs{\"path\":\"connector_job_tests/$dir\",\"name\":\"connector-$dir\"},"
@@ -362,6 +369,9 @@ jobs:
         test-dir: ${{ fromJson(needs.discover-test-dirs.outputs.test-dirs) }}
         edition: ${{ fromJson(needs.discover-test-dirs.outputs.editions) }}
 
+    env:
+      CODE_MODE_ENABLED: ${{ matrix.test-dir.code_mode && 'true' || 'false' }}
+
     steps:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
       - name: Checkout code
@@ -397,6 +407,7 @@ jobs:
           DISABLE_TELEMETRY=true
           ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}@${MODEL_SERVER_DIGEST}
           INTEGRATION_TESTS_MODE=true
+          CODE_MODE_ENABLED=${CODE_MODE_ENABLED}
           MCP_SERVER_ENABLED=true
           # The MCP client tests register a mock MCP server on a private/loopback
           # host (TEST_WEB_HOSTNAME); opt in so the SSRF guard allows it. Loopback
