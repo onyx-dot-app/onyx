@@ -185,8 +185,8 @@ A stopped run records `STOPPED_BY_USER`: `list_agents` shows "stopped by the use
 result wakes no agent; the root reads it at its next step.
 The controls stay direct in code mode. Each child inherits code mode but owns
 its own code cells.
-`list_agents` shows the root, running and suspended agents, and agents whose latest run started
-in the current root turn; `include_finished` adds agents that finished earlier. It marks the caller
+`list_agents` shows running and suspended agents, and agents whose latest run belongs to the
+current user turn (`AgentInfo.turn_id`); `include_finished` adds the rest. It marks the caller
 and accepts a `path_prefix` filter. An agent can message
 any other agent in the tree. `send_message` reaches the next model step or starts an idle agent
 with fresh limits; a message to the root waits for the root's next run and never starts one.
@@ -201,12 +201,7 @@ Results reach the agent's spawner automatically before its next model call.
 A subagent suspends before completing until the results of children it spawned are available.
 The root can finish its response while background children continue.
 An idle agent starts a follow-up response for unread child results.
-The root alone gets `wait_agents`, and a root prompt block (`prompts/chat_prompts.py:ROOT_AGENT_INSTRUCTIONS`)
-tells it when to use it. The tool records the named children's runs, or all running ones, in
-`AgentWaitDetails` on its saved result and terminates the run: the response ends after that step
-with the model's status text. Its results then wake the idle root together, once all of them finish;
-results of other agents still wake it one at a time. It returns without ending the turn when none
-of those agents is running. These results
+Only the root gets `wait_agents` and the `ROOT_AGENT_INSTRUCTIONS` prompt block; the wait rule is in [[chat-persistence]]. These results
 stay in model history; only the parent's response appears as a chat message.
 Tool replies use concise text. The `agent_id` from spawn/list is the control
 handle; paths are display labels and need not be unique.

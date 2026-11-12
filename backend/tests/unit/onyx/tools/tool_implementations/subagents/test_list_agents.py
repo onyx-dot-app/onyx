@@ -6,7 +6,7 @@ from onyx.agents.models import AgentInfo, RunStatus
 from onyx.agents.tools import ToolInvocation
 from onyx.tools.tool_implementations.subagents.subagent_tools import ListAgentsTool
 
-# The root's current turn is response 10; runs after it started in this turn.
+# Agents of earlier user turns are listed while unfinished.
 _AGENTS = [
     AgentInfo(
         id="root",
@@ -15,7 +15,8 @@ _AGENTS = [
         description="",
         restoration_config=None,
         latest_run_id="10",
-        status=RunStatus.RUNNING,
+        status=RunStatus.COMPLETE,
+        current_turn=True,
     ),
     *(
         AgentInfo(
@@ -26,12 +27,14 @@ _AGENTS = [
             restoration_config=None,
             latest_run_id=run_id,
             status=status,
+            current_turn=current_turn,
         )
-        for name, run_id, status in [
-            ("earlier", "4", RunStatus.COMPLETE),
-            ("suspended", "5", RunStatus.SUSPENDED),
-            ("running", "12", RunStatus.RUNNING),
-            ("finished", "13", RunStatus.ERROR),
+        for name, run_id, status, current_turn in [
+            ("earlier", "4", RunStatus.COMPLETE, False),
+            ("suspended", "5", RunStatus.SUSPENDED, False),
+            ("running", "12", RunStatus.RUNNING, True),
+            # Started in this turn before the root waited; read by a follow-up.
+            ("finished", "13", RunStatus.ERROR, True),
         ]
     ),
 ]

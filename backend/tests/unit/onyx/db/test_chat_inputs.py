@@ -1,10 +1,10 @@
-from itertools import product
-from uuid import uuid4
+from itertools import count, product
+from uuid import UUID, uuid4
 
 import pytest
 
 from onyx.agents.models import MessageDelivery, RunFailure, RunFailureKind, RunStatus
-from onyx.chat.models import AgentResultState, AgentWaitState
+from onyx.chat.models import AgentResultState, AgentWait
 from onyx.db.chat_inputs import agent_queue_paused, can_start_input, wakes_for_results
 
 _TARGETED = 7
@@ -58,7 +58,13 @@ def test_wakes_for_results(
     status: RunStatus | None, result_statuses: list[RunStatus], expected: bool
 ) -> None:
     results = [
-        AgentResultState(recipient_id=uuid4(), response_id=index, status=result)
+        AgentResultState(
+            recipient_id=uuid4(),
+            agent_id=uuid4(),
+            response_id=index,
+            root_response_id=1,
+            status=result,
+        )
         for index, result in enumerate(result_statuses)
     ]
     assert wakes_for_results(status, results, queue_paused=False) is expected
@@ -66,72 +72,99 @@ def test_wakes_for_results(
 
 def test_a_paused_queue_keeps_finished_results_from_waking_the_recipient() -> None:
     results = [
-        AgentResultState(recipient_id=uuid4(), response_id=1, status=RunStatus.COMPLETE)
+        AgentResultState(
+            recipient_id=uuid4(),
+            agent_id=uuid4(),
+            response_id=1,
+            root_response_id=1,
+            status=RunStatus.COMPLETE,
+        )
     ]
     assert not wakes_for_results(RunStatus.COMPLETE, results, queue_paused=True)
     assert agent_queue_paused(RunStatus.CANCELLED)
     assert not agent_queue_paused(RunStatus.COMPLETE)
 
 
-_DONE = RunStatus.COMPLETE
-_RUNNING = RunStatus.RUNNING
+_ROOT = uuid4()
+_ALPHA, _BETA = uuid4(), uuid4()
+_WAIT_RESPONSE = 10
+_RUN_IDS = count(100)
+
+
+def _result(
+    agent: UUID,
+    status: RunStatus,
+    *,
+    root: int = _WAIT_RESPONSE,
+    stopped: bool = False,
+) -> AgentResultState:
+    return AgentResultState(
+        recipient_id=_ROOT,
+        agent_id=agent,
+        response_id=next(_RUN_IDS),
+        root_response_id=root,
+        status=status,
+        failure=RunFailure(kind=RunFailureKind.STOPPED_BY_USER, message="Stopped")
+        if stopped
+        else None,
+    )
+
+
+def _wait(agents: set[UUID] | None, *, queued: bool = False) -> AgentWait:
+    return AgentWait(
+        response_id=_WAIT_RESPONSE,
+        agent_ids=frozenset(agents) if agents is not None else None,
+        queued=queued,
+    )
+
+
+_DONE, _RUNNING = RunStatus.COMPLETE, RunStatus.RUNNING
 
 
 @pytest.mark.parametrize(
     ("results", "waits", "expected"),
     [
-        # A wait holds its finished results while one of its runs is active.
-        ({1: _DONE, 2: _RUNNING}, [{1: _DONE, 2: _RUNNING}], False),
-        # A finished result that no wait names wakes the root at once.
-        ({1: _DONE, 2: _RUNNING, 3: _DONE}, [{1: _DONE, 2: _RUNNING}], True),
-        # When every awaited run finishes, its results wake the root together.
-        ({1: _DONE, 2: RunStatus.ERROR}, [{1: _DONE, 2: RunStatus.ERROR}], True),
-        # An awaited run without a result, as after an interrupt, still counts
-        # as finished; the others' results wake the root.
-        ({1: _DONE}, [{1: _DONE, 2: RunStatus.CANCELLED}], True),
-        # One finished wait wakes the root even if a later wait names its run.
-        ({1: _DONE}, [{1: _DONE}, {1: _DONE, 2: _RUNNING}], True),
-        # A wait whose runs left no result wakes nobody.
-        ({}, [{1: RunStatus.CANCELLED}], False),
+        # A wait holds a finished result while one of its agents runs.
+        ([_result(_ALPHA, _DONE), _result(_BETA, _RUNNING)], [_wait(None)], False),
+        # A result that no wait holds wakes the root at once.
+        ([_result(_ALPHA, _DONE), _result(_BETA, _RUNNING)], [_wait({_BETA})], True),
+        # Runs of a later root response are not held.
+        (
+            [_result(_ALPHA, _DONE, root=11), _result(_BETA, _RUNNING)],
+            [_wait(None)],
+            True,
+        ),
+        # When none of its runs is active, a failure counts as finished.
+        (
+            [_result(_ALPHA, _DONE), _result(_BETA, RunStatus.ERROR)],
+            [_wait(None)],
+            True,
+        ),
+        # An interrupted run left no result, so it holds nothing back.
+        ([_result(_ALPHA, _DONE)], [_wait({_ALPHA, _BETA})], True),
+        # A queued message to a held agent will start a run.
+        ([_result(_ALPHA, _DONE)], [_wait(None, queued=True)], False),
+        # Stopped runs wake nobody, with or without a wait.
+        ([_result(_ALPHA, RunStatus.CANCELLED, stopped=True)], [_wait(None)], False),
     ],
     ids=[
         "held",
         "unawaited",
-        "finished",
+        "later_turn",
+        "failed",
         "interrupted",
-        "overlapping",
-        "no_results",
+        "queued",
+        "stopped",
     ],
 )
-def test_waits_hold_their_results_until_every_awaited_run_finishes(
-    results: dict[int, RunStatus],
-    waits: list[dict[int, RunStatus]],
-    expected: bool,
+def test_a_wait_holds_its_results_until_its_agents_finish(
+    results: list[AgentResultState], waits: list[AgentWait], expected: bool
 ) -> None:
     assert (
-        wakes_for_results(
-            RunStatus.COMPLETE,
-            [
-                AgentResultState(recipient_id=uuid4(), response_id=run, status=status)
-                for run, status in results.items()
-            ],
-            queue_paused=False,
-            waits=[AgentWaitState(run_statuses=wait) for wait in waits],
-        )
+        wakes_for_results(RunStatus.COMPLETE, results, queue_paused=False, waits=waits)
         is expected
     )
-
-
-def test_a_finished_wait_of_stopped_runs_wakes_nobody() -> None:
-    stopped = AgentResultState(
-        recipient_id=uuid4(),
-        response_id=1,
-        status=RunStatus.CANCELLED,
-        failure=RunFailure(kind=RunFailureKind.STOPPED_BY_USER, message="Stopped"),
-    )
+    # A Stop pauses the queue, so nothing wakes during a wait either.
     assert not wakes_for_results(
-        RunStatus.COMPLETE,
-        [stopped],
-        queue_paused=False,
-        waits=[AgentWaitState(run_statuses={1: RunStatus.CANCELLED})],
+        RunStatus.COMPLETE, results, queue_paused=True, waits=waits
     )

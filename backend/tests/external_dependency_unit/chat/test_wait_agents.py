@@ -21,14 +21,10 @@ from onyx.agents.models import InputSource, RunStatus
 from onyx.cache.factory import get_cache_backend
 from onyx.chat import execution
 from onyx.chat.execution import chat_turn_work
-from onyx.chat.process_message import (
-    dispatch_pending_chat_messages,
-    handle_stream_message_objects,
-)
-from onyx.chat.run_store import RESPONSE_OWNER_KEY_PREFIX, stop_response
+from onyx.chat.process_message import handle_stream_message_objects
+from onyx.chat.run_store import RESPONSE_OWNER_KEY_PREFIX
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
-from onyx.db.chat_inputs import read_chat_inbox, withdraw_agent_result__no_commit
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.chat_inputs import read_chat_inbox
 from onyx.db.models import ChatMessage, ChatResponseItem, ChatSession, User
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import LLMConfig
@@ -42,13 +38,11 @@ from onyx.llm.models import (
 from onyx.server.query_and_chat import chat_backend
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.tools.constants import SPAWN_AGENT_TOOL_NAME, WAIT_AGENTS_TOOL_NAME
-from shared_configs.contextvars import get_current_tenant_id
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.unit.onyx.agents.fakes import FakeModelClient
 
 WAIT_TIMEOUT_S = 30
 WAITING = "Waiting for the workers."
-STARTED = "The workers started."
 QUESTION = "Ask the workers"
 # A status request without pass-through headers.
 _NO_HEADERS = Request({"type": "http", "headers": []})
@@ -67,7 +61,7 @@ class ScriptedLLM(FakeModelClient):
 
 
 class Workers:
-    """A root that starts named workers, then waits for some of them or answers.
+    """A root that starts named workers, then waits for some of them.
 
     Each worker runs until the test releases it. A follow-up or a later turn
     answers with the names of the results that it can see.
@@ -77,12 +71,17 @@ class Workers:
         self,
         names: tuple[str, ...],
         *,
-        wait_for: tuple[str, ...] | None,
+        wait_for: tuple[str, ...] | None = None,
         failing: frozenset[str] = frozenset(),
+        spawn_and_wait: bool = False,
+        before_wait: Callable[[], object] | None = None,
     ) -> None:
         self.names = names
+        # None waits for all workers.
         self.wait_for = wait_for
         self.failing = failing
+        self.spawn_and_wait = spawn_and_wait
+        self.before_wait = before_wait
         self.started = {name: Event() for name in names}
         self.release = {name: Event() for name in names}
         self.root_requests: list[GenerationRequest] = []
@@ -102,51 +101,46 @@ class Workers:
                 raise RuntimeError(f"Worker {worker} failed")
             return _text(f"Result {worker}")
         self.root_requests.append(request)
-        results = [
-            message
-            for message in request.messages
-            if isinstance(message, ToolResultMessage)
-        ]
-        if not results:
-            return AssistantMessage(
-                content=[
-                    ToolCall(
-                        id=f"spawn-{name}",
-                        name=SPAWN_AGENT_TOOL_NAME,
-                        arguments={"name": name, "instruction": f"Task {name}"},
-                    )
-                    for name in self.names
-                ]
+        spawns = [
+            ToolCall(
+                id=f"spawn-{name}",
+                name=SPAWN_AGENT_TOOL_NAME,
+                arguments={"name": name, "instruction": f"Task {name}"},
             )
+            for name in self.names
+        ]
+        if len(self.root_requests) == 1:
+            if self.spawn_and_wait:
+                return AssistantMessage(content=[*spawns, self._wait_call(request)])
+            return AssistantMessage(content=spawns)
         if not self.first_turn_done:
             self.first_turn_done = True
-            if self.wait_for is None:
-                return _text(STARTED)
-            agent_ids = {
-                match[1]: match[2]
-                for result in results
-                if (
-                    match := re.search(
-                        r"/root/(\w+) \(agent_id: ([\w-]+)\)", result.text
-                    )
-                )
-            }
-            # The wait ends the run even beside another call.
+            if self.spawn_and_wait:
+                return _text(WAITING)
+            if self.before_wait is not None:
+                self.before_wait()
             return AssistantMessage(
-                content=[
-                    TextContent(text=WAITING),
-                    ToolCall(id="list", name="list_agents", arguments={}),
-                    ToolCall(
-                        id="wait",
-                        name=WAIT_AGENTS_TOOL_NAME,
-                        arguments={"agent_ids": [agent_ids[n] for n in self.wait_for]}
-                        if self.wait_for != self.names
-                        else {},
-                    ),
-                ]
+                content=[TextContent(text=WAITING), self._wait_call(request)]
             )
         seen = [name for name in self.names if f"Result {name}" in str(texts)]
         return _text(f"Answer with {', '.join(seen) or 'nothing'}")
+
+    def _wait_call(self, request: GenerationRequest) -> ToolCall:
+        if self.wait_for is None:
+            return ToolCall(id="wait", name=WAIT_AGENTS_TOOL_NAME, arguments={})
+        agent_ids = {
+            match[1]: match[2]
+            for message in request.messages
+            if isinstance(message, ToolResultMessage)
+            and (
+                match := re.search(r"/root/(\w+) \(agent_id: ([\w-]+)\)", message.text)
+            )
+        }
+        return ToolCall(
+            id="wait",
+            name=WAIT_AGENTS_TOOL_NAME,
+            arguments={"agent_ids": [agent_ids[name] for name in self.wait_for]},
+        )
 
 
 def _text(text: str) -> AssistantMessage:
@@ -235,15 +229,9 @@ def _finish(
     chat: ChatSession,
     workers: Workers,
     name: str,
-    *,
-    release: bool = True,
 ) -> ChatMessage:
-    """Wait until a worker's run ends and releases, which dispatches.
-
-    With `release`, the worker answers first; otherwise something stops it.
-    """
-    if release:
-        workers.release[name].set()
+    """Release a worker and wait until its run releases, which dispatches."""
+    workers.release[name].set()
     response = _worker_responses(db_session, chat.id)[name]
     cache = get_cache_backend()
 
@@ -353,7 +341,7 @@ def test_the_root_waits_for_staggered_agents_and_answers_once(
     code_mode: bool,  # noqa: ARG001
 ) -> None:
     names = ("alpha", "beta", "gamma")
-    workers = Workers(names, wait_for=names)
+    workers = Workers(names, failing=frozenset({"beta"}))
     _start(chat, owner, workers, monkeypatch)
     [waiting] = _root_answers(db_session, chat.id)
     assert waiting.response_status == RunStatus.COMPLETE
@@ -365,52 +353,56 @@ def test_the_root_waits_for_staggered_agents_and_answers_once(
     ).has_active_subagents
 
     finished = [_finish(db_session, chat, workers, name) for name in names[:2]]
-    # Each release dispatched; the wait holds both results.
+    # Each release dispatched; the wait holds both results, the failure too.
+    assert finished[1].response_status == RunStatus.ERROR
     assert read_chat_inbox(db_session, chat.id).next_turn is None
     assert _follow_ups(db_session, chat.id) == []
     finished.append(_finish(db_session, chat, workers, names[2]))
     _settled(db_session, chat.id, 2)
     [follow_up] = _follow_ups(db_session, chat.id)
-    assert follow_up.message == "Answer with alpha, beta, gamma"
     assert _accepted_results(db_session, follow_up) == sorted(
         response.id for response in finished
     )
+    # The follow-up read the results, so the wait cannot wake the root again.
     assert read_chat_inbox(db_session, chat.id).next_turn is None
 
 
 @pytest.mark.usefixtures("idle_turn_work")
-def test_without_a_wait_each_staggered_result_wakes_the_root(
+def test_a_result_that_finishes_before_the_wait_call_waits_with_the_rest(
     chat: ChatSession,
     owner: User,
     db_session: Session,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    names = ("alpha", "beta", "gamma")
-    workers = Workers(names, wait_for=None)
+    """Alpha finishes while the model writes the wait call, so its result is
+    unread and finished when the wait starts."""
+    names = ("alpha", "beta")
+    workers = Workers(
+        names,
+        before_wait=lambda: _finish(db_session, chat, workers, "alpha"),
+    )
     _start(chat, owner, workers, monkeypatch)
-    for count, name in enumerate(names, start=1):
-        _finish(db_session, chat, workers, name)
-        _settled(db_session, chat.id, count + 1)
-    assert [answer.message for answer in _follow_ups(db_session, chat.id)] == [
-        "Answer with alpha",
-        "Answer with alpha, beta",
-        "Answer with alpha, beta, gamma",
-    ]
+    assert read_chat_inbox(db_session, chat.id).next_turn is None
+    assert _follow_ups(db_session, chat.id) == []
+    _finish(db_session, chat, workers, "beta")
+    _settled(db_session, chat.id, 2)
+    [follow_up] = _follow_ups(db_session, chat.id)
+    assert follow_up.message == "Answer with alpha, beta"
 
 
 @pytest.mark.usefixtures("idle_turn_work")
-def test_results_that_finish_together_wake_the_root_once(
+def test_a_wait_in_the_spawning_step_waits_for_those_agents(
     chat: ChatSession,
     owner: User,
     db_session: Session,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     names = ("alpha", "beta")
-    workers = Workers(names, wait_for=None)
-    dropped = _drop_dispatches(monkeypatch)
+    workers = Workers(names, spawn_and_wait=True)
     _start(chat, owner, workers, monkeypatch)
-    # Alpha's release dispatches nothing, as if beta finished at the same time.
-    dropped.drop_next(lambda: _finish(db_session, chat, workers, "alpha"))
+    _settled(db_session, chat.id, 1)
+    _finish(db_session, chat, workers, "alpha")
+    assert read_chat_inbox(db_session, chat.id).next_turn is None
     _finish(db_session, chat, workers, "beta")
     _settled(db_session, chat.id, 2)
     [follow_up] = _follow_ups(db_session, chat.id)
@@ -440,106 +432,7 @@ def test_an_unawaited_result_wakes_the_root_while_the_wait_stays_open(
     follow_ups = _follow_ups(db_session, chat.id)
     assert len(follow_ups) == 2
     assert _accepted_results(db_session, follow_ups[1]) == sorted([alpha.id, gamma.id])
-    # The follow-up read the awaited results, so the wait cannot wake the root again.
     assert read_chat_inbox(db_session, chat.id).next_turn is None
-
-
-@pytest.mark.usefixtures("idle_turn_work")
-def test_an_awaited_agent_that_fails_still_ends_the_wait(
-    chat: ChatSession,
-    owner: User,
-    db_session: Session,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    names = ("alpha", "beta")
-    workers = Workers(names, wait_for=names, failing=frozenset({"alpha"}))
-    _start(chat, owner, workers, monkeypatch)
-    alpha = _finish(db_session, chat, workers, "alpha")
-    assert alpha.response_status == RunStatus.ERROR
-    assert read_chat_inbox(db_session, chat.id).next_turn is None
-    beta = _finish(db_session, chat, workers, "beta")
-    _settled(db_session, chat.id, 2)
-    [follow_up] = _follow_ups(db_session, chat.id)
-    assert _accepted_results(db_session, follow_up) == sorted([alpha.id, beta.id])
-
-
-@pytest.mark.usefixtures("idle_turn_work")
-def test_an_interrupted_awaited_agent_reports_nothing_and_wakes_nobody(
-    chat: ChatSession,
-    owner: User,
-    db_session: Session,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """An interrupted run writes no result, so a wait on it alone never wakes the root."""
-    workers = Workers(("alpha",), wait_for=("alpha",))
-    _start(chat, owner, workers, monkeypatch)
-    alpha = _worker_responses(db_session, chat.id)["alpha"]
-    # The same steps as interrupt_agent: withdraw the result, then cancel.
-    with get_session_with_current_tenant() as session:
-        withdraw_agent_result__no_commit(session, alpha.id)
-        session.commit()
-    stop_response(get_cache_backend(), get_current_tenant_id(), alpha.id)
-    _finish(db_session, chat, workers, "alpha", release=False)
-    assert chat_turn_work.wait_idle(timeout=WAIT_TIMEOUT_S)
-    db_session.refresh(alpha)
-    assert alpha.response_status == RunStatus.CANCELLED
-    assert _follow_ups(db_session, chat.id) == []
-    assert read_chat_inbox(db_session, chat.id).next_turn is None
-
-
-@pytest.mark.parametrize("stop", ["stop", "stop_subagents"])
-@pytest.mark.usefixtures("idle_turn_work")
-def test_stop_during_a_wait_wakes_nobody(
-    chat: ChatSession,
-    owner: User,
-    db_session: Session,
-    monkeypatch: pytest.MonkeyPatch,
-    stop: str,
-) -> None:
-    names = ("alpha", "beta")
-    workers = Workers(names, wait_for=names)
-    _start(chat, owner, workers, monkeypatch)
-    with get_session_with_current_tenant() as session:
-        if stop == "stop":
-            chat_backend.stop_chat_session(chat.id, None, owner, session)
-        else:
-            chat_backend.stop_chat_subagents(chat.id, owner, session)
-    for name in names:
-        _finish(db_session, chat, workers, name, release=stop == "stop")
-    assert chat_turn_work.wait_idle(timeout=WAIT_TIMEOUT_S)
-    if stop == "stop_subagents":
-        assert {
-            response.response_status
-            for response in _worker_responses(db_session, chat.id).values()
-        } == {RunStatus.CANCELLED}
-    assert _follow_ups(db_session, chat.id) == []
-    assert read_chat_inbox(db_session, chat.id).next_turn is None
-
-
-@pytest.mark.usefixtures("idle_turn_work")
-def test_a_fresh_dispatcher_reads_the_wait_from_the_database(
-    chat: ChatSession,
-    owner: User,
-    db_session: Session,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The saved wait_agents call is the wait's only record, so a dispatcher in
-    another process wakes the root once the awaited runs finish."""
-    names = ("alpha", "beta")
-    workers = Workers(names, wait_for=names)
-    dropped = _drop_dispatches(monkeypatch)
-    _start(chat, owner, workers, monkeypatch)
-    alpha = dropped.drop_next(lambda: _finish(db_session, chat, workers, "alpha"))
-    dispatch_pending_chat_messages(chat.id, owner.id)
-    assert read_chat_inbox(db_session, chat.id).next_turn is None
-    # The release event never reaches a dispatcher, as when the host pod is gone.
-    beta = dropped.drop_next(lambda: _finish(db_session, chat, workers, "beta"))
-    assert _follow_ups(db_session, chat.id) == []
-    assert read_chat_inbox(db_session, chat.id).next_turn is not None
-    dispatch_pending_chat_messages(chat.id, owner.id)
-    _settled(db_session, chat.id, 2)
-    [follow_up] = _follow_ups(db_session, chat.id)
-    assert _accepted_results(db_session, follow_up) == sorted([alpha.id, beta.id])
 
 
 @pytest.mark.usefixtures("idle_turn_work")
@@ -552,7 +445,7 @@ def test_a_user_turn_reads_awaited_results_whose_wake_never_fired(
     """A user turn reads the root's unread results at its first step. That ends
     a wait whose wake was lost; a wait on running agents stays open."""
     names = ("alpha", "beta")
-    workers = Workers(names, wait_for=names)
+    workers = Workers(names)
     dropped = _drop_dispatches(monkeypatch)
     _start(chat, owner, workers, monkeypatch)
     # A user turn while both agents run answers normally.

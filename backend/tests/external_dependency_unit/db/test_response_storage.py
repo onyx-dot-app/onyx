@@ -2658,7 +2658,8 @@ def test_discovery_batches_response_metadata(
         metadata = load_session_agent_metadata(
             message_id, branch=branch, include_root=False
         )
-        assert len(executed_sql) == (3 if child_count else 1)
+        # Children add ancestry, their responses and the user's latest message.
+        assert len(executed_sql) == (4 if child_count else 1)
     else:
         metadata = load_session_agent_metadata(message_id)
 
@@ -2733,8 +2734,9 @@ def test_coordinator_discovery_reads_no_content_or_inbox(
     agents = coordinator.discover_agents()
     children = [agent for agent in agents if agent.parent_id is not None]
 
-    # Sessions, the root's latest response, ancestry, and child responses.
-    assert len(executed_sql) == 4
+    # Sessions, the root's latest response, ancestry, child responses, and the
+    # user's latest message.
+    assert len(executed_sql) == 5
     assert len(agents) == child_count + 1
     assert len(children) == child_count
     assert not any("chat_response_item" in query for query in executed_sql)

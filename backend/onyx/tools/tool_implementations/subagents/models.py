@@ -13,14 +13,15 @@ class ChatConfiguration(BaseModel):
 
 
 class AgentWaitDetails(BaseModel):
-    """The runs that a `wait_agents` call waits for.
+    """The agents that a root `wait_agents` call waits for; None means all.
 
-    The saved call is the wait's only record; its state comes from these runs
-    and the root's unread results.
+    The saved call is the wait's only record. It holds the root's unread
+    results from those agents' runs that belong to its response or an earlier
+    one, including runs that start later from messages already queued.
     """
 
     type: Literal["agent_wait"] = "agent_wait"
-    run_ids: list[str]
+    agent_ids: list[str] | None
 
 
 class SpawnAgentInput(BaseModel):
@@ -53,7 +54,7 @@ class ListAgentsInput(BaseModel):
     )
     include_finished: bool = Field(
         default=False,
-        description="Also list finished agents from earlier turns.",
+        description="Also list finished agents from earlier user turns.",
     )
 
 

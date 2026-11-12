@@ -1981,11 +1981,26 @@ def _execute_tools(run: Run) -> bool:
     return True
 
 
+def ends_run(results: Sequence[ToolResult]) -> bool:
+    """A step whose tool results all set `terminate` ends the run."""
+    return bool(results) and all(result.terminate for result in results)
+
+
 def _complete_step(run: Run) -> None:
     cancellation_signal = run.cancellation_signal
     after_step = run._after_step
     cancellation_signal.check()
     progress = run._progress
+    step = run._state.steps[progress.step_index]
+    calls = step.message.tool_calls
+    terminated = ends_run(
+        [
+            execution.result
+            for call in calls
+            if (execution := step.tools.get(call.id)) is not None
+            and execution.result is not None
+        ]
+    )
     if after_step is not None:
         should_continue = after_step(
             _step_result(run, progress.options, progress.step_index).model_copy(
@@ -1993,17 +2008,7 @@ def _complete_step(run: Run) -> None:
             )
         )
     else:
-        step = run._state.steps[progress.step_index]
-        calls = step.message.tool_calls
-        results = [
-            execution.result
-            for call in calls
-            if (execution := step.tools.get(call.id)) is not None
-            and execution.result is not None
-        ]
-        should_continue = bool(calls) and not any(
-            result.terminate for result in results
-        )
+        should_continue = bool(calls) and not terminated
     cancellation_signal.check()
     has_delegated_work = run.coordination is not None and bool(
         run.coordination.delegated_runs()
@@ -2017,8 +2022,14 @@ def _complete_step(run: Run) -> None:
     with run.execution_lock:
         progress.previous_options = progress.options
         can_continue = progress.step_index + 1 < progress.step_limit
-        if not should_continue and can_continue and ownership is not None:
-            # Unread messages continue the run while steps remain.
+        if (
+            not should_continue
+            and can_continue
+            and ownership is not None
+            and not terminated
+        ):
+            # Unread messages continue the run while steps remain; after a
+            # terminating step they wait for the next run.
             should_continue = ownership.has_unread_inputs(run)
         if not should_continue or not can_continue:
             progress.outcome = (

@@ -288,8 +288,8 @@ On restore, a call that a lost owner left running runs again, unless the tool se
 `interrupted_result`; then the run saves that result as the call's result instead (status `error` for an error result).
 Errors in runtime coordination or tool hooks can fail the run.
 The runtime produces error results for unknown tool names, malformed arguments, and
-arguments the model truncated. A step with a result that sets `terminate=True` ends the run when its other calls finish;
-unread messages still continue it. Chat's `after_step` applies the same rule.
+arguments the model truncated. A step whose results all set `terminate=True` ends the run (`ends_run`), and its
+unread messages wait for the next run. Chat's `after_step` uses the same rule.
 A custom `after_step` function chooses whether to continue.
 
 ## Subagents
@@ -365,21 +365,8 @@ A subagent waits for those results before finishing, or before its last step, an
 this releases its execution thread until it can incorporate the results.
 The root can finish its response while background children continue.
 
-The root can also wait for its children by ending its turn. Chat's root-only `wait_agents` tool lists the
-runs of the named children, or of all its running children, in `AgentWaitDetails`, and returns a terminating result.
-The run ends after that step; no thread, timer, or memory holds the wait. The saved tool call is the only record:
-`agent_waits` reads the branch's waits from the root responses at or after the oldest unread result's root response,
-with their runs' statuses, in one query. `wakes_for_results` applies one rule to an idle root:
-- A finished result of a run that no wait names wakes it, as before.
-- A wait holds the results of its runs until all of them finish (any status). Then one follow-up reads them,
-  with any other unread results. Interim follow-ups leave unfinished awaited runs unread, so the wait stays open.
-- The follow-up consumes the results, so a wait wakes the root at most once. A wait whose runs left no
-  waking result, because they were interrupted or stopped, wakes nobody.
-Results that finish while the root runs arrive between its steps, as before, and do not start extra turns.
-The trigger is the run store's release event, which dispatches after each child run ends on any pod.
-Known gap: if a pod crashes while awaited children run and no browser is open, the wake waits until `/status`
-or a run store repairs the orphaned runs. A user turn also reads the root's unread results at its first step,
-including awaited results whose wake never fired.
+Chat's root can also end its turn with `wait_agents` and get one follow-up for those children;
+`.agents/feature-map/components/chat-persistence.md` describes the wait rule.
 Foreground tools retain their `ChildRunWait` result path.
 
 Use `add_completion_cleanup(run_id, callback)` for resources that must survive suspension, such as a coding workspace.

@@ -541,6 +541,7 @@ def agent_metadata(
     latest_response_id: int | None,
     status: RunStatus | None,
     failure: RunFailure | None = None,
+    current_turn: bool = False,
 ) -> AgentInfo:
     parent_id = ancestors[agent.id].parent_id
     return AgentInfo(
@@ -554,6 +555,7 @@ def agent_metadata(
         else None,
         status=status,
         failure_kind=failure.kind if failure is not None else None,
+        current_turn=current_turn,
     )
 
 
@@ -600,6 +602,17 @@ def load_session_agent_metadata(
             branch,
             [str(agent.id) for agent in agents if agent.id != branch.chat_session_id],
         )
+        # Runs reserved after the user's latest message belong to the current turn.
+        latest_user_message = (
+            db_session.scalar(
+                select(func.max(ChatMessage.id)).where(
+                    ChatMessage.id.in_(branch.message_ids),
+                    ChatMessage.message_type == MessageType.USER,
+                )
+            )
+            if latest_by_agent
+            else None
+        )
         metadata: list[AgentInfo] = []
         for agent in agents:
             if agent.id == branch.chat_session_id:
@@ -632,7 +645,19 @@ def load_session_agent_metadata(
                 status = latest.response_status if latest else None
                 failure = latest.response_failure if latest else None
             metadata.append(
-                agent_metadata(agent, ancestors, latest_id, status, failure)
+                agent_metadata(
+                    agent,
+                    ancestors,
+                    latest_id,
+                    status,
+                    failure,
+                    current_turn=agent.id == branch.chat_session_id
+                    or (
+                        latest_id is not None
+                        and latest_user_message is not None
+                        and latest_id > latest_user_message
+                    ),
+                )
             )
         return metadata
 

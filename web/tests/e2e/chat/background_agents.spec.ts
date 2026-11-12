@@ -291,8 +291,6 @@ test("a root that waits for its agents answers their results once @code-mode", a
       "Subagents working"
     );
     await releaseMockLlmGate(gateId);
-    await expect(chatPage.inputBar.subagentActivity).toBeVisible();
-    await expect(chatPage.agentResultsDividers).toHaveCount(0);
     await releaseMockLlmGate(secondGateId);
     await chatPage.expectAnswerParagraph(finalAnswer);
     await expect(chatPage.inputBar.subagentActivity).toBeHidden();

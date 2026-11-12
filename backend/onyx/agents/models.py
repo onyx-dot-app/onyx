@@ -176,6 +176,8 @@ class AgentInfo(BaseModel):
     status: RunStatus | None = None
     # Why the latest run failed or was stopped, when it records a reason.
     failure_kind: RunFailureKind | None = None
+    # Whether the latest run started in the application's current user turn.
+    current_turn: bool = False
 
     @property
     def depth(self) -> int:

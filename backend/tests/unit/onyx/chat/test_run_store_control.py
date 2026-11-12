@@ -263,7 +263,11 @@ def test_every_step_receives_a_bounded_number_of_child_results(
     )
     finished = [
         AgentResultState(
-            recipient_id=chat_id, response_id=index, status=RunStatus.COMPLETE
+            recipient_id=chat_id,
+            agent_id=chat_id,
+            response_id=index,
+            root_response_id=1,
+            status=RunStatus.COMPLETE,
         )
         for index in range(2, 2 + run_store.MAX_AGENT_COMPLETIONS_PER_STEP + 1)
     ]

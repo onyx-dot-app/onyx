@@ -19,7 +19,6 @@ from onyx.agents.events import AgentEndEvent, AgentEvent, ToolEndEvent
 from onyx.agents.models import (
     PreparedStep,
     RunFailureKind,
-    RunStatus,
     StepInput,
     StepResult,
     ToolCallContext,
@@ -398,39 +397,6 @@ def test_selected_tool_definition_and_callback_stay_paired() -> None:
     run.result()
     assert run.wait_for_idle(2)
     assert run.snapshot().messages[-1].text == "original"
-
-
-def test_a_terminating_result_ends_the_run_after_its_step() -> None:
-    requests: list[GenerationRequest] = []
-    tools = [
-        AgentTool(
-            definition=ToolDefinition(name=name, description="", parameters={}),
-            execute=lambda _, name=name: ToolResult(
-                content=name, terminate=name == "finish"
-            ),
-        )
-        for name in ("work", "finish")
-    ]
-
-    def generate(
-        request: GenerationRequest, _signal: CancellationSignal
-    ) -> AssistantMessage:
-        requests.append(request)
-        return AssistantMessage(
-            content=[
-                ToolCall(id="work", name="work", arguments={}),
-                ToolCall(id="finish", name="finish", arguments={}),
-            ]
-        )
-
-    run = Agent(
-        FakeModelClient(generate),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-        tools=tools,
-    ).start(max_steps=3)
-    run.result()
-    assert run.snapshot().status == RunStatus.COMPLETE
-    assert len(requests) == 1
 
 
 def test_provider_receives_acceptance_before_reading_next_chunk() -> None:

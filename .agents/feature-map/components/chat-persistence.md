@@ -214,12 +214,22 @@ any terminal response; ordinary queued turns wait while Stop paused the queue
 (`db/chat_inputs.py:can_start_input`, shared with child inboxes). Unread
 finished results wake a recipient only while its queue is not paused and its
 latest run did not fail; an agent's queue pauses when its latest run was
-stopped (`db/chat_inputs.py:wakes_for_results`). A root `wait_agents` call holds
-the results of the runs it names until all of those runs finish; then they wake
-the root together. No column stores a wait: `db/chat_inputs.py:agent_waits` reads
-the `AgentWaitDetails` of the branch's saved `tool_call` rows from the oldest
-unread result's root response on, with their runs' statuses, in one query.
-The follow-up consumes the results, so a wait wakes the root at most once.
+stopped (`db/chat_inputs.py:wakes_for_results`).
+
+The root's `wait_agents` call ends its turn when a named agent, or any agent, still runs.
+Its saved `tool_call` result (`AgentWaitDetails`) is the only record of the wait. It holds
+the root's unread results from those agents' runs that belong to its root response or an
+earlier one. `wakes_for_results` applies one rule to an idle root: a finished result that no
+wait holds wakes it at once; held results wake it together once none of their wait's runs is
+active and no message to its agents is queued. Interrupted runs leave no result, so they count
+as finished; a wait whose runs left only stopped results wakes nobody. The follow-up reads the
+results, so a wait wakes the root once, and interim follow-ups leave its unfinished runs unread.
+`agent_waits` reads waits only when results would wake the root, from the oldest unread
+result's root response on. Dispatch evaluates the rule, mainly from a child's release.
+A pod crash while awaited runs are active, with no browser open, delays the wake until
+`/status` or a run store repairs the orphaned runs.
+A user turn reads the root's unread results at its first step, so it ends a wait whose wake was lost.
+
 Inbox writers lock the recipient session before the response. The session lock
 uses `NO KEY UPDATE` so response and tool foreign-key checks can proceed.
 Pending text is limited to `db/chat_inputs.py:MAX_PENDING_MESSAGE_BYTES` per

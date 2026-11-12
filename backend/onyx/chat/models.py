@@ -184,6 +184,21 @@ class ResponseRecord(BaseModel):
     def messages(self) -> list[Message]:
         return messages_from_steps(self.steps)
 
+    @property
+    def answer(self) -> str:
+        """The answer step's text; without text, the result of its terminating tool."""
+        if self.answer_step_index is None:
+            return ""
+        step = self.steps[self.answer_step_index]
+        return step.message.text or next(
+            (
+                execution.result.content
+                for execution in step.tools.values()
+                if execution.result is not None and execution.result.terminate
+            ),
+            "",
+        )
+
 
 class HistoryLink(BaseModel):
     id: int
@@ -228,7 +243,11 @@ class AgentResultState(BaseModel):
     """An unread child result on a branch; it is readable once its response finishes."""
 
     recipient_id: UUID
+    # The agent whose run delivers the result.
+    agent_id: UUID
     response_id: int
+    # The root response that the run belongs to.
+    root_response_id: int
     status: RunStatus
     failure: RunFailure | None = None
 
@@ -252,14 +271,18 @@ class AgentResultState(BaseModel):
         return not self.status.is_terminal
 
 
-class AgentWaitState(BaseModel):
-    """A root's `wait_agents` call on a branch, with the statuses of its runs."""
+class AgentWait(BaseModel):
+    """A root `wait_agents` call on a branch, as `AgentWaitDetails` records it."""
 
-    run_statuses: dict[int, RunStatus]
+    response_id: int
+    agent_ids: frozenset[UUID] | None
+    # A message to one of its agents still waits to start that agent's run.
+    queued: bool
 
-    @property
-    def finished(self) -> bool:
-        return all(status.is_terminal for status in self.run_statuses.values())
+    def holds(self, agent_id: UUID, root_response_id: int) -> bool:
+        return root_response_id <= self.response_id and (
+            self.agent_ids is None or agent_id in self.agent_ids
+        )
 
 
 class AgentInboxWork(BaseModel):
