@@ -442,6 +442,9 @@ const AppInputBar = React.memo(
         writeDraft(key, combined);
         return;
       }
+      // The composer saves its draft after a delay that a chat switch cancels;
+      // the server no longer holds this text, so it is saved at once.
+      writeDraft(chatDraftStorageKey, combined);
       setMessage(combined);
       setCursorToEnd();
     }

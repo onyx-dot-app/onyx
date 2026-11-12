@@ -883,6 +883,23 @@ test("an IME composition Enter does not send a highlighted message now", async (
   expect(interruptRequests()).toHaveLength(0);
 });
 
+test("an edited queued message is saved as the draft before the composer shows it", async () => {
+  const user = setupUser();
+  render(<ChatInput {...props("streaming")} initialMessage="" />);
+  await user.click(
+    await screen.findByRole("button", {
+      name: "Edit queued message: Queued follow-up",
+    })
+  );
+  const textbox = screen.getByRole("textbox", { name: "Message input" });
+  await waitFor(() => expect(textbox).toHaveTextContent(/^Queued follow-up$/));
+  // A chat switch cancels the composer's delayed save, so the text is saved now.
+  expect(mockWriteDraft).toHaveBeenCalledWith(
+    "chat:session",
+    "Queued follow-up"
+  );
+});
+
 test("an edit that finishes after a chat switch returns its text to its own chat", async () => {
   const user = setupUser();
   const withdrawal = deferred<Response>();
