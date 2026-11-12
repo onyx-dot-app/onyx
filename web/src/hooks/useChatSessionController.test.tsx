@@ -12,6 +12,8 @@ import { settleChatSession } from "@/lib/chat/settleChatSession";
 import { stopChatSession } from "@/lib/chat/stopChatSession";
 import { deferred } from "@tests/setup/test-utils";
 import { getLatestMessageChain } from "@/app/app/services/messageTree";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import type { ChatSessionStatus } from "@/lib/chat/types";
 
 jest.mock("next-intl", () => ({
   ...jest.requireActual("next-intl"),
@@ -72,10 +74,22 @@ function mountController() {
 beforeEach(() => {
   jest.mocked(processRawChatHistory).mockImplementation(() => new Map());
   useChatSessionStore.setState({ sessions: new Map(), currentSessionId: null });
-  jest.spyOn(global, "fetch").mockResolvedValue({
-    ok: true,
-    json: async () => backendSession(true),
-  } as Response);
+  jest.spyOn(global, "fetch").mockImplementation(async (url) => {
+    const path = String(url);
+    const status: ChatSessionStatus = {
+      is_processing: true,
+      current_stream: null,
+      has_startable_input: false,
+      latest_response_id: null,
+    };
+    const body =
+      path === SWR_KEYS.pendingChatMessages("session")
+        ? []
+        : path === SWR_KEYS.chatSessionStatus("session")
+          ? status
+          : backendSession(true);
+    return new Response(JSON.stringify(body));
+  });
   jest.mocked(fetchSettledChatSession).mockResolvedValue(backendSession(false));
 });
 
