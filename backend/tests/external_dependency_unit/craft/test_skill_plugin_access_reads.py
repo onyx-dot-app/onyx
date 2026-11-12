@@ -217,7 +217,7 @@ def test_access_results_match_the_skill_rows_except_organization_edit(
             _ids(
                 skills,
                 (
-                    skill.id
+                    skill.skill.id
                     for skill in list_runtime_skills_for_user(
                         user=user, db_session=db_session
                     )

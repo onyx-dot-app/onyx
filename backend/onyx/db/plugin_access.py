@@ -50,6 +50,7 @@ from onyx.db.models import (
     Plugin__User,
     Plugin__UserGroup,
     PluginSkill,
+    PluginVersion,
     Sandbox,
     User,
     User__UserGroup,
@@ -238,6 +239,16 @@ def frontmatter_in_version(
     )
 
 
+def version_is_valid(version_id: ColumnElement[UUID]) -> ColumnElement[bool | None]:
+    """Lazy validity of a version. NULL while the push has not classified it."""
+    return (
+        select(PluginVersion.is_valid)
+        .where(PluginVersion.id == version_id)
+        .correlate_except(PluginVersion)
+        .scalar_subquery()
+    )
+
+
 # --- Access of plugins for responses ----------------------------------------
 
 
@@ -271,6 +282,8 @@ class PluginAccess:
     # From the frontmatter of the version the user runs.
     name: str | None
     description: str
+    # Lazy validity of the version the user runs.
+    is_valid: bool | None
     user_shares: tuple[PluginUserShare, ...]
     group_shares: tuple[PluginGroupShare, ...]
 
@@ -300,6 +313,7 @@ def load_plugin_access(
             func.coalesce(
                 frontmatter_in_version("description", runs), Plugin.description
             ),
+            version_is_valid(runs),
         )
         .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
         .outerjoin(author, author.c.id == Plugin.author_user_id)
@@ -355,6 +369,7 @@ def load_plugin_access(
             version_user_runs=row[7],
             name=row[8],
             description=row[9],
+            is_valid=row[10],
             user_shares=tuple(user_shares.get(row[0], ())),
             group_shares=tuple(group_shares.get(row[0], ())),
         )

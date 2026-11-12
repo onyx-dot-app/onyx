@@ -55,7 +55,7 @@ def _management_skill_ids(
 
 def _runtime_skill_ids(user: User, db_session: Session) -> set[UUID]:
     return {
-        skill.id
+        skill.skill.id
         for skill in list_runtime_skills_for_user(
             user=user,
             db_session=db_session,

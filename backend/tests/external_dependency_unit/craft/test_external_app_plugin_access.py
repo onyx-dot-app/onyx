@@ -200,3 +200,26 @@ def test_disconnect_removes_only_enabled_choices(
         )
         is None
     )
+
+
+def test_associate_refuses_invalid_skill_with_no_plugin(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+) -> None:
+    skill = make_skill(db_session, with_plugin=False)
+    skill.is_valid = False
+    db_session.flush()
+    app_id = _make_app(db_session)
+
+    with pytest.raises(OnyxError) as exc:
+        with db_session.begin_nested():
+            associate_custom_skill_with_external_app__no_commit(
+                db_session, external_app_id=app_id, skill_id=skill.id
+            )
+    assert exc.value.error_code == OnyxErrorCode.INVALID_INPUT
+    with pytest.raises(OnyxError) as exc:
+        with db_session.begin_nested():
+            replace_custom_skill_associations__no_commit(
+                db_session, external_app_id=app_id, skill_ids=[skill.id]
+            )
+    assert exc.value.error_code == OnyxErrorCode.INVALID_INPUT

@@ -133,7 +133,7 @@ class SkillResponse(BaseModel):
             description=(
                 access.description if access is not None else skill.description
             ),
-            is_valid=skill.is_valid,
+            is_valid=access.is_valid if access is not None else None,
             # The plugin's own company setting. No setting maps to AVAILABLE,
             # as it did before plugins. The skills API cannot show
             # NOT_AVAILABLE until group install settings ship.

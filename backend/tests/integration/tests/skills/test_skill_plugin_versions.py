@@ -490,22 +490,23 @@ def test_stale_base_version_gets_409(user: DATestUser) -> None:
     _assert_legacy_matches_current(state)
 
 
-def test_response_version_id_matches_the_files_it_shows(user: DATestUser) -> None:
+def test_response_version_id_matches_the_fields_it_shows(user: DATestUser) -> None:
+    """A response reads the version id with the name and description, from
+    the plugin, so a stale legacy row cannot pair old fields with a new base."""
     name = f"snapshot-{uuid4().hex[:8]}"
     skill = _upload(user, _bundle({"SKILL.md": _skill_md(name, "v1")}), name=name)
-    first_version = skill["current_version_id"]
 
     with get_session_with_current_tenant() as db_session:
-        # A response that loaded the skill row before another save commits
-        # shows version 1, so it must return version 1 as the edit base.
         loaded = db_session.get(Skill, UUID(skill["id"]))
         db_user = db_session.get(User, UUID(user.id))
         assert loaded is not None and db_user is not None
         _patch(user, skill["id"], {"description": "v2"}).raise_for_status()
         response = skill_response_for_user(loaded, db_user, db_session)
 
-    assert str(response.current_version_id) == first_version
-    assert _state(skill["id"]).current.number == 2
+    state = _state(skill["id"])
+    assert state.current.number == 2
+    assert response.current_version_id == state.current_version_id
+    assert response.description == "v2"
 
 
 def test_save_on_published_plugin_moves_both_pointers(user: DATestUser) -> None:

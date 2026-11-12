@@ -204,3 +204,13 @@ async def test_auth_deletion_cleans_up_group_membership(db_session: Session) -> 
         if remaining_user is not None:
             delete_user_from_db__no_commit(remaining_user, db_session)
             db_session.commit()
+
+
+def test_delete_skill_with_no_plugin_returns_its_bundle(
+    db_session: Session,
+) -> None:
+    skill = make_skill(db_session, with_plugin=False)
+    bundle_file_id = skill.bundle_file_id
+
+    assert delete_skill(skill, db_session) == bundle_file_id
+    assert db_session.get(Plugin, skill.id) is None

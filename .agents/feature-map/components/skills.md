@@ -92,9 +92,12 @@ skill mutation (server/features/skill/api.py)   compute affected users BEFORE th
   -> push_skills_for_users       skills/push.py
        lock_sandbox_skills_hashes        SELECT ... FOR UPDATE on Sandbox rows
        build_user_skills_payload         per sandbox user
-         list_runtime_skills_for_user    db/skill.py: the one runtime gate
-         _assemble_fileset               built-ins from disk, custom from FileStore;
-                                         resolves ${CLAUDE_SKILL_DIR} in each SKILL.md
+         list_runtime_skills_for_user    db/skill.py: the one runtime gate; each custom
+                                         skill comes with the plugin version the user
+                                         runs (version_user_runs, outer joins)
+         _assemble_fileset               built-ins from disk, custom from the FileStore
+                                         bundle of that version, in a folder named by
+                                         its frontmatter; resolves ${CLAUDE_SKILL_DIR}
          build_connectable_apps_list     guidance for unconnected apps
        compute_skill_runtime_hash        once per sandbox; skip sandboxes whose hash matches
        push_to_sandboxes(SKILLS_MOUNT_PATH)
@@ -106,9 +109,9 @@ session start: sandbox_lifecycle.py:build_managed_content_payload
 
 **Two data models.** Each custom skill is also a plugin with the same id
 (`db/plugin.py`). Every write goes to the legacy skill rows and the plugin
-rows in one transaction. Access reads of custom skills use the plugin rows
-(`db/plugin_access.py`, [[#plugin-tables]]); the sandbox push and the bundle
-reads still use the skill rows, and built-in skills have no plugin. Each access
+rows in one transaction. Every read of a custom skill uses the plugin rows
+(`db/plugin_access.py`, [[#plugin-tables]]): access, names, validity, bundles
+and content. Built-in skills have no plugin. Each access
 write in `db/skill.py`, `db/external_app.py` and
 `ee/onyx/db/community_downgrade.py` calls one `db/plugin.py` helper that
 mirrors it. Lock order: the skill row, then the plugin row; many in id order.
@@ -118,8 +121,8 @@ a `FOR UPDATE` blocks that foreign-key check into a deadlock.
 
 **The runtime gate.** `db/skill.py:list_runtime_skills_for_user` decides what
 a sandbox gets. It combines visibility (`skill_visible_to_user`), enablement
-(`_is_enabled_for_user`), app readiness, bundle validity (`is_valid` not
-false) and built-in availability (`_exclude_unavailable_built_in_skills`).
+(`_is_enabled_for_user`), app readiness, bundle validity (`is_valid` of the
+version the user runs not false) and built-in availability (`_exclude_unavailable_built_in_skills`).
 These inputs stay independent. A required skill still needs a ready app and a
 valid bundle.
 
@@ -154,7 +157,8 @@ The library preview of an external-app skill calls the same renderer
 1. `rendering-input-changes-hash` **A new rendering input must change the
    hash.** If a value that changes the rendered files is not in the bytes that
    `skills/push.py:compute_skill_runtime_hash` reads, an edit never re-pushes and sessions
-   never go stale.
+   never go stale. The hash covers the bytes of the version each user runs, so a
+   change to `published_version_id` re-pushes to organization-only users.
 2. `affected-users-before-change` **Compute affected users before the
    change.** `db/skill.py:affected_user_ids_for_skill` finds users with a running sandbox
    who can see the skill, by the plugin visibility rule in one query
@@ -194,17 +198,21 @@ The library preview of an external-app skill calls the same renderer
    so sharing writes that reference the user still run. A new preference
    writer, such as an auto-enable, must take the same lock.
    `skills/push.py:_assemble_fileset` raises if two skills in one fileset share a name,
-   because the name is the sandbox directory.
+   because the name is the sandbox directory. For a custom skill that name is
+   `frontmatter->>'name'` of the version the user runs.
 6. `name-immutable` **A skill name never changes.** The frontmatter `name`,
    `Skill.name` and the bundle's wrapper directory, when there is one, must
    match (`skills/metadata.py:parse_skill_document`). Storage removes the
    wrapper. A rename is a delete and a new skill. Custom names cannot match a
    built-in.
 7. `validate-before-sandbox` **Validate before content reaches a sandbox.**
-   `_assemble_fileset` unzips a custom bundle only when `is_valid` is true, or
-   after `skills/validation.py:validate_stored_custom_skill` passes for an
-   unclassified row. `db/skill.py:persist_skill_validity` writes only to rows that are still unclassified
-   and still point at the same bundle.
+   `_assemble_fileset` unzips the bundle of the version a user runs only when
+   that version's `is_valid` is true, or after
+   `skills/validation.py:validate_stored_custom_skill` passes for an
+   unclassified version (it checks the name in the version's frontmatter).
+   `db/skill.py:persist_skill_validity` writes the result to the plugin
+   versions that hold that bundle and are still unclassified, and copies it to
+   the legacy skill row only while that row points at the same bundle.
    Writes check four limits in `skills/bundle.py:normalize_custom_bundle`.
    Count all non-directory archive entries, including ignored files. Check
    both the incoming and normalized ZIP sizes. Raw uploads use the per-file
@@ -385,8 +393,20 @@ The library preview of an external-app skill calls the same renderer
     with no author. Migration `55bf66dd54dd` re-syncs every plugin from the
     skill rows once, before these reads, to fix rows that older code left
     stale; it copies `backfill_plugins_from_skills` instead of importing it.
-    The sandbox push
-    still reads the bundle from the skill row.
+    Reads of bundles,
+    validity and content also come from the version: the runtime list, the
+    push, session start and the hash take the version each user runs
+    (`db/plugin_access.py:version_user_runs`). The editor and the edits read
+    the current version. The preview and `is_valid` in responses read the
+    version the user runs. External-app association checks the current
+    version, and the app admin list shows the version the organization runs.
+    Content of a version comes from one function,
+    `skills/content.py:read_version_contents`: `plugin_version.file_manifest`
+    and `plugin_skill.skill_md` from the database, and the bundle only when
+    they are NULL (a version copied from a legacy row before the repair task).
+    The legacy `bundle_file_id`, `bundle_sha256` and `is_valid` columns are
+    only written, by the dual writes; `db/plugin.py:legacy_skill_version_content`
+    reads them once to make a plugin for a skill that has none.
 20. `bundle-change-adds-version` **A file change adds a plugin version and
     keeps the old bundle.** Each create and each change to a custom skill's
     files goes through `db/skill.py:create_custom_skill__no_commit` or
@@ -402,10 +422,10 @@ The library preview of an external-app skill calls the same renderer
     stored bundle; the bytes of a rewritten ZIP differ even when its files
     do not. A bundle upload always adds one. An edit
     request may carry `base_version_id`; if it is not the current version,
-    the edit gets 409 `PLUGIN_VERSION_STALE`. Skill responses return as
-    `current_version_id` the version that holds the bundle they show
-    (`db/plugin.py:get_version_ids_for_bundles`), so the editor's base always
-    matches its fields. Routes no longer delete the
+    the edit gets 409 `PLUGIN_VERSION_STALE`. Skill responses return the plugin's
+    `current_version_id`, read with the name and description; the editor
+    returns the id of the version whose content it read, so the editor's base
+    always matches its fields. Routes no longer delete the
     previous bundle, because older versions still point at it; a skill delete
     removes only the current bundle, so earlier blobs stay until a cleanup
     task exists. Each new version stores `plugin_skill.skill_md`
@@ -491,8 +511,8 @@ The library preview of an external-app skill calls the same renderer
   ([[#affected-users-before-change]]).
 - `investigate-skill-missing` **Investigate "my skill is not in the sandbox".** Check the inputs of
   `list_runtime_skills_for_user` one at a time for that user: visibility,
-  `_is_enabled_for_user`, app readiness, `Skill.is_valid`, and built-in
-  availability. Then compare `Sandbox.skills_hash` with
+  `_is_enabled_for_user`, app readiness, `plugin_version.is_valid` of the
+  version the user runs (`version_user_runs`), and built-in availability. Then compare `Sandbox.skills_hash` with
   `BuildSession.skills_hash`: equal means the runtime loaded the last push;
   different means the session waits for a reload. Search the API server log
   for `Skill push failed` for a failed push.
@@ -508,6 +528,10 @@ The library preview of an external-app skill calls the same renderer
   GitHub import.
 - `backend/tests/external_dependency_unit/craft/` (the `test_skill*` files)
   covers visibility, the fileset, affected users, ownership and push faults.
+  `backend/tests/external_dependency_unit/craft/test_skill_version_reads.py` covers the version each user runs (an
+  organization-only user runs the published version, a share recipient the
+  current one, also in the push), and that the editor, the preview and the
+  list make no file store read for content stored in the database.
 - `backend/tests/external_dependency_unit/db/test_plugin_tables_migration.py`
   covers the plugin backfill,
   `backend/tests/external_dependency_unit/db/test_plugin_resync_migration.py`
