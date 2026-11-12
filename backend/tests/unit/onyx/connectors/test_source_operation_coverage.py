@@ -8,6 +8,7 @@ a gateway is picked up here automatically; it cannot forget to wire the test.
 
 from collections.abc import Callable
 from datetime import datetime, timezone
+from io import BytesIO
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -29,6 +30,7 @@ from onyx.connectors.confluence.source_operations import (
     ConfluenceRestSpacePermissionsNotAvailableError,
     ConfluenceSpacePermissionsVariant,
 )
+from onyx.connectors.egnyte.models import EgnyteFile, EgnyteFolder, EgnyteFolderPage
 from onyx.connectors.github.models import (
     GitHubGitTree,
     GitHubIssue,
@@ -405,6 +407,25 @@ def _configure_asana_spy(spy: MagicMock) -> None:
     )
 
 
+def _configure_egnyte_spy(spy: MagicMock) -> None:
+    """A folder holding one file, so the files check reaches the download."""
+    folder = EgnyteFolder(name="Docs", path="/Shared/Docs", folder_id="f1")
+    spy.list_folder_page.return_value = EgnyteFolderPage(
+        folder=folder,
+        folders=[],
+        files=[
+            EgnyteFile(
+                name="a.txt",
+                path="/Shared/Docs/a.txt",
+                group_id="g1",
+                entry_id="e1",
+                last_modified="Tue, 10 Nov 2026 18:00:00 GMT",
+            )
+        ],
+    )
+    spy.download_file.return_value = BytesIO(b"text")
+
+
 # A unit is covered when the checks exercise it under any one configuration:
 # a source whose credential picks the API family needs one per family.
 _SPY_CONFIGURATIONS: dict[DocumentSource, list[Callable[[MagicMock], None]]] = {
@@ -420,6 +441,7 @@ _SPY_CONFIGURATIONS: dict[DocumentSource, list[Callable[[MagicMock], None]]] = {
     DocumentSource.SLACK: [_configure_slack_spy],
     DocumentSource.YOUTRACK: [_configure_youtrack_spy],
     DocumentSource.AZURE_DATALAKE: [_configure_azure_datalake_spy],
+    DocumentSource.EGNYTE: [_configure_egnyte_spy],
 }
 
 # The connector config the checks read, per source (default: empty). Every
@@ -450,6 +472,7 @@ _CONNECTOR_CONFIGS: dict[DocumentSource, list[dict[str, Any]]] = {
     DocumentSource.AZURE_DATALAKE: [
         {"account_name": "onyxtest", "container_name": "docs", "path_prefix": "docs"}
     ],
+    DocumentSource.EGNYTE: [{"folder_path": "/Shared/Docs"}],
 }
 
 

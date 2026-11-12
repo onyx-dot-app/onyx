@@ -9,7 +9,7 @@ per-second 429, and fails at once when the daily quota is used up, since that
 import re
 import threading
 import time
-from collections.abc import Iterator
+from io import BytesIO
 from typing import Any
 from urllib.parse import quote
 
@@ -41,8 +41,6 @@ logger = setup_logger()
 EGNYTE_DOMAIN: str = "domain"
 EGNYTE_ACCESS_TOKEN: str = "access_token"
 
-FOLDER_PAGE_SIZE: int = 500
-
 # The domain is the subdomain of egnyte.com, so it must be one DNS label.
 _DOMAIN_PATTERN: re.Pattern[str] = re.compile(
     r"^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$"
@@ -57,16 +55,6 @@ _DEFAULT_RATE_LIMIT_WAIT_SECONDS: float = 1.0
 _QUOTA_ALLOTTED_HEADER: str = "X-Accesstoken-Quota-Allotted"
 _QUOTA_CURRENT_HEADER: str = "X-Accesstoken-Quota-Current"
 _DOWNLOAD_CHUNK_BYTES: int = 1024 * 1024
-# Each page re-reads the last tenth of the previous one, which absorbs that
-# many deletions between two requests.
-_PAGE_OVERLAP_DIVISOR: int = 10
-# A walk still paging past this is a server that ignores the offset.
-_MAX_PAGES: int = 100_000
-
-_UNTESTED_REASON: str = (
-    "Egnyte has no capability checks yet; they come with the checkpointed connector."
-)
-
 # Guards the lazy session build and the pacing schedule of every gateway
 # instance. Waits happen outside it.
 _LOCK = threading.Lock()
@@ -216,52 +204,43 @@ class EgnyteSourceOperations(SourceOperations):
     @source_operation(
         capabilities=(CredentialCapability.INDEXING,),
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED_REASON,
     )
-    def iterate_folder_pages(
-        self, *, folder_path: str, page_size: int = FOLDER_PAGE_SIZE
-    ) -> Iterator[EgnyteFolderPage]:
-        """Pages of a folder's direct children, without repeats. Pages overlap,
-        so children deleted between two requests shift the listing back
-        without pushing a live child past the next page's start: a missed file
-        would read as deleted to pruning. A repeat can only come from the page
-        before, so only its paths are kept."""
-        overlap = page_size // _PAGE_OVERLAP_DIVISOR
-        step = page_size - overlap
-        previous: set[str] = set()
-        for page in range(_MAX_PAGES):
-            body: dict[str, Any] = self._get(
-                f"/fs/{_fs_path(folder_path)}",
-                {
-                    "list_content": "true",
-                    "count": page_size,
-                    "offset": page * step,
-                    # Names are unique in a folder, so the order is stable.
-                    "sort_by": "name",
-                    "sort_direction": "ascending",
-                },
-            ).json()
-            folders = [EgnyteFolder.model_validate(f) for f in body.get("folders", [])]
-            files = [EgnyteFile.model_validate(f) for f in body.get("files", [])]
-            paths = {entry.path for entry in [*folders, *files]}
-            fresh_page = EgnyteFolderPage(
-                folders=[f for f in folders if f.path not in previous],
-                files=[f for f in files if f.path not in previous],
-            )
-            previous = paths
-            if fresh_page.folders or fresh_page.files:
-                yield fresh_page
-            if len(paths) < page_size:
-                return
-        raise RuntimeError(f"Egnyte kept paging {folder_path} past {_MAX_PAGES} pages")
+    def list_folder_page(
+        self, *, folder_path: str, offset: int, page_size: int
+    ) -> EgnyteFolderPage:
+        """One page of a folder's direct children, sorted by name. Names are
+        unique in a folder, so the order is stable while the folder changes."""
+        body: dict[str, Any] = self._get(
+            f"/fs/{_fs_path(folder_path)}",
+            {
+                "list_content": "true",
+                "count": page_size,
+                "offset": offset,
+                "sort_by": "name",
+                "sort_direction": "ascending",
+            },
+        ).json()
+        return EgnyteFolderPage(
+            folder=EgnyteFolder.model_validate(body),
+            folders=[EgnyteFolder.model_validate(f) for f in body.get("folders", [])],
+            files=[EgnyteFile.model_validate(f) for f in body.get("files", [])],
+        )
 
     @source_operation(
         capabilities=(CredentialCapability.INDEXING,),
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED_REASON,
     )
-    def download_file(self, *, file_path: str) -> bytes:
-        """The latest version of a file."""
+    def download_file(self, *, file_path: str, max_bytes: int | None = None) -> BytesIO:
+        """The latest version of a file, streamed into one buffer so a large
+        file is held in memory once. With ``max_bytes``, only the start of
+        the file is read."""
+        buffer = BytesIO()
+        chunk_size = min(max_bytes or _DOWNLOAD_CHUNK_BYTES, _DOWNLOAD_CHUNK_BYTES)
         response = self._get(f"/fs-content/{_fs_path(file_path)}", stream=True)
         with response:
-            return b"".join(response.iter_content(chunk_size=_DOWNLOAD_CHUNK_BYTES))
+            for chunk in response.iter_content(chunk_size=chunk_size):
+                buffer.write(chunk)
+                if max_bytes is not None and buffer.tell() >= max_bytes:
+                    break
+        buffer.seek(0)
+        return buffer

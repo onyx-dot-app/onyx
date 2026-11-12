@@ -2,6 +2,7 @@
 a child, per-second rate limits waited out, the daily quota failing at once,
 and the error each status maps to."""
 
+import io
 import json
 from collections.abc import Iterator
 from typing import Any
@@ -30,7 +31,9 @@ def _response(
     response = requests.Response()
     response.status_code = status
     response.headers.update(headers or {})
-    response._content = b"" if body is None else json.dumps(body).encode()
+    content = body if isinstance(body, bytes) else json.dumps(body).encode()
+    # Served from raw, so both .json() and iter_content can read it.
+    response.raw = io.BytesIO(b"" if body is None else content)
     return response
 
 
@@ -60,44 +63,42 @@ def no_sleep() -> Iterator[MagicMock]:
         yield sleep
 
 
-def test_folder_pages_overlap_and_never_repeat_a_child() -> None:
-    """With 10 per page the second request starts at 9, so a file deleted in
-    between still leaves the next live file on the second page."""
-    listing = [_file(f"f{n:02d}.txt") for n in range(15)]
-    first_page = listing[:10]
-    del listing[3]  # deleted after the first page was read
-    get = MagicMock(
-        side_effect=[
-            _response(200, {"files": first_page}),
-            _response(200, {"files": listing[9:19]}),
-        ]
-    )
+def test_folder_page_reads_the_folder_and_its_children() -> None:
+    body = {
+        "name": "Docs",
+        "path": "/Shared/Docs",
+        "folder_id": "f1",
+        "parent_id": "f0",
+        "folders": [{"name": "Sub", "path": "/Shared/Docs/Sub", "folder_id": "f2"}],
+        "files": [_file("a.txt")],
+    }
+    get = MagicMock(return_value=_response(200, body))
 
     with patch.object(requests.Session, "get", get):
-        walked = [
-            file.name
-            for page in _gateway().iterate_folder_pages(
-                folder_path="/Shared/Docs", page_size=10
-            )
-            for file in page.files
-        ]
+        page = _gateway().list_folder_page(
+            folder_path="/Shared/Docs", offset=180, page_size=200
+        )
 
-    assert walked == [f"f{n:02d}.txt" for n in range(15)]
-    assert [call.kwargs["params"]["offset"] for call in get.call_args_list] == [0, 9]
+    assert (page.folder.folder_id, page.folder.parent_id) == ("f1", "f0")
+    assert [f.path for f in page.folders] == ["/Shared/Docs/Sub"]
+    assert [f.group_id for f in page.files] == ["group-a.txt"]
+    assert get.call_args.args[0] == "https://acme.egnyte.com/pubapi/v1/fs/Shared/Docs"
+    params = get.call_args.kwargs["params"]
+    assert (params["offset"], params["count"], params["sort_by"]) == (180, 200, "name")
 
 
 def test_per_second_rate_limit_is_waited_out(no_sleep: MagicMock) -> None:
     get = MagicMock(
         side_effect=[
             _response(429, headers={"Retry-After": "1"}),
-            _response(200, {"files": [_file("a.txt")]}),
+            _response(200, b"text"),
         ]
     )
 
     with patch.object(requests.Session, "get", get):
-        pages = list(_gateway().iterate_folder_pages(folder_path="/Shared/Docs"))
+        content = _gateway().download_file(file_path="/Shared/Docs/a.txt")
 
-    assert [file.name for file in pages[0].files] == ["a.txt"]
+    assert content.getvalue() == b"text"
     no_sleep.assert_any_call(1.0)
 
 
@@ -143,3 +144,11 @@ def test_domain_that_is_not_one_label_is_refused() -> None:
             _gateway("evil.example.com/x").download_file(file_path="/a.txt")
 
     get.assert_not_called()
+
+
+def test_download_reads_only_the_start_when_bounded() -> None:
+    response = _response(200, b"x" * 10_000)
+    with patch.object(requests.Session, "get", MagicMock(return_value=response)):
+        content = _gateway().download_file(file_path="/Shared/big.txt", max_bytes=100)
+
+    assert content.getvalue() == b"x" * 100
