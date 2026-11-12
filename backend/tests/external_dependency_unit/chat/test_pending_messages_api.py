@@ -61,6 +61,7 @@ from onyx.llm.models import (
 from onyx.server.query_and_chat import chat_backend
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.server.query_and_chat.streaming_models import UserMessagePacket
+from onyx.utils.threadpool_concurrency import start_thread_future
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.unit.onyx.agents.fakes import FakeModelClient
 
@@ -1021,6 +1022,78 @@ def test_stop_after_the_answer_finishes_pauses_the_queue(
         status = chat_backend.get_chat_session_processing_status(chat.id, tasks, owner)
         assert not status.has_startable_input
         assert tasks.tasks == []
+    finally:
+        release.set()
+        stream.close()
+        assert chat_turn_work.wait_idle(timeout=30)
+
+
+def test_interrupt_during_preparation_stops_the_turn_when_it_publishes(
+    client: TestClient,
+    chat: ChatSession,
+    owner: User,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = f"/chat/chat-session/{chat.id}/pending-messages"
+    preparing, release = Event(), Event()
+    model = QueueTestLLM(
+        lambda _request, _signal: AssistantMessage(content=[TextContent(text="Done")])
+    )
+    calls: list[None] = []
+
+    def prepare_model(**_kwargs: object) -> QueueTestLLM:
+        calls.append(None)
+        if len(calls) == 1:
+            preparing.set()
+            assert release.wait(30)
+        return model
+
+    monkeypatch.setattr("onyx.chat.process_message.get_llm_for_persona", prepare_model)
+    stream = handle_stream_message_objects(
+        new_msg_req=SendMessageRequest(
+            message="Initial question", chat_session_id=chat.id
+        ),
+        user=owner,
+    )
+    assert isinstance(stream, Generator)
+    started = start_thread_future(lambda: next(stream), name="test-first-turn")
+    try:
+        assert preparing.wait(15)
+        interrupt = client.post(
+            path, json={"message": "Change direction now", "delivery": "interrupt"}
+        )
+        assert interrupt.status_code == 200, interrupt.text
+        release.set()
+        started.result(timeout=30)
+        stream.close()
+        assert chat_turn_work.wait_idle(timeout=30)
+        db_session.expire_all()
+        responses = list(
+            db_session.scalars(
+                select(ChatMessage)
+                .where(
+                    ChatMessage.chat_session_id == chat.id,
+                    ChatMessage.message_type == MessageType.ASSISTANT,
+                )
+                .order_by(ChatMessage.id)
+            )
+        )
+        assert [row.response_status for row in responses] == [
+            RunStatus.CANCELLED,
+            RunStatus.COMPLETE,
+        ]
+        assert list(
+            db_session.scalars(
+                select(ChatMessage.message)
+                .where(
+                    ChatMessage.chat_session_id == chat.id,
+                    ChatMessage.message_type == MessageType.USER,
+                )
+                .order_by(ChatMessage.id)
+            )
+        ) == ["Initial question", "Change direction now"]
+        assert client.get(path).json() == []
     finally:
         release.set()
         stream.close()
