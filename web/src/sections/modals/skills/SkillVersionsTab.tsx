@@ -3,7 +3,6 @@
 import { useState, type ReactNode } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import useSWR from "swr";
-import useSWRInfinite from "swr/infinite";
 import { IconLoader } from "@opal/loaders";
 import {
   Badge,
@@ -23,20 +22,14 @@ import {
   restoreSkillVersion,
 } from "@/lib/skills/api";
 import { hasUnpublishedChanges } from "@/lib/skills/sharing";
-import { usePermissionAuthority } from "@/lib/permissions/hooks";
-import { Permission } from "@/lib/types";
-import { useSettings } from "@/lib/settings/hooks";
-import { PluginPublishingPolicy } from "@/lib/settings/types";
+import { usePublishAction } from "@/lib/skills/hooks";
 import type {
   CustomSkill,
   SkillEditableDetail,
   SkillVersion,
   SkillVersionPreview,
-  SkillVersionReviewStatus,
 } from "@/lib/skills/types";
 import { SkillInstructionsPanel } from "@/sections/modals/SkillPreviewModal";
-
-const VERSIONS_PAGE_SIZE = 50;
 
 interface SkillVersionsTabProps {
   skill: CustomSkill;
@@ -51,20 +44,8 @@ interface SkillVersionsTabProps {
 }
 
 function canRestore(version: SkillVersion): boolean {
-  return (
-    version.bundle_kept &&
-    !version.is_current &&
-    version.review_status !== "denied"
-  );
+  return version.bundle_kept && !version.is_current;
 }
-
-const REVIEW_STATUS_COLORS = {
-  draft: "default",
-  pending: "pending",
-  published: "success",
-  denied: "error",
-  superseded: "default",
-} as const satisfies Record<SkillVersionReviewStatus, string>;
 
 export default function SkillVersionsTab({
   skill,
@@ -81,35 +62,19 @@ export default function SkillVersionsTab({
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [isStale, setIsStale] = useState(false);
   const [publishing, setPublishing] = useState(false);
-  const { isGlobalHolder: isOrganizationManager } = usePermissionAuthority(
-    Permission.MANAGE_PLUGINS
-  );
-  const { plugin_publishing: publishingPolicy } = useSettings();
+  const publishAction = usePublishAction();
   const {
-    data: pages,
+    data: versions = [],
     error,
     isLoading,
-    size,
-    setSize,
     mutate: refreshVersions,
-  } = useSWRInfinite<SkillVersion[], Error>(
-    (index: number, previous: SkillVersion[] | null): string | null => {
-      if (index === 0) return SWR_KEYS.skillVersions(skillId);
-      const last = previous?.at(-1);
-      if (!previous || previous.length < VERSIONS_PAGE_SIZE || !last)
-        return null;
-      return SWR_KEYS.skillVersions(skillId, last.version_number);
-    },
+  } = useSWR<SkillVersion[], Error>(
+    SWR_KEYS.skillVersions(skillId),
     errorHandlingFetcher
   );
-  const versions = pages?.flat() ?? [];
   const currentVersion = versions.find((version) => version.is_current);
   const previewVersion =
     versions.find((version) => version.id === previewVersionId) ?? null;
-  const hasOlder =
-    pages !== undefined &&
-    pages.length === size &&
-    (pages.at(-1)?.length ?? 0) === VERSIONS_PAGE_SIZE;
 
   async function handleRestore(version: SkillVersion) {
     if (!currentVersion || restoringId !== null || restoreBlocked) return;
@@ -195,8 +160,6 @@ export default function SkillVersionsTab({
   }
 
   const unpublishedChanges = hasUnpublishedChanges(skill);
-  const publishingOff =
-    !isOrganizationManager && publishingPolicy === PluginPublishingPolicy.OFF;
   const isPending =
     skill.pending_version_number !== null &&
     skill.pending_version_number === skill.current_version_number;
@@ -234,19 +197,16 @@ export default function SkillVersionsTab({
             {t("versionLabel", { number: versionNumber })}
           </Text>
           {row.is_current && <Badge title={t("currentBadge")} color="info" />}
+          {row.review_status === "published" && (
+            <Badge title={t("status.published")} color="success" />
+          )}
+          {row.review_status === "pending" && (
+            <Badge title={t("status.pending")} color="pending" />
+          )}
+          {row.review_status === "denied" && (
+            <Badge title={t("status.denied")} color="error" />
+          )}
         </Section>
-      ),
-    },
-    {
-      kind: "data",
-      field: "review_status",
-      title: t("columns.status"),
-      weight: 20,
-      cell: (status) => (
-        <Badge
-          title={t(`status.${status}`)}
-          color={REVIEW_STATUS_COLORS[status]}
-        />
       ),
     },
     {
@@ -358,7 +318,7 @@ export default function SkillVersionsTab({
           {canPublish &&
             (isPending ? (
               <Badge title={t("waitingForReview")} color="pending" size={6} />
-            ) : unpublishedChanges && publishingOff ? (
+            ) : unpublishedChanges && publishAction === "off" ? (
               <Text font="secondary-body" color="text-03">
                 {t("publishUpdate.offNotice")}
               </Text>
@@ -380,30 +340,18 @@ export default function SkillVersionsTab({
           restoreAction={restoreButton(previewVersion)}
         />
       ) : (
-        <Section gap={2} height="auto" alignItems="stretch">
-          <Table
-            label={t("tableLabel")}
-            items={versions}
-            columns={columns}
-            getRowId={(row) => row.id}
-            pageSize={false}
-            size={2.25}
-            onRowClick={(row) => setPreviewVersionId(row.id)}
-            getRowLabel={(row) =>
-              t("previewRow.ariaLabel", { number: row.version_number })
-            }
-          />
-          {hasOlder && (
-            <Section height="auto" alignItems="start">
-              <Button
-                prominence="secondary"
-                onClick={() => void setSize(size + 1)}
-              >
-                {t("showOlder.label")}
-              </Button>
-            </Section>
-          )}
-        </Section>
+        <Table
+          label={t("tableLabel")}
+          items={versions}
+          columns={columns}
+          getRowId={(row) => row.id}
+          pageSize={false}
+          size={2.25}
+          onRowClick={(row) => setPreviewVersionId(row.id)}
+          getRowLabel={(row) =>
+            t("previewRow.ariaLabel", { number: row.version_number })
+          }
+        />
       )}
     </Section>
   );

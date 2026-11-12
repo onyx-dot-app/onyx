@@ -7,11 +7,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from onyx.db.enums import (
-    PluginPublishingPolicy,
-    PluginReviewStatus,
-    SkillSharePermission,
-)
+from onyx.db.enums import PluginPublishingPolicy, SkillSharePermission
 from onyx.db.plugin import BUNDLES_KEPT
 from onyx.server.features.skill.models import (
     SkillBulkResponse,
@@ -51,10 +47,10 @@ def owner() -> DATestUser:
     return UserManager.create(name=f"publish_owner_{uuid4().hex[:8]}")
 
 
-def _statuses(skill_id: UUID, user: DATestUser) -> dict[int, PluginReviewStatus]:
+def _statuses(skill_id: UUID, user: DATestUser) -> dict[int, str]:
     return {
         version.version_number: version.review_status
-        for version in SkillManager.list_all_versions(skill_id, user)
+        for version in SkillManager.list_versions(skill_id, user)
     }
 
 
@@ -63,7 +59,7 @@ def _save(skill: SkillResponse, user: DATestUser, description: str) -> None:
 
 
 def _version_id(skill_id: UUID, number: int, user: DATestUser) -> UUID:
-    for version in SkillManager.list_all_versions(skill_id, user):
+    for version in SkillManager.list_versions(skill_id, user):
         if version.version_number == number:
             return version.id
     raise AssertionError(f"version {number} not found")
@@ -154,11 +150,11 @@ def test_open_publishes_at_once(owner: DATestUser, admin_user: DATestUser) -> No
 
     assert first.public_permission == SkillSharePermission.VIEWER
     assert first.published_version_number == 1
-    assert _statuses(skill.id, owner) == {1: PluginReviewStatus.PUBLISHED}
+    assert _statuses(skill.id, owner) == {1: "published"}
     assert update.published_version_number == 2
     assert _statuses(published.id, owner) == {
-        2: PluginReviewStatus.PUBLISHED,
-        1: PluginReviewStatus.SUPERSEDED,
+        2: "published",
+        1: "draft",
     }
 
 
@@ -214,8 +210,8 @@ def test_requires_review_makes_a_pending_request(
     assert update.published_version_number == 1
     assert update.pending_version_number == 2
     assert _statuses(published.id, owner) == {
-        2: PluginReviewStatus.PENDING,
-        1: PluginReviewStatus.PUBLISHED,
+        2: "pending",
+        1: "published",
     }
     requests = {
         request.skill_id: request
@@ -249,8 +245,8 @@ def test_approve_publishes_the_pending_version(
 ) -> None:
     published = _published_with_newer_draft(owner, admin_user)
     assert _statuses(published.id, owner) == {
-        2: PluginReviewStatus.DRAFT,
-        1: PluginReviewStatus.PUBLISHED,
+        2: "draft",
+        1: "published",
     }
     viewer = UserManager.create(name=f"publish_viewer_{uuid4().hex[:8]}")
     assert SkillManager.preview(published.id, viewer).description == "Version one"
@@ -264,8 +260,8 @@ def test_approve_publishes_the_pending_version(
     assert approved.published_version_number == 2
     assert approved.pending_version_number is None
     assert _statuses(published.id, owner) == {
-        2: PluginReviewStatus.PUBLISHED,
-        1: PluginReviewStatus.SUPERSEDED,
+        2: "published",
+        1: "draft",
     }
     assert SkillManager.preview(published.id, viewer).description == "Version two"
     assert published.id not in {
@@ -285,7 +281,7 @@ def test_deny_keeps_the_skill_private(
 
     assert denied.public_permission is None
     assert denied.pending_version_number is None
-    assert _statuses(skill.id, owner) == {1: PluginReviewStatus.DENIED}
+    assert _statuses(skill.id, owner) == {1: "denied"}
     again = SkillManager.review_response(skill.id, version_id, "approve", admin_user)
     assert again.status_code == 409
     assert skill.id not in {
@@ -293,7 +289,7 @@ def test_deny_keeps_the_skill_private(
     }
 
 
-def test_newer_request_supersedes_the_pending_one(
+def test_newer_request_replaces_the_pending_one(
     owner: DATestUser, admin_user: DATestUser
 ) -> None:
     _set_publishing(admin_user, PluginPublishingPolicy.REQUIRES_REVIEW)
@@ -305,8 +301,8 @@ def test_newer_request_supersedes_the_pending_one(
 
     assert second.pending_version_number == 2
     assert _statuses(skill.id, owner) == {
-        2: PluginReviewStatus.PENDING,
-        1: PluginReviewStatus.SUPERSEDED,
+        2: "pending",
+        1: "draft",
     }
     assert [
         request.version_number
@@ -319,29 +315,27 @@ def test_newer_request_supersedes_the_pending_one(
     assert old.status_code == 409
 
 
-def test_approve_refuses_a_version_not_newer_than_the_published_one(
+def test_direct_publish_clears_the_pending_request(
     owner: DATestUser, admin_user: DATestUser
 ) -> None:
     published = _published_with_newer_draft(owner, admin_user)
     SkillManager.publish(published.id, owner)
-    _save(published, owner, "Version three")
-    SkillManager.publish(published.id, admin_user)
-    assert SkillManager.get_for_user(published.id, owner).published_version_number == 3
+    assert _statuses(published.id, owner) == {2: "pending", 1: "published"}
 
+    assert SkillManager.publish(published.id, admin_user).published_version_number == 2
+
+    assert _statuses(published.id, owner) == {2: "published", 1: "draft"}
     response = SkillManager.review_response(
         published.id, _version_id(published.id, 2, owner), "approve", admin_user
     )
-
     assert response.status_code == 409
-    assert response.json()["detail"] == (
-        "Only a version newer than the published version can be approved."
-    )
+    assert response.json()["detail"] == "This version has no pending publish request."
 
 
 def _bundle_kept(skill_id: UUID, user: DATestUser) -> dict[int, bool]:
     return {
         version.version_number: version.bundle_kept
-        for version in SkillManager.list_all_versions(skill_id, user)
+        for version in SkillManager.list_versions(skill_id, user)
     }
 
 
@@ -358,26 +352,4 @@ def test_retention_keeps_the_pending_version(
 
     assert len(kept) == BUNDLES_KEPT + 1
     assert all(kept.values())
-    assert _statuses(skill.id, owner)[1] == PluginReviewStatus.PENDING
-
-
-def test_retention_prunes_denied_bundles_first(
-    owner: DATestUser, admin_user: DATestUser
-) -> None:
-    _set_publishing(admin_user, PluginPublishingPolicy.REQUIRES_REVIEW)
-    skill = SkillManager.create_custom(owner)
-    _save(skill, owner, "Version 2")
-    SkillManager.publish(skill.id, owner)
-    SkillManager.review(skill.id, _version_id(skill.id, 2, owner), "deny", admin_user)
-    for number in range(3, BUNDLES_KEPT + 2):
-        _save(skill, owner, f"Version {number}")
-
-    kept = _bundle_kept(skill.id, owner)
-
-    assert len(kept) == BUNDLES_KEPT + 1
-    assert not kept[2]
-    assert all(kept[number] for number in kept if number != 2)
-    preview = SkillManager.preview_version(
-        skill.id, _version_id(skill.id, 2, owner), owner
-    )
-    assert preview.description == "Version 2"
+    assert _statuses(skill.id, owner)[1] == "pending"

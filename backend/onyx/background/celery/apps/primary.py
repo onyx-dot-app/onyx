@@ -362,7 +362,6 @@ celery_app.autodiscover_tasks(
             "onyx.background.celery.tasks.user_file_processing",
             "onyx.background.celery.tasks.capability_checks",
             "onyx.background.celery.tasks.connector_edit",
-            "onyx.background.celery.tasks.skills",
         ]
     )
 )

@@ -17440,17 +17440,13 @@
         "columns": {
           "version": "バージョン",
           "madeBy": "作成者",
-          "date": "日付",
-          "status": "ステータス"
+          "date": "日付"
         },
         "versionLabel": "バージョン {number}",
         "currentBadge": "現在",
         "unknownAuthor": "不明",
         "previewRow": {
           "ariaLabel": "バージョン {number} をプレビュー"
-        },
-        "showOlder": {
-          "label": "以前のバージョンを表示"
         },
         "restore": {
           "label": "復元",
@@ -17475,11 +17471,9 @@
           }
         },
         "status": {
-          "draft": "下書き",
           "pending": "レビュー待ち",
           "published": "公開済み",
-          "denied": "却下",
-          "superseded": "置き換え済み"
+          "denied": "却下"
         },
         "unpublishedBadge": "未公開の変更",
         "organizationRuns": "組織はバージョン {number} を使用しています。",

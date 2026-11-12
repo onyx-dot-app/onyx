@@ -267,10 +267,7 @@ export const SWR_KEYS = {
   skillSharing: (skillId: string) => `/api/skills/custom/${skillId}/share`,
   editableSkill: (skillId: string) => `/api/skills/custom/${skillId}/edit`,
   skillReviewRequests: "/api/skills/review-requests",
-  skillVersions: (skillId: string, beforeVersion?: number) =>
-    beforeVersion === undefined
-      ? `/api/skills/custom/${skillId}/versions`
-      : `/api/skills/custom/${skillId}/versions?before_version=${beforeVersion}`,
+  skillVersions: (skillId: string) => `/api/skills/custom/${skillId}/versions`,
   skillVersion: (skillId: string, versionId: string) =>
     `/api/skills/custom/${skillId}/versions/${versionId}`,
 

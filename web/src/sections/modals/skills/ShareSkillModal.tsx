@@ -68,8 +68,7 @@ import {
 } from "@opal/icons";
 import { markdown } from "@opal/utils";
 import { SkillPreviewDetails } from "@/sections/modals/SkillPreviewModal";
-import { useSettings } from "@/lib/settings/hooks";
-import { PluginPublishingPolicy } from "@/lib/settings/types";
+import { usePublishAction } from "@/lib/skills/hooks";
 import SkillVersionsTab from "@/sections/modals/skills/SkillVersionsTab";
 
 type ShareModalView = "share" | "transfer";
@@ -135,12 +134,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     Permission.MANAGE_PLUGINS
   );
   const { mutate } = useSWRConfig();
-  const { plugin_publishing: publishingPolicy } = useSettings();
-  const publishNeedsReview =
-    !isOrganizationManager &&
-    publishingPolicy === PluginPublishingPolicy.REQUIRES_REVIEW;
-  const publishingOff =
-    !isOrganizationManager && publishingPolicy === PluginPublishingPolicy.OFF;
+  const publishAction = usePublishAction();
 
   const [draftState, setDraftState] = useState<SkillShareDraftState | null>(
     null
@@ -487,7 +481,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
               </Section>
             )}
           </Card>
-          {isPublishing && publishingOff && (
+          {isPublishing && publishAction === "off" && (
             <MessageCard
               variant="error"
               outerPadding={1}
@@ -496,7 +490,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
               description={t("share.publishOff.description")}
             />
           )}
-          {isPublishing && !publishingOff && (
+          {isPublishing && publishAction !== "off" && (
             <MessageCard
               variant="warning"
               outerPadding={1}
@@ -505,7 +499,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
               description={t("share.publishWarning.description")}
             />
           )}
-          {isPublishing && publishNeedsReview && (
+          {isPublishing && publishAction === "review" && (
             <MessageCard
               variant="info"
               outerPadding={1}
@@ -930,7 +924,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
                   !isDirty ||
                   saving ||
                   !!loadError ||
-                  (isPublishing && publishingOff)
+                  (isPublishing && publishAction === "off")
                 }
                 onClick={handleSave}
               >

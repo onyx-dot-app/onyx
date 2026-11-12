@@ -8,15 +8,12 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import (
-    PluginReviewStatus,
     SkillAccessLevel,
     SkillInstallationPolicy,
     SkillSharePermission,
 )
 from onyx.db.models import Skill
-from onyx.db.plugin import PluginVersionSummary
 from onyx.db.plugin_access import PluginAccess
-from onyx.db.plugin_review import PluginReviewRequest
 from onyx.db.skill import SkillSharingChange
 from onyx.db.utils import UNSET
 from onyx.server.models import MinimalUserSnapshot
@@ -241,37 +238,17 @@ class SkillVersionResponse(BaseModel):
     id: UUID
     version_number: int
     created_at: datetime.datetime
-    created_by_user_id: UUID | None
     created_by_email: str | None
-    # None for a version made before file lists were stored.
-    file_count: int | None
-    unpacked_size_bytes: int | None
     # False when retention removed the files; such a version cannot be restored.
     bundle_kept: bool
     is_current: bool
-    review_status: PluginReviewStatus
-
-    @classmethod
-    def from_summary(cls, summary: PluginVersionSummary) -> "SkillVersionResponse":
-        return cls(
-            id=summary.id,
-            version_number=summary.version_number,
-            created_at=summary.created_at,
-            created_by_user_id=summary.created_by_user_id,
-            created_by_email=summary.created_by_email,
-            file_count=summary.file_count,
-            unpacked_size_bytes=summary.unpacked_size_bytes,
-            bundle_kept=summary.bundle_kept,
-            is_current=summary.is_current,
-            review_status=summary.review_status,
-        )
+    review_status: Literal["draft", "pending", "published", "denied"]
 
 
-class SkillVersionPreviewResponse(SkillVersionResponse):
-    name: str
+class SkillVersionPreviewResponse(BaseModel):
+    version_number: int
     description: str
     instructions_markdown: str
-    files: list[SkillBundleFile]
 
 
 class SkillVersionRestoreRequest(BaseModel):
@@ -295,22 +272,8 @@ class SkillReviewRequestResponse(BaseModel):
     version_number: int
     # None for a first publish.
     published_version_number: int | None
-    requested_by_user_id: UUID | None
     requested_by_email: str | None
-    requested_at: datetime.datetime | None
-
-    @classmethod
-    def from_request(cls, request: PluginReviewRequest) -> "SkillReviewRequestResponse":
-        return cls(
-            skill_id=request.plugin_id,
-            name=request.name,
-            version_id=request.version_id,
-            version_number=request.version_number,
-            published_version_number=request.published_version_number,
-            requested_by_user_id=request.requested_by_user_id,
-            requested_by_email=request.requested_by_email,
-            requested_at=request.requested_at,
-        )
+    requested_at: datetime.datetime
 
 
 class SkillBundleInspectResponse(BaseModel):

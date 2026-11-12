@@ -34,7 +34,6 @@ function request(
     version_id: "version-1",
     version_number: 1,
     published_version_number: null,
-    requested_by_user_id: "user-1",
     requested_by_email: "author@example.com",
     requested_at: "2026-11-01T10:00:00Z",
     ...overrides,
