@@ -19,6 +19,7 @@ from onyx.server.features.build.db.sandbox import (
     get_running_sandboxes,
     user_has_stale_active_session,
 )
+from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.session.resource_cleanup import (
     reconcile_sandbox_resources,
@@ -44,13 +45,24 @@ def _check_cleanup_lease(lock: CacheLock, deadline: float) -> None:
     lock.extend(SESSION_FLOW_LOCK_LEASE_SECONDS)
 
 
+def _safe_get_sandbox_manager() -> SandboxManager | None:
+    try:
+        return get_sandbox_manager()
+    except RuntimeError as e:
+        task_logger.debug(
+            "Sandbox manager unavailable, skipping cleanup_idle_sandboxes_task: %s",
+            e,
+        )
+        return None
+
+
 @shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CLEANUP_IDLE_SANDBOXES,
     soft_time_limit=TIMEOUT_SECONDS,
     bind=True,
     ignore_result=True,
 )
-def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa: ARG001
+def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa: ARG001, C901
     """Sweep RUNNING sandboxes: background-snapshot sessions, sleep idle ones.
 
     Background snapshots bound data loss from ungraceful pod death (kubelet
@@ -86,7 +98,9 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
 
     try:
         deadline = time.monotonic() + TIMEOUT_SECONDS
-        sandbox_manager = get_sandbox_manager()
+        sandbox_manager = _safe_get_sandbox_manager()
+        if sandbox_manager is None:
+            return
 
         try:
             reconcile_sandbox_resources(
