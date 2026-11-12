@@ -14,6 +14,14 @@ export interface OnyxMeta {
    * cancelled state, so this is kept apart from `failed`.
    */
   cancelled?: boolean;
+  /**
+   * Identity of a message or thought part. Chunks with the same part id
+   * update one entry, so a replayed or reconnected stream does not repeat
+   * text.
+   */
+  partId?: string;
+  /** The part's full current text. Replaces the text received so far. */
+  snapshotText?: string;
 }
 
 /** ACP's extension field on every object. */

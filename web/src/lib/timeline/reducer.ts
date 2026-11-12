@@ -27,16 +27,16 @@ export interface AcpToolCall {
 }
 
 export type AcpTimelinePayload =
+  /** Agent message content. Adjacent text chunks are joined. */
+  | { kind: "message"; content: AcpContentBlock[] }
   | { kind: "thinking"; text: string }
   | { kind: "tool"; toolCall: AcpToolCall };
 
 export type AcpTimelineEntry = TimelineEntry<AcpTimelinePayload>;
 
 export interface TimelineState {
-  /** Thinking blocks and tool calls, in arrival order. */
+  /** Messages, thinking blocks and tool calls, in arrival order. */
   entries: AcpTimelineEntry[];
-  /** The agent's message. Adjacent text chunks are joined. */
-  message: AcpContentBlock[];
   /** The latest plan. */
   plan: AcpPlanEntry[];
   /** Set when the turn ends. */
@@ -47,11 +47,31 @@ export interface TimelineState {
 
 export const INITIAL_TIMELINE_STATE: TimelineState = {
   entries: [],
-  message: [],
   plan: [],
   stopReason: null,
   error: null,
 };
+
+type ChunkKind = "message" | "thinking";
+
+function isChunkEntry(entry: AcpTimelineEntry): boolean {
+  return entry.payload.kind === "message" || entry.payload.kind === "thinking";
+}
+
+/** Ends every open message or thinking entry, except `keepId`. */
+function settleChunks(
+  entries: AcpTimelineEntry[],
+  keepId: string | null = null
+): AcpTimelineEntry[] {
+  if (!entries.some((e) => e.status === "streaming" && isChunkEntry(e))) {
+    return entries;
+  }
+  return entries.map((entry) =>
+    entry.status === "streaming" && isChunkEntry(entry) && entry.id !== keepId
+      ? { ...entry, status: "done" }
+      : entry
+  );
+}
 
 function toolEntryStatus(toolCall: AcpToolCall): TimelineEntryStatus {
   if (toolCall._meta?.onyx?.cancelled) return "stopped";
@@ -85,7 +105,10 @@ function mergeMeta(
   return { ...current, ...next, onyx: { ...current.onyx, ...next.onyx } };
 }
 
-/** Applies the fields an update sets; fields it leaves out keep their value. */
+/**
+ * Applies the fields an update sets. A field that is left out or `null` keeps
+ * its value: the wire sends unset ACP fields as `null`.
+ */
 function applyToolUpdate(
   toolCall: AcpToolCall,
   update: AcpToolCallStart | AcpToolCallProgress
@@ -97,10 +120,8 @@ function applyToolUpdate(
     status: update.status ?? toolCall.status,
     content: update.content ?? toolCall.content,
     locations: update.locations ?? toolCall.locations,
-    rawInput:
-      update.rawInput !== undefined ? update.rawInput : toolCall.rawInput,
-    rawOutput:
-      update.rawOutput !== undefined ? update.rawOutput : toolCall.rawOutput,
+    rawInput: update.rawInput ?? toolCall.rawInput,
+    rawOutput: update.rawOutput ?? toolCall.rawOutput,
     _meta: mergeMeta(toolCall._meta, update._meta),
   };
 }
@@ -113,8 +134,8 @@ function newToolCall(toolCallId: string): AcpToolCall {
     status: "pending",
     content: [],
     locations: [],
-    rawInput: undefined,
-    rawOutput: undefined,
+    rawInput: null,
+    rawOutput: null,
     _meta: null,
   };
 }
@@ -139,52 +160,94 @@ function upsertToolCall(
   return entries.map((entry, i) => (i === index ? next : entry));
 }
 
-/** Ends the open thinking block, if the last entry is one. */
-function settleThinking(entries: AcpTimelineEntry[]): AcpTimelineEntry[] {
-  const last = entries[entries.length - 1];
-  if (last?.payload.kind !== "thinking" || last.status !== "streaming") {
+function chunkPayload(
+  kind: ChunkKind,
+  content: AcpContentBlock[]
+): AcpTimelinePayload {
+  if (kind === "message") return { kind, content };
+  const text = content
+    .map((block) => (block.type === "text" ? block.text : ""))
+    .join("");
+  return { kind, text };
+}
+
+function chunkContent(entry: AcpTimelineEntry): AcpContentBlock[] {
+  switch (entry.payload.kind) {
+    case "message":
+      return entry.payload.content;
+    case "thinking":
+      return [{ type: "text", text: entry.payload.text }];
+    case "tool":
+      return [];
+  }
+}
+
+/** Adds a block, joining it to the last block when both are text. */
+function appendBlock(
+  content: AcpContentBlock[],
+  block: AcpContentBlock
+): AcpContentBlock[] {
+  const last = content[content.length - 1];
+  if (last?.type === "text" && block.type === "text") {
+    return [...content.slice(0, -1), { ...last, text: last.text + block.text }];
+  }
+  return [...content, block];
+}
+
+/**
+ * Adds a message or thought chunk. A chunk with a part id updates that part's
+ * entry, and its snapshot text replaces the text received so far. A chunk
+ * without one continues the last entry of the same kind while it streams.
+ */
+function appendChunk(
+  entries: AcpTimelineEntry[],
+  kind: ChunkKind,
+  block: AcpContentBlock,
+  meta: AcpMeta | undefined
+): AcpTimelineEntry[] {
+  const partId = meta?.onyx?.partId;
+  const snapshot = meta?.onyx?.snapshotText;
+  // Thoughts are text; other block types carry nothing to show.
+  if (kind === "thinking" && block.type !== "text" && snapshot === undefined) {
     return entries;
   }
-  return [...entries.slice(0, -1), { ...last, status: "done" }];
-}
 
-function appendThought(
-  entries: AcpTimelineEntry[],
-  content: AcpContentBlock
-): AcpTimelineEntry[] {
-  // Thoughts are text; other block types carry nothing to show here.
-  if (content.type !== "text") return entries;
-  const last = entries[entries.length - 1];
-  if (last?.payload.kind === "thinking" && last.status === "streaming") {
-    const text = last.payload.text + content.text;
+  const index = partId
+    ? entries.findIndex((e) => e.id === `part:${partId}`)
+    : entries.length - 1;
+  const target = entries[index];
+  const continues =
+    target !== undefined &&
+    target.payload.kind === kind &&
+    (partId !== undefined || target.status === "streaming");
+
+  if (!continues) {
+    const content: AcpContentBlock[] =
+      snapshot !== undefined ? [{ type: "text", text: snapshot }] : [block];
+    const id = partId ? `part:${partId}` : `${kind}-${entries.length}`;
     return [
-      ...entries.slice(0, -1),
-      { ...last, payload: { kind: "thinking", text } },
+      ...settleChunks(entries),
+      {
+        id,
+        status: "streaming",
+        groupId: null,
+        payload: chunkPayload(kind, content),
+      },
     ];
   }
-  return [
-    ...entries,
-    {
-      id: `thinking-${entries.length}`,
-      status: "streaming",
-      groupId: null,
-      payload: { kind: "thinking", text: content.text },
-    },
-  ];
-}
 
-function appendMessage(
-  message: AcpContentBlock[],
-  content: AcpContentBlock
-): AcpContentBlock[] {
-  const last = message[message.length - 1];
-  if (last?.type === "text" && content.type === "text") {
-    return [
-      ...message.slice(0, -1),
-      { ...last, text: last.text + content.text },
-    ];
-  }
-  return [...message, content];
+  const content =
+    snapshot !== undefined
+      ? [{ type: "text" as const, text: snapshot }]
+      : appendBlock(chunkContent(target), block);
+  const updated: AcpTimelineEntry = {
+    ...target,
+    payload: chunkPayload(kind, content),
+  };
+  return settleChunks(
+    entries.map((entry, i) => (i === index ? updated : entry)),
+    updated.id
+  );
 }
 
 /** Applies one event. Pure: returns a new state and never mutates `state`. */
@@ -195,14 +258,14 @@ export function reduceTimeline(
   if (event.type === "stop") {
     return {
       ...state,
-      entries: settleThinking(state.entries),
+      entries: settleChunks(state.entries),
       stopReason: event.stopReason,
     };
   }
   if (event.type === "error") {
     return {
       ...state,
-      entries: settleThinking(state.entries),
+      entries: settleChunks(state.entries),
       error: event.message,
     };
   }
@@ -212,24 +275,33 @@ export function reduceTimeline(
     case "agent_thought_chunk":
       return {
         ...state,
-        entries: appendThought(state.entries, update.content),
+        entries: appendChunk(
+          state.entries,
+          "thinking",
+          update.content,
+          update._meta
+        ),
       };
     case "agent_message_chunk":
       return {
         ...state,
-        entries: settleThinking(state.entries),
-        message: appendMessage(state.message, update.content),
+        entries: appendChunk(
+          state.entries,
+          "message",
+          update.content,
+          update._meta
+        ),
       };
     case "tool_call":
     case "tool_call_update":
       return {
         ...state,
-        entries: upsertToolCall(settleThinking(state.entries), update),
+        entries: upsertToolCall(settleChunks(state.entries), update),
       };
     case "plan":
       return {
         ...state,
-        entries: settleThinking(state.entries),
+        entries: settleChunks(state.entries),
         plan: update.entries,
       };
   }
