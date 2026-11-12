@@ -26,6 +26,9 @@ import {
   type OutputFile,
   type OutputInventory,
 } from "@/app/craft/types/streamingTypes";
+import { craftPacketToEvents } from "@/lib/timeline/craft/events";
+import { cancelLatestRunningCall } from "@/lib/timeline/craft/stop";
+import type { TimelineEvent } from "@/lib/timeline/events";
 
 import {
   StreamItem,
@@ -541,6 +544,9 @@ function consolidateMessagesIntoTurns(
     if (currentAgentPackets.length === 0) return;
 
     const streamItems = convertMessagesToStreamItems(currentAgentPackets);
+    const timelineEvents = currentAgentPackets.flatMap((message) =>
+      craftPacketToEvents(message.message_metadata)
+    );
     const textContent = streamItems
       .filter((item) => item.type === "text")
       .map((item) => item.content)
@@ -556,6 +562,7 @@ function consolidateMessagesIntoTurns(
         message_metadata: {
           streamItems,
         },
+        timelineEvents,
       });
     }
     currentAgentPackets = [];
@@ -590,12 +597,17 @@ function consolidateMessagesIntoTurns(
 function splitActiveTurnTranscript(
   messages: BuildMessage[],
   activeTurnIndex: number | null
-): { messages: BuildMessage[]; streamItems: StreamItem[] } {
+): {
+  messages: BuildMessage[];
+  streamItems: StreamItem[];
+  timelineEvents: TimelineEvent[];
+} {
   if (activeTurnIndex === null) {
-    return { messages, streamItems: [] };
+    return { messages, streamItems: [], timelineEvents: [] };
   }
 
   const activeStreamItems: StreamItem[] = [];
+  const activeTimelineEvents: TimelineEvent[] = [];
   const settledMessages: BuildMessage[] = [];
 
   for (const message of messages) {
@@ -607,12 +619,17 @@ function splitActiveTurnTranscript(
       if (Array.isArray(streamItems)) {
         activeStreamItems.push(...(streamItems as StreamItem[]));
       }
+      activeTimelineEvents.push(...(message.timelineEvents ?? []));
       continue;
     }
     settledMessages.push(message);
   }
 
-  return { messages: settledMessages, streamItems: activeStreamItems };
+  return {
+    messages: settledMessages,
+    streamItems: activeStreamItems,
+    timelineEvents: activeTimelineEvents,
+  };
 }
 
 function mapApiSessionStatus(
@@ -717,6 +734,8 @@ export interface BuildSessionData {
    * Rendered directly without transformation.
    */
   streamItems: StreamItem[];
+  /** The current agent turn's timeline events, in arrival order. */
+  timelineEvents: TimelineEvent[];
   /**
    * Messages typed while a response is streaming. Auto-sent FIFO once the
    * session confirms completion and its stream owner claims the queue head.
@@ -950,6 +969,7 @@ function reconcileCompletedTranscript(
         useBuildSessionStore.getState().updateSessionData(sessionId, {
           messages: restored.messages,
           streamItems: restored.streamItems,
+          timelineEvents: restored.timelineEvents,
           subagents: buildSubagentsFromMessages(messages),
           contextUsage: deriveContextUsage(messages),
           status: successor
@@ -1183,6 +1203,7 @@ interface BuildSessionStore {
     todoList: TodoListState
   ) => void;
   clearStreamItems: (sessionId: string) => void;
+  appendTimelineEvents: (sessionId: string, events: TimelineEvent[]) => void;
 
   // Actions - Queued Messages
   enqueueMessage: (
@@ -1373,6 +1394,7 @@ const createInitialSessionData = (
     activeTurnIndex: null,
     activeTurnLocalOwner: false,
     streamItems: [],
+    timelineEvents: [],
     queuedMessages: [],
     isInterrupting: false,
     wasInterrupted: false,
@@ -1866,6 +1888,10 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
       if (latestInFlightIndex === -1) return state;
 
+      const timelineEvents = [
+        ...session.timelineEvents,
+        ...cancelLatestRunningCall(session.timelineEvents),
+      ];
       const streamItems = session.streamItems.map((item, index): StreamItem => {
         if (index === latestInFlightIndex && item.type === "tool_call") {
           return {
@@ -1879,10 +1905,25 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const updatedSession: BuildSessionData = {
         ...session,
         streamItems,
+        timelineEvents,
         lastAccessed: new Date(),
       };
       const newSessions = new Map(state.sessions);
       newSessions.set(sessionId, updatedSession);
+      return { sessions: newSessions };
+    });
+  },
+
+  appendTimelineEvents: (sessionId: string, events: TimelineEvent[]) => {
+    if (events.length === 0) return;
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session) return state;
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, {
+        ...session,
+        timelineEvents: [...session.timelineEvents, ...events],
+      });
       return { sessions: newSessions };
     });
   },
@@ -1944,6 +1985,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const updatedSession: BuildSessionData = {
         ...session,
         streamItems: [],
+        timelineEvents: [],
         lastAccessed: new Date(),
       };
       const newSessions = new Map(state.sessions);
@@ -2250,6 +2292,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           : {
               messages: persistedMessages,
               streamItems: currentSession!.streamItems,
+              timelineEvents: currentSession!.timelineEvents,
             };
       const resolvedMessages: BuildMessage[] = restoredActiveTurn.messages;
       const streamItems: StreamItem[] = restoredActiveTurn.streamItems;
@@ -2264,6 +2307,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           status,
           messages: resolvedMessages,
           streamItems,
+          timelineEvents: restoredActiveTurn.timelineEvents,
           subagents,
           activeTurnId: resolvedActiveTurnId,
           turnSettlement: currentSession!.turnSettlement,
@@ -3499,6 +3543,7 @@ type ChatSessionData = Pick<
   | "isLoaded"
   | "messages"
   | "streamItems"
+  | "timelineEvents"
   | "webappNeedsRefresh"
   | "skillsStale"
 >;
@@ -3525,6 +3570,7 @@ export const useChatSession = (): ChatSessionData | null =>
         isLoaded,
         messages,
         streamItems,
+        timelineEvents,
         webappNeedsRefresh,
         skillsStale,
       } = session;
@@ -3542,6 +3588,7 @@ export const useChatSession = (): ChatSessionData | null =>
         isLoaded,
         messages,
         streamItems,
+        timelineEvents,
         webappNeedsRefresh,
         skillsStale,
       };

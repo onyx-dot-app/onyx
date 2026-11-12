@@ -10,6 +10,7 @@ import type {
   AcpToolCallStatus,
   AcpToolKind,
 } from "@/lib/timeline/acp";
+import type { RateLimitDetails } from "@/app/app/types";
 import type { OnyxNotification, TimelineEvent } from "@/lib/timeline/events";
 import type { TimelineEntry, TimelineEntryStatus } from "@/lib/timeline/types";
 
@@ -43,7 +44,7 @@ export type TimelineNotice =
       externalAppId: number;
       reason: string | null;
     }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string; rateLimit?: RateLimitDetails };
 
 export type AcpTimelineEntry = TimelineEntry<AcpTimelinePayload>;
 
@@ -313,6 +314,17 @@ export function reduceTimeline(
     };
   }
   if (event.type === "error") {
+    // The same error right after itself is shown once.
+    const last = state.entries[state.entries.length - 1];
+    if (
+      !event.rateLimit &&
+      last?.payload.kind === "notice" &&
+      last.payload.notice.type === "error" &&
+      !last.payload.notice.rateLimit &&
+      last.payload.notice.message === event.message
+    ) {
+      return state;
+    }
     return {
       ...state,
       entries: [
@@ -320,6 +332,7 @@ export function reduceTimeline(
         noticeEntry(`error-${state.entries.length}`, {
           type: "error",
           message: event.message,
+          ...(event.rateLimit && { rateLimit: event.rateLimit }),
         }),
       ],
     };
