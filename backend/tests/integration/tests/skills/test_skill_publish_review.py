@@ -58,7 +58,7 @@ def owner() -> DATestUser:
 def _statuses(skill_id: UUID, user: DATestUser) -> dict[int, PluginReviewStatus]:
     return {
         version.version_number: version.review_status
-        for version in SkillManager.list_versions(skill_id, user)
+        for version in SkillManager.list_all_versions(skill_id, user)
     }
 
 
@@ -67,7 +67,7 @@ def _save(skill: SkillResponse, user: DATestUser, description: str) -> None:
 
 
 def _version_id(skill_id: UUID, number: int, user: DATestUser) -> UUID:
-    for version in SkillManager.list_versions(skill_id, user):
+    for version in SkillManager.list_all_versions(skill_id, user):
         if version.version_number == number:
             return version.id
     raise AssertionError(f"version {number} not found")
@@ -345,7 +345,7 @@ def test_approve_refuses_a_version_not_newer_than_the_published_one(
 def _bundle_kept(skill_id: UUID, user: DATestUser) -> dict[int, bool]:
     return {
         version.version_number: version.bundle_kept
-        for version in SkillManager.list_versions(skill_id, user)
+        for version in SkillManager.list_all_versions(skill_id, user)
     }
 
 
