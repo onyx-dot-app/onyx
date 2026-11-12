@@ -43,18 +43,9 @@ def load_stored_custom_skill_bundle(
     return normalize_stored_bundle(bundle_bytes)
 
 
-def is_missing_file_error(exc: Exception) -> bool:
+def _is_missing_file_error(exc: Exception) -> bool:
     if isinstance(exc, FileRecordNotFoundError):
         return True
-
-    from azure.core.exceptions import ResourceNotFoundError
-
-    # A missing container means storage is misconfigured, not that the file is gone.
-    if isinstance(exc, ResourceNotFoundError):
-        return (
-            getattr(exc, "error_code", None)  # ods: ignore[getattr]
-            == "BlobNotFound"
-        )
 
     response = getattr(exc, "response", None)  # ods: ignore[getattr]
     if isinstance(response, dict):
@@ -98,7 +89,7 @@ def validate_stored_custom_skill(
     try:
         normalized = load_stored_custom_skill_bundle(bundle_file_id, file_store)
     except Exception as exc:
-        if is_missing_file_error(exc):
+        if _is_missing_file_error(exc):
             return SkillValidationResult(
                 is_valid=False,
                 normalized_bundle=None,

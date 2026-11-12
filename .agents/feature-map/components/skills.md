@@ -434,40 +434,31 @@ The library preview of an external-app skill calls the same renderer
 21. `bundle-retention` **A plugin keeps 100 bundles, and every version row.**
     `db/plugin.py:prune_plugin_bundles__no_commit` runs in
     `add_plugin_version__no_commit`, under the plugin lock and in the same
-    transaction. It keeps the bundles of the current version, the published
-    version and the newest `BUNDLES_KEPT` versions, the bundle that the
-    legacy skill row uses, and the bundle of a version with no stored file
-    list or root `skill_md` (reads of it still open the bundle). Other
-    versions get `bundle_file_id` NULL and keep `bundle_sha256`, the file list
-    and `plugin_skill` rows. The routes delete
-    the pruned files after the commit. A skill delete, single or bulk, deletes
-    every bundle of the skill and its versions after the commit. A failed file
-    delete only logs: `background/celery/tasks/skills/tasks.py:check_for_orphan_skill_bundle_cleanup`
-    (one-hour base beat interval, times `beat_multiplier` on cloud) deletes
-    each `SKILL_BUNDLE` file older than one hour
-    (`ORPHAN_BUNDLE_MIN_AGE`) that no plugin version and no skill row uses.
-    It checks its time budget between files and leaves the rest for the next
-    run. Lite runs it from the API server poller
-    (`background/periodic_poller.py:_run_orphan_skill_bundle_cleanup`).
-    The age guard is required: an upload saves its file before its row
-    commits. A read of a pruned bundle, also one that loses a race with the
-    prune, gets 404 "The files of this version are no longer kept."
-    (`skills/content.py:read_skill_bundle_blob`), not a 500. On Azure, only a
-    `BlobNotFound` error counts as a missing file
-    (`skills/validation.py:is_missing_file_error`).
+    transaction. It keeps the bundles of the newest `BUNDLES_KEPT` versions
+    and of the published version. Other versions get `bundle_file_id` NULL and
+    keep `bundle_sha256`, the file list and `plugin_skill` rows. It returns
+    only files that no version and no legacy skill row still uses, and the
+    routes delete them after the commit. A skill delete, single or bulk,
+    deletes every bundle of the skill and its versions after the commit. A
+    failed file delete only logs, as on main. A read of a pruned bundle gets
+    404 "The files of this version are no longer kept."
+    (`skills/content.py:read_skill_bundle_blob`). A version copied from a
+    legacy row stores no file list or `skill_md`, so after its bundle is pruned
+    its preview also gets that 404.
 22. `version-history-api` **Version history uses the EDIT policy.** The
-    owner, editors and global `MANAGE_PLUGINS` list versions
-    (`GET /skills/custom/{id}/versions`, 50 per page, `before_version` for
-    older ones), preview one (`GET .../versions/{version_id}`) and restore one
-    (`POST .../versions/{version_id}/restore`); a viewer gets 404. The list and
-    preview read the database (`db/plugin.py:list_plugin_versions`,
-    `skills/content.py:read_version_preview`), so a version with no bundle
-    still previews when its content is stored. Restore needs
-    `base_version_id` (409 `PLUGIN_VERSION_STALE`), copies the old bundle into
-    a new blob and saves it through the editor save path, so it adds no
-    version when the files equal the current files, and the new version
-    prunes like any save ([[#bundle-retention]]). A version with no bundle
-    gets 404 `skills/content.py:VERSION_FILES_NOT_KEPT`. Skill responses carry
+    owner, editors and global `MANAGE_PLUGINS` list every version, newest
+    first (`GET /skills/custom/{id}/versions`), preview one
+    (`GET .../versions/{version_id}`) and restore one
+    (`POST .../versions/{version_id}/restore`); a viewer gets 404, and a
+    version of another skill gets 404 (`db/plugin.py:get_plugin_version`).
+    The preview reads the database (`skills/content.py:read_version_preview`),
+    so a version with no bundle still previews when its content is stored.
+    Restore needs `base_version_id` (409 `PLUGIN_VERSION_STALE`, checked by
+    the save path under the plugin lock), copies the old bundle into a new
+    blob and saves it through the editor save path, so it adds no version when
+    the files equal the current files, and the new version prunes like any
+    save ([[#bundle-retention]]). A version with no bundle gets 404
+    `skills/content.py:VERSION_FILES_NOT_KEPT`. Skill responses carry
     `current_version_number`.
 
 ---
@@ -582,8 +573,8 @@ The library preview of an external-app skill calls the same renderer
   (`backend/tests/integration/tests/skills/test_skill_bundle_retention.py`),
   and the version list, preview and restore
   (`backend/tests/integration/tests/skills/test_skill_version_api.py`).
-  `backend/tests/external_dependency_unit/craft/test_skill_bundle_cleanup.py`
-  covers the orphan bundle cleanup and the read of a pruned bundle.
+  `backend/tests/external_dependency_unit/craft/test_skill_pruned_version_read.py`
+  covers the read of a pruned bundle.
   `backend/tests/integration/tests/craft/k8s/` covers a real
   push.
 - By hand: edit a skill while a Craft session runs. The stale notice must

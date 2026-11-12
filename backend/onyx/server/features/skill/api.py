@@ -229,8 +229,8 @@ def _github_authorization_header(user: User) -> str | None:
 
 
 def _delete_bundle_blobs(file_store: FileStore, file_ids: list[str]) -> None:
-    """Delete bundles after the commit that stopped using them. The orphan
-    bundle cleanup task deletes one that fails here."""
+    """Delete bundles after the commit that stopped using them. A failed
+    delete only logs."""
     for file_id in file_ids:
         delete_bundle_blob(file_store, file_id)
 

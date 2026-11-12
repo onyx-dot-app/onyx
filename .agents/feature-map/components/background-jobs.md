@@ -165,11 +165,6 @@ it runs.
   lock and sends a fetch for each active, indexed pair whose
   `last_time_hierarchy_fetch` is older than `HIERARCHY_FETCH_INTERVAL_SECONDS`.
   [[connectors]] owns the hierarchy that the fetch loads.
-- Skill bundle cleanup ([[skills]]): `check_for_orphan_skill_bundle_cleanup`
-  runs on the primary queue under a beat lock, also for gated tenants, with a
-  one-hour base interval (cloud multiplies it by `beat_multiplier`).
-  Without Celery, `background/periodic_poller.py:_run_orphan_skill_bundle_cleanup`
-  runs it hourly with a one-minute budget.
 - License reclaim ([[billing]]): the license middleware schedules
   `reclaim_license_task` when the cache backend is Redis. Otherwise
   `background/periodic_poller.py:_run_license_reclaim` runs it on the poller's
