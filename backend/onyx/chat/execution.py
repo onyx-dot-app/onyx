@@ -740,6 +740,12 @@ def host_agent_work(
             store.poll_control()
         finally:
             setup.admission.release()
+        # A child that finished during the first scan dispatched while the host
+        # held admission, so its results wait for this dispatch.
+        try:
+            dispatch_pending_messages()
+        except Exception:
+            logger.exception("Could not dispatch queued chat input")
         while store.has_owned_work:
             time.sleep(_CANCEL_POLL_INTERVAL_S)
             try:

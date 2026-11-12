@@ -1,6 +1,7 @@
 """Pending user messages remain editable until Chat accepts them for execution."""
 
 import asyncio
+import time
 from collections.abc import Generator
 from concurrent.futures import Future
 from threading import Event
@@ -2149,7 +2150,21 @@ def _stream_turn(
     assert chat_turn_work.wait_idle(timeout=30)
 
 
-@pytest.mark.parametrize("host_event", ["none", "over_budget", "stop"])
+def _root_result_count(db_session: Session, chat_id: UUID) -> int:
+    db_session.expire_all()
+    return len(
+        db_session.scalars(
+            select(ChatMessage).where(
+                ChatMessage.chat_session_id == chat_id,
+                ChatMessage.message_type == MessageType.AGENT_RESULTS,
+            )
+        ).all()
+    )
+
+
+@pytest.mark.parametrize(
+    "host_event", ["none", "over_budget", "stop", "release_while_scanning"]
+)
 def test_status_starts_child_work_when_no_turn_hosts_it(
     chat: ChatSession,
     owner: User,
@@ -2162,7 +2177,8 @@ def test_status_starts_child_work_when_no_turn_hosts_it(
     Status counts it as active agent work, and its dispatch hosts the run. When
     the owner is over budget, the work becomes a visible failed run instead of
     failing silently on every poll. A Stop while the host holds chat admission
-    pauses the queue, so a message queued then waits after the host ends.
+    pauses the queue, so a message queued then waits after the host ends. A
+    child that finishes during the host's first scan still wakes the root.
     """
     over_budget = host_event == "over_budget"
 
@@ -2258,6 +2274,37 @@ def test_status_starts_child_work_when_no_turn_hosts_it(
             return bind(*args, **kwargs)
 
         monkeypatch.setattr(execution, "bind_run_store", stop_while_hosting)
+    root_results_before = _root_result_count(db_session, chat.id)
+    if host_event == "release_while_scanning":
+        bind = execution.bind_run_store
+
+        def finish_child_during_first_scan(*args: Any, **kwargs: Any) -> Any:
+            # Only the host's store; later turns bind their own stores.
+            monkeypatch.setattr(execution, "bind_run_store", bind)
+            released = Event()
+            on_released = kwargs["on_child_released"]
+
+            def child_released() -> None:
+                released.set()
+                on_released()
+
+            kwargs["on_child_released"] = child_released
+            store, view = bind(*args, **kwargs)
+            first_scan = store.poll_control
+
+            def scan_until_the_child_is_released() -> None:
+                # The child finishes while the host still holds chat admission.
+                monkeypatch.setattr(store, "poll_control", first_scan)
+                deadline = time.monotonic() + 30
+                while not released.is_set():
+                    assert time.monotonic() < deadline
+                    first_scan()
+                    released.wait(0.1)
+
+            monkeypatch.setattr(store, "poll_control", scan_until_the_child_is_released)
+            return store, view
+
+        monkeypatch.setattr(execution, "bind_run_store", finish_child_during_first_scan)
     tasks = BackgroundTasks()
     status = chat_backend.get_chat_session_processing_status(
         chat.id, tasks, _NO_HEADERS, owner
@@ -2305,6 +2352,9 @@ def test_status_starts_child_work_when_no_turn_hosts_it(
         chat.id, BackgroundTasks(), _NO_HEADERS, owner
     )
     assert not status.has_active_subagents
+    if host_event == "release_while_scanning":
+        # The result started a root follow-up after the host released the chat.
+        assert _root_result_count(db_session, chat.id) == root_results_before + 1
 
 
 def test_one_shot_turns_offer_no_agent_tools(
