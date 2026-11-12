@@ -91,7 +91,10 @@ def test_bundle_over_lowered_total_limit_stays_unclassified(
 
     monkeypatch.setattr(validation, "STORED_ZIP_MAX_BYTES", len(stored))
     file_store.read_file.return_value = io.BytesIO(stored)
-    assert validate_stored_custom_skill("canonical-name", _BUNDLE_ID, file_store).is_valid is True
+    assert (
+        validate_stored_custom_skill("canonical-name", _BUNDLE_ID, file_store).is_valid
+        is True
+    )
 
 
 def test_limit_on_normalized_bundle_leaves_skill_unclassified(

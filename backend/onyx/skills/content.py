@@ -106,9 +106,7 @@ def read_version_contents(
     or SKILL.md text yet (one copied from a legacy skill row)."""
     stored = _stored_version_content(version_id, db_session)
     if stored.file_manifest is not None and stored.skill_md is not None:
-        return custom_bundle_contents_from_stored(
-            stored.skill_md, stored.file_manifest
-        )
+        return custom_bundle_contents_from_stored(stored.skill_md, stored.file_manifest)
     return inspect_custom_bundle(
         read_skill_bundle_blob(
             stored.bundle_file_id, stored.name or str(version_id), file_store

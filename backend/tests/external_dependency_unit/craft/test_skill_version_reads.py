@@ -21,6 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import SandboxStatus, SkillInstallationPolicy, SkillSharePermission
+from onyx.db.file_record import FileRecordNotFoundError
 from onyx.db.models import Plugin, PluginVersion, Sandbox, Skill, User
 from onyx.db.skill import (
     SkillSharingChange,
@@ -96,7 +97,9 @@ def _current_version_id(skill_id: UUID, db_session: Session) -> UUID:
 
 @pytest.fixture
 def published_skill(
-    db_session: Session, tenant_context: None, bundle_ids: list[str]  # noqa: ARG001
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    bundle_ids: list[str],
 ) -> _PublishedSkill:
     """A published skill at version 2 whose organization still runs version 1,
     as after a save before "Publish update" exists. Installed by default, so
@@ -313,6 +316,6 @@ def test_backfilled_version_lists_name_and_description_without_file_store_read(
 
 def test_file_store_spy_records_reads(file_store_reads: list[str]) -> None:
     """The no-read tests depend on this spy seeing every read."""
-    with pytest.raises(Exception):
+    with pytest.raises(FileRecordNotFoundError):
         get_default_file_store().read_file("does-not-exist")
     assert file_store_reads == ["does-not-exist"]

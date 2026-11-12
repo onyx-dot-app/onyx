@@ -436,7 +436,10 @@ def associate_custom_skill_with_external_app__no_commit(
             OnyxErrorCode.INVALID_INPUT,
             "Built-in skills cannot be associated through the admin workflow.",
         )
-    if get_plugin_version_validity([skill.id], "current", db_session).get(skill.id) is False:
+    if (
+        get_plugin_version_validity([skill.id], "current", db_session).get(skill.id)
+        is False
+    ):
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             f"Invalid skill '{skill.name}' cannot be associated with an app.",

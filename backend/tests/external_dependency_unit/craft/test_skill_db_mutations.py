@@ -590,7 +590,8 @@ def test_installation_policies_preserve_choices_through_updates(
     state = skill_user_states(user, [skill.id], db_session)[skill.id]
     assert state.enabled and not state.can_toggle
     assert skill.id in {
-        row.skill.id for row in list_runtime_skills_for_user(user=user, db_session=db_session)
+        row.skill.id
+        for row in list_runtime_skills_for_user(user=user, db_session=db_session)
     }
     with pytest.raises(OnyxError):
         set_skill_enabled_for_user(

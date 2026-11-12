@@ -521,7 +521,7 @@ The library preview of an external-app skill calls the same renderer
   GitHub import.
 - `backend/tests/external_dependency_unit/craft/` (the `test_skill*` files)
   covers visibility, the fileset, affected users, ownership and push faults.
-  `test_skill_version_reads.py` covers the version each user runs (an
+  `backend/tests/external_dependency_unit/craft/test_skill_version_reads.py` covers the version each user runs (an
   organization-only user runs the published version, a share recipient the
   current one, also in the push), and that the editor, the preview and the
   list make no file store read for content stored in the database.
