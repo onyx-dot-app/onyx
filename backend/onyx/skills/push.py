@@ -1,13 +1,15 @@
 """Push skill bundles to running sandboxes."""
 
 import hashlib
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
 from onyx.db.external_app import get_connectable_apps_for_user
 from onyx.db.models import Skill, User
+from onyx.db.plugin_access import RuntimePluginCharge, runtime_plugin_charges
 from onyx.db.skill import (
     RuntimeSkill,
     SkillValidityUpdate,
@@ -16,11 +18,12 @@ from onyx.db.skill import (
     list_runtime_skills_for_user,
     persist_skill_validity,
 )
-from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.file_store import FileStore, get_default_file_store
 from onyx.server.features.build.db.sandbox import (
+    SandboxSkillsState,
     get_sandbox_user_map,
-    lock_sandbox_skills_hashes,
-    set_sandbox_skills_hashes__no_commit,
+    lock_sandbox_skills_states,
+    set_sandbox_skills_states__no_commit,
 )
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.image.sandbox_daemon.extract import (
@@ -32,6 +35,7 @@ from onyx.server.features.build.sandbox.util.agent_instructions import (
     build_connectable_apps_list,
 )
 from onyx.skills.built_in import (
+    BUILT_IN_SKILL_RUNTIME_USAGE,
     BUILT_IN_SKILLS,
     COMPANY_SEARCH,
     EXTERNAL_APP_SKILL_ID_TO_APP_TYPE,
@@ -43,6 +47,14 @@ from onyx.skills.bundle import (
     SKILL_MD_NAME,
     TEMPLATE_SUFFIX,
     open_bundle_zip,
+)
+from onyx.skills.limits import (
+    KeepGroup,
+    SkillOmission,
+    SkillUsage,
+    charged_file_bytes,
+    runtime_keep_key,
+    runtime_omission_reason,
 )
 from onyx.skills.rendering import (
     CLAUDE_SKILL_DIR_PLACEHOLDER,
@@ -135,7 +147,8 @@ def _resolved_size(name: str, skill_md: bytes) -> int:
 
 def _add_bundle_bytes(
     files: FileSet, name: str, bundle_file_id: str | None, bundle_bytes: bytes
-) -> None:
+) -> bool:
+    """Add a bundle's files under ``name``. Returns whether it was added."""
     try:
         bundle_files: FileSet = {}
         with open_bundle_zip(bundle_bytes) as zf:
@@ -150,7 +163,7 @@ def _add_bundle_bytes(
                     "Skipping skill %s: the skills exceed the sandbox size limit",
                     name,
                 )
-                return
+                return False
             for info in infos:
                 bundle_files[f"{name}/{info.filename}"] = zf.read(info)
         skill_md = bundle_files.get(f"{name}/{SKILL_MD_NAME}", b"")
@@ -165,8 +178,9 @@ def _add_bundle_bytes(
                 "Skipping skill %s: resolved instructions exceed a sandbox size limit",
                 name,
             )
-            return
+            return False
         files.update(bundle_files)
+        return True
     except Exception:
         logger.warning(
             "Failed to unpack bundle for skill %s (%s), skipping",
@@ -174,6 +188,7 @@ def _add_bundle_bytes(
             bundle_file_id,
             exc_info=True,
         )
+        return False
 
 
 def _resolve_skill_dirs(files: FileSet, skill_names: Iterable[str]) -> None:
@@ -205,18 +220,93 @@ def _resolve_skill_dirs(files: FileSet, skill_names: Iterable[str]) -> None:
         ).encode("utf-8")
 
 
-def _assemble_fileset(
+def _bundle_runtime_usage(bundle_bytes: bytes) -> SkillUsage | None:
+    """Charged usage of a bundle's files, each at least 4 KB."""
+    try:
+        with open_bundle_zip(bundle_bytes) as zf:
+            infos = [info for info in zf.infolist() if not info.is_dir()]
+    except Exception:
+        return None
+    return SkillUsage(
+        bytes=sum(charged_file_bytes(info.file_size) for info in infos),
+        files=len(infos),
+    )
+
+
+def _load_custom_bundle(
+    runtime_skill: RuntimeSkill,
+    file_store: FileStore,
+    validity_updates: list[SkillValidityUpdate],
+) -> bytes | None:
+    """The bundle of the plugin version the user runs, or None when it is
+    invalid, fails lazy validation or cannot be read."""
+    skill = runtime_skill.skill
+    version = runtime_skill.version
+    if version is None or version.is_valid is False:
+        return None
+    if version.is_valid is None:
+        validation = validate_stored_custom_skill(
+            runtime_skill.name, version.bundle_file_id, file_store
+        )
+        if validation.is_valid is not None:
+            validity_updates.append(
+                SkillValidityUpdate(
+                    skill_id=skill.id,
+                    bundle_file_id=version.bundle_file_id,
+                    is_valid=validation.is_valid,
+                )
+            )
+        if validation.normalized_bundle is None:
+            logger.warning(
+                "Skipping unvalidated skill %s: %s", skill.id, validation.detail
+            )
+        return validation.normalized_bundle
+    if version.bundle_file_id is None:
+        return None
+    try:
+        return load_stored_custom_skill_bundle(
+            version.bundle_file_id, file_store
+        ).content
+    except Exception as exc:
+        logger.warning("Skipping unreadable valid skill %s: %s", skill.id, exc)
+        return None
+
+
+def _runtime_keep_key(
+    runtime_skill: RuntimeSkill, charges: Mapping[UUID, RuntimePluginCharge]
+) -> tuple[int, float, UUID]:
+    skill_id = runtime_skill.skill.id
+    if runtime_skill.skill.built_in_skill_id is not None:
+        return runtime_keep_key(KeepGroup.BUILT_IN, None, skill_id)
+    charge = charges.get(skill_id)
+    if charge is None:
+        return runtime_keep_key(KeepGroup.INSTALLED_BY_DEFAULT, None, skill_id)
+    return runtime_keep_key(charge.group, charge.order_time, skill_id)
+
+
+@dataclass(frozen=True)
+class AssembledSkills:
+    files: FileSet
+    omissions: tuple[SkillOmission, ...]
+
+
+def _assemble_skills(
     skills: Iterable[RuntimeSkill],
     user: User,
     db_session: Session,
-) -> FileSet:
-    """Return the hydrated skills as a flat ``{path: bytes}`` map.
+    charges: Mapping[UUID, RuntimePluginCharge] | None,
+) -> AssembledSkills:
+    """Hydrate the skills as a flat ``{path: bytes}`` map.
 
     Built-ins render from disk. A custom skill sends the bundle of the plugin
     version the user runs, in a folder named by that version's frontmatter.
     The version must already be valid or pass lazy validation before its
     FileStore bundle is unpacked. Invalid, indeterminate, and unknown built-in
     rows are skipped. Of two skills with one name, the name order keeps one.
+
+    With ``charges``, the run-time limit applies: skills load in the keep
+    order while they fit, and whole plugins that do not fit are left out. A
+    version with no recorded size is measured from its bundle.
     """
     skills, hidden = keep_one_skill_per_name(skills)
     for runtime_skill in hidden:
@@ -226,57 +316,63 @@ def _assemble_fileset(
             runtime_skill.name,
         )
     seen_names = {runtime_skill.name for runtime_skill in skills}
+    if charges is not None:
+        skills = sorted(skills, key=lambda item: _runtime_keep_key(item, charges))
 
     files: FileSet = {}
+    omissions: list[SkillOmission] = []
+    used = SkillUsage()
     validity_updates: list[SkillValidityUpdate] = []
     file_store = get_default_file_store()
+
+    def left_out(runtime_skill: RuntimeSkill, usage: SkillUsage) -> bool:
+        reason = runtime_omission_reason(used, usage)
+        if reason is None:
+            return False
+        logger.info(
+            "Skill %s did not fit the run-time skill limit (%s)",
+            runtime_skill.skill.id,
+            reason,
+        )
+        omissions.append(
+            SkillOmission(
+                plugin_id=runtime_skill.skill.id,
+                name=runtime_skill.name,
+                bytes=usage.bytes,
+                files=usage.files,
+                reason=reason,
+            )
+        )
+        return True
 
     for runtime_skill in skills:
         skill = runtime_skill.skill
         if skill.built_in_skill_id is None:
-            version = runtime_skill.version
-            if version is None or version.is_valid is False:
-                continue
-
-            if version.is_valid is None:
-                validation = validate_stored_custom_skill(
-                    runtime_skill.name, version.bundle_file_id, file_store
-                )
-                if validation.is_valid is not None:
-                    validity_updates.append(
-                        SkillValidityUpdate(
-                            skill_id=skill.id,
-                            bundle_file_id=version.bundle_file_id,
-                            is_valid=validation.is_valid,
-                        )
-                    )
-                if validation.normalized_bundle is None:
-                    logger.warning(
-                        "Skipping unvalidated skill %s: %s",
-                        skill.id,
-                        validation.detail,
-                    )
+            charge = charges.get(skill.id) if charges is not None else None
+            usage = charge.usage if charge is not None else None
+            if charges is not None and usage is not None:
+                if left_out(runtime_skill, usage):
                     continue
-                bundle_bytes = validation.normalized_bundle
-            else:
-                try:
-                    if version.bundle_file_id is None:
-                        continue
-                    bundle_bytes = load_stored_custom_skill_bundle(
-                        version.bundle_file_id,
-                        file_store,
-                    ).content
-                except Exception as exc:
-                    logger.warning(
-                        "Skipping unreadable valid skill %s: %s",
-                        skill.id,
-                        exc,
-                    )
-                    continue
-
-            _add_bundle_bytes(
-                files, runtime_skill.name, version.bundle_file_id, bundle_bytes
+            bundle_bytes = _load_custom_bundle(
+                runtime_skill, file_store, validity_updates
             )
+            if bundle_bytes is None:
+                continue
+            if charges is not None and usage is None:
+                usage = _bundle_runtime_usage(bundle_bytes) or SkillUsage()
+                if left_out(runtime_skill, usage):
+                    continue
+            version = runtime_skill.version
+            if (
+                _add_bundle_bytes(
+                    files,
+                    runtime_skill.name,
+                    version.bundle_file_id if version is not None else None,
+                    bundle_bytes,
+                )
+                and usage is not None
+            ):
+                used += usage
             continue
         definition = BUILT_IN_SKILLS.get(skill.built_in_skill_id)
         if definition is None:
@@ -289,6 +385,9 @@ def _assemble_fileset(
         _add_static_builtin(files, skill, definition)
         if definition.has_template:
             _render_template(files, skill, definition, db_session, user)
+        used += BUILT_IN_SKILL_RUNTIME_USAGE.get(
+            definition.built_in_skill_id, SkillUsage()
+        )
 
     _resolve_skill_dirs(files, sorted(seen_names))
 
@@ -296,27 +395,52 @@ def _assemble_fileset(
         persist_skill_validity(validity_updates)
     except Exception:
         logger.exception("Failed to persist skill validity classifications")
-    return files
+    return AssembledSkills(files=files, omissions=tuple(omissions))
 
 
-def build_skills_fileset_for_user(user: User, db_session: Session) -> FileSet:
-    """Return a flat ``{path: bytes}`` map of every skill the user can see."""
-    skills = list_runtime_skills_for_user(user=user, db_session=db_session)
-    return _assemble_fileset(skills, user, db_session)
+def _assemble_fileset(
+    skills: Iterable[RuntimeSkill],
+    user: User,
+    db_session: Session,
+) -> FileSet:
+    """``_assemble_skills`` without the run-time limit."""
+    return _assemble_skills(skills, user, db_session, None).files
 
 
-def build_user_skills_payload(user: User, db_session: Session) -> tuple[str, FileSet]:
-    """Return the connectable-apps section and skill fileset.
+@dataclass(frozen=True)
+class UserSkillsPayload:
+    connectable_apps_section: str
+    files: FileSet
+    # Plugins the run-time skill limit left out of ``files``.
+    omissions: tuple[SkillOmission, ...]
+
+
+def build_user_skills_payload(user: User, db_session: Session) -> UserSkillsPayload:
+    """Return the connectable-apps section and the skill files within the
+    run-time skill limit, with the plugins it left out.
 
     The connectable-apps section lists org apps the user has not connected yet,
     so the agent can offer to set one up through the connect tool.
     """
     skills = list_runtime_skills_for_user(user=user, db_session=db_session)
-    files = _assemble_fileset(skills, user, db_session)
+    charges = {
+        charge.plugin_id: charge
+        for charge in runtime_plugin_charges([user.id], db_session).get(user.id, [])
+    }
+    assembled = _assemble_skills(skills, user, db_session, charges)
     connectable_apps_section = build_connectable_apps_list(
         get_connectable_apps_for_user(db_session, user)
     )
-    return connectable_apps_section, files
+    return UserSkillsPayload(
+        connectable_apps_section=connectable_apps_section,
+        files=assembled.files,
+        omissions=assembled.omissions,
+    )
+
+
+def build_skills_fileset_for_user(user: User, db_session: Session) -> FileSet:
+    """Return the skill files a sandbox of the user gets."""
+    return build_user_skills_payload(user, db_session).files
 
 
 def push_skill_to_affected_sandboxes(skill: Skill, db_session: Session) -> None:
@@ -325,62 +449,82 @@ def push_skill_to_affected_sandboxes(skill: Skill, db_session: Session) -> None:
     push_skills_for_users(user_ids, db_session)
 
 
+@dataclass(frozen=True)
+class _SandboxPush:
+    # The state to record; None when nothing changed or the send failed.
+    state: SandboxSkillsState | None
+    sent: bool
+    failed: bool
+
+
+def _push_one_sandbox(
+    sandbox_id: UUID,
+    user: User,
+    current: SandboxSkillsState | None,
+    db_session: Session,
+) -> _SandboxPush:
+    """Build one sandbox's payload and send it when its hash changed."""
+    payload = build_user_skills_payload(user, db_session)
+    state = SandboxSkillsState(
+        skills_hash=compute_skill_runtime_hash(
+            payload.files, payload.connectable_apps_section
+        ),
+        omissions=payload.omissions,
+    )
+    if current is not None and current.skills_hash == state.skills_hash:
+        changed = current.omissions != state.omissions
+        return _SandboxPush(state=state if changed else None, sent=False, failed=False)
+    result = get_sandbox_manager().push_to_sandbox(
+        sandbox_id=sandbox_id, mount_path=SKILLS_MOUNT_PATH, files=payload.files
+    )
+    for failure in result.failures:
+        logger.warning(
+            "Skill push failed for sandbox %s: %s: %s",
+            failure.sandbox_id,
+            failure.reason,
+            failure.detail,
+        )
+    failed = result.succeeded != result.targets
+    return _SandboxPush(state=None if failed else state, sent=True, failed=failed)
+
+
 def push_skills_for_users(user_ids: set[UUID], db_session: Session) -> None:
-    """Push skill state changes and mark affected sessions for reload."""
+    """Push skill state changes and mark affected sessions for reload. Builds
+    and sends one sandbox at a time, so only one payload is in memory."""
     if not user_ids:
         return
     try:
         sandbox_map = get_sandbox_user_map(list(user_ids), db_session)
-        current_hashes = lock_sandbox_skills_hashes(db_session, set(sandbox_map))
-        sandbox_payloads = {
-            sandbox_id: build_user_skills_payload(user, db_session)
-            for sandbox_id, user in sandbox_map.items()
-        }
-        desired_hashes = {
-            sandbox_id: compute_skill_runtime_hash(files, connectable_apps_section)
-            for sandbox_id, (
-                connectable_apps_section,
-                files,
-            ) in sandbox_payloads.items()
-        }
-        changed_files = {
-            sandbox_id: files
-            for sandbox_id, (
-                _connectable_apps_section,
-                files,
-            ) in sandbox_payloads.items()
-            if current_hashes.get(sandbox_id) != desired_hashes[sandbox_id]
-        }
-        if not changed_files:
-            return
-        result = get_sandbox_manager().push_to_sandboxes(
-            mount_path=SKILLS_MOUNT_PATH,
-            sandbox_files=changed_files,
-        )
-        failed_sandbox_ids = {failure.sandbox_id for failure in result.failures}
-        for failure in result.failures:
-            logger.warning(
-                "Skill push failed for sandbox %s: %s: %s",
-                failure.sandbox_id,
-                failure.reason,
-                failure.detail,
-            )
-        successful_sandbox_ids = set(changed_files) - failed_sandbox_ids
-        if not successful_sandbox_ids:
-            return
-        try:
-            with db_session.begin_nested():
-                set_sandbox_skills_hashes__no_commit(
-                    db_session,
-                    {
-                        sandbox_id: desired_hashes[sandbox_id]
-                        for sandbox_id in successful_sandbox_ids
-                    },
-                )
-        except Exception:
-            logger.exception("Failed to persist successful skill push state")
+        current_states = lock_sandbox_skills_states(db_session, set(sandbox_map))
     except Exception:
         logger.exception("Failed to push skills to sandboxes")
+        return
+    delivered: dict[UUID, SandboxSkillsState] = {}
+    sent = failed = 0
+    for sandbox_id in sorted(sandbox_map):
+        try:
+            outcome = _push_one_sandbox(
+                sandbox_id,
+                sandbox_map[sandbox_id],
+                current_states.get(sandbox_id),
+                db_session,
+            )
+        except Exception:
+            logger.exception("Failed to push skills to sandbox %s", sandbox_id)
+            continue
+        sent += outcome.sent
+        failed += outcome.failed
+        if outcome.state is not None:
+            delivered[sandbox_id] = outcome.state
+    if failed:
+        logger.warning("Skill push: %d/%d targets failed", failed, sent)
+    if not delivered:
+        return
+    try:
+        with db_session.begin_nested():
+            set_sandbox_skills_states__no_commit(db_session, delivered)
+    except Exception:
+        logger.exception("Failed to persist successful skill push state")
 
 
 def push_skills_after_membership_change(

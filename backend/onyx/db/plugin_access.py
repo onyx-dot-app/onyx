@@ -39,15 +39,19 @@ from typing import Literal
 from uuid import UUID
 
 from sqlalchemy import (
+    BigInteger,
     ColumnElement,
     and_,
     case,
+    cast,
+    column,
     func,
+    literal,
     or_,
     select,
     true,
 )
-from sqlalchemy.dialects.postgresql import aggregate_order_by
+from sqlalchemy.dialects.postgresql import JSONB, aggregate_order_by
 from sqlalchemy.orm import InstrumentedAttribute, Session, aliased
 from sqlalchemy.sql.elements import KeyedColumnElement
 from sqlalchemy.sql.selectable import Subquery
@@ -75,7 +79,11 @@ from onyx.db.models import (
     UserGroup,
     UserPluginPreference,
 )
-from onyx.skills.limits import SkillUsage
+from onyx.skills.limits import (
+    SKILL_MIN_FILE_BYTES,
+    KeepGroup,
+    SkillUsage,
+)
 
 UserIdExpr = UUID | ColumnElement[UUID] | InstrumentedAttribute[UUID]
 
@@ -599,6 +607,171 @@ def plugin_usage_by_plugin(
         )
         if plugin_id is not None
     }
+
+
+# --- Run-time limit inputs ------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class RuntimePluginCharge:
+    """One plugin a user gets, as the run-time limit sees it."""
+
+    plugin_id: UUID
+    group: KeepGroup
+    # Most recent first inside the group. None counts as oldest.
+    order_time: datetime | None
+    # Charged size of the version the user runs; None when the version has
+    # no sizes (backfilled).
+    usage: SkillUsage | None
+
+
+def _version_charges(
+    version_ids: Collection[UUID], db_session: Session
+) -> dict[UUID, SkillUsage | None]:
+    """Charged usage of each version, each file at least 4 KB. The manifest
+    gives each file's size; without one, the totals give a lower bound."""
+    if not version_ids:
+        return {}
+    manifest = case(
+        (
+            func.jsonb_typeof(PluginVersion.file_manifest) == "array",
+            PluginVersion.file_manifest,
+        ),
+        else_=literal([], JSONB),
+    )
+    entry = (
+        func.jsonb_array_elements(manifest)
+        .table_valued(column("value", JSONB))
+        .alias("entry")
+    )
+    manifest_bytes = (
+        select(
+            func.sum(
+                func.greatest(
+                    cast(entry.c.value["size"].astext, BigInteger),
+                    SKILL_MIN_FILE_BYTES,
+                )
+            )
+        )
+        .select_from(entry)
+        .scalar_subquery()
+    )
+    rows = db_session.execute(
+        select(
+            PluginVersion.id,
+            manifest_bytes,
+            func.jsonb_array_length(manifest),
+            PluginVersion.unpacked_size_bytes,
+            PluginVersion.file_count,
+        ).where(PluginVersion.id.in_(sorted(version_ids)))
+    ).all()
+    charges: dict[UUID, SkillUsage | None] = {}
+    for version_id, from_manifest, manifest_files, size, file_count in rows:
+        files = file_count if file_count is not None else manifest_files or 0
+        if from_manifest is not None:
+            charges[version_id] = SkillUsage(bytes=int(from_manifest), files=files)
+        elif size is not None:
+            charges[version_id] = SkillUsage(
+                bytes=max(size, files * SKILL_MIN_FILE_BYTES), files=files
+            )
+        else:
+            charges[version_id] = None
+    return charges
+
+
+def runtime_plugin_charges(
+    user_ids: Iterable[UUID], db_session: Session
+) -> dict[UUID, list[RuntimePluginCharge]]:
+    """The plugins each user gets (enabled, version not invalid, app
+    connected; before the name order), with their run-time keep group, order
+    time and charged usage. One query for the users, one for the versions and
+    one for app connections.
+
+    A Required plugin and an Installed by default plugin the user did not
+    turn on again sort by the latest share or group setting the user gets it
+    through, else plugin.created_at. A plugin the user turned on sorts by
+    when they turned it on."""
+    users = sorted(set(user_ids))
+    if not users:
+        return {}
+    pairs = _user_plugin_pairs(User.__table__.c.id.in_(users), None)
+    direct_share = (
+        select(Plugin__User.created_at)
+        .where(
+            Plugin__User.plugin_id == pairs.c.plugin_id,
+            Plugin__User.user_id == pairs.c.user_id,
+        )
+        .correlate(pairs)
+        .scalar_subquery()
+    )
+    group_row = (
+        select(func.max(Plugin__UserGroup.created_at))
+        .join(
+            User__UserGroup,
+            User__UserGroup.user_group_id == Plugin__UserGroup.user_group_id,
+        )
+        .where(
+            Plugin__UserGroup.plugin_id == pairs.c.plugin_id,
+            User__UserGroup.user_id == pairs.c.user_id,
+            Plugin__UserGroup.installation_policy.is_distinct_from(
+                PluginInstallationPolicy.NOT_AVAILABLE
+            ),
+        )
+        .correlate(pairs)
+        .scalar_subquery()
+    )
+    share_time = func.coalesce(
+        func.greatest(direct_share, group_row), pairs.c.created_at
+    )
+    app_plugin = pairs.c.plugin_id.in_(select(ExternalApp__Skill.skill_id))
+    rows = db_session.execute(
+        select(
+            pairs.c.user_id,
+            pairs.c.plugin_id,
+            pairs.c.rank,
+            UserPluginPreference.enabled,
+            UserPluginPreference.enabled_at,
+            share_time,
+            pairs.c.version_id,
+            app_plugin,
+        )
+        .join(PluginVersion, PluginVersion.id == pairs.c.version_id)
+        .outerjoin(UserPluginPreference, _preference_of_pair(pairs))
+        .where(_enabled_in_pairs(pairs), PluginVersion.is_valid.is_not(False))
+        .order_by(pairs.c.user_id, pairs.c.plugin_id)
+    ).all()
+    ready = ready_app_skill_pairs(
+        ((row[0], row[1]) for row in rows if row[7]), db_session
+    )
+    usage = _version_charges({row[6] for row in rows}, db_session)
+    charges: dict[UUID, list[RuntimePluginCharge]] = {}
+    for (
+        user_id,
+        plugin_id,
+        rank,
+        choice,
+        enabled_at,
+        shared_at,
+        version_id,
+        is_app,
+    ) in rows:
+        if is_app and (user_id, plugin_id) not in ready:
+            continue
+        if rank == policy_rank(PluginInstallationPolicy.REQUIRED):
+            group, order_time = KeepGroup.REQUIRED, shared_at
+        elif choice is True:
+            group, order_time = KeepGroup.TURNED_ON, enabled_at
+        else:
+            group, order_time = KeepGroup.INSTALLED_BY_DEFAULT, shared_at
+        charges.setdefault(user_id, []).append(
+            RuntimePluginCharge(
+                plugin_id=plugin_id,
+                group=group,
+                order_time=order_time,
+                usage=usage[version_id],
+            )
+        )
+    return charges
 
 
 @dataclass(frozen=True)

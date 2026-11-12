@@ -81,6 +81,7 @@ def _hydrate_managed_content_for_test(
         connectable_apps_section=connectable_apps_section,
         skills_files=skills_files,
         skills_hash=compute_skill_runtime_hash(skills_files, connectable_apps_section),
+        skill_omissions=(),
         mcp_fingerprint=craft_mcp_fingerprint(
             resolve_craft_mcp_servers(db_session, user)
         ),

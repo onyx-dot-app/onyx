@@ -125,18 +125,24 @@ Neighbours own the rest:
 skill mutation (server/features/skill/api.py)   compute affected users BEFORE the change
   -> db write, commit
   -> push_skills_for_users       skills/push.py
-       lock_sandbox_skills_hashes        SELECT ... FOR UPDATE on Sandbox rows
-       build_user_skills_payload         per sandbox user
+       lock_sandbox_skills_states        SELECT ... FOR UPDATE on Sandbox rows
+       per sandbox, in id order (one payload in memory at a time):
+       build_user_skills_payload         -> UserSkillsPayload (files, omissions)
          list_runtime_skills_for_user    db/skill.py: the one runtime gate; each custom
                                          skill comes with the plugin version the user
                                          runs (version_user_runs, outer joins)
-         _assemble_fileset               built-ins from disk, custom from the FileStore
-                                         bundle of that version, in a folder named by
-                                         its frontmatter; resolves ${CLAUDE_SKILL_DIR}
+         runtime_plugin_charges          db/plugin_access.py: keep group, order time and
+                                         charged size of each plugin (run-time limit)
+         _assemble_skills                keep order, whole plugins within 900 MB and
+                                         10,000 files; built-ins from disk, custom from
+                                         the FileStore bundle of that version, in a
+                                         folder named by its frontmatter; resolves
+                                         ${CLAUDE_SKILL_DIR}
          build_connectable_apps_list     guidance for unconnected apps
-       compute_skill_runtime_hash        once per sandbox; skip sandboxes whose hash matches
-       push_to_sandboxes(SKILLS_MOUNT_PATH)
-       set_sandbox_skills_hashes__no_commit   only for successful pushes
+       compute_skill_runtime_hash        skip a sandbox whose hash matches
+       push_to_sandbox(SKILLS_MOUNT_PATH)
+       set_sandbox_skills_states__no_commit   hash + skill_omissions, only for
+                                         successful pushes (omissions also on a hash skip)
   -> commit
 session start: sandbox_lifecycle.py:build_managed_content_payload
   uses the same payload and hash, before the sandbox is RUNNING
@@ -248,9 +254,9 @@ The library preview of an external-app skill calls the same renderer
    takes it first (`create_plugin__no_commit` retries). Publish and transfer
    refuse a clash with `CONFLICT`. Skill names repeat across plugins; never
    compare one with `plugin.name`. The legacy index
-   `uq_skill_automatic_name` allows one default or required skill row per
-   name, so the dual write stores `AVAILABLE` for `NOT_AVAILABLE` and for no
-   setting. The legacy `uq_user_skill_preference_name` allows one enabled
+   `uq_skill_automatic_name` is gone: the run-time name order picks one of
+   two automatic skills with one name. The dual write stores `AVAILABLE` for
+   `NOT_AVAILABLE` and for no setting. The legacy `uq_user_skill_preference_name` allows one enabled
    legacy choice per user and name; `db/skill.py:_write_legacy_choice__no_commit`
    skips a legacy row it refuses, because reads use `user_plugin_preference`.
    A toggle conflicts only with skills the user can see. Every write that
@@ -311,8 +317,8 @@ The library preview of an external-app skill calls the same renderer
     author, so transfer or delete private skills before their owner is
     removed.
 11. `push-holds-row-locks` **The push holds row locks during network I/O.**
-    `skills/push.py:push_skills_for_users` locks the target `Sandbox` rows, then calls the
-    sandbox push while the transaction is open. The hash write is a savepoint,
+    `skills/push.py:push_skills_for_users` locks the target `Sandbox` rows, then builds
+    and sends one sandbox at a time while the transaction is open. The hash write is a savepoint,
     and the caller commits. The push catches and logs every exception, so a
     failed push never fails the API call. The next push repairs it, because
     the hash of a failed sandbox is not written.
@@ -633,6 +639,27 @@ The library preview of an external-app skill calls the same renderer
     connects and saves an off choice for app skills that do not fit; the
     response lists them in `skills_left_off_for_limit`. Group membership
     changes are never checked: the run-time rule applies.
+26. `runtime-skill-limit` **A sandbox gets every plugin that fits in 900 MB
+    and 10,000 files.** `skills/push.py:build_user_skills_payload` applies it,
+    so session start (`build_managed_content_payload`) and the push both do.
+    Each file counts as at least 4 KB: the charge comes from
+    `plugin_version.file_manifest` sizes of the version the user runs
+    (`db/plugin_access.py:runtime_plugin_charges`, one query per user set and
+    one per version set); a version with no sizes is measured from its bundle
+    while the push loads it. Keep order (`skills/limits.py:KeepGroup`):
+    built-in, Required, turned on (also Installed by default turned on again),
+    Installed by default. Inside a group the newest first: `enabled_at` for
+    turned on (empty is oldest), else the latest `plugin__user` or
+    `plugin__user_group` row of the user, else `plugin.created_at`; then
+    `plugin.id`. Whole plugins only, after the name order. Left-out plugins
+    (`SkillOmission`: id, name, charged bytes, files, reason) go to
+    `sandbox.skill_omissions` together with `skills_hash`, so they describe
+    the content on that disk. `GET /skills/users-over-limit` (`MANAGE_PLUGINS`,
+    `db/skill_limit.py:users_past_write_limit`) lists active users past the
+    write limit with their size, files and the count of plugins that do not
+    load (sizes only, no bundle opened). The transport cap `MAX_BUNDLE_BYTES`
+    still applies on top (G7c).
+
 ---
 
 ## Decisions
@@ -674,7 +701,7 @@ The library preview of an external-app skill calls the same renderer
 
 ## Dependencies
 
-- [[craft-sandboxes]]: `push_to_sandboxes` and the managed volume.
+- [[craft-sandboxes]]: `push_to_sandbox` and the managed volume.
 - [[craft-sessions]]: the stale check and the reload that apply a push to a
   live runtime.
 - [[craft-external-apps]]: app readiness and action policy views. GitHub

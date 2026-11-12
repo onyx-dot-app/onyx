@@ -363,6 +363,26 @@ class OrganizationLibraryDefaultAccess(BaseModel):
     installation_policy: PluginInstallationPolicy
 
 
+class SkillLimitUser(BaseModel):
+    user_id: UUID
+    email: str
+    # Unpacked size and file count of the user's skills.
+    bytes: int
+    files: int
+    # Skills the run-time limit leaves out of the user's sandbox.
+    skills_not_loaded: int
+
+
+class SkillLimitUsersResponse(BaseModel):
+    """Active users past the write limit (``max_bytes`` or ``max_files``)."""
+
+    max_bytes: int
+    max_files: int
+    runtime_max_bytes: int
+    runtime_max_files: int
+    users: list[SkillLimitUser]
+
+
 class SkillEnableRequest(BaseModel):
     enabled: bool
     replace_conflict: bool = False

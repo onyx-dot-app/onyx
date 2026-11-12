@@ -1573,7 +1573,7 @@ def _legacy_installation_policy(
     policy: PluginInstallationPolicy | None,
 ) -> SkillInstallationPolicy:
     """The legacy column has no NOT_AVAILABLE. NOT_AVAILABLE and an empty
-    setting write AVAILABLE, so uq_skill_automatic_name does not count them."""
+    setting write AVAILABLE."""
     if policy in (PluginInstallationPolicy.DEFAULT, PluginInstallationPolicy.REQUIRED):
         return SkillInstallationPolicy(policy.value)
     return SkillInstallationPolicy.AVAILABLE
@@ -1704,17 +1704,7 @@ def _apply_to_plugin__no_commit(
     if is_set(change.company_installation_policy):
         policy = change.company_installation_policy
         if skill is not None:
-            try:
-                with db_session.begin_nested():
-                    skill.installation_policy = _legacy_installation_policy(policy)
-                    db_session.flush()
-            except IntegrityError as exc:
-                if not is_unique_violation(exc, "uq_skill_automatic_name"):
-                    raise
-                raise OnyxError(
-                    OnyxErrorCode.SKILL_NAME_CONFLICT,
-                    "Another automatically installed skill already uses this name.",
-                ) from exc
+            skill.installation_policy = _legacy_installation_policy(policy)
         plugin.installation_policy = policy
         db_session.flush()
 

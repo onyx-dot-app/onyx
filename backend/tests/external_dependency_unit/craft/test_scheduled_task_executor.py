@@ -57,6 +57,7 @@ from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
 from onyx.server.features.build.scheduled_tasks.executor import run_scheduled_task_logic
 from onyx.server.features.build.session.api import get_output_cards
 from onyx.server.features.build.session.manager import SessionManager
+from onyx.skills.push import UserSkillsPayload
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.common.craft.stubs import StubSandboxManager
@@ -314,7 +315,7 @@ def test_timeout_error_event_marks_run_failed_with_timeout_class(
     # Bypass skill-payload: encrypted ExternalApp creds break local MIT decryption.
     monkeypatch.setattr(
         "onyx.server.features.build.session.sandbox_lifecycle.build_user_skills_payload",
-        lambda *_: ("", {}),
+        lambda *_: UserSkillsPayload("", {}, ()),
     )
 
     sandbox(user=test_user, status=SandboxStatus.RUNNING)
@@ -351,7 +352,7 @@ def test_prompt_response_marks_run_succeeded(
     # Bypass skill-payload: encrypted ExternalApp creds break local MIT decryption.
     monkeypatch.setattr(
         "onyx.server.features.build.session.sandbox_lifecycle.build_user_skills_payload",
-        lambda *_: ("", {}),
+        lambda *_: UserSkillsPayload("", {}, ()),
     )
 
     sandbox(user=test_user, status=SandboxStatus.RUNNING)
@@ -389,7 +390,7 @@ def test_scheduled_run_threads_budget_as_turn_timeout(
     # Bypass skill-payload: encrypted ExternalApp creds break local MIT decryption.
     monkeypatch.setattr(
         "onyx.server.features.build.session.sandbox_lifecycle.build_user_skills_payload",
-        lambda *_: ("", {}),
+        lambda *_: UserSkillsPayload("", {}, ()),
     )
 
     sandbox(user=test_user, status=SandboxStatus.RUNNING)
@@ -431,7 +432,7 @@ def test_cancelled_prompt_response_marks_run_failed(
     # Bypass skill-payload: encrypted ExternalApp creds break local MIT decryption.
     monkeypatch.setattr(
         "onyx.server.features.build.session.sandbox_lifecycle.build_user_skills_payload",
-        lambda *_: ("", {}),
+        lambda *_: UserSkillsPayload("", {}, ()),
     )
 
     sandbox(user=test_user, status=SandboxStatus.RUNNING)
@@ -466,7 +467,7 @@ def test_transport_error_event_marks_run_failed_with_agent_exception_class(
     # Bypass skill-payload: encrypted ExternalApp creds break local MIT decryption.
     monkeypatch.setattr(
         "onyx.server.features.build.session.sandbox_lifecycle.build_user_skills_payload",
-        lambda *_: ("", {}),
+        lambda *_: UserSkillsPayload("", {}, ()),
     )
 
     sandbox(user=test_user, status=SandboxStatus.RUNNING)
@@ -503,7 +504,7 @@ def test_stream_without_prompt_response_marks_run_failed(
     # Bypass skill-payload: encrypted ExternalApp creds break local MIT decryption.
     monkeypatch.setattr(
         "onyx.server.features.build.session.sandbox_lifecycle.build_user_skills_payload",
-        lambda *_: ("", {}),
+        lambda *_: UserSkillsPayload("", {}, ()),
     )
 
     sandbox(user=test_user, status=SandboxStatus.RUNNING)
@@ -577,7 +578,7 @@ def test_output_cards_follow_producer_close_and_precede_terminal_status(
 ) -> None:
     monkeypatch.setattr(
         "onyx.server.features.build.session.sandbox_lifecycle.build_user_skills_payload",
-        lambda *_: ("", {}),
+        lambda *_: UserSkillsPayload("", {}, ()),
     )
     sandbox(user=test_user, status=SandboxStatus.RUNNING)
     _, run = _seed_task_and_queued_run(db_session, test_user)

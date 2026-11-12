@@ -186,8 +186,9 @@ library payload with the same code
 must close before the push. `push_managed_content` runs before the sandbox is
 reported `RUNNING`, because opencode scans the skills directory once per
 instance: a turn that starts during the push misses managed skills for good. It
-logs a failure and never raises. `skills_hash` is written
-only after a successful push, so the next session create or reload retries.
+logs a failure and never raises. `skills_hash` and `skill_omissions` (the
+plugins the run-time skill limit left out, [[skills]]) are written only after a
+successful push, so the next session create or reload retries.
 User library blobs use `FileOrigin.USER_FILE` but have no `UserFile` rows, so
 the chat user-file lifecycle does not apply to them.
 

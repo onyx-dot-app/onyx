@@ -21,7 +21,7 @@ and sees it.
 """
 
 import time
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from uuid import UUID
@@ -30,13 +30,22 @@ from sqlalchemy import ColumnElement, and_, select
 from sqlalchemy.orm import Session
 
 from onyx.db.models import Skill, User
-from onyx.db.plugin_access import active_skill_user, plugin_usage_by_user
+from onyx.db.plugin_access import (
+    RuntimePluginCharge,
+    active_skill_user,
+    plugin_usage_by_user,
+    runtime_plugin_charges,
+)
 from onyx.db.utils import acquire_advisory_xact_lock, advisory_lock_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills import limits
-from onyx.skills.built_in import BUILT_IN_SKILL_USAGE, BUILT_IN_SKILLS
-from onyx.skills.limits import SkillUsage
+from onyx.skills.built_in import (
+    BUILT_IN_SKILL_RUNTIME_USAGE,
+    BUILT_IN_SKILL_USAGE,
+    BUILT_IN_SKILLS,
+)
+from onyx.skills.limits import SkillUsage, runtime_keep_key, runtime_omission_reason
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -68,9 +77,11 @@ def lock_skill_limit(db_session: Session) -> float:
     return wait_ms
 
 
-def built_in_skill_usage(db_session: Session) -> SkillUsage:
+def built_in_skill_usage(
+    db_session: Session, usage_table: Mapping[str, SkillUsage] = BUILT_IN_SKILL_USAGE
+) -> SkillUsage:
     """Usage of the built-in skills the tenant has and offers. Every user
-    counts all of them."""
+    counts all of them. ``usage_table`` gives each built-in's usage."""
     usage = SkillUsage()
     for built_in_skill_id in set(
         db_session.scalars(
@@ -79,7 +90,7 @@ def built_in_skill_usage(db_session: Session) -> SkillUsage:
     ):
         definition = BUILT_IN_SKILLS.get(built_in_skill_id or "")
         if definition is not None and definition.is_available(db_session):
-            usage += BUILT_IN_SKILL_USAGE[definition.built_in_skill_id]
+            usage += usage_table[definition.built_in_skill_id]
     return usage
 
 
@@ -243,3 +254,74 @@ def skill_limit_check(
     finally:
         db_session.info.pop(_SESSION_KEY, None)
     check.finish()
+
+
+# --- Users past the write limit ------------------------------------------------
+
+
+@dataclass(frozen=True)
+class UserPastWriteLimit:
+    user_id: UUID
+    email: str
+    usage: SkillUsage
+    # Plugins the run-time limit leaves out for the user.
+    skills_not_loaded: int
+
+
+def runtime_omission_count(
+    charges: Iterable[RuntimePluginCharge], built_ins: SkillUsage
+) -> int:
+    """How many plugins the run-time limit leaves out, by sizes alone. A
+    version with no recorded size counts as 0."""
+    used = built_ins
+    count = 0
+    for charge in sorted(
+        charges,
+        key=lambda item: runtime_keep_key(item.group, item.order_time, item.plugin_id),
+    ):
+        usage = charge.usage or SkillUsage()
+        if runtime_omission_reason(used, usage) is not None:
+            count += 1
+        else:
+            used += usage
+    return count
+
+
+def users_past_write_limit(db_session: Session) -> list[UserPastWriteLimit]:
+    """Active users past the write limit (500 MB or 5,000 files), largest
+    first, with how many of their plugins the run-time limit leaves out. One
+    usage query for every user, then one charge query for those users."""
+    built_ins = built_in_skill_usage(db_session)
+    over = {
+        user_id: usage + built_ins
+        for user_id, usage in plugin_usage_by_user(
+            active_skill_user(), db_session
+        ).items()
+        if (usage + built_ins).is_over_write_limit
+    }
+    if not over:
+        return []
+    charges = runtime_plugin_charges(over, db_session)
+    runtime_built_ins = built_in_skill_usage(db_session, BUILT_IN_SKILL_RUNTIME_USAGE)
+    emails: dict[UUID, str] = {  # noqa: C416  # unpacking types the SQLAlchemy Row
+        user_id: email
+        for user_id, email in db_session.execute(
+            select(User.__table__.c.id, User.__table__.c.email).where(
+                User.__table__.c.id.in_(over)
+            )
+        )
+    }
+    return sorted(
+        (
+            UserPastWriteLimit(
+                user_id=user_id,
+                email=emails[user_id],
+                usage=usage,
+                skills_not_loaded=runtime_omission_count(
+                    charges.get(user_id, []), runtime_built_ins
+                ),
+            )
+            for user_id, usage in over.items()
+        ),
+        key=lambda item: (-item.usage.bytes, item.email),
+    )

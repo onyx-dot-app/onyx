@@ -221,15 +221,17 @@ def test_org_only_user_runs_published_version_and_recipient_runs_current(
 
 
 class _RecordingSandboxManager:
+    """Records each push call; a push call sends one sandbox."""
+
     def __init__(self) -> None:
         self.pushes: list[dict[UUID, dict[str, bytes]]] = []
 
-    def push_to_sandboxes(
-        self, mount_path: str, sandbox_files: dict[UUID, dict[str, bytes]]
+    def push_to_sandbox(
+        self, *, sandbox_id: UUID, mount_path: str, files: dict[str, bytes]
     ) -> SimpleNamespace:
         del mount_path
-        self.pushes.append(dict(sandbox_files))
-        return SimpleNamespace(failures=[])
+        self.pushes.append({sandbox_id: files})
+        return SimpleNamespace(targets=1, succeeded=1, failures=[])
 
 
 def test_push_sends_each_user_the_version_they_run(
@@ -248,7 +250,12 @@ def test_push_sends_each_user_the_version_they_run(
     push_skills_for_users(users, db_session)
     db_session.commit()
 
-    [first_push] = manager.pushes
+    first_push = {
+        sandbox_id: files
+        for push_call in manager.pushes
+        for sandbox_id, files in push_call.items()
+    }
+    assert len(manager.pushes) == 2
     assert _notes(first_push[org_sandbox.id], name) == b"notes one"
     assert _notes(first_push[recipient_sandbox.id], name) == b"notes two"
 
@@ -261,7 +268,8 @@ def test_push_sends_each_user_the_version_they_run(
     push_skills_for_users(users, db_session)
     db_session.commit()
 
-    second_push = manager.pushes[1]
+    second_push = manager.pushes[2]
+    assert len(manager.pushes) == 3
     assert set(second_push) == {org_sandbox.id}
     assert _notes(second_push[org_sandbox.id], name) == b"notes two"
 

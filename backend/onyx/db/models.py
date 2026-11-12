@@ -155,6 +155,7 @@ from onyx.llm.models import (
 from onyx.llm.override_models import LLMOverride, PromptOverride
 from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfigDict
 from onyx.server.security.models import IncognitoAvailability, SSRFProtectionLevel
+from onyx.skills.limits import SkillOmission
 from onyx.tools.models import (
     CustomToolCallSummary,
     FileReadResult,
@@ -5468,12 +5469,6 @@ class Skill(Base):
     )
 
     __table_args__ = (
-        Index(
-            "uq_skill_automatic_name",
-            "name",
-            unique=True,
-            postgresql_where=text("installation_policy <> 'AVAILABLE'"),
-        ),
         UniqueConstraint("name", "id", name="uq_skill_name_id"),
         CheckConstraint(
             "(built_in_skill_id IS NULL) <> (bundle_file_id IS NULL)",
@@ -7563,6 +7558,14 @@ class Sandbox(Base):
     )
     cleanup_checkpoint: Mapped[dict[str, int | str | None] | None] = mapped_column(
         PGJSONB, nullable=True
+    )
+    # Plugins the run-time skill limit left out of the content behind
+    # skills_hash. Written together with skills_hash.
+    skill_omissions: Mapped[list[SkillOmission]] = mapped_column(
+        PydanticListType(SkillOmission),
+        nullable=False,
+        default=list,
+        server_default=text("'[]'::jsonb"),
     )
 
     # Relationships
