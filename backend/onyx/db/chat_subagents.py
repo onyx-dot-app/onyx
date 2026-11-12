@@ -139,7 +139,7 @@ def selected_responses(branch: ChatBranch) -> CTE:
     # Every child question, including a follow-up, records its invocation.
     # Messages between agents chain runs beyond the spawn depth; each run is
     # newer than the run that started it, so the walk ends.
-    return responses.union_all(
+    invoked = responses.union_all(
         select(
             ChatMessage.id,
             ChatMessage.chat_session_id,
@@ -155,6 +155,23 @@ def selected_responses(branch: ChatBranch) -> CTE:
             ChatMessage.response_status.is_not(None),
             ChatMessage.id > responses.c.id,
         )
+    )
+    # A run can continue history from another turn than its sender's, so it is
+    # visible only when its previous run is visible too.
+    connected = (
+        select(invoked)
+        .where(
+            or_(
+                invoked.c.chat_session_id == branch.chat_session_id,
+                invoked.c.previous_response_id.is_(None),
+            )
+        )
+        .cte("connected_responses", recursive=True)
+    )
+    return connected.union_all(
+        select(invoked)
+        .join(connected, invoked.c.previous_response_id == connected.c.id)
+        .where(invoked.c.chat_session_id != branch.chat_session_id)
     )
 
 
