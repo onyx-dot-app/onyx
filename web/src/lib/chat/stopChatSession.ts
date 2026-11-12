@@ -18,6 +18,9 @@ export async function stopChatSession(
     return;
 
   const { abortController: controller, sendAcknowledged } = session;
+  // Without a local send, the session follows a turn the server reported as
+  // running, which may not have published a stream yet.
+  const serverTurn = !sendAcknowledged && session.chatState !== "loading";
   const ownsStop = () => {
     const current = useChatSessionStore.getState().sessions.get(sessionId);
     return (
@@ -27,13 +30,13 @@ export async function stopChatSession(
   };
   store.updateChatState(sessionId, "cancelling");
   // Abort local preparation; a dispatched send must acknowledge before Stop.
-  if (!sendAcknowledged) controller.abort(STOP_BEFORE_DISPATCH);
+  if (!sendAcknowledged && !serverTurn) controller.abort(STOP_BEFORE_DISPATCH);
 
   let streamId: number | null | undefined;
   try {
     streamId = await sendAcknowledged;
     if (!ownsStop()) return;
-    if (typeof streamId === "number") {
+    if (serverTurn || typeof streamId === "number") {
       // The accepted stream can end before Stop arrives, and a queued turn can
       // follow it. Stop targets the chat's current turn: the server stops it,
       // or pauses the queue when no turn is running.
@@ -50,7 +53,10 @@ export async function stopChatSession(
     if (!ownsStop()) return;
     useChatSessionStore.getState().updateSessionData(sessionId, {
       // A failed Stop leaves the accepted stream available for another Stop.
-      chatState: typeof streamId === "number" ? "streaming" : "unconfirmed",
+      chatState:
+        serverTurn || typeof streamId === "number"
+          ? "streaming"
+          : "unconfirmed",
       uncaughtError: errorMessage,
     });
     throw error;

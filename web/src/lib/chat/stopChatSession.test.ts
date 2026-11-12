@@ -236,3 +236,21 @@ test("Stop after the accepted stream ended stops the queued turn that followed i
   );
   expect(fetchMock.mock.calls[0]?.[0]).not.toContain("stream_id");
 });
+
+test("Stop reaches a server turn that has not published its stream", async () => {
+  // A refresh found the server preparing a queued turn: no local send and no
+  // stream yet.
+  useChatSessionStore.getState().updateSessionData("session", {
+    chatState: "streaming",
+    sendAcknowledged: undefined,
+  });
+  const controller = useChatSessionStore
+    .getState()
+    .sessions.get("session")!.abortController;
+  await stopChatSession("session", errorMessage);
+  expect(fetchMock).toHaveBeenCalledWith(
+    "/api/chat/stop-chat-session/session",
+    expect.objectContaining({ method: "POST" })
+  );
+  expect(controller.signal.aborted).toBe(false);
+});
