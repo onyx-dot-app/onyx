@@ -7,6 +7,7 @@ import { useToolConfiguration } from "@/lib/tools/hooks";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
 import type { MinimalAgent } from "@/lib/agents/types";
 import type { ToolSnapshot } from "@/lib/tools/types";
+import type { User } from "@/lib/types";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { toast } from "@opal/layouts";
 import {
@@ -41,11 +42,23 @@ jest.mock("@/providers/IncognitoProvider", () => ({
   useIncognito: () => ({ incognitoEnabled: mockIncognitoEnabled }),
 }));
 
+const SIGNED_IN: Pick<User, "id" | "email" | "is_anonymous_user"> = {
+  id: "user",
+  email: "user@example.com",
+  is_anonymous_user: false,
+};
+let mockUser: Pick<User, "id" | "email" | "is_anonymous_user"> | null =
+  SIGNED_IN;
+jest.mock("@/providers/UserProvider", () => ({
+  useUser: () => ({ user: mockUser }),
+}));
+
 beforeEach(() => {
   sessionStorage.clear();
   mockChatId = "abc";
   mockIncognitoEnabled = false;
   mockActiveAgent = undefined;
+  mockUser = SIGNED_IN;
 });
 
 function source(internalName: ValidSources, uniqueKey: string): SourceMetadata {
@@ -307,7 +320,7 @@ test("incognito masks Deep Research and leaving incognito restores it", () => {
   expect(result.current.deepResearchEnabled).toBe(true);
 });
 
-function openSavedChat(): void {
+function openSavedChat(loaded: boolean = true): void {
   const tool = (id: number): ToolSnapshot => ({
     id,
     name: `tool_${id}`,
@@ -340,8 +353,17 @@ function openSavedChat(): void {
     user_permission: null,
   };
   useChatSessionStore.setState({ sessions: new Map(), currentSessionId: null });
-  useChatSessionStore.getState().createSession("abc", { incognito: false });
+  if (loaded) {
+    useChatSessionStore.getState().createSession("abc", { incognito: false });
+  }
 }
+
+const NO_FILTERS = {
+  source_type: null,
+  document_set: null,
+  updated_at_range: null,
+  tags: [],
+};
 
 test("a tool change in an existing chat saves the chat's tool selection once", async () => {
   openSavedChat();
@@ -362,6 +384,7 @@ test("a tool change in an existing chat saves the chat's tool selection once", a
     expect(JSON.parse(String(init?.body))).toEqual({
       allowed_tool_ids: [1],
       preferred_tool_id: 1,
+      internal_search_filters: NO_FILTERS,
     });
   } finally {
     fetchSpy.mockRestore();
@@ -399,6 +422,7 @@ test("a tool-selection save waits for the save before it", async () => {
     expect(JSON.parse(String(patches()[1]![1]?.body))).toEqual({
       allowed_tool_ids: [1],
       preferred_tool_id: 1,
+      internal_search_filters: NO_FILTERS,
     });
   } finally {
     fetchSpy.mockRestore();
@@ -432,5 +456,95 @@ test("a failed tool-selection save warns the user", async () => {
     fetchSpy.mockRestore();
     errorToast.mockRestore();
     consoleError.mockRestore();
+  }
+});
+
+test("a filter change in an existing chat saves the chat's search filters", async () => {
+  openSavedChat();
+  const fetchSpy = jest
+    .spyOn(global, "fetch")
+    .mockImplementation(async () => new Response(JSON.stringify([])));
+  const patches = () =>
+    fetchSpy.mock.calls.filter(([, init]) => init?.method === "PATCH");
+  try {
+    const { result } = renderHook(() => useToolConfiguration());
+    await waitFor(() => expect(result.current.ready).toBe(true));
+
+    act(() =>
+      result.current.setFilters((current) => ({
+        ...current,
+        documentSets: ["Handbook"],
+      }))
+    );
+    await waitFor(() => expect(patches()).toHaveLength(1));
+    expect(JSON.parse(String(patches()[0]![1]?.body))).toEqual({
+      allowed_tool_ids: null,
+      preferred_tool_id: null,
+      internal_search_filters: { ...NO_FILTERS, document_set: ["Handbook"] },
+    });
+  } finally {
+    fetchSpy.mockRestore();
+  }
+});
+
+test("a tool change made before the chat details load is saved once they do", async () => {
+  openSavedChat(false);
+  const fetchSpy = jest
+    .spyOn(global, "fetch")
+    .mockImplementation(async () => new Response(JSON.stringify([])));
+  const patches = () =>
+    fetchSpy.mock.calls.filter(([, init]) => init?.method === "PATCH");
+  try {
+    const { result } = renderHook(() => useToolConfiguration());
+    await waitFor(() => expect(result.current.ready).toBe(true));
+
+    act(() => result.current.toggleToolState(2, "disabled"));
+    act(() =>
+      useChatSessionStore.getState().createSession("abc", { incognito: false })
+    );
+    await waitFor(() => expect(patches()).toHaveLength(1));
+    expect(JSON.parse(String(patches()[0]![1]?.body))).toEqual({
+      allowed_tool_ids: [1],
+      preferred_tool_id: null,
+      internal_search_filters: NO_FILTERS,
+    });
+  } finally {
+    fetchSpy.mockRestore();
+  }
+});
+
+test("opening a chat saves nothing until the user changes a tool", async () => {
+  openSavedChat();
+  const fetchSpy = jest
+    .spyOn(global, "fetch")
+    .mockImplementation(async () => new Response(JSON.stringify([])));
+  try {
+    const { result } = renderHook(() => useToolConfiguration());
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(
+      fetchSpy.mock.calls.filter(([, init]) => init?.method === "PATCH")
+    ).toHaveLength(0);
+  } finally {
+    fetchSpy.mockRestore();
+  }
+});
+
+test("a tool change saves nothing until the user is known", async () => {
+  openSavedChat();
+  mockUser = null;
+  const fetchSpy = jest
+    .spyOn(global, "fetch")
+    .mockImplementation(async () => new Response(JSON.stringify([])));
+  try {
+    const { result } = renderHook(() => useToolConfiguration());
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    act(() => result.current.toggleToolState(2, "disabled"));
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(
+      fetchSpy.mock.calls.filter(([, init]) => init?.method === "PATCH")
+    ).toHaveLength(0);
+  } finally {
+    fetchSpy.mockRestore();
   }
 });

@@ -21,6 +21,7 @@ import {
   enabledChatToolIds,
 } from "@/lib/plugins/chat";
 import { useUser } from "@/providers/UserProvider";
+import { useChatSearchFiltersRequest } from "@/lib/searchFilters/hooks";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import {
   CODING_AGENT_TOOL_ID,
@@ -432,18 +433,20 @@ export function useToolConfiguration(
   }, [newChatWithAgentId, appPosition, activeAgent]);
 
   // Tagged with the key it was read for, so a write cannot land on the entry
-  // the composer has since moved to.
+  // the composer has since moved to. `edited` records whether the user has
+  // changed the configuration since it was read for this key.
   const [entry, setEntry] = useState<{
     key: string | null;
     configuration: ChatConfiguration;
-  }>({ key: null, configuration: NEUTRAL });
+    edited: boolean;
+  }>({ key: null, configuration: NEUTRAL, edited: false });
 
   // Storage is only reachable on the client, so the first paint shows neutral
   // and this corrects it. Every later key change comes from the user moving
   // between chats, which is many frames after anything can be sent.
   useEffect(() => {
     if (key === null) {
-      setEntry({ key, configuration: NEUTRAL });
+      setEntry({ key, configuration: NEUTRAL, edited: false });
       return;
     }
     const stored = readConfiguration(key);
@@ -453,10 +456,11 @@ export function useToolConfiguration(
     if (!isChatKey(key) && !isNeutralConfiguration(stored)) {
       clearConfiguration(key);
     }
-    setEntry({ key, configuration: stored });
+    setEntry({ key, configuration: stored, edited: false });
   }, [key]);
 
   const configuration = entry.key === key ? entry.configuration : NEUTRAL;
+  const edited = entry.key === key && entry.edited;
   const ready = key !== null && entry.key === key;
 
   // Written from an effect rather than inside the setter, so two changes made
@@ -486,7 +490,7 @@ export function useToolConfiguration(
         // behind. A new one every time is a change to everything reading it,
         // and a caller that writes what it reads would never settle.
         if (tools === current.tools) return previous;
-        return { key, configuration: { ...current, tools } };
+        return { key, configuration: { ...current, tools }, edited: true };
       });
     },
     [key]
@@ -500,7 +504,7 @@ export function useToolConfiguration(
         const current = previous.configuration;
         const filters = change(current.filters);
         if (filters === current.filters) return previous;
-        return { key, configuration: { ...current, filters } };
+        return { key, configuration: { ...current, filters }, edited: true };
       });
     },
     [key]
@@ -560,9 +564,9 @@ export function useToolConfiguration(
     handOffToNewChatWith,
   ]);
 
-  // Turns the server starts for an existing chat use the tool selection saved
-  // on the chat. A new chat saves it on its first send; incognito and
-  // anonymous chats keep nothing.
+  // Turns the server starts for an existing chat use the tool selection and
+  // search filters saved on the chat. A new chat saves them on its first
+  // send; incognito and anonymous chats keep nothing.
   const t = useTranslations("actions");
   const { user } = useUser();
   const { plugins } = useMemberPlugins({
@@ -576,13 +580,18 @@ export function useToolConfiguration(
       ? undefined
       : state.sessions.get(chatSessionId)?.incognito
   );
+  const searchFilters = useChatSearchFiltersRequest(
+    activeAgent,
+    configuration.filters
+  );
   // The fields a normal send carries, built the same way.
   const toolSelection =
     ready &&
     chatSessionId !== null &&
     activeAgent !== undefined &&
     incognito === false &&
-    !user?.is_anonymous_user
+    user !== null &&
+    !user.is_anonymous_user
       ? JSON.stringify({
           allowed_tool_ids:
             enabledChatToolIds(activeAgent.tools, handle) ?? null,
@@ -591,6 +600,7 @@ export function useToolConfiguration(
             agent: activeAgent,
             plugins,
           }),
+          internal_search_filters: searchFilters,
         })
       : null;
   const savedSelection = useRef<{
@@ -605,15 +615,17 @@ export function useToolConfiguration(
   // Saves run one at a time, so the server keeps the latest selection.
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
   useEffect(() => {
-    if (toolSelection === null) return;
+    // Only a change the user makes is saved; the chat already has the
+    // selection it was opened with. A change made before the chat details
+    // load is saved once they do.
+    if (toolSelection === null || !edited) return;
     const previous = savedSelection.current;
-    savedSelection.current = { chatSessionId, body: toolSelection };
-    // The first selection read for a chat is the one it already has.
     if (
-      previous.chatSessionId !== chatSessionId ||
+      previous.chatSessionId === chatSessionId &&
       previous.body === toolSelection
     )
       return;
+    savedSelection.current = { chatSessionId, body: toolSelection };
     const url = `/api/chat/chat-session/${chatSessionId}/tool-selection`;
     const pending = pendingSave.current;
     if (pending) {
@@ -642,7 +654,7 @@ export function useToolConfiguration(
       timer: setTimeout(send, TOOL_SELECTION_SYNC_MS),
       send,
     };
-  }, [chatSessionId, toolSelection, t]);
+  }, [chatSessionId, toolSelection, edited, t]);
 
   return handle;
 }

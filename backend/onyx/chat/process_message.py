@@ -282,6 +282,7 @@ def prepare_chat_turn(
             selection = ChatToolSelection(
                 allowed_tool_ids=new_msg_req.allowed_tool_ids,
                 preferred_tool_id=new_msg_req.preferred_tool_id,
+                internal_search_filters=new_msg_req.internal_search_filters,
             )
             if selection != chat_session.tool_selection:
                 set_chat_session_tool_selection__no_commit(
