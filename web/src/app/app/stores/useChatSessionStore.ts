@@ -53,6 +53,9 @@ interface ChatSessionData {
   // The chat's saved tools and search filters, owned by the server; the tab's
   // only copy for a chat that stores no content. Undefined until known.
   toolSelection?: ChatToolSelection | null;
+  // The user's changes to that selection that the server has not confirmed;
+  // the composer shows them over the server's copy.
+  toolSelectionEdits?: Partial<ChatToolSelection>;
 
   // Streaming duration tracking
   streamingStartTime?: number;

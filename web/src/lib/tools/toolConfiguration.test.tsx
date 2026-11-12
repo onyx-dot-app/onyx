@@ -3,7 +3,7 @@ import {
   type SourceMetadata,
   ValidSources,
 } from "@/lib/connectors/types/source";
-import { useToolConfiguration } from "@/lib/tools/hooks";
+import { flushToolSelection, useToolConfiguration } from "@/lib/tools/hooks";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
 import type { MinimalAgent } from "@/lib/agents/types";
 import type { ChatToolSelection, ToolSnapshot } from "@/lib/tools/types";
@@ -473,29 +473,134 @@ test("incognito masks Deep Research and leaving incognito restores it", () => {
   expect(result.current.deepResearchEnabled).toBe(true);
 });
 
-test("a tool change in an existing chat saves the chat's full selection once", async () => {
-  openSavedChats({
-    abc: {
-      allowed_tool_ids: null,
-      preferred_tool_id: null,
-      internal_search_filters: { ...NO_FILTERS, document_set: ["Handbook"] },
+test("a tool change saves only the tools, so the saved filters stay as they are", async () => {
+  const saved: ChatToolSelection = {
+    allowed_tool_ids: null,
+    preferred_tool_id: null,
+    internal_search_filters: {
+      ...NO_FILTERS,
+      source_type: ["notion"],
+      document_set: ["Handbook"],
     },
-  });
-  const fetchSpy = echoSaves();
+  };
+  openSavedChats({ abc: saved });
+  // The server merges the fields a save sets into what it keeps.
+  const fetchSpy = echoSaves((sent) => ({ ...saved, ...sent }));
   const { result } = renderHook(() => useToolConfiguration());
   expect(result.current.ready).toBe(true);
 
-  act(() => result.current.toggleToolState(2, "disabled"));
-  act(() => result.current.toggleToolState(1, "preferred"));
+  act(() => {
+    result.current.toggleToolState(2, "disabled");
+    result.current.toggleToolState(1, "preferred");
+  });
   await waitFor(() => expect(patchesOf(fetchSpy)).toHaveLength(1));
   const [url, init] = patchesOf(fetchSpy)[0]!;
   expect(url).toBe("/api/chat/chat-session/abc/tool-selection");
-  // The composer holds the saved filters, so a tool change keeps them.
+  // The source roster plays no part, so an unloaded one cannot clear the
+  // saved sources.
   expect(JSON.parse(String(init.body))).toEqual({
     allowed_tool_ids: [1],
     preferred_tool_id: 1,
-    internal_search_filters: { ...NO_FILTERS, document_set: ["Handbook"] },
   });
+  await waitFor(() =>
+    expect(
+      useChatSessionStore.getState().sessions.get("abc")?.toolSelectionEdits
+    ).toBeUndefined()
+  );
+  expect(result.current.filters.selectedSources).toEqual(["notion"]);
+  expect(result.current.filters.documentSets).toEqual(["Handbook"]);
+});
+
+test("a source change is saved at once, so a reload right after keeps it", async () => {
+  openSavedChats();
+  const fetchSpy = echoSaves();
+  const { result, unmount } = renderHook(() => useToolConfiguration());
+  act(() => {
+    result.current.setFilters((current) => ({
+      ...current,
+      selectedSources: ["notion"],
+    }));
+  });
+  await act(async () => {
+    await Promise.resolve();
+  });
+  // Sent without waiting, and kept alive across a page unload.
+  expect(patchesOf(fetchSpy)).toHaveLength(1);
+  const [, init] = patchesOf(fetchSpy)[0]!;
+  expect(init.keepalive).toBe(true);
+  expect(JSON.parse(String(init.body))).toEqual({
+    internal_search_filters: { ...NO_FILTERS, source_type: ["notion"] },
+  });
+  await waitFor(() =>
+    expect(
+      useChatSessionStore.getState().sessions.get("abc")?.toolSelectionEdits
+    ).toBeUndefined()
+  );
+  unmount();
+
+  const reloaded = renderHook(() => useToolConfiguration());
+  expect(reloaded.result.current.filters.selectedSources).toEqual(["notion"]);
+});
+
+test("a choice whose save is running survives a chat switch and a later edit", async () => {
+  openSavedChats({ abc: null, other: null });
+  let finishFirst: (response: Response) => void = () => {};
+  let patchCount = 0;
+  const fetchSpy = jest
+    .spyOn(global, "fetch")
+    .mockImplementation(async (_url, init) => {
+      if (init?.method !== "PATCH") return new Response(JSON.stringify([]));
+      patchCount += 1;
+      if (patchCount > 1) return new Response(String(init.body));
+      return new Promise<Response>((resolve) => {
+        finishFirst = resolve;
+      });
+    });
+  const { result, rerender } = renderHook(() => useToolConfiguration());
+  act(() => result.current.toggleToolState(2, "disabled"));
+  await waitFor(() => expect(patchesOf(fetchSpy)).toHaveLength(1));
+
+  mockChatId = "other";
+  rerender();
+  mockChatId = "abc";
+  rerender();
+  expect(result.current.disabledToolIds).toEqual([2]);
+
+  act(() => result.current.toggleToolState(1, "preferred"));
+  expect(result.current.disabledToolIds).toEqual([2]);
+  expect(result.current.preferredToolId).toBe(1);
+
+  finishFirst(
+    new Response(
+      JSON.stringify({
+        allowed_tool_ids: [1],
+        preferred_tool_id: null,
+        internal_search_filters: null,
+      })
+    )
+  );
+  await waitFor(() => expect(patchesOf(fetchSpy)).toHaveLength(2));
+  expect(JSON.parse(String(patchesOf(fetchSpy)[1]![1].body))).toEqual({
+    allowed_tool_ids: [1],
+    preferred_tool_id: 1,
+  });
+});
+
+test("a flush resolves once the chat's selection is saved", async () => {
+  openSavedChats();
+  echoSaves();
+  const { result } = renderHook(() => useToolConfiguration());
+  act(() => result.current.toggleToolState(2, "disabled"));
+  await act(async () => {
+    await Promise.resolve();
+  });
+  await act(() => flushToolSelection("abc"));
+  expect(
+    useChatSessionStore.getState().sessions.get("abc")?.toolSelection
+  ).toMatchObject({ allowed_tool_ids: [1] });
+  expect(
+    useChatSessionStore.getState().sessions.get("abc")?.toolSelectionEdits
+  ).toBeUndefined();
 });
 
 test("a tool-selection save waits for the save before it", async () => {

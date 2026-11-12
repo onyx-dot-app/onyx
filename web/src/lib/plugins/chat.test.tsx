@@ -649,6 +649,8 @@ test("group selection serializes through the send service and neutral omits the 
   const fetchSpy = jest
     .spyOn(global, "fetch")
     .mockImplementation(async (input, init) => {
+      // A tool change in an existing chat also saves the chat's selection.
+      if (init?.method === "PATCH") return new Response(String(init.body));
       expect(input).toBe("/api/chat/send-chat-message");
       if (typeof init?.body !== "string")
         throw new Error("Expected JSON request body");
@@ -695,5 +697,7 @@ test("group selection serializes through the send service and neutral omits the 
     chat_session_id: "chat-a",
   });
   expect(requests[1]).not.toHaveProperty("allowed_tool_ids");
-  expect(fetchSpy).toHaveBeenCalledTimes(2);
+  expect(
+    fetchSpy.mock.calls.filter(([, init]) => init?.method !== "PATCH")
+  ).toHaveLength(2);
 });
