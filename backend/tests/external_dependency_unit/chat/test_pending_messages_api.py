@@ -1728,9 +1728,15 @@ def test_a_queued_message_starts_its_turn_with_the_model_it_was_sent_with(
     assert [request.llm_override for request in started] == [chosen]
 
 
-def _stream_turn(chat: ChatSession, owner: User, message: str) -> None:
+def _stream_turn(
+    chat: ChatSession, owner: User, message: str, *, accepts_follow_ups: bool = True
+) -> None:
     for _packet in handle_stream_message_objects(
-        new_msg_req=SendMessageRequest(message=message, chat_session_id=chat.id),
+        new_msg_req=SendMessageRequest(
+            message=message,
+            chat_session_id=chat.id,
+            accepts_follow_ups=accepts_follow_ups,
+        ),
         user=owner,
     ):
         pass
@@ -1838,7 +1844,8 @@ def test_status_starts_child_work_when_no_turn_hosts_it(
 def test_one_shot_turns_offer_no_agent_tools(
     chat: ChatSession, owner: User, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Only callers that deliver follow-up responses offer agent tools."""
+    """Only callers that deliver follow-up responses to a client that shows them
+    offer agent tools."""
     offered: list[set[str]] = []
 
     def generate(
@@ -1858,6 +1865,8 @@ def test_one_shot_turns_offer_no_agent_tools(
         user=owner,
     )
     _stream_turn(chat, owner, "Streamed")
-    one_shot, streamed = offered
+    _stream_turn(chat, owner, "Streamed to a client", accepts_follow_ups=False)
+    one_shot, streamed, unshown = offered
     assert SPAWN_AGENT_TOOL_NAME not in one_shot
     assert SPAWN_AGENT_TOOL_NAME in streamed
+    assert SPAWN_AGENT_TOOL_NAME not in unshown

@@ -668,7 +668,7 @@ Stop puts the input in “Stopping…” until execution, foreground child work,
 Messages sent while a turn runs wait in the inbox; a queued message starts a later turn when the session is idle.
 Chat agent tools start background children. The root response can finish while they run;
 the turn's control worker keeps their leases until they release. Only callers that deliver follow-up responses,
-such as the web chat, offer agent tools.
+for a client that shows them (`SendMessageRequest.accepts_follow_ups`, set by the web chat), offer agent tools.
 The event worker also writes replay batches to the configured cache. Slow cache writes delay later events, but control polling remains independent.
 The execution worker saves terminal output. Suspension releases the worker; new input can start another worker to resume execution.
 One control worker per chat turn renews ownership, reads Stop, and refreshes the processing marker in sequence.

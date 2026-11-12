@@ -484,8 +484,12 @@ class ChatTurnExecution:
             if startup_error is not None:
                 raise startup_error
             cancellation.check()
-            # Agent tools need a caller that delivers follow-up responses.
-            with_subagents = self._dispatch_pending_messages is not None
+            # Agent tools need a caller that delivers follow-up responses and a
+            # client that shows them.
+            with_subagents = (
+                self._dispatch_pending_messages is not None
+                and self.setup.new_msg_req.accepts_follow_ups
+            )
             chat_agent = create_chat_agent(
                 self.setup,
                 self.user,

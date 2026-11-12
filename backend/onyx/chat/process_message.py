@@ -818,6 +818,9 @@ def dispatch_pending_chat_messages(
                         llm_override=queued_turn.message.llm_override
                         if queued_turn.message is not None
                         else None,
+                        # Only clients that show follow-ups queue turns or
+                        # start the agents whose results wake the chat.
+                        accepts_follow_ups=True,
                     ),
                     user=user,
                     llm_overrides=None,
