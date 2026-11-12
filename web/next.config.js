@@ -18,6 +18,10 @@ const nextConfig = {
     // TypeScript 7 has no classic JS API, so `next build` must type-check
     // through the `tsc` CLI.
     useTypeScriptCli: true,
+    // Next truncates larger bodies before they reach the API catch-all. This
+    // applies when requests reach Next directly (local dev); nginx and the Helm
+    // ingress send /api to the backend. Skill uploads allow a 25 MiB ZIP.
+    proxyClientMaxBodySize: "32mb",
   },
   transpilePackages: ["@onyx-ai/opal", "@onyx-ai/shared"],
   typedRoutes: true,

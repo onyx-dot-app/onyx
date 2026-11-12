@@ -15,6 +15,10 @@ class Counts:
     search_calls: int = 0
     reasoning_packets: int = 0
     citations: int = 0
+    code_programs: int = 0
+    code_waits: int = 0
+    nested_search_calls: int = 0
+    code_failures: int = 0
 
 
 METRIC_NAMES = tuple(field.name for field in fields(Counts))

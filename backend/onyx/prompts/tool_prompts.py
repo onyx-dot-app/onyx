@@ -19,6 +19,12 @@ If it is unclear which tool to use, consider using multiple in parallel to be ef
 """.lstrip()
 
 
+CODE_MODE_GUIDANCE = """
+## execute_code
+Call tools from Python programs with `execute_code`; its description lists the functions. Batch independent calls in one `execute_code` with `asyncio.gather`, and inspect every result. Keep dependent or judgment-based follow-ups in a later call. Avoid unnecessary output.
+""".lstrip()
+
+
 INTERNAL_SEARCH_GUIDANCE = """
 ## internal_search
 Use the `internal_search` tool to search connected applications for information. Some examples of when to use `internal_search` include:
@@ -26,8 +32,18 @@ Use the `internal_search` tool to search connected applications for information.
 - Niche/Specific information: information that is likely not found in public sources, things specific to a project or product, team, process, etc.
 - Keyword Queries: queries that are heavily keyword based are often internal document search queries.
 - Ambiguity: questions about something that is not widely known or understood.
-Never provide more than 3 queries at once to `internal_search`.
 """.lstrip()
+
+# The internal_search stub's note in code mode: each call runs its own retrieval
+# pipeline.
+CODE_MODE_SEARCH_USAGE = (
+    "Each call runs a full retrieval pipeline with several model calls, so it is "
+    "expensive. Pass the queries for one information need in one call, for example "
+    '`await internal_search(queries=["first phrasing", "second phrasing"])`. Do not '
+    "split them into one call per query, and do not `asyncio.gather` single-query "
+    "calls. Search again when earlier results are insufficient or when a follow-up "
+    "depends on them."
+)
 
 
 WEB_SEARCH_GUIDANCE = """
@@ -55,10 +71,12 @@ PYTHON_TOOL_GUIDANCE = """
 ## run_python
 Use the `run_python` tool to execute Python code in an isolated sandbox. The tool will respond with the output of the execution or time out after 60.0 seconds.
 Any files uploaded to the chat will be automatically be available in the execution environment's current directory. \
+Word (.docx), PowerPoint (.pptx), Excel (.xlsx, .xlsm), and CSV files attached to the agent or project are also available there under their file names (list the directory if a name does not resolve). \
+File count and size limits apply to each run; the result's staging notice names any files that were not staged. \
 The current directory in the file system can be used to save and persist user files. Files written to the current directory will be returned with a `file_link`. \
 Use this to give the user a way to download the file OR to display generated images.
 Internet access for this session is disabled. Do not make external web requests or API calls as they will fail.
-Use `openpyxl` to read and write Excel files. You have access to libraries like numpy, pandas, scipy, matplotlib, and PIL.
+Use `openpyxl`, `python-docx`, and `python-pptx` to read and write Excel, Word, and PowerPoint files. You have access to libraries like numpy, pandas, scipy, matplotlib, and PIL.
 Write chart titles, axis labels, legends, and other text rendered into images in the language you reply in. \
 The sandbox fonts cannot shape Arabic or render CJK glyphs (they come out as disconnected letters or boxes), so for those languages write the rendered text in English and explain the labels in your reply.
 IMPORTANT: each call to this tool runs in a fresh, stateless sandbox. Variables, imports, and in-memory state from previous calls will NOT be available, \

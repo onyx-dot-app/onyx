@@ -24,9 +24,9 @@ export default function DowngradeToCommunityLink() {
       <LinkButton onClick={() => modal.toggle(true)} external={false}>
         {t("link.label")}
       </LinkButton>
-      {modal.isOpen && (
+      <modal.Provider>
         <DowngradeToCommunityModal onClose={() => modal.toggle(false)} />
-      )}
+      </modal.Provider>
     </>
   );
 }

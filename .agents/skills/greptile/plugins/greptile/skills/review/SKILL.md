@@ -24,7 +24,7 @@ Build the command from `$ARGUMENTS`, if the user supplied any:
 GREPTILE_NO_AUTO_INSTALL=1 GREPTILE_NO_UPDATE_CHECK=1 node "${CLAUDE_PLUGIN_ROOT}/scripts/greptile.mjs" review --agent
 ```
 
-Outside Claude Code (Codex), replace `${CLAUDE_PLUGIN_ROOT}` with the plugin
+Outside Claude Code (Codex, Devin), replace `${CLAUDE_PLUGIN_ROOT}` with the plugin
 root: the absolute path two folders above this `SKILL.md`.
 
 Always pass `--agent`; it selects plain output intended for AI agents.

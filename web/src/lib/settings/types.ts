@@ -116,6 +116,9 @@ export interface Settings {
   // True when hooks are available: single-tenant deployments only.
   hooks_enabled?: boolean;
 
+  // True on the playground deployment (IS_PLAYGROUND env var on the server).
+  is_playground?: boolean;
+
   // Application version from the ONYX_VERSION env var on the server.
   version?: string | null;
   // Git details of the server's build: commit, ISO 8601 commit date, tag or branch.

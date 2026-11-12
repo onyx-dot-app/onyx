@@ -1,6 +1,7 @@
 """Rebuild feature configuration and resources without replacing saved conversation state."""
 
 import pytest
+from pydantic import JsonValue
 
 from onyx.agents.models import (
     AgentState,
@@ -19,14 +20,23 @@ from onyx.deep_research.agent import DeepResearchAgent
 from onyx.deep_research.research_agent import ResearchAgent
 from onyx.file_store.models import ChatFileType, ChatLoadedFile, ExtractedContextFiles
 from onyx.llm.interfaces import LLM
+from onyx.llm.model_response import Delta
 from onyx.llm.models import (
     AssistantMessage,
     ImageContentPart,
     ReasoningEffort,
     TextContent,
+    ToolChoiceOptions,
     UserMessage,
 )
-from tests.unit.onyx.agents.fakes import EchoTool, FakeModelClient
+from onyx.tools.constants import WAIT_CODE_TOOL_NAME
+from onyx.tools.tool_implementations.code_mode.code_mode_tool import CodeModeTool
+from tests.unit.onyx.agents.fakes import (
+    EchoTool,
+    FakeModelClient,
+    ScriptedLLM,
+    run_agent,
+)
 
 PROJECT_IMAGE_BYTES = b"\x89PNG\r\n\x1a\n"
 
@@ -233,3 +243,85 @@ def test_factory_rejects_checkpoint_without_supported_feature_state() -> None:
     )
     with pytest.raises(ValueError, match="no supported chat feature state"):
         restore_chat_agent(checkpoint, llm=llm, tools=[], user_identity=None)
+
+
+def _offered(llm: ScriptedLLM) -> tuple[list[str], ToolChoiceOptions, str]:
+    [request] = llm.requests
+    return (
+        [tool["function"]["name"] for tool in request["tools"]],
+        request["tool_choice"],
+        str(request),
+    )
+
+
+def _chat_agent(llm: ScriptedLLM, *, code_mode: bool = False) -> ChatAgent:
+    return ChatAgent(
+        messages=[],
+        tools=[EchoTool()],
+        code_mode=code_mode,
+        custom_agent_prompt=None,
+        base_system_prompt="Base instructions",
+        context_files=ExtractedContextFiles(
+            file_texts=[],
+            image_files=[],
+            use_as_search_filter=False,
+            total_token_count=0,
+            file_metadata=[],
+            uncapped_token_count=None,
+        ),
+        persona=None,
+        user_memory_context=None,
+        llm=llm,
+        token_counter=len,
+        preferred_tool_id=EchoTool().id,
+        agent_id="retained-agent",
+    )
+
+
+def _suspended(agent: ChatAgent, state: dict[str, JsonValue]) -> ExecutionCheckpoint:
+    return ExecutionCheckpoint(
+        agent_state=agent.state,
+        run_state=RunState(
+            run_id="suspended-run",
+            agent_id=agent.id,
+            status=RunStatus.SUSPENDED,
+            steps=[],
+            progress=RunProgress(
+                tool_configuration_digest="test-tool-configuration",
+                step_limit=3,
+                feature_state=state,
+            ),
+        ),
+    )
+
+
+_CODE_MODE_ECHO = "echo (a function in `execute_code` programs)"
+
+
+@pytest.mark.parametrize(
+    ("saved_code_mode", "offered", "preferred"),
+    [
+        # Code mode names the preferred tool as a function of its programs.
+        (True, [CodeModeTool.NAME, WAIT_CODE_TOOL_NAME], _CODE_MODE_ECHO),
+        (False, [EchoTool().name], EchoTool().name),
+    ],
+)
+def test_restored_chat_keeps_the_saved_code_mode(
+    saved_code_mode: bool,
+    offered: list[str],
+    preferred: str,
+) -> None:
+    # Restoration reads only the saved state, never the deployment setting.
+    llm = ScriptedLLM([Delta(content="done")])
+    original = _chat_agent(llm, code_mode=saved_code_mode)
+    state = original.capture_state().model_dump(mode="json")
+    rebuilt = restore_chat_agent(
+        _suspended(original, state), llm=llm, tools=[EchoTool()], user_identity=None
+    )
+    assert isinstance(rebuilt, ChatAgent)
+    assert (rebuilt.code_cells is not None) == saved_code_mode
+    rebuilt.restore_state(state)
+    run_agent(rebuilt, max_steps=3, messages=[UserMessage(content="Go")])
+    names, choice, request_text = _offered(llm)
+    assert (names, choice) == (offered, ToolChoiceOptions.AUTO)
+    assert f"selected these operations for this request: {preferred}." in request_text

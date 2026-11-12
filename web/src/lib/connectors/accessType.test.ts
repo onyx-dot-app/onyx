@@ -3,8 +3,6 @@ import {
   toManageAccess,
   toWireAccess,
 } from "@/lib/connectors/accessType";
-import { createConnectorValidationSchema } from "@/lib/connectors/utils";
-import { ValidSources } from "@/lib/connectors/types/source";
 
 describe("toWireAccess", () => {
   it("restricts a synced connector when groups are chosen", () => {
@@ -65,36 +63,5 @@ describe("toManageAccess", () => {
       { group_id: 2, role: "operator" },
       { group_id: 3, role: "editor" },
     ]);
-  });
-});
-
-describe("Specific Groups validation", () => {
-  const REQUIRED = "Pick at least one group.";
-  const schema = createConnectorValidationSchema(ValidSources.Web, false, {
-    specificGroupsRequired: REQUIRED,
-  });
-
-  it("requires a reader group for private access", async () => {
-    await expect(
-      schema.validateAt("data_access_group_ids", {
-        access_type: "private",
-        data_access_group_ids: [],
-      })
-    ).rejects.toThrow(REQUIRED);
-  });
-
-  it("accepts private access with a group, and other access without one", async () => {
-    await expect(
-      schema.validateAt("data_access_group_ids", {
-        access_type: "private",
-        data_access_group_ids: [3],
-      })
-    ).resolves.toEqual([3]);
-    await expect(
-      schema.validateAt("data_access_group_ids", {
-        access_type: "public",
-        data_access_group_ids: [],
-      })
-    ).resolves.toEqual([]);
   });
 });

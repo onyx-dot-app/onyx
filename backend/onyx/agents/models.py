@@ -23,6 +23,7 @@ from onyx.llm.models import (
     Message,
     ToolCall,
     ToolDefinition,
+    ToolResult,
     ToolResultMessage,
 )
 
@@ -145,6 +146,25 @@ class PreparedStep(BaseModel):
             allowed_tool_names=self.allowed_tool_names,
             options=self.options.model_copy(deep=True),
         )
+
+
+class ToolResultAmendment(BaseModel):
+    """A replacement for the recorded result of one tool call of the releasing run."""
+
+    call_id: str
+    result: ToolResult
+
+
+class ReleaseFailed(Exception):
+    """Raised by a run's finish or suspend hook: the run applies `amendments`,
+    then fails with `error`."""
+
+    def __init__(
+        self, error: Exception, amendments: Sequence[ToolResultAmendment]
+    ) -> None:
+        super().__init__(str(error))
+        self.error = error
+        self.amendments = list(amendments)
 
 
 class ToolCallContext(BaseModel):

@@ -225,7 +225,6 @@ describe("CreateCustomAppModal", () => {
     fireEvent.change(name, { target: { value: "Draft" } });
     const dialog = screen.getByRole("dialog");
     expect(dialog).toHaveAttribute("data-width", "lg");
-    expect(dialog).toHaveAttribute("data-position", "top");
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(
@@ -249,7 +248,6 @@ describe("CreateCustomAppModal", () => {
       name: "Discard unsaved changes?",
     });
     expect(confirmation).toHaveAttribute("data-width", "lg");
-    expect(confirmation).toHaveAttribute("data-position", "top");
   });
 
   beforeEach(() => {

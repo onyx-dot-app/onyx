@@ -255,7 +255,7 @@
 }
 
 .opal-content-badge {
-  @apply ms-1 flex shrink-0;
+  @apply ms-1 flex shrink-0 gap-1;
 }
 
 /* ---------------------------------------------------------------------------

@@ -105,13 +105,16 @@ function ExistingProviderCard({
   const t = useTranslations("admin.languageModels");
   const defaultBadge = useLabelBadge("default");
   const { mutate } = useSWRConfig();
-  const [isOpen, setIsOpen] = useState(false);
+  const providerModal = useCreateModal();
+  const setIsOpen = providerModal.toggle;
   const deleteModal = useCreateModal();
   // The listing holds one page of models and the edit modal needs them all,
   // so a provider with more is loaded whole before the modal opens.
   const isPaged = provider.next_model_configuration_offset != null;
   const { llmProvider: fetchedProvider, error: fullProviderError } =
-    useAdminLanguageModel(isOpen && isPaged ? provider.id : null);
+    useAdminLanguageModel(
+      providerModal.isPresent && isPaged ? provider.id : null
+    );
   const fullProvider = isPaged ? fetchedProvider : provider;
   useEffect(() => {
     if (!fullProviderError) return;
@@ -150,11 +153,13 @@ function ExistingProviderCard({
 
   return (
     <>
-      {isOpen && fullProvider && (
-        <Modal existingLlmProvider={fullProvider} onOpenChange={setIsOpen} />
-      )}
+      <providerModal.Provider>
+        {fullProvider && (
+          <Modal existingLlmProvider={fullProvider} onOpenChange={setIsOpen} />
+        )}
+      </providerModal.Provider>
 
-      {deleteModal.isOpen && (
+      <deleteModal.Provider>
         <ConfirmationModalLayout
           icon={SvgTrash}
           title={markdown(t("deleteModal.title", { provider: displayName }))}
@@ -192,7 +197,7 @@ function ExistingProviderCard({
             )}
           </Section>
         </ConfirmationModalLayout>
-      )}
+      </deleteModal.Provider>
 
       <Hoverable.Root
         group="ExistingProviderCard"
@@ -269,7 +274,8 @@ function NewProviderCard({
   isFirstProvider,
 }: NewProviderCardProps) {
   const t = useTranslations("admin.languageModels");
-  const [isOpen, setIsOpen] = useState(false);
+  const providerModal = useCreateModal();
+  const setIsOpen = providerModal.toggle;
   const providerEntry = getProvider(providerName);
   const { icon, Modal } = providerEntry;
   const { productName, companyName } = useProviderNames()(providerEntry);
@@ -313,9 +319,9 @@ function NewProviderCard({
           </Button>
         }
       />
-      {isOpen && (
+      <providerModal.Provider>
         <Modal shouldMarkAsDefault={isFirstProvider} onOpenChange={setIsOpen} />
-      )}
+      </providerModal.Provider>
     </SelectCard>
   );
 }
@@ -332,16 +338,17 @@ function NewCustomProviderCard({
   isFirstProvider,
 }: NewCustomProviderCardProps) {
   const t = useTranslations("admin.languageModels");
-  const [isOpen, setIsOpen] = useState(false);
+  const providerModal = useCreateModal();
+  const setIsOpen = providerModal.toggle;
   const providerEntry = getProvider("custom");
   const { icon, Modal } = providerEntry;
   const { productName, companyName } = useProviderNames()(providerEntry);
 
   return (
     <>
-      {isOpen && (
+      <providerModal.Provider>
         <Modal shouldMarkAsDefault={isFirstProvider} onOpenChange={setIsOpen} />
-      )}
+      </providerModal.Provider>
 
       <SelectCard
         state="empty"

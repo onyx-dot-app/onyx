@@ -3,7 +3,7 @@
 import { useId, useState } from "react";
 import useSWR from "swr";
 import { useTranslations } from "next-intl";
-import { Button, Text } from "@opal/components";
+import { Button, Text, useCreateModal } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -122,6 +122,8 @@ function AppActionPolicyGroups({
     kind: "actions" | "connection";
     appId: number;
   } | null>(null);
+  const actionsModal = useCreateModal();
+  const connectionModal = useCreateModal();
   if (!apps) return <Text font="secondary-body">{t("loading")}</Text>;
   if (apps.length === 0)
     return <Text font="secondary-body">{t("emptyApps")}</Text>;
@@ -157,12 +159,14 @@ function AppActionPolicyGroups({
               enabled={draft?.enabled === true}
               policies={draft?.action_policies ?? {}}
               connection={plugin?.connection}
-              onEdit={() =>
-                setDialog({ kind: "actions", appId: app.gated_app_id })
-              }
-              onConnect={() =>
-                setDialog({ kind: "connection", appId: app.gated_app_id })
-              }
+              onEdit={() => {
+                setDialog({ kind: "actions", appId: app.gated_app_id });
+                actionsModal.toggle(true);
+              }}
+              onConnect={() => {
+                setDialog({ kind: "connection", appId: app.gated_app_id });
+                connectionModal.toggle(true);
+              }}
               onToggle={(enabled) =>
                 onChange(
                   value.map((item) =>
@@ -182,39 +186,43 @@ function AppActionPolicyGroups({
           );
         })}
       </div>
-      {connectingPlugin && (
-        <MemberPluginConnectionDialog
-          plugin={connectingPlugin}
-          surface="craft"
-          open
-          onClose={() => setDialog(null)}
-          onConnected={() => {
-            setDialog(null);
-            void refresh();
-          }}
-        />
-      )}
-      {editingApp && (
-        <TaskAppActionsModal
-          key={editingApp.gated_app_id}
-          app={editingApp}
-          policies={initialActionPolicies(
-            editingApp,
-            activeDraft?.action_policies ?? {}
-          )}
-          onClose={() => setDialog(null)}
-          onSave={(policies) => {
-            onChange(
-              value.map((app) =>
-                app.gated_app_id === editingApp.gated_app_id
-                  ? { ...app, action_policies: policies }
-                  : app
-              )
-            );
-            setDialog(null);
-          }}
-        />
-      )}
+      <connectionModal.Provider>
+        {connectingPlugin && (
+          <MemberPluginConnectionDialog
+            plugin={connectingPlugin}
+            surface="craft"
+            open
+            onClose={() => connectionModal.toggle(false)}
+            onConnected={() => {
+              connectionModal.toggle(false);
+              void refresh();
+            }}
+          />
+        )}
+      </connectionModal.Provider>
+      <actionsModal.Provider>
+        {editingApp && (
+          <TaskAppActionsModal
+            key={editingApp.gated_app_id}
+            app={editingApp}
+            policies={initialActionPolicies(
+              editingApp,
+              activeDraft?.action_policies ?? {}
+            )}
+            onClose={() => actionsModal.toggle(false)}
+            onSave={(policies) => {
+              onChange(
+                value.map((app) =>
+                  app.gated_app_id === editingApp.gated_app_id
+                    ? { ...app, action_policies: policies }
+                    : app
+                )
+              );
+              actionsModal.toggle(false);
+            }}
+          />
+        )}
+      </actionsModal.Provider>
     </>
   );
 }

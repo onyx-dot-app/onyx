@@ -22,6 +22,7 @@ from onyx.connectors.google_drive.constants import (
     DRIVE_RESOURCE_KEY_FIELD,
     DRIVE_SHORTCUT_TYPE,
 )
+from onyx.connectors.google_drive.form_extraction import get_form_text
 from onyx.connectors.google_drive.models import GDriveMimeType, GoogleDriveFileType
 from onyx.connectors.google_drive.section_extraction import (
     HEADING_DELIMITER,
@@ -210,6 +211,7 @@ _FALLBACK_WEB_VIEW_LINK_TEMPLATES = {
     GDriveMimeType.DOC.value: "https://docs.google.com/document/d/{}/view",
     GDriveMimeType.SPREADSHEET.value: "https://docs.google.com/spreadsheets/d/{}/view",
     GDriveMimeType.PPT.value: "https://docs.google.com/presentation/d/{}/view",
+    GDriveMimeType.FORM.value: "https://docs.google.com/forms/d/{}/view",
 }
 # Fallback template for non-native (uploaded binary) Drive files.
 _FALLBACK_BINARY_WEB_VIEW_LINK_TEMPLATE = "https://drive.google.com/file/d/{}/view"
@@ -801,6 +803,33 @@ def _convert_drive_item_to_document(
                     "Error in advanced parsing: %s. Using basic extraction.",
                     e,
                 )
+        # Drive cannot export a Google Form; the Forms API reads its questions.
+        elif file.get("mimeType") == GDriveMimeType.FORM.value:
+            try:
+                form = ops.fetch_google_form(
+                    user_email=retriever_email,
+                    form_id=file["id"],
+                    max_response_bytes=size_threshold,
+                )
+            except GoogleDriveHttpError as e:
+                if not e.api_disabled:
+                    raise
+                logger.warning(
+                    "Skipping Google Form %s: the Google Forms API is off.",
+                    file.get("name"),
+                )
+                return None
+            if form is None:
+                logger.warning(
+                    "Skipping Google Form %s: exceeds size threshold of %s.",
+                    file.get("name"),
+                    size_threshold,
+                )
+                return None
+            if form_text := get_form_text(form):
+                sections = [
+                    TextSection(link=file.get(WEB_VIEW_LINK_KEY, ""), text=form_text)
+                ]
         # Not Google Doc, attempt basic extraction
         else:
             basic_extraction = _basic_extraction()

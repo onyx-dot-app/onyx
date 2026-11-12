@@ -353,7 +353,7 @@
         "clientMetadataRejected": "提供方无法使用客户端元数据文档。如果此实例无法从公共互联网访问，请关闭“使用客户端元数据文档”后重新连接。",
         "discoveryFailed": "未找到 OAuth 登录设置。请检查服务器 URL，或输入提供商提供的端点。",
         "connectionFailed": "无法连接服务器。请检查服务器 URL 后重试。",
-        "oauthFailed": "无法开始 OAuth 登录。请检查客户端设置后重试。",
+        "oauthFailed": "OAuth 登录失败。请重试，或检查服务器的 OAuth 设置。",
         "oauthInitFailed": "发起 OAuth 失败：{detail}"
       },
       "header": {
@@ -2624,8 +2624,8 @@
       },
       "groupRestriction": {
         "empty": {
-          "description": "所有人保留从源系统同步的访问权限。",
-          "title": "添加群组前不设限制"
+          "description": "限制需要群组。关闭限制以保留从来源同步的访问权限。",
+          "title": "请至少选择一个群组"
         },
         "loadError": "无法加载群组。请重新加载页面后重试。",
         "memberCount": "{count, plural, other {# 名成员}}",
@@ -2971,6 +2971,7 @@
           "sync": "文档访问**与 {source} 同步**",
           "managedByAdmins": "由**管理员**管理",
           "managedByGroups": "由 **{count, plural, one {# 个群组} other {# 个群组}}** 管理",
+          "onlyMe": "通过此连接器的文档**仅其所有者**可见",
           "syncRestricted": "文档访问**与 {source} 同步**，并限制为 **{count, plural, one {# 个群组} other {# 个群组}}**",
           "groupsPending": "文档与**特定群组**共享",
           "syncRestrictedPending": "文档访问**与 {source} 同步**，并限制为**特定群组**"
@@ -3754,15 +3755,19 @@
             "description": "此连接器索引的文档对组织中的所有人可用。",
             "title": "组织中的所有人"
           },
+          "onlyMe": {
+            "description": "只有此连接器凭据的所有者能通过它访问；对于没有凭据的来源，只有创建它的人。",
+            "title": "仅限我"
+          },
           "specificGroups": {
             "description": "指定可以访问此连接器文档的群组。",
-            "required": "请至少选择一个群组。",
             "title": "特定群组"
           },
           "sync": {
             "description": "{appName} 会与来源同步权限。用户只能搜索他们在来源中可见的内容。",
             "disabledReason": "当前凭据的认证方式不支持自动同步权限。请将凭据的认证方式更改为受支持的方式。",
-            "title": "与 {source} 同步"
+            "title": "与 {source} 同步",
+            "restrictionRequired": "请至少选择一个群组，或关闭限制。"
           },
           "title": "文档访问"
         },
@@ -7519,7 +7524,8 @@
           "public": "对整个组织公开",
           "private": "{count, plural, =0 {私有} other {已与 # 个组共享}}",
           "sync": "自动同步权限",
-          "sync_restricted": "自动同步权限"
+          "sync_restricted": "自动同步权限",
+          "personal": "仅限我"
         },
         "detail": {
           "queued": "队列中第 {position, selectordinal, other {#}} 位",
@@ -7646,7 +7652,7 @@
             "targetUriParseFailed": "无法解析目标 URI — 将使用原始值。"
           },
           "validation": {
-            "targetUriInvalid": "目标 URI 必须是有效的 URL，并带有 api-version 查询参数，且路径中包含部署名称或 /openai/responses",
+            "targetUriInvalid": "目标 URI 必须是有效的 URL：/openai/v1/ URL，或带有 api-version 查询参数且路径中包含部署名称或 /openai/responses 的 URL",
             "targetUriRequired": "目标 URI 为必填项"
           }
         },
@@ -7860,7 +7866,6 @@
           "row": {
             "defaultLabel": "默认模型",
             "decisionTag": {
-              "label": "决策",
               "decisionOnly": "决策模型。不在聊天模型选择器中显示。",
               "chatAndDecision": "支持聊天和决策任务。"
             },
@@ -7869,9 +7874,6 @@
             },
             "setDefaultButton": {
               "label": "设为默认"
-            },
-            "visionMarker": {
-              "title": "视觉"
             }
           },
           "selectAllButton": {
@@ -12843,6 +12845,11 @@
           "text": "图片生成已停止"
         }
       },
+      "markdownTable": {
+        "copyButton": {
+          "label": "复制表格"
+        }
+      },
       "memoizedLink": {
         "questionFallback": {
           "label": "问题"
@@ -12927,6 +12934,9 @@
         "codingAgent": {
           "bashExit": {
             "header": "Bash · 退出码 {exitCode}"
+          },
+          "bashFailed": {
+            "header": "Bash · 失败"
           },
           "bashRequest": {
             "label": "请求"
@@ -13031,6 +13041,9 @@
           },
           "updatingMemory": {
             "label": "正在更新记忆..."
+          },
+          "working": {
+            "label": "处理中"
           }
         },
         "internalSearch": {
@@ -14258,6 +14271,11 @@
       "completeFailed": {
         "message": "无法完成授权"
       },
+      "desktopHandoff": {
+        "button": "打开 Onyx",
+        "description": "浏览器将打开 Onyx 桌面应用以完成连接。应用打开后，您可以关闭此标签页。",
+        "title": "返回 Onyx"
+      },
       "genericError": {
         "description": "OAuth 过程中发生错误。请重试。",
         "title": "出了点问题"
@@ -14375,6 +14393,10 @@
       },
       "labels": {
         "default": "默认"
+      },
+      "modelTypes": {
+        "decision": "决策",
+        "vision": "视觉"
       }
     }
   },

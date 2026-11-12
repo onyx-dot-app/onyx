@@ -240,6 +240,39 @@ run "the_bucket_grant_goes_to_the_workload_service_account" {
   }
 }
 
+run "the_pod_runtime_needs_no_iam_credentials_api" {
+  command = plan
+
+  assert {
+    condition     = !contains(local.project_apis, "iamcredentials.googleapis.com") && output.workload_google_service_account_email == null
+    error_message = "Only the Firecracker runtime signs GCS URLs, so the default adds no API and no Google service account."
+  }
+}
+
+run "firecracker_grants_the_bucket_to_the_signing_service_account" {
+  command = plan
+
+  variables {
+    enable_sandbox_node_pool = true
+    craft_sandbox_runtime    = "firecracker"
+  }
+
+  assert {
+    condition     = local.bucket_object_admin_members == ["serviceAccount:onyx-default-workload@example-project.iam.gserviceaccount.com"]
+    error_message = "The pods act as the Google service account, so the bucket grant must go to it."
+  }
+
+  assert {
+    condition     = output.workload_google_service_account_email == "onyx-default-workload@example-project.iam.gserviceaccount.com"
+    error_message = "The composition should publish the Google service account."
+  }
+
+  assert {
+    condition     = contains(local.project_apis, "iamcredentials.googleapis.com")
+    error_message = "signBlob is part of the IAM Credentials API."
+  }
+}
+
 run "redis_and_cloud_armor_are_on_by_default" {
   command = plan
 

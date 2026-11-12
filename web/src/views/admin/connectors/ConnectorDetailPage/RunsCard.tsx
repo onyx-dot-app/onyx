@@ -22,6 +22,7 @@ import {
   Badge,
   Tooltip,
   Text,
+  useCreateModal,
 } from "@opal/components";
 import { IllustrationContent, Section, toast } from "@opal/layouts";
 import { SvgLongWait, SvgNoResult } from "@opal/illustrations";
@@ -179,6 +180,7 @@ export default function RunsCard({
     null
   );
   const [logRun, setLogRun] = useState<CCPairRun | null>(null);
+  const logRunModal = useCreateModal();
 
   const pageSize = embedded ? EMBEDDED_PAGE_SIZE : PAGE_SIZE;
   const kinds = kind === null ? null : [kind];
@@ -395,7 +397,10 @@ export default function RunsCard({
             run={run}
             canCancel={canOperate}
             onCancel={() => void cancel(run)}
-            onViewLogs={() => setLogRun(run)}
+            onViewLogs={() => {
+              setLogRun(run);
+              logRunModal.toggle(true);
+            }}
             open={focus.isOpen(runKey(run))}
             onOpenChange={(open) => focus.setOpen(runKey(run), open)}
             dimmed={focus.isDimmed(runKey(run))}
@@ -406,12 +411,16 @@ export default function RunsCard({
         ))}
       </Section>
     );
-  const logModal = logRun !== null && (
-    <ExceptionTraceModal
-      onOutsideClick={() => setLogRun(null)}
-      exceptionTrace={runErrorText(logRun) ?? ""}
-      title={t(`errorModal.${logRun.kind}`)}
-    />
+  const logModal = (
+    <logRunModal.Provider>
+      {logRun !== null && (
+        <ExceptionTraceModal
+          onOutsideClick={() => logRunModal.toggle(false)}
+          exceptionTrace={runErrorText(logRun) ?? ""}
+          title={t(`errorModal.${logRun.kind}`)}
+        />
+      )}
+    </logRunModal.Provider>
   );
 
   // On the row's white header an idle filter is plain text, as the window picker is; the full card's tint already hides the filter fill.

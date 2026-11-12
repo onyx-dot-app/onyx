@@ -11,7 +11,7 @@ reviews:
     Use explicit type annotations for variables to enhance code clarity,
     especially when moving type hints around in the code.
 
-    Use `contributing_guides/best_practices.md` as core review context.
+    Use the "Engineering best practices" custom rule as core review context.
     Prefer consistency with existing patterns, fix issues in code you touch,
     avoid tacking new features onto muddy interfaces, fail loudly instead of
     silently swallowing errors, keep code strictly typed, preserve clear state
@@ -19,8 +19,19 @@ reviews:
     avoid hidden import-time side effects, respect module boundaries, and favor
     correctness-by-construction over relying on callers to use an API correctly.
 
+    Do not report again a finding that the author declined with a reason in
+    another thread, unless a later change makes that reason false.
+
+    When the PR edits a document (a feature-map component document, a README
+    or a code comment), check every edited sentence in this review, not a
+    sample. Check absolute words (every, always, never), numbers, and claims
+    about a second path (replay, resume, a flag that is off).
+
+    Do not ask for a backward-compatible default, alias or migration for a
+    persisted format that no released version wrote. Formats that exist only
+    on main or in an open PR need no compatibility code.
+
     Reference these files for additional context:
-    - `contributing_guides/best_practices.md` — Best practices for contributing to the codebase
     - `CLAUDE.md` — Project instructions and coding standards
     - `.agents/feature-map/PATHS.md`: maps code paths to the feature-map component documents
     - `backend/alembic/README.md` — Migration guidance, including multi-tenant migration behavior
@@ -36,6 +47,12 @@ reviews:
       - web/tools/oxlint/anti-slop/**
 
   custom_rules:
+    - name: Engineering best practices
+      description: >
+        Enforce the team's engineering best practices in the attached file.
+      file_paths:
+        - contributing_guides/best_practices.md
+
     - name: TODO format
       description: >
         Whenever a TODO is added, there must always be an associated name or
@@ -63,6 +80,36 @@ reviews:
         data model field, documented behaviour, or a contract in section 5) and
         does not update that document, flag it and name the stale section. Do
         not flag changes that leave every documented statement true.
+
+    - name: Customer docs fit the reader
+      description: >
+        For changes under documentation/, check each added or removed
+        sentence against "Decide what to include" in
+        .agents/skills/docs-writing/SKILL.md. Flag a removal of
+        content that the section's Diataxis type needs: on reference
+        pages, inputs, outputs, auth, ordering and timing guarantees,
+        limits, permissions, defaults, and error behavior; on how-to
+        pages, prerequisites, required permissions or scopes, steps,
+        and checks; on explanation pages, behavior the reader
+        observes, such as freshness, deletion and pruning, permission
+        sync, and limits. Flag a removal that is not one of: (a) a
+        duplicate the reader still finds at the same point of need,
+        (b) wrong per the code, (c) a code-level name (module, table,
+        queue) the reader does not configure, (d) a UI restatement on
+        an end-user page, (e) multi-tenant or test-only material. Flag
+        a removal of every copy of duplicated content. Flag a changed
+        product, edition, or plan name (Onyx Cloud, Enterprise
+        Edition) unless the code shows the old name is wrong. Flag
+        added text that does not serve the page's reader and task,
+        that is more detailed than the rest of the page (except
+        contract, behavior, or error-recovery content that the
+        section's type needs), or that sits away from the point of
+        need, and a new section placed above
+        more important sections. Flag a new image that shows a cropped
+        control or uses a different framing from the other images on
+        the page. Name the sentences to cut or restore.
+      include:
+        - documentation/**
 
     - name: No hardcoded booleans
       description: >

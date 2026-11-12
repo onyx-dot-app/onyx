@@ -58,6 +58,30 @@ def count_tokens(text: str, *, cached_counts: Mapping[str, int] | None = None) -
     return len(_encoder().encode(text, disallowed_special=()))
 
 
+def head_and_tail_tokens(text: str, max_tokens: int) -> tuple[str, str, int]:
+    """The head and tail of `text`, decoded, that together hold `max_tokens`
+    tokens, and the token count of `text`. A text that fits is the head."""
+    tokens = _encoder().encode(text, disallowed_special=())
+    if len(tokens) <= max_tokens:
+        return text, "", len(tokens)
+    # Token boundaries can split a UTF-8 character; the parts keep whole ones.
+    head_end = max_tokens // 2
+    while (head := _strict_decode(tokens[:head_end])) is None:
+        head_end -= 1
+    tail_start = len(tokens) - (max_tokens - max_tokens // 2)
+    while (tail := _strict_decode(tokens[tail_start:])) is None:
+        tail_start += 1
+    return head, tail, len(tokens)
+
+
+def _strict_decode(tokens: list[int]) -> str | None:
+    """The text of `tokens`, or None when they start or end inside a character."""
+    try:
+        return _encoder().decode_bytes(tokens).decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+
+
 def message_tokens(
     message: Message, token_counter: Callable[[str], int] = count_tokens
 ) -> int:
@@ -230,18 +254,9 @@ class _SummaryInput:
             if available <= 0:
                 break
             end = min(len(self.tokens), self.offset + available)
-            text = ""
             # A token boundary can split a UTF-8 character.
-            while end > self.offset:
-                try:
-                    text = (
-                        _encoder()
-                        .decode_bytes(self.tokens[self.offset : end])
-                        .decode("utf-8")
-                    )
-                    break
-                except UnicodeDecodeError:
-                    end -= 1
+            while (text := _strict_decode(self.tokens[self.offset : end])) is None:
+                end -= 1
             if end == self.offset and self.tokens:
                 break
             parts.append(header + text)

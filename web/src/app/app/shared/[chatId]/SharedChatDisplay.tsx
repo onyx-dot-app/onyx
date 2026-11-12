@@ -15,7 +15,7 @@ import { buildModelProviderLookup } from "@/lib/languageModels/options";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { IllustrationContent, Section } from "@opal/layouts";
 import SvgNotFound from "@opal/illustrations/not-found";
-import { Button, Text } from "@opal/components";
+import { Button, Text, useCreateModal } from "@opal/components";
 import { Agent } from "@/lib/agents/types";
 import { useAppPosition } from "@/lib/navigation/hooks";
 import { MinimalOnyxDocument } from "@/lib/search/types";
@@ -37,6 +37,11 @@ export default function SharedChatDisplay({
   const locale = useLocale();
   const [presentingDocument, setPresentingDocument] =
     useState<MinimalOnyxDocument | null>(null);
+  const previewModal = useCreateModal();
+  const presentDocument = (document: MinimalOnyxDocument) => {
+    setPresentingDocument(document);
+    previewModal.toggle(true);
+  };
 
   const isMounted = useOnMount();
   const appPosition = useAppPosition();
@@ -93,12 +98,14 @@ export default function SharedChatDisplay({
 
   return (
     <>
-      {presentingDocument && (
-        <PreviewModal
-          presentingDocument={presentingDocument}
-          onClose={() => setPresentingDocument(null)}
-        />
-      )}
+      <previewModal.Provider>
+        {presentingDocument && (
+          <PreviewModal
+            presentingDocument={presentingDocument}
+            onClose={() => previewModal.toggle(false)}
+          />
+        )}
+      </previewModal.Provider>
 
       <div className="flex flex-col h-full w-full overflow-hidden">
         <div className="flex-1 flex flex-col items-center overflow-y-auto">
@@ -151,7 +158,7 @@ export default function SharedChatDisplay({
                               agent: persona,
                               docs: [],
                               citations: undefined,
-                              setPresentingDocument,
+                              setPresentingDocument: presentDocument,
                             }}
                             llmManager={null}
                             parentMessage={message}
@@ -192,7 +199,7 @@ export default function SharedChatDisplay({
                             agent: persona,
                             docs: message.documents,
                             citations: message.citations,
-                            setPresentingDocument: setPresentingDocument,
+                            setPresentingDocument: presentDocument,
                             // Shared payload carries the model as `modelDisplayName`,
                             // not `overridden_model`. Surface it in the read-only footer.
                             overriddenModel:

@@ -1,5 +1,3 @@
-import io
-import zipfile
 from collections.abc import Callable
 from typing import Annotated, NamedTuple
 from uuid import UUID
@@ -82,6 +80,7 @@ from onyx.skills.bundle import (
     compute_bundle_sha256,
     inspect_custom_bundle,
     normalize_custom_bundle,
+    open_bundle_zip,
     read_bundle_file,
     read_custom_bundle_instructions,
     rewrite_custom_bundle_skill_md,
@@ -246,6 +245,8 @@ def _replace_skill_bundle_from_editor(
         f"{skill.name}.zip",
         file_store,
         expected_name=skill.name,
+        # update_custom_bundle_files applied the limits that fit each edit.
+        upload_limits=False,
     ) as ingested:
         old_file_id = replace_skill_bundle(
             skill=skill,
@@ -379,7 +380,7 @@ def create_custom_skill(
 ) -> SkillResponse:
     file_store = get_default_file_store()
     with ingested_skill_bundle(
-        read_bundle_file(bundle.file),
+        read_bundle_file(bundle.file, filename=bundle.filename),
         bundle.filename,
         file_store,
     ) as ingested:
@@ -434,7 +435,9 @@ def create_custom_skills_batch(
             path=bundle.filename or SKILL_MD_NAME,
             name=bundle.filename or SKILL_MD_NAME,
             ingest=lambda file_store, bundle=bundle: ingest_skill_bundle(
-                read_bundle_file(bundle.file), bundle.filename, file_store
+                read_bundle_file(bundle.file, filename=bundle.filename),
+                bundle.filename,
+                file_store,
             ),
         )
         for bundle in bundles
@@ -582,7 +585,7 @@ def create_custom_skill_from_editor(
     if upload is not None:
         bundle_bytes = update_custom_bundle_files(
             bundle_bytes,
-            read_bundle_file(upload.file),
+            read_bundle_file(upload.file, filename=upload.filename),
             filename=upload.filename,
         )
     bundle_bytes = rewrite_custom_bundle_skill_md(
@@ -660,7 +663,7 @@ def inspect_custom_skill_bundle_upload(
     if not upload.filename:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "upload is missing a filename")
 
-    upload_bytes = read_bundle_file(upload.file)
+    upload_bytes = read_bundle_file(upload.file, filename=upload.filename)
     if upload.filename.lower() == SKILL_MD_NAME.lower():
         upload_bytes = build_single_file_bundle(SKILL_MD_NAME, upload_bytes)
     elif not upload.filename.lower().endswith(".zip"):
@@ -670,7 +673,7 @@ def inspect_custom_skill_bundle_upload(
         )
 
     normalized = normalize_custom_bundle(upload_bytes)
-    with zipfile.ZipFile(io.BytesIO(normalized.content)) as bundle_zip:
+    with open_bundle_zip(normalized.content) as bundle_zip:
         document = parse_skill_document(
             bundle_zip.read(SKILL_MD_NAME),
             directory_name=normalized.source_directory,
@@ -703,7 +706,7 @@ def replace_current_user_skill_bundle(
 
     file_store = get_default_file_store()
     with ingested_skill_bundle(
-        read_bundle_file(bundle.file),
+        read_bundle_file(bundle.file, filename=bundle.filename),
         bundle.filename,
         file_store,
         expected_name=skill.name,
@@ -746,10 +749,9 @@ def upload_current_user_skill_files(
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
 
-    existing_bundle_bytes = read_custom_skill_bundle_bytes(skill)
     updated_bundle_bytes = update_custom_bundle_files(
-        existing_bundle_bytes,
-        read_bundle_file(upload.file),
+        lambda: read_custom_skill_bundle_bytes(skill),
+        read_bundle_file(upload.file, filename=upload.filename),
         filename=upload.filename,
     )
     return _replace_skill_bundle_from_editor(

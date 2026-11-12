@@ -56,6 +56,12 @@ var suites = []Suite{
 		DefaultArgs: []string{"-race"},
 		Short:       "Terraform provider tests",
 	},
+	{
+		Name:        "microvm",
+		Dir:         "microvm",
+		DefaultArgs: []string{"-race"},
+		Short:       "Craft Firecracker micro-VM tests",
+	},
 }
 
 // All returns every suite, in help order.

@@ -11,7 +11,7 @@ import { useTranslations } from "next-intl";
 import { Hoverable } from "@opal/core";
 import { clickOnKeyDown } from "@opal/utils";
 import { SvgEdit } from "@opal/icons";
-import { Button, Badge, Text } from "@opal/components";
+import { Button, Badge, Text, useCreateModal } from "@opal/components";
 import { Tooltip } from "@opal/components";
 import EditUserModal from "./EditUserModal";
 import { useCanManageGroups } from "@/lib/permissions/hooks";
@@ -38,7 +38,7 @@ export default function GroupsCell({
   onMutate,
 }: GroupsCellProps) {
   const t = useTranslations("admin.users");
-  const [showModal, setShowModal] = useState(false);
+  const editModal = useCreateModal();
   const [visibleCount, setVisibleCount] = useState<number | null>(null);
   // below Business the editor is empty, so show pills but don't open it
   const canManageGroups = useCanManageGroups();
@@ -157,8 +157,8 @@ export default function GroupsCell({
                 role: "button" as const,
                 tabIndex: 0,
                 "aria-label": t("groupsCell.editCell.ariaLabel"),
-                onClick: () => setShowModal(true),
-                onKeyDown: clickOnKeyDown(() => setShowModal(true)),
+                onClick: () => editModal.toggle(true),
+                onKeyDown: clickOnKeyDown(() => editModal.toggle(true)),
               }
             : {})}
         >
@@ -198,20 +198,22 @@ export default function GroupsCell({
                 tooltipSide="start"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setShowModal(true);
+                  editModal.toggle(true);
                 }}
               />
             </Hoverable.Item>
           )}
         </div>
       </Hoverable.Root>
-      {showModal && user.id != null && (
-        <EditUserModal
-          user={{ ...user, id: user.id }}
-          onClose={() => setShowModal(false)}
-          onMutate={onMutate}
-        />
-      )}
+      <editModal.Provider>
+        {user.id != null && (
+          <EditUserModal
+            user={{ ...user, id: user.id }}
+            onClose={() => editModal.toggle(false)}
+            onMutate={onMutate}
+          />
+        )}
+      </editModal.Provider>
     </>
   );
 }

@@ -3,7 +3,6 @@
 import json
 from collections.abc import Callable
 from itertools import groupby
-from typing import TypedDict
 
 from pydantic import JsonValue
 from sqlalchemy.orm import Session
@@ -56,6 +55,7 @@ from onyx.prompts.chat_prompts import (
 from onyx.server.query_and_chat.models import (
     ChatSessionCreationRequest,
 )
+from onyx.tools.tool_implementations.images.models import ImageResult
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -199,18 +199,13 @@ def convert_chat_history_basic(
     return list(reversed(trimmed_reversed))
 
 
-class _ImageReplay(TypedDict):
-    file_id: str
-    revised_prompt: str
-
-
 def _build_tool_call_response_history_message(
     tool_name: str,
     generated_images: list[dict[str, JsonValue]] | None,
     tool_call_response: str | None,
 ) -> str:
     if tool_name == IMAGE_GENERATION_TOOL_NAME and generated_images:
-        llm_image_context: list[_ImageReplay] = []
+        llm_image_context: list[dict[str, str]] = []
         for image in generated_images:
             file_id = image.get("file_id")
             revised_prompt = image.get("revised_prompt")
@@ -219,12 +214,12 @@ def _build_tool_call_response_history_message(
                 continue
 
             llm_image_context.append(
-                {
-                    "file_id": file_id,
-                    "revised_prompt": (
+                ImageResult(
+                    file_id=file_id,
+                    revised_prompt=(
                         revised_prompt if isinstance(revised_prompt, str) else ""
                     ),
-                }
+                ).model_dump()
             )
 
         if llm_image_context:
@@ -243,8 +238,10 @@ def _legacy_tool_messages(
 ) -> list[Message]:
     """Reconstruct tool steps for responses saved without response items."""
     messages: list[Message] = []
+    # Saved call order; a call that no tool row ran has no tool_id.
     calls = sorted(
-        message.tool_calls or [], key=lambda call: (call.turn_number, call.tool_id)
+        message.tool_calls or [],
+        key=lambda call: (call.turn_number, call.tab_index, call.id),
     )
     for turn_number, turn in groupby(calls, key=lambda call: call.turn_number):
         records = list(turn)

@@ -15,7 +15,13 @@ import {
 } from "@/app/craft/hooks/useBuildSessionStore";
 import type { SessionHistoryItem } from "@/app/craft/types/streamingTypes";
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
-import { Button, Dropdown, SidebarTab, Text } from "@opal/components";
+import {
+  Button,
+  Dropdown,
+  SidebarTab,
+  Text,
+  useCreateModal,
+} from "@opal/components";
 import {
   ConfirmationModalLayout,
   SidebarLayouts,
@@ -109,7 +115,8 @@ function BuildSessionButton({
   const t = useTranslations("craft.sideBar");
   const [renaming, setRenaming] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const deleteModal = useCreateModal();
+  const toggleDeleteModal = deleteModal.toggle;
   const [isDeleting, setIsDeleting] = useState(false);
 
   // Track title changes for typewriter animation (only for auto-naming, not manual rename)
@@ -130,9 +137,9 @@ function BuildSessionButton({
   }, [historyItem.title, renaming]);
 
   const closeModal = useCallback(() => {
-    setIsDeleteModalOpen(false);
+    toggleDeleteModal(false);
     setMenuOpen(false);
-  }, []);
+  }, [toggleDeleteModal]);
 
   const handleConfirmDelete = useCallback(
     async (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -203,7 +210,7 @@ function BuildSessionButton({
                 icon: SvgTrash,
                 danger: true,
                 title: t("delete.label"),
-                onSelect: () => setIsDeleteModalOpen(true),
+                onSelect: () => toggleDeleteModal(true),
               },
             ],
           },
@@ -258,14 +265,14 @@ function BuildSessionButton({
           </Hoverable.Root>
         </Dropdown.Anchor>
       </Dropdown>
-      {isDeleteModalOpen && (
+      <deleteModal.Provider>
         <CraftSessionDeleteModal
           sessionTitle={historyItem.title}
           isDeleting={isDeleting}
           onClose={closeModal}
           onConfirm={handleConfirmDelete}
         />
-      )}
+      </deleteModal.Provider>
     </>
   );
 }

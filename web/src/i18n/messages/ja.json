@@ -353,7 +353,7 @@
         "clientMetadataRejected": "プロバイダーがクライアントメタデータドキュメントを使用できませんでした。このインスタンスがインターネットからアクセスできない場合は、「クライアントメタデータドキュメントを使用」をオフにして、もう一度接続してください。",
         "discoveryFailed": "OAuthサインイン設定が見つかりませんでした。サーバーURLを確認するか、プロバイダーのエンドポイントを入力してください。",
         "connectionFailed": "サーバーに接続できませんでした。サーバーURLを確認して再試行してください。",
-        "oauthFailed": "OAuthサインインを開始できませんでした。クライアント設定を確認して再試行してください。",
+        "oauthFailed": "OAuth サインインに失敗しました。もう一度お試しいただくか、サーバーの OAuth 設定を確認してください。",
         "oauthInitFailed": "OAuth の開始に失敗しました: {detail}"
       },
       "header": {
@@ -2624,8 +2624,8 @@
       },
       "groupRestriction": {
         "empty": {
-          "description": "全員がソースから同期されたアクセス権を保持します。",
-          "title": "グループを追加するまで制限はありません"
+          "description": "制限にはグループが必要です。ソースから同期されたアクセスを維持するには、制限をオフにしてください。",
+          "title": "グループを1つ以上選択してください"
         },
         "loadError": "グループを読み込めませんでした。ページを再読み込みして、もう一度お試しください。",
         "memberCount": "{count, plural, other {#人のメンバー}}",
@@ -2971,6 +2971,7 @@
           "sync": "ドキュメントへのアクセスは**{source} と同期**",
           "managedByAdmins": "**管理者**が管理",
           "managedByGroups": "**{count, plural, one {# 件のグループ} other {# 件のグループ}}**が管理",
+          "onlyMe": "このコネクタ経由のドキュメントは**所有者のみ**に表示されます",
           "syncRestricted": "ドキュメントへのアクセスは**{source} と同期**し、**{count, plural, one {# 件のグループ} other {# 件のグループ}}**に制限",
           "groupsPending": "ドキュメントは**特定のグループ**と共有",
           "syncRestrictedPending": "ドキュメントへのアクセスは**{source} と同期**し、**特定のグループ**に制限"
@@ -3754,15 +3755,19 @@
             "description": "このコネクタでインデックスされたドキュメントは、組織内の全員が利用できます。",
             "title": "組織内の全員"
           },
+          "onlyMe": {
+            "description": "このコネクタを通じてアクセスできるのは認証情報の所有者だけです。認証情報のないソースでは、コネクタを作成した人だけです。",
+            "title": "自分のみ"
+          },
           "specificGroups": {
             "description": "このコネクタのドキュメントにアクセスできるグループを指定します。",
-            "required": "グループを 1 つ以上選択してください。",
             "title": "特定のグループ"
           },
           "sync": {
             "description": "{appName}はソースと権限を同期します。ユーザーはソースで閲覧できるものだけを検索できます。",
             "disabledReason": "現在の認証情報の認証方式は権限の自動同期に対応していません。対応している認証方式に変更してください。",
-            "title": "{source}と同期"
+            "title": "{source}と同期",
+            "restrictionRequired": "グループを1つ以上選択するか、制限をオフにしてください。"
           },
           "title": "ドキュメントへのアクセス"
         },
@@ -7519,7 +7524,8 @@
           "public": "組織全体に公開",
           "private": "{count, plural, =0 {非公開} other {# 個のグループと共有}}",
           "sync": "権限を自動同期",
-          "sync_restricted": "権限を自動同期"
+          "sync_restricted": "権限を自動同期",
+          "personal": "自分のみ"
         },
         "detail": {
           "queued": "キューの {position, selectordinal, other {#}} 番目",
@@ -7646,7 +7652,7 @@
             "targetUriParseFailed": "ターゲット URI を解析できませんでした。元の値を使用します。"
           },
           "validation": {
-            "targetUriInvalid": "ターゲット URI は、api-version クエリパラメータを含み、パスにデプロイ名または /openai/responses を含む有効な URL である必要があります",
+            "targetUriInvalid": "ターゲット URI は有効な URL である必要があります: /openai/v1/ の URL、または api-version クエリパラメータを含み、パスにデプロイ名または /openai/responses を含む URL",
             "targetUriRequired": "ターゲット URI は必須です"
           }
         },
@@ -7860,7 +7866,6 @@
           "row": {
             "defaultLabel": "デフォルトモデル",
             "decisionTag": {
-              "label": "判断",
               "decisionOnly": "判断モデルです。チャットのモデル選択には表示されません。",
               "chatAndDecision": "チャットと判断の両方のタスクに対応しています。"
             },
@@ -7869,9 +7874,6 @@
             },
             "setDefaultButton": {
               "label": "デフォルトに設定"
-            },
-            "visionMarker": {
-              "title": "画像対応"
             }
           },
           "selectAllButton": {
@@ -12843,6 +12845,11 @@
           "text": "画像の生成を停止しました"
         }
       },
+      "markdownTable": {
+        "copyButton": {
+          "label": "表をコピー"
+        }
+      },
       "memoizedLink": {
         "questionFallback": {
           "label": "質問"
@@ -12927,6 +12934,9 @@
         "codingAgent": {
           "bashExit": {
             "header": "Bash · 終了コード {exitCode}"
+          },
+          "bashFailed": {
+            "header": "Bash · 失敗"
           },
           "bashRequest": {
             "label": "リクエスト"
@@ -13031,6 +13041,9 @@
           },
           "updatingMemory": {
             "label": "メモリを更新中..."
+          },
+          "working": {
+            "label": "作業中"
           }
         },
         "internalSearch": {
@@ -14258,6 +14271,11 @@
       "completeFailed": {
         "message": "認可を完了できませんでした"
       },
+      "desktopHandoff": {
+        "button": "Onyx を開く",
+        "description": "接続を完了するため、ブラウザーが Onyx デスクトップアプリを開きます。アプリが開いたら、このタブを閉じてかまいません。",
+        "title": "Onyx に戻る"
+      },
       "genericError": {
         "description": "OAuth処理中にエラーが発生しました。もう一度お試しください。",
         "title": "問題が発生しました"
@@ -14375,6 +14393,10 @@
       },
       "labels": {
         "default": "デフォルト"
+      },
+      "modelTypes": {
+        "decision": "判断",
+        "vision": "画像対応"
       }
     }
   },

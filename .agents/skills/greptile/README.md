@@ -59,7 +59,7 @@ For self-hosted GitLab instances whose hostname doesn't contain "gitlab", pass `
 
 ## Plugin
 
-The Greptile plugin for Claude Code and Codex lives in [`plugins/greptile`](plugins/greptile/). It bundles the Greptile MCP server and CLI, with `login` and `review` skills:
+The Greptile plugin for Claude Code, Codex, and Devin lives in [`plugins/greptile`](plugins/greptile/). It bundles the Greptile MCP server and CLI, with `login` and `review` skills:
 
 ```
 /plugin marketplace add greptileai/skills
@@ -69,6 +69,10 @@ The Greptile plugin for Claude Code and Codex lives in [`plugins/greptile`](plug
 ```
 codex plugin marketplace add greptileai/skills
 codex plugin add greptile@greptile-plugin
+```
+
+```sh
+devin plugins install greptileai/skills#plugins/greptile
 ```
 
 See its [README](plugins/greptile/README.md) for setup and the MCP tools.

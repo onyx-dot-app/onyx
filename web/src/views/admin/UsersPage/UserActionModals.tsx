@@ -302,10 +302,8 @@ export function ResetPasswordModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [newPassword, setNewPassword] = useState<string | null>(null);
 
-  const handleClose = () => {
-    onClose();
-    setNewPassword(null);
-  };
+  // Closing keeps `newPassword`, so the card fades out showing it; the modal
+  // unmounts after its exit, so the next open starts fresh.
 
   return (
     <ConfirmationModalLayout
@@ -315,11 +313,11 @@ export function ResetPasswordModal({
           ? t("resetPasswordModal.successTitle")
           : t("resetPasswordModal.title")
       }
-      onClose={isSubmitting ? undefined : handleClose}
+      onClose={isSubmitting ? undefined : onClose}
       hideCancel={!!newPassword}
       submit={
         newPassword ? (
-          <Button onClick={handleClose}>
+          <Button onClick={onClose}>
             {t("resetPasswordModal.doneButton.label")}
           </Button>
         ) : (

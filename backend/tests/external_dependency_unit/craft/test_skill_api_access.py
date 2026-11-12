@@ -6,7 +6,8 @@ import io
 import json
 from types import SimpleNamespace
 from typing import cast
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
+from uuid import uuid4
 
 import pytest
 from fastapi import UploadFile
@@ -644,3 +645,45 @@ def test_creation_response_includes_saved_group_shares(
     )
     assert [share.group_id for share in response.group_shares] == [group.id]
     assert not response.is_personal
+
+
+def test_full_replacement_upload_does_not_read_current_bundle(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner = make_user(db_session, standard_account=True)
+    name = f"replace-{uuid4().hex[:8]}"
+
+    def skill_md(description: str) -> bytes:
+        return build_skill_md(
+            name=name, description=description, instructions_markdown="Do it."
+        ).encode("utf-8")
+
+    created = create_custom_skill(
+        bundle=_upload(
+            f"{name}.zip", build_single_file_bundle(SKILL_MD_NAME, skill_md("Old"))
+        ),
+        auto_enable=False,
+        user=owner,
+        db_session=db_session,
+    )
+    current_read = MagicMock(side_effect=AssertionError("current bundle was read"))
+    monkeypatch.setattr(
+        "onyx.server.features.skill.api.read_custom_skill_bundle_bytes",
+        current_read,
+    )
+
+    with patch(
+        "onyx.server.features.skill.api._editable_skill_response"
+    ) as editable_response:
+        upload_current_user_skill_files(
+            created.id,
+            upload=_upload(SKILL_MD_NAME, skill_md("New")),
+            user=owner,
+            db_session=db_session,
+        )
+
+    current_read.assert_not_called()
+    editable_response.assert_called_once()
+    assert editable_response.call_args.args[0].description == "New"

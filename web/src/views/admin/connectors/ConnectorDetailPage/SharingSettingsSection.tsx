@@ -16,6 +16,7 @@ import {
   SvgEditBig,
   SvgOrganization,
   SvgUserManage,
+  SvgUser,
   SvgUsers,
   SvgUserSync,
 } from "@opal/icons";
@@ -124,7 +125,7 @@ export default function SharingSettingsSection({
     const group = userGroups?.find((candidate) => candidate.id === groupId);
     return group === undefined
       ? undefined
-      : tGroups("memberCount", { count: group.users.length });
+      : tGroups("memberCount", { count: group.member_count });
   };
   const isDefaultGroup = (groupId: number): boolean =>
     userGroups?.find((candidate) => candidate.id === groupId)?.is_default ??
@@ -159,11 +160,17 @@ export default function SharingSettingsSection({
                   ? t("summary.groupsPending")
                   : t("summary.groups", { count: groupCount }),
             }
-          : {
-              icon: SvgOrganization,
-              label: tSettings("documentAccess.everyone.title"),
-              summary: t("summary.everyone"),
-            };
+          : ccPair.access_type === "personal"
+            ? {
+                icon: SvgUser,
+                label: tSettings("documentAccess.onlyMe.title"),
+                summary: t("summary.onlyMe"),
+              }
+            : {
+                icon: SvgOrganization,
+                label: tSettings("documentAccess.everyone.title"),
+                summary: t("summary.everyone"),
+              };
   const managedSummary = !manageKnown
     ? null
     : storedRows.length === 0

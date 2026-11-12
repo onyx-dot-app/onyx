@@ -5,7 +5,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Formik, Form, getIn, useFormikContext } from "formik";
 import type { FormikConfig } from "formik";
-import { cn } from "@opal/utils";
+import { cn, countryCodeToFlag } from "@opal/utils";
 import { markdown } from "@opal/utils";
 import { Hoverable, Interactive } from "@opal/core";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
@@ -42,8 +42,11 @@ import {
   type ModelSettingsPatch,
 } from "@/sections/modals/languageModels/ModelSettingsPopover";
 import { setDefaultLlmModelAndRefresh } from "@/lib/languageModels/cache";
-import { getProvider, modelDisplayName } from "@/lib/languageModels/utils";
-import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
+import { getProvider } from "@/lib/languageModels/utils";
+import {
+  useAdminLanguageModels,
+  useModelDisplayName,
+} from "@/lib/languageModels/hooks";
 import { useProviderNames } from "@/lib/languageModels/useProviderNames";
 import { useSWRConfig } from "swr";
 import {
@@ -59,7 +62,8 @@ import {
   SvgX,
 } from "@opal/icons";
 import SvgOnyxLogo from "@opal/logos/onyx-logo";
-import { Card, EmptyMessageCard, Badge, Tooltip } from "@opal/components";
+import { Card, EmptyMessageCard, type BadgeProps } from "@opal/components";
+import { useModelTypeBadge } from "@/lib/badges/components";
 import { ContentAction } from "@opal/layouts";
 import type { ContentEditHandle } from "@opal/layouts";
 import { SvgEdit } from "@opal/icons";
@@ -349,7 +353,7 @@ export function ModelAccessField() {
               <div className="grid grid-cols-2 gap-1 w-full">
                 {selectedGroupIds.map((id) => {
                   const group = groupById.get(id);
-                  const memberCount = group?.users.length ?? 0;
+                  const memberCount = group?.member_count ?? 0;
                   return (
                     <div key={`group-${id}`} className="min-w-0">
                       <Card
@@ -501,21 +505,6 @@ function formatContextSize(tokens: number | null | undefined): string {
   return String(tokens);
 }
 
-// Common non-ISO-3166 codes the provider may report → the ISO alpha-2 code
-// whose regional-indicator sequence actually has a flag glyph.
-const COUNTRY_CODE_ALIASES: Record<string, string> = {
-  UK: "GB", // United Kingdom is "GB" in ISO 3166-1; "UK" has no flag glyph
-};
-
-function countryCodeToFlag(code: string | null | undefined): string {
-  if (!code || code.length !== 2) return "";
-  const upper = code.toUpperCase();
-  const normalized = COUNTRY_CODE_ALIASES[upper] ?? upper;
-  const first = 0x1f1e6 + normalized.charCodeAt(0) - 65;
-  const second = 0x1f1e6 + normalized.charCodeAt(1) - 65;
-  return String.fromCodePoint(first, second);
-}
-
 /** Models that ship extra picker metadata (e.g. Nebius TokenFactory). Most
  *  providers do not, and the row description then has no metadata. */
 function hasModelMetadata(model: ModelConfiguration): boolean {
@@ -526,9 +515,6 @@ function hasModelMetadata(model: ModelConfiguration): boolean {
   );
 }
 
-/** Row description. Several ids can share one title, so the model id comes
- *  first when the title is not the id. Metadata such as
- *  "128K · 🇫🇮 · fp8 · tools, reasoning" follows when the model has any. */
 /** Selected models first. Providers that ship rich metadata (Nebius
  *  TokenFactory) sort by id so refetches keep the order. */
 function inherentOrder(models: ModelConfiguration[]): string[] {
@@ -561,8 +547,15 @@ function foldedLayout(models: ModelConfiguration[]): ModelListLayout {
   };
 }
 
-function buildModelDescription(model: ModelConfiguration): string | undefined {
-  const id = modelDisplayName(model) === model.name ? undefined : model.name;
+/** Row description. Several ids can share one title, so the model id comes
+ *  first when the title is not the id. Metadata such as
+ *  "128K · 🇫🇮 · fp8 · tools, reasoning" follows when the model has any. */
+
+function buildModelDescription(
+  model: ModelConfiguration,
+  displayName: string
+): string | undefined {
+  const id = displayName === model.name ? undefined : model.name;
   if (!hasModelMetadata(model)) return id;
   const parts: string[] = id ? [id] : [];
   const context = formatContextSize(model.max_input_tokens);
@@ -576,24 +569,11 @@ function buildModelDescription(model: ModelConfiguration): string | undefined {
   return parts.length > 0 ? parts.join("  ·  ") : undefined;
 }
 
-/** Eye marker for vision models, shown on the right of the picker row. */
-function modelRightChildren(
-  model: ModelConfiguration,
-  visionTitle: string
-): React.ReactNode {
-  if (!hasModelMetadata(model) || !model.supports_image_input) return undefined;
-  return (
-    <Text font="secondary-body" color="text-03" title={visionTitle}>
-      👁
-    </Text>
-  );
-}
-
 interface ModelRowProps {
   model: ModelConfiguration;
   isDefaultModel: boolean;
   onToggleVisibility: (visible: boolean) => void;
-  onRename: (value: string | undefined) => void;
+  onRename: (value: string | null) => void;
   onSettingsChange: (patch: ModelSettingsPatch) => void;
   onSetDefaultModel?: () => void;
 }
@@ -623,7 +603,25 @@ function ModelRow({
   // Keeps the hover-revealed actions visible while the settings popover,
   // which is portaled outside the row, is open.
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const displayName = modelDisplayName(model);
+  const displayName = useModelDisplayName()(model);
+  const description = buildModelDescription(model, displayName);
+  const decisionBadge = useModelTypeBadge("decision");
+  const visionBadge = useModelTypeBadge("vision");
+  const modelTypeBadges: BadgeProps[] = [
+    ...(model.supports_decisions
+      ? [
+          {
+            ...decisionBadge,
+            tooltip: t(
+              model.supports_chat === false
+                ? "models.row.decisionTag.decisionOnly"
+                : "models.row.decisionTag.chatAndDecision"
+            ),
+          },
+        ]
+      : []),
+    ...(model.supports_image_input ? [visionBadge] : []),
+  ];
   const isSelected = model.is_visible;
   const toggleVisibility = () => onToggleVisibility(!model.is_visible);
   // A click that blurs and commits an inline rename reaches the row after the
@@ -671,14 +669,15 @@ function ModelRow({
         }}
       >
         <Interactive.Container width="full" size="fit" rounding={3}>
-          <div className="w-full p-1.5">
+          <OpalSection alignItems="stretch" height="auto" padding={1.5}>
             <ContentAction
               font="main-ui-action"
               color="interactive"
               center
               icon={() => <InputCheckbox checked={isSelected} />}
               title={displayName}
-              description={buildModelDescription(model)}
+              description={description}
+              badge={modelTypeBadges}
               rightChildren={
                 <OpalSection
                   flexDirection="row"
@@ -686,25 +685,6 @@ function ModelRow({
                   height="auto"
                   gap={1}
                 >
-                  {model.supports_decisions && (
-                    <Tooltip
-                      tooltip={t(
-                        model.supports_chat === false
-                          ? "models.row.decisionTag.decisionOnly"
-                          : "models.row.decisionTag.chatAndDecision"
-                      )}
-                      side="top"
-                    >
-                      <Badge
-                        color="default"
-                        title={t("models.row.decisionTag.label")}
-                      />
-                    </Tooltip>
-                  )}
-                  {modelRightChildren(
-                    model,
-                    t("models.row.visionMarker.title")
-                  )}
                   <Hoverable.Item group="model-row" variant="appear-on-hover">
                     <OpalSection
                       flexDirection="row"
@@ -744,11 +724,12 @@ function ModelRow({
                     </OpalSection>
                   </Hoverable.Item>
                   {isDefaultModel && (
-                    <span className="px-1.5 py-1 text-action-selection-05">
+                    <span className="px-1.5">
                       <Text
+                        as="p"
                         font="secondary-action"
                         wordWrap="whitespace-nowrap"
-                        color="inherit"
+                        color="action-selection-05"
                       >
                         {t("models.row.defaultLabel")}
                       </Text>
@@ -758,10 +739,10 @@ function ModelRow({
               }
               editable
               editHandle={editHandle}
-              onTitleChange={(newTitle) => onRename(newTitle || undefined)}
+              onTitleChange={(newTitle) => onRename(newTitle || null)}
               padding={0}
             />
-          </div>
+          </OpalSection>
         </Interactive.Container>
       </Interactive.Stateful>
     </Hoverable.Root>
@@ -786,6 +767,7 @@ export function ModelSelectionField({
   const formikProps = useFormikContext<BaseLLMFormValues>();
   const { mutate } = useSWRConfig();
   const { defaultText } = useAdminLanguageModels();
+  const resolveDisplayName = useModelDisplayName();
   const providerId = formikProps.values.id;
   const [newModelName, setNewModelName] = useState("");
   const [isExpanded, setIsExpanded] = useState(false);
@@ -861,12 +843,14 @@ export function ModelSelectionField({
     await setDefaultLlmModelAndRefresh(providerId, modelName, mutate);
   }
 
-  function setCustomDisplayName(modelName: string, value: string | undefined) {
-    const updated = models.map((m) =>
-      m.name === modelName
-        ? { ...m, custom_display_name: value || undefined }
-        : m
-    );
+  // A cleared name is null, as the API sends it, so clearing a new name is
+  // not a change.
+  function setCustomDisplayName(modelName: string, value: string | null) {
+    const updated = models.map((m) => {
+      if (m.name !== modelName) return m;
+      const renamed = { ...m, custom_display_name: value || null };
+      return { ...renamed, effectiveDisplayName: resolveDisplayName(renamed) };
+    });
     formikProps.setFieldValue("model_configurations", updated);
   }
 

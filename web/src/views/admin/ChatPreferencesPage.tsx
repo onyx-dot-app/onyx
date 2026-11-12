@@ -68,7 +68,7 @@ import {
   MessageCard,
   Tooltip,
 } from "@opal/components";
-import { Modal } from "@opal/components";
+import { Modal, useCreateModal } from "@opal/components";
 import GenericConfirmModal from "@/sections/modals/GenericConfirmModal";
 import { InputSwitch } from "@opal/components";
 import { Disabled, Hoverable } from "@opal/core";
@@ -338,6 +338,8 @@ function RetentionField({
   // A pending reduction awaiting confirmation (always a positive number; null
   // means nothing is pending).
   const [pendingValue, setPendingValue] = useState<number | null>(null);
+  // `pendingValue` stays set on close so the modal can animate out.
+  const reduceModal = useCreateModal();
 
   const customInputRef = useRef<HTMLInputElement>(null);
   const focusCustomOnShowRef = useRef(false);
@@ -436,6 +438,7 @@ function RetentionField({
     if (next === value) return;
     if (isRetentionReduction(value, next)) {
       setPendingValue(next);
+      reduceModal.toggle(true);
       return;
     }
     persist(next);
@@ -501,12 +504,12 @@ function RetentionField({
 
   const handleConfirmReduction = () => {
     if (pendingValue !== null) persist(pendingValue);
-    setPendingValue(null);
+    reduceModal.toggle(false);
   };
 
   const handleCancelReduction = () => {
     // Discard the pending change and restore the UI to the persisted value.
-    setPendingValue(null);
+    reduceModal.toggle(false);
     syncToValue(value);
   };
 
@@ -597,15 +600,17 @@ function RetentionField({
         </div>
       )}
 
-      {pendingValue !== null && (
-        <GenericConfirmModal
-          title={t("retention.reduceModal.title")}
-          message={t("retention.reduceModal.message", { days: pendingValue })}
-          confirmText={t("retention.reduceModal.confirmLabel")}
-          onClose={handleCancelReduction}
-          onConfirm={handleConfirmReduction}
-        />
-      )}
+      <reduceModal.Provider>
+        {pendingValue !== null && (
+          <GenericConfirmModal
+            title={t("retention.reduceModal.title")}
+            message={t("retention.reduceModal.message", { days: pendingValue })}
+            confirmText={t("retention.reduceModal.confirmLabel")}
+            onClose={handleCancelReduction}
+            onConfirm={handleConfirmReduction}
+          />
+        )}
+      </reduceModal.Provider>
     </div>
   );
 }

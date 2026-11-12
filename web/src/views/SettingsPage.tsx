@@ -60,7 +60,7 @@ import useCCPairs from "@/hooks/useCCPairs";
 import { ValidSources } from "@/lib/connectors/types/source";
 import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
 import { ConfirmationModalLayout } from "@opal/layouts";
-import { BasicModalFooter, Modal } from "@opal/components";
+import { BasicModalFooter, Modal, useCreateModal } from "@opal/components";
 import { Code, CopyButton } from "@opal/components";
 import CharacterCount from "@/refresh-components/CharacterCount";
 import { InputPrompt } from "@/app/app/types";
@@ -436,7 +436,7 @@ function usePATCreation({
   onCreateSuccess,
 }: UsePATCreationOptions = {}) {
   const t = useTranslations("settings");
-  const [showCreateModal, setShowCreateModal] = useState(false);
+  const createModal = useCreateModal();
   const [isCreating, setIsCreating] = useState(false);
   const [newTokenName, setNewTokenName] = useState(defaultName);
   const [expirationDays, setExpirationDays] = useState<string>("30");
@@ -463,13 +463,14 @@ function usePATCreation({
 
   const openTokenModal = useCallback(() => {
     reset();
-    setShowCreateModal(true);
-  }, [reset]);
+    createModal.toggle(true);
+  }, [reset, createModal.toggle]);
 
+  // The next open resets the draft, so the modal keeps its content while it
+  // animates out.
   const closeTokenModal = useCallback(() => {
-    setShowCreateModal(false);
-    reset();
-  }, [reset]);
+    createModal.toggle(false);
+  }, [createModal.toggle]);
 
   const createPAT = useCallback(async () => {
     if (!newTokenName.trim()) {
@@ -518,7 +519,8 @@ function usePATCreation({
   ]);
 
   return {
-    showCreateModal,
+    showCreateModal: createModal.isOpen,
+    CreateModalProvider: createModal.Provider,
     isCreating,
     newTokenName,
     setNewTokenName,
@@ -577,7 +579,7 @@ function GeneralSettings() {
   );
   const { refreshChatSessions } = useChatSessions();
   const [isDeleting, setIsDeleting] = useState(false);
-  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const deleteAllChatsModal = useCreateModal();
 
   const {
     personalizationValues,
@@ -603,7 +605,7 @@ function GeneralSettings() {
       const response = await deleteAllChatSessions();
       if (response.ok) {
         await refreshChatSessions();
-        setShowDeleteConfirmation(false);
+        deleteAllChatsModal.toggle(false);
       } else {
         throw new Error("Failed to delete all chat sessions");
       }
@@ -612,15 +614,15 @@ function GeneralSettings() {
     } finally {
       setIsDeleting(false);
     }
-  }, [refreshChatSessions, t]);
+  }, [refreshChatSessions, deleteAllChatsModal.toggle, t]);
 
   return (
     <>
-      {showDeleteConfirmation && (
+      <deleteAllChatsModal.Provider>
         <ConfirmationModalLayout
           icon={SvgTrash}
           title={t("dangerZone.deleteAllChats.confirm.title")}
-          onClose={() => setShowDeleteConfirmation(false)}
+          onClose={() => deleteAllChatsModal.toggle(false)}
           submit={
             <Button
               disabled={isDeleting}
@@ -644,7 +646,7 @@ function GeneralSettings() {
             </Text>
           </Section>
         </ConfirmationModalLayout>
-      )}
+      </deleteAllChatsModal.Provider>
 
       <Section gap={8}>
         <Section gap={3}>
@@ -875,9 +877,9 @@ function GeneralSettings() {
                 <Button
                   variant="danger"
                   prominence="secondary"
-                  onClick={() => setShowDeleteConfirmation(true)}
+                  onClick={() => deleteAllChatsModal.toggle(true)}
                   icon={SvgTrash}
-                  interaction={showDeleteConfirmation ? "hover" : "rest"}
+                  interaction={deleteAllChatsModal.isOpen ? "hover" : "rest"}
                 >
                   {t("dangerZone.deleteAllChats.button")}
                 </Button>
@@ -1915,7 +1917,7 @@ function LLMGatewaySettings() {
 
   return (
     <>
-      {tokenCreation.showCreateModal && (
+      <tokenCreation.CreateModalProvider>
         <PATModal
           isCreating={tokenCreation.isCreating}
           newTokenName={tokenCreation.newTokenName}
@@ -1933,7 +1935,7 @@ function LLMGatewaySettings() {
           onCreate={tokenCreation.createPAT}
           createdToken={tokenCreation.newlyCreatedToken}
         />
-      )}
+      </tokenCreation.CreateModalProvider>
 
       <GatewayAccessSection
         canCreateToken={canCreateGatewayToken}
@@ -1948,7 +1950,7 @@ function AccountsAccessSettings() {
   const navigation = useNavigation();
   const { user, authTypeMetadata, permissions } = useUser();
   const isMultiTenant = useIsMultiTenant();
-  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const passwordModal = useCreateModal();
 
   // TODO(auth-refresh): only passwordMinLength is enforced here; the remaining
   // constraints (max length, uppercase, lowercase, digit, special char) will be
@@ -1974,6 +1976,7 @@ function AccountsAccessSettings() {
   });
 
   const [tokenToDelete, setTokenToDelete] = useState<PAT | null>(null);
+  const revokeModal = useCreateModal();
 
   const canCreateTokens = useCloudSubscription();
   const canCreatePAT = hasPermission(
@@ -2069,7 +2072,7 @@ function AccountsAccessSettings() {
             tokenCreation.closeTokenModal();
           }
           await mutate();
-          setTokenToDelete(null);
+          revokeModal.toggle(false);
         } else {
           toast.error(t("apiKeys.toasts.deleteFailed"));
         }
@@ -2077,7 +2080,7 @@ function AccountsAccessSettings() {
         toast.error(t("apiKeys.toasts.deleteNetworkError"));
       }
     },
-    [mutate, tokenCreation, t]
+    [mutate, revokeModal.toggle, tokenCreation, t]
   );
 
   const handleChangePassword = useCallback(
@@ -2099,7 +2102,7 @@ function AccountsAccessSettings() {
         });
 
         if (response.ok) {
-          setShowPasswordModal(false);
+          passwordModal.toggle(false);
           // The server revoked every token. Clear the cached list first so
           // a failed refetch cannot show revoked tokens.
           await mutate([], { revalidate: true });
@@ -2113,12 +2116,12 @@ function AccountsAccessSettings() {
         toast.error(t("accounts.passwordModal.toasts.networkError"));
       }
     },
-    [mutate, t]
+    [mutate, passwordModal.toggle, t]
   );
 
   return (
     <>
-      {tokenCreation.showCreateModal && (
+      <tokenCreation.CreateModalProvider>
         <PATModal
           isCreating={tokenCreation.isCreating}
           newTokenName={tokenCreation.newTokenName}
@@ -2136,36 +2139,38 @@ function AccountsAccessSettings() {
           onCreate={tokenCreation.createPAT}
           createdToken={tokenCreation.newlyCreatedToken}
         />
-      )}
+      </tokenCreation.CreateModalProvider>
 
-      {tokenToDelete && (
-        <ConfirmationModalLayout
-          icon={SvgTrash}
-          title={t("apiKeys.revokeModal.title")}
-          onClose={() => setTokenToDelete(null)}
-          submit={
-            <Button
-              variant="danger"
-              onClick={() => deletePAT(tokenToDelete.id)}
-            >
-              {t("apiKeys.revokeModal.submit")}
-            </Button>
-          }
-        >
-          <Section gap={2} alignItems="start">
-            <Text color="text-05">
-              {t("apiKeys.revokeModal.description", {
-                name: tokenToDelete.name,
-                tokenDisplay: tokenToDelete.token_display,
-                appName,
-              })}
-            </Text>
-            <Text color="text-05">{t("apiKeys.revokeModal.question")}</Text>
-          </Section>
-        </ConfirmationModalLayout>
-      )}
+      <revokeModal.Provider>
+        {tokenToDelete && (
+          <ConfirmationModalLayout
+            icon={SvgTrash}
+            title={t("apiKeys.revokeModal.title")}
+            onClose={() => revokeModal.toggle(false)}
+            submit={
+              <Button
+                variant="danger"
+                onClick={() => deletePAT(tokenToDelete.id)}
+              >
+                {t("apiKeys.revokeModal.submit")}
+              </Button>
+            }
+          >
+            <Section gap={2} alignItems="start">
+              <Text color="text-05">
+                {t("apiKeys.revokeModal.description", {
+                  name: tokenToDelete.name,
+                  tokenDisplay: tokenToDelete.token_display,
+                  appName,
+                })}
+              </Text>
+              <Text color="text-05">{t("apiKeys.revokeModal.question")}</Text>
+            </Section>
+          </ConfirmationModalLayout>
+        )}
+      </revokeModal.Provider>
 
-      {showPasswordModal && (
+      <passwordModal.Provider>
         <Formik
           initialValues={{
             currentPassword: "",
@@ -2211,7 +2216,7 @@ function AccountsAccessSettings() {
                   </Button>
                 }
                 onClose={() => {
-                  setShowPasswordModal(false);
+                  passwordModal.toggle(false);
                 }}
               >
                 <Section gap={4}>
@@ -2266,7 +2271,7 @@ function AccountsAccessSettings() {
             </Form>
           )}
         </Formik>
-      )}
+      </passwordModal.Provider>
 
       <Section gap={8}>
         <Section gap={3}>
@@ -2296,8 +2301,8 @@ function AccountsAccessSettings() {
                   <Button
                     prominence="secondary"
                     icon={SvgLock}
-                    onClick={() => setShowPasswordModal(true)}
-                    interaction={showPasswordModal ? "hover" : "rest"}
+                    onClick={() => passwordModal.toggle(true)}
+                    interaction={passwordModal.isOpen ? "hover" : "rest"}
                   >
                     {t("accounts.password.changeButton")}
                   </Button>
@@ -2425,7 +2430,10 @@ function AccountsAccessSettings() {
                             rightChildren={
                               <Button
                                 icon={SvgTrash}
-                                onClick={() => setTokenToDelete(pat)}
+                                onClick={() => {
+                                  setTokenToDelete(pat);
+                                  revokeModal.toggle(true);
+                                }}
                                 prominence="tertiary"
                                 size="sm"
                                 aria-label={t(
@@ -2505,8 +2513,7 @@ function FederatedConnectorCard({
   const t = useTranslations("settings");
   const { appName } = useSettings();
   const [isDisconnecting, setIsDisconnecting] = useState(false);
-  const [showDisconnectConfirmation, setShowDisconnectConfirmation] =
-    useState(false);
+  const disconnectModal = useCreateModal();
   const sourceMetadata = getSourceMetadata(connector.source as ValidSources);
 
   const handleDisconnect = useCallback(async () => {
@@ -2518,7 +2525,7 @@ function FederatedConnectorCard({
       );
 
       if (response.ok) {
-        setShowDisconnectConfirmation(false);
+        disconnectModal.toggle(false);
         onDisconnectSuccess();
       } else {
         throw new Error("Failed to disconnect");
@@ -2528,11 +2535,16 @@ function FederatedConnectorCard({
     } finally {
       setIsDisconnecting(false);
     }
-  }, [connector.federated_connector_id, onDisconnectSuccess, t]);
+  }, [
+    connector.federated_connector_id,
+    disconnectModal.toggle,
+    onDisconnectSuccess,
+    t,
+  ]);
 
   return (
     <>
-      {showDisconnectConfirmation && (
+      <disconnectModal.Provider>
         <ConfirmationModalLayout
           icon={SvgUnplug}
           title={markdown(
@@ -2540,7 +2552,7 @@ function FederatedConnectorCard({
               name: sourceMetadata.displayName,
             })
           )}
-          onClose={() => setShowDisconnectConfirmation(false)}
+          onClose={() => disconnectModal.toggle(false)}
           submit={
             <Button
               disabled={isDisconnecting}
@@ -2567,7 +2579,7 @@ function FederatedConnectorCard({
             </Text>
           </Section>
         </ConfirmationModalLayout>
-      )}
+      </disconnectModal.Provider>
 
       <Card border="solid" padding={2} rounding={4}>
         <Section alignItems="start" height="fit">
@@ -2588,7 +2600,7 @@ function FederatedConnectorCard({
                   icon={SvgUnplug}
                   prominence="tertiary"
                   size="sm"
-                  onClick={() => setShowDisconnectConfirmation(true)}
+                  onClick={() => disconnectModal.toggle(true)}
                 />
               ) : connector.authorize_url ? (
                 <Button

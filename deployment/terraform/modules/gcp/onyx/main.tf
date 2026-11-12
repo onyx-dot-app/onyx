@@ -41,6 +41,8 @@ locals {
     ],
     var.enable_l7_ingress ? ["certificatemanager.googleapis.com"] : [],
     var.enable_sandbox_archive_bucket ? ["cloudkms.googleapis.com"] : [],
+    # GCS signed URLs without a key file sign through the IAM Credentials API.
+    var.enable_sandbox_node_pool && var.craft_sandbox_runtime == "firecracker" ? ["iamcredentials.googleapis.com"] : [],
   ) : toset([])
 
   # T-shirt size defaults, chosen so each tier lands on the GCP machine closest

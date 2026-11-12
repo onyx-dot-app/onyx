@@ -29,7 +29,7 @@ beforeEach(() => {
 });
 afterEach(() => jest.restoreAllMocks());
 
-test("member OAuth routes to verified completion before sending any popup result", async () => {
+test("member OAuth reports to the waiting dialog, then lands on the completion page", async () => {
   jest.mocked(completeExternalAppOAuthCallback).mockResolvedValue({
     success: true,
     external_app_id: 7,
@@ -42,7 +42,11 @@ test("member OAuth routes to verified completion before sending any popup result
       "/app/plugins/oauth/complete?pluginKind=external-app&pluginId=7&attempt=nonce&message=oauth_connected"
     )
   );
-  expect(window.opener.postMessage).not.toHaveBeenCalled();
+  // The dialog verifies the connection itself; only a tab launchOAuth opened closes.
+  expect(window.opener.postMessage).toHaveBeenCalledWith(
+    { type: "onyx:oauth-complete", state: "state", ok: true },
+    window.location.origin
+  );
   expect(window.close).not.toHaveBeenCalled();
 });
 
@@ -72,5 +76,17 @@ test("rejects an external return URL without signalling success", async () => {
     expect(completeExternalAppOAuthCallback).toHaveBeenCalled()
   );
   expect(replace).not.toHaveBeenCalled();
-  expect(window.opener.postMessage).not.toHaveBeenCalled();
+  expect(window.opener.postMessage).toHaveBeenCalledTimes(1);
+  expect(window.opener.postMessage).toHaveBeenCalledWith(
+    {
+      type: "onyx:oauth-complete",
+      state: "state",
+      ok: false,
+      error: {
+        title: "Connection failed.",
+        description: "Missing code or state in callback URL.",
+      },
+    },
+    window.location.origin
+  );
 });

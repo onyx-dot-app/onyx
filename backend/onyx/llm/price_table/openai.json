@@ -136,7 +136,7 @@
         "output": 75.0
       },
       "limit": {
-        "context": 400000,
+        "context": 272000,
         "output": 128000
       },
       "modalities": {
@@ -1800,7 +1800,7 @@
         "output": 75.0
       },
       "limit": {
-        "context": 400000,
+        "context": 272000,
         "output": 128000
       },
       "modalities": {
@@ -2048,6 +2048,33 @@
       },
       "mode": "chat",
       "name": "gpt-6-astra-law",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
+    "gpt-6-cyber": {
+      "cost": {
+        "cache_read": 2.0,
+        "cache_write": 25.0,
+        "input": 20.0,
+        "output": 100.0
+      },
+      "limit": {
+        "context": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gpt-6-cyber",
       "reasoning": true,
       "structured_output": true,
       "tool_call": true
@@ -2634,6 +2661,22 @@
       },
       "mode": "image_generation",
       "name": "gpt-image-2.5-sunburst-2026-09-08"
+    },
+    "gpt-image-2.6-flare": {
+      "cost": {
+        "cache_read": 1.25,
+        "input": 5.0
+      },
+      "mode": "image_generation",
+      "name": "gpt-image-2.6-flare"
+    },
+    "gpt-image-2.6-sunburst": {
+      "cost": {
+        "cache_read": 1.25,
+        "input": 5.0
+      },
+      "mode": "image_generation",
+      "name": "gpt-image-2.6-sunburst"
     },
     "gpt-live-1": {
       "cost": {

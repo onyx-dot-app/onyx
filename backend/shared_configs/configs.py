@@ -196,6 +196,10 @@ CORS_ALLOW_CREDENTIALS: bool = cors_allow_credentials(CORS_ALLOWED_ORIGIN)
 # Multi-tenancy configuration
 MULTI_TENANT = os.environ.get("MULTI_TENANT", "").lower() == "true"
 
+# Deployment identity. The multi-tenant app runs as cloud or as the playground,
+# nothing else. False keeps every cloud behaviour unchanged.
+IS_PLAYGROUND = os.environ.get("IS_PLAYGROUND", "").lower() == "true"
+
 # Air-gapped deployment: no outbound calls to onyx-controlled endpoints
 # (recommended-models sync, remote model catalog lookup, release notes).
 # Inbound traffic and user-configured integrations are unaffected.

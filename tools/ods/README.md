@@ -535,6 +535,7 @@ later arguments go to the suite's test runner.
 | `ods` | | `tools/ods` | `go test` |
 | `cli` | | `cli` | `go test` |
 | `terraform` | `tf` | `terraform-provider-onyx` | `go test` |
+| `microvm` | | `microvm` | `go test` |
 
 The Go suites run with `-race`, the same as `pr-golang-tests.yml`. A runner that
 takes packages rather than files, such as `go test`, runs the package that holds
@@ -579,8 +580,8 @@ number counts only its own tests. That is a number the package's owner can act
 on; a cross-package `-coverpkg` total would credit a package for statements its
 own tests never assert on.
 
-The suites are the same Go modules `ods test` knows: `ods`, `cli`, and
-`terraform`. A module directory such as `tools/ods` is accepted in place of a
+The suites are the same Go modules `ods test` knows: `ods`, `cli`,
+`terraform` and `microvm`. A module directory such as `tools/ods` is accepted in place of a
 suite name, which is what CI passes.
 
 **Flags:**

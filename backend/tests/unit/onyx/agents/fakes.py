@@ -37,7 +37,7 @@ from onyx.llm.models import (
 )
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.tools.interface import Tool
-from onyx.tools.models import ToolContext
+from onyx.tools.models import CodeModeExposure, ToolContext
 
 
 class FakeAgentDirectory(AgentDirectory):
@@ -208,6 +208,10 @@ class EchoTool(Tool):
     @property
     def display_name(self) -> str:
         return "Echo"
+
+    @property
+    def code_mode_exposure(self) -> CodeModeExposure:
+        return CodeModeExposure.IMMEDIATE
 
     def tool_definition(self) -> ToolDefinition:
         return ToolDefinition(

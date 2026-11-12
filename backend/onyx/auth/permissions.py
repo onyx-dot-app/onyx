@@ -101,7 +101,7 @@ NON_TOGGLEABLE_PERMISSIONS: frozenset[Permission] = frozenset(
 # The only grants an admin may switch on or off for the seeded Basic group, which
 # holds the whole org. Everything else on a default group stays fixed by migrations.
 DEFAULT_GROUP_TOGGLEABLE_PERMISSIONS: frozenset[Permission] = frozenset(
-    {Permission.CREATE_USER_API_KEYS}
+    {Permission.CREATE_USER_API_KEYS, Permission.ADD_AGENTS}
 )
 
 # Permissions auto-granted to all users in Community Edition.
