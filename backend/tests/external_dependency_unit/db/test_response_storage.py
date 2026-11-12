@@ -4115,3 +4115,65 @@ def test_a_run_whose_previous_run_is_off_the_branch_is_not_selected(
         chat_subagents.latest_agent_response(db_session, sibling_branch, agent_id)
         is None
     )
+
+
+def test_a_run_that_continues_a_later_turn_belongs_to_that_turn(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    """An earlier turn's agent continues a later turn's agent; the new run, and
+    any run after it, belongs to the later turn."""
+    first_turn = _response(db_session, conversation)
+    sender = _child_record(
+        db_session,
+        _record(first_turn),
+        uuid4(),
+        "sender",
+        path="/root/sender",
+        tool_name="spawn_agent",
+    )
+    later_turn = _response(db_session, conversation, "Later", previous=first_turn)
+    recipient = _child_record(
+        db_session,
+        _record(later_turn),
+        uuid4(),
+        "recipient",
+        path="/root/recipient",
+        tool_name="spawn_agent",
+    )
+    save_response_record__no_commit(db_session, later_turn.id, recipient)
+    sender.steps = _steps(
+        sender.run_id,
+        [
+            AssistantMessage(
+                content=[ToolCall(id="message", name="send_message", arguments={})]
+            )
+        ],
+    )
+    save_response_record__no_commit(db_session, first_turn.id, sender)
+    run_id = reserve_child_response__no_commit(
+        db_session,
+        later_turn.id,
+        agent=AgentInfo(
+            id=recipient.agent_id or "",
+            path=recipient.agent_path,
+            parent_id=str(conversation.id),
+            description="",
+            restoration_config=None,
+        ),
+        instruction=UserMessage(content="Continue"),
+        previous_response_id=int(recipient.run_id),
+        parent_response_id=int(sender.run_id),
+        parent_message_id=f"{sender.run_id}:0",
+        parent_tool_call_id="message",
+        delivers_result=True,
+    )
+    db_session.flush()
+    continued = db_session.get(ChatMessage, run_id)
+    assert continued is not None
+    # The invocation traces to the first turn; the previous run to the later one.
+    assert root_response_id(db_session, continued) == later_turn.id
+    status = read_response_status__no_commit(db_session, run_id)
+    assert status is not None and status.root_message_id == later_turn.id
+    sender_row = db_session.get(ChatMessage, int(sender.run_id))
+    assert sender_row is not None
+    assert root_response_id(db_session, sender_row) == first_turn.id
