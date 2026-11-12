@@ -434,6 +434,7 @@ jobs:
         id: slack-actions
         if: >-
           inputs.slack-channel != '' &&
+          steps.pr.outputs.notify == 'true' &&
           (github.event_name != 'workflow_run' ||
            steps.repair-guard.outputs.proceed == 'true') &&
           steps.pr.outputs.pr_number != ''
@@ -448,6 +449,7 @@ jobs:
       - name: Post PR to Slack for review
         if: >-
           inputs.slack-channel != '' &&
+          steps.pr.outputs.notify == 'true' &&
           (github.event_name != 'workflow_run' ||
            steps.repair-guard.outputs.proceed == 'true') &&
           steps.pr.outputs.pr_number != '' &&

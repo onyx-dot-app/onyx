@@ -15,10 +15,6 @@ case "$remote_status" in
   0)
     lease="${remote%%[[:space:]]*}"
     git fetch --quiet origin "refs/heads/$BRANCH"
-    if [ -n "${FAILED_SHA:-}" ] && [ "$lease" != "$FAILED_SHA" ]; then
-      echo 'Repair target changed during task execution' >&2
-      exit 1
-    fi
     if [ -n "$existing" ] && [ -n "${DIFF_VALIDATOR:-}" ]; then
       python3 "$DIFF_VALIDATOR" "origin/$base" "$lease"
     fi
@@ -26,6 +22,10 @@ case "$remote_status" in
   2) ;;
   *) exit "$remote_status" ;;
 esac
+if [ -n "${FAILED_SHA:-}" ] && [ "$lease" != "$FAILED_SHA" ]; then
+  echo 'Repair target changed during task execution' >&2
+  exit 1
+fi
 # Tasks may stage their own edits; rebuild the index from approved paths.
 git reset --quiet HEAD
 paths=()
@@ -36,11 +36,13 @@ git switch -C "$BRANCH"
 git add -- "${paths[@]}"
 git commit -m "$PR_TITLE"
 if [ -n "${DIFF_VALIDATOR:-}" ]; then python3 "$DIFF_VALIDATOR" "origin/$base" HEAD; fi
+notify=true
 if [ -n "$existing" ] && git diff --quiet "$lease" HEAD -- "${files[@]}"; then
   echo "PR #$existing already has this output."
-  exit 0
+  notify=false
+else
+  git push --force-with-lease="refs/heads/$BRANCH:$lease" origin "HEAD:refs/heads/$BRANCH"
 fi
-git push --force-with-lease="refs/heads/$BRANCH:$lease" origin "HEAD:refs/heads/$BRANCH"
 body="$(mktemp)"
 trap 'rm -f "$body"' EXIT
 cat > "$body" <<BODY
@@ -70,6 +72,19 @@ if [ -z "$existing" ]; then
   existing="$(gh pr list --base "$base" --head "$BRANCH" --state open --json number --jq '.[0].number // empty')"
 fi
 edit_args=(--body-file "$body")
-if [ -n "${REVIEWER:-}" ]; then edit_args+=(--add-reviewer "$REVIEWER"); fi
+if [ -n "${REVIEWER:-}" ]; then
+  needs_review=true
+  if [ "$notify" = false ]; then
+    reviews="$(gh pr view "$existing" --json reviewRequests,reviews)"
+    if jq -e --arg reviewer "$REVIEWER" '
+      [.reviewRequests[]?.login, .reviews[]?.author.login]
+      | any(. != null and (ascii_downcase == ($reviewer | ascii_downcase)))
+    ' <<< "$reviews" > /dev/null; then needs_review=false; fi
+  fi
+  if [ "$needs_review" = true ]; then
+    edit_args+=(--add-reviewer "$REVIEWER")
+    notify=true
+  fi
+fi
 gh pr edit "$existing" "${edit_args[@]}"
-printf 'pr_number=%s\npr_url=%s/pull/%s\n' "$existing" "$REPO_URL" "$existing" >> "$GITHUB_OUTPUT"
+printf 'pr_number=%s\npr_url=%s/pull/%s\nnotify=%s\n' "$existing" "$REPO_URL" "$existing" "$notify" >> "$GITHUB_OUTPUT"
