@@ -12493,7 +12493,7 @@
         },
         "pendingMessages": {
           "keyboardHint": "Enter para enviar · Ctrl o Command + Enter para poner en cola",
-          "preparingHint": "Puedes poner mensajes en cola cuando comience la respuesta.",
+          "multiModelHint": "No se pueden poner mensajes en cola al comparar modelos. Elige un modelo para usar la cola.",
           "attachmentsHint": "Envía los archivos adjuntos cuando termine esta respuesta.",
           "chooseResponseHint": "Elige una respuesta antes de poner un mensaje en cola.",
           "incognitoHint": "Espera a que termine la respuesta en el chat de incógnito.",

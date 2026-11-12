@@ -12493,7 +12493,7 @@
         },
         "pendingMessages": {
           "keyboardHint": "Entrée pour envoyer · Ctrl ou Commande + Entrée pour mettre en attente",
-          "preparingHint": "Vous pouvez mettre des messages en file dès que la réponse commence.",
+          "multiModelHint": "La file d'attente n'est pas disponible pendant la comparaison de modèles. Choisissez un modèle pour mettre des messages en file.",
           "attachmentsHint": "Envoyez les pièces jointes une fois cette réponse terminée.",
           "chooseResponseHint": "Choisissez une réponse avant de mettre un message en file.",
           "incognitoHint": "Attendez la fin de la réponse dans le chat incognito.",

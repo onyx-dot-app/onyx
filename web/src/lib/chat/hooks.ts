@@ -70,22 +70,19 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
   const t = useTranslations("chat.input.pendingMessages");
   const tReadiness = useTranslations("chat.readiness");
   // Primitives only: the message tree changes on every streamed frame.
-  const { sessionId, idle, needsResponseSelection, hasTargetResponse } =
-    useChatSessionStore(
-      useShallow((state) => {
-        const session = state.currentSessionId
-          ? state.sessions.get(state.currentSessionId)
-          : undefined;
-        const target = pendingInputTarget(session?.messageTree);
-        return {
-          sessionId: state.currentSessionId,
-          idle:
-            session?.chatState === "input" && !session.isFetchingChatMessages,
-          needsResponseSelection: target.needsResponseSelection,
-          hasTargetResponse: target.targetResponseId !== null,
-        };
-      })
-    );
+  const { sessionId, idle, needsResponseSelection } = useChatSessionStore(
+    useShallow((state) => {
+      const session = state.currentSessionId
+        ? state.sessions.get(state.currentSessionId)
+        : undefined;
+      const target = pendingInputTarget(session?.messageTree);
+      return {
+        sessionId: state.currentSessionId,
+        idle: session?.chatState === "input" && !session.isFetchingChatMessages,
+        needsResponseSelection: target.needsResponseSelection,
+      };
+    })
+  );
   const pendingKey =
     enabled && sessionId ? SWR_KEYS.pendingChatMessages(sessionId) : null;
   const statusKey =
@@ -181,7 +178,6 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
       messages: messages ?? EMPTY_PENDING_MESSAGES,
       error: error ? t("loadFailed") : null,
       busy,
-      hasTargetResponse,
       needsResponseSelection,
       submit: async (message, delivery, turn) =>
         (await request(async (key) => {
@@ -254,7 +250,6 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
     messages,
     error,
     busy,
-    hasTargetResponse,
     needsResponseSelection,
     sessionId,
     pendingKey,

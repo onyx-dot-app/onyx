@@ -12493,7 +12493,7 @@
         },
         "pendingMessages": {
           "keyboardHint": "Enterで送信 · CtrlまたはCommand + Enterでキューに追加",
-          "preparingHint": "応答が始まるとキューに追加できます。",
+          "multiModelHint": "モデルの比較中はキューに追加できません。キューを使うにはモデルを1つ選んでください。",
           "attachmentsHint": "この応答が終わってから添付ファイルを送信してください。",
           "chooseResponseHint": "メッセージをキューに追加する前に応答を選択してください。",
           "incognitoHint": "シークレットチャットでは応答が終わるまでお待ちください。",

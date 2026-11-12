@@ -12493,7 +12493,7 @@
         },
         "pendingMessages": {
           "keyboardHint": "Enter to send · Ctrl or Command + Enter to queue",
-          "preparingHint": "Queueing is available once the response starts.",
+          "multiModelHint": "Queueing is unavailable while comparing models. Choose one model to queue messages.",
           "attachmentsHint": "Send attached files after this response finishes.",
           "chooseResponseHint": "Choose a response before queueing a message.",
           "incognitoHint": "Wait for the response to finish in incognito chat.",

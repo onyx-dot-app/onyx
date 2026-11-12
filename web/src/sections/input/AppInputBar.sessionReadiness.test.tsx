@@ -738,33 +738,33 @@ test.each([
   }
 );
 
-test.each([
-  [
-    "one model",
-    false,
-    {
-      model_provider: "Provider",
-      model_version: "picked-model",
-      model_configuration_id: 7,
-    },
-  ],
-  ["a multi-model comparison", true, null],
-])(
-  "a queued message runs with the model the picker shows for %s",
-  async (_case, isMultiModelActive, expected) => {
-    const user = setupUser();
-    render(
-      <ChatInput
-        {...props("streaming")}
-        isMultiModelActive={isMultiModelActive}
-      />
-    );
-    await user.click(screen.getByRole("textbox", { name: "Message input" }));
-    await user.keyboard("{Control>}{Enter}{/Control}");
-    await waitFor(() => expect(pending).toHaveLength(2));
-    expect(pending.at(-1)?.llm_override).toEqual(expected);
-  }
-);
+test("a queued message runs with the model the picker shows", async () => {
+  const user = setupUser();
+  render(<ChatInput {...props("streaming")} />);
+  await user.click(screen.getByRole("textbox", { name: "Message input" }));
+  await user.keyboard("{Control>}{Enter}{/Control}");
+  await waitFor(() => expect(pending).toHaveLength(2));
+  expect(pending.at(-1)?.llm_override).toEqual({
+    model_provider: "Provider",
+    model_version: "picked-model",
+    model_configuration_id: 7,
+  });
+});
+
+test("a multi-model comparison queues nothing and says why", async () => {
+  const user = setupUser();
+  render(<ChatInput {...props("streaming")} isMultiModelActive />);
+  await screen.findByText("Queued follow-up");
+  await user.click(screen.getByRole("textbox", { name: "Message input" }));
+  await user.keyboard("{Control>}{Enter}{/Control}");
+  await user.keyboard("{Enter}");
+  expect(
+    await screen.findByText(
+      "Queueing is unavailable while comparing models. Choose one model to queue messages."
+    )
+  ).toBeInTheDocument();
+  expect(pending).toHaveLength(1);
+});
 
 test("every pending write refreshes the chat status", async () => {
   const user = setupUser();

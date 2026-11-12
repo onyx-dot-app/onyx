@@ -12493,7 +12493,7 @@
         },
         "pendingMessages": {
           "keyboardHint": "Enter로 전송 · Ctrl 또는 Command + Enter로 대기열에 추가",
-          "preparingHint": "응답이 시작되면 대기열에 추가할 수 있습니다.",
+          "multiModelHint": "모델을 비교하는 동안에는 대기열에 추가할 수 없습니다. 대기열을 사용하려면 모델을 하나 선택하세요.",
           "attachmentsHint": "이 응답이 끝난 후 첨부 파일을 보내세요.",
           "chooseResponseHint": "메시지를 대기열에 추가하기 전에 응답을 선택하세요.",
           "incognitoHint": "시크릿 채팅에서는 응답이 끝날 때까지 기다리세요.",

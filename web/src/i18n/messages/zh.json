@@ -12493,7 +12493,7 @@
         },
         "pendingMessages": {
           "keyboardHint": "Enter 发送 · Ctrl 或 Command + Enter 加入队列",
-          "preparingHint": "回复开始后即可加入队列。",
+          "multiModelHint": "比较模型时无法加入队列。请选择一个模型以使用队列。",
           "attachmentsHint": "请在此回复结束后发送附件。",
           "chooseResponseHint": "请先选择回复，再将消息加入队列。",
           "incognitoHint": "在无痕聊天中，请等待回复结束。",

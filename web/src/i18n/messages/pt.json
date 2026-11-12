@@ -12493,7 +12493,7 @@
         },
         "pendingMessages": {
           "keyboardHint": "Enter para enviar · Ctrl ou Command + Enter para enfileirar",
-          "preparingHint": "Você pode colocar mensagens na fila quando a resposta começar.",
+          "multiModelHint": "Não é possível colocar mensagens na fila ao comparar modelos. Escolha um modelo para usar a fila.",
           "attachmentsHint": "Envie os arquivos anexados após esta resposta terminar.",
           "chooseResponseHint": "Escolha uma resposta antes de colocar uma mensagem na fila.",
           "incognitoHint": "Aguarde a resposta terminar no chat anônimo.",

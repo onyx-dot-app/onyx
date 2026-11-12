@@ -12493,7 +12493,7 @@
         },
         "pendingMessages": {
           "keyboardHint": "Enter zum Senden · Strg oder Command + Enter zum Einreihen",
-          "preparingHint": "Nach Beginn der Antwort können Sie Nachrichten einreihen.",
+          "multiModelHint": "Beim Vergleichen von Modellen ist das Einreihen nicht verfügbar. Wählen Sie ein Modell, um Nachrichten einzureihen.",
           "attachmentsHint": "Senden Sie angehängte Dateien nach dieser Antwort.",
           "chooseResponseHint": "Wählen Sie eine Antwort aus, bevor Sie eine Nachricht einreihen.",
           "incognitoHint": "Warten Sie im Inkognito-Chat, bis die Antwort fertig ist.",

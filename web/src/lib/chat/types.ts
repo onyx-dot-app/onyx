@@ -37,8 +37,6 @@ export interface ChatSessionQueue {
   error: string | null;
   /** A pending-message request is in flight. */
   busy: boolean;
-  /** New input has a saved response to target. */
-  hasTargetResponse: boolean;
   needsResponseSelection: boolean;
   /**
    * A queued or interrupting message's turn starts as Deep Research when

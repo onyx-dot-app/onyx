@@ -407,7 +407,8 @@ const AppInputBar = React.memo(
       responding &&
       !isSearchMode &&
       !queue.needsResponseSelection &&
-      (queue.hasTargetResponse || !isMultiModelActive) &&
+      // A queued message keeps one model; a comparison has none to keep.
+      !isMultiModelActive &&
       currentMessageFiles.length === 0;
 
     const pendingMessageHint = t(
@@ -419,8 +420,8 @@ const AppInputBar = React.memo(
             ? "appInputBar.pendingMessages.attachmentsHint"
             : queue.needsResponseSelection
               ? "appInputBar.pendingMessages.chooseResponseHint"
-              : isMultiModelActive && !queue.hasTargetResponse
-                ? "appInputBar.pendingMessages.preparingHint"
+              : isMultiModelActive
+                ? "appInputBar.pendingMessages.multiModelHint"
                 : sendDelivery === "interrupt"
                   ? "appInputBar.pendingMessages.interruptHint"
                   : "appInputBar.pendingMessages.sendHint"
@@ -460,19 +461,15 @@ const AppInputBar = React.memo(
         await queue.submit(submitted.trim(), delivery, {
           deepResearch: deepResearchEnabled && showDeepResearch,
           // The turn uses the model the picker shows, as a normal send does.
-          // A multi-model comparison has no single model, so the chat's saved
-          // model applies.
-          llmOverride: isMultiModelActive
-            ? null
-            : {
-                model_provider: llmManager.currentLlm.name,
-                model_version: llmManager.currentLlm.modelName,
-                model_configuration_id:
-                  llmManager.currentLlm.modelConfigurationId ?? null,
-                temperature: llmManager.hasTemperatureOverride
-                  ? llmManager.temperature
-                  : undefined,
-              },
+          llmOverride: {
+            model_provider: llmManager.currentLlm.name,
+            model_version: llmManager.currentLlm.modelName,
+            model_configuration_id:
+              llmManager.currentLlm.modelConfigurationId ?? null,
+            temperature: llmManager.hasTemperatureOverride
+              ? llmManager.temperature
+              : undefined,
+          },
         })
       )
         return;
