@@ -8,7 +8,7 @@ import RunRow from "@/views/admin/connectors/ConnectorDetailPage/RunRow";
 const START = "2026-03-23T10:00:00.000Z";
 
 function progress(
-  overrides: Partial<IndexAttemptProgress> = {},
+  overrides: Partial<IndexAttemptProgress> = {}
 ): IndexAttemptProgress {
   return {
     listing_done: true,
@@ -27,7 +27,7 @@ function progress(
 
 function indexRun(
   status: "in_progress" | "success",
-  runProgress: IndexAttemptProgress | null,
+  runProgress: IndexAttemptProgress | null
 ): CCPairRun {
   return {
     kind: "indexing",
@@ -67,7 +67,7 @@ function renderRow(run: CCPairRun) {
       open={false}
       onOpenChange={jest.fn()}
       dimmed={false}
-    />,
+    />
   );
 }
 
@@ -80,7 +80,7 @@ describe("RunProgress", () => {
           batches_total: null,
           docs_listed: 1234,
         })}
-      />,
+      />
     );
 
     expect(screen.getByText("Listed 1,234 documents so far")).toBeVisible();
@@ -92,13 +92,13 @@ describe("RunProgress", () => {
 
     expect(screen.getByRole("progressbar", { name: "Listed" })).toHaveAttribute(
       "aria-valuenow",
-      "20",
+      "20"
     );
     expect(
-      screen.getByRole("progressbar", { name: "Converted" }),
+      screen.getByRole("progressbar", { name: "Converted" })
     ).toHaveAttribute("aria-valuenow", "10");
     expect(
-      screen.getByRole("progressbar", { name: "Indexed" }),
+      screen.getByRole("progressbar", { name: "Indexed" })
     ).toHaveAttribute("aria-valuenow", "5");
     expect(screen.getByText("100%")).toBeVisible();
     expect(screen.getByText("50%")).toBeVisible();
@@ -107,9 +107,7 @@ describe("RunProgress", () => {
 
   it("shows the ETA and the skipped documents when there are any", () => {
     render(
-      <RunProgress
-        progress={progress({ eta_seconds: 252, docs_skipped: 3 })}
-      />,
+      <RunProgress progress={progress({ eta_seconds: 252, docs_skipped: 3 })} />
     );
 
     expect(screen.getByText("About 4 min 12 sec left")).toBeVisible();
@@ -130,7 +128,7 @@ describe("RunRow progress", () => {
 
     expect(screen.getByTestId("run-progress")).toBeVisible();
     expect(screen.getByTestId("run-row")).toContainElement(
-      screen.getByTestId("run-progress"),
+      screen.getByTestId("run-progress")
     );
   });
 
