@@ -25,7 +25,7 @@ from onyx.chat.chat_utils import (
     is_last_assistant_message_clarification,
 )
 from onyx.chat.errors import chat_error
-from onyx.chat.execution import chat_turn_work, start_chat_turn
+from onyx.chat.execution import chat_turn_work, host_agent_work, start_chat_turn
 from onyx.chat.files import (
     collect_available_file_ids,
     convert_loaded_files_to_chat_files,
@@ -179,26 +179,6 @@ def _load_session(
         db_session=db_session,
         project_id=chat_session.project_id,
     )
-    persona = chat_session.persona
-    tenant_id = get_current_tenant_id()
-    # Record the user's first chat for milestone tracking.
-    mt_cloud_telemetry(
-        tenant_id=tenant_id,
-        distinct_id=str(user.id) if not user.is_anonymous else tenant_id,
-        event=MilestoneRecordType.MULTIPLE_ASSISTANTS,
-    )
-    mt_cloud_telemetry(
-        tenant_id=tenant_id,
-        distinct_id=str(user.id) if not user.is_anonymous else tenant_id,
-        event=MilestoneRecordType.USER_MESSAGE_SENT,
-        properties={
-            "origin": request.origin.value,
-            "has_files": len(request.file_descriptors) > 0,
-            "has_project": chat_session.project_id is not None,
-            "has_persona": persona is not None and persona.id != DEFAULT_PERSONA_ID,
-            "deep_research": request.deep_research,
-        },
-    )
 
     return chat_session
 
@@ -289,13 +269,19 @@ def prepare_chat_turn(
     slack_context: SlackContext | None = None,
     additional_context: str | None = None,
     queued_turn: QueuedChatTurn | None = None,
+    agent_host: bool = False,
 ) -> ChatTurnSetup:
     """Capture configuration, load files, then reserve responses before execution.
 
-    A queued turn starts from its accepted message. It accepts the message and
-    reserves its response right after admission, so a later failure saves an
-    error response that pauses the queue.
+    A queued turn starts from its accepted question: a submitted message, or a
+    hidden AGENT_RESULTS message whose response's first step receives the results.
+    It accepts the question and reserves its response right after admission, so a
+    later failure saves an error response that pauses the queue.
+
+    An agent host adds no messages. Its setup belongs to the selected response,
+    the request's parent, and its agents run with that configuration.
     """
+    results_turn = queued_turn is not None and queued_turn.message is None
     admission = ChatTurnAdmission(
         get_cache_backend(operation_timeout_s=ADMISSION_CACHE_TIMEOUT_S)
     )
@@ -310,7 +296,7 @@ def prepare_chat_turn(
                 new_msg_req = SendMessageRequest.model_validate(
                     new_msg_req.model_dump() | chat_session.tool_selection.model_dump()
                 )
-            elif queued_turn is None:
+            elif queued_turn is None and not agent_host:
                 selection = ChatToolSelection(
                     allowed_tool_ids=new_msg_req.allowed_tool_ids,
                     preferred_tool_id=new_msg_req.preferred_tool_id,
@@ -338,7 +324,9 @@ def prepare_chat_turn(
                         token_count=len(
                             get_tokenizer(None, None).encode(accepted_text)
                         ),
-                        message_type=MessageType.USER,
+                        message_type=MessageType.AGENT_RESULTS
+                        if results_turn
+                        else MessageType.USER,
                         db_session=db_session,
                         commit=False,
                     )
@@ -355,6 +343,30 @@ def prepare_chat_turn(
                 if not has_global_permission(user, Permission.WRITE_CHAT):
                     raise OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS)
                 check_token_rate_limits(user)
+            elif agent_host:
+                response_ids = [parent_message.id]
+            if not results_turn and not agent_host:
+                persona = chat_session.persona
+                tenant_id = get_current_tenant_id()
+                # Record the user's first chat for milestone tracking.
+                mt_cloud_telemetry(
+                    tenant_id=tenant_id,
+                    distinct_id=str(user.id) if not user.is_anonymous else tenant_id,
+                    event=MilestoneRecordType.MULTIPLE_ASSISTANTS,
+                )
+                mt_cloud_telemetry(
+                    tenant_id=tenant_id,
+                    distinct_id=str(user.id) if not user.is_anonymous else tenant_id,
+                    event=MilestoneRecordType.USER_MESSAGE_SENT,
+                    properties={
+                        "origin": new_msg_req.origin.value,
+                        "has_files": len(new_msg_req.file_descriptors) > 0,
+                        "has_project": chat_session.project_id is not None,
+                        "has_persona": persona is not None
+                        and persona.id != DEFAULT_PERSONA_ID,
+                        "deep_research": new_msg_req.deep_research,
+                    },
+                )
             selected_models = _select_models(
                 new_msg_req,
                 chat_session,
@@ -421,7 +433,11 @@ def prepare_chat_turn(
                 db_session.commit()
             token_counter = get_llm_token_counter(selected_models[0][0])
             # Regeneration reuses the user message and its accepted query.
-            if queued_turn is None and parent_message.message_type != MessageType.USER:
+            if (
+                queued_turn is None
+                and not agent_host
+                and parent_message.message_type != MessageType.USER
+            ):
                 accepted_text = process_chat_query(
                     new_msg_req.message, chat_session, user, db_session
                 )
@@ -447,7 +463,9 @@ def prepare_chat_turn(
                 )
                 chat_history.append(user_message)
             persona = chat_session.persona
-            user_message_id = chat_history[-1].id
+            response_parent_id = chat_history[-1].id
+            # Clients render no question for a follow-up response.
+            user_message_id = None if results_turn or agent_host else response_parent_id
             context_user_files = capture_user_file_metadata(
                 resolve_context_user_files(
                     persona, chat_session.project_id, user.id, db_session
@@ -619,7 +637,7 @@ def prepare_chat_turn(
         if not record_mode_persists_content(incognito_record_mode):
             admission.refresh()
             history_store = RedisChatHistoryStore(
-                message_id=user_message_id,
+                message_id=response_parent_id,
                 chat_session_id=chat_session_id,
                 admission=admission,
             )
@@ -637,7 +655,7 @@ def prepare_chat_turn(
                 response_ids = reserve_chat_response_ids(
                     db_session=db_session,
                     chat_session_id=chat_session_id,
-                    parent_message_id=user_message_id,
+                    parent_message_id=response_parent_id,
                     model_display_names=[name for _, name in selected_models],
                 )
         models = [
@@ -671,7 +689,7 @@ def prepare_chat_turn(
             previous_run_id=previous_run_id,
             additional_context=additional_context or new_msg_req.additional_context,
             extracted_context_files=extracted_files,
-            stream_id=user_message_id if is_multi else models[0].message_id,
+            stream_id=response_parent_id if is_multi else models[0].message_id,
             reasoning_effort=reasoning_effort,
             search_params=search_params,
             all_injected_file_metadata=history.all_injected_file_metadata,
@@ -703,9 +721,10 @@ def prepare_chat_turn(
 
 
 def read_repaired_chat_inbox(chat_session_id: UUID, cache: CacheBackend) -> ChatInbox:
-    """Read the inbox after saving a running response that lost its owner.
+    """Read the inbox after saving running responses that lost their owner.
 
-    An ownerless response never finishes, so it would block the queue.
+    An ownerless response never finishes, so the agent waiting for it would not
+    wake, and a running root response would block the queue.
     """
     with get_session_with_current_tenant() as db_session:
         inbox = read_chat_inbox(db_session, chat_session_id)
@@ -722,10 +741,15 @@ def dispatch_pending_chat_messages(
     user_id: UUID,
     litellm_additional_headers: dict[str, str] | None = None,
     custom_tool_additional_headers: dict[str, str] | None = None,
+    *,
+    start_agent_host: bool = True,
 ) -> None:
-    """Start the selected branch's next queued turn through chat admission.
+    """Start the selected branch's next queued work through chat admission.
 
-    The turn uses the pass-through headers of the request that led to it.
+    The next root turn starts first. Otherwise, idle agents' work starts in an
+    agent host when no running child keeps a run store scanning. Chat turns pass
+    `start_agent_host=False`: their own run stores start that work. Started work
+    uses the pass-through headers of the request that led to it.
     """
     try:
         cache = get_cache_backend(operation_timeout_s=ADMISSION_CACHE_TIMEOUT_S)
@@ -733,7 +757,9 @@ def dispatch_pending_chat_messages(
             return
         inbox = read_repaired_chat_inbox(chat_session_id, cache)
         queued_turn = inbox.next_turn
-        if queued_turn is None:
+        if queued_turn is None and not (
+            start_agent_host and inbox.child_work and not inbox.running_response_ids
+        ):
             return
 
         def start_pending_work() -> None:
@@ -746,13 +772,47 @@ def dispatch_pending_chat_messages(
                 if user is None or not user.is_active:
                     logger.info("Queued chat work has no active owner")
                     return
+                dispatch = partial(
+                    dispatch_pending_chat_messages,
+                    chat_session_id,
+                    user_id,
+                    litellm_additional_headers,
+                    custom_tool_additional_headers,
+                    start_agent_host=False,
+                )
+                if queued_turn is None:
+                    if not has_global_permission(user, Permission.WRITE_CHAT):
+                        logger.info("Agent work waits for its owner's write access")
+                        return
+                    host_agent_work(
+                        prepare_chat_turn(
+                            new_msg_req=SendMessageRequest(
+                                message="",
+                                chat_session_id=chat_session_id,
+                                parent_message_id=inbox.selected_response_id,
+                            ),
+                            user=user,
+                            llm_overrides=None,
+                            litellm_additional_headers=litellm_additional_headers,
+                            custom_tool_additional_headers=custom_tool_additional_headers,
+                            agent_host=True,
+                        ),
+                        user,
+                        dispatch,
+                    )
+                    return
                 setup = prepare_chat_turn(
                     new_msg_req=SendMessageRequest(
-                        message=queued_turn.message.message,
+                        message=queued_turn.message.message
+                        if queued_turn.message is not None
+                        else "",
                         chat_session_id=chat_session_id,
                         parent_message_id=queued_turn.parent_response_id,
-                        deep_research=queued_turn.message.deep_research,
-                        llm_override=queued_turn.message.llm_override,
+                        deep_research=queued_turn.message is not None
+                        and queued_turn.message.deep_research,
+                        llm_override=queued_turn.message.llm_override
+                        if queued_turn.message is not None
+                        else None,
                     ),
                     user=user,
                     llm_overrides=None,
@@ -761,15 +821,7 @@ def dispatch_pending_chat_messages(
                     queued_turn=queued_turn,
                 )
                 stream = start_chat_turn(
-                    setup,
-                    user,
-                    dispatch_pending_messages=partial(
-                        dispatch_pending_chat_messages,
-                        chat_session_id,
-                        user_id,
-                        litellm_additional_headers,
-                        custom_tool_additional_headers,
-                    ),
+                    setup, user, dispatch_pending_messages=dispatch
                 )
                 # Delivery and persistence continue without a browser reader.
                 stream.close()
@@ -813,7 +865,7 @@ def _stream_chat_turn(
     """Prepare one request, then read its independently owned agent stream.
 
     `delivers_follow_ups` is false for one-shot callers. Their turns start no
-    queued work.
+    queued work and offer no agent tools.
     """
     setup: ChatTurnSetup | None = None
     stream: ChatStream | None = None
@@ -839,6 +891,7 @@ def _stream_chat_turn(
                 user.id,
                 litellm_additional_headers,
                 custom_tool_additional_headers,
+                start_agent_host=False,
             )
             if delivers_follow_ups and setup.incognito_record_mode is None
             else None,
@@ -1045,7 +1098,7 @@ def run_chat_turn(
 ) -> ChatFullResponse:
     """Run one chat turn to completion for in-process, non-streaming callers.
 
-    These callers read one response, so the turn starts no queued work.
+    These callers read one response, so the turn offers no agent tools.
     """
     response_future = Future[ChatResponseOutcome]()
     packets = handle_stream_message_objects(

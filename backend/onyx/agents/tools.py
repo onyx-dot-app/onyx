@@ -17,14 +17,18 @@ from onyx.llm.models import (
 )
 
 if TYPE_CHECKING:
-    from onyx.agents.models import AgentInfo, RunResult, RunState
+    from onyx.agents.models import (
+        AgentInfo,
+        AgentMessageReceipt,
+        MessageDelivery,
+        RunState,
+    )
     from onyx.agents.runtime import Agent
 
 
-DEFAULT_AGENT_WAIT_SECONDS = 60.0
-
-
 class AgentLifetime(str, Enum):
+    """Foreground children share parent cancellation and completion ownership."""
+
     FOREGROUND = "foreground"
     BACKGROUND = "background"
 
@@ -81,10 +85,6 @@ class SpawnResult(BaseModel):
     run_id: str
 
 
-class ChildRunCancelled(RuntimeError):
-    """The awaited child was cancelled; its parent can continue."""
-
-
 class AgentControl(Protocol):
     """Start and observe authorized agent executions."""
 
@@ -101,28 +101,35 @@ class AgentControl(Protocol):
         lifetime: AgentLifetime = AgentLifetime.FOREGROUND,
     ) -> SpawnResult: ...
 
-    def start_run(
+    def send_message(
         self,
         agent_id: str,
         *,
+        message: str,
+        delivery: "Literal[MessageDelivery.SEND, MessageDelivery.QUEUE]" = ...,
         max_steps: int,
-        messages: Sequence[Message],
-        lifetime: AgentLifetime = AgentLifetime.FOREGROUND,
-    ) -> str: ...
-
-    def wait_run(
-        self, run_id: str, *, timeout: float = DEFAULT_AGENT_WAIT_SECONDS
-    ) -> "RunResult | None":
-        """Return completed output, or raise ChildRunCancelled for a cancelled child."""
-        ...
-
-    def cancel_run(self, run_id: str) -> None: ...
+        total_timeout_s: float | None = None,
+    ) -> "AgentMessageReceipt": ...
 
     def add_completion_cleanup(
         self, run_id: str, callback: Callable[[], None]
     ) -> Future[None]: ...
 
-    def discover_children(self) -> list["AgentInfo"]: ...
+    @property
+    def agent_id(self) -> str:
+        """The calling agent."""
+        ...
+
+    def discover_agents(self) -> list["AgentInfo"]:
+        """The visible agent tree, including the root and the caller."""
+        ...
+
+    def interrupt_agent(self, agent_id: str) -> "AgentInfo | None":
+        """Cancel one agent's active run; the run reports no result.
+
+        Returns None for the caller, the root, or an agent that is not visible.
+        """
+        ...
 
 
 class ToolProgress(BaseModel):

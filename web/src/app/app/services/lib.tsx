@@ -526,7 +526,7 @@ export function processRawChatHistory(
       type:
         messageInfo.error_info || messageInfo.error
           ? "error"
-          : (messageInfo.message_type as "user" | "assistant"),
+          : (messageInfo.message_type as Message["type"]),
       files: messageInfo.files,
       alternateAgentID:
         messageInfo.alternate_assistant_id !== null

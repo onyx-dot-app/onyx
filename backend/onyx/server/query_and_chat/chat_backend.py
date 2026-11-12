@@ -20,7 +20,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.access.access import user_can_access_chat_file
-from onyx.agents.models import MessageDelivery
+from onyx.agents.models import MessageDelivery, RunStatus
 from onyx.auth.api_key import get_hashed_api_key_from_request
 from onyx.auth.pat import get_hashed_pat_from_request
 from onyx.auth.permissions import require_permission
@@ -1406,6 +1406,11 @@ def get_chat_session_processing_status(
     stream_id = get_processing_stream_id(session_id, cache)
     status = ChatSessionProcessingStatus(
         latest_response_id=inbox.selected_response_id,
+        has_active_subagents=any(
+            result.status == RunStatus.RUNNING for result in inbox.results
+        )
+        or bool(inbox.child_work)
+        or (inbox.next_turn is not None and inbox.next_turn.message is None),
         has_startable_input=inbox.next_turn is not None,
         is_processing=stream_id is not None
         or is_chat_session_processing(session_id, cache),
@@ -1422,6 +1427,8 @@ def get_chat_session_processing_status(
             inbox.next_turn is not None
             # Dispatch saves a response whose owner is gone as interrupted.
             or ownerless_response_ids(cache, inbox.running_response_ids)
+            # Agent work needs a host when no running child's store scans.
+            or (inbox.child_work and not inbox.running_response_ids)
         )
     ):
         # Queued work can outlive the process that completed its previous response.

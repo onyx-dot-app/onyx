@@ -80,6 +80,7 @@ beforeEach(() => {
       is_processing: true,
       current_stream: null,
       has_startable_input: false,
+      has_active_subagents: false,
       latest_response_id: null,
     };
     const body =

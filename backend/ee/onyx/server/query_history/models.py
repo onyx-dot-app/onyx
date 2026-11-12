@@ -16,6 +16,9 @@ from onyx.db.models import (
     TaskQueueState,
 )
 
+# Messages that clients do not display as conversation turns.
+HIDDEN_MESSAGE_TYPES = frozenset({MessageType.SYSTEM, MessageType.AGENT_RESULTS})
+
 
 class AbridgedSearchDoc(BaseModel):
     """A subset of the info present in `SearchDoc`"""
@@ -149,7 +152,7 @@ class ChatSessionMinimal(BaseModel):
                 [
                     message
                     for message in chat_session.messages
-                    if message.message_type != MessageType.SYSTEM
+                    if message.message_type not in HIDDEN_MESSAGE_TYPES
                 ]
             ),
         )

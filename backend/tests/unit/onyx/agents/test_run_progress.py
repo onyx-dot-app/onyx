@@ -112,10 +112,12 @@ def test_step_inputs_reach_the_model_and_survive_partial_generation(
     cancel_generation: bool,
 ) -> None:
     incoming = UserMessage(
-        id="steering",
-        content="Use the newer source",
+        id="child-delivery",
+        content="Child found the answer",
         metadata=InputMessageMetadata(
-            source=InputSource.HUMAN, content_metadata=AssistantMessage()
+            source=InputSource.AGENT_RESULT,
+            source_run_id="child",
+            content_metadata=AssistantMessage(),
         ),
     )
     requests: list[list[str]] = []
@@ -134,7 +136,7 @@ def test_step_inputs_reach_the_model_and_survive_partial_generation(
             )
         if len(requests) == 2:
             assert requests[-1][-2] == "Other work finished"
-            assert "Use the newer source" in requests[-1][-1]
+            assert "Child found the answer" in requests[-1][-1]
             # Preparing a later input cannot mutate the accepted conversation.
             incoming.content = "Changed outside the run"
             if cancel_generation:
@@ -154,9 +156,11 @@ def test_step_inputs_reach_the_model_and_survive_partial_generation(
         state=AgentState(
             messages=[
                 UserMessage(
-                    id="earlier-steering",
-                    content="Earlier instruction",
-                    metadata=InputMessageMetadata(source=InputSource.HUMAN),
+                    id="earlier-delivery",
+                    content="Earlier result",
+                    metadata=InputMessageMetadata(
+                        source=InputSource.AGENT_RESULT, source_run_id="earlier"
+                    ),
                 )
             ]
         ),
@@ -178,16 +182,18 @@ def test_step_inputs_reach_the_model_and_survive_partial_generation(
             run.result()
     else:
         assert run.result().output.text == "Answer"
-        assert any("Use the newer source" in text for text in tool_history[1])
+        assert any("Child found the answer" in text for text in tool_history[1])
     snapshot = run.snapshot()
     accepted = snapshot.steps[1].input_messages[0]
-    assert "Use the newer source" in accepted.text
+    assert "Child found the answer" in accepted.text
     # Accepted history keeps provenance; content metadata served preparation only.
-    assert accepted.metadata == InputMessageMetadata(source=InputSource.HUMAN)
+    assert accepted.metadata == InputMessageMetadata(
+        source=InputSource.AGENT_RESULT, source_run_id="child"
+    )
     restored = Run.from_snapshot(snapshot)
     assert (
         sum(
-            "Use the newer source" in message.text
+            "Child found the answer" in message.text
             for message in restored.snapshot().messages
         )
         == 1

@@ -169,6 +169,7 @@ beforeEach(() => {
           JSON.stringify({
             is_processing: false,
             current_stream: null,
+            has_active_subagents: false,
             has_startable_input: false,
             latest_response_id: 2,
           })
@@ -544,6 +545,7 @@ test.each([true, false])(
               JSON.stringify({
                 is_processing: processing,
                 current_stream: null,
+                has_active_subagents: false,
                 has_startable_input: startable,
                 latest_response_id: 2,
               })
@@ -603,6 +605,7 @@ test("a turn found by a readiness check during completion loads once the chat is
           JSON.stringify({
             is_processing: false,
             current_stream: null,
+            has_active_subagents: false,
             has_startable_input: false,
             latest_response_id: latestResponseId,
           })

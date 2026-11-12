@@ -20,9 +20,9 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import MultipleResultsFound
-from sqlalchemy.orm import Session, joinedload, load_only, selectinload
+from sqlalchemy.orm import Session, aliased, joinedload, load_only, selectinload
 from sqlalchemy.sql.expression import ColumnElement
-from sqlalchemy.sql.selectable import CTE
+from sqlalchemy.sql.selectable import CTE, Select
 
 from onyx.agents.models import (
     CompactionCheckpoint,
@@ -37,6 +37,7 @@ from onyx.chat.models import (
     HistoryLink,
     MessageRendering,
     PresentationMode,
+    ResponseAncestry,
     SessionAncestor,
 )
 from onyx.chat.response import message_thinking
@@ -1816,10 +1817,11 @@ def session_ancestors(
     return {row.id: row for row in rows}
 
 
-def agent_path_from_ancestors(
+def agent_ancestor_chain(
     agent_id: UUID, ancestors: dict[UUID, SessionAncestor]
-) -> str:
-    segments: list[str] = []
+) -> list[SessionAncestor]:
+    """Return this agent and its parents, with a complete and acyclic ancestry."""
+    chain: list[SessionAncestor] = []
     visited: set[UUID] = set()
     current: UUID | None = agent_id
     while current is not None:
@@ -1829,8 +1831,18 @@ def agent_path_from_ancestors(
         ancestor = ancestors.get(current)
         if ancestor is None:
             raise ValueError("Agent parent is unavailable")
-        segments.append(ancestor.agent_name or "root")
+        chain.append(ancestor)
         current = ancestor.parent_id
+    return chain
+
+
+def agent_path_from_ancestors(
+    agent_id: UUID, ancestors: dict[UUID, SessionAncestor]
+) -> str:
+    segments = [
+        ancestor.agent_name or "root"
+        for ancestor in agent_ancestor_chain(agent_id, ancestors)
+    ]
     return "/" + "/".join(reversed(segments))
 
 
@@ -1842,22 +1854,82 @@ def agent_session_path(db_session: Session, agent: ChatSession) -> str:
     )
 
 
+def response_invocation(response: ChatMessage) -> ToolCall | None:
+    """The tool call that started a child response; its question records it."""
+    question = response.parent_message
+    return question.invoking_tool_call if question is not None else None
+
+
+def _response_ancestry_select() -> Select:
+    question = aliased(ChatMessage)
+    spawning_response = aliased(ChatMessage)
+    return (
+        select(
+            ChatMessage.id.label("message_id"),
+            ChatMessage.chat_session_id.label("session_id"),
+            ChatMessage.response_status.label("status"),
+            ChatSession.spawned_by_message_id,
+            spawning_response.chat_session_id.label("parent_session_id"),
+            ToolCall.parent_chat_message_id.label("parent_response_id"),
+        )
+        .join(ChatSession, ChatSession.id == ChatMessage.chat_session_id)
+        .outerjoin(question, question.id == ChatMessage.parent_message_id)
+        .outerjoin(ToolCall, ToolCall.id == question.invoking_tool_call_id)
+        .outerjoin(
+            spawning_response,
+            spawning_response.id == ChatSession.spawned_by_message_id,
+        )
+    )
+
+
+def response_invocation_chain(
+    db_session: Session, response_id: int
+) -> list[ResponseAncestry]:
+    """The response, then each response whose tool call started the one before it.
+
+    The chain ends at the root response. Agents can message each other, so it
+    can be longer than the spawn depth. Each step goes to an older response, so
+    the walk ends without a length limit. Empty when the response is missing.
+    """
+    chain = (
+        _response_ancestry_select()
+        .where(ChatMessage.id == response_id)
+        .cte("response_invocation_chain", recursive=True)
+    )
+    chain = chain.union_all(
+        _response_ancestry_select()
+        .join(chain, ChatMessage.id == chain.c.parent_response_id)
+        .where(
+            chain.c.spawned_by_message_id.is_not(None),
+            ChatMessage.id < chain.c.message_id,
+        )
+    )
+    rows = TypeAdapter(list[ResponseAncestry]).validate_python(
+        db_session.execute(select(chain).order_by(chain.c.message_id.desc()))
+        .mappings()
+        .all()
+    )
+    if rows and rows[-1].spawned_by_message_id is not None:
+        raise ValueError("Child response is missing its invocation")
+    return rows
+
+
 def root_response_id(db_session: Session, response: ChatMessage) -> int:
-    current = response
-    visited: set[int] = set()
-    while current.chat_session.spawned_by_message_id is not None:
-        if current.id in visited or len(visited) >= MAX_AGENT_DEPTH:
-            raise ValueError("Child response hierarchy is cyclic or too deep")
-        visited.add(current.id)
-        question = current.parent_message
-        invocation = question.invoking_tool_call if question else None
-        if invocation is None or invocation.parent_chat_message_id is None:
-            raise ValueError("Child response is missing its invocation")
-        parent = db_session.get(ChatMessage, invocation.parent_chat_message_id)
-        if parent is None:
-            raise ValueError("Parent response is unavailable")
-        current = parent
-    return current.id
+    """The root response of the turn whose tool call started this response."""
+    chain = response_invocation_chain(db_session, response.id)
+    if not chain:
+        raise ValueError("Response is unavailable")
+    return chain[-1].message_id
+
+
+def response_on_branch(
+    db_session: Session, response: ChatMessage, branch_ids: Collection[int]
+) -> bool:
+    """Whether the turn that started the response is on the branch.
+
+    A child run belongs to every later turn of the branch that started it.
+    """
+    return root_response_id(db_session, response) in branch_ids
 
 
 def parent_session_id(db_session: Session, session: ChatSession) -> UUID | None:

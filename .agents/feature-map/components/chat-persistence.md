@@ -89,7 +89,8 @@ ChatRunStore (content-persisting only)     chat/run_store.py; each save commits 
                                            no steps yet
   reserve_run_id (sub-agent)               saves the parent's steps so far, then
                                            reserve_child_response__no_commit
-  save (child run end)                     _save_output: the child's terminal record
+  save (child run end)                     _save_output -> save_chat_turn: terminal
+                                           record, display data and source links
   save (root run end)                      ownership check, then:
 ChatResponsePersistence.save               chat/persistence.py; for USAGE_ONLY it is
                                            the run store itself (no ChatRunStore)
@@ -125,8 +126,9 @@ a `USAGE_ONLY` answer takes the legacy path. Reasoning display
 `backend/onyx/db/README.md` describes only the legacy format.
 
 **The tree.** Each session has one root row: `SYSTEM` type, no parent, empty
-text (`db/chat.py:get_or_create_root_message`). Messages alternate user and
-assistant below it. An edit adds a sibling user row under the same parent. A
+text (`db/chat.py:get_or_create_root_message`). A user message starts a turn;
+unread child results start a turn under a hidden `AGENT_RESULTS` question after a
+completed assistant response. Two assistant rows never follow each other. An edit adds a sibling user row under the same parent. A
 regenerate is a send whose parent is the user row, so
 `chat/process_message.py:prepare_chat_turn` reuses that row and adds a sibling
 answer. Each row's `latest_child_message_id` marks the active child. Walking
@@ -135,7 +137,7 @@ those pointers from the root gives the active conversation
 (`db/chat.py:set_as_latest_chat_message`). A multi-model pick sets
 `preferred_response_id` and moves the same pointer (`db/chat.py:set_preferred_response`).
 
-**Child sessions.** When a research or coding sub-agent runs in a
+**Child sessions.** When a research, coding or background sub-agent runs in a
 content-persisting chat, `reserve_child_response__no_commit` creates a
 `ChatSession` with `spawned_by_message_id` set to the parent response. It
 copies the root's user, agent, Slack flag and record mode. A child session has
@@ -143,13 +145,23 @@ no `SYSTEM` root: its first question has no parent, and
 `invoking_tool_call_id` links it to the parent's `ToolCall`, which
 `ChatRunStore.reserve_run_id` saves first. A later call to the same sub-agent
 reuses its child session and chains the new question to the previous
-response, which must be terminal. `db/chat_response.py:_ResponseWriter.store`
+response, which must be terminal. Creation links determine authorized ancestors;
+the invoking tool identifies the requester of each run. Accepted instructions
+also deliver the result to their senders on the selected branch. An automatic response
+to child output links directly to the previous assistant response and retains
+its original invocation. It creates no user-message row. An ancestor can request
+a grandchild's next run without changing the grandchild's session ancestry.
+`db/chat_response.py:_ResponseWriter.store`
 refuses a run tree deeper than 8 or larger than 512 runs, and a run with more
 than 8192 messages, so a very large research turn fails its save. Hard delete and
 retention treat the root and its descendants as one conversation
 (`db/chat.py:session_descendants`). A failed child start deletes the unused
 question, response and empty child session
-(`db/chat_response.py:abort_response_start__no_commit`).
+(`db/chat_response.py:abort_response_start__no_commit`). Child answers retain
+their own source links. Reads prefer those sources and fall back to the root
+response's sources for earlier saved children.
+`db/chat_subagents.py:load_session_agent_metadata` limits recent agents but
+also returns their ancestors, so discovery can reach each selected descendant.
 
 **Tool calls.** On a runtime response, `parent_chat_message_id` always names
 the owning response ([[#turn-number-is-step-index]]), and
@@ -162,16 +174,20 @@ the assistant's call order, not completion order. `tool_id`, `tab_index` and
 **Replay.** Neither path re-runs anything. A runtime response replays through
 `chat/presentation.py:replay_response`, which uses the same message and tool
 renderers as the live stream and reads typed results, not the tool catalog.
-`ChatInput` is the inbox of pending human messages. A step deletes the rows it accepts (`db/chat_inputs.py:consume_inputs__no_commit`)
+It excludes background child output from the `spawn_agent` card. The parent
+receives that output as a message before its next model call.
+`ChatInput` is the inbox: pending human and agent messages, and unread child
+results. A step deletes the rows it accepts (`db/chat_inputs.py:consume_inputs__no_commit`)
 in the transaction that writes `ChatResponseItem.inputs`, the typed list of
-accepted messages, with their identity and source. Starting a new turn moves
-its queued text into the question tree in the same transaction.
+accepted messages. Starting a new run moves its pending instruction into the
+question tree in the same transaction.
 The runtime records an input only after its acceptance transaction commits.
 Live and saved rendering emit accepted human inputs as `user_message` packets
 before the model step that consumed them. This preserves their display order.
-Main Chat accepts text without attachments or request headers. A queued or
-interrupting message keeps its Deep Research choice (`chat_input.deep_research`)
-and the model the picker showed (`chat_input.llm_override`). The human queue belongs to the
+Human input needs no invoking tool call or source response. Main Chat accepts
+text without attachments or request headers. A queued or interrupting message
+keeps its Deep Research choice (`chat_input.deep_research`) and the model the
+picker showed (`chat_input.llm_override`). The human queue belongs to the
 session: only a `send` row targets a response, and a `send` that its run never
 reads waits like queued input. Withdrawing pending text uses the
 same recipient lock as acceptance; accepted text cannot be withdrawn. Promotion
@@ -182,12 +198,43 @@ turn and `accept_queued_turn__no_commit` consumes it with the user-message
 insert under the session lock. A branch whose tip is a question, not a
 response, is not ready for a queued turn. Interrupts take priority and may start after
 any terminal response; ordinary queued turns require completion or the step
-limit (`db/chat_inputs.py:can_start_input`).
-Inbox writers lock the session before the response. The session lock
+limit (`db/chat_inputs.py:can_start_input`, shared with child inboxes). Unread
+finished results wake only an agent whose latest run completed or reached its
+step limit (`db/chat_inputs.py:wakes_for_results`).
+Inbox writers lock the recipient session before the response. The session lock
 uses `NO KEY UPDATE` so response and tool foreign-key checks can proceed.
 Pending text is limited to `db/chat_inputs.py:MAX_PENDING_MESSAGE_BYTES` per
-message. The source check uses `IS TRUE`, so a row with a NULL required field
-fails it.
+message, for human and agent messages. The source check uses `IS TRUE`, so a
+row with a NULL required field fails it.
+Accepted result inputs reference their source response; reconstructed history
+retains that provenance across compaction. Reserving a child response that its
+caller marks as result-delivering (a `spawn_agent` child, or any run started from
+the inbox) adds an `agent_result` row for the child's spawner
+(`db/chat_response.py:reserve_child_response__no_commit`). A child reservation
+is a running response; `chat/run_store.py:ChatRunStore` commits it with its owner
+lease, so a second run of that agent cannot be reserved. The row is readable
+once the response finishes. It names the run's root response: the invocation's
+root, or the newer root of the recipient's previous run when a message from an
+earlier turn continues it. Agents can message each other, so the chain of
+invoking runs can be longer than the spawn depth;
+`db/chat.py:response_invocation_chain` reads it in one query, and
+`db/chat.py:response_on_branch` is the one branch rule for reserving and saving.
+`db/chat_inputs.py:reserve_inbox_run__no_commit` picks that root, and
+`db/chat_inputs.py:agent_result_states` returns it only on branches that contain
+that root, so receipt on one branch does not consume a result on another. A
+completed parent gets a follow-up run under an `AGENT_RESULTS` question when
+unread results arrive, including nested parents
+(`db/chat_inputs.py:reserve_inbox_run__no_commit`); the first model step
+consumes them. Each run of a child delivers its own result to the child's spawner,
+whichever agent's message started it, except a run that `interrupt_agent` stops:
+its row is deleted first (`db/chat_inputs.py:withdraw_agent_result__no_commit`),
+so it wakes no agent. Agent messages to the root have no target run; a root run
+reads them at its next step, and dispatch never starts a root run for them. The runtime suspends a subagent before
+completion while its unread results include running children
+(`RunOwnership.delegated_runs`).
+Cancelled and failed parents do not restart automatically.
+User-submitted queued messages take priority.
+Result inputs remain model context and do not render as user messages.
 Search documents and `tool_id` come from the `ToolCall` rows and their search-doc
 links (`db/chat_response.py:read_response_replay_data`), not from the typed
 result: the saved `SearchDocsResponse` holds no documents. Only

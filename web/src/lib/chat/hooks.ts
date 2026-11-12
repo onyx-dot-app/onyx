@@ -63,7 +63,7 @@ function pendingInputTarget(tree: MessageTreeState | undefined) {
 }
 
 /**
- * Server-owned pending messages of the current chat.
+ * Server-owned pending messages and background activity of the current chat.
  * Mount once per chat surface; the composer only renders the result.
  */
 export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
@@ -102,9 +102,11 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
     statusKey,
     errorHandlingFetcher,
     {
-      // Pending input can start a turn this client did not send.
+      // Pending input and background work can start a turn this client did not send.
       refreshInterval: (current) =>
-        current?.has_startable_input ? SERVER_WORK_POLL_MS : 0,
+        current?.has_startable_input || current?.has_active_subagents
+          ? SERVER_WORK_POLL_MS
+          : 0,
       onErrorRetry: skipRetryOnAuthError,
     }
   );
@@ -147,6 +149,7 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
   // One request per chat at a time. The composer keeps new input until it ends.
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const busy = busyKey !== null && busyKey === pendingKey;
+  const hasActiveSubagents = status?.has_active_subagents ?? false;
 
   return useMemo(() => {
     // A 409 means the server already accepted the message.
@@ -181,6 +184,7 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
       messages: messages ?? EMPTY_PENDING_MESSAGES,
       error: error ? t("loadFailed") : null,
       busy,
+      hasActiveSubagents,
       hasTargetResponse,
       needsResponseSelection,
       submit: async (message, delivery, turn) =>
@@ -254,6 +258,7 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
     messages,
     error,
     busy,
+    hasActiveSubagents,
     hasTargetResponse,
     needsResponseSelection,
     sessionId,

@@ -37,7 +37,6 @@ from onyx.agents.tools import (
     AgentControl,
     AgentLifetime,
     AgentTool,
-    ChildRunCancelled,
     ChildRunWait,
     HumanToolAnswer,
     InputDecision,
@@ -45,6 +44,7 @@ from onyx.agents.tools import (
     PendingToolInput,
     SpawnResult,
     ToolInvocation,
+    ToolOutcome,
 )
 from onyx.chat.models import CheckpointBinding
 from onyx.chat.presentation import project_response
@@ -71,6 +71,7 @@ from tests.unit.onyx.agents.fakes import (
     FakeModelClient,
     FakeRunOwnership,
     FakeRunStore,
+    direct_message_coordinator,
     run_agent,
 )
 
@@ -92,18 +93,43 @@ def test_discovery_isolates_nested_configuration_from_callers() -> None:
     owner.register(info)
     configuration.sources.append("caller change")
     view = owner.view()
-    discovered = view.discover_children("root")[0]
+    discovered = view.discover_agents()[0]
     exposed = discovered.restoration_config
     assert isinstance(exposed, MutableRestorationConfig)
     exposed.sources.append("discovery change")
     for coordinator in (owner, view):
-        saved = coordinator.discover_children("root")[0].restoration_config
+        saved = coordinator.discover_agents()[0].restoration_config
         assert isinstance(saved, MutableRestorationConfig)
         assert saved.sources == ["original"]
 
 
+def test_discovery_refreshes_running_children_owned_elsewhere() -> None:
+    status = RunStatus.RUNNING
+    coordinator = AgentCoordinator(
+        directory=FakeAgentDirectory(read_run_status=lambda *_: status)
+    )
+    coordinator.register(
+        AgentInfo(
+            id="child",
+            path="/root/child",
+            parent_id="root",
+            description="Independent work",
+            restoration_config=None,
+            latest_run_id="child-response",
+            status=status,
+        )
+    )
+    assert coordinator.discover_agents()[0].status == RunStatus.RUNNING
+    status = RunStatus.COMPLETE
+    assert coordinator.discover_agents()[0].status == RunStatus.COMPLETE
+
+
 def parent_agent(
-    execute: Callable[[ToolInvocation], ToolResult], *, agent_id: str | None = None
+    execute: Callable[[ToolInvocation], ToolOutcome],
+    *,
+    agent_id: str | None = None,
+    result_from_children: Callable[[ToolInvocation, list[RunState]], ToolResult]
+    | None = None,
 ) -> Agent:
     responses = iter(
         [
@@ -129,6 +155,7 @@ def parent_agent(
                     parameters={},
                 ),
                 execute=execute,
+                result_from_children=result_from_children,
             )
         ],
     )
@@ -153,20 +180,12 @@ def test_saved_failure_matches_live_failure(
         FakeModelClient(fail),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
     )
-    handles = []
+    handles: list[Run] = []
     with pytest.raises(RunFailed) as live:
         run_agent(child, max_steps=1, runs=handles)
     transcript = handles[0].snapshot()
     assert live.value.failure.kind == kind
     assert "private input" not in transcript.model_dump_json()
-
-    def retrieve(invocation: ToolInvocation) -> ToolResult:
-        with pytest.raises(RunFailed) as saved:
-            invocation.agents.wait_run(transcript.run_id, timeout=2)
-        assert saved.value.failure == live.value.failure
-        return ToolResult(content="inspected")
-
-    parent = parent_agent(retrieve)
     coordinator = AgentCoordinator(
         directory=FakeAgentDirectory(read_run=lambda *_: transcript)
     )
@@ -174,15 +193,19 @@ def test_saved_failure_matches_live_failure(
         AgentInfo(
             id=child.id,
             path="/root/research",
-            parent_id=parent.id,
+            parent_id="parent",
             description="Research",
             restoration_config=None,
         )
     )
-    run_agent(parent, max_steps=2, coordinator=coordinator)
+    try:
+        state = coordinator.child_completion(transcript.run_id, "parent").result(2)
+        assert state.failure == live.value.failure
+    finally:
+        assert coordinator.close(3)
 
 
-def test_child_reuse_preserves_old_records_and_rejects_stale_tool_capabilities() -> (
+def test_child_messages_preserve_old_records_and_reject_stale_tool_capabilities() -> (
     None
 ):
     requests: list[list[str]] = []
@@ -208,7 +231,7 @@ def test_child_reuse_preserves_old_records_and_rejects_stale_tool_capabilities()
         prepare_step=prepare,
     )
 
-    def coordinate(invocation: ToolInvocation) -> ToolResult:
+    def coordinate(invocation: ToolInvocation) -> ChildRunWait:
         nonlocal spawned, prior_control
         if spawned is None:
             prior_control = invocation.agents
@@ -220,92 +243,51 @@ def test_child_reuse_preserves_old_records_and_rejects_stale_tool_capabilities()
                 max_steps=2,
             )
             initial.content = "changed caller copy"
-            result = invocation.agents.wait_run(spawned.run_id, timeout=3)
-            assert result is not None and result.output.text == "answer 1"
-            result.output.content.clear()
-        else:
-            assert prior_control is not None
-            with pytest.raises(RuntimeError):
-                prior_control.start_run(child.id, messages=[], max_steps=1)
-            previous = invocation.agents.wait_run(spawned.run_id, timeout=0)
-            assert previous is not None and previous.output.text == "answer 1"
-            next_id = invocation.agents.start_run(
-                child.id, messages=[UserMessage(content="second task")], max_steps=1
-            )
-            result = invocation.agents.wait_run(next_id, timeout=3)
-            assert result is not None and result.output.text == "answer 2"
-        return ToolResult(content="child finished")
+            return ChildRunWait(run_ids=[spawned.run_id])
+        assert prior_control is not None
+        with pytest.raises(RuntimeError):
+            prior_control.send_message(child.id, message="stale", max_steps=1)
+        receipt = invocation.agents.send_message(
+            child.id, message="second task", max_steps=1
+        )
+        assert receipt.run_id is not None
+        return ChildRunWait(run_ids=[receipt.run_id])
 
-    def exercise() -> None:
-        parent = parent_agent(coordinate)
-        coordinator = AgentCoordinator()
+    parent = parent_agent(
+        coordinate,
+        result_from_children=lambda _invocation, states: ToolResult(
+            content=states[0].messages[-1].text
+        ),
+    )
+    coordinator = direct_message_coordinator()
+    try:
         first = parent.start(max_steps=2, coordinator=coordinator)
-        first.result()
-        assert first.wait_for_idle(timeout=3)
+        first.result(3)
+        assert first.wait_for_idle(3)
         before = first.snapshot()
         second = parent.start(max_steps=2, coordinator=coordinator)
-        second.result()
-        assert second.wait_for_idle(timeout=3)
+        second.result(3)
+        assert second.wait_for_idle(3)
         assert first.snapshot() == before
-        after = second.snapshot()
+        info = next(
+            info for info in coordinator.discover_agents() if info.id == child.id
+        )
+        assert info.latest_run_id is not None
+        after = coordinator.saved_run(info.latest_run_id, parent.id)
         assert before.child_runs[0].input_messages[0].text == "first task"
-        assert after.child_runs[0].input_messages[0].text == "second task"
-        assert after.child_runs[0].previous_run_id == before.child_runs[0].run_id
+        assert after.input_messages[0].text == "second task"
+        assert after.previous_run_id == before.child_runs[0].run_id
         assert before.child_runs[0].parent_tool_call_id == "first"
-        assert after.child_runs[0].parent_message_id == f"{second.id}:0"
-        assert coordinator.discover_children(parent.id)[0].id == child.id
-        assert coordinator.close(timeout=3)
-
-    exercise()
+        assert after.parent_message_id == f"{second.id}:0"
+        assert [
+            info.id
+            for info in coordinator.discover_agents()
+            if info.parent_id == parent.id
+        ] == [child.id]
+    finally:
+        assert coordinator.close(3)
     assert budgets == [2, 1]
     assert requests == [["first task"], ["first task", "answer 1", "second task"]]
-
-
-def test_busy_child_rejects_new_input_and_unknown_identity() -> None:
-    entered, release = threading.Event(), threading.Event()
-    requests: list[list[str]] = []
-
-    def generate(
-        request: GenerationRequest, signal: CancellationSignal
-    ) -> AssistantMessage:
-        requests.append([message.text for message in request.messages])
-        entered.set()
-        while not release.wait(0.01):
-            signal.check()
-        return AssistantMessage(content=[TextContent(text="finished")])
-
-    child = Agent(
-        FakeModelClient(generate),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-    )
-
-    def coordinate(invocation: ToolInvocation) -> ToolResult:
-        spawned = invocation.agents.spawn_agent(
-            child,
-            name="research",
-            description="Facts",
-            messages=[UserMessage(content="accepted")],
-            max_steps=1,
-        )
-        assert entered.wait(2)
-        assert invocation.agents.wait_run(spawned.run_id, timeout=0) is None
-        with pytest.raises(RuntimeError):
-            invocation.agents.start_run(
-                child.id, messages=[UserMessage(content="rejected")], max_steps=1
-            )
-        with pytest.raises(ValueError):
-            invocation.agents.start_run("unknown", messages=[], max_steps=1)
-        release.set()
-        assert invocation.agents.wait_run(spawned.run_id, timeout=3) is not None
-        return ToolResult(content="done")
-
-    parent = parent_agent(coordinate)
-
-    try:
-        run_agent(parent, max_steps=2, coordinator=AgentCoordinator())
-    finally:
-        release.set()
-    assert requests == [["accepted"]]
 
 
 def test_cancelled_parent_keeps_child_identity_for_later_turn() -> None:
@@ -327,7 +309,7 @@ def test_cancelled_parent_keeps_child_identity_for_later_turn() -> None:
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
     )
 
-    def coordinate(invocation: ToolInvocation) -> ToolResult:
+    def coordinate(invocation: ToolInvocation) -> ChildRunWait:
         nonlocal spawned
         if spawned is None:
             spawned = invocation.agents.spawn_agent(
@@ -337,18 +319,21 @@ def test_cancelled_parent_keeps_child_identity_for_later_turn() -> None:
                 messages=[UserMessage(content="first")],
                 max_steps=1,
             )
-            invocation.agents.wait_run(spawned.run_id, timeout=3)
-        else:
-            next_id = invocation.agents.start_run(
-                child.id, messages=[UserMessage(content="second")], max_steps=1
-            )
-            result = invocation.agents.wait_run(next_id, timeout=3)
-            assert result is not None and result.output.text == "replacement"
-        return ToolResult(content="done")
+            return ChildRunWait(run_ids=[spawned.run_id])
+        receipt = invocation.agents.send_message(
+            child.id, message="second", max_steps=1
+        )
+        assert receipt.run_id is not None
+        return ChildRunWait(run_ids=[receipt.run_id])
 
     def exercise() -> None:
-        parent = parent_agent(coordinate)
-        coordinator = AgentCoordinator()
+        parent = parent_agent(
+            coordinate,
+            result_from_children=lambda _invocation, states: ToolResult(
+                content=states[0].messages[-1].text
+            ),
+        )
+        coordinator = direct_message_coordinator()
         first = parent.start(max_steps=2, coordinator=coordinator)
         assert entered.wait(3)
         first.cancel()
@@ -366,12 +351,18 @@ def test_cancelled_parent_keeps_child_identity_for_later_turn() -> None:
     exercise()
 
 
-def test_immediate_restart_waits_for_terminal_child_delivery_to_drain() -> None:
+def test_followup_waits_for_terminal_child_delivery_to_drain() -> None:
     entered, release = threading.Event(), threading.Event()
+    calls: list[str] = []
+
+    def reply(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        calls.append(request.messages[-1].text)
+        return AssistantMessage(content=[TextContent(text="done")])
+
     child = Agent(
-        FakeModelClient(
-            lambda *_: AssistantMessage(content=[TextContent(text="done")])
-        ),
+        FakeModelClient(reply),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
     )
 
@@ -387,38 +378,52 @@ def test_immediate_restart_waits_for_terminal_child_delivery_to_drain() -> None:
                 run.subscribe(observe)
             return binding
 
+    coordinator = ObservedCoordinator()
+
+    def start_again(parent_run_id: str) -> Run | None:
+        return coordinator.start_message_run(
+            child.id,
+            spawner_id=parent.id,
+            messages=[UserMessage(id="again", content="again")],
+            max_steps=1,
+            deadline_at=None,
+            parent_run_id=parent_run_id,
+            parent_message_id="",
+            parent_tool_call_id="send",
+        )
+
     def delegate(invocation: ToolInvocation) -> ToolResult:
         submitted = invocation.agents.spawn_agent(
-            child, name="research", description="Task", messages=[], max_steps=1
+            child,
+            name="research",
+            description="Task",
+            messages=[UserMessage(content="first")],
+            max_steps=1,
         )
-        assert invocation.agents.wait_run(submitted.run_id, timeout=2) is not None
         assert entered.wait(2)
-        restarting = start_thread_future(
-            operation=lambda: invocation.agents.start_run(
-                child.id, messages=[UserMessage(content="again")], max_steps=1
-            ),
-            name="test-restart",
-        )
-        time.sleep(0.03)
-        assert not restarting.done()
+        coordinator.child_completion(submitted.run_id, parent.id).result(2)
+        assert start_again(submitted.run_id) is None
         release.set()
-        run_id = restarting.result(2)
-        assert run_id != submitted.run_id
-        assert invocation.agents.wait_run(run_id, timeout=2) is not None
         return ToolResult(content="done")
 
+    parent = parent_agent(delegate)
     try:
-        run_agent(
-            parent_agent(delegate), max_steps=2, coordinator=ObservedCoordinator()
-        )
+        run_agent(parent, max_steps=2, coordinator=coordinator)
+        previous = coordinator.run(parent.latest_run_id or "")
+        assert previous.wait_for_idle(3)
+        started = start_again(previous.id)
+        assert started is not None
+        assert started.result(3).output.text == "done"
+        assert calls == ["first", "again"]
     finally:
         release.set()
+        assert coordinator.close(3)
 
 
 def test_parent_join_allows_child_to_start_nested_work() -> None:
     parent_answered = threading.Event()
 
-    def nested(invocation: ToolInvocation) -> ToolResult:
+    def nested(invocation: ToolInvocation) -> ChildRunWait:
         assert parent_answered.wait(3)
         leaf = Agent(
             FakeModelClient(
@@ -429,12 +434,15 @@ def test_parent_join_allows_child_to_start_nested_work() -> None:
         submitted = invocation.agents.spawn_agent(
             leaf, name="leaf", description="Nested work", messages=[], max_steps=1
         )
-        result = invocation.agents.wait_run(submitted.run_id, timeout=2)
-        assert result is not None
-        return ToolResult(content=result.output.text)
+        return ChildRunWait(run_ids=[submitted.run_id])
 
     def delegate(invocation: ToolInvocation) -> ToolResult:
-        child = parent_agent(nested)
+        child = parent_agent(
+            nested,
+            result_from_children=lambda _invocation, states: ToolResult(
+                content=states[0].messages[-1].text
+            ),
+        )
         invocation.agents.spawn_agent(
             child, name="research", description="Research", messages=[], max_steps=2
         )
@@ -498,18 +506,22 @@ def test_cancelled_parent_waits_for_child_terminal_record_before_snapshot() -> N
             ],
         )
 
-        def delegate(invocation: ToolInvocation) -> ToolResult:
+        def delegate(invocation: ToolInvocation) -> ChildRunWait:
             spawned = invocation.agents.spawn_agent(
                 child, name="child", description="Work", messages=[], max_steps=1
             )
-            invocation.agents.wait_run(spawned.run_id, timeout=3)
-            return ToolResult(content="done")
+            return ChildRunWait(run_ids=[spawned.run_id])
 
         coordinator = AgentCoordinator()
         with (
             patch("onyx.agents.agent_coordination.CHILD_TERMINAL_TIMEOUT_SECONDS", 0.5),
         ):
-            run = parent_agent(delegate).start(max_steps=2, coordinator=coordinator)
+            run = parent_agent(
+                delegate,
+                result_from_children=lambda _invocation, states: ToolResult(
+                    content=states[0].status.value
+                ),
+            ).start(max_steps=2, coordinator=coordinator)
             try:
                 assert entered.wait(2)
                 run.cancel()
@@ -547,15 +559,19 @@ def test_child_cancellation_retains_provider_cleanup_ownership() -> None:
             generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         )
 
-        def delegate(invocation: ToolInvocation) -> ToolResult:
+        def delegate(invocation: ToolInvocation) -> ChildRunWait:
             spawned = invocation.agents.spawn_agent(
                 child, name="child", description="Work", messages=[], max_steps=1
             )
             spawned_child.set()
-            invocation.agents.wait_run(spawned.run_id, timeout=3)
-            return ToolResult(content="done")
+            return ChildRunWait(run_ids=[spawned.run_id])
 
-        parent = parent_agent(delegate)
+        parent = parent_agent(
+            delegate,
+            result_from_children=lambda _invocation, states: ToolResult(
+                content=states[0].status.value
+            ),
+        )
         coordinator = AgentCoordinator()
         with patch(
             "onyx.agents.agent_coordination.CHILD_TERMINAL_TIMEOUT_SECONDS", 0.01
@@ -681,10 +697,7 @@ def test_failed_child_settlement_retains_accepted_partial_output(
 
 
 def test_background_child_outlives_parent_and_reports_to_application() -> None:
-    from onyx.agents.tools import AgentLifetime
-
     entered, release = threading.Event(), threading.Event()
-    events: list[AgentEvent] = []
     completed: list[RunState] = []
     spawned: list[SpawnResult] = []
 
@@ -726,35 +739,97 @@ def test_background_child_outlives_parent_and_reports_to_application() -> None:
     try:
         run.result(3)
         assert run.wait_for_idle(3)
+        # The finished parent neither waits for nor cancels its background child.
         assert run.snapshot().child_runs == []
         child_run = coordinator.child_run(spawned[0].run_id, parent.id)
         assert child_run is not None
         assert child_run.status == RunStatus.RUNNING
-        assert coordinator.run(child_run.id) is child_run
-        assert not coordinator.completion(child_run.id).done()
-        info = coordinator.registration(child.id)
-        assert info is not None
-        same_scope = coordinator.view()
-        assert same_scope.child_run(child_run.id, parent.id) is child_run
-        other_scope = coordinator.view(
-            directory=FakeAgentDirectory(lookup_agent=lambda *_: info)
-        )
-        with pytest.raises(ValueError, match="not available"):
-            other_scope.child_run(child_run.id, parent.id)
-        granted = coordinator.view(
-            visible_run_ids=[child_run.id],
-            directory=FakeAgentDirectory(lookup_agent=lambda *_: info),
-        )
-        assert granted.child_run(child_run.id, parent.id) is child_run
-        child_run.subscribe(events.append)
         release.set()
         assert child_run.result(3).output.text == "background finished"
         assert child_run.wait_for_idle(3)
-        assert coordinator.completion(child_run.id).result(3).run_id == child_run.id
-        assert any(event.run_id == child_run.id for event in events)
         assert all(event.run_id == run.id for event in root_events)
-        assert any(snapshot.run_id == child_run.id for snapshot in completed)
-        assert coordinator.child_run(child_run.id, parent.id) is child_run
+        assert any(
+            snapshot.run_id == spawned[0].run_id
+            and snapshot.status == RunStatus.COMPLETE
+            for snapshot in completed
+        )
+    finally:
+        release.set()
+        assert coordinator.close(3)
+
+
+def test_stopping_parent_wait_keeps_background_child_running() -> None:
+    entered, release = threading.Event(), threading.Event()
+    spawned: list[SpawnResult] = []
+    completed: list[RunState] = []
+
+    def generate(
+        _request: GenerationRequest, signal: CancellationSignal
+    ) -> AssistantMessage:
+        entered.set()
+        while not release.wait(0.01):
+            signal.check()
+        return AssistantMessage(content=[TextContent(text="background finished")])
+
+    child = Agent(
+        FakeModelClient(generate),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+    )
+
+    def delegate(invocation: ToolInvocation) -> ChildRunWait:
+        spawned.append(
+            invocation.agents.spawn_agent(
+                child,
+                name="background",
+                description="Independent work",
+                messages=[],
+                max_steps=1,
+                lifetime=AgentLifetime.BACKGROUND,
+            )
+        )
+        return ChildRunWait(run_ids=[spawned[0].run_id])
+
+    parent = Agent(
+        FakeModelClient(
+            lambda *_: AssistantMessage(
+                content=[ToolCall(id="delegate", name="delegate", arguments={})]
+            )
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(
+                    name="delegate", description="", parameters={}
+                ),
+                execute=delegate,
+                result_from_children=lambda _invocation, children: ToolResult(
+                    content=children[0].status.value
+                ),
+            )
+        ],
+    )
+    coordinator = AgentCoordinator(
+        store=FakeRunStore(save=lambda run: completed.append(run.snapshot())),
+    )
+    root = parent.start(max_steps=2, coordinator=coordinator)
+    try:
+        assert entered.wait(2)
+        assert root.wait_until_settled(2).status == RunStatus.SUSPENDED
+        root.cancel()
+        with pytest.raises(AgentCancelled):
+            root.result(3)
+        assert root.wait_for_idle(3)
+        child_run = coordinator.child_run(spawned[0].run_id, parent.id)
+        assert child_run is not None
+        assert child_run.status == RunStatus.RUNNING
+        assert not child_run.cancellation_signal.cancelled
+        release.set()
+        assert child_run.result(3).output.text == "background finished"
+        assert child_run.wait_for_idle(3)
+        assert (
+            coordinator.completion(child_run.id).result(3).status == RunStatus.COMPLETE
+        )
+        assert any(state.run_id == child_run.id for state in completed)
     finally:
         release.set()
         assert coordinator.close(3)
@@ -792,7 +867,6 @@ def test_completion_failure_is_retained_and_shutdown_waits_for_handler() -> None
 
 
 def test_fresh_coordinator_view_rebinds_idle_child_and_checks_visibility() -> None:
-    spawned: list[SpawnResult] = []
     restored: list[str] = []
     child = Agent(
         FakeModelClient(
@@ -802,16 +876,9 @@ def test_fresh_coordinator_view_rebinds_idle_child_and_checks_visibility() -> No
     )
 
     def delegate(invocation: ToolInvocation) -> ToolResult:
-        if not spawned:
-            spawned.append(
-                invocation.agents.spawn_agent(
-                    child, name="child", description="", messages=[], max_steps=1
-                )
-            )
-        else:
-            run_id = invocation.agents.start_run(child.id, messages=[], max_steps=1)
-            result = invocation.agents.wait_run(run_id, timeout=3)
-            assert result is not None and result.output.text == "new binding"
+        invocation.agents.spawn_agent(
+            child, name="child", description="", messages=[], max_steps=1
+        )
         return ToolResult(content="done")
 
     coordinator = AgentCoordinator()
@@ -825,32 +892,34 @@ def test_fresh_coordinator_view_rebinds_idle_child_and_checks_visibility() -> No
     def restore(agent_id: str, parent_id: str) -> Agent:
         assert agent_id == child.id and parent_id == parent.id
         restored.append(agent_id)
-        replacement = Agent(
+        return Agent(
             FakeModelClient(
                 lambda *_: AssistantMessage(content=[TextContent(text="new binding")])
             ),
             generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
             agent_id=agent_id,
         )
-        return replacement
 
     current = coordinator.view(
         directory=FakeAgentDirectory(
             lookup_agent=lambda *_: info, restore_agent=restore
         )
     )
-    second = parent.start(max_steps=2, coordinator=current)
-    second.result(3)
-    assert second.wait_for_idle(3)
-    assert restored == [child.id]
-    assert current.run(first.id) is first
-    hidden = coordinator.view(
-        directory=FakeAgentDirectory(lookup_agent=lambda *_: None)
-    )
-    assert hidden.discover_children(parent.id) == []
-    with pytest.raises(ValueError, match="not available"):
-        hidden.child_run(spawned[0].run_id, parent.id)
-    assert coordinator.close(3)
+    try:
+        replacement = current.resolve_child(child.id, parent.id)
+        second = replacement.start(max_steps=1, coordinator=current)
+        assert second.result(3).output.text == "new binding"
+        assert second.wait_for_idle(3)
+        assert restored == [child.id]
+        assert current.run(first.id) is first
+        hidden = coordinator.view(
+            directory=FakeAgentDirectory(lookup_agent=lambda *_: None)
+        )
+        assert hidden.discover_agents() == []
+        with pytest.raises(ValueError, match="not available"):
+            hidden.child_run(first.snapshot().child_runs[0].run_id, parent.id)
+    finally:
+        assert coordinator.close(3)
 
 
 def test_views_authorize_runs_independently_for_the_same_child() -> None:
@@ -870,13 +939,15 @@ def test_views_authorize_runs_independently_for_the_same_child() -> None:
                 ).run_id
             )
         else:
-            run_ids.append(
-                invocation.agents.start_run(child.id, messages=[], max_steps=1)
+            receipt = invocation.agents.send_message(
+                child.id, message="followup", max_steps=1
             )
-        invocation.agents.wait_run(run_ids[-1], timeout=3)
+            assert receipt.run_id is not None
+            run_ids.append(receipt.run_id)
+        owner.child_completion(run_ids[-1], parent.id).result(3)
         return ToolResult(content="done")
 
-    owner = AgentCoordinator()
+    owner = direct_message_coordinator()
     parent = parent_agent(delegate)
     for _ in range(2):
         run = parent.start(max_steps=2, coordinator=owner)
@@ -914,73 +985,23 @@ def test_views_authorize_runs_independently_for_the_same_child() -> None:
                 view.child_run(hidden.id, parent.id)
             with pytest.raises(ValueError, match="not available"):
                 view.saved_run(hidden.id, parent.id)
-            assert view.saved_run(hidden.id, parent.id, load_archive=False) is None
             assert view.child_run(visible.id, parent.id) is visible
             assert view.saved_run(visible.id, parent.id).run_id == visible.id
         assert owner.view().resolve_child(child.id, parent.id) is child
 
-        def reject_stale_context(invocation: ToolInvocation) -> ToolResult:
+        def reject_stale_context(_invocation: ToolInvocation) -> ToolResult:
             with pytest.raises(ValueError, match="restoration is unavailable"):
-                invocation.agents.start_run(child.id, messages=[], max_steps=1)
+                branch_a.resolve_child(child.id, parent.id)
             return ToolResult(content="rejected")
 
         branch_parent = parent_agent(reject_stale_context, agent_id=parent.id)
         branch_run = branch_parent.start(max_steps=2, coordinator=branch_a)
         branch_run.result(3)
         assert branch_run.wait_for_idle(3)
-        assert branch_a.discover_children(parent.id)[0].latest_run_id == first.id
-        assert branch_b.discover_children(parent.id)[0].latest_run_id == second.id
+        assert branch_a.discover_agents()[0].latest_run_id == first.id
+        assert branch_b.discover_agents()[0].latest_run_id == second.id
         assert owner.child_run(first.id, parent.id) is first
         assert owner.child_run(second.id, parent.id) is second
-    finally:
-        assert owner.close(3)
-
-
-def test_foreground_continuation_retains_consumed_background_history() -> None:
-    from onyx.agents.tools import AgentLifetime
-
-    child = Agent(
-        FakeModelClient(
-            lambda *_: AssistantMessage(content=[TextContent(text="done")])
-        ),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-    )
-    runs: list[str] = []
-
-    def delegate(invocation: ToolInvocation) -> ToolResult:
-        spawned = invocation.agents.spawn_agent(
-            child,
-            name="child",
-            description="",
-            messages=[],
-            max_steps=1,
-            lifetime=AgentLifetime.BACKGROUND,
-        )
-        runs.append(spawned.run_id)
-        assert invocation.agents.wait_run(runs[-1], timeout=3) is not None
-        runs.append(
-            invocation.agents.start_run(
-                child.id, messages=[], max_steps=1, lifetime=AgentLifetime.BACKGROUND
-            )
-        )
-        assert invocation.agents.wait_run(runs[-1], timeout=3) is not None
-        runs.append(invocation.agents.start_run(child.id, messages=[], max_steps=1))
-        assert invocation.agents.wait_run(runs[-1], timeout=3) is not None
-        return ToolResult(content="done")
-
-    owner = AgentCoordinator()
-    parent = parent_agent(delegate)
-    run = parent.start(max_steps=2, coordinator=owner)
-    try:
-        run.result(3)
-        assert run.wait_for_idle(3)
-        snapshot = run.snapshot()
-        assert [child.run_id for child in snapshot.child_runs] == runs
-        assert [child.previous_run_id for child in snapshot.child_runs] == [
-            None,
-            *runs[:-1],
-        ]
-        assert all(child.parent_run_id == run.id for child in snapshot.child_runs)
     finally:
         assert owner.close(3)
 
@@ -1362,7 +1383,7 @@ def test_cold_restore_rejects_existing_owner_and_missing_child_rolls_back() -> N
         with pytest.raises(RuntimeError, match="already running or draining"):
             replacement.resume(snapshot, coordinator=coordinator)
         assert coordinator.run(run.id) is run
-        assert coordinator.active_run(agent.id) is run
+        assert coordinator.newest_run(agent.id) is run
         assert run.status == RunStatus.SUSPENDED
 
         unrelated = AgentCoordinator()
@@ -1371,7 +1392,7 @@ def test_cold_restore_rejects_existing_owner_and_missing_child_rolls_back() -> N
         broken.progress.child_run_ids = ["missing-child"]
         with pytest.raises(ValueError, match="not available"):
             replacement.resume(broken, coordinator=unrelated)
-        assert unrelated.active_run(agent.id) is None
+        assert unrelated.newest_run(agent.id) is None
         assert unrelated.close(0)
     finally:
         assert coordinator.close(3)
@@ -1827,7 +1848,7 @@ def test_coordinator_close_leaves_released_state_unchanged() -> None:
     assert owner.close(3)
     with pytest.raises(RunReleased):
         run.result(0)
-    assert owner.active_run(agent.id) is None
+    assert owner.newest_run(agent.id) is None
     assert run.status == RunStatus.SUSPENDED
     assert cleaned == [run.id]
 
@@ -1959,12 +1980,14 @@ def test_remote_run_wait_and_cancel_use_authorized_fresh_snapshots(
     def execute(invocation: ToolInvocation) -> ToolResult:
         nonlocal complete
         assert coordinator.saved_run(remote.run_id, parent.id).status == status
-        assert invocation.agents.wait_run(remote.run_id, timeout=0.02) is None
-        invocation.agents.cancel_run(remote.run_id)
+        completion = coordinator.child_completion(remote.run_id, parent.id)
+        with pytest.raises(TimeoutError):
+            completion.result(0.02)
+        coordinator.cancel_child(remote.run_id, parent.id)
         assert cancellations == [(remote.run_id, parent.id)]
         complete = True
-        assert invocation.agents.wait_run(remote.run_id, timeout=1) is not None
-        invocation.agents.cancel_run(remote.run_id)
+        assert completion.result(2).status == RunStatus.COMPLETE
+        coordinator.cancel_child(remote.run_id, parent.id)
         assert len(cancellations) == 1
         archived = coordinator.restore_completed(
             remote.model_copy(update={"status": RunStatus.COMPLETE})
@@ -1975,7 +1998,7 @@ def test_remote_run_wait_and_cancel_use_authorized_fresh_snapshots(
                 remote.run_id, lambda: pytest.fail("archived cleanup")
             )
         with pytest.raises(ValueError, match="not available"):
-            invocation.agents.cancel_run("hidden")
+            coordinator.cancel_child("hidden", parent.id)
         return ToolResult(content="done")
 
     parent = parent_agent(execute)
@@ -1999,7 +2022,7 @@ def test_remote_run_wait_and_cancel_use_authorized_fresh_snapshots(
         )
     )
     run_agent(parent, max_steps=2, coordinator=coordinator)
-    assert len(reads) >= 5
+    assert len(reads) >= 2
     assert owner.close(timeout=3)
 
 
@@ -2017,19 +2040,18 @@ def test_handled_remote_child_failure_does_not_fail_parent(
         else RunFailure(kind=RunFailureKind.EXECUTION, message="remote failed"),
     )
 
-    def execute(invocation: ToolInvocation) -> ToolResult:
-        parent_run = coordinator.active_run(parent.id)
+    def execute(_invocation: ToolInvocation) -> ChildRunWait:
+        parent_run = coordinator.newest_run(parent.id)
         assert parent_run is not None
         assert parent_run.coordination is not None
         parent_run.coordination.children[remote.run_id] = False
-        with pytest.raises(
-            ChildRunCancelled if cancelled else RunFailed,
-            match="was cancelled" if cancelled else "remote failed",
-        ):
-            invocation.agents.wait_run(remote.run_id, timeout=1)
+        return ChildRunWait(run_ids=[remote.run_id])
+
+    def handle(_invocation: ToolInvocation, states: list[RunState]) -> ToolResult:
+        assert states[0].status == remote.status
         return ToolResult(content="Child failure handled")
 
-    parent = parent_agent(execute)
+    parent = parent_agent(execute, result_from_children=handle)
     owner = AgentCoordinator(directory=FakeAgentDirectory(read_run=lambda *_: remote))
     info = AgentInfo(
         id="remote-agent",
@@ -2053,7 +2075,7 @@ def test_handled_remote_child_failure_does_not_fail_parent(
 
 
 @pytest.mark.parametrize("location", ["local", "saved", "polled"])
-def test_unhandled_child_cancellation_is_a_tool_error(
+def test_child_cancellation_can_be_reported_as_a_tool_error(
     location: Literal["local", "saved", "polled"],
 ) -> None:
     remote = RunState(
@@ -2075,7 +2097,7 @@ def test_unhandled_child_cancellation_is_a_tool_error(
     ) -> AssistantMessage:
         raise AgentCancelled()
 
-    def execute(invocation: ToolInvocation) -> ToolResult:
+    def execute(invocation: ToolInvocation) -> ChildRunWait:
         if location == "local":
             child = invocation.agents.spawn_agent(
                 Agent(
@@ -2090,10 +2112,13 @@ def test_unhandled_child_cancellation_is_a_tool_error(
             child_run_id = child.run_id
         else:
             child_run_id = remote.run_id
-        invocation.agents.wait_run(child_run_id, timeout=2)
-        pytest.fail("Waiting for a cancelled child must raise")
+        return ChildRunWait(run_ids=[child_run_id])
 
-    parent = parent_agent(execute)
+    def handle(_invocation: ToolInvocation, states: list[RunState]) -> ToolResult:
+        assert states[0].status == RunStatus.CANCELLED
+        return ToolResult(content="Child was cancelled", is_error=True)
+
+    parent = parent_agent(execute, result_from_children=handle)
     coordinator = AgentCoordinator(directory=FakeAgentDirectory(read_run=read))
     coordinator.register(
         AgentInfo(
@@ -2146,7 +2171,7 @@ def test_parent_waits_for_child_owned_by_another_coordinator(status: RunStatus) 
         assert remote.wait_until_settled(2).status == RunStatus.SUSPENDED
 
     def delegate(_invocation: ToolInvocation) -> ChildRunWait:
-        parent_run = coordinator.active_run(parent.id)
+        parent_run = coordinator.newest_run(parent.id)
         assert parent_run is not None
         assert parent_run.coordination is not None
         parent_run.coordination.attach_children([remote.id])
@@ -2274,7 +2299,7 @@ def test_observing_older_remote_run_preserves_latest_run(
             coordinator.release(coordinator.restore_completed(newer))
         release_status.set()
         assert completion.result(2).run_id == older.run_id
-        assert coordinator.discover_children("parent")[0].latest_run_id == newer.run_id
+        assert coordinator.discover_agents()[0].latest_run_id == newer.run_id
         assert coordinator.saved_run(newer.run_id, "parent") == newer
     finally:
         release_read.set()
@@ -2283,7 +2308,7 @@ def test_observing_older_remote_run_preserves_latest_run(
         assert coordinator.close(3)
 
 
-def test_zero_time_wait_uses_completed_remote_runs_within_authorized_view() -> None:
+def test_completed_remote_runs_remain_scoped_to_authorized_view() -> None:
     child = Agent(
         FakeModelClient(
             lambda *_: AssistantMessage(content=[TextContent(text="done")])
@@ -2304,19 +2329,17 @@ def test_zero_time_wait_uses_completed_remote_runs_within_authorized_view() -> N
             return snapshot.model_copy(update={"status": RunStatus.RUNNING})
         return snapshot.model_copy(deep=True)
 
-    def execute(invocation: ToolInvocation) -> ToolResult:
+    def execute(_invocation: ToolInvocation) -> ToolResult:
         for run_id in snapshots:
             coordinator.child_completion(run_id, parent.id).result(2)
         previous_reads = dict(reads)
         for run_id in snapshots:
-            result = invocation.agents.wait_run(run_id, timeout=0)
-            assert result is not None
+            result = coordinator.child_completion(run_id, parent.id).result(0)
             assert result.run_id == run_id
-            assert result.output.text == "done"
+            assert result.messages[-1].text == "done"
             with pytest.raises(ValueError, match="not available"):
-                coordinator.saved_run(run_id, "another-parent", load_archive=False)
+                coordinator.saved_run(run_id, "another-parent")
             branch = coordinator.view(directory=FakeAgentDirectory())
-            assert branch.saved_run(run_id, parent.id, load_archive=False) is None
             with pytest.raises(ValueError, match="not available"):
                 branch.saved_run(run_id, parent.id)
         assert reads == previous_reads
@@ -2421,10 +2444,9 @@ def test_registration_releases_execution_locks_during_spawn_and_resume() -> None
     )
 
     def spawn(invocation: ToolInvocation) -> ToolResult:
-        submitted = invocation.agents.spawn_agent(
+        invocation.agents.spawn_agent(
             child, name="child", description="", max_steps=1, messages=[]
         )
-        assert invocation.agents.wait_run(submitted.run_id, timeout=3) is not None
         return ToolResult(content="child done")
 
     parent = parent_agent(spawn)
@@ -2868,10 +2890,8 @@ def test_restoring_history_preserves_branch_latest_run(
             restored = branch.restore_completed(saved)
         assert branch.child_run(archived.run_id, "root") is restored
         assert branch.completion(archived.run_id).result(0) == archived
-        assert (
-            branch.discover_children("root")[0].latest_run_id == current.latest_run_id
-        )
-        assert other.discover_children("root")[0].latest_run_id == archived.run_id
+        assert branch.discover_agents()[0].latest_run_id == current.latest_run_id
+        assert other.discover_agents()[0].latest_run_id == archived.run_id
     finally:
         assert owner.close(3)
 
@@ -2907,11 +2927,11 @@ def test_same_scope_view_observes_completion_of_a_running_child() -> None:
         run = child.start(max_steps=1, coordinator=owner)
         assert entered.wait(3)
         view = owner.view()
-        assert view.discover_children("root")[0].latest_run_id == run.id
+        assert view.discover_agents()[0].latest_run_id == run.id
         finish.set()
         assert run.result(3).output.text == "done"
         assert run.wait_for_idle(3)
-        info = view.discover_children("root")[0]
+        info = view.discover_agents()[0]
         assert info.latest_run_id == run.id
         assert info.status == RunStatus.COMPLETE
     finally:
@@ -2996,7 +3016,7 @@ def test_child_deadline_survives_checkpoint_and_ownership_transfer(
 
 
 @pytest.mark.parametrize("save_error", [None, ValueError, TimeoutError])
-def test_wait_run_exposes_only_saved_child_results(
+def test_child_completion_exposes_only_saved_results(
     save_error: type[Exception] | None,
 ) -> None:
     saving, release, checked = threading.Event(), threading.Event(), threading.Event()
@@ -3023,18 +3043,20 @@ def test_wait_run_exposes_only_saved_child_results(
             child, name="child", description="", messages=[], max_steps=1
         )
         assert saving.wait(2)
-        assert invocation.agents.wait_run(spawned.run_id, timeout=0) is None
+        completion = coordinator.child_completion(spawned.run_id, parent.id)
+        assert not completion.done()
         checked.set()
         if save_error is not None:
             with pytest.raises(save_error, match="child save failed"):
-                invocation.agents.wait_run(spawned.run_id, timeout=2)
+                completion.result(2)
         else:
-            result = invocation.agents.wait_run(spawned.run_id, timeout=2)
+            result = completion.result(2)
             assert result is not None
-            observed.append(result.output.text)
+            observed.append(result.messages[-1].text)
         return ToolResult(content="done")
 
-    root = parent_agent(delegate).start(max_steps=2, coordinator=coordinator)
+    parent = parent_agent(delegate)
+    root = parent.start(max_steps=2, coordinator=coordinator)
     try:
         assert checked.wait(2)
         assert observed == []
@@ -3066,7 +3088,6 @@ def test_parent_history_isolated_from_public_child_completion() -> None:
             child, name="child", description="", messages=[], max_steps=1
         )
         children.append(spawned.run_id)
-        assert invocation.agents.wait_run(spawned.run_id, timeout=2) is not None
         return ToolResult(content="done")
 
     root = parent_agent(delegate).start(max_steps=2, coordinator=coordinator)
@@ -3293,9 +3314,7 @@ def test_restoring_terminal_child_resolves_existing_parent_dependency(
         assert owner.completion(child.id) is completion
         assert completion.result(1) == terminal
         info = next(
-            info
-            for info in owner.discover_children(root.agent_id)
-            if info.id == child.agent_id
+            info for info in owner.discover_agents() if info.id == child.agent_id
         )
         assert info.status == RunStatus.COMPLETE
         root.result(3)
@@ -3352,7 +3371,7 @@ def test_conflicting_restore_keeps_accepted_result_and_latest_run(
         owner.run(accepted.run_id)
     restored = owner.restore_completed(accepted)
     assert restored.snapshot() == accepted
-    info = owner.discover_children("root")[0]
+    info = owner.discover_agents()[0]
     assert info.latest_run_id == ("newer" if newer_run else "accepted")
     assert info.status == RunStatus.COMPLETE
     assert owner.close(2)

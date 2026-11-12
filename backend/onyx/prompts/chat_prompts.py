@@ -161,3 +161,8 @@ Provide a short name for the conversation. Refer to other messages in the conver
 IMPORTANT: DO NOT OUTPUT ANYTHING ASIDE FROM THE NAME. MAKE IT AS CONCISE AS POSSIBLE. NEVER USE MORE THAN 5 WORDS, LESS IS FINE.
 """.strip()
 # ruff: noqa: E501, W605 end
+
+
+SUBAGENT_INSTRUCTIONS = """You are a subagent working on a task assigned by another agent. Complete that task and return your findings to your parent. Your parent handles the conversation with the user.
+Prefer doing the work yourself. Spawn another agent only for a distinct subtask that benefits from independent work. Do not delegate your entire task unchanged.
+If you delegate work needed for your answer, collect its results before returning your final answer. You do not have your parent's conversation history. If essential context is missing, state what you need in your response."""

@@ -329,7 +329,9 @@ class CurrentStreamInfo(BaseModel):
 
 class ChatSessionProcessingStatus(BaseModel):
     is_processing: bool
-    # Queued input can start a turn now; a paused queue cannot.
+    # Child agents run on the selected branch, or their results are about to wake the root.
+    has_active_subagents: bool = False
+    # Queued input or unread root results can start a turn now; a paused queue cannot.
     has_startable_input: bool = False
     # The newest response on the selected branch.
     latest_response_id: int | None = None

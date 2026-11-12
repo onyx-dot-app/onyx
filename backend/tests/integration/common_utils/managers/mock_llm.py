@@ -106,7 +106,12 @@ class MockLLMManager:
     """LLM providers that point at the mock LLM server."""
 
     @staticmethod
-    def create(api_base: str, user_performing_action: DATestUser) -> DATestLLMProvider:
+    def create(
+        api_base: str,
+        user_performing_action: DATestUser,
+        model_name: str = MOCK_LLM_MODEL_NAME,
+        make_default: bool = True,
+    ) -> DATestLLMProvider:
         upsert_request = LLMProviderUpsertRequest(
             name=f"mock-llm-{uuid4()}",
             provider=LlmProviderNames.OPENAI_COMPATIBLE,
@@ -119,10 +124,10 @@ class MockLLMManager:
             personas=[],
             model_configurations=[
                 ModelConfigurationUpsertRequest(
-                    name=MOCK_LLM_MODEL_NAME,
+                    name=model_name,
                     is_visible=True,
                     max_input_tokens=MOCK_LLM_MAX_INPUT_TOKENS,
-                    display_name=MOCK_LLM_MODEL_NAME,
+                    display_name=model_name,
                     supports_image_input=False,
                 )
             ],
@@ -140,7 +145,7 @@ class MockLLMManager:
             name=data["name"],
             provider=data["provider"],
             api_key=data["api_key"],
-            default_model_name=MOCK_LLM_MODEL_NAME,
+            default_model_name=model_name,
             is_public=data["is_public"],
             is_auto_mode=data.get("is_auto_mode", False),
             groups=data["groups"],
@@ -153,9 +158,11 @@ class MockLLMManager:
                 if mc.get("id") is not None
             ],
         )
+        if not make_default:
+            return provider
         try:
             _set_default(
-                DefaultModel(provider_id=provider.id, model_name=MOCK_LLM_MODEL_NAME),
+                DefaultModel(provider_id=provider.id, model_name=model_name),
                 user_performing_action,
             )
         except Exception:

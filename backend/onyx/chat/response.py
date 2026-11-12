@@ -23,6 +23,7 @@ from onyx.llm.models import (
     ToolCall,
     ToolResultMessage,
 )
+from onyx.tools.tool_implementations.subagents.models import ChatConfiguration
 from onyx.utils.logger import setup_logger
 from onyx.utils.streaming_json import parse_partial_object
 
@@ -85,7 +86,7 @@ def response_record(
             raise ValueError("Child response requires its agent registration")
         configuration = info.restoration_config if info else None
         if configuration is not None and not isinstance(
-            configuration, ResearchConfiguration
+            configuration, (ResearchConfiguration, ChatConfiguration)
         ):
             raise ValueError("Unsupported saved child configuration")
         return ResponseRecord(

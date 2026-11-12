@@ -12428,6 +12428,7 @@
     },
     "input": {
       "appInputBar": {
+        "subagentsWorking": "サブエージェントが作業中",
         "attachFilesButton": {
           "tooltip": "ファイルを添付"
         },
@@ -12709,6 +12710,9 @@
         "timedOut": {
           "text": "応答は制限時間に達したため停止しました。"
         }
+      },
+      "agentResults": {
+        "received": "サブエージェントの結果を受信しました"
       },
       "codeBlock": {
         "copyButton": {

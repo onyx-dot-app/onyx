@@ -36,6 +36,7 @@ def ownership(
         response_id=1,
         visible_response_ids=[],
         cache=cache,
+        follow_up_steps=4,
         control_cache=cache,
     )
     lease = _OwnerLease(ResponseOwner(token=uuid4(), root_message_id=1))

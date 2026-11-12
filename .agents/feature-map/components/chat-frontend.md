@@ -42,6 +42,14 @@
   Pending submission is text-only and unavailable in incognito and for
   anonymous users. Craft keeps its own queue; only the queue display and
   keyboard navigation are shared.
+- **Subagents can continue after the answer ends.** A small activity indicator
+  stays visible while background work remains. It shares a row with the
+  pending-input hint. The input stays usable. While
+  subagents run, status polling finds automatic follow-up responses in an idle
+  chat and loads them through the normal refresh and replay path. Internal
+  agent results do not become user message bubbles. A "Subagent results received" divider shows above each
+  automatic follow-up response. That response shows its model label but
+  cannot be regenerated.
 - **A user edits or regenerates** an earlier message. A switcher then moves
   between the versions, and the rest of the chat follows the chosen one. A
   reload shows the same version.
@@ -173,6 +181,13 @@ latest page preserves loaded history that connects to that page. Incognito
 recovery checks execution status and retains local content. A saved
 failure becomes an `error` node with `errorMessage`, `errorCode` and
 `isRetryable` from `error_info`; `message` holds only answer text.
+An automatic follow-up response has a hidden `agent_results` question node as
+its parent. `ChatUI` and the shared chat view render that node with
+`web/src/app/app/message/AgentResultsDivider.tsx`, with no message controls. Checks that
+look for the last `user` node skip it, and export omits it. A multi-model turn
+is unresolved only while the chain tip's parent is its user message
+(`web/src/app/app/message/multiModel.ts:getUnresolvedMultiModelTurn`), so a follow-up past it does not
+reopen response selection.
 
 **Packet processing.** `processPackets` is incremental. It processes only
 packets past `nextPacketIndex` and keeps its state in a ref. It decides each
@@ -331,7 +346,8 @@ Input that joins a running response arrives as a `user_message` packet;
 `app/app/services/lib.tsx` removes that ID from the cached list on either
 reader, with no request. Saved replay emits the same packets from each step's
 human inputs, so both paths render user bubbles between response sections.
-Status polls every 2 seconds while `has_startable_input` is true. An idle chat that sees a running or unknown
+Status polls every 2 seconds while `has_startable_input` or
+`has_active_subagents` is true. An idle chat that sees a running or unknown
 response refreshes history and attaches to the stream.
 `app/app/stores/useChatSessionStore.ts:useCurrentResponseStopped` is true once
 the latest response's last packet is a turn-level stop. `AppInputBar` then
@@ -445,7 +461,8 @@ up its own branding.
    backend accepts a send only when its parent is on the server's active branch
    ([[chat-persistence#send-parent-on-active-branch]]), and a reload shows the
    server's branch. A UI path that changes `latestChildNodeId` without the PUT
-   breaks both.
+   breaks both. After selection succeeds, refresh session status: an idle
+   branch has no polling timer to discover another branch's active children.
 8. `implicit-pick-revertible` **An implicit model pick must be revertible.** A
    follow-up to an unpicked multi-model turn picks the most visible answer,
    applies it locally and PUTs it. `web/src/hooks/useChatController.ts:onSubmit`
