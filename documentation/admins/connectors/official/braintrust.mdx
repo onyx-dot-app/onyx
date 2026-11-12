@@ -12,7 +12,7 @@ The Braintrust connector indexes the prompts, datasets and experiments of your B
 | Prompts     | One document per prompt, named `Prompt: <name>`.                                                                                                |
 | Datasets    | One document per dataset, named `Dataset: <name>`, holding its rows as a table.                                                                  |
 | Experiments | One document per experiment, named `Experiment: <name>`. The summary is always indexed; the per-row results depend on the lookback below.        |
-| Permissions | Not available. **Sync with Braintrust** is not offered, so the access type can only be **Everyone in Your Organization** or **Specific Groups**. |
+| Permissions | Not available. **Sync with Braintrust** is not offered, so the access type can only be **Everyone in Your Organization**, **Specific Groups**, or **Only Me**. |
 
 Onyx indexes prompts first, then datasets, then experiments,
 and keeps its place between runs so a large organization is indexed across several attempts.
@@ -47,8 +47,9 @@ You need:
   </Step>
 
   <Step title="Choose who can see the content">
-    Under **Document Access**, select **Everyone in Your Organization** or **Specific Groups**.
-    **Specific Groups** is available on Onyx Cloud and Enterprise Edition.
+    Under **Document Access**, select **Everyone in Your Organization**, **Specific Groups**, or **Only Me**.
+    **Specific Groups** and **Only Me** are available on Onyx Cloud and Enterprise Edition.
+    See [Document Access Controls](/admins/connectors/overview#document-access-controls) for what each option means.
   </Step>
 
   <Step title="Create and verify">

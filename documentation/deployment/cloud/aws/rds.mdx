@@ -251,8 +251,10 @@ Onyx fetches a new token for each connection and always verifies the RDS certifi
   </Step>
 
   <Step title="Restart Onyx">
+    For Docker Compose, add the `-f` and `-p` options that you use to start Onyx.
+
     ```bash Docker Compose
-    docker compose -f docker-compose.yml -f docker-compose.prod.yml -p onyx-stack up -d --force-recreate
+    docker compose up -d --force-recreate
     ```
 
     ```bash Kubernetes
