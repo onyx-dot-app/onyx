@@ -214,3 +214,26 @@ def test_doc_sync_listing_keeps_bare_ids_on_documents_only() -> None:
     assert [
         n.external_access.external_user_group_ids for n in nodes if n.external_access
     ] == [_prefixed(*bare)]
+
+
+def test_private_folders_skip_the_permissions_listing_in_any_case() -> None:
+    ops = MagicMock()
+    ops.list_users.return_value = []
+    ops.list_groups.return_value = []
+    ops.list_folder_page.return_value = EgnyteFolderPage(
+        folder=EgnyteFolder(name="Private", path="/Private", folder_id="f-private"),
+        folders=[],
+        files=[],
+    )
+    connector = EgnyteConnector(folder_path="/private")
+    connector.load_credentials({"domain": _DOMAIN, "access_token": "test-token"})
+    connector._ops = ops
+
+    nodes = [
+        item for batch in connector.retrieve_all_slim_docs_perm_sync() for item in batch
+    ]
+
+    ops.list_folder_page_with_permissions.assert_not_called()
+    assert [
+        n.external_access.external_user_group_ids for n in nodes if n.external_access
+    ] == [_prefixed(_ADMINS)]

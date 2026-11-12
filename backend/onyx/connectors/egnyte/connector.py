@@ -84,7 +84,7 @@ _PAGE_OVERLAP = FOLDER_PAGE_SIZE // 10
 _SLIM_BATCH_SIZE = 500
 # Egnyte refuses to list the permissions of these folders. They hold only
 # folders, and only administrators read them.
-PATHS_WITHOUT_PERMISSIONS = frozenset({"/", "/Private"})
+_PATHS_WITHOUT_PERMISSIONS = frozenset({"/", "/private"})
 OAUTH_SCOPES = "Egnyte.filesystem Egnyte.permission Egnyte.user Egnyte.group"
 
 
@@ -96,6 +96,10 @@ def egnyte_document_id(group_id: str) -> str:
 def same_path(left: str, right: str) -> bool:
     """Egnyte paths are case-insensitive."""
     return left.lower() == right.lower()
+
+
+def lists_permissions(folder_path: str) -> bool:
+    return folder_path.lower() not in _PATHS_WITHOUT_PERMISSIONS
 
 
 def normalize_folder_path(folder_path: str | None) -> str:
@@ -349,7 +353,7 @@ class EgnyteConnector(
         # Permissions come with a folder's first page, and are the same on
         # every page.
         if include_permissions and offset == 0:
-            if path not in PATHS_WITHOUT_PERMISSIONS:
+            if lists_permissions(path):
                 return self.ops.list_folder_page_with_permissions(
                     folder_path=path, offset=offset, page_size=FOLDER_PAGE_SIZE
                 )

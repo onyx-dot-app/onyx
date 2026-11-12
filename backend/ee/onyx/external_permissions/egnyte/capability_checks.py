@@ -18,7 +18,7 @@ from onyx.connectors.egnyte.capability_checks import (
     probe,
 )
 from onyx.connectors.egnyte.config import EgnyteConnectorConfig
-from onyx.connectors.egnyte.connector import PATHS_WITHOUT_PERMISSIONS
+from onyx.connectors.egnyte.connector import lists_permissions
 from onyx.connectors.egnyte.models import EgnyteGroupRef, EgnyteUserType
 from onyx.connectors.egnyte.source_operations import EgnyteSourceOperations
 from onyx.connectors.exceptions import InsufficientPermissionsError
@@ -101,7 +101,7 @@ class _FolderPermissionsCheck(CapabilityCheck[EgnyteConnectorConfig]):
 
     def run(self, context: CapabilityCheckContext) -> None:
         folder_path: str = configured_folder(context)
-        if folder_path in PATHS_WITHOUT_PERMISSIONS:
+        if not lists_permissions(folder_path):
             folder_path = _PERMISSIONS_PROBE_FALLBACK
         probe(
             lambda: gateway_from_context(context).list_folder_page_with_permissions(
