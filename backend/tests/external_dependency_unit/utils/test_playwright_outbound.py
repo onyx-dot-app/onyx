@@ -268,7 +268,9 @@ _HOSTILE_PAGES = {
     "/spin": "<script>setTimeout(()=>{while(true){}},50)</script>",
     "/grow": "<script>const a=[];for(let i=0;i<32;i++)a.push(new Uint8Array(64<<20).fill(1))</script>",
     "/slow": "<p>slow</p><script>setTimeout(()=>{},0)</script>",
+    "/stall": '<p>stall</p><img src="http://stall.invalid/x.png">',
 }
+_STALLED_HOST = "stall.invalid"
 
 
 @pytest.fixture
@@ -295,6 +297,11 @@ def hostile_source() -> Iterator[str]:
     source = f"http://127.0.0.1:{server.server_port}"
 
     def validate_target(url: str, **kwargs: bool) -> str:
+        host = urlsplit(url).hostname
+        if host == _STALLED_HOST:
+            # Stands in for a DNS lookup that does not return.
+            time.sleep(20)
+            return url
         if urlsplit(url).netloc == urlsplit(source).netloc:
             return url
         return validate_outbound_http_url(url, **kwargs)
@@ -310,13 +317,14 @@ def hostile_source() -> Iterator[str]:
         thread.join()
 
 
-def _render_within(url: str, seconds: float) -> bool:
-    """Run one fallback render; True if it returned None within `seconds`."""
+def _render(url: str, seconds: float) -> tuple[bool, float]:
+    """Run one fallback render; return (returned None in time, elapsed)."""
     result: list[playwright_fetch.RenderedPage | None] = []
     worker = Thread(target=lambda: result.append(fetch_rendered_html(url)), daemon=True)
+    started = time.monotonic()
     worker.start()
     worker.join(seconds)
-    return not worker.is_alive() and result == [None]
+    return not worker.is_alive() and result == [None], time.monotonic() - started
 
 
 def _render_browsers() -> list[psutil.Process]:
@@ -331,20 +339,30 @@ def _render_browsers() -> list[psutil.Process]:
 
 
 @pytest.mark.parametrize(
-    ("page", "limits"),
+    ("page", "limits", "reason"),
     [
-        ("flood", {"MAX_FALLBACK_PAUSED_REQUESTS": 200}),
-        ("spin", {"OPEN_URL_PLAYWRIGHT_TIMEOUT_SECONDS": 8}),
-        ("grow", {"OPEN_URL_PLAYWRIGHT_MAX_MEMORY_MB": 1024}),
+        ("flood", {"MAX_FALLBACK_PAUSED_REQUESTS": 200}, "more than 200 requests"),
+        ("spin", {"OPEN_URL_PLAYWRIGHT_TIMEOUT_SECONDS": 8}, "8s time limit"),
+        ("stall", {"OPEN_URL_PLAYWRIGHT_TIMEOUT_SECONDS": 5}, "5s time limit"),
+        ("grow", {"OPEN_URL_PLAYWRIGHT_MAX_MEMORY_MB": 1024}, "1024 MiB limit"),
     ],
 )
 def test_fallback_kills_browser_past_limit(
-    hostile_source: str, page: str, limits: dict[str, int]
+    hostile_source: str,
+    page: str,
+    limits: dict[str, int],
+    reason: str,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     with ExitStack() as stack:
         for name, value in limits.items():
             stack.enter_context(patch.object(playwright_fetch, name, value))
-        assert _render_within(f"{hostile_source}/{page}", 30)
+        returned_none, elapsed = _render(f"{hostile_source}/{page}", 30)
+    assert returned_none
+    # The stalled lookup sleeps 20 s; the render must not wait for it.
+    assert elapsed < 15
+    assert f"Stopped Playwright fallback for {hostile_source}/{page}" in caplog.text
+    assert reason in caplog.text
     assert _render_browsers() == []
 
 
@@ -372,11 +390,16 @@ def test_fallback_limits_concurrent_renders(hostile_source: str) -> None:
         patch.object(playwright_fetch, "_render_page", side_effect=counting_render),
     ):
         workers = [
-            Thread(target=fetch_rendered_html, args=(f"{hostile_source}/slow",))
+            Thread(
+                target=fetch_rendered_html,
+                args=(f"{hostile_source}/slow",),
+                daemon=True,
+            )
             for _ in range(5)
         ]
         for worker in workers:
             worker.start()
         for worker in workers:
             worker.join(60)
+    assert not any(worker.is_alive() for worker in workers)
     assert peak == 2

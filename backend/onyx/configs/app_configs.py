@@ -1208,8 +1208,9 @@ WEB_CONNECTOR_OAUTH_TOKEN_URL = os.environ.get("WEB_CONNECTOR_OAUTH_TOKEN_URL")
 OPEN_URL_PLAYWRIGHT_FALLBACK_ENABLED = (
     os.environ.get("OPEN_URL_PLAYWRIGHT_FALLBACK_ENABLED", "true").lower() == "true"
 )
-# The fallback browser runs inside the calling process. When a render passes the
-# time or memory limit, Onyx kills its browser. 0 turns off the memory limit.
+# The fallback browser runs inside the calling process. Onyx kills a browser when
+# its render passes the time limit, or when all fallback browsers in the process
+# together pass the memory limit (the largest goes). 0 turns off the memory limit.
 OPEN_URL_PLAYWRIGHT_TIMEOUT_SECONDS = max(
     1, _non_negative_int_env("OPEN_URL_PLAYWRIGHT_TIMEOUT_SECONDS", 60)
 )

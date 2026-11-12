@@ -16,6 +16,8 @@ import threading
 import time
 import uuid
 from collections.abc import Callable, Iterator, Sequence
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from contextlib import contextmanager
 from typing import NotRequired, TypedDict, cast
 from urllib.parse import urlsplit
@@ -93,6 +95,7 @@ class RenderedPage(BaseModel):
 
 def start_playwright(
     extra_browser_args: Sequence[str] = (),
+    launch_timeout_ms: float | None = None,
 ) -> tuple[Playwright, BrowserContext]:
     """Launch a Playwright Chromium context tuned to look like a real browser.
 
@@ -111,6 +114,7 @@ def start_playwright(
             "--disable-site-isolation-trials",
             *extra_browser_args,
         ],
+        timeout=launch_timeout_ms,
     )
 
     context = browser.new_context(
@@ -179,6 +183,7 @@ def get_connector_oauth_header() -> str | None:
 @contextmanager
 def playwright_session(
     extra_browser_args: Sequence[str] = (),
+    launch_timeout_ms: float | None = None,
 ) -> Iterator[BrowserContext]:
     """Context-manager wrapper around `start_playwright()` for one-shot use.
 
@@ -193,7 +198,7 @@ def playwright_session(
     playwright: Playwright | None = None
     context: BrowserContext | None = None
     try:
-        playwright, context = start_playwright(extra_browser_args)
+        playwright, context = start_playwright(extra_browser_args, launch_timeout_ms)
         yield context
     finally:
         if context is not None:
@@ -269,6 +274,37 @@ def _ssrf_allows(
         return False
 
 
+_lookup_pool = ThreadPoolExecutor(
+    max_workers=8, thread_name_prefix="playwright-fallback-lookup"
+)
+
+
+def _ssrf_allows_within(
+    url: str,
+    seconds: float,
+    *,
+    allow_private_network: bool,
+    allow_loopback: bool = False,
+) -> bool:
+    """`_ssrf_allows` that fails closed when its DNS lookup takes too long.
+
+    A blocked lookup would also block Playwright's event loop, which a
+    browser kill cannot interrupt.
+    """
+    if seconds <= 0:
+        return False
+    future = _lookup_pool.submit(
+        _ssrf_allows,
+        url,
+        allow_private_network=allow_private_network,
+        allow_loopback=allow_loopback,
+    )
+    try:
+        return future.result(timeout=seconds)
+    except FutureTimeoutError:
+        return False
+
+
 class _ResponseStream(TypedDict):
     stream: str
 
@@ -341,6 +377,7 @@ def install_ssrf_guard(
     authorization_url: str | None = None,
     max_paused_requests: int | None = None,
     on_request_limit: Callable[[], None] | None = None,
+    lookup_seconds: Callable[[], float] | None = None,
 ) -> None:
     if allow_private_network:
         page.context.grant_permissions(["local-network-access"])
@@ -388,11 +425,20 @@ def install_ssrf_guard(
                 on_request_limit()
             return
         url = event["request"]["url"]
-        if not _ssrf_allows(
-            url,
-            allow_private_network=allow_private_network,
-            allow_loopback=allow_loopback,
-        ):
+        if lookup_seconds is None:
+            allowed = _ssrf_allows(
+                url,
+                allow_private_network=allow_private_network,
+                allow_loopback=allow_loopback,
+            )
+        else:
+            allowed = _ssrf_allows_within(
+                url,
+                lookup_seconds(),
+                allow_private_network=allow_private_network,
+                allow_loopback=allow_loopback,
+            )
+        if not allowed:
             session.send(
                 "Fetch.failRequest",
                 {"requestId": event["requestId"], "errorReason": "BlockedByClient"},
@@ -477,10 +523,14 @@ def read_bounded_page_html(page: Page) -> str | None:
 MAX_FALLBACK_PAUSED_REQUESTS = 1000
 _WATCHDOG_POLL_SECONDS = 0.25
 _fallback_slots = threading.BoundedSemaphore(OPEN_URL_PLAYWRIGHT_MAX_CONCURRENCY)
+# Last memory sample of each running fallback browser, for the shared budget.
+_browser_memory: dict["_BrowserWatchdog", int] = {}
+_browser_memory_lock = threading.Lock()
 
 
 class _BrowserWatchdog:
-    """Kills one fallback browser when it passes its time or memory limit.
+    """Kills one fallback browser when it passes its time limit, or when all
+    fallback browsers together pass the memory budget and it is the largest.
 
     The sync Playwright API is not thread-safe, so this thread finds the
     browser by a unique launch flag and kills its processes. The Playwright
@@ -507,6 +557,11 @@ class _BrowserWatchdog:
     def __exit__(self, *_: object) -> None:
         self._done.set()
         self._thread.join()
+        with _browser_memory_lock:
+            _browser_memory.pop(self, None)
+
+    def remaining_seconds(self) -> float:
+        return max(0.0, self._deadline - time.monotonic())
 
     def request_stop(self, reason: str) -> None:
         self._requested_reason = reason
@@ -549,9 +604,14 @@ class _BrowserWatchdog:
             return f"passed the {self._timeout_seconds}s time limit"
         if self._browser is not None and self._max_memory_bytes > 0:
             memory = self._memory_bytes(self._browser)
-            if memory > self._max_memory_bytes:
+            with _browser_memory_lock:
+                _browser_memory[self] = memory
+                total = sum(_browser_memory.values())
+                largest = max(_browser_memory.values())
+            if total > self._max_memory_bytes and memory == largest:
                 return (
-                    f"browser used {memory >> 20} MiB, "
+                    f"fallback browsers used {total >> 20} MiB "
+                    f"(this one {memory >> 20} MiB), "
                     f"over the {self._max_memory_bytes >> 20} MiB limit"
                 )
         return None
@@ -587,10 +647,11 @@ def fetch_rendered_html(
     right tool for high-volume crawling (use a long-lived `BrowserContext`
     via `start_playwright()` instead).
 
-    The render is bounded by `OPEN_URL_PLAYWRIGHT_TIMEOUT_SECONDS`,
-    `OPEN_URL_PLAYWRIGHT_MAX_MEMORY_MB` and `MAX_FALLBACK_PAUSED_REQUESTS`;
-    past a limit the browser is killed and this returns None. At most
-    `OPEN_URL_PLAYWRIGHT_MAX_CONCURRENCY` renders run at once per process.
+    The render is bounded by `OPEN_URL_PLAYWRIGHT_TIMEOUT_SECONDS` and
+    `MAX_FALLBACK_PAUSED_REQUESTS`, and all fallback browsers in the process
+    share `OPEN_URL_PLAYWRIGHT_MAX_MEMORY_MB`; past a limit the browser is
+    killed and this returns None. At most `OPEN_URL_PLAYWRIGHT_MAX_CONCURRENCY`
+    renders run at once per process.
 
     When ``allow_private_network`` is True, the private-IP guard is skipped
     so operators on trusted networks can render URLs that resolve to RFC1918
@@ -653,7 +714,11 @@ def _render_page(
     bot_challenge_grace_ms: int,
     allow_private_network: bool,
 ) -> RenderedPage | None:
-    with playwright_session([watchdog.launch_flag]) as context:
+    with playwright_session(
+        # Playwright reads a timeout of 0 as no timeout.
+        [watchdog.launch_flag],
+        max(1.0, watchdog.remaining_seconds() * 1000),
+    ) as context:
         page = context.new_page()
         install_ssrf_guard(
             page,
@@ -662,6 +727,7 @@ def _render_page(
             on_request_limit=lambda: watchdog.request_stop(
                 f"page sent more than {MAX_FALLBACK_PAUSED_REQUESTS} requests"
             ),
+            lookup_seconds=watchdog.remaining_seconds,
         )
         try:
             # Use "commit" instead of "domcontentloaded" to avoid hanging
@@ -685,7 +751,11 @@ def _render_page(
                 pass
 
             final_url = page.url
-            if not _ssrf_allows(final_url, allow_private_network=allow_private_network):
+            if not _ssrf_allows_within(
+                final_url,
+                watchdog.remaining_seconds(),
+                allow_private_network=allow_private_network,
+            ):
                 logger.warning("Playwright fallback ended on a disallowed destination")
                 return None
 
