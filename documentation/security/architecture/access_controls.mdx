@@ -31,8 +31,8 @@ For setup guides, see [Authentication](/deployment/authentication/basic),
   user and can be limited to specific scopes. Admins can switch PAT creation off for the Basic group.
 - **Service accounts**: an admin issues API keys under **Admin Panel > Service Accounts**. A service
   account gets its capabilities from the groups it belongs to. Business or Enterprise plan.
-- **MCP server**: external LLM clients use a PAT or API key to search Onyx through its MCP server,
-  with the same document permissions as the token's owner.
+- **MCP server**: external LLM clients use OAuth, a PAT, or an API key to search Onyx through its MCP
+  server, with the same document permissions as the user or token owner.
 
 Onyx stores only a hash of each token. The raw value is shown once, at creation.
 

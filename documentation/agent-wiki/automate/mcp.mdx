@@ -210,12 +210,6 @@ Edits are ordinary git commits attributed to you, so anything an agent does is v
     The server was added at local scope. Re-add it with `-s user` to make it available everywhere.
   </Accordion>
 
-  <Accordion title="The connection drops or never establishes in local development">
-    Point the client at the backend directly (`http://localhost:8080/api/mcp`) rather than the Next.js dev server.
-    The dev server's `/api/:path*` rewrite buffers responses and breaks the transport when the client sends `Accept:
-    text/event-stream`.
-  </Accordion>
-
   <Accordion title="Links in tool results point at the wrong host">
     Tool results build absolute URLs from `PUBLIC_BASE_URL`. If it is wrong,
     the links are wrong — see [Configuration](/agent-wiki/deployment/configuration).

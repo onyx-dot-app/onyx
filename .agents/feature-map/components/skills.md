@@ -112,6 +112,9 @@ reads still use the skill rows, and built-in skills have no plugin. Each access
 write in `db/skill.py`, `db/external_app.py` and
 `ee/onyx/db/community_downgrade.py` calls one `db/plugin.py` helper that
 mirrors it. Lock order: the skill row, then the plugin row; many in id order.
+A skill switch locks its target skill `FOR NO KEY UPDATE`: another user's
+switch inserts a preference for that skill while it holds a plugin lock, and
+a `FOR UPDATE` blocks that foreign-key check into a deadlock.
 
 **The runtime gate.** `db/skill.py:list_runtime_skills_for_user` decides what
 a sandbox gets. It combines visibility (`skill_visible_to_user`), enablement
@@ -393,7 +396,10 @@ The library preview of an external-app skill calls the same renderer
     name and description to the legacy skill row. A save on a plugin in the
     Organization library also moves `published_version_id`. An editor save
     whose file list equals the current version's adds no version, and the
-    route deletes the new blob. A bundle upload always adds one. An edit
+    route deletes the new blob. A version copied from a legacy row has no
+    file list, so editor routes pass `previous_manifest`, the list of the
+    stored bundle; the bytes of a rewritten ZIP differ even when its files
+    do not. A bundle upload always adds one. An edit
     request may carry `base_version_id`; if it is not the current version,
     the edit gets 409 `PLUGIN_VERSION_STALE`. Skill responses return as
     `current_version_id` the version that holds the bundle they show

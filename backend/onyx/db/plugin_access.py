@@ -25,7 +25,6 @@ can compute access for many users or many plugins.
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any
 from uuid import UUID
 
 from sqlalchemy import (
@@ -315,7 +314,7 @@ def load_plugin_access(
         return {}
     runs = version_user_runs(Plugin, user_id)
     author = User.__table__.alias("author")
-    user_email: KeyedColumnElement[Any] = User.__table__.c.email
+    user_email: KeyedColumnElement[str] = User.__table__.c.email
     plugin_rows = db_session.execute(
         select(
             Plugin.id,

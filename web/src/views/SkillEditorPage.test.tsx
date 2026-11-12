@@ -525,6 +525,80 @@ describe("SkillEditorPage", () => {
     );
   });
 
+  it("keeps the old base version when the reload after a save fails", async () => {
+    const user = setupUser();
+    const skill = existingSkill();
+    mockUseSWR.mockReturnValue({
+      data: skill,
+      error: undefined,
+      isLoading: false,
+      mutate: mockRefreshSkill,
+    });
+    // The response can name a newer save than these fields.
+    mockPatchUserSkill.mockResolvedValue({
+      ...skill,
+      description: "My edit",
+      current_version_id: "version-3",
+    });
+    mockRefreshSkill.mockImplementation((data?: SkillEditableDetail) =>
+      data === undefined
+        ? Promise.reject(new Error("Network error"))
+        : Promise.resolve(data)
+    );
+    jest.spyOn(console, "error").mockImplementation(() => {});
+
+    render(<SkillEditorPage skillId={skill.id} />);
+    const description = screen.getByPlaceholderText(
+      "What does this skill help with?"
+    );
+    await user.clear(description);
+    await user.type(description, "My edit");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(mockPatchUserSkill).toHaveBeenCalledTimes(1));
+
+    await user.type(description, " again");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(mockPatchUserSkill).toHaveBeenCalledTimes(2));
+    expect(mockPatchUserSkill).toHaveBeenLastCalledWith(skill.id, {
+      description: "My edit again",
+      instructions_markdown: skill.instructions_markdown,
+      base_version_id: "version-1",
+    });
+  });
+
+  it("locks the fields while a file removal is pending", async () => {
+    const user = setupUser();
+    const skill = existingSkill({
+      files: [{ path: "notes.txt", size: 5 }],
+    });
+    mockUseSWR.mockReturnValue({
+      data: skill,
+      error: undefined,
+      isLoading: false,
+      mutate: mockRefreshSkill,
+    });
+    let finishRemoval: (value: SkillEditableDetail) => void = () => {};
+    mockRemoveUserSkillFile.mockReturnValue(
+      new Promise<SkillEditableDetail>((resolve) => {
+        finishRemoval = resolve;
+      })
+    );
+
+    render(<SkillEditorPage skillId={skill.id} />);
+    await user.click(screen.getByRole("button", { name: "Remove notes.txt" }));
+
+    expect(
+      screen.getByPlaceholderText("What does this skill help with?")
+    ).toBeDisabled();
+    finishRemoval(existingSkill({ current_version_id: "version-2" }));
+    await waitFor(() =>
+      expect(
+        screen.getByPlaceholderText("What does this skill help with?")
+      ).toBeEnabled()
+    );
+  });
+
   it("confirms before leaving an existing skill with unsaved changes", async () => {
     const user = setupUser();
     const skill = existingSkill();

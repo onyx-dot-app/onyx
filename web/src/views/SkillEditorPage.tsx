@@ -209,8 +209,14 @@ export default function SkillEditorPage({
   // A bundle upload rewrites name/description/instructions from SKILL.md, so
   // lock the detail fields while one is in flight: edits made mid-upload
   // would be clobbered by the post-upload sync (or race it via Save).
+  // A file removal and a stale reload sync the fields from the server too.
   const fieldsLocked =
-    !canManageSkill || isPreparingFiles || isUploadingFiles || isSaving;
+    !canManageSkill ||
+    isPreparingFiles ||
+    isUploadingFiles ||
+    isSaving ||
+    removingFilePath !== null ||
+    isReloadingStale;
 
   const canSave =
     (isCreating || !!skill) &&
@@ -222,6 +228,7 @@ export default function SkillEditorPage({
     !!description.trim() &&
     !!instructionsMarkdown.trim() &&
     !isSaving &&
+    removingFilePath === null &&
     !isVersionStale;
 
   function leaveEditor() {
@@ -303,10 +310,13 @@ export default function SkillEditorPage({
       } catch (refreshError) {
         console.error("Failed to reload skill after save", refreshError);
       }
+      // Without a fresh load, `updated` can name a newer save than these
+      // fields. Keep the old base, so the next save gets a stale error.
       const nextSkill: SkillEditableDetail = fresh ?? {
         ...skill,
         ...updated,
         instructions_markdown: instructionsMarkdown.trim(),
+        current_version_id: baseVersionId,
       };
       if (!fresh) await refreshSkill(nextSkill, { revalidate: false });
       syncEditableFields(nextSkill);
