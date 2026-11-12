@@ -1431,3 +1431,10 @@ the new version, so no follow-up commit is needed.
 > Tagging from a stale branch publishes that branch under the new version.
 
 See also, [`.github/workflows/release-devtools.yml`](https://github.com/onyx-dot-app/onyx/blob/main/.github/workflows/release-devtools.yml).
+
+### Audit software installed outside package managers
+
+Use `ods audit image IMAGE --sbom /path/in/image.cdx.json` for a required CycloneDX inventory.
+ODS scans the inventory with pinned Grype and combines its findings with the OSV image report.
+Docker must be available. Missing inventory, empty inventory, and scanner errors fail the audit.
+The same advisory exceptions, JSON/SARIF reports, and CVE alerts apply to both scanners.
