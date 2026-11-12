@@ -184,9 +184,12 @@ test("Stop subagents ends background work", async ({ api, chatPage, page }) => {
     );
     await chatPage.inputBar.stopSubagentsButton.click();
     expect((await stopped).ok()).toBe(true);
+    // The released child can finish its reply; Stop must still drop its result.
+    await releaseMockLlmGate(gateId);
     await expect(chatPage.inputBar.subagentActivity).toBeHidden();
     await chatPage.reload();
     await expect(chatPage.inputBar.subagentActivity).toBeHidden();
+    await expect(chatPage.agentResultsDividers).toHaveCount(0);
     await expect(chatPage.scrollContainer).not.toContainText(
       "Private child result:"
     );
