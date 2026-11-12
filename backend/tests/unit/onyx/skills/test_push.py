@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import io
 import zipfile
-from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import MagicMock
@@ -12,8 +11,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.models import Skill, User
-from onyx.db.plugin_access import SkillNameRank
-from onyx.db.skill import RuntimeSkill, RuntimeSkillVersion, keep_one_skill_per_name
+from onyx.db.skill import RuntimeSkill, RuntimeSkillVersion
 from onyx.file_store.file_store import FileStore
 from onyx.skills import push
 
@@ -37,8 +35,6 @@ def _skill(
     *,
     name: str = "canonical-name",
     is_valid: bool | None = None,
-    name_rank: SkillNameRank = SkillNameRank.PUBLISHED,
-    created_at: datetime | None = None,
 ) -> RuntimeSkill:
     """A custom skill with the version the user runs. The legacy row holds a
     different name and no bundle, so a read of it fails the test."""
@@ -57,8 +53,6 @@ def _skill(
         version=RuntimeSkillVersion(
             id=uuid4(), bundle_file_id="bundle-id", is_valid=is_valid
         ),
-        name_rank=name_rank,
-        plugin_created_at=created_at or datetime(2026, 1, 1, tzinfo=timezone.utc),
     )
 
 
@@ -74,34 +68,6 @@ def test_skill_runtime_hash_covers_files_and_connectable_apps() -> None:
     assert push.compute_skill_runtime_hash(
         files, "apps"
     ) != push.compute_skill_runtime_hash(files, "different apps")
-
-
-def test_assemble_keeps_one_skill_per_name_by_the_name_order(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Two skills with one name do not stop the push: a shared skill loses to
-    a published one, and the older of two published skills wins."""
-    file_store = MagicMock(spec=FileStore)
-    file_store.read_file.side_effect = lambda *_args, **_kwargs: io.BytesIO(
-        _bundle("canonical-name")
-    )
-    monkeypatch.setattr(push, "get_default_file_store", lambda: file_store)
-    monkeypatch.setattr(push, "persist_skill_validity", MagicMock())
-    user = cast(User, SimpleNamespace())
-    older = datetime(2025, 1, 1, tzinfo=timezone.utc)
-    shared = _skill(is_valid=True, name_rank=SkillNameRank.SHARED, created_at=older)
-    newer_published = _skill(is_valid=True)
-    older_published = _skill(is_valid=True, created_at=older)
-
-    kept, hidden = keep_one_skill_per_name([shared, newer_published, older_published])
-    files = push._assemble_fileset(
-        [shared, newer_published, older_published], user, MagicMock(spec=Session)
-    )
-
-    assert kept == [older_published]
-    assert hidden == [shared, newer_published]
-    assert "canonical-name/SKILL.md" in files
-    assert file_store.read_file.call_count == 1
 
 
 def test_assemble_classifies_and_hydrates_valid_unclassified_skill(
@@ -245,28 +211,6 @@ def test_assemble_resolves_skill_dir_only_in_root_skill_md(
     assert files["canonical-name/scripts/x.py"] == b"print('${CLAUDE_SKILL_DIR}')\n"
 
 
-def test_assemble_resolves_skill_dirs_in_name_order(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # Every server must drop the same Skills when expansions exceed a limit.
-    file_store = MagicMock(spec=FileStore)
-    file_store.read_file.side_effect = [
-        io.BytesIO(_bundle(name)) for name in ("zeta", "alpha", "mid")
-    ]
-    monkeypatch.setattr(push, "get_default_file_store", lambda: file_store)
-    monkeypatch.setattr(push, "persist_skill_validity", MagicMock())
-    resolve = MagicMock()
-    monkeypatch.setattr(push, "_resolve_skill_dirs", resolve)
-
-    push._assemble_fileset(
-        [_skill(name=name, is_valid=True) for name in ("zeta", "alpha", "mid")],
-        cast(User, SimpleNamespace()),
-        MagicMock(spec=Session),
-    )
-
-    assert resolve.call_args.args[1] == ["alpha", "mid", "zeta"]
-
-
 def test_assemble_hydrates_when_validity_persistence_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -306,7 +250,6 @@ def test_user_payload_returns_hydrated_files_and_connectable_apps(
         list_runtime_skills,
     )
     monkeypatch.setattr(push, "_assemble_skills", assemble_skills)
-    monkeypatch.setattr(push, "runtime_plugin_charges", lambda *_args: {})
     monkeypatch.setattr(push, "get_connectable_apps_for_user", lambda *_args: [])
     monkeypatch.setattr(push, "build_connectable_apps_list", lambda _apps: "apps")
 
@@ -320,10 +263,7 @@ def test_user_payload_returns_hydrated_files_and_connectable_apps(
         db_session=db_session,
     )
     assemble_skills.assert_called_once_with(
-        [valid_skill, invalid_skill],
-        user,
-        db_session,
-        {},
+        [valid_skill, invalid_skill], user, db_session
     )
 
 
@@ -347,8 +287,6 @@ def test_assemble_skips_oversized_expansion_and_keeps_other_skills(
     validity_updates: list[push.SkillValidityUpdate] = []
     monkeypatch.setattr(push, "get_default_file_store", lambda: file_store)
     monkeypatch.setattr(push, "persist_skill_validity", validity_updates.extend)
-    replacement = MagicMock(wraps=push.resolve_skill_dir_placeholder)
-    monkeypatch.setattr(push, "resolve_skill_dir_placeholder", replacement)
     monkeypatch.setattr(push, "DEFAULT_PER_FILE_MAX_BYTES", 1_100, raising=False)
     oversized = _skill()
     healthy = _skill(name="healthy", is_valid=True)
@@ -359,7 +297,6 @@ def test_assemble_skips_oversized_expansion_and_keeps_other_skills(
 
     assert set(files) == {"healthy/SKILL.md", "healthy/scripts/run.py"}
     assert files["healthy/scripts/run.py"] == b"print('hello')\n"
-    replacement.assert_not_called()
     assert len(validity_updates) == 1
     assert validity_updates[0].skill_id == oversized.skill.id
     assert validity_updates[0].bundle_file_id == "bundle-id"
@@ -427,3 +364,45 @@ def test_skill_dropped_by_resolution_does_not_crowd_out_later_skills(
     )
 
     assert set(files) == {"b-healthy/SKILL.md", "b-healthy/scripts/run.py"}
+
+
+@pytest.mark.parametrize("fits", [True, False])
+def test_resolved_instructions_count_against_the_sandbox_total(
+    monkeypatch: pytest.MonkeyPatch, fits: bool
+) -> None:
+    """The total counts SKILL.md after ``${CLAUDE_SKILL_DIR}`` resolution, so
+    the push never passes the transport cap; a later skill that fits loads."""
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w") as bundle_zip:
+        bundle_zip.writestr(
+            "SKILL.md", "---\nname: grows\ndescription: d\n---\n${CLAUDE_SKILL_DIR}\n"
+        )
+    growing = output.getvalue()
+    small = io.BytesIO()
+    with zipfile.ZipFile(small, "w") as bundle_zip:
+        bundle_zip.writestr("SKILL.md", "---\nname: small\ndescription: d\n---\n")
+    file_store = MagicMock(spec=FileStore)
+    file_store.read_file.side_effect = [
+        io.BytesIO(growing),
+        io.BytesIO(small.getvalue()),
+    ]
+    monkeypatch.setattr(push, "get_default_file_store", lambda: file_store)
+    monkeypatch.setattr(push, "persist_skill_validity", MagicMock())
+    with zipfile.ZipFile(io.BytesIO(growing)) as bundle_zip:
+        raw = bundle_zip.getinfo("SKILL.md").file_size
+    resolved = raw + len("/workspace/managed/skills/grows") - len("${CLAUDE_SKILL_DIR}")
+    monkeypatch.setattr(push, "SKILL_RUNTIME_MAX_BYTES", resolved if fits else raw)
+
+    assembled = push._assemble_skills(
+        [_skill(name="grows", is_valid=True), _skill(name="small", is_valid=True)],
+        cast(User, SimpleNamespace()),
+        MagicMock(spec=Session),
+    )
+
+    if fits:
+        assert set(assembled.files) == {"grows/SKILL.md"}
+        assert assembled.omissions[0].name == "small"
+    else:
+        assert set(assembled.files) == {"small/SKILL.md"}
+        assert [omission.name for omission in assembled.omissions] == ["grows"]
+        assert assembled.omissions[0].bytes == resolved

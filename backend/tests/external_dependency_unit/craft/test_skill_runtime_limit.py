@@ -1,5 +1,5 @@
 """The run-time skill limit (G7b): every plugin that fits in 900 MB and
-10,000 files, each file at least 4 KB, in the keep order.
+10,000 files, in the keep order.
 
 Sizes are written to plugin_version rows (manifest, size, file count), so
 small real bundles stand for large ones. Earlier tests leave plugins in the
@@ -8,7 +8,6 @@ organization library, so each test measures the room its user has first."""
 from __future__ import annotations
 
 import io
-import weakref
 import zipfile
 from collections.abc import Callable, Iterator
 from datetime import datetime, timezone
@@ -26,32 +25,27 @@ from onyx.db.enums import (
 )
 from onyx.db.models import Plugin, PluginVersion, Skill, User, UserPluginPreference
 from onyx.db.plugin import set_plugin_preferences__no_commit
-from onyx.db.plugin_access import runtime_plugin_charges
+from onyx.db.plugin_access import load_user_plugin_states
 from onyx.db.skill import (
     SkillSharingChange,
     create_custom_skill__no_commit,
+    list_runtime_skills_for_user,
     replace_skill_bundle,
     replace_skill_shares,
 )
-from onyx.db.skill_limit import built_in_skill_usage, users_past_write_limit
+from onyx.db.skill_limit import UserPastWriteLimit, users_past_write_limit
 from onyx.file_store.file_store import get_default_file_store
 from onyx.skills import push
-from onyx.skills.built_in import BUILT_IN_SKILL_RUNTIME_USAGE
 from onyx.skills.ingest import delete_bundle_blob, ingest_skill_bundle
 from onyx.skills.limits import (
-    SKILL_MIN_FILE_BYTES,
     SKILL_RUNTIME_MAX_BYTES,
     SKILL_RUNTIME_MAX_FILES,
-    SKILL_WRITE_MAX_BYTES,
     KeepGroup,
     SkillUsage,
 )
 from tests.external_dependency_unit.craft.db_helpers import (
-    add_user_to_group,
-    make_group,
     make_sandbox,
     make_user,
-    share_plugin_with_group,
     share_plugin_with_user,
 )
 
@@ -139,10 +133,25 @@ def _turn_on(
 def _free_room(db_session: Session, user: User) -> SkillUsage:
     """Run-time room left for plugins that sort before the plugins earlier
     tests left as Installed by default."""
-    used = built_in_skill_usage(db_session, BUILT_IN_SKILL_RUNTIME_USAGE)
-    for charge in runtime_plugin_charges([user.id], db_session).get(user.id, []):
-        if charge.group != KeepGroup.INSTALLED_BY_DEFAULT and charge.usage:
-            used += charge.usage
+    built_in_names = {
+        skill.name
+        for skill in list_runtime_skills_for_user(user=user, db_session=db_session)
+        if skill.version is None
+    }
+    built_in_files = [
+        content
+        for path, content in push.build_user_skills_payload(
+            user, db_session
+        ).files.items()
+        if path.partition("/")[0] in built_in_names
+    ]
+    used = SkillUsage(
+        bytes=sum(len(content) for content in built_in_files),
+        files=len(built_in_files),
+    )
+    for state in load_user_plugin_states([user.id], db_session, runnable_only=True):
+        if state.keep_key[0] != KeepGroup.INSTALLED_BY_DEFAULT:
+            used += state.usage or SkillUsage()
     return SkillUsage(
         bytes=SKILL_RUNTIME_MAX_BYTES - used.bytes,
         files=SKILL_RUNTIME_MAX_FILES - used.files,
@@ -155,54 +164,6 @@ def _omitted(payload: push.UserSkillsPayload) -> set[UUID]:
 
 def _at(day: int) -> datetime:
     return datetime(2099, 1, day, tzinfo=timezone.utc)
-
-
-def test_group_join_past_the_write_limit_keeps_every_plugin_that_fits(
-    db_session: Session,
-    seeded_skill: Callable[..., Skill],
-    resized: list[UUID],
-) -> None:
-    user = make_user(db_session, standard_account=True)
-    author = make_user(db_session, standard_account=True)
-    db_session.commit()
-    room = _free_room(db_session, user)
-    third = room.bytes * 3 // 10
-    group = make_group(db_session)
-    own = seeded_skill(f"rt-own-{user.id.hex[:8]}", author_user_id=user.id)
-    by_default = seeded_skill(f"rt-default-{user.id.hex[:8]}", author_user_id=author.id)
-    required = seeded_skill(f"rt-required-{user.id.hex[:8]}", author_user_id=author.id)
-    _turn_on(db_session, user, own.id, _at(1))
-    share_plugin_with_group(
-        db_session,
-        by_default.id,
-        group.id,
-        SkillSharePermission.VIEWER,
-        PluginInstallationPolicy.DEFAULT,
-    )
-    share_plugin_with_group(
-        db_session,
-        required.id,
-        group.id,
-        SkillSharePermission.VIEWER,
-        PluginInstallationPolicy.REQUIRED,
-    )
-    for skill in (own, by_default, required):
-        _set_files(db_session, skill.id, [third], resized)
-    db_session.commit()
-    assert user.id not in {item.user_id for item in users_past_write_limit(db_session)}
-
-    add_user_to_group(db_session, user, group)
-    db_session.commit()
-
-    payload = push.build_user_skills_payload(user, db_session)
-    assert payload.omissions == ()
-    for skill in (own, by_default, required):
-        assert f"{skill.name}/SKILL.md" in payload.files
-    [listed] = [
-        item for item in users_past_write_limit(db_session) if item.user_id == user.id
-    ]
-    assert listed.usage.bytes >= 3 * third > SKILL_WRITE_MAX_BYTES
-    assert listed.skills_not_loaded == 0
 
 
 def test_keep_order_when_not_every_plugin_fits(
@@ -370,7 +331,7 @@ class _RecordingSandboxManager:
         return SimpleNamespace(targets=1, succeeded=1, failures=[])
 
 
-def test_each_file_counts_as_at_least_4_kb_and_omissions_are_recorded(
+def test_omissions_are_recorded_and_a_backfilled_version_is_measured(
     db_session: Session,
     seeded_skill: Callable[..., Skill],
     resized: list[UUID],
@@ -387,9 +348,9 @@ def test_each_file_counts_as_at_least_4_kb_and_omissions_are_recorded(
     _turn_on(db_session, user, filler.id, _at(3))
     _turn_on(db_session, user, small_files.id, _at(2))
     _turn_on(db_session, user, backfilled.id, _at(1))
-    # 2 KB of room left: five 1-byte files are 5 bytes, but 20 KB on disk.
-    _set_files(db_session, filler.id, [room.bytes - 2048], resized)
-    _set_files(db_session, small_files.id, [1] * 5, resized)
+    # 50 bytes of room left: less than any SKILL.md.
+    _set_files(db_session, filler.id, [room.bytes - 50], resized)
+    _set_files(db_session, small_files.id, [1024] * 3, resized)
     resized.append(backfilled.id)
     sandbox = make_sandbox(db_session, user)
     db_session.commit()
@@ -405,15 +366,9 @@ def test_each_file_counts_as_at_least_4_kb_and_omissions_are_recorded(
     assert recorded.keys() >= {small_files.id, backfilled.id}
     assert filler.id not in recorded
     small = recorded[small_files.id]
-    assert (small.bytes, small.files, small.reason) == (
-        5 * SKILL_MIN_FILE_BYTES,
-        5,
-        "bytes",
-    )
-    assert (recorded[backfilled.id].bytes, recorded[backfilled.id].files) == (
-        SKILL_MIN_FILE_BYTES,
-        1,
-    )
+    assert (small.bytes, small.files, small.reason) == (3 * 1024, 3, "bytes")
+    assert recorded[backfilled.id].files == 1
+    assert recorded[backfilled.id].bytes > 50
 
     # Same content: no new send, and the record stays.
     push.push_skills_for_users({user.id}, db_session)
@@ -445,59 +400,11 @@ def test_file_count_limit(
     assert omission.files == room.files + 1
 
 
-def test_push_holds_one_payload_at_a_time(
-    db_session: Session,
-    seeded_skill: Callable[..., Skill],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    users = [make_user(db_session, standard_account=True) for _ in range(3)]
-    sandboxes = [make_sandbox(db_session, user) for user in users]
-    db_session.commit()
-    for user in users:
-        skill = seeded_skill(f"rt-push-{user.id.hex[:8]}", author_user_id=user.id)
-        _turn_on(db_session, user, skill.id, _at(1))
-    db_session.commit()
-
-    class _TrackedFiles(dict[str, bytes]):
-        """A payload that a weak set can watch."""
-
-        __hash__ = object.__hash__
-
-    live: weakref.WeakSet[_TrackedFiles] = weakref.WeakSet()
-    live_at_build: list[int] = []
-    live_at_send: list[int] = []
-    real_build = push.build_user_skills_payload
-
-    def tracked_build(user: User, session: Session) -> push.UserSkillsPayload:
-        live_at_build.append(len(live))
-        payload = real_build(user, session)
-        files = _TrackedFiles(payload.files)
-        live.add(files)
-        return push.UserSkillsPayload(
-            connectable_apps_section=payload.connectable_apps_section,
-            files=files,
-            omissions=payload.omissions,
-        )
-
-    manager = _RecordingSandboxManager(lambda: live_at_send.append(len(live)))
-    monkeypatch.setattr(push, "build_user_skills_payload", tracked_build)
-    monkeypatch.setattr(push, "get_sandbox_manager", lambda: manager)
-
-    push.push_skills_for_users({user.id for user in users}, db_session)
-    db_session.commit()
-
-    assert sorted(manager.sent) == sorted(sandbox.id for sandbox in sandboxes)
-    assert live_at_build == [0, 0, 0]
-    assert live_at_send == [1, 1, 1]
-    for sandbox in sandboxes:
-        db_session.refresh(sandbox)
-        assert sandbox.skills_hash is not None
-
-
-def test_admin_read_counts_skills_that_do_not_load(
+def test_admin_read_counts_skills_that_did_not_load(
     db_session: Session,
     seeded_skill: Callable[..., Skill],
     resized: list[UUID],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     user = make_user(db_session, standard_account=True)
     author = make_user(db_session, standard_account=True)
@@ -515,11 +422,24 @@ def test_admin_read_counts_skills_that_do_not_load(
         _set_files(db_session, skill.id, [room.bytes * 4 // 10], resized)
     db_session.commit()
 
-    [listed] = [
-        item for item in users_past_write_limit(db_session) if item.user_id == user.id
-    ]
-    assert listed.email == user.email
-    assert listed.skills_not_loaded == 1
+    def listed() -> UserPastWriteLimit:
+        [item] = [
+            item
+            for item in users_past_write_limit(db_session)
+            if item.user_id == user.id
+        ]
+        return item
+
+    # No sandbox yet: nothing was left out of one.
+    assert listed().email == user.email
+    assert listed().skills_not_loaded == 0
+
+    make_sandbox(db_session, user)
+    db_session.commit()
+    monkeypatch.setattr(push, "get_sandbox_manager", lambda: _RecordingSandboxManager())
+    push.push_skills_for_users({user.id}, db_session)
+    db_session.commit()
+    assert listed().skills_not_loaded == 1
     payload = push.build_user_skills_payload(user, db_session)
     assert _omitted(payload) == {big[0].id}
 
@@ -529,9 +449,8 @@ def test_push_over_the_transport_cap_leaves_out_skills_by_the_keep_order(
     seeded_skill: Callable[..., Skill],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """When the files do not fit the transport cap although the charges fit,
-    the push leaves out the later plugin in the keep order, records it, and
-    still sends the rest."""
+    """When the files sent do not fit the cap, the push leaves out the later
+    plugin in the keep order, records it, and still sends the rest."""
     user = make_user(db_session, standard_account=True)
     db_session.commit()
     tag = user.id.hex[:8]
@@ -549,7 +468,9 @@ def test_push_over_the_transport_cap_leaves_out_skills_by_the_keep_order(
         if not path.startswith(f"{older.name}/")
     }
     monkeypatch.setattr(
-        push, "SKILL_RUNTIME_MAX_BYTES", push._sent_bytes(without_older)
+        push,
+        "SKILL_RUNTIME_MAX_BYTES",
+        sum(len(content) for content in without_older.values()),
     )
     manager = _RecordingSandboxManager()
     monkeypatch.setattr(push, "get_sandbox_manager", lambda: manager)

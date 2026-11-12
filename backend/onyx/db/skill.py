@@ -33,17 +33,15 @@ roll back atomically.
 
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
-from datetime import datetime
 from enum import Enum
 from typing import Any, Literal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import (
     ColumnElement,
     Select,
     and_,
     exists,
-    func,
     or_,
     select,
     update,
@@ -68,12 +66,10 @@ from onyx.db.external_app import (
     get_skill_external_app_dependencies,
 )
 from onyx.db.models import (
-    ExternalApp,
     ExternalApp__Skill,
     Marketplace,
     Plugin,
     Plugin__UserGroup,
-    PluginVersion,
     Sandbox,
     Skill,
     Skill__User,
@@ -104,24 +100,20 @@ from onyx.db.plugin import (
 )
 from onyx.db.plugin_access import (
     SkillNameOrder,
-    SkillNameRank,
     UserPluginState,
     affected_user_ids_for_plugins,
+    company_installation_policy,
     load_user_plugin_states,
     order_skill_names,
     plugin_editable_by_user,
     plugin_in_managed_scope,
-    plugin_usage_by_plugin,
     plugin_visible_to_user,
-    skill_name_in_version,
-    skill_name_order_key,
-    version_user_runs,
 )
 from onyx.db.plugin_review import (
     deny_review__no_commit,
     pending_version,
 )
-from onyx.db.skill_limit import SkillLimitCheck, skill_limit_check
+from onyx.db.skill_limit import check_skill_limit
 from onyx.db.utils import (
     UNSET,
     UnsetType,
@@ -130,10 +122,9 @@ from onyx.db.utils import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.skills import limits
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.ingest import IngestedBundle
-from onyx.skills.limits import SkillOmission
+from onyx.skills.limits import SkillUsage
 from onyx.skills.models import PluginFileEntry
 
 
@@ -164,10 +155,10 @@ class RuntimeSkill:
     # The name in the version the user runs; the row name for a built-in.
     name: str
     # None for a built-in skill.
-    version: RuntimeSkillVersion | None
-    # Place in the name order; BUILT_IN with no created_at for a built-in.
-    name_rank: SkillNameRank
-    plugin_created_at: datetime | None
+    version: RuntimeSkillVersion | None = None
+    # Recorded size of the version; None for a built-in or a version with no
+    # recorded size.
+    usage: SkillUsage | None = None
 
 
 @dataclass(frozen=True)
@@ -212,20 +203,6 @@ def _is_shared_with_user_group(
 
 
 type _PluginClause[T] = Callable[[type[Plugin], type[Marketplace]], ColumnElement[T]]
-
-
-def _plugin_of_skill[T](build: _PluginClause[T]) -> Select[tuple[T]]:
-    """Select ``build`` over the plugin of the enclosing query's skill. Fresh
-    aliases, so the clause can nest inside another plugin query."""
-    plugin: type[Plugin] = aliased(Plugin)
-    marketplace: type[Marketplace] = aliased(Marketplace)
-    return (
-        select(build(plugin, marketplace))
-        .select_from(plugin)
-        .join(marketplace, marketplace.id == plugin.marketplace_id)
-        .where(plugin.id == Skill.id)
-        .correlate_except(plugin, marketplace)
-    )
 
 
 def _plugin_of_skill_matches(build: _PluginClause[bool]) -> ColumnElement[bool]:
@@ -280,24 +257,11 @@ def _is_editable_by_user(user: User) -> ColumnElement[bool]:
     return editable
 
 
-def _runtime_name(user: User) -> ColumnElement[str]:
-    """The skill name in the version the user runs. Built-in skills use their
-    row name."""
-    return func.coalesce(
-        _plugin_of_skill(
-            lambda plugin, _marketplace: skill_name_in_version(
-                version_user_runs(plugin, user.id)
-            )
-        ).scalar_subquery(),
-        Skill.name,
-    )
-
-
 @dataclass(frozen=True)
 class _UserSkillSelection:
     """The custom skills one user can see, their choices and the name order
     (``onyx.db.plugin_access``). Only skills that can run take part in the
-    name order: valid, and with a ready app if they need one."""
+    name order, with the names of the user's built-in skills reserved."""
 
     states: dict[UUID, UserPluginState]
     order: SkillNameOrder
@@ -321,29 +285,19 @@ class _UserSkillSelection:
 def _user_skill_selection(
     user: User,
     db_session: Session,
-    external_app_dependencies: Mapping[UUID, SkillExternalAppDependencyState]
-    | None = None,
+    built_in_skills: Iterable[Skill] | None = None,
 ) -> _UserSkillSelection:
-    if external_app_dependencies is None:
-        external_app_dependencies = get_skill_external_app_dependencies(
-            db_session, user
-        )
+    if built_in_skills is None:
+        built_in_skills = _runtime_built_in_skills(user, db_session)
     states = {
         state.plugin_id: state
         for state in load_user_plugin_states([user.id], db_session)
     }
-    can_run = [
-        state
-        for state in states.values()
-        if state.version_is_valid is not False
-        and (
-            state.plugin_id not in external_app_dependencies
-            or external_app_dependencies[state.plugin_id].ready
-        )
-    ]
     return _UserSkillSelection(
         states=states,
-        order=order_skill_names(can_run, reserved_names=BUILT_IN_SKILLS.keys()),
+        order=order_skill_names(
+            states.values(), reserved_names={skill.name for skill in built_in_skills}
+        ),
     )
 
 
@@ -472,109 +426,62 @@ def list_skills(
     return list(db_session.scalars(stmt))
 
 
+def _runtime_built_in_skills(user: User, db_session: Session) -> list[Skill]:
+    """The built-in skills the user gets: visible, available, and with a
+    ready app if they need one."""
+    rows = list(
+        db_session.scalars(
+            _exclude_unavailable_built_in_skills(
+                select(Skill)
+                .where(Skill.built_in_skill_id.isnot(None), skill_visible_to_user(user))
+                .order_by(Skill.name, Skill.id),
+                db_session,
+            )
+        )
+    )
+    apps = get_skill_external_app_dependencies(
+        db_session, user, [skill.id for skill in rows]
+    )
+    return [skill for skill in rows if skill.id not in apps or apps[skill.id].ready]
+
+
 def list_runtime_skills_for_user(
     *,
     db_session: Session,
     user: User,
 ) -> list[RuntimeSkill]:
-    """Return the user's effective sandbox skills, each with the plugin version
-    the user runs.
-
-    Management visibility, user selection, bundle validity, built-in
-    availability, and external-app readiness remain independent inputs. The
-    plugin and its version are outer joins, so built-in skills stay.
-    """
-    external_app_dependencies = get_skill_external_app_dependencies(db_session, user)
-    ready_external_app_skill_ids = [
-        skill_id
-        for skill_id, dependency in external_app_dependencies.items()
-        if dependency.ready
-    ]
-    selection = _user_skill_selection(user, db_session, external_app_dependencies)
-    run_plugin: type[Plugin] = aliased(Plugin)
-    run_version: type[PluginVersion] = aliased(PluginVersion)
-    name = _runtime_name(user)
-    stmt = (
-        select(
-            Skill,
-            name,
-            run_version.id,
-            run_version.bundle_file_id,
-            run_version.is_valid,
-        )
-        .options(
-            selectinload(Skill.author),
-            selectinload(Skill.user_shares).selectinload(Skill__User.user),
-            selectinload(Skill.group_shares).selectinload(Skill__UserGroup.user_group),
-        )
-        .outerjoin(run_plugin, run_plugin.id == Skill.id)
-        .outerjoin(
-            run_version, run_version.id == version_user_runs(run_plugin, user.id)
-        )
-        .order_by(name, Skill.id)
-        .where(
-            skill_visible_to_user(user),
-            or_(
-                Skill.built_in_skill_id.isnot(None),
-                Skill.id.in_(set(selection.order.kept.values())),
-            ),
-            or_(
-                ~exists().where(ExternalApp__Skill.skill_id == Skill.id),
-                Skill.id.in_(ready_external_app_skill_ids),
-            ),
-            or_(
-                Skill.built_in_skill_id.isnot(None),
-                and_(run_version.id.isnot(None), run_version.is_valid.is_not(False)),
-            ),
-        )
-    )
-    rows = db_session.execute(_exclude_unavailable_built_in_skills(stmt, db_session))
-    skills: list[RuntimeSkill] = []
-    for skill, skill_name, version_id, bundle_file_id, is_valid in rows:
-        state = selection.states.get(skill.id)
-        if skill.built_in_skill_id is not None or state is None:
-            skills.append(
-                RuntimeSkill(
-                    skill=skill,
-                    name=skill_name,
-                    version=None,
-                    name_rank=SkillNameRank.BUILT_IN,
-                    plugin_created_at=None,
-                )
-            )
-            continue
-        skills.append(
-            RuntimeSkill(
-                skill=skill,
-                name=skill_name,
-                version=RuntimeSkillVersion(
-                    id=version_id, bundle_file_id=bundle_file_id, is_valid=is_valid
-                ),
-                name_rank=state.name_rank,
-                plugin_created_at=state.created_at,
-            )
-        )
-    kept, _hidden = keep_one_skill_per_name(skills)
-    return kept
-
-
-def keep_one_skill_per_name(
-    skills: Iterable[RuntimeSkill],
-) -> tuple[list[RuntimeSkill], list[RuntimeSkill]]:
-    """Apply the name order (``onyx.db.plugin_access``) to runtime skills.
-    Returns the kept skills, in input order, and the hidden ones."""
-    skills = list(skills)
-    winners: dict[str, RuntimeSkill] = {}
-    for runtime_skill in sorted(
-        skills,
-        key=lambda item: skill_name_order_key(
-            item.name_rank, item.plugin_created_at, item.skill.id
+    """The user's sandbox skills in the run-time keep order: built-ins, then
+    the custom skills the name order keeps, by ``UserPluginState.keep_key``.
+    Each custom skill has the plugin version the user runs."""
+    built_ins = _runtime_built_in_skills(user, db_session)
+    selection = _user_skill_selection(user, db_session, built_ins)
+    kept = sorted(
+        (
+            selection.states[plugin_id]
+            for plugin_id in set(selection.order.kept.values())
         ),
-    ):
-        winners.setdefault(runtime_skill.name, runtime_skill)
-    kept = [item for item in skills if winners[item.name] is item]
-    hidden = [item for item in skills if winners[item.name] is not item]
-    return kept, hidden
+        key=lambda state: state.keep_key,
+    )
+    skill_rows = {
+        skill.id: skill
+        for skill in db_session.scalars(
+            select(Skill).where(Skill.id.in_([state.plugin_id for state in kept]))
+        )
+    }
+    return [RuntimeSkill(skill=skill, name=skill.name) for skill in built_ins] + [
+        RuntimeSkill(
+            skill=skill_rows[state.plugin_id],
+            name=state.skill_names[0],
+            version=RuntimeSkillVersion(
+                id=state.version_id,
+                bundle_file_id=state.bundle_file_id,
+                is_valid=state.version_is_valid,
+            ),
+            usage=state.usage,
+        )
+        for state in kept
+        if state.plugin_id in skill_rows
+    ]
 
 
 def fetch_skill(
@@ -640,9 +547,7 @@ def enable_new_skill_if_name_available__no_commit(
             return False
     if skill.is_custom:
         plugin = lock_skill_plugin__no_commit(skill, db_session)
-        with skill_limit_check(
-            db_session, [plugin.id], actor_id=user_id, user_ids=[user_id]
-        ):
+        with check_skill_limit(db_session, [plugin.id], user_id, user_ids=[user_id]):
             set_plugin_preferences__no_commit(user_id, [plugin.id], True, db_session)
     _write_legacy_choice__no_commit(user_id, skill, True, db_session)
     return True
@@ -690,48 +595,30 @@ def create_custom_skill__no_commit(
     others start in the author's "My uploads". Returns the skill and the users
     the access change affects."""
     created_public = external_app_id is not None
-    with skill_limit_check(db_session, actor_id=user.id) as limit_check:
-        return _create_custom_skill__no_commit(
-            ingested,
-            user,
+    skill_id = uuid4()
+    with check_skill_limit(db_session, [skill_id], user.id):
+        skill = add_new_skill__no_commit(
+            Skill(
+                id=skill_id,
+                name=ingested.canonical_name,
+                description=ingested.description,
+                bundle_file_id=ingested.bundle_file_id,
+                bundle_sha256=ingested.bundle_sha256,
+                is_valid=True,
+                author_user_id=user.id,
+                public_permission=(
+                    SkillSharePermission.VIEWER if created_public else None
+                ),
+            ),
             db_session,
-            created_public=created_public,
-            change=change,
-            external_app_id=external_app_id,
-            limit_check=limit_check,
         )
-
-
-def _create_custom_skill__no_commit(
-    ingested: IngestedBundle,
-    user: User,
-    db_session: Session,
-    *,
-    created_public: bool,
-    change: "SkillSharingChange | None",
-    external_app_id: int | None,
-    limit_check: SkillLimitCheck,
-) -> tuple[Skill, set[UUID]]:
-    skill = add_new_skill__no_commit(
-        Skill(
-            name=ingested.canonical_name,
-            description=ingested.description,
-            bundle_file_id=ingested.bundle_file_id,
-            bundle_sha256=ingested.bundle_sha256,
-            is_valid=True,
-            author_user_id=user.id,
-            public_permission=(SkillSharePermission.VIEWER if created_public else None),
-        ),
-        db_session,
-    )
-    create_skill_plugin__no_commit(skill, ingested.content, user, db_session)
-    limit_check.track_new([skill.id])
-    if external_app_id is not None:
-        associate_custom_skill_with_external_app__no_commit(
-            db_session,
-            external_app_id=external_app_id,
-            skill_id=skill.id,
-        )
+        create_skill_plugin__no_commit(skill, ingested.content, user, db_session)
+        if external_app_id is not None:
+            associate_custom_skill_with_external_app__no_commit(
+                db_session,
+                external_app_id=external_app_id,
+                skill_id=skill.id,
+            )
     affected: set[UUID] = set()
     if change is not None:
         # main allows two published skills with one name, so a new skill that
@@ -771,7 +658,7 @@ def replace_skill_bundle(
     # A skill with no plugin gets one copied from its legacy row first, so the
     # change below is version 2, as for every other skill.
     plugin = lock_skill_plugin__no_commit(skill, db_session)
-    with skill_limit_check(db_session, [plugin.id], actor_id=user.id):
+    with check_skill_limit(db_session, [plugin.id], user.id):
         added = add_plugin_version__no_commit(
             plugin=plugin,
             content=ingested.content,
@@ -870,7 +757,7 @@ def skill_user_states(
         return {}
 
     external_app_dependencies = get_skill_external_app_dependencies(db_session, user)
-    selection = _user_skill_selection(user, db_session, external_app_dependencies)
+    selection = _user_skill_selection(user, db_session)
     states: dict[UUID, SkillUserState] = {}
     for skill_id, built_in_skill_id in db_session.execute(
         select(Skill.id, Skill.built_in_skill_id).where(Skill.id.in_(requested_ids))
@@ -962,9 +849,7 @@ def set_skill_enabled_for_user(
     conflict_plugin_ids = [
         plugin_id for plugin_id in locked_plugin_ids if plugin_id != skill.id
     ]
-    with skill_limit_check(
-        db_session, locked_plugin_ids, actor_id=user.id, user_ids=[user.id]
-    ):
+    with check_skill_limit(db_session, locked_plugin_ids, user.id, user_ids=[user.id]):
         if conflicts:
             set_plugin_preferences__no_commit(
                 user.id, conflict_plugin_ids, False, db_session
@@ -976,86 +861,6 @@ def set_skill_enabled_for_user(
         set_plugin_preferences__no_commit(user.id, [skill.id], enabled, db_session)
         _write_legacy_choice__no_commit(user.id, skill, enabled, db_session)
     return skill
-
-
-def connect_external_app_within_skill_limit__no_commit(
-    external_app_id: int,
-    user: User,
-    connect: Callable[[], object],
-    db_session: Session,
-) -> list[SkillOmission]:
-    """Run ``connect``, which stores the user's app credentials, and keep it.
-    When the app's skills would put the user past the skill limit, leave off
-    the ones that do not fit, in name order, with a saved "off" choice, and
-    return them with their usage and the limit they would break. Turning one on later runs the limit check again. A
-    Required skill cannot be left off; the run-time rule applies to it.
-
-    Lock order, shared with app edits and toggles: the app row (the
-    credential's foreign key), the user, skill rows, plugin rows, then the
-    skill limit lock. Every write after the limit lock is on rows this
-    transaction already holds."""
-    db_session.execute(
-        select(ExternalApp.id)
-        .where(ExternalApp.id == external_app_id)
-        .with_for_update(read=True, key_share=True)
-    )
-    _lock_user_skill_preferences(user.id, db_session)
-    plugin_ids = _lock_custom_skill_plugins(
-        db_session.scalars(
-            select(ExternalApp__Skill.skill_id).where(
-                ExternalApp__Skill.external_app_id == external_app_id
-            )
-        ),
-        db_session,
-    )
-    check = SkillLimitCheck(db_session, user.id, [user.id])
-    check.track(plugin_ids)
-    connect()
-    outcome = check.measure()
-    total = outcome.users_over.get(user.id)
-    if total is None:
-        return []
-    app_usage = plugin_usage_by_plugin(user.id, plugin_ids, db_session)
-    states = {
-        state.plugin_id: state
-        for state in load_user_plugin_states([user.id], db_session, plugin_ids)
-    }
-    kept = total
-    for usage in app_usage.values():
-        kept -= usage
-    left_off: list[UUID] = []
-    omissions: list[SkillOmission] = []
-    for plugin_id in sorted(
-        app_usage, key=lambda plugin_id: (states[plugin_id].skill_names, plugin_id)
-    ):
-        usage = app_usage[plugin_id]
-        state = states[plugin_id]
-        required = state.installation_policy == PluginInstallationPolicy.REQUIRED
-        total = kept + usage
-        if total.is_over_write_limit and not required:
-            left_off.append(plugin_id)
-            omissions.append(
-                SkillOmission(
-                    plugin_id=plugin_id,
-                    name=state.skill_names[0] if state.skill_names else "",
-                    bytes=usage.bytes,
-                    files=usage.files,
-                    reason=(
-                        "bytes"
-                        if total.bytes > limits.SKILL_WRITE_MAX_BYTES
-                        else "files"
-                    ),
-                )
-            )
-        else:
-            kept += usage
-    if left_off:
-        set_plugin_preferences__no_commit(user.id, left_off, False, db_session)
-        for skill in db_session.scalars(
-            select(Skill).where(Skill.id.in_(left_off)).order_by(Skill.id)
-        ):
-            _write_legacy_choice__no_commit(user.id, skill, False, db_session)
-    return omissions
 
 
 def _lock_custom_skill_plugins(
@@ -1144,30 +949,18 @@ def transfer_skill_ownership(
         return
 
     plugin = lock_skill_plugin__no_commit(skill, db_session)
-    with skill_limit_check(db_session, [plugin.id], actor_id=None):
-        _transfer_skill_plugin__no_commit(
-            skill, plugin, previous_owner_user_id, new_owner_user_id, db_session
-        )
-
-
-def _transfer_skill_plugin__no_commit(
-    skill: Skill,
-    plugin: Plugin,
-    previous_owner_user_id: UUID | None,
-    new_owner_user_id: UUID,
-    db_session: Session,
-) -> None:
-    try:
-        skill.author_user_id = new_owner_user_id
-        db_session.flush()
-    except IntegrityError as e:
-        if is_fk_violation(e):
-            raise OnyxError(
-                OnyxErrorCode.INVALID_INPUT,
-                "New owner user does not exist.",
-            ) from e
-        raise
-    transfer_plugin__no_commit(plugin.id, new_owner_user_id, db_session)
+    with check_skill_limit(db_session, [plugin.id], None):
+        try:
+            skill.author_user_id = new_owner_user_id
+            db_session.flush()
+        except IntegrityError as e:
+            if is_fk_violation(e):
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    "New owner user does not exist.",
+                ) from e
+            raise
+        transfer_plugin__no_commit(plugin.id, new_owner_user_id, db_session)
     # The author has no share, so the new owner's share goes.
     apply_plugin_access_change__no_commit(
         [plugin.id],
@@ -1339,7 +1132,7 @@ def publish_skill__no_commit(
     check_base_version(plugin, base_version_id)
     if plugin.published_version_id == plugin.current_version_id:
         return set()
-    with skill_limit_check(db_session, [plugin.id], actor_id=user.id):
+    with check_skill_limit(db_session, [plugin.id], user.id):
         before = affected_user_ids_for_plugins([plugin.id], db_session)
         publish_or_request_review__no_commit(
             plugin, skill, plugin.current_version_id, user, "raise", db_session
@@ -1356,7 +1149,7 @@ def approve_skill_review__no_commit(
     (R12). The caller holds the skill row lock. Returns the affected users."""
     plugin = lock_skill_plugin__no_commit(skill, db_session)
     version = pending_version(plugin, version_id, db_session)
-    with skill_limit_check(db_session, [plugin.id], actor_id=None):
+    with check_skill_limit(db_session, [plugin.id], None):
         before = affected_user_ids_for_plugins([plugin.id], db_session)
         publish_or_request_review__no_commit(
             plugin, skill, version.id, None, "raise", db_session
@@ -1397,8 +1190,8 @@ def share_skill__no_commit(
 @dataclass(frozen=True)
 class SkillBulkShareResult:
     succeeded: list[UUID]
-    # Skill id and the refusal, in skill id order.
-    failed: list[tuple[UUID, OnyxError]]
+    # Skill id and the reason, in skill id order.
+    failed: list[tuple[UUID, str]]
     affected_user_ids: set[UUID]
 
 
@@ -1412,7 +1205,7 @@ def bulk_share_skills__no_commit(
     are add-only. A skill the user cannot edit, or whose change is refused or
     fails, is reported and changes nothing; the other skills still change. A
     refusal for the whole set fails every skill."""
-    failed: dict[UUID, OnyxError] = {}
+    failed: dict[UUID, str] = {}
     candidates: list[UUID] = []
     for skill_id in sorted(set(skill_ids)):
         skill = fetch_skill(
@@ -1423,12 +1216,12 @@ def bulk_share_skills__no_commit(
             lock_for_update=True,
         )
         if skill is None:
-            failed[skill_id] = OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+            failed[skill_id] = "Skill not found"
             continue
         try:
             _check_skill_access_change(skill, change, user, db_session)
         except OnyxError as exc:
-            failed[skill_id] = exc
+            failed[skill_id] = exc.detail
             continue
         candidates.append(skill_id)
 
@@ -1443,9 +1236,11 @@ def bulk_share_skills__no_commit(
                     db_session,
                 )
         except OnyxError as exc:
-            failed |= dict.fromkeys(candidates, exc)
+            failed |= dict.fromkeys(candidates, exc.detail)
         else:
-            failed |= result.failures
+            failed |= {
+                skill_id: exc.detail for skill_id, exc in result.failures.items()
+            }
             affected = result.affected_user_ids
     return SkillBulkShareResult(
         succeeded=[skill_id for skill_id in candidates if skill_id not in failed],
@@ -1465,11 +1260,7 @@ def _is_required_for_anyone(skill_id: UUID, db_session: Session) -> bool:
                     exists().where(
                         Plugin.id == skill_id,
                         Marketplace.id == Plugin.marketplace_id,
-                        func.coalesce(
-                            Plugin.installation_policy,
-                            Marketplace.default_installation_policy,
-                        )
-                        == required,
+                        company_installation_policy(Plugin, Marketplace) == required,
                     ),
                     exists().where(
                         Plugin__UserGroup.plugin_id == skill_id,
@@ -1515,10 +1306,7 @@ def create_skill_from_bundle__no_commit(
     """Create a skill from a stored bundle inside a savepoint, so a name
     conflict or a rejected access change rolls back this skill only. Returns
     the skill, whether it was enabled for the user, and the affected users."""
-    with (
-        db_session.begin_nested(),
-        skill_limit_check(db_session, actor_id=user.id),
-    ):
+    with db_session.begin_nested():
         skill, affected = create_custom_skill__no_commit(
             ingested, user, db_session, change=change
         )

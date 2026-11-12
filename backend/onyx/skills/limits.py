@@ -17,21 +17,15 @@ from pydantic import BaseModel, ConfigDict
 SKILL_WRITE_MAX_BYTES: Final[int] = 500 * 1024 * 1024
 SKILL_WRITE_MAX_FILES: Final[int] = 5_000
 
-# A 1 GB sandbox disk held 1,000 MB of skills; this keeps about 110 MB spare.
+# A 1 GB sandbox disk held 1,000 MB of skills. The spare 100 MB also holds
+# the disk blocks of up to 10,000 small files.
 SKILL_RUNTIME_MAX_BYTES: Final[int] = 900 * 1024 * 1024
 SKILL_RUNTIME_MAX_FILES: Final[int] = 10_000
-# The disk gives each file at least one 4 KB block.
-SKILL_MIN_FILE_BYTES: Final[int] = 4096
-
-
-def charged_file_bytes(size: int) -> int:
-    return max(size, SKILL_MIN_FILE_BYTES)
 
 
 @dataclass(frozen=True)
 class SkillUsage:
-    """Size and file count of skills. For the run-time limit, ``bytes`` is
-    the charged size (each file at least 4 KB)."""
+    """Unpacked size and file count of skills."""
 
     bytes: int = 0
     files: int = 0
@@ -75,15 +69,13 @@ def runtime_keep_key(
 
 
 class SkillOmission(BaseModel):
-    """A plugin that a skill limit left out: out of a sandbox (run-time
-    limit) or turned off at app connect (write limit)."""
+    """A plugin that the run-time limit left out of a sandbox."""
 
     model_config = ConfigDict(frozen=True)
 
     plugin_id: UUID
     name: str
-    # Size and file count of the version the user runs (charged size for the
-    # run-time limit).
+    # Size and file count of the version the user runs.
     bytes: int
     files: int
     # The limit it would break.
@@ -91,7 +83,7 @@ class SkillOmission(BaseModel):
 
 
 class SkillLimitNotice(BaseModel):
-    """The plugins a skill limit left out, and that limit."""
+    """The plugins the run-time limit left out, and that limit."""
 
     skills: list[SkillOmission]
     max_bytes: int
@@ -113,14 +105,6 @@ class SkillLimitRefusal(BaseModel):
     max_files: int
 
 
-def write_limit_notice(skills: list[SkillOmission]) -> SkillLimitNotice | None:
-    if not skills:
-        return None
-    return SkillLimitNotice(
-        skills=skills, max_bytes=SKILL_WRITE_MAX_BYTES, max_files=SKILL_WRITE_MAX_FILES
-    )
-
-
 def runtime_limit_notice(skills: list[SkillOmission]) -> SkillLimitNotice | None:
     if not skills:
         return None
@@ -129,15 +113,3 @@ def runtime_limit_notice(skills: list[SkillOmission]) -> SkillLimitNotice | None
         max_bytes=SKILL_RUNTIME_MAX_BYTES,
         max_files=SKILL_RUNTIME_MAX_FILES,
     )
-
-
-def runtime_omission_reason(
-    used: SkillUsage, usage: SkillUsage
-) -> Literal["bytes", "files"] | None:
-    """Why ``usage`` does not fit next to ``used``, or None when it fits."""
-    total = used + usage
-    if total.bytes > SKILL_RUNTIME_MAX_BYTES:
-        return "bytes"
-    if total.files > SKILL_RUNTIME_MAX_FILES:
-        return "files"
-    return None

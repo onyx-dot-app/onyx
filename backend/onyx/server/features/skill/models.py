@@ -18,7 +18,6 @@ from onyx.db.skill import SkillSharingChange
 from onyx.db.utils import UNSET
 from onyx.server.models import MinimalUserSnapshot
 from onyx.skills.built_in import BuiltInSkillDefinition
-from onyx.skills.limits import SkillLimitRefusal
 from onyx.skills.models import GITHUB_SKILL_MAX_COUNT, SkillBundleFile
 from onyx.utils.github import GITHUB_COMMIT_SHA_PATTERN
 
@@ -341,8 +340,6 @@ class GitHubSkillNotImported(BaseModel):
     path: str
     name: str
     reason: str
-    # Set when the skill limit refused the skill.
-    skill_limit: SkillLimitRefusal | None = None
 
 
 class GitHubSkillsImportResponse(BaseModel):
@@ -525,8 +522,6 @@ class SkillBulkActionRequest(BaseModel):
 class SkillBulkFailure(BaseModel):
     skill_id: UUID
     detail: str
-    # Set when the skill limit refused the change.
-    skill_limit: SkillLimitRefusal | None = None
 
 
 class SkillBulkResponse(BaseModel):

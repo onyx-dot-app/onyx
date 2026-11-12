@@ -1,21 +1,19 @@
 """Push skill bundles to running sandboxes."""
 
 import hashlib
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable
 from dataclasses import dataclass
-from enum import Enum
+from typing import Literal
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
 from onyx.db.external_app import get_connectable_apps_for_user
 from onyx.db.models import Skill, User
-from onyx.db.plugin_access import RuntimePluginCharge, runtime_plugin_charges
 from onyx.db.skill import (
     RuntimeSkill,
     SkillValidityUpdate,
     affected_user_ids_for_skill,
-    keep_one_skill_per_name,
     list_runtime_skills_for_user,
     persist_skill_validity,
 )
@@ -35,7 +33,6 @@ from onyx.server.features.build.sandbox.util.agent_instructions import (
     build_connectable_apps_list,
 )
 from onyx.skills.built_in import (
-    BUILT_IN_SKILL_RUNTIME_USAGE,
     BUILT_IN_SKILLS,
     COMPANY_SEARCH,
     EXTERNAL_APP_SKILL_ID_TO_APP_TYPE,
@@ -50,12 +47,9 @@ from onyx.skills.bundle import (
 )
 from onyx.skills.limits import (
     SKILL_RUNTIME_MAX_BYTES,
-    KeepGroup,
+    SKILL_RUNTIME_MAX_FILES,
     SkillOmission,
     SkillUsage,
-    charged_file_bytes,
-    runtime_keep_key,
-    runtime_omission_reason,
 )
 from onyx.skills.rendering import (
     CLAUDE_SKILL_DIR_PLACEHOLDER,
@@ -138,121 +132,68 @@ def _render_template(
     )
 
 
-def _resolved_size(name: str, skill_md: bytes) -> int:
-    """Size of a root ``SKILL.md`` after ``${CLAUDE_SKILL_DIR}`` resolution."""
-    placeholder = CLAUDE_SKILL_DIR_PLACEHOLDER.encode()
-    return len(skill_md) + skill_md.count(placeholder) * (
-        len(f"{SKILLS_MOUNT_PATH}/{name}".encode()) - len(placeholder)
-    )
+def _omission_reason(
+    used: SkillUsage, usage: SkillUsage
+) -> Literal["bytes", "files"] | None:
+    """Why ``usage`` does not fit the run-time limit next to ``used``, or None
+    when it fits. The byte limit is also the transport cap of a push."""
+    total = used + usage
+    if total.bytes > SKILL_RUNTIME_MAX_BYTES:
+        return "bytes"
+    if total.files > SKILL_RUNTIME_MAX_FILES:
+        return "files"
+    return None
 
 
-def _sent_bytes(files: FileSet) -> int:
-    """Bytes the sandbox receives for ``files``, with each root ``SKILL.md``
-    at its size after ``${CLAUDE_SKILL_DIR}`` resolution."""
-    total = 0
-    for path, content in files.items():
-        name, _, rest = path.partition("/")
-        total += (
-            _resolved_size(name, content) if rest == SKILL_MD_NAME else len(content)
-        )
-    return total
-
-
-class _BundleAdd(Enum):
-    ADDED = "added"
-    # The push would pass the transport cap; the run-time limit records it.
-    TOO_LARGE = "too_large"
-    SKIPPED = "skipped"
-
-
-def _add_bundle_bytes(
-    files: FileSet, name: str, bundle_file_id: str | None, bundle_bytes: bytes
-) -> _BundleAdd:
-    """Add a bundle's files under ``name`` if the push stays within the
-    transport cap ``SKILL_RUNTIME_MAX_BYTES``."""
-    try:
-        bundle_files: FileSet = {}
-        with open_bundle_zip(bundle_bytes) as zf:
-            infos = [info for info in zf.infolist() if not info.is_dir()]
-            # A member never reads past its declared size, so this bounds memory
-            # before the receiver would refuse the whole push.
-            total = _sent_bytes(files) + sum(info.file_size for info in infos)
-            if total > SKILL_RUNTIME_MAX_BYTES:
-                logger.warning(
-                    "Skipping skill %s: the skills exceed the sandbox size limit",
-                    name,
-                )
-                return _BundleAdd.TOO_LARGE
-            for info in infos:
-                bundle_files[f"{name}/{info.filename}"] = zf.read(info)
-        skill_md = bundle_files.get(f"{name}/{SKILL_MD_NAME}", b"")
-        resolved = _resolved_size(name, skill_md)
-        # Count the resolved instructions now, so a Skill that resolution would
-        # drop does not push later Skills over the total.
-        if resolved > min(DEFAULT_PER_FILE_MAX_BYTES, MAX_FILE_BYTES):
-            logger.warning(
-                "Skipping skill %s: resolved instructions exceed the file size limit",
-                name,
-            )
-            return _BundleAdd.SKIPPED
-        if total - len(skill_md) + resolved > SKILL_RUNTIME_MAX_BYTES:
-            logger.warning(
-                "Skipping skill %s: resolved instructions exceed the sandbox size limit",
-                name,
-            )
-            return _BundleAdd.TOO_LARGE
-        files.update(bundle_files)
-        return _BundleAdd.ADDED
-    except Exception:
-        logger.warning(
-            "Failed to unpack bundle for skill %s (%s), skipping",
-            name,
-            bundle_file_id,
-            exc_info=True,
-        )
-        return _BundleAdd.SKIPPED
-
-
-def _resolve_skill_dirs(files: FileSet, skill_names: Iterable[str]) -> None:
-    """Point ``${CLAUDE_SKILL_DIR}`` in each root ``SKILL.md`` at the skill's
-    sandbox folder. Only the sent copy changes, not the stored bundle."""
-    placeholder = CLAUDE_SKILL_DIR_PLACEHOLDER.encode()
-    total = sum(len(content) for content in files.values())
-    file_limit = min(DEFAULT_PER_FILE_MAX_BYTES, MAX_FILE_BYTES)
-    for name in skill_names:
-        path = f"{name}/{SKILL_MD_NAME}"
-        content = files.get(path)
-        if content is None or placeholder not in content:
-            continue
-        skill_dir = f"{SKILLS_MOUNT_PATH}/{name}"
-        resolved_size = _resolved_size(name, content)
-        resolved_total = total - len(content) + resolved_size
-        if resolved_size > file_limit or resolved_total > SKILL_RUNTIME_MAX_BYTES:
-            logger.warning(
-                "Skipping skill %s: resolved instructions exceed a sandbox size limit",
-                name,
-            )
-            prefix = f"{name}/"
-            for skill_path in [key for key in files if key.startswith(prefix)]:
-                total -= len(files.pop(skill_path))
-            continue
-        total = resolved_total
-        files[path] = resolve_skill_dir_placeholder(
-            content.decode("utf-8"), skill_dir
-        ).encode("utf-8")
-
-
-def _bundle_runtime_usage(bundle_bytes: bytes) -> SkillUsage | None:
-    """Charged usage of a bundle's files, each at least 4 KB."""
-    try:
-        with open_bundle_zip(bundle_bytes) as zf:
-            infos = [info for info in zf.infolist() if not info.is_dir()]
-    except Exception:
-        return None
+def _larger(first: SkillUsage | None, second: SkillUsage) -> SkillUsage:
+    if first is None:
+        return second
     return SkillUsage(
-        bytes=sum(charged_file_bytes(info.file_size) for info in infos),
-        files=len(infos),
+        bytes=max(first.bytes, second.bytes), files=max(first.files, second.files)
     )
+
+
+def _usage_of(files: FileSet) -> SkillUsage:
+    return SkillUsage(
+        bytes=sum(len(content) for content in files.values()), files=len(files)
+    )
+
+
+def _resolve_skill_dir(files: FileSet, name: str) -> bool:
+    """Point ``${CLAUDE_SKILL_DIR}`` in the root ``SKILL.md`` of one skill's
+    files at the skill's sandbox folder. Only the sent copy changes, not the
+    stored bundle. False when the resolved file passes the per-file limit."""
+    path = f"{name}/{SKILL_MD_NAME}"
+    content = files.get(path)
+    if content is None or CLAUDE_SKILL_DIR_PLACEHOLDER.encode() not in content:
+        return True
+    resolved = resolve_skill_dir_placeholder(
+        content.decode("utf-8"), f"{SKILLS_MOUNT_PATH}/{name}"
+    ).encode("utf-8")
+    if len(resolved) > min(DEFAULT_PER_FILE_MAX_BYTES, MAX_FILE_BYTES):
+        logger.warning(
+            "Skipping skill %s: resolved instructions exceed the file size limit",
+            name,
+        )
+        return False
+    files[path] = resolved
+    return True
+
+
+def _bundle_usage(bundle_bytes: bytes) -> SkillUsage:
+    """Size and file count of a bundle's files, from the zip directory."""
+    with open_bundle_zip(bundle_bytes) as zf:
+        infos = [info for info in zf.infolist() if not info.is_dir()]
+    return SkillUsage(bytes=sum(info.file_size for info in infos), files=len(infos))
+
+
+def _unpack_bundle(name: str, bundle_bytes: bytes) -> FileSet:
+    with open_bundle_zip(bundle_bytes) as zf:
+        return {
+            f"{name}/{info.filename}": zf.read(info)
+            for info in zf.infolist()
+            if not info.is_dir()
+        }
 
 
 def _load_custom_bundle(
@@ -294,18 +235,6 @@ def _load_custom_bundle(
         return None
 
 
-def _runtime_keep_key(
-    runtime_skill: RuntimeSkill, charges: Mapping[UUID, RuntimePluginCharge]
-) -> tuple[int, float, UUID]:
-    skill_id = runtime_skill.skill.id
-    if runtime_skill.skill.built_in_skill_id is not None:
-        return runtime_keep_key(KeepGroup.BUILT_IN, None, skill_id)
-    charge = charges.get(skill_id)
-    if charge is None:
-        return runtime_keep_key(KeepGroup.INSTALLED_BY_DEFAULT, None, skill_id)
-    return runtime_keep_key(charge.group, charge.order_time, skill_id)
-
-
 @dataclass(frozen=True)
 class AssembledSkills:
     files: FileSet
@@ -313,42 +242,31 @@ class AssembledSkills:
 
 
 def _assemble_skills(
-    skills: Iterable[RuntimeSkill],
-    user: User,
-    db_session: Session,
-    charges: Mapping[UUID, RuntimePluginCharge] | None,
+    skills: Iterable[RuntimeSkill], user: User, db_session: Session
 ) -> AssembledSkills:
-    """Hydrate the skills as a flat ``{path: bytes}`` map.
+    """Hydrate the skills, in the keep order, as a flat ``{path: bytes}`` map.
 
     Built-ins render from disk. A custom skill sends the bundle of the plugin
     version the user runs, in a folder named by that version's frontmatter.
     The version must already be valid or pass lazy validation before its
     FileStore bundle is unpacked. Invalid, indeterminate, and unknown built-in
-    rows are skipped. Of two skills with one name, the name order keeps one.
+    rows are skipped.
 
-    With ``charges``, the run-time limit applies: skills load in the keep
-    order while they fit, and whole plugins that do not fit are left out. A
-    version with no recorded size is measured from its bundle.
+    The run-time limit applies to one running total: a skill that does not
+    fit is left out, and later ones still load if they fit. A custom skill
+    counts its recorded size, or the files sent when they are larger (with
+    ``${CLAUDE_SKILL_DIR}`` resolved), so the total also keeps the push within
+    the transport cap. The recorded size decides before the bundle is read.
     """
-    skills, hidden = keep_one_skill_per_name(skills)
-    for runtime_skill in hidden:
-        logger.warning(
-            "Skipping skill %s: another skill is named '%s'",
-            runtime_skill.skill.id,
-            runtime_skill.name,
-        )
-    seen_names = {runtime_skill.name for runtime_skill in skills}
-    if charges is not None:
-        skills = sorted(skills, key=lambda item: _runtime_keep_key(item, charges))
-
     files: FileSet = {}
     omissions: list[SkillOmission] = []
     used = SkillUsage()
+    seen_names: set[str] = set()
     validity_updates: list[SkillValidityUpdate] = []
     file_store = get_default_file_store()
 
     def left_out(runtime_skill: RuntimeSkill, usage: SkillUsage) -> bool:
-        reason = runtime_omission_reason(used, usage)
+        reason = _omission_reason(used, usage)
         if reason is None:
             return False
         logger.info(
@@ -369,59 +287,57 @@ def _assemble_skills(
 
     for runtime_skill in skills:
         skill = runtime_skill.skill
+        name = runtime_skill.name
+        if name in seen_names:
+            logger.warning(
+                "Skipping skill %s: another skill is named '%s'", skill.id, name
+            )
+            continue
+        skill_files: FileSet = {}
+        size = SkillUsage()
         if skill.built_in_skill_id is None:
-            charge = charges.get(skill.id) if charges is not None else None
-            usage = charge.usage if charge is not None else None
-            if charges is not None and usage is not None:
-                if left_out(runtime_skill, usage):
-                    continue
+            if runtime_skill.usage is not None and left_out(
+                runtime_skill, runtime_skill.usage
+            ):
+                continue
             bundle_bytes = _load_custom_bundle(
                 runtime_skill, file_store, validity_updates
             )
             if bundle_bytes is None:
                 continue
-            if charges is not None and usage is None:
-                usage = _bundle_runtime_usage(bundle_bytes) or SkillUsage()
-                if left_out(runtime_skill, usage):
+            try:
+                # The zip directory bounds memory before the files are read.
+                size = _larger(runtime_skill.usage, _bundle_usage(bundle_bytes))
+                if left_out(runtime_skill, size):
                     continue
-            version = runtime_skill.version
-            added = _add_bundle_bytes(
-                files,
-                runtime_skill.name,
-                version.bundle_file_id if version is not None else None,
-                bundle_bytes,
-            )
-            if added is _BundleAdd.ADDED and usage is not None:
-                used += usage
-            elif added is _BundleAdd.TOO_LARGE and usage is not None:
-                # The files do not fit the transport cap although the charge
-                # fits, for example after ${CLAUDE_SKILL_DIR} resolution.
-                omissions.append(
-                    SkillOmission(
-                        plugin_id=skill.id,
-                        name=runtime_skill.name,
-                        bytes=usage.bytes,
-                        files=usage.files,
-                        reason="bytes",
-                    )
+                skill_files = _unpack_bundle(name, bundle_bytes)
+            except Exception:
+                logger.warning(
+                    "Failed to unpack bundle for skill %s, skipping",
+                    skill.id,
+                    exc_info=True,
                 )
+                continue
+        else:
+            definition = BUILT_IN_SKILLS.get(skill.built_in_skill_id)
+            if definition is None:
+                logger.warning(
+                    "Skill row %s references unknown built-in %s; skipping",
+                    skill.name,
+                    skill.built_in_skill_id,
+                )
+                continue
+            _add_static_builtin(skill_files, skill, definition)
+            if definition.has_template:
+                _render_template(skill_files, skill, definition, db_session, user)
+        if not _resolve_skill_dir(skill_files, name):
             continue
-        definition = BUILT_IN_SKILLS.get(skill.built_in_skill_id)
-        if definition is None:
-            logger.warning(
-                "Skill row %s references unknown built-in %s; skipping",
-                skill.name,
-                skill.built_in_skill_id,
-            )
+        size = _larger(size, _usage_of(skill_files))
+        if left_out(runtime_skill, size):
             continue
-        _add_static_builtin(files, skill, definition)
-        if definition.has_template:
-            _render_template(files, skill, definition, db_session, user)
-        used += BUILT_IN_SKILL_RUNTIME_USAGE.get(
-            definition.built_in_skill_id, SkillUsage()
-        )
-
-    _resolve_skill_dirs(files, sorted(seen_names))
+        files.update(skill_files)
+        seen_names.add(name)
+        used += size
 
     try:
         persist_skill_validity(validity_updates)
@@ -435,8 +351,7 @@ def _assemble_fileset(
     user: User,
     db_session: Session,
 ) -> FileSet:
-    """``_assemble_skills`` without the run-time limit."""
-    return _assemble_skills(skills, user, db_session, None).files
+    return _assemble_skills(skills, user, db_session).files
 
 
 @dataclass(frozen=True)
@@ -455,11 +370,7 @@ def build_user_skills_payload(user: User, db_session: Session) -> UserSkillsPayl
     so the agent can offer to set one up through the connect tool.
     """
     skills = list_runtime_skills_for_user(user=user, db_session=db_session)
-    charges = {
-        charge.plugin_id: charge
-        for charge in runtime_plugin_charges([user.id], db_session).get(user.id, [])
-    }
-    assembled = _assemble_skills(skills, user, db_session, charges)
+    assembled = _assemble_skills(skills, user, db_session)
     connectable_apps_section = build_connectable_apps_list(
         get_connectable_apps_for_user(db_session, user)
     )

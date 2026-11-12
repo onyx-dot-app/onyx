@@ -1,10 +1,11 @@
 """Whether a user has connected the external app that a skill needs.
 
-Below ``onyx.db.plugin`` in the import order, so the skill limit check can use
-it."""
+Below ``onyx.db.plugin`` in the import order, so the plugin access reads can
+use it."""
 
 import re
 from collections.abc import Iterable
+from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
@@ -54,56 +55,57 @@ def is_user_authenticated_for_app(
     return all(k in stored for k in required)
 
 
-def app_skill_ids(skill_ids: Iterable[UUID], db_session: Session) -> set[UUID]:
-    """The skills among ``skill_ids`` that need an external app."""
-    ids = set(skill_ids)
-    if not ids:
-        return set()
-    return set(
-        db_session.scalars(
-            select(ExternalApp__Skill.skill_id).where(
-                ExternalApp__Skill.skill_id.in_(ids)
-            )
-        )
-    )
+@dataclass(frozen=True)
+class SkillExternalAppDependencyState:
+    external_app_id: int
+    name: str
+    enabled: bool
+    ready: bool
 
 
-def ready_app_skill_pairs(
-    pairs: Iterable[tuple[UUID, UUID]], db_session: Session
-) -> set[tuple[UUID, UUID]]:
-    """The (user id, skill id) pairs whose skill's app is enabled and connected
-    for that user, in one query."""
-    wanted = set(pairs)
-    if not wanted:
-        return set()
-    user_ids = {user_id for user_id, _ in wanted}
-    skill_ids = {skill_id for _, skill_id in wanted}
-    rows = db_session.execute(
+def app_dependency_states(
+    user_ids: Iterable[UUID],
+    db_session: Session,
+    skill_ids: Iterable[UUID] | None = None,
+) -> dict[tuple[UUID, UUID], SkillExternalAppDependencyState]:
+    """The app each skill needs (all, or ``skill_ids``), for each user, keyed
+    by (user id, skill id). Ready: the app is enabled and the user connected
+    it. One query; skills with no app are left out."""
+    users = set(user_ids)
+    if not users:
+        return {}
+    stmt = (
         select(ExternalApp__Skill.skill_id, ExternalApp, ExternalAppUserCredential)
         .join(ExternalApp, ExternalApp.id == ExternalApp__Skill.external_app_id)
         .outerjoin(
             ExternalAppUserCredential,
             and_(
                 ExternalAppUserCredential.external_app_id == ExternalApp.id,
-                ExternalAppUserCredential.user_id.in_(user_ids),
+                ExternalAppUserCredential.user_id.in_(users),
             ),
         )
-        .where(ExternalApp__Skill.skill_id.in_(skill_ids))
         # Credentials written earlier in this session must be read as stored.
         .execution_options(populate_existing=True)
-    ).all()
+    )
+    if skill_ids is not None:
+        ids = set(skill_ids)
+        if not ids:
+            return {}
+        stmt = stmt.where(ExternalApp__Skill.skill_id.in_(ids))
     apps: dict[UUID, ExternalApp] = {}
     credentials: dict[tuple[UUID, int], ExternalAppUserCredential] = {}
-    for skill_id, app, credential in rows:
+    for skill_id, app, credential in db_session.execute(stmt).all():
         apps[skill_id] = app
         if credential is not None:
             credentials[(credential.user_id, app.id)] = credential
     return {
-        (user_id, skill_id)
-        for user_id, skill_id in wanted
-        if skill_id in apps
-        and apps[skill_id].enabled
-        and is_user_authenticated_for_app(
-            apps[skill_id], credentials.get((user_id, apps[skill_id].id))
+        (user_id, skill_id): SkillExternalAppDependencyState(
+            external_app_id=app.id,
+            name=app.name,
+            enabled=app.enabled,
+            ready=app.enabled
+            and is_user_authenticated_for_app(app, credentials.get((user_id, app.id))),
         )
+        for skill_id, app in apps.items()
+        for user_id in users
     }

@@ -16,7 +16,7 @@ from sqlalchemy import select, update
 
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.db.models import Plugin, PluginVersion
-from onyx.db.skill_limit import built_in_skill_usage
+from onyx.skills.built_in import BUILT_IN_SKILLS_USAGE
 from onyx.skills.limits import SKILL_WRITE_MAX_BYTES, SKILL_WRITE_MAX_FILES
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -74,21 +74,14 @@ def _set_size(
         db_session.commit()
 
 
-def _built_ins() -> tuple[int, int]:
-    with get_session_with_current_tenant() as db_session:
-        usage = built_in_skill_usage(db_session)
-    return usage.bytes, usage.files
-
-
 def _fill(user: DATestUser, *, free_bytes: int = 0, free_files: int = 0) -> UUID:
     """Give the user one enabled skill that leaves ``free_bytes`` and
     ``free_files`` under the limits (negative: past them)."""
     skill = SkillManager.create_custom(user, name=_name("filler"))
-    built_in_bytes, built_in_files = _built_ins()
     _set_size(
         skill.id,
-        size=SKILL_WRITE_MAX_BYTES - built_in_bytes - free_bytes,
-        files=SKILL_WRITE_MAX_FILES - built_in_files - free_files,
+        size=SKILL_WRITE_MAX_BYTES - BUILT_IN_SKILLS_USAGE.bytes - free_bytes,
+        files=SKILL_WRITE_MAX_FILES - BUILT_IN_SKILLS_USAGE.files - free_files,
     )
     _FILLERS.append(skill.id)
     return skill.id
@@ -106,13 +99,8 @@ def _share(
 
 def _group_share(group_id: int, policy: str) -> dict[str, Any]:
     return {
-        "group_shares": [
-            {
-                "group_id": group_id,
-                "permission": "VIEWER",
-                "installation_policy": policy,
-            }
-        ]
+        "group_shares": [{"group_id": group_id, "permission": "VIEWER"}],
+        "group_settings": [{"group_id": group_id, "installation_policy": policy}],
     }
 
 
@@ -208,11 +196,7 @@ def test_batch_upload_reports_limit_per_skill() -> None:
     body = response.json()
     assert body["imported"] == []
     (refused,) = body["not_imported"]
-    limit = refused["skill_limit"]
-    assert limit["users_over"] == 1
-    assert limit["usage"]["bytes"] > SKILL_WRITE_MAX_BYTES
-    assert limit["max_bytes"] == SKILL_WRITE_MAX_BYTES
-    assert limit["max_files"] == SKILL_WRITE_MAX_FILES
+    assert "The limit is 500 MB" in refused["reason"]
 
 
 def test_toggle_on_refused_with_usage() -> None:

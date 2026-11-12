@@ -52,7 +52,7 @@ from onyx.db.skill import (
     share_skill__no_commit,
     transfer_skill_ownership,
 )
-from onyx.db.skill_limit import skill_limit_refusal, users_past_write_limit
+from onyx.db.skill_limit import users_past_write_limit
 from onyx.db.users import fetch_user_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -189,10 +189,7 @@ def _import_skill_bundles(
                 delete_bundle_blob(file_store, bundle_file_ids.pop())
                 not_imported.append(
                     GitHubSkillNotImported(
-                        path=source.path,
-                        name=source.name,
-                        reason=exc.detail,
-                        skill_limit=skill_limit_refusal(exc),
+                        path=source.path, name=source.name, reason=exc.detail
                     )
                 )
                 continue
@@ -369,12 +366,8 @@ def bulk_update_skills(
         )
         succeeded = shared.succeeded
         failed = [
-            SkillBulkFailure(
-                skill_id=skill_id,
-                detail=exc.detail,
-                skill_limit=skill_limit_refusal(exc),
-            )
-            for skill_id, exc in shared.failed
+            SkillBulkFailure(skill_id=skill_id, detail=detail)
+            for skill_id, detail in shared.failed
         ]
         affected = shared.affected_user_ids
     else:
@@ -384,13 +377,7 @@ def bulk_update_skills(
                     skill_id, request.action, user, db_session
                 )
             except OnyxError as exc:
-                failed.append(
-                    SkillBulkFailure(
-                        skill_id=skill_id,
-                        detail=exc.detail,
-                        skill_limit=skill_limit_refusal(exc),
-                    )
-                )
+                failed.append(SkillBulkFailure(skill_id=skill_id, detail=exc.detail))
                 continue
             succeeded.append(skill_id)
             affected |= item_affected

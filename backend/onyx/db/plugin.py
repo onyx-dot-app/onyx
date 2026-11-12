@@ -63,7 +63,7 @@ from onyx.db.plugin_access import (
     plugin_version_kind,
 )
 from onyx.db.plugin_review import publish_action_for, request_review__no_commit
-from onyx.db.skill_limit import skill_limit_check
+from onyx.db.skill_limit import check_skill_limit
 from onyx.db.user_group import assert_not_shared_with_default_group
 from onyx.db.utils import (
     UNSET,
@@ -191,7 +191,7 @@ def set_organization_library_default__no_commit(
             )
         )
     )
-    with skill_limit_check(db_session, affected_ids, actor_id=None):
+    with check_skill_limit(db_session, affected_ids, None):
         before = affected_user_ids_for_plugins(affected_ids, db_session)
         library.default_installation_policy = policy
         db_session.flush()
@@ -1683,8 +1683,8 @@ def apply_plugin_access_change__no_commit(
     plugins, failures = _lock_for_access_change(ids, db_session)
     check_scope = _check_access_change(plugins, change, actor, db_session)
 
-    with skill_limit_check(
-        db_session, plugins, actor_id=actor.id if actor is not None else None
+    with check_skill_limit(
+        db_session, plugins, actor.id if actor is not None else None
     ):
         before = affected_user_ids_for_plugins(plugins, db_session)
         for plugin_id, locked in plugins.items():

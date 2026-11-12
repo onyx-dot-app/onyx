@@ -34,23 +34,19 @@ from collections.abc import Collection, Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import IntEnum
-from typing import Literal
+from typing import Literal, cast
 from uuid import UUID
 
 from sqlalchemy import (
-    BigInteger,
     ColumnElement,
     and_,
     case,
-    cast,
-    column,
     func,
-    literal,
     or_,
     select,
     true,
 )
-from sqlalchemy.dialects.postgresql import JSONB, aggregate_order_by
+from sqlalchemy.dialects.postgresql import aggregate_order_by
 from sqlalchemy.orm import InstrumentedAttribute, Session, aliased
 from sqlalchemy.sql.elements import KeyedColumnElement
 from sqlalchemy.sql.selectable import Subquery
@@ -63,9 +59,8 @@ from onyx.db.enums import (
     SandboxStatus,
     SkillSharePermission,
 )
-from onyx.db.external_app_readiness import ready_app_skill_pairs
+from onyx.db.external_app_readiness import app_dependency_states
 from onyx.db.models import (
-    ExternalApp__Skill,
     Marketplace,
     Plugin,
     Plugin__User,
@@ -82,11 +77,7 @@ from onyx.db.scoped_permissions import (
     managed_group_member_ids_subquery,
     scoped_group_ids_subquery,
 )
-from onyx.skills.limits import (
-    SKILL_MIN_FILE_BYTES,
-    KeepGroup,
-    SkillUsage,
-)
+from onyx.skills.limits import KeepGroup, SkillUsage, runtime_keep_key
 
 UserIdExpr = UUID | ColumnElement[UUID] | InstrumentedAttribute[UUID]
 
@@ -399,14 +390,27 @@ class UserPluginState:
     published: bool
     is_author: bool
     shared: bool
-    # The version the user runs, and its lazy validity.
+    # The version the user runs, its bundle and its lazy validity.
     version_id: UUID
+    bundle_file_id: str | None
     version_is_valid: bool | None
     # The user's choice under the setting, before the name order.
     enabled: bool
+    # Enabled, the version is not invalid, and the app it needs, if any, is
+    # ready for the user. Only these plugins count for the skill limits.
+    can_run: bool
     created_at: datetime
     # Names from the plugin_skill rows of the version the user runs, by path.
     skill_names: tuple[str, ...]
+    # Recorded size of the version the user runs. None before the repair task
+    # measures a backfilled version.
+    usage: SkillUsage | None
+    # The user turned the plugin on (a saved choice, not the default).
+    turned_on: bool
+    enabled_at: datetime | None
+    # The latest share or group row the user gets the plugin through, else
+    # when the plugin was created.
+    shared_at: datetime
 
     @property
     def name_rank(self) -> SkillNameRank:
@@ -417,6 +421,20 @@ class UserPluginState:
         if self.is_author:
             return SkillNameRank.OWN
         return SkillNameRank.SHARED
+
+    @property
+    def keep_key(self) -> tuple[int, float, UUID]:
+        """Run-time keep order: Required, then turned on, then Installed by
+        default; the most recent first inside each."""
+        if self.installation_policy == PluginInstallationPolicy.REQUIRED:
+            return runtime_keep_key(KeepGroup.REQUIRED, self.shared_at, self.plugin_id)
+        if self.turned_on:
+            return runtime_keep_key(
+                KeepGroup.TURNED_ON, self.enabled_at, self.plugin_id
+            )
+        return runtime_keep_key(
+            KeepGroup.INSTALLED_BY_DEFAULT, self.shared_at, self.plugin_id
+        )
 
 
 def skill_name_order_key(
@@ -483,254 +501,7 @@ def _preference_of_pair(pairs: Subquery) -> ColumnElement[bool]:
     )
 
 
-def load_user_plugin_states(
-    user_ids: Iterable[UUID],
-    db_session: Session,
-    plugin_ids: Iterable[UUID] | None = None,
-) -> list[UserPluginState]:
-    """The state of each plugin for each user, in one query. With
-    ``plugin_ids``, every pair of the users and those plugins; without, only
-    the plugins each user can see."""
-    users = sorted(set(user_ids))
-    if not users:
-        return []
-    plugins = sorted(set(plugin_ids)) if plugin_ids is not None else None
-    if plugins is not None and not plugins:
-        return []
-    pairs = _user_plugin_pairs(User.__table__.c.id.in_(users), plugins)
-    rank = pairs.c.rank
-    enabled = _enabled_in_pairs(pairs)
-    skill_names = (
-        select(
-            func.array_agg(
-                aggregate_order_by(
-                    PluginSkill.frontmatter["name"].astext, PluginSkill.path
-                )
-            )
-        )
-        .where(PluginSkill.plugin_version_id == pairs.c.version_id)
-        .correlate(pairs)
-        .scalar_subquery()
-    )
-    rows = db_session.execute(
-        select(
-            pairs.c.user_id,
-            pairs.c.plugin_id,
-            rank,
-            pairs.c.visible,
-            pairs.c.published,
-            pairs.c.is_author,
-            pairs.c.shared,
-            pairs.c.version_id,
-            PluginVersion.is_valid,
-            enabled,
-            pairs.c.created_at,
-            skill_names,
-        )
-        .join(PluginVersion, PluginVersion.id == pairs.c.version_id)
-        .outerjoin(UserPluginPreference, _preference_of_pair(pairs))
-        .order_by(pairs.c.user_id, pairs.c.plugin_id)
-    ).all()
-    return [
-        UserPluginState(
-            user_id=row[0],
-            plugin_id=row[1],
-            installation_policy=_POLICY_OF_RANK[row[2]],
-            visible=bool(row[3]),
-            published=bool(row[4]),
-            is_author=bool(row[5]),
-            shared=bool(row[6]),
-            version_id=row[7],
-            version_is_valid=row[8],
-            enabled=bool(row[9]),
-            created_at=row[10],
-            skill_names=tuple(row[11] or ()),
-        )
-        for row in rows
-    ]
-
-
-# --- Skill usage of many users ------------------------------------------------
-
-_NO_SKILL_DISK_ACCOUNTS = (
-    AccountType.BOT,
-    AccountType.EXT_PERM_USER,
-    AccountType.ANONYMOUS,
-)
-
-
-def active_skill_user() -> ColumnElement[bool]:
-    """Users the skill limit counts: active accounts that can get a skill
-    disk."""
-    user = User.__table__.c
-    return and_(
-        user.is_active.is_(True), user.account_type.not_in(_NO_SKILL_DISK_ACCOUNTS)
-    )
-
-
-def _plugin_usage_rows(
-    user_filter: ColumnElement[bool],
-    plugin_ids: list[UUID] | None,
-    by_plugin: bool,
-    db_session: Session,
-) -> list[tuple[UUID, UUID | None, SkillUsage]]:
-    """Usage of the plugins each user gets, in one query, then one query for
-    app connections. A plugin counts with the size of the version the user
-    runs when it is enabled for the user (before the name order), its version
-    is not invalid, and its app, if any, is connected. A backfilled version
-    with no sizes counts as 0."""
-    pairs = _user_plugin_pairs(user_filter, plugin_ids)
-    app_plugin = pairs.c.plugin_id.in_(select(ExternalApp__Skill.skill_id))
-    key = (
-        pairs.c.plugin_id
-        if by_plugin
-        else case((app_plugin, pairs.c.plugin_id), else_=None)
-    )
-    rows = db_session.execute(
-        select(
-            pairs.c.user_id,
-            key,
-            app_plugin,
-            func.sum(func.coalesce(PluginVersion.unpacked_size_bytes, 0)),
-            func.sum(func.coalesce(PluginVersion.file_count, 0)),
-        )
-        .join(PluginVersion, PluginVersion.id == pairs.c.version_id)
-        .outerjoin(UserPluginPreference, _preference_of_pair(pairs))
-        .where(_enabled_in_pairs(pairs), PluginVersion.is_valid.is_not(False))
-        .group_by(pairs.c.user_id, key, app_plugin)
-    ).all()
-    ready = ready_app_skill_pairs(
-        ((user_id, plugin_id) for user_id, plugin_id, is_app, _, _ in rows if is_app),
-        db_session,
-    )
-    return [
-        (user_id, plugin_id, SkillUsage(bytes=int(size), files=int(files)))
-        for user_id, plugin_id, is_app, size, files in rows
-        if not is_app or (user_id, plugin_id) in ready
-    ]
-
-
-def plugin_usage_by_user(
-    user_filter: ColumnElement[bool],
-    db_session: Session,
-    plugin_ids: Iterable[UUID] | None = None,
-) -> dict[UUID, SkillUsage]:
-    """Usage of the plugins each user gets (``plugin_ids``, or all), for the
-    users that ``user_filter`` selects on the user table. Users with no usage
-    are left out. Built-in skills are not plugins and are not counted."""
-    plugins = sorted(set(plugin_ids)) if plugin_ids is not None else None
-    if plugins is not None and not plugins:
-        return {}
-    usage: dict[UUID, SkillUsage] = {}
-    for user_id, _, row_usage in _plugin_usage_rows(
-        user_filter, plugins, False, db_session
-    ):
-        usage[user_id] = usage.get(user_id, SkillUsage()) + row_usage
-    return usage
-
-
-def plugin_usage_by_plugin(
-    user_id: UUID, plugin_ids: Iterable[UUID], db_session: Session
-) -> dict[UUID, SkillUsage]:
-    """Usage of each of the plugins one user gets."""
-    plugins = sorted(set(plugin_ids))
-    if not plugins:
-        return {}
-    return {
-        plugin_id: row_usage
-        for _, plugin_id, row_usage in _plugin_usage_rows(
-            User.__table__.c.id == user_id, plugins, True, db_session
-        )
-        if plugin_id is not None
-    }
-
-
-# --- Run-time limit inputs ------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class RuntimePluginCharge:
-    """One plugin a user gets, as the run-time limit sees it."""
-
-    plugin_id: UUID
-    group: KeepGroup
-    # Most recent first inside the group. None counts as oldest.
-    order_time: datetime | None
-    # Charged size of the version the user runs; None when the version has
-    # no sizes (backfilled).
-    usage: SkillUsage | None
-
-
-def _version_charges(
-    version_ids: Collection[UUID], db_session: Session
-) -> dict[UUID, SkillUsage | None]:
-    """Charged usage of each version, each file at least 4 KB. The manifest
-    gives each file's size; without one, the totals give a lower bound."""
-    if not version_ids:
-        return {}
-    manifest = case(
-        (
-            func.jsonb_typeof(PluginVersion.file_manifest) == "array",
-            PluginVersion.file_manifest,
-        ),
-        else_=literal([], JSONB),
-    )
-    entry = (
-        func.jsonb_array_elements(manifest)
-        .table_valued(column("value", JSONB))
-        .alias("entry")
-    )
-    manifest_bytes = (
-        select(
-            func.sum(
-                func.greatest(
-                    cast(entry.c.value["size"].astext, BigInteger),
-                    SKILL_MIN_FILE_BYTES,
-                )
-            )
-        )
-        .select_from(entry)
-        .scalar_subquery()
-    )
-    rows = db_session.execute(
-        select(
-            PluginVersion.id,
-            manifest_bytes,
-            func.jsonb_array_length(manifest),
-            PluginVersion.unpacked_size_bytes,
-            PluginVersion.file_count,
-        ).where(PluginVersion.id.in_(sorted(version_ids)))
-    ).all()
-    charges: dict[UUID, SkillUsage | None] = {}
-    for version_id, from_manifest, manifest_files, size, file_count in rows:
-        files = file_count if file_count is not None else manifest_files or 0
-        if from_manifest is not None:
-            charges[version_id] = SkillUsage(bytes=int(from_manifest), files=files)
-        elif size is not None:
-            charges[version_id] = SkillUsage(
-                bytes=max(size, files * SKILL_MIN_FILE_BYTES), files=files
-            )
-        else:
-            charges[version_id] = None
-    return charges
-
-
-def runtime_plugin_charges(
-    user_ids: Iterable[UUID], db_session: Session
-) -> dict[UUID, list[RuntimePluginCharge]]:
-    """The plugins each user gets (enabled, version not invalid, app
-    connected; before the name order), with their run-time keep group, order
-    time and charged usage. One query for the users, one for the versions and
-    one for app connections.
-
-    A Required plugin and an Installed by default plugin the user did not
-    turn on again sort by the latest share or group setting the user gets it
-    through, else plugin.created_at. A plugin the user turned on sorts by
-    when they turned it on."""
-    users = sorted(set(user_ids))
-    if not users:
-        return {}
-    pairs = _user_plugin_pairs(User.__table__.c.id.in_(users), None)
+def _shared_at(pairs: Subquery) -> ColumnElement[datetime]:
     direct_share = (
         select(Plugin__User.created_at)
         .where(
@@ -749,65 +520,143 @@ def runtime_plugin_charges(
         .where(
             Plugin__UserGroup.plugin_id == pairs.c.plugin_id,
             User__UserGroup.user_id == pairs.c.user_id,
-            Plugin__UserGroup.installation_policy.is_distinct_from(
-                PluginInstallationPolicy.NOT_AVAILABLE
-            ),
         )
         .correlate(pairs)
         .scalar_subquery()
     )
-    share_time = func.coalesce(
-        func.greatest(direct_share, group_row), pairs.c.created_at
+    return func.coalesce(func.greatest(direct_share, group_row), pairs.c.created_at)
+
+
+def load_user_plugin_states(
+    users: Iterable[UUID] | ColumnElement[bool],
+    db_session: Session,
+    plugin_ids: Iterable[UUID] | None = None,
+    *,
+    runnable_only: bool = False,
+) -> list[UserPluginState]:
+    """The state of each plugin for each user, in one query, then one query
+    for app connections. ``users`` is a list of ids or a filter on the user
+    table. With ``plugin_ids``, every pair of the users and those plugins;
+    without, only the plugins each user can see. ``runnable_only`` keeps only
+    the plugins that can run."""
+    user_filter: ColumnElement[bool]
+    if isinstance(users, ColumnElement):
+        user_filter = cast(ColumnElement[bool], users)
+    else:
+        user_ids = sorted(set(users))
+        if not user_ids:
+            return []
+        user_filter = User.__table__.c.id.in_(user_ids)
+    plugins = sorted(set(plugin_ids)) if plugin_ids is not None else None
+    if plugins is not None and not plugins:
+        return []
+    pairs = _user_plugin_pairs(user_filter, plugins)
+    enabled = _enabled_in_pairs(pairs)
+    skill_names = (
+        select(
+            func.array_agg(
+                aggregate_order_by(
+                    PluginSkill.frontmatter["name"].astext, PluginSkill.path
+                )
+            )
+        )
+        .where(PluginSkill.plugin_version_id == pairs.c.version_id)
+        .correlate(pairs)
+        .scalar_subquery()
     )
-    app_plugin = pairs.c.plugin_id.in_(select(ExternalApp__Skill.skill_id))
-    rows = db_session.execute(
+    stmt = (
         select(
             pairs.c.user_id,
             pairs.c.plugin_id,
             pairs.c.rank,
+            pairs.c.visible,
+            pairs.c.published,
+            pairs.c.is_author,
+            pairs.c.shared,
+            pairs.c.version_id,
+            PluginVersion.bundle_file_id,
+            PluginVersion.is_valid,
+            enabled,
+            pairs.c.created_at,
+            skill_names,
+            PluginVersion.unpacked_size_bytes,
+            PluginVersion.file_count,
             UserPluginPreference.enabled,
             UserPluginPreference.enabled_at,
-            share_time,
-            pairs.c.version_id,
-            app_plugin,
+            _shared_at(pairs),
         )
         .join(PluginVersion, PluginVersion.id == pairs.c.version_id)
         .outerjoin(UserPluginPreference, _preference_of_pair(pairs))
-        .where(_enabled_in_pairs(pairs), PluginVersion.is_valid.is_not(False))
         .order_by(pairs.c.user_id, pairs.c.plugin_id)
-    ).all()
-    ready = ready_app_skill_pairs(
-        ((row[0], row[1]) for row in rows if row[7]), db_session
     )
-    usage = _version_charges({row[6] for row in rows}, db_session)
-    charges: dict[UUID, list[RuntimePluginCharge]] = {}
-    for (
-        user_id,
-        plugin_id,
-        rank,
-        choice,
-        enabled_at,
-        shared_at,
-        version_id,
-        is_app,
-    ) in rows:
-        if is_app and (user_id, plugin_id) not in ready:
+    if runnable_only:
+        stmt = stmt.where(enabled, PluginVersion.is_valid.is_not(False))
+    rows = db_session.execute(stmt).all()
+    apps = app_dependency_states(
+        {row[0] for row in rows}, db_session, {row[1] for row in rows if row[10]}
+    )
+    states: list[UserPluginState] = []
+    for row in rows:
+        app = apps.get((row[0], row[1]))
+        can_run = bool(row[10]) and row[9] is not False and (app is None or app.ready)
+        if runnable_only and not can_run:
             continue
-        if rank == policy_rank(PluginInstallationPolicy.REQUIRED):
-            group, order_time = KeepGroup.REQUIRED, shared_at
-        elif choice is True:
-            group, order_time = KeepGroup.TURNED_ON, enabled_at
-        else:
-            group, order_time = KeepGroup.INSTALLED_BY_DEFAULT, shared_at
-        charges.setdefault(user_id, []).append(
-            RuntimePluginCharge(
-                plugin_id=plugin_id,
-                group=group,
-                order_time=order_time,
-                usage=usage[version_id],
+        states.append(
+            UserPluginState(
+                user_id=row[0],
+                plugin_id=row[1],
+                installation_policy=_POLICY_OF_RANK[row[2]],
+                visible=bool(row[3]),
+                published=bool(row[4]),
+                is_author=bool(row[5]),
+                shared=bool(row[6]),
+                version_id=row[7],
+                bundle_file_id=row[8],
+                version_is_valid=row[9],
+                enabled=bool(row[10]),
+                can_run=can_run,
+                created_at=row[11],
+                skill_names=tuple(row[12] or ()),
+                usage=(
+                    SkillUsage(bytes=row[13], files=row[14] or 0)
+                    if row[13] is not None
+                    else None
+                ),
+                turned_on=row[15] is True,
+                enabled_at=row[16],
+                shared_at=row[17],
             )
         )
-    return charges
+    return states
+
+
+def skill_usage_by_user(states: Iterable[UserPluginState]) -> dict[UUID, SkillUsage]:
+    """Usage of the plugins each user can run, before the name order. A
+    version with no recorded size counts as 0. Built-in skills are not
+    plugins and are not counted."""
+    usage: dict[UUID, SkillUsage] = {}
+    for state in states:
+        if state.can_run:
+            usage[state.user_id] = usage.get(state.user_id, SkillUsage()) + (
+                state.usage or SkillUsage()
+            )
+    return usage
+
+
+_NO_SKILL_DISK_ACCOUNTS = (
+    AccountType.BOT,
+    AccountType.EXT_PERM_USER,
+    AccountType.ANONYMOUS,
+)
+
+
+def active_skill_user() -> ColumnElement[bool]:
+    """Users the skill limit counts: active accounts that can get a skill
+    disk."""
+    user = User.__table__.c
+    return and_(
+        user.is_active.is_(True), user.account_type.not_in(_NO_SKILL_DISK_ACCOUNTS)
+    )
 
 
 @dataclass(frozen=True)
@@ -822,12 +671,12 @@ def order_skill_names(
     states: Iterable[UserPluginState],
     reserved_names: Collection[str] = (),
 ) -> SkillNameOrder:
-    """Keep one plugin for each skill name of one user's enabled plugins.
+    """Keep one plugin for each skill name of the plugins one user can run.
     ``reserved_names`` are the names of the user's built-in skills, which
     always win."""
     contenders: dict[str, list[UserPluginState]] = {}
     for state in states:
-        if not state.enabled:
+        if not state.can_run:
             continue
         for name in state.skill_names:
             contenders.setdefault(name, []).append(state)

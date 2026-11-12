@@ -6,7 +6,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from onyx.db.enums import ActionPolicy, ExternalAppType
 from onyx.external_apps.models import ActionPolicyView
 from onyx.server.features.build.connect_app import ConnectAppDecision
-from onyx.skills.limits import SkillLimitNotice
 
 
 class CreateBuiltInExternalAppRequest(BaseModel):
@@ -144,13 +143,6 @@ class OAuthCallbackResponse(BaseModel):
     success: bool
     external_app_id: int
     return_path: str | None = None
-    # App skills left off because they would put the user past the skill limit.
-    skills_left_off_for_limit: SkillLimitNotice | None = None
-
-
-class ExternalAppConnectResponse(BaseModel):
-    # App skills left off because they would put the user past the skill limit.
-    skills_left_off_for_limit: SkillLimitNotice | None = None
 
 
 class ConnectAppDecisionRequest(BaseModel):

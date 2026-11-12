@@ -30,7 +30,7 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import ExternalAppType
 from onyx.image_gen.generation import is_image_generation_configured
 from onyx.server.features.build.configs import ENABLE_BROWSER
-from onyx.skills.limits import SkillUsage, charged_file_bytes
+from onyx.skills.limits import SkillUsage
 from onyx.skills.metadata import parse_skill_document
 from onyx.skills.models import SKILL_NAME_PATTERN
 
@@ -235,25 +235,20 @@ EXTERNAL_APP_SKILL_ID_TO_APP_TYPE: Final[dict[str, ExternalAppType]] = {
 }
 
 
-def _source_usage(source_dir: Path, *, charged: bool) -> SkillUsage:
-    sizes = [path.stat().st_size for path in iter_builtin_skill_files(source_dir)]
-    return SkillUsage(
-        bytes=sum(charged_file_bytes(size) if charged else size for size in sizes),
-        files=len(sizes),
-    )
-
-
-# Size and file count of each built-in skill's packaged sources, for the
-# per-user skill limit. A template stands for the SKILL.md rendered from it.
-BUILT_IN_SKILL_USAGE: Final[dict[str, SkillUsage]] = {
-    skill_id: _source_usage(definition.source_dir, charged=False)
-    for skill_id, definition in BUILT_IN_SKILLS.items()
-}
-# The same for the run-time limit, which charges each file at least 4 KB.
-BUILT_IN_SKILL_RUNTIME_USAGE: Final[dict[str, SkillUsage]] = {
-    skill_id: _source_usage(definition.source_dir, charged=True)
-    for skill_id, definition in BUILT_IN_SKILLS.items()
-}
+# Size and file count of every built-in skill's packaged sources. The write
+# limit counts all of them for every user. A template stands for the SKILL.md
+# rendered from it.
+BUILT_IN_SKILLS_USAGE: Final[SkillUsage] = SkillUsage(
+    bytes=sum(
+        path.stat().st_size
+        for definition in BUILT_IN_SKILLS.values()
+        for path in iter_builtin_skill_files(definition.source_dir)
+    ),
+    files=sum(
+        len(list(iter_builtin_skill_files(definition.source_dir)))
+        for definition in BUILT_IN_SKILLS.values()
+    ),
+)
 
 # Named handles so callers avoid bare identity literals.
 COMPANY_SEARCH: Final[BuiltInSkillDefinition] = BUILT_IN_SKILLS["company-search"]
