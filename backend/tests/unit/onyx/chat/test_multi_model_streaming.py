@@ -527,6 +527,56 @@ class TestRunModels:
         assert resolved["additional_headers"] == {"X-Request-ID": "fast-routing"}
         assert resolved["policy_fn"]("openai").model_kwargs == {"store": False}
 
+    @pytest.mark.parametrize("incognito", [False, True])
+    def test_incognito_turns_offer_no_coding_agent(self, incognito: bool) -> None:
+        from onyx.db.enums import IncognitoRecordMode
+        from onyx.tools.constants import CODING_AGENT_TOOL_ID
+        from onyx.tools.models import PersonaToolConfiguration, ToolConfiguration
+
+        def tool(tool_id: int, in_code_tool_id: str) -> ToolConfiguration:
+            return ToolConfiguration(
+                id=tool_id,
+                name=in_code_tool_id,
+                description=None,
+                display_name=None,
+                in_code_tool_id=in_code_tool_id,
+                enabled=True,
+                openapi_schema=None,
+                mcp_input_schema=None,
+                mcp_output_schema=None,
+                custom_headers=None,
+                passthrough_auth=False,
+                mcp_server_id=None,
+                oauth_config_id=None,
+            )
+
+        setup = _make_setup(n_models=1)
+        setup.incognito_record_mode = (
+            IncognitoRecordMode.FULL_HISTORY if incognito else None
+        )
+        setup.tool_configuration = PersonaToolConfiguration.model_construct(
+            persona_id=0,
+            persona_name="Assistant",
+            tools=[tool(1, "SearchTool"), tool(2, CODING_AGENT_TOOL_ID)],
+        )
+
+        with (
+            patch("onyx.chat.execution.ChatAgent"),
+            patch("onyx.chat.execution.construct_tools", return_value={}) as tools,
+            patch(
+                "onyx.chat.execution.get_llm_token_counter", return_value=lambda _: 0
+            ),
+        ):
+            create_chat_agent(setup, MagicMock(), 0, CancellationSignal(), True)
+
+        offered = {
+            configured.in_code_tool_id
+            for configured in tools.call_args.kwargs["configuration"].tools
+        }
+        assert offered == (
+            {"SearchTool"} if incognito else {"SearchTool", CODING_AGENT_TOOL_ID}
+        )
+
     def test_n1_overall_stop_from_llm_loop_passes_through(self) -> None:
         """OverallStop emitted by agent is passed through the drain loop unchanged."""
 
