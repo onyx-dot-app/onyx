@@ -227,7 +227,18 @@ class JiraSmConnector(
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
-        yield from self.generate_slim_documents()
+        jql = self._build_jql()
+        try:
+            issue_keys = self._fetch_all_issue_keys(jql)
+        except JiraApiError as e:
+            if e.status_code in (401, 403):
+                raise CredentialExpiredError(str(e))
+            raise
+
+        for batch in chunked(issue_keys, self._batch_size):
+            if callback is not None and callback.should_stop():
+                break
+            yield [SlimDocument(id=self._make_doc_id(key)) for key in batch]
 
     # ── Permission sync ──────────────────────────────────────────────
 
