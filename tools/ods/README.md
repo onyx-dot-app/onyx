@@ -1012,6 +1012,8 @@ Use `--sbom-only` when a job checks only software from supplemental inventories.
 The same advisory exceptions, JSON/SARIF reports, and CVE alerts apply to both scanners.
 
 Supplemental packages also use `s3://onyx-internal-tools/audit/updates.json` for update deadlines.
+Fork PRs read policy through the existing RunsOn instance role, without repository secrets.
+The runner role needs read access to this object; missing or invalid policy still fails the scan.
 This state is separate from advisory exceptions. It records an emergency minimum and each release's first observation.
 Routine updates warn after 24 hours and block after 72 hours. Emergency minimums block immediately.
 Stale upstream observations warn without resetting recorded deadlines.
@@ -1019,7 +1021,7 @@ Stale upstream observations warn without resetting recorded deadlines.
 
 CVE Tracking owns policy observation and S3 writes. Its manual `minimum` input raises Chrome's emergency minimum.
 It saves this minimum before upstream discovery, preserving release timestamps even if discovery fails.
-It checks main and supported release branches. Update Sandbox Browser uses the shared task-PR workflow for pin changes.
+It checks main and supported release branches. Update Sandbox Browser opens or updates pin PRs for stale branches.
 CI builds the audit binary from source. Installed ODS commands receive these features through the normal devtools release.
 
 #### Checking a release branch before a tag

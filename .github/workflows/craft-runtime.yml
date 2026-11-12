@@ -76,6 +76,7 @@ jobs:
           go-version-file: tools/ods/go.mod
           cache: false
       - name: Configure AWS credentials for audit policy
+        continue-on-error: true # Forks use the runner role to read audit policy.
         uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # ratchet:aws-actions/configure-aws-credentials@v6.2.3
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
