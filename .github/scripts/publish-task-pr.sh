@@ -26,6 +26,8 @@ case "$remote_status" in
   2) ;;
   *) exit "$remote_status" ;;
 esac
+# Tasks may stage their own edits; rebuild the index from approved paths.
+git reset --quiet HEAD
 paths=()
 for path in "${files[@]}"; do
   if [ -e "$path" ] || [ -L "$path" ] || [ -n "$(git ls-files -- "$path")" ]; then paths+=("$path"); fi
