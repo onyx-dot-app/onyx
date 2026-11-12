@@ -23,9 +23,9 @@ import {
   stepHasCollapsedStreamingContent,
 } from "@/lib/timeline/chat/packetHelpers";
 import { useTimelineStepState } from "@/lib/timeline/chat/hooks/useTimelineStepState";
-import { StreamingHeader } from "@/lib/timeline/chat/headers/StreamingHeader";
-import { CompletedHeader } from "@/lib/timeline/chat/headers/CompletedHeader";
-import { StoppedHeader } from "@/lib/timeline/chat/headers/StoppedHeader";
+import { StreamingHeader } from "@/lib/timeline/components/headers/StreamingHeader";
+import { CompletedHeader } from "@/lib/timeline/components/headers/CompletedHeader";
+import { StoppedHeader } from "@/lib/timeline/components/headers/StoppedHeader";
 import { useStreamingStartTime } from "@/app/app/stores/useChatSessionStore";
 import { ExpandedTimelineContent } from "./ExpandedTimelineContent";
 import { CollapsedStreamingContent } from "./CollapsedStreamingContent";

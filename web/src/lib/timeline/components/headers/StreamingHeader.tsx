@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { SvgFold, SvgExpand } from "@opal/icons";
 import { Button } from "@opal/components";
 import { TextLoader } from "@opal/loaders";
-import { useStreamingDuration } from "../hooks/useStreamingDuration";
+import { useStreamingDuration } from "@/lib/timeline/useStreamingDuration";
 import { formatDurationSeconds } from "@opal/time";
 
 export interface StreamingHeaderProps {
