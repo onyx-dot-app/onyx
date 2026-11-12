@@ -40,6 +40,8 @@ from onyx.connectors.jira.access import get_project_permissions
 from onyx.connectors.jira.models import JiraIssueIdPage
 from onyx.connectors.jira.source_operations import (
     JiraApiError,
+    JiraGateway,
+    JiraServiceManagementSourceOperations,
     JiraSourceOperations,
     is_cloud_gateway,
 )
@@ -102,7 +104,7 @@ _RUN_FAILING_STATUS_CODES = frozenset({401, 403, 429})
 
 
 def _perform_jql_search(
-    source_operations: JiraSourceOperations,
+    source_operations: JiraGateway,
     jql: str,
     start: int,
     max_results: int,
@@ -253,7 +255,7 @@ def _handle_jira_search_error(e: JiraApiError, jql: str) -> None:
 
 
 def _perform_jql_search_v3(
-    source_operations: JiraSourceOperations,
+    source_operations: JiraGateway,
     jql: str,
     max_results: int,
     all_issue_ids: list[list[str]],
@@ -300,7 +302,7 @@ def _perform_jql_search_v3(
 
 
 def _perform_jql_search_v2(
-    source_operations: JiraSourceOperations,
+    source_operations: JiraGateway,
     jql: str,
     start: int,
     max_results: int,
@@ -502,7 +504,7 @@ class JiraConnector(
         self.labels_to_skip = set(labels_to_skip)
         self.jql_query = (jql_query or "").strip() or None
         self.scoped_token = scoped_token
-        self._source_operations: JiraSourceOperations | None = None
+        self._source_operations: JiraGateway | None = None
         # Cache project permissions to avoid fetching them repeatedly across runs
         self._project_permissions_cache: dict[str, Any] = {}
 
@@ -511,7 +513,7 @@ class JiraConnector(
         return tuple(email.strip() for email in self._comment_email_blacklist)
 
     @property
-    def source_operations(self) -> JiraSourceOperations:
+    def source_operations(self) -> JiraGateway:
         if self._source_operations is None:
             raise ConnectorMissingCredentialError("Jira")
         return self._source_operations
@@ -536,6 +538,7 @@ class JiraConnector(
                 source_operations=self.source_operations,
                 jira_project=project_key,
                 add_prefix=add_prefix,
+                source=self.source,
             )
         return self._project_permissions_cache[cache_key]
 
@@ -639,7 +642,12 @@ class JiraConnector(
         return project_key
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
-        self._source_operations = JiraSourceOperations(
+        gateway_cls: type[JiraGateway] = (
+            JiraServiceManagementSourceOperations
+            if self.source == DocumentSource.JIRA_SERVICE_MANAGEMENT
+            else JiraSourceOperations
+        )
+        self._source_operations = gateway_cls(
             credentials_provider=OnyxStaticCredentialsProvider(
                 None, self.source.value, credentials
             ),

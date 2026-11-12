@@ -375,7 +375,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     icon: SvgJira,
     displayName: "Jira Service Management",
     category: SourceCategory.TicketingAndTaskManagement,
-    docs: `${DOCS_ADMINS_PATH}/connectors/official/jira_service_management`,
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/jira`,
     isPopular: false,
   },
   zendesk: {

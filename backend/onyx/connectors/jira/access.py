@@ -6,7 +6,8 @@ from collections.abc import Callable
 from typing import cast
 
 from onyx.access.models import ExternalAccess
-from onyx.connectors.jira.source_operations import JiraSourceOperations
+from onyx.configs.constants import DocumentSource
+from onyx.connectors.jira.source_operations import JiraGateway
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation,
     global_version,
@@ -14,9 +15,10 @@ from onyx.utils.variable_functionality import (
 
 
 def get_project_permissions(
-    source_operations: JiraSourceOperations,
+    source_operations: JiraGateway,
     jira_project: str,
     add_prefix: bool = False,
+    source: DocumentSource = DocumentSource.JIRA,
 ) -> ExternalAccess | None:
     """
     Fetch the project + issue level permissions / access-control.
@@ -28,6 +30,7 @@ def get_project_permissions(
         add_prefix: When True, prefix group IDs with source type (for indexing path).
                    When False (default), leave unprefixed (for permission sync path
                    where upsert_document_external_perms handles prefixing).
+        source: Effective document source used when prefixing group IDs.
 
     Returns:
         ExternalAccess object for the page. None if EE is not enabled or no restrictions found.
@@ -39,7 +42,7 @@ def get_project_permissions(
 
     ee_get_project_permissions = cast(
         Callable[
-            [JiraSourceOperations, str, bool],
+            [JiraGateway, str, bool, DocumentSource],
             ExternalAccess | None,
         ],
         fetch_versioned_implementation(
@@ -51,4 +54,5 @@ def get_project_permissions(
         source_operations,
         jira_project,
         add_prefix,
+        source,
     )

@@ -1,5 +1,4 @@
 import time
-from unittest.mock import patch
 
 import pytest
 
@@ -58,8 +57,13 @@ def jsm_connector_scoped(
 def test_jsm_basic_load(
     jsm_connector: JiraServiceManagementConnector,
 ) -> None:
-    docs = load_all_from_connector(jsm_connector)
+    docs = load_all_from_connector(
+        connector=jsm_connector,
+        start=0,
+        end=time.time(),
+    ).documents
+    assert len(docs) > 0
     for doc in docs:
-        if isinstance(doc, Document):
-            assert doc.source == DocumentSource.JIRA_SERVICE_MANAGEMENT
-            assert doc.id.startswith("https://danswerai.atlassian.net")
+        assert isinstance(doc, Document)
+        assert doc.source == DocumentSource.JIRA_SERVICE_MANAGEMENT
+        assert doc.id.startswith("https://danswerai.atlassian.net")

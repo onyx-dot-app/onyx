@@ -1,15 +1,17 @@
-from unittest.mock import MagicMock, patch
-
 import pytest
 from pydantic import ValidationError
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.capability_checks.registry import get_capability_checks
 from onyx.connectors.credential_families import (
     FAMILY_CREDENTIAL_CODECS,
     credential_family_for_source,
 )
 from onyx.connectors.factory import identify_connector_class
 from onyx.connectors.jira.connector import process_jira_issue
+from onyx.connectors.jira.source_operations import (
+    JiraServiceManagementSourceOperations,
+)
 from onyx.connectors.jira_service_management.config import (
     JiraServiceManagementConnectorConfig,
     jira_planning_rule,
@@ -19,13 +21,15 @@ from onyx.connectors.jira_service_management.connector import (
 )
 from onyx.connectors.planning_rule import ConnectorChangeOverride
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
+from onyx.connectors.source_operations import get_source_operations_class
 
 
-def test_jsm_document_source_enum():
+def test_jsm_document_source_enum() -> None:
+    assert hasattr(DocumentSource, "JIRA_SERVICE_MANAGEMENT")
     assert DocumentSource.JIRA_SERVICE_MANAGEMENT == "jira_service_management"
 
 
-def test_jsm_registry_mapping():
+def test_jsm_registry_mapping() -> None:
     assert DocumentSource.JIRA_SERVICE_MANAGEMENT in CONNECTOR_CLASS_MAP
     mapping = CONNECTOR_CLASS_MAP[DocumentSource.JIRA_SERVICE_MANAGEMENT]
     assert mapping.class_name == "JiraServiceManagementConnector"
@@ -33,13 +37,13 @@ def test_jsm_registry_mapping():
     assert identify_connector_class(DocumentSource.JIRA_SERVICE_MANAGEMENT) is JiraServiceManagementConnector
 
 
-def test_jsm_credential_family_codec():
+def test_jsm_credential_family_codec() -> None:
     assert DocumentSource.JIRA_SERVICE_MANAGEMENT in FAMILY_CREDENTIAL_CODECS
     family = credential_family_for_source(DocumentSource.JIRA_SERVICE_MANAGEMENT)
     assert family is not None
 
 
-def test_jsm_config_validation():
+def test_jsm_config_validation() -> None:
     # Valid config
     config = JiraServiceManagementConnectorConfig(
         jira_base_url="https://company.atlassian.net",
@@ -63,7 +67,7 @@ def test_jsm_config_validation():
     assert config_jql.jql_query == "project = HELP AND status = 'Open'"
 
 
-def test_jsm_planning_rule():
+def test_jsm_planning_rule() -> None:
     old_config = JiraServiceManagementConnectorConfig(
         jira_base_url="https://company.atlassian.net",
         project_key="HELP",
@@ -78,7 +82,7 @@ def test_jsm_planning_rule():
     assert isinstance(override, ConnectorChangeOverride)
 
 
-def test_jsm_connector_initialization():
+def test_jsm_connector_initialization() -> None:
     # Standard initialization
     connector = JiraServiceManagementConnector(
         jira_base_url="https://company.atlassian.net",
@@ -89,7 +93,7 @@ def test_jsm_connector_initialization():
     assert connector.jira_base == "https://company.atlassian.net"
 
 
-def test_jsm_load_credentials():
+def test_jsm_load_credentials() -> None:
     connector = JiraServiceManagementConnector(
         jira_base_url="https://company.atlassian.net",
         project_key="IT",
@@ -100,10 +104,20 @@ def test_jsm_load_credentials():
             "jira_api_token": "token123",
         }
     )
-    assert connector.source_operations is not None
+    assert isinstance(connector.source_operations, JiraServiceManagementSourceOperations)
 
 
-def test_jsm_document_extraction():
+def test_jsm_gateway_and_capability_checks_registered() -> None:
+    assert (
+        get_source_operations_class(DocumentSource.JIRA_SERVICE_MANAGEMENT)
+        is JiraServiceManagementSourceOperations
+    )
+    checks = get_capability_checks(DocumentSource.JIRA_SERVICE_MANAGEMENT)
+    assert any(not check.is_fallback for check in checks)
+    assert any(check.check_id == "jira_auth" for check in checks)
+
+
+def test_jsm_document_extraction() -> None:
     issue = {
         "key": "IT-101",
         "fields": {

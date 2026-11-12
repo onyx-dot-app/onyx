@@ -174,6 +174,187 @@ def _bulk_fetch_batch(
         return left + right
 
 
+def _gateway_binding(gateway: SourceOperations) -> JiraCredentialBinding:
+    return JiraCredentialBinding.model_validate(gateway.connector_specific_config or {})
+
+
+def _gateway_credentials(gateway: SourceOperations) -> dict[str, Any]:
+    return gateway.credentials_provider.get_credentials()
+
+
+def _gateway_api_url(gateway: SourceOperations) -> str:
+    binding: JiraCredentialBinding = _gateway_binding(gateway)
+    jira_base: str = binding.jira_base_url.rstrip("/")
+    if not binding.scoped_token:
+        return jira_base
+    try:
+        return scoped_url(jira_base, "jira")
+    except KeyError as e:
+        raise JiraCloudIdError(
+            f"{jira_base}/_edge/tenant_info returned no Atlassian cloud id."
+        ) from e
+
+
+def _build_jira_client(
+    credentials: dict[str, Any], api_url: str, *, fast: bool
+) -> JIRA:
+    api_token: str = credentials[JIRA_API_TOKEN_KEY]
+    options: dict[str, str | bool | Any] = {
+        "rest_api_version": rest_api_version(credentials)
+    }
+    # The SDK retries a connection error, 429 and 503 with sleeps of up to
+    # a minute; the fast client raises at once.
+    timeout: int | None = _FAST_TIMEOUT_SECONDS if fast else _INDEXING_TIMEOUT_SECONDS
+    max_retries: int = 0 if fast else _INDEXING_MAX_RETRIES
+    if JIRA_USER_EMAIL_KEY in credentials:
+        return JIRA(
+            basic_auth=(credentials[JIRA_USER_EMAIL_KEY], api_token),
+            server=api_url,
+            options=options,
+            timeout=timeout,
+            max_retries=max_retries,
+        )
+    return JIRA(
+        token_auth=api_token,
+        server=api_url,
+        options=options,
+        timeout=timeout,
+        max_retries=max_retries,
+    )
+
+
+def _op_get_myself(client: JIRA, *, fast: bool) -> dict[str, Any]:
+    with _translate_errors(fast=fast):
+        return client.myself()
+
+
+def _op_list_projects(client: JIRA, *, fast: bool) -> list[dict[str, Any]]:
+    with _translate_errors(fast=fast):
+        return [project.raw for project in client.projects()]
+
+
+def _op_get_project(client: JIRA, *, project_key: str, fast: bool) -> dict[str, Any]:
+    with _translate_errors(fast=fast):
+        return client.project(project_key).raw
+
+
+def _op_search_issue_ids(
+    client: JIRA,
+    *,
+    jql: str,
+    next_page_token: str | None,
+    max_results: int,
+    fast: bool,
+) -> JiraIssueIdPage:
+    # https://community.atlassian.com/forums/Jira-articles/
+    # Avoiding-Pitfalls-A-Guide-to-Smooth-Migration-to-Enhanced-JQL/ba-p/2985433
+    params: dict[str, str | int | None] = {
+        "jql": jql,
+        "maxResults": max_results,
+        "nextPageToken": next_page_token,
+        "fields": "id",
+    }
+    with _translate_errors(fast=fast):
+        response: requests.Response = client._session.get(  # ty: ignore[unresolved-attribute]
+            client._get_url("search/jql"), params=params
+        )
+        response.raise_for_status()
+        response_json: dict[str, Any] = response.json()
+    return JiraIssueIdPage(
+        issue_ids=[str(issue["id"]) for issue in response_json["issues"]],
+        next_page_token=response_json.get("nextPageToken"),
+    )
+
+
+def _op_bulk_fetch_issues(
+    client: JIRA, *, issue_ids: list[str], fields: str | None, fast: bool
+) -> list[dict[str, Any]]:
+    raw_issues: list[dict[str, Any]] = []
+    for batch in chunked(issue_ids, _JIRA_BULK_FETCH_LIMIT):
+        try:
+            with _translate_errors(fast=fast):
+                raw_issues.extend(_bulk_fetch_batch(client, list(batch), fields))
+        except Exception as e:
+            logger.error("Error fetching issues: %s", e)
+            raise
+    return raw_issues
+
+
+def _op_search_issues(
+    client: JIRA,
+    *,
+    jql: str,
+    start_at: int,
+    max_results: int,
+    fields: str | None,
+    fast: bool,
+) -> list[dict[str, Any]]:
+    logger.debug(
+        "Fetching Jira issues with JQL: %s, starting at %s, max results: %s",
+        jql,
+        start_at,
+        max_results,
+    )
+    with _translate_errors(fast=fast):
+        issues: Any = client.search_issues(
+            jql_str=jql,
+            startAt=start_at,
+            maxResults=max_results,
+            fields=fields,
+        )
+    raw_issues: list[dict[str, Any]] = []
+    for issue in issues:
+        if not isinstance(issue.raw, dict):
+            raise RuntimeError(f"Found Jira object not of type Issue: {issue}")
+        raw_issues.append(issue.raw)
+    return raw_issues
+
+
+def _op_get_project_permission_scheme(
+    client: JIRA, *, project_key: str, fast: bool
+) -> dict[str, Any]:
+    with _translate_errors(fast=fast):
+        return client.project_permissionscheme(project=project_key).raw
+
+
+def _op_get_project_role(
+    client: JIRA, *, project_key: str, role_id: str, fast: bool
+) -> dict[str, Any]:
+    with _translate_errors(fast=fast):
+        return client.project_role(project=project_key, id=role_id).raw
+
+
+def _op_get_user(client: JIRA, *, user_id: str, fast: bool) -> dict[str, Any]:
+    with _translate_errors(fast=fast):
+        return client.user(id=user_id).raw
+
+
+def _op_list_groups(client: JIRA, *, fast: bool) -> JiraGroupPage:
+    with _translate_errors(fast=fast):
+        response: dict[str, Any] = client._get_json(
+            "groups/picker", params={"maxResults": _GROUP_PICKER_MAX_RESULTS}
+        )
+    return JiraGroupPage(
+        group_names=sorted(group["name"] for group in response["groups"]),
+        total=response.get("total"),
+    )
+
+
+def _op_get_group_members_page(
+    client: JIRA, *, group_name: str, start_at: int, max_results: int, fast: bool
+) -> dict[str, Any]:
+    with _translate_errors(fast=fast):
+        return client._get_json(
+            "group/member",
+            params={
+                "groupname": group_name,
+                "includeInactiveUsers": "false",
+                "startAt": start_at,
+                "maxResults": max_results,
+            },
+        )
+
+
 class JiraSourceOperations(SourceOperations):
     source = DocumentSource.JIRA
     sdk_modules = ("jira",)
@@ -190,12 +371,10 @@ class JiraSourceOperations(SourceOperations):
         return vars(self).setdefault("_build_lock", threading.Lock())
 
     def _binding(self) -> JiraCredentialBinding:
-        return JiraCredentialBinding.model_validate(
-            self.connector_specific_config or {}
-        )
+        return _gateway_binding(self)
 
     def _credentials(self) -> dict[str, Any]:
-        return self.credentials_provider.get_credentials()
+        return _gateway_credentials(self)
 
     def _is_cloud(self) -> bool:
         return is_cloud_credential(self._credentials())
@@ -206,44 +385,10 @@ class JiraSourceOperations(SourceOperations):
         ``requests.HTTPError`` on an error response, ``ValueError`` on an
         answer that is not JSON, and ``JiraCloudIdError`` when the JSON holds
         no cloud id."""
-        binding: JiraCredentialBinding = self._binding()
-        jira_base: str = binding.jira_base_url.rstrip("/")
-        if not binding.scoped_token:
-            return jira_base
-        try:
-            return scoped_url(jira_base, "jira")
-        except KeyError as e:
-            raise JiraCloudIdError(
-                f"{jira_base}/_edge/tenant_info returned no Atlassian cloud id."
-            ) from e
+        return _gateway_api_url(self)
 
     def _build_client(self, api_url: str, *, fast: bool) -> JIRA:
-        credentials: dict[str, Any] = self._credentials()
-        api_token: str = credentials[JIRA_API_TOKEN_KEY]
-        options: dict[str, str | bool | Any] = {
-            "rest_api_version": rest_api_version(credentials)
-        }
-        # The SDK retries a connection error, 429 and 503 with sleeps of up to
-        # a minute; the fast client raises at once.
-        timeout: int | None = (
-            _FAST_TIMEOUT_SECONDS if fast else _INDEXING_TIMEOUT_SECONDS
-        )
-        max_retries: int = 0 if fast else _INDEXING_MAX_RETRIES
-        if JIRA_USER_EMAIL_KEY in credentials:
-            return JIRA(
-                basic_auth=(credentials[JIRA_USER_EMAIL_KEY], api_token),
-                server=api_url,
-                options=options,
-                timeout=timeout,
-                max_retries=max_retries,
-            )
-        return JIRA(
-            token_auth=api_token,
-            server=api_url,
-            options=options,
-            timeout=timeout,
-            max_retries=max_retries,
-        )
+        return _build_jira_client(self._credentials(), api_url, fast=fast)
 
     def _client(self, *, fast: bool = False) -> JIRA:
         cached: JIRA | None = self._cached_fast_client if fast else self._cached_client
@@ -267,8 +412,7 @@ class JiraSourceOperations(SourceOperations):
     )
     def get_myself(self, *, fast: bool = False) -> dict[str, Any]:
         """Returns the user the credential acts as (``myself``)."""
-        with _translate_errors(fast=fast):
-            return self._client(fast=fast).myself()
+        return _op_get_myself(self._client(fast=fast), fast=fast)
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
@@ -276,8 +420,7 @@ class JiraSourceOperations(SourceOperations):
     )
     def list_projects(self, *, fast: bool = False) -> list[dict[str, Any]]:
         """Returns the projects the credential can browse."""
-        with _translate_errors(fast=fast):
-            return [project.raw for project in self._client(fast=fast).projects()]
+        return _op_list_projects(self._client(fast=fast), fast=fast)
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
@@ -286,8 +429,9 @@ class JiraSourceOperations(SourceOperations):
     def get_project(self, *, project_key: str, fast: bool = False) -> dict[str, Any]:
         """Returns one project. Raises ``JiraApiError`` (404) when it does not
         exist or the credential cannot browse it."""
-        with _translate_errors(fast=fast):
-            return self._client(fast=fast).project(project_key).raw
+        return _op_get_project(
+            self._client(fast=fast), project_key=project_key, fast=fast
+        )
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
@@ -303,24 +447,12 @@ class JiraSourceOperations(SourceOperations):
     ) -> JiraIssueIdPage:
         """Cloud only: one page of issue ids from the enhanced JQL search
         (``search/jql``). The SDK does not support this endpoint."""
-        # https://community.atlassian.com/forums/Jira-articles/
-        # Avoiding-Pitfalls-A-Guide-to-Smooth-Migration-to-Enhanced-JQL/ba-p/2985433
-        client: JIRA = self._client(fast=fast)
-        params: dict[str, str | int | None] = {
-            "jql": jql,
-            "maxResults": max_results,
-            "nextPageToken": next_page_token,
-            "fields": "id",
-        }
-        with _translate_errors(fast=fast):
-            response: requests.Response = client._session.get(  # ty: ignore[unresolved-attribute]
-                client._get_url("search/jql"), params=params
-            )
-            response.raise_for_status()
-            response_json: dict[str, Any] = response.json()
-        return JiraIssueIdPage(
-            issue_ids=[str(issue["id"]) for issue in response_json["issues"]],
-            next_page_token=response_json.get("nextPageToken"),
+        return _op_search_issue_ids(
+            self._client(fast=fast),
+            jql=jql,
+            next_page_token=next_page_token,
+            max_results=max_results,
+            fast=fast,
         )
 
     @source_operation(
@@ -333,16 +465,9 @@ class JiraSourceOperations(SourceOperations):
         """Cloud only: the raw issues for these ids (``issue/bulkfetch``), in
         batches of at most 100. ``fields`` is a comma-separated list; None
         fetches all fields."""
-        client: JIRA = self._client(fast=fast)
-        raw_issues: list[dict[str, Any]] = []
-        for batch in chunked(issue_ids, _JIRA_BULK_FETCH_LIMIT):
-            try:
-                with _translate_errors(fast=fast):
-                    raw_issues.extend(_bulk_fetch_batch(client, list(batch), fields))
-            except Exception as e:
-                logger.error("Error fetching issues: %s", e)
-                raise
-        return raw_issues
+        return _op_bulk_fetch_issues(
+            self._client(fast=fast), issue_ids=issue_ids, fields=fields, fast=fast
+        )
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
@@ -359,25 +484,14 @@ class JiraSourceOperations(SourceOperations):
     ) -> list[dict[str, Any]]:
         """Server / Data Center only: one offset page of raw issues from the v2
         JQL search. Cloud removed this API."""
-        logger.debug(
-            "Fetching Jira issues with JQL: %s, starting at %s, max results: %s",
-            jql,
-            start_at,
-            max_results,
+        return _op_search_issues(
+            self._client(fast=fast),
+            jql=jql,
+            start_at=start_at,
+            max_results=max_results,
+            fields=fields,
+            fast=fast,
         )
-        with _translate_errors(fast=fast):
-            issues: Any = self._client(fast=fast).search_issues(
-                jql_str=jql,
-                startAt=start_at,
-                maxResults=max_results,
-                fields=fields,
-            )
-        raw_issues: list[dict[str, Any]] = []
-        for issue in issues:
-            if not isinstance(issue.raw, dict):
-                raise RuntimeError(f"Found Jira object not of type Issue: {issue}")
-            raw_issues.append(issue.raw)
-        return raw_issues
 
     @source_operation(
         capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
@@ -389,13 +503,9 @@ class JiraSourceOperations(SourceOperations):
         """Returns the permission scheme of a project with its grants and
         expanded users. Needs the Administer Projects permission on the
         project, or Administer Jira."""
-        with _translate_errors(fast=fast):
-            # The SDK resource requests ``expand=user``.
-            return (
-                self._client(fast=fast)
-                .project_permissionscheme(project=project_key)
-                .raw
-            )
+        return _op_get_project_permission_scheme(
+            self._client(fast=fast), project_key=project_key, fast=fast
+        )
 
     @source_operation(
         capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
@@ -405,12 +515,12 @@ class JiraSourceOperations(SourceOperations):
         self, *, project_key: str, role_id: str, fast: bool = False
     ) -> dict[str, Any]:
         """Returns a project role with its actors (users and groups)."""
-        with _translate_errors(fast=fast):
-            return (
-                self._client(fast=fast)
-                .project_role(project=project_key, id=role_id)
-                .raw
-            )
+        return _op_get_project_role(
+            self._client(fast=fast),
+            project_key=project_key,
+            role_id=role_id,
+            fast=fast,
+        )
 
     @source_operation(
         capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
@@ -419,8 +529,7 @@ class JiraSourceOperations(SourceOperations):
     def get_user(self, *, user_id: str, fast: bool = False) -> dict[str, Any]:
         """Returns a user: ``user_id`` is the accountId on Cloud and the
         username on Server / Data Center."""
-        with _translate_errors(fast=fast):
-            return self._client(fast=fast).user(id=user_id).raw
+        return _op_get_user(self._client(fast=fast), user_id=user_id, fast=fast)
 
     @source_operation(
         capabilities={CredentialCapability.EXTERNAL_GROUP_SYNC},
@@ -428,16 +537,7 @@ class JiraSourceOperations(SourceOperations):
     )
     def list_groups(self, *, fast: bool = False) -> JiraGroupPage:
         """Returns the group names from ``groups/picker``, sorted."""
-        with _translate_errors(fast=fast):
-            # The public ``JIRA.groups()`` drops ``total``, which shows whether
-            # the listing was cut off.
-            response: dict[str, Any] = self._client(fast=fast)._get_json(
-                "groups/picker", params={"maxResults": _GROUP_PICKER_MAX_RESULTS}
-            )
-        return JiraGroupPage(
-            group_names=sorted(group["name"] for group in response["groups"]),
-            total=response.get("total"),
-        )
+        return _op_list_groups(self._client(fast=fast), fast=fast)
 
     @source_operation(
         capabilities={CredentialCapability.EXTERNAL_GROUP_SYNC},
@@ -455,18 +555,207 @@ class JiraSourceOperations(SourceOperations):
         (``group/member``, Jira 6.0+). The deprecated ``GET /group`` that the SDK
         uses is gone in Jira Server 10.3+
         (https://github.com/pycontribs/jira/pull/2356)."""
-        with _translate_errors(fast=fast):
-            return self._client(fast=fast)._get_json(
-                "group/member",
-                params={
-                    "groupname": group_name,
-                    "includeInactiveUsers": "false",
-                    "startAt": start_at,
-                    "maxResults": max_results,
-                },
-            )
+        return _op_get_group_members_page(
+            self._client(fast=fast),
+            group_name=group_name,
+            start_at=start_at,
+            max_results=max_results,
+            fast=fast,
+        )
 
 
-def is_cloud_gateway(gateway: JiraSourceOperations) -> bool:
+class JiraServiceManagementSourceOperations(SourceOperations):
+    source = DocumentSource.JIRA_SERVICE_MANAGEMENT
+    sdk_modules = ("jira",)
+    config_keys = frozenset(JiraCredentialBinding.model_fields)
+
+    _cached_client: JIRA | None = None
+    _cached_fast_client: JIRA | None = None
+
+    def _client_build_lock(self) -> threading.Lock:
+        return vars(self).setdefault("_build_lock", threading.Lock())
+
+    def _binding(self) -> JiraCredentialBinding:
+        return _gateway_binding(self)
+
+    def _credentials(self) -> dict[str, Any]:
+        return _gateway_credentials(self)
+
+    def _is_cloud(self) -> bool:
+        return is_cloud_credential(self._credentials())
+
+    def _api_url(self) -> str:
+        return _gateway_api_url(self)
+
+    def _build_client(self, api_url: str, *, fast: bool) -> JIRA:
+        return _build_jira_client(self._credentials(), api_url, fast=fast)
+
+    def _client(self, *, fast: bool = False) -> JIRA:
+        cached: JIRA | None = self._cached_fast_client if fast else self._cached_client
+        if cached is not None:
+            return cached
+        with self._client_build_lock():
+            cached = self._cached_fast_client if fast else self._cached_client
+            if cached is None:
+                api_url: str = self._api_url()
+                with _translate_errors(fast=fast):
+                    cached = self._build_client(api_url, fast=fast)
+                if fast:
+                    self._cached_fast_client = cached
+                else:
+                    self._cached_client = cached
+        return cached
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+    )
+    def get_myself(self, *, fast: bool = False) -> dict[str, Any]:
+        """Returns the user the credential acts as (``myself``)."""
+        return _op_get_myself(self._client(fast=fast), fast=fast)
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+    )
+    def list_projects(self, *, fast: bool = False) -> list[dict[str, Any]]:
+        """Returns the projects the credential can browse."""
+        return _op_list_projects(self._client(fast=fast), fast=fast)
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.BOTH,
+    )
+    def get_project(self, *, project_key: str, fast: bool = False) -> dict[str, Any]:
+        """Returns one project."""
+        return _op_get_project(
+            self._client(fast=fast), project_key=project_key, fast=fast
+        )
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.BOTH,
+    )
+    def search_issue_ids(
+        self,
+        *,
+        jql: str,
+        next_page_token: str | None = None,
+        max_results: int = _MAX_RESULTS_FETCH_IDS,
+        fast: bool = False,
+    ) -> JiraIssueIdPage:
+        """Cloud only: one page of issue ids from the enhanced JQL search."""
+        return _op_search_issue_ids(
+            self._client(fast=fast),
+            jql=jql,
+            next_page_token=next_page_token,
+            max_results=max_results,
+            fast=fast,
+        )
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.BOTH,
+    )
+    def bulk_fetch_issues(
+        self, *, issue_ids: list[str], fields: str | None = None, fast: bool = False
+    ) -> list[dict[str, Any]]:
+        """Cloud only: raw issues from ``issue/bulkfetch``."""
+        return _op_bulk_fetch_issues(
+            self._client(fast=fast), issue_ids=issue_ids, fields=fields, fast=fast
+        )
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.BOTH,
+    )
+    def search_issues(
+        self,
+        *,
+        jql: str,
+        start_at: int,
+        max_results: int,
+        fields: str | None = None,
+        fast: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Server / Data Center only: one offset page of raw issues."""
+        return _op_search_issues(
+            self._client(fast=fast),
+            jql=jql,
+            start_at=start_at,
+            max_results=max_results,
+            fields=fields,
+            fast=fast,
+        )
+
+    @source_operation(
+        capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
+        consumes=OperationConsumes.CREDENTIAL,
+    )
+    def get_project_permission_scheme(
+        self, *, project_key: str, fast: bool = False
+    ) -> dict[str, Any]:
+        """Returns the permission scheme of a project."""
+        return _op_get_project_permission_scheme(
+            self._client(fast=fast), project_key=project_key, fast=fast
+        )
+
+    @source_operation(
+        capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
+        consumes=OperationConsumes.CREDENTIAL,
+    )
+    def get_project_role(
+        self, *, project_key: str, role_id: str, fast: bool = False
+    ) -> dict[str, Any]:
+        """Returns a project role with its actors."""
+        return _op_get_project_role(
+            self._client(fast=fast),
+            project_key=project_key,
+            role_id=role_id,
+            fast=fast,
+        )
+
+    @source_operation(
+        capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
+        consumes=OperationConsumes.CREDENTIAL,
+    )
+    def get_user(self, *, user_id: str, fast: bool = False) -> dict[str, Any]:
+        """Returns a user."""
+        return _op_get_user(self._client(fast=fast), user_id=user_id, fast=fast)
+
+    @source_operation(
+        capabilities={CredentialCapability.EXTERNAL_GROUP_SYNC},
+        consumes=OperationConsumes.CREDENTIAL,
+    )
+    def list_groups(self, *, fast: bool = False) -> JiraGroupPage:
+        """Returns the group names from ``groups/picker``."""
+        return _op_list_groups(self._client(fast=fast), fast=fast)
+
+    @source_operation(
+        capabilities={CredentialCapability.EXTERNAL_GROUP_SYNC},
+        consumes=OperationConsumes.CREDENTIAL,
+    )
+    def get_group_members_page(
+        self,
+        *,
+        group_name: str,
+        start_at: int,
+        max_results: int,
+        fast: bool = False,
+    ) -> dict[str, Any]:
+        """Returns one page of the active members of a group."""
+        return _op_get_group_members_page(
+            self._client(fast=fast),
+            group_name=group_name,
+            start_at=start_at,
+            max_results=max_results,
+            fast=fast,
+        )
+
+
+JiraGateway = JiraSourceOperations | JiraServiceManagementSourceOperations
+
+
+def is_cloud_gateway(gateway: JiraGateway) -> bool:
     """True when the gateway's credential uses the Cloud APIs."""
     return gateway._is_cloud()

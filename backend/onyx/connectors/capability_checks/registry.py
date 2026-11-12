@@ -57,6 +57,7 @@ _INDEXING_CHECKS_BY_SOURCE: dict[DocumentSource, list[CapabilityCheck]] = {
     DocumentSource.OUTLOOK: build_outlook_indexing_checks(),
     DocumentSource.HUBSPOT: build_hubspot_indexing_checks(),
     DocumentSource.JIRA: build_jira_indexing_checks(),
+    DocumentSource.JIRA_SERVICE_MANAGEMENT: build_jira_indexing_checks(),
     DocumentSource.LINEAR: build_linear_indexing_checks(),
     DocumentSource.NOTION: build_notion_indexing_checks(),
     DocumentSource.SHAREPOINT: build_sharepoint_indexing_checks(),
