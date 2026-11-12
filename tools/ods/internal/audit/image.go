@@ -14,11 +14,13 @@ import (
 
 // ImageOptions configures a container image audit run.
 type ImageOptions struct {
-	Image     string
-	SBOMs     []string // Required inventory paths inside the image.
-	Format    string   // comma-separated list of text|json|sarif
-	FailOn    Severity
-	IgnoreURL string
+	SBOMOnly        bool
+	Image           string
+	SBOMs           []string // Required inventory paths inside the image.
+	UpdatePolicyURL string
+	Format          string // comma-separated list of text|json|sarif
+	FailOn          Severity
+	IgnoreURL       string
 	// Strict fails a scan that extracts no packages, for callers that read a
 	// missing finding as a resolved one. Every image ships OS packages.
 	Strict bool
@@ -34,17 +36,33 @@ var scanOSImage = scanImage
 // returns the result. Findings at or above opts.FailOn are reported as Blocking,
 // which is how it gates a release.
 func RunImage(opts ImageOptions) (*Result, error) {
-	findings, err := scanOSImage(opts.Image, opts.Strict)
-	if err != nil {
-		return nil, fmt.Errorf("image scan failed: %w", err)
+	if opts.SBOMOnly && len(opts.SBOMs) == 0 {
+		return nil, fmt.Errorf("SBOM-only audit requires an inventory")
+	}
+	var findings []Finding
+	var err error
+	if !opts.SBOMOnly {
+		findings, err = scanOSImage(opts.Image, opts.Strict)
+		if err != nil {
+			return nil, fmt.Errorf("image scan failed: %w", err)
+		}
 	}
 
+	var updates []UpdateStatus
+	var policy UpdatePolicy
+	if len(opts.SBOMs) > 0 && opts.UpdatePolicyURL != "" {
+		policy, err = ReadUpdatePolicy(opts.UpdatePolicyURL)
+		if err != nil {
+			return nil, err
+		}
+	}
 	for _, inventory := range opts.SBOMs {
-		extra, err := ScanSBOM(opts.Image, inventory, opts.Stderr)
+		extra, statuses, err := ScanSBOM(opts.Image, inventory, opts.Stderr, policy)
 		if err != nil {
 			return nil, err
 		}
 		findings = append(findings, extra...)
+		updates = append(updates, statuses...)
 	}
 
 	ignores, err := FetchIgnores(opts.IgnoreURL)
@@ -63,6 +81,7 @@ func RunImage(opts ImageOptions) (*Result, error) {
 
 	result := &Result{
 		Findings: kept,
+		Updates:  updates,
 		Ignored:  suppressed,
 		Blocking: blockingFindings(kept, opts.FailOn),
 	}

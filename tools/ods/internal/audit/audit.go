@@ -136,9 +136,10 @@ type Options struct {
 
 // Result is the outcome of an audit run.
 type Result struct {
-	Findings []Finding `json:"findings"` // kept findings, after allowlist filtering
-	Ignored  []Finding `json:"ignored"`  // findings suppressed by the allowlist
-	Blocking []Finding `json:"blocking"` // kept findings at or above FailOn
+	Updates  []UpdateStatus `json:"updates,omitempty"`
+	Findings []Finding      `json:"findings"` // kept findings, after allowlist filtering
+	Ignored  []Finding      `json:"ignored"`  // findings suppressed by the allowlist
+	Blocking []Finding      `json:"blocking"` // kept findings at or above FailOn
 }
 
 // Run executes the selected audit backends, applies the allowlist, renders a

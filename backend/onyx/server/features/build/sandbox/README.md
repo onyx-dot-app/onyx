@@ -434,17 +434,28 @@ for amd64 or arm64. Update the version and both hashes together. The browser
 lives at `/opt/chrome/chrome`; Debian supplies its shared libraries and `certutil`.
 The build checks the installed version and writes `/opt/chrome/browser.cdx.json`.
 
-Release gates require current stable Chrome and scan its inventory with Grype
-before ODS scans Debian packages.
-An outdated browser, critical findings, or scan errors fail the gate with status 1.
-Status 2 is reserved for an unknown component. CVE report collection uses
-`--report` to resolve images without enforcing the browser gate, so browser
-failures do not stop unrelated vulnerability alerts.
-The stable-release check covers delays in vulnerability database updates.
-This extra scan is required because ODS cannot identify the ZIP installation.
-Grype findings appear in the audit log; they do not use the ODS ignore list or
-its automatic issue tracking. Do not treat a clean Debian scan as browser coverage.
+ODS scans the explicit inventory with Grype alongside the image's OSV scan.
+Both scanners use the same reports, advisory exceptions, and CVE alert workflow.
+Critical findings and scanner errors block publication.
 
+Update deadlines use separate state at `s3://onyx-internal-tools/audit/updates.json`.
+Routine updates warn immediately, alert after 24 hours, and block after 72 hours.
+The deadline starts at the first observed newer release. Later releases do not reset it.
+Emergency minimum versions block immediately. CVE Tracking owns release observation
+and the policy object. Its optional `minimum` input can raise Chrome's minimum.
+A failed upstream lookup leaves recorded deadlines intact. Stale observations alert.
+Missing policy or required inventory fails the audit.
+
+Deployment applies the sandbox result before publication, including cached image reuse.
+Other components can continue. CVE collection disables freshness checks and still collects vulnerabilities.
+Backport the gate to supported release branches; existing tags retain their original audit code.
+
+Run the policy and publication tests from the repository root:
+
+```bash
+(cd tools/ods && go test ./internal/audit ./internal/auditcmd)
+uv run python -m unittest discover -s .github/scripts -p test_base_image_ref.py -v
+```
 
 `image/browser-cli.sh` installs as `/usr/local/bin/browser`, a PATH executable,
 because the agent's `bash` tool does not read aliases. It pins the browser

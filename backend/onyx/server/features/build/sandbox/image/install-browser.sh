@@ -26,7 +26,7 @@ rm /tmp/chrome.zip
 /opt/chrome/chrome --version | grep -F " ${version} "
 
 # ODS's Debian inventory cannot identify a ZIP install. Grype scans this
-# explicit CPE inventory in the image audit resolver before ODS scans apt.
+# explicit CPE inventory through ODS alongside the apt scan.
 cat > /opt/chrome/browser.cdx.json <<EOF
 {
   "bomFormat": "CycloneDX",
