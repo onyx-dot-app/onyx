@@ -466,11 +466,17 @@ class ToolRenderer:
     """Project tool progress and final results without sending private tool state."""
 
     def __init__(
-        self, call: ToolCall, placement: Placement, tool_id: int | None = None
+        self,
+        call: ToolCall,
+        placement: Placement,
+        tool_id: int | None = None,
+        display_name: str | None = None,
     ) -> None:
         self.call = call
         self.placement = placement
         self.tool_id = tool_id
+        # The tool's own display name; calls of tools without one show their name.
+        self.display_name = display_name or call.name
         self._queries: set[str] = set()
         self._documents: set[str] = set()
         self._last_details: BaseModel | None = None
@@ -496,7 +502,11 @@ class ToolRenderer:
             )
         if not objects:
             objects = [
-                packets.CustomToolStart(tool_name=name, tool_id=self.tool_id),
+                packets.CustomToolStart(
+                    tool_name=name,
+                    display_name=self.display_name,
+                    tool_id=self.tool_id,
+                ),
                 packets.CustomToolArgs(
                     tool_name=name,
                     tool_args={
@@ -697,6 +707,7 @@ class ToolRenderer:
             objects.append(
                 packets.CustomToolDelta(
                     tool_name=details.tool_name,
+                    display_name=self.display_name,
                     tool_id=self.tool_id,
                     response_type=details.response_type,
                     data=data,
@@ -737,6 +748,7 @@ class ToolRenderer:
             objects.append(
                 packets.CustomToolDelta(
                     tool_name=self.call.name,
+                    display_name=self.display_name,
                     tool_id=self.tool_id,
                     response_type="text",
                     data=content,
@@ -827,9 +839,13 @@ class CodeModeRenderer(ToolRenderer):
     """
 
     def __init__(
-        self, call: ToolCall, placement: Placement, tool_id: int | None = None
+        self,
+        call: ToolCall,
+        placement: Placement,
+        tool_id: int | None = None,
+        display_name: str | None = None,
     ) -> None:
-        super().__init__(call, placement, tool_id)
+        super().__init__(call, placement, tool_id, display_name)
         self._children: dict[int, ToolRenderer] = {}
         self._stdout = ""
 
@@ -880,6 +896,7 @@ class CodeModeRenderer(ToolRenderer):
                 ),
                 self.placement.model_copy(update={"sub_turn_index": call.index}),
                 call.tool_id,
+                call.display_name,
             )
             self._children[call.index] = child
         return child
@@ -992,8 +1009,11 @@ class CodeModeRenderer(ToolRenderer):
 
 
 def tool_renderer(
-    call: ToolCall, placement: Placement, tool_id: int | None = None
+    call: ToolCall,
+    placement: Placement,
+    tool_id: int | None = None,
+    display_name: str | None = None,
 ) -> ToolRenderer:
     """The renderer of a tool call: a code mode card, or the generic tool display."""
     renderer = CodeModeRenderer if call.name in CODE_MODE_TOOL_NAMES else ToolRenderer
-    return renderer(call, placement, tool_id)
+    return renderer(call, placement, tool_id, display_name)

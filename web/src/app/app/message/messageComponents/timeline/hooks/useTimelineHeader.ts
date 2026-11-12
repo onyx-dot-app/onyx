@@ -13,10 +13,7 @@ import {
   formatSearchHeader,
   constructCurrentSearchState,
 } from "@/app/app/message/messageComponents/timeline/renderers/search/searchStateUtils";
-import {
-  externalToolLabel,
-  type TimelineTranslate,
-} from "@/app/app/message/messageComponents/toolDisplayHelpers";
+import { type TimelineTranslate } from "@/app/app/message/messageComponents/toolDisplayHelpers";
 
 /** Header text for the activity of one step, or null for no tool activity. */
 function stepHeaderText(
@@ -56,11 +53,9 @@ function stepHeaderText(
     case PacketType.FILE_READER_START:
       return t("header.readingFile.label");
     case PacketType.CUSTOM_TOOL_START: {
-      const toolName = (firstPacket.obj as CustomToolStart).tool_name;
+      const toolName = (firstPacket.obj as CustomToolStart).display_name;
       return toolName
-        ? t("header.executingNamedTool.label", {
-            toolName: externalToolLabel(toolName),
-          })
+        ? t("header.executingNamedTool.label", { toolName })
         : t("header.executingTool.label");
     }
     case PacketType.MEMORY_TOOL_START:

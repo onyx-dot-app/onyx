@@ -61,15 +61,6 @@ export function parseToolKey(key: string): {
   };
 }
 
-// The model sees custom and MCP tools as `custom__<tool id>__<operation>` and
-// `mcp__<server id>__<server name>__<tool>`. Users see the operation or tool name.
-const QUALIFIED_EXTERNAL_TOOL_NAME =
-  /^(?:custom__\d+|mcp__\d+__[A-Za-z0-9_-]*?)__(.+)$/;
-
-export function externalToolLabel(toolName: string): string {
-  return QUALIFIED_EXTERNAL_TOOL_NAME.exec(toolName)?.[1] ?? toolName;
-}
-
 export type TimelineTranslate = ReturnType<
   typeof useTranslations<"chat.messages.timeline">
 >;
@@ -92,8 +83,10 @@ export function getToolName(packets: Packet[], t: TimelineTranslate): string {
     case PacketType.FETCH_TOOL_START:
       return t("toolNames.openUrls");
     case PacketType.CUSTOM_TOOL_START: {
-      const toolName = (firstPacket.obj as CustomToolStart).tool_name;
-      return toolName ? externalToolLabel(toolName) : t("toolNames.customTool");
+      return (
+        (firstPacket.obj as CustomToolStart).display_name ||
+        t("toolNames.customTool")
+      );
     }
     case PacketType.IMAGE_GENERATION_TOOL_START:
       return t("toolNames.generateImage");
