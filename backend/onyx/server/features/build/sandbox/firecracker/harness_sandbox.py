@@ -17,7 +17,6 @@ from collections.abc import Iterator
 from io import BytesIO
 from uuid import UUID
 
-
 from onyx.cache.factory import get_cache_backend, get_shared_cache_backend
 from onyx.cache.interface import CacheBackend
 from onyx.configs.constants import FileOrigin
