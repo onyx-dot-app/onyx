@@ -620,6 +620,23 @@ def test_a_queued_turn_uses_the_saved_tools_and_search_filters(
     setup.admission.release()
 
 
+def test_an_agent_host_uses_the_saved_tool_selection(
+    chat_session: ChatSession,
+    _mock_chat_preparation: None,
+) -> None:
+    chat_session.tool_selection = ChatToolSelection(
+        allowed_tool_ids=[3], preferred_tool_id=None
+    )
+    setup = prepare_chat_turn(
+        SendMessageRequest(message="", chat_session_id=chat_session.id),
+        User(id=uuid4(), email="reader@example.com"),
+        llm_overrides=None,
+        agent_host=True,
+    )
+    assert setup.new_msg_req.allowed_tool_ids == [3]
+    setup.admission.release()
+
+
 def test_regeneration_reuses_user_message_without_writing(
     chat_session: ChatSession,
     _mock_chat_preparation: None,
