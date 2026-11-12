@@ -171,4 +171,38 @@ describe("processRawChatHistory", () => {
     );
     expect(tree.get(1)!.streamingStartedAt).toBeUndefined();
   });
+  it("keeps an automatic follow-up's hidden question out of assistant packets", () => {
+    const tree = processRawChatHistory(
+      [
+        {
+          ...bm({ message_id: 1, message_type: "user", parent_message: null }),
+          latest_child_message: 2,
+        },
+        {
+          ...bm({
+            message_id: 2,
+            message_type: "assistant",
+            parent_message: 1,
+          }),
+          latest_child_message: 3,
+        },
+        {
+          ...bm({
+            message_id: 3,
+            message_type: "agent_results",
+            parent_message: 2,
+          }),
+          latest_child_message: 4,
+        },
+        bm({ message_id: 4, message_type: "assistant", parent_message: 3 }),
+      ],
+      [[packet("a0")], [packet("follow-up")]],
+    );
+
+    expect(tree.get(3)!.type).toBe("agent_results");
+    expect(tree.get(3)!.packets).toEqual([]);
+    expect((tree.get(4)!.packets[0]!.obj as MessageDelta).content).toBe(
+      "follow-up",
+    );
+  });
 });
