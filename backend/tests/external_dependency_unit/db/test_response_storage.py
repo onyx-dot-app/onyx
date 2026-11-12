@@ -29,6 +29,8 @@ from onyx.agents.models import (
     CompactionCheckpoint,
     ExecutionCheckpoint,
     ExecutionStatus,
+    InputMessageMetadata,
+    InputSource,
     RunAction,
     RunFailure,
     RunFailureKind,
@@ -765,6 +767,13 @@ def test_suspended_search_result_restores_after_database_round_trip(
         input_messages=[instruction],
         steps=[
             StepRecord(
+                input_messages=[
+                    UserMessage(
+                        id="follow-up-instruction",
+                        content="Include the supporting evidence.",
+                        metadata=InputMessageMetadata(source=InputSource.HUMAN),
+                    )
+                ],
                 message=AssistantMessage(
                     id="generation",
                     content=[
@@ -1005,6 +1014,12 @@ def test_response_items_preserve_order_provider_metadata_and_tool_identity(
     answer_index = 2
 
     record.steps = _steps(record.run_id, messages, ExecutionStatus(record.status.value))
+    record.steps[1].input_messages = [
+        UserMessage(id="steer-one", content="Compare the first source")
+    ]
+    record.steps[2].input_messages = [
+        UserMessage(id="steer-two", content="Compare the second source")
+    ]
 
     record.answer_step_index = answer_index
     _save(db_session, response, record)
@@ -1021,7 +1036,7 @@ def test_response_items_preserve_order_provider_metadata_and_tool_identity(
     assert isinstance(first, AssistantMessage)
     assert first.content[0] == record.messages[0].content[0]
     assert restored.answer_step_index == 2
-    assert restored.messages[4].text == "Final answer"
+    assert restored.messages[6].text == "Final answer"
     items = messages_from_steps(read_response_steps(response))
     assert items == restored.messages
     tools = list(

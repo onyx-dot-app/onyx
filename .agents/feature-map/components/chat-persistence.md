@@ -161,6 +161,9 @@ the assistant's call order, not completion order. `tool_id`, `tab_index` and
 **Replay.** Neither path re-runs anything. A runtime response replays through
 `chat/presentation.py:replay_response`, which uses the same message and tool
 renderers as the live stream and reads typed results, not the tool catalog.
+`ChatResponseItem.inputs` is the typed list of messages that a step accepted
+before its generation, with their identity and source. Reconstructed history
+places them before that step's assistant message.
 Search documents and `tool_id` come from the `ToolCall` rows and their search-doc
 links (`db/chat_response.py:read_response_replay_data`), not from the typed
 result: the saved `SearchDocsResponse` holds no documents. Only
