@@ -1,0 +1,175 @@
+import type { AcpSessionUpdate } from "@/lib/timeline/acp";
+import type { TimelineEvent } from "@/lib/timeline/events";
+import { reduceTimelineEvents } from "@/lib/timeline/reducer";
+
+function update(value: AcpSessionUpdate): TimelineEvent {
+  return { type: "update", update: value };
+}
+
+function thought(text: string): TimelineEvent {
+  return update({
+    sessionUpdate: "agent_thought_chunk",
+    content: { type: "text", text },
+  });
+}
+
+function message(text: string): TimelineEvent {
+  return update({
+    sessionUpdate: "agent_message_chunk",
+    content: { type: "text", text },
+  });
+}
+
+describe("reduceTimeline", () => {
+  it("joins thought chunks and ends the block when the message starts", () => {
+    const state = reduceTimelineEvents([
+      thought("Let me "),
+      thought("check."),
+      message("Done "),
+      message("here."),
+    ]);
+
+    expect(state.entries).toEqual([
+      {
+        id: "thinking-0",
+        status: "done",
+        groupId: null,
+        payload: { kind: "thinking", text: "Let me check." },
+      },
+    ]);
+    expect(state.message).toEqual([{ type: "text", text: "Done here." }]);
+  });
+
+  it("applies tool call updates and keeps the fields an update leaves out", () => {
+    const state = reduceTimelineEvents([
+      update({
+        sessionUpdate: "tool_call",
+        toolCallId: "t1",
+        title: "Run tests",
+        kind: "execute",
+        status: "pending",
+        rawInput: { command: "npm test" },
+      }),
+      update({
+        sessionUpdate: "tool_call_update",
+        toolCallId: "t1",
+        status: "in_progress",
+      }),
+      update({
+        sessionUpdate: "tool_call_update",
+        toolCallId: "t1",
+        status: "completed",
+        content: [{ type: "content", content: { type: "text", text: "ok" } }],
+      }),
+    ]);
+
+    const [entry] = state.entries;
+    expect(entry?.status).toBe("done");
+    expect(entry?.payload).toEqual({
+      kind: "tool",
+      toolCall: {
+        toolCallId: "t1",
+        title: "Run tests",
+        kind: "execute",
+        status: "completed",
+        content: [{ type: "content", content: { type: "text", text: "ok" } }],
+        locations: [],
+        rawInput: { command: "npm test" },
+        rawOutput: undefined,
+        _meta: null,
+      },
+    });
+  });
+
+  it("keeps concurrent tool calls as separate entries in arrival order", () => {
+    const state = reduceTimelineEvents([
+      update({ sessionUpdate: "tool_call", toolCallId: "a", title: "A" }),
+      update({ sessionUpdate: "tool_call", toolCallId: "b", title: "B" }),
+      update({
+        sessionUpdate: "tool_call_update",
+        toolCallId: "a",
+        status: "in_progress",
+      }),
+    ]);
+
+    expect(
+      state.entries.map((entry) => [entry.id, entry.status, entry.groupId])
+    ).toEqual([
+      ["a", "streaming", null],
+      ["b", "streaming", null],
+    ]);
+  });
+
+  it("keeps a cancelled call apart from a failed one", () => {
+    const state = reduceTimelineEvents([
+      update({ sessionUpdate: "tool_call", toolCallId: "f", title: "F" }),
+      update({
+        sessionUpdate: "tool_call_update",
+        toolCallId: "f",
+        status: "failed",
+      }),
+      update({ sessionUpdate: "tool_call", toolCallId: "c", title: "C" }),
+      update({
+        sessionUpdate: "tool_call_update",
+        toolCallId: "c",
+        _meta: { onyx: { cancelled: true } },
+      }),
+    ]);
+
+    expect(state.entries.map((entry) => entry.status)).toEqual([
+      "error",
+      "stopped",
+    ]);
+  });
+
+  it("adds a tool call when its first event is an update", () => {
+    const state = reduceTimelineEvents([
+      update({
+        sessionUpdate: "tool_call_update",
+        toolCallId: "late",
+        title: "Read file",
+        status: "in_progress",
+      }),
+    ]);
+
+    expect(state.entries.map((entry) => [entry.id, entry.status])).toEqual([
+      ["late", "streaming"],
+    ]);
+  });
+
+  it("records the stop reason and leaves running tool calls as they are", () => {
+    const state = reduceTimelineEvents([
+      update({
+        sessionUpdate: "tool_call",
+        toolCallId: "t",
+        title: "T",
+        status: "in_progress",
+      }),
+      thought("Still thinking"),
+      { type: "stop", stopReason: "cancelled" },
+    ]);
+
+    expect(state.stopReason).toBe("cancelled");
+    expect(state.entries.map((entry) => [entry.id, entry.status])).toEqual([
+      ["t", "streaming"],
+      ["thinking-1", "done"],
+    ]);
+  });
+
+  it("replaces the plan on each plan update", () => {
+    const state = reduceTimelineEvents([
+      update({
+        sessionUpdate: "plan",
+        entries: [{ content: "One", priority: "high", status: "pending" }],
+      }),
+      update({
+        sessionUpdate: "plan",
+        entries: [{ content: "One", priority: "high", status: "completed" }],
+      }),
+    ]);
+
+    expect(state.plan).toEqual([
+      { content: "One", priority: "high", status: "completed" },
+    ]);
+  });
+});
