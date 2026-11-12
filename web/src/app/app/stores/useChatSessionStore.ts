@@ -630,8 +630,9 @@ export const useCurrentChatState = () =>
   });
 
 /**
- * The reader has the server's stop packet for the open chat's latest response.
- * Only rendering and settlement remain, so the response cannot be stopped.
+ * The reader has the server's stop packet for every response of the open
+ * chat's latest turn. Only rendering and settlement remain, so the turn cannot
+ * be stopped.
  */
 export const useCurrentResponseStopped = () =>
   useChatSessionStore((state) => {
@@ -640,11 +641,20 @@ export const useCurrentResponseStopped = () =>
       ? sessions.get(currentSessionId)
       : null;
     if (!currentSession) return false;
-    const last = getLatestMessageChain(currentSession.messageTree)
-      .at(-1)
-      ?.packets.at(-1);
-    // A per-model stop ends one panel of a multi-model turn, not the turn.
-    return last?.obj.type === "stop" && last.placement.model_index == null;
+    const tree = currentSession.messageTree;
+    const latest = getLatestMessageChain(tree).at(-1);
+    if (!latest) return false;
+    // Each model of a multi-model turn is a sibling that ends with its own stop.
+    const turn =
+      latest.parentNodeId === null
+        ? [latest]
+        : (tree.get(latest.parentNodeId)?.childrenNodeIds ?? [latest.nodeId])
+            .map((nodeId) => tree.get(nodeId))
+            .filter((node): node is Message => node !== undefined);
+    return (
+      turn.length > 0 &&
+      turn.every((node) => node.packets.at(-1)?.obj.type === "stop")
+    );
   });
 
 export const useUncaughtError = () =>
