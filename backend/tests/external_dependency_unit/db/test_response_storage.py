@@ -63,6 +63,7 @@ from onyx.chat.models import (
     ResponseRecord,
 )
 from onyx.chat.presentation import ResponsePresenter, project_response, replay_response
+from onyx.chat.process_message import read_repaired_chat_inbox
 from onyx.chat.response import response_record, response_snapshot
 from onyx.chat.run_store import ChatRunStore
 from onyx.chat.tool_results import tool_result_sources
@@ -100,6 +101,7 @@ from onyx.db.chat_inputs import (
     latest_agent_response,
     lock_agent,
     pending_inputs,
+    read_chat_inbox,
     read_run_inputs,
 )
 from onyx.db.chat_response import (
@@ -3752,6 +3754,47 @@ def test_unreceived_send_starts_the_next_child_run(
     assert not can_start(queued.id)
     child_row.response_status = RunStatus.COMPLETE
     assert can_start(late.id) and can_start(queued.id)
+
+
+def test_status_repair_finishes_an_ownerless_agent_that_messages_wait_for(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    """A child left running without a result row and an owner still gets repaired."""
+    response = _response(db_session, conversation)
+    parent = _record(response)
+    child = _child_record(db_session, parent, uuid4(), "First answer")
+    _save(db_session, response, parent)
+    child_row = db_session.get(ChatMessage, int(child.run_id))
+    assert child_row is not None and child.agent_id is not None
+    child_row.chat_session.restoration_config = ChatConfiguration(kind="chat")
+    child_row.response_status = RunStatus.RUNNING
+    response.response_status = RunStatus.COMPLETE
+    branch = ChatBranch(chat_session_id=conversation.id, message_ids=[response.id])
+    request = AgentMessageRequest(
+        agent_id=child.agent_id,
+        parent_id=str(conversation.id),
+        message=UserMessage(content="Continue"),
+        delivery=MessageDelivery.QUEUE,
+        max_steps=3,
+        parent_run_id=parent.run_id,
+        parent_message_id=f"{parent.run_id}:0",
+        parent_tool_call_id="delegate",
+    )
+    enqueue_message(db_session, branch, request, response.id)
+    db_session.commit()
+    assert read_chat_inbox(db_session, conversation.id).waiting_response_ids == [
+        child_row.id
+    ]
+
+    inbox = read_repaired_chat_inbox(
+        conversation.id,
+        get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE),
+    )
+
+    assert inbox.waiting_response_ids == []
+    db_session.expire_all()
+    repaired = db_session.get(ChatMessage, child_row.id)
+    assert repaired is not None and repaired.response_status == RunStatus.ERROR
 
 
 def test_existing_descendant_accepts_an_ancestor_invocation_without_reparenting(

@@ -265,6 +265,11 @@ class ChatInbox(BaseModel):
     # Unfinished latest runs of agents whose messages wait for them.
     waiting_response_ids: list[int] = Field(default_factory=list)
 
+    @property
+    def unfinished_response_ids(self) -> list[int]:
+        """Running and waited-for responses; any of them can have lost its owner."""
+        return [*self.running_response_ids, *self.waiting_response_ids]
+
 
 class ResponseLink(BaseModel):
     id: int

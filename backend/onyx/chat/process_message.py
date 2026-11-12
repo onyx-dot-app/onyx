@@ -734,7 +734,7 @@ def read_repaired_chat_inbox(chat_session_id: UUID, cache: CacheBackend) -> Chat
     with get_session_with_current_tenant() as db_session:
         inbox = read_chat_inbox(db_session, chat_session_id)
     if interrupt_ownerless_responses(
-        cache, get_current_tenant_id(), inbox.running_response_ids
+        cache, get_current_tenant_id(), inbox.unfinished_response_ids
     ):
         with get_session_with_current_tenant() as db_session:
             inbox = read_chat_inbox(db_session, chat_session_id)
