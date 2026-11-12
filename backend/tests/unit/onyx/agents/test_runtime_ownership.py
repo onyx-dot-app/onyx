@@ -264,7 +264,7 @@ def test_generation_deadline_rejects_output_when_blocked_read_returns() -> None:
     assert run.wait_for_idle(2)
 
 
-def test_loaded_agent_bound_is_shared_across_parent_runs() -> None:
+def test_a_spawn_at_the_load_bound_evicts_an_idle_agent() -> None:
     def spawn(invocation: ToolInvocation) -> ToolResult:
         invocation.agents.spawn_agent(
             Agent(
@@ -294,10 +294,10 @@ def test_loaded_agent_bound_is_shared_across_parent_runs() -> None:
             for message in second.snapshot().messages
             if isinstance(message, ToolResultMessage) and message.is_error
         ]
-        assert len(errors) == 1
-        assert "loaded agent limit exceeded" in errors[0].content
+        # The first child is idle, so it leaves memory and both stay listed.
+        assert errors == []
         assert (
-            len([info for info in coordinator.discover_agents() if info.parent_id]) == 1
+            len([info for info in coordinator.discover_agents() if info.parent_id]) == 2
         )
         assert coordinator.close(timeout=3)
 

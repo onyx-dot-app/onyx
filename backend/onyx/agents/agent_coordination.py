@@ -806,9 +806,8 @@ class AgentCoordinator:
                 ancestor = self._state.registrations[ancestor.parent_id]
             if depth >= MAX_CHILD_DEPTH:
                 raise ValueError("Agent nesting limit exceeded")
-            if (
-                agent.id in self._state.registrations
-                or len(self._state.agents) >= MAX_LOADED_AGENTS
+            if agent.id in self._state.registrations or not self._make_room_locked(
+                agent.id
             ):
                 raise ValueError(
                     "Agent already registered or loaded agent limit exceeded"
@@ -826,11 +825,10 @@ class AgentCoordinator:
             self._state.agents[agent.id] = _LoadedAgent(agent, self._view_id)
             return info
 
-    def _has_agent_room_locked(self, agent_id: str) -> bool:
-        """Make room to restore `agent_id`; evict the oldest idle child agent when full.
+    def _make_room_locked(self, agent_id: str) -> bool:
+        """Make room to load `agent_id`; evict the least recently used idle child agent.
 
         An idle child has no attached run, so a later use restores it from history.
-        New spawns still count every loaded agent against the bound.
         """
         if (
             agent_id in self._state.agents
@@ -842,6 +840,7 @@ class AgentCoordinator:
             for tracked in self._state.tracked_runs.values()
             if tracked.coordination is not None
         }
+        # `_state.agents` keeps use order: each use moves an agent to the end.
         idle = next(
             (
                 loaded_id
@@ -949,7 +948,11 @@ class AgentCoordinator:
         if check_history and loaded.agent.latest_run_id != latest_run_id:
             return None
         with self._state.lock:
-            return loaded.agent if self._state.agents.get(agent_id) is loaded else None
+            if self._state.agents.get(agent_id) is not loaded:
+                return None
+            # A use makes the agent the most recently used.
+            self._state.agents[agent_id] = self._state.agents.pop(agent_id)
+            return loaded.agent
 
     def resolve_child(self, agent_id: str, parent_id: str) -> Agent:
         info, authoritative = self._lookup(agent_id, parent_id, current=True)
@@ -961,7 +964,7 @@ class AgentCoordinator:
         if cached is not None:
             return cached
         with self._state.lock:
-            if not self._has_agent_room_locked(agent_id):
+            if not self._make_room_locked(agent_id):
                 raise AgentBusy("Loaded agent limit exceeded")
         if self._directory is None:
             raise ValueError("Agent restoration is unavailable")
@@ -981,7 +984,7 @@ class AgentCoordinator:
                 if tracked.coordination is not None
             ):
                 raise AgentBusy("Agent is already running or draining")
-            if not self._has_agent_room_locked(agent_id):
+            if not self._make_room_locked(agent_id):
                 raise AgentBusy("Loaded agent limit exceeded")
             self._state.agents[agent_id] = _LoadedAgent(restored, self._view_id)
         return restored

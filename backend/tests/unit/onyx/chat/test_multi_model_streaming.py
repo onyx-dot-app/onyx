@@ -587,6 +587,28 @@ class TestRunModels:
             {"SearchTool"} if incognito else {"SearchTool", CODING_AGENT_TOOL_ID}
         )
 
+    @pytest.mark.parametrize("n_models", [1, 2])
+    def test_only_single_model_turns_offer_agent_tools(self, n_models: int) -> None:
+        """Results follow one answer, so a multi-model turn starts no agents."""
+        offered: list[bool] = []
+
+        def create(*_args: object, with_subagents: bool, **_kwargs: object) -> None:
+            offered.append(with_subagents)
+            raise RuntimeError("Agent construction recorded")
+
+        setup = _make_setup(n_models=n_models)
+        setup.new_msg_req.accepts_follow_ups = True
+        with patch("onyx.chat.execution.create_chat_agent", side_effect=create):
+            reader = start_chat_turn(
+                setup, MagicMock(), dispatch_pending_messages=lambda: None
+            )
+            try:
+                list(reader)
+            finally:
+                reader.close()
+
+        assert offered == [n_models == 1] * n_models
+
     def test_n1_overall_stop_from_llm_loop_passes_through(self) -> None:
         """OverallStop emitted by agent is passed through the drain loop unchanged."""
 

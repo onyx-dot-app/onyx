@@ -481,10 +481,12 @@ class ChatTurnExecution:
                 raise startup_error
             cancellation.check()
             # Agent tools need a caller that delivers follow-up responses and a
-            # client that shows them.
+            # client that shows them. A multi-model turn has no single answer for
+            # results to follow.
             with_subagents = (
                 self._dispatch_pending_messages is not None
                 and self.setup.new_msg_req.accepts_follow_ups
+                and len(self.setup.responses) == 1
             )
             chat_agent = create_chat_agent(
                 self.setup,

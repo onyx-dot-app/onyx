@@ -44,6 +44,7 @@ from onyx.db.chat_inputs import (
     MAX_PENDING_MESSAGE_BYTES,
     consume_inputs__no_commit,
     pause_chat_queue__no_commit,
+    read_chat_inbox,
     read_run_inputs,
     submit_human_message__no_commit,
     withdraw_human_message__no_commit,
@@ -1318,13 +1319,15 @@ def test_status_recovers_queued_message_after_previous_dispatcher_exits(
     assert client.get(path).json() == []
 
 
+@pytest.mark.parametrize("lost_status", [RunStatus.RUNNING, RunStatus.SUSPENDED])
 def test_status_wakes_the_root_for_a_child_whose_owner_is_gone(
     response: ChatMessage,
     owner: User,
     db_session: Session,
     monkeypatch: pytest.MonkeyPatch,
+    lost_status: RunStatus,
 ) -> None:
-    """After a pod restart, a child stays running without an owner.
+    """After a pod restart, a running or suspended child has no owner.
 
     Status reports it, and its dispatch saves the child as failed, so the
     result wakes the root.
@@ -1345,7 +1348,7 @@ def test_status_wakes_the_root_for_a_child_whose_owner_is_gone(
         message="",
         token_count=0,
         message_type=MessageType.ASSISTANT,
-        response_status=RunStatus.RUNNING,
+        response_status=lost_status,
     )
     db_session.add(child_response)
     db_session.flush()
@@ -2144,15 +2147,19 @@ def _stream_turn(
     assert chat_turn_work.wait_idle(timeout=30)
 
 
+@pytest.mark.parametrize("over_budget", [False, True])
 def test_status_starts_child_work_when_no_turn_hosts_it(
     chat: ChatSession,
     owner: User,
     db_session: Session,
     monkeypatch: pytest.MonkeyPatch,
+    over_budget: bool,
 ) -> None:
     """Child work that becomes startable after every run store exited still starts.
 
-    Status counts it as active agent work, and its dispatch hosts the run.
+    Status counts it as active agent work, and its dispatch hosts the run. When
+    the owner is over budget, the work becomes a visible failed run instead of
+    failing silently on every poll.
     """
 
     def generate(
@@ -2217,6 +2224,14 @@ def test_status_starts_child_work_when_no_turn_hosts_it(
     )
     db_session.commit()
 
+    if over_budget:
+
+        def over_limit(_user: User) -> None:
+            raise OnyxError(OnyxErrorCode.RATE_LIMITED, "Over budget")
+
+        monkeypatch.setattr(
+            "onyx.chat.process_message.check_token_rate_limits", over_limit
+        )
     tasks = BackgroundTasks()
     status = chat_backend.get_chat_session_processing_status(
         chat.id, tasks, _NO_HEADERS, owner
@@ -2226,6 +2241,21 @@ def test_status_starts_child_work_when_no_turn_hosts_it(
     asyncio.run(tasks())
     assert chat_turn_work.wait_idle(timeout=30)
     db_session.expire_all()
+    if over_budget:
+        failed = db_session.scalar(
+            select(ChatMessage)
+            .where(
+                ChatMessage.chat_session_id == worker.id,
+                ChatMessage.message_type == MessageType.ASSISTANT,
+            )
+            .order_by(ChatMessage.id.desc())
+            .limit(1)
+        )
+        assert failed is not None and failed.response_status == RunStatus.ERROR
+        assert failed.response_failure is not None
+        assert failed.response_failure.message == "Over budget"
+        assert not read_chat_inbox(db_session, chat.id).child_work
+        return
     follow_up = db_session.scalar(
         select(ChatMessage).where(
             ChatMessage.chat_session_id == worker.id,

@@ -76,6 +76,7 @@ from onyx.db.chat import (
 )
 from onyx.db.chat_inputs import (
     accept_queued_turn__no_commit,
+    fail_inbox_start__no_commit,
     fail_response_start__no_commit,
     read_chat_inbox,
 )
@@ -793,8 +794,8 @@ def dispatch_pending_chat_messages(
                     if not has_global_permission(user, Permission.WRITE_CHAT):
                         logger.info("Agent work waits for its owner's write access")
                         return
-                    host_agent_work(
-                        prepare_chat_turn(
+                    try:
+                        host_setup = prepare_chat_turn(
                             new_msg_req=SendMessageRequest(
                                 message="",
                                 chat_session_id=chat_session_id,
@@ -805,10 +806,25 @@ def dispatch_pending_chat_messages(
                             litellm_additional_headers=litellm_additional_headers,
                             custom_tool_additional_headers=custom_tool_additional_headers,
                             agent_host=True,
-                        ),
-                        user,
-                        dispatch,
-                    )
+                        )
+                    except OnyxError as error:
+                        if error.error_code is not OnyxErrorCode.RATE_LIMITED:
+                            raise
+                        # Like a queued turn's error response, failed runs keep
+                        # the work from retrying on every poll; their results
+                        # reach the agents that sent it.
+                        with get_session_with_current_tenant() as db_session:
+                            for work in inbox.child_work:
+                                fail_inbox_start__no_commit(
+                                    db_session,
+                                    inbox.branch,
+                                    work.agent_id,
+                                    work.message.id if work.message else None,
+                                    error.detail,
+                                )
+                            db_session.commit()
+                        return
+                    host_agent_work(host_setup, user, dispatch)
                     return
                 setup = prepare_chat_turn(
                     new_msg_req=SendMessageRequest(

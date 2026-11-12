@@ -162,7 +162,8 @@ work.
 **Default subagent controls.** `ChatAgent` adds the tools in
 `tools/tool_implementations/subagents/subagent_tools.py` when it receives a child factory.
 `chat/agent.py:build_chat_agent` gives one when `with_subagents` is set: the turn's caller
-delivers follow-up responses and the request sets `accepts_follow_ups`, as the web chat does.
+delivers follow-up responses, the request sets `accepts_follow_ups`, as the web chat does, and
+the turn has one model.
 Mobile, the CLI and other API clients omit the flag. Incognito chats and one-shot callers
 (`chat/process_message.py:run_chat_turn`, used by Slack, evals and the non-streaming API)
 omit these controls. In incognito, chat also excludes the coding agent from tool configuration

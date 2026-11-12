@@ -392,9 +392,7 @@ def read_chat_inbox(session: Session, chat_session_id: UUID) -> ChatInbox:
     if selected is not None and selected.response_status == RunStatus.RUNNING:
         inbox.running_response_ids.append(selected.id)
     inbox.running_response_ids.extend(
-        result.response_id
-        for result in inbox.results
-        if result.status == RunStatus.RUNNING
+        result.response_id for result in inbox.results if result.is_active
     )
     inbox.next_turn = next_queued_turn(
         session, chat_session_id, selected, branch, inbox.results
@@ -900,7 +898,11 @@ def reserve_inbox_run__no_commit(
     return response_id, root_id
 
 
-def fail_response_start__no_commit(session: Session, response_id: int) -> None:
+def fail_response_start__no_commit(
+    session: Session,
+    response_id: int,
+    failure_message: str = "The response could not start",
+) -> None:
     """Record that reserved work could not start, so it does not retry forever."""
     response = session.get(ChatMessage, response_id)
     if (
@@ -911,13 +913,16 @@ def fail_response_start__no_commit(session: Session, response_id: int) -> None:
         return
     response.response_status = RunStatus.ERROR
     response.response_failure = RunFailure(
-        kind=RunFailureKind.EXECUTION,
-        message="The response could not start",
+        kind=RunFailureKind.EXECUTION, message=failure_message
     )
 
 
 def fail_inbox_start__no_commit(
-    session: Session, branch: ChatBranch, agent_id: str, message_id: str | None
+    session: Session,
+    branch: ChatBranch,
+    agent_id: str,
+    message_id: str | None,
+    failure_message: str = "The response could not start",
 ) -> None:
     """Consume inbox work that could not start, so it does not retry.
 
@@ -942,7 +947,7 @@ def fail_inbox_start__no_commit(
                 parent_ids=None,
             )
             if reserved is not None:
-                fail_response_start__no_commit(session, reserved[0])
+                fail_response_start__no_commit(session, reserved[0], failure_message)
         return
     except ValueError:
         logger.exception("Could not record failed inbox work; dropping it")

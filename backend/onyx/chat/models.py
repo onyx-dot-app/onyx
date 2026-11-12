@@ -230,6 +230,14 @@ class AgentResultState(BaseModel):
     response_id: int
     status: RunStatus
 
+    @property
+    def is_active(self) -> bool:
+        """An active background agent: an unfinished run that delivers this result.
+
+        Only `spawn_agent` runs have result rows, so foreground workers never count.
+        """
+        return not self.status.is_terminal
+
 
 class AgentInboxWork(BaseModel):
     """An idle child's next run: a queued message, or its unread results when None."""
@@ -254,8 +262,8 @@ class ChatInbox(BaseModel):
 
     branch: ChatBranch
     selected_response_id: int | None
-    # The running selected response and running children with unread results.
-    # Each can have lost its owner.
+    # The running selected response and active background agents. Each can have
+    # lost its owner.
     running_response_ids: list[int] = Field(default_factory=list)
     results: list[AgentResultState] = Field(default_factory=list)
     next_turn: QueuedChatTurn | None = None

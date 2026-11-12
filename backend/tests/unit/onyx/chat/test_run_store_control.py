@@ -203,7 +203,7 @@ def test_saved_child_responses_label_tool_calls_with_display_names(
 
 
 @pytest.mark.parametrize("final_step", [False, True])
-def test_the_final_step_receives_every_finished_child_result(
+def test_every_step_receives_a_bounded_number_of_child_results(
     monkeypatch: pytest.MonkeyPatch, final_step: bool
 ) -> None:
     cache = MagicMock(spec=CacheBackend)
@@ -255,6 +255,5 @@ def test_the_final_step_receives_every_finished_child_result(
 
     received = store.receive_inputs(run)
 
-    assert len(received) == (
-        len(finished) if final_step else run_store.MAX_AGENT_COMPLETIONS_PER_STEP
-    )
+    # The final step is bounded too; unread results wake the agent's next run.
+    assert len(received) == run_store.MAX_AGENT_COMPLETIONS_PER_STEP

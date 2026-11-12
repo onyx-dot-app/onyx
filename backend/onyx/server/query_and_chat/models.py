@@ -339,7 +339,7 @@ class CurrentStreamInfo(BaseModel):
 
 class ChatSessionProcessingStatus(BaseModel):
     is_processing: bool
-    # Child agents run on the selected branch, or their results are about to wake the root.
+    # Background agents are active on the selected branch, or their queued work waits.
     has_active_subagents: bool = False
     # Queued input or unread root results can start a turn now; a paused queue cannot.
     has_startable_input: bool = False

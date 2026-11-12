@@ -136,3 +136,46 @@ def test_restoring_an_agent_at_the_load_bound_evicts_an_idle_agent() -> None:
         assert second.id == "second"
     finally:
         assert owner.close(3)
+
+
+def test_loaded_agent_eviction_keeps_the_most_recently_used_agent() -> None:
+    """A use moves an agent to the back, so the least recently used one is evicted."""
+    infos = {
+        agent_id: AgentInfo(
+            id=agent_id,
+            path=f"/root/{agent_id}",
+            parent_id="root",
+            description="",
+            restoration_config=None,
+            latest_run_id=None,
+            status=RunStatus.COMPLETE,
+        )
+        for agent_id in ["first", "second", "third"]
+    }
+
+    def restore(agent_id: str, _parent_id: str) -> Agent:
+        return Agent(
+            FakeModelClient(
+                lambda *_: AssistantMessage(content=[TextContent(text="done")])
+            ),
+            agent_id=agent_id,
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        )
+
+    owner = AgentCoordinator(
+        directory=FakeAgentDirectory(
+            list_agents=lambda: list(infos.values()),
+            lookup_agent=lambda agent_id, _parent_id: infos.get(agent_id),
+            restore_agent=restore,
+        )
+    )
+    try:
+        with patch("onyx.agents.agent_coordination.MAX_LOADED_AGENTS", 2):
+            first = owner.resolve_child("first", "root")
+            second = owner.resolve_child("second", "root")
+            assert owner.resolve_child("first", "root") is first
+            owner.resolve_child("third", "root")
+            assert owner.resolve_child("first", "root") is first
+            assert owner.resolve_child("second", "root") is not second
+    finally:
+        assert owner.close(3)

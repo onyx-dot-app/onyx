@@ -432,12 +432,11 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory):
                 self._root_branch(run),
                 self._input_branch.message_ids,
             )
+        # Each step reads a bounded number of results; the rest stay unread and
+        # wake the agent's next run.
         completed = [
             result.response_id for result in results if result.status.is_terminal
-        ]
-        # The last step answers with every finished result; it has no later step.
-        if not run.on_final_step:
-            completed = completed[:MAX_AGENT_COMPLETIONS_PER_STEP]
+        ][:MAX_AGENT_COMPLETIONS_PER_STEP]
         if not completed:
             return messages
         with get_session_with_tenant(tenant_id=self.tenant_id) as session:
@@ -533,7 +532,7 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory):
                     self._pending_dispatch or bool(inbox.child_work) or waiting
                 )
                 self._has_running_children = any(
-                    result.status == RunStatus.RUNNING for result in inbox.results
+                    result.is_active for result in inbox.results
                 )
             for work in inbox.child_work:
                 # Stores of several turns on one branch scan the same inbox. This
