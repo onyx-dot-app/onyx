@@ -170,6 +170,9 @@ with no tool calls. Definitions remain advertised for cache reuse where the prov
 Their control functions, such as `think_tool`, `generate_report` and
 `generate_answer`, are plain `AgentTool` objects with no `Tool` row, and
 `chat/renderer.py:HIDDEN_TOOLS` keeps them out of the stream.
+Incognito chats run no child agents. Chat excludes the coding agent from their tool
+configuration (`chat/execution.py:create_chat_agent`), and preparation rejects deep
+research before it saves the user message (`chat/process_message.py:prepare_chat_turn`).
 
 ---
 

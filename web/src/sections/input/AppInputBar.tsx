@@ -381,6 +381,7 @@ const AppInputBar = React.memo(
       requestedToolId: toolConfiguration.preferredToolId,
       agent: activeAgent,
       plugins: memberPlugins ?? [],
+      incognito: incognitoEnabled,
     });
     const { isLoading: isLoadingProjects } = useProjects();
     const activeProject = useActiveProject();
@@ -700,16 +701,18 @@ const AppInputBar = React.memo(
             ) : (
               showDeepResearch && (
                 <SelectButton
-                  disabled={disabled || isMultiModelActive}
+                  disabled={disabled || isMultiModelActive || incognitoEnabled}
                   variant="select-light"
                   icon={SvgHourglass}
                   onClick={toggleDeepResearch}
                   state={deepResearchEnabled ? "selected" : "empty"}
                   foldable={!deepResearchEnabled}
                   tooltip={
-                    isMultiModelActive
-                      ? t("appInputBar.deepResearchButton.disabledTooltip")
-                      : undefined
+                    incognitoEnabled
+                      ? t("appInputBar.deepResearchButton.incognitoTooltip")
+                      : isMultiModelActive
+                        ? t("appInputBar.deepResearchButton.disabledTooltip")
+                        : undefined
                   }
                 >
                   {t("appInputBar.deepResearchButton.label")}

@@ -182,8 +182,8 @@ of only markers stays empty.
    the error, and the turn saves with no citations and no renderings. With
    `persist_content=False` (temporary chats), `save_chat_turn` saves no
    citations or search docs. `chat/history_store.py:RedisChatHistoryStore`
-   keeps those numbers in Redis instead, with `sources_by_run` for child agents.
-   A new save path must cover both history stores.
+   retains citation numbers and source documents in the cached root messages.
+   Incognito does not support subagents. A new save path must cover both history stores.
 5. `document-key-prompt-design` **The document JSON key and field order are
    prompt design.** The key is `document`, not `citation_id`, so the model does
    not write reasoning such as "I should reference citation_id: 5". The number

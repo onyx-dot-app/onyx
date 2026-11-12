@@ -122,6 +122,9 @@
       "authenticate": {
         "label": "مصادقة"
       },
+      "codingAgentIncognito": {
+        "tooltip": "وكيل البرمجة غير متاح في وضع التخفي"
+      },
       "configure": {
         "tooltip": "تكوين"
       },
@@ -12432,6 +12435,7 @@
         },
         "deepResearchButton": {
           "disabledTooltip": "البحث المعمق معطّل في وضع النماذج المتعددة",
+          "incognitoTooltip": "البحث المعمق غير متاح في وضع التخفي",
           "label": "بحث معمق"
         },
         "incognitoNotice": {

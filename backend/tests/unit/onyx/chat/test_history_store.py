@@ -29,6 +29,7 @@ from onyx.chat.models import (
     IncognitoState,
 )
 from onyx.chat.presentation import project_response
+from onyx.chat.run_store import ChatRunStore
 from onyx.chat.subagents import ChatAgentDirectory
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SearchDoc
@@ -66,7 +67,6 @@ def test_temporary_history_preparation_waits_for_explicit_user_message_save(
     store = RedisChatHistoryStore(
         message_id=17,
         chat_session_id=session_id,
-        visible_message_ids=(),
         admission=Mock(spec=ChatTurnAdmission),
     )
     previous = UserMessage(id="chat:17", content="Original question")
@@ -255,7 +255,6 @@ def test_temporary_response_restores_file_sources_before_serialization() -> None
     store = RedisChatHistoryStore(
         message_id=17,
         chat_session_id=uuid4(),
-        visible_message_ids=(),
         admission=Mock(spec=ChatTurnAdmission),
     )
     with (
@@ -289,6 +288,8 @@ def test_agent_lookup_uses_its_tenant_and_restores_the_callers_context(
     )
     token = CURRENT_TENANT_ID_CONTEXTVAR.set("conversation-tenant")
     try:
+        store = Mock(spec=ChatRunStore)
+        store.tenant_id = "conversation-tenant"
         directory = ChatAgentDirectory(
             history_store=PostgresChatHistoryStore(
                 message_id=17, chat_session_id=uuid4()
@@ -296,7 +297,7 @@ def test_agent_lookup_uses_its_tenant_and_restores_the_callers_context(
             llm=Mock(spec=LLM),
             tools=[],
             user_identity=LLMUserIdentity(),
-            store=None,
+            store=store,
         )
         CURRENT_TENANT_ID_CONTEXTVAR.set("caller-tenant")
 
@@ -319,9 +320,7 @@ def test_agent_lookup_uses_its_tenant_and_restores_the_callers_context(
 
 
 def test_incognito_regeneration_preserves_results_before_selected_question() -> None:
-    store = RedisChatHistoryStore(
-        message_id=17, chat_session_id=uuid4(), visible_message_ids=()
-    )
+    store = RedisChatHistoryStore(message_id=17, chat_session_id=uuid4())
     search = ToolResultMessage(
         id="prior:0",
         tool_call_id="search",

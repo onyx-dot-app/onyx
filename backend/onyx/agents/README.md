@@ -694,7 +694,7 @@ An expired owner is reported as interrupted when its response is inspected. Unce
 
 Released runs have no local execution owner. Stop requests use the application’s run-ID route.
 Closing the old coordinator does not cancel execution claimed by another pod.
-Content-free incognito runs keep local ownership and do not write durable execution checkpoints or child conversations to PostgreSQL.
+Incognito runs have no run ownership, directory or child agents, and write no durable execution checkpoints.
 
 Checkpoint file data uses existing file-store references. Generated files are stored under the chat session before transfer.
 Deleting the chat removes those files. Tool execution loads file contents when needed.

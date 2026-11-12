@@ -53,6 +53,9 @@ jest.mock("@/lib/agents/hooks", () => ({
 jest.mock("@/lib/settings/hooks", () => ({
   useSettings: () => ({ vectorDbEnabled: true }),
 }));
+jest.mock("@/providers/IncognitoProvider", () => ({
+  useIncognito: () => ({ incognitoEnabled: false }),
+}));
 jest.mock("@/lib/projects/providers", () => ({
   useProjectsContext: () => ({
     currentProjectId: mockProjectId,

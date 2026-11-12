@@ -45,7 +45,7 @@ from onyx.chat.checkpoint import deserialize_checkpoint, serialize_checkpoint
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.citation_utils import message_citation_sources
 from onyx.chat.emitter import Emitter
-from onyx.chat.history_store import get_chat_history_store
+from onyx.chat.history_store import PostgresChatHistoryStore, get_chat_history_store
 from onyx.chat.models import (
     ChatBranch,
     ChatMessageMetadata,
@@ -1451,11 +1451,8 @@ def test_nested_child_visibility_and_reuse_follow_root_branch(
         (sibling, set()),
     ):
         branch = chat_subagents.load_chat_branch(selected.id)
-        store = get_chat_history_store(
-            message_id=selected.id,
-            chat_session_id=conversation.id,
-            persist_content=True,
-            branch=branch,
+        store = PostgresChatHistoryStore(
+            message_id=selected.id, chat_session_id=conversation.id, branch=branch
         )
         assert {agent.id for agent in store.list_agents()} == expected
     assert (
@@ -2130,10 +2127,9 @@ def test_discovery_batches_response_metadata(
     executed_sql.clear()
 
     if reuse_branch:
-        metadata = get_chat_history_store(
+        metadata = PostgresChatHistoryStore(
             message_id=message_id,
             chat_session_id=branch.chat_session_id,
-            persist_content=True,
             branch=branch,
         ).list_agents()
         assert len(executed_sql) == (3 if child_count else 1)
