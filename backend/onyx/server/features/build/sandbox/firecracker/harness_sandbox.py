@@ -40,6 +40,7 @@ from onyx.microvm.lifecycle import (
     wake_sandbox_vm,
 )
 from onyx.microvm.models import (
+    CancelSignal,
     ExecCommand,
     ExecCompletion,
     ExecGap,
@@ -80,10 +81,10 @@ from onyx.server.features.build.sandbox.harness_base import (
     POLL_MIN_YIELD_MS,
     WRITE_STDIN_DEFAULT_YIELD_MS,
     WRITE_STDIN_MAX_YIELD_MS,
+    ExecCapReachedError,
     ExecSessionEndedError,
     ExecSessionNotFoundError,
     HarnessSandbox,
-    HarnessSandboxError,
     SandboxFileTooLargeError,
     SandboxPathError,
     session_workspace,
@@ -145,7 +146,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox):
         client_factory: HostAgentClientFactory | None = None,
     ) -> None:
         if not template:
-            raise ValueError("FirecrackerHarnessSandbox needs a template version")
+            raise ValueError("FirecrackerHarnessSandbox needs a template image tag")
         self._template = template
         self._client_factory = client_factory or MtlsHostAgentClientFactory()
 
@@ -291,18 +292,6 @@ class FirecrackerHarnessSandbox(HarnessSandbox):
 
     # Exec
 
-    def _session_vm(
-        self, ref: HarnessSandboxRef
-    ) -> tuple[PlacedVm, SandboxDaemonClient]:
-        """The running VM and its daemon, with the session directory made."""
-        placed = self._place(ref)
-        daemon = sandbox_daemon(self._client_factory, placed)
-        directory = session_workspace(ref.session_id)
-        result = list(daemon.run(ExecCommand(argv=["mkdir", "-p", directory])))[-1]
-        if not isinstance(result, ExecResult) or result.exit_code != 0:
-            raise HarnessSandboxError(f"could not create {directory}")
-        return placed, daemon
-
     def exec_command(
         self,
         ref: HarnessSandboxRef,
@@ -317,16 +306,23 @@ class FirecrackerHarnessSandbox(HarnessSandbox):
         yield_seconds = _clamp_ms(
             yield_time_ms, EXEC_DEFAULT_YIELD_MS, EXEC_MIN_YIELD_MS, EXEC_MAX_YIELD_MS
         )
-        placed, daemon = self._session_vm(ref)
-        cwd = posixpath.join(session_workspace(ref.session_id), workdir or "")
-        started = daemon.start(
-            ExecCommand(
-                argv=["bash", "-c", cmd],
-                cwd=posixpath.normpath(cwd),
-                stdin=True,
-                deadline_seconds=EXEC_DEADLINE_SECONDS,
+        placed = self._place(ref)
+        daemon = sandbox_daemon(self._client_factory, placed)
+        try:
+            # The daemon makes the session directory, the default cwd.
+            started = daemon.start(
+                ExecCommand(
+                    argv=["bash", "-c", cmd],
+                    cwd=workdir or "",
+                    stdin=True,
+                    deadline_seconds=EXEC_DEADLINE_SECONDS,
+                    session_id=str(ref.session_id),
+                )
             )
-        )
+        except SandboxDaemonError as e:
+            if e.reason is SandboxDaemonErrorReason.EXECUTION_CAP_REACHED:
+                raise ExecCapReachedError() from e
+            raise
         record = ExecSessionRecord(
             exec_session_id=secrets.token_hex(4),
             chat_session_id=str(ref.session_id),
@@ -392,7 +388,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox):
             if text:
                 daemon.interact(record.execution_id, data=text.encode())
             if interrupt:
-                daemon.cancel(record.execution_id)
+                daemon.cancel(record.execution_id, CancelSignal.SIGINT)
         except SandboxDaemonError as e:
             if e.reason is SandboxDaemonErrorReason.EXECUTION_NOT_FOUND:
                 remove_exec_session(tenant_cache, ref.sandbox_id, exec_session_id)

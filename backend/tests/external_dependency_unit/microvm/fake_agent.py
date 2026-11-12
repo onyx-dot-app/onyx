@@ -58,6 +58,7 @@ _DAEMON_REASON_CODES: dict[SandboxDaemonErrorReason, grpc.StatusCode] = {
     SandboxDaemonErrorReason.FILE_NOT_FOUND: grpc.StatusCode.NOT_FOUND,
     SandboxDaemonErrorReason.FILE_EXISTS: grpc.StatusCode.ALREADY_EXISTS,
     SandboxDaemonErrorReason.LIMIT_EXCEEDED: grpc.StatusCode.RESOURCE_EXHAUSTED,
+    SandboxDaemonErrorReason.EXECUTION_CAP_REACHED: grpc.StatusCode.RESOURCE_EXHAUSTED,
 }
 
 
@@ -156,6 +157,9 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         self._ids = itertools.count(1)
         # Execution IDs of every Cancel.
         self.cancel_calls: list[str] = []
+        # Start and Run refuse with EXECUTION_CAP_REACHED at this many
+        # running executions of a VM.
+        self.max_running_executions = 64
         # Seconds each Create waits before it runs (to overlap two wakes).
         self.create_delay_seconds = 0.0
         # Seconds each Stop waits before it runs.
@@ -219,6 +223,10 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
                         context, HostAgentErrorReason.ATTEMPT_CONFLICT, "other attempt"
                     )
                 del self.vms[request.sandbox_id]
+            if all(t.version != request.template for t in self.templates):
+                abort_with_reason(
+                    context, HostAgentErrorReason.TEMPLATE_MISSING, "no template"
+                )
             if self.mem_available_mib < request.mem_mib:
                 abort_with_reason(
                     context, HostAgentErrorReason.CAPACITY_MEMORY, "not enough memory"
@@ -736,6 +744,13 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
             script = shlex.split(argv[2])
         if not script or script[0] not in ("echo", "fail", "cat", "sleep", "mkdir"):
             abort_daemon(context, SandboxDaemonErrorReason.START_FAILED, "no program")
+        running = [
+            e
+            for e in self.agent.executions.get(sandbox_id, {}).values()
+            if e.result is None
+        ]
+        if len(running) >= self.agent.max_running_executions:
+            abort_daemon(context, SandboxDaemonErrorReason.EXECUTION_CAP_REACHED, "cap")
         execution = FakeExecution(
             execution_id=self.agent.next_id("exec"),
             argv=argv,
@@ -908,8 +923,11 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
                 sandboxd_pb2.CANCEL_SIGNAL_SIGTERM,
             )
             if soft and not already_ended:
-                # The scripted command dies of the signal later; no result yet.
+                # Scripted commands do not trap signals: the command dies of
+                # it after the answer, which carries no result.
                 execution.signaled = request.signal
+                execution.end(sandboxd_pb2.CANCELED)
+                self.agent.ended.notify_all()
                 return sandboxd_pb2.CancelResponse(signaled=True)
             if not already_ended:
                 execution.end(sandboxd_pb2.CANCELED)

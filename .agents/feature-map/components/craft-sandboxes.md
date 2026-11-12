@@ -270,20 +270,27 @@ Harness sandboxes (the agent harness runs outside the sandbox):
 - `backend/onyx/server/features/build/sandbox/harness_base.py:HarnessSandbox`
   is the narrow interface the new harness calls: `ensure_running`, the Codex
   `exec_command` / `write_stdin` contract (yield time, head and tail output
-  caps, "\x03" interrupts), `read_file` / `write_file` (exact bytes for
+  caps, "\x03" sends SIGINT), `read_file` / `write_file` (exact bytes for
   view_image and apply_patch), `publish_artifact`, and busy signals (turn
   and parked-approval marks). Each chat session works in
   `SESSION_WORKSPACE_ROOT/<session_id>` (`/home/onyx/workspaces`).
 - `.../sandbox/firecracker/harness_sandbox.py:FirecrackerHarnessSandbox`
   implements it on the microvm code: wake on the first call (capacity
-  retry for 10 s), Init only when `Health.initialized` is false. Exec
+  retry for 10 s), Init only when `Health.initialized` is false or the
+  Health generation is not the VM's generation. Exec
   sessions are durable records in the tenant cache
   (`.../firecracker/harness_state.py`, no TTL, compare-and-set, the 64 most
   recently used per sandbox); a record of another VM instance raises
-  `ExecSessionEndedError`.
+  `ExecSessionEndedError`. Commands send `Command.session_id`, so the daemon
+  makes the session directory and uses it as the default cwd. A full daemon
+  execution table (`EXECUTION_CAP_REACHED`) raises `ExecCapReachedError`.
 - `.../sandbox/harness_factory.py:get_harness_sandbox` returns it with
-  `SANDBOX_RUNTIME=firecracker` and `SANDBOX_FC_TEMPLATE`. Opencode
-  sessions keep `get_sandbox_manager` (pod or Docker).
+  `SANDBOX_RUNTIME=firecracker` and `SANDBOX_FC_TEMPLATE`, the source image
+  tag of the root drive. Each node names its templates
+  `<tag>-<key hash[:12]>` and the hash differs per node, so
+  `backend/onyx/microvm/models.py:NodeInfo.template` takes an exact version or that node's newest
+  compatible template of the tag. Opencode sessions keep
+  `get_sandbox_manager` (pod or Docker).
 
 ---
 

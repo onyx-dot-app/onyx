@@ -18,6 +18,8 @@ from onyx.microvm.daemon_client import (
     SandboxDaemonError,
 )
 from onyx.microvm.generated.hostagent.v1 import hostagent_pb2
+from onyx.microvm.generated.sandboxd.v1 import sandboxd_pb2
+from onyx.microvm.lifecycle import sandbox_daemon
 from onyx.microvm.models import OutputStream
 from onyx.microvm.registry import get_sandbox_placement
 from onyx.server.features.build.sandbox import harness_base, harness_factory
@@ -35,6 +37,7 @@ from onyx.server.features.build.sandbox.firecracker.harness_sandbox import (
 )
 from onyx.server.features.build.sandbox.harness_base import (
     EXEC_DEFAULT_ENV,
+    ExecCapReachedError,
     ExecSessionEndedError,
     ExecSessionNotFoundError,
     SandboxFileTooLargeError,
@@ -218,6 +221,47 @@ def test_a_replaced_vm_after_a_crash_is_initialized(
     assert node.agent.daemon_inits[str(ref.sandbox_id)] == placement.generation
 
 
+def test_each_node_runs_its_own_newest_template_of_the_image_tag(
+    client_factory: InsecureClientFactory,
+    add_node: AddNode,
+    new_ref: NewRef,
+) -> None:
+    def template(
+        version: str, built: int, compatible: bool = True
+    ) -> hostagent_pb2.TemplateInfo:
+        info = hostagent_pb2.TemplateInfo(
+            version=version, vcpus=2, mem_mib=2048, scratch_gib=4, compatible=compatible
+        )
+        info.built_at.FromSeconds(built)
+        return info
+
+    first = add_node(f"fch-{uuid4().hex[:6]}")
+    second = add_node(f"fch-{uuid4().hex[:6]}")
+    first.agent.templates = [
+        template("dev-build-adf9a87-0123456789ab", 100),
+        template("dev-build-adf9a87-ba9876543210", 200),
+        # Newer, but its key does not fit the node.
+        template("dev-build-adf9a87-cccccccccccc", 300, compatible=False),
+        template("dev-build-old-dddddddddddd", 400),
+    ]
+    second.agent.templates = [template("dev-build-adf9a87-fedcba987654", 100)]
+    second.agent.mem_available_mib = 4096
+    sandbox = FirecrackerHarnessSandbox(
+        template="dev-build-adf9a87", client_factory=client_factory
+    )
+
+    on_first = new_ref()
+    sandbox.ensure_running(on_first)
+    first.agent.mem_available_mib = 0
+    on_second = new_ref()
+    sandbox.ensure_running(on_second)
+
+    vm = first.agent.vms[str(on_first.sandbox_id)]
+    assert vm.template == "dev-build-adf9a87-ba9876543210"
+    vm = second.agent.vms[str(on_second.sandbox_id)]
+    assert vm.template == "dev-build-adf9a87-fedcba987654"
+
+
 # Exec
 
 
@@ -238,11 +282,9 @@ def test_exec_command_returns_the_exit_and_output_of_a_short_command(
     executions = node.agent.executions[str(ref.sandbox_id)].values()
     command = next(e for e in executions if e.argv[:2] == ["bash", "-c"])
     assert command.argv == ["bash", "-c", "echo hi there"]
-    assert command.cwd == session_workspace(ref.session_id)
-    mkdirs = [e for e in executions if e.argv[0] == "mkdir"]
-    assert [m.argv for m in mkdirs] == [
-        ["mkdir", "-p", session_workspace(ref.session_id)]
-    ]
+    # The daemon makes the session directory and uses it as the default cwd.
+    assert command.session_id == str(ref.session_id)
+    assert command.cwd == ""
 
 
 def test_exec_command_reports_a_failed_command_and_relative_workdir(
@@ -259,7 +301,8 @@ def test_exec_command_reports_a_failed_command_and_relative_workdir(
         for e in node.agent.executions[str(ref.sandbox_id)].values()
         if e.argv[:2] == ["bash", "-c"]
     )
-    assert command.cwd == f"{session_workspace(ref.session_id)}/sub/dir"
+    assert command.session_id == str(ref.session_id)
+    assert command.cwd == "sub/dir"
 
 
 @pytest.mark.usefixtures("node")
@@ -295,6 +338,7 @@ def test_a_running_command_gets_an_exec_session_that_another_pod_serves(
 def test_an_empty_write_polls_until_the_command_ends(
     monkeypatch: pytest.MonkeyPatch,
     tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
     sandbox: FirecrackerHarnessSandbox,
     node: RunningFakeAgent,
     new_ref: NewRef,
@@ -316,14 +360,16 @@ def test_an_empty_write_polls_until_the_command_ends(
     assert polled.exec_session_id == session and polled.output == ""
 
     # The command ends between polls: the poll returns its exit at once.
-    sandbox._session_vm(ref)[1].interact(execution_id, data=b"bye", close_stdin=True)
+    sandbox_daemon(client_factory, sandbox._place(ref)).interact(
+        execution_id, data=b"bye", close_stdin=True
+    )
     _, ended = _run(sandbox.write_stdin(ref, session, yield_time_ms=10_000))
     assert ended.exit_code == 0 and ended.output == "bye"
     assert ended.exec_session_id is None
     assert harness_state.get_exec_session(tenant_cache, ref.sandbox_id, session) is None
 
 
-def test_ctrl_c_cancels_the_command(
+def test_ctrl_c_sends_sigint_to_the_command(
     tenant_cache: CacheBackend,
     sandbox: FirecrackerHarnessSandbox,
     node: RunningFakeAgent,
@@ -335,11 +381,28 @@ def test_ctrl_c_cancels_the_command(
     assert session is not None
 
     _, result = _run(sandbox.write_stdin(ref, session, "last\x03"))
+    [execution] = node.agent.executions[str(ref.sandbox_id)].values()
+    assert node.agent.cancel_calls == [execution.execution_id]
+    # SIGINT (Ctrl-C), not a kill of the cgroup.
+    assert execution.signaled == sandboxd_pb2.CANCEL_SIGNAL_SIGINT
     assert result.completion == "canceled"
     assert result.exit_code is None and result.exec_session_id is None
     assert result.output == "last"
-    assert len(node.agent.cancel_calls) == 1
     assert harness_state.get_exec_session(tenant_cache, ref.sandbox_id, session) is None
+
+
+def test_a_full_execution_table_is_a_clear_tool_error(
+    sandbox: FirecrackerHarnessSandbox,
+    node: RunningFakeAgent,
+    new_ref: NewRef,
+) -> None:
+    node.agent.max_running_executions = 1
+    ref = new_ref()
+    _, result = _run(sandbox.exec_command(ref, "cat", yield_time_ms=250))
+    assert result.exec_session_id is not None
+
+    with pytest.raises(ExecCapReachedError, match="Too many commands"):
+        _run(sandbox.exec_command(ref, "echo hi"))
 
 
 @pytest.mark.usefixtures("node")
@@ -603,6 +666,7 @@ def test_a_failed_registration_stops_the_started_command(
 @pytest.mark.usefixtures("node")
 def test_ctrl_c_on_an_ended_command_reports_its_exit(
     tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
     sandbox: FirecrackerHarnessSandbox,
     new_ref: NewRef,
 ) -> None:
@@ -612,7 +676,7 @@ def test_ctrl_c_on_an_ended_command_reports_its_exit(
     assert session is not None
     record = harness_state.get_exec_session(tenant_cache, ref.sandbox_id, session)
     assert record is not None
-    sandbox._session_vm(ref)[1].interact(
+    sandbox_daemon(client_factory, sandbox._place(ref)).interact(
         record.execution_id, data=b"", close_stdin=True
     )
     _, interrupted = _run(sandbox.write_stdin(ref, session, "\x03"))

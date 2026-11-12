@@ -101,6 +101,14 @@ class ExecSessionEndedError(HarnessSandboxError):
         )
 
 
+class ExecCapReachedError(HarnessSandboxError):
+    def __init__(self) -> None:
+        super().__init__(
+            "Too many commands run in this sandbox. Stop one (write_stdin "
+            'with "\\x03") or wait for one to end, then run the command again.'
+        )
+
+
 class SandboxPathError(HarnessSandboxError):
     """The path is outside the session directory."""
 
