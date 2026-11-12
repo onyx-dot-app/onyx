@@ -8,6 +8,8 @@ from onyx.agents.compaction import count_tokens
 from onyx.agents.execution_records import run_input_message_id
 from onyx.agents.models import (
     AgentInfo,
+    InputMessageMetadata,
+    InputSource,
     RunFailureKind,
     RunStatus,
     StepRecord,
@@ -45,6 +47,7 @@ from onyx.db.chat import (
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import record_mode_persists_content
 from onyx.db.models import (
+    AcceptedChatInput,
     ChatMessage,
     ChatResponseCheckpoint,
     ChatResponseItem,
@@ -845,6 +848,16 @@ def read_response_steps(response: ChatMessage) -> list[StepRecord]:
         if row.message.id != row.id or row.step_index != len(steps):
             raise ValueError("Response assistant identity or step is invalid")
         step = StepRecord(
+            input_messages=[
+                UserMessage(
+                    id=item.id,
+                    content=item.content,
+                    metadata=InputMessageMetadata(
+                        source=item.source, source_run_id=item.source_run_id
+                    ),
+                )
+                for item in row.inputs
+            ],
             message=row.message.model_copy(deep=True),
             generation_status=row.generation_status,
         )
@@ -887,6 +900,29 @@ def _invoking_message_id(invocation: ToolCall) -> str:
     }:
         raise ValueError("Tool invocation has no assistant message")
     return row.id
+
+
+def _accepted_inputs(messages: list[UserMessage]) -> list[AcceptedChatInput]:
+    inputs: list[AcceptedChatInput] = []
+    for message in messages:
+        if message.id is None or not isinstance(message.content, str):
+            raise ValueError("Saved response inputs require an identity and text")
+        origin = message.metadata
+        inputs.append(
+            AcceptedChatInput(
+                id=sanitize_string(message.id),
+                source=origin.source
+                if isinstance(origin, InputMessageMetadata)
+                else InputSource.HUMAN,
+                source_run_id=origin.source_run_id
+                if isinstance(origin, InputMessageMetadata)
+                else None,
+                content=sanitize_string(message.content),
+            )
+        )
+    if len({item.id for item in inputs}) != len(inputs):
+        raise ValueError("Received input identity is repeated")
+    return inputs
 
 
 def read_response_record(
@@ -985,6 +1021,10 @@ def write_response_items(
         if item_id not in existing:
             response.response_items.append(row)
         row.message = message
+        inputs = _accepted_inputs(step.input_messages)
+        if row.inputs and row.inputs != inputs:
+            raise ValueError("Accepted inputs cannot change")
+        row.inputs = inputs
         row.generation_status = step.generation_status
         row.is_answer = step_index == record.answer_step_index
         setting = presentation.pop(message_id, None)
