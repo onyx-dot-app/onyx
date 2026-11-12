@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
-  SvgBubbleText,
+  SvgCircle,
   SvgCheckAll,
   SvgCheckCircle,
   SvgLoader,
@@ -20,7 +20,10 @@ import { groupTimelineEntries } from "@/lib/timeline/entries";
 import type { TimelineStepPosition } from "@/lib/timeline/types";
 import TaskBody from "@/lib/timeline/craft/components/tool-cards/TaskBody";
 import SkillBadge from "@/lib/timeline/craft/components/tool-cards/SkillBadge";
-import ThinkingMarkdown from "@/lib/timeline/craft/components/ThinkingMarkdown";
+import {
+  ThinkingBody,
+  splitThinkingTitle,
+} from "@/lib/timeline/components/bodies/ThinkingBody";
 import {
   getToolCallStepIcon,
   hasToolCallBody,
@@ -46,14 +49,17 @@ function CraftTimelineStep({
   const { payload } = entry;
 
   if (payload.kind === "thinking") {
-    const header = t(
-      payload.isStreaming
-        ? "header.thinkingEllipsis.label"
-        : "header.thinking.label"
-    );
+    const { title, remainingContent } = splitThinkingTitle(payload.content);
+    const header =
+      title ??
+      t(
+        payload.isStreaming
+          ? "header.thinkingEllipsis.label"
+          : "header.thinking.label"
+      );
     return (
       <StepContainer
-        stepIcon={SvgBubbleText}
+        stepIcon={SvgCircle}
         header={header}
         toggleLabel={header}
         isExpanded={isExpanded}
@@ -64,8 +70,9 @@ function CraftTimelineStep({
         noPaddingRight
       >
         {isExpanded ? (
-          <ThinkingMarkdown
+          <ThinkingBody
             content={payload.content}
+            displayContent={title ? remainingContent : payload.content}
             isStreaming={payload.isStreaming}
           />
         ) : null}

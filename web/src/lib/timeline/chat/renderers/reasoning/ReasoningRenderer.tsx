@@ -1,10 +1,4 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 
 import {
@@ -16,53 +10,13 @@ import {
   MessageRenderer,
   FullChatState,
 } from "@/app/app/message/messageComponents/types";
-import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
-import ExpandableTextDisplay from "@/refresh-components/texts/ExpandableTextDisplay";
 import {
-  mutedTextMarkdownComponents,
-  collapsedMarkdownComponents,
-} from "@/lib/timeline/chat/renderers/sharedMarkdownComponents";
+  ThinkingBody,
+  splitThinkingTitle,
+} from "@/lib/timeline/components/bodies/ThinkingBody";
 import { SvgCircle } from "@opal/icons";
 
 const THINKING_MIN_DURATION_MS = 500; // 0.5 second minimum for "Thinking" state
-
-function extractFirstParagraph(content: string): {
-  title: string | null;
-  remainingContent: string;
-} {
-  if (!content || content.trim().length === 0) {
-    return { title: null, remainingContent: content };
-  }
-
-  const trimmed = content.trim();
-
-  // Split by double newline (paragraph break) or single newline
-  const lines = trimmed.split(/\n\n|\n/);
-  const firstLine = lines[0]?.trim();
-
-  if (!firstLine) {
-    return { title: null, remainingContent: content };
-  }
-
-  // Only treat as title if it's an actual markdown heading (starts with #)
-  const isMarkdownHeading = /^#+\s/.test(firstLine);
-  if (!isMarkdownHeading) {
-    return { title: null, remainingContent: content };
-  }
-
-  // Remove markdown heading markers (# ## ### etc.)
-  const cleanTitle = firstLine.replace(/^#+\s*/, "").trim();
-
-  // Only use as title if it's reasonably short (under ~60 chars for UI fit)
-  if (cleanTitle.length > 60) {
-    return { title: null, remainingContent: content };
-  }
-
-  // Remove the first line from content
-  const remainingContent = trimmed.slice(firstLine.length).replace(/^\n+/, "");
-
-  return { title: cleanTitle, remainingContent };
-}
 
 function constructCurrentReasoningState(packets: ReasoningPacket[]) {
   const hasStart = packets.some(
@@ -101,7 +55,7 @@ export const ReasoningRenderer: MessageRenderer<
   );
 
   const { title, remainingContent } = useMemo(
-    () => extractFirstParagraph(content),
+    () => splitThinkingTitle(content),
     [content]
   );
 
@@ -152,20 +106,6 @@ export const ReasoningRenderer: MessageRenderer<
     return () => clearTimeout(timeout);
   }, [hasEnd, reasoningStartTime, animate, onComplete]);
 
-  // Markdown renderer callback for ExpandableTextDisplay
-  // Uses collapsed components (no spacing) in collapsed view, normal spacing in expanded modal
-  const renderMarkdown = useCallback(
-    (text: string, isExpanded: boolean) => (
-      <MinimalMarkdown
-        content={text}
-        components={
-          isExpanded ? mutedTextMarkdownComponents : collapsedMarkdownComponents
-        }
-      />
-    ),
-    []
-  );
-
   if (!hasStart && !hasEnd && content.length === 0) {
     return children([
       {
@@ -178,15 +118,11 @@ export const ReasoningRenderer: MessageRenderer<
   }
 
   const reasoningContent = (
-    <div className="ps-(--timeline-common-text-padding)">
-      <ExpandableTextDisplay
-        title={t("reasoning.fullText.title")}
-        content={content}
-        displayContent={displayContent}
-        renderContent={renderMarkdown}
-        isStreaming={!hasEnd}
-      />
-    </div>
+    <ThinkingBody
+      content={content}
+      displayContent={displayContent}
+      isStreaming={!hasEnd}
+    />
   );
 
   return children([

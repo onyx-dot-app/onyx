@@ -1,4 +1,5 @@
 import { useTranslations } from "next-intl";
+import { RetrievalBody } from "@/lib/timeline/components/bodies/RetrievalBody";
 import { FetchToolPacket } from "@/app/app/services/streamingModels";
 import {
   MessageRenderer,
@@ -133,35 +134,18 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
       supportsCollapsible: false,
       timelineLayout: "timeline",
       content: (
-        <div className="flex flex-col">
-          {displayDocuments ? (
-            <SearchChipList
-              items={documents}
-              initialCount={INITIAL_URLS_TO_SHOW}
-              expansionCount={URLS_PER_EXPANSION}
-              getKey={(doc: OnyxDocument) => doc.document_id}
-              toSourceInfo={(doc: OnyxDocument) => documentToSourceInfo(doc)}
-              onClick={(doc: OnyxDocument) => {
-                if (doc.link) openExternalLink(doc.link);
-              }}
-              emptyState={!stopPacketSeen ? <BlinkingBar /> : undefined}
-            />
-          ) : displayUrls ? (
-            <SearchChipList
-              items={urls}
-              initialCount={INITIAL_URLS_TO_SHOW}
-              expansionCount={URLS_PER_EXPANSION}
-              getKey={(url: string) => url}
-              toSourceInfo={urlToSourceInfo}
-              onClick={(url: string) => openExternalLink(url)}
-              emptyState={!stopPacketSeen ? <BlinkingBar /> : undefined}
-            />
-          ) : (
-            <div className="flex flex-wrap gap-x-2 gap-y-2 ms-1">
-              {!stopPacketSeen && <BlinkingBar />}
-            </div>
-          )}
-        </div>
+        <RetrievalBody
+          queries={[]}
+          results={
+            displayDocuments
+              ? documents.map(documentToSourceInfo)
+              : displayUrls
+                ? urls.map(urlToSourceInfo)
+                : []
+          }
+          isComplete={stopPacketSeen}
+          compact
+        />
       ),
     },
   ]);
