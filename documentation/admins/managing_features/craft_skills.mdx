@@ -207,14 +207,15 @@ and choose a value under **Default Access**:
 
 | Value | Effect |
 | --- | --- |
-| **Available** | Members find the Skill and turn it on if they want it. This is the default. |
-| **Installed by default** | The Skill is on for every member. Members can turn it off. |
-| **Not available** | The Skill is hidden. Members cannot find it or turn it on. |
+| **Available to install** | Members find the Skill and turn it on if they want it. This is the default. |
+| **Installed by default** | Installed for every member. Members can turn it off. |
+| **Not available** | Hidden. Members cannot find it or turn it on. |
 
 **Required** is not a value of this setting, because it would turn on every published Skill for every member.
 
 With **Not available**, a newly published Skill reaches only its author and the people and groups it is shared with.
-Other members get it after an Admin sets an installation policy on the Skill.
+Other members get it after an Admin sets an installation policy on the Skill, for example **Available to install**.
+A Skill linked to an App gets **Available to install** as its own policy, so it stays visible to the organization.
 
 ### Control who shares
 
@@ -273,22 +274,28 @@ Transferring a private Skill to a person who has a Skill with the same name is a
 
 ## Choose an installation policy
 
-Admins set how a shared Skill is installed for everyone with access:
+Admins set how a shared Skill is installed for everyone with access. Open the Skill, select the **Sharing** tab,
+and choose a value under **Installation**:
 
 | Policy | Effect |
 | --- | --- |
-| **Available to install** | Users can install or uninstall the Skill at any time. |
-| **Installed by default** | Onyx installs it automatically. Users can disable or uninstall it. |
-| **Required** | Onyx installs it automatically. Users cannot disable or uninstall it. Only Admins can delete it. |
+| **Organization default** | The Skill has no policy of its own and uses **Default Access**. The option shows the current value. |
+| **Required** | Installed and always on. Members cannot turn it off. Only Admins can delete it. |
+| **Installed by default** | Installed for every member. Members can turn it off. |
+| **Available to install** | Members find it and turn it on if they want it. |
+| **Not available** | Hidden. Members cannot find it or turn it on. |
 
-The policy follows the current audience; changing who can access the Skill does not reset it.
+A policy of the Skill's own replaces **Default Access**. For example, with **Default Access** set to **Not available**,
+choose **Available to install** to show one Skill to every member. Onyx saves the policy only when you change it.
+A save of other sharing changes keeps the current policy. The policy follows the current audience;
+changing who can access the Skill does not reset it.
 
 ### Set a policy for a group
 
 By default, every group uses the organization setting.
 A group policy replaces the organization setting for the members of that group, also when it is stricter.
 A member in several groups gets the most open policy, in this order: **Required**, **Installed by default**,
-**Available**, **Not available**. Groups give access. They are not a security boundary:
+**Available to install**, **Not available**. Groups give access. They are not a security boundary:
 a person with a direct share still sees the Skill.
 
 To set a group policy:
@@ -300,7 +307,7 @@ To set a group policy:
 
   <Step title="Choose a policy">
     Each row is a Skill and its policy for this group. Choose **Organization setting** to use the organization setting,
-    or choose **Required**, **Installed by default**, **Available**, or **Not available**.
+    or choose **Required**, **Installed by default**, **Available to install**, or **Not available**.
     Onyx saves the change at once.
   </Step>
 
@@ -312,6 +319,13 @@ To set a group policy:
 
 To remove a group policy from a Skill that is not shared with the group, select the remove icon on its row.
 Members get the change at their next session.
+
+You can also set group policies from a Skill. Open the Skill, select the **Sharing** tab, and use **Group Access**.
+Each row is a group and its policy. Select **Add a group** to add a group with a policy but no share.
+The bulk sharing dialog has the same section. A group you list gets its policy on every selected Skill.
+
+On **Admin Panel → Skills**, each custom Skill card lists its groups and their policies.
+Use **Filter by group** next to the search field to show only the Skills of one group.
 
 A published Skill can have a group policy without a share. A group with **Can edit** cannot get **Not available**.
 Only users with the organization-wide `manage:plugins` permission set a group policy on a published Skill.
@@ -370,8 +384,8 @@ Do not transfer ownership to bots, service accounts, limited accounts, or inacti
   <Step title="Configure access and installation">
     Select **Share**. Choose **Everyone in the organization** to publish all selected Skills to your staff.
     Publishing cannot be undone. You can also add specific people or groups.
-    People and groups you list get the chosen permission. Other existing grants remain in place.
-    Settings left at **Keep unchanged** retain their current values.
+    People and groups you list get the chosen permission. Other existing grants remain in place. Under **Group Access**,
+    add groups and a policy for each. Settings left at **Keep unchanged** retain their current values.
   </Step>
 
   <Step title="Apply the changes">

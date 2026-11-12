@@ -574,9 +574,20 @@ class PluginGroupShare:
 
 
 @dataclass(frozen=True)
+class PluginGroupRowAccess:
+    """One plugin__user_group row. A row with no permission holds only a
+    setting."""
+
+    group_id: int
+    group_name: str
+    permission: SkillSharePermission | None
+    installation_policy: PluginInstallationPolicy | None
+
+
+@dataclass(frozen=True)
 class PluginAccess:
     """A plugin's grants and the values one user sees. Shares hold only rows
-    with a permission."""
+    with a permission; ``group_rows`` holds every group row."""
 
     plugin_id: UUID
     author_user_id: UUID | None
@@ -598,15 +609,10 @@ class PluginAccess:
     is_valid: bool | None
     user_shares: tuple[PluginUserShare, ...]
     group_shares: tuple[PluginGroupShare, ...]
+    group_rows: tuple[PluginGroupRowAccess, ...]
 
     # The default of the plugin's marketplace.
     marketplace_default_policy: PluginInstallationPolicy
-
-    @property
-    def own_installation_policy(self) -> PluginInstallationPolicy:
-        """The plugin's own setting as the skills API shows and writes it. No
-        setting shows as AVAILABLE, and AVAILABLE writes "no setting"."""
-        return self.installation_policy or PluginInstallationPolicy.AVAILABLE
 
     @property
     def company_installation_policy(self) -> PluginInstallationPolicy:
@@ -671,25 +677,33 @@ def load_plugin_access(
         )
 
     group_shares: dict[UUID, list[PluginGroupShare]] = {}
-    for plugin_id, group_id, group_name, permission in db_session.execute(
+    group_rows: dict[UUID, list[PluginGroupRowAccess]] = {}
+    for plugin_id, group_id, group_name, permission, policy in db_session.execute(
         select(
             Plugin__UserGroup.plugin_id,
             Plugin__UserGroup.user_group_id,
             UserGroup.name,
             Plugin__UserGroup.permission,
+            Plugin__UserGroup.installation_policy,
         )
         .join(UserGroup, UserGroup.id == Plugin__UserGroup.user_group_id)
-        .where(
-            Plugin__UserGroup.plugin_id.in_(ids),
-            Plugin__UserGroup.permission.is_not(None),
-        )
-        .order_by(Plugin__UserGroup.plugin_id, UserGroup.name)
+        .where(Plugin__UserGroup.plugin_id.in_(ids))
+        .order_by(Plugin__UserGroup.plugin_id, UserGroup.name, UserGroup.id)
     ):
-        group_shares.setdefault(plugin_id, []).append(
-            PluginGroupShare(
-                group_id=group_id, group_name=group_name, permission=permission
+        group_rows.setdefault(plugin_id, []).append(
+            PluginGroupRowAccess(
+                group_id=group_id,
+                group_name=group_name,
+                permission=permission,
+                installation_policy=policy,
             )
         )
+        if permission is not None:
+            group_shares.setdefault(plugin_id, []).append(
+                PluginGroupShare(
+                    group_id=group_id, group_name=group_name, permission=permission
+                )
+            )
 
     return {
         row[0]: PluginAccess(
@@ -710,6 +724,7 @@ def load_plugin_access(
             is_valid=row[14],
             user_shares=tuple(user_shares.get(row[0], ())),
             group_shares=tuple(group_shares.get(row[0], ())),
+            group_rows=tuple(group_rows.get(row[0], ())),
         )
         for row in plugin_rows
     }

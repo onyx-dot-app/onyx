@@ -5205,18 +5205,6 @@
         "defaultAccess": {
           "title": "기본 액세스",
           "description": "자체 설정이 없는 모든 게시된 스킬에 적용됩니다. 나중에 게시되는 스킬도 포함됩니다. {setting}",
-          "available": {
-            "label": "사용 가능",
-            "description": "멤버가 찾아서 원하면 켭니다."
-          },
-          "default": {
-            "label": "기본으로 설치됨",
-            "description": "모든 멤버에게 설치됩니다. 멤버는 끌 수 있습니다."
-          },
-          "notAvailable": {
-            "label": "사용 불가",
-            "description": "숨겨집니다. 멤버는 찾거나 켤 수 없습니다."
-          },
           "saveSuccess": {
             "message": "기본 액세스를 저장했습니다."
           },
@@ -6434,28 +6422,6 @@
         "intro": "이 그룹 구성원에게 각 플러그인을 설치하는 방식을 설정합니다.",
         "inheritance": "기본적으로 모든 그룹은 조직 설정을 사용합니다.",
         "conflicts": "그룹 설정은 더 엄격하더라도 해당 구성원에 대해 조직 설정을 대체합니다. 여러 그룹에 속한 구성원은 가장 개방적인 설정을 받습니다.",
-        "policy": {
-          "REQUIRED": {
-            "label": "필수",
-            "description": "설치되어 항상 켜져 있습니다. 구성원이 끌 수 없습니다."
-          },
-          "DEFAULT": {
-            "label": "기본 설치",
-            "description": "모든 구성원에게 설치됩니다. 구성원이 끌 수 있습니다."
-          },
-          "AVAILABLE": {
-            "label": "사용 가능",
-            "description": "구성원이 찾아서 원하면 켭니다."
-          },
-          "NOT_AVAILABLE": {
-            "label": "사용 불가",
-            "description": "숨겨집니다. 구성원이 찾거나 켤 수 없습니다."
-          }
-        },
-        "option": {
-          "inherit": "조직 설정({policy})",
-          "inheritDescription": "그룹 설정이 없습니다. 그룹은 조직 설정을 사용합니다."
-        },
         "row": {
           "shared": "이 그룹과 공유됨",
           "sharedPublished": "게시되었으며 이 그룹과 공유됨",
@@ -17492,15 +17458,7 @@
         },
         "installation": {
           "title": "설치",
-          "available": "설치 가능",
-          "default": "기본 설치",
-          "required": "필수",
-          "availableDescription": "사용자는 언제든지 설치하거나 제거할 수 있습니다.",
-          "defaultDescription": "자동으로 설치됩니다. 사용자는 언제든지 비활성화하거나 제거할 수 있습니다.",
-          "requiredDescription": "자동으로 설치됩니다. 사용자는 비활성화하거나 제거할 수 없습니다.",
-          "description": "액세스 권한이 있는 모든 사용자의 스킬 설치 방법을 선택하세요.",
-          "notAvailable": "사용 불가",
-          "notAvailableDescription": "숨겨집니다. 멤버는 찾거나 켤 수 없습니다."
+          "description": "액세스 권한이 있는 모든 사용자의 스킬 설치 방법을 선택하세요."
         },
         "description": "이 스킬을 사용할 수 있는 사용자와 설치 방법을 선택하세요.",
         "accessTitle": "액세스 범위",
@@ -17526,6 +17484,16 @@
         "publishReview": {
           "title": "관리자가 이 게시를 승인해야 합니다",
           "description": "관리자가 요청을 승인할 때까지 스킬은 비공개로 유지됩니다."
+        },
+        "groupAccess": {
+          "title": "그룹 액세스",
+          "description": "기본적으로 모든 그룹은 조직 설정을 사용합니다. 그룹 설정은 더 엄격한 경우에도 그룹 구성원에 대해 조직 설정을 대체합니다.",
+          "bulkDescription": "선택한 모든 스킬에 이 그룹을 설정합니다. 지정하지 않은 그룹은 현재 설정을 유지합니다.",
+          "add": "그룹 추가",
+          "select": "{name} 설정",
+          "remove": "{name} 제거",
+          "shared": "이 그룹과 공유됨",
+          "settingOnly": "그룹 설정만"
         }
       },
       "placeholders": {
@@ -17615,7 +17583,8 @@
       "empty": {
         "noMatches": {
           "description": "다른 검색어를 사용해 보세요.",
-          "title": "일치하는 스킬 없음"
+          "title": "일치하는 스킬 없음",
+          "groupDescription": "이 그룹에서 일치하는 스킬이 없습니다. 다른 그룹이나 검색어를 사용해 보세요."
         },
         "noSkills": {
           "title": "아직 사용자 지정 스킬이 없습니다",
@@ -17779,6 +17748,40 @@
         "description": "나중에 다시 시도하세요."
       },
       "empty": "검토를 기다리는 스킬이 없습니다."
+    },
+    "installationPolicy": {
+      "REQUIRED": {
+        "label": "필수",
+        "description": "설치되어 항상 켜져 있습니다. 구성원이 끌 수 없습니다."
+      },
+      "DEFAULT": {
+        "label": "기본 설치",
+        "description": "모든 구성원에게 설치됩니다. 구성원이 끌 수 있습니다."
+      },
+      "AVAILABLE": {
+        "label": "설치 가능",
+        "description": "구성원이 찾아서 원하면 켭니다."
+      },
+      "NOT_AVAILABLE": {
+        "label": "사용 불가",
+        "description": "숨겨집니다. 구성원이 찾거나 켤 수 없습니다."
+      },
+      "inherit": {
+        "group": "조직 설정({policy})",
+        "groupAny": "조직 설정",
+        "groupDescription": "그룹 설정이 없습니다. 그룹은 조직 설정을 사용합니다.",
+        "organization": "조직 기본값({policy})",
+        "organizationAny": "조직 기본값",
+        "organizationDescription": "자체 설정이 없습니다. 관리자가 변경한 후에도 스킬은 기본 액세스를 사용합니다."
+      }
+    },
+    "groups": {
+      "filter": {
+        "placeholder": "그룹으로 필터링",
+        "all": "모든 그룹"
+      },
+      "card": "그룹: {groups}",
+      "entry": "{name}: {policy}"
     }
   },
   "opensearchHealth": {

@@ -193,6 +193,7 @@ export function ImportSkillsFromGitHubModalView({
   onConfigureSharing,
 }: ImportSkillsFromGitHubModalViewProps) {
   const t = useTranslations("skills.modals");
+  const policyCopy = useTranslations("skills.installationPolicy");
   const importablePaths = useMemo(
     () =>
       preview?.skills
@@ -461,9 +462,9 @@ export function ImportSkillsFromGitHubModalView({
                 >
                   {isAdmin && (
                     <Text font="secondary-body" color="text-03">
-                      {t(
-                        `share.installation.${({ AVAILABLE: "available", DEFAULT: "default", REQUIRED: "required", NOT_AVAILABLE: "notAvailable" } as const)[sharing.installation_policy]}`
-                      )}
+                      {sharing.installation_policy === null
+                        ? policyCopy("inherit.organizationAny")
+                        : policyCopy(`${sharing.installation_policy}.label`)}
                     </Text>
                   )}
                   <Text font="secondary-body" color="text-03">

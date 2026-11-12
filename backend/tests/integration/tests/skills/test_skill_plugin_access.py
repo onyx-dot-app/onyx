@@ -415,14 +415,20 @@ def test_organization_editor_is_refused(owner: DATestUser) -> None:
 
 @pytest.mark.parametrize(
     ("policy", "plugin_policy"),
-    [("DEFAULT", "DEFAULT"), ("REQUIRED", "REQUIRED"), ("AVAILABLE", None)],
+    [
+        ("DEFAULT", "DEFAULT"),
+        ("REQUIRED", "REQUIRED"),
+        ("AVAILABLE", "AVAILABLE"),
+        (None, None),
+    ],
 )
 def test_install_setting_writes_plugin_policy(
-    admin_user: DATestUser, policy: str, plugin_policy: str | None
+    admin_user: DATestUser, policy: str | None, plugin_policy: str | None
 ) -> None:
+    """AVAILABLE is an own setting; null clears it."""
     single = SkillManager.create_custom(admin_user, name=_name("policy"))
     bulk = SkillManager.create_custom(admin_user, name=_name("policy-bulk"))
-    if policy == "AVAILABLE":
+    if policy is None:
         for skill in (single, bulk):
             _share(
                 admin_user, skill.id, {"installation_policy": "DEFAULT"}

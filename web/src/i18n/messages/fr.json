@@ -5205,18 +5205,6 @@
         "defaultAccess": {
           "title": "Accès par défaut",
           "description": "S'applique à chaque skill publié sans réglage propre, y compris ceux publiés plus tard. {setting}",
-          "available": {
-            "label": "Disponible",
-            "description": "Les membres le trouvent et l'activent s'ils le souhaitent."
-          },
-          "default": {
-            "label": "Installé par défaut",
-            "description": "Installé pour chaque membre. Les membres peuvent le désactiver."
-          },
-          "notAvailable": {
-            "label": "Non disponible",
-            "description": "Masqué. Les membres ne peuvent ni le trouver ni l'activer."
-          },
           "saveSuccess": {
             "message": "Accès par défaut enregistré."
           },
@@ -6434,28 +6422,6 @@
         "intro": "Définissez comment chaque plugin est installé pour les membres de ce groupe.",
         "inheritance": "Par défaut, chaque groupe utilise le paramètre de l'organisation.",
         "conflicts": "Un paramètre de groupe remplace celui de l'organisation pour ses membres, même s'il est plus strict. Un membre de plusieurs groupes obtient le paramètre le plus ouvert.",
-        "policy": {
-          "REQUIRED": {
-            "label": "Obligatoire",
-            "description": "Installé et toujours actif. Les membres ne peuvent pas le désactiver."
-          },
-          "DEFAULT": {
-            "label": "Installé par défaut",
-            "description": "Installé pour chaque membre. Les membres peuvent le désactiver."
-          },
-          "AVAILABLE": {
-            "label": "Disponible",
-            "description": "Les membres le trouvent et l'activent s'ils le souhaitent."
-          },
-          "NOT_AVAILABLE": {
-            "label": "Non disponible",
-            "description": "Masqué. Les membres ne peuvent ni le trouver ni l'activer."
-          }
-        },
-        "option": {
-          "inherit": "Paramètre de l'organisation ({policy})",
-          "inheritDescription": "Aucun paramètre de groupe. Le groupe utilise le paramètre de l'organisation."
-        },
         "row": {
           "shared": "Partagé avec ce groupe",
           "sharedPublished": "Publié et partagé avec ce groupe",
@@ -17492,15 +17458,7 @@
         },
         "installation": {
           "title": "Installation",
-          "available": "Disponible à l’installation",
-          "default": "Installé par défaut",
-          "required": "Obligatoire",
-          "availableDescription": "Les utilisateurs peuvent installer ou désinstaller à tout moment.",
-          "defaultDescription": "Installé automatiquement. Les utilisateurs peuvent désactiver ou désinstaller à tout moment.",
-          "requiredDescription": "Installé automatiquement. Les utilisateurs ne peuvent ni désactiver ni désinstaller.",
-          "description": "Choisissez comment cette compétence est installée pour les personnes ayant accès.",
-          "notAvailable": "Non disponible",
-          "notAvailableDescription": "Masqué. Les membres ne peuvent ni le trouver ni l'activer."
+          "description": "Choisissez comment cette compétence est installée pour les personnes ayant accès."
         },
         "description": "Choisissez qui peut utiliser cette compétence et comment elle est installée.",
         "accessTitle": "Qui peut accéder",
@@ -17526,6 +17484,16 @@
         "publishReview": {
           "title": "Un administrateur doit approuver cette publication",
           "description": "La compétence reste privée jusqu'à ce qu'un administrateur approuve la demande."
+        },
+        "groupAccess": {
+          "title": "Accès des groupes",
+          "description": "Par défaut, chaque groupe utilise le paramètre de l'organisation. Un paramètre de groupe le remplace pour les membres du groupe, même s'il est plus strict.",
+          "bulkDescription": "Appliquez ces groupes à chaque compétence sélectionnée. Les groupes que vous n'indiquez pas gardent leurs paramètres.",
+          "add": "Ajouter un groupe",
+          "select": "Paramètre pour {name}",
+          "remove": "Retirer {name}",
+          "shared": "Partagé avec ce groupe",
+          "settingOnly": "Paramètre de groupe uniquement"
         }
       },
       "placeholders": {
@@ -17615,7 +17583,8 @@
       "empty": {
         "noMatches": {
           "description": "Essayez une autre recherche.",
-          "title": "Aucune compétence correspondante"
+          "title": "Aucune compétence correspondante",
+          "groupDescription": "Aucune compétence de ce groupe ne correspond. Essayez un autre groupe ou une autre recherche."
         },
         "noSkills": {
           "title": "Aucune compétence personnalisée pour le moment",
@@ -17779,6 +17748,40 @@
         "description": "Réessayez plus tard."
       },
       "empty": "Aucune compétence n'attend d'examen."
+    },
+    "installationPolicy": {
+      "REQUIRED": {
+        "label": "Obligatoire",
+        "description": "Installé et toujours actif. Les membres ne peuvent pas le désactiver."
+      },
+      "DEFAULT": {
+        "label": "Installé par défaut",
+        "description": "Installé pour chaque membre. Les membres peuvent le désactiver."
+      },
+      "AVAILABLE": {
+        "label": "Disponible à l’installation",
+        "description": "Les membres le trouvent et l'activent s'ils le souhaitent."
+      },
+      "NOT_AVAILABLE": {
+        "label": "Non disponible",
+        "description": "Masqué. Les membres ne peuvent ni le trouver ni l'activer."
+      },
+      "inherit": {
+        "group": "Paramètre de l'organisation ({policy})",
+        "groupAny": "Paramètre de l'organisation",
+        "groupDescription": "Aucun paramètre de groupe. Le groupe utilise le paramètre de l'organisation.",
+        "organization": "Valeur par défaut de l'organisation ({policy})",
+        "organizationAny": "Valeur par défaut de l'organisation",
+        "organizationDescription": "Aucun paramètre propre. La compétence utilise l'accès par défaut, même après une modification par un administrateur."
+      }
+    },
+    "groups": {
+      "filter": {
+        "placeholder": "Filtrer par groupe",
+        "all": "Tous les groupes"
+      },
+      "card": "Groupes : {groups}",
+      "entry": "{name} : {policy}"
     }
   },
   "opensearchHealth": {

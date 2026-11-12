@@ -72,17 +72,17 @@ describe("GroupPluginsTab", () => {
     ).toBeVisible();
     expect(
       screen.getByText(
-        "Shared with this group · Uses the organization setting: Available."
+        "Shared with this group · Uses the organization setting: Available to install."
       )
     ).toBeVisible();
     expect(
       screen.getByText(
-        "Group setting only · Group setting: Required. Organization setting: Available."
+        "Group setting only · Group setting: Required. Organization setting: Available to install."
       )
     ).toBeVisible();
     expect(
       screen.getByRole("combobox", { name: "Setting for deploy" })
-    ).toHaveValue("Organization setting (Available)");
+    ).toHaveValue("Organization setting (Available to install)");
   });
 
   it("saves a new setting", async () => {

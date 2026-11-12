@@ -1179,6 +1179,7 @@ def share_current_user_skill(
     if (
         share_req.user_shares is None
         and share_req.group_shares is None
+        and share_req.group_settings is None
         and "installation_policy" not in share_req.model_fields_set
         and "public_permission" not in share_req.model_fields_set
     ):

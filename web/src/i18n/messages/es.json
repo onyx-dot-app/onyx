@@ -5205,18 +5205,6 @@
         "defaultAccess": {
           "title": "Acceso predeterminado",
           "description": "Se aplica a cada skill publicado que no tiene su propia configuración, incluidos los que se publiquen después. {setting}",
-          "available": {
-            "label": "Disponible",
-            "description": "Los miembros lo encuentran y lo activan si lo necesitan."
-          },
-          "default": {
-            "label": "Instalado por defecto",
-            "description": "Instalado para cada miembro. Los miembros pueden desactivarlo."
-          },
-          "notAvailable": {
-            "label": "No disponible",
-            "description": "Oculto. Los miembros no pueden encontrarlo ni activarlo."
-          },
           "saveSuccess": {
             "message": "Acceso predeterminado guardado."
           },
@@ -6434,28 +6422,6 @@
         "intro": "Define cómo se instala cada plugin para los miembros de este grupo.",
         "inheritance": "De forma predeterminada, cada grupo usa la configuración de la organización.",
         "conflicts": "Una configuración de grupo reemplaza la de la organización para sus miembros, incluso si es más estricta. Un miembro de varios grupos obtiene la configuración más abierta.",
-        "policy": {
-          "REQUIRED": {
-            "label": "Obligatorio",
-            "description": "Instalado y siempre activo. Los miembros no pueden desactivarlo."
-          },
-          "DEFAULT": {
-            "label": "Instalado de forma predeterminada",
-            "description": "Instalado para cada miembro. Los miembros pueden desactivarlo."
-          },
-          "AVAILABLE": {
-            "label": "Disponible",
-            "description": "Los miembros lo encuentran y lo activan si lo quieren."
-          },
-          "NOT_AVAILABLE": {
-            "label": "No disponible",
-            "description": "Oculto. Los miembros no pueden encontrarlo ni activarlo."
-          }
-        },
-        "option": {
-          "inherit": "Configuración de la organización ({policy})",
-          "inheritDescription": "Sin configuración de grupo. El grupo usa la configuración de la organización."
-        },
         "row": {
           "shared": "Compartido con este grupo",
           "sharedPublished": "Publicado y compartido con este grupo",
@@ -17492,15 +17458,7 @@
         },
         "installation": {
           "title": "Instalación",
-          "available": "Disponible para instalar",
-          "default": "Instalado de forma predeterminada",
-          "required": "Obligatorio",
-          "availableDescription": "Los usuarios pueden instalar o desinstalar en cualquier momento.",
-          "defaultDescription": "Se instala automáticamente. Los usuarios pueden desactivar o desinstalar en cualquier momento.",
-          "requiredDescription": "Se instala automáticamente. Los usuarios no pueden desactivar ni desinstalar.",
-          "description": "Elige cómo se instala esta habilidad para quienes tienen acceso.",
-          "notAvailable": "No disponible",
-          "notAvailableDescription": "Oculto. Los miembros no pueden encontrarlo ni activarlo."
+          "description": "Elige cómo se instala esta habilidad para quienes tienen acceso."
         },
         "description": "Elige quién puede usar esta habilidad y cómo se instala.",
         "accessTitle": "Quién puede acceder",
@@ -17526,6 +17484,16 @@
         "publishReview": {
           "title": "Un administrador debe aprobar esta publicación",
           "description": "La habilidad sigue privada hasta que un administrador apruebe la solicitud."
+        },
+        "groupAccess": {
+          "title": "Acceso de grupos",
+          "description": "De forma predeterminada, cada grupo usa la configuración de la organización. Una configuración de grupo la reemplaza para los miembros del grupo, también cuando es más estricta.",
+          "bulkDescription": "Aplica estos grupos a cada skill seleccionado. Los grupos que no indiques conservan su configuración.",
+          "add": "Agregar un grupo",
+          "select": "Configuración para {name}",
+          "remove": "Quitar {name}",
+          "shared": "Compartido con este grupo",
+          "settingOnly": "Solo configuración del grupo"
         }
       },
       "placeholders": {
@@ -17615,7 +17583,8 @@
       "empty": {
         "noMatches": {
           "description": "Prueba con otra búsqueda.",
-          "title": "No hay habilidades coincidentes"
+          "title": "No hay habilidades coincidentes",
+          "groupDescription": "Ningún skill de este grupo coincide. Prueba otro grupo u otra búsqueda."
         },
         "noSkills": {
           "title": "Aún no hay habilidades personalizadas",
@@ -17779,6 +17748,40 @@
         "description": "Inténtalo de nuevo más tarde."
       },
       "empty": "No hay habilidades esperando revisión."
+    },
+    "installationPolicy": {
+      "REQUIRED": {
+        "label": "Obligatorio",
+        "description": "Instalado y siempre activo. Los miembros no pueden desactivarlo."
+      },
+      "DEFAULT": {
+        "label": "Instalado de forma predeterminada",
+        "description": "Instalado para cada miembro. Los miembros pueden desactivarlo."
+      },
+      "AVAILABLE": {
+        "label": "Disponible para instalar",
+        "description": "Los miembros lo encuentran y lo activan si lo quieren."
+      },
+      "NOT_AVAILABLE": {
+        "label": "No disponible",
+        "description": "Oculto. Los miembros no pueden encontrarlo ni activarlo."
+      },
+      "inherit": {
+        "group": "Configuración de la organización ({policy})",
+        "groupAny": "Configuración de la organización",
+        "groupDescription": "Sin configuración de grupo. El grupo usa la configuración de la organización.",
+        "organization": "Valor predeterminado de la organización ({policy})",
+        "organizationAny": "Valor predeterminado de la organización",
+        "organizationDescription": "Sin configuración propia. El skill usa el acceso predeterminado, también después de que un administrador lo cambie."
+      }
+    },
+    "groups": {
+      "filter": {
+        "placeholder": "Filtrar por grupo",
+        "all": "Todos los grupos"
+      },
+      "card": "Grupos: {groups}",
+      "entry": "{name}: {policy}"
     }
   },
   "opensearchHealth": {

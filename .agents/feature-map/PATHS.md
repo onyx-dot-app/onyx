@@ -304,7 +304,7 @@ covers new files that match it.
 | `web/src/app/craft/v1/plugins/` | craft-external-apps, plugins |
 | `web/src/app/craft/v1/skills/`, `web/src/app/craft/components/SkillsStaleNotice.tsx` | skills |
 | `web/src/app/admin/skills/` | skills |
-| `web/src/views/admin/GroupsPage/GroupPluginsTab.tsx`, `web/src/views/admin/GroupsPage/GroupPluginSettingRow.tsx`, `web/src/views/admin/GroupsPage/groupPluginPolicies.ts`, `web/src/lib/groupPlugins/` | skills |
+| `web/src/views/admin/GroupsPage/GroupPluginsTab.tsx`, `web/src/views/admin/GroupsPage/GroupPluginSettingRow.tsx`, `web/src/lib/groupPlugins/` | skills |
 | `web/src/views/SkillsPage.tsx`, `web/src/views/SkillEditorPage.tsx`, `web/src/sections/skills/`, `web/src/sections/modals/skills/`, `web/src/sections/cards/SkillCard.tsx`, `web/src/hooks/useUserSkills.ts`, `web/src/lib/skills/`, `web/src/sections/modals/SkillPreviewModal.tsx` | skills |
 
 ## Frontend: admin and platform

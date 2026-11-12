@@ -28,6 +28,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.skill.models import (
     SkillExternalAppDependencyResponse,
+    SkillGroupSummary,
     SkillPreviewResponse,
     SkillResponse,
     SkillsList,
@@ -115,6 +116,30 @@ def user_permission_for_skill(
     return None
 
 
+def _group_summaries(
+    access: PluginAccess | None,
+    user_permission: SkillAccessLevel | None,
+    managed_user_group_ids: set[int] | None,
+) -> list[SkillGroupSummary]:
+    """The group rows the caller may see: every row for a user who may edit
+    the skill (the rule of the share details), else the rows of the groups a
+    scoped manager manages."""
+    if access is None:
+        return []
+    can_edit = user_permission in (SkillAccessLevel.OWNER, SkillAccessLevel.EDITOR)
+    managed = managed_user_group_ids or set()
+    return [
+        SkillGroupSummary(
+            group_id=row.group_id,
+            group_name=row.group_name,
+            permission=row.permission,
+            installation_policy=row.installation_policy,
+        )
+        for row in access.group_rows
+        if can_edit or row.group_id in managed
+    ]
+
+
 def skill_response_for_user(
     skill: Skill,
     user: User,
@@ -166,21 +191,25 @@ def skill_response_for_user(
             shown_version_number = get_plugin_version_number(
                 shown_version_id, db_session
             )
+    user_permission = user_permission_for_skill(
+        skill,
+        access,
+        user,
+        user_group_ids,
+        managed_user_group_ids,
+        managed_member_ids,
+    )
     return SkillResponse.from_custom(
         skill,
         access,
         enabled=state.enabled,
         can_toggle=state.can_toggle,
         effective_installation_policy=state.installation_policy,
-        user_permission=user_permission_for_skill(
-            skill,
-            access,
-            user,
-            user_group_ids,
-            managed_user_group_ids,
-            managed_member_ids,
-        ),
+        user_permission=user_permission,
         include_share_details=include_share_details,
+        group_summaries=_group_summaries(
+            access, user_permission, managed_user_group_ids
+        ),
         external_app=_dependency_response(state.external_app_dependency),
         current_version_id=shown_version_id,
         current_version_number=shown_version_number,

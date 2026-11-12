@@ -5205,18 +5205,6 @@
         "defaultAccess": {
           "title": "デフォルトのアクセス",
           "description": "独自の設定がない公開済みスキルすべてに適用されます。後から公開されるスキルも含みます。 {setting}",
-          "available": {
-            "label": "利用可能",
-            "description": "メンバーが見つけて、必要なら有効にします。"
-          },
-          "default": {
-            "label": "デフォルトでインストール",
-            "description": "すべてのメンバーにインストールされます。メンバーは無効にできます。"
-          },
-          "notAvailable": {
-            "label": "利用不可",
-            "description": "非表示。メンバーは見つけることも有効にすることもできません。"
-          },
           "saveSuccess": {
             "message": "デフォルトのアクセスを保存しました。"
           },
@@ -6434,28 +6422,6 @@
         "intro": "このグループのメンバーに各プラグインをどのようにインストールするかを設定します。",
         "inheritance": "既定では、すべてのグループが組織の設定を使用します。",
         "conflicts": "グループ設定は、より厳しい場合でも、そのメンバーについて組織の設定を置き換えます。複数のグループに属するメンバーには、最も緩い設定が適用されます。",
-        "policy": {
-          "REQUIRED": {
-            "label": "必須",
-            "description": "インストール済みで常にオンです。メンバーはオフにできません。"
-          },
-          "DEFAULT": {
-            "label": "既定でインストール",
-            "description": "すべてのメンバーにインストールされます。メンバーはオフにできます。"
-          },
-          "AVAILABLE": {
-            "label": "利用可能",
-            "description": "メンバーが見つけて、必要に応じてオンにします。"
-          },
-          "NOT_AVAILABLE": {
-            "label": "利用不可",
-            "description": "非表示です。メンバーは見つけることもオンにすることもできません。"
-          }
-        },
-        "option": {
-          "inherit": "組織の設定（{policy}）",
-          "inheritDescription": "グループ設定はありません。グループは組織の設定を使用します。"
-        },
         "row": {
           "shared": "このグループと共有",
           "sharedPublished": "公開済みでこのグループと共有",
@@ -17492,15 +17458,7 @@
         },
         "installation": {
           "title": "インストール",
-          "available": "インストール可能",
-          "default": "デフォルトでインストール",
-          "required": "必須",
-          "availableDescription": "ユーザーはいつでもインストールまたはアンインストールできます。",
-          "defaultDescription": "自動でインストールされます。ユーザーはいつでも無効化またはアンインストールできます。",
-          "requiredDescription": "自動でインストールされます。ユーザーは無効化またはアンインストールできません。",
-          "description": "アクセス権を持つ全員に対するスキルのインストール方法を選択します。",
-          "notAvailable": "利用不可",
-          "notAvailableDescription": "非表示。メンバーは見つけることも有効にすることもできません。"
+          "description": "アクセス権を持つ全員に対するスキルのインストール方法を選択します。"
         },
         "description": "このスキルを使用できるユーザーとインストール方法を選択します。",
         "accessTitle": "アクセス範囲",
@@ -17526,6 +17484,16 @@
         "publishReview": {
           "title": "この公開には管理者の承認が必要です",
           "description": "管理者がリクエストを承認するまで、スキルは非公開のままです。"
+        },
+        "groupAccess": {
+          "title": "グループアクセス",
+          "description": "デフォルトでは、各グループは組織の設定を使用します。グループの設定は、より厳しい場合でも、そのグループのメンバーに対して組織の設定を置き換えます。",
+          "bulkDescription": "選択した各スキルにこれらのグループを設定します。指定しないグループは現在の設定を維持します。",
+          "add": "グループを追加",
+          "select": "{name} の設定",
+          "remove": "{name} を削除",
+          "shared": "このグループと共有済み",
+          "settingOnly": "グループ設定のみ"
         }
       },
       "placeholders": {
@@ -17615,7 +17583,8 @@
       "empty": {
         "noMatches": {
           "description": "別の検索をお試しください。",
-          "title": "一致するスキルがありません"
+          "title": "一致するスキルがありません",
+          "groupDescription": "このグループに一致するスキルはありません。別のグループまたは検索を試してください。"
         },
         "noSkills": {
           "title": "カスタムスキルはまだありません",
@@ -17779,6 +17748,40 @@
         "description": "後でもう一度お試しください。"
       },
       "empty": "レビュー待ちのスキルはありません。"
+    },
+    "installationPolicy": {
+      "REQUIRED": {
+        "label": "必須",
+        "description": "インストール済みで常にオンです。メンバーはオフにできません。"
+      },
+      "DEFAULT": {
+        "label": "既定でインストール",
+        "description": "すべてのメンバーにインストールされます。メンバーはオフにできます。"
+      },
+      "AVAILABLE": {
+        "label": "インストール可能",
+        "description": "メンバーが見つけて、必要に応じてオンにします。"
+      },
+      "NOT_AVAILABLE": {
+        "label": "利用不可",
+        "description": "非表示です。メンバーは見つけることもオンにすることもできません。"
+      },
+      "inherit": {
+        "group": "組織の設定（{policy}）",
+        "groupAny": "組織の設定",
+        "groupDescription": "グループ設定はありません。グループは組織の設定を使用します。",
+        "organization": "組織のデフォルト（{policy}）",
+        "organizationAny": "組織のデフォルト",
+        "organizationDescription": "独自の設定はありません。管理者が変更した後も、スキルはデフォルトアクセスを使用します。"
+      }
+    },
+    "groups": {
+      "filter": {
+        "placeholder": "グループで絞り込む",
+        "all": "すべてのグループ"
+      },
+      "card": "グループ: {groups}",
+      "entry": "{name}: {policy}"
     }
   },
   "opensearchHealth": {

@@ -88,6 +88,7 @@ from onyx.db.plugin import (
     PluginAccessChange,
     PluginAccessMode,
     PluginGroupGrant,
+    PluginGroupSetting,
     PluginUserGrant,
     add_plugin_version__no_commit,
     apply_plugin_access_change__no_commit,
@@ -129,7 +130,6 @@ from onyx.db.utils import (
     UNSET,
     UnsetType,
     is_fk_violation,
-    is_set,
     is_unique_violation,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -1153,8 +1153,8 @@ def persist_skill_validity(
 class SkillSharingChange:
     """A partial update to a skill's access, as the skills API sends it. None
     shares leave that kind unchanged; set_public_permission marks
-    public_permission as supplied. ``installation_policy``: UNSET keeps it, and
-    None or AVAILABLE means "use the marketplace default"."""
+    public_permission as supplied. ``installation_policy``: UNSET keeps it,
+    None means "use the marketplace default", and a value sets that value."""
 
     public_permission: SkillSharePermission | None = None
     set_public_permission: bool = False
@@ -1166,6 +1166,8 @@ class SkillSharingChange:
     group_installation_policies: Mapping[int, PluginInstallationPolicy | None] = field(
         default_factory=dict
     )
+    # Group install settings with no change to the share. None removes one.
+    group_settings: Mapping[int, PluginInstallationPolicy | None] | None = None
 
 
 SkillBulkAction = Literal["enable", "disable", "delete"]
@@ -1217,19 +1219,22 @@ def _plugin_access_change(
 ) -> PluginAccessChange:
     """The plugin change for a skills API change. Organization access is
     checked per skill (``_publish_requested``); VIEWER publishes."""
-    policy = change.installation_policy
     return PluginAccessChange(
         user_grants=_user_grants(change.user_shares),
         group_grants=_group_grants(
             change.group_shares, change.group_installation_policies
         ),
+        group_settings=(
+            tuple(
+                PluginGroupSetting(group_id=group_id, installation_policy=policy)
+                for group_id, policy in change.group_settings.items()
+            )
+            if change.group_settings is not None
+            else None
+        ),
         publish=change.set_public_permission
         and change.public_permission == SkillSharePermission.VIEWER,
-        company_installation_policy=(
-            None if policy == PluginInstallationPolicy.AVAILABLE else policy
-        )
-        if is_set(policy)
-        else UNSET,
+        company_installation_policy=change.installation_policy,
         mode=mode,
         on_name_clash=on_name_clash,
     )

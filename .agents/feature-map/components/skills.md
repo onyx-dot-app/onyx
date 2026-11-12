@@ -26,9 +26,12 @@
   organization, or transfers ownership.
 - **Admins** set the installation policy of a custom skill: available (the user
   opts in), installed by default (on until the user opts out), required (on,
-  and the user cannot turn it off), or not available (hidden). This needs
+  and the user cannot turn it off), or not available (hidden). With no own
+  setting ("Organization default") the skill follows Default Access; an own
+  `AVAILABLE` overrides a stricter Default Access. This needs
   organization-wide `MANAGE_PLUGINS`, which only admins hold today. A group
-  setting (`SkillGroupShareRequest.installation_policy`) replaces it for that
+  setting (`SkillGroupShareRequest.installation_policy`, or
+  `SkillShareRequest.group_settings` with no share change) replaces it for that
   group's members; a group manager sets it only for their groups, on a private
   skill shared only within them. The group page reads and writes these
   settings through `GET /manage/admin/user-group/{id}/plugins` and
@@ -37,7 +40,13 @@
   have yet is shared as viewer. The **Plugins** tab of the group page
   (`web/src/views/admin/GroupsPage/GroupPluginsTab.tsx`, shown with
   `manage:plugins` while Craft is available) edits them; each row saves on
-  its own, apart from the group form's Save. Only organization-wide `MANAGE_PLUGINS`
+  its own, apart from the group form's Save. The share dialog and the bulk
+  dialog have a **Group Access** section
+  (`web/src/sections/modals/skills/SkillGroupAccess.tsx`) for `manage:plugins`
+  holders: one row per group with its setting. Every level label and help text
+  (share dialog, bulk dialog, group tab, Default Access, card badge) comes from
+  `web/src/lib/skills/installationPolicy.ts` and the
+  `skills.installationPolicy.*` keys. Only organization-wide `MANAGE_PLUGINS`
   deletes a skill that is required for anyone.
 - **Admin skill policies** on Admin Panel → Craft → Preferences: Skill
   Publishing ([[#publishing-review]]), **Default Access** (the Organization
@@ -49,7 +58,13 @@
   personal enable/disable, and confirmed deletion. Admins see all manageable
   custom skills. Bulk sharing adds or updates supplied individual grants;
   omitted visibility and installation settings remain unchanged. Failed items
-  stay selected. Search changes clear selection.
+  stay selected. Search and group filter changes clear selection.
+  `SkillResponse.group_summaries` lists every `plugin__user_group` row (group,
+  permission or none, setting) to a caller who may edit the skill, and to a
+  scoped manager only the rows of their groups
+  (`server/features/skill/response_helpers.py:_group_summaries`). Custom cards
+  show them as a groups line, and the list has a group filter built from them;
+  other members get an empty list, so the filter is hidden for them.
   Custom cards show Personal, Shared, or Organization access from
   `public_permission` and the server's `is_personal`; share-detail arrays can
   be hidden, so empty arrays do not mean a skill is personal.
@@ -284,7 +299,10 @@ The library preview of an external-app skill calls the same renderer
     (`db/external_app.py:associate_custom_skill_with_external_app__no_commit`,
     `replace_custom_skill_associations__no_commit`) publishes the skill through
     `db/plugin.py:publish_plugin__no_commit`, and a name clash in the
-    Organization library returns `CONFLICT`. Publishing is one-way, so an
+    Organization library returns `CONFLICT`. A newly linked skill with no own
+    setting gets an explicit `AVAILABLE`
+    (`db/plugin.py:make_plugins_available_by_default__no_commit`), so Default
+    Access Not available does not hide it. Publishing is one-way, so an
     unlinked skill stays published. A private custom skill must have an
     owner: `ck_private_skill_has_owner` rejects a private skill with no
     author, so transfer or delete private skills before their owner is
@@ -321,7 +339,14 @@ The library preview of an external-app skill calls the same renderer
     Rules: a company install setting needs organization-wide `MANAGE_PLUGINS`
     (`has_global_permission`; never `has_permission`, which accepts a scoped
     grant). In `SkillShareRequest`, a missing `installation_policy` changes
-    nothing, and null or AVAILABLE means the marketplace default. A group
+    nothing, null means no own setting (the marketplace default applies), and
+    a value, `AVAILABLE` too, is the own setting. `SkillResponse.installation_policy`
+    is the own setting or null, and `default_installation_policy` is the
+    marketplace default. The share dialog sends the company setting only when
+    the admin changed it (`lib/skills/sharing.ts:serializeSkillSharing`), so a
+    save never turns "no own setting" into `AVAILABLE`. The legacy mirror
+    (`db/plugin.py:plugin_installation_policy`, the backfill) still maps legacy
+    `AVAILABLE` to no setting. A group
     keeps its install setting when the change does not set one, also when its
     share is removed (the row stays with no permission). A group install
     setting needs global `MANAGE_PLUGINS`, or `MANAGE_PLUGINS` for that group
@@ -699,7 +724,10 @@ The library preview of an external-app skill calls the same renderer
   and `backend/tests/external_dependency_unit/craft/test_plugin_setting_writes.py`
   cover the setting and name rules of
   writes; `backend/tests/integration/tests/skills/test_skill_setting_writes.py`
-  covers Default Access, Not available, Sharing and the response fields.
+  covers Default Access, Not available, Sharing and the response fields;
+  `backend/tests/integration/tests/skills/test_skill_group_summaries.py`
+  covers group summaries, `group_settings`, the explicit company Available and
+  app skills under Default Access Not available.
   `backend/tests/integration/tests/craft/k8s/` covers a real
   push.
 - By hand: edit a skill while a Craft session runs. The stale notice must

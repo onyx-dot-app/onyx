@@ -11,6 +11,7 @@ import { useSettings } from "@/lib/settings/hooks";
 import { PluginPublishingPolicy } from "@/lib/settings/types";
 import { updateAdminSettings } from "@/lib/settings/svc";
 import { setOrganizationLibraryDefaultAccess } from "@/lib/skills/api";
+import { useInstallationPolicyCopy } from "@/lib/skills/installationPolicy";
 import type {
   OrganizationLibraryDefaultAccess,
   OrganizationLibraryDefaultPolicy,
@@ -44,6 +45,7 @@ export default function SkillPublishingCard() {
     errorHandlingFetcher
   );
   const [isSaving, setIsSaving] = useState(false);
+  const policyCopy = useInstallationPolicyCopy();
 
   async function saveSetting(
     run: () => Promise<void>,
@@ -101,23 +103,6 @@ export default function SkillPublishingCard() {
     [PluginPublishingPolicy.OFF]: t("off.description"),
   } as const satisfies Record<PluginPublishingPolicy, string>;
 
-  const defaultAccessCopy = {
-    AVAILABLE: {
-      label: t("defaultAccess.available.label"),
-      description: t("defaultAccess.available.description"),
-    },
-    DEFAULT: {
-      label: t("defaultAccess.default.label"),
-      description: t("defaultAccess.default.description"),
-    },
-    NOT_AVAILABLE: {
-      label: t("defaultAccess.notAvailable.label"),
-      description: t("defaultAccess.notAvailable.description"),
-    },
-  } as const satisfies Record<
-    OrganizationLibraryDefaultPolicy,
-    { label: string; description: string }
-  >;
   const currentDefault = defaultAccess?.installation_policy ?? "AVAILABLE";
 
   return (
@@ -149,7 +134,7 @@ export default function SkillPublishingCard() {
         <InputHorizontal
           title={t("defaultAccess.title")}
           description={t("defaultAccess.description", {
-            setting: defaultAccessCopy[currentDefault].description,
+            setting: policyCopy.description(currentDefault),
           })}
           withLabel
         >
@@ -163,7 +148,7 @@ export default function SkillPublishingCard() {
             }}
             options={DEFAULT_ACCESS_POLICIES.map((value) => ({
               value,
-              title: defaultAccessCopy[value].label,
+              title: policyCopy.label(value),
             }))}
           />
         </InputHorizontal>

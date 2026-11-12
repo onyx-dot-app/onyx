@@ -5205,18 +5205,6 @@
         "defaultAccess": {
           "title": "默认访问权限",
           "description": "适用于每个没有自身设置的已发布技能，包括以后发布的技能。 {setting}",
-          "available": {
-            "label": "可用",
-            "description": "成员可以找到并按需启用。"
-          },
-          "default": {
-            "label": "默认安装",
-            "description": "为每个成员安装。成员可以关闭。"
-          },
-          "notAvailable": {
-            "label": "不可用",
-            "description": "已隐藏。成员无法找到或启用。"
-          },
           "saveSuccess": {
             "message": "默认访问权限已保存。"
           },
@@ -6434,28 +6422,6 @@
         "intro": "设置每个插件为此群组成员安装的方式。",
         "inheritance": "默认情况下，每个群组都使用组织设置。",
         "conflicts": "群组设置会为其成员替换组织设置，即使更严格也是如此。属于多个群组的成员获得最开放的设置。",
-        "policy": {
-          "REQUIRED": {
-            "label": "必需",
-            "description": "已安装且始终开启。成员无法关闭。"
-          },
-          "DEFAULT": {
-            "label": "默认安装",
-            "description": "为每位成员安装。成员可以关闭。"
-          },
-          "AVAILABLE": {
-            "label": "可用",
-            "description": "成员可以找到它，并按需开启。"
-          },
-          "NOT_AVAILABLE": {
-            "label": "不可用",
-            "description": "已隐藏。成员无法找到或开启。"
-          }
-        },
-        "option": {
-          "inherit": "组织设置（{policy}）",
-          "inheritDescription": "没有群组设置。群组使用组织设置。"
-        },
         "row": {
           "shared": "已与此群组共享",
           "sharedPublished": "已发布并与此群组共享",
@@ -17492,15 +17458,7 @@
         },
         "installation": {
           "title": "安装",
-          "available": "可供安装",
-          "default": "默认安装",
-          "required": "必需",
-          "availableDescription": "用户可以随时安装或卸载。",
-          "defaultDescription": "自动安装。用户可以随时禁用或卸载。",
-          "requiredDescription": "自动安装。用户无法禁用或卸载。",
-          "description": "选择此技能对所有有访问权限的用户的安装方式。",
-          "notAvailable": "不可用",
-          "notAvailableDescription": "已隐藏。成员无法找到或启用。"
+          "description": "选择此技能对所有有访问权限的用户的安装方式。"
         },
         "description": "选择谁可以使用此技能及其安装方式。",
         "accessTitle": "谁可以访问",
@@ -17526,6 +17484,16 @@
         "publishReview": {
           "title": "此次发布需要管理员批准",
           "description": "在管理员批准请求之前，技能保持私有。"
+        },
+        "groupAccess": {
+          "title": "群组访问",
+          "description": "默认情况下，每个群组都使用组织设置。群组设置会为该群组的成员替换组织设置，即使它更严格。",
+          "bulkDescription": "为每个所选技能设置这些群组。未列出的群组保留其设置。",
+          "add": "添加群组",
+          "select": "{name} 的设置",
+          "remove": "移除 {name}",
+          "shared": "已与此群组共享",
+          "settingOnly": "仅群组设置"
         }
       },
       "placeholders": {
@@ -17615,7 +17583,8 @@
       "empty": {
         "noMatches": {
           "description": "请尝试其他搜索。",
-          "title": "没有匹配的技能"
+          "title": "没有匹配的技能",
+          "groupDescription": "此群组中没有匹配的技能。请尝试其他群组或搜索。"
         },
         "noSkills": {
           "title": "暂无自定义技能",
@@ -17779,6 +17748,40 @@
         "description": "请稍后重试。"
       },
       "empty": "没有等待审核的技能。"
+    },
+    "installationPolicy": {
+      "REQUIRED": {
+        "label": "必需",
+        "description": "已安装且始终开启。成员无法关闭。"
+      },
+      "DEFAULT": {
+        "label": "默认安装",
+        "description": "为每位成员安装。成员可以关闭。"
+      },
+      "AVAILABLE": {
+        "label": "可供安装",
+        "description": "成员可以找到它，并按需开启。"
+      },
+      "NOT_AVAILABLE": {
+        "label": "不可用",
+        "description": "已隐藏。成员无法找到或开启。"
+      },
+      "inherit": {
+        "group": "组织设置（{policy}）",
+        "groupAny": "组织设置",
+        "groupDescription": "没有群组设置。群组使用组织设置。",
+        "organization": "组织默认值（{policy}）",
+        "organizationAny": "组织默认值",
+        "organizationDescription": "没有自己的设置。即使管理员更改了默认访问，技能也会使用它。"
+      }
+    },
+    "groups": {
+      "filter": {
+        "placeholder": "按群组筛选",
+        "all": "所有群组"
+      },
+      "card": "群组：{groups}",
+      "entry": "{name}：{policy}"
     }
   },
   "opensearchHealth": {

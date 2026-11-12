@@ -98,7 +98,7 @@ def test_organization_library_default_not_available(
     assert skill.id not in _visible_ids(group_member)
     assert skill.id not in _visible_ids(other)
     shown = SkillManager.get_for_user(skill.id, shared)
-    assert shown.installation_policy == PluginInstallationPolicy.AVAILABLE
+    assert shown.installation_policy is None
     assert shown.company_installation_policy == PluginInstallationPolicy.NOT_AVAILABLE
     assert shown.effective_installation_policy == PluginInstallationPolicy.AVAILABLE
 

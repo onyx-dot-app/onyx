@@ -42,17 +42,26 @@ jest.mock("@/hooks/useShareableUsers", () => ({
   __esModule: true,
   default: () => ({ data: [] }),
 }));
+let mockGroups: { id: number; name: string }[] = [];
 jest.mock("@/hooks/useShareableGroups", () => ({
   __esModule: true,
-  default: () => ({ data: [] }),
+  default: () => ({ data: mockGroups }),
 }));
 jest.mock("@/lib/skills/api", () => ({
   updateSkillShares: (...args: unknown[]) => mockUpdateSkillShares(...args),
   transferSkillOwnership: jest.fn(),
 }));
 
+async function pickCompanySetting(name: RegExp) {
+  fireEvent.click(
+    await screen.findByRole("combobox", { name: "Installation" })
+  );
+  fireEvent.click(screen.getByRole("option", { name }));
+}
+
 describe("ShareSkillModal", () => {
   beforeEach(() => {
+    mockGroups = [];
     mockIsAdmin = true;
     mockPublishing = "OPEN";
     Object.values(mockToast).forEach((fn) => fn.mockReset());
@@ -89,13 +98,12 @@ describe("ShareSkillModal", () => {
       "true"
     );
     await user.click(screen.getByRole("tab", { name: "Sharing" }));
-    await user.click(screen.getByRole("button", { name: "Required" }));
+    await pickCompanySetting(/^Required/);
     await user.click(screen.getByRole("tab", { name: "Details" }));
     expect(screen.getByText("Use the team workflow.")).toBeVisible();
     await user.click(screen.getByRole("tab", { name: "Sharing" }));
-    expect(screen.getByRole("button", { name: "Required" })).toHaveAttribute(
-      "aria-pressed",
-      "true"
+    expect(screen.getByRole("combobox", { name: "Installation" })).toHaveValue(
+      "Required"
     );
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>
@@ -124,9 +132,7 @@ describe("ShareSkillModal", () => {
       screen.queryByPlaceholderText("Add users, groups, and accounts")
     ).not.toBeInTheDocument();
     expect(screen.getByText("Ownership")).toBeInTheDocument();
-    await user.click(
-      await screen.findByRole("button", { name: "Installed by default" })
-    );
+    await pickCompanySetting(/^Installed by default/);
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>
       expect(mockUpdateSkillShares).toHaveBeenCalledWith("custom-1", {
@@ -160,7 +166,7 @@ describe("ShareSkillModal", () => {
         onSaved={jest.fn()}
       />
     );
-    await user.click(await screen.findByRole("button", { name: "Required" }));
+    await pickCompanySetting(/^Required/);
     expect(mockLoadSkill).toHaveBeenCalledWith(
       "/api/skills/custom/custom-1/share"
     );
@@ -534,7 +540,7 @@ describe("ShareSkillModal", () => {
         onSaveDraft={onSaveDraft}
       />
     );
-    await user.click(screen.getByRole("button", { name: "Required" }));
+    await pickCompanySetting(/^Required/);
     await user.click(screen.getByRole("button", { name: "Save" }));
     expect(onSaveDraft).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -557,7 +563,7 @@ describe("ShareSkillModal", () => {
       />
     );
     expect(
-      screen.queryByRole("group", { name: "Installation" })
+      screen.queryByRole("combobox", { name: "Installation" })
     ).not.toBeInTheDocument();
   });
 
@@ -576,10 +582,10 @@ describe("ShareSkillModal", () => {
       />
     );
     expect(
-      await screen.findByRole("group", { name: "Installation" })
+      await screen.findByRole("combobox", { name: "Installation" })
     ).toBeInTheDocument();
     expect(screen.getByText("People with access")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Required" }));
+    await pickCompanySetting(/^Required/);
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>
       expect(mockUpdateSkillShares).toHaveBeenCalledWith("custom-1", {
@@ -589,5 +595,159 @@ describe("ShareSkillModal", () => {
         group_shares: [],
       })
     );
+  });
+
+  it("sends an explicit Available under a Not available default", async () => {
+    const user = setupUser();
+    mockLoadSkill.mockResolvedValue(
+      customFixture({
+        user_permission: "OWNER",
+        installation_policy: null,
+        default_installation_policy: "NOT_AVAILABLE",
+        company_installation_policy: "NOT_AVAILABLE",
+      })
+    );
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        open
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+      />
+    );
+    expect(
+      await screen.findByRole("combobox", { name: "Installation" })
+    ).toHaveValue("Organization default (Not available)");
+    await pickCompanySetting(/^Available to install/);
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(mockUpdateSkillShares).toHaveBeenCalledWith(
+        "custom-1",
+        expect.objectContaining({ installation_policy: "AVAILABLE" })
+      )
+    );
+  });
+
+  it("sends null when an admin picks the organization default", async () => {
+    const user = setupUser();
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        open
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+      />
+    );
+    await pickCompanySetting(/^Organization default/);
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(mockUpdateSkillShares).toHaveBeenCalledWith(
+        "custom-1",
+        expect.objectContaining({ installation_policy: null })
+      )
+    );
+  });
+
+  it("saves changed group settings and leaves the company setting out", async () => {
+    const user = setupUser();
+    mockGroups = [
+      { id: 3, name: "Design" },
+      { id: 4, name: "Ops" },
+      { id: 5, name: "Sales" },
+    ];
+    mockLoadSkill.mockResolvedValue(
+      customFixture({
+        user_permission: "OWNER",
+        installation_policy: null,
+        default_installation_policy: "AVAILABLE",
+        group_summaries: [
+          {
+            group_id: 3,
+            group_name: "Design",
+            permission: "VIEWER",
+            installation_policy: null,
+          },
+          {
+            group_id: 4,
+            group_name: "Ops",
+            permission: null,
+            installation_policy: "REQUIRED",
+          },
+        ],
+      })
+    );
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        open
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+      />
+    );
+    const design = await screen.findByRole("combobox", {
+      name: "Setting for Design",
+    });
+    expect(design).toHaveValue("Organization setting (Available to install)");
+    expect(
+      screen.getByRole("combobox", { name: "Setting for Ops" })
+    ).toHaveValue("Required");
+    // A group share has no remove button; choose the organization setting.
+    expect(
+      screen.queryByRole("button", { name: "Remove Design" })
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(design);
+    fireEvent.click(screen.getByRole("option", { name: /^Not available/ }));
+    await user.click(screen.getByRole("button", { name: "Remove Ops" }));
+    fireEvent.click(screen.getByRole("combobox", { name: "Add a group" }));
+    fireEvent.click(screen.getByRole("option", { name: "Sales" }));
+    fireEvent.click(
+      screen.getByRole("combobox", { name: "Setting for Sales" })
+    );
+    fireEvent.click(
+      screen.getByRole("option", { name: /^Installed by default/ })
+    );
+
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(mockUpdateSkillShares).toHaveBeenCalled());
+    const payload = mockUpdateSkillShares.mock.calls[0][1];
+    expect(payload.installation_policy).toBeUndefined();
+    expect(payload.group_settings).toEqual([
+      { group_id: 3, installation_policy: "NOT_AVAILABLE" },
+      { group_id: 5, installation_policy: "DEFAULT" },
+      { group_id: 4, installation_policy: null },
+    ]);
+  });
+
+  it("hides group settings from a member without manage:plugins", async () => {
+    mockIsAdmin = false;
+    mockLoadSkill.mockResolvedValue(
+      customFixture({
+        user_permission: "OWNER",
+        public_permission: null,
+        group_summaries: [
+          {
+            group_id: 3,
+            group_name: "Design",
+            permission: "VIEWER",
+            installation_policy: null,
+          },
+        ],
+      })
+    );
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        open
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+      />
+    );
+    await screen.findByText("Ownership");
+    expect(screen.queryByText("Group Access")).not.toBeInTheDocument();
   });
 });

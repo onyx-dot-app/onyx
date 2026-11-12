@@ -57,6 +57,7 @@ class _Case:
             is_valid=True,
             user_shares=tuple(self.user_shares),
             group_shares=tuple(self.group_shares),
+            group_rows=(),
         )
 
 

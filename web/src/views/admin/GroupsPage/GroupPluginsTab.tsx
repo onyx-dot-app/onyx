@@ -26,9 +26,9 @@ import GroupPluginSettingRow from "@/views/admin/GroupsPage/GroupPluginSettingRo
 import {
   INHERIT,
   isPolicyChoice,
-  usePolicyOptions,
+  useGroupPolicyOptions,
   type PolicyChoice,
-} from "@/views/admin/GroupsPage/groupPluginPolicies";
+} from "@/lib/skills/installationPolicy";
 
 interface GroupPluginsTabProps {
   groupId: number;
@@ -163,10 +163,10 @@ function AddGroupPluginModal({
   }, [skills, existingIds]);
   const selected = candidates.find((skill) => skill.id === pluginId) ?? null;
   const published = selected?.public_permission != null;
-  const { options } = usePolicyOptions(
+  const { options } = useGroupPolicyOptions(
     selected === null || published
-      ? null
-      : (selected.company_installation_policy ?? selected.installation_policy)
+      ? undefined
+      : (selected.company_installation_policy ?? undefined)
   );
   const canAdd =
     selected !== null && choice !== "" && !(published && choice === INHERIT);

@@ -57,6 +57,8 @@ function existingSkill(
     can_toggle: true,
     installation_policy: "AVAILABLE",
     company_installation_policy: null,
+    default_installation_policy: null,
+    group_summaries: [],
     effective_installation_policy: null,
     author_user_id: "author-id",
     author_email: "author@example.com",

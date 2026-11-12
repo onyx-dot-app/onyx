@@ -1,5 +1,17 @@
-import type { CustomSkill } from "@/lib/skills/types";
-import type { SkillShareUpdatePayload } from "@/lib/skills/api";
+import type {
+  CustomSkill,
+  SkillInstallationPolicy,
+  SkillSharePermission,
+} from "@/lib/skills/types";
+import type {
+  SkillGroupSettingPayload,
+  SkillShareUpdatePayload,
+} from "@/lib/skills/api";
+import {
+  INHERIT,
+  fromPolicyChoice,
+  type PolicyChoice,
+} from "@/lib/skills/installationPolicy";
 
 export type SkillSharingDraft = Pick<
   CustomSkill,
@@ -53,18 +65,25 @@ export function emptySkillSharingDraft(
     user_shares: [],
     group_shares: [],
     public_permission: null,
-    installation_policy: "AVAILABLE",
+    installation_policy: null,
     external_app: null,
   };
 }
 
+/** ``initialPolicy`` is the company setting the dialog opened with. The
+ * payload holds the setting only when it changed, so a save never turns "no
+ * own setting" into an explicit value by accident. */
 export function serializeSkillSharing(
   draft: SkillSharingDraft,
   isAdmin: boolean,
-  isOrganizationManager: boolean
+  isOrganizationManager: boolean,
+  initialPolicy: SkillInstallationPolicy | null = null
 ): SkillShareUpdatePayload {
   return {
-    installation_policy: isAdmin ? draft.installation_policy : undefined,
+    installation_policy:
+      isAdmin && draft.installation_policy !== initialPolicy
+        ? draft.installation_policy
+        : undefined,
     public_permission:
       !draft.external_app &&
       canChangeOrganizationAccess(draft, isOrganizationManager)
@@ -81,4 +100,35 @@ export function serializeSkillSharing(
       permission: share.permission,
     })),
   };
+}
+
+/** One row of the Group Access editor. */
+export interface GroupAccessRow {
+  group_id: number;
+  group_name: string;
+  /** Null for a group with no share. */
+  permission: SkillSharePermission | null;
+  choice: PolicyChoice;
+}
+
+/** The group settings to send: a changed row, a new row with a setting, and
+ * null for a removed row that had one. */
+export function groupSettingChanges(
+  initial: readonly GroupAccessRow[],
+  current: readonly GroupAccessRow[]
+): SkillGroupSettingPayload[] {
+  const before = new Map(initial.map((row) => [row.group_id, row.choice]));
+  const changes: SkillGroupSettingPayload[] = current
+    .filter((row) => row.choice !== (before.get(row.group_id) ?? INHERIT))
+    .map((row) => ({
+      group_id: row.group_id,
+      installation_policy: fromPolicyChoice(row.choice),
+    }));
+  const kept = new Set(current.map((row) => row.group_id));
+  for (const row of initial) {
+    if (!kept.has(row.group_id) && row.choice !== INHERIT) {
+      changes.push({ group_id: row.group_id, installation_policy: null });
+    }
+  }
+  return changes;
 }

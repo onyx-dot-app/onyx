@@ -10,9 +10,9 @@ import type { UserGroupPlugin } from "@/lib/groupPlugins/types";
 import {
   INHERIT,
   isPolicyChoice,
-  usePolicyOptions,
+  useGroupPolicyOptions,
   type PolicyChoice,
-} from "@/views/admin/GroupsPage/groupPluginPolicies";
+} from "@/lib/skills/installationPolicy";
 
 interface GroupPluginSettingRowProps {
   plugin: UserGroupPlugin;
@@ -28,7 +28,7 @@ export default function GroupPluginSettingRow({
   onSave,
 }: GroupPluginSettingRowProps) {
   const t = useTranslations("admin.groups.plugins");
-  const { options, policyLabel } = usePolicyOptions(
+  const { options, policyLabel } = useGroupPolicyOptions(
     plugin.company_installation_policy
   );
   const [saving, setSaving] = useState(false);

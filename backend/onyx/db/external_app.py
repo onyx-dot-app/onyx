@@ -31,6 +31,7 @@ from onyx.db.plugin import (
     delete_plugin_preferences__no_commit,
     get_plugin_version_validity,
     lock_skill_plugin__no_commit,
+    make_plugins_available_by_default__no_commit,
     publish_plugin__no_commit,
     set_plugin_installation_policy__no_commit,
 )
@@ -480,6 +481,7 @@ def associate_custom_skill_with_external_app__no_commit(
     db_session.add(ExternalApp__Skill(external_app_id=app.id, skill_id=skill.id))
     db_session.flush()
     publish_plugin__no_commit(plugin.id, "raise", db_session)
+    make_plugins_available_by_default__no_commit([plugin.id], db_session)
     return skill
 
 
@@ -493,7 +495,8 @@ def replace_custom_skill_associations__no_commit(
 
     Built-in provider associations are preserved. Each associated skill is
     published to the organization (VIEWER); a name clash in the Organization
-    library is refused with CONFLICT. Removed skills stay published, because
+    library is refused with CONFLICT. A newly linked skill with no own setting
+    gets an explicit AVAILABLE, so a stricter Default Access does not hide it. Removed skills stay published, because
     publishing is one-way.
     """
     requested_ids = list(skill_ids)
@@ -607,6 +610,8 @@ def replace_custom_skill_associations__no_commit(
     db_session.flush()
     for plugin_id in plugin_ids:
         publish_plugin__no_commit(plugin_id, "raise", db_session)
+    # Plugin ids equal skill ids. A skill linked before keeps its setting.
+    make_plugins_available_by_default__no_commit(target_ids - current_ids, db_session)
     return current_custom_skills + [
         skill for skill in target_skills if skill.id not in current_ids
     ]

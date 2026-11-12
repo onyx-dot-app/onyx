@@ -930,6 +930,21 @@ def publish_or_request_review__no_commit(
     )
 
 
+def make_plugins_available_by_default__no_commit(
+    plugin_ids: Iterable[UUID], db_session: Session
+) -> None:
+    """Give each plugin with no own setting an explicit AVAILABLE, so a stricter
+    marketplace default does not hide it. A plugin's own setting stays."""
+    ids = sorted(set(plugin_ids))
+    if not ids:
+        return
+    db_session.execute(
+        update(Plugin)
+        .where(Plugin.id.in_(ids), Plugin.installation_policy.is_(None))
+        .values(installation_policy=PluginInstallationPolicy.AVAILABLE)
+    )
+
+
 def is_plugin_published(plugin: Plugin, db_session: Session) -> bool:
     return (
         db_session.scalar(

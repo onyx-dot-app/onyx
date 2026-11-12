@@ -5205,18 +5205,6 @@
         "defaultAccess": {
           "title": "Default Access",
           "description": "Applies to every published skill that doesn't have its own setting, including skills published later. {setting}",
-          "available": {
-            "label": "Available",
-            "description": "Members find it and turn it on if they want it."
-          },
-          "default": {
-            "label": "Installed by default",
-            "description": "Installed for every member. Members can turn it off."
-          },
-          "notAvailable": {
-            "label": "Not available",
-            "description": "Hidden. Members can't find or turn it on."
-          },
           "saveSuccess": {
             "message": "Default access saved."
           },
@@ -6434,28 +6422,6 @@
         "intro": "Set how each plugin is installed for the members of this group.",
         "inheritance": "By default, every group uses the organization setting.",
         "conflicts": "A group setting replaces the organization setting for its members, also when it is stricter. A member in several groups gets the most open setting.",
-        "policy": {
-          "REQUIRED": {
-            "label": "Required",
-            "description": "Installed and always on. Members can't turn it off."
-          },
-          "DEFAULT": {
-            "label": "Installed by default",
-            "description": "Installed for every member. Members can turn it off."
-          },
-          "AVAILABLE": {
-            "label": "Available",
-            "description": "Members find it and turn it on if they want it."
-          },
-          "NOT_AVAILABLE": {
-            "label": "Not available",
-            "description": "Hidden. Members can't find or turn it on."
-          }
-        },
-        "option": {
-          "inherit": "Organization setting ({policy})",
-          "inheritDescription": "No group setting. The group uses the organization setting."
-        },
         "row": {
           "shared": "Shared with this group",
           "sharedPublished": "Published and shared with this group",
@@ -17492,15 +17458,7 @@
         },
         "installation": {
           "title": "Installation",
-          "available": "Available to install",
-          "default": "Installed by default",
-          "required": "Required",
-          "availableDescription": "Users can install or uninstall anytime.",
-          "defaultDescription": "Installed automatically. Users can disable or uninstall anytime.",
-          "requiredDescription": "Installed automatically. Users cannot disable or uninstall.",
-          "description": "Choose how this skill is installed for everyone with access.",
-          "notAvailable": "Not available",
-          "notAvailableDescription": "Hidden. Members can't find or turn it on."
+          "description": "Choose how this skill is installed for everyone with access."
         },
         "description": "Choose who can use this skill and how it is installed.",
         "accessTitle": "Who can access",
@@ -17526,6 +17484,16 @@
         "publishReview": {
           "title": "An admin must approve this publish",
           "description": "The skill stays private until an admin approves the request."
+        },
+        "groupAccess": {
+          "title": "Group Access",
+          "description": "By default, every group uses the organization setting. A group setting replaces it for the group's members, also when it is stricter.",
+          "bulkDescription": "Set these groups on every selected skill. Groups you do not list keep their settings.",
+          "add": "Add a group",
+          "select": "Setting for {name}",
+          "remove": "Remove {name}",
+          "shared": "Shared with this group",
+          "settingOnly": "Group setting only"
         }
       },
       "placeholders": {
@@ -17615,7 +17583,8 @@
       "empty": {
         "noMatches": {
           "description": "Try a different search.",
-          "title": "No matching skills"
+          "title": "No matching skills",
+          "groupDescription": "No skills in this group match. Try a different group or search."
         },
         "noSkills": {
           "title": "No custom skills yet",
@@ -17779,6 +17748,40 @@
         "description": "Try again later."
       },
       "empty": "No skills are waiting for review."
+    },
+    "installationPolicy": {
+      "REQUIRED": {
+        "label": "Required",
+        "description": "Installed and always on. Members can't turn it off."
+      },
+      "DEFAULT": {
+        "label": "Installed by default",
+        "description": "Installed for every member. Members can turn it off."
+      },
+      "AVAILABLE": {
+        "label": "Available to install",
+        "description": "Members find it and turn it on if they want it."
+      },
+      "NOT_AVAILABLE": {
+        "label": "Not available",
+        "description": "Hidden. Members can't find or turn it on."
+      },
+      "inherit": {
+        "group": "Organization setting ({policy})",
+        "groupAny": "Organization setting",
+        "groupDescription": "No group setting. The group uses the organization setting.",
+        "organization": "Organization default ({policy})",
+        "organizationAny": "Organization default",
+        "organizationDescription": "No own setting. The skill uses Default Access, also after an admin changes it."
+      }
+    },
+    "groups": {
+      "filter": {
+        "placeholder": "Filter by group",
+        "all": "All groups"
+      },
+      "card": "Groups: {groups}",
+      "entry": "{name}: {policy}"
     }
   },
   "opensearchHealth": {

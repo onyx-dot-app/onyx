@@ -5205,18 +5205,6 @@
         "defaultAccess": {
           "title": "Acesso padrão",
           "description": "Aplica-se a cada skill publicado sem configuração própria, incluindo os publicados depois. {setting}",
-          "available": {
-            "label": "Disponível",
-            "description": "Os membros o encontram e o ativam se quiserem."
-          },
-          "default": {
-            "label": "Instalado por padrão",
-            "description": "Instalado para cada membro. Os membros podem desativá-lo."
-          },
-          "notAvailable": {
-            "label": "Não disponível",
-            "description": "Oculto. Os membros não conseguem encontrá-lo nem ativá-lo."
-          },
           "saveSuccess": {
             "message": "Acesso padrão salvo."
           },
@@ -6434,28 +6422,6 @@
         "intro": "Defina como cada plugin é instalado para os membros deste grupo.",
         "inheritance": "Por padrão, cada grupo usa a configuração da organização.",
         "conflicts": "Uma configuração de grupo substitui a da organização para seus membros, mesmo quando é mais restrita. Um membro de vários grupos recebe a configuração mais aberta.",
-        "policy": {
-          "REQUIRED": {
-            "label": "Obrigatório",
-            "description": "Instalado e sempre ativo. Os membros não podem desativá-lo."
-          },
-          "DEFAULT": {
-            "label": "Instalado por padrão",
-            "description": "Instalado para cada membro. Os membros podem desativá-lo."
-          },
-          "AVAILABLE": {
-            "label": "Disponível",
-            "description": "Os membros o encontram e o ativam se quiserem."
-          },
-          "NOT_AVAILABLE": {
-            "label": "Não disponível",
-            "description": "Oculto. Os membros não podem encontrá-lo nem ativá-lo."
-          }
-        },
-        "option": {
-          "inherit": "Configuração da organização ({policy})",
-          "inheritDescription": "Sem configuração de grupo. O grupo usa a configuração da organização."
-        },
         "row": {
           "shared": "Compartilhado com este grupo",
           "sharedPublished": "Publicado e compartilhado com este grupo",
@@ -17492,15 +17458,7 @@
         },
         "installation": {
           "title": "Instalação",
-          "available": "Disponível para instalar",
-          "default": "Instalado por padrão",
-          "required": "Obrigatório",
-          "availableDescription": "Os usuários podem instalar ou desinstalar a qualquer momento.",
-          "defaultDescription": "Instalado automaticamente. Os usuários podem desativar ou desinstalar a qualquer momento.",
-          "requiredDescription": "Instalado automaticamente. Os usuários não podem desativar nem desinstalar.",
-          "description": "Escolha como esta habilidade é instalada para quem tem acesso.",
-          "notAvailable": "Não disponível",
-          "notAvailableDescription": "Oculto. Os membros não conseguem encontrá-lo nem ativá-lo."
+          "description": "Escolha como esta habilidade é instalada para quem tem acesso."
         },
         "description": "Escolha quem pode usar esta habilidade e como ela é instalada.",
         "accessTitle": "Quem pode acessar",
@@ -17526,6 +17484,16 @@
         "publishReview": {
           "title": "Um administrador precisa aprovar esta publicação",
           "description": "A habilidade fica privada até um administrador aprovar a solicitação."
+        },
+        "groupAccess": {
+          "title": "Acesso de grupos",
+          "description": "Por padrão, cada grupo usa a configuração da organização. Uma configuração de grupo a substitui para os membros do grupo, também quando é mais restrita.",
+          "bulkDescription": "Defina esses grupos em cada skill selecionada. Os grupos que você não listar mantêm suas configurações.",
+          "add": "Adicionar um grupo",
+          "select": "Configuração de {name}",
+          "remove": "Remover {name}",
+          "shared": "Compartilhado com este grupo",
+          "settingOnly": "Somente configuração do grupo"
         }
       },
       "placeholders": {
@@ -17615,7 +17583,8 @@
       "empty": {
         "noMatches": {
           "description": "Tente uma pesquisa diferente.",
-          "title": "Nenhuma habilidade correspondente"
+          "title": "Nenhuma habilidade correspondente",
+          "groupDescription": "Nenhuma skill deste grupo corresponde. Tente outro grupo ou outra pesquisa."
         },
         "noSkills": {
           "title": "Ainda não há habilidades personalizadas",
@@ -17779,6 +17748,40 @@
         "description": "Tente novamente mais tarde."
       },
       "empty": "Nenhuma habilidade aguarda revisão."
+    },
+    "installationPolicy": {
+      "REQUIRED": {
+        "label": "Obrigatório",
+        "description": "Instalado e sempre ativo. Os membros não podem desativá-lo."
+      },
+      "DEFAULT": {
+        "label": "Instalado por padrão",
+        "description": "Instalado para cada membro. Os membros podem desativá-lo."
+      },
+      "AVAILABLE": {
+        "label": "Disponível para instalar",
+        "description": "Os membros o encontram e o ativam se quiserem."
+      },
+      "NOT_AVAILABLE": {
+        "label": "Não disponível",
+        "description": "Oculto. Os membros não podem encontrá-lo nem ativá-lo."
+      },
+      "inherit": {
+        "group": "Configuração da organização ({policy})",
+        "groupAny": "Configuração da organização",
+        "groupDescription": "Sem configuração de grupo. O grupo usa a configuração da organização.",
+        "organization": "Padrão da organização ({policy})",
+        "organizationAny": "Padrão da organização",
+        "organizationDescription": "Sem configuração própria. A skill usa o acesso padrão, também depois que um administrador o altera."
+      }
+    },
+    "groups": {
+      "filter": {
+        "placeholder": "Filtrar por grupo",
+        "all": "Todos os grupos"
+      },
+      "card": "Grupos: {groups}",
+      "entry": "{name}: {policy}"
     }
   },
   "opensearchHealth": {
