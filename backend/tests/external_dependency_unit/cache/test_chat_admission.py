@@ -11,9 +11,12 @@ import pytest
 from onyx.cache.interface import CacheBackend, CacheLockLostError
 from onyx.chat.chat_processing_checker import (
     ChatTurnAdmission,
+    current_turn_owner,
     get_processing_stream_id,
     is_chat_session_processing,
+    stop_current_turn,
 )
+from onyx.chat.stop_signal_checker import is_stop_requested
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
@@ -66,3 +69,36 @@ def test_concurrent_claim_and_stale_owner_cleanup(cache: CacheBackend) -> None:
     finally:
         for admission in admissions:
             admission.release()
+
+
+def test_stop_targets_the_turn_that_holds_admission(cache: CacheBackend) -> None:
+    session_id = uuid4()
+    first, second = ChatTurnAdmission(cache), ChatTurnAdmission(cache)
+    preparation_stop = f"chatprocessing_preparation_stop_{session_id}"
+    idle_stops: list[None] = []
+    try:
+        stop_current_turn(session_id, cache, when_idle=lambda: idle_stops.append(None))
+        assert idle_stops == [None]
+        first.claim(session_id)
+        finished = current_turn_owner(session_id, cache)
+        assert finished is not None
+        stop_current_turn(session_id, cache)
+        # The preparation Stop lasts as long as the admission it targets.
+        cache.expire(preparation_stop, 5)
+        first.refresh()
+        assert cache.ttl(preparation_stop) > 5
+        first.release()
+        second.claim(session_id)
+        second.publish(21)
+        assert not is_stop_requested(session_id, cache, stream_id=21)
+        # A Stop aimed at the finished turn does not reach the next one.
+        stop_current_turn(session_id, cache, owner=finished)
+        assert not is_stop_requested(session_id, cache, stream_id=21)
+        stop_current_turn(session_id, cache)
+        assert is_stop_requested(session_id, cache, stream_id=21)
+        assert idle_stops == [None]
+    finally:
+        first.release()
+        second.release()
+        cache.delete(preparation_stop)
+        cache.delete(f"chatsessionstop_fence_{session_id}_21")

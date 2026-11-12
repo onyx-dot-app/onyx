@@ -179,7 +179,7 @@ def submit_human_message__no_commit(
     that no longer accepts input waits in the queue instead.
     """
     lock_agent(session, str(chat_session_id))
-    selected, _ = get_selected_branch(session, chat_session_id)
+    selected, branch = get_selected_branch(session, chat_session_id)
     target = selected
     if target_response_id is not None and (
         selected is None or target_response_id != selected.id
@@ -193,9 +193,17 @@ def submit_human_message__no_commit(
             raise OnyxError(
                 OnyxErrorCode.CONFLICT, "The target is not a current response"
             )
-        # A running response that the selected turn does not show is another branch's.
-        if target.response_status in _ACCEPTING_STATUSES and (
-            selected is None or target.parent_message_id != selected.parent_message_id
+        # A running sibling of the selected response can still receive a send;
+        # any other target must be on the selected branch.
+        if (
+            target.response_status in _ACCEPTING_STATUSES
+            and (
+                selected is None
+                or target.parent_message_id != selected.parent_message_id
+            )
+        ) or (
+            target.response_status not in _ACCEPTING_STATUSES
+            and target.id not in branch.message_ids
         ):
             raise OnyxError(
                 OnyxErrorCode.CONFLICT, "The target is not a current response"

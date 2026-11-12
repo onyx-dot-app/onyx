@@ -29,6 +29,7 @@ from onyx.background.task_utils import enqueue_user_file_deletes
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.chat_processing_checker import (
     ADMISSION_CACHE_TIMEOUT_S,
+    current_turn_owner,
     get_processing_stream_id,
     is_chat_session_processing,
     stop_current_turn,
@@ -85,6 +86,8 @@ from onyx.db.chat import (
     get_chat_session_by_id,
     get_chat_sessions_by_user,
     get_incognito_session_ids_for_user,
+    get_owned_chat_session,
+    get_selected_branch,
     set_as_latest_chat_message,
     set_chat_session_tool_selection__no_commit,
     set_preferred_response,
@@ -92,6 +95,7 @@ from onyx.db.chat import (
     update_chat_session,
 )
 from onyx.db.chat_inputs import (
+    cancel_completed_responses__no_commit,
     get_human_input_session,
     interrupt_human_message__no_commit,
     list_human_messages,
@@ -1523,6 +1527,7 @@ def resume_chat_stream(
 def submit_pending_chat_message(
     session_id: UUID,
     body: PendingChatMessageRequest,
+    request: Request,
     user: User = Depends(require_permission(Permission.WRITE_CHAT)),
     db_session: Session = Depends(get_session),
     _rate_limit_check: None = Depends(check_token_rate_limits),
@@ -1537,10 +1542,18 @@ def submit_pending_chat_message(
         delivery=body.delivery,
         target_response_id=body.target_response_id,
     )
+    cache = get_cache_backend()
+    # The interrupt stops the turn running at commit, never the turn it starts.
+    interrupted = current_turn_owner(session_id, cache)
     db_session.commit()
-    if pending.delivery == MessageDelivery.INTERRUPT:
-        stop_current_turn(session_id, get_cache_backend())
-    dispatch_pending_chat_messages(session_id, user.id)
+    if pending.delivery == MessageDelivery.INTERRUPT and interrupted is not None:
+        stop_current_turn(session_id, cache, owner=interrupted)
+    dispatch_pending_chat_messages(
+        session_id,
+        user.id,
+        get_relevant_headers(request.headers, LITELLM_PASS_THROUGH_HEADERS),
+        get_relevant_headers(request.headers, CUSTOM_TOOL_PASS_THROUGH_HEADERS),
+    )
     return pending
 
 
@@ -1558,6 +1571,7 @@ def list_pending_chat_messages(
 def withdraw_pending_chat_message(
     session_id: UUID,
     message_id: str,
+    request: Request,
     user: User = Depends(require_permission(Permission.WRITE_CHAT)),
     db_session: Session = Depends(get_session),
 ) -> PendingChatMessage:
@@ -1565,7 +1579,12 @@ def withdraw_pending_chat_message(
     get_human_input_session(db_session, session_id, user)
     pending = withdraw_human_message__no_commit(db_session, session_id, message_id)
     db_session.commit()
-    dispatch_pending_chat_messages(session_id, user.id)
+    dispatch_pending_chat_messages(
+        session_id,
+        user.id,
+        get_relevant_headers(request.headers, LITELLM_PASS_THROUGH_HEADERS),
+        get_relevant_headers(request.headers, CUSTOM_TOOL_PASS_THROUGH_HEADERS),
+    )
     return pending
 
 
@@ -1573,6 +1592,7 @@ def withdraw_pending_chat_message(
 def interrupt_with_pending_chat_message(
     session_id: UUID,
     message_id: str,
+    request: Request,
     user: User = Depends(require_permission(Permission.WRITE_CHAT)),
     db_session: Session = Depends(get_session),
     _rate_limit_check: None = Depends(check_token_rate_limits),
@@ -1581,9 +1601,18 @@ def interrupt_with_pending_chat_message(
     """Stop current work; the message starts the next turn."""
     get_human_input_session(db_session, session_id, user)
     pending = interrupt_human_message__no_commit(db_session, session_id, message_id)
+    cache = get_cache_backend()
+    # The interrupt stops the turn running at commit, never the turn it starts.
+    interrupted = current_turn_owner(session_id, cache)
     db_session.commit()
-    stop_current_turn(session_id, get_cache_backend())
-    dispatch_pending_chat_messages(session_id, user.id)
+    if interrupted is not None:
+        stop_current_turn(session_id, cache, owner=interrupted)
+    dispatch_pending_chat_messages(
+        session_id,
+        user.id,
+        get_relevant_headers(request.headers, LITELLM_PASS_THROUGH_HEADERS),
+        get_relevant_headers(request.headers, CUSTOM_TOOL_PASS_THROUGH_HEADERS),
+    )
     return pending
 
 
@@ -1618,7 +1647,11 @@ def stop_chat_session(
     user: User = Depends(require_permission(Permission.WRITE_CHAT)),
     db_session: Session = Depends(get_session),
 ) -> StopChatResponse:
-    """Stop the requested execution without affecting a later request."""
+    """Stop one stream, or without `stream_id` the chat's current turn.
+
+    Without `stream_id`, a Stop that finds no turn running pauses the queue by
+    saving the selected finished response as stopped.
+    """
     try:
         get_chat_session_by_id(
             chat_session_id=chat_session_id,
@@ -1631,7 +1664,16 @@ def stop_chat_session(
         ) from error
 
     if stream_id is None:
-        stop_current_turn(chat_session_id, get_cache_backend())
+
+        def pause_queue() -> None:
+            selected, _ = get_selected_branch(db_session, chat_session_id)
+            if selected is not None:
+                cancel_completed_responses__no_commit(
+                    db_session, chat_session_id, [selected.id]
+                )
+                db_session.commit()
+
+        stop_current_turn(chat_session_id, get_cache_backend(), when_idle=pause_queue)
     else:
         request_stop(chat_session_id, get_cache_backend(), stream_id=stream_id)
     return StopChatResponse(message="Chat session stopped")

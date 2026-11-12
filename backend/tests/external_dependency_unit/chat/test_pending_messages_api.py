@@ -2,9 +2,10 @@
 
 import asyncio
 from collections.abc import Generator
+from concurrent.futures import Future
 from threading import Event
-from typing import override
-from uuid import uuid4
+from typing import Any, override
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi import BackgroundTasks, FastAPI
@@ -21,6 +22,7 @@ from onyx.agents.models import (
     RunStatus,
 )
 from onyx.cache.factory import get_cache_backend
+from onyx.chat import execution
 from onyx.chat.chat_processing_checker import ChatTurnAdmission
 from onyx.chat.execution import chat_turn_work
 from onyx.chat.models import PendingChatMessage, ResponseOwner
@@ -41,7 +43,7 @@ from onyx.db.chat_inputs import (
     withdraw_human_message__no_commit,
 )
 from onyx.db.chat_response import read_response_record
-from onyx.db.enums import HookPoint
+from onyx.db.enums import HookPoint, IncognitoRecordMode
 from onyx.db.models import ChatInput, ChatMessage, ChatSession, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError, register_onyx_exception_handlers
@@ -64,6 +66,7 @@ from onyx.llm.models import (
 from onyx.server.query_and_chat import chat_backend
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.server.query_and_chat.streaming_models import UserMessagePacket
+from onyx.tools.models import ChatToolSelection
 from onyx.utils.threadpool_concurrency import start_thread_future
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.unit.onyx.agents.fakes import FakeModelClient
@@ -323,6 +326,63 @@ def test_send_targets_a_current_response(
     queued = client.post(path, json={"message": "Later", "delivery": "queue"})
     assert queued.status_code == 200, queued.text
     assert client.get(path).json() == [untargeted.json(), sent.json(), queued.json()]
+
+
+def test_interrupt_rejects_a_finished_response_on_another_branch(
+    client: TestClient, response: ChatMessage, db_session: Session
+) -> None:
+    question = response.parent_message
+    assert question is not None
+    response.response_status = RunStatus.COMPLETE
+    selected = ChatMessage(
+        chat_session_id=response.chat_session_id,
+        parent_message_id=question.id,
+        message="Regenerated",
+        token_count=0,
+        message_type=MessageType.ASSISTANT,
+        response_status=RunStatus.COMPLETE,
+    )
+    db_session.add(selected)
+    db_session.flush()
+    question.latest_child_message_id = selected.id
+    db_session.commit()
+    path = f"/chat/chat-session/{response.chat_session_id}/pending-messages"
+    # The earlier answer is no longer on the selected branch.
+    stale = client.post(
+        path,
+        json={
+            "message": "Change direction",
+            "delivery": "interrupt",
+            "target_response_id": response.id,
+        },
+    )
+    assert stale.status_code == 409, stale.text
+    assert client.get(path).json() == []
+    current = client.post(
+        path,
+        json={
+            "message": "Change direction",
+            "delivery": "queue",
+            "target_response_id": selected.id,
+        },
+    )
+    assert current.status_code == 200, current.text
+
+
+def test_an_incognito_chat_saves_its_tool_selection(
+    chat: ChatSession, owner: User, db_session: Session
+) -> None:
+    chat.incognito_record_mode = IncognitoRecordMode.FULL_HISTORY
+    db_session.commit()
+    selection = ChatToolSelection(allowed_tool_ids=[1], preferred_tool_id=None)
+    assert (
+        chat_backend.update_chat_tool_selection(chat.id, selection, owner, db_session)
+        == selection
+    )
+    db_session.expire_all()
+    saved = db_session.get(ChatSession, chat.id)
+    assert saved is not None
+    assert saved.tool_selection == selection
 
 
 def test_send_without_target_binds_to_the_only_running_regeneration(
@@ -1038,6 +1098,229 @@ def test_stop_after_the_answer_finishes_pauses_the_queue(
         status = chat_backend.get_chat_session_processing_status(chat.id, tasks, owner)
         assert not status.has_startable_input
         assert tasks.tasks == []
+    finally:
+        release.set()
+        stream.close()
+        assert chat_turn_work.wait_idle(timeout=30)
+
+
+def test_stop_after_the_last_stop_check_pauses_the_queue(
+    client: TestClient,
+    chat: ChatSession,
+    owner: User,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A Stop that arrives after the finished turn reads Stop still pauses the queue."""
+    path = f"/chat/chat-session/{chat.id}/pending-messages"
+    entered, release = Event(), Event()
+    requests: list[GenerationRequest] = []
+
+    def generate(
+        request: GenerationRequest, _cancellation: CancellationSignal
+    ) -> AssistantMessage:
+        requests.append(request)
+        entered.set()
+        assert release.wait(30)
+        return AssistantMessage(content=[TextContent(text="Full answer")])
+
+    model = QueueTestLLM(generate)
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
+    )
+    stream = handle_stream_message_objects(
+        new_msg_req=SendMessageRequest(
+            message="Initial question", chat_session_id=chat.id
+        ),
+        user=owner,
+    )
+    assert isinstance(stream, Generator)
+    try:
+        next(stream)
+        stream.close()
+        assert entered.wait(15)
+        queued = client.post(
+            path, json={"message": "Do this later", "delivery": "queue"}
+        )
+        assert queued.status_code == 200, queued.text
+
+        def stop() -> None:
+            with Session(db_session.get_bind()) as session:
+                chat_backend.stop_chat_session(chat.id, None, owner, session)
+
+        stops: list[Future[None]] = []
+        read_stop = execution.is_stop_requested
+
+        def stop_after_the_check(*args: Any, **kwargs: Any) -> bool:
+            requested = read_stop(*args, **kwargs)
+            if not stops:
+                # The user presses Stop right after the turn's last Stop check.
+                stops.append(start_thread_future(stop, name="late-stop"))
+            return requested
+
+        claim = ChatTurnAdmission.claim
+
+        def claim_after_stop(admission: ChatTurnAdmission, session_id: UUID) -> None:
+            # The queued turn claims the chat only after Stop was recorded.
+            if stops:
+                stops[0].result(timeout=30)
+            claim(admission, session_id)
+
+        monkeypatch.setattr(execution, "is_stop_requested", stop_after_the_check)
+        monkeypatch.setattr(ChatTurnAdmission, "claim", claim_after_stop)
+        release.set()
+        assert chat_turn_work.wait_idle(timeout=30)
+        assert stops
+        stops[0].result(timeout=30)
+        assert chat_turn_work.wait_idle(timeout=30)
+        db_session.expire_all()
+        finished = db_session.scalar(
+            select(ChatMessage).where(
+                ChatMessage.chat_session_id == chat.id,
+                ChatMessage.message_type == MessageType.ASSISTANT,
+            )
+        )
+        assert finished is not None
+        assert finished.response_status == RunStatus.CANCELLED
+        assert len(requests) == 1
+        assert [message["id"] for message in client.get(path).json()] == [
+            queued.json()["id"]
+        ]
+    finally:
+        release.set()
+        stream.close()
+        assert chat_turn_work.wait_idle(timeout=30)
+
+
+def test_interrupt_does_not_stop_the_turn_it_starts(
+    client: TestClient,
+    chat: ChatSession,
+    owner: User,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A turn that ends before the interrupt's Stop lets the interrupt run to completion."""
+    path = f"/chat/chat-session/{chat.id}/pending-messages"
+    entered, release, interrupt_started, finish_interrupt = (
+        Event(),
+        Event(),
+        Event(),
+        Event(),
+    )
+    requests: list[GenerationRequest] = []
+
+    def generate(
+        request: GenerationRequest, _cancellation: CancellationSignal
+    ) -> AssistantMessage:
+        requests.append(request)
+        if len(requests) == 1:
+            entered.set()
+            assert release.wait(30)
+            return AssistantMessage(content=[TextContent(text="First answer")])
+        interrupt_started.set()
+        assert finish_interrupt.wait(30)
+        return AssistantMessage(content=[TextContent(text="Interrupt answer")])
+
+    model = QueueTestLLM(generate)
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
+    )
+    stop_turn = chat_backend.stop_current_turn
+
+    def stop_after_the_interrupt_starts(*args: Any, **kwargs: Any) -> None:
+        # The first turn finishes and starts the interrupt before its Stop runs.
+        release.set()
+        assert interrupt_started.wait(30)
+        stop_turn(*args, **kwargs)
+        finish_interrupt.set()
+
+    monkeypatch.setattr(
+        chat_backend, "stop_current_turn", stop_after_the_interrupt_starts
+    )
+    stream = handle_stream_message_objects(
+        new_msg_req=SendMessageRequest(
+            message="Initial question", chat_session_id=chat.id
+        ),
+        user=owner,
+    )
+    assert isinstance(stream, Generator)
+    try:
+        next(stream)
+        stream.close()
+        assert entered.wait(15)
+        interrupted = client.post(
+            path, json={"message": "Change direction", "delivery": "interrupt"}
+        )
+        assert interrupted.status_code == 200, interrupted.text
+        assert chat_turn_work.wait_idle(timeout=30)
+        db_session.expire_all()
+        answers = db_session.scalars(
+            select(ChatMessage)
+            .where(
+                ChatMessage.chat_session_id == chat.id,
+                ChatMessage.message_type == MessageType.ASSISTANT,
+            )
+            .order_by(ChatMessage.id)
+        ).all()
+        assert [(answer.message, answer.response_status) for answer in answers] == [
+            ("First answer", RunStatus.COMPLETE),
+            ("Interrupt answer", RunStatus.COMPLETE),
+        ]
+    finally:
+        release.set()
+        finish_interrupt.set()
+        stream.close()
+        assert chat_turn_work.wait_idle(timeout=30)
+
+
+def test_queued_turn_keeps_the_pass_through_headers_of_the_turn_before_it(
+    client: TestClient,
+    chat: ChatSession,
+    owner: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = f"/chat/chat-session/{chat.id}/pending-messages"
+    entered, release = Event(), Event()
+    requests: list[GenerationRequest] = []
+
+    def generate(
+        request: GenerationRequest, _cancellation: CancellationSignal
+    ) -> AssistantMessage:
+        requests.append(request)
+        if len(requests) == 1:
+            entered.set()
+            assert release.wait(30)
+        return AssistantMessage(content=[TextContent(text="Answer")])
+
+    model = QueueTestLLM(generate)
+    model_headers: list[dict[str, str] | None] = []
+
+    def model_for_persona(**kwargs: Any) -> QueueTestLLM:
+        model_headers.append(kwargs["additional_headers"])
+        return model
+
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", model_for_persona
+    )
+    headers = {"x-proxy-user": "user-1"}
+    stream = handle_stream_message_objects(
+        new_msg_req=SendMessageRequest(
+            message="Initial question", chat_session_id=chat.id
+        ),
+        user=owner,
+        litellm_additional_headers=headers,
+    )
+    assert isinstance(stream, Generator)
+    try:
+        next(stream)
+        stream.close()
+        assert entered.wait(15)
+        queued = client.post(path, json={"message": "Follow up", "delivery": "queue"})
+        assert queued.status_code == 200, queued.text
+        release.set()
+        assert chat_turn_work.wait_idle(timeout=30)
+        assert len(requests) == 2
+        assert model_headers == [headers, headers]
     finally:
         release.set()
         stream.close()
