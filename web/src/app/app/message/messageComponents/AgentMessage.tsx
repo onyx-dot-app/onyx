@@ -1,6 +1,9 @@
 "use client";
 
-import { getToolKey } from "@/app/app/message/messageComponents/toolDisplayHelpers";
+import {
+  getToolKey,
+  parseToolKey,
+} from "@/app/app/message/messageComponents/toolDisplayHelpers";
 
 import React, { useRef, useMemo, useEffect, useLayoutEffect } from "react";
 import {
@@ -18,7 +21,10 @@ import { HumanMessageBubble } from "@/app/app/message/HumanMessage";
 import type { TurnGroup } from "@/app/app/message/messageComponents/timeline/transformers";
 import type { GroupedPacket } from "@/app/app/message/messageComponents/timeline/hooks/packetProcessor";
 import { handleCopy } from "@/app/app/message/copyingUtils";
-import { useAuthErrors } from "@/app/app/message/messageComponents/hooks/useAuthErrors";
+import {
+  type AuthError,
+  useAuthErrors,
+} from "@/app/app/message/messageComponents/hooks/useAuthErrors";
 import { getMessageSwitching } from "@/app/app/message/messageComponents/messageSwitching";
 import { RendererComponent } from "@/app/app/message/messageComponents/renderMessageComponent";
 import { GeneratedImageGrid } from "@/app/app/message/messageComponents/renderers/ImageToolRenderer";
@@ -72,6 +78,7 @@ interface ResponseSection {
   toolGroups: TurnGroup[];
   displayGroups: GroupedPacket[];
   images: GeneratedImage[];
+  authErrors: AuthError[];
 }
 
 // TODO: Consider more robust comparisons:
@@ -210,6 +217,8 @@ const AgentMessage = React.memo(function AgentMessage({
       visibleGroups
     );
 
+  const authErrors = useAuthErrors(rawPackets);
+
   const sections = useMemo(() => {
     const sections: ResponseSection[] = [
       {
@@ -218,6 +227,7 @@ const AgentMessage = React.memo(function AgentMessage({
         toolGroups: [],
         displayGroups: [],
         images: [],
+        authErrors: [],
       },
     ];
     let current = sections[0]!;
@@ -230,6 +240,7 @@ const AgentMessage = React.memo(function AgentMessage({
           toolGroups: [],
           displayGroups: [],
           images: [],
+          authErrors: [],
         };
         sections.push(current);
       } else {
@@ -238,9 +249,11 @@ const AgentMessage = React.memo(function AgentMessage({
     }
     let index = 0;
     for (const group of pacedTurnGroups) {
+      // Timeline turns are renumbered; compare the packet turn of the step.
+      const packetTurn = parseToolKey(group.steps[0]!.groupKey).turn_index;
       while (
         index + 1 < sections.length &&
-        group.turnIndex > sections[index + 1]!.turnIndex
+        packetTurn > sections[index + 1]!.turnIndex
       ) {
         index++;
       }
@@ -251,8 +264,13 @@ const AgentMessage = React.memo(function AgentMessage({
         .findLast((section) => section.turnIndex < image.turnIndex)!
         .images.push(image);
     }
+    for (const error of authErrors) {
+      sections
+        .findLast((section) => section.turnIndex < error.turnIndex)!
+        .authErrors.push(error);
+    }
     return sections;
-  }, [pacedDisplayGroups, pacedTurnGroups, generatedImages]);
+  }, [pacedDisplayGroups, pacedTurnGroups, generatedImages, authErrors]);
   const lastAnswerGroup = sections.at(-1)!.displayGroups.at(-1);
 
   // Merge streaming citation/document data with chatState props.
@@ -298,8 +316,6 @@ const AgentMessage = React.memo(function AgentMessage({
       mergedDocs,
     ]
   );
-
-  const authErrors = useAuthErrors(rawPackets);
 
   const {
     currentMessageInd,
@@ -458,30 +474,23 @@ const AgentMessage = React.memo(function AgentMessage({
                   <GeneratedImageGrid images={section.images} />
                 </div>
               )}
-              {section.displayGroups.length > 0 && (
+              {(section.displayGroups.length > 0 ||
+                section.authErrors.length > 0) && (
                 <div
                   ref={(element) => {
                     answerRefs.current[sectionIndex] = element;
                   }}
                   className="flex flex-col gap-3"
                 >
-                  {authErrors
-                    .filter(
-                      (error) =>
-                        error.turnIndex > section.turnIndex &&
-                        (isLastSection ||
-                          error.turnIndex <
-                            sections[sectionIndex + 1]!.turnIndex)
-                    )
-                    .map((authError, i) => (
-                      <CustomToolAuthCard
-                        key={`auth-error-${i}`}
-                        toolName={authError.toolName}
-                        toolId={authError.toolId}
-                        tools={effectiveChatState.agent.tools}
-                        agentId={effectiveChatState.agent.id}
-                      />
-                    ))}
+                  {section.authErrors.map((authError, i) => (
+                    <CustomToolAuthCard
+                      key={`auth-error-${i}`}
+                      toolName={authError.toolName}
+                      toolId={authError.toolId}
+                      tools={effectiveChatState.agent.tools}
+                      agentId={effectiveChatState.agent.id}
+                    />
+                  ))}
                   {section.displayGroups.map((displayGroup) => (
                     <RendererComponent
                       key={getToolKey(

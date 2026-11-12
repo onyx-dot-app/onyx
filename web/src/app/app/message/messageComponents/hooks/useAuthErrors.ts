@@ -7,7 +7,7 @@ import {
   Placement,
 } from "@/app/app/services/streamingModels";
 
-interface AuthError {
+export interface AuthError {
   turnIndex: number;
   toolName: string;
   toolId: number | null;
@@ -30,7 +30,7 @@ function computeAuthErrors(rawPackets: Packet[]): AuthError[] {
   const labels = new Map<string, string>();
   const errors: AuthError[] = [];
   // Labels can repeat across tools, so deduplicate on the tool ID or the
-  // qualified tool name.
+  // qualified tool name within each section.
   const seen = new Set<string>();
 
   for (const packet of rawPackets) {
@@ -39,6 +39,11 @@ function computeAuthErrors(rawPackets: Packet[]): AuthError[] {
         callKey(packet.placement),
         (packet.obj as CustomToolStart).display_name
       );
+      continue;
+    }
+    // Each accepted user message starts a section with its own auth cards.
+    if (packet.obj.type === PacketType.USER_MESSAGE) {
+      seen.clear();
       continue;
     }
     if (packet.obj.type !== PacketType.CUSTOM_TOOL_DELTA) {

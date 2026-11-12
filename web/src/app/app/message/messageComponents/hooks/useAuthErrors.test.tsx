@@ -49,7 +49,7 @@ describe("useAuthErrors", () => {
 
     expect(result.current).toEqual([
       { turnIndex: 0, toolName: "Create issue", toolId: null },
-      { turnIndex: 0, toolName: "New issue", toolId: null },
+      { turnIndex: 2, toolName: "New issue", toolId: null },
     ]);
   });
 
@@ -63,6 +63,29 @@ describe("useAuthErrors", () => {
 
     expect(result.current).toEqual([
       { turnIndex: 0, toolName: "Get user", toolId: 7 },
+    ]);
+  });
+
+  it("reports a tool again after an accepted user message", () => {
+    const packets: Packet[] = [
+      ...authError(0, "custom__7__get_user", "Get user", 7),
+      {
+        placement: { turn_index: 1 },
+        obj: {
+          type: PacketType.USER_MESSAGE,
+          id: "accepted",
+          message: "Try again",
+        },
+      },
+      ...authError(2, "custom__7__get_user", "Get user", 7),
+      ...authError(2, "custom__7__get_user", "Get user", 7),
+    ];
+
+    const { result } = renderHook(() => useAuthErrors(packets));
+
+    expect(result.current).toEqual([
+      { turnIndex: 0, toolName: "Get user", toolId: 7 },
+      { turnIndex: 2, toolName: "Get user", toolId: 7 },
     ]);
   });
 });

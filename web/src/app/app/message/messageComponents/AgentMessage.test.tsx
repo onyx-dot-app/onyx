@@ -27,6 +27,11 @@ jest.mock("@/providers/VoiceModeProvider", () => ({
   }),
 }));
 
+jest.mock("@/app/app/message/messageComponents/CustomToolAuthCard", () => ({
+  __esModule: true,
+  default: ({ toolName }: { toolName: string }) => <p>Connect {toolName}</p>,
+}));
+
 const SESSION_ID = "session-1";
 const USER_NODE_ID = 1;
 const OLD_ANSWER_NODE_ID = 2;
@@ -1044,6 +1049,126 @@ test("a research step shows each of its nested calls once", async () => {
     expect(second).toHaveLength(1);
     expect(
       first[0]!.compareDocumentPosition(second[0]!) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  } finally {
+    view.unmount();
+  }
+});
+
+test("a tool step after an accepted user message follows that message", async () => {
+  seedSessionAwaitingAnswer();
+  const search = (turn_index: number, query: string): Packet[] => [
+    {
+      placement: { turn_index, tab_index: 0 },
+      obj: { type: "search_tool_start", is_internet_search: false },
+    },
+    {
+      placement: { turn_index, tab_index: 0 },
+      obj: { type: "search_tool_queries_delta", queries: [query] },
+    },
+    { placement: { turn_index, tab_index: 0 }, obj: { type: "section_end" } },
+  ];
+  const packets: Packet[] = [
+    ...search(0, "first query"),
+    {
+      placement: { turn_index: 1, tab_index: 0 },
+      obj: {
+        type: PacketType.USER_MESSAGE,
+        id: "accepted",
+        message: "Use the latest report",
+      },
+    },
+    ...search(2, "second query"),
+    ...answerPackets.map((packet) => ({
+      ...packet,
+      placement: { turn_index: 3, tab_index: 0 },
+    })),
+  ];
+  const view = render(
+    <AgentMessage
+      rawPackets={packets}
+      packetCount={packets.length}
+      chatState={chatState}
+      nodeId={NEW_ANSWER_NODE_ID}
+      llmManager={null}
+      hideFooter
+      disableTTS
+    />
+  );
+  try {
+    const bubble = await screen.findByText("Use the latest report");
+    // Each search gets its own timeline, on its side of the user message.
+    expect(screen.queryByText("2 steps")).not.toBeInTheDocument();
+    const timelines = screen.getAllByRole("button", {
+      name: "Toggle timeline",
+    });
+    expect(timelines).toHaveLength(2);
+    expect(
+      timelines[0]!.compareDocumentPosition(bubble) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      bubble.compareDocumentPosition(timelines[1]!) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  } finally {
+    view.unmount();
+  }
+});
+
+test("an auth error after an accepted user message shows its card without an answer", async () => {
+  seedSessionAwaitingAnswer();
+  const authError = (turn_index: number): Packet => ({
+    placement: { turn_index, tab_index: 0 },
+    obj: {
+      type: PacketType.CUSTOM_TOOL_DELTA,
+      tool_name: "custom__7__get_user",
+      display_name: "get_user",
+      tool_id: 7,
+      response_type: "text",
+      error: {
+        is_auth_error: true,
+        is_unreachable: false,
+        status_code: 401,
+        message: "unauthorized",
+      },
+    },
+  });
+  const packets: Packet[] = [
+    ...answerPackets.slice(0, 2),
+    authError(1),
+    {
+      placement: { turn_index: 2, tab_index: 0 },
+      obj: {
+        type: PacketType.USER_MESSAGE,
+        id: "accepted",
+        message: "Try again",
+      },
+    },
+    authError(3),
+    {
+      placement: { turn_index: 3, tab_index: 0 },
+      obj: { type: PacketType.STOP, stop_reason: StopReason.FINISHED },
+    },
+  ];
+  const view = render(
+    <AgentMessage
+      rawPackets={packets}
+      packetCount={packets.length}
+      chatState={chatState}
+      nodeId={NEW_ANSWER_NODE_ID}
+      llmManager={null}
+      hideFooter
+      disableTTS
+    />
+  );
+  try {
+    const bubble = await screen.findByText("Try again");
+    const cards = await screen.findAllByText("Connect get_user");
+    expect(cards).toHaveLength(2);
+    expect(
+      bubble.compareDocumentPosition(cards[1]!) &
         Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
   } finally {
