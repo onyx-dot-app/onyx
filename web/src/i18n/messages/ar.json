@@ -820,6 +820,7 @@
       "search": {
         "placeholder": "البحث في الإجراءات..."
       },
+      "selectionSaveFailed": "تعذر حفظ اختيار الأدوات لهذه المحادثة.",
       "serverFallback": {
         "label": "الخادم"
       },

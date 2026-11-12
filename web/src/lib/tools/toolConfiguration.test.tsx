@@ -8,6 +8,7 @@ import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
 import type { MinimalAgent } from "@/lib/agents/types";
 import type { ToolSnapshot } from "@/lib/tools/types";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
+import { toast } from "@opal/layouts";
 import {
   selectedSourcesFrom,
   buildFilters,
@@ -21,6 +22,7 @@ const CHAT_KEY = "onyx:tools:chat:abc";
 // from what useAppPosition reports on each render.
 let mockChatId = "abc";
 
+jest.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }));
 jest.mock("@/lib/navigation/hooks", () => ({
   useAppPosition: () => ({
     chat: () => mockChatId,
@@ -305,12 +307,44 @@ test("incognito masks Deep Research and leaving incognito restores it", () => {
   expect(result.current.deepResearchEnabled).toBe(true);
 });
 
-test("a tool change in an existing chat saves the chat's tool selection once", async () => {
-  const tool = (id: number) =>
-    ({ id, in_code_tool_id: null, mcp_server_id: null }) as ToolSnapshot;
-  mockActiveAgent = { id: 7, tools: [tool(1), tool(2)] } as MinimalAgent;
+function openSavedChat(): void {
+  const tool = (id: number): ToolSnapshot => ({
+    id,
+    name: `tool_${id}`,
+    display_name: `Tool ${id}`,
+    description: "",
+    definition: null,
+    custom_headers: null,
+    in_code_tool_id: null,
+    passthrough_auth: false,
+    mcp_server_id: null,
+    enabled: true,
+    chat_selectable: true,
+    agent_creation_selectable: true,
+    default_enabled: true,
+  });
+  mockActiveAgent = {
+    id: 7,
+    name: "Agent",
+    description: "",
+    tools: [tool(1), tool(2)],
+    starter_messages: null,
+    document_sets: [],
+    is_public: true,
+    is_listed: true,
+    display_priority: null,
+    is_featured: false,
+    builtin_persona: false,
+    owner: null,
+    owner_group: null,
+    user_permission: null,
+  };
   useChatSessionStore.setState({ sessions: new Map(), currentSessionId: null });
   useChatSessionStore.getState().createSession("abc", { incognito: false });
+}
+
+test("a tool change in an existing chat saves the chat's tool selection once", async () => {
+  openSavedChat();
   const fetchSpy = jest
     .spyOn(global, "fetch")
     .mockImplementation(async () => new Response(JSON.stringify([])));
@@ -331,5 +365,72 @@ test("a tool change in an existing chat saves the chat's tool selection once", a
     });
   } finally {
     fetchSpy.mockRestore();
+  }
+});
+
+test("a tool-selection save waits for the save before it", async () => {
+  openSavedChat();
+  let finishFirst: (response: Response) => void = () => {};
+  let patchCount = 0;
+  const fetchSpy = jest
+    .spyOn(global, "fetch")
+    .mockImplementation(async (_url, init) => {
+      if (init?.method !== "PATCH") return new Response(JSON.stringify([]));
+      patchCount += 1;
+      if (patchCount > 1) return new Response(null, { status: 200 });
+      return new Promise<Response>((resolve) => {
+        finishFirst = resolve;
+      });
+    });
+  const patches = () =>
+    fetchSpy.mock.calls.filter(([, init]) => init?.method === "PATCH");
+  try {
+    const { result } = renderHook(() => useToolConfiguration());
+    await waitFor(() => expect(result.current.ready).toBe(true));
+
+    act(() => result.current.toggleToolState(2, "disabled"));
+    await waitFor(() => expect(patches()).toHaveLength(1));
+    act(() => result.current.toggleToolState(1, "preferred"));
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(patches()).toHaveLength(1);
+
+    finishFirst(new Response(null, { status: 200 }));
+    await waitFor(() => expect(patches()).toHaveLength(2));
+    expect(JSON.parse(String(patches()[1]![1]?.body))).toEqual({
+      allowed_tool_ids: [1],
+      preferred_tool_id: 1,
+    });
+  } finally {
+    fetchSpy.mockRestore();
+  }
+});
+
+test("a failed tool-selection save warns the user", async () => {
+  openSavedChat();
+  const fetchSpy = jest
+    .spyOn(global, "fetch")
+    .mockImplementation(async (_url, init) =>
+      init?.method === "PATCH"
+        ? new Response(null, { status: 500 })
+        : new Response(JSON.stringify([]))
+    );
+  const errorToast = jest.spyOn(toast, "error").mockReturnValue("toast-id");
+  const consoleError = jest
+    .spyOn(console, "error")
+    .mockImplementation(() => {});
+  try {
+    const { result } = renderHook(() => useToolConfiguration());
+    await waitFor(() => expect(result.current.ready).toBe(true));
+
+    act(() => result.current.toggleToolState(2, "disabled"));
+    await waitFor(() =>
+      expect(errorToast).toHaveBeenCalledWith(
+        "toolsPopover.selectionSaveFailed"
+      )
+    );
+  } finally {
+    fetchSpy.mockRestore();
+    errorToast.mockRestore();
+    consoleError.mockRestore();
   }
 });

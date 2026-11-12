@@ -820,6 +820,7 @@
       "search": {
         "placeholder": "搜索操作..."
       },
+      "selectionSaveFailed": "无法保存此聊天的工具选择。",
       "serverFallback": {
         "label": "服务器"
       },

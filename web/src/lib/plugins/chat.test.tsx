@@ -25,6 +25,7 @@ let mockChatId: string | null = "chat-a";
 let mockAgentId: number | null = null;
 let mockProjectId: number | null = null;
 
+jest.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }));
 jest.mock("@/lib/navigation/hooks", () => ({
   useAppPosition: () => ({
     chat: () => mockChatId,
