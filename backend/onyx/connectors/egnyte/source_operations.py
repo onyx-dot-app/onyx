@@ -18,7 +18,16 @@ import requests
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capabilities import CredentialCapability
 from onyx.connectors.cross_connector_utils.server_wait import bound_server_wait
-from onyx.connectors.egnyte.models import EgnyteFile, EgnyteFolder, EgnyteFolderPage
+from onyx.connectors.egnyte.models import (
+    EgnyteFile,
+    EgnyteFolder,
+    EgnyteFolderPage,
+    EgnyteGroup,
+    EgnyteGroupRef,
+    EgnytePermissions,
+    EgnyteUser,
+    EgnyteUserInfo,
+)
 from onyx.connectors.exceptions import (
     CredentialInvalidError,
     InsufficientPermissionsError,
@@ -55,6 +64,12 @@ _DEFAULT_RATE_LIMIT_WAIT_SECONDS: float = 1.0
 _QUOTA_ALLOTTED_HEADER: str = "X-Accesstoken-Quota-Allotted"
 _QUOTA_CURRENT_HEADER: str = "X-Accesstoken-Quota-Current"
 _DOWNLOAD_CHUNK_BYTES: int = 1024 * 1024
+_V2_USERS_PATH: str = "/v2/users"
+_V2_GROUPS_PATH: str = "/v2/groups"
+# Egnyte returns at most 100 users or groups per page.
+_DIRECTORY_PAGE_SIZE: int = 100
+# A listing still paging past this is a server that ignores startIndex.
+_MAX_DIRECTORY_PAGES: int = 10_000
 # Guards the lazy session build and the pacing schedule of every gateway
 # instance. Waits happen outside it.
 _LOCK = threading.Lock()
@@ -78,7 +93,7 @@ def validate_domain(domain: str) -> None:
 
 
 def _api_root(domain: str) -> str:
-    return f"https://{domain}.egnyte.com/pubapi/v1"
+    return f"https://{domain}.egnyte.com/pubapi"
 
 
 def _fs_path(path: str) -> str:
@@ -201,6 +216,56 @@ class EgnyteSourceOperations(SourceOperations):
             url=url,
         )
 
+    def _list_folder_page(
+        self, folder_path: str, offset: int, page_size: int, with_permissions: bool
+    ) -> EgnyteFolderPage:
+        params: dict[str, str | int] = {
+            "list_content": "true",
+            "count": page_size,
+            "offset": offset,
+            # Names are unique in a folder, so the order is stable while the
+            # folder changes.
+            "sort_by": "name",
+            "sort_direction": "ascending",
+        }
+        if with_permissions:
+            params["perms"] = "true"
+        body: dict[str, Any] = self._get(
+            f"/v1/fs/{_fs_path(folder_path)}", params
+        ).json()
+        return EgnyteFolderPage(
+            folder=EgnyteFolder.model_validate(body),
+            folders=[EgnyteFolder.model_validate(f) for f in body.get("folders", [])],
+            files=[EgnyteFile.model_validate(f) for f in body.get("files", [])],
+            permissions=(
+                EgnytePermissions.model_validate(body.get("permissions") or {})
+                if with_permissions
+                else None
+            ),
+        )
+
+    def _list_directory(self, path: str, limit: int | None) -> list[dict[str, Any]]:
+        """The resources of a SCIM listing, which pages by 1-based startIndex.
+        Every one, or at most ``limit`` from one call."""
+        resources: list[dict[str, Any]] = []
+        for _ in range(_MAX_DIRECTORY_PAGES):
+            body: dict[str, Any] = self._get(
+                path,
+                {
+                    "startIndex": len(resources) + 1,
+                    "count": min(limit or _DIRECTORY_PAGE_SIZE, _DIRECTORY_PAGE_SIZE),
+                },
+            ).json()
+            page: list[dict[str, Any]] = body.get("resources", [])
+            resources.extend(page)
+            if limit is not None:
+                return resources[:limit]
+            if not page or len(resources) >= int(body.get("totalResults", 0)):
+                return resources
+        raise RuntimeError(
+            f"Egnyte kept paging {path} past {_MAX_DIRECTORY_PAGES} pages"
+        )
+
     @source_operation(
         capabilities=(CredentialCapability.INDEXING,),
         consumes=OperationConsumes.CREDENTIAL,
@@ -208,22 +273,68 @@ class EgnyteSourceOperations(SourceOperations):
     def list_folder_page(
         self, *, folder_path: str, offset: int, page_size: int
     ) -> EgnyteFolderPage:
-        """One page of a folder's direct children, sorted by name. Names are
-        unique in a folder, so the order is stable while the folder changes."""
-        body: dict[str, Any] = self._get(
-            f"/fs/{_fs_path(folder_path)}",
-            {
-                "list_content": "true",
-                "count": page_size,
-                "offset": offset,
-                "sort_by": "name",
-                "sort_direction": "ascending",
-            },
-        ).json()
-        return EgnyteFolderPage(
-            folder=EgnyteFolder.model_validate(body),
-            folders=[EgnyteFolder.model_validate(f) for f in body.get("folders", [])],
-            files=[EgnyteFile.model_validate(f) for f in body.get("files", [])],
+        """One page of a folder's direct children, sorted by name."""
+        return self._list_folder_page(folder_path, offset, page_size, False)
+
+    @source_operation(
+        capabilities=(CredentialCapability.DOC_PERMISSION_SYNC,),
+        consumes=OperationConsumes.CREDENTIAL,
+    )
+    def list_folder_page_with_permissions(
+        self, *, folder_path: str, offset: int, page_size: int
+    ) -> EgnyteFolderPage:
+        """A folder page with the folder's effective grants. Needs the
+        Egnyte.permission scope, and Egnyte refuses it for "/" and "/Private"."""
+        return self._list_folder_page(folder_path, offset, page_size, True)
+
+    @source_operation(
+        capabilities=(
+            CredentialCapability.DOC_PERMISSION_SYNC,
+            CredentialCapability.EXTERNAL_GROUP_SYNC,
+        ),
+        consumes=OperationConsumes.CREDENTIAL,
+    )
+    def get_user_info(self) -> EgnyteUserInfo:
+        return EgnyteUserInfo.model_validate(self._get("/v1/userinfo").json())
+
+    @source_operation(
+        capabilities=(
+            CredentialCapability.DOC_PERMISSION_SYNC,
+            CredentialCapability.EXTERNAL_GROUP_SYNC,
+        ),
+        consumes=OperationConsumes.CREDENTIAL,
+    )
+    def list_users(self, *, limit: int | None = None) -> list[EgnyteUser]:
+        """Every user of the domain, or the first ``limit`` with one call.
+        Needs an administrator's token."""
+        return [
+            EgnyteUser.model_validate(user)
+            for user in self._list_directory(_V2_USERS_PATH, limit)
+        ]
+
+    @source_operation(
+        capabilities=(
+            CredentialCapability.DOC_PERMISSION_SYNC,
+            CredentialCapability.EXTERNAL_GROUP_SYNC,
+        ),
+        consumes=OperationConsumes.CREDENTIAL,
+    )
+    def list_groups(self, *, limit: int | None = None) -> list[EgnyteGroupRef]:
+        """Every custom group, or the first ``limit`` with one call. The
+        default groups are not listed."""
+        return [
+            EgnyteGroupRef.model_validate(group)
+            for group in self._list_directory(_V2_GROUPS_PATH, limit)
+        ]
+
+    @source_operation(
+        capabilities=(CredentialCapability.EXTERNAL_GROUP_SYNC,),
+        consumes=OperationConsumes.CREDENTIAL,
+    )
+    def get_group(self, *, group_id: str) -> EgnyteGroup:
+        """A custom group with its members."""
+        return EgnyteGroup.model_validate(
+            self._get(f"{_V2_GROUPS_PATH}/{quote(group_id)}").json()
         )
 
     @source_operation(
@@ -236,7 +347,7 @@ class EgnyteSourceOperations(SourceOperations):
         the file is read."""
         buffer = BytesIO()
         chunk_size = min(max_bytes or _DOWNLOAD_CHUNK_BYTES, _DOWNLOAD_CHUNK_BYTES)
-        response = self._get(f"/fs-content/{_fs_path(file_path)}", stream=True)
+        response = self._get(f"/v1/fs-content/{_fs_path(file_path)}", stream=True)
         with response:
             for chunk in response.iter_content(chunk_size=chunk_size):
                 buffer.write(chunk)

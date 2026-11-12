@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.9.42
+version: 0.9.43
 appVersion: latest
 annotations:
   category: Productivity
@@ -21,9 +21,9 @@ annotations:
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
     - kind: added
-      description: Craft Firecracker host agent VM cap per node
-        (craft.hostAgent.maxVms, default 60 for nested virtualization). Raise
-        it or set 0 (no cap) on bare metal nodes.
+      description: EGNYTE_PERMISSION_DOC_SYNC_FREQUENCY and
+        EGNYTE_PERMISSION_GROUP_SYNC_FREQUENCY set how often Egnyte
+        permission sync runs.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it
