@@ -303,9 +303,13 @@ Community downgrade clears it ([[billing]]).
    checkpoint row in the same transaction; a direct caller of `save_chat_turn`
    does not. Do not commit in the middle. The earlier saves
    (`save_response_record__no_commit`) commit on their own, and happen only at
-   run start (no steps), before each sub-agent starts (the root's steps so
-   far), and when a sub-agent run ends. A crashed root run keeps its steps only
-   up to its last sub-agent start, under a `RUNNING` status.
+   run start (no steps), when a step accepts pending human input
+   (`chat/run_store.py:ChatRunStore.accept_inputs` saves the steps so far plus
+   the accepting step, in the transaction that consumes the inbox rows), before
+   each sub-agent starts (the root's steps so far), and when a sub-agent run
+   ends. A crashed root run keeps its steps only up to the latest of these
+   saves, under a `RUNNING` status, so accepted input survives a crash and is
+   not delivered again.
    `chat/run_store.py:ChatRunStore._load_status` marks a `RUNNING` response
    with no live owner as `ERROR` (`cancel_run`: `CANCELLED`) only when a later
    run reads it as a sub-agent. A root response left `RUNNING` is repaired
