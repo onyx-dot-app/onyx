@@ -22,6 +22,14 @@
   second streaming send on the same session with a `StreamingError` packet whose
   `error_code` is `CONFLICT`, not with an HTTP status. A `stream=false` send
   fails with "Message ID is required" ([[#session-admission]]).
+  The separate pending-message API accepts text during a turn. `send` targets
+  the current response's next model step; without a target it goes to the
+  selected response. A `send` that its response no longer reads, including one
+  to an idle session, is stored as `queue` and never refused. `queue` starts a
+  new turn after normal completion or the step limit. `interrupt` requests Stop,
+  then starts a new turn after execution and saves drain. Stop and failure
+  leave ordinary queued text pending. The main-chat frontend uses this API; Craft has a
+  separate backend.
 - **Stop.** The user presses stop. The input shows that the turn is stopping
   until active model, tool and save work drains. The partial answer stays, with
   "Generation was stopped by the user." after it. A reload shows the same saved
@@ -40,7 +48,10 @@
   multi-model deep research request. The other cases end the turn with an error.
 - **When the turn fails** in setup (no access to a document set, a bad model
   setting, a Query Processing hook that rejects the message), the user sees one
-  error, and no response row is reserved. A failure after reservation is saved
+  error, and no response row is reserved. Queued input is accepted and its
+  answer reserved right after admission, so a later failure, including a rate
+  or spend limit, saves an error answer that pauses the queue instead of
+  retrying. A failure after reservation is saved
   per model: a launch failure adds one `CHAT_STARTUP_ERROR` packet, then each
   model streams and saves its own error. Agent construction errors (preferred tool
   missing, deep research in a project or with a small model) and failures during
@@ -107,12 +118,9 @@ Processing hook before it saves the user message, only for a new, non-blank
 message, and only when the incognito mode allows hooks
 (`IncognitoRecordMode.fires_hooks`), because the hook sends the query out
 ([[hooks]]). A rejection raises `QUERY_REJECTED`. A regeneration reuses the saved
-user message. Each user send saves its tools in `chat_session.tool_selection`
-(`allowed_tool_ids`, `preferred_tool_id`; NULL means the agent's tools), and the
-`PATCH /chat/chat-session/{session_id}/tool-selection` route updates them between
-sends. A single-model send with a model override saves it in
-`chat_session.llm_override`, which later turns without an override use. Then
-setup resolves the custom agent prompt, memories, the
+user message. Pending human submissions run the same hook before queue storage;
+setup reuses that processed text without rewriting it again. Then setup resolves
+the custom agent prompt, memories, the
 reserved tokens, the tool configuration and the branch summary, and copies the
 history out of the ORM rows. It closes the DB session before slow file loading,
 renews the admission between stages, and reserves one assistant row per model.
@@ -168,7 +176,31 @@ not cancelled, refreshes the admission lease every 5 s, and lets each
 `DEADLINE` failure. The turn cancels remaining work 30 seconds later, including
 preparation that has not started a run. When no response worker and no
 owned run remains, it finishes delivery and then releases the admission. A child
-run's owner lease also keeps the turn and its admission alive. API shutdown
+run's owner lease also keeps the turn and its admission alive.
+Before release it reads Stop one last time. A Stop that arrived after an answer
+finished saves that answer as `CANCELLED`, so the queue pauses
+(`db/chat_inputs.py:cancel_completed_responses__no_commit`).
+After release, `chat/process_message.py:dispatch_pending_chat_messages` starts
+the next queued turn. `db/chat_inputs.py:read_chat_inbox` reads the selected
+branch's queued turn; it reads the branch only when the conversation has an
+inbox row. With admission free, dispatch saves a selected root response that is
+still `RUNNING` without an owner as interrupted
+(`chat/run_store.py:interrupt_ownerless_responses`). It starts a response with
+current session settings and fresh authorization checks. A queued turn whose
+owner lost `WRITE_CHAT` saves an error response, which pauses the queue. The model is
+`chat_session.llm_override`, which each single-model user turn with a model
+override updates, so queued and interrupting turns use the user's last
+model. Tools work the same way: each user send and the
+`PATCH /chat/chat-session/{session_id}/tool-selection` route save
+`chat_session.tool_selection` (`allowed_tool_ids`, `preferred_tool_id`), and a
+turn the server starts uses the selection current when it starts. NULL means
+the agent's tools. Child agents keep their own tool configuration. If the queue head changes before acceptance, preparation ends with a
+conflict, and the next trigger dispatches again. Consuming the inbox row
+prevents delivery twice. If automatic preparation fails, a saved error response
+prevents repeated startup attempts. Withdrawal removes pending text atomically;
+editing resubmits a new entry. No browser reader is needed. Only callers that
+deliver follow-ups (`delivers_follow_ups`, false for `run_chat_turn`) start
+queued turns. A dispatch failure never cancels the turn. API shutdown
 waits up to `CHAT_EXECUTION_TIMEOUT_S` for `chat/execution.py:chat_turn_work`,
 then closes database and tracing services; it does not cancel turns. The pod's
 termination grace period is much shorter, so it ends running turns first
@@ -269,13 +301,16 @@ termination grace period is much shorter, so it ends running turns first
     "Deploying the shared runtime").
 12. `crashed-turn` **A crashed turn is not recomputed.** `ChatRunStore.register`
     marks each run's row `RUNNING` and sets `chat_response_owner:<response_id>`
-    (60 s TTL, renewed every 10 s). After a crash a root response stays `RUNNING`,
-    and a reload replays it as is. Only a sub-agent response gets marked `ERROR`,
-    when a later parent run reads it as a child through
-    `ChatRunStore._load_status` ([[chat-persistence#save-chat-turn-one-commit]]). A row that was
+    (60 s TTL, renewed every 10 s). After a crash a response stays `RUNNING`,
+    and a reload replays it as is. `chat/run_store.py:interrupt_ownerless_responses`
+    marks it `ERROR` when a parent reads it as a child through
+    `ChatRunStore._load_status`, or when the dispatcher, which status polling
+    also starts, finds the selected root without an owner while admission is
+    free ([[chat-persistence#save-chat-turn-one-commit]]). A row that was
     reserved but never registered keeps the placeholder text from
     `db/chat.py:reserve_chat_response_ids`. Stream resume does not restart work;
     only a suspended checkpoint (`ChatRunStore.handoff` and `resume`) restores it.
+    Queued text can still start a new root response through status polling.
 13. `shared-loop-pieces` **Shared runtime pieces have several callers.** A change
     to `agents/runtime.py`, to `chat/prompt_utils.py:prepare_prompt` or to
     `Placement` handling also reaches deep research, the research agent and the

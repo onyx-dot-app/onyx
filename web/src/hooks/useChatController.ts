@@ -195,9 +195,6 @@ export default function useChatController({
   const updateChatStateAction = useChatSessionStore(
     (state) => state.updateChatState
   );
-  const setLatestMessageRenderComplete = useChatSessionStore(
-    (state) => state.setLatestMessageRenderComplete
-  );
   const updateRegenerationStateAction = useChatSessionStore(
     (state) => state.updateRegenerationState
   );
@@ -405,9 +402,6 @@ export default function useChatController({
       const submissionSessionId = getCurrentSessionId();
       if (submissionSessionId) {
         submissionStore.setAbortController(submissionSessionId, controller);
-        submissionStore.updateSessionData(submissionSessionId, {
-          queuedMessagesPaused: false,
-        });
       }
       // Read at submit time so no caller can capture a stale value.
       const incognito = incognitoEnabledRef.current ?? false;
@@ -675,7 +669,6 @@ export default function useChatController({
       ];
 
       updateChatStateAction(frozenSessionId, "loading");
-      setLatestMessageRenderComplete(frozenSessionId, false);
 
       // find the parent
       const currMessageHistory =
@@ -1572,11 +1565,6 @@ export default function useChatController({
         }
       }
 
-      if (saveFailed || !streamSucceeded) {
-        useChatSessionStore
-          .getState()
-          .updateSessionData(frozenSessionId, { queuedMessagesPaused: true });
-      }
       const wasCancelling =
         useChatSessionStore.getState().sessions.get(frozenSessionId)
           ?.chatState === "cancelling";
@@ -1585,7 +1573,6 @@ export default function useChatController({
         controller,
         errorMessage: tReadiness("checkFailed"),
         refreshHistory: !streamSucceeded || saveFailed || wasCancelling,
-        completeRendering: !streamSucceeded || wasCancelling,
       });
 
       // Name the chat now that we have the first AI response (navigation already happened before streaming)

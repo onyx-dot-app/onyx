@@ -97,9 +97,9 @@ Default Chat when the user's preference turns it off.
 keeps each chat's tool states. When the user changes them in an existing chat
 that is not incognito and not anonymous, it PATCHes
 `/api/chat/chat-session/{id}/tool-selection` with the `allowed_tool_ids` and
-`preferred_tool_id` a send would carry, debounced by 300 ms. The server keeps
-that selection on the chat session. A new chat saves its selection on its
-first send.
+`preferred_tool_id` a send would carry, debounced by 300 ms. Turns the server
+starts, such as queued input, use that saved selection. A new chat saves its
+selection on its first send.
 
 ---
 

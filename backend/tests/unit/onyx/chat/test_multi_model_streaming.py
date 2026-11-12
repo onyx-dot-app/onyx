@@ -1241,15 +1241,15 @@ class TestRunModels:
             _wait_for_stop()
 
         setup = _make_setup(n_models=2)
-        setup.cache.exists.return_value = True
-        model_1_persisted = threading.Event()
+        failed_model_persisted = threading.Event()
+        setup.cache.exists.side_effect = lambda *_: failed_model_persisted.is_set()
 
         with (
             patch_execution(side_effect=fail_model_0),
             patch("onyx.chat.execution.construct_tools", return_value={}),
             patch(
                 "onyx.chat.history_store.save_chat_response_to_db",
-                side_effect=lambda *_, **__: model_1_persisted.set(),
+                side_effect=lambda *_, **__: failed_model_persisted.set(),
             ) as mock_handle,
             patch(
                 "onyx.chat.execution.get_llm_token_counter",
@@ -1257,7 +1257,7 @@ class TestRunModels:
             ),
         ):
             _collect_chat_turn(setup)
-            assert model_1_persisted.wait(timeout=5)
+            assert failed_model_persisted.wait(timeout=5)
             assert mock_handle.call_count == 2
 
         persisted = {
@@ -1409,6 +1409,7 @@ def _mock_settings() -> Generator[None, None, None]:
             return_value=[],
         ),
         patch("onyx.chat.execution.get_cache_backend"),
+        patch("onyx.chat.execution.get_session_with_current_tenant"),
         patch("onyx.chat.execution.ChatRunStore", side_effect=run_store),
     ):
         yield

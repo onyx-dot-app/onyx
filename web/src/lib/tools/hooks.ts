@@ -559,9 +559,9 @@ export function useToolConfiguration(
     handOffToNewChatWith,
   ]);
 
-  // Turns the server starts for an existing chat use the tool selection saved
-  // on the chat. A new chat saves it on its first send; incognito and
-  // anonymous chats keep nothing.
+  // The server starts turns for an existing chat, such as queued input, with
+  // the tool selection saved on the chat. A new chat saves it on its first
+  // send; incognito and anonymous chats keep nothing.
   const { user } = useUser();
   const { plugins } = useMemberPlugins({
     agentId: activeAgent?.id,

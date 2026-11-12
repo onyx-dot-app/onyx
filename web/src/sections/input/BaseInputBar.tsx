@@ -145,7 +145,12 @@ const BaseInputBar = memo(
         messages: queue,
         inputIsEmpty: !message,
         onRemove: (index) => onRemoveQueuedMessage?.(index),
-        onEdit: setMessage,
+        onEdit: (index) => {
+          const queued = queue[index];
+          if (!queued) return;
+          onRemoveQueuedMessage?.(index);
+          setMessage(queued.text);
+        },
       });
 
       useImperativeHandle(ref, () => ({
@@ -295,9 +300,8 @@ const BaseInputBar = memo(
           {queueEnabled && (
             <QueuedMessageBar
               messages={queue}
-              highlightedIndex={queueNav.highlightedIndex}
+              highlightedId={queueNav.highlightedId}
               onDiscard={(index) => onRemoveQueuedMessage?.(index)}
-              onHighlight={queueNav.setHighlightedIndex}
             />
           )}
           <div
@@ -329,7 +333,7 @@ const BaseInputBar = memo(
                 onKeyDown={handleKeyDown}
                 onKeyUp={handleSelectionChange}
                 onMouseUp={handleSelectionChange}
-                onBlur={() => queueNav.setHighlightedIndex(null)}
+                onBlur={() => queueNav.setHighlightedId(null)}
                 className={cn(
                   "w-full h-full min-h-[44px] outline-hidden bg-transparent",
                   "whitespace-pre-wrap wrap-break-word overscroll-contain",

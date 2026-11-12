@@ -2,7 +2,7 @@
 
 import threading
 import time
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Collection, Iterator, Sequence
 from contextlib import contextmanager
 from uuid import UUID, uuid4
 
@@ -42,6 +42,11 @@ from onyx.db.chat_checkpoint import (
     publish_checkpoint__no_commit,
     release_checkpoint_claim__no_commit,
 )
+from onyx.db.chat_inputs import (
+    consume_inputs__no_commit,
+    has_pending_sends,
+    read_run_inputs,
+)
 from onyx.db.chat_response import (
     abort_response_start__no_commit,
     find_response__no_commit,
@@ -66,6 +71,51 @@ OWNER_EXPIRY_MARGIN_SECONDS = 5.0
 OWNER_LOCK_SECONDS = 30
 OWNER_LOCK_WAIT_SECONDS = 10
 STOP_TTL_SECONDS = 600
+RESPONSE_OWNER_KEY_PREFIX = "chat_response_owner:"
+
+
+def _owner_key(response_id: int) -> str:
+    return f"{RESPONSE_OWNER_KEY_PREFIX}{response_id}"
+
+
+@contextmanager
+def _ownership_lock(cache: CacheBackend, response_id: int) -> Iterator[None]:
+    lock = cache.lock(f"chat_response_lock:{response_id}", timeout=OWNER_LOCK_SECONDS)
+    if not lock.acquire(blocking_timeout=OWNER_LOCK_WAIT_SECONDS):
+        raise TimeoutError("Response ownership is busy")
+    try:
+        yield
+    finally:
+        lock.release()
+
+
+def ownerless_response_ids(
+    cache: CacheBackend, response_ids: Collection[int]
+) -> set[int]:
+    """The running responses whose execution lease is gone."""
+    keys = {_owner_key(response_id): response_id for response_id in response_ids}
+    return set(response_ids) - (
+        {keys[key] for key in cache.exists_many(keys)} if keys else set()
+    )
+
+
+def interrupt_ownerless_responses(
+    cache: CacheBackend, tenant_id: str, response_ids: Collection[int]
+) -> set[int]:
+    """Save running responses whose owner is gone as interrupted; return their IDs.
+
+    A crashed owner's lease expires without a terminal status.
+    """
+    interrupted: set[int] = set()
+    for response_id in ownerless_response_ids(cache, response_ids):
+        with _ownership_lock(cache, response_id):
+            if cache.exists(_owner_key(response_id)):
+                continue
+            with get_session_with_tenant(tenant_id=tenant_id) as session:
+                interrupt_response__no_commit(session, response_id)
+                session.commit()
+        interrupted.add(response_id)
+    return interrupted
 
 
 class _OwnershipLost(RuntimeError):
@@ -132,26 +182,11 @@ class ChatRunStore(RunStore, RunOwnership):
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
-    def _owner_key(self, response_id: int) -> str:
-        return f"chat_response_owner:{response_id}"
-
     def _stop_key(self, response_id: int) -> str:
         return f"chat_response_stop:{response_id}"
 
-    @contextmanager
-    def _ownership_lock(self, response_id: int) -> Iterator[None]:
-        lock = self.cache.lock(
-            f"chat_response_lock:{response_id}", timeout=OWNER_LOCK_SECONDS
-        )
-        if not lock.acquire(blocking_timeout=OWNER_LOCK_WAIT_SECONDS):
-            raise TimeoutError("Response ownership is busy")
-        try:
-            yield
-        finally:
-            lock.release()
-
     def _owner(self, response_id: int) -> ResponseOwner | None:
-        value = self.cache.get(self._owner_key(response_id))
+        value = self.cache.get(_owner_key(response_id))
         return ResponseOwner.model_validate_json(value) if value is not None else None
 
     def _require_owner(self, owned: _OwnedRun) -> None:
@@ -193,18 +228,14 @@ class ChatRunStore(RunStore, RunOwnership):
             raise ValueError("Response is unavailable on this branch")
         if parent_id is not None and saved.parent_agent_id != (parent_id or None):
             raise ValueError("Response is unavailable to this parent")
-        if saved.status == RunStatus.RUNNING:
-            with self._ownership_lock(saved.message_id):
-                if self._owner(saved.message_id) is None:
-                    with get_session_with_tenant(tenant_id=self.tenant_id) as session:
-                        interrupt_response__no_commit(session, saved.message_id)
-                        session.commit()
-                        current = read_response_status__no_commit(
-                            session, saved.message_id
-                        )
-                    if current is None:
-                        raise LookupError("Response was removed")
-                    saved = current
+        if saved.status == RunStatus.RUNNING and interrupt_ownerless_responses(
+            self.cache, self.tenant_id, [saved.message_id]
+        ):
+            with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                current = read_response_status__no_commit(session, saved.message_id)
+            if current is None:
+                raise LookupError("Response was removed")
+            saved = current
         return saved
 
     def _load(self, response_id: int, parent_id: str | None = None) -> SavedResponse:
@@ -218,15 +249,41 @@ class ChatRunStore(RunStore, RunOwnership):
     def discovery(self) -> list[AgentInfo]:
         return self._with_tenant(lambda: load_session_agent_metadata(self.response_id))
 
-    def receive_inputs(self, run: Run) -> list[UserMessage]:  # noqa: ARG002
-        """Chat sends no input to a running response."""
-        return []
+    def receive_inputs(self, run: Run) -> list[UserMessage]:
+        """Read the messages sent to this run."""
+        with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+            return read_run_inputs(session, run.agent_id, run.id)
 
-    def accept_inputs(self, run: Run, step: StepRecord) -> bool:  # noqa: ARG002
-        return True
+    def accept_inputs(self, run: Run, step: StepRecord) -> bool:
+        if not step.input_messages:
+            return True
+        snapshot = run.snapshot(include_children=False)
+        snapshot.steps.append(step)
+        response_id = int(run.id)
+        with self._lock:
+            owned = self._owned.get(response_id)
+        if owned is None:
+            raise ValueError("Response has no execution ownership")
+        with _ownership_lock(self.cache, response_id):
+            self._require_owner(owned)
+            with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                if not consume_inputs__no_commit(
+                    session,
+                    response_id,
+                    step.input_messages,
+                    ownership_version=owned.owner.ownership_version,
+                ):
+                    return False
+                save_response_record__no_commit(
+                    session, owned.owner.root_message_id, self._record(snapshot)
+                )
+                session.commit()
+                return True
 
-    def has_unread_inputs(self, run: Run) -> bool:  # noqa: ARG002
-        return False
+    def has_unread_inputs(self, run: Run) -> bool:
+        # A send that arrives after this check starts the next turn.
+        with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+            return has_pending_sends(session, run.agent_id, int(run.id))
 
     def read_run(self, run_id: str, parent_id: str) -> RunState | None:
         if not run_id.isdecimal():
@@ -252,7 +309,7 @@ class ChatRunStore(RunStore, RunOwnership):
         if saved.status.is_terminal:
             return
         self.cache.set(self._stop_key(saved.message_id), 1, ex=STOP_TTL_SECONDS)
-        with self._ownership_lock(saved.message_id):
+        with _ownership_lock(self.cache, saved.message_id):
             if self._owner(saved.message_id) is None:
                 with get_session_with_tenant(tenant_id=self.tenant_id) as session:
                     interrupt_response__no_commit(
@@ -269,7 +326,7 @@ class ChatRunStore(RunStore, RunOwnership):
     def _save_output(self, owned: _OwnedRun, snapshot: RunState) -> None:
         response_id = int(owned.run.id)
         record = self._record(snapshot)
-        with self._ownership_lock(response_id):
+        with _ownership_lock(self.cache, response_id):
             self._require_owner(owned)
             with get_session_with_tenant(tenant_id=self.tenant_id) as session:
                 check_checkpoint_owner__no_commit(
@@ -314,7 +371,7 @@ class ChatRunStore(RunStore, RunOwnership):
         if parent is None:
             raise ValueError("Parent response has no execution ownership")
         self._save_output(parent, parent.run.snapshot(include_children=False))
-        with self._ownership_lock(parent_response_id):
+        with _ownership_lock(self.cache, parent_response_id):
             self._require_owner(parent)
             with get_session_with_tenant(tenant_id=self.tenant_id) as session:
                 check_checkpoint_owner__no_commit(
@@ -352,7 +409,7 @@ class ChatRunStore(RunStore, RunOwnership):
             root_message_id = (
                 parent.owner.root_message_id if parent else self.response_id
             )
-            with self._ownership_lock(response_id):
+            with _ownership_lock(self.cache, response_id):
                 if self._owner(response_id) is not None:
                     raise ValueError("Response already has an owner")
                 with get_session_with_tenant(tenant_id=self.tenant_id) as session:
@@ -371,7 +428,7 @@ class ChatRunStore(RunStore, RunOwnership):
                 with self._lock:
                     self._leases[response_id] = lease
                 self.cache.set(
-                    self._owner_key(response_id),
+                    _owner_key(response_id),
                     claimed.model_dump_json(),
                     ex=OWNER_TTL_SECONDS,
                 )
@@ -398,7 +455,7 @@ class ChatRunStore(RunStore, RunOwnership):
         with self._lock:
             lease = self._leases.get(response_id)
         if lease is None:
-            with self._ownership_lock(response_id):
+            with _ownership_lock(self.cache, response_id):
                 if self._owner(response_id) is not None:
                     return
                 with get_session_with_tenant(tenant_id=self.tenant_id) as session:
@@ -410,7 +467,7 @@ class ChatRunStore(RunStore, RunOwnership):
         with lease.lock:
             lease.released = True
         try:
-            with self._ownership_lock(response_id):
+            with _ownership_lock(self.cache, response_id):
                 owner = self._owner(response_id)
                 if owner is not None and owner != lease.owner:
                     return
@@ -431,7 +488,7 @@ class ChatRunStore(RunStore, RunOwnership):
                         )
                         session.commit()
                 if owner is not None:
-                    self.cache.delete(self._owner_key(response_id))
+                    self.cache.delete(_owner_key(response_id))
         finally:
             with self._lock:
                 self._leases.pop(response_id, None)
@@ -446,9 +503,9 @@ class ChatRunStore(RunStore, RunOwnership):
         with lease.lock:
             lease.released = True
         try:
-            with self._ownership_lock(response_id):
+            with _ownership_lock(self.cache, response_id):
                 if self._owner(response_id) == lease.owner:
-                    self.cache.delete(self._owner_key(response_id))
+                    self.cache.delete(_owner_key(response_id))
         finally:
             with self._lock:
                 self._leases.pop(response_id, None)
@@ -462,7 +519,7 @@ class ChatRunStore(RunStore, RunOwnership):
         if response_id != self.response_id or self._root_response is None:
             self._save_output(owned, run.snapshot(include_children=False))
             return
-        with self._ownership_lock(response_id):
+        with _ownership_lock(self.cache, response_id):
             self._require_owner(owned)
             with get_session_with_tenant(tenant_id=self.tenant_id) as session:
                 check_checkpoint_owner__no_commit(
@@ -484,7 +541,7 @@ class ChatRunStore(RunStore, RunOwnership):
 
     def _refresh_owner(self, response_id: int, owner: ResponseOwner) -> None:
         if not self.control_cache.renew_if_value(
-            self._owner_key(response_id),
+            _owner_key(response_id),
             owner.model_dump_json().encode(),
             OWNER_TTL_SECONDS,
         ):
@@ -566,7 +623,7 @@ class ChatRunStore(RunStore, RunOwnership):
         data = serialize_checkpoint(captured, record, self._binding(response_id))
 
         def save(_checkpoint: ExecutionCheckpoint) -> None:
-            with self._ownership_lock(response_id):
+            with _ownership_lock(self.cache, response_id):
                 self._require_owner(owned)
                 with get_session_with_tenant(tenant_id=self.tenant_id) as session:
                     check_checkpoint_owner__no_commit(
@@ -605,7 +662,7 @@ class ChatRunStore(RunStore, RunOwnership):
         if self._coordinator is None or build_agent is None:
             raise ValueError("Bind feature reconstruction before resuming")
         saved = self._load(response_id)
-        with self._ownership_lock(response_id):
+        with _ownership_lock(self.cache, response_id):
             if self._owner(response_id) is not None:
                 return None
             with get_session_with_tenant(tenant_id=self.tenant_id) as session:
@@ -621,7 +678,7 @@ class ChatRunStore(RunStore, RunOwnership):
             lease = _OwnerLease(owner)
             try:
                 self.cache.set(
-                    self._owner_key(response_id),
+                    _owner_key(response_id),
                     owner.model_dump_json(),
                     ex=OWNER_TTL_SECONDS,
                 )

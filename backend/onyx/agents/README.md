@@ -534,6 +534,9 @@ An assistant `chat_message` owns one complete or partial response, its outcome, 
 Its user-message parent owns the input. `chat_response_item` stores each assistant model generation in step order.
 These items retain message identity, content, generation status, and provider metadata, including empty messages.
 Each item's `inputs` column keeps the messages its generation accepted, with their identity and source.
+`chat_input` is the inbox of pending human messages. Consuming a row deletes it.
+A step deletes its rows in the transaction that saves the step, so each message is accepted once.
+Starting a new turn moves its queued text into the question tree in one transaction.
 `tool_call` stores the result payload, execution status, and a queryable copy of the call arguments.
 Argument parsing details remain in the saved assistant message; tool rows do not store another copy.
 
@@ -629,7 +632,7 @@ The execution worker consumes model streams directly.
 Cancellation takes effect when a blocked provider read returns or times out; the run retains ownership until then.
 Total generation deadlines are checked between events. They do not interrupt a blocked synchronous read.
 Stop puts the input in “Stopping…” until execution, foreground child work, tools, and saves finish.
-Drafts remain editable; sending and queued follow-ups wait for the session to become idle.
+Messages sent while a turn runs wait in the inbox; a queued message starts a later turn when the session is idle.
 Current chat tools use foreground children. Background chat execution needs separate admission and control ownership.
 The event worker also writes replay batches to the configured cache. Slow cache writes delay later events, but control polling remains independent.
 The execution worker saves terminal output. Suspension releases the worker; new input can start another worker to resume execution.
@@ -658,11 +661,11 @@ Its application interfaces provide access to saved data and execution ownership:
 | --- | --- |
 | `AgentDirectory` | Authorize agent lookup, restore saved agents, and read or cancel runs on the selected branch. |
 | `RunStore` | Save terminal output before dependent runs receive completion. |
-| `RunOwnership` | Reserve execution before starting work and release it after workers drain. It reads the inputs sent to a run and accepts them with their step. |
+| `RunOwnership` | Reserve execution before starting work and release it after workers drain. It owns the inbox: stored messages, step inputs and their acceptance. |
 
 Chat supplies `ChatRunStore` for both saving and ownership when durable checkpoints are enabled.
 Without checkpoints, `ChatResponsePersistence` supplies saving alone. Saved output can be available before worker cleanup finishes.
-`ChatRunStore` sends no inputs to runs: `receive_inputs` returns an empty list, `accept_inputs` accepts, and `has_unread_inputs` returns false.
+`ChatRunStore` reads human messages sent to a running response from `chat_input`. A step that accepts them deletes their rows when it saves.
 
 Within the SDK, `RunCoordination` tracks one parent's foreground children, consumed child failures, and cancellation links.
 Tools access child controls through their invocation. They do not construct this internal object.

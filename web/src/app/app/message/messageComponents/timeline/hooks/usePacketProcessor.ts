@@ -3,8 +3,8 @@
    replays idempotent and consumers need the state in the same commit. */
 import { useRef, useState, useMemo, useCallback } from "react";
 import {
-  GeneratedImage,
   Packet,
+  PacketType,
   StreamingCitation,
   StopReason,
 } from "@/app/app/services/streamingModels";
@@ -12,6 +12,7 @@ import { CitationMap } from "@/app/app/types";
 import { OnyxDocument } from "@/lib/search/types";
 import {
   ProcessorState,
+  PlacedImage,
   GroupedPacket,
   createInitialState,
   processPackets,
@@ -37,8 +38,9 @@ export interface UsePacketProcessorResult {
   // Status (derived from packets)
   stopPacketSeen: boolean;
   stopReason: StopReason | undefined;
-  hasSteps: boolean;
-  generatedImages: GeneratedImage[];
+  /** Packets through the latest accepted user message. */
+  acceptedPacketCount: number;
+  generatedImages: PlacedImage[];
   // Whether final answer is coming (MESSAGE_START seen)
   finalAnswerComing: boolean;
   // Tool processing duration from backend (via MESSAGE_START packet)
@@ -86,6 +88,7 @@ export function usePacketProcessor(
   // Track for transition detection
   const prevNextPacketIndex = stateRef.current.nextPacketIndex;
   const prevFinalAnswerComing = stateRef.current.finalAnswerComing;
+  const previousDisplayGroup = stateRef.current.potentialDisplayGroups.at(-1);
 
   // Detect stream reset (packets shrunk)
   if (prevNextPacketIndex > rawPackets.length) {
@@ -99,8 +102,13 @@ export function usePacketProcessor(
     stateRef.current = processPackets(stateRef.current, rawPackets);
   }
 
-  // Reset renderComplete on tool-after-message transition
-  if (prevFinalAnswerComing && !stateRef.current.finalAnswerComing) {
+  // Each new answer must finish rendering before the response toolbar appears.
+  const latestDisplayGroup = stateRef.current.potentialDisplayGroups.at(-1);
+  if (
+    (prevFinalAnswerComing && !stateRef.current.finalAnswerComing) ||
+    previousDisplayGroup?.turn_index !== latestDisplayGroup?.turn_index ||
+    previousDisplayGroup?.tab_index !== latestDisplayGroup?.tab_index
+  ) {
     setRenderComplete(false);
   }
 
@@ -113,7 +121,13 @@ export function usePacketProcessor(
     if (effectiveFinalAnswerComing || state.toolGroups.length === 0) {
       return state.potentialDisplayGroups;
     }
-    return [];
+    const acceptedThroughTurn =
+      state.potentialDisplayGroups.findLast(
+        (group) => group.packets[0]?.obj.type === PacketType.USER_MESSAGE
+      )?.turn_index ?? -1;
+    return state.potentialDisplayGroups.filter(
+      (group) => group.turn_index <= acceptedThroughTurn
+    );
   }, [
     effectiveFinalAnswerComing,
     state.toolGroups.length,
@@ -152,7 +166,7 @@ export function usePacketProcessor(
     // Status (derived from packets)
     stopPacketSeen: state.stopPacketSeen,
     stopReason: state.stopReason,
-    hasSteps: toolTurnGroups.length > 0,
+    acceptedPacketCount: state.acceptedPacketCount,
     generatedImages: state.generatedImages,
     finalAnswerComing: state.finalAnswerComing,
     toolProcessingDuration: state.toolProcessingDuration,
@@ -160,7 +174,10 @@ export function usePacketProcessor(
     // Completion: the stream stopped, and the answer finished rendering or
     // there is no answer to render
     isComplete:
-      state.stopPacketSeen && (renderComplete || displayGroups.length === 0),
+      state.stopPacketSeen &&
+      (renderComplete ||
+        displayGroups.length === 0 ||
+        displayGroups.at(-1)?.packets[0]?.obj.type === PacketType.USER_MESSAGE),
 
     // Callbacks
     onRenderComplete,

@@ -7,6 +7,7 @@ import {
 import { externalToolLabel } from "@/app/app/message/messageComponents/toolDisplayHelpers";
 
 interface AuthError {
+  turnIndex: number;
   toolName: string;
   toolId: number | null;
 }
@@ -38,6 +39,7 @@ function computeAuthErrors(rawPackets: Packet[]): AuthError[] {
 
     if (!alreadyPresent) {
       errors.push({
+        turnIndex: packet.placement.turn_index,
         toolName: externalToolLabel(delta.tool_name),
         toolId: delta.tool_id ?? null,
       });

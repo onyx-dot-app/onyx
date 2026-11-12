@@ -12464,6 +12464,21 @@
         "voiceSetupButton": {
           "ariaLabel": "Sprachfunktion einrichten",
           "tooltip": "Sprachfunktion nicht konfiguriert. Richten Sie sie in den Administrator-Einstellungen ein."
+        },
+        "pendingMessages": {
+          "keyboardHint": "Enter zum Senden · Strg oder Command + Enter zum Einreihen",
+          "preparingHint": "Nach Beginn der Antwort können Sie Nachrichten einreihen.",
+          "attachmentsHint": "Senden Sie angehängte Dateien nach dieser Antwort.",
+          "chooseResponseHint": "Wählen Sie eine Antwort aus, bevor Sie eine Nachricht einreihen.",
+          "incognitoHint": "Warten Sie im Inkognito-Chat, bis die Antwort fertig ist.",
+          "sendHint": "Im nächsten Schritt dieser Antwort senden",
+          "interruptHint": "Aktuelle Arbeit unterbrechen und diese Nachricht senden",
+          "sendLabel": "Senden",
+          "queueLabel": "Einreihen",
+          "interruptKeyboardHint": "Enter zum Unterbrechen · Strg oder Command + Enter zum Einreihen",
+          "interruptLabel": "Unterbrechen",
+          "waitHint": "Warten Sie, bis die Antwort fertig ist.",
+          "ctrlKey": "Strg"
         }
       },
       "baseInputBar": {
@@ -12562,16 +12577,26 @@
       },
       "queuedMessageBar": {
         "discardButton": {
-          "tooltip": "Nachricht aus der Warteschlange entfernen"
+          "tooltip": "Nachricht aus der Warteschlange entfernen",
+          "ariaLabel": "Nachricht aus der Warteschlange entfernen: {message}"
         },
         "editHint": {
           "label": "bearbeiten ·"
         },
-        "item": {
-          "ariaLabel": "Nachricht in der Warteschlange umschalten"
-        },
         "removeHint": {
           "label": "entfernen"
+        },
+        "editButton": {
+          "tooltip": "Eingereihte Nachricht bearbeiten",
+          "clearDraftTooltip": "Leeren Sie Ihren Entwurf, um eine eingereihte Nachricht zu bearbeiten",
+          "ariaLabel": "Eingereihte Nachricht bearbeiten: {message}"
+        },
+        "sendButton": {
+          "tooltip": "Aktuelle Arbeit unterbrechen und diese Nachricht senden",
+          "ariaLabel": "Jetzt senden: {message}"
+        },
+        "sendHint": {
+          "label": "jetzt senden ·"
         }
       },
       "sharedAppInputBar": {
@@ -12581,6 +12606,13 @@
         "startSessionButton": {
           "label": "Neue Sitzung starten"
         }
+      },
+      "pendingMessages": {
+        "submitFailed": "Die Nachricht konnte nicht gesendet werden.",
+        "withdrawFailed": "Die ausstehende Nachricht konnte nicht entfernt werden.",
+        "loadFailed": "Ausstehende Nachrichten konnten nicht geladen werden.",
+        "alreadyAccepted": "Diese Nachricht wurde bereits angenommen und ist nicht mehr ausstehend.",
+        "interruptFailed": "Diese Nachricht konnte nicht sofort gesendet werden. Sie bleibt ausstehend."
       }
     },
     "mcpApiKey": {
@@ -16422,6 +16454,12 @@
       "title": "Chats",
       "toasts": {
         "saveFailed": "Einstellungen konnten nicht gespeichert werden"
+      },
+      "sendBehavior": {
+        "title": "Sendeverhalten während der Verarbeitung",
+        "description": "Wählen Sie, was Enter und die Senden-Taste während einer Antwort tun. Strg/Cmd+Enter reiht immer eine Folgenachricht ein.",
+        "afterStep": "Nach dem aktuellen Schritt",
+        "interrupt": "Aktuelle Arbeit unterbrechen"
       }
     },
     "connectors": {

@@ -1,36 +1,364 @@
-"""Incognito chat limits through the real chat API."""
+"""Pending human messages and incognito limits through the real chat API."""
 
-from collections.abc import Generator
+import json
+import time
+from collections.abc import Callable, Generator
+from concurrent.futures import ThreadPoolExecutor
 from uuid import UUID, uuid4
 
 import pytest
 
+from onyx.agents.models import MessageDelivery, RunStatus
+from onyx.chat.models import PendingChatMessage
 from onyx.coding_agent.tool_definitions import CODING_AGENT_TOOL_NAME
 from onyx.configs.constants import MessageType
 from onyx.server.query_and_chat.models import (
     ChatSessionCreationRequest,
     ChatSessionDetailResponse,
+    ChatSessionProcessingStatus,
+    PendingChatMessageRequest,
 )
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.chat import ChatSessionManager
-from tests.integration.common_utils.managers.mock_llm import MockLLMScript
+from tests.integration.common_utils.managers.mock_llm import (
+    MockLLMScript,
+)
+from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.mock_services.mock_llm_server.models import (
     Reply,
     RequestConditions,
 )
 
+WAIT_TIMEOUT_S = 60
 SECURITY_URL = f"{API_SERVER_URL}/admin/security"
 
 
+def _wait_until(condition: Callable[[], bool], description: str) -> None:
+    deadline = time.monotonic() + WAIT_TIMEOUT_S
+    while time.monotonic() < deadline:
+        if condition():
+            return
+        time.sleep(0.2)
+    raise AssertionError(f"Timed out waiting until {description}")
+
+
+def _status(session_id: UUID, user: DATestUser) -> ChatSessionProcessingStatus:
+    response = client.get(
+        f"{API_SERVER_URL}/chat/chat-session/{session_id}/status",
+        headers=user.headers,
+    )
+    response.raise_for_status()
+    return ChatSessionProcessingStatus.model_validate(response.json())
+
+
 def _detail(session_id: UUID, user: DATestUser) -> ChatSessionDetailResponse:
+    # Unlike /status, reading the session never dispatches queued work.
     response = client.get(
         f"{API_SERVER_URL}/chat/get-chat-session/{session_id}",
         headers=user.headers,
     )
     response.raise_for_status()
     return ChatSessionDetailResponse.model_validate(response.json())
+
+
+def _texts(detail: ChatSessionDetailResponse, message_type: MessageType) -> list[str]:
+    return [
+        message.message
+        for message in sorted(detail.messages, key=lambda m: m.message_id)
+        if message.message_type == message_type
+    ]
+
+
+def _pending_url(session_id: UUID) -> str:
+    return f"{API_SERVER_URL}/chat/chat-session/{session_id}/pending-messages"
+
+
+def _submit(session_id: UUID, user: DATestUser, message: str) -> PendingChatMessage:
+    response = client.post(
+        _pending_url(session_id),
+        json=PendingChatMessageRequest(
+            message=message, delivery=MessageDelivery.QUEUE
+        ).model_dump(mode="json"),
+        headers=user.headers,
+    )
+    response.raise_for_status()
+    return PendingChatMessage.model_validate(response.json())
+
+
+def _pending(session_id: UUID, user: DATestUser) -> list[str]:
+    response = client.get(_pending_url(session_id), headers=user.headers)
+    response.raise_for_status()
+    return [PendingChatMessage.model_validate(item).message for item in response.json()]
+
+
+def test_pending_messages_queue_withdraw_stop_and_send_now(
+    admin_user: DATestUser, mock_llm: MockLLMScript
+) -> None:
+    """Queued messages wait for the running answer, Stop pauses them, and
+    Send now starts one message ahead of the rest of the queue."""
+    nonce = uuid4().hex
+    question = f"Explain queued messages. {nonce}"
+    first, sent_now, withdrawn = "First queued", "Send this now", "Withdraw this"
+    edited = "Edited after withdrawal"
+    mock_llm.conversation(
+        nonce,
+        Reply(text="Working on it.\n\nDone.", pause_after_first_chunk=nonce),
+        Reply(
+            text="Answer to the urgent message.",
+            conditions=RequestConditions(prompt_contains=[sent_now]),
+        ),
+        Reply(
+            text="Answer to the first message.",
+            conditions=RequestConditions(prompt_contains=[first]),
+        ),
+        Reply(
+            text="Answer to the edited message.",
+            conditions=RequestConditions(prompt_contains=[edited]),
+        ),
+        conditions=RequestConditions(prompt_contains=[nonce]),
+    )
+    session = ChatSessionManager.create(user_performing_action=admin_user)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        try:
+            held = executor.submit(
+                ChatSessionManager.send_message, session.id, question, admin_user
+            )
+            # The answer is running once the model receives its request.
+            _wait_until(
+                lambda: bool(mock_llm.requests_in(nonce)), "the answer is running"
+            )
+
+            # Messages submitted during the answer wait in submission order.
+            _submit(session.id, admin_user, first)
+            urgent = _submit(session.id, admin_user, sent_now)
+            discarded = _submit(session.id, admin_user, withdrawn)
+            assert _pending(session.id, admin_user) == [first, sent_now, withdrawn]
+
+            # Withdrawing returns the text for editing and removes it; the
+            # edited text joins the end of the queue.
+            withdraw_url = f"{_pending_url(session.id)}/{discarded.id}"
+            response = client.delete(withdraw_url, headers=admin_user.headers)
+            response.raise_for_status()
+            assert PendingChatMessage.model_validate(response.json()).message == (
+                withdrawn
+            )
+            assert (
+                client.delete(withdraw_url, headers=admin_user.headers).status_code
+                == 409
+            )
+            _submit(session.id, admin_user, edited)
+            assert _pending(session.id, admin_user) == [first, sent_now, edited]
+
+            # Stop ends the answer and pauses the queue.
+            client.post(
+                f"{API_SERVER_URL}/chat/stop-chat-session/{session.id}",
+                headers=admin_user.headers,
+            ).raise_for_status()
+            mock_llm.release_gate(nonce)
+            held.result(timeout=WAIT_TIMEOUT_S)
+            _wait_until(
+                lambda: not _status(session.id, admin_user).is_processing,
+                "the stopped answer releases the chat",
+            )
+        finally:
+            mock_llm.release_gate(nonce)
+    status = _status(session.id, admin_user)
+    assert not status.has_startable_input
+    assert _pending(session.id, admin_user) == [first, sent_now, edited]
+    stopped = _detail(session.id, admin_user)
+    assert [
+        message.response_status
+        for message in stopped.messages
+        if message.message_type == MessageType.ASSISTANT
+    ] == [RunStatus.CANCELLED]
+
+    # Send now starts its message; the rest of the queue follows in order.
+    client.post(
+        f"{_pending_url(session.id)}/{urgent.id}/interrupt", headers=admin_user.headers
+    ).raise_for_status()
+
+    def queue_drained() -> bool:
+        detail = _detail(session.id, admin_user)
+        return (
+            len(_texts(detail, MessageType.ASSISTANT)) == 4 and not detail.is_processing
+        )
+
+    _wait_until(queue_drained, "the queued messages are answered")
+    detail = _detail(session.id, admin_user)
+    assert _texts(detail, MessageType.USER) == [question, sent_now, first, edited]
+    assert _texts(detail, MessageType.ASSISTANT)[1:] == [
+        "Answer to the urgent message.",
+        "Answer to the first message.",
+        "Answer to the edited message.",
+    ]
+    assert _pending(session.id, admin_user) == []
+    assert not _status(session.id, admin_user).has_startable_input
+
+
+def test_interrupt_while_a_response_streams(
+    admin_user: DATestUser, mock_llm: MockLLMScript
+) -> None:
+    """An interrupting message stops the streaming answer, keeps its partial
+    text, and starts before messages queued earlier."""
+    nonce = uuid4().hex
+    question = f"Write a long answer. {nonce}"
+    queued, urgent = "Queued earlier", "Interrupt with this"
+    mock_llm.conversation(
+        nonce,
+        Reply(
+            text="Partial answer.\n\nThe rest of the answer.",
+            pause_after_first_chunk=nonce,
+            heartbeat_while_paused=True,
+        ),
+        Reply(
+            text="Answer to the interruption.",
+            conditions=RequestConditions(prompt_contains=[urgent]),
+        ),
+        Reply(
+            text="Answer to the queued message.",
+            conditions=RequestConditions(prompt_contains=[queued]),
+        ),
+        conditions=RequestConditions(prompt_contains=[nonce]),
+    )
+    session = ChatSessionManager.create(user_performing_action=admin_user)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        try:
+            held = executor.submit(
+                ChatSessionManager.send_message, session.id, question, admin_user
+            )
+            _wait_until(
+                lambda: bool(mock_llm.requests_in(nonce)), "the answer is streaming"
+            )
+            _submit(session.id, admin_user, queued)
+            client.post(
+                _pending_url(session.id),
+                json=PendingChatMessageRequest(
+                    message=urgent, delivery=MessageDelivery.INTERRUPT
+                ).model_dump(mode="json"),
+                headers=admin_user.headers,
+            ).raise_for_status()
+            held.result(timeout=WAIT_TIMEOUT_S)
+        finally:
+            mock_llm.release_gate(nonce)
+
+    def answered() -> bool:
+        detail = _detail(session.id, admin_user)
+        return (
+            len(_texts(detail, MessageType.ASSISTANT)) == 3 and not detail.is_processing
+        )
+
+    _wait_until(answered, "the interruption and the queue are answered")
+    detail = _detail(session.id, admin_user)
+    assert _texts(detail, MessageType.USER) == [question, urgent, queued]
+    stopped, *answers = sorted(
+        (
+            message
+            for message in detail.messages
+            if message.message_type == MessageType.ASSISTANT
+        ),
+        key=lambda message: message.message_id,
+    )
+    assert stopped.response_status == RunStatus.CANCELLED
+    assert stopped.message.startswith("Partial answer")
+    assert "rest of the answer" not in stopped.message
+    assert [message.message for message in answers] == [
+        "Answer to the interruption.",
+        "Answer to the queued message.",
+    ]
+    assert _pending(session.id, admin_user) == []
+
+
+def test_turns_the_server_starts_use_the_current_tool_selection(
+    admin_user: DATestUser, mock_llm: MockLLMScript
+) -> None:
+    """The chat keeps the user's tool selection: a queued turn offers the
+    tools selected when it starts, not the tools of the last sent message."""
+    nonce = uuid4().hex
+    enabled, blocked = "Queued with the tool", "Queued without the tool"
+    created = client.post(
+        f"{API_SERVER_URL}/admin/tool/custom",
+        json={
+            "name": f"selection-{nonce}",
+            "description": "Ping a service",
+            "definition": {
+                "openapi": "3.0.0",
+                "info": {"title": "Ping", "description": "Ping", "version": "1.0.0"},
+                "servers": [{"url": "https://example.com"}],
+                "paths": {
+                    "/ping": {
+                        "get": {
+                            "summary": "Ping the service",
+                            "operationId": "ping",
+                            "responses": {"200": {"description": "ok"}},
+                        }
+                    }
+                },
+            },
+            "custom_headers": [],
+            "passthrough_auth": False,
+        },
+        headers=admin_user.headers,
+    )
+    created.raise_for_status()
+    tool_id = int(created.json()["id"])
+    tool_name = f"custom__{tool_id}__ping"
+    persona = PersonaManager.create(
+        tool_ids=[tool_id], user_performing_action=admin_user
+    )
+    mock_llm.conversation(
+        nonce,
+        Reply(text="Answer without the tool."),
+        Reply(
+            text="Answer with the tool.",
+            conditions=RequestConditions(prompt_contains=[enabled]),
+        ),
+        Reply(
+            text="Answer without the tool again.",
+            conditions=RequestConditions(prompt_contains=[blocked]),
+        ),
+        conditions=RequestConditions(prompt_contains=[nonce]),
+    )
+    selection_url = f"{API_SERVER_URL}/chat/chat-session/{{}}/tool-selection"
+    try:
+        session = ChatSessionManager.create(
+            persona_id=persona.id, user_performing_action=admin_user
+        )
+        sent = ChatSessionManager.send_message(
+            session.id, f"Start without tools. {nonce}", admin_user, allowed_tool_ids=[]
+        )
+        assert sent.error is None
+        for message, selection, answer in (
+            (enabled, [tool_id], "Answer with the tool."),
+            (blocked, [], "Answer without the tool again."),
+        ):
+            client.patch(
+                selection_url.format(session.id),
+                json={"allowed_tool_ids": selection, "preferred_tool_id": None},
+                headers=admin_user.headers,
+            ).raise_for_status()
+            _submit(session.id, admin_user, message)
+
+            def answered(answer: str = answer) -> bool:
+                detail = _detail(session.id, admin_user)
+                return (
+                    answer in _texts(detail, MessageType.ASSISTANT)
+                    and not detail.is_processing
+                )
+
+            _wait_until(answered, f"the queued turn answers: {answer}")
+    finally:
+        assert PersonaManager.delete(persona, user_performing_action=admin_user)
+        client.delete(
+            f"{API_SERVER_URL}/admin/tool/custom/{tool_id}", headers=admin_user.headers
+        ).raise_for_status()
+    # Code mode defers the tool: a program finds it with `tool_search`.
+    assert [
+        tool_name in request.tools
+        or "tool_search(" in json.dumps(request.body.get("tools", []))
+        for request in mock_llm.requests_in(nonce)
+    ] == [False, True, False]
 
 
 @pytest.fixture

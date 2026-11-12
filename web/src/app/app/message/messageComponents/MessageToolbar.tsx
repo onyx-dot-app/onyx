@@ -109,7 +109,7 @@ export interface MessageToolbarProps {
 
   // Copy functionality
   rawPackets: Packet[];
-  finalAnswerRef: RefObject<HTMLDivElement | null>;
+  answerRefs: RefObject<(HTMLDivElement | null)[]>;
 
   // Feedback
   currentFeedback?: FeedbackType | null;
@@ -138,7 +138,7 @@ export default function MessageToolbar({
   getNextMessage,
   onMessageSelection,
   rawPackets,
-  finalAnswerRef,
+  answerRefs,
   currentFeedback,
   onRegenerate,
   parentMessage,
@@ -289,7 +289,11 @@ export default function MessageToolbar({
                   removeThinkingTokens(getTextContent(rawPackets)) as string
                 )
               }
-              getHtmlContent={() => finalAnswerRef.current?.innerHTML || ""}
+              getHtmlContent={() =>
+                answerRefs.current
+                  .map((element) => element?.innerHTML || "")
+                  .join("\n")
+              }
               data-testid="AgentMessage/copy-button"
             />
             {!incognitoEnabled && (
