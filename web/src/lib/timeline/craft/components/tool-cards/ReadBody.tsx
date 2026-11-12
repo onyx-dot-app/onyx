@@ -9,7 +9,7 @@ import { useCodeHighlighter } from "@/app/craft/hooks/useCodeHighlighter";
 import ToolCardSurface, {
   ToolCardSection,
   MONO_STYLE,
-} from "@/lib/timeline/craft/components/tool-cards/ToolCardSurface";
+} from "@/lib/timeline/components/bodies/ToolCardSurface";
 import type { ToolCardBodyProps } from "@/lib/timeline/craft/components/tool-cards/interfaces";
 
 const PREVIEW_LINE_COUNT = 8;

@@ -6,7 +6,7 @@ import { ValidSources } from "@/lib/connectors/types/source";
 import { RetrievalBody } from "@/lib/timeline/components/bodies/RetrievalBody";
 import ToolCardSurface, {
   ToolCardSection,
-} from "@/lib/timeline/craft/components/tool-cards/ToolCardSurface";
+} from "@/lib/timeline/components/bodies/ToolCardSurface";
 import type { ToolCardBodyProps } from "@/lib/timeline/craft/components/tool-cards/interfaces";
 
 interface SearchResult {
