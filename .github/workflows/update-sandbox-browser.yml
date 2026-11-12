@@ -4,9 +4,6 @@ on:
   schedule:
     - cron: "15 */4 * * *"
   workflow_dispatch:
-  workflow_run: # zizmor: ignore[dangerous-triggers]
-    workflows: [Dependency Audit]
-    types: [completed]
 
 permissions:
   contents: read
@@ -22,13 +19,7 @@ defaults:
 
 jobs:
   branches:
-    if: >-
-      github.ref == 'refs/heads/main' &&
-      (github.event_name != 'workflow_run' ||
-       (github.event.workflow_run.conclusion == 'success' &&
-        github.event.workflow_run.event == 'pull_request' &&
-        github.event.workflow_run.head_repository.full_name == github.repository &&
-        startsWith(github.event.workflow_run.head_branch, 'auto/sandbox-browser/')))
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -39,18 +30,9 @@ jobs:
         with:
           persist-credentials: false
       - id: branches
-        env:
-          EVENT: ${{ github.event_name }}
-          BRANCH: ${{ github.event.workflow_run.head_branch }}
         run: |
-          if [ "$EVENT" = workflow_run ]; then
-            base="${BRANCH#auto/sandbox-browser/}"
-            [[ "$base" = main || "$base" =~ ^release/v[0-9]+\.[0-9]+$ ]] || exit 1
-            bases="$(jq -cn --arg base "$base" '[$base]')"
-          else
-            releases="$(python3 .github/scripts/supported-release-branches.py)"
-            bases="$(printf '%s\n' "$releases" | jq -Rsc 'split("\n") | map(select(length > 0)) | ["main"] + .')"
-          fi
+          releases="$(python3 .github/scripts/supported-release-branches.py)"
+          bases="$(printf '%s\n' "$releases" | jq -Rsc 'split("\n") | map(select(length > 0)) | ["main"] + .')"
           echo "bases=$bases" >> "$GITHUB_OUTPUT"
           echo "reviewer=$(jq -r '.[]' .github/actions/slack-notify/cve-reviewers.json | shuf -n 1)" >> "$GITHUB_OUTPUT"
 
@@ -63,7 +45,6 @@ jobs:
     uses: ./.github/workflows/reusable-agent-task-pr.yml
     with:
       task-name: sandbox-browser
-      auto-merge: true
       base: ${{ matrix.base }}
       workflow-permission: true
       script: .github/scripts/update-browser-task.py

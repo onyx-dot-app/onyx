@@ -1,7 +1,5 @@
 """Accept only a version increase and its two checksum replacements."""
 
-import json
-import os
 import re
 import subprocess
 import sys
@@ -37,43 +35,5 @@ def verify(base: str, head: str) -> None:
         raise ValueError("A browser update must change both checksums")
 
 
-def verify_validation_run(base: str, run_id: str) -> None:
-    # Required quality checks must preserve the pin-only contract on future heads.
-    quality = git("show", f"{base}:.github/workflows/pr-quality-checks.yml")
-    if "name: Validate automatic browser pin updates" not in quality:
-        raise ValueError("The target branch must enforce browser pin validation")
-    pages = json.loads(
-        subprocess.check_output(
-            [
-                "gh",
-                "api",
-                "--paginate",
-                "--slurp",
-                f"repos/{os.environ['REPO']}/actions/runs/{run_id}/jobs?per_page=100",
-            ],
-            text=True,
-        )
-    )
-    jobs = [
-        job
-        for page in pages
-        for job in page["jobs"]
-        if job["name"]
-        in {"Sandbox browser audit (amd64)", "Sandbox browser audit (arm64)"}
-    ]
-    if len(jobs) != 2 or any(
-        job["conclusion"] != "success"
-        or not any(
-            step["name"] == "Verify browser rendering and screenshots"
-            and step["conclusion"] == "success"
-            for step in job["steps"]
-        )
-        for job in jobs
-    ):
-        raise ValueError("Both native browser rendering jobs must pass")
-
-
 if __name__ == "__main__":
     verify(sys.argv[1], sys.argv[2])
-    if run_id := os.environ.get("VALIDATION_RUN_ID"):
-        verify_validation_run(sys.argv[1], run_id)

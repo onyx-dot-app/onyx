@@ -27,15 +27,6 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # ratchet:actions/setup-python@v7.0.0
         with:
           python-version: "3.13"
-      - name: Validate automatic browser pin updates
-        if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'auto/sandbox-browser/')
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          # Read validation from the reviewed base, not the candidate pin PR.
-          git show "${BASE_SHA}:.github/scripts/verify-browser-pin.py" > "${RUNNER_TEMP}/verify-browser-pin.py"
-          python3 "${RUNNER_TEMP}/verify-browser-pin.py" "$BASE_SHA" "$HEAD_SHA"
       # A change made only of documentation files needs none of the web setup or
       # widget tests below. The docs hooks need only Python and bun (prettier runs
       # through bunx). The check is an allow-list of docs file types: any other
