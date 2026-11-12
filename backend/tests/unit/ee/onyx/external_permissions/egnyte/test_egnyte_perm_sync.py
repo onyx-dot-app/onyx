@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from ee.onyx.connectors.perm_sync_valid import validate_egnyte_group_sync
 from ee.onyx.external_permissions.egnyte.access import (
     custom_group_id,
     default_group_id,
@@ -30,8 +31,10 @@ from onyx.connectors.egnyte.models import (
     EgnytePermissionGrant,
     EgnytePermissions,
     EgnyteUser,
+    EgnyteUserInfo,
     EgnyteUserType,
 )
+from onyx.connectors.egnyte.source_operations import EgnyteSourceOperations
 from onyx.connectors.models import Document, HierarchyNode, SlimDocument
 
 _DOMAIN = "Acme"
@@ -237,3 +240,42 @@ def test_private_folders_skip_the_permissions_listing_in_any_case() -> None:
     assert [
         n.external_access.external_user_group_ids for n in nodes if n.external_access
     ] == [_prefixed(_ADMINS)]
+
+
+def test_a_permission_run_resuming_mid_folder_reads_the_folder_access() -> None:
+    connector, ops = _perm_sync_connector()
+    # Saved by a run without permissions, on the folder's second page.
+    checkpoint = EgnyteCheckpoint(
+        has_more=True, todo=[], current_path="/Shared", offset=180
+    )
+
+    documents = [
+        document
+        for document, _node, _failure, _next in CheckpointOutputWrapper[
+            EgnyteCheckpoint
+        ]()(connector.load_from_checkpoint_with_perm_sync(0, 2e9, checkpoint))
+        if document
+    ]
+
+    assert ops.list_folder_page_with_permissions.call_args.kwargs["offset"] == 180
+    assert [
+        d.external_access.external_user_group_ids
+        for d in documents
+        if d.external_access
+    ] == [_prefixed(_ADMINS, custom_group_id(_DOMAIN, "g-fin"))]
+
+
+def test_group_sync_validation_does_not_read_the_folder() -> None:
+    connector, _ = _perm_sync_connector()
+    ops = MagicMock(spec=EgnyteSourceOperations)
+    ops.get_user_info.return_value = EgnyteUserInfo(
+        username="root", user_type=EgnyteUserType.ADMIN
+    )
+    ops.list_groups.return_value = [EgnyteGroupRef(id="g-fin", display_name="Finance")]
+    ops.get_group.return_value = EgnyteGroup(id="g-fin", display_name="Finance")
+    connector._ops = ops
+
+    validate_egnyte_group_sync(connector)
+
+    ops.list_folder_page_with_permissions.assert_not_called()
+    ops.list_folder_page.assert_not_called()

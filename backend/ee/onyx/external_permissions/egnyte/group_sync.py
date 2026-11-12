@@ -4,6 +4,7 @@ each active user's type, and every custom group with its active members."""
 import time
 from collections.abc import Generator
 
+from ee.onyx.connectors.perm_sync_valid import validate_egnyte_group_sync
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.egnyte.access import (
     active_users,
@@ -28,7 +29,7 @@ def egnyte_group_sync(
     connector: EgnyteConnector = egnyte_connector(cc_pair)
     # A token whose user is no longer an administrator lists fewer users, and
     # the sync would then drop them from every group without an error.
-    connector.validate_perm_sync()
+    validate_egnyte_group_sync(connector)
     yield from egnyte_groups(connector)
 
 

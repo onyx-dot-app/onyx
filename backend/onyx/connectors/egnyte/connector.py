@@ -348,15 +348,13 @@ class EgnyteConnector(
         return get_folder_access(self.domain, page.permissions, self._directory)
 
     def _list_page(
-        self, path: str, offset: int, include_permissions: bool
+        self, path: str, offset: int, with_permissions: bool
     ) -> EgnyteFolderPage:
-        # Permissions come with a folder's first page, and are the same on
-        # every page.
-        if include_permissions and offset == 0:
-            if lists_permissions(path):
-                return self.ops.list_folder_page_with_permissions(
-                    folder_path=path, offset=offset, page_size=FOLDER_PAGE_SIZE
-                )
+        # Every page carries the folder's permissions, so they are read once.
+        if with_permissions and lists_permissions(path):
+            return self.ops.list_folder_page_with_permissions(
+                folder_path=path, offset=offset, page_size=FOLDER_PAGE_SIZE
+            )
         return self.ops.list_folder_page(
             folder_path=path, offset=offset, page_size=FOLDER_PAGE_SIZE
         )
@@ -441,11 +439,18 @@ class EgnyteConnector(
             self._directory = load_directory(self.ops)
 
         path = checkpoint.current_path
+        # Also read mid-folder, when a checkpoint saved without permissions
+        # resumes in a permission run.
+        reads_access = (
+            include_permissions
+            and self._directory is not None
+            and checkpoint.current_access is None
+        )
         try:
             page: EgnyteFolderPage = self._list_page(
-                path, checkpoint.offset, include_permissions
+                path, checkpoint.offset, reads_access
             )
-            if include_permissions and checkpoint.offset == 0:
+            if reads_access:
                 checkpoint.current_access = self._folder_access(page)
         except (
             EgnyteApiError,

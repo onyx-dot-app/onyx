@@ -208,9 +208,9 @@ def validate_youtrack_perm_sync(connector: YouTrackConnector) -> None:
         check.run(context)
 
 
-def validate_egnyte_perm_sync(connector: EgnyteConnector) -> None:
-    """Scheduled syncs validate through here, so a token that lost its
-    administrator or a scope fails the sync instead of narrowing access."""
+def _run_egnyte_checks(
+    connector: EgnyteConnector, checks: list[CapabilityCheck]
+) -> None:
     context: CapabilityCheckContext = CapabilityCheckContext(
         source=DocumentSource.EGNYTE,
         credential_json={},
@@ -221,13 +221,23 @@ def validate_egnyte_perm_sync(connector: EgnyteConnector) -> None:
         source_operations=connector.ops,
     )
     # Checks mirrored across both capabilities share an id and run once.
-    checks: dict[str, CapabilityCheck] = {
-        check.check_id: check
-        for check in build_egnyte_doc_permission_sync_checks()
-        + build_egnyte_group_sync_checks()
-    }
-    for check in checks.values():
+    for check in {check.check_id: check for check in checks}.values():
         check.run(context)
+
+
+def validate_egnyte_perm_sync(connector: EgnyteConnector) -> None:
+    """Scheduled syncs validate through here, so a token that lost its
+    administrator or a scope fails the sync instead of narrowing access."""
+    _run_egnyte_checks(
+        connector,
+        build_egnyte_doc_permission_sync_checks() + build_egnyte_group_sync_checks(),
+    )
+
+
+def validate_egnyte_group_sync(connector: EgnyteConnector) -> None:
+    """Group membership does not depend on the configured folder, so a
+    renamed folder does not stop group sync."""
+    _run_egnyte_checks(connector, build_egnyte_group_sync_checks())
 
 
 def validate_azure_datalake_perm_sync(connector: AzureDataLakeConnector) -> None:
