@@ -285,6 +285,8 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   `ExecSessionEndedError`. Commands send `Command.session_id`, so the daemon
   makes the session directory and uses it as the default cwd. A full daemon
   execution table (`EXECUTION_CAP_REACHED`) raises `ExecCapReachedError`.
+  Each command has a client label; when Start gets no answer, the harness
+  finds the command by that label and adopts it.
 - `.../sandbox/harness_factory.py:get_harness_sandbox` returns it with
   `SANDBOX_RUNTIME=firecracker` and `SANDBOX_FC_TEMPLATE`, the source image
   tag of the root drive. Each node names its templates
@@ -292,6 +294,20 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   `backend/onyx/microvm/models.py:NodeInfo.template` takes an exact version or that node's newest
   compatible template of the tag. Opencode sessions keep
   `get_sandbox_manager` (pod or Docker).
+- Session saves (`.../firecracker/session_saves.py`): the idle evictor
+  (node reports, `get_eviction_policy`, 15 min) saves each session on the
+  VM first, in the background: CaptureSession of the session's top-level
+  directories (without dependencies and caches), presigned upload, file
+  store finalize, commit of the new save in the cache, then deletion of the
+  old archive. A busy sandbox (running command, turn, parked approval) or a
+  failed save keeps the VM. A session's first use on a new VM instance
+  restores its last save, once across pods (cache lock + session-instance
+  record). The record is written under the placement lock only while the
+  placement is still that instance. Session setup takes no command slot.
+  The stop renews its sandbox lock before each session's save and keeps the
+  VM if it lost the lock. A session with no directory keeps its last save.
+  A configuration error in the eviction
+  policy turns idle eviction off; it never fails the node report.
 
 ---
 

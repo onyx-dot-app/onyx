@@ -36,6 +36,7 @@ _REASON_CODES: dict[HostAgentErrorReason, grpc.StatusCode] = {
     HostAgentErrorReason.CAPACITY_DISK: grpc.StatusCode.RESOURCE_EXHAUSTED,
     HostAgentErrorReason.CAPACITY_VM_SLOTS: grpc.StatusCode.RESOURCE_EXHAUSTED,
     HostAgentErrorReason.ATTEMPT_CONFLICT: grpc.StatusCode.ALREADY_EXISTS,
+    HostAgentErrorReason.STALE_ATTEMPT: grpc.StatusCode.FAILED_PRECONDITION,
     HostAgentErrorReason.SANDBOX_NOT_FOUND: grpc.StatusCode.NOT_FOUND,
     HostAgentErrorReason.INSTANCE_MISMATCH: grpc.StatusCode.FAILED_PRECONDITION,
     HostAgentErrorReason.GUEST_UNREACHABLE: grpc.StatusCode.UNAVAILABLE,
@@ -162,6 +163,12 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         self.max_running_executions = 64
         # Seconds each Create waits before it runs (to overlap two wakes).
         self.create_delay_seconds = 0.0
+        # Like the real agent: a Create of a stopped (sandbox, attempt) fails
+        # with STALE_ATTEMPT. Off by default.
+        self.remember_stopped_attempts = False
+        self.stopped_attempts: set[tuple[str, int]] = set()
+        # ListFiles returns at most this many entries (None: 10,000).
+        self.list_max_entries: int | None = None
         # Seconds each Stop waits before it runs.
         self.stop_delay_seconds = 0.0
         # Seconds each guest daemon Init waits before it runs.
@@ -209,6 +216,13 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
                 if self.refuse_create_times is not None:
                     self.refuse_create_times -= 1
                 abort_with_reason(context, self.refuse_create, "refused by the test")
+            if (
+                self.remember_stopped_attempts
+                and (request.sandbox_id, request.attempt) in self.stopped_attempts
+            ):
+                abort_with_reason(
+                    context, HostAgentErrorReason.STALE_ATTEMPT, "attempt stopped"
+                )
             existing = self.vms.get(request.sandbox_id)
             if existing is not None:
                 # Like the real agent: the same attempt returns the VM, even
@@ -296,6 +310,7 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
                     context, HostAgentErrorReason.INSTANCE_MISMATCH, "other instance"
                 )
             del self.vms[request.sandbox_id]
+            self.stopped_attempts.add((request.sandbox_id, vm.attempt))
             self.daemon_keys.pop(request.sandbox_id, None)
             self.daemon_inits.pop(request.sandbox_id, None)
             self._drop_guest_state(request.sandbox_id)
@@ -746,7 +761,14 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
         script = argv
         if argv[:2] == ["bash", "-c"] and len(argv) == 3:
             script = shlex.split(argv[2])
-        if not script or script[0] not in ("echo", "fail", "cat", "sleep", "mkdir"):
+        if not script or script[0] not in (
+            "echo",
+            "fail",
+            "cat",
+            "sleep",
+            "mkdir",
+            "true",
+        ):
             abort_daemon(context, SandboxDaemonErrorReason.START_FAILED, "no program")
         running = [
             e
@@ -765,7 +787,7 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
             env=dict(command.env),
         )
         argv = script
-        if argv[0] == "mkdir":
+        if argv[0] in ("mkdir", "true"):
             execution.end(sandboxd_pb2.EXITED, 0)
         elif argv[0] == "echo":
             execution.stdout = (" ".join(argv[1:]) + "\n").encode()
@@ -1111,7 +1133,7 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
                 continue
             entries.append(self._info(path, len(data)))
         listing = [self._info(d, 0, directory=True) for d in sorted(dirs)] + entries
-        limit = request.max_entries or 10_000
+        limit = request.max_entries or self.agent.list_max_entries or 10_000
         return sandboxd_pb2.ListFilesResponse(
             entries=listing[:limit], truncated=len(listing) > limit or depth_cut
         )

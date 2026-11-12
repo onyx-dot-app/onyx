@@ -317,7 +317,7 @@ The agent runs the VMs; the api_server makes sure that each sandbox has at most 
 | Node state push | The agent pushes its list every 20 s (Node state report), because Onyx has no scheduler inside the api_server to poll nodes. |
 | Ended list | The agent lists each exited or stopped VM for `--ended-retention` (10 min). |
 | Orphan stops | The api_server stops a VM of an older attempt at once, and an unknown VM after `SANDBOX_FC_ORPHAN_GRACE_SECONDS` (40 s), at most 8 per report, with no checkpoint. |
-| API-side idle evictor | Idle evictor on the record's last activity (`SANDBOX_FC_IDLE_TIMEOUT_SECONDS`). The stop waits for session saves. |
+| API-side idle evictor | Idle evictor on the record's last activity (`SANDBOX_FC_IDLE_TIMEOUT_SECONDS`, 15 min). It stops a VM only when it is not busy and every session on it is saved; it is on only for harness sandboxes with a presignable file store. |
 | Dead node | Dead node (registration expired, or no report within `SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS`): records stay; wake starts the next attempt on a live node, and the old VM is an orphan if it reports again. |
 
 Keys without a TTL need a Redis eviction policy that never evicts them (`volatile-*` or `noeviction`), or the

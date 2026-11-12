@@ -3,6 +3,7 @@ idempotent ensure, idle eviction only when nothing runs, and stop only after
 a saved checkpoint and a fresh liveness check."""
 
 import time
+from collections.abc import Callable
 from uuid import UUID, uuid4
 
 import pytest
@@ -45,7 +46,14 @@ class SavedCheckpoint(SandboxCheckpointer):
         # Simulates the VM exiting while the checkpoint runs.
         self.drop_vm_from = on_save
 
-    def save_checkpoint(self, *, tenant_id: str, sandbox_id: UUID, vm: AgentVm) -> bool:  # noqa: ARG002
+    def save_checkpoint(
+        self,
+        *,
+        tenant_id: str,  # noqa: ARG002
+        sandbox_id: UUID,
+        vm: AgentVm,
+        renew_lease: Callable[[], None],  # noqa: ARG002
+    ) -> bool:
         self.saved.append(vm.generation)
         if self.drop_vm_from is not None:
             self.drop_vm_from.vms.pop(str(sandbox_id))
