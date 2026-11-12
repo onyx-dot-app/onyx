@@ -203,7 +203,10 @@ export interface CustomToolErrorInfo {
 
 export interface CustomToolStart extends BaseObj {
   type: "custom_tool_start";
+  // Qualified name that identifies the tool; not for display.
   tool_name: string;
+  // Absent from servers that predate it.
+  display_name?: string;
   tool_id?: number | null;
 }
 
@@ -216,6 +219,7 @@ export interface CustomToolArgs extends BaseObj {
 export interface CustomToolDelta extends BaseObj {
   type: "custom_tool_delta";
   tool_name: string;
+  display_name?: string;
   tool_id?: number | null;
   response_type: string;
   data?: unknown;
