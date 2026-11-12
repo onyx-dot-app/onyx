@@ -3,7 +3,7 @@
 import json
 import threading
 import time
-from collections.abc import Callable, Collection, Iterator, Sequence
+from collections.abc import Callable, Collection, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
@@ -236,8 +236,11 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory):
         root_response: RunStore | None = None,
         control_cache: CacheBackend | None = None,
         on_child_released: Callable[[], None] | None = None,
+        tool_labels: Mapping[str, str] | None = None,
     ) -> None:
         self.tenant_id = tenant_id
+        # Saved child responses label their tool calls with these display names.
+        self._tool_labels = dict(tool_labels or {})
         self.chat_session_id = chat_session_id
         self.response_id = response_id
         # Branch IDs stay newest first, as the branch queries order them.
@@ -648,6 +651,7 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory):
                     for step in snapshot.steps
                     for call in step.message.tool_calls
                 },
+                tool_labels=self._tool_labels,
                 registrations=self._coordinator.registrations()
                 if self._coordinator
                 else (),
