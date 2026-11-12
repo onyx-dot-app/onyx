@@ -30,7 +30,7 @@ import type { MemberPlugin } from "@/lib/plugins/member";
 import { useAppPosition } from "@/lib/navigation/hooks";
 import { settleChatSession } from "@/lib/chat/settleChatSession";
 import type { ChatSessionQueue, PendingChatMessage } from "@/lib/chat/types";
-import { useDraft, draftKey, writeDraft } from "@/hooks/useDraft";
+import { useDraft, draftKey, readDraft, writeDraft } from "@/hooks/useDraft";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
 import PasteTilePopover from "@/sections/input/PasteTilePopover";
 import { cn } from "@opal/utils";
@@ -414,14 +414,21 @@ const AppInputBar = React.memo(
                   : "appInputBar.pendingMessages.sendHint"
     );
 
-    // Text that cannot return to the composer goes to its own chat's draft.
+    // Returned text goes before any newer text, in the composer or, for a chat
+    // that is no longer open, in that chat's draft.
     function returnText(sessionId: string | null, key: string, text: string) {
-      if (useChatSessionStore.getState().currentSessionId !== sessionId)
-        writeDraft(key, text);
-      else if (!messageRef.current) {
-        setMessage(text);
-        setCursorToEnd();
+      const isOpen =
+        useChatSessionStore.getState().currentSessionId === sessionId;
+      const newer = isOpen
+        ? messageRef.current
+        : (readDraft<string>(key) ?? "");
+      const combined = newer.trim() ? `${text}\n\n${newer}` : text;
+      if (!isOpen) {
+        writeDraft(key, combined);
+        return;
       }
+      setMessage(combined);
+      setCursorToEnd();
     }
 
     async function submitPendingMessage(
