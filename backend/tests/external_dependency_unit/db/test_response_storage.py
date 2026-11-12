@@ -92,6 +92,7 @@ from onyx.db.chat_checkpoint import (
 )
 from onyx.db.chat_inputs import (
     MAX_PENDING_MESSAGE_BYTES,
+    agent_queue_paused,
     agent_result_states,
     can_start_input,
     consume_inputs__no_commit,
@@ -3741,7 +3742,10 @@ def test_unreceived_send_starts_the_next_child_run(
     def can_start(receipt_id: str) -> bool:
         row = by_id[receipt_id]
         return can_start_input(
-            row.delivery, row.target_response_id, child_row.response_status
+            row.delivery,
+            row.target_response_id,
+            child_row.response_status,
+            queue_paused=agent_queue_paused(child_row.response_status),
         )
 
     by_id = {

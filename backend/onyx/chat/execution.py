@@ -674,7 +674,7 @@ def bind_run_store(
         ),
         root_response=root_response,
         on_child_released=on_child_released,
-        tool_labels={tool.name: tool.display_name for tool in tools},
+        tool_ids={tool.name: tool.id for tool in tools},
     )
     view = store.bind(
         coordinator,

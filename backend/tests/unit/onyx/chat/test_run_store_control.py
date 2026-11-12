@@ -2,18 +2,28 @@
 
 import threading
 from contextlib import nullcontext
-from typing import Literal
+from typing import Any, Literal
 from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
 
-from onyx.agents.models import AgentCompletion, RunProgress, RunState, RunStatus
+from onyx.agents.models import (
+    AgentCompletion,
+    ExecutionStatus,
+    RunProgress,
+    RunState,
+    RunStatus,
+    StepRecord,
+    ToolExecutionRecord,
+)
 from onyx.agents.runtime import Run
 from onyx.cache.interface import CacheBackend
 from onyx.chat import run_store
-from onyx.chat.models import AgentResultState, ResponseOwner
+from onyx.chat.models import AgentResultState, ChatResponseSnapshot, ResponseOwner
 from onyx.chat.run_store import ChatRunStore, _OwnedRun, _OwnerLease
+from onyx.llm.models import AssistantMessage, ToolResultMessage
+from onyx.llm.models import ToolCall as ModelToolCall
 
 
 class Clock:
@@ -170,10 +180,11 @@ def test_root_and_child_control_calls_use_the_callers_thread(
     child.cancel.assert_called_once()
 
 
-def test_saved_child_responses_label_tool_calls_with_display_names(
+def test_saved_child_tool_calls_keep_their_tool_id_and_display_name(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     cache = MagicMock(spec=CacheBackend)
+    name = "mcp__3__my__srv__create_issue"
     store = ChatRunStore(
         tenant_id="tenant",
         chat_session_id=uuid4(),
@@ -182,24 +193,47 @@ def test_saved_child_responses_label_tool_calls_with_display_names(
         cache=cache,
         follow_up_steps=4,
         control_cache=cache,
-        tool_labels={"mcp__3__my__srv__create_issue": "create_issue"},
+        tool_ids={name: 7},
     )
-    labels: list[object] = []
+    call = ModelToolCall(id="call", name=name, arguments={})
+    snapshot = RunState(
+        run_id="2",
+        agent_id="child",
+        parent_run_id="1",
+        status=RunStatus.COMPLETE,
+        steps=[
+            StepRecord(
+                message=AssistantMessage(id="2:0", content=[call]),
+                generation_status=ExecutionStatus.COMPLETE,
+                tools={
+                    call.id: ToolExecutionRecord(
+                        status=ExecutionStatus.COMPLETE,
+                        result=ToolResultMessage(
+                            tool_call_id=call.id, tool_name=name, content="created"
+                        ),
+                        display_name="create_issue",
+                    )
+                },
+            )
+        ],
+    )
+    projected: list[ChatResponseSnapshot] = []
+    project = run_store.project_response
 
-    def project(*_args: object, **kwargs: object) -> None:
-        labels.append(kwargs["tool_labels"])
+    def capture(*args: Any, **kwargs: Any) -> ChatResponseSnapshot:
+        projected.append(project(*args, **kwargs))
         raise RuntimeError("projected")
 
-    monkeypatch.setattr(run_store, "project_response", project)
+    monkeypatch.setattr(run_store, "project_response", capture)
     lease = _OwnerLease(ResponseOwner(token=uuid4(), root_message_id=1))
     run = MagicMock(spec=Run)
     run.id = "2"
-    snapshot = RunState(
-        run_id="2", agent_id="child", parent_run_id="1", status=RunStatus.COMPLETE
-    )
     with pytest.raises(RuntimeError, match="projected"):
         store._save_output(_OwnedRun(run, lease), snapshot)
-    assert labels == [{"mcp__3__my__srv__create_issue": "create_issue"}]
+    [display] = projected
+    assert [info.tool_id for info in display.tool_calls] == [7]
+    assert display.response is not None
+    assert display.response.steps[0].tools[call.id].display_name == "create_issue"
 
 
 @pytest.mark.parametrize("final_step", [False, True])
