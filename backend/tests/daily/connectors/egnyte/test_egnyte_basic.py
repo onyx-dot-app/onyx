@@ -6,7 +6,6 @@ the tests read only small folders and one run makes about 50 calls.
 """
 
 import time
-from collections.abc import Generator
 from unittest.mock import MagicMock
 from urllib.parse import quote
 
@@ -27,7 +26,6 @@ from onyx.connectors.egnyte import connector as egnyte_connector_module
 from onyx.connectors.egnyte.connector import OAUTH_SCOPES, EgnyteConnector
 from onyx.connectors.egnyte.models import EgnyteUserType
 from onyx.connectors.models import Document, HierarchyNode, SlimDocument
-from onyx.utils.variable_functionality import global_version
 from tests.daily.connectors.utils import load_all_from_connector
 from tests.utils.secret_names import TestSecret
 
@@ -102,15 +100,6 @@ def _connector(access_token: str, folder_path: str) -> EgnyteConnector:
 
 
 @pytest.fixture
-def ee_enabled() -> Generator[None, None, None]:
-    was_ee = global_version.is_ee_version()
-    global_version.set_ee()
-    yield
-    if not was_ee:
-        global_version.unset_ee()
-
-
-@pytest.fixture
 def small_pages(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(egnyte_connector_module, "FOLDER_PAGE_SIZE", TEST_PAGE_SIZE)
     monkeypatch.setattr(egnyte_connector_module, "_PAGE_OVERLAP", TEST_PAGE_SIZE // 10)
@@ -165,9 +154,9 @@ def test_index_without_permissions(
     assert result.documents[0].external_access is None
 
 
+@pytest.mark.usefixtures("enable_ee")
 def test_index_with_permissions(
     mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
-    ee_enabled: None,  # noqa: ARG001
     access_token: str,
 ) -> None:
     connector = _connector(access_token, f"{ROOT}/NoInherit")
@@ -196,8 +185,8 @@ def test_index_with_permissions(
     }
 
 
+@pytest.mark.usefixtures("enable_ee")
 def test_folder_permissions_match_egnyte(
-    ee_enabled: None,  # noqa: ARG001
     small_pages: None,  # noqa: ARG001
     access_token: str,
 ) -> None:
@@ -255,18 +244,17 @@ def test_folder_permissions_match_egnyte(
     assert big_file_count == BIG_FILE_COUNT
 
 
+@pytest.mark.usefixtures("enable_ee")
 def test_group_sync(
-    ee_enabled: None,  # noqa: ARG001
     access_token: str,
 ) -> None:
     connector = _connector(access_token, ROOT)
     emails = _emails_by_username(connector)
     group_ids = {group.display_name: group.id for group in connector.ops.list_groups()}
 
-    groups = {
-        group.id: set(group.user_emails) & {emails[u] for u in TEST_USERS}
-        for group in egnyte_groups(connector)
-    }
+    test_emails = {emails[username] for username in TEST_USERS}
+    members = {group.id: set(group.user_emails) for group in egnyte_groups(connector)}
+    groups = {group_id: users & test_emails for group_id, users in members.items()}
 
     assert groups[custom_group_id(DOMAIN, group_ids[TEST_GROUP_NAME])] == {
         emails[STANDARD_USER_1],
@@ -277,7 +265,9 @@ def test_group_sync(
         emails[STANDARD_USER_2],
     }
     assert groups[default_group_id(DOMAIN, "All Power Users")] == {emails[POWER_USER]}
-    assert groups[default_group_id(DOMAIN, ADMINISTRATORS_GROUP_NAME)] == set()
+    assert members[
+        default_group_id(DOMAIN, ADMINISTRATORS_GROUP_NAME)
+    ] == _administrator_emails(connector)
 
 
 def test_ids_survive_a_folder_rename(access_token: str) -> None:
