@@ -506,6 +506,23 @@ def fetch_skill(
     return db_session.scalars(stmt).one_or_none()
 
 
+def fetch_skill_to_save(skill_id: UUID, user: User, db_session: Session) -> Skill:
+    """Lock a skill the user may edit, for a write that adds a version. Takes
+    the user's lock before the skill row, the order of the user's toggle, so
+    the two cannot deadlock."""
+    lock_user_skill_preferences(user.id, db_session)
+    skill = fetch_skill(
+        skill_id,
+        policy=SkillManagementPolicy.EDIT,
+        user=user,
+        db_session=db_session,
+        lock_for_update=True,
+    )
+    if skill is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+    return skill
+
+
 def add_new_skill__no_commit(
     skill: Skill,
     db_session: Session,

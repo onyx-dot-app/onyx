@@ -246,6 +246,13 @@ def test_group_manager_is_refused_install_settings(
     assert group_setting.status_code == 403
     assert _group_rows(skill.id) == {managed.id: (SkillSharePermission.VIEWER, None)}
 
+    # A private skill the manager cannot see does not show that it exists.
+    hidden = SkillManager.create_custom(UserManager.create(name=unique_name("hidden")))
+    hidden_setting = {
+        "group_settings": [{"group_id": managed.id, "installation_policy": "DEFAULT"}]
+    }
+    assert share_skill(manager, hidden.id, hidden_setting).status_code == 404
+
     result = _bulk_share(manager, [skill.id], {"installation_policy": "REQUIRED"})
     assert [failure.skill_id for failure in result.failed] == [skill.id]
     assert _company_settings(skill.id) == (None, "AVAILABLE")

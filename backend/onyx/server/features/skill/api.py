@@ -45,6 +45,7 @@ from onyx.db.skill import (
     enable_new_skill_if_name_available__no_commit,
     ensure_can_edit_org_visibility,
     fetch_skill,
+    fetch_skill_to_save,
     list_skills,
     publish_skill__no_commit,
     replace_skill_bundle,
@@ -875,15 +876,7 @@ def restore_custom_skill_version(
 ) -> SkillEditableDetailResponse:
     """Copy an old version's files into a new version. Content equal to the
     current version adds no version."""
-    skill = fetch_skill(
-        skill_id,
-        policy=SkillManagementPolicy.EDIT,
-        user=user,
-        db_session=db_session,
-        lock_for_update=True,
-    )
-    if skill is None:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+    skill = fetch_skill_to_save(skill_id, user, db_session)
     get_plugin_version(skill.id, version_id, db_session)
     return _replace_skill_bundle_from_editor(
         skill,
@@ -974,15 +967,7 @@ def replace_current_user_skill_bundle(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillResponse:
-    skill = fetch_skill(
-        skill_id,
-        policy=SkillManagementPolicy.EDIT,
-        user=user,
-        db_session=db_session,
-        lock_for_update=True,
-    )
-    if skill is None:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+    skill = fetch_skill_to_save(skill_id, user, db_session)
 
     file_store = get_default_file_store()
     with ingested_skill_bundle(
@@ -1023,15 +1008,7 @@ def upload_current_user_skill_files(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillEditableDetailResponse:
-    skill = fetch_skill(
-        skill_id,
-        policy=SkillManagementPolicy.EDIT,
-        user=user,
-        db_session=db_session,
-        lock_for_update=True,
-    )
-    if skill is None:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+    skill = fetch_skill_to_save(skill_id, user, db_session)
 
     updated_bundle_bytes = update_custom_bundle_files(
         lambda: _bundle_to_edit(skill, db_session),
@@ -1051,15 +1028,7 @@ def remove_current_user_skill_file(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillEditableDetailResponse:
-    skill = fetch_skill(
-        skill_id,
-        policy=SkillManagementPolicy.EDIT,
-        user=user,
-        db_session=db_session,
-        lock_for_update=True,
-    )
-    if skill is None:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+    skill = fetch_skill_to_save(skill_id, user, db_session)
     if not path:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Skill file path cannot be empty")
 
@@ -1079,15 +1048,7 @@ def patch_current_user_skill(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillResponse:
-    skill = fetch_skill(
-        skill_id,
-        policy=SkillManagementPolicy.EDIT,
-        user=user,
-        db_session=db_session,
-        lock_for_update=True,
-    )
-    if skill is None:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+    skill = fetch_skill_to_save(skill_id, user, db_session)
     if "public_permission" in patch_req.model_fields_set:
         ensure_can_edit_org_visibility(skill, user)
     if not (patch_req.has_details_update or patch_req.has_db_field_update):
