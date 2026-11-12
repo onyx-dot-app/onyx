@@ -17,6 +17,7 @@ import {
   storedMcpTool,
 } from "@/sections/plugins/__tests__/memberPluginFixtures";
 import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
+import type { ChatState } from "@/app/app/types";
 
 jest.mock("@/lib/hooks", () => ({
   useLlmManager: () => ({ isLoadingProviders: true }),
@@ -108,11 +109,15 @@ function Composer({
   agentId = 0,
   tools = agent.tools,
   inputBarRef,
+  chatState = "input",
+  disabled = false,
 }: {
   plugins: readonly MemberPlugin[];
   agentId?: number;
   tools?: MinimalAgent["tools"];
   inputBarRef?: React.Ref<AppInputBarHandle>;
+  chatState?: ChatState;
+  disabled?: boolean;
 }) {
   const configuration = useToolConfiguration(agentId);
   const llmManager = useLlmManager();
@@ -140,8 +145,8 @@ function Composer({
         handleFileUpload={jest.fn()}
         deepResearchEnabled={false}
         toggleDeepResearch={jest.fn()}
-        chatState="input"
-        disabled={false}
+        chatState={chatState}
+        disabled={disabled}
         queue={queue}
       />
     </>
@@ -264,3 +269,21 @@ describe("restore after a failed send", () => {
     expect(mockProjectsContext.setCurrentMessageFiles).not.toHaveBeenCalled();
   });
 });
+
+test.each([
+  ["input", false, "true"],
+  ["streaming", false, "false"],
+  ["cancelling", false, "false"],
+  ["input", true, "false"],
+] as const)(
+  "the composer accepts a normal send only when idle and enabled (%s, disabled=%s)",
+  (chatState, disabled, accepts) => {
+    const { container } = render(
+      <Composer plugins={[]} chatState={chatState} disabled={disabled} />
+    );
+    expect(container.querySelector("#onyx-chat-input")).toHaveAttribute(
+      "data-accepts-send",
+      accepts
+    );
+  }
+);

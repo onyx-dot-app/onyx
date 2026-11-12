@@ -271,9 +271,9 @@ export class InputBar {
     }
   }
 
-  /** The chat accepts new input, and the empty composer cannot send. */
+  /** The composer accepts a normal send, and the empty composer cannot send. */
   async expectIdle(timeout = POLL_TIMEOUT): Promise<void> {
-    await expect(this.container).toHaveAttribute("data-chat-state", "input", {
+    await expect(this.container).toHaveAttribute("data-accepts-send", "true", {
       timeout,
     });
     await expect(this.textbox).toHaveAttribute("data-empty", "");

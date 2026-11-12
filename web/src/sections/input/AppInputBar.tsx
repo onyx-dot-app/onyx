@@ -387,6 +387,10 @@ const AppInputBar = React.memo(
       [currentMessageFiles]
     );
 
+    // The composer sends a normal message; tests read this as idle.
+    const acceptsSend =
+      chatState === "input" && !disabled && !isClassifying && !hasPendingFiles;
+
     // Text typed while Onyx responds becomes pending input.
     const hasPendingInput = responding && Boolean(message.trim());
     const canSubmitPending =
@@ -1008,6 +1012,7 @@ const AppInputBar = React.memo(
             ref={containerRef}
             id="onyx-chat-input"
             data-chat-state={chatState}
+            data-accepts-send={acceptsSend}
             className={cn(
               "relative w-full flex flex-col shadow-box-01 bg-background-neutral-00 rounded-16"
               // # Note (from @raunakab):
@@ -1133,14 +1138,8 @@ const AppInputBar = React.memo(
                           !event.nativeEvent.isComposing
                         ) {
                           event.preventDefault();
-                          const canSubmitNormally = chatState === "input";
-                          if (canSubmitNormally) {
-                            if (
-                              message &&
-                              !disabled &&
-                              !isClassifying &&
-                              !hasPendingFiles
-                            ) {
+                          if (chatState === "input") {
+                            if (message && acceptsSend) {
                               submitMessage(message);
                             }
                           } else if (canSubmitPending) {
