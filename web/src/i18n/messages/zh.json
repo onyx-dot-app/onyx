@@ -15546,9 +15546,6 @@
         }
       },
       "group": {
-        "calls": {
-          "tag": "{count, plural, one {# 次调用} other {# 次调用}}"
-        },
         "working": {
           "label": "处理中"
         }

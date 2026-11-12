@@ -15546,9 +15546,6 @@
         }
       },
       "group": {
-        "calls": {
-          "tag": "{count, plural, one {# استدعاء} other {# استدعاءات}}"
-        },
         "working": {
           "label": "قيد العمل"
         }

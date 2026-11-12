@@ -15546,9 +15546,6 @@
         }
       },
       "group": {
-        "calls": {
-          "tag": "{count, plural, one {# Aufruf} other {# Aufrufe}}"
-        },
         "working": {
           "label": "In Arbeit"
         }
