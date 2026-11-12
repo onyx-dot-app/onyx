@@ -1,4 +1,12 @@
 import type { Message } from "@/app/app/types";
+import type { LLMOverride } from "@/app/app/services/lib";
+
+/** Composer choices that a queued or interrupting message's turn starts with. */
+export interface PendingTurnSettings {
+  deepResearch: boolean;
+  /** Null uses the chat's saved model. */
+  llmOverride: LLMOverride | null;
+}
 
 export interface PendingChatMessage {
   id: string;
@@ -6,6 +14,7 @@ export interface PendingChatMessage {
   delivery: "send" | "queue" | "interrupt";
   target_response_id: number | null;
   deep_research: boolean;
+  llm_override: LLMOverride | null;
 }
 
 export interface ChatHistoryPage {
@@ -31,11 +40,14 @@ export interface ChatSessionQueue {
   /** New input has a saved response to target. */
   hasTargetResponse: boolean;
   needsResponseSelection: boolean;
-  /** `deepResearch` starts a queued or interrupting message's turn as Deep Research. */
+  /**
+   * A queued or interrupting message's turn starts as Deep Research when
+   * `deepResearch` is set, with `llmOverride` as its model.
+   */
   submit: (
     message: string,
     delivery: PendingChatMessage["delivery"],
-    deepResearch: boolean
+    turn: PendingTurnSettings
   ) => Promise<boolean>;
   withdraw: (id: string) => Promise<PendingChatMessage | null>;
   interrupt: (id: string) => Promise<void>;

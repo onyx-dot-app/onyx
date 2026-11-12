@@ -129,7 +129,17 @@ function props(chatState: AppInputBarProps["chatState"]): ComposerProps {
     deepResearchEnabled: false,
     disabled: false,
     activeAgent: undefined,
-    llmManager: { isLoadingProviders: false } as AppInputBarProps["llmManager"],
+    llmManager: {
+      isLoadingProviders: false,
+      currentLlm: {
+        name: "Provider",
+        provider: "openai",
+        modelName: "picked-model",
+        modelConfigurationId: 7,
+      },
+      hasTemperatureOverride: false,
+      temperature: 0.5,
+    } as AppInputBarProps["llmManager"],
     toolConfiguration: {} as AppInputBarProps["toolConfiguration"],
   };
 }
@@ -146,6 +156,7 @@ beforeEach(() => {
       delivery: "queue",
       target_response_id: 2,
       deep_research: false,
+      llm_override: null,
     },
   ];
   jest.mocked(waitForChatResponseEnd).mockReset();
@@ -512,6 +523,7 @@ test("a successful queue request keeps text typed while it was pending", async (
       delivery: "queue" as const,
       target_response_id: 2,
       deep_research: false,
+      llm_override: null,
     };
     pending.push(item);
     submission.resolve(new Response(JSON.stringify(item)));
@@ -726,6 +738,34 @@ test.each([
   }
 );
 
+test.each([
+  [
+    "one model",
+    false,
+    {
+      model_provider: "Provider",
+      model_version: "picked-model",
+      model_configuration_id: 7,
+    },
+  ],
+  ["a multi-model comparison", true, null],
+])(
+  "a queued message runs with the model the picker shows for %s",
+  async (_case, isMultiModelActive, expected) => {
+    const user = setupUser();
+    render(
+      <ChatInput
+        {...props("streaming")}
+        isMultiModelActive={isMultiModelActive}
+      />
+    );
+    await user.click(screen.getByRole("textbox", { name: "Message input" }));
+    await user.keyboard("{Control>}{Enter}{/Control}");
+    await waitFor(() => expect(pending).toHaveLength(2));
+    expect(pending.at(-1)?.llm_override).toEqual(expected);
+  }
+);
+
 test("every pending write refreshes the chat status", async () => {
   const user = setupUser();
   render(<ChatInput {...props("streaming")} />);
@@ -771,6 +811,7 @@ test("Enter on a highlighted message that left the queue does not reach the next
     delivery: "queue",
     target_response_id: 2,
     deep_research: false,
+    llm_override: null,
   });
   await act(async () => {
     await mutate(() => true, undefined, { revalidate: false });

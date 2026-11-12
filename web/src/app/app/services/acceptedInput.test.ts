@@ -12,6 +12,7 @@ function pending(id: string): PendingChatMessage {
     delivery: "send",
     target_response_id: 2,
     deep_research: false,
+    llm_override: null,
   };
 }
 

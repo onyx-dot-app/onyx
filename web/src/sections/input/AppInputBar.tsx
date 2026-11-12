@@ -457,11 +457,23 @@ const AppInputBar = React.memo(
       clearMessage();
       clearChatDraft();
       if (
-        await queue.submit(
-          submitted.trim(),
-          delivery,
-          deepResearchEnabled && showDeepResearch
-        )
+        await queue.submit(submitted.trim(), delivery, {
+          deepResearch: deepResearchEnabled && showDeepResearch,
+          // The turn uses the model the picker shows, as a normal send does.
+          // A multi-model comparison has no single model, so the chat's saved
+          // model applies.
+          llmOverride: isMultiModelActive
+            ? null
+            : {
+                model_provider: llmManager.currentLlm.name,
+                model_version: llmManager.currentLlm.modelName,
+                model_configuration_id:
+                  llmManager.currentLlm.modelConfigurationId ?? null,
+                temperature: llmManager.hasTemperatureOverride
+                  ? llmManager.temperature
+                  : undefined,
+              },
+        })
       )
         return;
       returnText(sessionId, submitted);

@@ -47,6 +47,7 @@ from onyx.llm.models import (
     ReasoningEffort,
     ToolResultMessage,
 )
+from onyx.llm.override_models import LLMOverride
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.server.query_and_chat.models import (
     MessageResponseIDInfo,
@@ -82,6 +83,7 @@ class PendingChatMessage(BaseModel):
     delivery: MessageDelivery
     target_response_id: int | None
     deep_research: bool = False
+    llm_override: LLMOverride | None = None
 
 
 class QueuedChatTurn(BaseModel):

@@ -10,6 +10,7 @@ const messages: PendingChatMessage[] = [
     delivery: "queue",
     target_response_id: 2,
     deep_research: false,
+    llm_override: null,
   },
 ];
 

@@ -47,6 +47,7 @@ def upgrade() -> None:
         sa.Column(
             "deep_research", sa.Boolean(), nullable=False, server_default=sa.false()
         ),
+        sa.Column("llm_override", postgresql.JSONB(), nullable=True),
         # IS TRUE: a NULL comparison makes CHECK pass, so require a true result.
         sa.CheckConstraint(
             "(source = 'human' AND delivery IN ('send', 'queue', 'interrupt')) IS TRUE",
