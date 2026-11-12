@@ -138,9 +138,14 @@ class SendMessageRequest(BaseModel):
     # Origin of the message for telemetry tracking
     origin: MessageOrigin = MessageOrigin.UNSET
 
-    # Set by clients that show the responses a turn's background agents start
-    # after the stream ends. Only these turns offer background agent tools.
-    accepts_follow_ups: bool = False
+    accepts_follow_ups: bool = Field(
+        default=False,
+        description=(
+            "Set to true if the client can receive automatic follow-up answers "
+            "after the stream ends. This enables background agents for the "
+            "turn. Clients that only read the streamed answer leave it false."
+        ),
+    )
 
     # Placement information for the message in the conversation tree:
     # - -1: auto-place after latest message in chain
