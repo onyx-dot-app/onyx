@@ -433,7 +433,7 @@ The library preview of an external-app skill calls the same renderer
     ([[#bundle-size-limits]]). `skills/metadata.py:frontmatter_for_jsonb`
     drops a frontmatter value that JSONB cannot hold and keeps every other
     key; name and description are always the validated strings.
-21. `bundle-retention` **A plugin keeps ten bundles, and every version row.**
+21. `bundle-retention` **A plugin keeps 100 bundles, and every version row.**
     `db/plugin.py:prune_plugin_bundles__no_commit` runs in
     `add_plugin_version__no_commit`, under the plugin lock and in the same
     transaction. It keeps the bundles of the current, published and pending

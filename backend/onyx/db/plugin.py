@@ -87,7 +87,7 @@ _PLUGIN_PRIMARY_KEY = "plugin_pkey"
 
 # The newest version keeps its bundle, with the newest older versions up to
 # this many bundles. The published and pending versions always keep theirs.
-BUNDLES_KEPT = 10
+BUNDLES_KEPT = 100
 
 NameClashAction = Literal["raise", "rename"]
 _RENAME_ATTEMPTS = 3
