@@ -4,6 +4,7 @@ import {
   Packet,
   PacketType,
 } from "@/app/app/services/streamingModels";
+import { externalToolLabel } from "@/app/app/message/messageComponents/toolDisplayHelpers";
 
 interface AuthError {
   toolName: string;
@@ -37,7 +38,7 @@ function computeAuthErrors(rawPackets: Packet[]): AuthError[] {
 
     if (!alreadyPresent) {
       errors.push({
-        toolName: delta.tool_name,
+        toolName: externalToolLabel(delta.tool_name),
         toolId: delta.tool_id ?? null,
       });
     }
