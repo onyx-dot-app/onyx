@@ -522,3 +522,48 @@ def test_admin_read_counts_skills_that_do_not_load(
     assert listed.skills_not_loaded == 1
     payload = push.build_user_skills_payload(user, db_session)
     assert _omitted(payload) == {big[0].id}
+
+
+def test_push_over_the_transport_cap_leaves_out_skills_by_the_keep_order(
+    db_session: Session,
+    seeded_skill: Callable[..., Skill],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When the files do not fit the transport cap although the charges fit,
+    the push leaves out the later plugin in the keep order, records it, and
+    still sends the rest."""
+    user = make_user(db_session, standard_account=True)
+    db_session.commit()
+    tag = user.id.hex[:8]
+    newer = seeded_skill(f"rt-cap-newer-{tag}", author_user_id=user.id)
+    older = seeded_skill(f"rt-cap-older-{tag}", author_user_id=user.id)
+    _turn_on(db_session, user, newer.id, _at(2))
+    _turn_on(db_session, user, older.id, _at(1))
+    sandbox = make_sandbox(db_session, user)
+    db_session.commit()
+    full = push.build_user_skills_payload(user, db_session)
+    assert f"{older.name}/SKILL.md" in full.files
+    without_older = {
+        path: content
+        for path, content in full.files.items()
+        if not path.startswith(f"{older.name}/")
+    }
+    monkeypatch.setattr(
+        push, "SKILL_RUNTIME_MAX_BYTES", push._sent_bytes(without_older)
+    )
+    manager = _RecordingSandboxManager()
+    monkeypatch.setattr(push, "get_sandbox_manager", lambda: manager)
+
+    push.push_skills_for_users({user.id}, db_session)
+    db_session.commit()
+
+    assert manager.sent == [sandbox.id]
+    db_session.refresh(sandbox)
+    [omission] = [
+        item for item in sandbox.skill_omissions if item.plugin_id == older.id
+    ]
+    assert omission.reason == "bytes"
+    assert newer.id not in {item.plugin_id for item in sandbox.skill_omissions}
+    payload = push.build_user_skills_payload(user, db_session)
+    assert f"{newer.name}/SKILL.md" in payload.files
+    assert f"{older.name}/SKILL.md" not in payload.files

@@ -7,6 +7,7 @@ so Python uses the same ``sandbox_daemon`` package name as the container.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import importlib
@@ -18,9 +19,11 @@ import sqlite3
 import sys
 import tarfile
 import time
+import tracemalloc
 from collections.abc import Generator
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 from uuid import UUID, uuid4
 
 import httpx
@@ -533,14 +536,14 @@ def test_push_over_size_cap_returns_413(
     configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
     client: TestClient,
 ) -> None:
-    """Content-Length > 100 MiB -> 413, body never streamed."""
+    """Content-Length over the archive cap -> 413, body never streamed."""
     extract_mod, _, priv, allowed_root = configured_sandbox_daemon
     mount_path = str(allowed_root / "skills")
 
     # Use a small body but advertise a huge Content-Length. The daemon rejects
     # based on the header before reading the body.
     body = _build_targz_bytes({"x": b"x"})
-    huge = str(extract_mod.MAX_BUNDLE_BYTES + 1)
+    huge = str(extract_mod.MAX_ARCHIVE_BYTES + 1)
     sha = hashlib.sha256(body).hexdigest()
     ts = str(int(time.time()))
     sig = _sign(priv, mount_path=mount_path, sha256_hex=sha, timestamp=ts)
@@ -1624,3 +1627,234 @@ def test_output_manifest_client_and_daemon_contract(
     assert json.loads(bodies[0]) == expected_body
     assert result.entries[0].mtime_ns == (outputs / "deck.pptx").stat().st_mtime_ns
     assert result.entries[0].ctime_ns == (outputs / "deck.pptx").stat().st_ctime_ns
+
+
+# ---------------------------------------------------------------------------
+# Streamed push
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def spool_dir(
+    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> Path:
+    """Folder that receives the daemon's spooled push bodies."""
+    _, server_mod, _, _ = configured_sandbox_daemon
+    path = tmp_path / "spool"
+    monkeypatch.setattr(server_mod, "_PUSH_SPOOL_DIR", path)
+    return path
+
+
+def _signed_push_headers(
+    priv: Ed25519PrivateKey, mount_path: str, sha256_hex: str
+) -> dict[str, str]:
+    ts = str(int(time.time()))
+    return {
+        "Content-Type": "application/gzip",
+        "X-Bundle-Sha256": sha256_hex,
+        "X-Push-Signature": _sign(
+            priv, mount_path=mount_path, sha256_hex=sha256_hex, timestamp=ts
+        ),
+        "X-Push-Timestamp": ts,
+    }
+
+
+def _write_large_archive(path: Path, file_count: int, file_bytes: int) -> str:
+    """Write an incompressible tar.gz (gzip level 0) and return its SHA-256."""
+    block = os.urandom(1024 * 1024)
+
+    class _Repeat(io.RawIOBase):
+        def __init__(self, size: int) -> None:
+            self._left = size
+
+        def readable(self) -> bool:
+            return True
+
+        def readinto(self, buffer: Any) -> int:
+            n = min(len(buffer), self._left, len(block))
+            buffer[:n] = block[:n]
+            self._left -= n
+            return n
+
+    with tarfile.open(path, mode="w:gz", compresslevel=0) as tar:
+        for index in range(file_count):
+            info = tarfile.TarInfo(name=f"big-skill/part-{index}.bin")
+            info.size = file_bytes
+            tar.addfile(info, io.BufferedReader(_Repeat(file_bytes)))
+    digest = hashlib.sha256()
+    with path.open("rb") as archive:
+        for chunk in iter(lambda: archive.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+async def _asgi_push_from_file(
+    app: Any,
+    *,
+    archive: io.BufferedReader,
+    size: int,
+    mount_path: str,
+    headers: dict[str, str],
+) -> int:
+    """Send a push to the ASGI app in 1 MiB chunks read from disk, the way a
+    server hands the body to the app. Returns the response status."""
+    raw_headers = [
+        (key.lower().encode(), value.encode())
+        for key, value in {**headers, "Content-Length": str(size)}.items()
+    ]
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "path": "/push",
+        "raw_path": b"/push",
+        "query_string": f"mount_path={mount_path}".encode(),
+        "headers": raw_headers,
+        "client": ("127.0.0.1", 1),
+        "server": ("127.0.0.1", 8731),
+    }
+    status: list[int] = []
+
+    async def receive() -> dict[str, Any]:
+        chunk = archive.read(1024 * 1024)
+        return {"type": "http.request", "body": chunk, "more_body": bool(chunk)}
+
+    async def send(message: dict[str, Any]) -> None:
+        if message["type"] == "http.response.start":
+            status.append(message["status"])
+
+    await app(scope, receive, send)
+    return status[0]
+
+
+def test_200_mb_push_streams_with_bounded_memory(
+    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    spool_dir: Path,
+    tmp_path: Path,
+) -> None:
+    """The handler spools the body to disk and extracts from the file, so
+    traced memory stays far below the body size."""
+    _, server_mod, priv, allowed_root = configured_sandbox_daemon
+    mount_path = str(allowed_root / "skills")
+    archive_path = tmp_path / "push.tar.gz"
+    file_bytes = 20 * 1024 * 1024
+    sha = _write_large_archive(archive_path, file_count=10, file_bytes=file_bytes)
+    body_bytes = archive_path.stat().st_size
+    assert body_bytes > 200 * 1024 * 1024
+
+    tracemalloc.start()
+    try:
+        with archive_path.open("rb") as archive:
+            status = asyncio.run(
+                _asgi_push_from_file(
+                    server_mod.app,
+                    archive=archive,
+                    size=body_bytes,
+                    mount_path=mount_path,
+                    headers=_signed_push_headers(priv, mount_path, sha),
+                )
+            )
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+
+    assert status == 200
+    assert peak < 32 * 1024 * 1024, f"peak traced memory {peak} bytes"
+    extracted = Path(mount_path) / "big-skill"
+    assert sorted(p.stat().st_size for p in extracted.iterdir()) == [file_bytes] * 10
+    assert list(spool_dir.iterdir()) == []
+
+
+def test_push_body_over_the_cap_is_refused_and_keeps_the_live_tree(
+    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    client: TestClient,
+    spool_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A body with no Content-Length is counted while it streams."""
+    _, server_mod, priv, allowed_root = configured_sandbox_daemon
+    mount_path = str(allowed_root / "skills")
+    keep = _build_targz_bytes({"keep.txt": b"keep"})
+    assert _push_request(client, priv=priv, mount_path=mount_path, body=keep).is_success
+    live = Path(mount_path).resolve()
+    body = _build_targz_bytes({"big.bin": os.urandom(8192)})
+    monkeypatch.setattr(server_mod, "MAX_ARCHIVE_BYTES", len(body) - 1)
+
+    def chunks() -> Generator[bytes, None, None]:
+        for start in range(0, len(body), 1000):
+            yield body[start : start + 1000]
+
+    resp = client.post(
+        "/push",
+        params={"mount_path": mount_path},
+        content=chunks(),
+        headers=_signed_push_headers(
+            priv, mount_path, hashlib.sha256(body).hexdigest()
+        ),
+    )
+
+    assert resp.status_code == 413
+    assert Path(mount_path).resolve() == live
+    assert list(spool_dir.iterdir()) == []
+
+
+def test_push_with_malformed_content_length_returns_400(
+    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    client: TestClient,
+) -> None:
+    _, _, priv, allowed_root = configured_sandbox_daemon
+    mount_path = str(allowed_root / "skills")
+    body = _build_targz_bytes({"x": b"x"})
+
+    resp = client.post(
+        "/push",
+        params={"mount_path": mount_path},
+        content=body,
+        headers={
+            **_signed_push_headers(priv, mount_path, hashlib.sha256(body).hexdigest()),
+            "Content-Length": "abc",
+        },
+    )
+
+    assert resp.status_code == 400
+
+
+@pytest.mark.parametrize("case", ["sha_mismatch", "traversal", "corrupt_gzip"])
+def test_refused_push_removes_the_spooled_body_and_keeps_the_live_tree(
+    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    client: TestClient,
+    spool_dir: Path,
+    case: str,
+) -> None:
+    _, _, priv, allowed_root = configured_sandbox_daemon
+    mount_path = str(allowed_root / "skills")
+    keep = _build_targz_bytes({"keep.txt": b"keep"})
+    assert _push_request(client, priv=priv, mount_path=mount_path, body=keep).is_success
+    live = Path(mount_path).resolve()
+    (spool_dir / "left-by-a-killed-sidecar.tar.gz").write_bytes(b"partial")
+
+    if case == "sha_mismatch":
+        body = _build_targz_bytes({"a.txt": b"a"})
+        resp = client.post(
+            "/push",
+            params={"mount_path": mount_path},
+            content=body,
+            headers=_signed_push_headers(priv, mount_path, "0" * 64),
+        )
+    else:
+        body = (
+            _build_targz_bytes({"../escape.txt": b"oops"})
+            if case == "traversal"
+            else _build_targz_bytes({"a.bin": os.urandom(65536)})[:1000]
+        )
+        resp = _push_request(client, priv=priv, mount_path=mount_path, body=body)
+
+    assert resp.status_code == 400, resp.text
+    assert Path(mount_path).resolve() == live
+    assert (live / "keep.txt").read_bytes() == b"keep"
+    assert list(live.parent.iterdir()) == [live]
+    assert list(spool_dir.iterdir()) == []

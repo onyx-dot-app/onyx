@@ -114,7 +114,7 @@ def test_expansion_checks_combined_bytes_before_substitution(
     expected = f"{_SKILL_DIR}/run.py".encode()
     monkeypatch.setattr(
         push,
-        "MAX_BUNDLE_BYTES",
+        "SKILL_RUNTIME_MAX_BYTES",
         len(expected) + len(b"scripthealthy") - excess,
         raising=False,
     )
@@ -141,7 +141,7 @@ def test_expansion_accumulates_growth_and_keeps_later_fitting_skill(
     third = b"/workspace/managed/skills/third"
     monkeypatch.setattr(
         push,
-        "MAX_BUNDLE_BYTES",
+        "SKILL_RUNTIME_MAX_BYTES",
         len(first) + len(body) * 2 + len(b"healthy"),
         raising=False,
     )

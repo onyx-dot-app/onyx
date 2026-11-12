@@ -381,7 +381,7 @@ def test_assemble_skips_skill_that_would_pass_the_sandbox_total(
     first = _bundle("first")
     with zipfile.ZipFile(io.BytesIO(first)) as bundle_zip:
         first_size = sum(info.file_size for info in bundle_zip.infolist())
-    monkeypatch.setattr(push, "MAX_BUNDLE_BYTES", first_size + 1)
+    monkeypatch.setattr(push, "SKILL_RUNTIME_MAX_BYTES", first_size + 1)
 
     files = push._assemble_fileset(
         [_skill(name="first", is_valid=True), _skill(name="second", is_valid=True)],
@@ -413,7 +413,9 @@ def test_skill_dropped_by_resolution_does_not_crowd_out_later_skills(
     with zipfile.ZipFile(io.BytesIO(healthy)) as bundle_zip:
         healthy_size = sum(info.file_size for info in bundle_zip.infolist())
     monkeypatch.setattr(push, "DEFAULT_PER_FILE_MAX_BYTES", expanding_size + 1)
-    monkeypatch.setattr(push, "MAX_BUNDLE_BYTES", expanding_size + healthy_size - 1)
+    monkeypatch.setattr(
+        push, "SKILL_RUNTIME_MAX_BYTES", expanding_size + healthy_size - 1
+    )
 
     files = push._assemble_fileset(
         [

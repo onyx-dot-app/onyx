@@ -459,10 +459,11 @@ The library preview of an external-app skill calls the same renderer
     `zip_metadata_bytes`. `normalize_custom_bundle` finds duplicate and
     file-versus-folder paths by sorting the paths, not by building every parent
     path. `skills/push.py:_add_bundle_bytes` skips a Skill whose declared file
-    sizes would take the push over the receiver's `MAX_BUNDLE_BYTES`, before it
-    reads the files. It also checks the resolved SKILL.md size then, so a
-    Skill that `skill-dir-placeholder` would drop never counts against later
-    Skills.
+    sizes would take the push over the transport cap
+    (`skills/limits.py:SKILL_RUNTIME_MAX_BYTES`, 900 MiB), before it reads the
+    files. The running total counts each root SKILL.md at its resolved size
+    (`_sent_bytes`), so a Skill that `skill-dir-placeholder` would drop never
+    counts against later Skills.
 19. `plugin-tables` **Access reads come from the plugin tables;
     the skill rows are still written.** Migration `cdec9dd9ca3d` adds `plugin_marketplace`,
     `plugin`, `plugin_version`, `plugin_skill`, `plugin__user`,
@@ -657,8 +658,11 @@ The library preview of an external-app skill calls the same renderer
     the content on that disk. `GET /skills/users-over-limit` (`MANAGE_PLUGINS`,
     `db/skill_limit.py:users_past_write_limit`) lists active users past the
     write limit with their size, files and the count of plugins that do not
-    load (sizes only, no bundle opened). The transport cap `MAX_BUNDLE_BYTES`
-    still applies on top (G7c).
+    load (sizes only, no bundle opened). The transport cap (900 MiB of sent
+    bytes, `SKILL_RUNTIME_MAX_BYTES`, see [[craft-sandboxes]]) applies on top,
+    in the same keep order: a plugin whose files do not fit after
+    `${CLAUDE_SKILL_DIR}` resolution is left out and recorded as an omission
+    with reason `bytes`; the push still goes out.
 
 ---
 
@@ -669,6 +673,11 @@ The library preview of an external-app skill calls the same renderer
   stale with no list of inputs to maintain.
 - **A stale notice, not an automatic reload.** Reload disposes the live
   runtime, so the user chooses when. It refuses while a turn runs.
+- **A push can change files during a turn (R30).** "A new version applies at
+  the next message" holds only for the harness. The OpenCode push swaps the
+  `/workspace/managed/skills` link at once, so a turn that is running can read
+  the new files of a Skill. The previous tree stays readable until the next
+  push to that mount or for 60 seconds.
 - **App lifecycle keeps user intent.** Disconnecting an app deletes the user's
   enabled selections for its skills and keeps opt-outs
   (`db/external_app.py`). Deleting an app resets its custom skills to

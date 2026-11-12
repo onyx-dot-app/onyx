@@ -1,11 +1,14 @@
 import asyncio
 import base64
 import binascii
+import gzip
 import hashlib
 import os
+import shutil
 import tarfile
 import tempfile
 import time
+import zlib
 from collections.abc import Iterator
 from pathlib import Path
 from uuid import UUID
@@ -15,7 +18,7 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from fastapi import FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
-from sandbox_daemon.extract import MAX_BUNDLE_BYTES, safe_extract_then_atomic_swap
+from sandbox_daemon.extract import MAX_ARCHIVE_BYTES, safe_extract_then_atomic_swap
 from sandbox_daemon.filesystem import FilesystemPathError, list_session_directory
 from sandbox_daemon.models import (
     PUSH_DAEMON_PORT,
@@ -52,6 +55,10 @@ from sandbox_daemon.snapshot import (
 app = FastAPI(title="sandbox-sidecar", docs_url=None, redoc_url=None)
 
 _MAX_TIMESTAMP_DRIFT_SECONDS = 60
+_PUSH_SPOOL_DIR = Path(tempfile.gettempdir()) / "onyx-push-spool"
+
+# One push at a time bounds the spooled archive and extracted trees on disk.
+_push_lock = asyncio.Lock()
 
 _public_key: Ed25519PublicKey | None = None
 
@@ -116,13 +123,24 @@ def _iter_file_then_unlink(path: Path) -> Iterator[bytes]:
 async def _spool_verified_archive(
     request: Request,
     expected_sha256: str,
+    max_bytes: int | None = None,
+    directory: Path | None = None,
 ) -> Path:
     archive_path: Path | None = None
     sha256_hash = hashlib.sha256()
+    size = 0
     try:
-        with tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False) as tmp_file:
+        with tempfile.NamedTemporaryFile(
+            suffix=".tar.gz", delete=False, dir=directory
+        ) as tmp_file:
             archive_path = Path(tmp_file.name)
             async for chunk in request.stream():
+                size += len(chunk)
+                if max_bytes is not None and size > max_bytes:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"Bundle exceeds {max_bytes} byte limit",
+                    )
                 sha256_hash.update(chunk)
                 tmp_file.write(chunk)
 
@@ -133,10 +151,34 @@ async def _spool_verified_archive(
                 detail=f"SHA-256 mismatch: expected {expected_sha256}, got {actual_sha}",
             )
         return archive_path
-    except Exception:
+    except BaseException:
         if archive_path is not None:
             archive_path.unlink(missing_ok=True)
         raise
+
+
+def _check_content_length(request: Request, max_bytes: int) -> None:
+    content_length = request.headers.get("content-length")
+    if content_length is None:
+        return
+    try:
+        length = int(content_length)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid Content-Length")
+    if length > max_bytes:
+        raise HTTPException(
+            status_code=413, detail=f"Bundle exceeds {max_bytes} byte limit"
+        )
+
+
+def _clear_spool_dir() -> None:
+    """Remove archives that a killed sidecar left behind."""
+    _PUSH_SPOOL_DIR.mkdir(parents=True, exist_ok=True)
+    for entry in _PUSH_SPOOL_DIR.iterdir():
+        if entry.is_dir() and not entry.is_symlink():
+            shutil.rmtree(entry, ignore_errors=True)
+        else:
+            entry.unlink(missing_ok=True)
 
 
 @app.get(SIDECAR_HEALTH_PATH)
@@ -232,34 +274,34 @@ async def push(
     if not mount_path.startswith("/"):
         raise HTTPException(status_code=400, detail="mount_path must be absolute")
 
-    content_length = request.headers.get("content-length")
-    if content_length is not None and int(content_length) > MAX_BUNDLE_BYTES:
-        raise HTTPException(
-            status_code=413, detail=f"Bundle exceeds {MAX_BUNDLE_BYTES} byte limit"
-        )
+    _check_content_length(request, MAX_ARCHIVE_BYTES)
 
-    chunks: list[bytes] = []
-    size = 0
-    async for chunk in request.stream():
-        size += len(chunk)
-        if size > MAX_BUNDLE_BYTES:
-            raise HTTPException(
-                status_code=413, detail=f"Bundle exceeds {MAX_BUNDLE_BYTES} byte limit"
+    async with _push_lock:
+        archive_path: Path | None = None
+        try:
+            await asyncio.to_thread(_clear_spool_dir)
+            archive_path = await _spool_verified_archive(
+                request,
+                x_bundle_sha256,
+                max_bytes=MAX_ARCHIVE_BYTES,
+                directory=_PUSH_SPOOL_DIR,
             )
-        chunks.append(chunk)
-    body = b"".join(chunks)
-
-    actual_sha = hashlib.sha256(body).hexdigest()
-    if actual_sha != x_bundle_sha256.lower():
-        raise HTTPException(
-            status_code=400,
-            detail=f"SHA-256 mismatch: expected {x_bundle_sha256}, got {actual_sha}",
-        )
-
-    try:
-        safe_extract_then_atomic_swap(body, mount_path)
-    except (ValueError, tarfile.ReadError, tarfile.CompressionError) as e:
-        raise HTTPException(status_code=400, detail=str(e))
+            await asyncio.to_thread(
+                safe_extract_then_atomic_swap, archive_path, mount_path
+            )
+        except (
+            ValueError,
+            EOFError,
+            zlib.error,
+            gzip.BadGzipFile,
+            tarfile.TarError,
+        ) as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except OSError as e:
+            raise HTTPException(status_code=500, detail=f"Push OS error: {e}")
+        finally:
+            if archive_path is not None:
+                archive_path.unlink(missing_ok=True)
 
     return {"status": "ok"}
 

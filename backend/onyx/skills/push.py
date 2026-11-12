@@ -3,6 +3,7 @@
 import hashlib
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from enum import Enum
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -27,7 +28,6 @@ from onyx.server.features.build.db.sandbox import (
 )
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.image.sandbox_daemon.extract import (
-    MAX_BUNDLE_BYTES,
     MAX_FILE_BYTES,
 )
 from onyx.server.features.build.sandbox.models import FileSet
@@ -49,6 +49,7 @@ from onyx.skills.bundle import (
     open_bundle_zip,
 )
 from onyx.skills.limits import (
+    SKILL_RUNTIME_MAX_BYTES,
     KeepGroup,
     SkillOmission,
     SkillUsage,
@@ -145,42 +146,63 @@ def _resolved_size(name: str, skill_md: bytes) -> int:
     )
 
 
+def _sent_bytes(files: FileSet) -> int:
+    """Bytes the sandbox receives for ``files``, with each root ``SKILL.md``
+    at its size after ``${CLAUDE_SKILL_DIR}`` resolution."""
+    total = 0
+    for path, content in files.items():
+        name, _, rest = path.partition("/")
+        total += (
+            _resolved_size(name, content) if rest == SKILL_MD_NAME else len(content)
+        )
+    return total
+
+
+class _BundleAdd(Enum):
+    ADDED = "added"
+    # The push would pass the transport cap; the run-time limit records it.
+    TOO_LARGE = "too_large"
+    SKIPPED = "skipped"
+
+
 def _add_bundle_bytes(
     files: FileSet, name: str, bundle_file_id: str | None, bundle_bytes: bytes
-) -> bool:
-    """Add a bundle's files under ``name``. Returns whether it was added."""
+) -> _BundleAdd:
+    """Add a bundle's files under ``name`` if the push stays within the
+    transport cap ``SKILL_RUNTIME_MAX_BYTES``."""
     try:
         bundle_files: FileSet = {}
         with open_bundle_zip(bundle_bytes) as zf:
             infos = [info for info in zf.infolist() if not info.is_dir()]
             # A member never reads past its declared size, so this bounds memory
             # before the receiver would refuse the whole push.
-            total = sum(len(content) for content in files.values()) + sum(
-                info.file_size for info in infos
-            )
-            if total > MAX_BUNDLE_BYTES:
+            total = _sent_bytes(files) + sum(info.file_size for info in infos)
+            if total > SKILL_RUNTIME_MAX_BYTES:
                 logger.warning(
                     "Skipping skill %s: the skills exceed the sandbox size limit",
                     name,
                 )
-                return False
+                return _BundleAdd.TOO_LARGE
             for info in infos:
                 bundle_files[f"{name}/{info.filename}"] = zf.read(info)
         skill_md = bundle_files.get(f"{name}/{SKILL_MD_NAME}", b"")
         resolved = _resolved_size(name, skill_md)
         # Count the resolved instructions now, so a Skill that resolution would
         # drop does not push later Skills over the total.
-        if (
-            resolved > min(DEFAULT_PER_FILE_MAX_BYTES, MAX_FILE_BYTES)
-            or total - len(skill_md) + resolved > MAX_BUNDLE_BYTES
-        ):
+        if resolved > min(DEFAULT_PER_FILE_MAX_BYTES, MAX_FILE_BYTES):
             logger.warning(
-                "Skipping skill %s: resolved instructions exceed a sandbox size limit",
+                "Skipping skill %s: resolved instructions exceed the file size limit",
                 name,
             )
-            return False
+            return _BundleAdd.SKIPPED
+        if total - len(skill_md) + resolved > SKILL_RUNTIME_MAX_BYTES:
+            logger.warning(
+                "Skipping skill %s: resolved instructions exceed the sandbox size limit",
+                name,
+            )
+            return _BundleAdd.TOO_LARGE
         files.update(bundle_files)
-        return True
+        return _BundleAdd.ADDED
     except Exception:
         logger.warning(
             "Failed to unpack bundle for skill %s (%s), skipping",
@@ -188,7 +210,7 @@ def _add_bundle_bytes(
             bundle_file_id,
             exc_info=True,
         )
-        return False
+        return _BundleAdd.SKIPPED
 
 
 def _resolve_skill_dirs(files: FileSet, skill_names: Iterable[str]) -> None:
@@ -205,7 +227,7 @@ def _resolve_skill_dirs(files: FileSet, skill_names: Iterable[str]) -> None:
         skill_dir = f"{SKILLS_MOUNT_PATH}/{name}"
         resolved_size = _resolved_size(name, content)
         resolved_total = total - len(content) + resolved_size
-        if resolved_size > file_limit or resolved_total > MAX_BUNDLE_BYTES:
+        if resolved_size > file_limit or resolved_total > SKILL_RUNTIME_MAX_BYTES:
             logger.warning(
                 "Skipping skill %s: resolved instructions exceed a sandbox size limit",
                 name,
@@ -363,16 +385,26 @@ def _assemble_skills(
                 if left_out(runtime_skill, usage):
                     continue
             version = runtime_skill.version
-            if (
-                _add_bundle_bytes(
-                    files,
-                    runtime_skill.name,
-                    version.bundle_file_id if version is not None else None,
-                    bundle_bytes,
-                )
-                and usage is not None
-            ):
+            added = _add_bundle_bytes(
+                files,
+                runtime_skill.name,
+                version.bundle_file_id if version is not None else None,
+                bundle_bytes,
+            )
+            if added is _BundleAdd.ADDED and usage is not None:
                 used += usage
+            elif added is _BundleAdd.TOO_LARGE and usage is not None:
+                # The files do not fit the transport cap although the charge
+                # fits, for example after ${CLAUDE_SKILL_DIR} resolution.
+                omissions.append(
+                    SkillOmission(
+                        plugin_id=skill.id,
+                        name=runtime_skill.name,
+                        bytes=usage.bytes,
+                        files=usage.files,
+                        reason="bytes",
+                    )
+                )
             continue
         definition = BUILT_IN_SKILLS.get(skill.built_in_skill_id)
         if definition is None:

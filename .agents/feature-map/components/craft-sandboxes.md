@@ -170,6 +170,25 @@ then replaces `outputs/` and `attachments/`
 in place with `tar`. Managed-content pushes, not snapshots, use
 `backend/onyx/server/features/build/sandbox/image/sandbox_daemon/extract.py:safe_extract_then_atomic_swap`.
 
+**Push transport.** A push carries at most 900 MiB of files: the sender cap
+is `backend/onyx/skills/limits.py:SKILL_RUNTIME_MAX_BYTES`
+(`backend/onyx/server/features/build/sandbox/kubernetes/kubernetes_sandbox_manager.py:_build_targz`, also for the
+user library), and
+the receiver cap is `MAX_BUNDLE_BYTES` in
+`backend/onyx/server/features/build/sandbox/image/sandbox_daemon/extract.py` (the
+daemon cannot import `onyx`, so the two constants must match). The sender
+writes the tar.gz to a temporary file and streams it with `Content-Length`
+(`backend/onyx/server/features/build/sandbox/kubernetes/sidecar_client.py:SidecarClient.push_archive`). The sidecar runs one push at
+a time. It clears its spool folder, checks the signature and
+`MAX_ARCHIVE_BYTES` (content plus 64 MiB for tar and gzip framing), spools
+the body to `/tmp` with a running SHA-256, and extracts from the file in a
+worker thread in 1 MiB chunks. Path checks and the limit on extracted bytes
+are unchanged. Each mount keeps its versions in `.versions/<mount name>/`; a
+push removes that mount's versions other than the live one before it extracts,
+so a mount holds at most two trees. A failure keeps the live tree. The sidecar
+`ephemeral-storage` limit (6Gi) covers the archive and four trees. Running pods
+keep their old image and limits until they are recreated.
+
 **Sweep.** `cleanup_idle_sandboxes_task` runs on the `sandbox` Celery queue.
 It first reconciles runtime resources
 (`backend/onyx/server/features/build/session/resource_cleanup.py:reconcile_sandbox_resources`): it fails stale

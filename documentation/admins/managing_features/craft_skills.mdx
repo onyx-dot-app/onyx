@@ -387,7 +387,12 @@ If the Skills do not fit, Onyx leaves out whole Skills. It never loads part of a
 
 In each group, the Skill that the user turned on, or got through a share or group setting, most recently stays first.
 A Skill with no share or group setting uses the time it was created.
-Onyx applies this order at session start and when it sends changed Skills to a running session.
+Onyx applies this order at session start and when it sends changed Skills to a running session. In rare cases,
+such as when `${CLAUDE_SKILL_DIR}` makes the files larger,
+the files of a Skill do not fit in 900 MB although its counted size fits.
+Onyx then leaves out that Skill and the Skills after it in this order that do not fit. The other Skills still load.
+
+A running session gets changed Skills at once, not at its next message. A turn that is running can read the new files.
 
 To see which users are past 500 MB or 5,000 files, call `GET /api/skills/users-over-limit`.
 You need the organization-wide `manage:plugins` permission. The response lists each user with their size, file count,
