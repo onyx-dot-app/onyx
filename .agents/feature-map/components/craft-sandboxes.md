@@ -369,7 +369,8 @@ Agents become reachable when their signing-key registration carries
   Update deadlines use separate S3 state at `s3://onyx-internal-tools/audit/updates.json`. Routine updates
   have 72 hours from first observation; maintenance monitoring warns after 24 hours.
   Emergency minimum versions block immediately. A new release or failed PR does
-  not reset existing deadlines. Missing policy or inventory fails the audit.
+  not reset existing deadlines. PR audits scan vulnerabilities without update-policy access.
+  Deployment audits enforce freshness and fail if policy is missing. Missing inventory fails every audit.
   Stale observations warn while recorded deadlines remain enforced.
   Deployment records sandbox audit status separately and requires success before
   sandbox publication, including reuse of an existing context image.

@@ -444,7 +444,8 @@ The deadline starts at the first observed newer release. Later releases do not r
 Emergency minimum versions block immediately. CVE Tracking owns release observation
 and the policy object. Its optional `minimum` input can raise Chrome's minimum.
 A failed upstream lookup leaves recorded deadlines intact. Stale observations alert.
-Missing policy or required inventory fails the audit.
+PR audits scan vulnerabilities without update-policy access. Deployment audits also enforce freshness.
+Missing policy fails deployment; missing required inventory fails every audit.
 
 Deployment applies the sandbox result before publication, including cached image reuse.
 Other components can continue. CVE collection disables freshness checks and still collects vulnerabilities.

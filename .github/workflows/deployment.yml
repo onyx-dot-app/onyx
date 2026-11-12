@@ -158,7 +158,7 @@ jobs:
             image="$(.github/scripts/base-image-ref.sh "${component}")"
             args=()
             if [ "${component}" = sandbox ]; then
-              args+=(--sbom /opt/chrome/browser.cdx.json)
+              args+=(--sbom /opt/chrome/browser.cdx.json --update-policy s3://onyx-internal-tools/audit/updates.json)
             fi
             component_status=success
             ods-audit image "${image}" "${args[@]}" --fail-on=critical --strict --format=sarif,text > "image-audit-${component}.sarif" || component_status=failure

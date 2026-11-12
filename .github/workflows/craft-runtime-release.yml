@@ -111,7 +111,7 @@ jobs:
           cache: false
       - name: Audit runtime and supplemental inventory
         working-directory: tools/ods
-        run: go run ./odsaudit image onyxdotapp/craft-runtime:release-check --sbom /opt/chrome/browser.cdx.json --sbom-only --strict
+        run: go run ./odsaudit image onyxdotapp/craft-runtime:release-check --sbom /opt/chrome/browser.cdx.json --sbom-only --strict --update-policy s3://onyx-internal-tools/audit/updates.json
       - name: Check runtime offline
         run: |
           docker run --rm --network none --shm-size=256m \

@@ -57,7 +57,7 @@ how it gates deploys.`,
 
 	cmd.Flags().StringSliceVar(&opts.SBOMs, "sbom", nil, "Required supplemental SBOM paths inside the image (scanned with Grype)")
 
-	cmd.Flags().StringVar(&opts.UpdatePolicyURL, "update-policy", audit.DefaultUpdatePolicyURL, "Update policy for supplemental packages; empty disables freshness checks")
+	cmd.Flags().StringVar(&opts.UpdatePolicyURL, "update-policy", "", "Update policy for supplemental packages; enables freshness checks")
 	cmd.Flags().BoolVar(&opts.SBOMOnly, "sbom-only", false, "Scan only the required supplemental inventories")
 	return cmd
 }

@@ -130,6 +130,11 @@ func TestImageUpdateDeadlineUsesSharedCommand(t *testing.T) {
  rm) ;;
  *) exit 99;;
  esac`)
+	defaultPolicy, _ := newAuditImageCommand().Flags().GetString("update-policy")
+	writeFakeCommand(t, bin, "aws", "exit 1")
+	if err := runAuditImage("fixture", &AuditImageOptions{SBOMOnly: true, SBOMs: []string{"/inventory.json"}, UpdatePolicyURL: defaultPolicy, FailOn: "critical", Format: "json"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("default vulnerability scan requires update-policy access: %v", err)
+	}
 	policy := writeFixture(t, t.TempDir(), "policy.json", `{"example":{"checked_at":"2026-01-01T00:00:00Z","minimum":"2","releases":{"2":"2026-01-01T00:00:00Z"}}}`)
 	err := runAuditImage("fixture", &AuditImageOptions{SBOMOnly: true, SBOMs: []string{"/inventory.json"}, UpdatePolicyURL: policy, FailOn: "critical", Format: "json"}, io.Discard, io.Discard)
 	if err == nil || !strings.Contains(err.Error(), "package update deadlines failed") {

@@ -1011,13 +1011,14 @@ Docker must be available. Missing inventory, empty inventory, and scanner errors
 Use `--sbom-only` when a job checks only software from supplemental inventories.
 The same advisory exceptions, JSON/SARIF reports, and CVE alerts apply to both scanners.
 
-Supplemental packages also use `s3://onyx-internal-tools/audit/updates.json` for update deadlines.
-Fork PRs read policy through the existing RunsOn instance role, without repository secrets.
-The runner role needs read access to this object; missing or invalid policy still fails the scan.
+Deployment opts into update deadlines with `--update-policy s3://onyx-internal-tools/audit/updates.json`.
+PR audits and CVE collection scan vulnerabilities without reading update policy.
+Missing or invalid policy fails deployment audits.
 This state is separate from advisory exceptions. It records an emergency minimum and each release's first observation.
 Routine updates warn after 24 hours and block after 72 hours. Emergency minimums block immediately.
 Stale upstream observations warn without resetting recorded deadlines.
-`--update-policy ""` disables freshness checks for CVE collection, which still scans vulnerabilities.
+Image scans leave freshness checks disabled unless `--update-policy` is supplied.
+`ods audit gate` includes freshness checks as part of its deployment checks.
 
 CVE Tracking owns policy observation and S3 writes. Its manual `minimum` input raises Chrome's emergency minimum.
 It saves this minimum before upstream discovery, preserving release timestamps even if discovery fails.

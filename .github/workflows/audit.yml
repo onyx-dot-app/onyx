@@ -137,7 +137,6 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
-      id-token: write # OIDC for the shared update policy
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
@@ -176,13 +175,6 @@ jobs:
         with:
           go-version-file: tools/ods/go.mod
           cache-dependency-path: tools/ods/go.sum
-
-      - name: Configure AWS credentials for audit policy
-        continue-on-error: true # Forks use the runner role to read audit policy.
-        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # ratchet:aws-actions/configure-aws-credentials@v6.2.3
-        with:
-          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
-          aws-region: us-east-2
 
       - name: Scan image and supplemental inventory through ODS
         working-directory: tools/ods
