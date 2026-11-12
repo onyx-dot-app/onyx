@@ -247,6 +247,19 @@ def _pre_commit(repo: Path) -> str | None:
     return str(in_venv) if in_venv.exists() else None
 
 
+def _pre_commit_env(repo: Path) -> dict[str, str]:
+    """The environment for pre-commit, with the repo's virtualenv first on PATH.
+
+    `language: system` hooks run `python3` from PATH. An agent started outside the
+    virtualenv would give them the system Python, which can be too old for the repo.
+    """
+    env = dict(os.environ)
+    venv_bin = repo / ".venv" / "bin"
+    if venv_bin.is_dir():
+        env["PATH"] = f"{venv_bin}{os.pathsep}{env.get('PATH', '')}"
+    return env
+
+
 def _pre_commit_failures(repo: Path, files: list[str]) -> str | None:
     pre_commit = _pre_commit(repo)
     if not files or pre_commit is None:
@@ -261,6 +274,7 @@ def _pre_commit_failures(repo: Path, files: list[str]) -> str | None:
         proc = subprocess.Popen(
             [pre_commit, "run", "--files", *files],
             cwd=repo,
+            env=_pre_commit_env(repo),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,

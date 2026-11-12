@@ -122,7 +122,9 @@ worktree HEAD reflog. For a merge commit, only files that differ from Git's auto
 merge result are checked. For a rebase, the check includes every file in each commit
 resolved with `git rebase --continue`, and skips clean picks. The `--apply` rebase
 backend logs resolved conflicts as picks, so the hook skips them. Checkout, pull, clean
-merge, and clean rebase updates do not add files to the check.
+merge, and clean rebase updates do not add files to the check. The hook puts the
+repository's `.venv/bin` first on `PATH`, so pre-commit hooks that run `python3` get the
+project's Python even when the agent did not start in the virtualenv.
 If pre-commit fails, fix the reported problems before you finish. When the repo has the feature map
 (`.agents/feature-map/stale_docs.py`), the same hook blocks the stop once with an
 editing brief: the sections and keys of the feature-map documents that cite code
