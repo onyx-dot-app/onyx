@@ -196,11 +196,13 @@ onyx-cli install-skill --agent claude-code
 | `/help` | Show help message |
 | `/clear` | Clear chat and start a new session |
 | `/agent` | List and switch agents (by ID or name) |
+| `/model` | List and switch models |
 | `/attach <path>` | Attach a file to next message |
 | `/sessions` | List recent chat sessions |
 | `/configure` | Re-run connection setup |
 | `/connectors` | Open connectors in browser |
 | `/settings` | Open settings in browser |
+| `/experiments` | List experimental features and their status |
 | `/quit` | Exit Onyx CLI |
 
 ## Keyboard Shortcuts
