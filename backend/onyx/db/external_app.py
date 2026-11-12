@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import and_, delete, func, select
+from sqlalchemy import and_, delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, selectinload
 
@@ -23,6 +23,7 @@ from onyx.db.models import (
     ExternalApp,
     ExternalApp__Skill,
     ExternalAppUserCredential,
+    Plugin,
     Skill,
     User,
     UserSkillPreference,
@@ -31,7 +32,6 @@ from onyx.db.plugin import (
     delete_plugin_preferences__no_commit,
     lock_skill_plugin__no_commit,
     publish_plugin__no_commit,
-    set_plugin_installation_policy__no_commit,
 )
 from onyx.db.utils import UNSET, UnsetType, is_set
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -734,10 +734,11 @@ def delete_external_app(
                 UserSkillPreference.skill_id.in_(custom_skill_ids)
             )
         )
-    for plugin_id in plugin_ids:
-        set_plugin_installation_policy__no_commit(
-            plugin_id, SkillInstallationPolicy.AVAILABLE, db_session
-        )
+    # No setting: the plugin follows its marketplace default, as legacy
+    # AVAILABLE does.
+    db_session.execute(
+        update(Plugin).where(Plugin.id.in_(plugin_ids)).values(installation_policy=None)
+    )
     delete_plugin_preferences__no_commit(plugin_ids, db_session)
 
     db_session.delete(app)

@@ -26,7 +26,9 @@
   organization, or transfers ownership.
 - **Admins** set the installation policy of a custom skill: available (the user
   opts in), installed by default (on until the user opts out), or required (on,
-  and the user cannot turn it off). Only an admin can delete a required skill.
+  and the user cannot turn it off). This needs organization-wide
+  `MANAGE_SKILLS`, which only admins hold today; a group manager cannot. Only
+  the same permission deletes a required skill.
 - **Bulk management.** Craft's Skills library and **Admin Panel → Skills**
   support selection of custom skills, bulk access and installation changes,
   personal enable/disable, and confirmed deletion. Admins see all manageable
@@ -155,7 +157,8 @@ The library preview of an external-app skill calls the same renderer
    never go stale.
 2. `affected-users-before-change` **Compute affected users before the
    change.** `db/skill.py:affected_user_ids_for_skill` finds users with a running sandbox
-   who can see the skill, by the plugin visibility rule in one query. It ignores preferences on purpose, so that a delete
+   who can see the skill, by the plugin visibility rule in one query
+   (`db/plugin_access.py:affected_user_ids_for_plugins`, which takes a set). It ignores preferences on purpose, so that a delete
    or a disable still pushes to the users who had the skill. The delete route
    reads the audience before it deletes. The share, transfer and edit routes
    push to the union of the audience before and after. A new mutation must do
@@ -219,8 +222,9 @@ The library preview of an external-app skill calls the same renderer
    Other `.template` files in an app skill get only `{{APP:...}}` values and no
    such check.
 10. `app-skill-org-visible` **An app skill stays visible to the
-    organization.** `db/skill.py:set_skill_public_permission` accepts only `VIEWER` for a
-    skill linked to an external app. The app link
+    organization.** `db/skill.py:_ensure_external_app_skill_stays_public`
+    accepts only `VIEWER` for a custom or built-in skill linked to an external
+    app. The app link
     (`db/external_app.py:associate_custom_skill_with_external_app__no_commit`,
     `replace_custom_skill_associations__no_commit`) publishes the skill through
     `db/plugin.py:publish_plugin__no_commit`, and a name clash in the
@@ -235,38 +239,57 @@ The library preview of an external-app skill calls the same renderer
     and the caller commits. The push catches and logs every exception, so a
     failed push never fails the API call. The next push repairs it, because
     the hash of a failed sandbox is not written.
-12. `sharing-single-entry` **Sharing and policy writes go through
-    `db/skill.py:share_skill__no_commit`.** The share route, the editor create
-    route, the patch route's visibility change, bulk sharing and imports with
-    access settings all call it with a `SkillSharingChange`
-    (`SkillShareRequest.to_change()` builds one). A change
-    to `installation_policy` needs `FULL_ADMIN_PANEL_ACCESS`, and
-    `db/skill.py:set_skill_installation_policy` refuses a built-in. EDIT on a
-    skill is not enough to change its groups:
-    `db/skill.py:_assert_group_share_within_scope` treats any change to the
-    group set or levels as a `MANAGE_SKILLS` action within scope
-    ([[authorization]]). Without it, an owner could push a skill into any
-    group manager's scope. It compares against the stored plugin group shares
-    (rows with a permission), and the
-    privacy check uses the stored visibility and the request, so a
-    public-to-private change in the same request cannot get past it. A
-    `public_permission` change needs the author or global `MANAGE_SKILLS`
+12. `sharing-single-entry` **Every share, publish and install setting change
+    goes through `db/plugin.py:apply_plugin_access_change__no_commit`.** It
+    takes a set of plugin ids, a `PluginAccessChange` (user and group grants,
+    `publish`, a three-state company install setting, and a mode: replace or
+    add-only) and the actor. A skill has no access of its own: the skills API
+    passes the plugin with the skill's id. The function locks the legacy skill
+    rows, then the plugins, in id order; checks the rules once for the set;
+    writes each plugin and its legacy rows in a savepoint, so one failure rolls
+    back that plugin only; and reads the affected users for the whole set
+    before and after. The routes then commit and push once. The skills layer
+    calls it through `db/skill.py:share_skill__no_commit` (share route, editor
+    create, patch visibility, imports with access settings) and
+    `db/skill.py:bulk_share_skills__no_commit` (bulk, add-only shares).
+    `db/skill.py:replace_skill_shares`, `set_skill_installation_policy`,
+    `set_skill_public_permission` and `transfer_skill_ownership` are thin
+    callers with no actor, so they skip the permission checks. Do not write
+    `plugin__user`, `plugin__user_group`, `skill__user` or
+    `skill__user_group` anywhere else.
+    Rules: a company install setting needs organization-wide `MANAGE_SKILLS`
+    (`has_global_permission`; never `has_permission`, which accepts a scoped
+    grant). In `SkillShareRequest`, a missing `installation_policy` changes
+    nothing, and null or AVAILABLE means the marketplace default. A group
+    keeps its install setting when the change does not set one, also when its
+    share is removed (the row stays with no permission). A group install
+    setting needs `MANAGE_SKILLS` for that group on a private plugin and
+    global `MANAGE_SKILLS` on a published one; it is then refused until group
+    settings ship. EDIT on a skill is not enough to change its groups: any
+    change to the group set or levels is a `MANAGE_SKILLS` action within scope
+    (`auth/scoped_permissions.py:assert_within_scope`, [[authorization]]).
+    Without it, an owner could push a skill into any group manager's scope.
+    It compares against the stored plugin group shares (rows with a
+    permission), and the privacy check uses the stored visibility and the
+    request, so a public-to-private change in the same request cannot get past
+    it. Publishing needs the author or global `MANAGE_SKILLS`
     (`db/skill.py:ensure_can_edit_org_visibility`; the patch route calls it
-    too). `db/skill.py:set_skill_public_permission` is the one entry for
-    publishing. It refuses organization `EDITOR` and a change from published to
-    private, for every route, bulk included. A publish moves the plugin to the
-    Organization library (`db/plugin.py:publish_plugin__no_commit`); a name
-    clash there returns `CONFLICT`. Only global `MANAGE_SKILLS` deletes a
-    published skill (`db/skill.py:delete_skill_for_user__no_commit`); the
-    card, bulk menu and editor hide Delete to match. A
-    transfer moves a private plugin to the new owner's "My uploads", and a name
-    clash there returns `CONFLICT`. A new sharing entry point must call `share_skill__no_commit`, not
-    `db/skill.py:replace_skill_shares`.
+    too). `db/skill.py:_publish_requested` checks every request for
+    organization access: it refuses organization `EDITOR` and a change from
+    published to private, for every route, bulk included. A publish moves the
+    plugin to the Organization library (`db/plugin.py:publish_plugin__no_commit`);
+    a name clash there returns `CONFLICT`. Only global `MANAGE_SKILLS` deletes
+    a published or a required skill
+    (`db/skill.py:delete_skill_for_user__no_commit`); the card, bulk menu and
+    editor hide Delete to match. A transfer moves a private plugin to the new
+    owner's "My uploads", and a name clash there returns `CONFLICT`.
     Agents apply a looser form of the rule
     ([[agents-personas#group-share-needs-manage-agents]]).
-    `POST /skills/bulk` applies each item in a savepoint, reports expected
-    business errors per skill, and pushes the combined affected audience after
-    commit. Bulk enable and disable change only the caller's preference.
+    `POST /skills/bulk` sharing applies one change to every skill the user
+    can edit, reports refusals and failures per skill, and pushes the combined
+    affected audience once after commit. A refusal for the whole set, such as
+    a scope or install setting refusal, fails every skill. Bulk delete applies
+    each item in a savepoint. Bulk enable and disable change only the caller's preference.
     `POST /skills/custom/batch` and GitHub import create each bundle through
     `db/skill.py:create_skill_from_bundle__no_commit`, one savepoint per skill,
     so a bad bundle or a name conflict under a DEFAULT or REQUIRED policy lands

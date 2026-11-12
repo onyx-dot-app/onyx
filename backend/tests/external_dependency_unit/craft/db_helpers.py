@@ -47,6 +47,7 @@ from onyx.db.models import (
     Credential,
     ExternalApp,
     ExternalAppUserCredential,
+    Plugin__User,
     Plugin__UserGroup,
     Sandbox,
     Skill,
@@ -62,7 +63,6 @@ from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.plugin import (
     create_skill_plugin__no_commit,
     legacy_skill_version_content,
-    set_plugin_user_share__no_commit,
 )
 from onyx.db.users import assign_user_to_default_groups__no_commit
 
@@ -345,7 +345,7 @@ def share_skill_with_user(
     db_session.add(share)
     db_session.flush()
     if skill.is_custom:
-        set_plugin_user_share__no_commit(skill.id, user.id, permission, db_session)
+        share_plugin_with_user(db_session, skill.id, user.id, permission)
     return share
 
 
@@ -367,6 +367,25 @@ def share_skill_with_group(
     if skill.is_custom:
         share_plugin_with_group(db_session, skill.id, group.id, permission)
     return share
+
+
+def share_plugin_with_user(
+    db_session: Session,
+    plugin_id: UUID,
+    user_id: UUID,
+    permission: SkillSharePermission,
+) -> None:
+    """Upsert a ``Plugin__User`` row."""
+    stmt = pg_insert(Plugin__User).values(
+        plugin_id=plugin_id, user_id=user_id, permission=permission
+    )
+    db_session.execute(
+        stmt.on_conflict_do_update(
+            index_elements=[Plugin__User.plugin_id, Plugin__User.user_id],
+            set_={"permission": stmt.excluded.permission},
+        )
+    )
+    db_session.flush()
 
 
 def share_plugin_with_group(
