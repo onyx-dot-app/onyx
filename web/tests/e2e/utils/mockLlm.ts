@@ -45,6 +45,12 @@ export const MOCK_LLM_MODELS = [
   { name: "mock-model-alt", displayName: "Mock Alt Model" },
 ] as const;
 export const MOCK_LLM_DEFAULT_MODEL = MOCK_LLM_MODELS[0];
+/**
+ * Whether the backend offers tools through `execute_code` programs. Set
+ * CODE_MODE_ENABLED for the runner to the backend's value; CI sets both.
+ */
+export const CODE_MODE_ENABLED =
+  process.env.CODE_MODE_ENABLED?.toLowerCase() === "true";
 
 const HEALTH_TIMEOUT_MS = 30_000;
 const HEALTH_POLL_INTERVAL_MS = 1_000;
