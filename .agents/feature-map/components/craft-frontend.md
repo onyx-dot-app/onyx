@@ -112,9 +112,10 @@ scheduled run settles on its saved run status instead.
 timeline events (`web/src/lib/timeline/craft/events.ts:craftPacketToEvents`)
 and appends them to the session's `timelineEvents`. `BuildMessageList` renders
 the in-progress turn from the reducer (`web/src/lib/timeline/reducer.ts`) when
-it receives `timelineEvents`; saved messages and subagent views still render
-from `streamItems`. Both live states are cleared and restored together, so a
-change to one must change the other.
+it receives `timelineEvents`. A saved assistant message renders from its own
+`timelineEvents` (set from the saved rows, or kept at turn end); subagent views
+still render from `streamItems`. Both live states are cleared and restored
+together, so a change to one must change the other.
 
 **The queue.** `enqueueMessage` adds to `queuedMessages`. The dispatcher in
 `web/src/app/craft/hooks/useBuildStreaming.ts` subscribes to the store and

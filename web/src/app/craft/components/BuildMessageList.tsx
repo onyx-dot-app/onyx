@@ -320,14 +320,15 @@ export default function BuildMessageList({
    * and the plan is pinned on top.
    */
   const renderTimeline = (
-    state: TimelineState
+    state: TimelineState,
+    opts: { isCurrentStream: boolean }
   ): { nodes: React.ReactNode[]; pinnedTodo: TodoListState | null } => {
     type Block =
       | { kind: "steps"; id: string; entries: CraftTimelineEntry[] }
       | { kind: "item"; entry: AcpTimelineEntry };
     const blocks: Block[] = [];
     for (const entry of state.entries) {
-      const step = toCraftStep(entry);
+      const step = toCraftStep(entry, opts.isCurrentStream);
       if (step) {
         const last = blocks[blocks.length - 1];
         if (last?.kind === "steps") last.entries.push(step);
@@ -363,7 +364,9 @@ export default function BuildMessageList({
                 content={entry.payload.content
                   .map((part) => (part.type === "text" ? part.text : ""))
                   .join("")}
-                isStreaming={entry.status === "streaming"}
+                isStreaming={
+                  opts.isCurrentStream && entry.status === "streaming"
+                }
                 onFileOpen={onFileOpen}
               />
             </div>
@@ -396,8 +399,19 @@ export default function BuildMessageList({
       }
     });
 
-    return { nodes, pinnedTodo: planToTodoList(state.plan) };
+    return {
+      nodes,
+      pinnedTodo: planToTodoList(state.plan, opts.isCurrentStream),
+    };
   };
+
+  const savedTimelines = useMemo(() => {
+    const states = new Map<string, TimelineState>();
+    for (const message of messages)
+      if (message.type === "assistant" && message.timelineEvents?.length)
+        states.set(message.id, reduceTimelineEvents(message.timelineEvents));
+    return states;
+  }, [messages]);
 
   const renderAgentMessage = (
     message: BuildMessage,
@@ -414,8 +428,10 @@ export default function BuildMessageList({
     const savedStreamItems = message.message_metadata?.streamItems as
       | StreamItem[]
       | undefined;
-    const savedRender =
-      savedStreamItems && savedStreamItems.length > 0
+    const savedTimeline = savedTimelines.get(message.id);
+    const savedRender = savedTimeline
+      ? renderTimeline(savedTimeline, { isCurrentStream: false })
+      : savedStreamItems && savedStreamItems.length > 0
         ? renderStreamItems(savedStreamItems, {
             isCurrentStream: false,
             extractLatestTodo: true,
@@ -512,7 +528,7 @@ export default function BuildMessageList({
   const streamRender = !hasStreamItems
     ? null
     : timelineState
-      ? renderTimeline(timelineState)
+      ? renderTimeline(timelineState, { isCurrentStream: true })
       : renderStreamItems(streamItems, {
           isCurrentStream: true,
           extractLatestTodo: true,
@@ -610,8 +626,14 @@ export default function BuildMessageList({
   );
 }
 
-/** A thinking block or tool call as a rail step; anything else is not a step. */
-function toCraftStep(entry: AcpTimelineEntry): CraftTimelineEntry | null {
+/**
+ * A thinking block or tool call as a rail step; anything else is not a step.
+ * Outside the current stream, a thinking block that never got its end is done.
+ */
+function toCraftStep(
+  entry: AcpTimelineEntry,
+  isCurrentStream: boolean
+): CraftTimelineEntry | null {
   switch (entry.payload.kind) {
     case "tool":
       return {
@@ -627,12 +649,15 @@ function toCraftStep(entry: AcpTimelineEntry): CraftTimelineEntry | null {
       if (!entry.payload.text) return null;
       return {
         id: entry.id,
-        status: entry.status,
+        status:
+          !isCurrentStream && entry.status === "streaming"
+            ? "done"
+            : entry.status,
         groupId: null,
         payload: {
           kind: "thinking",
           content: entry.payload.text,
-          isStreaming: entry.status === "streaming",
+          isStreaming: isCurrentStream && entry.status === "streaming",
         },
       };
     default:
@@ -640,8 +665,11 @@ function toCraftStep(entry: AcpTimelineEntry): CraftTimelineEntry | null {
   }
 }
 
-/** The plan as the pinned todo list the live turn shows. */
-function planToTodoList(plan: AcpPlanEntry[]): TodoListState | null {
+/** The plan as the pinned todo list; it starts open only in the live turn. */
+function planToTodoList(
+  plan: AcpPlanEntry[],
+  isOpen: boolean
+): TodoListState | null {
   if (plan.length === 0) return null;
   return {
     id: "plan",
@@ -650,6 +678,6 @@ function planToTodoList(plan: AcpPlanEntry[]): TodoListState | null {
       status: entry.status,
       activeForm: entry._meta?.onyx?.activeForm ?? entry.content,
     })),
-    isOpen: true,
+    isOpen,
   };
 }

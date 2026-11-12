@@ -852,6 +852,13 @@ export function useBuildStreaming({
                 message_metadata: {
                   streamItems: savedStreamItems,
                 },
+                timelineEvents: session.timelineEvents.filter(
+                  (event) =>
+                    !(
+                      event.type === "ext" &&
+                      event.notification.method === "_onyx/connect_app_request"
+                    )
+                ),
               });
             }
 
