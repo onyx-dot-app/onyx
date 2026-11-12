@@ -645,8 +645,12 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
   ) => {
     const existingSession = get().sessions.get(sessionId);
     // A load that started before a save was confirmed holds a stale selection.
+    // The server never clears a stored selection, so a load without one keeps
+    // the tab's copy: that chat stores none, and the tab holds the only copy.
     const selectionIsCurrent =
-      (existingSession?.toolSelectionVersion ?? 0) === toolSelectionVersion;
+      (existingSession?.toolSelectionVersion ?? 0) === toolSelectionVersion &&
+      (backendSession?.tool_selection != null ||
+        existingSession?.toolSelection == null);
     const initialData: Partial<ChatSessionData> = {
       isLoaded: true,
       description: backendSession?.description,

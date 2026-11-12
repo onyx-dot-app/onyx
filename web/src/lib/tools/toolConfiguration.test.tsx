@@ -630,6 +630,27 @@ test("a chat load that started before a save finished keeps the saved choice", a
   expect(result.current.disabledToolIds).toEqual([2]);
 });
 
+test("a chat that stores no selection keeps the tab's choice when it loads again", async () => {
+  openSavedChats({ abc: null }, true);
+  // The server keeps nothing for a content-free chat and answers null.
+  echoSaves(() => null);
+  const { result } = renderHook(() => useToolConfiguration());
+  act(() => result.current.toggleToolState(2, "disabled"));
+  await act(async () => {
+    await Promise.resolve();
+  });
+  await act(() => flushToolSelection("abc"));
+  const store = useChatSessionStore.getState();
+  const loadStartedAt = store.sessions.get("abc")?.toolSelectionVersion ?? 0;
+
+  act(() =>
+    useChatSessionStore
+      .getState()
+      .initializeSession("abc", staleChatDetail("abc"), loadStartedAt)
+  );
+  expect(result.current.disabledToolIds).toEqual([2]);
+});
+
 test("a flush resolves once the chat's selection is saved", async () => {
   openSavedChats();
   echoSaves();
