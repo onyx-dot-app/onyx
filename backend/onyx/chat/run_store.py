@@ -443,6 +443,13 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory):
         with _ownership_lock(self.cache, int(request.parent_run_id)):
             self._require_owner(parent)
             with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                # Stop subagents drops pending work and sets Stop keys under the
+                # chat lock, so a stopped sender cannot add work after it.
+                lock_agent(session, str(self.chat_session_id))
+                if self.cache.exists(_stop_key(int(request.parent_run_id))):
+                    raise ValueError(
+                        "This agent was stopped; it cannot message agents."
+                    )
                 self._follow_selected_branch(
                     get_selected_branch(session, self.chat_session_id)[1]
                 )

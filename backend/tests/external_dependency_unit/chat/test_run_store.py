@@ -3215,6 +3215,54 @@ def test_a_stopped_parent_cannot_start_an_agent(
         assert coordinator.close(timeout=30)
 
 
+def test_a_stopped_sender_cannot_queue_agent_work(
+    branch: tuple[UUID, int], db_session: Session, user_message: UserMessage
+) -> None:
+    """A send checks its sender's Stop under the chat lock that Stop holds."""
+    owner = unpolled_store(branch)
+    coordinator = AgentCoordinator()
+    view = owner.bind(coordinator, build_agent=never_restore("No restore expected"))
+    spawned: list[SpawnResult] = []
+    refused: list[str] = []
+
+    def delegate(invocation: ToolInvocation) -> ToolResult:
+        child = invocation.agents.spawn_agent(
+            fake_agent(lambda *_: text("Child answer")),
+            name="worker",
+            description="Collect evidence",
+            messages=[UserMessage(content="Initial task")],
+            max_steps=1,
+            restoration_config=ChatConfiguration(kind="chat"),
+            lifetime=AgentLifetime.BACKGROUND,
+        )
+        spawned.append(child)
+        coordinator.completion(child.run_id).result(timeout=10)
+        # Stop subagents dropped pending work before this send reached the inbox.
+        run_store.request_response_stop(owner.cache, branch[1], "user")
+        try:
+            invocation.agents.send_message(
+                child.agent_id,
+                message="Follow up",
+                delivery=MessageDelivery.QUEUE,
+                max_steps=1,
+            )
+        except ValueError as error:
+            refused.append(str(error))
+        return ToolResult(content="Done")
+
+    root = delegating_root(
+        branch, agent_tool("delegate", delegate), answer="Root answer"
+    )
+    try:
+        run = root.start(messages=[user_message], max_steps=2, coordinator=view)
+        run.result(timeout=30)
+        assert refused and "stopped" in refused[0]
+        assert pending_agent_messages(db_session, spawned[0].agent_id) == 0
+    finally:
+        owner.cache.delete(f"chat_response_stop:{branch[1]}")
+        assert coordinator.close(timeout=30)
+
+
 def test_inbox_work_waits_while_the_branch_runs_the_agent_cap(
     branch: tuple[UUID, int],
     db_session: Session,
