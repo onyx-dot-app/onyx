@@ -145,7 +145,7 @@ the guards decide.
    | Connector (cc-pair) | EDIT access: global `MANAGE_CONNECTORS`, or a manager of a group with the Editor role on the pair; the Operator role gives only OPERATE ([[cc-pairs-and-creds]]) | Same as edit | Global `MANAGE_CONNECTORS` |
    | Agent | Owner or editor share; a change to its groups also needs GATE 2 on `MANAGE_AGENTS` | Owner, owner-group member, or global `MANAGE_AGENTS`, and `ADD_AGENTS` (scope admits); not a manager (`onyx/db/persona.py:can_delete_persona`) | Same people as delete, without `ADD_AGENTS` (`onyx/db/persona.py:update_persona_public_status`) |
    | Document set | Global, manager scope, or the creator of a private set with no groups | Global `MANAGE_DOCUMENT_SETS`, or the creator of a private set with no groups | Global `MANAGE_DOCUMENT_SETS` |
-   | Custom skill | Owner, editor share, manager scope, or global `MANAGE_SKILLS` | Any editor of a private skill; a published skill needs global `MANAGE_SKILLS`, not the scoped permission; a required skill needs global `MANAGE_SKILLS` too (`db/skill.py:delete_skill_for_user__no_commit`) | Owner or global `MANAGE_SKILLS` (`db/skill.py:ensure_can_edit_org_visibility`). One-way: no unpublish, no organization edit |
+   | Custom skill | Owner, editor share, manager scope, or global `MANAGE_PLUGINS` | Any editor of a private skill; a published skill needs global `MANAGE_PLUGINS`, not the scoped permission; a required skill needs global `MANAGE_PLUGINS` too (`db/skill.py:delete_skill_for_user__no_commit`) | Owner or global `MANAGE_PLUGINS` (`db/skill.py:ensure_can_edit_org_visibility`). One-way: no unpublish, no organization edit |
    | Custom action, MCP server | Owner or global `MANAGE_ACTIONS` (`db/tools.py:can_manage_tool`) | Same as edit | Not applicable |
    | User group | Manager of that group, or global `MANAGE_USER_GROUPS` | Global `MANAGE_USER_GROUPS`; never a default group | Grants: full admin only |
 6. `recompute-on-grant-change` **Every change to grants or membership must
@@ -161,9 +161,9 @@ the guards decide.
    grants they do not hold, such as the seeded Admin group. In the same way,
    adding or removing an agent's group share is a `MANAGE_AGENTS` action
    (`ee/onyx/db/persona.py:_assert_group_share_within_scope`), and changing a
-   skill's group shares is a `MANAGE_SKILLS` action
+   skill's group shares is a `MANAGE_PLUGINS` action
    (`db/plugin.py:apply_plugin_access_change__no_commit`). A skill's company
-   install setting needs global `MANAGE_SKILLS`.
+   install setting needs global `MANAGE_PLUGINS`.
 8. `scoped-pat-fails-closed` **A scoped PAT fails closed; an unscoped PAT does
    not.** A scoped PAT reaches only routes with `require_permission` or
    `scope_exempt()`, and only when its scopes imply the required permission. A
@@ -224,7 +224,7 @@ the guards decide.
 
 - **The custom-skill projection disagrees with the routes.**
   `onyx/auth/permission_projection.py:custom_skill_permissions` says delete is full
-  admin only and publish is global `MANAGE_SKILLS` only. The routes let any
+  admin only and publish is global `MANAGE_PLUGINS` only. The routes let any
   editor delete a skill that is not required, and let the owner publish. No
   route calls this builder, so it affects only its contract test.
 - **API-key creation may be admin-equivalent.** An earlier audit reported that
@@ -269,6 +269,14 @@ the guards decide.
   step. An OAuth-provider token carries only `READ_SEARCH`, so an MCP tool can
   call the route only when it stays on `READ_SEARCH`
   ([[mcp-server#oauth-token-route-allowlist]]).
+- `rename-permission` **Rename a permission value.** Change the member in
+  `Permission` (`db/enums.py`) and in `web/src/lib/types.ts`. Map the old
+  value to the new one in `db/enums.py:LEGACY_PERMISSION_ALIASES` for one
+  release: `Permission._missing_` then reads it in request bodies, stored
+  effective permissions and PAT scopes. The `permission_grant.permission`
+  Enum column does not use the alias, so a migration must rewrite it, together
+  with `user.effective_permissions` and `personal_access_token.scopes`. Copy
+  the `manage:plugins` rename, revision `7b154e670bd8`.
 - `scoped-manager-route` **Add a route that group managers can use.** Copy
   `server/manage/administrative.py:create_deletion_attempt_for_connector_id`:
   `allow_scope=True` at GATE 1, then the resource lookup that applies the

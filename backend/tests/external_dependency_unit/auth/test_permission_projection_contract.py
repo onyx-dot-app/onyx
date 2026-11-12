@@ -1138,7 +1138,7 @@ def test_mcp_projection_matches_gates(db_session: Session) -> None:
 
 def test_skill_projection_matches_gates(db_session: Session) -> None:
     """edit/manage_access track the assert_within_scope guard on the skill's groups;
-    delete is FULL_ADMIN; publish (make public) is global MANAGE_SKILLS. A scoped manager
+    delete is FULL_ADMIN; publish (make public) is global MANAGE_PLUGINS. A scoped manager
     edits/re-grants a managed skill but can never delete or publish it."""
     managed = _make_group(db_session)
 
@@ -1161,7 +1161,7 @@ def test_skill_projection_matches_gates(db_session: Session) -> None:
             assert_within_scope,
             actor,
             db_session,
-            permission=Permission.MANAGE_SKILLS,
+            permission=Permission.MANAGE_PLUGINS,
             current_group_ids=group_ids,
             requested_group_ids=group_ids,
             is_non_public=skill.public_permission is None,
@@ -1171,7 +1171,7 @@ def test_skill_projection_matches_gates(db_session: Session) -> None:
             assert_within_scope,
             actor,
             db_session,
-            permission=Permission.MANAGE_SKILLS,
+            permission=Permission.MANAGE_PLUGINS,
             current_group_ids=group_ids,
             requested_group_ids=group_ids,
             is_non_public=False,
@@ -1179,14 +1179,14 @@ def test_skill_projection_matches_gates(db_session: Session) -> None:
         can_edit = within_scope(
             actor,
             db_session,
-            permission=Permission.MANAGE_SKILLS,
+            permission=Permission.MANAGE_PLUGINS,
             current_group_ids=group_ids,
             requested_group_ids=group_ids,
             is_non_public=skill.public_permission is None,
         )
         assert can_edit == edit_enforced, actor.email
         is_full_admin = has_global_permission(actor, Permission.FULL_ADMIN_PANEL_ACCESS)
-        is_skills_admin = has_global_permission(actor, Permission.MANAGE_SKILLS)
+        is_skills_admin = has_global_permission(actor, Permission.MANAGE_PLUGINS)
         tags = custom_skill_permissions(
             can_edit=can_edit,
             is_full_admin=is_full_admin,
@@ -1195,14 +1195,14 @@ def test_skill_projection_matches_gates(db_session: Session) -> None:
         assert tags["edit"] == edit_enforced
         assert tags["manage_access"] == edit_enforced
         assert tags["delete"] == is_full_admin
-        assert tags["publish"] == publish_enforced  # global MANAGE_SKILLS
+        assert tags["publish"] == publish_enforced  # global MANAGE_PLUGINS
 
     # in-scope manager edits/re-grants but can't delete or publish
     assert custom_skill_permissions(
         can_edit=within_scope(
             in_scope,
             db_session,
-            permission=Permission.MANAGE_SKILLS,
+            permission=Permission.MANAGE_PLUGINS,
             current_group_ids=group_ids,
             requested_group_ids=group_ids,
             is_non_public=skill.public_permission is None,
@@ -1210,7 +1210,7 @@ def test_skill_projection_matches_gates(db_session: Session) -> None:
         is_full_admin=has_global_permission(
             in_scope, Permission.FULL_ADMIN_PANEL_ACCESS
         ),
-        is_skills_admin=has_global_permission(in_scope, Permission.MANAGE_SKILLS),
+        is_skills_admin=has_global_permission(in_scope, Permission.MANAGE_PLUGINS),
     ) == {"edit": True, "manage_access": True, "delete": False, "publish": False}
 
 

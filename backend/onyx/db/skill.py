@@ -269,7 +269,7 @@ def _is_editable_by_user(user: User) -> ColumnElement[bool]:
     editable = _plugin_of_skill_matches(
         lambda plugin, _marketplace: plugin_editable_by_user(plugin, user.id)
     )
-    if has_permission(user, Permission.MANAGE_SKILLS) is PermissionAuthority.SCOPED:
+    if has_permission(user, Permission.MANAGE_PLUGINS) is PermissionAuthority.SCOPED:
         editable = or_(editable, _is_group_shared_only_within_managed_scope(user))
     return editable
 
@@ -408,14 +408,14 @@ def _skill_select_for_management_policy(
                 ~exists().where(ExternalApp__Skill.skill_id == Skill.id),
             )
         )
-        if has_global_permission(user, Permission.MANAGE_SKILLS):
+        if has_global_permission(user, Permission.MANAGE_PLUGINS):
             return stmt
         stmt = stmt.where(skill_visible_to_user(user))
         return _exclude_unavailable_built_in_skills(stmt, db_session)
 
     if policy == SkillManagementPolicy.EDIT:
         stmt = stmt.where(Skill.built_in_skill_id.is_(None))
-        if has_global_permission(user, Permission.MANAGE_SKILLS):
+        if has_global_permission(user, Permission.MANAGE_PLUGINS):
             return stmt
         return stmt.where(_is_editable_by_user(user))
 
@@ -1134,7 +1134,7 @@ SkillBulkAction = Literal["enable", "disable", "delete"]
 def ensure_can_edit_org_visibility(skill: Skill, user: User) -> None:
     if skill.author_user_id == user.id:
         return
-    if has_global_permission(user, Permission.MANAGE_SKILLS):
+    if has_global_permission(user, Permission.MANAGE_PLUGINS):
         return
     raise OnyxError(
         OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
@@ -1278,10 +1278,10 @@ def delete_skill_for_user__no_commit(
     skill: Skill, user: User, db_session: Session
 ) -> tuple[set[UUID], str | None]:
     """Delete a skill the user may edit. Only a user with organization-wide
-    MANAGE_SKILLS can delete a published skill. Returns the affected users and
+    MANAGE_PLUGINS can delete a published skill. Returns the affected users and
     the bundle file id for caller cleanup."""
     if skill.public_permission is not None and not has_global_permission(
-        user, Permission.MANAGE_SKILLS
+        user, Permission.MANAGE_PLUGINS
     ):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
@@ -1289,7 +1289,7 @@ def delete_skill_for_user__no_commit(
         )
     if (
         skill.installation_policy == SkillInstallationPolicy.REQUIRED
-        and not has_global_permission(user, Permission.MANAGE_SKILLS)
+        and not has_global_permission(user, Permission.MANAGE_PLUGINS)
     ):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,

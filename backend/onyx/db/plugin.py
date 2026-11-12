@@ -929,7 +929,7 @@ def _check_access_change(
     if (
         actor is not None
         and is_set(change.company_installation_policy)
-        and not has_global_permission(actor, Permission.MANAGE_SKILLS)
+        and not has_global_permission(actor, Permission.MANAGE_PLUGINS)
     ):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
@@ -953,7 +953,7 @@ def _check_access_change(
     if setting_group_ids:
         if actor is not None:
             if any_published:
-                if not has_global_permission(actor, Permission.MANAGE_SKILLS):
+                if not has_global_permission(actor, Permission.MANAGE_PLUGINS):
                     raise OnyxError(
                         OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
                         "Only an organization-wide skill manager can set a "
@@ -963,7 +963,7 @@ def _check_access_change(
                 assert_within_scope(
                     actor,
                     db_session,
-                    permission=Permission.MANAGE_SKILLS,
+                    permission=Permission.MANAGE_PLUGINS,
                     current_group_ids=[],
                     requested_group_ids=setting_group_ids,
                     is_non_public=True,
@@ -974,7 +974,7 @@ def _check_access_change(
             "Group install settings are not available yet.",
         )
 
-    # A change to a plugin's group shares is a MANAGE_SKILLS action. The
+    # A change to a plugin's group shares is a MANAGE_PLUGINS action. The
     # current shares come from the database, never the request, so a
     # reassignment cannot escape scope. Re-sending the current set is no change.
     changed = [
@@ -988,7 +988,7 @@ def _check_access_change(
     assert_within_scope(
         actor,
         db_session,
-        permission=Permission.MANAGE_SKILLS,
+        permission=Permission.MANAGE_PLUGINS,
         current_group_ids=sorted(
             {
                 group_id
@@ -1173,7 +1173,7 @@ def _apply_to_plugin__no_commit(
         if (
             actor is not None
             and plugin.author_user_id != actor.id
-            and not has_global_permission(actor, Permission.MANAGE_SKILLS)
+            and not has_global_permission(actor, Permission.MANAGE_PLUGINS)
         ):
             raise OnyxError(
                 OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
@@ -1231,12 +1231,12 @@ def apply_plugin_access_change__no_commit(
     ``failures``. The affected users are read for the whole set before and
     after the writes. The caller commits, then pushes once.
 
-    Rules: a company install setting needs organization-wide MANAGE_SKILLS. A
-    group install setting needs MANAGE_SKILLS for that group on a private
-    plugin, and organization-wide MANAGE_SKILLS on a published one; it is
+    Rules: a company install setting needs organization-wide MANAGE_PLUGINS. A
+    group install setting needs MANAGE_PLUGINS for that group on a private
+    plugin, and organization-wide MANAGE_PLUGINS on a published one; it is
     refused after these checks until the legacy group table is gone. A change
     to group shares must stay within the actor's managed scope. Publishing
-    needs the author or organization-wide MANAGE_SKILLS.
+    needs the author or organization-wide MANAGE_PLUGINS.
 
     ``actor`` None is a system write that the caller authorized, such as an
     ownership transfer. The permission checks are skipped; the other rules

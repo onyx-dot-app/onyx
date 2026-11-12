@@ -173,7 +173,7 @@ class TestSkillVisibility:
         db_session: Session,
         test_user: User,  # noqa: ARG002
     ) -> None:
-        # Current behavior pinned: ONLY a global MANAGE_SKILLS holder bypasses the visibility
+        # Current behavior pinned: ONLY a global MANAGE_PLUGINS holder bypasses the visibility
         # filter. Curators (and global curators) walk the same path as
         # regular users — no admin-style "see every row" override.
         curator = make_user(db_session, is_group_manager=True)

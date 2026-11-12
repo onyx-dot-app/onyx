@@ -76,7 +76,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
   const bulkCopy = useTranslations("skills.bulk");
   const { isAdmin } = useUser();
   const { isGlobalHolder: canManageOrgSkills } = usePermissionAuthority(
-    Permission.MANAGE_SKILLS
+    Permission.MANAGE_PLUGINS
   );
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);

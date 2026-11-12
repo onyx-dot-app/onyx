@@ -22,6 +22,7 @@ from onyx.auth.permissions import (
 )
 from onyx.auth.users import get_anonymous_user
 from onyx.db.enums import Permission, PermissionAuthority
+from onyx.db.permissions import parse_permission_values
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.variable_functionality import global_version
@@ -602,10 +603,11 @@ class TestApiSurfaceScopeRegistration:
     def test_implied_set_matches_spec(self) -> None:
         assert {p.value for p in Permission.IMPLIED} == self.EXPECTED_IMPLIED
 
-    def test_non_toggleable_is_implied_plus_basic_admin_craft_and_skills(self) -> None:
-        # manage:skills is the curator role — resolved, never granted.
+    def test_non_toggleable_is_implied_plus_basic_admin_craft_and_plugins(self) -> None:
+        # manage:plugins is the curator role — resolved, never granted.
         assert {p.value for p in NON_TOGGLEABLE_PERMISSIONS} == (
-            self.EXPECTED_IMPLIED | {"basic", "admin", "craft_sandbox", "manage:skills"}
+            self.EXPECTED_IMPLIED
+            | {"basic", "admin", "craft_sandbox", "manage:plugins"}
         )
 
     def test_implication_edges_match_spec(self) -> None:
@@ -624,3 +626,45 @@ class TestApiSurfaceScopeRegistration:
             "generate:image",
             "use:llm_gateway",
         }
+
+
+@pytest.mark.usefixtures("enable_ee")
+class TestLegacyManageSkillsAlias:
+    """manage:skills reads as manage:plugins for one release."""
+
+    def test_old_value_parses_to_manage_plugins(self) -> None:
+        assert Permission("manage:skills") is Permission.MANAGE_PLUGINS
+        assert parse_permission_values(["manage:skills"]) == [Permission.MANAGE_PLUGINS]
+
+    def test_request_body_accepts_old_value(self) -> None:
+        from ee.onyx.server.user_group.models import BulkSetPermissionsRequest
+
+        request = BulkSetPermissionsRequest.model_validate_json(
+            '{"permissions": ["manage:skills"]}'
+        )
+        assert request.permissions == [Permission.MANAGE_PLUGINS]
+        # Still refused by the toggle endpoint, as the old value was.
+        assert Permission.MANAGE_PLUGINS in NON_TOGGLEABLE_PERMISSIONS
+
+    def test_user_with_old_value_keeps_access(self) -> None:
+        user = MagicMock()
+        user.effective_permissions = ["basic", "manage:skills"]
+        user.is_group_manager = False
+        assert (
+            has_permission(user, Permission.MANAGE_PLUGINS)
+            is PermissionAuthority.GLOBAL
+        )
+
+    @pytest.mark.asyncio
+    async def test_token_with_old_scope_keeps_access(self) -> None:
+        user = MagicMock()
+        user.effective_permissions = ["admin"]
+        # As resolve_pat parses a stored scopes list.
+        token_scopes = parse_permission_values(["manage:skills"])
+
+        dep = require_permission(Permission.MANAGE_PLUGINS)
+        assert await dep(request=_request(token_scopes), user=user) is user
+        with pytest.raises(OnyxError):
+            await require_permission(Permission.MANAGE_AGENTS)(
+                request=_request(token_scopes), user=user
+            )

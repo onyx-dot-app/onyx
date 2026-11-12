@@ -11,8 +11,9 @@ Open **Craft → Skills** to manage your own library.
 <Note>
   Anyone with Craft access can create a Skill and manage the Skills they own or can edit.
   Admins can inspect and manage all custom Skills, including private personal Skills.
-  Only Admins set installation policies. Group Managers cannot, not even for a Skill shared only with their group.
-  Craft needs a Business or Enterprise plan, or Onyx Cloud.
+  Only Admins set installation policies, because this needs the organization-wide `manage:plugins` permission.
+  Group Managers hold `manage:plugins` only for their groups. They cannot set an installation policy,
+  not even for a Skill shared only with their group. Craft needs a Business or Enterprise plan, or Onyx Cloud.
 </Note>
 
 ## Understand the Skills library
@@ -268,6 +269,7 @@ Do not transfer ownership to bots, service accounts, limited accounts, or inacti
 Use **Installed by default** or **Required** under **Installation** to deploy Skills to people with access.
 Open **More actions** for personal enablement and deletion. **Delete** removes selected Skills for everyone with access.
 Only an admin can delete a Skill that is published to the organization.
+This needs the organization-wide `manage:plugins` permission.
 The confirmation lists each selected Skill before deletion.
 
 ### Set access during import

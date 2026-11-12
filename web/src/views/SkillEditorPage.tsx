@@ -92,7 +92,7 @@ export default function SkillEditorPage({
   const navigation = useNavigation();
   const { isAdmin, user } = useUser();
   const { isGlobalHolder: canManageOrgSkills } = usePermissionAuthority(
-    Permission.MANAGE_SKILLS
+    Permission.MANAGE_PLUGINS
   );
   const creationDraft = useMemo(
     () => (isCreating && draftId ? getSkillCreationDraft(draftId) : undefined),
