@@ -57,6 +57,7 @@ class CurrentMailbox(BaseModel):
 #
 # For initial checkpointing, set both fields to `None`.
 class ImapCheckpoint(ConnectorCheckpoint):
+    version: int = 2
     todo_mailboxes: list[str] | None = None
     current_mailbox: CurrentMailbox | None = None
 
@@ -145,6 +146,14 @@ class ImapConnector(
         checkpoint = copy.deepcopy(checkpoint)
         checkpoint.has_more = True
 
+        if checkpoint.version < 2:
+            # Legacy sequence-number checkpoint: re-enumerate current mailbox with UIDs
+            if checkpoint.current_mailbox:
+                if checkpoint.todo_mailboxes is not None:
+                    checkpoint.todo_mailboxes.append(checkpoint.current_mailbox.mailbox)
+                checkpoint.current_mailbox = None
+            checkpoint.version = 2
+
         mail_client = self._get_mail_client()
 
         if checkpoint.todo_mailboxes is None:
@@ -204,7 +213,8 @@ class ImapConnector(
 
             try:
                 mailbox_name = checkpoint.current_mailbox.mailbox
-                fallback_id = f"imap-{mailbox_name}-{email_id}"
+                username = (self._credentials or {}).get("imap_username", "user")
+                fallback_id = f"imap-{self._host}-{username}-{mailbox_name}-{email_id}"
                 email_headers = EmailHeaders.from_email_msg(
                     email_msg=email_msg,
                     fallback_id=fallback_id,
@@ -354,10 +364,8 @@ def _fetch_email(mail_client: imaplib.IMAP4_SSL, email_id: str) -> Message | Non
         return None
 
     data = msg_data[0]
-    if not isinstance(data, tuple):
-        raise RuntimeError(
-            f"Message data should be a tuple; instead got a {type(data)=} {data=}"
-        )
+    if data is None or not isinstance(data, tuple):
+        return None
 
     _metadata, raw_email = data
     return email.message_from_bytes(raw_email)
