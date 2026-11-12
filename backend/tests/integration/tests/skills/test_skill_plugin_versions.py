@@ -738,21 +738,23 @@ def _drop_plugin(skill_id: str) -> None:
 
 @pytest.mark.parametrize("change", ["patch", "replace", "add_file"])
 def test_save_on_skill_without_plugin_row_converges(
-    user: DATestUser, change: str
+    user: DATestUser, admin_user: DATestUser, change: str
 ) -> None:
+    """Only an admin sees a skill with no plugin row. Its save makes version 1
+    from the legacy row first."""
     name = f"no-plugin-{uuid4().hex[:8]}"
     skill = _upload(user, _bundle({"SKILL.md": _skill_md(name, "Before")}), name=name)
     legacy_bundle = _state(skill["id"]).skill_bundle_file_id
     _drop_plugin(skill["id"])
 
     if change == "patch":
-        response = _patch(user, skill["id"], {"description": "After"})
+        response = _patch(admin_user, skill["id"], {"description": "After"})
     elif change == "replace":
         response = _replace(
-            user, skill["id"], _bundle({"SKILL.md": _skill_md(name, "After")})
+            admin_user, skill["id"], _bundle({"SKILL.md": _skill_md(name, "After")})
         )
     else:
-        response = _add_file(user, skill["id"], "notes.txt", b"notes")
+        response = _add_file(admin_user, skill["id"], "notes.txt", b"notes")
     response.raise_for_status()
 
     state = _state(skill["id"])
@@ -769,14 +771,14 @@ def test_save_on_skill_without_plugin_row_converges(
 
 
 def test_unchanged_save_on_skill_without_plugin_row_adds_only_version_1(
-    user: DATestUser,
+    user: DATestUser, admin_user: DATestUser
 ) -> None:
     name = f"no-plugin-same-{uuid4().hex[:8]}"
     skill = _upload(user, _bundle({"SKILL.md": _skill_md(name, "Same")}), name=name)
     _patch(user, skill["id"], {"description": "Same"}).raise_for_status()
     _drop_plugin(skill["id"])
 
-    _patch(user, skill["id"], {"description": "Same"}).raise_for_status()
+    _patch(admin_user, skill["id"], {"description": "Same"}).raise_for_status()
     state = _state(skill["id"])
     assert [v.number for v in state.versions] == [1]
     assert state.current.bundle_file_id == state.skill_bundle_file_id
