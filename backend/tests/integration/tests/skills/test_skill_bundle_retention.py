@@ -193,9 +193,9 @@ def test_version_without_stored_content_keeps_its_bundle_past_the_limit(
 
 
 def test_delete_removes_every_version_and_bundle(basic_user: DATestUser) -> None:
-    skill = _skill_with_versions(basic_user, 12)
+    skill = _skill_with_versions(basic_user, BUNDLES_KEPT + 2)
     bundles = _bundles_by_version(skill.id)
-    assert len(bundles) == 12
+    assert len(bundles) == BUNDLES_KEPT + 2
     kept = {file_id for file_id in bundles.values() if file_id is not None}
     assert len(kept) == BUNDLES_KEPT
 
