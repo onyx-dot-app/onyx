@@ -82,6 +82,7 @@ _PLUGIN_NAME_INDEX = "uq_plugin_marketplace_name"
 _PLUGIN_PRIMARY_KEY = "plugin_pkey"
 
 NameClashAction = Literal["raise", "rename"]
+_RENAME_ATTEMPTS = 3
 
 PluginVersionKind = Literal["skill", "plugin"]
 
@@ -653,30 +654,36 @@ def _move_plugin__no_commit(
     clash_detail: Callable[[str], str],
     db_session: Session,
 ) -> None:
-    name = _preferred_name(plugin, db_session)
-    name_taken = (
-        db_session.scalar(
-            select(Plugin.id).where(
-                Plugin.marketplace_id == marketplace_id,
-                Plugin.name == name,
-                Plugin.id != plugin.id,
+    preferred = _preferred_name(plugin, db_session)
+    # A concurrent writer can take the chosen name before this move commits.
+    # "rename" then picks the next free name again.
+    for attempt in range(1, _RENAME_ATTEMPTS + 1):
+        name = preferred
+        name_taken = (
+            db_session.scalar(
+                select(Plugin.id).where(
+                    Plugin.marketplace_id == marketplace_id,
+                    Plugin.name == name,
+                    Plugin.id != plugin.id,
+                )
             )
+            is not None
         )
-        is not None
-    )
-    if name_taken:
-        if on_name_clash == "raise":
-            raise OnyxError(OnyxErrorCode.CONFLICT, clash_detail(name))
-        name = free_plugin_name(marketplace_id, name, db_session)
-    try:
-        with db_session.begin_nested():
-            plugin.marketplace_id = marketplace_id
-            plugin.name = name
-            db_session.flush()
-    except IntegrityError as exc:
-        if not is_unique_violation(exc, _PLUGIN_NAME_INDEX):
-            raise
-        raise OnyxError(OnyxErrorCode.CONFLICT, clash_detail(name)) from exc
+        if name_taken:
+            if on_name_clash == "raise":
+                raise OnyxError(OnyxErrorCode.CONFLICT, clash_detail(name))
+            name = free_plugin_name(marketplace_id, name, db_session)
+        try:
+            with db_session.begin_nested():
+                plugin.marketplace_id = marketplace_id
+                plugin.name = name
+                db_session.flush()
+            return
+        except IntegrityError as exc:
+            if not is_unique_violation(exc, _PLUGIN_NAME_INDEX):
+                raise
+            if on_name_clash == "raise" or attempt == _RENAME_ATTEMPTS:
+                raise OnyxError(OnyxErrorCode.CONFLICT, clash_detail(name)) from exc
 
 
 def _organization_name_clash(name: str) -> str:

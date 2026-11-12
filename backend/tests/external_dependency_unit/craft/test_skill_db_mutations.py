@@ -11,12 +11,17 @@ from sqlalchemy.orm import Session
 
 from onyx.db.enums import SkillInstallationPolicy, SkillSharePermission
 from onyx.db.models import (
+    Plugin,
     Skill,
     Skill__User,
     Skill__UserGroup,
     UserSkillPreference,
 )
-from onyx.db.plugin import lock_plugin, lock_skill_plugin__no_commit
+from onyx.db.plugin import (
+    lock_plugin,
+    lock_skill_plugin__no_commit,
+    publish_plugin__no_commit,
+)
 from onyx.db.skill import (
     add_new_skill__no_commit,
     enable_new_skill_if_name_available__no_commit,
@@ -825,6 +830,7 @@ def test_same_name_switch_locks_plugins_in_id_order(db_session: Session) -> None
     def switch() -> None:
         with Session(bind=db_session.get_bind()) as switch_session:
             try:
+                switch_session.execute(text("SET LOCAL lock_timeout = '10s'"))
                 set_skill_enabled_for_user(
                     skill_id=higher.id,
                     enabled=True,
@@ -856,8 +862,119 @@ def test_same_name_switch_locks_plugins_in_id_order(db_session: Session) -> None
             probe.rollback()
     finally:
         db_session.rollback()
-        switcher.join(timeout=10)
+        switcher.join(timeout=15)
+    assert not switcher.is_alive(), "The switch did not finish."
     assert not errors
+
+
+def _wait_until_blocked_by(holder: Session, pid: int, message: str) -> None:
+    with Session(bind=holder.get_bind()) as probe:
+        deadline = time.monotonic() + 10
+        while not probe.scalar(
+            text(
+                "SELECT EXISTS (SELECT 1 FROM pg_stat_activity "
+                "WHERE :pid = ANY(pg_blocking_pids(pid)))"
+            ),
+            {"pid": pid},
+        ):
+            assert time.monotonic() < deadline, message
+            time.sleep(0.05)
+
+
+def test_opposite_same_name_switches_do_not_deadlock(db_session: Session) -> None:
+    switching_user = make_user(db_session)
+    other_user = make_user(db_session)
+    name = f"opposite-{uuid4().hex[:8]}"
+    lower, higher = sorted(
+        (make_skill(db_session, name=name, is_public=True) for _ in range(2)),
+        key=lambda skill: skill.id,
+    )
+    set_skill_enabled_for_user(
+        skill_id=lower.id, enabled=True, user=switching_user, db_session=db_session
+    )
+    lock_skill_plugin__no_commit(higher, db_session)
+    db_session.commit()
+
+    # The other user's switch to the lower skill holds the lower plugin and
+    # next inserts its first preference for the higher skill.
+    lock_plugin(lower.id, db_session)
+    holder_pid = db_session.scalar(text("SELECT pg_backend_pid()"))
+    errors: list[Exception] = []
+
+    def switch() -> None:
+        with Session(bind=db_session.get_bind()) as switch_session:
+            try:
+                switch_session.execute(text("SET LOCAL lock_timeout = '10s'"))
+                set_skill_enabled_for_user(
+                    skill_id=higher.id,
+                    enabled=True,
+                    replace_conflict=True,
+                    user=switching_user,
+                    db_session=switch_session,
+                )
+                switch_session.commit()
+            except Exception as error:
+                errors.append(error)
+
+    switcher = threading.Thread(target=switch)
+    switcher.start()
+    try:
+        _wait_until_blocked_by(db_session, holder_pid, "The switch did not wait.")
+        db_session.execute(text("SET LOCAL lock_timeout = '5s'"))
+        db_session.add(
+            UserSkillPreference(
+                user_id=other_user.id, skill_id=higher.id, name=name, enabled=False
+            )
+        )
+        db_session.flush()
+    finally:
+        db_session.rollback()
+        switcher.join(timeout=15)
+    assert not switcher.is_alive(), "The switch did not finish."
+    assert not errors
+
+
+def test_publish_rename_retries_when_a_concurrent_write_takes_the_name(
+    db_session: Session,
+) -> None:
+    owner = make_user(db_session)
+    name = f"race-{uuid4().hex[:8]}"
+    moving = make_skill(db_session, name=name, author_user_id=owner.id)
+    published = make_skill(db_session, name=name, is_public=True)
+    for skill in (moving, published):
+        lock_skill_plugin__no_commit(skill, db_session)
+    db_session.commit()
+
+    # Another transaction publishes a plugin under the first free name and
+    # commits while the move waits on it.
+    racer = make_skill(db_session, name=f"{name}-2", is_public=True)
+    lock_skill_plugin__no_commit(racer, db_session)
+    holder_pid = db_session.scalar(text("SELECT pg_backend_pid()"))
+    errors: list[Exception] = []
+
+    def publish() -> None:
+        with Session(bind=db_session.get_bind()) as publish_session:
+            try:
+                publish_session.execute(text("SET LOCAL lock_timeout = '10s'"))
+                publish_plugin__no_commit(moving.id, "rename", publish_session)
+                publish_session.commit()
+            except Exception as error:
+                errors.append(error)
+
+    publisher = threading.Thread(target=publish)
+    publisher.start()
+    try:
+        _wait_until_blocked_by(db_session, holder_pid, "The publish did not wait.")
+        db_session.commit()
+    finally:
+        db_session.rollback()
+        publisher.join(timeout=15)
+    assert not publisher.is_alive(), "The publish did not finish."
+    assert not errors
+    plugin = db_session.get(Plugin, moving.id)
+    assert plugin is not None
+    db_session.refresh(plugin)
+    assert plugin.name == f"{name}-3"
 
 
 def test_toggle_lock_allows_concurrent_share_foreign_key_read(

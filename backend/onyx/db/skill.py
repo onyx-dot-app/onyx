@@ -191,10 +191,10 @@ def _is_shared_with_user_group(
     return stmt.exists()
 
 
-_PluginClause = Callable[[type[Plugin], type[Marketplace]], ColumnElement[Any]]
+type _PluginClause[T] = Callable[[type[Plugin], type[Marketplace]], ColumnElement[T]]
 
 
-def _plugin_of_skill(build: _PluginClause) -> Select[tuple[Any]]:
+def _plugin_of_skill[T](build: _PluginClause[T]) -> Select[tuple[T]]:
     """Select ``build`` over the plugin of the enclosing query's skill. Fresh
     aliases, so the clause can nest inside another plugin query."""
     plugin: type[Plugin] = aliased(Plugin)
@@ -208,7 +208,7 @@ def _plugin_of_skill(build: _PluginClause) -> Select[tuple[Any]]:
     )
 
 
-def _plugin_of_skill_matches(build: _PluginClause) -> ColumnElement[bool]:
+def _plugin_of_skill_matches(build: _PluginClause[bool]) -> ColumnElement[bool]:
     """True when the skill's plugin satisfies ``build``. False for a built-in
     skill or a custom skill with no plugin."""
     plugin: type[Plugin] = aliased(Plugin)
@@ -574,7 +574,10 @@ def fetch_skill(
     db_session: Session,
     user: User,
     lock_for_update: bool = False,
+    allow_key_share: bool = False,
 ) -> Skill | None:
+    """``allow_key_share`` takes FOR NO KEY UPDATE, so foreign-key checks of
+    rows that reference the skill do not wait for this lock."""
     stmt = _skill_select_for_management_policy(
         policy=policy,
         db_session=db_session,
@@ -582,7 +585,7 @@ def fetch_skill(
         order_by_name=False,
     ).where(Skill.id == skill_id)
     if lock_for_update:
-        stmt = stmt.with_for_update(of=Skill)
+        stmt = stmt.with_for_update(of=Skill, key_share=allow_key_share)
     return db_session.scalars(stmt).one_or_none()
 
 
@@ -738,16 +741,11 @@ def replace_skill_bundle(
     return version
 
 
-def _publish_requested(
+def _ensure_external_app_skill_stays_public(
     skill: Skill,
     public_permission: SkillSharePermission | None,
     db_session: Session,
-) -> bool:
-    """Check a request for organization access to a custom skill, and return
-    whether it publishes. VIEWER publishes. None keeps the skill private and is
-    refused for a published skill, because publishing is one-way.
-    Organization-wide EDITOR is refused; editors are named users and groups. A
-    skill linked to an external app stays published."""
+) -> None:
     is_associated = db_session.scalar(
         select(
             exists().where(
@@ -761,6 +759,19 @@ def _publish_requested(
             "Skills associated with an external app must remain visible to the "
             "organization with viewer access.",
         )
+
+
+def _publish_requested(
+    skill: Skill,
+    public_permission: SkillSharePermission | None,
+    db_session: Session,
+) -> bool:
+    """Check a request for organization access to a custom skill, and return
+    whether it publishes. VIEWER publishes. None keeps the skill private and is
+    refused for a published skill, because publishing is one-way.
+    Organization-wide EDITOR is refused; editors are named users and groups. A
+    skill linked to an external app stays published."""
+    _ensure_external_app_skill_stays_public(skill, public_permission, db_session)
     if public_permission == SkillSharePermission.EDITOR:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
@@ -787,6 +798,7 @@ def set_skill_public_permission(
     """Publish a custom skill (VIEWER) or keep it private (None), with no
     permission check. Routes use ``share_skill__no_commit``."""
     if not skill.is_custom:
+        _ensure_external_app_skill_stays_public(skill, public_permission, db_session)
         skill.public_permission = public_permission
         db_session.flush()
         return
@@ -848,12 +860,16 @@ def set_skill_enabled_for_user(
     db_session: Session,
 ) -> Skill:
     _lock_user_skill_preferences(user.id, db_session)
+    # Another user's switch inserts a preference for this skill while it holds
+    # a plugin lock this call waits for. A FOR UPDATE here blocks that
+    # foreign-key check and the two switches deadlock.
     skill = fetch_skill(
         skill_id,
         policy=SkillManagementPolicy.VIEW,
         user=user,
         db_session=db_session,
         lock_for_update=True,
+        allow_key_share=True,
     )
     if skill is None:
         raise OnyxError(
