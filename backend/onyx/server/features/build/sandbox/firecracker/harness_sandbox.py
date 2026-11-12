@@ -112,6 +112,10 @@ TURN_LEASE_SECONDS = 15 * 60.0
 APPROVAL_PARK_SECONDS = 24 * 3600.0
 # Largest session file that publish_artifact copies to the file store.
 PUBLISH_MAX_BYTES = 100 << 20
+# One Init per VM instance across API pods: a second Init resets egress
+# connections that a command of the first may already use.
+_INIT_LOCK_PREFIX = "sandbox_fc_harness_init:"
+_INIT_LOCK_SECONDS = 30.0
 
 
 def _clamp_ms(value: int | None, default: int, low: int, high: int) -> float:
@@ -174,18 +178,8 @@ class FirecrackerHarnessSandbox(HarnessSandbox):
                 placed = wake_sandbox_vm(
                     shared_cache, tenant_cache, self._client_factory, request
                 )
-                health = sandbox_daemon(self._client_factory, placed).health()
-                if not health.initialized or health.generation != placed.vm.generation:
-                    initialize_sandbox_vm(
-                        shared_cache,
-                        tenant_cache,
-                        self._client_factory,
-                        placed,
-                        tenant_id=ref.tenant_id,
-                        # No secrets: the egress proxy injects them.
-                        env=dict(EXEC_DEFAULT_ENV),
-                        session_ids=[],
-                    )
+                if not self._initialized(placed):
+                    self._initialize(tenant_cache, ref, placed)
                 return placed
             except (
                 OnyxError,
@@ -211,6 +205,40 @@ class FirecrackerHarnessSandbox(HarnessSandbox):
                 )
                 time.sleep(pause)
                 delay = min(delay * 2, 2.0)
+
+    def _initialized(self, placed: PlacedVm) -> bool:
+        health = sandbox_daemon(self._client_factory, placed).health()
+        return health.initialized and health.generation == placed.vm.generation
+
+    def _initialize(
+        self, tenant_cache: CacheBackend, ref: HarnessSandboxRef, placed: PlacedVm
+    ) -> None:
+        """Init under a lock per VM instance; a waiter checks Health again."""
+        vm = placed.vm
+        lock = tenant_cache.lock(
+            f"{_INIT_LOCK_PREFIX}{vm.sandbox_id}:{vm.attempt}:{vm.generation}",
+            timeout=_INIT_LOCK_SECONDS,
+        )
+        if not lock.acquire(blocking_timeout=_INIT_LOCK_SECONDS):
+            raise SandboxProvisionContentionError(
+                f"sandbox {vm.sandbox_id} is initializing on another API pod"
+            )
+        try:
+            if self._initialized(placed):
+                return
+            initialize_sandbox_vm(
+                get_shared_cache_backend(),
+                tenant_cache,
+                self._client_factory,
+                placed,
+                tenant_id=ref.tenant_id,
+                # No secrets: the egress proxy injects them.
+                env=dict(EXEC_DEFAULT_ENV),
+                session_ids=[],
+            )
+        finally:
+            if lock.owned():
+                lock.release()
 
     def _placed_if_running(
         self, tenant_cache: CacheBackend, sandbox_id: UUID

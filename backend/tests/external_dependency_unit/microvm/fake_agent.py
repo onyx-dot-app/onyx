@@ -164,6 +164,8 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         self.create_delay_seconds = 0.0
         # Seconds each Stop waits before it runs.
         self.stop_delay_seconds = 0.0
+        # Seconds each guest daemon Init waits before it runs.
+        self.init_delay_seconds = 0.0
 
     def add_vm(
         self,
@@ -715,6 +717,8 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
     def Init(  # noqa: N802
         self, request: sandboxd_pb2.InitRequest, context: grpc.ServicerContext
     ) -> sandboxd_pb2.InitResponse:
+        if self.agent.init_delay_seconds:
+            time.sleep(self.agent.init_delay_seconds)
         with self.agent.lock:
             sandbox_id, key = self._route(context)
             self._check_key(context, sandbox_id, key)

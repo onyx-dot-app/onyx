@@ -277,7 +277,8 @@ Harness sandboxes (the agent harness runs outside the sandbox):
 - `.../sandbox/firecracker/harness_sandbox.py:FirecrackerHarnessSandbox`
   implements it on the microvm code: wake on the first call (capacity
   retry for 10 s), Init only when `Health.initialized` is false or the
-  Health generation is not the VM's generation. Exec
+  Health generation is not the VM's generation (under a cache lock per VM
+  instance, so concurrent wakes run one Init). Exec
   sessions are durable records in the tenant cache
   (`.../firecracker/harness_state.py`, no TTL, compare-and-set, the 64 most
   recently used per sandbox); a record of another VM instance raises

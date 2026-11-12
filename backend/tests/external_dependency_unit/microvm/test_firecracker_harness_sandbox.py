@@ -4,6 +4,7 @@ busy signals."""
 
 import time
 from collections.abc import Callable, Generator, Iterator
+from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
 
 import pytest
@@ -154,6 +155,26 @@ def test_ensure_running_is_idempotent_with_one_init_per_boot(
     sandbox.ensure_running(ref)
     assert node.agent.create_calls == 1
     assert len(node.agent.init_requests) == 2
+
+
+def test_concurrent_wakes_of_an_uninitialized_vm_run_one_init(
+    make_sandbox: MakeSandbox,
+    node: RunningFakeAgent,
+    new_ref: NewRef,
+) -> None:
+    ref = new_ref()
+    make_sandbox().ensure_running(ref)
+    node.agent.daemon_inits.pop(str(ref.sandbox_id))
+    node.agent.init_delay_seconds = 0.3
+
+    # Two "API pods" wake the same VM at once.
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        for future in [
+            pool.submit(make_sandbox().ensure_running, ref) for _ in range(2)
+        ]:
+            future.result()
+    assert len(node.agent.init_requests) == 2
+    assert node.agent.create_calls == 1
 
 
 def test_ensure_running_replaces_a_vm_whose_daemon_rejects_the_key(
