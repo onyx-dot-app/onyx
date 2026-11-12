@@ -59,21 +59,34 @@ export const SlackTokensForm = ({
           if (refreshSlackBot) {
             refreshSlackBot();
           }
-          const responseJson = await response.json().catch(() => ({}));
-          const botId = isUpdate ? existingSlackBotId : responseJson.id;
+          const responseJson: unknown = await response.json().catch(() => null);
+          const botId: number | undefined = isUpdate
+            ? existingSlackBotId
+            : typeof responseJson === "object" &&
+              responseJson !== null &&
+              "id" in responseJson &&
+              typeof (responseJson as { id: unknown }).id === "number"
+            ? (responseJson as { id: number }).id
+            : undefined;
+
           toast.success(
             isUpdate
               ? t("tokensForm.updated.toast")
               : t("tokensForm.created.toast")
           );
-          if (botId) {
+          if (botId !== undefined) {
             navigation.go(`/admin/bots/${encodeURIComponent(botId)}`);
           }
         } else {
-          const responseJson = await response.json().catch(() => ({}));
+          const responseJson: unknown = await response.json().catch(() => null);
+          const errorData =
+            typeof responseJson === "object" && responseJson !== null
+              ? (responseJson as Record<string, unknown>)
+              : null;
+
           let errorMsg =
-            (typeof responseJson?.detail === "string" && responseJson.detail) ||
-            (typeof responseJson?.message === "string" && responseJson.message) ||
+            (typeof errorData?.detail === "string" && errorData.detail) ||
+            (typeof errorData?.message === "string" && errorData.message) ||
             response.statusText ||
             t("error.unknownOccurred.message");
 
