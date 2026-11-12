@@ -173,6 +173,9 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         self.stop_delay_seconds = 0.0
         # Seconds each guest daemon Init waits before it runs.
         self.init_delay_seconds = 0.0
+        # Like grpc-go, the agent resets a stream with CANCELLED at its
+        # deadline; this many seconds early models a reset that wins the race.
+        self.stream_reset_lead_seconds: float | None = None
 
     def add_vm(
         self,
@@ -871,6 +874,7 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
         """Like the daemon: output as it comes, then the result. A client
         that goes away ends the stream, not the command."""
         offsets = [stdout_offset, stderr_offset]
+        reset_lead = self.agent.stream_reset_lead_seconds
         while True:
             with self.agent.lock:
                 while (
@@ -880,6 +884,14 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
                     and len(execution.stdout) <= offsets[0]
                     and len(execution.stderr) <= offsets[1]
                 ):
+                    if (
+                        reset_lead is not None
+                        and context.time_remaining() <= reset_lead
+                    ):
+                        context.abort(
+                            grpc.StatusCode.CANCELLED,
+                            "Received RST_STREAM with error code 8",
+                        )
                     self.agent.ended.wait(timeout=0.05)
                 if execution.vm_gone:
                     abort_with_reason(
