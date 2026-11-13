@@ -66,3 +66,10 @@ updates:
     labels:
       - "dependabot:javascript"
       - "dependabot:sandbox"
+  # Security updates only (limit 0 turns off version updates). Each Go bump
+  # needs the Craft Firecracker KVM tests.
+  - package-ecosystem: "gomod"
+    directory: "/microvm"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 0
