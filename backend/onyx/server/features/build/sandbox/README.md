@@ -451,11 +451,21 @@ Deployment applies the sandbox result before publication, including cached image
 Other components can continue. CVE collection disables freshness checks and still collects vulnerabilities.
 Backport the gate to supported release branches; existing tags retain their original audit code.
 
+The updater uses the shared task-PR workflow for main and four supported release lines.
+The shared workflow owns script execution and PR publication.
+The browser validator accepts only a version increase and both checksum changes.
+Branches run independently. Identical output does not push another commit.
+On main, native rendering, screenshot, and vulnerability checks run on both architectures.
+Release PRs use their target branch’s checks. Backport the audit tooling and rendering
+checks before merging release-branch pin updates.
+The updater opens PRs for the normal review and merge process.
+
 Run the policy and publication tests from the repository root:
 
 ```bash
 (cd tools/ods && go test ./internal/audit ./internal/auditcmd)
 uv run python -m unittest discover -s .github/scripts -p test_base_image_ref.py -v
+uv run python -m unittest discover -s .github/scripts -p test_browser_update_pr.py -v
 ```
 
 `image/browser-cli.sh` installs as `/usr/local/bin/browser`, a PATH executable,
