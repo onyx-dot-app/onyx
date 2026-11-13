@@ -8,13 +8,15 @@ export interface TimelineHeaderRowProps {
 
 /**
  * TimelineHeaderRow aligns the top header (e.g., agent avatar + title row)
- * with the same rail width used by the timeline steps.
+ * with the same rail width used by the timeline steps. The 24px avatar sits
+ * in 2px of padding, so its 28px box matches the header text's box, and both
+ * center in the 36px row.
  */
 export function TimelineHeaderRow({ left, children }: TimelineHeaderRowProps) {
   return (
     <div className="flex w-full h-(--timeline-header-row-height)">
       <div className="flex items-center justify-center w-(--timeline-rail-width) h-(--timeline-header-row-height)">
-        {left}
+        {left && <div className="flex p-0.5">{left}</div>}
       </div>
       <div className="flex-1 min-w-0 h-full">{children}</div>
     </div>
