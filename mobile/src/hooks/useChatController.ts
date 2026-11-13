@@ -27,7 +27,6 @@ import { processRawChatHistory } from "@/chat/chatHistory";
 import { ChatState, FileDescriptor } from "@/chat/interfaces";
 import {
   buildImmediateMessages,
-  getLastSuccessfulMessageId,
   getLatestMessageChain,
   SYSTEM_MESSAGE_ID,
   SYSTEM_NODE_ID,
@@ -370,13 +369,19 @@ export function useChatController(
         const tree =
           useChatSessionStore.getState().sessions.get(activeId)?.messageTree ??
           new Map();
-        const chain = getLatestMessageChain(tree);
-        const lastNode = chain[chain.length - 1];
-        const parentNodeId = lastNode ? lastNode.nodeId : SYSTEM_NODE_ID;
+        // A failed turn the server saved stays in the conversation, so the
+        // next message continues after it. A turn the server rejected before
+        // saving has no row to continue from.
+        const parent = getLatestMessageChain(tree).findLast(
+          (message) => message.messageId !== undefined,
+        );
+        const parentNodeId = parent?.nodeId ?? SYSTEM_NODE_ID;
         // -3 (synthetic root) → null; null = first message.
-        const lastSuccessful = getLastSuccessfulMessageId(tree);
         const parentMessageId =
-          lastSuccessful === SYSTEM_MESSAGE_ID ? null : lastSuccessful;
+          parent?.messageId === undefined ||
+          parent.messageId === SYSTEM_MESSAGE_ID
+            ? null
+            : parent.messageId;
 
         const { initialUserNode, initialAgentNode } = buildImmediateMessages(
           parentNodeId,

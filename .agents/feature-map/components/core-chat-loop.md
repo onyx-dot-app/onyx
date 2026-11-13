@@ -66,6 +66,11 @@
   that does not keep content stores a generic error text instead, because
   provider errors can echo the prompt. When a save fails or takes longer than
   its wait bound, the stream shows a separate `RESPONSE_SAVE_ERROR`.
+- **After a failed turn**, a send whose parent is the error answer continues
+  the conversation. Model history keeps the question and the saved partial
+  steps; `chat/chat_utils.py:capture_chat_history` reads an error answer like
+  any other answer and adds no failure note. The first step of the next turn
+  reads agent results that the failed turn left unread on the branch.
 - **An API caller** gets NDJSON when `stream=true` and one `ChatFullResponse`
   when `stream=false`. A multi-model request without streaming is rejected.
 - **Bots.** The Slack bot runs the same turn in-process

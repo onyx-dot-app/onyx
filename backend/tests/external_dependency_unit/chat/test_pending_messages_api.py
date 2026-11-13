@@ -20,6 +20,7 @@ from onyx.agents.models import (
     InputMessageMetadata,
     InputSource,
     MessageDelivery,
+    RunFailure,
     RunFailureKind,
     RunStatus,
     agent_result_message_id,
@@ -980,6 +981,130 @@ def test_send_now_starts_after_a_send_fails_during_preparation(
         )
     ).all()
     assert sorted(questions) == ["Initial question", "Try again"]
+
+
+def test_a_send_after_a_failed_turn_continues_the_conversation(
+    chat: ChatSession,
+    owner: User,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A send whose parent is a failed response keeps the failed turn in history.
+
+    The model sees the question and the partial output, and the first step
+    reads an agent result that the failed turn left unread.
+    """
+    requests: list[GenerationRequest] = []
+
+    class FailingFirstModel(QueueTestLLM):
+        @override
+        def stream(
+            self, request: GenerationRequest, context: GenerationContext | None = None
+        ) -> Generator[GenerationEvent, None, None]:
+            requests.append(request)
+            if len(requests) == 1:
+                yield GenerationStartEvent()
+                yield TextDeltaEvent(content_index=0, text="Partial answer")
+                raise RuntimeError("Provider failed")
+            yield from super().stream(request, context)
+
+    model = FailingFirstModel(
+        lambda _request, _signal: AssistantMessage(
+            content=[TextContent(text="Recovered answer")]
+        )
+    )
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
+    )
+    for _packet in handle_stream_message_objects(
+        new_msg_req=SendMessageRequest(
+            message="Original question", chat_session_id=chat.id
+        ),
+        user=owner,
+    ):
+        pass
+    assert chat_turn_work.wait_idle(timeout=30)
+    db_session.expire_all()
+    [failed] = db_session.scalars(
+        select(ChatMessage).where(
+            ChatMessage.chat_session_id == chat.id,
+            ChatMessage.message_type == MessageType.ASSISTANT,
+        )
+    ).all()
+    assert failed.response_status == RunStatus.ERROR
+    worker = ChatSession(
+        id=uuid4(),
+        user_id=owner.id,
+        persona_id=DEFAULT_PERSONA_ID,
+        spawned_by_message_id=failed.id,
+        agent_name="worker",
+    )
+    db_session.add(worker)
+    db_session.flush()
+    worker_response = ChatMessage(
+        chat_session_id=worker.id,
+        message="",
+        token_count=0,
+        message_type=MessageType.ASSISTANT,
+        response_status=RunStatus.ERROR,
+        response_failure=RunFailure(
+            kind=RunFailureKind.EXECUTION, message="Worker stopped early"
+        ),
+    )
+    db_session.add(worker_response)
+    db_session.flush()
+    result_id = agent_result_message_id(str(worker_response.id))
+    db_session.add(
+        ChatInput(
+            recipient_session_id=chat.id,
+            message_id=result_id,
+            source=InputSource.AGENT_RESULT,
+            source_response_id=worker_response.id,
+            root_response_id=failed.id,
+            content="",
+        )
+    )
+    db_session.commit()
+
+    for _packet in handle_stream_message_objects(
+        new_msg_req=SendMessageRequest(
+            message="Try again",
+            chat_session_id=chat.id,
+            parent_message_id=failed.id,
+        ),
+        user=owner,
+    ):
+        pass
+    assert chat_turn_work.wait_idle(timeout=30)
+
+    assert len(requests) == 2
+    history = [
+        (type(message).__name__, message.text)
+        for message in requests[1].messages
+        if isinstance(message, UserMessage | AssistantMessage)
+    ]
+    assert history[:3] == [
+        ("UserMessage", "Original question"),
+        ("AssistantMessage", "Partial answer"),
+        ("UserMessage", "Try again"),
+    ]
+    [(kind, result_text)] = history[3:]
+    assert kind == "UserMessage"
+    assert result_text.startswith("Background agent result")
+    assert "Worker stopped early" in result_text
+    db_session.expire_all()
+    question = db_session.scalar(
+        select(ChatMessage).where(ChatMessage.parent_message_id == failed.id)
+    )
+    assert question is not None and question.message == "Try again"
+    answer = db_session.scalar(
+        select(ChatMessage).where(ChatMessage.parent_message_id == question.id)
+    )
+    assert answer is not None and answer.response_status == RunStatus.COMPLETE
+    assert (
+        db_session.scalar(select(ChatInput.id).where(ChatInput.message_id == result_id))
+        is None
+    )
 
 
 # Each failure point follows the response reservation in turn preparation.

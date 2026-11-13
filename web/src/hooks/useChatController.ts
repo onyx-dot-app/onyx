@@ -12,7 +12,6 @@ import {
   applyPreferredResponse,
   chooseImplicitPreferred,
   getMostVisibleResponseId,
-  getMultiModelChildren,
   getUnresolvedMultiModelTurn,
 } from "@/app/app/message/multiModel";
 import { getMaxSelectedDocumentTokens } from "@/lib/projects/svc";
@@ -21,7 +20,6 @@ import { StreamStopInfo } from "@/lib/search/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "next";
 import {
-  getLastSuccessfulMessageId,
   getLatestMessageChain,
   MessageTreeState,
   upsertMessages,
@@ -402,80 +400,9 @@ export default function useChatController({
       setUncaughtError(frozenSessionId, null);
       setLoadingError(frozenSessionId, null);
 
-      // Check if the last message was an error and remove it before proceeding with a new message
-      // Ensure this isn't a regeneration or resend, as those operations should preserve the history leading up to the point of regeneration/resend.
       let currentMessageTreeLocal =
         currentMessageTree || new Map<number, Message>();
-      let currentHistory = getLatestMessageChain(currentMessageTreeLocal);
-      let lastMessage = currentHistory[currentHistory.length - 1];
-
-      // A multi-model turn whose chain-tip panel errored can still have usable
-      // siblings. Keep the turn so the implicit-preferred pick below can
-      // continue the chain through a successful sibling.
-      const errorTurnUserMsg =
-        lastMessage?.type === "error" && lastMessage.parentNodeId != null
-          ? currentMessageTreeLocal.get(lastMessage.parentNodeId)
-          : undefined;
-      const errorTurnHasUsableSibling = errorTurnUserMsg
-        ? (getMultiModelChildren(
-            errorTurnUserMsg,
-            currentMessageTreeLocal
-          )?.some((m) => m.type === "assistant" && m.messageId != null) ??
-          false)
-        : false;
-
-      if (
-        lastMessage &&
-        lastMessage.type === "error" &&
-        !messageIdToResend &&
-        !regenerationRequest &&
-        !errorTurnHasUsableSibling
-      ) {
-        const newMessageTree = new Map(currentMessageTreeLocal);
-        const parentNodeId = lastMessage.parentNodeId;
-
-        // Remove the error message itself
-        newMessageTree.delete(lastMessage.nodeId);
-
-        // Remove the parent message + update the parent of the parent to no longer
-        // link to the parent
-        if (parentNodeId !== null && parentNodeId !== undefined) {
-          const parentOfError = newMessageTree.get(parentNodeId);
-          if (parentOfError) {
-            const grandparentNodeId = parentOfError.parentNodeId;
-            if (grandparentNodeId !== null && grandparentNodeId !== undefined) {
-              const grandparent = newMessageTree.get(grandparentNodeId);
-              if (grandparent) {
-                // Update grandparent to no longer link to parent
-                const updatedGrandparent = {
-                  ...grandparent,
-                  childrenNodeIds: (grandparent.childrenNodeIds || []).filter(
-                    (id: number) => id !== parentNodeId
-                  ),
-                  latestChildNodeId:
-                    grandparent.latestChildNodeId === parentNodeId
-                      ? null
-                      : grandparent.latestChildNodeId,
-                };
-                newMessageTree.set(grandparentNodeId, updatedGrandparent);
-              }
-            }
-            // Remove the parent message
-            newMessageTree.delete(parentNodeId);
-          }
-        }
-        // Update the state immediately so subsequent logic uses the cleaned map
-        updateSessionMessageTree(frozenSessionId, newMessageTree);
-        console.log(
-          "Removed previous error message ID:",
-          lastMessage.messageId
-        );
-
-        // update state for the new world (with the error message removed)
-        currentHistory = getLatestMessageChain(newMessageTree);
-        currentMessageTreeLocal = newMessageTree;
-        lastMessage = currentHistory[currentHistory.length - 1];
-      }
+      const currentHistory = getLatestMessageChain(currentMessageTreeLocal);
 
       // Auto-pin the agent to sidebar when sending a message if not already pinned
       if (activeAgent) {
@@ -601,9 +528,12 @@ export default function useChatController({
       // set the ability to cancel the request
       setAbortController(currChatSessionId, controller);
 
-      const messageToResend = currentHistory.find(
-        (message) => message.messageId === messageIdToResend
-      );
+      const messageToResend =
+        messageIdToResend === undefined
+          ? undefined
+          : currentHistory.find(
+              (message) => message.messageId === messageIdToResend
+            );
       if (messageIdToResend && regenerationRequest) {
         updateRegenerationState(
           { regenerating: true, finalMessageIndex: messageIdToResend + 1 },
@@ -644,7 +574,6 @@ export default function useChatController({
 
       updateChatStateAction(frozenSessionId, "loading");
 
-      // find the parent
       const currMessageHistory =
         messageToResendIndex !== null
           ? currentHistory.slice(0, messageToResendIndex)
@@ -723,12 +652,15 @@ export default function useChatController({
         }
       }
 
+      // A failed turn the server saved stays in the conversation, so the next
+      // message continues after it. A turn the server rejected before saving
+      // has no row to continue from.
       let parentMessage =
         messageToResendParent ||
         implicitPreference?.message ||
-        (currMessageHistory.length > 0
-          ? currMessageHistory[currMessageHistory.length - 1]
-          : null) ||
+        currMessageHistory.findLast(
+          (message) => message.messageId !== undefined
+        ) ||
         (currentMessageTreeLocal.size === 1
           ? Array.from(currentMessageTreeLocal.values())[0]
           : null);
@@ -1059,10 +991,6 @@ export default function useChatController({
           }
         }
 
-        const lastSuccessfulMessageId = getLastSuccessfulMessageId(
-          currentMessageTreeLocal
-        );
-
         const effectivePreferredToolId = deepResearch
           ? null
           : effectiveChatPreferredToolId({
@@ -1089,9 +1017,9 @@ export default function useChatController({
           fileDescriptors: effectiveFileDescriptors,
           parentMessageId: (() => {
             const parentId =
-              regenerationRequest?.parentMessage.messageId ||
-              messageToResendParent?.messageId ||
-              lastSuccessfulMessageId;
+              regenerationRequest?.parentMessage.messageId ??
+              parentMessage?.messageId ??
+              null;
             // Don't send SYSTEM_MESSAGE_ID (-3) as parent, use null instead
             // The backend expects null for "the first message in the chat"
             return parentId === SYSTEM_MESSAGE_ID ? null : parentId;
@@ -1453,6 +1381,7 @@ export default function useChatController({
         }
         const userErrorNode: Message = {
           nodeId: initialUserNode.nodeId,
+          messageId: newUserMessageId ?? undefined,
           message: currMessage,
           type: "user",
           files: effectiveFileDescriptors,

@@ -3,6 +3,7 @@ import { ReadonlyURLSearchParams } from "next/navigation";
 import useChatController from "@/hooks/useChatController";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { createChatSession, sendMessage } from "@/app/app/services/lib";
+import { getLatestMessageChain } from "@/app/app/services/messageTree";
 import type { MinimalAgent } from "@/lib/agents/types";
 import type { LlmManager } from "@/lib/hooks";
 import { waitForChatResponseEnd } from "@/lib/chat/sessionReadiness";
@@ -534,3 +535,69 @@ test.each([false, true])(
     );
   }
 );
+
+test("a send after a failed turn continues after the failed response", async () => {
+  jest.spyOn(console, "log").mockImplementation(() => {});
+  useChatSessionStore.setState({
+    sessions: new Map(),
+    currentSessionId: "session",
+  });
+  useChatSessionStore.getState().createSession("session", { incognito: true });
+  jest
+    .mocked(sendMessage)
+    .mockImplementationOnce(async function* () {
+      yield { user_message_id: 11, reserved_assistant_message_id: 12 };
+      yield {
+        placement: { turn_index: 0 },
+        obj: { type: "message_delta", content: "Partial answer" },
+      };
+      yield {
+        error: "Provider failed",
+        error_code: "API_ERROR",
+        is_retryable: true,
+        stack_trace: "",
+        details: {},
+      };
+    })
+    .mockImplementationOnce(async function* () {
+      yield { user_message_id: 13, reserved_assistant_message_id: 14 };
+      yield { placement: { turn_index: 0 }, obj: { type: "stop" } };
+    });
+  const { result } = renderHook(() =>
+    useChatController({
+      llmManager: createLlmManager(),
+      toolConfiguration,
+      activeAgent: undefined,
+      availableAgents: [],
+      existingChatSessionId: "session",
+      selectedDocuments: [],
+      searchParams: new ReadonlyURLSearchParams(),
+      resetInputBar: jest.fn(),
+      restoreInputBar: jest.fn(),
+    })
+  );
+  for (const message of ["Question", "try again"]) {
+    await act(async () =>
+      result.current.onSubmit({
+        message,
+        currentMessageFiles: [],
+        deepResearch: false,
+      })
+    );
+  }
+
+  expect(sendMessage).toHaveBeenLastCalledWith(
+    expect.objectContaining({ message: "try again", parentMessageId: 12 })
+  );
+  const tree = useChatSessionStore
+    .getState()
+    .sessions.get("session")!.messageTree;
+  const chain = getLatestMessageChain(tree);
+  expect(chain.map((message) => [message.type, message.messageId])).toEqual([
+    ["user", 11],
+    ["error", 12],
+    ["user", 13],
+    ["assistant", 14],
+  ]);
+  expect(chain[2]!.parentNodeId).toBe(chain[1]!.nodeId);
+});

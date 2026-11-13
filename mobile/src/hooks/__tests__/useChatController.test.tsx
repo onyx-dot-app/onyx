@@ -266,6 +266,50 @@ describe("useChatController", () => {
     expect(messages[1]!.message).toBe("Boom.");
   });
 
+  it("continues the conversation after a failed turn", async () => {
+    // Node ids come from the clock; keep the two turns' ids distinct.
+    let now = Date.now();
+    const clock = jest.spyOn(Date, "now").mockImplementation(() => (now += 10));
+    useChatSessionStore.getState().ensureSession("s1");
+    streamMock
+      .mockReturnValueOnce(
+        scripted([idInfo, startPacket("Partial "), streamError("Boom.")]),
+      )
+      .mockReturnValueOnce(
+        scripted([
+          { user_message_id: 12, reserved_assistant_message_id: 13 },
+          startPacket("Done"),
+          endPacket(),
+        ] as StreamEvent[]),
+      );
+
+    const { result } = renderHook(() => useChatController("s1"), { wrapper });
+    await act(async () => {
+      await result.current.submit("Question");
+    });
+    await waitFor(() => expect(result.current.chatState).toBe("input"));
+    await act(async () => {
+      await result.current.submit("try again");
+    });
+    await waitFor(() => expect(result.current.chatState).toBe("input"));
+
+    expect(
+      (
+        streamMock.mock.calls[1]![0] as unknown as {
+          parent_message_id: number | null;
+        }
+      ).parent_message_id,
+    ).toBe(11);
+    const messages = result.current.messages;
+    expect(messages.map((m) => [m.type, m.messageId])).toEqual([
+      ["user", 10],
+      ["error", 11],
+      ["user", 12],
+      ["assistant", 13],
+    ]);
+    clock.mockRestore();
+  });
+
   it("does not auto-name a new session whose first run errors", async () => {
     createSessionMock.mockResolvedValue("err-session");
     streamMock.mockReturnValue(scripted([streamError("nope")]));

@@ -80,6 +80,11 @@
   it. In a multi-model turn, only the failed panel shows the error. In a
   single-model send, a usage limit shows a banner with the reset time and no
   retry ([[rate-and-usage-limits]]).
+- **After a failed answer**, the next message continues the conversation
+  after it. The model sees the question and the saved partial answer.
+  **Regenerate** runs the same question again. A message the server rejected
+  before it saved the question has no saved turn, so the next message follows
+  the last saved message.
 - **A developer who runs the web server in development** reaches the backend
   at `/api` on the web origin, streams included. A production web server
   answers that route with a 404 and a message that nginx must serve `/api`
@@ -179,6 +184,10 @@ latest page preserves loaded history that connects to that page. Incognito
 recovery checks execution status and retains local content. A saved
 failure becomes an `error` node with `errorMessage`, `errorCode` and
 `isRetryable` from `error_info`; `message` holds only answer text.
+Unless it edits, regenerates or makes an implicit multi-model pick, `onSubmit`
+puts a new message after the last chain node that has a `messageId`, a saved
+failed response included, and sends that ID as `parent_message_id`. The local
+parent and the server parent are the same node.
 An automatic follow-up response has a hidden `agent_results` question node as
 its parent. `ChatUI` and the shared chat view render that node with
 `web/src/app/app/message/AgentResultsDivider.tsx`, with no message controls. Checks that
