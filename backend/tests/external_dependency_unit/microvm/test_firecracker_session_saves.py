@@ -1032,23 +1032,25 @@ def test_purges_reach_records_and_saves_that_the_indexes_miss(
     sandbox.write_file(ref, "src/a.py", b"a")
     sandbox.write_file(other_ref, "src/b.py", b"b")
     assert _sleep(sandbox, ref.sandbox_id) is VmStopOutcome.STOPPED
-    # An exec record of a stopped VM instance.
-    harness_state.put_exec_session(
-        tenant_cache,
-        ref.sandbox_id,
-        ExecSessionRecord(
-            exec_session_id="e1",
-            chat_session_id=str(ref.session_id),
-            execution_id="x1",
-            attempt=1,
-            generation=1,
-            last_used=time.time(),
-        ),
-    )
+    # Exec records of a stopped VM instance, one per session.
+    for exec_id, session in (("e1", ref.session_id), ("e2", other_ref.session_id)):
+        harness_state.put_exec_session(
+            tenant_cache,
+            ref.sandbox_id,
+            ExecSessionRecord(
+                exec_session_id=exec_id,
+                chat_session_id=str(session),
+                execution_id=f"x-{exec_id}",
+                attempt=1,
+                generation=1,
+                last_used=time.time(),
+            ),
+        )
     sandbox.purge_session(
         tenant_id=TENANT_ID, sandbox_id=ref.sandbox_id, session_id=ref.session_id
     )
     assert harness_state.get_exec_session(tenant_cache, ref.sandbox_id, "e1") is None
+    assert harness_state.get_exec_session(tenant_cache, ref.sandbox_id, "e2")
 
     # A save from before the saved-session index.
     other = harness_state.get_session_save(tenant_cache, other_ref.session_id)
