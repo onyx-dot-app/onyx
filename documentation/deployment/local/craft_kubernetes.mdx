@@ -127,6 +127,12 @@ Each active user receives a sandbox pod. The main sandbox container has these de
 | Ephemeral storage | `5Gi` | `20Gi` |
 
 The pod also includes initialization and sidecar containers for network setup, file transfer, snapshots, and restore.
+The sidecar has a `1Gi` memory limit and a `6Gi` ephemeral storage limit.
+It receives up to 900 MiB of Skill files in one push and writes the push to disk, not to memory.
+Kubernetes adds the sidecar storage limit to the pod storage limit. The storage holds the push archive,
+the live and incoming Skill files, and the user library files.
+Running sandbox pods keep their old limits until Onyx creates them again, for example after they sleep.
+
 To change the main container resources, merge these `configMap` entries into your deployment values or Craft overlay:
 
 ```yaml

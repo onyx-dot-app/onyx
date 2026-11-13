@@ -6,10 +6,24 @@ import tarfile
 
 import pytest
 
+from onyx.server.features.build.sandbox.image.sandbox_daemon.extract import (
+    MAX_BUNDLE_BYTES,
+)
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     _build_targz,
 )
 from onyx.server.features.build.sandbox.models import FatalWriteError, FileSet
+from onyx.skills.limits import SKILL_RUNTIME_MAX_BYTES
+
+_MANAGER_MODULE = (
+    "onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager"
+)
+
+
+def _build(files: FileSet) -> tuple[bytes, str]:
+    archive_file = io.BytesIO()
+    sha = _build_targz(files, archive_file)
+    return archive_file.getvalue(), sha
 
 
 def test_round_trip() -> None:
@@ -18,7 +32,7 @@ def test_round_trip() -> None:
         "sub/dir/deep.py": b"print('deep')",
         "empty": b"",
     }
-    raw, sha = _build_targz(files)
+    raw, sha = _build(files)
 
     # Extract and verify
     with tarfile.open(fileobj=io.BytesIO(raw), mode="r:gz") as tar:
@@ -40,8 +54,8 @@ def test_deterministic() -> None:
         "a.txt": b"aaa",
         "c.txt": b"ccc",
     }
-    raw1, sha1 = _build_targz(files)
-    raw2, sha2 = _build_targz(files)
+    raw1, sha1 = _build(files)
+    raw2, sha2 = _build(files)
 
     assert raw1[4:8] == b"\0\0\0\0"
     assert raw1 == raw2
@@ -54,7 +68,7 @@ def test_sorted_entries() -> None:
         "alpha.txt": b"a",
         "middle.txt": b"m",
     }
-    raw, _ = _build_targz(files)
+    raw, _ = _build(files)
 
     with tarfile.open(fileobj=io.BytesIO(raw), mode="r:gz") as tar:
         names = [m.name for m in tar.getmembers()]
@@ -63,7 +77,7 @@ def test_sorted_entries() -> None:
 
 
 def test_empty_dict() -> None:
-    raw, sha = _build_targz({})
+    raw, sha = _build({})
 
     # Should be a valid tar.gz with no entries
     with tarfile.open(fileobj=io.BytesIO(raw), mode="r:gz") as tar:
@@ -74,10 +88,13 @@ def test_empty_dict() -> None:
 
 
 def test_oversized_bundle_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager._MAX_BUNDLE_BYTES",
-        100,
-    )
+    monkeypatch.setattr(f"{_MANAGER_MODULE}.MAX_BUNDLE_BYTES", 100)
     files: FileSet = {"big.bin": b"x" * 200}
+    archive_file = io.BytesIO()
     with pytest.raises(FatalWriteError, match="exceeds"):
-        _build_targz(files)
+        _build_targz(files, archive_file)
+    assert archive_file.tell() == 0
+
+
+def test_transport_cap_is_the_run_time_skill_limit() -> None:
+    assert SKILL_RUNTIME_MAX_BYTES == MAX_BUNDLE_BYTES == 900 * 1024 * 1024

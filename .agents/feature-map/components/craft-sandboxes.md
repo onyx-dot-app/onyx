@@ -181,6 +181,20 @@ then replaces `outputs/` and `attachments/`
 in place with `tar`. Managed-content pushes, not snapshots, use
 `backend/onyx/server/features/build/sandbox/image/sandbox_daemon/extract.py:safe_extract_then_atomic_swap`.
 
+**Push transport.** A push carries at most 900 MiB of files:
+`MAX_BUNDLE_BYTES` in
+`backend/onyx/server/features/build/sandbox/image/sandbox_daemon/extract.py`.
+The sender (`_build_targz`) and the run-time skill limit
+(`backend/onyx/skills/limits.py:SKILL_RUNTIME_MAX_BYTES`) import it, so the
+caps cannot drift. The sender spools the archive to disk and streams it with a
+`Content-Length`
+(`backend/onyx/server/features/build/sandbox/kubernetes/sidecar_client.py:SidecarClient.push_archive`).
+The sidecar refuses a `Content-Length` past `MAX_ARCHIVE_BYTES` (the bundle
+cap plus tar and gzip overhead) with a 413 before it reads the body, spools
+the rest to disk and cuts a longer stream at that cap.
+A failure keeps the live tree. Each mount holds at most two trees: a push
+removes that mount's versions other than the live one before it extracts.
+
 **Sweep.** Two tasks on the `sandbox` Celery queue share one per-tenant sweep
 (`backend/onyx/background/celery/tasks/build/tasks.py:_sweep_tenant_sandboxes`). The sweep fails stale
 `PROVISIONING` attempts

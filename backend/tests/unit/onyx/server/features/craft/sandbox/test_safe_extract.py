@@ -3,13 +3,20 @@
 import io
 import os
 import tarfile
+import tempfile
 from pathlib import Path
 
 import pytest
 
-from onyx.server.features.build.sandbox.image.sandbox_daemon.extract import (
-    safe_extract_then_atomic_swap,
-)
+from onyx.server.features.build.sandbox.image.sandbox_daemon import extract
+
+
+def safe_extract_then_atomic_swap(tar_gz: bytes, mount_path: str) -> None:
+    """Spool the archive to a file, as the daemon does, then extract it."""
+    with tempfile.TemporaryDirectory() as spool:
+        archive_path = Path(spool) / "push.tar.gz"
+        archive_path.write_bytes(tar_gz)
+        extract.safe_extract_then_atomic_swap(archive_path, mount_path)
 
 
 @pytest.fixture(autouse=True)
@@ -238,3 +245,74 @@ def test_setuid_and_world_write_bits_stripped(tmp_path: Path) -> None:
     assert mode & 0o7000 == 0
     # group/other write must be stripped
     assert mode & 0o022 == 0
+
+
+def _live(mount_path: str) -> Path:
+    return Path(mount_path).resolve()
+
+
+def test_versions_are_kept_per_mount(tmp_path: Path) -> None:
+    skills = _make_mount_path(tmp_path, "skills")
+    library = _make_mount_path(tmp_path, "user_library")
+
+    safe_extract_then_atomic_swap(_build_tar_gz({"a.txt": b"a"}), skills)
+    safe_extract_then_atomic_swap(_build_tar_gz({"b.txt": b"b"}), library)
+
+    assert _live(skills).parent == (tmp_path / ".versions" / "skills").resolve()
+    assert _live(library).parent == (tmp_path / ".versions" / "user_library").resolve()
+
+
+def test_next_push_removes_stale_versions_of_the_same_mount_only(
+    tmp_path: Path,
+) -> None:
+    skills = _make_mount_path(tmp_path, "skills")
+    library = _make_mount_path(tmp_path, "user_library")
+    safe_extract_then_atomic_swap(_build_tar_gz({"lib.txt": b"lib"}), library)
+    safe_extract_then_atomic_swap(_build_tar_gz({"a.txt": b"1"}), skills)
+    first = _live(skills)
+    safe_extract_then_atomic_swap(_build_tar_gz({"a.txt": b"2"}), skills)
+    second = _live(skills)
+    # The previous version stays readable until the next push.
+    assert (first / "a.txt").read_bytes() == b"1"
+    orphan = tmp_path / ".versions" / "skills" / "left-by-a-killed-sidecar"
+    orphan.mkdir()
+
+    safe_extract_then_atomic_swap(_build_tar_gz({"a.txt": b"3"}), skills)
+
+    third = _live(skills)
+    assert sorted(p.name for p in third.parent.iterdir()) == sorted(
+        [second.name, third.name]
+    )
+    assert not first.exists()
+    assert not orphan.exists()
+    assert (third / "a.txt").read_bytes() == b"3"
+    assert (_live(library) / "lib.txt").read_bytes() == b"lib"
+
+
+@pytest.mark.parametrize("bad_name", ["../escape.txt", "/etc/passwd"])
+def test_refused_push_keeps_the_live_tree(tmp_path: Path, bad_name: str) -> None:
+    mount_path = _make_mount_path(tmp_path)
+    safe_extract_then_atomic_swap(_build_tar_gz({"keep.txt": b"keep"}), mount_path)
+    live = _live(mount_path)
+
+    with pytest.raises(ValueError):
+        safe_extract_then_atomic_swap(
+            _build_tar_gz({"ok.txt": b"partial", bad_name: b"bad"}), mount_path
+        )
+
+    assert _live(mount_path) == live
+    assert (live / "keep.txt").read_bytes() == b"keep"
+    assert list(live.parent.iterdir()) == [live]
+
+
+def test_truncated_archive_keeps_the_live_tree(tmp_path: Path) -> None:
+    mount_path = _make_mount_path(tmp_path)
+    safe_extract_then_atomic_swap(_build_tar_gz({"keep.txt": b"keep"}), mount_path)
+    live = _live(mount_path)
+    tar_gz = _build_tar_gz({"a.bin": os.urandom(64 * 1024)})
+
+    with pytest.raises((EOFError, tarfile.TarError)):
+        safe_extract_then_atomic_swap(tar_gz[: len(tar_gz) // 2], mount_path)
+
+    assert _live(mount_path) == live
+    assert list(live.parent.iterdir()) == [live]
