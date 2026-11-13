@@ -15,7 +15,7 @@ import TextChunk from "@/app/craft/components/TextChunk";
 import CraftTimeline from "@/lib/timeline/craft/components/CraftTimeline";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { ErrorBanner } from "@/app/app/message/Resubmit";
-import { RATE_LIMITED_ERROR_CODE } from "@/app/app/types";
+import { RATE_LIMITED_ERROR_CODE, RateLimitDetails } from "@/app/app/types";
 import { convertMarkdownTablesToTsv } from "@/app/app/message/copyingUtils";
 import CompactionMarker from "@/app/craft/components/CompactionMarker";
 import TodoListCard from "@/app/craft/components/TodoListCard";
@@ -27,13 +27,29 @@ import {
   type OutputCard,
 } from "@/app/craft/types/streamingTypes";
 import { StreamItem, TodoListState } from "@/app/craft/types/displayTypes";
-import { buildCraftTranscript } from "@/lib/timeline/craft/timelineEntries";
+import {
+  buildCraftTranscript,
+  type CraftTimelineEntry,
+} from "@/lib/timeline/craft/timelineEntries";
+import { toCraftToolCall } from "@/lib/timeline/craft/toolCall";
+import type { AcpPlanEntry } from "@/lib/timeline/acp";
+import type { TimelineEvent } from "@/lib/timeline/events";
+import {
+  reduceTimelineEvents,
+  type AcpTimelineEntry,
+  type TimelineState,
+} from "@/lib/timeline/reducer";
 
 interface BuildMessageListProps {
   sessionId: string | null;
   attachmentRefreshKey?: number;
   messages: BuildMessage[];
   streamItems: StreamItem[];
+  /**
+   * The current turn's timeline events. When set, the in-progress turn
+   * renders from them instead of from `streamItems`.
+   */
+  timelineEvents?: TimelineEvent[];
   isStreaming?: boolean;
   isFinalizing?: boolean;
   /** Whether auto-scroll is enabled (user is at bottom) */
@@ -69,6 +85,7 @@ export default function BuildMessageList({
   attachmentRefreshKey = 0,
   messages,
   streamItems,
+  timelineEvents,
   isStreaming = false,
   isFinalizing = false,
   autoScrollEnabled = true,
@@ -103,6 +120,7 @@ export default function BuildMessageList({
   }, [
     messages.length,
     streamItems.length,
+    timelineEvents?.length,
     outputCards,
     autoScrollEnabled,
     scrollContainerRef,
@@ -118,14 +136,84 @@ export default function BuildMessageList({
     [connectableApps]
   );
 
-  const hasStreamItems = streamItems.length > 0;
+  const timelineState = useMemo(
+    () => (timelineEvents ? reduceTimelineEvents(timelineEvents) : null),
+    [timelineEvents]
+  );
+  const hasStreamItems = timelineState
+    ? timelineState.entries.length > 0 || timelineState.plan.length > 0
+    : streamItems.length > 0;
   const lastMessage = messages[messages.length - 1];
   const showStreamingArea =
     hasStreamItems ||
     (isStreaming && (!isFinalizing || lastMessage?.type !== "assistant"));
   const showStreamCursor =
     isStreaming &&
-    !streamItems.some((item) => item.type === "text" && item.isStreaming);
+    (timelineState
+      ? !timelineState.entries.some(
+          (entry) =>
+            entry.payload.kind === "message" && entry.status === "streaming"
+        )
+      : !streamItems.some((item) => item.type === "text" && item.isStreaming));
+
+  // Inline items, shared by the stream-item and timeline renders.
+  const renderConnectCard = (
+    key: string,
+    topMargin: string,
+    requestId: string,
+    externalAppId: number,
+    reason: string | null
+  ) => (
+    <div key={key} className={cn(topMargin)}>
+      <SetupCard
+        requestId={requestId}
+        externalAppId={externalAppId}
+        reason={reason}
+        userApp={appsById.get(externalAppId)}
+      />
+    </div>
+  );
+  const renderCompaction = (
+    key: string,
+    topMargin: string,
+    summary: string | null
+  ) => (
+    <div key={key} className={cn(topMargin)}>
+      <CompactionMarker summary={summary} />
+    </div>
+  );
+  const renderError = (
+    key: string,
+    topMargin: string,
+    content: string,
+    rateLimit: RateLimitDetails | undefined
+  ) => {
+    if (rateLimit) {
+      return (
+        <div key={key} className={cn(topMargin)}>
+          <ErrorBanner
+            error={content}
+            errorCode={RATE_LIMITED_ERROR_CODE}
+            isRetryable={false}
+            details={rateLimit}
+          />
+        </div>
+      );
+    }
+    return (
+      <div
+        key={key}
+        className={cn(
+          topMargin,
+          "flex items-start gap-2 rounded-08 border border-status-error-02 bg-status-error-00 px-3 py-2 text-sm text-status-error-05"
+        )}
+        role="alert"
+      >
+        <SvgAlertCircle className="mt-0.5 size-4 shrink-0 stroke-status-error-05" />
+        <span className="min-w-0 break-words">{content}</span>
+      </div>
+    );
+  };
 
   const renderStreamItems = (
     rawItems: StreamItem[],
@@ -211,54 +299,108 @@ export default function BuildMessageList({
             </div>
           );
         case "connect_app_request":
-          return (
-            <div key={item.id} className={cn(topMargin)}>
-              <SetupCard
-                requestId={item.requestId}
-                externalAppId={item.externalAppId}
-                reason={item.reason}
-                userApp={appsById.get(item.externalAppId)}
-              />
-            </div>
+          return renderConnectCard(
+            item.id,
+            topMargin,
+            item.requestId,
+            item.externalAppId,
+            item.reason
           );
         case "compaction":
-          return (
-            <div key={item.id} className={cn(topMargin)}>
-              <CompactionMarker summary={item.summary} />
-            </div>
-          );
+          return renderCompaction(item.id, topMargin, item.summary);
         case "error":
-          if (item.rateLimit) {
-            return (
-              <div key={item.id} className={cn(topMargin)}>
-                <ErrorBanner
-                  error={item.content}
-                  errorCode={RATE_LIMITED_ERROR_CODE}
-                  isRetryable={false}
-                  details={item.rateLimit}
-                />
-              </div>
-            );
-          }
-          return (
-            <div
-              key={item.id}
-              className={cn(
-                topMargin,
-                "flex items-start gap-2 rounded-08 border border-status-error-02 bg-status-error-00 px-3 py-2 text-sm text-status-error-05"
-              )}
-              role="alert"
-            >
-              <SvgAlertCircle className="mt-0.5 size-4 shrink-0 stroke-status-error-05" />
-              <span className="min-w-0 break-words">{item.content}</span>
-            </div>
-          );
+          return renderError(item.id, topMargin, item.content, item.rateLimit);
         default:
           return null;
       }
     });
 
     return { nodes, pinnedTodo };
+  };
+
+  /**
+   * Renders the in-progress turn from the timeline reducer: runs of thinking
+   * and tool calls go on the rail, messages and notices render between them,
+   * and the plan is pinned on top.
+   */
+  const renderTimeline = (
+    state: TimelineState
+  ): { nodes: React.ReactNode[]; pinnedTodo: TodoListState | null } => {
+    type Block =
+      | { kind: "steps"; id: string; entries: CraftTimelineEntry[] }
+      | { kind: "item"; entry: AcpTimelineEntry };
+    const blocks: Block[] = [];
+    for (const entry of state.entries) {
+      const step = toCraftStep(entry);
+      if (step) {
+        const last = blocks[blocks.length - 1];
+        if (last?.kind === "steps") last.entries.push(step);
+        else blocks.push({ kind: "steps", id: step.id, entries: [step] });
+      } else if (entry.payload.kind !== "thinking") {
+        blocks.push({ kind: "item", entry });
+      }
+    }
+
+    const nodes = blocks.map((block, idx) => {
+      if (block.kind === "steps") {
+        // The block folds closed once an assistant message follows it.
+        const followedByMessage = blocks
+          .slice(idx + 1)
+          .some((b) => b.kind === "item" && b.entry.payload.kind === "message");
+        return (
+          <CraftTimeline
+            key={block.id}
+            entries={block.entries}
+            autoCollapse={followedByMessage}
+          />
+        );
+      }
+
+      const topMargin = blocks[idx - 1]?.kind === "steps" ? "mt-3" : "";
+      const { entry } = block;
+      switch (entry.payload.kind) {
+        case "message":
+          return (
+            <div key={entry.id} className={cn(topMargin)}>
+              <TextChunk
+                sessionId={sessionId}
+                content={entry.payload.content
+                  .map((part) => (part.type === "text" ? part.text : ""))
+                  .join("")}
+                isStreaming={entry.status === "streaming"}
+                onFileOpen={onFileOpen}
+              />
+            </div>
+          );
+        case "notice": {
+          const { notice } = entry.payload;
+          switch (notice.type) {
+            case "connect_app_request":
+              return renderConnectCard(
+                entry.id,
+                topMargin,
+                notice.requestId,
+                notice.externalAppId,
+                notice.reason
+              );
+            case "compaction":
+              return renderCompaction(entry.id, topMargin, notice.summary);
+            case "error":
+              return renderError(
+                entry.id,
+                topMargin,
+                notice.message || "Turn failed.",
+                notice.rateLimit
+              );
+          }
+          return null;
+        }
+        default:
+          return null;
+      }
+    });
+
+    return { nodes, pinnedTodo: planToTodoList(state.plan) };
   };
 
   const renderAgentMessage = (
@@ -371,12 +513,14 @@ export default function BuildMessageList({
     return -1;
   }, [messages]);
 
-  const streamRender = hasStreamItems
-    ? renderStreamItems(streamItems, {
-        isCurrentStream: true,
-        extractLatestTodo: true,
-      })
-    : null;
+  const streamRender = !hasStreamItems
+    ? null
+    : timelineState
+      ? renderTimeline(timelineState)
+      : renderStreamItems(streamItems, {
+          isCurrentStream: true,
+          extractLatestTodo: true,
+        });
 
   return (
     <div className="flex flex-col items-center px-4 pb-4">
@@ -468,4 +612,48 @@ export default function BuildMessageList({
       </div>
     </div>
   );
+}
+
+/** A thinking block or tool call as a rail step; anything else is not a step. */
+function toCraftStep(entry: AcpTimelineEntry): CraftTimelineEntry | null {
+  switch (entry.payload.kind) {
+    case "tool":
+      return {
+        id: entry.id,
+        status: entry.status,
+        groupId: null,
+        payload: {
+          kind: "tool",
+          toolCall: toCraftToolCall(entry.payload.toolCall),
+        },
+      };
+    case "thinking":
+      if (!entry.payload.text) return null;
+      return {
+        id: entry.id,
+        status: entry.status,
+        groupId: null,
+        payload: {
+          kind: "thinking",
+          content: entry.payload.text,
+          isStreaming: entry.status === "streaming",
+        },
+      };
+    default:
+      return null;
+  }
+}
+
+/** The plan as the pinned todo list the live turn shows. */
+function planToTodoList(plan: AcpPlanEntry[]): TodoListState | null {
+  if (plan.length === 0) return null;
+  return {
+    id: "plan",
+    todos: plan.map((entry) => ({
+      content: entry.content,
+      status: entry.status,
+      activeForm: entry._meta?.onyx?.activeForm ?? entry.content,
+    })),
+    isOpen: true,
+  };
 }
