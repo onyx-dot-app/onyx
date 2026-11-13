@@ -7,6 +7,7 @@ import AgentsCatalogLoading from "@/views/AgentsCatalogPage/loading";
 import AgentEditorLoading from "@/views/AgentEditorPage/loading";
 import PluginsLoading from "@/views/PluginsPage/loading";
 import SettingsLoading from "@/views/SettingsPage/loading";
+import { ChatLoading } from "@/views/AppPage/loading";
 
 /**
  * The loading screen of the URL's page: `AppChrome`'s `PendingRoute` loader,
@@ -22,12 +23,8 @@ export function AppChromeLoader() {
   if (pathname.startsWith("/app/agents/")) return <AgentEditorLoading />;
   if (pathname === "/app/plugins") return <PluginsLoading />;
   if (position.isUserSettings()) return <SettingsLoading />;
-  if (
-    position.isChat() ||
-    position.isNewSession() ||
-    position.isAgent() ||
-    position.isProject()
-  ) {
+  if (position.isChat()) return <ChatLoading />;
+  if (position.isNewSession() || position.isAgent() || position.isProject()) {
     return <div />;
   }
   return <PageLoader />;

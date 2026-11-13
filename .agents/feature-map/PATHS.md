@@ -255,7 +255,7 @@ covers new files that match it.
 
 | Path | Component(s) |
 |---|---|
-| `web/src/app/app/`, `web/src/views/AppPage.tsx` | chat-frontend |
+| `web/src/app/app/`, `web/src/views/AppPage.tsx`, `web/src/views/AppPage/` | chat-frontend |
 | `web/src/app/api/[...path]/route.ts` | chat-frontend |
 | `web/next.config.js` | chat-frontend |
 | `web/src/hooks/useChatController.ts`, `web/src/hooks/useChatSessionController.ts`, `web/src/hooks/useFeedbackController.ts`, `web/src/hooks/useMultiModelChat.ts`, `web/src/hooks/useChatSessions.ts`, `web/src/hooks/useQueuedMessageNavigation.ts`, `web/src/hooks/useDeepResearchToggle.ts` | chat-frontend |
