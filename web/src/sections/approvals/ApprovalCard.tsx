@@ -137,9 +137,11 @@ export default function ApprovalCard({
   return (
     <div>
       {/* One live region announces the wait, then the decided record. */}
-      <p role="status" className="sr-only">
-        {record !== null ? record : t("header.required", { headline })}
-      </p>
+      <div role="status" className="sr-only">
+        <Text as="p" font="main-ui-muted" color="text-04">
+          {record !== null ? record : t("header.required", { headline })}
+        </Text>
+      </div>
       {record !== null ? (
         <div aria-hidden>
           <Content
