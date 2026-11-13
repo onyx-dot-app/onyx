@@ -311,8 +311,7 @@ def add_plugin_version__no_commit(
 @dataclass(frozen=True)
 class StoredVersionContent:
     """What the database holds of one version's content. ``file_manifest`` and
-    ``skill_md`` are None for a version copied from a legacy skill row before
-    the repair task fills them."""
+    ``skill_md`` are None for a version copied from a legacy skill row."""
 
     bundle_file_id: str | None
     # Name in the frontmatter of the skill at the bundle root.

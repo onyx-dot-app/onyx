@@ -403,7 +403,7 @@ The library preview of an external-app skill calls the same renderer
     Content of a version comes from one function,
     `skills/content.py:read_version_contents`: `plugin_version.file_manifest`
     and `plugin_skill.skill_md` from the database, and the bundle only when
-    they are NULL (a version copied from a legacy row before the repair task).
+    they are NULL (a version copied from a legacy row).
     The legacy `bundle_file_id`, `bundle_sha256` and `is_valid` columns are
     only written, by the dual writes; `db/plugin.py:legacy_skill_version_content`
     reads them once to make a plugin for a skill that has none.
@@ -426,13 +426,16 @@ The library preview of an external-app skill calls the same renderer
     `current_version_id`, read with the name and description; the editor
     returns the id of the version whose content it read, so the editor's base
     always matches its fields. Routes no longer delete the
-    previous bundle, because older versions still point at it; a skill delete
-    removes only the current bundle, so earlier blobs stay until a cleanup
-    task exists. Each new version stores `plugin_skill.skill_md`
+    previous bundle, because older versions still point at it
+    ([[#bundle-retention]]). Each new version stores `plugin_skill.skill_md`
     ([[#bundle-size-limits]]). `skills/metadata.py:frontmatter_for_jsonb`
     drops a frontmatter value that JSONB cannot hold and keeps every other
     key; name and description are always the validated strings.
-
+21. `bundle-retention` **Every version keeps its bundle while the skill exists.**
+    Routes never delete a bundle on save, because the version still points at
+    it. A skill delete, single or bulk, returns every version bundle and the
+    route deletes them after the commit
+    (`file_store/staging.py:delete_files_best_effort`).
 ---
 
 ## Decisions
@@ -540,7 +543,9 @@ The library preview of an external-app skill calls the same renderer
   database rules of the plugin tables.
 - `backend/tests/integration/tests/skills/` covers the API, bulk actions,
   import sharing and plugin version writes
-  (`backend/tests/integration/tests/skills/test_skill_plugin_versions.py`).
+  (`backend/tests/integration/tests/skills/test_skill_plugin_versions.py`),
+  deleting a skill deletes every version bundle
+  (`backend/tests/integration/tests/skills/test_skill_bundle_delete.py`).
   `backend/tests/integration/tests/craft/k8s/` covers a real
   push.
 - By hand: edit a skill while a Craft session runs. The stale notice must
