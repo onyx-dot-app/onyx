@@ -225,6 +225,7 @@ Most deployments keep the defaults. These settings change often:
 | --- | --- | --- |
 | `craft.hostAgent.maxVms` | `60` | Most microVMs per node. Keep `60` on nested virtualization. On bare metal, raise it or set `0` (no limit). |
 | `craft.hostAgent.dataDir` | `/var/lib/craft-fc` | Set it to the mount point of a dedicated XFS disk. |
+| `craft.hostAgent.loopStore.sizeGiB` | 80% of the free disk, 20 GiB to 4 TiB | Only on nodes without reflink, to set the size of the XFS loop file. |
 | `craft.hostAgent.namespace` | `onyx-sandbox-runtime` | It must differ from the release namespace and `configMap.SANDBOX_NAMESPACE`. |
 | `craft.hostAgent.createNamespace` | `true` | Set `false` to make the namespace yourself. Give it the label `pod-security.kubernetes.io/enforce: privileged`. |
 | `craft.hostAgent.imagePullSecrets` | `[]` | Pull Secrets for a private registry. They must exist in the host agent namespace. |
