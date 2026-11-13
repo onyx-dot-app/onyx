@@ -1185,3 +1185,80 @@ test("an auth error after an accepted user message shows its card without an ans
     view.unmount();
   }
 });
+
+test("text written with the step's closing tool call remains the answer after the stop", async () => {
+  seedSessionAwaitingAnswer();
+  const customTool = (
+    turn_index: number,
+    tool_name: string,
+    data: string
+  ): Packet[] => [
+    {
+      placement: { turn_index, tab_index: 0 },
+      obj: {
+        type: PacketType.CUSTOM_TOOL_START,
+        tool_name,
+        display_name: tool_name,
+        tool_id: null,
+      },
+    },
+    {
+      placement: { turn_index, tab_index: 0 },
+      obj: {
+        type: PacketType.CUSTOM_TOOL_DELTA,
+        tool_name,
+        tool_id: null,
+        response_type: "text",
+        data,
+      },
+    },
+    { placement: { turn_index, tab_index: 0 }, obj: { type: "section_end" } },
+  ];
+  const text: Packet[] = [
+    ...answerPackets.slice(0, 2).map((packet) => ({
+      ...packet,
+      placement: { turn_index: 1, tab_index: 0 },
+    })),
+    {
+      placement: { turn_index: 1, tab_index: 0 },
+      obj: { type: "section_end" },
+    },
+  ];
+  const packets: Packet[] = [
+    ...customTool(0, "spawn_agent", "Started /root/research"),
+    ...text,
+    ...customTool(2, "wait_agents", "Waiting for 1 agent"),
+    answerPackets.at(-1)!,
+  ];
+  const renderMessage = (shown: Packet[], restored = 0) => (
+    <AgentMessage
+      rawPackets={shown}
+      packetCount={shown.length}
+      restoredPacketCount={restored}
+      chatState={chatState}
+      nodeId={NEW_ANSWER_NODE_ID}
+      llmManager={null}
+      hideFooter
+      disableTTS
+    />
+  );
+
+  // Live: the stop closes the step, so its text is the answer.
+  const live = render(renderMessage(packets.slice(0, -1)));
+  try {
+    live.rerender(renderMessage(packets));
+    expect(await screen.findByText("A quick answer.")).toBeInTheDocument();
+    expect(await screen.findByTestId("onyx-ai-message")).toBeInTheDocument();
+  } finally {
+    live.unmount();
+  }
+
+  // Reload: the saved response replays the same packets.
+  const reloaded = render(renderMessage(packets, packets.length));
+  try {
+    expect(await screen.findByText("A quick answer.")).toBeInTheDocument();
+    expect(await screen.findByTestId("onyx-ai-message")).toBeInTheDocument();
+  } finally {
+    reloaded.unmount();
+  }
+});

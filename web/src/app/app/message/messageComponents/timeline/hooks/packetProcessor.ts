@@ -321,6 +321,21 @@ function handleStopPacket(state: ProcessorState, packet: Packet): void {
   const stopPacket = packet.obj as Stop;
   state.stopReason = stopPacket.stop_reason;
 
+  // Nothing follows Stop, so the latest text is the answer, even when its
+  // step also called a tool.
+  const latestDisplayKey = Array.from(state.displayGroupKeys)
+    .map((key) => ({ key, ...parseToolKey(key) }))
+    .sort((a, b) => b.turn_index - a.turn_index || b.tab_index - a.tab_index)
+    .at(0)?.key;
+  if (
+    latestDisplayKey !== undefined &&
+    !state.groupedPacketsMap
+      .get(latestDisplayKey)
+      ?.some((p) => p.obj.type === PacketType.USER_MESSAGE)
+  ) {
+    state.finalAnswerComing = true;
+  }
+
   // Inject SECTION_END for all group keys that don't have one
   state.seenGroupKeys.forEach((groupKey) => {
     if (!state.groupKeysWithSectionEnd.has(groupKey)) {

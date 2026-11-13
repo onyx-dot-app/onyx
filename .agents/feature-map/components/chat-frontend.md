@@ -230,7 +230,10 @@ is a new tool call and sets `finalAnswerComing` back to false. The tool starts
 with its first tool packet other than a streamed argument, so a call whose
 arguments streamed before the answer also counts when it starts. A later
 packet of a started tool, such as a code mode closing record, joins its group,
-and the answer stays shown. Live,
+and the answer stays shown. The stop packet sets `finalAnswerComing` again
+when the latest display group is text, not a user message. Nothing follows the
+stop, so the text of a step that ends the response with a tool call, such as
+`wait_agents`, is the answer. Live,
 the closing record follows the answer. On replay, it follows its tab's section
 end, before the answer's `message_start`. Both orders give the same groups.
 The mobile app copies the group end and step-kind rules in
