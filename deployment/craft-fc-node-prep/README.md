@@ -12,7 +12,9 @@ Customer guide: https://docs.onyx.app/deployment/kubernetes/craft-firecracker-ba
 The default data dir is `/var/lib/craft-fc`, the chart default of `craft.hostAgent.dataDir`.
 
 `apply` never erases data. It refuses a device that has a file system other than XFS, and a device that is mounted
-somewhere else, and a data dir that is not empty (a mount would hide its files). It cannot turn on cgroup v2 or VT-x: `check` names the fix.
+somewhere else, and a data dir that is not empty (a mount would hide its files). For a disk already mounted at the
+data dir, it checks that the disk is XFS and adds the missing fstab entry. It refuses an fstab entry that mounts
+another disk at the data dir, or that has `noauto`. It cannot turn on cgroup v2 or VT-x: `check` names the fix.
 
 Without `--xfs-device`, a data dir on ext4 needs a host agent with the XFS loop store (Onyx releases with the
 `craft.hostAgent.loopStore` chart values). It then makes its own XFS loop file there. Older host agents need an XFS
@@ -22,4 +24,5 @@ data dir with reflink: use `--xfs-device`.
 
 The script was run in a privileged `debian:trixie-slim` container with `xfsprogs` and `e2fsprogs`: `check`, `apply
 --dry-run`, `apply --xfs-device` on a loop device (format, fstab line, mount, second run makes no change), a refused
-ext4 device, and `label --dry-run`. Run `shellcheck craft-fc-node-prep.sh` after a change.
+ext4 device, a hand-mounted XFS disk and a hand-mounted ext4 disk, conflicting and `noauto` fstab entries, and
+`label --dry-run`. Run `shellcheck craft-fc-node-prep.sh` after a change.
