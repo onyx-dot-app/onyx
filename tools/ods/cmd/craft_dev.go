@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -104,7 +105,7 @@ func newCraftDevDoctorCommand(opts *craftDevOptions) *cobra.Command {
 		Short: "Check AWS, VPN egress, kube, Telepresence, host agents and the Alembic head (read-only)",
 		Args:  cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
-			runCraftDev(craftDevArgv(craftDevDoctor, opts.targetArgs(), "doctor"))
+			runCraftDev(craftDevDoctor, opts.targetArgs(), "doctor")
 		},
 	}
 }
@@ -114,7 +115,7 @@ func newCraftDevAPICommand(opts *craftDevOptions) *cobra.Command {
 		Use:   "api [-- uvicorn args...]",
 		Short: "Start the local API server against the cluster (needs Telepresence)",
 		Run: func(cmd *cobra.Command, args []string) {
-			runCraftDev(craftDevArgv(craftDevLauncher, opts.launcherArgs(), "api", withSeparator(args)...))
+			runCraftDev(craftDevLauncher, opts.launcherArgs(), "api", withSeparator(args)...)
 		},
 	}
 	cmd.Flags().IntVar(&opts.port, "port", 0, "Local API port (default: $CRAFT_API_PORT, else 8080 or the next free port)")
@@ -127,7 +128,7 @@ func newCraftDevWebCommand(opts *craftDevOptions) *cobra.Command {
 		Short: "Start the local web server that proxies to the local API",
 		Args:  cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
-			runCraftDev(craftDevArgv(craftDevLauncher, opts.launcherArgs(), "web"))
+			runCraftDev(craftDevLauncher, opts.launcherArgs(), "web")
 		},
 	}
 	cmd.Flags().IntVar(&opts.port, "port", 0, "Port of the local API (default: $CRAFT_API_PORT, else 8080)")
@@ -161,7 +162,7 @@ func newCraftDevVMCommand(opts *craftDevOptions, cmd *cobra.Command, flags func(
 	cmd.Flags().StringVar(&opts.tenant, "tenant", "", "Tenant ID (default: looked up from the email)")
 	cmd.Flags().BoolVar(&opts.verbose, "verbose", false, "Show the pod helper output")
 	cmd.Run = func(c *cobra.Command, args []string) {
-		runCraftDev(craftDevArgv(craftDevVM, opts.vmArgs(), craftDevSubcommand(c), craftDevVMRest(c, args)...))
+		runCraftDev(craftDevVM, opts.vmArgs(), craftDevSubcommand(c), craftDevVMRest(c, args)...)
 	}
 	return cmd
 }
@@ -226,7 +227,9 @@ func craftDevVMRest(c *cobra.Command, args []string) []string {
 			return
 		}
 		if f.Value.Type() == "bool" {
-			rest = append(rest, "--"+f.Name)
+			if f.Value.String() == "true" {
+				rest = append(rest, "--"+f.Name)
+			}
 		} else {
 			rest = append(rest, fmt.Sprintf("--%s=%s", f.Name, f.Value.String()))
 		}
@@ -245,21 +248,21 @@ func withSeparator(args []string) []string {
 }
 
 // craftDevArgv builds the uv argv: global launcher flags go before the
-// subcommand, as argparse needs.
-func craftDevArgv(script string, global []string, subcommand string, rest ...string) []string {
-	argv := []string{"run", "--frozen", "python", script}
+// subcommand, as argparse needs. uv finds the project with --project, so the
+// caller's working directory stays and relative paths keep their meaning.
+func craftDevArgv(root, script string, global []string, subcommand string, rest ...string) []string {
+	argv := []string{"run", "--project", root, "--frozen", "python", filepath.Join(root, script)}
 	argv = append(argv, global...)
 	argv = append(argv, strings.Fields(subcommand)...)
 	return append(argv, rest...)
 }
 
-func runCraftDev(argv []string) {
+func runCraftDev(script string, global []string, subcommand string, rest ...string) {
 	root, err := paths.GitRoot()
 	if err != nil {
 		log.Fatalf("Failed to find git root: %v", err)
 	}
-	log.Debugf("Running in %s: uv %v", root, argv)
-	c := exec.Command("uv", argv...)
-	c.Dir = root
-	childproc.Run(c, "uv")
+	argv := craftDevArgv(root, script, global, subcommand, rest...)
+	log.Debugf("Running: uv %v", argv)
+	childproc.Run(exec.Command("uv", argv...), "uv")
 }

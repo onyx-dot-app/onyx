@@ -227,6 +227,21 @@ class HelperProtocolTest(unittest.TestCase):
         self.assertEqual(result["tail"], "end")
         self.assertEqual(result["req"]["command_name"], "x")
 
+    def test_helper_exit_status_is_checked(self) -> None:
+        def argv(line: str, code: int) -> list[str]:
+            script = f"import sys;sys.stdin.read();print({line!r});sys.exit({code})"
+            return [sys.executable, "-c", script]
+
+        target = vm.Target(context="ctx", user="a@b.c")
+        ok = '@@craft-fc {"t": "vms", "vms": []}'
+        with patch.object(vm, "helper_argv", lambda _t: argv(ok, 1)):
+            with self.assertRaisesRegex(vm.CommandError, "exited 1"):
+                list(vm.run_helper(target, {"command_name": "vms"}))
+        error = '@@craft-fc {"t": "error", "code": "NO_VM", "message": "none"}'
+        with patch.object(vm, "helper_argv", lambda _t: argv(error, 3)):
+            results = list(vm.run_helper(target, {"command_name": "vms"}))
+        self.assertEqual(results[0]["code"], "NO_VM")
+
     def test_helper_file_compiles(self) -> None:
         compile(vm.HELPER.read_bytes(), str(vm.HELPER), "exec")
 
@@ -249,6 +264,38 @@ CTX_PROFILE = remote.parse_profile(
 
 class CommandTest(unittest.TestCase):
     target = vm.Target(context="ctx", user="me@example.com")
+    profile = CTX_PROFILE
+    server = "https://api.example.test"
+
+    def test_refuses_another_api_server_before_the_helper(self) -> None:
+        self.profile = remote.parse_profile(
+            {
+                "kube": {"context": "ctx", "server": "https://api.example.test"},
+                "namespaces": {"agent": "agent-ns"},
+                "aws": {"region": "us-west-2", "eks_cluster": "dev"},
+            }
+        )
+        self.server = "https://other.example.test"
+        code, sent, _, err = self.run_main(["vms"], [{"t": "vms", "vms": []}])
+        self.assertEqual((code, sent), (2, []))
+        self.assertIn("another API server", err)
+
+    def test_logs_fail_when_kubectl_fails(self) -> None:
+        class Proc:
+            stdout: list[str] = []
+
+            def wait(self) -> int:
+                return 1
+
+        with (
+            patch.object(vm, "agent_pods", lambda _t, _n: ["pod/a"]),
+            patch.object(vm.subprocess, "Popen", lambda *_a, **_k: Proc()),
+        ):
+            code, _, _, err = self.run_main(
+                ["logs"], [{"t": "where", "sandbox_id": "s1", "placed": False}]
+            )
+        self.assertEqual(code, 2)
+        self.assertIn("kubectl logs failed for pod/a", err)
 
     def run_main(
         self, argv: list[str], results: list[dict[str, Any]]
@@ -267,7 +314,8 @@ class CommandTest(unittest.TestCase):
         out, err = io.StringIO(), io.StringIO()
         with (
             patch.object(vm, "run_helper", fake),
-            patch.object(vm, "load_profile", lambda _p: CTX_PROFILE),
+            patch.object(vm, "load_profile", lambda _p: self.profile),
+            patch.object(remote.RemoteCluster, "command", return_value=self.server),
             contextlib.redirect_stdout(out),
             contextlib.redirect_stderr(err),
         ):

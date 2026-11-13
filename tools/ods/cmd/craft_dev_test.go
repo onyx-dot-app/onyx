@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 )
@@ -11,8 +13,9 @@ func TestCraftDev_buildsTheLauncherArgv(t *testing.T) {
 		dev    = "deployment/helm/dev/dev.py"
 		vm     = "deployment/helm/dev/craft_fc_vm.py"
 	)
+	// uv records the script and its args; the root is added per case.
 	uv := func(script string, args ...string) []string {
-		return append([]string{"run", "--frozen", "python", script}, args...)
+		return append([]string{script}, args...)
 	}
 	cases := []struct {
 		name string
@@ -33,6 +36,7 @@ func TestCraftDev_buildsTheLauncherArgv(t *testing.T) {
 		{"logs", []string{"logs", "--tail", "5", "--agent"}, uv(vm, "logs", "--agent", "--tail=5")},
 		{"logs follow", []string{"logs", "-f", "--since", "2h"}, uv(vm, "logs", "--follow", "--since=2h")},
 		{"reset", []string{"--context", "ctx", "reset", "--force"}, uv(vm, "--context", "ctx", "reset", "--force")},
+		{"false booleans are not forwarded", []string{"reset", "--force=false", "--verbose=false"}, uv(vm, "reset")},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -46,11 +50,38 @@ func TestCraftDev_buildsTheLauncherArgv(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			want := []devtoolCall{{Dir: root, Args: c.want}}
+			args := append([]string{"run", "--project", root, "--frozen", "python", filepath.Join(root, c.want[0])}, c.want[1:]...)
+			want := []devtoolCall{{Dir: root, Args: args}}
 			if got := devtoolCalls(t, uvCalls); !reflect.DeepEqual(got, want) {
 				t.Fatalf("expected %q, got %q", want, got)
 			}
 		})
+	}
+}
+
+func TestCraftDev_keepsTheCallerDirectoryForRelativePaths(t *testing.T) {
+	binDir := devtoolBinDir(t)
+	root := devtoolRepo(t)
+	sub := filepath.Join(root, "work")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(sub)
+	uvCalls := devtoolFakeTool(t, binDir, "uv", "")
+
+	cmd := NewCraftDevCommand()
+	cmd.SetArgs([]string{"--profile", "p.yaml", "skills", "push", "./skills"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+
+	script := filepath.Join(root, "deployment/helm/dev/craft_fc_vm.py")
+	want := []devtoolCall{{Dir: sub, Args: []string{
+		"run", "--project", root, "--frozen", "python", script,
+		"--profile", "p.yaml", "skills", "push", "./skills",
+	}}}
+	if got := devtoolCalls(t, uvCalls); !reflect.DeepEqual(got, want) {
+		t.Fatalf("expected %q, got %q", want, got)
 	}
 }
 

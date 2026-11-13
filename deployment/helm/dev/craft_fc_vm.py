@@ -112,6 +112,14 @@ def target_from(
     )
 
 
+def verify_server(profile: RemoteProfile, context: str) -> None:
+    """Refuse a context whose API server differs from the profile, like the launcher."""
+    try:
+        remote.RemoteCluster.from_profile(ROOT, profile, context).verify_server()
+    except (ValueError, OSError, subprocess.SubprocessError) as e:
+        raise CommandError(str(e)) from e
+
+
 def load_profile(path: str | None) -> RemoteProfile:
     """The profile from --profile, else $CRAFT_DEV_PROFILE, else onyx-internal."""
     try:
@@ -261,7 +269,7 @@ def run_helper(
     assert proc.stdin is not None and proc.stdout is not None
     proc.stdin.write(helper_input(request, payload, HELPER.read_bytes()))
     proc.stdin.close()
-    seen = False
+    seen = errored = False
     for raw in proc.stdout:
         line = raw.decode(errors="replace").rstrip("\n")
         result = parse_result(line)
@@ -270,11 +278,17 @@ def run_helper(
                 print(line, file=sys.stderr)
             continue
         seen = True
+        errored = errored or result.get("t") == "error"
         yield result
-    proc.wait()
+    code = proc.wait()
     if not seen:
         raise CommandError(
-            f"the pod helper gave no result (kubectl exit {proc.returncode}); "
+            f"the pod helper gave no result (kubectl exit {code}); "
+            "run again with --verbose"
+        )
+    if code != 0 and not errored:
+        raise CommandError(
+            f"kubectl exec exited {code} before the pod helper finished; "
             "run again with --verbose"
         )
 
@@ -485,6 +499,7 @@ def cmd_logs(target: Target, args: argparse.Namespace) -> int:
         )
     guest = not args.agent
     agent = not args.guest
+    failed: list[str] = []
     for pod in pods:
         # --tail counts this VM's lines, so the filter applies it, not kubectl.
         argv = target.kubectl(target.agent_namespace) + [
@@ -505,7 +520,12 @@ def cmd_logs(target: Target, args: argparse.Namespace) -> int:
                 print(shown, flush=True)
         except KeyboardInterrupt:
             proc.terminate()
-        proc.wait()
+            proc.wait()
+            return 130
+        if proc.wait() != 0:
+            failed.append(pod)
+    if failed:
+        raise CommandError(f"kubectl logs failed for {', '.join(failed)}")
     return 0
 
 
@@ -567,13 +587,15 @@ def parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     try:
+        profile = load_profile(args.profile)
         target = target_from(
-            load_profile(args.profile),
+            profile,
             context=args.context,
             user=args.user,
             tenant_id=args.tenant,
             env=dict(os.environ),
         )
+        verify_server(profile, target.context)
         return int(args.handler(target, args))
     except CommandError as e:
         print(f"error: {e}", file=sys.stderr)
