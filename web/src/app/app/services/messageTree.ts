@@ -261,6 +261,19 @@ export function setMessageAsLatest(
   return newMessages;
 }
 
+/**
+ * The responses of the latest turn: the tip of the latest chain and, for a
+ * multi-model turn, its siblings.
+ */
+export function getLatestTurn(tree: MessageTreeState): Message[] {
+  const latest = getLatestMessageChain(tree).at(-1);
+  if (!latest) return [];
+  if (latest.parentNodeId === null) return [latest];
+  return (tree.get(latest.parentNodeId)?.childrenNodeIds ?? [latest.nodeId])
+    .map((nodeId) => tree.get(nodeId))
+    .filter((node): node is Message => node !== undefined);
+}
+
 export function getLatestMessageChain(messages: MessageTreeState): Message[] {
   const chain: Message[] = [];
   if (messages.size === 0) {

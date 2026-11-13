@@ -8,6 +8,7 @@ import {
 } from "@/app/app/services/streamingModels";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import AgentMessage from "@/app/app/message/messageComponents/AgentMessage";
+import { useToolApprovalUi } from "@/lib/chat/toolApprovals";
 import { FullChatState } from "@/app/app/message/messageComponents/types";
 import type { MinimalAgent } from "@/lib/agents/types";
 
@@ -611,6 +612,101 @@ test("a later report of a code mode call replaces what the step shows", async ()
     ).toBeInTheDocument();
     expect(screen.getByText("3 orders")).toBeInTheDocument();
     expect(screen.queryByText("checking more")).not.toBeInTheDocument();
+  } finally {
+    view.unmount();
+  }
+});
+
+test("a program call that waits for approval shows the nested tool and a waiting header", async () => {
+  seedSessionAwaitingAnswer();
+  useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null });
+  const cell = { turn_index: 0, tab_index: 0 };
+  const nested = { ...cell, sub_turn_index: 0 };
+  // The program's call starts, then the request arrives at the cell's placement.
+  const packets: Packet[] = [
+    {
+      placement: cell,
+      obj: { type: PacketType.CODE_MODE_START, code: "await create_issue()" },
+    },
+    {
+      placement: nested,
+      obj: {
+        type: PacketType.CUSTOM_TOOL_START,
+        tool_name: "mcp__3__github__create_issue",
+        display_name: "Create issue",
+      },
+    },
+    {
+      placement: cell,
+      obj: {
+        type: PacketType.TOOL_APPROVAL_REQUEST,
+        approval_id: "approval",
+        tool_call_id: "nested-call",
+        tool_name: "mcp__3__github__create_issue",
+        display_name: "Create issue",
+        arguments: { title: "Fix login" },
+        expires_at: "2099-01-01T00:00:00Z",
+      },
+    },
+  ];
+  const view = render(
+    <AgentMessage
+      rawPackets={packets}
+      packetCount={packets.length}
+      chatState={chatState}
+      nodeId={NEW_ANSWER_NODE_ID}
+      llmManager={null}
+      hideFooter
+      disableTTS
+    />
+  );
+  try {
+    expect(
+      await screen.findByRole("button", {
+        name: /^Approval requested: Create issue Approve by/,
+      })
+    ).toBeInTheDocument();
+    expect(screen.getByText("Waiting for your approval")).toBeInTheDocument();
+    expect(screen.queryByText("Working")).not.toBeInTheDocument();
+
+    // A decision this client made ends the wait before its packet arrives.
+    act(() =>
+      useToolApprovalUi.setState({
+        localStatuses: new Map([["approval", "approved"]]),
+      })
+    );
+    expect(
+      screen.queryByText("Waiting for your approval")
+    ).not.toBeInTheDocument();
+
+    const resolved: Packet[] = [
+      ...packets,
+      {
+        placement: cell,
+        obj: {
+          type: PacketType.TOOL_APPROVAL_RESOLVED,
+          approval_id: "approval",
+          outcome: "approved",
+        },
+      },
+    ];
+    view.rerender(
+      <AgentMessage
+        rawPackets={resolved}
+        packetCount={resolved.length}
+        chatState={chatState}
+        nodeId={NEW_ANSWER_NODE_ID}
+        llmManager={null}
+        hideFooter
+        disableTTS
+      />
+    );
+    expect(
+      await screen.findAllByText("Approved: Create issue")
+    ).not.toHaveLength(0);
+    expect(
+      screen.queryByText("Waiting for your approval")
+    ).not.toBeInTheDocument();
   } finally {
     view.unmount();
   }

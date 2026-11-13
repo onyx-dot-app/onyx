@@ -91,6 +91,7 @@ import {
   stopChatSession,
   STOP_BEFORE_DISPATCH,
 } from "@/lib/chat/stopChatSession";
+import { useToolApprovalSendGuard } from "@/lib/chat/hooks";
 
 const SYSTEM_MESSAGE_ID = -3;
 
@@ -207,6 +208,7 @@ export default function useChatController({
   const currentMessageTree = useCurrentMessageTree();
   const currentMessageHistory = useCurrentMessageHistory();
   const tReadiness = useTranslations("chat.readiness");
+  const approvalGuard = useToolApprovalSendGuard();
 
   const navigatingAway = useRef(false);
 
@@ -1408,12 +1410,17 @@ export default function useChatController({
         // could get stranded in local state.
         flushPendingUpdates();
 
-        // Surface FIFO errors (e.g. 429 before any packets arrive) so the
-        // catch block replaces the thinking placeholder with an error message.
-        if (stack.error) {
-          throw new Error(stack.error);
+        if (stack.approvalPending) {
+          restoreTreeBeforeSend();
+          approvalGuard.showPendingApproval();
+        } else {
+          // Surface FIFO errors (e.g. 429 before any packets arrive) so the
+          // catch block replaces the thinking placeholder with an error message.
+          if (stack.error) {
+            throw new Error(stack.error);
+          }
+          streamSucceeded = true;
         }
-        streamSucceeded = true;
       } catch (e: any) {
         if (controller.signal.aborted || !ownsStream()) return;
         console.log("Error:", e);
@@ -1560,6 +1567,7 @@ export default function useChatController({
       searchParams,
       resetInputBar,
       restoreInputBar,
+      approvalGuard,
       t,
       updateSelectedNodeForDocDisplay,
       currentMessageTree,

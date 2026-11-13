@@ -107,6 +107,14 @@ export class ChatPage {
     if (skills) await this.waitForChatSkills();
   }
 
+  /** Waits until the chat uses this agent. A message sent sooner goes to the
+   * default agent. */
+  async expectAgent(name: string): Promise<void> {
+    await expect(this.page.getByTestId("agent-name-display")).toContainText(
+      name
+    );
+  }
+
   /** With `skills`, also waits until the composer has the user's chat
    * skills, so that `@` opens the picker at once. */
   async reload({ skills = false } = {}): Promise<void> {

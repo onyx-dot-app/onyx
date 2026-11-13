@@ -10,6 +10,7 @@ import { waitForChatResponseEnd } from "@/lib/chat/sessionReadiness";
 
 jest.mock("@/app/app/services/lib", () => ({
   ChatSendRejectedError: class extends Error {},
+  ApprovalPendingError: class extends Error {},
   sendMessage: jest.fn(),
   processRawChatHistory: jest.fn(() => new Map()),
 }));

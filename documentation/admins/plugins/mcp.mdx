@@ -120,15 +120,37 @@ Enter a key to test the server and load its tools. A test key is saved to your a
 - In **Available tools**, turn tools on or off for the whole workspace.
 - Click **Refresh tools** after the server adds, removes, or changes tools. Save or discard pending changes first.
 
-When Craft is enabled, the **Approval settings** tab sets the Craft policy for each tool.
+The **Approval settings** tab sets the approval policy for each tool. The policy applies in Chat, in custom agents,
+and in Craft.
+
+<Warning>
+  **Upgrade note.** Before this release, approval policies applied only in Craft.
+  The upgrade sets **Auto-approve** for the tools that exist at upgrade time, so they keep running without a prompt,
+  on these MCP servers:
+
+  - all servers, if no one in the workspace has used Craft
+  - servers that are not available in Craft, if someone has used Craft
+
+  The other servers keep their Craft policies, so their tools with the **Ask** policy now need approval in Chat too.
+  The upgrade keeps the policies that an administrator already set. New tools, new servers,
+  and new installations use the default policy of each tool, described below.
+  If you later enable Craft on a server that the upgrade set to **Auto-approve**,
+  those **Auto-approve** policies also apply in Craft. They show in the **Approval settings** tab,
+  where you can change them.
+
+  Older clients cannot answer approval requests: mobile app builds, [Onyx CLI](/overview/onyx_anywhere/cli) versions,
+  and pinned widget versions from before this release, and API scripts that do not handle them. In these clients,
+  a call that needs approval does not run until its request times out,
+  and the chat does not accept new messages until then. Upgrade these clients.
+</Warning>
 
 <img className="rounded-image" src="/assets/admins/plugins/mcp_tools_approval.webp" alt="Approval settings with Auto-approve, Ask, and Disabled for each tool"/>
 
-| Policy | Effect in Craft |
-| --- | --- |
-| **Auto-approve** | The tool runs without a prompt. |
-| **Ask** | Craft asks the user to approve each call. |
-| **Disabled** | Craft never runs the tool. |
+| Policy | Effect in Chat and custom agents | Effect in Craft |
+| --- | --- | --- |
+| **Auto-approve** | The tool runs without a prompt. | The tool runs without a prompt. |
+| **Ask** | The answer pauses until the user approves the call. See [Approvals in Chat](#approvals-in-chat). | Craft asks the user to approve each call. |
+| **Disabled** | The agent does not get the tool. | Craft never runs the tool. |
 
 Each tool starts at **Ask**. A tool that the server marks as read-only (`readOnlyHint`) starts at **Auto-approve**.
 Onyx cannot confirm that a tool is read-only. If you do not trust the server, set its tools to **Ask**.
@@ -137,13 +159,57 @@ Onyx saves a setting only when it is different from the tool's default.
 If a tool keeps its default and a refresh changes the default, the tool uses the new default. After a refresh,
 examine the tools and set **Ask** again where necessary.
 
-Tool availability and Craft policies are separate.
-A tool that you turn off in **Available tools** is not available anywhere.
+Tool availability and approval policies are separate.
+A tool that you turn off in **Available tools** is not available anywhere. In Chat,
+a policy change applies from the next message. An answer in progress keeps the policies it started with,
+with one exception: a tool that you set to **Disabled** does not run, even if the user approved it for the chat.
 
-<Warning>
-  Approval policies apply only in Craft. In default Chat and custom agents,
-  agents call enabled MCP tools without a prompt.
-</Warning>
+### Approvals in Chat
+
+When an agent in the Onyx web app calls a tool with the **Ask** policy, the answer pauses.
+An approval card shows the tool name, the arguments of the call, and the time to approve by.
+The user selects one of these options:
+
+| Option | Effect |
+| --- | --- |
+| **Approve once** | The call runs with the arguments that the card shows. |
+| **Approve for this chat** | The call runs. Later calls of the same tool in the same chat run without a card. |
+| **Reject** | The call does not run. The agent does not retry it, tells the user, and asks how to continue. |
+
+After the decision, the card becomes a one-line record: **Approved**, **Approved for this chat**, **Not approved**,
+**Timed out**, **Disabled**, or **No longer waiting**.
+
+While a card waits for a decision, the user can type a message but cannot send it.
+Onyx keeps the draft and shows the card that waits. If the user reloads the page or opens the chat again,
+the card that waits shows again.
+
+If the user does not decide within 10 minutes, the call does not run, and the agent continues the answer.
+The agent does not treat the timeout as a refusal. If the user stops the answer, or the API server restarts,
+the request ends and the call does not run.
+
+If a tool becomes **Disabled** while its card waits, an approval saves a rejection. The call does not run,
+the record shows **Disabled**, and the agent is told that the tool is disabled.
+
+When `CODE_MODE_ENABLED` is `true`, the agent calls MCP tools from a Python program.
+A call to a tool with the **Ask** policy waits inside the program, and the approval card shows on the program's card.
+The rules above apply in the same way.
+
+The mobile app, the widget, the [Onyx CLI](/overview/onyx_anywhere/cli),
+and [Chat API](/developers/guides/chat_new_guide#tool-approvals) clients also show approval requests.
+
+<Note>
+  The Slack and Discord bots cannot show approval requests yet. In their answers,
+  a tool with the **Ask** policy runs without approval. A tool with the **Disabled** policy is not available to them.
+</Note>
+
+In some chats, a tool call cannot wait for approval. There, a tool with the **Ask** policy does not run,
+and the agent gets an error that explains why:
+
+- incognito chats when **Incognito Chat Records** is **Usage Only**
+- users who are not signed in
+- subagents that run in the background
+
+Agents that run in the foreground, such as Deep Research, can wait for approval.
 
 ## Configuration tab
 
@@ -152,7 +218,7 @@ A tool that you turn off in **Available tools** is not available anywhere.
 | Setting | Effect |
 | --- | --- |
 | **Enable in default Chat** | Adds or removes the server from default Chat for the workspace. Custom agents keep their tools. |
-| **Let users manage approval settings** | Lets users change Craft approval policies for tools that you did not disable. Users change their policies in the plugin's **Approval settings** tab on the [Plugins page](/overview/core_features/plugins#review-tools). Users do not need access to Craft to do this. When you turn this setting off, users do not see the tab, and the workspace policies apply to all users. |
+| **Let users manage approval settings** | Lets users change the approval policy of tools that you did not disable, for Chat and Craft. Users change policies in the plugin's **Approval settings** tab on the [Plugins page](/overview/core_features/plugins#review-tools). Craft is not necessary. When you turn this setting off, the workspace policies apply to all users. |
 
 If you change the server URL, Onyx removes the stored connections for that server. Users must connect again.
 
