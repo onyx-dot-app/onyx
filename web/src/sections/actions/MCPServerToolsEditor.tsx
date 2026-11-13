@@ -129,11 +129,12 @@ export default function MCPServerToolsEditor({
         const currentPolicies = Object.fromEntries(
           Object.entries(policies).filter(([name]) => toolNames.has(name))
         );
-        await updateMCPServer(server.id, {
+        const updated = await updateMCPServer(server.id, {
           action_policies: currentPolicies,
         });
-        setPolicies(currentPolicies);
-        setSavedPolicies(currentPolicies);
+        const storedPolicies = updated.action_policies ?? currentPolicies;
+        setPolicies(storedPolicies);
+        setSavedPolicies(storedPolicies);
       }
       await onSaved();
     } catch (cause) {
