@@ -1241,6 +1241,7 @@ def test_input_sent_during_a_tool_step_is_read_at_the_next_step(
                     delivery=MessageDelivery.SEND,
                     target_response_id=None,
                     turn_preparing=False,
+                    mentions=[],
                 )
                 session.commit()
             signals.slow_release.set()

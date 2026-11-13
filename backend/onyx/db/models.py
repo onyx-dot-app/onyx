@@ -62,6 +62,7 @@ from onyx.agents.models import (
     RunStatus,
 )
 from onyx.auth.schemas import UserRole
+from onyx.chat.mention_models import Mention, RecordedMention
 from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.configs.constants import (
     ANONYMOUS_USER_UUID,
@@ -3698,6 +3699,14 @@ class ChatMessage(Base):
     files: Mapped[list[FileDescriptor] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )
+    # What the user tagged in the question, as the turn resolved it. A skill
+    # is pinned to the version the user ran; history puts its SKILL.md before
+    # the question.
+    mentions: Mapped[list[RecordedMention]] = mapped_column(
+        PydanticListType(RecordedMention),
+        default=list,
+        server_default=text("'[]'::jsonb"),
+    )
 
     # Maps the citation numbers to a SearchDoc id
     citations: Mapped[dict[int, int] | None] = mapped_column(
@@ -3910,6 +3919,11 @@ class ChatInput(Base):
     # The model the composer showed when a queued or interrupting message was sent.
     llm_override: Mapped[LLMOverride | None] = mapped_column(
         PydanticType(LLMOverride), nullable=True
+    )
+    # What the user tagged in a queued or interrupting message; its turn
+    # resolves the mentions when it accepts the message.
+    mentions: Mapped[list[Mention]] = mapped_column(
+        PydanticListType(Mention), default=list, server_default=text("'[]'::jsonb")
     )
     max_steps: Mapped[int | None] = mapped_column(Integer, nullable=True)
     total_timeout_s: Mapped[float | None] = mapped_column(Float, nullable=True)

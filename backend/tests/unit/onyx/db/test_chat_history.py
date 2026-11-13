@@ -108,6 +108,7 @@ class TestConvertChatHistory:
                 cast(list[ChatMessage], chat_history), {}, lambda s: len(s)
             ),
             files=[user_image],
+            skill_instructions={},
         )
 
         user_messages = [m for m in result.messages if m.role == "user"]
@@ -146,6 +147,7 @@ class TestConvertChatHistory:
                 lambda s: len(s),
             ),
             files=[],
+            skill_instructions={},
         )
 
         tool_responses = [m for m in result.messages if m.role == "tool_result"]

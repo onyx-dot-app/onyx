@@ -1,5 +1,6 @@
 import re
 from typing import Any, Final
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
 
@@ -161,3 +162,13 @@ class GitHubSkillBundle(BaseModel):
     description: str | None
     bundle_bytes: bytes | None
     unavailable_reason: str | None = None
+
+
+class ChatSkill(BaseModel):
+    """A custom skill the user runs, at the version the user runs."""
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str
+    description: str
+    version_id: UUID

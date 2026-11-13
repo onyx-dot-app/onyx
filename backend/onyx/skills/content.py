@@ -1,12 +1,12 @@
 """Helpers for reading skill source content."""
 
-from collections.abc import Iterator
+from collections.abc import Collection, Iterator
 from pathlib import Path
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from onyx.db.plugin import get_stored_version_content
+from onyx.db.plugin import get_stored_version_content, get_visible_versions_skill_md
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore, get_default_file_store
@@ -20,6 +20,9 @@ from onyx.skills.bundle import (
 )
 from onyx.skills.models import CustomSkillBundleContents
 from onyx.skills.validation import read_stored_bundle_bytes
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 def iter_builtin_skill_files(source_dir: Path) -> Iterator[Path]:
@@ -92,3 +95,34 @@ def read_version_contents(
             stored.bundle_file_id, stored.name or str(version_id), file_store
         )
     )
+
+
+def read_versions_instructions(
+    version_ids: Collection[UUID],
+    user_id: UUID,
+    db_session: Session,
+) -> dict[UUID, str]:
+    """The SKILL.md instructions of each version whose skill the user can see
+    now, from one query. A version that stores no SKILL.md text (one copied
+    from a legacy skill row) opens its bundle. A version that is gone, hidden
+    from the user or unreadable is left out."""
+    if not version_ids:
+        return {}
+    instructions: dict[UUID, str] = {}
+    for version_id, stored in get_visible_versions_skill_md(
+        version_ids, user_id, db_session
+    ).items():
+        if stored.skill_md is not None:
+            instructions[version_id] = strip_skill_md_frontmatter(stored.skill_md)
+            continue
+        try:
+            instructions[version_id] = inspect_custom_bundle(
+                read_skill_bundle_blob(stored.bundle_file_id, str(version_id))
+            ).instructions_markdown
+        except OnyxError:
+            logger.warning(
+                "Could not read the bundle of skill version %s",
+                version_id,
+                exc_info=True,
+            )
+    return instructions

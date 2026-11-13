@@ -128,6 +128,7 @@ def restore_chat_agent(
             all_injected_file_metadata=state.file_metadata,
             inject_memories_in_prompt=state.inject_memories,
             reminders_enabled=state.reminders_enabled,
+            skills=state.skills,
             checkpoint=context.checkpoint,
             previous_run_id=snapshot.previous_run_id,
             agent_id=snapshot.agent_id,

@@ -516,7 +516,9 @@ def get_chat_session(
 
     # Convert messages to ChatMessageDetail format
     chat_message_details = [
-        translate_db_message_to_chat_message_detail(msg) for msg in session_messages
+        # A shared view does not show what the owner tagged in a question.
+        detail.model_copy(update={"mentions": []}) if is_shared else detail
+        for detail in map(translate_db_message_to_chat_message_detail, session_messages)
     ]
 
     current_stream: CurrentStreamInfo | None = None
@@ -1566,6 +1568,7 @@ def submit_pending_chat_message(
         and get_processing_stream_id(session_id, cache) is None,
         deep_research=body.deep_research,
         llm_override=body.llm_override,
+        mentions=body.mentions,
     )
     # The interrupt stops the turn running at commit, never the turn it starts.
     interrupted = current_turn_owner(session_id, cache)

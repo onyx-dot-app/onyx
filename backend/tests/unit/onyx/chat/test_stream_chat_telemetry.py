@@ -34,7 +34,9 @@ _USER_ID = "3f1c9a7e-0f38-4c3d-9a55-2d9e8a1b4c6d"
 
 
 def _packet() -> MessageResponseIDInfo:
-    return MessageResponseIDInfo(user_message_id=1, reserved_assistant_message_id=2)
+    return MessageResponseIDInfo(
+        mentions=[], user_message_id=1, reserved_assistant_message_id=2
+    )
 
 
 def _mock_user() -> Mock:

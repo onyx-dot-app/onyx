@@ -32,6 +32,7 @@ from onyx.chat.models import (
     ChatTurnSetup,
     IncognitoAgentResponse,
     IncognitoState,
+    PromptMetadata,
     SavedAgentContext,
 )
 from onyx.chat.presentation import project_response
@@ -94,6 +95,7 @@ def test_research_request_restores_a_chat_child_without_a_live_chat_root(
     setup.user_identity = LLMUserIdentity()
     setup.chat_files_for_tools = []
     setup.reasoning_effort = ReasoningEffort.AUTO
+    setup.chat_skills = []
     setup.all_injected_file_metadata = {}
     setup.incognito_record_mode = None
     configuration = ChatConfiguration(kind="chat")
@@ -442,3 +444,46 @@ def test_incognito_regeneration_preserves_results_before_selected_question() -> 
     assert messages[:2] == [search, image]
     assert search.metadata is None
     assert cached.messages[-1] is answer
+
+
+def test_incognito_regeneration_keeps_the_skills_before_its_question() -> None:
+    def skill(question_id: str) -> UserMessage:
+        return UserMessage(
+            id=f"{question_id}:skill:version",
+            content="<skill>triage</skill>",
+            metadata=PromptMetadata(skill_name="triage"),
+        )
+
+    earlier_answer = AssistantMessage(id="chat:16", content=[])
+    cached = IncognitoState(
+        messages=[
+            skill("chat:15"),
+            UserMessage(id="chat:15", content="Run triage"),
+            earlier_answer,
+            skill("chat:17"),
+            UserMessage(id="chat:17", content="Run triage again"),
+        ],
+        responses={
+            "16": IncognitoAgentResponse(
+                replay_digest="", run_id="prior", message_ids=["chat:16"]
+            )
+        },
+    )
+    # The content-free rows keep each skill's identity, so the branch names
+    # the earlier skill message.
+    canonical = [
+        skill("chat:15"),
+        UserMessage(id="chat:15", content=""),
+        earlier_answer,
+    ]
+    store = RedisChatHistoryStore(message_id=17, chat_session_id=uuid4())
+    with patch("onyx.chat.history_store.load_incognito_context", return_value=cached):
+        regenerated, _, _ = store.prepare_messages(
+            ChatHistoryResult(
+                messages=canonical, input_start=3, all_injected_file_metadata={}
+            ),
+            None,
+        )
+
+    assert regenerated.messages == cached.messages
+    assert regenerated.input_start == 3

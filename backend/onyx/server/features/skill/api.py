@@ -42,6 +42,7 @@ from onyx.db.skill import (
     enable_new_skill_if_name_available__no_commit,
     ensure_can_edit_org_visibility,
     fetch_skill,
+    list_chat_skills,
     list_review_requests,
     list_skills,
     publish_skill__no_commit,
@@ -113,7 +114,7 @@ from onyx.skills.ingest import (
 )
 from onyx.skills.ingest_from_github import fetch_github_skill_bundles
 from onyx.skills.metadata import parse_skill_document
-from onyx.skills.models import GITHUB_SKILL_MAX_COUNT
+from onyx.skills.models import GITHUB_SKILL_MAX_COUNT, ChatSkill
 from onyx.skills.push import push_skill_to_affected_sandboxes, push_skills_for_users
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -318,6 +319,15 @@ def list_skills_for_current_user(
         db_session=db_session,
     )
     return skills_list_response_for_user(rows, user, db_session)
+
+
+@user_router.get("/chat")
+def list_chat_skills_for_current_user(
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> list[ChatSkill]:
+    """The custom skills that the user's chat agents get, for the `@` picker."""
+    return list_chat_skills(db_session, user)
 
 
 @user_router.post("/bulk")

@@ -182,7 +182,7 @@ def _response_digest(response: ResponseRecord) -> str:
                 "steps": [step.model_dump(mode="json") for step in response.steps],
                 "answer_step_index": response.answer_step_index,
                 "input": [
-                    # The question is durable; attachment and request context live in the checkpoint.
+                    # The question is durable; attachment, skill and request context live in the checkpoint.
                     item.model_dump(mode="json")
                     for item in response.input_messages[-1:]
                 ],

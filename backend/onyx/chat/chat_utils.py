@@ -1,8 +1,9 @@
 """Chat session policy and conversion of saved history into model input."""
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from itertools import groupby
+from uuid import UUID
 
 from pydantic import JsonValue
 from sqlalchemy.orm import Session
@@ -15,6 +16,7 @@ from onyx.chat.incognito import (
     resolve_incognito_record_mode,
 )
 from onyx.chat.incognito_context import incognito_context_available
+from onyx.chat.mention_models import RecordedSkillMention
 from onyx.chat.models import (
     ChatHistoryMessage,
     ChatHistoryResult,
@@ -52,9 +54,15 @@ from onyx.llm.models import ToolCall as AgentToolCall
 from onyx.prompts.chat_prompts import (
     TOOL_CALL_RESPONSE_CROSS_MESSAGE,
 )
+from onyx.prompts.skill_prompts import (
+    MENTIONED_SKILL_PROMPT,
+    MENTIONED_SKILL_TRUNCATED_NOTE,
+    MENTIONED_SKILL_UNAVAILABLE,
+)
 from onyx.server.query_and_chat.models import (
     ChatSessionCreationRequest,
 )
+from onyx.skills.chat import MAX_SKILL_PROMPT_BYTES
 from onyx.tools.tool_implementations.images.models import ImageResult
 from onyx.utils.logger import setup_logger
 
@@ -333,6 +341,7 @@ def capture_chat_history(
                 token_count=message.token_count,
                 files=message.files or [],
                 is_clarification=message.is_clarification,
+                mentions=message.mentions or [],
                 response_messages=response_messages,
             )
         )
@@ -347,8 +356,11 @@ def capture_chat_history(
 def convert_chat_history(
     chat_history: list[ChatHistoryMessage],
     files: list[ChatLoadedFile],
+    skill_instructions: Mapping[UUID, str],
 ) -> ChatHistoryResult:
-    """Load canonical assistant output and attach user files to message history."""
+    """Load canonical assistant output and put user files and the SKILL.md of
+    each mentioned skill before their question. A skill version missing from
+    ``skill_instructions`` gets a note that the skill is unavailable."""
     messages: list[Message] = []
     all_injected_file_metadata: dict[str, FileToolMetadata] = {}
     input_start = 0
@@ -393,6 +405,40 @@ def convert_chat_history(
                 ctx.message.id = f"chat:{chat_message.id}:file:{fd['id']}"
                 messages.append(ctx.message)
                 all_injected_file_metadata[tool_id] = ctx.tool_metadata
+
+            # The SKILL.md of each skill the question mentioned, at its pinned
+            # version, is context for the question like an attachment.
+            for mention in chat_message.mentions:
+                match mention:
+                    case RecordedSkillMention(name=name, version_id=version_id):
+                        instructions = skill_instructions.get(version_id)
+                        if instructions is None:
+                            instructions = MENTIONED_SKILL_UNAVAILABLE
+                        elif (
+                            len(encoded := instructions.encode())
+                            > MAX_SKILL_PROMPT_BYTES
+                        ):
+                            kept = encoded[:MAX_SKILL_PROMPT_BYTES].decode(
+                                errors="ignore"
+                            )
+                            instructions = kept + MENTIONED_SKILL_TRUNCATED_NOTE.format(
+                                name=name, start_char=len(kept)
+                            )
+                        messages.append(
+                            UserMessage(
+                                id=f"chat:{chat_message.id}:skill:{version_id}",
+                                content=MENTIONED_SKILL_PROMPT.format(
+                                    name=name, instructions=instructions
+                                ),
+                                metadata=PromptMetadata(
+                                    skill_name=name,
+                                    compaction_text=(
+                                        f"Mentioned skill: {name}. "
+                                        "Instructions omitted from summary input."
+                                    ),
+                                ),
+                            )
+                        )
 
             # Count the images attached to this user message.
             image_token_count = (

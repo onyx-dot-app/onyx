@@ -3,6 +3,7 @@
 import threading
 from collections.abc import Callable, Generator, Sequence
 from unittest.mock import Mock, patch
+from uuid import uuid4
 
 import pytest
 import tiktoken
@@ -51,6 +52,7 @@ from onyx.agents.tools import (
 )
 from onyx.chat.chat_utils import convert_chat_history
 from onyx.chat.files import build_file_context
+from onyx.chat.mention_models import RecordedSkillMention
 from onyx.chat.models import ChatHistoryMessage, CheckpointBinding
 from onyx.chat.prompt_formatting import prompt_metadata
 from onyx.chat.prompt_utils import prepare_prompt
@@ -357,6 +359,7 @@ def test_compaction_replaces_attachment_body_with_file_reference() -> None:
 def test_summary_cutoff_survives_next_user_turn(long_question: bool) -> None:
     model = ContextModel()
     old_answer = ChatHistoryMessage(
+        mentions=[],
         id=1,
         message_type=MessageType.ASSISTANT,
         message="Old findings. " * 600,
@@ -370,6 +373,7 @@ def test_summary_cutoff_survives_next_user_turn(long_question: bool) -> None:
         ],
     )
     question = ChatHistoryMessage(
+        mentions=[],
         id=2,
         message_type=MessageType.USER,
         message="Current question. " * (160 if long_question else 1),
@@ -381,6 +385,7 @@ def test_summary_cutoff_survives_next_user_turn(long_question: bool) -> None:
     source = convert_chat_history(
         [old_answer, question],
         files=[],
+        skill_instructions={},
     ).messages
     checkpoint = compact_history(model, source, None, GenerationContext())
     assert checkpoint.covered_through_message_id == "old-answer"
@@ -389,6 +394,7 @@ def test_summary_cutoff_survives_next_user_turn(long_question: bool) -> None:
     reloaded = convert_chat_history(
         [old_answer, question, next_question],
         files=[],
+        skill_instructions={},
     ).messages
     restored_checkpoint = CompactionCheckpoint.model_validate_json(
         checkpoint.model_dump_json()
@@ -819,6 +825,7 @@ def test_image_replay_cost_controls_compaction_and_output_allowance(
         token_count=stored_image_tokens,
     )
     question = ChatHistoryMessage(
+        mentions=[],
         id=1,
         message_type=MessageType.USER,
         message=older_text,
@@ -847,6 +854,7 @@ def test_image_replay_cost_controls_compaction_and_output_allowance(
             ),
         ],
         files=[image],
+        skill_instructions={},
     ).messages
     original = [message.model_copy(deep=True) for message in history]
     model = ImageBudgetModel()
@@ -1001,6 +1009,48 @@ def test_truncation_preserves_the_user_task_before_an_agent_result() -> None:
         message.text for message in working_messages(source, checkpoint, input_start=1)
     ]
     assert size == input_limit
+
+
+def test_compaction_keeps_the_question_that_mentioned_a_skill() -> None:
+    version_id = uuid4()
+    question = ChatHistoryMessage(
+        id=1,
+        message_type=MessageType.USER,
+        message=TASK,
+        token_count=0,
+        files=[],
+        is_clarification=False,
+        mentions=[RecordedSkillMention(name="triage", version_id=version_id)],
+        response_messages=[],
+    )
+    source: list[Message] = [
+        *convert_chat_history(
+            [question], files=[], skill_instructions={version_id: "Sort by area."}
+        ).messages,
+        AssistantMessage(
+            id="work", content=[TextContent(text="Earlier research context. " * 1000)]
+        ),
+        UserMessage(
+            id="child-delivery",
+            content="Child research findings",
+            metadata=InputMessageMetadata(
+                source=InputSource.AGENT_RESULT, source_run_id="child"
+            ),
+        ),
+    ]
+
+    remaining = working_messages(
+        source,
+        CompactionCheckpoint(summary="Summary", covered_through_message_id="work"),
+        input_start=0,
+    )
+
+    # The question stays the user's task; its skill text is summarized away.
+    assert [message.text for message in remaining] == [
+        "Conversation summary:\nSummary",
+        TASK,
+        "Child research findings",
+    ]
 
 
 def test_truncation_validates_boundaries_once_across_candidates() -> None:

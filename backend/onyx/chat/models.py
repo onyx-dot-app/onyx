@@ -29,6 +29,7 @@ from onyx.agents.models import (
 from onyx.agents.tools import InputDecision
 from onyx.cache.interface import CacheBackend
 from onyx.chat.chat_processing_checker import ChatTurnAdmission
+from onyx.chat.mention_models import Mention, RecordedMention
 from onyx.configs.constants import MessageType
 from onyx.context.models import UserMemoryContext
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
@@ -61,6 +62,7 @@ from onyx.server.query_and_chat.streaming_models import (
     Packet,
     StreamingError,
 )
+from onyx.skills.models import ChatSkill
 from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles, SavedLoadedFile
 from onyx.tools.models import (
     ChatFile,
@@ -87,6 +89,7 @@ class PendingChatMessage(BaseModel):
     target_response_id: int | None
     deep_research: bool = False
     llm_override: LLMOverride | None = None
+    mentions: list[Mention]
 
 
 class QueuedChatTurn(BaseModel):
@@ -103,6 +106,8 @@ class PromptMetadata(CompactionMetadata):
     should_cache: bool = False
     file_id: str | None = None
     is_reminder: bool = False
+    # Set on the SKILL.md message before the question that invoked it.
+    skill_name: str | None = None
 
 
 class FileContextResult(BaseModel):
@@ -444,6 +449,7 @@ class ChatHistoryMessage(BaseModel):
     token_count: int
     files: list[FileDescriptor]
     is_clarification: bool
+    mentions: list[RecordedMention]
     response_messages: list[Message]
     checkpoint: CompactionCheckpoint | None = None
 
@@ -726,6 +732,7 @@ class ChatFeatureState(BaseModel):
     custom_prompt: str | None
     request_context: str | None = None
     reminders_enabled: bool
+    skills: list[ChatSkill] = []
 
     elapsed_seconds: float
     citation_sources: dict[int, SearchDoc]
@@ -762,6 +769,8 @@ class ChatTurnSetup(BaseModel):
     checkpoint: CompactionCheckpoint | None
     # Child-result delivery has no new user message.
     user_message_id: int | None
+    # The mentions recorded on the question, for its ID packet.
+    mentions: list[RecordedMention]
     user_identity: LLMUserIdentity
     responses: list[ReservedChatResponse]
     messages: list[Message]
@@ -782,6 +791,8 @@ class ChatTurnSetup(BaseModel):
     chat_files_for_tools: list[ChatFile]
     custom_agent_prompt: str | None
     user_memory_context: UserMemoryContext
+    # The custom skills the user runs, for the catalog and the skill tools.
+    chat_skills: list[ChatSkill]
     # For deep research: was the last assistant message a clarification request?
     skip_clarification: bool
     cache: CacheBackend

@@ -20,7 +20,7 @@ Functions here flush and never commit.
 """
 
 import hashlib
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Collection, Iterable, Mapping
 from dataclasses import dataclass
 from enum import Enum
 from typing import Literal
@@ -55,7 +55,10 @@ from onyx.db.models import (
     UserPluginPreference,
     UserSkillPreference,
 )
-from onyx.db.plugin_access import affected_user_ids_for_plugins
+from onyx.db.plugin_access import (
+    affected_user_ids_for_plugins,
+    plugin_visible_to_user,
+)
 from onyx.db.user_group import assert_not_shared_with_default_group
 from onyx.db.utils import (
     UNSET,
@@ -392,6 +395,42 @@ def get_stored_version_content(
         ),
         skill_md=skill_md,
     )
+
+
+@dataclass(frozen=True)
+class StoredSkillMd:
+    """The root SKILL.md text of a version, None for a version copied from a
+    legacy skill row, and the bundle that holds it."""
+
+    bundle_file_id: str | None
+    skill_md: str | None
+
+
+def get_visible_versions_skill_md(
+    version_ids: Collection[UUID], user_id: UUID, db_session: Session
+) -> dict[UUID, StoredSkillMd]:
+    """The SKILL.md of each version whose plugin the user can see now, in one
+    query. A version that is gone or hidden from the user is left out."""
+    rows = db_session.execute(
+        select(PluginVersion.id, PluginVersion.bundle_file_id, PluginSkill.skill_md)
+        .join(Plugin, Plugin.id == PluginVersion.plugin_id)
+        .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
+        .outerjoin(
+            PluginSkill,
+            and_(
+                PluginSkill.plugin_version_id == PluginVersion.id,
+                PluginSkill.path == "",
+            ),
+        )
+        .where(
+            PluginVersion.id.in_(version_ids),
+            plugin_visible_to_user(Plugin, Marketplace, user_id),
+        )
+    )
+    return {
+        version_id: StoredSkillMd(bundle_file_id=bundle_file_id, skill_md=skill_md)
+        for version_id, bundle_file_id, skill_md in rows
+    }
 
 
 def get_plugin_current_version_id(plugin_id: UUID, db_session: Session) -> UUID | None:

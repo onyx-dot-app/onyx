@@ -59,6 +59,7 @@ from onyx.llm.models import (
     Message,
     NamedToolChoice,
     ReasoningEffort,
+    SystemMessage,
     ToolChoiceOptions,
     ToolResult,
     ToolResultMessage,
@@ -69,6 +70,8 @@ from onyx.prompts.chat_prompts import (
     ROOT_AGENT_INSTRUCTIONS,
     SUBAGENT_INSTRUCTIONS,
 )
+from onyx.skills.chat import render_skills_catalog
+from onyx.skills.models import ChatSkill
 from onyx.tools.constants import PYTHON_TOOL_NAME
 from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles
 from onyx.tools.interface import Tool
@@ -120,6 +123,7 @@ class ChatAgent(Agent, RestorableFeature):
         is_subagent: bool = False,
         create_subagent: Callable[[], Agent] | None = None,
         can_spawn: bool = True,
+        skills: list[ChatSkill] | None = None,
     ) -> None:
         # The fixed system block for the agent's role: a subagent, or a root
         # that can start agents.
@@ -135,6 +139,17 @@ class ChatAgent(Agent, RestorableFeature):
         self.context_files = context_files.model_copy(deep=True)
         self.token_counter = token_counter
         self.file_metadata = all_injected_file_metadata
+        self.skills = list(skills or [])
+        self.skills_catalog_message = (
+            SystemMessage(content=catalog)
+            if (
+                catalog := render_skills_catalog(
+                    self.skills, llm.config.max_input_tokens
+                )
+            )
+            is not None
+            else None
+        )
         # The tools the chat is configured with; restored and child agents receive
         # them, and code mode applies per agent.
         self.configured_tools = list(tools)
@@ -249,6 +264,7 @@ class ChatAgent(Agent, RestorableFeature):
             custom_prompt=self.custom_agent_prompt,
             request_context=self.additional_context,
             reminders_enabled=self.reminders_enabled,
+            skills=self.skills,
             elapsed_seconds=max(0.0, time.monotonic() - self.started),
             citation_sources=self.citation_processor.citation_to_doc,
             citation_mapping=self.citation_mapping,
@@ -274,6 +290,7 @@ class ChatAgent(Agent, RestorableFeature):
             or saved.custom_prompt != self.custom_agent_prompt
             or saved.request_context != self.additional_context
             or saved.reminders_enabled != self.reminders_enabled
+            or saved.skills != self.skills
         ):
             raise ValueError("Chat restoration configuration does not match")
         self.search_context = saved.search_context
@@ -391,6 +408,7 @@ class ChatAgent(Agent, RestorableFeature):
                 agent_instructions=self.agent_instructions,
                 system_prompt=prompt.system_prompt,
                 user_info_prompt=prompt.user_info_prompt,
+                skills_catalog_message=self.skills_catalog_message,
                 custom_agent_prompt=prompt.custom_prompt,
                 reminder_message=prompt.reminder,
                 request_context_message=UserMessage(
@@ -547,6 +565,7 @@ def build_chat_agent(
         include_citations=setup.new_msg_req.include_citations,
         all_injected_file_metadata=setup.all_injected_file_metadata,
         inject_memories_in_prompt=inject_memories,
+        skills=setup.chat_skills,
     )
 
 

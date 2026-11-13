@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from onyx.agents.models import MessageDelivery, RunStatus
+from onyx.chat.mention_models import Mention, RecordedMention
 from onyx.configs.constants import DocumentSource, MessageType, SessionType
 from onyx.context.search.models import BaseFilters, SavedSearchDoc, SearchDoc, Tag
 from onyx.db.enums import ChatSessionSharedStatus
@@ -36,6 +37,8 @@ class MessageOrigin(str, Enum):
 class MessageResponseIDInfo(BaseModel):
     user_message_id: int | None
     reserved_assistant_message_id: int
+    # What the question tagged, as its turn resolved it.
+    mentions: list[RecordedMention]
 
 
 class ModelResponseSlot(BaseModel):
@@ -51,19 +54,25 @@ class MultiModelMessageResponseIDInfo(BaseModel):
 
     user_message_id: int | None
     responses: list[ModelResponseSlot]
+    mentions: list[RecordedMention]
 
 
 def response_id_info(
-    user_message_id: int | None, responses: list[ModelResponseSlot]
+    user_message_id: int | None,
+    responses: list[ModelResponseSlot],
+    mentions: list[RecordedMention],
 ) -> "MessageResponseIDInfo | MultiModelMessageResponseIDInfo":
     """The packet that names a turn's saved question and reserved responses."""
     if len(responses) > 1:
         return MultiModelMessageResponseIDInfo(
-            user_message_id=user_message_id, responses=responses
+            user_message_id=user_message_id,
+            responses=responses,
+            mentions=mentions,
         )
     return MessageResponseIDInfo(
         user_message_id=user_message_id,
         reserved_assistant_message_id=responses[0].message_id,
+        mentions=mentions,
     )
 
 
@@ -141,6 +150,16 @@ class SendMessageRequest(BaseModel):
         return data
 
     file_descriptors: list[FileDescriptor] = []
+
+    mentions: list[Mention] = Field(
+        default_factory=list,
+        description=(
+            "What the user tagged in this message with `@`. A `skill` mention "
+            "names a chat skill; its SKILL.md goes to the model before the "
+            "question. Skills the user cannot use are ignored, and the message "
+            "text never tags anything."
+        ),
+    )
 
     internal_search_filters: BaseFilters | None = None
 
@@ -244,6 +263,14 @@ class PendingChatMessageRequest(BaseModel):
             "ignores it."
         ),
     )
+    mentions: list[Mention] = Field(
+        default_factory=list,
+        description=(
+            "What the user tagged in a queued or interrupting message with `@`. "
+            "Its turn ignores skills the user cannot use. A send into a running "
+            "response ignores them."
+        ),
+    )
 
     @field_validator("message")
     @classmethod
@@ -323,6 +350,8 @@ class ChatMessageDetail(BaseModel):
     citations: dict[int, str] | None = None
     time_sent: datetime
     files: list[FileDescriptor]
+    # What a question tagged, as its turn resolved it.
+    mentions: list[RecordedMention]
     error: str | None = None
     error_info: StreamingError | None = None
     response_status: RunStatus | None = None

@@ -1,5 +1,7 @@
 """Rebuild feature configuration and resources without replacing saved conversation state."""
 
+from uuid import uuid4
+
 import pytest
 from pydantic import JsonValue
 
@@ -29,8 +31,14 @@ from onyx.llm.models import (
     ToolChoiceOptions,
     UserMessage,
 )
+from onyx.skills.models import ChatSkill
 from onyx.tools.constants import WAIT_CODE_TOOL_NAME
+from onyx.tools.interface import Tool
 from onyx.tools.tool_implementations.code_mode.code_mode_tool import CodeModeTool
+from onyx.tools.tool_implementations.skills.skill_tools import (
+    SkillsListTool,
+    SkillsReadTool,
+)
 from tests.unit.onyx.agents.fakes import (
     EchoTool,
     FakeModelClient,
@@ -254,10 +262,17 @@ def _offered(llm: ScriptedLLM) -> tuple[list[str], ToolChoiceOptions, str]:
     )
 
 
-def _chat_agent(llm: ScriptedLLM, *, code_mode: bool = False) -> ChatAgent:
+def _chat_agent(
+    llm: ScriptedLLM,
+    *,
+    code_mode: bool = False,
+    tools: list[Tool] | None = None,
+    skills: list[ChatSkill] | None = None,
+) -> ChatAgent:
     return ChatAgent(
         messages=[],
-        tools=[EchoTool()],
+        tools=tools or [EchoTool()],
+        skills=skills,
         code_mode=code_mode,
         custom_agent_prompt=None,
         base_system_prompt="Base instructions",
@@ -337,3 +352,28 @@ def test_restored_chat_keeps_the_saved_code_mode(
     ]
     assert choice == ToolChoiceOptions.AUTO
     assert f"selected these operations for this request: {preferred}." in request_text
+
+
+def test_restored_chat_offers_the_skill_tools_once() -> None:
+    # Restoration receives the turn's configured tools, skill tools included.
+    llm = ScriptedLLM([Delta(content="done")])
+    skills = [ChatSkill(name="triage", description="Sort.", version_id=uuid4())]
+    original = _chat_agent(
+        llm,
+        tools=[EchoTool(), SkillsListTool(skills), SkillsReadTool(skills, uuid4())],
+        skills=skills,
+    )
+    state = original.capture_state().model_dump(mode="json")
+
+    rebuilt = restore_chat_agent(
+        _suspended(original, state),
+        llm=llm,
+        tools=original.configured_tools,
+        user_identity=None,
+    )
+    assert isinstance(rebuilt, ChatAgent)
+    rebuilt.restore_state(state)
+    run_agent(rebuilt, max_steps=3, messages=[UserMessage(content="Go")])
+
+    names, _, _ = _offered(llm)
+    assert names == [EchoTool().name, "skills_list", "skills_read"]
