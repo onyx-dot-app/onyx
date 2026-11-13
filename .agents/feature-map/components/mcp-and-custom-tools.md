@@ -191,7 +191,9 @@ Policy precedence is in [[craft-external-apps]].
    member route `user_list_mcp_tools_by_id` discovers but never writes. OpenAPI
    tools need no sync. The same sync saves the tool's declared `outputSchema`
    in `Tool.mcp_output_schema`, and sets it to NULL when the server declares
-   none.
+   none. It also saves `annotations.readOnlyHint` in `Tool.mcp_read_only` (NULL
+   when absent), which sets the Craft default policy
+   ([[craft-external-apps]]).
 6. `sync-matches-by-name` **Sync matches tools by name.**
    `server/features/mcp/api.py:_sync_mcp_server_tools` treats a tool that the
    remote server renames as a new tool: it is deleted and inserted again with

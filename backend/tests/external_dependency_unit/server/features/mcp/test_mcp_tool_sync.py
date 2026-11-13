@@ -11,6 +11,7 @@ from uuid import uuid4
 
 import pytest
 from mcp.types import Tool as MCPLibTool
+from mcp.types import ToolAnnotations
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -157,3 +158,46 @@ def test_sync_stores_updates_and_clears_the_output_schema(
     assert sync_and_read(first) == first
     assert sync_and_read(second) == second
     assert sync_and_read(None) is None
+
+
+def test_sync_stores_and_updates_the_read_only_hint(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    server = _make_server(db_session)
+
+    def sync_and_read(hints: dict[str, bool | None]) -> dict[str, bool | None]:
+        tools = [
+            MCPLibTool(
+                name=name,
+                inputSchema={},
+                annotations=None
+                if hint is None
+                else ToolAnnotations(readOnlyHint=hint),
+            )
+            for name, hint in hints.items()
+        ]
+        mcp_api._sync_mcp_server_tools(server.id, tools, db_session)
+        db_session.expire_all()
+        return {
+            t.name: t.mcp_read_only
+            for t in get_tools_by_mcp_server_id(server.id, db_session)
+        }
+
+    assert sync_and_read({"read": True, "write": False, "plain": None}) == {
+        "read": True,
+        "write": False,
+        "plain": None,
+    }
+    assert sync_and_read({"read": False, "write": True, "plain": True}) == {
+        "read": False,
+        "write": True,
+        "plain": True,
+    }
+    titled_only = MCPLibTool(
+        name="read", inputSchema={}, annotations=ToolAnnotations(title="Read")
+    )
+    mcp_api._sync_mcp_server_tools(server.id, [titled_only], db_session)
+    db_session.expire_all()
+    (stored,) = get_tools_by_mcp_server_id(server.id, db_session)
+    assert stored.mcp_read_only is None
