@@ -219,10 +219,16 @@ class StreamText:
         if out := decoder.decode(data):
             self.on_output(stream, out)
 
+    def gap(self, stream: str) -> None:
+        """Bytes were dropped: end the partial character so no new one forms."""
+        if (decoder := self.decoders.pop(stream, None)) and (
+            out := decoder.decode(b"", final=True)
+        ):
+            self.on_output(stream, out)
+
     def flush(self) -> None:
-        for stream, decoder in self.decoders.items():
-            if out := decoder.decode(b"", final=True):
-                self.on_output(stream, out)
+        for stream in list(self.decoders):
+            self.gap(stream)
 
 
 def _run(
@@ -245,6 +251,7 @@ def _run(
         if isinstance(event, ExecOutput):
             text.feed(event.stream.value.lower(), event.data)
         elif isinstance(event, ExecGap):
+            text.gap(event.stream.value.lower())
             on_output("stderr", f"[{event.end - event.start} bytes dropped]\n")
         elif isinstance(event, ExecResult):
             result = {

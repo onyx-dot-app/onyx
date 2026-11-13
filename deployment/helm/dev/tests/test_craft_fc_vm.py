@@ -275,6 +275,19 @@ class HelperProtocolTest(unittest.TestCase):
             ],
         )
 
+    def test_gap_ends_a_partial_character(self) -> None:
+        seen: list[tuple[str, str]] = []
+        text = helper.StreamText(lambda stream, out: seen.append((stream, out)))
+        snow = "\u2603".encode()
+        text.feed("stdout", b"a" + snow[:1])
+        text.gap("stdout")
+        text.feed("stdout", snow[1:] + b"b")
+        text.flush()
+        shown = "".join(out for _, out in seen)
+        self.assertNotIn("\u2603", shown)
+        self.assertEqual(seen[:2], [("stdout", "a"), ("stdout", "\ufffd")])
+        self.assertTrue(shown.endswith("b"))
+
     def test_helper_file_compiles(self) -> None:
         compile(vm.HELPER.read_bytes(), str(vm.HELPER), "exec")
 
