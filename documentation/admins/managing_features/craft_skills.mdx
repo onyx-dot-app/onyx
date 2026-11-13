@@ -251,6 +251,19 @@ Admins set how a shared Skill is installed for everyone with access:
 
 The policy follows the current audience; changing who can access the Skill does not reset it.
 
+### Two Skills with the same name
+
+A Craft session can use only one Skill for each name. If two Skills that a user has on have the same name,
+Onyx uses one of them in this order:
+
+1. A built-in Skill.
+2. A Skill that is **Required** for the user.
+3. A Skill published to the organization.
+4. The user's own Skill.
+5. A Skill shared with the user.
+
+If the two Skills are equal in this order, Onyx uses the older one. The other Skill shows as off.
+
 ## Maintain a Skill
 
 Open a custom Skill to manage its lifecycle:
@@ -334,6 +347,11 @@ Configure access once before importing the batch. Onyx reports invalid bundles s
 <Accordion title="Users cannot find a shared Skill">
   Confirm that the Skill is enabled and that the user or one of their groups has **Can use** or **Can edit** access.
   If it was shared during an active session, start a new turn or session and check the picker again.
+</Accordion>
+
+<Accordion title="A Skill is on but Craft uses a different Skill">
+  Another Skill the user has on probably has the same name. Onyx uses one Skill for each name.
+  See [Two Skills with the same name](#two-skills-with-the-same-name). Turn off the Skill that you do not want.
 </Accordion>
 
 <Accordion title="Craft does not choose the Skill automatically">

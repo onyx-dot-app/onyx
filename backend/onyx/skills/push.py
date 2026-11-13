@@ -15,8 +15,6 @@ from onyx.db.skill import (
     list_runtime_skills_for_user,
     persist_skill_validity,
 )
-from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.db.sandbox import (
     get_sandbox_user_map,
@@ -206,12 +204,13 @@ def _resolve_skill_dirs(files: FileSet, skill_names: Iterable[str]) -> None:
         ).encode("utf-8")
 
 
-def _assemble_fileset(
+def _assemble(
     skills: Iterable[RuntimeSkill],
     user: User,
     db_session: Session,
-) -> FileSet:
-    """Return the hydrated skills as a flat ``{path: bytes}`` map.
+) -> tuple[FileSet, set[UUID]]:
+    """Return the hydrated skills as a flat ``{path: bytes}`` map, and the
+    skills whose version lazy validation found invalid.
 
     Built-ins render from disk. A custom skill sends the bundle of the plugin
     version the user runs, in a folder named by that version's frontmatter.
@@ -219,22 +218,21 @@ def _assemble_fileset(
     FileStore bundle is unpacked. Invalid, indeterminate, and unknown built-in
     rows are skipped.
     """
-    skills = list(skills)
-    seen_names: set[str] = set()
-    for runtime_skill in skills:
-        if runtime_skill.name in seen_names:
-            raise OnyxError(
-                OnyxErrorCode.INTERNAL_ERROR,
-                f"Multiple enabled skills are named '{runtime_skill.name}'.",
-            )
-        seen_names.add(runtime_skill.name)
 
     files: FileSet = {}
+    seen_names: set[str] = set()
     validity_updates: list[SkillValidityUpdate] = []
     file_store = get_default_file_store()
 
     for runtime_skill in skills:
         skill = runtime_skill.skill
+        name = runtime_skill.name
+        if name in seen_names:
+            logger.warning(
+                "Skipping skill %s: another skill is named '%s'", skill.id, name
+            )
+            continue
+        seen_names.add(name)
         if skill.built_in_skill_id is None:
             version = runtime_skill.version
             if version is None or version.is_valid is False:
@@ -298,13 +296,36 @@ def _assemble_fileset(
         persist_skill_validity(validity_updates)
     except Exception:
         logger.exception("Failed to persist skill validity classifications")
-    return files
+    return files, {
+        update.skill_id for update in validity_updates if update.is_valid is False
+    }
+
+
+def _assemble_fileset(
+    skills: Iterable[RuntimeSkill],
+    user: User,
+    db_session: Session,
+) -> FileSet:
+    return _assemble(skills, user, db_session)[0]
 
 
 def build_skills_fileset_for_user(user: User, db_session: Session) -> FileSet:
-    """Return a flat ``{path: bytes}`` map of every skill the user can see."""
-    skills = list_runtime_skills_for_user(user=user, db_session=db_session)
-    return _assemble_fileset(skills, user, db_session)
+    """Return a flat ``{path: bytes}`` map of every skill the user can see.
+
+    An unvalidated version can keep a skill name and hide a valid skill with
+    that name. When it fails validation, the next pass leaves it out of the
+    name order, so the name goes to the next skill. A pass runs again only
+    when it finds a new invalid version, so the passes end.
+    """
+    invalid: set[UUID] = set()
+    while True:
+        skills = list_runtime_skills_for_user(
+            user=user, db_session=db_session, left_out=invalid
+        )
+        files, found_invalid = _assemble(skills, user, db_session)
+        if found_invalid <= invalid:
+            return files
+        invalid |= found_invalid
 
 
 def build_user_skills_payload(user: User, db_session: Session) -> tuple[str, FileSet]:
@@ -313,8 +334,7 @@ def build_user_skills_payload(user: User, db_session: Session) -> tuple[str, Fil
     The connectable-apps section lists org apps the user has not connected yet,
     so the agent can offer to set one up through the connect tool.
     """
-    skills = list_runtime_skills_for_user(user=user, db_session=db_session)
-    files = _assemble_fileset(skills, user, db_session)
+    files = build_skills_fileset_for_user(user, db_session)
     connectable_apps_section = build_connectable_apps_list(
         get_connectable_apps_for_user(db_session, user)
     )

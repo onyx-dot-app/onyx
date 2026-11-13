@@ -12,8 +12,15 @@ The rule, once:
 - Install setting for a user: the company setting is the plugin's own setting,
   else its marketplace default. Each of the user's groups gives its own setting,
   else the company setting. The most open one wins; a user in no group gets the
-  company setting. Default groups do not count. A share (user or group) gives
-  at least AVAILABLE.
+  company setting. Default groups do not count. The author and a share (user
+  or group) get at least AVAILABLE.
+- Enabled: REQUIRED is on. DEFAULT is on unless the user turned it off.
+  AVAILABLE is on only when the user turned it on. A hidden plugin is off; its
+  saved choice stays.
+- Name order: when two enabled plugins of a user hold one skill name, a
+  built-in skill keeps it, then a plugin REQUIRED for the user, then a
+  published plugin, then the user's own, then a shared one. The older plugin
+  wins a tie.
 - Version a user runs: the author and share recipients run current_version_id.
   Users who see the plugin only through the organization run
   published_version_id, or current_version_id when it is empty.
@@ -23,10 +30,13 @@ aliases of them) and a user id, which can be a value or a column, so one query
 can compute access for many users or many plugins.
 """
 
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
 from dataclasses import dataclass
+from datetime import datetime
+from enum import IntEnum
 from uuid import UUID
 
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import (
     ColumnElement,
     and_,
@@ -34,9 +44,12 @@ from sqlalchemy import (
     func,
     or_,
     select,
+    true,
 )
+from sqlalchemy.dialects.postgresql import aggregate_order_by
 from sqlalchemy.orm import InstrumentedAttribute, Session, aliased
 from sqlalchemy.sql.elements import KeyedColumnElement
+from sqlalchemy.sql.selectable import Select, Subquery
 
 from onyx.db.enums import (
     MarketplaceKind,
@@ -44,6 +57,7 @@ from onyx.db.enums import (
     SandboxStatus,
     SkillSharePermission,
 )
+from onyx.db.external_app_readiness import app_dependency_states, waits_for_app
 from onyx.db.models import (
     Marketplace,
     Plugin,
@@ -55,6 +69,7 @@ from onyx.db.models import (
     User,
     User__UserGroup,
     UserGroup,
+    UserPluginPreference,
 )
 
 UserIdExpr = UUID | ColumnElement[UUID] | InstrumentedAttribute[UUID]
@@ -72,7 +87,11 @@ def policy_rank(policy: PluginInstallationPolicy) -> int:
     return _POLICY_RANK[policy]
 
 
-def _rank_of(policy: ColumnElement[PluginInstallationPolicy]) -> ColumnElement[int]:
+def _rank_of(
+    policy: ColumnElement[PluginInstallationPolicy]
+    | ColumnElement[PluginInstallationPolicy | None]
+    | InstrumentedAttribute[PluginInstallationPolicy | None],
+) -> ColumnElement[int]:
     return case(_POLICY_RANK, value=policy)
 
 
@@ -115,90 +134,39 @@ def plugin_shared_with_user(
     return or_(user_share.exists(), group_share.exists())
 
 
-def _setting_rank_for_user(
-    plugin: type[Plugin], marketplace: type[Marketplace], user_id: UserIdExpr
+def _with_share_floor(
+    rank: ColumnElement[int], granted: ColumnElement[bool]
 ) -> ColumnElement[int]:
-    """Rank of the install setting before the share floor. Default groups
-    (Basic, Admin) do not count: Basic holds the whole organization, so it
-    would always give the company setting. Plugins cannot be shared with them
-    either."""
-    company = company_installation_policy(plugin, marketplace)
-    group_setting = (
-        select(Plugin__UserGroup.installation_policy)
-        .where(
-            Plugin__UserGroup.plugin_id == plugin.id,
-            Plugin__UserGroup.user_group_id == User__UserGroup.user_group_id,
-        )
-        .correlate_except(Plugin__UserGroup)
-        .scalar_subquery()
-    )
-    most_open_group = (
-        select(func.max(_rank_of(func.coalesce(group_setting, company))))
-        .select_from(User__UserGroup)
-        .join(UserGroup, UserGroup.id == User__UserGroup.user_group_id)
-        .where(User__UserGroup.user_id == user_id, UserGroup.is_default.is_(False))
-        .correlate_except(User__UserGroup, UserGroup)
-        .scalar_subquery()
-    )
-    return func.coalesce(most_open_group, _rank_of(company))
-
-
-def installation_rank_for_user(
-    plugin: type[Plugin], marketplace: type[Marketplace], user_id: UserIdExpr
-) -> ColumnElement[int]:
-    """Rank (see ``policy_rank``) of the install setting that applies to the
-    user. A share gives at least AVAILABLE."""
-    rank = _setting_rank_for_user(plugin, marketplace, user_id)
+    """The author and a share (``granted``) get at least AVAILABLE."""
     return case(
-        (
-            plugin_shared_with_user(plugin, user_id),
-            func.greatest(rank, policy_rank(PluginInstallationPolicy.AVAILABLE)),
-        ),
+        (granted, func.greatest(rank, policy_rank(PluginInstallationPolicy.AVAILABLE))),
         else_=rank,
     )
 
 
-def plugin_visible_to_user(
-    plugin: type[Plugin], marketplace: type[Marketplace], user_id: UserIdExpr
+def _visible(
+    granted: ColumnElement[bool],
+    published: ColumnElement[bool],
+    setting_rank: ColumnElement[int],
 ) -> ColumnElement[bool]:
     return or_(
-        plugin.author_user_id == user_id,
-        plugin_shared_with_user(plugin, user_id),
+        granted,
         and_(
-            marketplace.kind == MarketplaceKind.ORGANIZATION_LIBRARY,
-            _setting_rank_for_user(plugin, marketplace, user_id)
-            > policy_rank(PluginInstallationPolicy.NOT_AVAILABLE),
+            published,
+            setting_rank > policy_rank(PluginInstallationPolicy.NOT_AVAILABLE),
         ),
     )
 
 
-def affected_user_ids_for_plugins(
-    plugin_ids: Iterable[UUID], db_session: Session
-) -> set[UUID]:
-    """Users with a running sandbox who can see at least one of the plugins, in
-    one query. Ignores user choices, so a change that removes access still
-    reaches the users who had it."""
-    ids = sorted(set(plugin_ids))
-    if not ids:
-        return set()
-    plugin: type[Plugin] = aliased(Plugin)
-    marketplace: type[Marketplace] = aliased(Marketplace)
-    visible = (
-        select(plugin.id)
-        .join(marketplace, marketplace.id == plugin.marketplace_id)
-        .where(
-            plugin.id.in_(ids),
-            plugin_visible_to_user(plugin, marketplace, Sandbox.user_id),
-        )
-        .correlate_except(plugin, marketplace)
-        .exists()
-    )
-    return set(
-        db_session.scalars(
-            select(Sandbox.user_id).where(
-                Sandbox.status == SandboxStatus.RUNNING, visible
-            )
-        )
+def _version_for(
+    granted: ColumnElement[bool],
+    current_version_id: ColumnElement[UUID] | InstrumentedAttribute[UUID],
+    published_version_id: ColumnElement[UUID | None]
+    | InstrumentedAttribute[UUID | None],
+) -> ColumnElement[UUID]:
+    return case(
+        (granted, current_version_id),
+        else_=func.coalesce(published_version_id, current_version_id),
     )
 
 
@@ -212,15 +180,13 @@ def plugin_editable_by_user(
 
 
 def version_user_runs(plugin: type[Plugin], user_id: UserIdExpr) -> ColumnElement[UUID]:
-    return case(
-        (
-            or_(
-                plugin.author_user_id == user_id,
-                plugin_shared_with_user(plugin, user_id),
-            ),
-            plugin.current_version_id,
+    return _version_for(
+        or_(
+            plugin.author_user_id == user_id,
+            plugin_shared_with_user(plugin, user_id),
         ),
-        else_=func.coalesce(plugin.published_version_id, plugin.current_version_id),
+        plugin.current_version_id,
+        plugin.published_version_id,
     )
 
 
@@ -247,6 +213,320 @@ def version_is_valid(version_id: ColumnElement[UUID]) -> ColumnElement[bool | No
         .correlate_except(PluginVersion)
         .scalar_subquery()
     )
+
+
+# --- Install settings and choices of many users -----------------------------
+
+_POLICY_OF_RANK: dict[int, PluginInstallationPolicy] = {
+    rank: policy for policy, rank in _POLICY_RANK.items()
+}
+
+
+class SkillNameRank(IntEnum):
+    """Who keeps a skill name that two enabled skills of a user hold. Lower
+    wins."""
+
+    REQUIRED = 0
+    PUBLISHED = 1
+    OWN = 2
+    SHARED = 3
+
+
+class UserPluginState(BaseModel):
+    """One plugin that one user can see, as that user gets it."""
+
+    model_config = ConfigDict(frozen=True)
+
+    user_id: UUID
+    plugin_id: UUID
+    # The install setting for the user, with the author and share floor.
+    installation_policy: PluginInstallationPolicy
+    published: bool
+    is_author: bool
+    # The version the user runs, its bundle and its lazy validity.
+    version_id: UUID
+    bundle_file_id: str | None
+    version_is_valid: bool | None
+    # The user's choice under the setting, before the name order.
+    enabled: bool
+    # Enabled, the version is not invalid, and the app it needs, if any, is
+    # ready for the user.
+    can_run: bool
+    created_at: datetime
+    # Names from the plugin_skill rows of the version the user runs, by path.
+    skill_names: tuple[str, ...]
+
+    @property
+    def name_rank(self) -> SkillNameRank:
+        if self.installation_policy == PluginInstallationPolicy.REQUIRED:
+            return SkillNameRank.REQUIRED
+        if self.published:
+            return SkillNameRank.PUBLISHED
+        if self.is_author:
+            return SkillNameRank.OWN
+        return SkillNameRank.SHARED
+
+
+def _user_plugin_pairs(
+    user_filter: ColumnElement[bool], plugin_ids: list[UUID] | None
+) -> Subquery:
+    """Each user (``user_filter`` on the user table) with each plugin the user
+    can see, or only those of ``plugin_ids``. The one place that applies the
+    install setting rule to users.
+
+    Reads the share rows and group settings once for each pair, through joins.
+    Correlated subqueries repeat for each column that uses them; on tables with
+    no statistics, that plan costs more than ``jit_above_cost``, and each
+    backend that JIT-compiles it keeps about 30 MB."""
+    user_id: KeyedColumnElement[UUID] = User.__table__.c.id
+    company = company_installation_policy(Plugin, Marketplace)
+    company_rank = _rank_of(company)
+    # Group rows are aggregated once for the filtered users and joined to each
+    # pair by hash, so a call for many users stays under jit_above_cost on
+    # tables with no statistics.
+    filtered_users = select(user_id).where(user_filter).correlate(None)
+    group_policy_rank = case(
+        (
+            and_(
+                UserGroup.is_default.is_(False),
+                Plugin__UserGroup.installation_policy.is_not(None),
+            ),
+            _rank_of(Plugin__UserGroup.installation_policy),
+        )
+    )
+    group_rows = (
+        select(
+            User__UserGroup.user_id.label("user_id"),
+            Plugin__UserGroup.plugin_id.label("plugin_id"),
+            func.bool_or(Plugin__UserGroup.permission.is_not(None)).label("shared"),
+            # Most open setting of the non-default groups that give their own.
+            func.max(group_policy_rank).label("max_rank"),
+            func.count(group_policy_rank).label("setting_groups"),
+        )
+        .join(
+            User__UserGroup,
+            User__UserGroup.user_group_id == Plugin__UserGroup.user_group_id,
+        )
+        .join(UserGroup, UserGroup.id == User__UserGroup.user_group_id)
+        .where(User__UserGroup.user_id.in_(filtered_users))
+        .group_by(User__UserGroup.user_id, Plugin__UserGroup.plugin_id)
+        .subquery("group_rows")
+    )
+    user_groups = (
+        select(
+            User__UserGroup.user_id.label("user_id"),
+            func.count().label("groups"),
+        )
+        .join(UserGroup, UserGroup.id == User__UserGroup.user_group_id)
+        .where(
+            User__UserGroup.user_id.in_(filtered_users),
+            UserGroup.is_default.is_(False),
+        )
+        .group_by(User__UserGroup.user_id)
+        .subquery("user_groups")
+    )
+    # A non-default group with no setting of its own gives the company one.
+    setting_rank = case(
+        (func.coalesce(user_groups.c.groups, 0) == 0, company_rank),
+        (
+            func.coalesce(group_rows.c.setting_groups, 0) < user_groups.c.groups,
+            func.greatest(group_rows.c.max_rank, company_rank),
+        ),
+        else_=group_rows.c.max_rank,
+    )
+    grants = (
+        select(
+            user_id.label("user_id"),
+            Plugin.id.label("plugin_id"),
+            Plugin.created_at.label("created_at"),
+            (Marketplace.kind == MarketplaceKind.ORGANIZATION_LIBRARY).label(
+                "published"
+            ),
+            func.coalesce(Plugin.author_user_id == user_id, False).label("is_author"),
+            or_(
+                Plugin__User.plugin_id.is_not(None),
+                func.coalesce(group_rows.c.shared, False),
+            ).label("shared"),
+            setting_rank.label("setting_rank"),
+            Plugin.current_version_id.label("current_version_id"),
+            Plugin.published_version_id.label("published_version_id"),
+        )
+        .select_from(User.__table__)
+        .join(Plugin, true())
+        .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
+        .outerjoin(
+            Plugin__User,
+            and_(Plugin__User.plugin_id == Plugin.id, Plugin__User.user_id == user_id),
+        )
+        .outerjoin(
+            group_rows,
+            and_(group_rows.c.user_id == user_id, group_rows.c.plugin_id == Plugin.id),
+        )
+        .outerjoin(user_groups, user_groups.c.user_id == user_id)
+        .where(user_filter)
+    )
+    if plugin_ids is not None:
+        grants = grants.where(Plugin.id.in_(plugin_ids))
+    g = grants.subquery("pair_grants")
+    granted = or_(g.c.is_author, g.c.shared)
+    return (
+        select(
+            g.c.user_id,
+            g.c.plugin_id,
+            g.c.created_at,
+            g.c.published,
+            g.c.is_author,
+            _with_share_floor(g.c.setting_rank, granted).label("rank"),
+            _version_for(
+                granted, g.c.current_version_id, g.c.published_version_id
+            ).label("version_id"),
+        )
+        .where(_visible(granted, g.c.published, g.c.setting_rank))
+        .subquery("pairs")
+    )
+
+
+def _enabled_in_pairs(pairs: Subquery) -> ColumnElement[bool]:
+    """The user's choice under the setting. Needs an outer join of
+    user_plugin_preference on the pair."""
+    choice = UserPluginPreference.enabled
+    rank = pairs.c.rank
+    return case(
+        (rank == policy_rank(PluginInstallationPolicy.REQUIRED), True),
+        (
+            rank == policy_rank(PluginInstallationPolicy.DEFAULT),
+            func.coalesce(choice, True),
+        ),
+        (
+            rank == policy_rank(PluginInstallationPolicy.AVAILABLE),
+            func.coalesce(choice, False),
+        ),
+        else_=False,
+    )
+
+
+def load_user_plugin_states(
+    user_ids: Iterable[UUID],
+    db_session: Session,
+    plugin_ids: Iterable[UUID] | None = None,
+) -> list[UserPluginState]:
+    """The state of each plugin each user can see (only those of
+    ``plugin_ids``, when given), in one query, then one query for app
+    connections."""
+    users = sorted(set(user_ids))
+    if not users:
+        return []
+    plugins = sorted(set(plugin_ids)) if plugin_ids is not None else None
+    if plugins is not None and not plugins:
+        return []
+    pairs = _user_plugin_pairs(User.__table__.c.id.in_(users), plugins)
+    skill_names = (
+        select(
+            func.array_agg(
+                aggregate_order_by(
+                    PluginSkill.frontmatter["name"].astext, PluginSkill.path
+                )
+            )
+        )
+        .where(PluginSkill.plugin_version_id == pairs.c.version_id)
+        .correlate(pairs)
+        .scalar_subquery()
+    )
+    rows = db_session.execute(
+        select(
+            pairs.c.user_id,
+            pairs.c.plugin_id,
+            pairs.c.rank,
+            pairs.c.published,
+            pairs.c.is_author,
+            pairs.c.version_id,
+            PluginVersion.bundle_file_id,
+            PluginVersion.is_valid,
+            _enabled_in_pairs(pairs).label("enabled"),
+            pairs.c.created_at,
+            skill_names.label("skill_names"),
+        )
+        .join(PluginVersion, PluginVersion.id == pairs.c.version_id)
+        .outerjoin(
+            UserPluginPreference,
+            and_(
+                UserPluginPreference.user_id == pairs.c.user_id,
+                UserPluginPreference.plugin_id == pairs.c.plugin_id,
+            ),
+        )
+        .order_by(pairs.c.user_id, pairs.c.plugin_id)
+    ).all()
+    apps = app_dependency_states(
+        {row.user_id for row in rows},
+        db_session,
+        {row.plugin_id for row in rows if row.enabled},
+    )
+    return [
+        UserPluginState(
+            user_id=row.user_id,
+            plugin_id=row.plugin_id,
+            installation_policy=_POLICY_OF_RANK[row.rank],
+            published=bool(row.published),
+            is_author=bool(row.is_author),
+            version_id=row.version_id,
+            bundle_file_id=row.bundle_file_id,
+            version_is_valid=row.is_valid,
+            enabled=bool(row.enabled),
+            can_run=bool(row.enabled)
+            and row.is_valid is not False
+            and not waits_for_app(apps.get((row.user_id, row.plugin_id))),
+            created_at=row.created_at,
+            skill_names=tuple(row.skill_names or ()),
+        )
+        for row in rows
+    ]
+
+
+def visible_plugin_ids(user_id: UUID) -> Select[tuple[UUID]]:
+    """The plugins the user can see, as a subquery for ``in_``."""
+    pairs = _user_plugin_pairs(User.__table__.c.id == user_id, None)
+    return select(pairs.c.plugin_id)
+
+
+def affected_user_ids_for_plugins(
+    plugin_ids: Iterable[UUID], db_session: Session
+) -> set[UUID]:
+    """Users with a running sandbox who can see at least one of the plugins.
+    Ignores user choices, so a change that removes access still reaches the
+    users who had it (read it before and after the change)."""
+    ids = sorted(set(plugin_ids))
+    if not ids:
+        return set()
+    running = select(Sandbox.user_id).where(Sandbox.status == SandboxStatus.RUNNING)
+    pairs = _user_plugin_pairs(User.__table__.c.id.in_(running), ids)
+    return set(db_session.scalars(select(pairs.c.user_id).distinct()))
+
+
+def order_skill_names(
+    states: Iterable[UserPluginState],
+    reserved_names: Collection[str] = (),
+) -> frozenset[UUID]:
+    """The plugins that lose a skill name to another plugin one user can run,
+    or to one of ``reserved_names`` (the user's built-in skills, which always
+    win). A plugin that loses any of its names does not load, and shows as off.
+    Only plugins that can run take part."""
+    contenders: dict[str, list[UserPluginState]] = {}
+    for state in states:
+        if not state.can_run:
+            continue
+        for name in state.skill_names:
+            contenders.setdefault(name, []).append(state)
+
+    hidden: set[UUID] = set()
+    for name, named in contenders.items():
+        ordered = sorted(
+            named,
+            key=lambda state: (state.name_rank, state.created_at, state.plugin_id),
+        )
+        if name not in reserved_names:
+            ordered = ordered[1:]
+        hidden.update(state.plugin_id for state in ordered)
+    return frozenset(hidden)
 
 
 # --- Access of plugins for responses ----------------------------------------
