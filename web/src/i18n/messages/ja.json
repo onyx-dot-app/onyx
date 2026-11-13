@@ -14631,7 +14631,7 @@
         "duplicateSkillName": "アプリ「{appName}」には「{skillName}」という名前の関連スキルがすでにあります。別の名前のスキルをアップロードしてください。"
       },
       "mcpPolicy": {
-        "description": "この MCP サーバーのツールで Craft エージェントに許可する操作を設定します。",
+        "description": "チャットと Craft で、自動実行、承認を求める、無効にするツールを選択します。",
         "emptyPolicies": "このサーバーには有効なツールがありません。まず MCP アクションページでツールを有効にしてください。",
         "saveButton": "保存",
         "title": "{name} を編集"
@@ -15828,7 +15828,7 @@
     "actionPolicies": {
       "appTitle": "{name} の承認設定",
       "title": "承認設定",
-      "personalDescription": "これらの設定は、Craftの会話と新しいタスクでアクションを自動実行するか承認を必要とするかを制御し、既存のタスクは独自の設定を保持します。",
+      "personalDescription": "これらの設定は、Craftの会話、新しいタスク、チャットでのMCPツール呼び出しでアクションを自動実行するか承認を必要とするかを制御し、既存のタスクは独自の設定を保持します。",
       "taskDescription": "このタスクが使用できるプラグインを選び、自動実行するアクションを管理します。変更はこのタスクにのみ適用されます。",
       "newTaskDescription": "プラグインを有効にすると、現在のアクション設定を初期設定として使用します。",
       "workspace_disabled": "ワークスペースで無効",

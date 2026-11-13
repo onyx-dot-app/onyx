@@ -39,6 +39,10 @@
   text. Multi-model Stop also marks the individual response IDs, so automatic
   child-result delivery can check the same stop request. Anonymous users cannot
   stop ([[#anonymous-send]]).
+- **A tool call waits for approval.** The response pauses inside the turn, so
+  the session stays busy until the user decides, the request expires or the
+  user stops the turn. Stop expires the request
+  ([[mcp-and-custom-tools#chat-approval-owner-delivers]]).
 - **Leaving is not stopping.** If the user closes the tab, navigates away or loses
   the network, the run continues on the server and is saved. When the user returns
   while the run is live, the client resumes the stream ([[streaming-protocol]]).
@@ -73,9 +77,13 @@
   reads agent results that the failed turn left unread on the branch.
 - **An API caller** gets NDJSON when `stream=true` and one `ChatFullResponse`
   when `stream=false`. A multi-model request without streaming is rejected.
+  Without streaming, a tool call that waits for approval returns the response
+  early with `pending_tool_approvals`; the turn keeps running
+  ([[mcp-and-custom-tools#chat-approval-needs-waiting-client]]).
 - **Bots.** The Slack bot runs the same turn in-process
   (`onyxbot/slack/handlers/handle_regular_answer.py`). The Discord bot calls the
   HTTP endpoint (`onyxbot/discord/api_client.py`). A change here reaches both.
+  Both run Ask tools without approval for now (`ChatTurnSetup.ask_for_approval`).
 
 ---
 

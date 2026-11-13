@@ -14631,7 +14631,7 @@
         "duplicateSkillName": "앱 \"{appName}\"에는 이미 \"{skillName}\" 이름의 연결된 스킬이 있습니다. 다른 이름의 스킬을 업로드하세요."
       },
       "mcpPolicy": {
-        "description": "이 MCP 서버의 도구로 Craft 에이전트가 할 수 있는 작업을 구성합니다.",
+        "description": "채팅과 Craft에서 자동으로 실행할 도구, 승인을 요청할 도구, 비활성화할 도구를 선택합니다.",
         "emptyPolicies": "이 서버에 활성화된 도구가 없습니다. 먼저 MCP 작업 페이지에서 도구를 활성화하세요.",
         "saveButton": "저장",
         "title": "{name} 편집"
@@ -15828,7 +15828,7 @@
     "actionPolicies": {
       "appTitle": "{name} 승인 설정",
       "title": "승인 설정",
-      "personalDescription": "이 설정은 Craft 대화와 새 작업에서 동작을 자동으로 실행할지 승인을 요청할지 결정하며, 기존 작업은 자체 설정을 유지합니다.",
+      "personalDescription": "이 설정은 Craft 대화, 새 작업, 채팅의 MCP 도구 호출에서 동작을 자동으로 실행할지 승인을 요청할지 결정하며, 기존 작업은 자체 설정을 유지합니다.",
       "taskDescription": "이 작업에서 사용할 플러그인과 자동으로 실행할 동작을 선택하세요. 변경 사항은 이 작업에만 적용됩니다.",
       "newTaskDescription": "플러그인을 활성화하면 현재 동작 설정으로 시작합니다.",
       "workspace_disabled": "워크스페이스에서 비활성화됨",

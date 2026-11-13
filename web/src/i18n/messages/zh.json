@@ -14631,7 +14631,7 @@
         "duplicateSkillName": "应用“{appName}”已有名为“{skillName}”的关联技能。请上传其他名称的技能。"
       },
       "mcpPolicy": {
-        "description": "配置 Craft 智能体可以使用此 MCP 服务器的工具执行的操作。",
+        "description": "选择在聊天和 Craft 中哪些工具自动运行、请求批准或被禁用。",
         "emptyPolicies": "此服务器上没有已启用的工具。请先在 MCP 操作页面启用工具。",
         "saveButton": "保存",
         "title": "编辑 {name}"
@@ -15828,7 +15828,7 @@
     "actionPolicies": {
       "appTitle": "{name} 审批设置",
       "title": "审批设置",
-      "personalDescription": "这些设置决定 Craft 对话和新任务中的操作是自动运行还是需要批准；现有任务保留各自的设置。",
+      "personalDescription": "这些设置决定 Craft 对话、新任务和聊天中的 MCP 工具调用是自动运行还是需要批准；现有任务保留各自的设置。",
       "taskDescription": "选择此任务可使用的插件，并管理哪些操作可自动执行。更改仅适用于此任务。",
       "newTaskDescription": "启用插件后，将以您当前的操作设置为初始设置。",
       "workspace_disabled": "工作区已禁用",

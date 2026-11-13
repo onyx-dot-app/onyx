@@ -11,7 +11,7 @@ interface PolicyToggleProps {
   onChange: (value: ActionPolicy) => void;
 }
 
-/** Three-state Craft approval policy selector, shared by per-action and
+/** Three-state approval policy selector, shared by per-action and
  * per-tool policy rows. */
 export default function PolicyToggle({
   value,

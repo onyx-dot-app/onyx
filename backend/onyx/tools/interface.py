@@ -17,6 +17,7 @@ from onyx.tools.models import (
     CodeModeExposure,
     CodeModeFunctionName,
     CodeModeResultSpec,
+    ToolApprovalScope,
     ToolCallException,
     ToolContext,
     ToolExecutionError,
@@ -156,6 +157,8 @@ class Tool(abc.ABC):
     interrupted_result: ToolResult | None = None
     merge_list_argument: str | None = None
     merge_list_limit: int | None = None
+    # Set on tools whose calls follow an action policy; see onyx/chat/tool_approvals.py.
+    approval: ToolApprovalScope | None = None
 
     @property
     def execution_mode(self) -> ToolExecutionMode:
@@ -265,4 +268,9 @@ class Tool(abc.ABC):
             result_from_children=result_from_children,
             interrupted_result=self.interrupted_result,
             display_name=self.display_name,
+            approval_required=[
+                tool.name
+                for tool in (self, *self.inner_tools)
+                if tool.approval is not None
+            ],
         )

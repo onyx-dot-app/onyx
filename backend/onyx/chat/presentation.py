@@ -7,6 +7,8 @@ from pydantic import BaseModel
 from onyx.agents.events import (
     AgentEndEvent,
     AgentEvent,
+    InputEndedEvent,
+    InputRequiredEvent,
     MessageEndEvent,
     MessageStartEvent,
     MessageUpdateEvent,
@@ -404,8 +406,12 @@ class ResponsePresenter:
         emitter: Emitter,
         *,
         tool_ids: Mapping[str, int | None] | None = None,
+        display_names: Mapping[str, str] | None = None,
     ) -> None:
         self.tool_ids = tool_ids or {}
+        # Tool display names by call name, for approval requests of calls that
+        # a tool makes for the model.
+        self.display_names = display_names or {}
         self.emitter = emitter
         self.layout = ResponseLayout()
         self.renderers: dict[str, MessageRenderer] = {}
@@ -455,17 +461,20 @@ class ResponsePresenter:
                     tool_placement,
                     self.tool_ids.get(call.name),
                 )
-        elif isinstance(event, (ToolStartEvent, ToolUpdateEvent, ToolEndEvent)):
+        elif isinstance(
+            event,
+            (
+                ToolStartEvent,
+                ToolUpdateEvent,
+                ToolEndEvent,
+                InputRequiredEvent,
+                InputEndedEvent,
+            ),
+        ):
             tool = self.tools.get((event.run_id, event.message_id, event.tool_call.id))
             if tool is None:
                 return
-            if isinstance(event, ToolStartEvent):
-                tool.display_name = event.display_name
-                output = tool.start()
-            elif isinstance(event, ToolUpdateEvent):
-                output = tool.update(event.progress.details, event.progress.content)
-            else:
-                output = tool.complete(event.result)
+            output = tool.consume(event, self.display_names)
         elif isinstance(event, ToolResultAmendedEvent):
             if event.tool_call.name in HIDDEN_TOOLS:
                 return

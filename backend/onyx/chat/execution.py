@@ -520,7 +520,8 @@ class ChatTurnExecution:
                 with self._lock:
                     self._stores.append(store)
             else:
-                # Incognito chats have no child agents to find, restore, or own.
+                # Incognito chats have no child agents to find, restore, or own,
+                # and no approvals.
                 coordinator = persistence.coordinator.view(store=persistence)
             coordinator.register(
                 AgentInfo(
@@ -541,7 +542,13 @@ class ChatTurnExecution:
                 deadline_at=self._deadline_at,
                 coordinator=coordinator,
                 event_dispatcher=self.delivery.events,
-                on_event=ResponsePresenter(emitter, tool_ids=tool_ids).consume,
+                on_event=ResponsePresenter(
+                    emitter,
+                    tool_ids=tool_ids,
+                    display_names={
+                        tool.name: tool.display_name for tool in configured_tools
+                    },
+                ).consume,
             )
 
             def response_saved(completion: Future[RunState]) -> None:
@@ -669,7 +676,7 @@ def bind_run_store(
         ),
         root_response=root_response,
         on_child_released=on_child_released,
-        tool_ids={tool.name: tool.id for tool in tools},
+        tools=tools,
         # Child-result delivery saves no user message.
         answers_agent_results=setup.user_message_id is None,
     )
@@ -817,6 +824,7 @@ def create_chat_agent(
             ),
             allowed_tool_ids=setup.new_msg_req.allowed_tool_ids,
             search_usage_forcing_setting=setup.search_params.search_usage,
+            ask_for_approval=setup.ask_for_approval,
         )
         tools = [tool for tool_list in tools_by_type.values() for tool in tool_list]
 

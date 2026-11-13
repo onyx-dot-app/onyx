@@ -7,7 +7,6 @@ wake just falls back to the proxy's wait timeout.
 """
 
 from datetime import datetime, timedelta, timezone
-from enum import StrEnum
 from typing import Any
 from uuid import UUID
 
@@ -30,6 +29,7 @@ from onyx.external_apps.matching.engine import (
 )
 from onyx.external_apps.presentation.decode import decode_payload
 from onyx.sandbox_proxy import approval_cache
+from onyx.server.features.action_policies.models import ApprovalChoice, DecisionBody
 from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
 from onyx.server.features.build.db import action_approval
 from onyx.server.features.build.db.build_session import get_build_session
@@ -40,17 +40,6 @@ logger = setup_logger()
 
 
 router = APIRouter(prefix="/approvals")
-
-
-class ApprovalChoice(StrEnum):
-    APPROVE_ONCE = "approve_once"
-    APPROVE_SESSION = "approve_session"
-    REJECT = "reject"
-
-
-class DecisionBody(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    decision: ApprovalChoice
 
 
 class ApprovalView(BaseModel):

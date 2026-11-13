@@ -60,6 +60,7 @@ from onyx.server.query_and_chat.streaming_models import (
     CitationInfo,
     Packet,
     StreamingError,
+    ToolApprovalRequest,
 )
 from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles, SavedLoadedFile
 from onyx.tools.models import (
@@ -142,6 +143,14 @@ class PresentationMode(str, Enum):
     CODING_THINKING = "coding_thinking"
     CODING_ANSWER = "coding_answer"
     SILENT = "silent"
+
+
+class ToolApprovalDenial(BaseModel):
+    """Metadata of the result that a denied approval request gives the model:
+    why the call did not run. Saved responses drop it."""
+
+    # disabled: the action policy blocked the call when the user approved it.
+    outcome: Literal["rejected", "expired", "disabled"]
 
 
 class MessageRendering(BaseModel):
@@ -518,6 +527,10 @@ class ChatFullResponse(BaseModel):
     # packet does. A server that omits it did not honor an incognito request.
     incognito: bool = False
     error_msg: str | None = None
+    # Set when the response returned early because a tool call waits for the
+    # user's approval. The turn keeps running; its answer is saved to the chat
+    # session after the decision. Empty for a finished response.
+    pending_tool_approvals: list[ToolApprovalRequest] = []
 
 
 class ChatHistoryResult(BaseModel):
@@ -791,6 +804,10 @@ class ChatTurnSetup(BaseModel):
     litellm_additional_headers: dict[str, str] | None = None
     custom_tool_additional_headers: dict[str, str] | None
     mcp_headers: dict[str, str] | None
+    # False runs tools whose action policy asks for approval without asking,
+    # for a bot that cannot show approval requests. Only server-side callers
+    # set it; the public request has no such field.
+    ask_for_approval: bool = True
 
 
 class ResponseOwner(BaseModel):

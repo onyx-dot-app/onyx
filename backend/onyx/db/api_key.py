@@ -44,6 +44,9 @@ class ApiKeyAuthResult(NamedTuple):
     api_key_id: int
     api_key_name: str | None
     api_key_display: str
+    # The Discord bot's service key: only the bot creates an ownerless key
+    # with its name, and no key can be renamed to it.
+    is_discord_bot: bool
 
 
 def get_api_key_email_pattern() -> str:
@@ -138,6 +141,8 @@ async def fetch_api_key_auth_result(
         api_key_id=row.id,
         api_key_name=row.name,
         api_key_display=row.api_key_display,
+        is_discord_bot=row.owner_id is None
+        and row.name == DISCORD_SERVICE_API_KEY_NAME,
     )
 
 
@@ -204,6 +209,9 @@ def update_api_key(
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND, f"API key with id {api_key_id} does not exist"
         )
+    # The name identifies the Discord bot's key; see ApiKeyAuthResult.
+    if api_key_args.name == DISCORD_SERVICE_API_KEY_NAME != existing_api_key.name:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "This API key name is reserved")
 
     existing_api_key.name = api_key_args.name
     api_key_user = db_session.scalar(

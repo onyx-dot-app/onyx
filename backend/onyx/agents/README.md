@@ -671,7 +671,7 @@ streamed. Instructions that cannot fit after compaction fail the run. Public wai
 
 The SDK owns synchronous execution, typed events, safe suspension, and resumption.
 Tools return a result or a pending request. They do not manage checkpoint storage or ownership.
-Approval policies, question forms, and their HTTP endpoints are future product work.
+Chat applies the MCP action policy through `approval_required` and `ChatRunStore.request_approval` (`onyx/chat/tool_approvals.py`); question forms are future product work.
 The SDK accepts new user messages between model steps through `RunOwnership.receive_inputs`; the feature decides how each step uses them.
 
 A chat request follows this path:
@@ -789,8 +789,10 @@ Coding's temporary sandbox has no cross-process reconstruction factory.
 
 ### Delivery and failure boundaries
 
-There is no durable generic control ledger. The store does not accept approval answers. Human messages sent to a running response are stored in `chat_input`, as described above.
-SDK tests exercise pending requests and early answers directly. Future product adapters must persist decisions before acknowledging them.
+There is no durable generic control ledger. Human messages sent to a running response are stored in `chat_input`, as described above.
+Tool approval decisions are saved in `approval_request` before the decision API returns, which then sets a wake key for the response.
+The response owner's control poll reads the wake key with the Stop key, reads the decisions of the requests that its runs wait on (`Run.pending_inputs`), and submits the answers to its runs. A slower periodic read covers a lost wake key and expires overdue requests, up to that interval late.
+When a run ends, or a program's call stops waiting, chat expires its open requests. When the API server starts to shut down, runs that wait stop, as on Stop, and new calls do not ask.
 The existing chat Stop route keeps its cache signal; child Stop requests also use tenant-scoped cache state.
 An expired owner is reported as interrupted when its response is inspected. Uncertain external work is never automatically replayed.
 

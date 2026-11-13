@@ -14631,7 +14631,7 @@
         "duplicateSkillName": "Die App „{appName}“ hat bereits einen verknüpften Skill namens „{skillName}“. Laden Sie einen Skill mit anderem Namen hoch."
       },
       "mcpPolicy": {
-        "description": "Legen Sie fest, was der Craft-Agent mit den Tools dieses MCP-Servers tun darf.",
+        "description": "Legen Sie fest, welche Tools im Chat und in Craft automatisch ausgeführt werden, eine Freigabe anfordern oder deaktiviert sind.",
         "emptyPolicies": "Keine aktivierten Tools auf diesem Server. Aktivieren Sie Tools zuerst auf der MCP-Aktionsseite.",
         "saveButton": "Speichern",
         "title": "{name} bearbeiten"
@@ -15828,7 +15828,7 @@
     "actionPolicies": {
       "appTitle": "{name} Genehmigungseinstellungen",
       "title": "Genehmigungseinstellungen",
-      "personalDescription": "Diese Einstellungen legen fest, ob Aktionen in Craft-Unterhaltungen und neuen Aufgaben automatisch ausgeführt werden oder eine Genehmigung erfordern; bestehende Aufgaben behalten ihre eigenen Einstellungen.",
+      "personalDescription": "Diese Einstellungen legen fest, ob Aktionen in Craft-Unterhaltungen, neuen Aufgaben und MCP-Toolaufrufen im Chat automatisch ausgeführt werden oder eine Genehmigung erfordern; bestehende Aufgaben behalten ihre eigenen Einstellungen.",
       "taskDescription": "Wählen Sie die Plugins für diese Aufgabe und legen Sie fest, welche Aktionen automatisch ausgeführt werden. Änderungen gelten nur für diese Aufgabe.",
       "newTaskDescription": "Aktivieren Sie ein Plugin, um mit Ihren aktuellen Aktionseinstellungen zu beginnen.",
       "workspace_disabled": "Für den Arbeitsbereich deaktiviert",

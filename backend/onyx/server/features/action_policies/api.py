@@ -1,6 +1,6 @@
 """Personal action policy endpoints for one app or MCP server.
 
-Personal MCP settings do not require Craft, though only Craft enforces them.
+MCP servers serve chat and Craft, so their settings do not require Craft.
 External apps exist only in Craft.
 """
 

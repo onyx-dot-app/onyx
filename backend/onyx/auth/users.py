@@ -2482,6 +2482,7 @@ async def _resolve_optional_user(
                     api_key.api_key_name,
                     api_key.api_key_display,
                 )
+                request.state.discord_bot_api_key = api_key.is_discord_bot
     except ValueError:
         logger.warning("Issue with validating authentication token")
         return None

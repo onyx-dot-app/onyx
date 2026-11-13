@@ -27,6 +27,7 @@ from onyx.chat.models import (
     PromptMetadata,
     ResponseCheckpoint,
     ResponseRecord,
+    ToolApprovalDenial,
 )
 from onyx.chat.response import response_snapshot
 from onyx.db.models import SAVED_TOOL_RESULT_TYPES
@@ -44,6 +45,7 @@ CHECKPOINT_PAYLOAD_TYPES: dict[str, type[BaseModel]] = {
     "prompt.metadata.v1": PromptMetadata,
     "chat.metadata.v1": ChatMessageMetadata,
     "chat.rendering.v1": MessageRendering,
+    "chat.tool_approval_denial.v1": ToolApprovalDenial,
     "chat.search.v1": ChatSearchResult,
     "chat.code_mode.v1": ChatCodeModeResult,
     "search.planning.v1": SearchPlanningResult,
