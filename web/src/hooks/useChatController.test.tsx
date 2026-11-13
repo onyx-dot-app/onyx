@@ -6,6 +6,7 @@ import {
   createChatSession,
   processRawChatHistory,
   sendMessage,
+  setPreferredResponse,
 } from "@/app/app/services/lib";
 import { getLatestMessageChain } from "@/app/app/services/messageTree";
 import type { MinimalAgent } from "@/lib/agents/types";
@@ -66,6 +67,7 @@ jest.mock("@/app/app/services/lib", () => ({
   updateLlmOverrideForChatSession: jest.fn(),
   processRawChatHistory: jest.fn(() => new Map()),
   sendMessage: jest.fn(),
+  setPreferredResponse: jest.fn(),
   createChatSession: jest.fn(),
   buildChatUrl: () => "/app?chatId=session",
   ChatSendRejectedError: class extends Error {},
@@ -817,4 +819,94 @@ test("saved history keeps a failed turn and drops a rejected send", async () => 
     expect.objectContaining({ message: "try again", parentMessageId: 12 })
   );
   jest.mocked(processRawChatHistory).mockImplementation(() => new Map());
+});
+
+test("a failed preference write drops the send and the next send retries it", async () => {
+  jest.spyOn(console, "log").mockImplementation(() => {});
+  useChatSessionStore.setState({
+    sessions: new Map(),
+    currentSessionId: "session",
+  });
+  useChatSessionStore.getState().createSession("session", { incognito: true });
+  jest
+    .mocked(sendMessage)
+    .mockImplementationOnce(async function* () {
+      yield {
+        user_message_id: 11,
+        responses: [
+          { message_id: 12, model_name: "First" },
+          { message_id: 13, model_name: "Second" },
+        ],
+      };
+      for (const model_index of [0, 1]) {
+        yield {
+          placement: { turn_index: 0, tab_index: 0, model_index },
+          obj: { type: "message_delta", content: `Answer ${model_index}` },
+        };
+        yield {
+          placement: { turn_index: 0, tab_index: 0, model_index },
+          obj: { type: "stop" },
+        };
+      }
+    })
+    .mockImplementationOnce(async function* () {
+      yield { user_message_id: 14, reserved_assistant_message_id: 15 };
+      yield { placement: { turn_index: 0 }, obj: { type: "stop" } };
+    });
+  jest
+    .mocked(setPreferredResponse)
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify({ detail: "Not saved" }), { status: 500 })
+    )
+    .mockResolvedValueOnce(new Response(null, { status: 200 }));
+  const restoreInputBar = jest.fn();
+  const { result } = renderChatController(restoreInputBar);
+  const session = () => useChatSessionStore.getState().sessions.get("session")!;
+  await act(async () =>
+    result.current.onSubmit({
+      message: "Compare answers",
+      currentMessageFiles: [],
+      deepResearch: false,
+      selectedModels: ["First", "Second"].map((name) => ({
+        name: "provider",
+        provider: "openai",
+        modelName: name,
+        modelConfigurationId: null,
+        displayName: name,
+      })),
+    })
+  );
+  const userNodeId = getLatestMessageChain(session().messageTree)[0]!.nodeId;
+
+  await act(async () =>
+    result.current.onSubmit({
+      message: "Follow-up",
+      currentMessageFiles: [],
+      deepResearch: false,
+    })
+  );
+  expect(sendMessage).toHaveBeenCalledTimes(1);
+  expect(restoreInputBar).toHaveBeenCalledWith("Follow-up", []);
+  expect(session().uncaughtError?.error).toBe("Not saved");
+  expect(
+    getLatestMessageChain(session().messageTree).map(
+      (message) => message.messageId
+    )
+  ).toEqual([11, 13]);
+  expect(
+    session().messageTree.get(userNodeId)?.preferredResponseId
+  ).toBeUndefined();
+
+  await act(async () =>
+    result.current.onSubmit({
+      message: "Follow-up",
+      currentMessageFiles: [],
+      deepResearch: false,
+    })
+  );
+  expect(setPreferredResponse).toHaveBeenCalledTimes(2);
+  expect(setPreferredResponse).toHaveBeenLastCalledWith(11, 13);
+  expect(sendMessage).toHaveBeenLastCalledWith(
+    expect.objectContaining({ message: "Follow-up", parentMessageId: 13 })
+  );
 });
