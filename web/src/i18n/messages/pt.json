@@ -1529,6 +1529,9 @@
         },
         "federatedSlack": {
           "description": "Pesquisar no Slack na consulta"
+        },
+        "jiraServiceManagement": {
+          "description": "Service desk e ITSM da Atlassian"
         }
       }
     },
@@ -3312,6 +3315,7 @@
         "excludedChannels": "Canais excluídos",
         "includeBotMessages": "Incluir mensagens de bots",
         "jiraProjectUrl": "URL do projeto Jira",
+        "jiraSiteUrl": "URL do site Jira",
         "multipleRepos": "vários repositórios",
         "pageId": "ID da página",
         "realm": "Realm",
@@ -4940,6 +4944,14 @@
             "mailboxes": {
               "label": "Caixas de correio",
               "description": "Especifique as caixas de correio a indexar (por exemplo, INBOX, Sent, Drafts). Deixe vazio para indexar todas as caixas de correio."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Configurar conector do Jira Service Management",
+          "fields": {
+            "everything": {
+              "description": "O Onyx indexa todas as issues de cada projeto do Jira Service Management (service desk) que a conta selecionada pode ler. Para indexar menos, escolha outra aba."
             }
           }
         }

@@ -1529,6 +1529,9 @@
         },
         "federatedSlack": {
           "description": "查询时搜索 Slack"
+        },
+        "jiraServiceManagement": {
+          "description": "Atlassian 服务台与 ITSM"
         }
       }
     },
@@ -3312,6 +3315,7 @@
         "excludedChannels": "排除的频道",
         "includeBotMessages": "包含机器人消息",
         "jiraProjectUrl": "Jira 项目 URL",
+        "jiraSiteUrl": "Jira 站点 URL",
         "multipleRepos": "多个仓库",
         "pageId": "页面 ID",
         "realm": "领域",
@@ -4940,6 +4944,14 @@
             "mailboxes": {
               "label": "邮箱",
               "description": "指定要索引的邮箱（例如 INBOX、Sent、Drafts）。留空则索引所有邮箱。"
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "配置 Jira Service Management 连接器",
+          "fields": {
+            "everything": {
+              "description": "Onyx 会索引所选账户可读的每个 Jira Service Management（服务台）项目中的所有工单。如需缩小范围，请选择其他标签页。"
             }
           }
         }

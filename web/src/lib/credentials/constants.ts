@@ -240,6 +240,14 @@ const GOOGLE_ACCOUNT_SPEC = defineCredentialSpec({
   ],
 });
 
+const JIRA_CREDENTIAL_FIELDS = {
+  jira_user_email: email("accountEmail", {
+    optional: true,
+    hint: { key: "jiraUserEmail" },
+  }),
+  jira_api_token: secret("apiToken"),
+};
+
 /**
  * The credential each source asks for. Field keys are the exact
  * `credential_json` keys the backend reads. A source with no credential, or
@@ -330,13 +338,11 @@ export const CREDENTIAL_SPECS = {
   }),
   jira: defineCredentialSpec({
     brandName: "Jira",
-    fields: {
-      jira_user_email: email("accountEmail", {
-        optional: true,
-        hint: { key: "jiraUserEmail" },
-      }),
-      jira_api_token: secret("apiToken"),
-    },
+    fields: JIRA_CREDENTIAL_FIELDS,
+  }),
+  jira_service_management: defineCredentialSpec({
+    brandName: "Jira Service Management",
+    fields: JIRA_CREDENTIAL_FIELDS,
   }),
   productboard: defineCredentialSpec({
     brandName: "Productboard",

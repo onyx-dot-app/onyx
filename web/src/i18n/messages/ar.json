@@ -1529,6 +1529,9 @@
         },
         "federatedSlack": {
           "description": "البحث في Slack عند الاستعلام"
+        },
+        "jiraServiceManagement": {
+          "description": "مكتب الخدمة وإدارة خدمات تكنولوجيا المعلومات من Atlassian"
         }
       }
     },
@@ -3312,6 +3315,7 @@
         "excludedChannels": "القنوات المستبعدة",
         "includeBotMessages": "تضمين رسائل الروبوتات",
         "jiraProjectUrl": "عنوان URL لمشروع Jira",
+        "jiraSiteUrl": "عنوان URL لموقع Jira",
         "multipleRepos": "مستودعات متعددة",
         "pageId": "معرّف الصفحة",
         "realm": "النطاق",
@@ -4940,6 +4944,14 @@
             "mailboxes": {
               "label": "صناديق البريد",
               "description": "حدّد صناديق البريد المراد فهرستها (مثل INBOX وSent وDrafts). اتركه فارغًا لفهرسة جميع صناديق البريد."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "تكوين موصل Jira Service Management",
+          "fields": {
+            "everything": {
+              "description": "يقوم Onyx بفهرسة جميع التذاكر في كل مشروع Jira Service Management (مكتب الخدمة) يمكن للحساب المحدد قراءته. لفهرسة عدد أقل، اختر علامة تبويب أخرى."
             }
           }
         }
