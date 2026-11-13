@@ -168,10 +168,12 @@ def test_a_wait_holds_its_results_until_its_agents_finish(
     results: list[AgentResultState], waits: list[AgentWait], expected: bool
 ) -> None:
     assert (
-        wakes_for_results(RunStatus.COMPLETE, results, queue_paused=False, waits=waits)
+        wakes_for_results(
+            RunStatus.COMPLETE, results, queue_paused=False, waits=lambda: waits
+        )
         is expected
     )
     # A Stop pauses the queue, so nothing wakes during a wait either.
     assert not wakes_for_results(
-        RunStatus.COMPLETE, results, queue_paused=True, waits=waits
+        RunStatus.COMPLETE, results, queue_paused=True, waits=lambda: waits
     )

@@ -3,7 +3,7 @@
 A row is pending until a step or a new run consumes it; consuming deletes it.
 """
 
-from collections.abc import Collection, Iterable
+from collections.abc import Callable, Collection, Iterable
 from uuid import UUID, uuid4
 
 from sqlalchemy import Select, and_, delete, func, or_, select, type_coerce
@@ -125,14 +125,14 @@ def wakes_for_results(
     results: Iterable[AgentResultState],
     *,
     queue_paused: bool,
-    waits: Collection[AgentWait] = (),
+    waits: Callable[[], Collection[AgentWait]] | None = None,
 ) -> bool:
     """Whether unread finished results start an idle recipient's next run.
 
     A finished result that no wait holds starts it. A wait holds its results
     until none of its runs is active and no message that dispatch would start
     is queued for its agents; a result starts the run once every wait that
-    holds it is released.
+    holds it is released. `waits` is read only when a result could wake.
     """
     if (
         latest_status is None
@@ -142,8 +142,13 @@ def wakes_for_results(
     ):
         return False
     results = list(results)
+    if not any(result.wakes_recipient for result in results):
+        return False
+    if waits is None:
+        return True
+    open_waits = waits()
     return any(
-        result.wakes_recipient and not _held_by_open_wait(result, results, waits)
+        result.wakes_recipient and not _held_by_open_wait(result, results, open_waits)
         for result in results
     )
 
@@ -153,11 +158,6 @@ def _held_by_open_wait(
     results: Collection[AgentResultState],
     waits: Collection[AgentWait],
 ) -> bool:
-    """Whether a wait that holds the result is still open.
-
-    A wait is open while one of its runs is active or a message that dispatch
-    would start is queued for one of its agents.
-    """
     return any(
         wait.holds(result.agent_id, result.root_response_id)
         and (
@@ -168,6 +168,18 @@ def _held_by_open_wait(
             )
         )
         for wait in waits
+    )
+
+
+def _dispatch_would_start(
+    delivery: MessageDelivery | None,
+    target_response_id: int | None,
+    latest: ChatMessage | None,
+) -> bool:
+    """Whether dispatch would start a pending agent message's run now."""
+    status = latest.response_status if latest else None
+    return can_start_input(
+        delivery, target_response_id, status, queue_paused=agent_queue_paused(status)
     )
 
 
@@ -408,14 +420,11 @@ def next_queued_turn(
     root_results = [
         result for result in results if result.recipient_id == chat_session_id
     ]
-    # Waits only hold results back, so they are read only when results would wake.
     if wakes_for_results(
-        status, root_results, queue_paused=paused
-    ) and wakes_for_results(
         status,
         root_results,
         queue_paused=paused,
-        waits=agent_waits(session, chat_session_id, branch),
+        waits=lambda: agent_waits(session, chat_session_id, branch),
     ):
         return QueuedChatTurn(parent_response_id=parent_response_id, message=None)
     return None
@@ -464,13 +473,7 @@ def read_chat_inbox(session: Session, chat_session_id: UUID) -> ChatInbox:
         latest = latest_by_agent.get(agent_id)
         if agent_id in {work.agent_id for work in inbox.child_work}:
             continue
-        latest_status = latest.response_status if latest else None
-        if not can_start_input(
-            row.delivery,
-            row.target_response_id,
-            latest_status,
-            queue_paused=agent_queue_paused(latest_status),
-        ):
+        if not _dispatch_would_start(row.delivery, row.target_response_id, latest):
             if (
                 latest is not None
                 and latest.response_status is not None
@@ -642,14 +645,11 @@ def agent_waits(
     latest = latest_agent_responses(
         session, branch, {str(recipient) for recipient, *_ in messages}
     )
-    starting: list[tuple[UUID, int]] = []
-    for recipient, root_id, delivery, target_id in messages:
-        recipient_latest = latest.get(str(recipient))
-        status = recipient_latest.response_status if recipient_latest else None
-        if root_id is not None and can_start_input(
-            delivery, target_id, status, queue_paused=agent_queue_paused(status)
-        ):
-            starting.append((recipient, root_id))
+    starting = [
+        (recipient, root_id)
+        for recipient, root_id, delivery, target_id in messages
+        if _dispatch_would_start(delivery, target_id, latest.get(str(recipient)))
+    ]
     waits: list[AgentWait] = []
     for response_id, result in calls:
         if (
@@ -657,24 +657,18 @@ def agent_waits(
             or result is None
             or not isinstance(result.details, AgentWaitDetails)
         ):
-            raise ValueError("A wait_agents call has no saved wait")
-        scope = AgentWait(
+            continue
+        wait = AgentWait(
             response_id=response_id,
             agent_ids=frozenset(UUID(agent_id) for agent_id in result.details.agent_ids)
             if result.details.agent_ids is not None
             else None,
             queued=False,
         )
-        waits.append(
-            scope.model_copy(
-                update={
-                    "queued": any(
-                        scope.holds(recipient, root_id)
-                        for recipient, root_id in starting
-                    )
-                }
-            )
+        wait.queued = any(
+            wait.holds(recipient, root_id) for recipient, root_id in starting
         )
+        waits.append(wait)
     return waits
 
 
