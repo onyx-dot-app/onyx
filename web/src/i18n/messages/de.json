@@ -12309,7 +12309,6 @@
       },
       "incognitoStart": {
         "ariaLabel": "Inkognito-Chat starten",
-        "lockedTooltip": "Inkognito kann nur vor Beginn des Chats aktiviert werden",
         "tooltip": "Inkognito-Chat"
       },
       "mode": {

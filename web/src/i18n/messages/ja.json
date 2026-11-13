@@ -12309,7 +12309,6 @@
       },
       "incognitoStart": {
         "ariaLabel": "シークレットチャットを開始",
-        "lockedTooltip": "シークレットはチャット開始前にのみ設定できます",
         "tooltip": "シークレットチャット"
       },
       "mode": {

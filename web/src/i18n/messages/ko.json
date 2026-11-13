@@ -12309,7 +12309,6 @@
       },
       "incognitoStart": {
         "ariaLabel": "시크릿 채팅 시작",
-        "lockedTooltip": "시크릿 모드는 채팅 시작 전에만 설정할 수 있습니다",
         "tooltip": "시크릿 채팅"
       },
       "mode": {

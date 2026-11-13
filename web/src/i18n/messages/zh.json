@@ -12309,7 +12309,6 @@
       },
       "incognitoStart": {
         "ariaLabel": "开始无痕聊天",
-        "lockedTooltip": "只能在聊天开始前设置无痕模式",
         "tooltip": "无痕聊天"
       },
       "mode": {
