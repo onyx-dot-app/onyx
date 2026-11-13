@@ -228,9 +228,14 @@ class RemoteCluster(Cluster):
 
     def pinned_environment(self, settings: dict[str, str]) -> dict[str, str]:
         """Keep the deployed sandbox backend; only the context is local."""
-        pins = {"K8S_CONTEXT": self.kube_context}
-        if self.kubeconfig:
-            pins["KUBECONFIG"] = str(self.kubeconfig)
+        # The API loads K8S_CONTEXT from the kubeconfig that the checks used.
+        pins = {
+            "K8S_CONTEXT": self.kube_context,
+            "KUBECONFIG": str(self.kubeconfig)
+            if self.kubeconfig
+            else os.environ.get("KUBECONFIG")
+            or str(Path("~/.kube/config").expanduser()),
+        }
         for key in SANDBOX_PINS:
             if settings.get(key):
                 pins[key] = settings[key]
@@ -881,6 +886,13 @@ def doctor(root: Path, profile_path: Path | None, context: str | None) -> int:
             None, "Skipped the agent and database checks; connect Telepresence first"
         )
         return finish(report)
-    with secret_files(cluster, env, workload) as resolved:
-        agent_and_head_checks(root, profile, cluster, resolved, report)
+    try:
+        with secret_files(cluster, env, workload) as resolved:
+            agent_and_head_checks(root, profile, cluster, resolved, report)
+    except (ValueError, OSError, subprocess.SubprocessError) as exc:
+        report(
+            False,
+            f"api-server Secret files: {exc}",
+            "check the Secrets that the api Deployment mounts",
+        )
     return finish(report)

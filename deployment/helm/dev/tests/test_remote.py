@@ -231,6 +231,22 @@ class RemoteClusterTests(unittest.TestCase):
             env["INTERNAL_URL"], "http://onyx-api-service.onyx.svc.cluster.local:8080"
         )
 
+    def test_personal_kubeconfig_cannot_reach_the_api(self) -> None:
+        unpinned = parse_profile({**PROFILE, "kube": {"context": "ctx-a"}})
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / ".vscode").mkdir()
+            (root / f".vscode/.env.{remote.TARGET}").write_text(
+                "KUBECONFIG=/elsewhere.yaml\n"
+            )
+            cluster = RemoteCluster.from_profile(root, unpinned)
+            with patch.dict(os.environ, {"KUBECONFIG": "/mine.yaml"}, clear=True):
+                env = cluster.local_environment(settings={})
+            self.assertEqual(env["KUBECONFIG"], "/mine.yaml")
+            with patch.dict(os.environ, {"HOME": directory}, clear=True):
+                env = cluster.local_environment(settings={})
+            self.assertEqual(env["KUBECONFIG"], f"{directory}/.kube/config")
+
     def test_shared_sentry_is_blank_without_a_personal_value(self) -> None:
         with (
             tempfile.TemporaryDirectory() as directory,
@@ -408,6 +424,24 @@ class DoctorTests(unittest.TestCase):
             self.assertEqual(remote.doctor(Path.cwd(), None, "prod-cluster"), 1)
         run.assert_not_called()
         self.assertIn("allowed_contexts", output.getvalue())
+
+    def test_doctor_reports_a_missing_secret(self) -> None:
+        output = io.StringIO()
+        with (
+            patch.object(remote, "load_profile", return_value=parse_profile(PROFILE)),
+            patch.object(remote.shutil, "which", return_value="/bin/tool"),
+            patch.object(remote, "aws_checks"),
+            patch.object(remote, "kube_checks", return_value="https://api"),
+            patch.object(remote, "telepresence_checks", return_value=True),
+            patch.object(RemoteCluster, "api_workload", return_value=workload()),
+            patch.object(RemoteCluster, "local_environment", return_value={}),
+            patch.object(
+                remote, "secret_files", side_effect=ValueError("no client-tls")
+            ),
+            contextlib.redirect_stdout(output),
+        ):
+            self.assertEqual(remote.doctor(Path.cwd(), None, None), 1)
+        self.assertIn("FAIL: api-server Secret files: no client-tls", output.getvalue())
 
 
 class LauncherTests(unittest.TestCase):
