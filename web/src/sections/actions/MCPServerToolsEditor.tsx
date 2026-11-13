@@ -166,7 +166,7 @@ export default function MCPServerToolsEditor({
   const enabledCount = tools.filter(isEnabled).length;
   const enabledTools = tools.filter(isEnabled);
   const effectivePolicies = enabledTools.map(
-    (tool) => policies[tool.name] ?? "ASK"
+    (tool) => policies[tool.name] ?? tool.default_action_policy ?? "ASK"
   );
   const bulkPolicy =
     effectivePolicies.every((policy) => policy === "ALWAYS") &&
@@ -324,7 +324,11 @@ export default function MCPServerToolsEditor({
                   showPolicies ? (
                     <PolicyToggle
                       label={tool.display_name || tool.name}
-                      value={policies[tool.name] ?? "ASK"}
+                      value={
+                        policies[tool.name] ??
+                        tool.default_action_policy ??
+                        "ASK"
+                      }
                       disabled={policyDisabled}
                       onChange={(value) =>
                         setPolicies((current) => ({

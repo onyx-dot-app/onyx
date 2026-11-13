@@ -32,6 +32,7 @@ from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.action_policy import (
     get_or_create_gated_app_id,
     get_workspace_action_policies,
+    mcp_tool_default_policy,
     replace_workspace_action_policies,
     users_can_manage_policies,
 )
@@ -1659,6 +1660,7 @@ def get_mcp_server_tools_snapshots(
         ToolSnapshot.from_model(
             tool,
             permissions=tool_permissions(can_manage=can_manage_tool(user, tool)),
+            default_action_policy=mcp_tool_default_policy(tool.mcp_read_only),
         )
         for tool in mcp_tools
     ]

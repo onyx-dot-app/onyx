@@ -512,3 +512,21 @@ it("keeps user management out of the tool permissions tab", async () => {
     screen.queryByRole("switch", { name: "Let users manage approval settings" })
   ).not.toBeInTheDocument();
 });
+
+it("shows the server default for a tool without a stored policy", async () => {
+  const user = setupUser();
+  snapshots = [{ ...tool, default_action_policy: "ALWAYS" }];
+  render(<Harness value={{ ...server, action_policies: {} }} />);
+  await screen.findByRole("switch", { name: "tool-toggle-Display tool" });
+  await user.click(
+    screen.getByRole("tab", { name: messages.actions.mcpTools.policiesTab })
+  );
+  const row = screen.getByRole("group", { name: "Display tool" });
+  expect(
+    within(row).getByRole("button", { name: "Auto-approve" })
+  ).toHaveAttribute("aria-pressed", "true");
+  expect(within(row).getByRole("button", { name: "Ask" })).toHaveAttribute(
+    "aria-pressed",
+    "false"
+  );
+});
