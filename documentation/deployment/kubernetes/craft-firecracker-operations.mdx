@@ -433,7 +433,7 @@ kubectl $K -n $NS logs "$(pod_on <node>)" --since=1h \
 
 ```bash
 kubectl $K -n $REL get pods -l app.kubernetes.io/component=sandbox-proxy -o wide
-kubectl $K -n $REL logs deploy/onyx-sandbox-proxy --since=30m | grep -iE 'error|reject' | tail -20
+kubectl $K -n $REL logs -l app.kubernetes.io/component=sandbox-proxy --prefix --since=30m | grep -iE 'error|reject' | tail -20
 kubectl $K -n $NS logs "$(pod_on <node>)" --since=30m | grep -E 'signing key regist|"level":"ERROR"' | tail -10
 ```
 

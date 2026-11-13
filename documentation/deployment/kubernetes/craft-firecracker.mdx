@@ -327,7 +327,7 @@ the host agent accepts every client certificate that its CA signed.
 
   <Step title="Check the registration on the API server">
     ```bash
-    kubectl -n onyx logs deploy/onyx-api-server | grep sandbox_node_signing_key_registered
+    kubectl -n onyx logs -l app=api-server --prefix --tail=-1 | grep sandbox_node_signing_key_registered
     ```
 
     The `key_id` must be the same as in the host agent log.
