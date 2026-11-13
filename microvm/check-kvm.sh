@@ -92,10 +92,15 @@ cleanup_vms() {
   done
   # TestLoopStoreKVM: its VMs run in host scopes outside ${xfs}; then its
   # loop store and the ext4 mount under it.
+  case " ${tests} " in *" TestLoopStoreKVM "*) ;; *) return 0 ;; esac
   systemctl kill --signal=KILL 'fcvm-*.scope' >/dev/null 2>&1 || true
+  for _ in $(seq 150); do
+    pgrep -x firecracker >/dev/null || break
+    sleep 0.1
+  done
   loop_data="${KVM_LOOP_DATA_DIR:-/mnt/fcext4/craft-fc}"
   while mountpoint -q "${loop_data}"; do umount "${loop_data}" || break; done
-  umount "$(dirname "${loop_data}")" 2>/dev/null || true
+  if mountpoint -q "$(dirname "${loop_data}")"; then umount "$(dirname "${loop_data}")" || true; fi
 }
 test_pid="" mitm=""
 cleanup() {

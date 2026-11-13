@@ -621,9 +621,8 @@ manual flag (`SetDrain`) before a planned drain to close this gap.
   (`FAILED_PRECONDITION`); create the VM on another node. A repeat Create of a VM that runs here still
   returns it. It also refuses a template build that must boot a template VM (`BuildTemplate` and the
   start-up build) with `NODE_DRAINING`; a template that is already on the node is still returned.
-- Running VMs keep running. Automatic evacuation by the api_server is planned, not built.
-  Until then, save the data you need, `Stop` each VM from `List`, and wait for `NodeInfo.drain.state`
-  `DRAINED` before you take the node down.
+- Running VMs keep running. The api_server saves the session of each VM on a draining node, then
+  stops the VM. Wait for `NodeInfo.drain.state` `DRAINED` before you take the node down.
 - `NodeInfo.drain`: `state` (`ACTIVE`, `DRAINING` while VMs are starting or running, while the agent
   keeps Firecracker processes in doubt or runs a template build VM, and while no process scan worked;
   `DRAINED` when none of these is left), `manual`, `taints`, `since`, `watch_error`. While draining,
