@@ -94,7 +94,7 @@ spec:
             {{- end }}
           annotations:
             summary: {{ `Node {{ $labels.node }} refuses VMs ({{ $labels.reason }})` | quote }}
-            description: {{ `Node {{ $labels.node }} refused {{ $value | humanize }} Creates with {{ $labels.reason }} in 15m, for 15m or more.` | quote }}
+            description: {{ `Node {{ $labels.node }} refused about {{ $value | printf "%.0f" }} Creates with {{ $labels.reason }} in 15m, for 15m or more.` | quote }}
             runbook_url: {{ printf "%s#craftfcadmissionrefusals" $runbook }}
 
         - alert: CraftFcSessionTransferFailures
@@ -110,7 +110,7 @@ spec:
             {{- end }}
           annotations:
             summary: {{ `{{ $labels.method }} fails on {{ $labels.node }}` | quote }}
-            description: {{ `{{ $value | humanize }} {{ $labels.method }} calls failed on node {{ $labels.node }} in 30m. Session saves or restores may be lost or late.` | quote }}
+            description: {{ `About {{ $value | printf "%.0f" }} {{ $labels.method }} calls failed on node {{ $labels.node }} in 30m. Session saves or restores may be lost or late.` | quote }}
             runbook_url: {{ printf "%s#craftfcsessiontransferfailures" $runbook }}
 
         - alert: CraftFcRelayErrors
