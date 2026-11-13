@@ -172,8 +172,9 @@ then the chat default.
    live. A new write route must pick one of these on purpose.
 6. `unset-action-is-catalog-default` **An unset action is not "no policy".**
    It resolves to the catalog `default_policy` at read time, and an override
-   equal to the default is not stored. Every MCP tool has the default `ASK`
-   (`db/action_policy.py:_catalog_defaults`). A change to a catalog default changes
+   equal to the default is not stored. An MCP tool defaults to `ASK`, or to
+   `ALWAYS` when the last sync stored `Tool.mcp_read_only` true
+   (`db/action_policy.py:mcp_tool_default_policy`). A change to a catalog default changes
    behaviour for every app that kept the default, with no migration and no
    row change.
 7. `app-type-immutable` **`app_type` cannot change on update.** The PATCH

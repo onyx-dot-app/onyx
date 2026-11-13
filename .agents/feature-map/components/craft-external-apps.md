@@ -110,7 +110,8 @@ prefix among the user's Craft-enabled servers
 (`sandbox_proxy/resolvers/mcp_matching.py:match_request`), then parses the
 JSON-RPC body (`sandbox_proxy/mcp_jsonrpc.py:classify_mcp_request`). Protocol
 messages need a session and task access but no approval. `tools/call` gives one
-action per tool, default Ask. Grants, policies and approvals key off
+action per tool. Its default is Ask, or Always when the server marks the tool
+read-only (`Tool.mcp_read_only`, from `readOnlyHint`). Grants, policies and approvals key off
 `GatedTarget.key`, never a display name ([[craft-admin#gated-app-identity-by-id]]).
 
 **Policy precedence.** `db/action_policy.py:resolve_action_policies` and
@@ -317,11 +318,11 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
 
 - The proxy does not scrub responses. An upstream API that echoes request
   headers in its response body returns the injected credential to the agent.
-- The MCP tool default (Ask) is written twice and the copies must agree:
-  `sandbox_proxy/request_evaluator.py:MCP_TOOL_DEFAULT_POLICY` for the proxy and
-  `db/action_policy.py:_catalog_defaults` for storage, which drops an override
-  equal to the default. The constant of the same name in
-  `server/features/mcp/api.py` has no readers; it is a false lead.
+- The MCP tool default comes from the server's unverified `readOnlyHint`
+  (`db/action_policy.py:mcp_tool_default_policy`). The proxy, the policy view
+  and workspace saves all use it. A workspace save drops an override equal to
+  the default, so an admin Ask chosen while the default was Ask has no row. That
+  tool becomes Always when a later sync marks it read-only.
 
 ---
 

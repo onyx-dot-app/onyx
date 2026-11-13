@@ -1,7 +1,7 @@
 """External-dependency-unit tests for `McpRequestEvaluator` against a real DB.
 
 Pins proxy-authoritative per-tool approvals: a craft MCP `tools/call` becomes an
-`AllMatchedActions` targeting the server, carrying the tool's default ASK policy; protocol plumbing retains server attribution without action approval; an
+`AllMatchedActions` targeting the server, carrying the tool's default policy; protocol plumbing retains server attribution without action approval; an
 unclassifiable body on a matched host is a DENY verdict so the gate fails closed.
 """
 
@@ -183,6 +183,32 @@ def test_admin_tool_override_does_not_change_recognition(
     )
     assert other is not None
     assert other.governing_action.policy is ActionPolicy.ASK
+
+
+def test_read_only_tool_defaults_to_always(
+    db_session: Session, craft_server: CraftServerFactory
+) -> None:
+    user = create_test_user(db_session, "mcp_eval_read_only")
+    server = craft_server()
+    db_session.add_all(
+        Tool(name=name, mcp_server_id=server.id, enabled=True, mcp_read_only=hint)
+        for name, hint in (("read_inbox", True), ("send_email", False))
+    )
+    db_session.commit()
+
+    matched = _evaluate(
+        _request(
+            _server_host(server),
+            body=_tool_call_body("read_inbox", "send_email", "unsynced"),
+        ),
+        user.id,
+    )
+    assert matched is not None
+    assert {a.action_type: a.policy for a in matched.actions} == {
+        "read_inbox": ActionPolicy.ALWAYS,
+        "send_email": ActionPolicy.ASK,
+        "unsynced": ActionPolicy.ASK,
+    }
 
 
 @pytest.mark.parametrize(
