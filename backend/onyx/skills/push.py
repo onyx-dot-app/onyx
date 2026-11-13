@@ -42,6 +42,7 @@ from onyx.skills.built_in import (
     COMPANY_SEARCH,
     EXTERNAL_APP_SKILL_ID_TO_APP_TYPE,
     BuiltInSkillDefinition,
+    iter_builtin_skill_files,
 )
 from onyx.skills.bundle import (
     DEFAULT_PER_FILE_MAX_BYTES,
@@ -49,7 +50,6 @@ from onyx.skills.bundle import (
     TEMPLATE_SUFFIX,
     open_bundle_zip,
 )
-from onyx.skills.content import iter_builtin_skill_files
 from onyx.skills.rendering import (
     CLAUDE_SKILL_DIR_PLACEHOLDER,
     render_company_search_skill,

@@ -564,6 +564,8 @@ def test_installation_policies_preserve_choices_through_updates(
     set_skill_enabled_for_user(
         skill_id=skill.id, enabled=False, user=user, db_session=db_session
     )
+    # A save needs edit access; an admin edits the published skill.
+    editor = make_user(db_session, is_admin=True)
     replace_skill_bundle(
         skill=skill,
         ingested=IngestedBundle(
@@ -588,7 +590,7 @@ def test_installation_policies_preserve_choices_through_updates(
             ),
         ),
         base_version_id=None,
-        user=user,
+        user=editor,
         skip_if_unchanged=False,
         db_session=db_session,
     )
