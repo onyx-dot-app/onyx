@@ -7,6 +7,7 @@ serial listing."""
 
 import threading
 import time
+from datetime import datetime
 
 import pytest
 
@@ -308,6 +309,72 @@ def test_a_split_refused_by_the_shard_cap_runs_on_a_later_page(
     _assert_full_corpus(listing, expected)
     assert cap_refused, "no split was refused by the shard cap"
     assert split_after_refusal, "no shard split after the cap refused it"
+
+
+@pytest.mark.usefixtures("small_pages")
+def test_a_shard_splits_again_after_a_bulk_upload_burst(
+    own_mock_drive: MockDrive, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A bulk upload gives more files one modifiedTime than a shard keeps ids
+    for. A shard that lists through that burst unsplit must split on a later
+    page that starts after the burst."""
+    monkeypatch.setattr(parallel_listing, "MAX_FRONTIER_IDS", 10)
+    monkeypatch.setattr(parallel_listing, "LEAF_TARGET_PAGES", 4)
+    monkeypatch.setattr(parallel_listing, "MIN_PAGES_TO_SPLIT", 8)
+    own_mock_drive.set_corpus(_SHARDED_CORPUS)
+    burst_ids = own_mock_drive.client.post(
+        "/_mock/corpus/touch", json={"count": 600}
+    ).json()["file_ids"]
+    burst = own_mock_drive.client.get(f"/_mock/corpus/files/{burst_ids[0]}").json()
+    # Drive gives modifiedTime to the millisecond.
+    burst_ms = (
+        datetime.fromisoformat(burst["file"]["modified_time"]).timestamp() * 1_000_000
+    ) // 1000
+    # Files over more than two seconds after the burst, so a shard past the
+    # burst has a range wide enough to split.
+    for _ in range(2):
+        time.sleep(2.5)
+        own_mock_drive.client.post(
+            "/_mock/corpus/touch", json={"count": 400}
+        ).raise_for_status()
+    expected = own_mock_drive.content_file_ids()
+
+    burst_files_seen: dict[int, int] = {}
+    split_after_crowded_burst: set[int] = set()
+    try_split = parallel_listing.ParallelDriveLister._try_split
+
+    def hold_until_past_the_burst(
+        self: parallel_listing.ParallelDriveLister,
+        shard: ListingShard,
+        files: list[GoogleDriveFileType],
+    ) -> object:
+        """Stands in for the shard cap until a page starts after the burst, as
+        when the cap is reached early in a run and frees up late."""
+        page_ms = [
+            round(datetime.fromisoformat(str(file["modifiedTime"])).timestamp() * 1000)
+            for file in files
+            if file.get("modifiedTime")
+        ]
+        in_burst = sum(1 for ms in page_ms if ms == burst_ms)
+        burst_files_seen[shard.id] = burst_files_seen.get(shard.id, 0) + in_burst
+        if not page_ms or min(page_ms) <= burst_ms:
+            return parallel_listing._SplitRefusal.SHARD_CAP
+        result = try_split(self, shard, files)
+        crowded = burst_files_seen[shard.id] > parallel_listing.MAX_FRONTIER_IDS
+        if crowded and isinstance(result, list) and result:
+            split_after_crowded_burst.add(shard.id)
+        return result
+
+    monkeypatch.setattr(
+        parallel_listing.ParallelDriveLister, "_try_split", hold_until_past_the_burst
+    )
+    listing = list_with_resume(own_mock_drive.build_connector())
+
+    _assert_full_corpus(listing, expected)
+    assert max(burst_files_seen.values()) > parallel_listing.MAX_FRONTIER_IDS, (
+        "no shard kept more burst files than it keeps ids for"
+    )
+    assert split_after_crowded_burst, "no shard split after a crowded burst"
 
 
 @pytest.mark.usefixtures("small_pages")
