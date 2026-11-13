@@ -67,7 +67,7 @@ from onyx.db.chat import (
     load_message_branch,
     reserve_chat_response_ids,
 )
-from onyx.db.document_set import filter_document_set_names_by_user_access
+from onyx.db.document_set import require_document_set_access
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import HookPoint, record_mode_persists_content
 from onyx.db.memory import get_memories
@@ -125,20 +125,9 @@ def _load_session(
     request: SendMessageRequest, user: User, db_session: Session
 ) -> ChatSession:
     filters = request.internal_search_filters
-    if (
-        not user.is_anonymous
-        and filters is not None
-        and filters.document_set is not None
-    ):
-        accessible_names = filter_document_set_names_by_user_access(
-            db_session=db_session, document_set_names=filters.document_set, user=user
-        )
-        unauthorized = sorted(set(filters.document_set) - set(accessible_names))
-        if unauthorized:
-            raise OnyxError(
-                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-                f"User does not have access to document sets: {unauthorized}",
-            )
+    require_document_set_access(
+        db_session, filters.document_set if filters else None, user
+    )
 
     session_id = request.chat_session_id
     if session_id is None:

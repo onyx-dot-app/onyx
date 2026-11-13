@@ -820,6 +820,7 @@
       "search": {
         "placeholder": "작업 검색..."
       },
+      "selectionSaveFailed": "이 채팅의 도구 선택을 저장할 수 없습니다.",
       "serverFallback": {
         "label": "서버"
       },

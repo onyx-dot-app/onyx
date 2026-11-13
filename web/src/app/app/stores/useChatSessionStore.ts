@@ -14,6 +14,7 @@ import {
   MessageTreeState,
 } from "../services/messageTree";
 import { useMemo } from "react";
+import type { ChatToolSelection } from "@/lib/tools/types";
 
 interface ChatSessionData {
   sessionId: string;
@@ -49,6 +50,15 @@ interface ChatSessionData {
   personaId?: number;
   // Pinned at creation server-side, so it outlives the live UI toggle.
   incognito?: boolean;
+  // The chat's saved tools and search filters, owned by the server; the tab's
+  // only copy for a chat that stores no content. Undefined until known.
+  toolSelection?: ChatToolSelection | null;
+  // The user's changes to that selection that the server has not confirmed;
+  // the composer shows them over the server's copy.
+  toolSelectionEdits?: Partial<ChatToolSelection>;
+  // Counts the server's confirmations of that selection; a chat load that
+  // started before the latest one carries an older copy.
+  toolSelectionVersion?: number;
 
   // Streaming duration tracking
   streamingStartTime?: number;
@@ -179,7 +189,8 @@ interface ChatSessionStore {
   // Utilities
   initializeSession: (
     sessionId: string,
-    backendSession?: BackendChatSession
+    backendSession?: BackendChatSession,
+    toolSelectionVersion?: number
   ) => void;
   cleanupOldSessions: (maxSessions?: number) => void;
 }
@@ -629,16 +640,28 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
   // Utilities
   initializeSession: (
     sessionId: string,
-    backendSession?: BackendChatSession
+    backendSession?: BackendChatSession,
+    toolSelectionVersion: number = 0
   ) => {
+    const existingSession = get().sessions.get(sessionId);
+    // A load that started before a save was confirmed holds a stale selection.
+    // The server never clears a stored selection, so a load without one keeps
+    // the tab's copy: that chat stores none, and the tab holds the only copy.
+    const selectionIsCurrent =
+      (existingSession?.toolSelectionVersion ?? 0) === toolSelectionVersion &&
+      (backendSession?.tool_selection != null ||
+        existingSession?.toolSelection == null);
     const initialData: Partial<ChatSessionData> = {
       isLoaded: true,
       description: backendSession?.description,
       personaId: backendSession?.persona_id,
       incognito: backendSession?.incognito ?? false,
+      ...(backendSession &&
+        selectionIsCurrent && {
+          toolSelection: backendSession.tool_selection ?? null,
+        }),
     };
 
-    const existingSession = get().sessions.get(sessionId);
     if (existingSession) {
       get().updateSessionData(sessionId, initialData);
     } else {

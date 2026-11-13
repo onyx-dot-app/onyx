@@ -419,6 +419,7 @@
   "PATCH /build/sessions/{session_id}/output-cards/{artifact_id}/viewed": "basic",
   "PATCH /build/sessions/{session_id}/public": "basic",
   "PATCH /chat/chat-session/{session_id}": "basic",
+  "PATCH /chat/chat-session/{session_id}/tool-selection": "write:chat",
   "PATCH /input_prompt/{input_prompt_id}": "basic",
   "PATCH /manage/admin/activate-user": "admin",
   "PATCH /manage/admin/connector/{connector_id}": "manage:connectors +scope",

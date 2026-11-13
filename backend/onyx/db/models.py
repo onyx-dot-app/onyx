@@ -155,6 +155,7 @@ from onyx.llm.override_models import LLMOverride, PromptOverride
 from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfigDict
 from onyx.server.security.models import IncognitoAvailability, SSRFProtectionLevel
 from onyx.tools.models import (
+    ChatToolSelection,
     CustomToolCallSummary,
     FileReadResult,
     LlmBashExecutionResult,
@@ -3548,6 +3549,10 @@ class ChatSession(Base):
 
     prompt_override: Mapped[PromptOverride | None] = mapped_column(
         PydanticType(PromptOverride), nullable=True
+    )
+    # The tools the user last selected; NULL means the agent's tools.
+    tool_selection: Mapped[ChatToolSelection | None] = mapped_column(
+        PydanticType(ChatToolSelection), nullable=True
     )
     time_updated: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),

@@ -205,6 +205,9 @@ export default function useChatSessionController({
         );
       };
 
+      const toolSelectionVersion =
+        useChatSessionStore.getState().sessions.get(existingChatSessionId)
+          ?.toolSelectionVersion ?? 0;
       let response: Response;
       try {
         response = await fetch(chatPageUrl(existingChatSessionId));
@@ -257,7 +260,11 @@ export default function useChatSessionController({
       setCurrentSession(chatSession.chat_session_id);
 
       // Initialize session data including personaId
-      initializeSession(chatSession.chat_session_id, chatSession);
+      initializeSession(
+        chatSession.chat_session_id,
+        chatSession,
+        toolSelectionVersion
+      );
       const sessionOwner = useChatSessionStore
         .getState()
         .sessions.get(chatSession.chat_session_id)?.abortController;

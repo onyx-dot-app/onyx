@@ -820,6 +820,7 @@
       "search": {
         "placeholder": "アクションを検索..."
       },
+      "selectionSaveFailed": "このチャットのツール選択を保存できませんでした。",
       "serverFallback": {
         "label": "サーバー"
       },

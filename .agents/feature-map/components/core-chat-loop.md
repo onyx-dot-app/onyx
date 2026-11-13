@@ -107,7 +107,16 @@ Processing hook before it saves the user message, only for a new, non-blank
 message, and only when the incognito mode allows hooks
 (`IncognitoRecordMode.fires_hooks`), because the hook sends the query out
 ([[hooks]]). A rejection raises `QUERY_REJECTED`. A regeneration reuses the saved
-user message. Then setup resolves the custom agent prompt, memories, the
+user message. A send never changes the chat's saved tools and search filters:
+`chat_session.tool_selection` (`allowed_tool_ids`, `preferred_tool_id`,
+`internal_search_filters`; NULL means the agent's tools) has one writer, the
+`PATCH /chat/chat-session/{session_id}/tool-selection` route
+(`db/chat.py:set_chat_session_tool_selection__no_commit`). It checks
+document-set access, saves only the fields the body sets, and stores nothing
+for a chat whose record mode keeps no content. The chat-session detail returns
+the selection to its owner. The chat's model is `current_alternate_model`,
+which the web writes through `PUT /chat/update-chat-session-model` on each
+send. Then setup resolves the custom agent prompt, memories, the
 reserved tokens, the tool configuration and the branch summary, and copies the
 history out of the ORM rows. It closes the DB session before slow file loading,
 renews the admission between stages, and reserves one assistant row per model.

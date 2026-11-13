@@ -1,4 +1,3 @@
-import type { Tag } from "@/lib/types";
 import type {
   SourceMetadata,
   ValidSources,
@@ -7,7 +6,10 @@ import type { MinimalAgent } from "@/lib/agents/types";
 import type { ChatSearchFilters } from "@/lib/tools/types";
 import { isAssistant } from "@/lib/agents/utils";
 import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
-import type { SearchFiltersRequest } from "@/lib/searchFilters/types";
+import type {
+  SearchFiltersRequest,
+  TagSelection,
+} from "@/lib/searchFilters/types";
 
 /**
  * Freezes a live selection into the shape the backend receives.
@@ -20,7 +22,7 @@ export function buildFilters(
   sources: SourceMetadata[] | null,
   documentSets: readonly string[],
   timeRange: { from: Date | string } | null,
-  tags: readonly Tag[]
+  tags: readonly TagSelection[]
 ): SearchFiltersRequest {
   return {
     source_type: sources ? sources.map((source) => source.internalName) : null,

@@ -1,5 +1,6 @@
 import { MCPConnectionStatus } from "@/lib/mcp/types";
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { sendMessage } from "@/app/app/services/lib";
 import { ReadableStream } from "node:stream/web";
 import {
@@ -25,6 +26,7 @@ let mockChatId: string | null = "chat-a";
 let mockAgentId: number | null = null;
 let mockProjectId: number | null = null;
 
+jest.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }));
 jest.mock("@/lib/navigation/hooks", () => ({
   useAppPosition: () => ({
     chat: () => mockChatId,
@@ -32,8 +34,14 @@ jest.mock("@/lib/navigation/hooks", () => ({
     project: () => mockProjectId,
   }),
 }));
+let mockAgentTools: ToolSnapshot[] = [];
 jest.mock("@/lib/agents/hooks", () => ({
-  useActiveAgent: () => ({ id: 5 }),
+  useActiveAgent: () => ({ id: 5, tools: mockAgentTools }),
+}));
+jest.mock("@/providers/UserProvider", () => ({
+  useUser: () => ({
+    user: { id: "user", email: "user@example.com", is_anonymous_user: false },
+  }),
 }));
 
 function tool(id: number, overrides: Partial<ToolSnapshot> = {}): ToolSnapshot {
@@ -135,10 +143,11 @@ describe("effective preferred tool selection", () => {
 
   test.each([10, 20])(
     "keeps persisted choice %i when suppressing a send",
-    (id) => {
+    async (id) => {
       const { result, unmount } = renderHook(() => useToolConfiguration());
       act(() => result.current.setToolState(id, () => "preferred"));
       unmount();
+      await savedOn("chat-a");
       const restored = renderHook(() => useToolConfiguration());
       expect(restored.result.current.preferredToolId).toBe(id);
       expect(
@@ -247,8 +256,31 @@ beforeEach(() => {
   mockChatId = "chat-a";
   mockAgentId = null;
   mockProjectId = null;
+  mockAgentTools = tools;
+  // Existing chats whose details carry no saved selection yet.
+  useChatSessionStore.setState({ sessions: new Map(), currentSessionId: null });
+  for (const chatSessionId of ["chat-a", "chat-b"]) {
+    useChatSessionStore
+      .getState()
+      .createSession(chatSessionId, { incognito: false, toolSelection: null });
+  }
+  // Each PATCH answers with the selection it saved.
+  jest
+    .spyOn(global, "fetch")
+    .mockImplementation(
+      async (_url, init) => new Response(String(init?.body ?? "null"))
+    );
 });
 afterEach(() => jest.restoreAllMocks());
+
+/** Waits until a chat's saved selection holds what its composer chose. */
+async function savedOn(chatSessionId: string): Promise<void> {
+  await waitFor(() =>
+    expect(
+      useChatSessionStore.getState().sessions.get(chatSessionId)?.toolSelection
+    ).toBeTruthy()
+  );
+}
 
 test("groups only attached tools and preserves custom-agent access outside default chat", () => {
   expect(
@@ -339,10 +371,11 @@ test("a new attached MCP tool starts neutral after the existing group was disabl
   expect(isChatPluginEnabled(expanded, result.current)).toBe(true);
 });
 
-test("chat plugin choices survive a reload and stay separate between chats", () => {
+test("chat plugin choices survive a reload and stay separate between chats", async () => {
   const first = renderHook(() => useToolConfiguration());
   act(() => setChatPluginEnabled(mcpGroup(), false, first.result.current));
   first.unmount();
+  await savedOn("chat-a");
   const second = renderHook(() => useToolConfiguration());
   expect(second.result.current.disabledToolIds).toEqual([10, 11]);
   mockChatId = "chat-b";
@@ -616,6 +649,8 @@ test("group selection serializes through the send service and neutral omits the 
   const fetchSpy = jest
     .spyOn(global, "fetch")
     .mockImplementation(async (input, init) => {
+      // A tool change in an existing chat also saves the chat's selection.
+      if (init?.method === "PATCH") return new Response(String(init.body));
       expect(input).toBe("/api/chat/send-chat-message");
       if (typeof init?.body !== "string")
         throw new Error("Expected JSON request body");
@@ -662,5 +697,7 @@ test("group selection serializes through the send service and neutral omits the 
     chat_session_id: "chat-a",
   });
   expect(requests[1]).not.toHaveProperty("allowed_tool_ids");
-  expect(fetchSpy).toHaveBeenCalledTimes(2);
+  expect(
+    fetchSpy.mock.calls.filter(([, init]) => init?.method !== "PATCH")
+  ).toHaveLength(2);
 });
