@@ -1,0 +1,95 @@
+
+Onyx has three editions. **Community Edition** is free and open source.
+**Business** and **Enterprise** add features for security, user management, and site customization.
+
+<Tip>
+  Onyx Cloud includes every Business and Enterprise feature.
+</Tip>
+
+## Business Features
+
+<CardGroup cols={2}>
+  <Card title="Multiple SSO Providers" icon="sitemap" href="/deployment/authentication/oidc">
+    Enable more than one OIDC or SAML provider at the same time. A single provider works in every edition.
+  </Card>
+
+  <Card title="Permission Sync Connectors" icon="sitemap" href="/admins/connectors/overview#permission-syncing-connectors">
+    Inherit document permissions from the source system.
+  </Card>
+
+  <Card title="User Groups & Group Permissions" icon="users" href="/admins/user_management/users_and_groups">
+    Organize users into groups and scope Connectors, Document Sets, Agents, and models to them.
+  </Card>
+
+  <Card title="Appearance & Theming" icon="brush" href="/admins/advanced_configs/white_labeling">
+    Add your logo, name, and colors to the Onyx interface.
+  </Card>
+
+  <Card title="Usage & Analytics" icon="chart-line" href="/admins/analytics/overview">
+    Usage dashboards, query history, and query analytics.
+  </Card>
+
+  <Card title="Service Accounts" icon="key" href="/developers/overview">
+    Scoped access tokens for automations and the LLM Gateway.
+  </Card>
+
+  <Card title="LLM Gateway" icon="route" href="/developers/guides/llm_gateway">
+    Call the models your admin configured from external tools with an OpenAI-compatible API.
+  </Card>
+
+  <Card title="Encrypted Secrets" icon="lock" href="/deployment/configuration/configuration">
+    AES encryption for connector credentials and API keys when `ENCRYPTION_KEY_SECRET` is set.
+  </Card>
+</CardGroup>
+
+## Enterprise Features
+
+Enterprise includes everything in Business, plus:
+
+<CardGroup cols={2}>
+  <Card title="SCIM / Group Sync" icon="arrows-rotate" href="/deployment/authentication/scim">
+    Provision users and groups from your identity provider.
+  </Card>
+
+  <Card title="Custom Roles & Permissions" icon="user-shield" href="/admins/permissions/understanding_permissions">
+    Define your own admin roles with fine-grained permissions.
+  </Card>
+
+  <Card title="Hook Extensions" icon="webhook" href="/admins/advanced_configs/hook_extensions">
+    Inject custom logic into the Onyx pipeline at defined stages.
+  </Card>
+
+  <Card title="Configurable Usage Limits" icon="gauge" href="/admins/advanced_configs/spending_limits">
+    Set token and request limits for users and groups.
+  </Card>
+
+  <Card title="Full White-labeling" icon="palette" href="/admins/advanced_configs/white_labeling">
+    Replace Onyx branding, help links, and footer content.
+  </Card>
+
+  <Card title="Custom Analytics & Log Export" icon="file-export" href="/admins/analytics/custom_analytics">
+    Embed your own dashboards and download raw server logs.
+  </Card>
+
+  <Card title="Enterprise SLAs & Priority Support" icon="headphones" href="/deployment/miscellaneous/contact_us">
+    Dedicated support with guaranteed response times and deployment assistance.
+  </Card>
+
+  <Card title="Custom Deployments" icon="server" href="/deployment/miscellaneous/contact_us">
+    Region-specific data processing and dedicated infrastructure.
+  </Card>
+</CardGroup>
+
+## Who needs Business or Enterprise?
+
+- Organizations with more than 100 users
+- Environments that need group-scoped access or several SSO providers
+- Companies with strict security and compliance requirements
+- Teams that need centralized user management and analytics
+- Deployments that inherit permissions from external systems
+
+## Interested in Business or Enterprise?
+
+Try [Onyx Cloud](https://cloud.onyx.app) for free. The trial has no feature or usage limits.
+
+For a self-hosted trial, contact us at [hello@onyx.app](mailto:hello@onyx.app).

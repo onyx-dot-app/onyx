@@ -1,0 +1,57 @@
+---
+title: "Document360"
+description: "Access wiki articles from Document360"
+---
+
+## How it works
+
+The Document360 connector indexes the articles of one Document360 workspace. You can limit it to specific categories.
+
+Document360 saves articles in HTML, Markdown, or block format. The connector indexes HTML articles only.
+
+Onyx checks Document360 for new and changed articles every 30 minutes by default.
+You can change **Refresh Every** on the connector.
+
+Permission sync is not available for Document360.
+Everyone who can see the connector's documents in Onyx can see every indexed article.
+
+## Setting up
+
+### Authorization
+
+<Steps>
+  <Step title="Open API tokens">
+    In Document360, go to **Settings > Knowledge base portal > API tokens**.
+  </Step>
+
+  <Step title="Generate a token">
+    Click **Generate**. Enter a token name and select the allowed request methods. Click **Generate** again.
+    Document360 shows your portal ID and API token. Copy both.
+  </Step>
+</Steps>
+
+<img className="rounded-image" src="/assets/admins/connectors/document360/Document360Token.webp" alt="Document360 token generation"/>
+
+### Indexing
+
+<Steps>
+  <Step title="Create the account">
+    In the Onyx admin panel, go to **Connectors** and select **Document360**. Under **Authentication Account**,
+    click **Create New**. Enter the **Document360 Portal ID** and the **API Token** from above.
+
+    <img className="rounded-image" src="/assets/admins/connectors/document360/Document360Auth.webp" alt="Document360 account form with Portal ID and API Token"/>
+  </Step>
+
+  <Step title="Set the workspace and categories">
+    Enter the **Workspace** name. Add one or more **Categories** to index only those categories.
+    Leave **Categories** empty to index the whole workspace.
+  </Step>
+
+  <Step title="Choose document access">
+    Under **Document Access**, select who can see the indexed articles.
+    **Specific Groups** is available on the Business and Enterprise plans and on Onyx Cloud.
+    Then click **Create Connector**.
+  </Step>
+</Steps>
+
+<img className="rounded-image" src="/assets/admins/connectors/document360/Document360.webp" alt="Document360 connector configuration in Onyx"/>
