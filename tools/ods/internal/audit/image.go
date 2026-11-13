@@ -14,8 +14,10 @@ import (
 
 // ImageOptions configures a container image audit run.
 type ImageOptions struct {
+	SBOMOnly  bool
 	Image     string
-	Format    string // comma-separated list of text|json|sarif
+	SBOMs     []string // Required inventory paths inside the image.
+	Format    string   // comma-separated list of text|json|sarif
 	FailOn    Severity
 	IgnoreURL string
 	// Strict fails a scan that extracts no packages, for callers that read a
@@ -26,14 +28,31 @@ type ImageOptions struct {
 	Stderr io.Writer
 }
 
+var scanOSImage = scanImage
+
 // RunImage scans a container image for known vulnerabilities, applies the same
 // S3 allowlist used by Run, renders a report to opts.Stdout/opts.Stderr, and
 // returns the result. Findings at or above opts.FailOn are reported as Blocking,
 // which is how it gates a release.
 func RunImage(opts ImageOptions) (*Result, error) {
-	findings, err := scanImage(opts.Image, opts.Strict)
-	if err != nil {
-		return nil, fmt.Errorf("image scan failed: %w", err)
+	if opts.SBOMOnly && len(opts.SBOMs) == 0 {
+		return nil, fmt.Errorf("SBOM-only audit requires an inventory")
+	}
+	var findings []Finding
+	var err error
+	if !opts.SBOMOnly {
+		findings, err = scanOSImage(opts.Image, opts.Strict)
+		if err != nil {
+			return nil, fmt.Errorf("image scan failed: %w", err)
+		}
+	}
+
+	for _, inventory := range opts.SBOMs {
+		extra, err := scanSBOM(opts.Image, inventory, opts.Stderr)
+		if err != nil {
+			return nil, err
+		}
+		findings = append(findings, extra...)
 	}
 
 	ignores, err := FetchIgnores(opts.IgnoreURL)

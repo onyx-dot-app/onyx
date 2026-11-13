@@ -9,6 +9,7 @@ import (
 	"io"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -330,14 +331,21 @@ func blockingFindings(findings []Finding, failOn Severity) []Finding {
 // and version. The same advisory can surface from more than one lockfile (e.g.
 // the root and web bun.lock) or from both osv-scanner and Dependabot.
 func dedupeFindings(findings []Finding) []Finding {
-	seen := make(map[string]bool, len(findings))
+	seen := make(map[string]int, len(findings))
 	out := findings[:0]
 	for _, f := range findings {
 		key := strings.ToLower(f.ID) + "\x00" + strings.ToLower(f.Ecosystem) + "\x00" + f.Package + "\x00" + f.Version
-		if seen[key] {
+		if index, ok := seen[key]; ok {
+			aliases := append(slices.Clone(out[index].Aliases), f.Aliases...)
+			slices.Sort(aliases)
+			aliases = slices.Compact(aliases)
+			if f.Severity.rank() > out[index].Severity.rank() {
+				out[index] = f
+			}
+			out[index].Aliases = aliases
 			continue
 		}
-		seen[key] = true
+		seen[key] = len(out)
 		out = append(out, f)
 	}
 	return out
