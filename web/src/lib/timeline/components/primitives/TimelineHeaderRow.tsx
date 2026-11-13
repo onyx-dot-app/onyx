@@ -8,15 +8,19 @@ export interface TimelineHeaderRowProps {
 
 /**
  * TimelineHeaderRow aligns the top header (e.g., agent avatar + title row)
- * with the same rail width used by the timeline steps. The 24px avatar sits
- * in 2px of padding, so its 28px box matches the header text's box, and both
- * center in the 36px row.
+ * with the same rail width used by the timeline steps. The header icon sits in
+ * its own padding, so its box matches the header text's box, and both center
+ * in the header row.
  */
 export function TimelineHeaderRow({ left, children }: TimelineHeaderRowProps) {
   return (
     <div className="flex w-full h-(--timeline-header-row-height)">
       <div className="flex items-center justify-center w-(--timeline-rail-width) h-(--timeline-header-row-height)">
-        {left && <div className="flex p-0.5">{left}</div>}
+        {left && (
+          <div className="flex box-content size-(--timeline-header-icon-size) p-(--timeline-header-icon-padding)">
+            {left}
+          </div>
+        )}
       </div>
       <div className="flex-1 min-w-0 h-full">{children}</div>
     </div>
@@ -47,7 +51,7 @@ export function RunHeaderRow({
     <TimelineHeaderRow left={left}>
       <div
         className={cn(
-          "flex flex-1 min-w-0 h-full items-center justify-between p-1 rounded-t-12 transition-colors duration-300",
+          "flex flex-1 min-w-0 h-full items-center justify-between p-(--timeline-header-surface-padding) rounded-t-12 transition-colors duration-300",
           interactive && "hover:bg-background-tint-00",
           tinted && "bg-background-tint-00",
           roundedBottom && "rounded-b-12"
