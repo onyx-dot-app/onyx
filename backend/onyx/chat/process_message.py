@@ -263,7 +263,8 @@ def prepare_chat_turn(
     queued_turn: QueuedChatTurn | None = None,
     agent_host: bool = False,
     on_reserved: Callable[
-        [MessageResponseIDInfo | MultiModelMessageResponseIDInfo], None
+        [CreateChatSessionID | MessageResponseIDInfo | MultiModelMessageResponseIDInfo],
+        None,
     ]
     | None = None,
 ) -> ChatTurnSetup:
@@ -277,8 +278,9 @@ def prepare_chat_turn(
     An agent host adds no messages. Its setup belongs to the selected response,
     the request's parent, and its agents run with that configuration.
 
-    `on_reserved` receives a send's IDs once its question and responses are
-    saved, so a later preparation failure can still name the saved turn.
+    `on_reserved` receives a send's ID packets, a created session first, once
+    its question and responses are saved, so a later preparation failure can
+    still name the saved turn.
     """
     results_turn = queued_turn is not None and queued_turn.message is None
     admission = ChatTurnAdmission(
@@ -483,6 +485,14 @@ def prepare_chat_turn(
                     model_display_names=[name for _, name in selected_models],
                 )
                 if on_reserved is not None:
+                    if new_msg_req.chat_session_id is None:
+                        on_reserved(
+                            CreateChatSessionID(
+                                chat_session_id=chat_session.id,
+                                incognito=chat_session.incognito_record_mode
+                                is not None,
+                            )
+                        )
                     on_reserved(
                         response_id_info(
                             user_message.id,
@@ -932,7 +942,9 @@ def _stream_chat_turn(
     """
     setup: ChatTurnSetup | None = None
     stream: ChatStream | None = None
-    reserved: list[MessageResponseIDInfo | MultiModelMessageResponseIDInfo] = []
+    saved_turn_packets: list[
+        CreateChatSessionID | MessageResponseIDInfo | MultiModelMessageResponseIDInfo
+    ] = []
     try:
         setup = prepare_chat_turn(
             new_msg_req=new_msg_req,
@@ -943,7 +955,7 @@ def _stream_chat_turn(
             mcp_headers=mcp_headers,
             slack_context=slack_context,
             additional_context=additional_context,
-            on_reserved=reserved.append,
+            on_reserved=saved_turn_packets.append,
         )
         stream = start_chat_turn(
             setup,
@@ -969,9 +981,9 @@ def _stream_chat_turn(
         else:
             logger.exception("Chat request failed")
         streaming_error = chat_error(error, setup.responses[0].llm if setup else None)
-        if setup is None and reserved:
+        if setup is None and saved_turn_packets:
             # The saved question and its error answer belong to the client's chat.
-            yield reserved[0]
+            yield from saved_turn_packets
             if response_future is not None:
                 response_future.set_exception(streaming_error_as_onyx(streaming_error))
         yield streaming_error

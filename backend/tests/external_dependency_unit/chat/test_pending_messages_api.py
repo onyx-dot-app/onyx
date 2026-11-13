@@ -29,7 +29,7 @@ from onyx.cache.factory import get_cache_backend
 from onyx.chat import execution
 from onyx.chat.chat_processing_checker import ChatTurnAdmission
 from onyx.chat.execution import chat_turn_work
-from onyx.chat.models import PendingChatMessage, ResponseOwner
+from onyx.chat.models import CreateChatSessionID, PendingChatMessage, ResponseOwner
 from onyx.chat.presentation import replay_response
 from onyx.chat.process_message import (
     dispatch_pending_chat_messages,
@@ -42,7 +42,7 @@ from onyx.chat.stop_signal_checker import request_stop
 from onyx.chat.stream_buffer import StreamBufferWriter
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
 from onyx.context.search.models import BaseFilters
-from onyx.db.chat import reserve_chat_response_ids
+from onyx.db.chat import delete_chat_session, reserve_chat_response_ids
 from onyx.db.chat_inputs import (
     MAX_PENDING_MESSAGE_BYTES,
     consume_inputs__no_commit,
@@ -81,6 +81,7 @@ from onyx.llm.models import ToolCall as ModelToolCall
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat import chat_backend
 from onyx.server.query_and_chat.models import (
+    ChatSessionCreationRequest,
     MessageResponseIDInfo,
     SendMessageRequest,
 )
@@ -992,6 +993,47 @@ def test_send_now_starts_after_a_send_fails_during_preparation(
         )
     ).all()
     assert sorted(questions) == ["Initial question", "Try again"]
+
+
+def test_a_send_that_creates_its_session_names_it_when_preparation_fails(
+    owner: User,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    model = QueueTestLLM(
+        lambda _request, _signal: AssistantMessage(content=[TextContent(text="Done")])
+    )
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
+    )
+
+    def fail(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("File store unavailable")
+
+    monkeypatch.setattr("onyx.chat.process_message.load_chat_files", fail)
+    packets = list(
+        handle_stream_message_objects(
+            new_msg_req=SendMessageRequest(
+                message="Question", chat_session_info=ChatSessionCreationRequest()
+            ),
+            user=owner,
+        )
+    )
+    assert chat_turn_work.wait_idle(timeout=30)
+    created = packets[0]
+    assert isinstance(created, CreateChatSessionID) and not created.incognito
+    try:
+        _, ids, error = packets
+        assert isinstance(ids, MessageResponseIDInfo)
+        assert isinstance(error, StreamingError)
+        saved = db_session.get(ChatMessage, ids.reserved_assistant_message_id)
+        assert saved is not None
+        assert saved.chat_session_id == created.chat_session_id
+        assert saved.response_status == RunStatus.ERROR
+    finally:
+        delete_chat_session(
+            owner.id, created.chat_session_id, db_session, hard_delete=True
+        )
 
 
 def test_a_non_streaming_send_that_fails_after_saving_raises_its_error(
