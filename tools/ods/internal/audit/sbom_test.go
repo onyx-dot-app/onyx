@@ -2,12 +2,14 @@ package audit
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestSupplementalInventoryUsesSharedImageReport(t *testing.T) {
@@ -49,18 +51,24 @@ esac
 	t.Setenv("EXPECTED_SCANNER", "docker.io/"+grypeImage)
 	t.Setenv("PATH", directory+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("SBOM_FIXTURE", write("sbom.json", `{"bomFormat":"CycloneDX","specVersion":"1.5","version":1,"components":[{"type":"application","name":"example","version":"1.0.0","cpe":"cpe:2.3:a:vendor:example:1.0.0:*:*:*:*:*:*:*"}]}`))
-	t.Setenv("GRYPE_FIXTURE", write("grype.json", `{"matches":[{"vulnerability":{"id":"CVE-TEST","severity":"Critical","description":"test finding","fix":{"versions":["1.0.1"]}},"relatedVulnerabilities":[{"id":"GHSA-alias"}],"artifact":{"name":"example","version":"1.0.0","type":"binary"}}]}`))
+	t.Setenv("GRYPE_FIXTURE", write("grype.json", `{"matches":[{"vulnerability":{"id":"CVE-TEST","severity":"Critical","description":"test finding","fix":{"versions":["1.0.1"]}},"relatedVulnerabilities":[{"id":"GHSA-alias"}],"artifact":{"name":"example","version":"1.0.0","type":"UnknownPackage"}}]}`))
 	original := scanOSImage
 	scanOSImage = func(string, bool) ([]Finding, error) { return nil, nil }
 	t.Cleanup(func() { scanOSImage = original })
-	opts := ImageOptions{Image: "fixture", SBOMs: []string{"/inventory.cdx.json"}, Format: "json", FailOn: SeverityCritical, Stderr: io.Discard}
+	now := time.Now().UTC()
+	policy := UpdatePolicy{"example": {CheckedAt: now, Minimum: "1.0.0", Releases: map[string]time.Time{"1.0.1": now.Add(-73 * time.Hour)}}}
+	data, err := json.Marshal(policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opts := ImageOptions{Image: "fixture", SBOMs: []string{"/inventory.cdx.json"}, UpdatePolicyURL: write("updates.json", string(data)), Format: "json", FailOn: SeverityCritical, Stderr: io.Discard}
 	var out bytes.Buffer
 	opts.Stdout = &out
 	result, err := RunImage(opts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Blocking) != 1 || !strings.Contains(out.String(), "grype-sbom") {
+	if len(result.Blocking) != 1 || result.BlockingUpdates() != 1 || !strings.Contains(out.String(), "grype-sbom") {
 		t.Fatalf("missing shared findings: %s", out.String())
 	}
 	opts.IgnoreURL = write("ignores.json", `{"ignores":[{"id":"GHSA-alias","reason":"reviewed"}]}`)
@@ -69,17 +77,53 @@ esac
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Blocking) != 0 || len(result.Ignored) != 1 {
-		t.Fatalf("shared exception was not applied: %+v", result)
+	if len(result.Blocking) != 0 || len(result.Ignored) != 1 || result.BlockingUpdates() != 1 {
+		t.Fatalf("exceptions must not suppress deadlines: %+v", result)
 	}
-	for _, invalid := range []string{`not json`, `{"components":[{"type":"application"}]}`, `{"components":[{"type":"file","name":"example","version":"1.0.0","cpe":"cpe:2.3:a:vendor:example:1.0.0:*:*:*:*:*:*:*"}]}`, `{"components":[]}`, `{"components":[{"type":"application","name":"example","version":"1.0.0","cpe":"cpe:2.3:a:vendor:example:2.0.0:*:*:*:*:*:*:*"}]}`} {
+	for _, format := range []string{"text", "sarif"} {
+		out.Reset()
+		opts.Format = format
+		if _, err := RunImage(opts); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(out.String(), "update") {
+			t.Fatalf("%s misses maintenance result: %s", format, out.String())
+		}
+	}
+	for _, invalid := range []string{`not json`, `{"components":[{"type":"application"}]}`, `{"components":[{"type":"file","name":"example","version":"1.0.0","cpe":"cpe:2.3:a:vendor:example:1.0.0:*:*:*:*:*:*:*"}]}`, `{"components":[]}`, `{"components":[{"type":"application","name":"example","version":"1.0.0","cpe":"cpe:2.3:a:vendor:example:2.0.0:*:*:*:*:*:*:*"}]}`, `{"components":[{"type":"application","name":"example","version":"1.0.0","cpe":"cpe:2.3:a:vendor:example:1.0.0:*:*:*:*:*:*:*","bom-ref":"same","components":[{}]}]}`, `{"components":[{"type":"application","name":"example","version":"1.0.0","cpe":"cpe:2.3:a:vendor:example:1.0.0:*:*:*:*:*:*:*","bom-ref":"same"}],"metadata":{"component":{}}}`, `{"components":[{"type":"application","name":"example","version":"1.0.0","cpe":"cpe:2.3:a:vendor:example:1.0.0:*:*:*:*:*:*:*","bom-ref":"same"},{"type":"application","name":"example","version":"1.0.0","cpe":"cpe:2.3:a:vendor:example:1.0.0:*:*:*:*:*:*:*","bom-ref":"same"}]}`} {
 		path := write("invalid-sbom.json", invalid)
 		t.Setenv("SBOM_FIXTURE", path)
 		if _, err := RunImage(opts); err == nil {
-			t.Fatal("invalid required inventory passed")
+			t.Errorf("invalid required inventory passed: %s", invalid)
 		}
 	}
 	t.Setenv("SBOM_FIXTURE", filepath.Join(directory, "sbom.json"))
+	opts.UpdatePolicyURL = write("wrong-package.json", `{"another":{"checked_at":"2026-11-12T00:00:00Z","minimum":"1.0.0","releases":{"1.0.0":"2026-11-12T00:00:00Z"}}}`)
+	if _, err := RunImage(opts); err == nil {
+		t.Fatal("missing package policy passed")
+	}
+	opts.UpdatePolicyURL = ""
+	opts.SBOMOnly = true
+	t.Setenv("GRYPE_FIXTURE", write("clean-grype.json", `{"matches":[]}`))
+	clean, err := RunImage(opts)
+	if err != nil || len(clean.Findings) != 0 || len(clean.ScannedPackages) != 1 || clean.ScannedPackages[0].Package != "example" {
+		t.Fatalf("clean inventory lost package coverage: %+v %v", clean, err)
+	}
+	t.Setenv("GRYPE_FIXTURE", filepath.Join(directory, "grype.json"))
+	opts.UpdatePolicyURL = write("invalid-policy.json", "invalid")
+	if _, err := RunImage(opts); err == nil {
+		t.Fatal("invalid policy passed")
+	}
+	opts.UpdatePolicyURL = write("invalid-entry.json", `{"example":{}}`)
+	if _, err := RunImage(opts); err == nil {
+		t.Fatal("invalid entry passed")
+	}
+	opts.UpdatePolicyURL = ""
+	opts.SBOMs = nil
+	if _, err := RunImage(opts); err == nil {
+		t.Fatal("missing SBOM passed")
+	}
+	opts.SBOMs = []string{"/inventory.cdx.json"}
 	t.Setenv("BASE_IMAGE_REGISTRY", "mirror.example")
 	t.Setenv("EXPECTED_SCANNER", "mirror.example/"+grypeImage)
 	t.Setenv("SSL_CERT_FILE", write("ca.pem", "test CA"))

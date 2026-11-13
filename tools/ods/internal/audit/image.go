@@ -14,11 +14,13 @@ import (
 
 // ImageOptions configures a container image audit run.
 type ImageOptions struct {
-	Image     string
-	SBOMs     []string // Required inventory paths inside the image.
-	Format    string   // comma-separated list of text|json|sarif
-	FailOn    Severity
-	IgnoreURL string
+	SBOMOnly        bool
+	Image           string
+	SBOMs           []string // Required inventory paths inside the image.
+	UpdatePolicyURL string
+	Format          string // comma-separated list of text|json|sarif
+	FailOn          Severity
+	IgnoreURL       string
 	// Strict fails a scan that extracts no packages, for callers that read a
 	// missing finding as a resolved one. Every image ships OS packages.
 	Strict bool
@@ -34,17 +36,47 @@ var scanOSImage = scanImage
 // returns the result. Findings at or above opts.FailOn are reported as Blocking,
 // which is how it gates a release.
 func RunImage(opts ImageOptions) (*Result, error) {
-	findings, err := scanOSImage(opts.Image, opts.Strict)
-	if err != nil {
-		return nil, fmt.Errorf("image scan failed: %w", err)
+	if opts.SBOMOnly && len(opts.SBOMs) == 0 {
+		return nil, fmt.Errorf("SBOM-only audit requires an inventory")
+	}
+	var findings []Finding
+	var err error
+	if !opts.SBOMOnly {
+		findings, err = scanOSImage(opts.Image, opts.Strict)
+		if err != nil {
+			return nil, fmt.Errorf("image scan failed: %w", err)
+		}
 	}
 
-	for _, inventory := range opts.SBOMs {
-		extra, err := ScanSBOM(opts.Image, inventory, opts.Stderr)
+	var updates []UpdateStatus
+	var packages []ScannedPackage
+	var policy UpdatePolicy
+	if len(opts.SBOMs) > 0 && opts.UpdatePolicyURL != "" {
+		policy, err = ReadUpdatePolicy(opts.UpdatePolicyURL)
 		if err != nil {
 			return nil, err
 		}
-		findings = append(findings, extra...)
+	}
+	for _, inventory := range opts.SBOMs {
+		extra, err := scanSBOM(opts.Image, inventory, opts.Stderr)
+		if err != nil {
+			return nil, err
+		}
+		findings = append(findings, extra.Findings...)
+		if policy != nil {
+			for _, component := range extra.Components {
+				entry, ok := policy[component.Name]
+				if !ok {
+					return nil, fmt.Errorf("missing update policy for %s", component.Name)
+				}
+				status, err := CheckUpdate(component.Name, component.Version, entry, time.Now())
+				if err != nil {
+					return nil, err
+				}
+				updates = append(updates, status)
+			}
+		}
+		packages = append(packages, extra.ScannedPackages...)
 	}
 
 	ignores, err := FetchIgnores(opts.IgnoreURL)
@@ -62,9 +94,11 @@ func RunImage(opts ImageOptions) (*Result, error) {
 	sortFindings(suppressed)
 
 	result := &Result{
-		Findings: kept,
-		Ignored:  suppressed,
-		Blocking: blockingFindings(kept, opts.FailOn),
+		Findings:        kept,
+		ScannedPackages: packages,
+		Updates:         updates,
+		Ignored:         suppressed,
+		Blocking:        blockingFindings(kept, opts.FailOn),
 	}
 
 	if err := renderReport(opts.Stdout, opts.Stderr, opts.Format, result); err != nil {

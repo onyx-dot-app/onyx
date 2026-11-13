@@ -7,7 +7,8 @@ on:
       - "deployment/craft-fc/**"
       - "microvm/**"
       - "backend/onyx/server/features/build/sandbox/image/install-browser.sh"
-      - ".github/scripts/audit-sandbox-browser.sh"
+      - "tools/ods/internal/audit/**"
+      - "tools/ods/internal/auditcmd/**"
       - "backend/onyx/server/features/build/sandbox/image/templates/pptx/**"
       - ".github/workflows/craft-runtime.yml"
       - ".github/workflows/craft-runtime-release.yml"
@@ -18,7 +19,8 @@ on:
       - "deployment/craft-fc/**"
       - "microvm/**"
       - "backend/onyx/server/features/build/sandbox/image/install-browser.sh"
-      - ".github/scripts/audit-sandbox-browser.sh"
+      - "tools/ods/internal/audit/**"
+      - "tools/ods/internal/auditcmd/**"
       - "backend/onyx/server/features/build/sandbox/image/templates/pptx/**"
       - ".github/workflows/craft-runtime.yml"
       - ".github/workflows/craft-runtime-release.yml"
@@ -66,8 +68,13 @@ jobs:
           set: |
             runtime.cache-from=type=gha,scope=craft-runtime
             runtime.cache-to=type=gha,scope=craft-runtime,mode=max
-      - name: Audit browser
-        run: bash .github/scripts/audit-sandbox-browser.sh onyxdotapp/craft-runtime:ci
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: tools/ods/go.mod
+          cache: false
+      - name: Audit runtime and supplemental inventory
+        working-directory: tools/ods
+        run: go run ./odsaudit image onyxdotapp/craft-runtime:ci --sbom /opt/chrome/browser.cdx.json --sbom-only --strict
       - name: Check runtime offline
         run: |
           docker run --rm --network none --shm-size=256m \

@@ -12,9 +12,27 @@ import (
 
 const grypeImage = "anchore/grype:v0.121.1@sha256:6b06708b036f74b2cd70e94b706b4586af96d1932e6ac46255940b2e39dd44a9"
 
-// ScanSBOM scans an explicit inventory for software outside package managers.
+type sbomComponent struct {
+	Components []json.RawMessage `json:"components"`
+	Type       string            `json:"type"`
+	Name       string            `json:"name"`
+	Version    string            `json:"version"`
+	CPE        string            `json:"cpe"`
+	PURL       string            `json:"purl"`
+	BOMRef     string            `json:"bom-ref"`
+	Group      string            `json:"group"`
+	Properties []json.RawMessage `json:"properties"`
+}
+
+type sbomResult struct {
+	Findings        []Finding
+	ScannedPackages []ScannedPackage
+	Components      []sbomComponent
+}
+
+// scanSBOM scans an explicit inventory for software outside package managers.
 // The inventory must exist in the image; a failed extraction never means clean.
-func ScanSBOM(image, inventory string, stderr io.Writer) ([]Finding, error) {
+func scanSBOM(image, inventory string, stderr io.Writer) (*sbomResult, error) {
 	directory, err := os.MkdirTemp("", "ods-sbom-*")
 	if err != nil {
 		return nil, err
@@ -38,12 +56,10 @@ func ScanSBOM(image, inventory string, stderr io.Writer) ([]Finding, error) {
 		return nil, err
 	}
 	var inventoryData struct {
-		Components []struct {
-			Type    string `json:"type"`
-			Name    string `json:"name"`
-			Version string `json:"version"`
-			CPE     string `json:"cpe"`
-		} `json:"components"`
+		Components []sbomComponent `json:"components"`
+		Metadata   struct {
+			Component *json.RawMessage `json:"component"`
+		} `json:"metadata"`
 	}
 	if err := json.Unmarshal(data, &inventoryData); err != nil {
 		return nil, err
@@ -51,7 +67,21 @@ func ScanSBOM(image, inventory string, stderr io.Writer) ([]Finding, error) {
 	if len(inventoryData.Components) == 0 {
 		return nil, fmt.Errorf("required SBOM has no components")
 	}
+	if inventoryData.Metadata.Component != nil {
+		return nil, fmt.Errorf("required SBOM must list packages only in top-level components")
+	}
+	seenRefs := make(map[string]bool)
+	var packages []ScannedPackage
 	for _, component := range inventoryData.Components {
+		if len(component.Components) > 0 {
+			return nil, fmt.Errorf("required SBOM must list packages only in top-level components")
+		}
+		if component.BOMRef != "" {
+			if seenRefs[component.BOMRef] {
+				return nil, fmt.Errorf("duplicate SBOM bom-ref %q", component.BOMRef)
+			}
+			seenRefs[component.BOMRef] = true
+		}
 		switch component.Type {
 		case "application", "framework", "library", "machine-learning-model", "firmware":
 		default:
@@ -64,7 +94,11 @@ func ScanSBOM(image, inventory string, stderr io.Writer) ([]Finding, error) {
 		if len(cpe) != 13 || cpe[0] != "cpe" || cpe[1] != "2.3" || cpe[4] != component.Name || cpe[5] != component.Version {
 			return nil, fmt.Errorf("SBOM CPE must identify the component name and installed version")
 		}
-
+		// Grype reports UnknownPackage for CPE-only inventories without package metadata.
+		// Leave other identities unclaimed rather than close an unrelated alert.
+		if component.PURL == "" && !strings.HasPrefix(component.BOMRef, "pkg:") && component.Group == "" && len(component.Properties) == 0 {
+			packages = append(packages, ScannedPackage{Ecosystem: "UnknownPackage", Package: component.Name})
+		}
 	}
 	args := []string{"run", "--rm", "--env", "GRYPE_CHECK_FOR_APP_UPDATE=false", "--mount", "type=bind,source=" + directory + ",target=/inventory,readonly"}
 	if ca := os.Getenv("SSL_CERT_FILE"); ca != "" {
@@ -82,7 +116,10 @@ func ScanSBOM(image, inventory string, stderr io.Writer) ([]Finding, error) {
 		return nil, fmt.Errorf("scan required SBOM %s: %w", inventory, err)
 	}
 	findings, err := grypeFindings(output, image+":"+inventory)
-	return findings, err
+	if err != nil {
+		return nil, err
+	}
+	return &sbomResult{Findings: findings, ScannedPackages: packages, Components: inventoryData.Components}, nil
 }
 
 func grypeFindings(data []byte, manifest string) ([]Finding, error) {

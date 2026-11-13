@@ -1008,7 +1008,22 @@ ods audit --all-lockfiles --web --python
 Use `ods audit image IMAGE --sbom /path/in/image.cdx.json` for a required CycloneDX inventory.
 ODS scans the inventory with pinned Grype and combines its findings with the OSV image report.
 Docker must be available. Missing inventory, empty inventory, and scanner errors fail the audit.
+Use `--sbom-only` when a job checks only software from supplemental inventories.
 The same advisory exceptions, JSON/SARIF reports, and CVE alerts apply to both scanners.
+
+Deployment opts into update deadlines with `--update-policy s3://onyx-internal-tools/audit/updates.json`.
+PR audits and CVE collection scan vulnerabilities without reading update policy.
+Missing or invalid policy fails deployment audits.
+This state is separate from advisory exceptions. It records an emergency minimum and each release's first observation.
+Routine updates warn after 24 hours and block after 72 hours. Emergency minimums block immediately.
+Stale upstream observations warn without resetting recorded deadlines.
+Image scans leave freshness checks disabled unless `--update-policy` is supplied.
+`ods audit gate` includes freshness checks as part of its deployment checks.
+
+CVE Tracking owns policy observation and S3 writes. Its manual `minimum` input raises Chrome's emergency minimum.
+It saves this minimum before upstream discovery, preserving release timestamps even if discovery fails.
+It checks main and supported release branches. Update Sandbox Browser opens or updates pin PRs for stale branches.
+CI builds the audit binary from source. Installed ODS commands receive these features through the normal devtools release.
 
 #### Checking a release branch before a tag
 
