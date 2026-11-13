@@ -207,3 +207,57 @@ test("an interrupted smooth scroll does not resume following later content", asy
     jest.useRealTimers();
   }
 });
+
+test("keeps following when shrinking rows move the scroll position up", async () => {
+  // A reloaded chat: windowed rows settle to smaller heights, the browser
+  // moves the scroll position up, then the resumed run streams more content.
+  const frames: FrameRequestCallback[] = [];
+  const requestFrame = jest
+    .spyOn(window, "requestAnimationFrame")
+    .mockImplementation((callback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+  const view = render(
+    <ChatScrollContainer autoScroll>
+      <Spacer height={0} />
+    </ChatScrollContainer>
+  );
+  const container = screen.getByTestId("chat-scroll-container");
+  const end = container.firstElementChild?.lastElementChild;
+  if (!(end instanceof HTMLElement))
+    throw new Error("Missing content end marker");
+  let contentHeight = 1000;
+  Object.defineProperties(container, {
+    clientHeight: { get: () => 400 },
+    scrollHeight: { get: () => contentHeight },
+  });
+  Object.defineProperty(end, "offsetTop", { get: () => contentHeight });
+  const scrollTo = jest.fn((options?: ScrollToOptions | number) => {
+    if (typeof options === "object" && options.top !== undefined)
+      container.scrollTop = options.top;
+  });
+  container.scrollTo = scrollTo;
+  try {
+    container.scrollTop = 600;
+    fireEvent.scroll(container);
+
+    contentHeight = 900;
+    container.scrollTop = 450;
+    fireEvent.scroll(container);
+
+    scrollTo.mockClear();
+    await act(async () => {
+      contentHeight += 150;
+      end.before(document.createElement("div"));
+      await Promise.resolve();
+    });
+    act(() => frames.splice(0).forEach((callback) => callback(0)));
+
+    expect(scrollTo).toHaveBeenCalledWith({ top: 650, behavior: "instant" });
+    expect(container.scrollTop).toBe(650);
+  } finally {
+    view.unmount();
+    requestFrame.mockRestore();
+  }
+});

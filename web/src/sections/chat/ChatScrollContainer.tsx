@@ -105,6 +105,7 @@ const ChatScrollContainer = React.memo(
       const isAutoScrollingRef = useRef(false); // Prevent handleScroll from interfering during auto-scroll
       const followOpeningUntilRef = useRef(0);
       const prevScrollTopRef = useRef(0); // Track scroll position to detect scroll direction
+      const prevScrollHeightRef = useRef(0); // Content height at the last scroll event
       const [isScrollReady, setIsScrollReady] = useState(false);
 
       // Use refs for values that change during streaming to prevent effect re-runs
@@ -259,7 +260,14 @@ const ChatScrollContainer = React.memo(
         if (isAutoScrollingRef.current) return;
 
         const currentScrollTop = container.scrollTop;
-        const scrolledUp = currentScrollTop < prevScrollTopRef.current - 5; // 5px threshold to ignore micro-movements
+        // Content that shrinks (rows settling to their measured height) makes
+        // the browser clamp or anchor the scroll position upward. That is
+        // layout, not the user, so it must not stop following.
+        const contentShrank =
+          container.scrollHeight < prevScrollHeightRef.current;
+        prevScrollHeightRef.current = container.scrollHeight;
+        const scrolledUp =
+          !contentShrank && currentScrollTop < prevScrollTopRef.current - 5; // 5px threshold to ignore micro-movements
         prevScrollTopRef.current = currentScrollTop;
 
         // Only upward movement can stop following new content.

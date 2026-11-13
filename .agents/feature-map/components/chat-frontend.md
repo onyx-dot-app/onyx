@@ -550,7 +550,11 @@ up its own branding.
     catch up if auto-scroll is enabled and the user has not scrolled away.
     During the opening-follow window, content observers can also catch up with
     auto-scroll disabled. Scrolling up ends that window. Content observers
-    update visual state without treating layout growth as a user scroll.
+    update visual state without treating layout growth as a user scroll. An
+    upward scroll while the content shrinks is layout, not the user, so it
+    does not stop following. `components/chat/DynamicBottomSpacer.tsx` adds
+    space only for a turn sent from the page, which passes through
+    `loading`. A run the page resumes starts at `streaming` and gets no space.
 
 ---
 
