@@ -14440,6 +14440,48 @@
         "decision": "判断",
         "vision": "画像対応"
       }
+    },
+    "payloadView": {
+      "empty": {
+        "label": "ペイロードはありません。"
+      },
+      "showLess": {
+        "button": "表示を減らす"
+      },
+      "showMore": {
+        "button": "もっと見る"
+      }
+    },
+    "approvalCard": {
+      "approveOnce": {
+        "ariaLabel": "このアクションを1回だけ承認",
+        "button": "1回だけ承認"
+      },
+      "approveSession": {
+        "button": "セッション全体で承認",
+        "tooltip": "このセッションの一致するアクションを承認"
+      },
+      "deadline": "{time}までに承認",
+      "header": {
+        "required": "承認リクエスト: {headline}"
+      },
+      "headline": {
+        "multiAction": "{app} での {count, plural, one {# 件のアクション} other {# 件のアクション}}",
+        "singleAction": "{app} での {action}"
+      },
+      "reject": {
+        "ariaLabel": "このアクションを却下",
+        "button": "却下"
+      },
+      "record": {
+        "approved": "承認済み: {headline}",
+        "closed": "承認待ちではありません: {headline}",
+        "expired": "タイムアウト: {headline}",
+        "rejected": "未承認: {headline}",
+        "approvedForSession": "このセッションで承認済み: {headline}"
+      },
+      "submitError": "決定を送信できませんでした。もう一度お試しください。",
+      "actionWithDescription": "{action}: {description}"
     }
   },
   "craft": {
@@ -14452,50 +14494,6 @@
       },
       "switch": {
         "ariaLabel": "エージェントを切り替える"
-      }
-    },
-    "approvals": {
-      "approveOnce": {
-        "ariaLabel": "このアクションを1回だけ承認",
-        "button": "1回だけ承認"
-      },
-      "approveSession": {
-        "button": "セッション全体で承認",
-        "tooltip": "このセッションの一致するアクションを承認"
-      },
-      "details": {
-        "hideAriaLabel": "詳細を隠す",
-        "showAriaLabel": "詳細を表示"
-      },
-      "header": {
-        "required": "承認が必要です: {headline}"
-      },
-      "headline": {
-        "multiAction": "{app} での {count, plural, one {# 件のアクション} other {# 件のアクション}}",
-        "singleAction": "{app} での {action}"
-      },
-      "payload": {
-        "empty": {
-          "label": "ペイロードはありません。"
-        },
-        "showLess": {
-          "button": "表示を減らす"
-        },
-        "showMore": {
-          "button": "もっと見る"
-        }
-      },
-      "reject": {
-        "ariaLabel": "このアクションを却下",
-        "button": "却下"
-      },
-      "status": {
-        "approved": "承認済み",
-        "rejected": "却下済み",
-        "expired": "期限切れ"
-      },
-      "submit": {
-        "errorFallback": "決定を送信できませんでした"
       }
     },
     "apps": {

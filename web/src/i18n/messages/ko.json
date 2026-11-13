@@ -14440,6 +14440,48 @@
         "decision": "판단",
         "vision": "비전"
       }
+    },
+    "payloadView": {
+      "empty": {
+        "label": "페이로드가 없습니다."
+      },
+      "showLess": {
+        "button": "간략히 보기"
+      },
+      "showMore": {
+        "button": "더 보기"
+      }
+    },
+    "approvalCard": {
+      "approveOnce": {
+        "ariaLabel": "이 작업을 한 번만 승인",
+        "button": "한 번 승인"
+      },
+      "approveSession": {
+        "button": "세션 동안 승인",
+        "tooltip": "이 세션의 일치하는 작업 승인"
+      },
+      "deadline": "{time}까지 승인",
+      "header": {
+        "required": "승인 요청됨: {headline}"
+      },
+      "headline": {
+        "multiAction": "{app}의 {count, plural, one {작업 #개} other {작업 #개}}",
+        "singleAction": "{app}의 {action}"
+      },
+      "reject": {
+        "ariaLabel": "이 작업 거부",
+        "button": "거부"
+      },
+      "record": {
+        "approved": "승인됨: {headline}",
+        "closed": "더 이상 대기하지 않음: {headline}",
+        "expired": "시간 초과: {headline}",
+        "rejected": "승인되지 않음: {headline}",
+        "approvedForSession": "이 세션에서 승인됨: {headline}"
+      },
+      "submitError": "결정을 제출할 수 없습니다. 다시 시도하세요.",
+      "actionWithDescription": "{action}: {description}"
     }
   },
   "craft": {
@@ -14452,50 +14494,6 @@
       },
       "switch": {
         "ariaLabel": "에이전트 전환"
-      }
-    },
-    "approvals": {
-      "approveOnce": {
-        "ariaLabel": "이 작업을 한 번만 승인",
-        "button": "한 번 승인"
-      },
-      "approveSession": {
-        "button": "세션 동안 승인",
-        "tooltip": "이 세션의 일치하는 작업 승인"
-      },
-      "details": {
-        "hideAriaLabel": "세부 정보 숨기기",
-        "showAriaLabel": "세부 정보 표시"
-      },
-      "header": {
-        "required": "승인 필요: {headline}"
-      },
-      "headline": {
-        "multiAction": "{app}의 {count, plural, one {작업 #개} other {작업 #개}}",
-        "singleAction": "{app}의 {action}"
-      },
-      "payload": {
-        "empty": {
-          "label": "페이로드가 없습니다."
-        },
-        "showLess": {
-          "button": "간략히 보기"
-        },
-        "showMore": {
-          "button": "더 보기"
-        }
-      },
-      "reject": {
-        "ariaLabel": "이 작업 거부",
-        "button": "거부"
-      },
-      "status": {
-        "approved": "승인됨",
-        "rejected": "거부됨",
-        "expired": "만료됨"
-      },
-      "submit": {
-        "errorFallback": "결정을 제출하지 못했습니다"
       }
     },
     "apps": {

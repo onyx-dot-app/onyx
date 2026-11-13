@@ -36,6 +36,7 @@ def _view(action_type: str, payload: dict[str, Any]) -> ApprovalView:
         created_at=datetime.datetime.now(datetime.timezone.utc),
         decision=None,
         decided_at=None,
+        decided_via=None,
     )
 
 

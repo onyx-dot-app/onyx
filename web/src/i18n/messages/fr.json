@@ -14440,6 +14440,48 @@
         "decision": "Décision",
         "vision": "Vision"
       }
+    },
+    "payloadView": {
+      "empty": {
+        "label": "Aucune donnée."
+      },
+      "showLess": {
+        "button": "Afficher moins"
+      },
+      "showMore": {
+        "button": "Afficher plus"
+      }
+    },
+    "approvalCard": {
+      "approveOnce": {
+        "ariaLabel": "Approuver cette action une fois",
+        "button": "Approuver une fois"
+      },
+      "approveSession": {
+        "button": "Approuver pour la session",
+        "tooltip": "Approuver les actions correspondantes pour cette session"
+      },
+      "deadline": "Approuver avant {time}",
+      "header": {
+        "required": "Approbation demandée : {headline}"
+      },
+      "headline": {
+        "multiAction": "{count, plural, one {# action} other {# actions}} dans {app}",
+        "singleAction": "{action} dans {app}"
+      },
+      "reject": {
+        "ariaLabel": "Rejeter cette action",
+        "button": "Rejeter"
+      },
+      "record": {
+        "approved": "Approuvé : {headline}",
+        "closed": "N'attend plus : {headline}",
+        "expired": "Délai dépassé : {headline}",
+        "rejected": "Non approuvé : {headline}",
+        "approvedForSession": "Approuvé pour cette session : {headline}"
+      },
+      "submitError": "Impossible d'envoyer votre décision. Réessayez.",
+      "actionWithDescription": "{action} : {description}"
     }
   },
   "craft": {
@@ -14452,50 +14494,6 @@
       },
       "switch": {
         "ariaLabel": "Changer d'agent"
-      }
-    },
-    "approvals": {
-      "approveOnce": {
-        "ariaLabel": "Approuver cette action une fois",
-        "button": "Approuver une fois"
-      },
-      "approveSession": {
-        "button": "Approuver pour la session",
-        "tooltip": "Approuver les actions correspondantes pour cette session"
-      },
-      "details": {
-        "hideAriaLabel": "Masquer les détails",
-        "showAriaLabel": "Afficher les détails"
-      },
-      "header": {
-        "required": "Approbation requise : {headline}"
-      },
-      "headline": {
-        "multiAction": "{count, plural, one {# action} other {# actions}} dans {app}",
-        "singleAction": "{action} dans {app}"
-      },
-      "payload": {
-        "empty": {
-          "label": "Aucune donnée."
-        },
-        "showLess": {
-          "button": "Afficher moins"
-        },
-        "showMore": {
-          "button": "Afficher plus"
-        }
-      },
-      "reject": {
-        "ariaLabel": "Rejeter cette action",
-        "button": "Rejeter"
-      },
-      "status": {
-        "approved": "Approuvé",
-        "rejected": "Rejeté",
-        "expired": "Expirée"
-      },
-      "submit": {
-        "errorFallback": "Échec de l'envoi de la décision"
       }
     },
     "apps": {

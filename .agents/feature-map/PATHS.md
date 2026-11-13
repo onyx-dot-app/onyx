@@ -294,6 +294,7 @@ covers new files that match it.
 | Path | Component(s) |
 |---|---|
 | `web/src/app/craft/`, `web/src/providers/CraftStreamingProvider.tsx` | craft-frontend |
+| `web/src/sections/approvals/`, `web/src/lib/approvals/` | craft-frontend |
 | `web/src/app/craft/utils/parsePacket.ts`, `web/src/app/craft/utils/subagentRouting.ts`, `web/src/app/craft/utils/packetTypes.ts`, `web/src/app/craft/types/streamingTypes.ts` | craft-streaming |
 | `web/src/app/craft/components/output-panel/`, `web/src/app/craft/components/OutputPanel.tsx`, `web/src/lib/build/hooks.ts`, `web/src/lib/build/types.ts` | craft-frontend |
 | `web/src/app/craft/services/workspaceDirectorySnapshots.ts`, `web/src/app/craft/services/outputInventorySnapshots.ts`, `web/src/app/craft/services/outputThumbnailCache.ts`, `web/src/app/craft/services/workspaceFiles.ts`, `web/src/app/craft/services/outputPanelPreferences.ts`, `web/src/app/craft/services/filePreview.ts` | craft-frontend |
