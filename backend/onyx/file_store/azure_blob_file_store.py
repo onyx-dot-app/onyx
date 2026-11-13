@@ -531,8 +531,9 @@ class AzureBlobBackedFileStore(PresignableFileStore):
                 except HttpResponseError as e:
                     if e.status_code == 403:
                         raise PresignedUrlsNotSupportedError(
-                            "An Azure user delegation SAS needs the Storage Blob "
-                            "Delegator role on the storage account"
+                            "An Azure user delegation SAS needs a role with "
+                            "generateUserDelegationKey on the storage account, "
+                            "such as Storage Blob Data Contributor"
                         ) from e
                     raise
                 self._user_delegation_key_expiry = expiry
