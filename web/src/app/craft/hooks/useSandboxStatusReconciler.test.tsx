@@ -7,7 +7,10 @@ import { SWRConfig } from "swr";
 import { useSandboxStatusReconciler } from "@/app/craft/hooks/useSandboxStatusReconciler";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 import * as api from "@/app/craft/services/apiServices";
-import type { SandboxRuntimeState } from "@/app/craft/types/streamingTypes";
+import type {
+  ApiSandboxStatusResponse,
+  SandboxRuntimeState,
+} from "@/app/craft/types/streamingTypes";
 
 jest.mock("@/app/craft/services/apiServices");
 
@@ -60,7 +63,11 @@ describe("useSandboxStatusReconciler", () => {
     "updates the runtime state when the API reports %s",
     async (status) => {
       seedSession(sandbox());
-      mockedApi.fetchSandboxStatus.mockResolvedValue({ status });
+      mockedApi.fetchSandboxStatus.mockResolvedValue({
+        status,
+        skills_stale: false,
+        skill_omissions: null,
+      });
 
       renderHook(() => useSandboxStatusReconciler(), { wrapper });
 
@@ -73,6 +80,67 @@ describe("useSandboxStatusReconciler", () => {
     }
   );
 
+  it("shows a push by someone else in the open session", async () => {
+    seedSession(sandbox());
+    const notice = {
+      skills: [
+        {
+          plugin_id: "p1",
+          name: "big-skill",
+          bytes: 2,
+          files: 1,
+          reason: "bytes" as const,
+        },
+      ],
+      max_bytes: 1,
+      max_files: 10,
+    };
+    mockedApi.fetchSandboxStatus.mockResolvedValue({
+      status: "running",
+      skills_stale: true,
+      skill_omissions: notice,
+    });
+
+    renderHook(() => useSandboxStatusReconciler(), { wrapper });
+
+    await waitFor(() => {
+      const session = useBuildSessionStore.getState().sessions.get(SESSION_ID);
+      expect(session?.skillsStale).toBe(true);
+      expect(session?.skillOmissions).toEqual(notice);
+    });
+  });
+
+  it("does not undo a Reload that finished while a poll was in flight", async () => {
+    seedSession(sandbox());
+    let resolvePoll: (value: ApiSandboxStatusResponse) => void = () => {};
+    mockedApi.fetchSandboxStatus.mockReturnValue(
+      new Promise((resolve) => {
+        resolvePoll = resolve;
+      })
+    );
+
+    renderHook(() => useSandboxStatusReconciler(), { wrapper });
+    await waitFor(() =>
+      expect(mockedApi.fetchSandboxStatus).toHaveBeenCalledTimes(1)
+    );
+    act(() => {
+      useBuildSessionStore
+        .getState()
+        .updateSessionData(SESSION_ID, { skillsStale: false });
+    });
+    await act(async () => {
+      resolvePoll({
+        status: "running",
+        skills_stale: true,
+        skill_omissions: null,
+      });
+    });
+
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)?.skillsStale
+    ).toBe(false);
+  });
+
   it("does not poll an inactive sandbox", async () => {
     seedSession(sandbox({ status: "sleeping" }));
 
@@ -84,7 +152,11 @@ describe("useSandboxStatusReconciler", () => {
 
   it("keeps polling while the sandbox is provisioning", async () => {
     seedSession(sandbox({ status: "provisioning" }));
-    mockedApi.fetchSandboxStatus.mockResolvedValue({ status: "provisioning" });
+    mockedApi.fetchSandboxStatus.mockResolvedValue({
+      status: "provisioning",
+      skills_stale: false,
+      skill_omissions: null,
+    });
 
     renderHook(() => useSandboxStatusReconciler(), { wrapper });
 
@@ -96,7 +168,11 @@ describe("useSandboxStatusReconciler", () => {
 
   it("reconciles the workspace when provisioning finishes", async () => {
     seedSession(sandbox({ status: "provisioning" }));
-    mockedApi.fetchSandboxStatus.mockResolvedValue({ status: "running" });
+    mockedApi.fetchSandboxStatus.mockResolvedValue({
+      status: "running",
+      skills_stale: false,
+      skill_omissions: null,
+    });
 
     renderHook(() => useSandboxStatusReconciler(), { wrapper });
 
@@ -107,7 +183,7 @@ describe("useSandboxStatusReconciler", () => {
 
   it("does not let a late poll overwrite workspace restoration", async () => {
     seedSession(sandbox({ status: "provisioning" }));
-    let finishPoll: (value: { status: "running" }) => void = () => {};
+    let finishPoll: (value: ApiSandboxStatusResponse) => void = () => {};
     mockedApi.fetchSandboxStatus.mockReturnValue(
       new Promise((resolve) => {
         finishPoll = resolve;
@@ -123,7 +199,11 @@ describe("useSandboxStatusReconciler", () => {
       useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
         sandbox: sandbox({ status: "restoring" }),
       });
-      finishPoll({ status: "running" });
+      finishPoll({
+        status: "running",
+        skills_stale: false,
+        skill_omissions: null,
+      });
     });
 
     await waitFor(() => {
@@ -135,7 +215,11 @@ describe("useSandboxStatusReconciler", () => {
 
   it("stops polling after the sandbox becomes inactive", async () => {
     seedSession(sandbox());
-    mockedApi.fetchSandboxStatus.mockResolvedValue({ status: "sleeping" });
+    mockedApi.fetchSandboxStatus.mockResolvedValue({
+      status: "sleeping",
+      skills_stale: false,
+      skill_omissions: null,
+    });
 
     renderHook(() => useSandboxStatusReconciler(), { wrapper });
 
@@ -151,7 +235,11 @@ describe("useSandboxStatusReconciler", () => {
 
   it("leaves an unchanged runtime status alone", async () => {
     seedSession(sandbox());
-    mockedApi.fetchSandboxStatus.mockResolvedValue({ status: "running" });
+    mockedApi.fetchSandboxStatus.mockResolvedValue({
+      status: "running",
+      skills_stale: false,
+      skill_omissions: null,
+    });
 
     renderHook(() => useSandboxStatusReconciler(), { wrapper });
 

@@ -1,5 +1,8 @@
+import { useCallback } from "react";
+import { useFormatBytes } from "@/hooks/useFormatBytes";
 import { useTranslations } from "next-intl";
 import type { SelectOption } from "@opal/components";
+import { FetchError, fetchErrorDetail } from "@/lib/fetcher";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { useSettings } from "@/lib/settings/hooks";
 import { PluginPublishingPolicy } from "@/lib/settings/types";
@@ -9,6 +12,7 @@ import {
   INSTALLATION_POLICIES,
   type InheritOption,
 } from "@/lib/skills/installationPolicy";
+import { skillLimitOf } from "@/lib/skills/limits";
 import type { SkillInstallationPolicy } from "@/lib/skills/types";
 
 export type PublishAction = "publish" | "review" | "off";
@@ -85,4 +89,30 @@ export function usePolicyOptions({
     },
     ...options,
   ];
+}
+
+export interface SkillLimitCopy {
+  /** The refusal of a 413 SKILL_LIMIT_EXCEEDED error, else the server's
+   * detail, else `fallback`. */
+  describeError: (error: unknown, fallback: string) => string;
+}
+
+export function useSkillLimitCopy(): SkillLimitCopy {
+  const t = useTranslations("skills.limit");
+  const formatBytes = useFormatBytes();
+  const describeError = useCallback(
+    (error: unknown, fallback: string) => {
+      const limit = skillLimitOf(error);
+      if (limit !== null)
+        return t("refused", {
+          maxSize: formatBytes(limit.max_bytes),
+          maxFiles: limit.max_files,
+        });
+      if (error instanceof FetchError)
+        return fetchErrorDetail(error) ?? fallback;
+      return error instanceof Error && error.message ? error.message : fallback;
+    },
+    [t, formatBytes]
+  );
+  return { describeError };
 }

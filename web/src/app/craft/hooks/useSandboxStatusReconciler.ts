@@ -20,12 +20,19 @@ export function useSandboxStatusReconciler(): void {
   const loadSession = useBuildSessionStore((state) => state.loadSession);
   const runtimeStatus = session?.sandbox?.status ?? null;
   const reconcilingSessionIdRef = useRef<string | null>(null);
+  // The skill-state revision when the in-flight poll started.
+  const pollRevisionRef = useRef<number | null>(null);
   const shouldPoll =
     runtimeStatus === "running" || runtimeStatus === "provisioning";
 
   useSWR<ApiSandboxStatusResponse, unknown, [string, string] | null>(
     sessionId && shouldPoll ? ["sandbox-status", sessionId] : null,
-    ([, id]) => fetchSandboxStatus(id),
+    ([, id]) => {
+      pollRevisionRef.current =
+        useBuildSessionStore.getState().sessions.get(id)?.skillsStaleRevision ??
+        null;
+      return fetchSandboxStatus(id);
+    },
     {
       refreshInterval:
         runtimeStatus === "provisioning"
@@ -36,9 +43,22 @@ export function useSandboxStatusReconciler(): void {
 
         // Read current state instead of the render snapshot: a restore may have
         // started while this request was in flight.
-        const sandbox = useBuildSessionStore
-          .getState()
-          .sessions.get(sessionId)?.sandbox;
+        const current = useBuildSessionStore.getState().sessions.get(sessionId);
+        // A push by someone else changes these while the session is open. A
+        // poll that started before a newer update (a Reload) does not undo it.
+        if (
+          current &&
+          current.skillsStaleRevision === pollRevisionRef.current &&
+          (current.skillsStale !== data.skills_stale ||
+            JSON.stringify(current.skillOmissions) !==
+              JSON.stringify(data.skill_omissions))
+        ) {
+          updateSessionData(sessionId, {
+            skillsStale: data.skills_stale,
+            skillOmissions: data.skill_omissions,
+          });
+        }
+        const sandbox = current?.sandbox;
         if (!sandbox) return;
 
         // loadSession owns the client-only restoring state until workspace and

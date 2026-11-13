@@ -15882,6 +15882,12 @@
       "resetDefaults": "すべて既定値に戻す",
       "resetAll": "すべてワークスペースの既定値に戻す",
       "workspaceDisabledTooltip": "管理者がワークスペースでこのアクションを無効にしました。"
+    },
+    "skillRuntimeNotice": {
+      "title": "{count, plural, other {# 件のスキルを読み込めませんでした}}",
+      "description": "このセッションでは {names} を使用できません。スキルは {maxSize} かつ {maxFiles, number} ファイル以内に収める必要があります。不要なスキルをオフにして空きを作ってください。",
+      "manage": "スキルを管理",
+      "dismiss": "閉じる"
     }
   },
   "knowledge": {
@@ -17755,6 +17761,15 @@
       },
       "card": "グループ: {groups}",
       "entry": "{name}: {policy}"
+    },
+    "limit": {
+      "refused": "この変更により {maxSize} または {maxFiles, number} ファイルのスキル上限を超えます。使っていないスキルをオフにしてから、もう一度お試しください。",
+      "banner": {
+        "title": "{count, plural, other {# 人のユーザーがスキルの上限を超えています}}",
+        "description": "グループ設定と共有により、ユーザーのスキルが {maxSize} または {maxFiles, number} ファイルを超えることがあります。その場合、一部のスキルが読み込まれないことがあります。グループ設定を変更するか、ユーザーにスキルをオフにするよう依頼してください。",
+        "user": "{email}: {size}、{files, plural, other {# ファイル}}、読み込まれなかったスキル {notLoaded, plural, other {# 件}}",
+        "more": "ほか {count, number} 人。"
+      }
     }
   },
   "opensearchHealth": {

@@ -33,6 +33,7 @@ from onyx.server.features.build.db.artifact import (
 )
 from onyx.server.features.build.db.build_session import (
     get_build_session,
+    session_runtime_stale,
     set_build_session_sharing_scope,
 )
 from onyx.server.features.build.db.sandbox import (
@@ -75,6 +76,7 @@ from onyx.server.features.build.session.models import (
     SetSessionSharingResponse,
     SnapshotResponse,
     WebappInfo,
+    skill_limit_notice,
 )
 from onyx.server.features.build.session.sandbox_lifecycle import (
     create_session_snapshot_keep_latest,
@@ -218,7 +220,10 @@ def reload_session_skills(
 ) -> SessionSkillsStateResponse:
     skills_stale = SessionManager(db_session).reload_session_skills(session_id, user)
     db_session.commit()
-    return SessionSkillsStateResponse(skills_stale=skills_stale)
+    return SessionSkillsStateResponse(
+        skills_stale=skills_stale,
+        skill_omissions=skill_limit_notice(get_sandbox_by_user_id(db_session, user.id)),
+    )
 
 
 @router.get("/{session_id}/sandbox-status")
@@ -235,7 +240,11 @@ def get_sandbox_status(
 
     sandbox = get_sandbox_by_user_id(db_session, user.id)
 
-    return SandboxStatusResponse(status=sandbox.status if sandbox else None)
+    return SandboxStatusResponse(
+        status=sandbox.status if sandbox else None,
+        skills_stale=session_runtime_stale(session, sandbox),
+        skill_omissions=skill_limit_notice(sandbox),
+    )
 
 
 @router.get(

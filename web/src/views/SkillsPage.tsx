@@ -59,6 +59,7 @@ import ImportSkillsFromGitHubModal from "@/sections/modals/skills/ImportSkillsFr
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 import SkillPreviewModal from "@/sections/modals/SkillPreviewModal";
 import SkillReviewRequests from "@/sections/skills/SkillReviewRequests";
+import SkillLimitUsersBanner from "@/sections/skills/SkillLimitUsersBanner";
 import type { BuiltinSkill, CustomSkill } from "@/lib/skills/types";
 import { stageSkillCreationDraft } from "@/lib/skills/creationDraft";
 import {
@@ -69,6 +70,7 @@ import {
   setSkillEnabled,
 } from "@/lib/skills/api";
 import { useSettings } from "@/lib/settings/hooks";
+import { useSkillLimitCopy } from "@/lib/skills/hooks";
 
 interface SkillsPageProps {
   admin?: boolean;
@@ -77,6 +79,7 @@ interface SkillsPageProps {
 export default function SkillsPage({ admin = false }: SkillsPageProps) {
   const t = useTranslations("skills");
   const bulkCopy = useTranslations("skills.bulk");
+  const { describeError } = useSkillLimitCopy();
   const { isAdmin } = useUser();
   const { isGlobalHolder: canManageOrgSkills } = usePermissionAuthority(
     Permission.MANAGE_PLUGINS
@@ -96,11 +99,14 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
       ? Number(externalAppIdParam)
       : null;
   const { data, error, isLoading, refresh } = useUserSkills();
-  // Revalidation after a successful change is best effort.
-  function revalidateSkills() {
-    return refresh().catch(() => undefined);
-  }
   const { mutate } = useSWRConfig();
+  // Revalidation after a successful change is best effort. A change can move
+  // a user past or back within the skill limit, so the admin banner reloads.
+  function revalidateSkills() {
+    return Promise.all([refresh(), mutate(SWR_KEYS.skillLimitUsers)]).catch(
+      () => undefined
+    );
+  }
   const [deleteTarget, setDeleteTarget] = useState<CustomSkillCardItem | null>(
     null
   );
@@ -265,6 +271,9 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
       void refresh().catch(() => {
         toast.error(t("page.toasts.refreshFailed", { name: item.name }));
       });
+      void Promise.resolve(mutate(SWR_KEYS.skillLimitUsers)).catch(
+        () => undefined
+      );
     } catch (error) {
       if (enabled && !replaceConflict && isSkillNameConflict(error)) {
         setPendingSwitchTarget(item);
@@ -272,14 +281,13 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         return;
       }
       toast.error(
-        error instanceof Error
-          ? error.message
-          : t(
-              enabled
-                ? "page.toasts.enableFailed"
-                : "page.toasts.disableFailed",
-              { name: item.name }
-            )
+        describeError(
+          error,
+          t(
+            enabled ? "page.toasts.enableFailed" : "page.toasts.disableFailed",
+            { name: item.name }
+          )
+        )
       );
     } finally {
       setOptimisticEnabledById((current) => {
@@ -621,6 +629,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
       </SettingsLayouts.Header>
 
       <SettingsLayouts.Body>
+        {admin && canManageOrgSkills && <SkillLimitUsersBanner />}
         {canManageOrgSkills && (admin || !isAdmin) && (
           <SkillReviewRequests onReviewed={() => void revalidateSkills()} />
         )}

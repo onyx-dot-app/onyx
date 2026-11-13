@@ -271,6 +271,7 @@ export const SWR_KEYS = {
   skillSharing: (skillId: string) => `/api/skills/custom/${skillId}/share`,
   editableSkill: (skillId: string) => `/api/skills/custom/${skillId}/edit`,
   skillReviewRequests: "/api/skills/review-requests",
+  skillLimitUsers: "/api/skills/users-over-limit",
   organizationLibraryDefaultAccess:
     "/api/skills/organization-library/default-access",
   skillVersions: (skillId: string) => `/api/skills/custom/${skillId}/versions`,

@@ -20,6 +20,7 @@ describe("SkillsStaleNotice", () => {
     });
     jest.mocked(api.reloadSessionSkills).mockResolvedValue({
       skills_stale: false,
+      skill_omissions: null,
     });
   });
 
@@ -34,6 +35,33 @@ describe("SkillsStaleNotice", () => {
         useBuildSessionStore.getState().sessions.get(SESSION_ID)?.skillsStale
       ).toBe(false);
     });
+  });
+
+  it("replaces the skills that did not load with the reload's result", async () => {
+    useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
+      skillOmissions: {
+        skills: [
+          {
+            plugin_id: "p1",
+            name: "old-skill",
+            bytes: 1,
+            files: 1,
+            reason: "bytes",
+          },
+        ],
+        max_bytes: 10,
+        max_files: 10,
+      },
+    });
+    render(<SkillsStaleNotice sessionId={SESSION_ID} turnActive={false} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Reload" }));
+
+    await waitFor(() =>
+      expect(
+        useBuildSessionStore.getState().sessions.get(SESSION_ID)?.skillOmissions
+      ).toBeNull()
+    );
   });
 
   it("reveals retained stale state after an active turn stops", () => {

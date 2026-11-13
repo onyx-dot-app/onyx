@@ -15882,6 +15882,12 @@
       "resetDefaults": "모두 기본값으로 재설정",
       "resetAll": "모두 워크스페이스 기본값으로 재설정",
       "workspaceDisabledTooltip": "관리자가 워크스페이스에서 이 작업을 비활성화했습니다."
+    },
+    "skillRuntimeNotice": {
+      "title": "{count, plural, other {스킬 #개를 불러오지 못했습니다}}",
+      "description": "이 세션에서는 {names}을(를) 사용할 수 없습니다. 스킬은 {maxSize} 및 파일 {maxFiles, number}개 이내여야 합니다. 필요 없는 스킬을 끄고 공간을 확보하세요.",
+      "manage": "스킬 관리",
+      "dismiss": "닫기"
     }
   },
   "knowledge": {
@@ -17755,6 +17761,15 @@
       },
       "card": "그룹: {groups}",
       "entry": "{name}: {policy}"
+    },
+    "limit": {
+      "refused": "이 변경으로 {maxSize} 또는 파일 {maxFiles, number}개의 스킬 한도를 넘습니다. 사용하지 않는 스킬을 끈 다음 다시 시도하세요.",
+      "banner": {
+        "title": "{count, plural, other {사용자 #명이 스킬 한도를 넘었습니다}}",
+        "description": "그룹 설정과 공유로 인해 사용자의 스킬이 {maxSize} 또는 {maxFiles, number}개 파일을 넘을 수 있습니다. 이 경우 일부 스킬이 로드되지 않을 수 있습니다. 그룹 설정을 변경하거나 사용자에게 스킬을 끄도록 요청하세요.",
+        "user": "{email}: {size}, 파일 {files, plural, other {#개}}, 불러오지 못한 스킬 {notLoaded, plural, other {#개}}",
+        "more": "외 {count, number}명."
+      }
     }
   },
   "opensearchHealth": {

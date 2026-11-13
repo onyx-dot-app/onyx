@@ -60,6 +60,7 @@ import {
 } from "@/app/craft/services/apiServices";
 
 import { isAuthStatusError, isNotFoundError } from "@/lib/fetcher";
+import type { SkillLimitNotice } from "@/lib/skills/limits";
 
 import { genId } from "@/app/craft/utils/streamItemHelpers";
 import { parsePacket } from "@/app/craft/utils/parsePacket";
@@ -751,6 +752,8 @@ export interface BuildSessionData {
   skillsStale: boolean;
   /** Incremented only with skillsStale so async refreshes can reject stale responses. */
   skillsStaleRevision: number;
+  /** Skills the run-time limit left out of the user's sandbox. */
+  skillOmissions: SkillLimitNotice | null;
   origin: SessionOrigin;
   abortController: AbortController;
   lastAccessed: Date;
@@ -1386,6 +1389,7 @@ const createInitialSessionData = (
     agentModel: null,
     skillsStale: false,
     skillsStaleRevision: 0,
+    skillOmissions: null,
     origin: "INTERACTIVE",
     abortController: new AbortController(),
     lastAccessed: new Date(),
@@ -2316,6 +2320,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         isLoaded: true,
         loadError: null,
         ...(canApplySkillsStale() && { skillsStale: sessionData.skills_stale }),
+        skillOmissions: sessionData.skill_omissions,
         origin: sessionData.origin,
       });
       if (!needsRestore) {
@@ -2368,6 +2373,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
             skillsStaleRevisionBeforeRestore && {
             skillsStale: sessionData.skills_stale,
           }),
+          skillOmissions: sessionData.skill_omissions,
           filesNeedsRefresh:
             (get().sessions.get(sessionId)?.filesNeedsRefresh ?? 0) + 1,
           webappNeedsRefresh:
