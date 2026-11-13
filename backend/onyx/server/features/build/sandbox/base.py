@@ -200,6 +200,10 @@ class SandboxManager(_ServeMixin, ABC):
         """Inventory only this deployment's resources, including partial provisions."""
         raise NotImplementedError
 
+    def list_resource_tenant_ids(self, deadline: float) -> set[str]:
+        """Return every tenant that labels at least one of this deployment's resources."""
+        raise NotImplementedError
+
     def delete_resource(self, resource: SandboxResource, deadline: float) -> None:
         """Delete the observed instance after ownership checks. Raise on incomplete deletion."""
         raise NotImplementedError

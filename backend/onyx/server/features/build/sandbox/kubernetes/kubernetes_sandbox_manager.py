@@ -49,7 +49,7 @@ import shlex
 import tarfile
 import tempfile
 import time
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 from typing import cast
 from uuid import UUID
@@ -1354,38 +1354,66 @@ class KubernetesSandboxManager(SandboxManager):
                 legacy_secret_selector,
             ),
         ):
-            continuation = None
-            while True:
-                page = list_resources(
-                    namespace=self._namespace,
-                    label_selector=resource_selector,
-                    limit=100,
-                    _continue=continuation,
-                    _request_timeout=remaining_request_timeout(deadline),
+            for item in self._list_all_pages(
+                list_resources, resource_selector, deadline
+            ):
+                metadata = item.metadata
+                labels = metadata.labels or {}
+                legacy = (
+                    kind == SandboxResourceKind.SECRET and LABEL_TENANT_ID not in labels
                 )
-                for item in page.items:
-                    metadata = item.metadata
-                    labels = metadata.labels or {}
-                    legacy = (
-                        kind == SandboxResourceKind.SECRET
-                        and LABEL_TENANT_ID not in labels
-                    )
-                    resource_labels = (
-                        {**labels, LABEL_TENANT_ID: tenant_id} if legacy else labels
-                    )
-                    resource = sandbox_resource_from_labels(
-                        kind=kind,
-                        name=metadata.name,
-                        instance_id=metadata.uid,
-                        created_at=metadata.creation_timestamp,
-                        labels=resource_labels,
-                        tenant_id=tenant_id,
-                    )
-                    if resource is not None:
-                        yield resource.model_copy(update={"legacy_ownership": legacy})
-                continuation = page.metadata._continue
-                if not continuation:
-                    break
+                resource_labels = (
+                    {**labels, LABEL_TENANT_ID: tenant_id} if legacy else labels
+                )
+                resource = sandbox_resource_from_labels(
+                    kind=kind,
+                    name=metadata.name,
+                    instance_id=metadata.uid,
+                    created_at=metadata.creation_timestamp,
+                    labels=resource_labels,
+                    tenant_id=tenant_id,
+                )
+                if resource is not None:
+                    yield resource.model_copy(update={"legacy_ownership": legacy})
+
+    def list_resource_tenant_ids(self, deadline: float) -> set[str]:
+        selector = (
+            f"{LABEL_K8S_MANAGED_BY}={LABEL_K8S_MANAGED_BY_ONYX},"
+            f"{LABEL_TENANT_ID},"
+            f"{LABEL_K8S_COMPONENT} in ({LABEL_K8S_COMPONENT_SANDBOX},{LABEL_K8S_COMPONENT_AUTH})"
+        )
+        return {
+            tenant_id
+            for list_resources in (
+                self._core_api.list_namespaced_pod,
+                self._core_api.list_namespaced_service,
+                self._core_api.list_namespaced_secret,
+            )
+            for item in self._list_all_pages(list_resources, selector, deadline)
+            if (tenant_id := (item.metadata.labels or {}).get(LABEL_TENANT_ID))
+        }
+
+    def _list_all_pages(
+        self,
+        list_resources: Callable[
+            ..., client.V1PodList | client.V1ServiceList | client.V1SecretList
+        ],
+        label_selector: str,
+        deadline: float,
+    ) -> Iterator[client.V1Pod | client.V1Service | client.V1Secret]:
+        continuation = None
+        while True:
+            page = list_resources(
+                namespace=self._namespace,
+                label_selector=label_selector,
+                limit=100,
+                _continue=continuation,
+                _request_timeout=remaining_request_timeout(deadline),
+            )
+            yield from page.items
+            continuation = page.metadata._continue
+            if not continuation:
+                return
 
     def delete_resource(self, resource: SandboxResource, deadline: float) -> None:
         operations = {
