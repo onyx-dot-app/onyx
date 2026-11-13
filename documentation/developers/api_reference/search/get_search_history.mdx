@@ -1,0 +1,16 @@
+---
+title: "Get Search History"
+openapi: "GET /search/search-history"
+---
+
+<Info>
+  **Required permission:** Search &mdash; Read (`read:search`), which `basic` includes, so any signed-in user has it.
+  A limited [Personal Access Token](/developers/overview#personal-access-tokens) needs the Search &mdash; Read scope.
+</Info>
+
+<Note>
+  Returns only the calling user's own queries, most recent first,
+  and only those sent through [Handle Send Search Message](/developers/api_reference/search/handle_send_search_message)
+  &mdash; chat messages and `POST /search` calls are not recorded here. A `limit` outside 1&ndash;1000,
+  or a `filter_days` of zero or less, is rejected with `400`.
+</Note>

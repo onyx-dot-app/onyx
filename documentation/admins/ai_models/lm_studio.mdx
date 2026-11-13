@@ -1,0 +1,70 @@
+---
+title: "LM Studio"
+description: "Using LM Studio with Onyx"
+icon: "desktop"
+---
+
+import NavigateToAiModels from "/snippets/navigate-to-ai-models.mdx";
+import StandardAiModelConfigs from "/snippets/standard-ai-model-configs.mdx";
+
+## Guide
+
+Configure Onyx to use models served by [LM Studio](https://lmstudio.ai/).
+
+Onyx reads the models loaded in LM Studio, together with their capabilities (vision, reasoning) and context length.
+
+<Steps>
+  <Step title="Set Up LM Studio and Load Your Models">
+    Download LM Studio from [lmstudio.ai](https://lmstudio.ai/) and load the models you want to use.
+
+    Start the LM Studio local server:
+
+    ```bash
+    lms server start --port 1234
+    ```
+
+    LM Studio listens on port `1234` by default.
+
+    <Tip>
+      Use a model with strong instruction-following and tool-use capabilities (for example, Qwen 3.5).
+    </Tip>
+
+    If LM Studio runs on a different machine than Onyx,
+    make sure the server is reachable from the Onyx host (for example, `http://<lm-studio-host>:1234`).
+
+    <Info>
+      **Running Onyx in Docker on the same machine as LM Studio?**
+
+      By default, LM Studio binds only to `127.0.0.1`, which is unreachable from inside an Onyx container. To fix this:
+
+      - In the LM Studio **Developer** tab, enable **Serve on Local Network** (or set the host to `0.0.0.0`) and restart the server.
+      - Use `http://host.docker.internal:1234` as the **API Base URL** instead of `http://localhost:1234`.
+      Onyx fills in this address when it runs in a container.
+
+      See the [LM Studio docs](https://lmstudio.ai/docs/developer/core/server/serve-on-network) for details.
+    </Info>
+  </Step>
+
+  <NavigateToAiModels />
+
+  <Step title="Connect LM Studio">
+    Under **Self-hosted & Custom**, click **Connect** on the **LM Studio** card.
+
+    Set the **API Base URL** to your LM Studio server address (for example, `http://localhost:1234`).
+    Enter the server root. Onyx adds the `/v1` path for you.
+
+    If your LM Studio server requires authentication, paste the key in the optional **API Key** field.
+
+    <img className="rounded-image" src="/assets/admins/ai_models/lm_studio_config.webp" alt="LM Studio provider setup dialog"/>
+  </Step>
+
+  <Step title="Load Your Models">
+    In the **Models** section, click **Refresh models**. Onyx lists the models loaded in LM Studio.
+  </Step>
+
+  <StandardAiModelConfigs />
+
+  <Step title="Connect">
+    Click **Connect**. Onyx tests the connection with one of the selected models before it saves the provider.
+  </Step>
+</Steps>

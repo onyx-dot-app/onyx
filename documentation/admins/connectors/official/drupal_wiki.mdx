@@ -1,0 +1,65 @@
+---
+title: "Drupal Wiki"
+description: "Access knowledge from your Drupal Wiki instance"
+---
+
+## How it works
+
+The Drupal Wiki connector indexes the pages of your Drupal Wiki instance.
+You can index every space the account can read, or only specific spaces and pages. You can also index page attachments.
+
+Onyx converts each page to text and keeps the space and author as document metadata. After the first run,
+Onyx checks Drupal Wiki for new and changed pages every 30 minutes by default.
+You can change **Refresh Every** on the connector. Pruning removes pages that were deleted in Drupal Wiki.
+
+The connector indexes only the content that the API token can read. Permission sync is not available for Drupal Wiki.
+Everyone who can see the connector's documents in Onyx can see every indexed page.
+
+## Setting up
+
+### Authorization
+
+You need a Drupal Wiki personal access token. The token starts with `pat:`.
+
+<Steps>
+  <Step title="Check the REST API">
+    Make sure the REST API is enabled in your Drupal Wiki instance.
+  </Step>
+
+  <Step title="Generate an access token">
+    Follow the Drupal Wiki documentation to generate a personal access token:
+    [https://help.drupal-wiki.com/node/605#2-Zugriffs-Token-generieren](https://help.drupal-wiki.com/node/605#2-Zugriffs-Token-generieren)
+  </Step>
+</Steps>
+
+### Indexing
+
+<Steps>
+  <Step title="Create the account">
+    In the Onyx admin panel, go to **Connectors** and select **Drupal Wiki**. Under **Authentication Account**,
+    click **Create New**. Enter the **Base URL** of your instance, for example `https://help.drupal-wiki.com`,
+    and the token as the **API Token**.
+  </Step>
+
+  <Step title="Choose the content to index">
+    Under **Drupal Wiki Content to Index**, select a tab:
+    - **Everything**: Onyx indexes all pages in every space that the account can read.
+    - **Specific Spaces/Pages**: Enter **Space IDs** and **Page IDs**. Use numeric IDs only. To find space IDs, see
+    [https://help.drupal-wiki.com/node/606](https://help.drupal-wiki.com/node/606).
+  </Step>
+
+  <Step title="Set the attachment option">
+    Check **Include Attachments** to also index the files attached to pages.
+    Onyx indexes the supported document types and skips attachments larger than 10 MB.
+  </Step>
+
+  <Step title="Choose document access">
+    Under **Document Access**, select who can see the indexed pages.
+    **Specific Groups** is available on the Business and Enterprise plans and on Onyx Cloud.
+    Then click **Create Connector**.
+  </Step>
+</Steps>
+
+<img className="rounded-image" src="/assets/admins/connectors/drupal_wiki/OnyxDrupalWikiConfig.webp" alt="Drupal Wiki connector configuration in Onyx"/>
+
+The connector works with self-hosted and cloud-hosted Drupal Wiki instances.

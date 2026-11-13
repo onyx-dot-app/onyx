@@ -1,0 +1,61 @@
+---
+title: "Email (IMAP)"
+description: "Ingest emails from IMAP mailboxes"
+---
+
+## How it works
+
+The Email (IMAP)
+connector signs in to a mail server over IMAP with SSL and indexes the emails in the mailboxes you select.
+Each email becomes one document. The subject is the document title. The email body is the document text.
+
+After the first run, the connector only fetches new emails on each poll.
+
+## Setting up
+
+### Authorization
+
+<Steps>
+  <Step title="Enable IMAP">
+    Enable IMAP access on the mail account. For hosted providers (Gmail, Outlook.com, Fastmail)
+    check the provider's settings.
+  </Step>
+
+  <Step title="Get a password">
+    Note the account username and password. If the provider requires app passwords,
+    create one and use it instead of the account password.
+  </Step>
+</Steps>
+
+### Indexing
+
+<Steps>
+  <Step title="Create a credential">
+    Go to **Admin Panel → Connectors** and select **Email (IMAP)**. Select **New IMAP Account**.
+    Enter the **IMAP Username** and **IMAP Password**, then select **Create**.
+  </Step>
+
+  <Step title="Enter the server details">
+    - **IMAP Server Host**: the host name of the IMAP server, for example `imap.example.com`.
+    - **IMAP Server Port**: the SSL port of the IMAP server. The default is `993`.
+  </Step>
+
+  <Step title="Select mailboxes (optional)">
+    In **Mailboxes**, enter the mailbox names to index, for example `INBOX` or `Sent`.
+    Leave the field empty to index every mailbox on the account.
+  </Step>
+
+  <Step title="Choose document access">
+    Under **Document Access**, select **Everyone in Your Organization** or **Specific Groups**.
+    **Specific Groups** needs the Business or Enterprise tier on Onyx Cloud, or the Enterprise Edition when self-hosted.
+  </Step>
+
+  <Step title="Start indexing">
+    Select **Create Connector**. Onyx signs in to the server to confirm the settings and then starts indexing.
+  </Step>
+</Steps>
+
+<Note>
+  To index several accounts, create one connector per account. The Email (IMAP)
+  connector does not support **Sync with Email (IMAP)** (permission sync).
+</Note>
