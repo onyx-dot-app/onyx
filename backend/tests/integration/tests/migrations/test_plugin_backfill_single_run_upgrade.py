@@ -1,7 +1,7 @@
 """A deploy runs every pending revision in one transaction. The plugin backfills
 (cdec9dd9ca3d, 55bf66dd54dd) write rows under deferred FKs, and a later
-revision alters the plugin table. 55bf66dd54dd runs the queued checks, or that
-ALTER fails on every instance with a custom skill."""
+revision alters the plugin table. env.py runs the queued checks after each
+revision, or that ALTER fails on every instance with a custom skill."""
 
 from collections.abc import Generator
 from uuid import UUID, uuid4

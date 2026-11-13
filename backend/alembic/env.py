@@ -18,12 +18,17 @@ from sqlalchemy import text
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.engine.base import Connection
 import os
+from typing import Any
+from collections.abc import Collection
+from collections.abc import Mapping
 from itertools import chain
 import asyncio
 import logging
 from logging.config import fileConfig
 
 from alembic import context
+from alembic.runtime.migration import MigrationContext
+from alembic.runtime.migration import MigrationInfo
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.ext.asyncio import create_async_engine
 from onyx.configs.constants import SSL_CERT_FILE
@@ -246,6 +251,35 @@ def get_schema_options() -> tuple[
     )
 
 
+def run_queued_deferred_checks(
+    ctx: MigrationContext,
+    step: MigrationInfo,  # noqa: ARG001
+    heads: Collection[Any],  # noqa: ARG001
+    run_args: Mapping[str, Any],  # noqa: ARG001
+) -> None:
+    """Every revision runs in one transaction. A revision that writes rows under
+    a deferred constraint queues checks until commit, and a later ALTER TABLE on
+    that table fails with "pending trigger events". Run the checks after each
+    revision, then restore the deferred default."""
+    connection = ctx.connection
+    if ctx.as_sql or connection is None:
+        return
+    connection.exec_driver_sql("SET CONSTRAINTS ALL IMMEDIATE")
+    names = (
+        connection.execute(
+            text(
+                "SELECT format('%I.%I', n.nspname, c.conname) FROM pg_constraint c "
+                "JOIN pg_namespace n ON n.oid = c.connamespace "
+                "WHERE c.condeferred AND n.nspname = current_schema()"
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if names:
+        connection.exec_driver_sql(f"SET CONSTRAINTS {', '.join(names)} DEFERRED")
+
+
 def do_run_migrations(
     connection: Connection, schema_name: str, create_schema: bool
 ) -> None:
@@ -264,6 +298,7 @@ def do_run_migrations(
         compare_type=True,
         compare_server_default=True,
         script_location=config.get_main_option("script_location"),
+        on_version_apply=run_queued_deferred_checks,
     )
 
     # Migrations may call into code that reads CURRENT_TENANT_ID_CONTEXTVAR
@@ -541,6 +576,7 @@ def run_migrations_online() -> None:
                 compare_type=True,
                 compare_server_default=True,
                 script_location=config.get_main_option("script_location"),
+                on_version_apply=run_queued_deferred_checks,
             )
 
             with context.begin_transaction():
