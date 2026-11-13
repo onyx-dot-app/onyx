@@ -1,5 +1,6 @@
 "use client";
 
+import { TIMELINE_HEADER_ICON_PX } from "@/lib/timeline/components/primitives/tokens";
 import React, { useMemo, useCallback } from "react";
 import { StopReason } from "@/app/app/services/streamingModels";
 import {
@@ -54,7 +55,11 @@ function TimelineContainer({
   return (
     <TimelineRoot>
       <TimelineHeaderRow
-        left={showAgentAvatar ? <AgentAvatar agent={agent} size={24} /> : null}
+        left={
+          showAgentAvatar ? (
+            <AgentAvatar agent={agent} size={TIMELINE_HEADER_ICON_PX} />
+          ) : null
+        }
       >
         {headerContent}
       </TimelineHeaderRow>
@@ -340,7 +345,10 @@ export const AgentTimeline = React.memo(function AgentTimeline({
       <RunHeaderRow
         left={
           showAgentAvatar ? (
-            <AgentAvatar agent={chatState.agent} size={24} />
+            <AgentAvatar
+              agent={chatState.agent}
+              size={TIMELINE_HEADER_ICON_PX}
+            />
           ) : null
         }
         interactive={headerIsInteractive}
