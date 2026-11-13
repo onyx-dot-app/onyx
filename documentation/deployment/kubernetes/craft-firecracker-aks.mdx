@@ -148,6 +148,8 @@ shared key access can stay off.
   <Step title="Set up the workload identity">
     The Onyx `azure/onyx` module does this step for you. On your own cluster:
 
+    - Turn on the OIDC issuer and Workload Identity on the cluster
+    (`az aks update --enable-oidc-issuer --enable-workload-identity`).
     - Make a user-assigned managed identity and federate it to the Onyx service account
     (default `onyx-workload-access` in the namespace `onyx`).
     - Set `serviceAccount.create: false` and `serviceAccount.name` to that service account in your Helm values.
