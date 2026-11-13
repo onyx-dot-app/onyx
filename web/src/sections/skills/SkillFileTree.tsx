@@ -13,7 +13,7 @@ import {
 } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
 import { cn } from "@opal/utils";
-import { formatBytes } from "@/lib/utils";
+import { useFormatBytes } from "@/hooks/useFormatBytes";
 import type { SkillBundleFile } from "@/lib/skills/types";
 
 interface SkillFileTreeNode {
@@ -43,6 +43,7 @@ function SkillFileTreeNodes({
   removeDisabled,
 }: SkillFileTreeNodesProps) {
   const t = useTranslations("skills.sections");
+  const formatBytes = useFormatBytes();
 
   return nodes.map((node) => {
     const isDirectory = node.size === null;
@@ -64,7 +65,7 @@ function SkillFileTreeNodes({
     ) : (
       <div className="flex items-center gap-1">
         <Text font="secondary-body" color="text-02">
-          {formatBytes(node.size!, 1)}
+          {formatBytes(node.size!)}
         </Text>
         {onRemove && (
           <Button

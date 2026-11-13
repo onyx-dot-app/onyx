@@ -22,7 +22,7 @@ import {
   restoreSkillVersion,
 } from "@/lib/skills/api";
 import { hasUnpublishedChanges } from "@/lib/skills/sharing";
-import { usePublishAction } from "@/lib/skills/hooks";
+import { usePublishAction, useSkillLimitCopy } from "@/lib/skills/hooks";
 import type {
   CustomSkill,
   SkillEditableDetail,
@@ -52,6 +52,7 @@ export default function SkillVersionsTab({
 }: SkillVersionsTabProps) {
   const skillId = skill.id;
   const t = useTranslations("skills.modals.versions");
+  const { describeError } = useSkillLimitCopy();
   const editorCopy = useTranslations("skills.editor");
   const format = useFormatter();
   const [previewVersionId, setPreviewVersionId] = useState<string | null>(null);
@@ -102,9 +103,7 @@ export default function SkillVersionsTab({
         return;
       }
       console.error("Failed to restore skill version", err);
-      toast.error(
-        err instanceof Error ? err.message : t("restore.failedToast")
-      );
+      toast.error(describeError(err, t("restore.failedToast")));
     } finally {
       setBusy(false);
     }
