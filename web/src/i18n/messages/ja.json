@@ -15546,9 +15546,6 @@
         }
       },
       "group": {
-        "calls": {
-          "tag": "{count, plural, one {# 件の呼び出し} other {# 件の呼び出し}}"
-        },
         "working": {
           "label": "作業中"
         }

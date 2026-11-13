@@ -2,19 +2,20 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Badge, Button, Text } from "@opal/components";
-import { Section } from "@opal/layouts";
 import {
   SvgBubbleText,
   SvgCheckAll,
-  SvgExpand,
-  SvgFold,
+  SvgCheckCircle,
   SvgLoader,
+  SvgStopCircle,
 } from "@opal/icons";
 import { StepContainer } from "@/lib/timeline/components/StepContainer";
 import { TimelineSteps } from "@/lib/timeline/components/TimelineSteps";
 import { TimelineRoot } from "@/lib/timeline/components/primitives/TimelineRoot";
 import { TimelineHeaderRow } from "@/lib/timeline/components/primitives/TimelineHeaderRow";
+import { StreamingHeader } from "@/lib/timeline/components/headers/StreamingHeader";
+import { CompletedHeader } from "@/lib/timeline/components/headers/CompletedHeader";
+import { StoppedHeader } from "@/lib/timeline/components/headers/StoppedHeader";
 import { groupTimelineEntries } from "@/lib/timeline/entries";
 import type { TimelineStepPosition } from "@/lib/timeline/types";
 import TaskBody from "@/lib/timeline/craft/components/tool-cards/TaskBody";
@@ -122,8 +123,8 @@ interface CraftTimelineProps {
 
 /**
  * CraftTimeline renders one run of a Craft turn's tool calls and thinking on
- * the shared timeline rail. A run with more than one entry gets a "Working"
- * header that folds it.
+ * the shared timeline rail. A run with more than one entry gets the shared
+ * run header, which folds it, and a Done or Stopped row when expanded.
  */
 export default function CraftTimeline({
   entries,
@@ -133,10 +134,13 @@ export default function CraftTimeline({
   const tTimeline = useTranslations("chat.messages.timeline");
   const groups = useMemo(() => groupTimelineEntries(entries), [entries]);
   const isRunning = entries.some((entry) => entry.status === "streaming");
+  const isStopped =
+    !isRunning && entries.some((entry) => entry.status === "stopped");
   const foldable = entries.length > 1;
   // Open while the run is active so streaming steps stay visible; settled
   // runs start folded.
   const [isOpen, setIsOpen] = useState(!foldable || isRunning);
+  const toggle = () => setIsOpen((prev) => !prev);
 
   // Fold closed once a message follows; fire once so a manual re-open sticks.
   const didAutoCollapse = useRef(false);
@@ -147,9 +151,20 @@ export default function CraftTimeline({
     }
   }, [foldable, autoCollapse]);
 
-  const toolCount = entries.filter(
-    (entry) => entry.payload.kind === "tool"
-  ).length;
+  // A run that streams here is timed; a saved run has no duration.
+  const [startedAt] = useState<number | undefined>(() =>
+    isRunning ? Date.now() : undefined
+  );
+  const [durationSeconds, setDurationSeconds] = useState(0);
+  useEffect(() => {
+    if (!isRunning && startedAt !== undefined) {
+      setDurationSeconds(
+        Math.max(1, Math.round((Date.now() - startedAt) / 1000))
+      );
+    }
+  }, [isRunning, startedAt]);
+
+  const showEndRow = foldable && isOpen && !isRunning;
 
   return (
     <TimelineRoot>
@@ -163,42 +178,30 @@ export default function CraftTimeline({
             )
           }
         >
-          <Section
-            flexDirection="row"
-            justifyContent="between"
-            alignItems="center"
-            gap={2}
-            padding={1}
-          >
-            <Section
-              flexDirection="row"
-              justifyContent="start"
-              alignItems="center"
-              gap={2}
-              width="fit"
-            >
-              <Text font="main-ui-muted" color="text-04">
-                {t("working.label")}
-              </Text>
-              {toolCount > 0 && (
-                <Badge
-                  title={t("calls.tag", { count: toolCount })}
-                  size={4}
-                  color="default"
-                />
-              )}
-            </Section>
-            <Button
-              prominence="tertiary"
-              size="md"
-              icon={isOpen ? SvgFold : SvgExpand}
-              onClick={() => setIsOpen((prev) => !prev)}
-              aria-expanded={isOpen}
-              aria-label={tTimeline(
-                isOpen ? "collapseButton.ariaLabel" : "expandButton.ariaLabel"
-              )}
+          {isRunning ? (
+            <StreamingHeader
+              headerText={t("working.label")}
+              collapsible
+              isExpanded={isOpen}
+              onToggle={toggle}
+              streamingStartTime={startedAt}
             />
-          </Section>
+          ) : isStopped ? (
+            <StoppedHeader
+              totalSteps={entries.length}
+              collapsible
+              isExpanded={isOpen}
+              onToggle={toggle}
+            />
+          ) : (
+            <CompletedHeader
+              totalSteps={entries.length}
+              collapsible
+              isExpanded={isOpen}
+              onToggle={toggle}
+              processingDurationSeconds={durationSeconds}
+            />
+          )}
         </TimelineHeaderRow>
       )}
       {isOpen && (
@@ -207,11 +210,23 @@ export default function CraftTimeline({
           renderEntry={(entry, position) => (
             <CraftTimelineStep
               entry={entry}
-              position={position}
+              position={{ ...position, isLast: position.isLast && !showEndRow }}
               defaultExpanded={!foldable && entry.status === "error"}
             />
           )}
         />
+      )}
+      {showEndRow && (
+        <StepContainer
+          stepIcon={isStopped ? SvgStopCircle : SvgCheckCircle}
+          header={tTimeline(
+            isStopped ? "stoppedStep.header" : "doneStep.header"
+          )}
+          isLastStep
+          isFirstStep={false}
+        >
+          {null}
+        </StepContainer>
       )}
     </TimelineRoot>
   );

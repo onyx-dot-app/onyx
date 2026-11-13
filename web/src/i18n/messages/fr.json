@@ -15546,9 +15546,6 @@
         }
       },
       "group": {
-        "calls": {
-          "tag": "{count, plural, one {# appel} other {# appels}}"
-        },
         "working": {
           "label": "En cours"
         }
