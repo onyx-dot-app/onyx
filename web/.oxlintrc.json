@@ -259,7 +259,6 @@
         "src/app/craft/components/CraftInputBar.tsx",
         "src/app/craft/components/OpencodeDebugLogs.tsx",
         "src/app/craft/components/SuggestedPrompts.tsx",
-        "src/lib/timeline/craft/components/ThinkingMarkdown.tsx",
         "src/app/craft/components/TodoListCard.tsx",
         "src/app/craft/components/UserLibraryModal.tsx",
         "src/app/craft/components/approvals/ApprovalCard.tsx",

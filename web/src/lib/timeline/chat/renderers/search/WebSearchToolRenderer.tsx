@@ -1,4 +1,5 @@
 import React from "react";
+import { RetrievalBody } from "@/lib/timeline/components/bodies/RetrievalBody";
 import { useTranslations } from "next-intl";
 import { SvgSearch, SvgGlobe } from "@opal/icons";
 import { SearchToolPacket } from "@/app/app/services/streamingModels";
@@ -121,21 +122,16 @@ export const WebSearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
     ]);
   }
 
-  // FULL mode: return queries timeline step
+  // FULL mode: return queries timeline step; the fetch step reads results
   return children([
     {
       icon: SvgGlobe,
       status: queriesHeader,
       content: (
-        <SearchChipList
-          items={queries}
-          initialCount={INITIAL_QUERIES_TO_SHOW}
-          expansionCount={QUERIES_PER_EXPANSION}
-          getKey={(_, index) => index}
-          toSourceInfo={queryToSourceInfo}
-          emptyState={!stopPacketSeen ? <BlinkingBar /> : undefined}
-          showDetailsCard={false}
-          isQuery={true}
+        <RetrievalBody
+          queries={queries}
+          results={null}
+          isComplete={stopPacketSeen}
         />
       ),
       supportsCollapsible: false,
