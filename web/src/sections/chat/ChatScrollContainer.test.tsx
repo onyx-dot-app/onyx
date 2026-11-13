@@ -216,8 +216,9 @@ test.each([
 ])(
   "when shrinking rows move the scroll position up and $case, following is $follows",
   async ({ scrollTopAfterShrink, follows }) => {
-    // A reloaded chat: windowed rows settle to smaller heights, the scroll
-    // position moves up, then the resumed run streams more content.
+    // A reloaded chat opens at the bottom and follows during the opening
+    // window. Windowed rows settle to smaller heights before the first scroll
+    // event, the scroll position moves up, then the resumed run streams more.
     const frames: FrameRequestCallback[] = [];
     const requestFrame = jest
       .spyOn(window, "requestAnimationFrame")
@@ -225,11 +226,16 @@ test.each([
         frames.push(callback);
         return frames.length;
       });
-    const view = render(
-      <ChatScrollContainer autoScroll>
-        <Spacer height={0} />
+    const chat = (anchorSelector?: string) => (
+      <ChatScrollContainer
+        sessionId="session"
+        anchorSelector={anchorSelector}
+        autoScroll={false}
+      >
+        <div id="anchor" />
       </ChatScrollContainer>
     );
+    const view = render(chat());
     const container = screen.getByTestId("chat-scroll-container");
     const end = container.firstElementChild?.lastElementChild;
     if (!(end instanceof HTMLElement))
@@ -246,8 +252,8 @@ test.each([
     });
     container.scrollTo = scrollTo;
     try {
-      container.scrollTop = 600;
-      fireEvent.scroll(container);
+      view.rerender(chat("#anchor"));
+      expect(container.scrollTop).toBe(600);
 
       contentHeight = 900;
       container.scrollTop = scrollTopAfterShrink;

@@ -1,10 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useCallback } from "react";
-import {
-  useChatSessionStore,
-  useCurrentChatState,
-} from "@/app/app/stores/useChatSessionStore";
+import { useCurrentChatState } from "@/app/app/stores/useChatSessionStore";
 import { useScrollContainer } from "@/sections/chat/ScrollContainerContext";
 
 // Small offset from the top of the scroll viewport where the anchor should appear.
@@ -34,13 +31,11 @@ const DynamicBottomSpacer = React.memo(
   ({ anchorNodeId }: DynamicBottomSpacerProps) => {
     const spacerRef = useRef<HTMLDivElement>(null);
     const chatState = useCurrentChatState();
-    const sessionId = useChatSessionStore((state) => state.currentSessionId);
     const isStreaming = chatState === "streaming" || chatState === "loading";
     // A send from this page passes through "loading". A run the page resumes
     // (a reload, or a chat it opens mid-run) starts at "streaming" and is not
-    // a new turn, so it must not push the history up. The marker holds the
-    // session that sent, so a switch to another chat clears it.
-    const sentSessionIdRef = useRef<string | null>(null);
+    // a new turn, so it must not push the history up.
+    const sentHereRef = useRef(false);
 
     // Get scroll container refs from context (provided by ChatScrollContainer)
     const { scrollContainerRef, contentWrapperRef, spacerHeightRef } =
@@ -254,11 +249,8 @@ const DynamicBottomSpacer = React.memo(
      * Main effect: detect streaming start/stop and anchor changes
      */
     useEffect(() => {
-      if (chatState === "loading") sentSessionIdRef.current = sessionId;
-      else if (!isStreaming || sentSessionIdRef.current !== sessionId)
-        sentSessionIdRef.current = null;
-      const sentHere =
-        sessionId !== null && sentSessionIdRef.current === sessionId;
+      if (chatState === "loading") sentHereRef.current = true;
+      else if (!isStreaming) sentHereRef.current = false;
       const anchorChanged = prevAnchorNodeIdRef.current !== anchorNodeId;
       const streamingStarted = isStreaming && !wasStreamingRef.current;
 
@@ -268,7 +260,7 @@ const DynamicBottomSpacer = React.memo(
       // Activate when a turn sent from this page starts: a new anchor appears
       // while it streams, or streaming starts with an anchor.
       if (
-        sentHere &&
+        sentHereRef.current &&
         anchorNodeId &&
         ((anchorChanged && isStreaming) || streamingStarted)
       ) {
@@ -281,7 +273,7 @@ const DynamicBottomSpacer = React.memo(
       // We intentionally do NOT clear it when streaming ends — for fast responses,
       // streaming can end before the smooth scroll animation completes, which would
       // remove the suppression too early and flash the scroll-to-bottom button.
-    }, [anchorNodeId, chatState, sessionId, isStreaming, activate]);
+    }, [anchorNodeId, chatState, isStreaming, activate]);
 
     /**
      * Reset when anchor is cleared

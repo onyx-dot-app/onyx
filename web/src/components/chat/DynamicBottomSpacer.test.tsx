@@ -8,7 +8,7 @@ import type { ChatState } from "@/app/app/types";
 const ANCHOR_NODE_ID = 2;
 
 /** A scrolled chat whose latest user message sits near the end of the history. */
-function Chat({ anchorNodeId }: { anchorNodeId: number | undefined }) {
+function Chat() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const contentWrapperRef = useRef<HTMLDivElement>(null);
   const spacerHeightRef = useRef(0);
@@ -35,7 +35,7 @@ function Chat({ anchorNodeId }: { anchorNodeId: number | undefined }) {
                 element.getBoundingClientRect = () => ({ top: 900 }) as DOMRect;
             }}
           />
-          <DynamicBottomSpacer anchorNodeId={anchorNodeId} />
+          <DynamicBottomSpacer anchorNodeId={ANCHOR_NODE_ID} />
         </ScrollContainerProvider>
       </div>
     </div>
@@ -46,14 +46,6 @@ function setChatState(chatState: ChatState) {
   act(() =>
     useChatSessionStore.getState().updateChatState("session", chatState)
   );
-}
-
-/** Wait two frames: the effect and the spacer's own layout pass. */
-async function settleFrames() {
-  for (let frame = 0; frame < 2; frame++)
-    await act(
-      () => new Promise((resolve) => requestAnimationFrame(() => resolve(null)))
-    );
 }
 
 function spacerHeight(container: HTMLElement): string | undefined {
@@ -70,33 +62,24 @@ beforeEach(() => {
 test("a run the page resumes does not push the history up", async () => {
   // A reload of a chat whose answer is still streaming.
   setChatState("streaming");
-  const { container } = render(<Chat anchorNodeId={ANCHOR_NODE_ID} />);
+  const { container } = render(<Chat />);
 
-  await settleFrames();
+  // Two frames: the effect and the spacer's own layout pass.
+  await act(
+    () => new Promise((resolve) => requestAnimationFrame(() => resolve(null)))
+  );
+  await act(
+    () => new Promise((resolve) => requestAnimationFrame(() => resolve(null)))
+  );
 
   expect(spacerHeight(container) ?? "").toMatch(/^(0px)?$/);
 });
 
 test("a message sent from the page pushes the history up", async () => {
-  const { container } = render(<Chat anchorNodeId={ANCHOR_NODE_ID} />);
+  const { container } = render(<Chat />);
 
   setChatState("loading");
   setChatState("streaming");
 
   await waitFor(() => expect(spacerHeight(container)).toBe("484px"));
-});
-
-test("a send in one chat does not push up another chat the page opens mid-run", async () => {
-  const { container, rerender } = render(<Chat anchorNodeId={undefined} />);
-  setChatState("loading");
-
-  act(() => {
-    useChatSessionStore.getState().createSession("other");
-    useChatSessionStore.getState().updateChatState("other", "streaming");
-    useChatSessionStore.getState().setCurrentSession("other");
-  });
-  rerender(<Chat anchorNodeId={ANCHOR_NODE_ID} />);
-  await settleFrames();
-
-  expect(spacerHeight(container) ?? "").toMatch(/^(0px)?$/);
 });

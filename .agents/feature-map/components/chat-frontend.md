@@ -553,9 +553,12 @@ up its own branding.
     update visual state without treating layout growth as a user scroll. When
     the content shrinks, an upward scroll up to the shrinkage is layout, not
     the user, so only movement beyond it stops following.
-    `components/chat/DynamicBottomSpacer.tsx` adds space only for a turn sent
-    from the open chat, which passes through `loading`. A run the page resumes
-    or a chat it switches to starts at `streaming` and gets no space.
+    Every scroll baseline records the position and the content height
+    together. `components/chat/DynamicBottomSpacer.tsx` adds space only for a
+    turn sent from the page, which passes through `loading`. A run the page
+    resumes starts at `streaming` and gets no space. The scroll element is
+    keyed by session, so a chat switch remounts the spacer and clears its
+    state.
 
 ---
 
