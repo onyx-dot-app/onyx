@@ -122,6 +122,9 @@
       "authenticate": {
         "label": "認証"
       },
+      "codingAgentIncognito": {
+        "tooltip": "シークレットモードではコーディングエージェントを使用できません"
+      },
       "configure": {
         "tooltip": "設定"
       },
@@ -12457,6 +12460,7 @@
         },
         "deepResearchButton": {
           "disabledTooltip": "マルチモデルモードでは Deep Research を使用できません",
+          "incognitoTooltip": "シークレットモードでは Deep Research を使用できません",
           "label": "Deep Research"
         },
         "incognitoNotice": {

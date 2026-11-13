@@ -14,7 +14,6 @@ from onyx.chat.models import (
     ChatBranch,
     MessageRendering,
     ResponseLink,
-    ResponseRecord,
     SavedAgentContext,
     SessionAncestor,
 )
@@ -23,16 +22,13 @@ from onyx.db.chat import (
     MAX_AGENT_DEPTH,
     MAX_AGENT_HISTORY_RUNS,
     agent_path_from_ancestors,
-    agent_session_path,
     checkpoint_from_summary,
     find_summary_for_ancestry,
-    parent_session_id,
     session_ancestors,
     translate_db_search_doc_to_saved_search_doc,
     visible_message_ids,
 )
 from onyx.db.chat_response import (
-    read_response_record,
     read_response_steps,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -340,47 +336,6 @@ def load_agent_history(message_id: int, agent_id: str) -> SavedAgentContext:
         return _load_history(
             db_session, branch, _visible_agent(db_session, branch, agent_id)
         )
-
-
-def load_saved_response(
-    message_id: int, response_id: int, parent_agent_id: str
-) -> ResponseRecord | None:
-    """Read a completed child response after authorizing its parent branch."""
-    branch = load_chat_branch(message_id)
-    with get_session_with_current_tenant() as db_session:
-        session_id = db_session.scalar(
-            select(ChatMessage.chat_session_id).where(
-                ChatMessage.id == response_id, ChatMessage.response_status.is_not(None)
-            )
-        )
-        if session_id is None:
-            return None
-        agent = _visible_agent(db_session, branch, str(session_id))
-        if parent_session_id(db_session, agent) != UUID(parent_agent_id):
-            return None
-        links = _selected_response_links(db_session, branch, [agent.id])[agent.id]
-        if not any(link.id == response_id for link in links):
-            return None
-        _check_history_size(db_session, [response_id])
-        response = db_session.scalar(
-            select(ChatMessage)
-            .where(ChatMessage.id == response_id)
-            .options(
-                selectinload(ChatMessage.response_items),
-                selectinload(ChatMessage.tool_calls),
-                joinedload(ChatMessage.parent_message).joinedload(
-                    ChatMessage.parent_message
-                ),
-            )
-        )
-        if response is None:
-            return None
-        record = read_response_record(response, agent_session_path(db_session, agent))
-        summary = find_summary_for_ancestry(
-            db_session, agent.id, visible_message_ids(db_session, response)
-        )
-        record.checkpoint = checkpoint_from_summary(summary)
-        return record
 
 
 def _agent_metadata(

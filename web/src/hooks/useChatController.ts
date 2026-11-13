@@ -1098,6 +1098,7 @@ export default function useChatController({
               requestedToolId: toolConfiguration.preferredToolId,
               agent: activeAgent,
               plugins: memberPlugins ?? [],
+              incognito,
             });
 
         // Determine origin for telemetry tracking (also used for frontend PostHog tracking below)

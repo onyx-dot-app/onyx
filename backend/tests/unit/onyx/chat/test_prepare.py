@@ -31,7 +31,14 @@ from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
 from onyx.context.models import UserInfo, UserMemoryContext
 from onyx.context.search.models import PersonaSearchInfo
 from onyx.db.enums import IncognitoRecordMode
-from onyx.db.models import ChatMessage, ChatSession, Persona, User, UserProject
+from onyx.db.models import (
+    ChatMessage,
+    ChatSession,
+    Persona,
+    Tool,
+    User,
+    UserProject,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.models import (
@@ -50,6 +57,7 @@ from onyx.llm.models import (
     UserMessage,
 )
 from onyx.server.query_and_chat.models import SendMessageRequest
+from onyx.tools.constants import CODING_AGENT_TOOL_ID
 from onyx.tools.models import PersonaToolConfiguration
 from tests.unit.fakes import FakeCache
 from tests.unit.onyx.agents.fakes import ScriptedLLM
@@ -507,6 +515,79 @@ def test_expired_preparation_does_not_save_user_messages(
                 User(id=uuid4(), email="reader@example.com"),
                 llm_overrides=None,
             )
+    create_message.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "setting, detail",
+    [
+        (
+            "incognito",
+            "Deep research is not available in incognito. "
+            "Start a normal chat to use it.",
+        ),
+        ("project", "Deep research is not supported for projects"),
+        ("context", "Deep research requires a model with at least 50,000 input tokens"),
+    ],
+)
+def test_invalid_deep_research_is_rejected_before_the_question_is_saved(
+    setting: str,
+    detail: str,
+    chat_session: ChatSession,
+    _mock_chat_preparation: None,
+) -> None:
+    if setting == "incognito":
+        chat_session.incognito_record_mode = IncognitoRecordMode.USAGE_ONLY
+    if setting == "project":
+        chat_session.project_id = 1
+    model = ScriptedLLM([], max_input_tokens=4096 if setting == "context" else 200_000)
+    with (
+        patch(
+            "onyx.chat.process_message._select_models",
+            return_value=[(model, "Test")],
+        ),
+        patch("onyx.chat.process_message.create_new_chat_message") as create_message,
+        pytest.raises(OnyxError) as raised,
+    ):
+        prepare_chat_turn(
+            SendMessageRequest(
+                message="Question",
+                chat_session_id=chat_session.id,
+                deep_research=True,
+            ),
+            User(id=uuid4(), email="reader@example.com"),
+            llm_overrides=None,
+        )
+    assert raised.value.error_code == OnyxErrorCode.BAD_REQUEST
+    assert raised.value.detail == detail
+    create_message.assert_not_called()
+
+
+def test_incognito_rejects_a_preferred_coding_agent_before_the_question_is_saved(
+    chat_session: ChatSession,
+    _mock_chat_preparation: None,
+) -> None:
+    chat_session.incognito_record_mode = IncognitoRecordMode.FULL_HISTORY
+    chat_session.persona.tools = [
+        Tool(id=7, name="coding_agent", in_code_tool_id=CODING_AGENT_TOOL_ID)
+    ]
+    with (
+        patch("onyx.chat.process_message.create_new_chat_message") as create_message,
+        pytest.raises(OnyxError) as raised,
+    ):
+        prepare_chat_turn(
+            SendMessageRequest(
+                message="Question",
+                chat_session_id=chat_session.id,
+                preferred_tool_id=7,
+            ),
+            User(id=uuid4(), email="reader@example.com"),
+            llm_overrides=None,
+        )
+    assert raised.value.error_code == OnyxErrorCode.BAD_REQUEST
+    assert raised.value.detail == (
+        "The Coding Agent is not available in incognito. Start a normal chat to use it."
+    )
     create_message.assert_not_called()
 
 

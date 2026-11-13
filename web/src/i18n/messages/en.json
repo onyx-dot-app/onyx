@@ -122,6 +122,9 @@
       "authenticate": {
         "label": "Authenticate"
       },
+      "codingAgentIncognito": {
+        "tooltip": "Coding agent isn't available in incognito mode"
+      },
       "configure": {
         "tooltip": "Configure"
       },
@@ -12457,6 +12460,7 @@
         },
         "deepResearchButton": {
           "disabledTooltip": "Deep Research is disabled in multi-model mode",
+          "incognitoTooltip": "Deep Research isn't available in incognito mode",
           "label": "Deep Research"
         },
         "incognitoNotice": {

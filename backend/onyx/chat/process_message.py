@@ -74,6 +74,7 @@ from onyx.db.memory import get_memories
 from onyx.db.models import ChatSession, User
 from onyx.db.tools import capture_persona_tool_configuration, get_tools
 from onyx.db.user_file import capture_user_file_metadata, prepare_chat_file_inputs
+from onyx.deep_research.agent import MIN_RESEARCH_CONTEXT_TOKENS
 from onyx.deep_research.tool_definitions import (
     RESEARCH_AGENT_IN_CODE_ID,
 )
@@ -104,7 +105,11 @@ from onyx.server.query_and_chat.streaming_models import (
 )
 from onyx.server.query_and_chat.token_limit import check_model_spend_limits
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
-from onyx.tools.constants import FILE_READER_TOOL_ID, SEARCH_TOOL_ID
+from onyx.tools.constants import (
+    CODING_AGENT_TOOL_ID,
+    FILE_READER_TOOL_ID,
+    SEARCH_TOOL_ID,
+)
 from onyx.tools.models import SearchToolUsage
 from onyx.utils.fleet_query_telemetry import QueryObservation, telemetry_chat
 from onyx.utils.logger import setup_logger
@@ -280,6 +285,40 @@ def prepare_chat_turn(
                 litellm_additional_headers,
                 db_session,
             )
+            if new_msg_req.deep_research:
+                # Validate before the user message is saved.
+                if chat_session.incognito_record_mode is not None:
+                    raise OnyxError(
+                        OnyxErrorCode.BAD_REQUEST,
+                        "Deep research is not available in incognito. Start a normal chat to use it.",
+                    )
+                if chat_session.project_id:
+                    raise OnyxError(
+                        OnyxErrorCode.BAD_REQUEST,
+                        "Deep research is not supported for projects",
+                    )
+                if any(
+                    llm.config.max_input_tokens < MIN_RESEARCH_CONTEXT_TOKENS
+                    for llm, _ in selected_models
+                ):
+                    raise OnyxError(
+                        OnyxErrorCode.BAD_REQUEST,
+                        "Deep research requires a model with at least 50,000 input tokens",
+                    )
+            if (
+                chat_session.incognito_record_mode is not None
+                and new_msg_req.preferred_tool_id is not None
+                and any(
+                    tool.id == new_msg_req.preferred_tool_id
+                    and tool.in_code_tool_id == CODING_AGENT_TOOL_ID
+                    for tool in chat_session.persona.tools
+                )
+            ):
+                # Incognito offers no coding agent; reject before the question is saved.
+                raise OnyxError(
+                    OnyxErrorCode.BAD_REQUEST,
+                    "The Coding Agent is not available in incognito. Start a normal chat to use it.",
+                )
             token_counter = get_llm_token_counter(selected_models[0][0])
             chat_history, parent_message = load_message_branch(
                 chat_session.id, new_msg_req.parent_message_id, db_session
@@ -486,7 +525,6 @@ def prepare_chat_turn(
             history_store = RedisChatHistoryStore(
                 message_id=user_message_id,
                 chat_session_id=chat_session_id,
-                visible_message_ids=(),
                 admission=admission,
             )
             history, previous_run_id, checkpoint = history_store.prepare_messages(
