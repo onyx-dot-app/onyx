@@ -486,7 +486,7 @@
       "type": "stat",
       "id": 8,
       "title": "Admission refusals (1h)",
-      "description": "",
+      "description": "A reason series that is new in the hour counts with its full value (increase() misses the first event of a new series).",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -543,7 +543,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "round(sum(increase(craft_fc_host_agent_admissions_total{namespace=~\"$namespace\", node=~\"$node\", result=\"refused\"}[1h]))) or vector(0)",
+          "expr": "round(sum((craft_fc_host_agent_admissions_total{namespace=~\"$namespace\", node=~\"$node\", result=\"refused\"} unless present_over_time(craft_fc_host_agent_admissions_total{namespace=~\"$namespace\", node=~\"$node\", result=\"refused\"}[1h] offset 1h)) or increase(craft_fc_host_agent_admissions_total{namespace=~\"$namespace\", node=~\"$node\", result=\"refused\"}[1h]))) or vector(0)",
           "refId": "A"
         }
       ]
