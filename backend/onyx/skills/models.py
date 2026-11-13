@@ -161,3 +161,34 @@ class GitHubSkillBundle(BaseModel):
     description: str | None
     bundle_bytes: bytes | None
     unavailable_reason: str | None = None
+
+
+class SkillUsage(BaseModel):
+    """Unpacked size and file count of skills."""
+
+    model_config = ConfigDict(frozen=True)
+
+    bytes: int = 0
+    files: int = 0
+
+    def __add__(self, other: "SkillUsage") -> "SkillUsage":
+        return SkillUsage(
+            bytes=self.bytes + other.bytes, files=self.files + other.files
+        )
+
+    def __sub__(self, other: "SkillUsage") -> "SkillUsage":
+        return SkillUsage(
+            bytes=self.bytes - other.bytes, files=self.files - other.files
+        )
+
+    def grew_from(self, other: "SkillUsage") -> bool:
+        return self.bytes > other.bytes or self.files > other.files
+
+
+class SkillLimitRefusal(BaseModel):
+    """Why a write was refused: the acting user's usage after it, and the
+    write limits."""
+
+    usage: SkillUsage
+    max_bytes: int
+    max_files: int
