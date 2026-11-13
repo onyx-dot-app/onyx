@@ -156,7 +156,7 @@ class TestCustomTool(unittest.TestCase):
         assert isinstance(result.details, CustomToolCallSummary)
         self.assertEqual(
             result.details.tool_name,
-            "getAssistant",
+            "custom__-1__getAssistant",
             "Tool name in response does not match expected value",
         )
 
@@ -202,7 +202,7 @@ class TestCustomTool(unittest.TestCase):
         assert isinstance(result.details, CustomToolCallSummary)
         self.assertEqual(
             result.details.tool_name,
-            "createAssistant",
+            "custom__-1__createAssistant",
             "Tool name in response does not match expected value",
         )
 
@@ -965,7 +965,7 @@ def test_call_network_error_returns_clean_message(
         response = _run_ping("http://10.255.255.1")
     _assert_failed(response, status_code=None, is_unreachable=True)
     assert response.text == (
-        f"The ping tool could not reach its server {expected_reason}."
+        f"The custom__1__ping tool could not reach its server {expected_reason}."
     )
     for internal_detail in ("urllib3", "HTTPConnectionPool", "Max retries", "10.255"):
         assert internal_detail not in response.text

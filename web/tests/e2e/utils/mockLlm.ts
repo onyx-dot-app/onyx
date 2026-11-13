@@ -78,6 +78,7 @@ export interface MockLlmRequestConditions {
 
 export interface MockLlmReply {
   pause_after_first_chunk?: string;
+  heartbeat_while_paused?: boolean;
   reasoning?: string;
   text?: string;
   tool_calls?: MockLlmToolCall[];
@@ -94,6 +95,39 @@ export interface MockLlmConversation {
 export interface MockLlmScript {
   conversations?: MockLlmConversation[];
   default_reply?: MockLlmReply | null;
+}
+
+/**
+ * A reply that calls tools the way the backend offers them: native tool calls,
+ * or with code mode on, one `execute_code` program that awaits each call in
+ * order. A program names a tool with its other characters as `_`; it can call
+ * a deferred (MCP or custom) function without `tool_search`. The program call
+ * takes the first call's id, so a later reply can wait for
+ * `has_results_for: [calls[0].id]` in both modes.
+ */
+export function mockLlmToolCallReply(calls: MockLlmToolCall[]): MockLlmReply {
+  if (!CODE_MODE_ENABLED) {
+    return {
+      tool_calls: calls,
+      conditions: { offers: calls.map((call) => call.name) },
+    };
+  }
+  const code = calls
+    .map((call) => {
+      const args = Object.entries(call.arguments ?? {}).map(
+        ([name, value]) =>
+          `${name}=json.loads(${JSON.stringify(JSON.stringify(value))})`
+      );
+      const name = call.name.replace(/[^0-9A-Za-z_]/g, "_");
+      return `await ${name}(${args.join(", ")})`;
+    })
+    .join("\n");
+  return {
+    tool_calls: [
+      { id: calls[0]!.id, name: "execute_code", arguments: { code } },
+    ],
+    conditions: { offers: ["execute_code"] },
+  };
 }
 
 /** The `api_base` of a provider that the given script answers. */

@@ -23,6 +23,7 @@ from onyx.agents.compaction import (
     context_budget,
     count_tokens,
     history_boundaries,
+    messages_after_compaction,
     request_tokens,
     working_messages,
 )
@@ -31,7 +32,6 @@ from onyx.agents.concurrency import (
     EventDelivery,
     EventDispatcher,
     ExecutionWork,
-    wait_operation,
 )
 from onyx.agents.events import (
     AgentEndEvent,
@@ -55,6 +55,7 @@ from onyx.agents.models import (
     ExecutionCheckpoint,
     ExecutionRequest,
     ExecutionStatus,
+    InputMessageMetadata,
     PreparedStep,
     ReleaseFailed,
     RunAction,
@@ -71,6 +72,7 @@ from onyx.agents.models import (
     ToolCallContext,
     ToolExecutionRecord,
     ToolResultAmendment,
+    cancellation_failure,
     messages_from_steps,
 )
 from onyx.agents.tool_execution import ToolBatch
@@ -106,7 +108,6 @@ from onyx.llm.models import (
     GenerationRequest,
     Message,
     NamedToolChoice,
-    SystemMessage,
     ToolCall,
     ToolChoiceOptions,
     ToolDefinition,
@@ -140,6 +141,10 @@ class RunNotTransferable(RuntimeError):
 
 class RunReleased(RuntimeError):
     """Local execution ended at a saved checkpoint; use its run ID to resume."""
+
+
+class AgentBusy(RuntimeError):
+    """The agent cannot start a run now; a later attempt can."""
 
 
 class RunFailed(RuntimeError):
@@ -317,6 +322,15 @@ class Agent:
         return self._id
 
     @property
+    def latest_run_id(self) -> str | None:
+        with self._lock:
+            return (
+                self._latest_run.id
+                if self._latest_run is not None
+                else self._previous_run_id
+            )
+
+    @property
     def state(self) -> AgentState:
         with self._lock:
             latest_run = self._latest_run
@@ -372,7 +386,7 @@ class Agent:
                         not previous._state.status.is_terminal
                         or not previous._reusable.done()
                     ):
-                        raise RuntimeError("Agent is already running or draining")
+                        raise AgentBusy("Agent is already running or draining")
                     previous._reusable.result(timeout=0)
             history = self.state
             external_cancellation = (
@@ -728,10 +742,6 @@ class Run:
         """Wait for terminal handling without copying output or waiting for cleanup."""
         self._completed.result(timeout=timeout)
 
-    def wait_until_reusable(self, cancellation: CancellationSignal) -> None:
-        """Wait for ownership cleanup before another run uses this agent."""
-        wait_operation(self._reusable, cancellation)
-
     def track_child_work(self, child: "Run") -> None:
         """Keep this execution busy until the child's current workers drain."""
         self.work.track_operation(child._idle)
@@ -745,7 +755,9 @@ class Run:
         with self.execution_lock:
             return self._execution_request == ExecutionRequest.SUSPEND
 
-    def start_tool_calls(self, calls: Sequence[ToolCall]) -> None:
+    def start_tool_calls(
+        self, calls: Sequence[ToolCall], display_name: str | None
+    ) -> None:
         with self.execution_lock:
             self.cancellation_signal.check()
             record = self._state.steps[self._progress.step_index]
@@ -756,7 +768,7 @@ class Run:
                 if call.id in record.tools:
                     continue
                 record.tools[call.id] = ToolExecutionRecord(
-                    status=ExecutionStatus.RUNNING
+                    status=ExecutionStatus.RUNNING, display_name=display_name
                 )
                 self.publish_event(
                     ToolStartEvent(
@@ -764,6 +776,7 @@ class Run:
                         message_id=message_id,
                         step_index=self._progress.step_index,
                         tool_call=call,
+                        display_name=display_name,
                     )
                 )
 
@@ -1254,15 +1267,10 @@ class Run:
                         execution.status = ExecutionStatus(outcome.value)
             # After partial messages end, so live events keep the saved order.
             self._apply_amendments(amendments)
-            if (
-                outcome == RunStatus.CANCELLED
-                and self._state.failure is None
-                and self.cancellation_signal.reason == "deadline"
-            ):
-                logger.warning("Agent run %s was stopped at its deadline", self.id)
-                self._state.failure = RunFailure(
-                    kind=RunFailureKind.DEADLINE,
-                    message="The run was stopped at its deadline.",
+            if outcome == RunStatus.CANCELLED and self._state.failure is None:
+                # Deadlines and user stops are reported; a plain request is not.
+                self._state.failure = cancellation_failure(
+                    self.cancellation_signal.reason or "requested"
                 )
             self._state.status = outcome
             if self.event_delivery:
@@ -1353,6 +1361,7 @@ class Run:
                         step_index=index,
                         tool_call=call,
                         result=amendment.result,
+                        display_name=execution.display_name,
                     )
                 )
         checkpoint = self._state.checkpoint
@@ -1499,12 +1508,26 @@ def _advance_loop(
             ):
                 raise RuntimeError("Execution is missing its terminal decision")
             return progress.outcome
+        if progress.action == RunAction.WAIT_CHILDREN:
+            if not run.begin_work_cycle():
+                return RunStatus.SUSPENDED
+            if run.coordination is None:
+                raise RuntimeError("Waiting for delegated work requires a coordinator")
+            if run.coordination.wait_for_delegations():
+                return RunStatus.SUSPENDED
+            with run.execution_lock:
+                progress.action = RunAction.PREPARE
+                run._state.revision += 1
         if progress.action == RunAction.PREPARE:
             if not run.begin_work_cycle():
                 return RunStatus.SUSPENDED
             step = AgentStep(index=progress.step_index, limit=max_steps)
             prepare = run._prepare_step
             prepared = run._defaults
+            ownership = (
+                run.coordination.coordinator.ownership if run.coordination else None
+            )
+            received = ownership.receive_inputs(run) if ownership is not None else []
             if prepare is not None:
                 previous = (
                     _step_result(
@@ -1521,10 +1544,14 @@ def _advance_loop(
                     messages=run._state.messages,
                     step=step,
                     previous=previous,
+                    received_inputs=received,
                 ).model_copy(deep=True)
                 prepared = prepare(decision)
                 cancellation_signal.check()
-            _advance_step(run, llm, prepared, step)
+            if prepared.input_messages is None:
+                prepared = prepared.model_copy(update={"input_messages": received})
+            if not _advance_step(run, llm, prepared, step):
+                continue
         if progress.action == RunAction.TOOLS:
             if not _execute_tools(run):
                 return RunStatus.SUSPENDED
@@ -1572,7 +1599,13 @@ def _resolve_step_tools(
     return phase_tools, prepared
 
 
-def _advance_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) -> None:
+def _advance_step(
+    run: Run,
+    llm: LLM,
+    prepared: PreparedStep,
+    step: AgentStep,
+) -> bool:
+    """Record the step and generate; return False when another owner took its input."""
     cancellation_signal = run.cancellation_signal
     phase_tools, prepared = _resolve_step_tools(run, prepared)
     allowed = prepared.allowed_tool_names
@@ -1593,7 +1626,32 @@ def _advance_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) -
             or run._generation_context.stall_timeout_s,
         }
     )
-    source = [*run._history.messages, *run._state.input_messages, *run._state.messages]
+    # Compaction tells the task question from later input by this metadata.
+    if any(
+        not isinstance(message.metadata, InputMessageMetadata)
+        for message in prepared.input_messages or []
+    ):
+        raise ValueError("Between-step input needs InputMessageMetadata")
+    inputs = [
+        message.model_copy(
+            deep=True,
+            update={
+                "id": message.id or f"{run.id}:{step.index}:input:{index}",
+                # History keeps provenance only; content metadata served preparation.
+                "metadata": message.metadata.model_copy(
+                    update={"content_metadata": None}
+                ),
+            },
+        )
+        for index, message in enumerate(prepared.input_messages or [])
+        if isinstance(message.metadata, InputMessageMetadata)
+    ]
+    source = [
+        *run._history.messages,
+        *run._state.input_messages,
+        *run._state.messages,
+        *inputs,
+    ]
     call_ids = run._tool_call_ids
     if call_ids is None:
         call_ids = run._tool_call_ids = {
@@ -1604,20 +1662,25 @@ def _advance_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) -
         }
     # Compaction can leave calls out of the request; new calls must not reuse them.
     reserved = frozenset(call_ids)
-    request = _compact_context(
-        run, llm, source, prepared, generation_context, tools=definitions
-    ).model_copy(update={"reserved_tool_call_ids": reserved})
-    execution_options = request.options.model_copy(deep=True)
+    request = (
+        _compact_context(
+            run, llm, source, prepared, generation_context, tools=definitions
+        ).model_copy(update={"reserved_tool_call_ids": reserved})
+        if not inputs
+        else None
+    )
     message_id = f"{run._state.run_id}:{step.index}"
     started = MessageStartEvent(
         message_id=message_id,
         **run.event_context,
         step_index=step.index,
         metadata=prepared.output_metadata,
+        input_messages=inputs,
     )
     with run.execution_lock:
         cancellation_signal.check()
         recorded_step = StepRecord(
+            input_messages=inputs,
             message=AssistantMessage(
                 id=message_id,
                 metadata=prepared.output_metadata.model_copy(deep=True)
@@ -1626,9 +1689,22 @@ def _advance_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) -
             ),
             generation_status=ExecutionStatus.RUNNING,
         )
+        ownership = run.coordination.coordinator.ownership if run.coordination else None
+        if (
+            ownership is not None
+            and inputs
+            and not ownership.accept_inputs(run, recorded_step)
+        ):
+            return False
         run._state.steps.append(recorded_step)
         if run.event_delivery:
             run.event_delivery.publish(started)
+
+    if request is None:
+        request = _compact_context(
+            run, llm, source, prepared, generation_context, tools=definitions
+        ).model_copy(update={"reserved_tool_call_ids": reserved})
+    execution_options = request.options.model_copy(deep=True)
 
     timeout = generation_context.total_timeout_s
     deadline = time.monotonic() + min(
@@ -1730,6 +1806,7 @@ def _advance_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) -
         run._progress.allowed_tool_names = allowed
         run._progress.action = RunAction.TOOLS
         run._state.revision += 1
+    return True
 
 
 def _compact_context(
@@ -1824,10 +1901,7 @@ def _truncate_context(
 ) -> tuple[CompactionCheckpoint, GenerationRequest, int]:
     """Find the first smaller request that fits after removing older turns."""
     boundaries = set(history_boundaries(source, input_start=input_start))
-    system_messages: list[Message] = []
     for index, message in enumerate(source):
-        if isinstance(message, SystemMessage):
-            system_messages.append(message)
         if not isinstance(message, UserMessage) or index not in boundaries:
             continue
         cutoff_message_id = source[index - 1].id
@@ -1838,9 +1912,8 @@ def _truncate_context(
             covered_through_message_id=cutoff_message_id,
         )
         cancellation_signal.check()
-        # Each cutoff starts a user turn, so the suffix retains the current task.
         candidate_request = prepared.generation_request(
-            [*system_messages, *source[index:]], tools=tools
+            messages_after_compaction(source, index, summary=""), tools=tools
         )
         cancellation_signal.check()
         candidate_size = request_tokens(candidate_request, token_counts)
@@ -1884,6 +1957,7 @@ def _execute_tools(run: Run) -> bool:
         *run._history.messages,
         *run._state.input_messages,
         *messages_from_steps(run._state.steps[: progress.step_index]),
+        *run._state.steps[progress.step_index].input_messages,
     ]
     batch = ToolBatch(
         run,
@@ -1931,9 +2005,22 @@ def _complete_step(run: Run) -> None:
             results and all(result.terminate for result in results)
         )
     cancellation_signal.check()
+    has_delegated_work = run.coordination is not None and bool(
+        run.coordination.delegated_runs()
+    )
+    # Collect delegated results before accepting an early answer or using the last step.
+    wait_for_children = has_delegated_work and (
+        not should_continue or progress.step_index + 2 >= progress.step_limit
+    )
+    should_continue = should_continue or has_delegated_work
+    ownership = run.coordination.coordinator.ownership if run.coordination else None
     with run.execution_lock:
         progress.previous_options = progress.options
-        if not should_continue or progress.step_index + 1 >= progress.step_limit:
+        can_continue = progress.step_index + 1 < progress.step_limit
+        if not should_continue and can_continue and ownership is not None:
+            # Unread messages continue the run while steps remain.
+            should_continue = ownership.has_unread_inputs(run)
+        if not should_continue or not can_continue:
             progress.outcome = (
                 RunStatus.LIMIT if should_continue else RunStatus.COMPLETE
             )
@@ -1942,7 +2029,9 @@ def _complete_step(run: Run) -> None:
                 run._state.answer_step_index = progress.step_index
         else:
             progress.step_index += 1
-            progress.action = RunAction.PREPARE
+            progress.action = (
+                RunAction.WAIT_CHILDREN if wait_for_children else RunAction.PREPARE
+            )
             progress.finalized_tool_call_ids.clear()
             progress.pending_tool_calls = {}
             progress.options = None

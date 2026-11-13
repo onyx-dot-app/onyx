@@ -122,6 +122,9 @@
       "authenticate": {
         "label": "認証"
       },
+      "codingAgentIncognito": {
+        "tooltip": "シークレットモードではコーディングエージェントを使用できません"
+      },
       "configure": {
         "tooltip": "設定"
       },
@@ -817,6 +820,7 @@
       "search": {
         "placeholder": "アクションを検索..."
       },
+      "selectionSaveFailed": "このチャットのツール選択を保存できませんでした。",
       "serverFallback": {
         "label": "サーバー"
       },
@@ -12449,6 +12453,7 @@
     },
     "input": {
       "appInputBar": {
+        "subagentsWorking": "サブエージェントが作業中",
         "attachFilesButton": {
           "tooltip": "ファイルを添付"
         },
@@ -12457,6 +12462,7 @@
         },
         "deepResearchButton": {
           "disabledTooltip": "マルチモデルモードでは Deep Research を使用できません",
+          "incognitoTooltip": "シークレットモードでは Deep Research を使用できません",
           "label": "Deep Research"
         },
         "incognitoNotice": {
@@ -12485,6 +12491,24 @@
         "voiceSetupButton": {
           "ariaLabel": "音声を設定",
           "tooltip": "音声が未設定です。管理設定で設定してください。"
+        },
+        "pendingMessages": {
+          "keyboardHint": "Enterで送信 · CtrlまたはCommand + Enterでキューに追加",
+          "multiModelHint": "モデルの比較中はキューに追加できません。キューを使うにはモデルを1つ選んでください。",
+          "attachmentsHint": "この応答が終わってから添付ファイルを送信してください。",
+          "chooseResponseHint": "メッセージをキューに追加する前に応答を選択してください。",
+          "incognitoHint": "シークレットチャットでは応答が終わるまでお待ちください。",
+          "sendHint": "この応答の次のステップで送信",
+          "interruptHint": "現在の処理を中断してこのメッセージを送信",
+          "sendLabel": "送信",
+          "queueLabel": "キュー",
+          "interruptKeyboardHint": "Enterで中断 · CtrlまたはCommand + Enterでキューに追加",
+          "interruptLabel": "中断",
+          "waitHint": "応答が終わるまでお待ちください。",
+          "ctrlKey": "Ctrl"
+        },
+        "stopSubagentsButton": {
+          "label": "サブエージェントを停止"
         }
       },
       "baseInputBar": {
@@ -12583,16 +12607,26 @@
       },
       "queuedMessageBar": {
         "discardButton": {
-          "tooltip": "キュー内のメッセージを削除"
+          "tooltip": "キュー内のメッセージを削除",
+          "ariaLabel": "キュー内のメッセージを削除: {message}"
         },
         "editHint": {
           "label": "編集 ·"
         },
-        "item": {
-          "ariaLabel": "キュー内のメッセージを切り替え"
-        },
         "removeHint": {
           "label": "削除"
+        },
+        "editButton": {
+          "tooltip": "キュー内のメッセージを編集",
+          "clearDraftTooltip": "キュー内のメッセージを編集するには下書きを空にしてください",
+          "ariaLabel": "キュー内のメッセージを編集: {message}"
+        },
+        "sendButton": {
+          "tooltip": "現在の処理を中断してこのメッセージを送信",
+          "ariaLabel": "今すぐ送信: {message}"
+        },
+        "sendHint": {
+          "label": "今すぐ送信 ·"
         }
       },
       "sharedAppInputBar": {
@@ -12602,6 +12636,14 @@
         "startSessionButton": {
           "label": "新しいセッションを開始"
         }
+      },
+      "pendingMessages": {
+        "submitFailed": "メッセージを送信できませんでした。",
+        "withdrawFailed": "保留中のメッセージを削除できませんでした。",
+        "loadFailed": "保留中のメッセージを読み込めませんでした。",
+        "alreadyAccepted": "このメッセージはすでに受け付けられており、保留中ではありません。",
+        "interruptFailed": "今すぐ送信できませんでした。メッセージは保留中です。",
+        "stopSubagentsFailed": "サブエージェントを停止できませんでした。"
       }
     },
     "mcpApiKey": {
@@ -12697,6 +12739,9 @@
         "timedOut": {
           "text": "応答は制限時間に達したため停止しました。"
         }
+      },
+      "agentResults": {
+        "received": "サブエージェントの結果を受信しました"
       },
       "codeBlock": {
         "copyButton": {
@@ -16443,6 +16488,12 @@
       "title": "チャット",
       "toasts": {
         "saveFailed": "設定を保存できませんでした"
+      },
+      "sendBehavior": {
+        "title": "処理中の送信動作",
+        "description": "応答中のEnterキーと送信ボタンの動作を選択します。Ctrl/Cmd+Enterは常に次のメッセージをキューに追加します。",
+        "afterStep": "現在のステップの後",
+        "interrupt": "現在の処理を中断"
       }
     },
     "connectors": {

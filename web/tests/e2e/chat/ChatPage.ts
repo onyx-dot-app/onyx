@@ -25,7 +25,9 @@ export class ChatPage {
   // Message collections. Only messages near the viewport are mounted, so
   // these hold the rendered ones, not the whole chat.
   readonly humanMessages: Locator;
+  readonly humanMessageBubbles: Locator;
   readonly aiMessages: Locator;
+  readonly agentResultsDividers: Locator;
   /** One row per message; far from the viewport, an empty placeholder. */
   readonly messageRows: Locator;
   readonly scrollToBottomButton: Locator;
@@ -48,7 +50,12 @@ export class ChatPage {
     this.container = page.locator("[data-main-container]");
     this.scrollContainer = page.getByTestId("chat-scroll-container");
     this.humanMessages = page.locator("#onyx-human-message");
+    this.humanMessageBubbles = page.getByTestId("human-message-bubble");
     this.aiMessages = page.getByTestId("onyx-ai-message");
+    this.agentResultsDividers = this.scrollContainer.getByText(
+      "Subagent results received",
+      { exact: true }
+    );
     this.messageRows = this.scrollContainer.locator('[id^="message-"]');
     this.scrollToBottomButton = page.getByRole("button", {
       name: "Scroll to bottom",
@@ -92,7 +99,6 @@ export class ChatPage {
 
   async goto(sessionId?: string): Promise<void> {
     await this.page.goto(sessionId ? `/app?chatId=${sessionId}` : "/app");
-    await this.page.waitForLoadState("networkidle");
     await this.inputBar.textbox.waitFor({ state: "visible", timeout: 15000 });
   }
 
@@ -195,6 +201,32 @@ export class ChatPage {
     ).toHaveCount(1);
   }
 
+  async copyAnswerHtml(): Promise<string> {
+    // Capture the clipboard boundary without depending on the host clipboard.
+    await this.page.evaluate(() => {
+      sessionStorage.removeItem("test:copied-answer");
+      navigator.clipboard.write = async (items) => {
+        const [item] = items;
+        if (!item) throw new Error("Answer was not copied");
+        sessionStorage.setItem(
+          "test:copied-answer",
+          await (await item.getType("text/html")).text()
+        );
+      };
+    });
+    await this.aiMessage().getByTestId("AgentMessage/copy-button").click();
+    let html = "";
+    await expect
+      .poll(async () => {
+        html = await this.page.evaluate(
+          () => sessionStorage.getItem("test:copied-answer") || ""
+        );
+        return html;
+      })
+      .not.toBe("");
+    return html;
+  }
+
   async expectCopyButton(): Promise<void> {
     await expect(
       this.aiMessage().getByTestId("AgentMessage/copy-button")
@@ -236,6 +268,8 @@ export class ChatPage {
     await expect(
       this.messageRows.last().getByTestId("onyx-ai-message").first()
     ).toBeVisible({ timeout });
+    // Text sent before the turn settles joins it as pending input.
+    await this.inputBar.expectIdle(timeout);
   }
 
   /**
@@ -404,6 +438,14 @@ export class ChatPage {
     await this.openModelSettings(modelName);
     await this.modelPopover.getByRole("slider").first().press("End");
     await this.page.keyboard.press("Escape");
+  }
+
+  async selectPreviousHumanMessage(index = 0): Promise<void> {
+    await this.humanMessage(index)
+      .getByTestId("MessageSwitcher/container")
+      .getByRole("button")
+      .first()
+      .click();
   }
 
   async editHumanMessage(text: string, index = 0): Promise<void> {

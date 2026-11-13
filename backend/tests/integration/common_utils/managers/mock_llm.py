@@ -1,3 +1,4 @@
+import re
 from uuid import uuid4
 
 import httpx
@@ -42,10 +43,12 @@ def requires_code_mode(enabled: bool) -> pytest.MarkDecorator:
 def tool_call_reply(
     *calls: ToolCall, tool_choice: str | None = None, required: bool = True
 ) -> Reply:
-    """A reply that calls built-in tools the way the server offers them: native
-    tool calls, or with code mode on, one `execute_code` program that awaits
-    each call in order. The program call takes the first call's id, so a later
-    reply can wait for `has_results_for=[calls[0].id]` in both modes."""
+    """A reply that calls tools the way the server offers them: native tool
+    calls, or with code mode on, one `execute_code` program that awaits each
+    call in order. A program names a tool with its other characters as `_`; it
+    can call a deferred (MCP or custom) function without `tool_search`. The
+    program call takes the first call's id, so a later reply can wait for
+    `has_results_for=[calls[0].id]` in both modes."""
     if not CODE_MODE_ENABLED:
         return Reply(
             tool_calls=list(calls),
@@ -55,7 +58,7 @@ def tool_call_reply(
             required=required,
         )
     program = "\n".join(
-        f"await {call.name}("
+        f"await {re.sub(r'[^0-9A-Za-z_]', '_', call.name)}("
         + ", ".join(f"{name}={value!r}" for name, value in call.arguments.items())
         + ")"
         for call in calls
@@ -148,7 +151,12 @@ class MockLLMManager:
     """LLM providers that point at the mock LLM server."""
 
     @staticmethod
-    def create(api_base: str, user_performing_action: DATestUser) -> DATestLLMProvider:
+    def create(
+        api_base: str,
+        user_performing_action: DATestUser,
+        model_name: str = MOCK_LLM_MODEL_NAME,
+        make_default: bool = True,
+    ) -> DATestLLMProvider:
         upsert_request = LLMProviderUpsertRequest(
             name=f"mock-llm-{uuid4()}",
             provider=LlmProviderNames.OPENAI_COMPATIBLE,
@@ -161,10 +169,10 @@ class MockLLMManager:
             personas=[],
             model_configurations=[
                 ModelConfigurationUpsertRequest(
-                    name=MOCK_LLM_MODEL_NAME,
+                    name=model_name,
                     is_visible=True,
                     max_input_tokens=MOCK_LLM_MAX_INPUT_TOKENS,
-                    display_name=MOCK_LLM_MODEL_NAME,
+                    display_name=model_name,
                     supports_image_input=False,
                 )
             ],
@@ -182,7 +190,7 @@ class MockLLMManager:
             name=data["name"],
             provider=data["provider"],
             api_key=data["api_key"],
-            default_model_name=MOCK_LLM_MODEL_NAME,
+            default_model_name=model_name,
             is_public=data["is_public"],
             is_auto_mode=data.get("is_auto_mode", False),
             groups=data["groups"],
@@ -195,9 +203,11 @@ class MockLLMManager:
                 if mc.get("id") is not None
             ],
         )
+        if not make_default:
+            return provider
         try:
             _set_default(
-                DefaultModel(provider_id=provider.id, model_name=MOCK_LLM_MODEL_NAME),
+                DefaultModel(provider_id=provider.id, model_name=model_name),
                 user_performing_action,
             )
         except Exception:

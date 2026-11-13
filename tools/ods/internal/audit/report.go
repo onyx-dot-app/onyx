@@ -95,6 +95,12 @@ func isDataFormat(f string) bool {
 }
 
 func renderText(w io.Writer, res *Result) error {
+	for _, status := range res.Updates {
+		if status.Message != "" {
+			_, _ = fmt.Fprintf(w, "Update policy: %s@%s: %s (blocking=%t)\n", status.Package, status.Version, status.Message, status.Blocking)
+		}
+	}
+
 	if len(res.Findings) == 0 {
 		_, _ = fmt.Fprintln(w, "No dependency vulnerabilities found.")
 		if len(res.Ignored) > 0 {
@@ -217,8 +223,9 @@ type sarifLog struct {
 }
 
 type sarifRun struct {
-	Tool    sarifTool     `json:"tool"`
-	Results []sarifResult `json:"results"`
+	Properties map[string]any `json:"properties,omitempty"`
+	Tool       sarifTool      `json:"tool"`
+	Results    []sarifResult  `json:"results"`
 }
 
 type sarifTool struct {
@@ -332,7 +339,8 @@ func renderSARIF(w io.Writer, res *Result) error {
 				InformationURI: sarifToolURI,
 				Rules:          rules,
 			}},
-			Results: results,
+			Results:    results,
+			Properties: map[string]any{"updates": res.Updates},
 		}},
 	}
 

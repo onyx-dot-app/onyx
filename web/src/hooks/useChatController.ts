@@ -8,8 +8,6 @@ import {
   setPreferredResponse,
   updateLlmOverrideForChatSession,
 } from "@/app/app/services/lib";
-import { getConfiguredSources } from "@/lib/connectors/utils";
-import { type SourceMetadata } from "@/lib/connectors/types/source";
 import {
   applyPreferredResponse,
   chooseImplicitPreferred,
@@ -61,12 +59,7 @@ import {
   CurrentMessageFIFO,
   updateCurrentMessageFIFO,
 } from "@/app/app/services/currentMessageFIFO";
-import {
-  agentDeclaresOwnSources,
-  buildFilters,
-  effectiveAvailableSourcesFor,
-  selectedSourcesFrom,
-} from "@/lib/searchFilters/utils";
+import { useChatSearchFiltersRequest } from "@/lib/searchFilters/hooks";
 import { toast } from "@opal/layouts";
 import {
   isStillOnLocation,
@@ -93,7 +86,6 @@ import type { MemberPlugin } from "@/lib/plugins/member";
 import { ProjectFile, useProjectsContext } from "@/lib/projects/providers";
 import { useIncognito } from "@/providers/IncognitoProvider";
 import { projectFilesToFileDescriptors } from "@/lib/projects/utils";
-import { useAvailableSources } from "@/lib/connectors/hooks";
 import { settleChatSession } from "@/lib/chat/settleChatSession";
 import {
   stopChatSession,
@@ -154,24 +146,10 @@ export default function useChatController({
   restoreInputBar,
 }: UseChatControllerProps) {
   const t = useTranslations("chat.app");
-  // The chat's search filters ride the tool configuration, resolved against
-  // the sources the active agent can reach. An explicit selection resolves
-  // only against a complete roster — `settled` allows stale data (a failed
-  // revalidation must not drop a restriction) but never a partial first
-  // load, which would narrow the send wrongly. An agent declaring its own
-  // knowledge_sources carries its complete roster and never waits.
-  const { availableSources, settled: sourcesSettled } = useAvailableSources();
-  const selectedSearchSources = useMemo<SourceMetadata[] | null>(
-    () =>
-      activeAgent && (sourcesSettled || agentDeclaresOwnSources(activeAgent))
-        ? selectedSourcesFrom(
-            toolConfiguration.filters,
-            getConfiguredSources(
-              effectiveAvailableSourcesFor(activeAgent, availableSources)
-            )
-          )
-        : null,
-    [activeAgent, sourcesSettled, availableSources, toolConfiguration.filters]
+  // The chat's search filters ride the tool configuration.
+  const searchFilters = useChatSearchFiltersRequest(
+    activeAgent,
+    toolConfiguration.filters
   );
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -191,9 +169,6 @@ export default function useChatController({
   // Store actions - these don't cause re-renders
   const updateChatStateAction = useChatSessionStore(
     (state) => state.updateChatState
-  );
-  const setLatestMessageRenderComplete = useChatSessionStore(
-    (state) => state.setLatestMessageRenderComplete
   );
   const updateRegenerationStateAction = useChatSessionStore(
     (state) => state.updateRegenerationState
@@ -401,9 +376,6 @@ export default function useChatController({
       const submissionSessionId = getCurrentSessionId();
       if (submissionSessionId) {
         submissionStore.setAbortController(submissionSessionId, controller);
-        submissionStore.updateSessionData(submissionSessionId, {
-          queuedMessagesPaused: false,
-        });
       }
       // Read at submit time so no caller can capture a stale value.
       const incognito = incognitoEnabledRef.current ?? false;
@@ -671,7 +643,6 @@ export default function useChatController({
       ];
 
       updateChatStateAction(frozenSessionId, "loading");
-      setLatestMessageRenderComplete(frozenSessionId, false);
 
       // find the parent
       const currMessageHistory =
@@ -1098,6 +1069,7 @@ export default function useChatController({
               requestedToolId: toolConfiguration.preferredToolId,
               agent: activeAgent,
               plugins: memberPlugins ?? [],
+              incognito,
             });
 
         // Determine origin for telemetry tracking (also used for frontend PostHog tracking below)
@@ -1125,14 +1097,7 @@ export default function useChatController({
             return parentId === SYSTEM_MESSAGE_ID ? null : parentId;
           })(),
           chatSessionId: currChatSessionId,
-          filters: buildFilters(
-            selectedSearchSources,
-            toolConfiguration.filters.documentSets,
-            toolConfiguration.filters.timeRange
-              ? { from: toolConfiguration.filters.timeRange.from }
-              : null,
-            toolConfiguration.filters.tags
-          ),
+          filters: searchFilters,
           modelProvider: isMultiModel
             ? undefined
             : modelOverride?.name || llmManager.currentLlm.name || undefined,
@@ -1558,11 +1523,6 @@ export default function useChatController({
         }
       }
 
-      if (saveFailed || !streamSucceeded) {
-        useChatSessionStore
-          .getState()
-          .updateSessionData(frozenSessionId, { queuedMessagesPaused: true });
-      }
       const wasCancelling =
         useChatSessionStore.getState().sessions.get(frozenSessionId)
           ?.chatState === "cancelling";
@@ -1571,7 +1531,6 @@ export default function useChatController({
         controller,
         errorMessage: tReadiness("checkFailed"),
         refreshHistory: !streamSucceeded || saveFailed || wasCancelling,
-        completeRendering: !streamSucceeded || wasCancelling,
       });
 
       // Name the chat now that we have the first AI response (navigation already happened before streaming)
@@ -1581,7 +1540,7 @@ export default function useChatController({
     },
     [
       // Narrow to stable fields from managers to avoid re-creation
-      selectedSearchSources,
+      searchFilters,
       llmManager.currentLlm,
       llmManager.temperature,
       llmManager.hasTemperatureOverride,

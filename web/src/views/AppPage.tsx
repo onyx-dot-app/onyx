@@ -530,20 +530,21 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     restoreInputBar,
   });
 
-  const { onMessageSelection, sessionFetchError } = useChatSessionController({
-    existingChatSessionId: currentChatSessionId,
-    searchParams,
-    firstMessage,
-    setSelectedDocuments,
-    setCurrentMessageFiles,
-    chatSessionIdRef,
-    loadedIdSessionRef,
-    chatInputBarRef,
-    isInitialLoad,
-    submitOnLoadPerformed,
-    refreshChatSessions,
-    onSubmit,
-  });
+  const { onMessageSelection, sessionFetchError, queue } =
+    useChatSessionController({
+      existingChatSessionId: currentChatSessionId,
+      searchParams,
+      firstMessage,
+      setSelectedDocuments,
+      setCurrentMessageFiles,
+      chatSessionIdRef,
+      loadedIdSessionRef,
+      chatInputBarRef,
+      isInitialLoad,
+      submitOnLoadPerformed,
+      refreshChatSessions,
+      onSubmit,
+    });
 
   // A link can arrive carrying both a prompt and a search scope. Declared here
   // because it submits, so it needs `onSubmit` above it.
@@ -1198,6 +1199,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         </div>
                       )}
                       <AppInputBar
+                        queue={queue}
                         toolConfiguration={toolConfiguration}
                         memberPlugins={memberPlugins.plugins}
                         ref={chatInputBarRef}

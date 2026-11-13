@@ -1116,6 +1116,7 @@ class CodeCell:
             id=f"{self._call_id}:{external.index}",
             tool_name=function.tool.name,
             tool_id=function.tool.id,
+            display_name=function.tool.display_name,
             function_name=function.function_name,
             arguments=_bounded_arguments(arguments, MAX_SAVED_CALL_CHARS, copied.text),
             state="running",

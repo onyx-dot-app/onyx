@@ -5,7 +5,7 @@ import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { createChatSession, sendMessage } from "@/app/app/services/lib";
 import type { MinimalAgent } from "@/lib/agents/types";
 import type { LlmManager } from "@/lib/hooks";
-import { waitForChatSessionIdle } from "@/lib/chat/sessionReadiness";
+import { waitForChatResponseEnd } from "@/lib/chat/sessionReadiness";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 
 jest.mock("next/navigation", () => {
@@ -62,7 +62,7 @@ jest.mock("@/app/app/services/lib", () => ({
   ChatSendRejectedError: class extends Error {},
 }));
 jest.mock("@/lib/chat/sessionReadiness", () => ({
-  waitForChatSessionIdle: jest.fn(async () => {}),
+  waitForChatResponseEnd: jest.fn(async () => null),
   fetchSettledChatSession: jest.fn(async () => ({
     messages: [],
     packets: [],
@@ -279,11 +279,11 @@ test("Stop drains multi-model packets and finishes every panel before releasing 
   });
   await waitFor(() =>
     expect(global.fetch).toHaveBeenCalledWith(
-      "/api/chat/stop-chat-session/session?stream_id=11",
+      "/api/chat/stop-chat-session/session",
       expect.objectContaining({ method: "POST" })
     )
   );
-  expect(waitForChatSessionIdle).not.toHaveBeenCalled();
+  expect(waitForChatResponseEnd).not.toHaveBeenCalled();
   expect(
     useChatSessionStore.getState().sessions.get("session")?.chatState
   ).toBe("cancelling");

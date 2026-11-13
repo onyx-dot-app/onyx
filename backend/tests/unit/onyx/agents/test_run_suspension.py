@@ -191,14 +191,10 @@ def test_handoff_release_failure_settles_waiters_after_saving() -> None:
         assert released == [run.id]
         assert len(saved) == 1 and saved[0].run_state.status == RunStatus.SUSPENDED
         assert finished.is_set() and run.is_done
-        assert coordinator.active_run(agent.id) is None
+        assert coordinator.newest_run(agent.id) is None
         with pytest.raises(RuntimeError) as result_error:
             run.result(0)
         assert result_error.value is failure
-        assert run._reusable.done()
-        with pytest.raises(RuntimeError) as reuse_error:
-            run.wait_until_reusable(CancellationSignal())
-        assert reuse_error.value is failure
     finally:
         assert coordinator.close(3)
 

@@ -14,6 +14,7 @@ from pydantic import (
 
 from onyx.agents.execution_records import messages_for_model
 from onyx.agents.tools import ChildRunWait, HumanToolAnswer, PendingToolInput
+from onyx.llm.cancellation import CancelReason
 from onyx.llm.models import (
     AssistantMessage,
     GenerationOptions,
@@ -25,7 +26,15 @@ from onyx.llm.models import (
     ToolDefinition,
     ToolResult,
     ToolResultMessage,
+    UserMessage,
 )
+
+AGENT_RESULT_MESSAGE_PREFIX = "agent-result:"
+
+
+def agent_result_message_id(run_id: str) -> str:
+    """The inbox identity of a finished run's result for its spawner."""
+    return f"{AGENT_RESULT_MESSAGE_PREFIX}{run_id}"
 
 
 class RunStatus(str, Enum):
@@ -61,12 +70,85 @@ class RunFailureKind(str, Enum):
     LLM_RATE_LIMIT = "llm_rate_limit"
     EXECUTION = "execution"
     DEADLINE = "deadline"
+    STOPPED_BY_USER = "stopped_by_user"
 
 
 class RunFailure(BaseModel):
     kind: RunFailureKind
     message: str
     llm_error: LLMErrorInfo | None = None
+
+
+def cancellation_failure(reason: CancelReason) -> RunFailure | None:
+    """The failure a cancelled run records for its reason; a plain request records none."""
+    if reason == "deadline":
+        return RunFailure(
+            kind=RunFailureKind.DEADLINE,
+            message="The run was stopped at its deadline.",
+        )
+    if reason == "user":
+        return RunFailure(
+            kind=RunFailureKind.STOPPED_BY_USER, message="The user stopped this agent."
+        )
+    return None
+
+
+class AgentCompletion(BaseModel):
+    """A background agent's saved terminal result, ready for its parent to receive."""
+
+    agent_id: str
+    agent_path: str
+    run_id: str
+    status: RunStatus
+    output: AssistantMessage | None = None
+    failure: RunFailure | None = None
+
+    @property
+    def message_id(self) -> str:
+        return agent_result_message_id(self.run_id)
+
+
+class InputSource(str, Enum):
+    HUMAN = "human"
+    AGENT = "agent"
+    AGENT_RESULT = "agent_result"
+
+
+class InputMessageMetadata(BaseModel):
+    """Input provenance survives flattened conversation history and compaction.
+
+    Content metadata reaches step preparation only; accepted history omits it.
+    """
+
+    type: Literal["agent_input"] = "agent_input"
+    source: InputSource
+    source_run_id: str | None = None
+    content_metadata: SerializeAsAny[BaseModel] | None = None
+
+
+class MessageDelivery(str, Enum):
+    SEND = "send"
+    QUEUE = "queue"
+    INTERRUPT = "interrupt"
+
+
+class AgentMessageReceipt(BaseModel):
+    """A stored instruction and the run it targets; None starts a new run."""
+
+    id: str
+    run_id: str | None = None
+
+
+class AgentMessageRequest(BaseModel):
+    agent_id: str
+    parent_id: str
+    message: UserMessage
+    delivery: Literal[MessageDelivery.SEND, MessageDelivery.QUEUE]
+    max_steps: int = Field(gt=0)
+    total_timeout_s: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    parent_run_id: str
+    parent_message_id: str
+    parent_tool_call_id: str
 
 
 class ContextBudget(BaseModel):
@@ -92,6 +174,13 @@ class AgentInfo(BaseModel):
     restoration_config: SerializeAsAny[BaseModel] | None
     latest_run_id: str | None = None
     status: RunStatus | None = None
+    # Why the latest run failed or was stopped, when it records a reason.
+    failure_kind: RunFailureKind | None = None
+
+    @property
+    def depth(self) -> int:
+        """Levels below the root, which is at depth 0."""
+        return self.path.count("/") - 1
 
 
 class AgentStep(BaseModel):
@@ -121,10 +210,11 @@ class CompactionMetadata(BaseModel):
 
 
 class PreparedStep(BaseModel):
-    """Step settings; permissions restrict the configured tools without changing schemas."""
+    """Incoming messages and generation settings; permissions preserve tool schemas."""
 
     model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True, frozen=True)
     system_prompt: str = ""
+    input_messages: list[UserMessage] | None = None
     allowed_tool_names: frozenset[str] | None = None
     tool_phase: str | None = None
     options: GenerationOptions = Field(default_factory=GenerationOptions)
@@ -190,6 +280,7 @@ class StepInput(BaseModel):
     messages: list[Message]
     step: AgentStep
     previous: StepResult | None = None
+    received_inputs: list[UserMessage] = Field(default_factory=list)
 
 
 class RunResult(BaseModel):
@@ -213,6 +304,7 @@ class RunAction(str, Enum):
     PREPARE = "prepare"
     TOOLS = "tools"
     AFTER_STEP = "after_step"
+    WAIT_CHILDREN = "wait_children"
     FINISH = "finish"
 
 
@@ -223,13 +315,16 @@ class ToolExecutionRecord(BaseModel):
 
     status: ExecutionStatus
     result: ToolResultMessage | None = None
+    # The called tool's display name; None for a tool without one.
+    display_name: str | None = None
 
 
 class StepRecord(BaseModel):
-    """One model generation and the executions of its tool calls."""
+    """Inputs accepted before one generation, its message, and its tool executions."""
 
     model_config = ConfigDict(extra="forbid")
 
+    input_messages: list[UserMessage] = Field(default_factory=list)
     message: AssistantMessage
     generation_status: ExecutionStatus
     tools: dict[str, ToolExecutionRecord] = Field(default_factory=dict)
@@ -239,6 +334,7 @@ def messages_from_steps(steps: list[StepRecord]) -> list[Message]:
     """Return message references in model order, regardless of tool completion order."""
     messages: list[Message] = []
     for step in steps:
+        messages.extend(step.input_messages)
         messages.append(step.message)
         for call in step.message.tool_calls:
             execution = step.tools.get(call.id)

@@ -10,6 +10,7 @@ import React, {
 import { Message } from "@/app/app/types";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/types";
 import HumanMessage from "@/app/app/message/HumanMessage";
+import AgentResultsDivider from "@/app/app/message/AgentResultsDivider";
 import { ErrorBanner } from "@/app/app/message/Resubmit";
 import { MinimalAgent } from "@/lib/agents/types";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
@@ -314,6 +315,19 @@ const ChatUI = React.memo(
                   )}
                 </WindowedRow>
               );
+            } else if (message.type === "agent_results") {
+              return (
+                <WindowedRow
+                  id={messageReactComponentKey}
+                  key={messageReactComponentKey}
+                  className={cn("w-full self-center", msgWidth)}
+                  pinned={pinned}
+                  initiallyMounted={initiallyMounted}
+                  heightCache={rowHeightCache}
+                >
+                  <AgentResultsDivider />
+                </WindowedRow>
+              );
             } else if (
               message.type === "assistant" ||
               message.type === "error"
@@ -376,7 +390,9 @@ const ChatUI = React.memo(
                   {message.type === "error" && (
                     <ErrorBanner
                       resubmit={
-                        chatState === "input" && i === messages.length - 1
+                        chatState === "input" &&
+                        previousMessage?.type === "user" &&
+                        i === messages.length - 1
                           ? onResubmit
                           : undefined
                       }

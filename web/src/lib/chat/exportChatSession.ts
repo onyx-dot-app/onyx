@@ -1,4 +1,5 @@
-import { BackendChatSession, BackendMessage } from "@/app/app/types";
+import { BackendChatSession } from "@/app/app/types";
+import { PacketType, UserMessage } from "@/app/app/services/streamingModels";
 import { UNNAMED_CHAT } from "@/lib/constants";
 import { downloadFile } from "@/lib/download";
 
@@ -14,18 +15,37 @@ function roleLabel(messageType: string): string {
   return messageType;
 }
 
-function exportableMessages(session: BackendChatSession): BackendMessage[] {
-  return session.messages.filter(
-    (message) =>
-      EXPORTABLE_MESSAGE_TYPES.has(message.message_type) &&
-      message.message.trim().length > 0
-  );
+interface TranscriptEntry {
+  role: string;
+  text: string;
+}
+
+// Messages sent while a response ran join it as user_message packets, as the
+// chat shows them. They come before its answer, which the last step writes.
+function transcriptEntries(session: BackendChatSession): TranscriptEntry[] {
+  let responseIndex = 0;
+  return session.messages.flatMap((message) => {
+    const entries: TranscriptEntry[] = [];
+    if (message.message_type === "assistant") {
+      for (const packet of session.packets[responseIndex] ?? []) {
+        if (packet.obj.type !== PacketType.USER_MESSAGE) continue;
+        // SAFETY: the type check above makes this a user_message packet.
+        const text = (packet.obj as UserMessage).message.trim();
+        if (text) entries.push({ role: roleLabel("user"), text });
+      }
+      responseIndex++;
+    }
+    const text = message.message.trim();
+    if (EXPORTABLE_MESSAGE_TYPES.has(message.message_type) && text) {
+      entries.push({ role: roleLabel(message.message_type), text });
+    }
+    return entries;
+  });
 }
 
 function chatSessionToText(session: BackendChatSession, title: string): string {
-  const blocks = exportableMessages(session).map(
-    (message) =>
-      `${roleLabel(message.message_type)}:\n${message.message.trim()}`
+  const blocks = transcriptEntries(session).map(
+    (entry) => `${entry.role}:\n${entry.text}`
   );
   return [title, ...blocks].join("\n\n") + "\n";
 }
@@ -34,9 +54,8 @@ function chatSessionToMarkdown(
   session: BackendChatSession,
   title: string
 ): string {
-  const blocks = exportableMessages(session).map(
-    (message) =>
-      `## ${roleLabel(message.message_type)}\n\n${message.message.trim()}`
+  const blocks = transcriptEntries(session).map(
+    (entry) => `## ${entry.role}\n\n${entry.text}`
   );
   return [`# ${title}`, ...blocks].join("\n\n") + "\n";
 }

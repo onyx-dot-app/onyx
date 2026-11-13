@@ -1,7 +1,8 @@
 import json
+from types import UnionType
 from typing import Any, Optional, Type
 
-from pydantic import BaseModel
+from pydantic import BaseModel, TypeAdapter
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.types import TypeDecorator
 
@@ -15,13 +16,14 @@ class PydanticType(TypeDecorator):
 
     def __init__(
         self,
-        pydantic_model: Type[BaseModel],
+        pydantic_model: Type[BaseModel] | UnionType,
         sanitize_strings: bool = False,
         *args: Any,
         **kwargs: Any,
     ) -> None:
         super().__init__(*args, **kwargs)
         self.pydantic_model = pydantic_model
+        self._adapter = TypeAdapter[BaseModel](pydantic_model)
         self.sanitize_strings = sanitize_strings
 
     def process_bind_param(
@@ -41,7 +43,7 @@ class PydanticType(TypeDecorator):
         dialect: Any,  # noqa: ARG002
     ) -> Optional[BaseModel]:
         if value is not None:
-            return self.pydantic_model.model_validate(value)
+            return self._adapter.validate_python(value)
         return None
 
 

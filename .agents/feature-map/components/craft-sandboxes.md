@@ -414,15 +414,21 @@ Harness sandboxes (the agent harness runs outside the sandbox):
 - **Browser security updates do not wait for Debian.**
   `backend/onyx/server/features/build/sandbox/image/install-browser.sh` pins
   Chrome for Testing and verifies the selected archive with its architecture's
-  checksum. Release gates require current stable Chrome and run Grype on its
-  inventory before ODS scans apt. CVE report collection uses `--report` to
-  resolve the image without enforcing the browser gate, so browser failures
-  cannot stop unrelated alerts.
-  Keep that scan: ODS does not detect the browser ZIP. Browser findings do not
-  use the ODS allowlist or automatic issue tracking.
-  `.github/workflows/update-sandbox-browser.yml` moves the pin: it runs every
-  four hours and when a deploy audit gate fails, and opens a PR on each stale
-  branch among main and the four newest release lines.
+  checksum. `ods audit image --sbom /opt/chrome/browser.cdx.json` scans the
+  explicit browser inventory with Grype alongside the OSV image scan. Findings
+  use ODS reports, the shared CVE allowlist, and the existing CVE alert lifecycle.
+  Update deadlines use separate S3 state at `s3://onyx-internal-tools/audit/updates.json`. Routine updates
+  have 72 hours from first observation; maintenance monitoring warns after 24 hours.
+  Emergency minimum versions block immediately. A new release or failed PR does
+  not reset existing deadlines. PR audits scan vulnerabilities without update-policy access.
+  Deployment audits enforce freshness and fail if policy is missing. Missing inventory fails every audit.
+  Stale observations warn while recorded deadlines remain enforced.
+  Deployment records sandbox audit status separately and requires success before
+  sandbox publication, including reuse of an existing context image.
+  `.github/workflows/cve-tracking.yml` observes releases independently of pin PRs.
+  `.github/workflows/update-sandbox-browser.yml` uses the shared task-PR workflow
+  to update main and the four newest release lines every four hours.
+
 
 - **One sandbox per user, not per session.** Sessions share a warm pod, the
   managed skills and the user library.

@@ -303,7 +303,6 @@ Chat: see [[plugins#openapi-enabled-default-chat-only]].
 - `MCPTransport.STDIO` is accepted by `MCPToolCreateRequest`, but the client
   has no STDIO path and uses `sse_client` for it. Do not remove the enum value:
   the column is a non-native enum, and a stored `STDIO` row would fail to load.
-- OpenAPI tool names can collide on one agent. See [[tools-framework]].
 - A per-tool OAuth token replaces a static `Authorization` header with only a
   log warning (`tools/tool_implementations/custom/custom_tool.py:CustomTool`).
   Save rejects that pair only for `passthrough_auth`

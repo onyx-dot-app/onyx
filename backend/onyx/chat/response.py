@@ -4,7 +4,13 @@ from collections.abc import Mapping, Sequence
 
 from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
 
-from onyx.agents.models import AgentInfo, RunState, StepRecord, ToolExecutionRecord
+from onyx.agents.models import (
+    AgentInfo,
+    InputMessageMetadata,
+    RunState,
+    StepRecord,
+    ToolExecutionRecord,
+)
 from onyx.chat.models import ChatMessageMetadata, MessageRendering, ResponseRecord
 from onyx.chat.tool_results import restored_result_details, saved_result_details
 from onyx.context.search.models import SearchDoc
@@ -17,6 +23,7 @@ from onyx.llm.models import (
     ToolCall,
     ToolResultMessage,
 )
+from onyx.tools.tool_implementations.subagents.models import ChatConfiguration
 from onyx.utils.logger import setup_logger
 from onyx.utils.streaming_json import parse_partial_object
 
@@ -79,7 +86,7 @@ def response_record(
             raise ValueError("Child response requires its agent registration")
         configuration = info.restoration_config if info else None
         if configuration is not None and not isinstance(
-            configuration, ResearchConfiguration
+            configuration, (ResearchConfiguration, ChatConfiguration)
         ):
             raise ValueError("Unsupported saved child configuration")
         return ResponseRecord(
@@ -161,7 +168,10 @@ def restore_response_sources(
 
 
 def _saved_message[T: Message](message: T) -> T:
-    update: dict[str, BaseModel | None] = {"metadata": None}
+    # Input provenance is saved; the runtime already dropped its content metadata.
+    update: dict[str, BaseModel | None] = (
+        {} if isinstance(message.metadata, InputMessageMetadata) else {"metadata": None}
+    )
     if isinstance(message, ToolResultMessage):
         update["details"] = saved_result_details(message.details)
     return message.model_copy(update=update).model_copy(deep=True)
@@ -169,6 +179,7 @@ def _saved_message[T: Message](message: T) -> T:
 
 def _saved_step(step: StepRecord) -> StepRecord:
     return StepRecord(
+        input_messages=[_saved_message(message) for message in step.input_messages],
         message=_saved_message(step.message),
         generation_status=step.generation_status,
         tools={
@@ -177,6 +188,7 @@ def _saved_step(step: StepRecord) -> StepRecord:
                 result=_saved_message(execution.result)
                 if execution.result is not None
                 else None,
+                display_name=execution.display_name,
             )
             for call_id, execution in step.tools.items()
         },

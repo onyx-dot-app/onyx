@@ -581,7 +581,7 @@ def test_coding_delegation_releases_parent_worker_without_deleting_waiting_works
     try:
         assert run.wait_until_settled(timeout=5).status == RunStatus.SUSPENDED
         assert run.wait_for_idle(timeout=5)
-        child = coordinator.active_run(children[0].id)
+        child = coordinator.newest_run(children[0].id)
         assert child is not None
         assert child.wait_until_settled(timeout=5).status == RunStatus.SUSPENDED
         assert child.wait_for_idle(timeout=5)

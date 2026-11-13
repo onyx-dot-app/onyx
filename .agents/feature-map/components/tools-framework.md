@@ -122,8 +122,8 @@ captured tools in order and applies these gates:
 Two tools are added outside this loop. `SearchTool` is added when the request
 forces search on (`SearchToolUsage.ENABLED`), `DISABLE_VECTOR_DB` is off, and
 the loop did not build it. `MemoryTool` is added when `user.enable_memory_tool`
-is set ([[#memory-tool-bypasses-filters]]). Last, `_disambiguate_mcp_tool_names`
-renames MCP tools whose names collide.
+is set ([[#memory-tool-bypasses-filters]]). MCP and OpenAPI tools receive stable
+qualified names at construction, independent of the other selected tools.
 
 **Execution.** A tool implements `_run(invocation, context)` and returns a
 `ToolResult`, or a `ChildRunWait` when it delegates to a sub-agent. Call data,
@@ -158,6 +158,51 @@ result. On Stop or a run failure, a running call ends with no result (status
 result that finishes after cancellation. Side effects that the tool already
 made are not undone, so check `invocation.cancellation` before irreversible
 work.
+
+**Default subagent controls.** `ChatAgent` adds the tools in
+`tools/tool_implementations/subagents/subagent_tools.py` when it receives a child factory.
+`chat/agent.py:build_chat_agent` gives one when `with_subagents` is set: the turn's caller
+delivers follow-up responses, the request sets `accepts_follow_ups`, as the web chat does, and
+the turn has one model.
+Mobile, the CLI and other API clients omit the flag. Incognito chats and one-shot callers
+(`chat/process_message.py:run_chat_turn`, used by Slack, evals and the non-streaming API)
+omit these controls. In incognito, chat also excludes the coding agent from tool configuration
+(`chat/execution.py:create_chat_agent`), and preparation rejects deep research before it saves
+the user message (`chat/process_message.py:prepare_chat_turn`). These controls have no
+catalog rows or persona switches. `chat/agent.py:chat_subagent_factory` builds children
+with `build_chat_agent`, the same builder that restores saved children.
+Each child builds its own controls and conversation state.
+Agents nest two levels below the root (`agents/agent_coordination.py:MAX_CHILD_DEPTH`); an agent
+at that depth gets no `spawn_agent`. A chat runs at most ten active background agents on a branch
+(`chat/run_store.py:MAX_RUNNING_AGENTS`); `chat/models.py:AgentResultState.is_active` defines them:
+unfinished runs with a result row, so foreground workers never count. A spawn beyond that
+returns a tool error, and inbox work for an idle agent waits until a run finishes. Each run checks the owner's token rate limits: root turns when they are sent
+or leave the queue, and runs that agents start in `chat/run_store.py:ChatRunStore.reserve_run_id`,
+where inbox work checks capacity first. The `stop-subagents` route takes the chat lock, drops
+pending work for agents below the root (`db/chat_inputs.py:drop_agent_work__no_commit`), and stops
+the active background agents with the reason "user". A parent's Stop refuses its later spawns.
+A stopped run records `STOPPED_BY_USER`: `list_agents` shows "stopped by the user", and its
+result wakes no agent; the root reads it at its next step.
+The controls stay direct in code mode. Each child inherits code mode but owns
+its own code cells.
+`list_agents` shows the whole agent tree of the selected branch, including the root and agents
+from earlier turns; it marks the caller and accepts a `path_prefix` filter. An agent can message
+any other agent in the tree. `send_message` reaches the next model step or starts an idle agent
+with fresh limits; a message to the root waits for the root's next run and never starts one.
+`send_message(delivery="queue")` waits for normal completion or the step limit. `interrupt_agent` cancels one
+agent's active run, except the caller's and the root's, including its in-flight tool calls and
+foreground children; agents it started in the background keep running. The
+interrupted run reports no result and starts no follow-up; its conversation remains.
+Cancellation is cooperative: the runtime signals each tool's `ToolInvocation.cancellation`
+and discards results that arrive later, but a tool that does not check the signal keeps
+running until it returns.
+Results reach the agent's spawner automatically before its next model call.
+A subagent suspends before completing until the results of children it spawned are available.
+The root can finish its response while background children continue.
+An idle agent starts a follow-up response for unread child results. These results
+stay in model history; only the parent's response appears as a chat message.
+Tool replies use concise text. The `agent_id` from spawn/list is the control
+handle; paths are display labels and need not be unique.
 
 **Sub-agents.** `DeepResearchAgent`, `ResearchAgent` and `CodingAgent` are
 runtime agents. `DeepResearchAgent` and `CodingAgentTool` spawn a child run and
@@ -289,7 +334,17 @@ Their control functions, such as `think_tool`, `generate_report` and
    `chat/execution.py:ChatTurnExecution._run_response` find tools by name, so
    two tools with one name make one unreachable. OpenAI and Bedrock accept only
    `[a-zA-Z0-9_-]`. Tools that take user-supplied names, such as MCP and OpenAPI
-   tools, must pass them through `tools/tool_name.py:sanitize_tool_name`.
+   tools, use `tools/tool_name.py:normalize_external_tool_name`. MCP names are
+   `mcp__<server id>__<server name>__<tool>`; OpenAPI names are
+   `custom__<tool id>__<operation>`. The ID comes first, so a user-chosen name
+   cannot make two tools collide.
+   Names fit 64 characters; sanitation and truncation add a stable hash.
+   Execution retains the original upstream name. Users see the tool's
+   `display_name`. Each call's `ToolExecutionRecord.display_name` keeps it,
+   and `tool_call.display_name` saves it, so replay reads it from the call.
+   `CustomToolStart` carries it (`chat/renderer.py:ToolRenderer`), and code
+   mode calls keep it in `CodeModeCall.display_name`. Web, mobile and CLI
+   labels, including auth cards, read only the start packet's field.
 11. `replay-by-class-name` **Replay finds a tool by its name or its class
    name.** Saved responses replay by tool name
    ([[#renderer-dispatches-by-name]]). Older messages with no saved response
@@ -353,11 +408,6 @@ Their control functions, such as `think_tool`, `generate_report` and
 - **A step with more than 64 tool calls fails the run.**
   `agents/tool_execution.py:ToolBatch` raises `ValueError` above
   `MAX_TOOL_CALLS_PER_STEP`.
-- **OpenAPI tool names can collide.** `_disambiguate_mcp_tool_names` renames
-  only `MCPTool`. One OpenAPI schema rejects its own duplicate operation IDs
-  (`tools/tool_implementations/custom/openapi_parsing.py`), but nothing checks
-  across two OpenAPI tools on one agent, or against a built-in name. The
-  by-name maps keep the last one ([[#tool-name-is-lookup-key]]).
 - **`tools/utils.py:is_image_generation_available` has no caller,** and its
   rule differs from the image tool's ([[image-generation]]).
 

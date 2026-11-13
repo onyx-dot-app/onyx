@@ -198,7 +198,7 @@ jobs:
           fi
           # The chat suites run a second time with code mode on, where the model
           # calls most tools from `execute_code` programs.
-          code_mode_dirs="chat llm_workflows streaming_endpoints tools"
+          code_mode_dirs="chat llm_workflows streaming_endpoints tools mcp_oauth"
           # The daily run covers only the suites that PRs skip by default.
           if [[ "$EVENT_NAME" == "schedule" || "$EVENT_NAME" == "workflow_dispatch" ]]; then
             tests_dirs="reindex_port"

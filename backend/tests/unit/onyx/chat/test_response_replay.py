@@ -19,6 +19,7 @@ from onyx.server.query_and_chat.streaming_models import (
     OverallStop,
     SearchToolDocumentsDelta,
 )
+from onyx.tools.constants import SEND_MESSAGE_TOOL_NAME, SPAWN_AGENT_TOOL_NAME
 
 
 def test_missing_message_identity_preserves_content_without_inventing_tool_records() -> (
@@ -132,3 +133,45 @@ def test_replay_restores_saved_search_documents_and_parent_tabs_without_mutation
     stops = [packet.obj for packet in packets if isinstance(packet.obj, OverallStop)]
     assert len(stops) == 1
     assert stops[0].stop_reason == "user_cancelled"
+
+
+@pytest.mark.parametrize("tool_name", [SPAWN_AGENT_TOOL_NAME, SEND_MESSAGE_TOOL_NAME])
+def test_replay_omits_background_agent_runs_from_the_sender(tool_name: str) -> None:
+    """A background run's output arrives through its result, not inside the sender."""
+    response = ResponseRecord(
+        run_id="root",
+        status=RunStatus.COMPLETE,
+        steps=[
+            StepRecord(
+                message=AssistantMessage(
+                    id="root-message",
+                    content=[ToolCall(id="agent", name=tool_name, arguments={})],
+                ),
+                generation_status=ExecutionStatus.COMPLETE,
+            )
+        ],
+        child_runs=[
+            ResponseRecord(
+                run_id="child",
+                parent_run_id="root",
+                parent_message_id="root-message",
+                parent_tool_call_id="agent",
+                status=RunStatus.COMPLETE,
+                steps=[
+                    StepRecord(
+                        message=AssistantMessage(
+                            id="child-message",
+                            content=[TextContent(text="Background answer")],
+                        ),
+                        generation_status=ExecutionStatus.COMPLETE,
+                    )
+                ],
+            )
+        ],
+    )
+    packets = replay_response(response, {}, {}, {})
+    assert not any(
+        isinstance(packet.obj, AgentResponseDelta)
+        and packet.obj.content == "Background answer"
+        for packet in packets
+    )

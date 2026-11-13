@@ -81,10 +81,9 @@ separate session keeps the failure log.
   non-blank message, and only when the session's incognito mode allows it
   (`IncognitoRecordMode.fires_hooks`). An empty `query` in the response rejects
   with `QUERY_REJECTED`
-  (`chat/process_message.py:_process_query`). `prepare_chat_turn` saves the
-  rewritten, stripped query as the user message, so the model and later turns
-  see it, not the typed text. Regeneration reuses that message and does not
-  run the hook again.
+  (`chat/process_message.py:process_chat_query`). Both normal turns and pending
+  submissions save the rewritten, stripped query. Queued execution and
+  regeneration reuse that processed text without running the hook again.
 - Document ingestion runs per document, in order, in
   `indexing/indexing_pipeline.py:_apply_document_ingestion_hook`. An empty
   `sections` drops the document. When the first document returns `HookSkipped`,

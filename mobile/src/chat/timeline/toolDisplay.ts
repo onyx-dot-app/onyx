@@ -1,7 +1,12 @@
 // Pure tool key/name/completion helpers. Port of web's toolDisplayHelpers (its JSX icon factory is
 // deferred to toolIcons.ts).
 
-import { Packet, PacketType, SearchToolStart } from "@/chat/streamingModels";
+import {
+  CustomToolStart,
+  Packet,
+  PacketType,
+  SearchToolStart,
+} from "@/chat/streamingModels";
 import { isGroupEndPacket } from "@/chat/timeline/packetHelpers";
 
 export function hasToolError(packets: Packet[]): boolean {
@@ -29,6 +34,12 @@ export function parseToolKey(key: string): {
   };
 }
 
+// Label a custom or MCP tool call by its display name; older servers send only
+// the tool name.
+export function customToolLabel(start: CustomToolStart): string {
+  return start.display_name || start.tool_name;
+}
+
 export function getToolName(packets: Packet[]): string {
   const firstPacket = packets[0];
   if (!firstPacket) return "Tool";
@@ -47,7 +58,7 @@ export function getToolName(packets: Packet[]): string {
       return "Open URLs";
     case PacketType.CUSTOM_TOOL_START:
       return (
-        (firstPacket.obj as { tool_name?: string }).tool_name || "Custom Tool"
+        customToolLabel(firstPacket.obj as CustomToolStart) || "Custom Tool"
       );
     case PacketType.IMAGE_GENERATION_TOOL_START:
       return "Generate Image";
