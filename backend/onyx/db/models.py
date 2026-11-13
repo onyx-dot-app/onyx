@@ -4620,6 +4620,8 @@ class Tool(Base):
     mcp_output_schema: Mapped[dict[str, Any] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )
+    # MCP readOnlyHint; NULL when the server gives none. Only applies to MCP tools.
+    mcp_read_only: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     custom_headers: Mapped[list[HeaderItemDict] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )

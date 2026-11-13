@@ -916,7 +916,9 @@ def sleep_sandbox(
     """Snapshot an idle ``RUNNING`` sandbox, terminate its pod, and mark it
     ``SLEEPING``. Commits on success; on abort the sandbox stays ``RUNNING``.
 
-    Snapshot or workspace discovery failures abort the reap. An unhealthy
+    Snapshot or workspace discovery failures abort the reap and raise, so the
+    sweep reports the sandbox it could not sleep. Contention or new activity
+    skips the reap without raising. An unhealthy
     endpoint does not prove that workspace storage is lost. Re-check idleness
     before termination because snapshots can take minutes.
     """
@@ -955,13 +957,10 @@ def sleep_sandbox(
         try:
             sandbox_manager.create_opencode_history_snapshot(sandbox_id, tenant_id)
         except Exception as e:
-            logger.error(
-                "opencode history snapshot failed for sandbox "
-                "%s; leaving it RUNNING: %s",
-                sandbox_id,
-                e,
-            )
-            return
+            raise RuntimeError(
+                f"opencode history snapshot failed for sandbox {sandbox_id}; "
+                "leaving it RUNNING"
+            ) from e
 
     if not session_creation_lock.acquire(blocking=False):
         logger.info(
@@ -1015,11 +1014,10 @@ def sleep_sandbox(
     logger.info("Putting sandbox %s to sleep", sandbox_id)
 
     if snapshot_failed:
-        logger.error(
-            "Snapshot failed for sandbox %s; leaving it RUNNING to retry next cycle",
-            sandbox_id,
+        raise RuntimeError(
+            f"Snapshot failed for sandbox {sandbox_id}; leaving it RUNNING to "
+            "retry next cycle"
         )
-        return
 
     # Do not block session creation during snapshots. Reacquire its lock before
     # the final check so a workspace cannot appear between the rescan and kill.

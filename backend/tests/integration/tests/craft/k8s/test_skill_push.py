@@ -596,7 +596,9 @@ class TestSkillPush:
         _skill_file_path(workspace, skill.name).wait_for_bytes(b"version one\n")
 
         _replace_bundle(k8s_admin_user, skill, body="version two\n")
+        _skill_file_path(workspace, skill.name).wait_for_bytes(b"version one\n")
 
+        SkillManager.publish(skill.id, k8s_admin_user)
         _skill_file_path(workspace, skill.name).wait_for_bytes(b"version two\n")
 
     def test_owner_file_removal_propagates_to_shared_users_sandbox(

@@ -81,6 +81,16 @@
       "stopAll": true
     },
     {
+      "name": "Craft dev (remote cluster)",
+      "configurations": [
+        "Web Server",
+        "API Server (craft-dev)"
+      ],
+      "presentation": {
+        "group": "1"
+      }
+    },
+    {
       "name": "Celery (k8s)",
       "configurations": [
         "Celery primary (k8s)",
@@ -225,6 +235,30 @@
         "group": "2"
       },
       "consoleTitle": "API Server (k8s) Console",
+      "justMyCode": false,
+      "program": "${workspaceFolder}/deployment/helm/dev/launch.py",
+      "subProcess": true
+    },
+    {
+      "name": "API Server (craft-dev)",
+      "consoleName": "API Server (craft-dev)",
+      "type": "debugpy",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/backend",
+      "env": {
+        "LOG_LEVEL": "DEBUG",
+        "PYTHONUNBUFFERED": "1",
+        "CRAFT_API_PORT": "8080"
+      },
+      "args": [
+        "--target",
+        "craft-dev",
+        "api"
+      ],
+      "presentation": {
+        "group": "2"
+      },
+      "consoleTitle": "API Server (craft-dev) Console",
       "justMyCode": false,
       "program": "${workspaceFolder}/deployment/helm/dev/launch.py",
       "subProcess": true

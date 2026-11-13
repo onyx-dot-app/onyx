@@ -435,9 +435,10 @@ def test_snapshot_failure_on_healthy_pod_aborts_sleep(
     stubbed_cleanup.health_check_returns = True  # pod still reachable
 
     with caplog.at_level(logging.WARNING):
-        cleanup_idle_sandboxes_task.run(
-            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE  # ty: ignore[invalid-argument-type]
-        )
+        with pytest.raises(ExceptionGroup):
+            cleanup_idle_sandboxes_task.run(
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE  # ty: ignore[invalid-argument-type]
+            )
 
     db_session.expire_all()
     refreshed = db_session.get(Sandbox, sandbox.id)
@@ -451,6 +452,55 @@ def test_snapshot_failure_on_healthy_pod_aborts_sleep(
     )
     assert snapshots == []
     assert any("Failed to create snapshot" in r.getMessage() for r in caplog.records)
+
+
+def test_failed_sleep_does_not_stop_other_sandboxes_and_fails_the_sweep(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+    stubbed_cleanup: StubSandboxManager,
+    short_idle_threshold: int,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A sandbox that cannot be slept stays RUNNING, the rest of the tenant is
+    still swept, and the task fails so the leak is visible."""
+    stuck_user = make_user(db_session)
+    stuck = make_sandbox(db_session, stuck_user)
+    idle = make_sandbox(db_session, make_user(db_session))
+    session_row = BuildSession(
+        user_id=stuck_user.id,
+        name="stuck-session",
+        status=BuildSessionStatus.ACTIVE,
+    )
+    db_session.add(session_row)
+    db_session.commit()
+    db_session.refresh(session_row)
+    for sandbox in (stuck, idle):
+        _backdate_heartbeat(db_session, sandbox, seconds_ago=short_idle_threshold * 4)
+
+    stubbed_cleanup.list_session_workspaces_returns = [session_row.id]
+    stubbed_cleanup.terminate_silent = True
+    snapshot = stubbed_cleanup.create_snapshot
+
+    def _fail_for_stuck(
+        sandbox_id: UUID, session_id: UUID, tenant_id: str
+    ) -> SnapshotResult | None:
+        if sandbox_id == stuck.id:
+            raise RuntimeError("Forbidden")
+        return snapshot(sandbox_id, session_id, tenant_id)
+
+    monkeypatch.setattr(stubbed_cleanup, "create_snapshot", _fail_for_stuck)
+
+    with pytest.raises(ExceptionGroup) as raised:
+        cleanup_idle_sandboxes_task.run(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE  # ty: ignore[invalid-argument-type]
+        )
+
+    assert len(raised.value.exceptions) == 1
+    db_session.expire_all()
+    stuck_row = db_session.get(Sandbox, stuck.id)
+    idle_row = db_session.get(Sandbox, idle.id)
+    assert stuck_row is not None and stuck_row.status == SandboxStatus.RUNNING
+    assert idle_row is not None and idle_row.status == SandboxStatus.SLEEPING
 
 
 def test_opencode_history_snapshot_failure_on_healthy_pod_aborts_sleep(
@@ -485,9 +535,10 @@ def test_opencode_history_snapshot_failure_on_healthy_pod_aborts_sleep(
     monkeypatch.setattr(stubbed_cleanup, "create_opencode_history_snapshot", _boom)
 
     with caplog.at_level(logging.ERROR):
-        cleanup_idle_sandboxes_task.run(
-            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE  # ty: ignore[invalid-argument-type]
-        )
+        with pytest.raises(ExceptionGroup):
+            cleanup_idle_sandboxes_task.run(
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE  # ty: ignore[invalid-argument-type]
+            )
 
     db_session.expire_all()
     refreshed = db_session.get(Sandbox, sandbox.id)
@@ -539,7 +590,10 @@ def test_opencode_history_snapshot_failure_on_unreachable_pod_preserves_runtime(
 
     monkeypatch.setattr(stubbed_cleanup, "create_opencode_history_snapshot", _boom)
 
-    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)  # ty: ignore[invalid-argument-type]
+    with pytest.raises(ExceptionGroup):
+        cleanup_idle_sandboxes_task.run(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE  # ty: ignore[invalid-argument-type]
+        )
 
     db_session.expire_all()
     refreshed = db_session.get(Sandbox, sandbox.id)
@@ -583,7 +637,10 @@ def test_snapshot_failure_on_unreachable_pod_preserves_runtime(
     stubbed_cleanup.health_check_returns = False  # pod unreachable
     stubbed_cleanup.terminate_silent = True
 
-    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)  # ty: ignore[invalid-argument-type]
+    with pytest.raises(ExceptionGroup):
+        cleanup_idle_sandboxes_task.run(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE  # ty: ignore[invalid-argument-type]
+        )
 
     db_session.expire_all()
     refreshed = db_session.get(Sandbox, sandbox.id)
@@ -768,7 +825,9 @@ def test_heartbeat_refresh_mid_sweep_aborts_reap(
     stubbed_cleanup.terminate_silent = True
 
     def _resume_then_snapshot(
-        _sandbox_id: object, _session_id: object, _tenant_id: object
+        sandbox_id: object,  # noqa: ARG001
+        session_id: object,  # noqa: ARG001
+        tenant_id: object,  # noqa: ARG001
     ) -> SnapshotResult:
         db_session.execute(
             update(Sandbox)

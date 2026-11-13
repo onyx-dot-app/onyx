@@ -108,6 +108,24 @@ def get_workspace_action_policies(
     return {action_id: policy for action_id, policy in rows}  # noqa: C416  # unpacking types the SQLAlchemy Row
 
 
+def mcp_tool_default_policy(read_only: bool | None) -> ActionPolicy:
+    """A server's readOnlyHint is unverified; it only relaxes the default."""
+    return ActionPolicy.ALWAYS if read_only else ActionPolicy.ASK
+
+
+def get_mcp_tool_default_policies(
+    db_session: Session, mcp_server_id: int | None
+) -> dict[str, ActionPolicy]:
+    return {
+        name: mcp_tool_default_policy(read_only)
+        for name, read_only in db_session.execute(
+            select(Tool.name, Tool.mcp_read_only).where(
+                Tool.mcp_server_id == mcp_server_id
+            )
+        ).tuples()
+    }
+
+
 def _catalog_defaults(db_session: Session, app: GatedApp) -> dict[str, ActionPolicy]:
     if app.external_app_id is not None:
         external_app = db_session.get(ExternalApp, app.external_app_id)
@@ -117,12 +135,7 @@ def _catalog_defaults(db_session: Session, app: GatedApp) -> dict[str, ActionPol
             endpoint.id: endpoint.default_policy
             for endpoint in get_endpoint_catalog(external_app.app_type)
         }
-    return dict.fromkeys(
-        db_session.scalars(
-            select(Tool.name).where(Tool.mcp_server_id == app.mcp_server_id)
-        ),
-        ActionPolicy.ASK,
-    )
+    return get_mcp_tool_default_policies(db_session, app.mcp_server_id)
 
 
 def replace_workspace_action_policies(
@@ -420,7 +433,7 @@ def list_action_policies(
                     action_id=name,
                     normalised_name=tool.display_name or name,
                     description=tool.description or "",
-                    default_policy=ActionPolicy.ASK,
+                    default_policy=mcp_tool_default_policy(tool.mcp_read_only),
                 )
                 for name, tool in sorted(tools_by_server.get(server.id, {}).items())
             ]

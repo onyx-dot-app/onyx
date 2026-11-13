@@ -509,7 +509,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
 
 
 def log_http_error(request: Request, exc: Exception) -> JSONResponse:
-    status_code = getattr(exc, "status_code", 500)  # ods: ignore[getattr]
+    status = getattr(exc, "status_code", None)  # ods: ignore[getattr]
+    status_code = status if isinstance(status, int) else 500
 
     if isinstance(exc, BasicAuthenticationError):
         # For BasicAuthenticationError, just log a brief message without stack trace
