@@ -273,7 +273,7 @@ covers new files that match it.
 | `web/src/app/app/plugins/`, `web/src/views/PluginsPage/` | plugins, chat-frontend |
 | `web/src/app/app/settings/llm-gateway/` | llm-gateway |
 | `web/src/app/app/settings/usage/` | observability |
-| `web/src/views/SettingsPage.tsx` | chat-preferences |
+| `web/src/views/SettingsPage.tsx`, `web/src/views/SettingsPage/` | chat-preferences |
 | `web/src/hooks/useUserPersonalization.ts`, `web/src/hooks/usePromptShortcuts.ts`, `web/src/hooks/useMemoryManager.ts`, `web/src/sections/settings/Memories.tsx`, `web/src/refresh-components/modals/MemoriesModal.tsx` | chat-preferences |
 | `web/src/lib/settings/`, `web/src/providers/SettingsProvider.tsx` | chat-preferences, whitelabelling-and-theme |
 | `web/src/providers/VoiceModeProvider.tsx`, `web/src/hooks/useVoiceRecorder.ts`, `web/src/hooks/useVoicePlayback.ts`, `web/src/hooks/useVoiceStatus.ts`, `web/src/lib/streamingTTS.ts`, `web/src/sections/input/MicrophoneButton.tsx`, `web/src/components/voice/` | voice |
