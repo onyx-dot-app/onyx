@@ -99,7 +99,6 @@ test("each call of a program is its own step, without the program", () => {
     ["0-0-1"],
   ]);
   for (const turn of turns) {
-    expect(turn.isParallel).toBe(false);
     expect(turn.steps[0]!.packets[0]!.obj.type).toBe(
       PacketType.SEARCH_TOOL_START
     );
@@ -214,12 +213,14 @@ test("steps keep their keys and objects when an earlier cell gains a call", () =
   expect(after[0]).toBe(before[0]);
 });
 
-test("direct parallel calls keep their shared turn", () => {
+test("direct parallel calls render as separate steps, in tab order", () => {
   const turns = expand([
-    ...search(0, 0, true).map((p) => ({ ...p, placement: at(0, 0) })),
     ...search(0, 0, true).map((p) => ({ ...p, placement: at(0, 1) })),
+    ...search(0, 0, true).map((p) => ({ ...p, placement: at(0, 0) })),
   ]);
 
-  expect(turns).toHaveLength(1);
-  expect(turns[0]!.isParallel).toBe(true);
+  expect(turns.map((turn) => turn.steps.map((step) => step.key))).toEqual([
+    ["0-0"],
+    ["0-1"],
+  ]);
 });

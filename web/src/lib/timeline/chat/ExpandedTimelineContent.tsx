@@ -16,15 +16,12 @@ import {
   TimelineRendererOutput,
   TimelineRendererResult,
 } from "@/lib/timeline/chat/TimelineRendererComponent";
-import { ParallelTimelineTabs } from "@/lib/timeline/chat/ParallelTimelineTabs";
 import { StepContainer } from "@/lib/timeline/components/StepContainer";
 import { TimelineSteps } from "@/lib/timeline/components/TimelineSteps";
-import type { TimelineGroup } from "@/lib/timeline/types";
 import { TimelineStepComposer } from "@/lib/timeline/chat/TimelineStepComposer";
 import {
   isSearchToolPackets,
   isPythonToolPackets,
-  isCodingAgentPackets,
 } from "@/lib/timeline/chat/packetHelpers";
 
 // =============================================================================
@@ -130,44 +127,11 @@ export const ExpandedTimelineContent = React.memo(
       () => turnGroups.map(toChatTimelineGroup),
       [turnGroups]
     );
-    const turnGroupById = useMemo(
-      () =>
-        new Map(
-          turnGroups.map((turnGroup) => [
-            String(turnGroup.turnIndex),
-            turnGroup,
-          ])
-        ),
-      [turnGroups]
-    );
 
     return (
       <div className="w-full">
         <TimelineSteps
           groups={groups}
-          // Coding-agent groups always render via ParallelTimelineTabs so
-          // their tab-pill chrome is consistent with the multi-agent case.
-          isTabbedGroup={(group: TimelineGroup<TransformedStep>) =>
-            group.isParallel ||
-            group.entries.some((entry) =>
-              isCodingAgentPackets(entry.payload.packets)
-            )
-          }
-          renderTabbedGroup={(group, position) => {
-            const turnGroup = turnGroupById.get(group.id);
-            return turnGroup ? (
-              <ParallelTimelineTabs
-                turnGroup={turnGroup}
-                chatState={chatState}
-                stopPacketSeen={stopPacketSeen}
-                stopReason={stopReason}
-                isLastTurnGroup={
-                  position.isLast && !showDoneStep && !showStoppedStep
-                }
-                isFirstTurnGroup={position.isFirst}
-              />
-            ) : null;
-          }}
           renderEntry={(entry, position) => (
             <TimelineStep
               step={entry.payload}

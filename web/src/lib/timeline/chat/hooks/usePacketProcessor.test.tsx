@@ -458,7 +458,7 @@ describe("usePacketProcessor", () => {
   });
 
   describe("toolTurnGroups transformation", () => {
-    test("groups tools by turn index", () => {
+    test("gives parallel tools on one turn their own groups", () => {
       const packets = [
         createSearchToolStartPacket({ turn_index: 0, tab_index: 0 }),
         createSearchToolStartPacket({ turn_index: 0, tab_index: 1 }),
@@ -468,9 +468,11 @@ describe("usePacketProcessor", () => {
 
       const { result } = renderHook(() => usePacketProcessor(packets, 1));
 
-      expect(result.current.toolTurnGroups.length).toBe(1);
-      expect(result.current.toolTurnGroups[0]?.isParallel).toBe(true);
-      expect(result.current.toolTurnGroups[0]?.steps.length).toBe(2);
+      expect(
+        result.current.toolTurnGroups.map((group) =>
+          group.steps.map((step) => step.key)
+        )
+      ).toEqual([["0-0"], ["0-1"]]);
     });
   });
 

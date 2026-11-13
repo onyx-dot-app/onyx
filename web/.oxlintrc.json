@@ -391,7 +391,6 @@
         "src/app/app/message/messageComponents/MessageToolbar.tsx",
         "src/app/app/message/messageComponents/renderers/CustomToolRenderer.tsx",
         "src/lib/timeline/chat/AgentTimeline.tsx",
-        "src/lib/timeline/chat/ParallelTimelineTabs.tsx",
         "src/lib/timeline/components/StepContainer.tsx",
         "src/lib/timeline/chat/headers/CompletedHeader.tsx",
         "src/lib/timeline/components/primitives/TimelineHeaderRow.tsx",
