@@ -88,6 +88,9 @@ The `gcp/onyx` module makes the Firecracker sandbox pool. See [Google Cloud](/de
 
 ## Option 2: Your own GKE cluster
 
+The cluster must enforce NetworkPolicy,
+for example with GKE Dataplane V2 (`--enable-dataplane-v2` when you create the cluster).
+
 <Steps>
   <Step title="Make the Firecracker node pool">
     Nested virtualization can be set only when you create a pool:
