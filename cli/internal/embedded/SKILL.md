@@ -129,6 +129,17 @@ onyx-cli ask --json "List all active API integrations"
 | `--quiet`      | bool | Buffer output and print once at end (no streaming)           |
 | `--prompt`     | str  | Question text (use with piped stdin context)                 |
 | `--max-output` | int  | Max bytes to print before truncating (0 to disable, default 50000 for non-TTY) |
+| `--approve`    | str  | Answer to tool approval requests: `fail` (default), `reject`, `once`, or `session` |
+
+#### Tool approvals
+
+Some tool calls need the user's approval before they run. Without a terminal, `ask` never waits for input. It uses `--approve`:
+
+- `fail` (default): rejects the tool call, prints the request to stderr, and exits with code 10.
+- `reject`: rejects the tool call and continues the answer without it.
+- `once` or `session`: approves the tool call.
+
+On exit code 10, show the user the tool name and arguments from stderr. Ask the user whether to approve. Then run the command again with the `--approve` value that the user chose. Do not choose `once` or `session` without the user's consent. With `--json`, the request is a `tool_approval_request` event.
 
 ### List available agents
 
@@ -177,6 +188,7 @@ Checks config exists, PAT is present, server is reachable, and credentials are v
 | 7    | Timeout        | Request timed out                |
 | 8    | ServerError    | Server returned 5xx              |
 | 9    | NotAvailable   | Feature/endpoint does not exist  |
+| 10   | ApprovalRequired | A tool call needed approval; `--approve=fail` rejected it |
 
 ## Statelessness
 

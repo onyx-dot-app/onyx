@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -92,5 +93,93 @@ func TestTestConnection_AWSELB403(t *testing.T) {
 	}
 	if !strings.Contains(authErr.Error(), "AWS load balancer") {
 		t.Fatalf("expected AWS load balancer message, got: %s", authErr.Error())
+	}
+}
+
+func TestDecideApprovalSendsDecision(t *testing.T) {
+	var gotPath, gotDecision string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		var body struct {
+			Decision string `json:"decision"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		gotDecision = body.Decision
+		_, _ = w.Write([]byte(`{"approval_id":"a1","decision":"APPROVED","decided_via":"SESSION_GRANT"}`))
+	}))
+	defer srv.Close()
+
+	result, err := testutil.NewClient(srv.URL).DecideApproval(t.Context(), "a1", models.ApproveSession)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotPath != "/api/chat/approvals/a1/decision" || gotDecision != "approve_session" {
+		t.Fatalf("request = %s %q", gotPath, gotDecision)
+	}
+	if want := (models.ApprovalDecisionResult{ApprovalID: "a1", Decision: "APPROVED", DecidedVia: "SESSION_GRANT"}); result != want {
+		t.Fatalf("result = %+v, want %+v", result, want)
+	}
+}
+
+func TestDecideApprovalNoLongerWaiting(t *testing.T) {
+	for _, status := range []int{http.StatusConflict, http.StatusNotFound} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(status)
+			_, _ = w.Write([]byte(`{"error_code":"CONFLICT","detail":"This request was already decided or is no longer waiting"}`))
+		}))
+		_, err := testutil.NewClient(srv.URL).DecideApproval(t.Context(), "a1", models.RejectApproval)
+		srv.Close()
+		if !api.IsApprovalNoLongerWaiting(err) {
+			t.Errorf("status %d: IsApprovalNoLongerWaiting(%v) = false", status, err)
+		}
+	}
+	if api.IsApprovalNoLongerWaiting(&api.OnyxAPIError{StatusCode: http.StatusInternalServerError}) {
+		t.Error("a server error must stay retryable, not no longer waiting")
+	}
+}
+
+func TestErrorCodeParsedFromJSONBody(t *testing.T) {
+	tests := []struct {
+		name, body, wantCode, wantDetail string
+	}{
+		{"onyx error", `{"error_code":"APPROVAL_PENDING","detail":"Approve or reject the pending requests"}`, "APPROVAL_PENDING", "Approve or reject the pending requests"},
+		{"plain fastapi error", `{"detail":"Not Found"}`, "", `{"detail":"Not Found"}`},
+		{"validation list", `{"error_code":"INVALID_INPUT","detail":[{"loc":["body"]}]}`, "INVALID_INPUT", `{"error_code":"INVALID_INPUT","detail":[{"loc":["body"]}]}`},
+		{"not json", `upstream failed`, "", "upstream failed"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusConflict)
+				_, _ = w.Write([]byte(tt.body))
+			}))
+			defer srv.Close()
+			_, err := testutil.NewClient(srv.URL).ListAgents(t.Context())
+			var apiErr *api.OnyxAPIError
+			if !errors.As(err, &apiErr) {
+				t.Fatalf("want *OnyxAPIError, got %T: %v", err, err)
+			}
+			if apiErr.ErrorCode != tt.wantCode || apiErr.Detail != tt.wantDetail {
+				t.Errorf("got code=%q detail=%q", apiErr.ErrorCode, apiErr.Detail)
+			}
+		})
+	}
+}
+
+func TestApprovalPendingReachesStreamError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(`{"error_code":"APPROVAL_PENDING","detail":"Approve or reject the pending requests before you send a message"}`))
+	}))
+	defer srv.Close()
+	sid := "session"
+	var got models.ErrorEvent
+	for event := range testutil.NewClient(srv.URL).SendMessageStream(t.Context(), "hi", &sid, 0, nil, nil, nil) {
+		if e, ok := event.(models.ErrorEvent); ok {
+			got = e
+		}
+	}
+	if got.ErrorCode != api.ErrorCodeApprovalPending || got.StatusCode != http.StatusConflict {
+		t.Fatalf("error event = %+v", got)
 	}
 }

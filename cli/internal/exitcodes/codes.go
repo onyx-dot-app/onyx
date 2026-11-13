@@ -17,6 +17,9 @@ const (
 	Timeout       Code = 7
 	ServerError   Code = 8
 	NotAvailable  Code = 9
+	// ApprovalRequired: a tool call needed approval that no one could give
+	// (ask --approve=fail, the default without a terminal). The CLI rejected it.
+	ApprovalRequired Code = 10
 )
 
 // ForHTTPStatus maps an HTTP status code to a CLI exit code.

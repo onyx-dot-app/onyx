@@ -116,6 +116,27 @@ onyx-cli chat
 Use `--agent-id` or `--agent-name` to start the session with a specific Agent,
 and `--no-stream-markdown` to turn off progressive Markdown rendering.
 
+#### Tool approvals
+
+Some tool calls need your approval before they run, for example an MCP Action with the **Ask** policy.
+The chat shows a card with the tool name, its arguments, and the time by which to decide (10 minutes by default).
+
+| Key | Action |
+|-----|--------|
+| `y` | Approve once |
+| `a` | Approve for this session |
+| `n` | Reject |
+| `Up` / `Down`, `Enter` | Select and confirm an action |
+| `Escape`, `Ctrl+C` | Stop the response |
+
+The shortcuts work when the input is empty. While a request waits, you can type a draft, but you cannot send it.
+After the decision, the card changes to a one-line record: **Approved**, **Approved for this session**,
+**Not approved**, **Timed out**, **Disabled**, or **No longer waiting**.
+
+If you open a session with `/resume` while a request in it waits, the chat shows the response again with its card,
+so you can decide in the CLI. If you send a message while a request waits,
+the chat does the same and keeps your message as a draft.
+
 ### One-Shot Questions
 
 Ask a question and get a response without entering the TUI:
@@ -138,6 +159,19 @@ onyx-cli ask --agent-id 5 "Summarize our Q4 roadmap"
 | `--prompt <string>` | Question text, for use with piped stdin context |
 | `--quiet` | Buffer output and print once at the end |
 | `--max-output <int>` | Max bytes before truncating (0 to disable) |
+| `--approve <answer>` | Answer to tool approval requests when `ask` cannot prompt: `fail` (default), `reject`, `once`, or `session` |
+
+When a tool call needs approval and stderr is a terminal, `ask` shows the request on stderr and prompts: `[y]
+approve once / [a] approve for session / [N] reject`. If the server ends the request first, for example at its deadline,
+the prompt ends and `ask` shows the outcome.
+
+Without a terminal, in CI, or with `--json`, `ask` does not wait for input. It uses `--approve` instead:
+
+- `fail` rejects the tool call, stops the response, and exits with code `10`.
+- `reject` rejects the tool call and continues the response without it.
+- `once` and `session` approve the tool call.
+
+If you set `--approve`, `ask` uses it on a terminal too.
 
 ### Search Documents
 
@@ -257,7 +291,8 @@ It is **not** used for general programming questions or questions about code in 
 When the CLI runs without a terminal, for example from an AI agent or a pipe,
 it prints results to stdout and progress to stderr, uses no ANSI codes or prompts,
 and truncates long `ask` output at 50000 bytes (use `--max-output 0` to disable). Exit codes identify the failure:
-`3` not configured, `4` authentication failed, `5` server unreachable, `6` rate limited.
+`3` not configured, `4` authentication failed, `5` server unreachable, `6` rate limited,
+`10` a tool call needed approval and `ask --approve=fail` rejected it.
 
 ### Configuration for agents
 
@@ -284,13 +319,16 @@ onyx-cli ask --json "List all active API integrations"
 | `error` | Error with `error` message field |
 | `search_tool_start` | Onyx started searching documents |
 | `citation_info` | Source citation with `citation_number` and `document_id` |
+| `tool_approval_request` | A tool call waits for approval. `ask` answers it with `--approve` |
+| `tool_approval_resolved` | How an approval request ended, in `outcome` |
 
 ## Keyboard Shortcuts
 
 | Key | Action |
 |-----|--------|
 | `Enter` | Send message |
-| `Escape` | Cancel current generation |
+| `Escape`, `Ctrl+C` | Cancel current generation |
+| `y` / `a` / `n` | Approve once / approve for this session / reject a tool call |
 | `Ctrl+O` | Toggle source citations |
 | `Ctrl+D` | Quit (press twice) |
 | `Scroll` / `Shift+Up/Down` | Scroll chat history |
