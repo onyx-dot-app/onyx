@@ -1,4 +1,5 @@
 import React from "react";
+import { cn } from "@opal/utils";
 
 export interface TimelineHeaderRowProps {
   left?: React.ReactNode;
@@ -17,6 +18,42 @@ export function TimelineHeaderRow({ left, children }: TimelineHeaderRowProps) {
       </div>
       <div className="flex-1 min-w-0 h-full">{children}</div>
     </div>
+  );
+}
+
+export interface RunHeaderRowProps {
+  /** The agent avatar, on a response's first run only. */
+  left?: React.ReactNode;
+  /** The header folds the run, so it reacts to hover. */
+  interactive: boolean;
+  /** Tinted while the run works or is open. */
+  tinted: boolean;
+  /** Rounded at the bottom when no steps show below it. */
+  roundedBottom: boolean;
+  children?: React.ReactNode;
+}
+
+/** A run's header row: the avatar slot, then the header on its surface. */
+export function RunHeaderRow({
+  left,
+  interactive,
+  tinted,
+  roundedBottom,
+  children,
+}: RunHeaderRowProps) {
+  return (
+    <TimelineHeaderRow left={left}>
+      <div
+        className={cn(
+          "flex flex-1 min-w-0 h-full items-center justify-between p-1 rounded-t-12 transition-colors duration-300",
+          interactive && "hover:bg-background-tint-00",
+          tinted && "bg-background-tint-00",
+          roundedBottom && "rounded-b-12"
+        )}
+      >
+        {children}
+      </div>
+    </TimelineHeaderRow>
   );
 }
 
