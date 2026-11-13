@@ -38,7 +38,8 @@ git commit -m "$PR_TITLE"
 if [ -n "${DIFF_VALIDATOR:-}" ]; then python3 "$DIFF_VALIDATOR" "origin/$base" HEAD; fi
 notify=true
 if [ -n "$existing" ] && git diff --quiet "$lease" HEAD -- "${files[@]}" \
-  && git diff --quiet "$(git merge-base "$lease" "origin/$base")" "origin/$base" -- "${files[@]}"; then
+  && git diff --quiet "$(git merge-base "$lease" "origin/$base")" "origin/$base" -- "${files[@]}" \
+  && git diff --quiet "$(git merge-base "$lease" "origin/$base")" "$lease" -- . "${files[@]/#/:(exclude)}"; then
   echo "PR #$existing already has this output."
   notify=false
 else

@@ -73,6 +73,29 @@ class TaskPRTests(unittest.TestCase):
             self.assertEqual((root / "unapproved.txt").read_text(), "after")
             self.assertEqual((root / "unapproved-new.txt").read_text(), "after")
 
+            # Identical approved output must not preserve an extra remote change.
+            (root / "remote-extra.txt").write_text("manual change")
+            run(root, "git", "add", "remote-extra.txt")
+            run(root, "git", "commit", "-m", "manual change")
+            run(root, "git", "push", "origin", "auto/test")
+            run(root, "git", "checkout", "main")
+            (root / "approved.txt").write_text("after")
+            run(root, "git", "rm", "delete.txt")
+            result = run(root, "bash", str(SCRIPTS / "publish-task-pr.sh"), env=env)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            run(root, "git", "fetch", "origin")
+            self.assertEqual(
+                run(
+                    root,
+                    "git",
+                    "diff",
+                    "--name-only",
+                    "origin/main",
+                    "origin/auto/test",
+                ).stdout.splitlines(),
+                ["approved.txt", "delete.txt"],
+            )
+
             failed_sha = run(root, "git", "rev-parse", "HEAD").stdout.strip()
             run(root, "git", "push", "origin", "--delete", "auto/test")
             Path(env["CREATED"]).unlink()
