@@ -790,7 +790,7 @@ func preflight(f flags, lay jailer.Layout, log *slog.Logger) (*loopstore.Store, 
 		log.Info("data dir is a loop store", "image", store.Image, "device", store.Device,
 			"gib", store.SizeBytes>>30, "created", store.Created, "node_dir", store.NodeDir)
 		if store.NodeDir == "" {
-			log.Warn("the node file system under the loop store is not visible: Create does not check its free space")
+			log.Info("the node file system under the loop store has no other path here (a disk mounted at the data dir?): Create checks the free space of the store only")
 		}
 	}
 	for _, d := range []string{"templates", "jail", "bin", "kernel", "run", "journal", "managed"} {

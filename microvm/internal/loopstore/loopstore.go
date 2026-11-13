@@ -81,8 +81,11 @@ type Store struct {
 	// Created is true when this start made the image.
 	Created bool
 	// NodeDir is a directory on the node file system that holds the image,
-	// for free space checks, or "" if the agent cannot see one.
-	NodeDir   string
+	// for free space checks, or "" if the agent cannot see one. That is the
+	// case for a disk mounted at the data dir: the store covers all of it,
+	// so only the image uses it.
+	NodeDir string
+	// DevNumber is the device number of Device.
 	DevNumber uint64
 }
 

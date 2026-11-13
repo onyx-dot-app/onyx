@@ -234,10 +234,26 @@ func makeImage(o Options, image string) error {
 	if err := os.Rename(tmp, image); err != nil {
 		return err
 	}
+	if err := syncDir(filepath.Dir(image)); err != nil {
+		return err
+	}
 	if o.Log != nil {
 		o.Log.Info("made the loop store image", "image", image, "gib", size>>30)
 	}
 	return nil
+}
+
+// syncDir makes a rename in dir durable.
+func syncDir(dir string) error {
+	d, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	err = d.Sync()
+	if cerr := d.Close(); err == nil {
+		err = cerr
+	}
+	return err
 }
 
 // attach returns the loop device of image: the one it is attached to, or a
