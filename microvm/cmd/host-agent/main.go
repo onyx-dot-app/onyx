@@ -767,6 +767,10 @@ func preflight(f flags, lay jailer.Layout, log *slog.Logger) (*loopstore.Store, 
 	if err != nil {
 		return nil, err
 	}
+	// The agent reads the host view of the data dir under /proc/1/root.
+	if !filepath.IsAbs(f.dataDir) {
+		return nil, fmt.Errorf("--data-dir %q must be an absolute path", f.dataDir)
+	}
 	longest := lay.HostPath(strings.Repeat("x", 36), longestSock)
 	if len(longest) > jailer.MaxSockPath {
 		return nil, fmt.Errorf("data dir %s is too long: VM socket paths would be %d bytes, the limit is %d",
