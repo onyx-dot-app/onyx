@@ -184,15 +184,17 @@ async function runChatStream(
           errorCode: event.error_code ?? null,
           error: event.error,
         });
-        pending = [];
         if (flushTimer) {
           clearTimeout(flushTimer);
           flushTimer = null;
         }
         if (!accepted) {
+          pending = [];
           rejection = event.error;
           break;
         }
+        // Keep the partial answer that arrived before the error.
+        flush();
         store.getState().patchNode(sessionId, agentNodeId, {
           type: "error",
           message: event.error,

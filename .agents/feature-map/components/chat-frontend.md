@@ -91,8 +91,9 @@
   turn stays in the chat. The tree returns to its state before the send, the
   text goes back to the input bar, and the error shows below the chat with no
   **Regenerate**. A rejected regeneration keeps the earlier answer. A network
-  failure without IDs can still have reached the server, so its turn stays
-  until saved history replaces it.
+  failure without IDs can still have reached the server, so its turn stays in
+  the tree. The next message follows the last saved message, so that turn
+  becomes a hidden branch until saved history replaces it.
 - **A developer who runs the web server in development** reaches the backend
   at `/api` on the web origin, streams included. A production web server
   answers that route with a 404 and a message that nginx must serve `/api`

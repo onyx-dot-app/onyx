@@ -80,7 +80,10 @@ from onyx.llm.models import (
 from onyx.llm.models import ToolCall as ModelToolCall
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat import chat_backend
-from onyx.server.query_and_chat.models import SendMessageRequest
+from onyx.server.query_and_chat.models import (
+    MessageResponseIDInfo,
+    SendMessageRequest,
+)
 from onyx.server.query_and_chat.streaming_models import (
     CodeModeStart,
     StreamingError,
@@ -952,13 +955,14 @@ def test_send_now_starts_after_a_send_fails_during_preparation(
 
     with monkeypatch.context() as failing_files:
         failing_files.setattr("onyx.chat.process_message.load_chat_files", fail)
-        for _packet in handle_stream_message_objects(
-            new_msg_req=SendMessageRequest(
-                message="Initial question", chat_session_id=chat.id
-            ),
-            user=owner,
-        ):
-            pass
+        packets = list(
+            handle_stream_message_objects(
+                new_msg_req=SendMessageRequest(
+                    message="Initial question", chat_session_id=chat.id
+                ),
+                user=owner,
+            )
+        )
     assert chat_turn_work.wait_idle(timeout=30)
     db_session.expire_all()
     [failed] = db_session.scalars(
@@ -968,6 +972,13 @@ def test_send_now_starts_after_a_send_fails_during_preparation(
         )
     ).all()
     assert failed.response_status == RunStatus.ERROR
+    # The client learns the saved turn's IDs before its error.
+    ids, error = packets
+    assert ids == MessageResponseIDInfo(
+        user_message_id=failed.parent_message_id,
+        reserved_assistant_message_id=failed.id,
+    )
+    assert isinstance(error, StreamingError)
 
     sent_now = client.post(path, json={"message": "Try again", "delivery": "interrupt"})
     assert sent_now.status_code == 200, sent_now.text
@@ -981,6 +992,30 @@ def test_send_now_starts_after_a_send_fails_during_preparation(
         )
     ).all()
     assert sorted(questions) == ["Initial question", "Try again"]
+
+
+def test_a_non_streaming_send_that_fails_after_saving_raises_its_error(
+    chat: ChatSession,
+    owner: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    model = QueueTestLLM(
+        lambda _request, _signal: AssistantMessage(content=[TextContent(text="Done")])
+    )
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
+    )
+
+    def fail(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("File store unavailable")
+
+    monkeypatch.setattr("onyx.chat.process_message.load_chat_files", fail)
+    with pytest.raises(OnyxError):
+        run_chat_turn(
+            new_msg_req=SendMessageRequest(message="Question", chat_session_id=chat.id),
+            user=owner,
+        )
+    assert chat_turn_work.wait_idle(timeout=30)
 
 
 def test_a_send_after_a_failed_turn_continues_the_conversation(

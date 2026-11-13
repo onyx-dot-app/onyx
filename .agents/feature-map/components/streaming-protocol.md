@@ -99,8 +99,12 @@ is never buffered. When the send route itself fails
 one `StreamingError` line from `chat/errors.py:unhandled_stream_error`. Only an
 `OnyxError` detail reaches the client. Other exceptions get a generic message
 with code `INTERNAL_ERROR`, and the full exception goes to the server log.
-A request that fails before `start_chat_turn` gets one `StreamingError` and no
-ID lines.
+A request that fails before it saves its question gets one `StreamingError`
+and no ID lines. A send whose preparation fails after it saved the question
+and reserved its responses gets their ID line first
+(`chat/process_message.py:prepare_chat_turn` `on_reserved`), then the
+`StreamingError`. So ID lines mean a saved turn, and no ID lines mean a
+rejected send. A non-streaming caller still gets the error as an HTTP status.
 
 **`Placement`.** `turn_index` is the rendering block. `tab_index` separates
 parallel tool calls in one block. `sub_turn_index` is set for packets from a

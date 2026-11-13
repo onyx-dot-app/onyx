@@ -55,9 +55,8 @@ from onyx.llm.cancellation import CancellationSignal, cancellation_scope
 from onyx.llm.factory import get_llm_token_counter, get_search_selection_llm
 from onyx.llm.interfaces import LLM
 from onyx.server.query_and_chat.models import (
-    MessageResponseIDInfo,
     ModelResponseSlot,
-    MultiModelMessageResponseIDInfo,
+    response_id_info,
 )
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
@@ -148,19 +147,14 @@ def start_chat_turn(
                 )
             )
         turn.delivery.publish(
-            MultiModelMessageResponseIDInfo(
-                user_message_id=setup.user_message_id,
-                responses=[
+            response_id_info(
+                setup.user_message_id,
+                [
                     ModelResponseSlot(
                         message_id=response.message_id, model_name=response.display_name
                     )
                     for response in setup.responses
                 ],
-            )
-            if len(setup.responses) > 1
-            else MessageResponseIDInfo(
-                user_message_id=setup.user_message_id,
-                reserved_assistant_message_id=setup.responses[0].message_id,
             )
         )
         if query_observation is not None:

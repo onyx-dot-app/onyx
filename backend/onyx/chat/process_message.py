@@ -4,6 +4,7 @@ An overview can be found in the README.md file in this directory.
 """
 
 import re
+from collections.abc import Callable
 from concurrent.futures import Future
 from functools import partial
 from uuid import UUID
@@ -112,7 +113,10 @@ from onyx.onyxbot.slack.models import SlackContext
 from onyx.prompts.prompt_utils import substitute_user_placeholders
 from onyx.server.query_and_chat.models import (
     MessageResponseIDInfo,
+    ModelResponseSlot,
+    MultiModelMessageResponseIDInfo,
     SendMessageRequest,
+    response_id_info,
 )
 from onyx.server.query_and_chat.streaming_models import (
     StreamingError,
@@ -258,6 +262,10 @@ def prepare_chat_turn(
     additional_context: str | None = None,
     queued_turn: QueuedChatTurn | None = None,
     agent_host: bool = False,
+    on_reserved: Callable[
+        [MessageResponseIDInfo | MultiModelMessageResponseIDInfo], None
+    ]
+    | None = None,
 ) -> ChatTurnSetup:
     """Capture configuration, load files, then reserve responses before execution.
 
@@ -268,6 +276,9 @@ def prepare_chat_turn(
 
     An agent host adds no messages. Its setup belongs to the selected response,
     the request's parent, and its agents run with that configuration.
+
+    `on_reserved` receives a send's IDs once its question and responses are
+    saved, so a later preparation failure can still name the saved turn.
     """
     results_turn = queued_turn is not None and queued_turn.message is None
     admission = ChatTurnAdmission(
@@ -471,6 +482,20 @@ def prepare_chat_turn(
                     parent_message_id=user_message.id,
                     model_display_names=[name for _, name in selected_models],
                 )
+                if on_reserved is not None:
+                    on_reserved(
+                        response_id_info(
+                            user_message.id,
+                            [
+                                ModelResponseSlot(
+                                    message_id=response_id, model_name=name
+                                )
+                                for response_id, (_, name) in zip(
+                                    response_ids, selected_models, strict=True
+                                )
+                            ],
+                        )
+                    )
             persona = chat_session.persona
             response_parent_id = chat_history[-1].id
             # Clients render no question for a follow-up response.
@@ -878,6 +903,15 @@ def dispatch_pending_chat_messages(
         logger.exception("Could not dispatch queued chat input")
 
 
+def streaming_error_as_onyx(error: StreamingError) -> OnyxError:
+    """A preparation failure as an HTTP status for callers that read one response."""
+    return OnyxError(
+        OnyxErrorCode.for_code(error.error_code),
+        error.error,
+        extra=error.details,
+    )
+
+
 def _stream_chat_turn(
     new_msg_req: SendMessageRequest,
     user: User,
@@ -898,6 +932,7 @@ def _stream_chat_turn(
     """
     setup: ChatTurnSetup | None = None
     stream: ChatStream | None = None
+    reserved: list[MessageResponseIDInfo | MultiModelMessageResponseIDInfo] = []
     try:
         setup = prepare_chat_turn(
             new_msg_req=new_msg_req,
@@ -908,6 +943,7 @@ def _stream_chat_turn(
             mcp_headers=mcp_headers,
             slack_context=slack_context,
             additional_context=additional_context,
+            on_reserved=reserved.append,
         )
         stream = start_chat_turn(
             setup,
@@ -932,7 +968,13 @@ def _stream_chat_turn(
                 log_onyx_error(error)
         else:
             logger.exception("Chat request failed")
-        yield chat_error(error, setup.responses[0].llm if setup else None)
+        streaming_error = chat_error(error, setup.responses[0].llm if setup else None)
+        if setup is None and reserved:
+            # The saved question and its error answer belong to the client's chat.
+            yield reserved[0]
+            if response_future is not None:
+                response_future.set_exception(streaming_error_as_onyx(streaming_error))
+        yield streaming_error
     finally:
         if stream is not None:
             stream.close()
@@ -1077,11 +1119,7 @@ def gather_stream_full(
         if error is not None:
             # The turn failed before it reserved a message; surface the
             # original error as an HTTP status instead of a 500.
-            raise OnyxError(
-                OnyxErrorCode.for_code(error.error_code),
-                error.error,
-                extra=error.details,
-            )
+            raise streaming_error_as_onyx(error)
         raise ValueError("Message ID is required")
 
     outcome = response_future.result(timeout=CHAT_RESPONSE_WAIT_TIMEOUT_S)

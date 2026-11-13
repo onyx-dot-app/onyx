@@ -261,6 +261,8 @@ describe("useChatController", () => {
     expect(messages.map((m) => m.type)).toEqual(["user", "error"]);
     expect(messages[1]!.message).toBe("The model exploded.");
     expect(messages[1]!.errorCode).toBe("RATE_LIMIT");
+    // The partial answer stays with the error.
+    expect(accumulated(messages[1]!.packets)).toBe("Partial ");
   });
 
   it.each(["error packet", "HTTP 400"] as const)(
