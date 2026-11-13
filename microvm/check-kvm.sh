@@ -90,6 +90,12 @@ cleanup_vms() {
   for proc in /proc/[0-9]*; do
     case "$(readlink "${proc}/root" 2>/dev/null)" in "${xfs}"/*) kill -KILL "${proc#/proc/}" 2>/dev/null || true ;; esac
   done
+  # TestLoopStoreKVM: its VMs run in host scopes outside ${xfs}; then its
+  # loop store and the ext4 mount under it.
+  systemctl kill --signal=KILL 'fcvm-*.scope' >/dev/null 2>&1 || true
+  loop_data="${KVM_LOOP_DATA_DIR:-/mnt/fcext4/craft-fc}"
+  while mountpoint -q "${loop_data}"; do umount "${loop_data}" || break; done
+  umount "$(dirname "${loop_data}")" 2>/dev/null || true
 }
 test_pid="" mitm=""
 cleanup() {
