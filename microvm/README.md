@@ -381,7 +381,7 @@ Postgres cache backend. The chart's bundled Redis uses `allkeys-lru`.
 
   | Metric | Type | Labels |
   |---|---|---|
-  | `craft_fc_host_agent_create_duration_seconds` | histogram | `result`: created, existing, refused, failed |
+  | `craft_fc_host_agent_create_duration_seconds` | histogram | `result`: created, existing, refused, failed, canceled (caller cancel or deadline) |
   | `craft_fc_host_agent_admissions_total` | counter | `result`: admitted, refused (stopped before admission passed), failed (the start failed after admission); `reason`: ErrorReason |
   | `craft_fc_host_agent_vms` | gauge | `state`: starting, running, exited |
   | `craft_fc_host_agent_vm_memory_allocated_bytes`, `_vm_vcpus_allocated` | gauge | |

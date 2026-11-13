@@ -226,18 +226,18 @@ func (p *Passthrough) InstallKey(ctx context.Context, vm agent.VM, key string, e
 	if timeout == 0 {
 		timeout = DefaultKeyTimeout
 	}
-	ctx, cancel := context.WithTimeout(ctx, timeout)
+	kctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	_, err = sdpb.NewSandboxdClient(u.conn).SetKey(ctx, &sdpb.SetKeyRequest{Key: key, EgressCaPem: egressCA}, grpc.WaitForReady(true))
+	_, err = sdpb.NewSandboxdClient(u.conn).SetKey(kctx, &sdpb.SetKeyRequest{Key: key, EgressCaPem: egressCA}, grpc.WaitForReady(true))
 	switch {
 	case err == nil:
 		return nil
 	case u.isDropped():
 		return apierr.New(pb.ErrorReason_VM_NOT_RUNNING, "sandbox %s VM stopped during Create", vm.SandboxID)
+	case ctx.Err() != nil:
+		// The caller gave up (cancel or its deadline): not a guest fault.
+		return ctx.Err()
 	case status.Code(err) == codes.Unavailable, status.Code(err) == codes.DeadlineExceeded:
-		if errors.Is(ctx.Err(), context.Canceled) {
-			return ctx.Err()
-		}
 		return apierr.New(pb.ErrorReason_GUEST_UNREACHABLE, "guest daemon of sandbox %s did not take the key: %s", vm.SandboxID, status.Convert(err).Message())
 	default:
 		return apierr.New(pb.ErrorReason_GUEST_KEY_REJECTED, "guest daemon of sandbox %s: %s", vm.SandboxID, status.Convert(err).Message())
