@@ -1368,6 +1368,9 @@
         "jira": {
           "description": "متتبع مشكلات Atlassian"
         },
+        "jiraServiceManagement": {
+          "description": "مكتب خدمات تقنية المعلومات من Atlassian"
+        },
         "productboard": {
           "description": "إدارة المنتجات"
         },
