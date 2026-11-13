@@ -261,13 +261,16 @@ const ChatScrollContainer = React.memo(
 
         const currentScrollTop = container.scrollTop;
         // Content that shrinks (rows settling to their measured height) makes
-        // the browser clamp or anchor the scroll position upward. That is
-        // layout, not the user, so it must not stop following.
-        const contentShrank =
-          container.scrollHeight < prevScrollHeightRef.current;
+        // the browser clamp or anchor the scroll position up by at most the
+        // shrinkage. That part is layout, not the user, so only movement
+        // beyond it stops following.
+        const shrinkage = Math.max(
+          0,
+          prevScrollHeightRef.current - container.scrollHeight
+        );
         prevScrollHeightRef.current = container.scrollHeight;
         const scrolledUp =
-          !contentShrank && currentScrollTop < prevScrollTopRef.current - 5; // 5px threshold to ignore micro-movements
+          currentScrollTop < prevScrollTopRef.current - shrinkage - 5; // 5px threshold to ignore micro-movements
         prevScrollTopRef.current = currentScrollTop;
 
         // Only upward movement can stop following new content.
