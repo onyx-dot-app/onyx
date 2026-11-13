@@ -1,7 +1,7 @@
-"""A deploy runs every pending revision in one transaction. The plugin backfill
-(cdec9dd9ca3d, 55bf66dd54dd) writes rows under deferred FKs, and a later
-revision alters the plugin table. Queued FK checks made that ALTER fail on
-every instance with a custom skill."""
+"""A deploy runs every pending revision in one transaction. The plugin backfills
+(cdec9dd9ca3d, 55bf66dd54dd) write rows under deferred FKs, and a later
+revision alters the plugin table. 55bf66dd54dd runs the queued checks, or that
+ALTER fails on every instance with a custom skill."""
 
 from collections.abc import Generator
 from uuid import UUID, uuid4
@@ -19,16 +19,16 @@ from onyx.configs.app_configs import (
 from onyx.db.engine.sql_engine import SYNC_DB_API, build_connection_string
 from tests.integration.common_utils.reset import downgrade_postgres, upgrade_postgres
 
-BEFORE_PLUGIN_TABLES_REVISION = "fdaeeca238a1"
+# Before the plugin tables, so both backfills write rows. After them, so only
+# the re-sync writes rows.
+START_REVISIONS = ("fdaeeca238a1", "cdec9dd9ca3d")
 
 
-@pytest.fixture
-def engine() -> Generator[Engine, None, None]:
+@pytest.fixture(params=START_REVISIONS)
+def engine(request: pytest.FixtureRequest) -> Generator[Engine, None, None]:
     upgrade_postgres(database=POSTGRES_DB, config_name="alembic", revision="head")
     downgrade_postgres(
-        database=POSTGRES_DB,
-        config_name="alembic",
-        revision=BEFORE_PLUGIN_TABLES_REVISION,
+        database=POSTGRES_DB, config_name="alembic", revision=request.param
     )
     engine = create_engine(
         build_connection_string(

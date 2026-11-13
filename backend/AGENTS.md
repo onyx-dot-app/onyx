@@ -120,7 +120,8 @@ on that table then fails with "pending trigger events". Empty test databases do 
 - Add a deferrable constraint only when one transaction must write rows in both directions of
   an FK. Put the reason in a comment.
 - A new CHECK or FK on a large table scans every row under a lock that blocks the table. Add it
-  with `postgresql_not_valid=True`, then validate it in a later revision.
+  with `postgresql_not_valid=True`. Commit, then validate it, as `9d8f310ac672` does. A later
+  revision is not enough, because it runs in the same transaction and keeps the lock.
 - A revision that writes rows under a deferrable constraint ends with
   `SET CONSTRAINTS <names> IMMEDIATE`, then `SET CONSTRAINTS <names> DEFERRED`.
 - Test a backfill with seeded rows and a single upgrade to `head`, as
