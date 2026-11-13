@@ -17472,6 +17472,15 @@
         "sharingOff": {
           "title": "Teilen ist deaktiviert",
           "description": "Ein Admin hat das Teilen mit Personen und Gruppen deaktiviert. Bitte einen Skill-Manager, diesen Skill zu teilen."
+        },
+        "groupAccess": {
+          "title": "Gruppenzugriff",
+          "description": "Standardmäßig verwendet jede Gruppe die Einstellung der Organisation. Eine Gruppeneinstellung ersetzt sie für die Mitglieder der Gruppe, auch wenn sie strenger ist.",
+          "add": "Gruppe hinzufügen",
+          "select": "Einstellung für {name}",
+          "remove": "{name} entfernen",
+          "shared": "Mit dieser Gruppe geteilt",
+          "settingOnly": "Nur Gruppeneinstellung"
         }
       },
       "placeholders": {
@@ -17556,7 +17565,8 @@
       "empty": {
         "noMatches": {
           "description": "Versuchen Sie eine andere Suche.",
-          "title": "Keine passenden Skills"
+          "title": "Keine passenden Skills",
+          "groupDescription": "Keine Skills in dieser Gruppe passen. Versuchen Sie eine andere Gruppe oder Suche."
         },
         "noSkills": {
           "title": "Noch keine benutzerdefinierten Skills",
@@ -17737,6 +17747,14 @@
         "labelWithPolicy": "{scope, select, group {Einstellung der Organisation ({policy})} other {Standardzugriff ({policy})}}",
         "description": "{scope, select, group {Keine Gruppeneinstellung. Die Gruppe verwendet die Einstellung der Organisation.} other {Keine eigene Einstellung. Der Skill verwendet den Standardzugriff, auch nachdem ein Admin ihn ändert.}}"
       }
+    },
+    "groups": {
+      "filter": {
+        "placeholder": "Nach Gruppe filtern",
+        "all": "Alle Gruppen"
+      },
+      "card": "Gruppen: {groups}",
+      "entry": "{name}: {policy}"
     }
   },
   "opensearchHealth": {

@@ -40,6 +40,7 @@ function custom(overrides: Partial<CustomSkill> = {}): CustomSkillCardItem {
     installation_policy: "AVAILABLE",
     default_installation_policy: "AVAILABLE",
     can_delete: true,
+    group_summaries: [],
     required_for_user: false,
     author_user_id: "user-id",
     author_email: "owner@example.com",
@@ -229,6 +230,37 @@ describe("SkillCard", () => {
     await user.click(screen.getByRole("button", { name: "Edit sharing" }));
     expect(onShare).toHaveBeenCalledWith(item);
     expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it("lists the groups and their settings the caller may see", () => {
+    render(
+      <SkillCard
+        item={custom({
+          group_summaries: [
+            {
+              group_id: 3,
+              group_name: "Design",
+              permission: "VIEWER",
+              installation_policy: null,
+            },
+            {
+              group_id: 4,
+              group_name: "Ops",
+              permission: null,
+              installation_policy: "NOT_AVAILABLE",
+            },
+          ],
+        })}
+      />
+    );
+    expect(
+      screen.getByText("Groups: Design and Ops: Not available")
+    ).toBeInTheDocument();
+  });
+
+  it("shows no groups line without group summaries", () => {
+    render(<SkillCard item={custom()} />);
+    expect(screen.queryByText(/^Groups:/)).not.toBeInTheDocument();
   });
 
   it("shows Unpublished changes when the current version is newer than the published one", () => {

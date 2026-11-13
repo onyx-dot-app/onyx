@@ -26,12 +26,21 @@
   organization, or transfers ownership.
 - **Admins** set the installation policy of a custom skill: available (the user
   opts in), installed by default (on until the user opts out), required (on,
-  and the user cannot turn it off), or not available (hidden). This needs
+  and the user cannot turn it off), or not available (hidden). With no own
+  setting ("Default access" in the UI) the skill follows the Organization
+  library default; an own `AVAILABLE` overrides a stricter default. This needs
   organization-wide `MANAGE_PLUGINS`, which only admins hold today. A group
   setting (`SkillShareRequest.group_settings`, also on a group with no share)
   replaces the Organization setting for that group's members. It also needs
-  organization-wide `MANAGE_PLUGINS`; a group manager cannot set one. Only
-  organization-wide `MANAGE_PLUGINS` deletes a skill that is required for anyone
+  organization-wide `MANAGE_PLUGINS`; a group manager cannot set one. The
+  share dialog has a **Group Access** section
+  (`web/src/sections/modals/skills/SkillGroupAccess.tsx`) for those holders:
+  one row per group with its setting. The dialog keeps one list of group
+  settings; each row's share comes from the share draft
+  (`web/src/lib/skills/sharing.ts:groupAccessRows`), and Save sends the
+  changed settings. `PluginAccess.group_shares` is derived from `group_rows`.
+  Only organization-wide
+  `MANAGE_PLUGINS` deletes a skill that is required for anyone
   (`db/plugin_access.py:plugin_required_for_anyone`: a REQUIRED company setting,
   or a REQUIRED group setting for a group member who can see the plugin). The
   delete route and `SkillResponse.can_delete` share one rule
@@ -48,7 +57,11 @@
   personal enable/disable, and confirmed deletion. Admins see all manageable
   custom skills. Bulk sharing adds or updates supplied individual grants;
   omitted visibility and installation settings remain unchanged. Failed items
-  stay selected. Search changes clear selection.
+  stay selected. Search and group filter changes clear selection.
+  `SkillResponse.group_summaries` lists the `plugin__user_group` rows (group,
+  permission or none, setting) to a caller who may edit the skill, and to a
+  scoped manager only the rows of their groups. Custom cards show them as a
+  groups line, and the list has a group filter built from them.
   Custom cards show Personal, Shared, or Organization access from
   `public_permission` and the server's `is_personal`; share-detail arrays can
   be hidden, so empty arrays do not mean a skill is personal.
@@ -285,7 +298,10 @@ The library preview of an external-app skill calls the same renderer
     (`db/external_app.py:associate_custom_skill_with_external_app__no_commit`,
     `replace_custom_skill_associations__no_commit`) publishes the skill through
     `db/plugin.py:publish_plugin__no_commit`, and a name clash in the
-    Organization library returns `CONFLICT`. Publishing is one-way, so an
+    Organization library returns `CONFLICT`. A newly linked skill with no own
+    setting gets an explicit `AVAILABLE`
+    (`db/plugin.py:make_plugins_available_by_default__no_commit`), so Default
+    Access Not available does not hide it. Publishing is one-way, so an
     unlinked skill stays published. A private custom skill must have an
     owner: `ck_private_skill_has_owner` rejects a private skill with no
     author, so transfer or delete private skills before their owner is

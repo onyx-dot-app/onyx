@@ -198,6 +198,12 @@ export async function setSkillEnabled(
   return handle<Skill>(res);
 }
 
+export interface SkillGroupSettingPayload {
+  group_id: number;
+  /** Null: the group uses the organization setting. */
+  installation_policy: SkillInstallationPolicy | null;
+}
+
 export interface SkillShareUpdatePayload {
   /** Null: no own setting, so Default access applies. */
   installation_policy?: SkillInstallationPolicy | null;
@@ -210,6 +216,7 @@ export interface SkillShareUpdatePayload {
     permission: SkillSharePermission;
   }[];
   public_permission?: SkillSharePermission | null;
+  group_settings?: SkillGroupSettingPayload[];
 }
 
 export async function uploadUserSkillFiles(

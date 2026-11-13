@@ -17472,6 +17472,15 @@
         "sharingOff": {
           "title": "O compartilhamento está desativado",
           "description": "Um administrador desativou o compartilhamento com pessoas e grupos. Peça a um gerenciador de skills para compartilhar este skill."
+        },
+        "groupAccess": {
+          "title": "Acesso de grupos",
+          "description": "Por padrão, cada grupo usa a configuração da organização. Uma configuração de grupo a substitui para os membros do grupo, também quando é mais restrita.",
+          "add": "Adicionar um grupo",
+          "select": "Configuração de {name}",
+          "remove": "Remover {name}",
+          "shared": "Compartilhado com este grupo",
+          "settingOnly": "Somente configuração do grupo"
         }
       },
       "placeholders": {
@@ -17556,7 +17565,8 @@
       "empty": {
         "noMatches": {
           "description": "Tente uma pesquisa diferente.",
-          "title": "Nenhuma habilidade correspondente"
+          "title": "Nenhuma habilidade correspondente",
+          "groupDescription": "Nenhuma skill deste grupo corresponde. Tente outro grupo ou outra pesquisa."
         },
         "noSkills": {
           "title": "Ainda não há habilidades personalizadas",
@@ -17737,6 +17747,14 @@
         "labelWithPolicy": "{scope, select, group {Configuração da organização ({policy})} other {Acesso padrão ({policy})}}",
         "description": "{scope, select, group {Sem configuração de grupo. O grupo usa a configuração da organização.} other {Sem configuração própria. A skill usa o acesso padrão, também depois que um administrador o altera.}}"
       }
+    },
+    "groups": {
+      "filter": {
+        "placeholder": "Filtrar por grupo",
+        "all": "Todos os grupos"
+      },
+      "card": "Grupos: {groups}",
+      "entry": "{name}: {policy}"
     }
   },
   "opensearchHealth": {

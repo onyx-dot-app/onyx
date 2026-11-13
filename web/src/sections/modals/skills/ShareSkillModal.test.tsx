@@ -4,6 +4,7 @@ import {
   screen,
   setupUser,
   waitFor,
+  within,
 } from "@tests/setup/test-utils";
 import ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
 import { customFixture } from "@/lib/skills/__fixtures__/picker";
@@ -46,9 +47,10 @@ jest.mock("@/hooks/useShareableUsers", () => ({
   __esModule: true,
   default: () => ({ data: [] }),
 }));
+let mockGroups: { id: number; name: string }[] = [];
 jest.mock("@/hooks/useShareableGroups", () => ({
   __esModule: true,
-  default: () => ({ data: [] }),
+  default: () => ({ data: mockGroups }),
 }));
 jest.mock("@/lib/skills/api", () => ({
   updateSkillShares: (...args: unknown[]) => mockUpdateSkillShares(...args),
@@ -64,6 +66,7 @@ async function pickCompanySetting(name: RegExp) {
 
 describe("ShareSkillModal", () => {
   beforeEach(() => {
+    mockGroups = [];
     mockIsAdmin = true;
     mockPublishing = "OPEN";
     mockSharing = undefined;
@@ -649,6 +652,204 @@ describe("ShareSkillModal", () => {
         expect.objectContaining({ installation_policy: null })
       )
     );
+  });
+
+  it("saves changed group settings and sends the unchanged company setting", async () => {
+    const user = setupUser();
+    mockGroups = [
+      { id: 3, name: "Design" },
+      { id: 4, name: "Ops" },
+      { id: 5, name: "Sales" },
+    ];
+    mockLoadSkill.mockResolvedValue(
+      customFixture({
+        user_permission: "OWNER",
+        installation_policy: null,
+        default_installation_policy: "AVAILABLE",
+        group_shares: [
+          { group_id: 3, group_name: "Design", permission: "VIEWER" },
+        ],
+        group_summaries: [
+          {
+            group_id: 3,
+            group_name: "Design",
+            permission: "VIEWER",
+            installation_policy: null,
+          },
+          {
+            group_id: 4,
+            group_name: "Ops",
+            permission: null,
+            installation_policy: "REQUIRED",
+          },
+        ],
+      })
+    );
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        open
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+      />
+    );
+    const design = await screen.findByRole("combobox", {
+      name: "Setting for Design",
+    });
+    expect(design).toHaveValue("Organization setting (Available to install)");
+    expect(
+      screen.getByRole("combobox", { name: "Setting for Ops" })
+    ).toHaveValue("Required");
+    // A group share has no remove button; choose the organization setting.
+    expect(
+      screen.queryByRole("button", { name: "Remove Design" })
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(design);
+    // A group with a share cannot be Not available.
+    expect(
+      screen.queryByRole("option", { name: /^Not available/ })
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("option", { name: /^Available/ }));
+    await user.click(screen.getByRole("button", { name: "Remove Ops" }));
+    fireEvent.click(screen.getByRole("combobox", { name: "Add a group" }));
+    fireEvent.click(screen.getByRole("option", { name: "Sales" }));
+    fireEvent.click(
+      screen.getByRole("combobox", { name: "Setting for Sales" })
+    );
+    fireEvent.click(
+      screen.getByRole("option", { name: /^Installed by default/ })
+    );
+
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(mockUpdateSkillShares).toHaveBeenCalled());
+    const payload = mockUpdateSkillShares.mock.calls[0][1];
+    expect(payload.installation_policy).toBeNull();
+    expect(payload.group_settings).toEqual([
+      { group_id: 3, installation_policy: "AVAILABLE" },
+      { group_id: 5, installation_policy: "DEFAULT" },
+      { group_id: 4, installation_policy: null },
+    ]);
+  });
+
+  it("shows a group whose share the dialog removes as a setting-only row", async () => {
+    const user = setupUser();
+    mockGroups = [{ id: 3, name: "Design" }];
+    mockLoadSkill.mockResolvedValue(
+      customFixture({
+        user_permission: "OWNER",
+        public_permission: null,
+        installation_policy: null,
+        default_installation_policy: "AVAILABLE",
+        group_shares: [
+          { group_id: 3, group_name: "Design", permission: "VIEWER" },
+        ],
+        group_summaries: [
+          {
+            group_id: 3,
+            group_name: "Design",
+            permission: "VIEWER",
+            installation_policy: "DEFAULT",
+          },
+        ],
+      })
+    );
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        open
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+      />
+    );
+    const row = await screen.findByRole("group", { name: "Design" });
+    expect(within(row).getByText("Shared with this group")).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "Update access for Design" })
+    );
+    fireEvent.click(
+      await screen.findByRole("option", { name: "Remove Access" })
+    );
+
+    expect(within(row).getByText("Group setting only")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Remove Design" })
+    ).toBeInTheDocument();
+  });
+
+  it("drops a shared group with no setting when the dialog removes its share", async () => {
+    const user = setupUser();
+    mockGroups = [{ id: 3, name: "Design" }];
+    mockLoadSkill.mockResolvedValue(
+      customFixture({
+        user_permission: "OWNER",
+        public_permission: null,
+        group_shares: [
+          { group_id: 3, group_name: "Design", permission: "VIEWER" },
+        ],
+        group_summaries: [
+          {
+            group_id: 3,
+            group_name: "Design",
+            permission: "VIEWER",
+            installation_policy: null,
+          },
+        ],
+      })
+    );
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        open
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+      />
+    );
+    await screen.findByRole("group", { name: "Design" });
+
+    await user.click(
+      screen.getByRole("button", { name: "Update access for Design" })
+    );
+    fireEvent.click(
+      await screen.findByRole("option", { name: "Remove Access" })
+    );
+
+    expect(
+      screen.queryByRole("group", { name: "Design" })
+    ).not.toBeInTheDocument();
+  });
+
+  it("hides group settings from a member without manage:plugins", async () => {
+    mockIsAdmin = false;
+    mockLoadSkill.mockResolvedValue(
+      customFixture({
+        user_permission: "OWNER",
+        public_permission: null,
+        group_summaries: [
+          {
+            group_id: 3,
+            group_name: "Design",
+            permission: "VIEWER",
+            installation_policy: null,
+          },
+        ],
+      })
+    );
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        open
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+      />
+    );
+    await screen.findByText("Ownership");
+    expect(screen.queryByText("Group Access")).not.toBeInTheDocument();
   });
 
   it("disables adding people for a member while Sharing is off", async () => {
