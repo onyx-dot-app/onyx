@@ -15,6 +15,7 @@ from uuid import UUID
 
 from onyx.microvm.configs import FIRECRACKER_ENABLED, SANDBOX_FC_TEMPLATE
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import start_thread_with_context
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -62,3 +63,16 @@ def purge_harness_sandboxes(sandbox_ids: list[UUID]) -> None:
             sandbox.purge_sandbox(tenant_id=tenant_id, sandbox_id=sandbox_id)
         except Exception:
             logger.exception("sandbox_fc_sandbox_purge_failed sandbox=%s", sandbox_id)
+
+
+def purge_harness_sandboxes_in_background(sandbox_ids: list[UUID]) -> None:
+    """For sync callers that may run on an event loop: a purge can wait a
+    minute for the sandbox lock and the VM stop."""
+    if not HARNESS_PURGE_ENABLED or not sandbox_ids:
+        return
+    start_thread_with_context(
+        target=purge_harness_sandboxes,
+        name="fc-sandbox-purge",
+        daemon=True,
+        args=(sandbox_ids,),
+    )

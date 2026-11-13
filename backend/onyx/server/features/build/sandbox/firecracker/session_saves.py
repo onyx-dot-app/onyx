@@ -315,9 +315,13 @@ def save_session(
     # A purge marks first and then reads the records, so either it finds
     # this commit or this check finds its mark.
     if is_purged(cache, sandbox_id, session_id):
+        # The purge may have read this commit and dropped the previous save's
+        # record already: delete both archives.
         delete_session_save_if(cache, session_id, save)
-        if save.file_id is not None:
-            _delete_archive(store, save.file_id, session_id)
+        remove_id(cache, SAVED_SESSIONS_PREFIX, sandbox_id, str(session_id))
+        for file_id in {save.file_id, previous.file_id if previous else None}:
+            if file_id is not None:
+                _delete_archive(store, file_id, session_id)
         raise SessionPurgedError(f"session {session_id} was deleted during a save")
     if previous is not None and previous.file_id not in (None, save.file_id):
         _delete_archive(store, previous.file_id, session_id)

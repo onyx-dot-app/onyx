@@ -99,7 +99,9 @@ def test_delete_user_purges_the_harness_sandbox(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     purged: list[list[UUID]] = []
-    monkeypatch.setattr(users_module, "purge_harness_sandboxes", purged.append)
+    monkeypatch.setattr(
+        users_module, "purge_harness_sandboxes_in_background", purged.append
+    )
     user = make_user(db_session, standard_account=True)
     try:
         sandbox = make_sandbox(db_session, user, status=SandboxStatus.SLEEPING)

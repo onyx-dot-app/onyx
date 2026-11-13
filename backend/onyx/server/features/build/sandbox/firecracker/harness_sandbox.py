@@ -795,12 +795,21 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                 },
             )
         # A session delete keeps artifacts; a sandbox purge deletes them.
-        add_id(
-            get_cache_backend(tenant_id=ref.tenant_id),
-            ARTIFACTS_PREFIX,
-            ref.sandbox_id,
-            file_id,
-        )
+        try:
+            add_id(
+                get_cache_backend(tenant_id=ref.tenant_id),
+                ARTIFACTS_PREFIX,
+                ref.sandbox_id,
+                file_id,
+            )
+        except Exception:
+            # The file is saved; only a later sandbox purge misses it.
+            logger.warning(
+                "sandbox_fc_artifact_index_failed sandbox=%s file=%s",
+                ref.sandbox_id,
+                file_id,
+                exc_info=True,
+            )
         return file_id
 
     # Purge (delete hooks). Each step runs even when an earlier one failed;
@@ -825,10 +834,13 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                 sandbox_daemon(self._client_factory, placed).delete_file(
                     session_id="", path=session_workspace(session_id), recursive=True
                 )
-        except (HostAgentError, SandboxDaemonError) as e:
+        except Exception as e:
             # The directory goes with the VM at its next stop.
             errors.append(e)
-        forget_session_on_instances(tenant_cache, sandbox_id, session_id)
+        try:
+            forget_session_on_instances(tenant_cache, sandbox_id, session_id)
+        except Exception as e:
+            errors.append(e)
         try:
             with tenant_scope(tenant_id):
                 delete_session_archives(
@@ -861,7 +873,8 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
             ):
                 try:
                     daemon.cancel(record.execution_id)
-                except SandboxDaemonError:
+                except (HostAgentError, SandboxDaemonError):
+                    # The command stops with the VM at the latest.
                     pass
             remove_exec_session(tenant_cache, sandbox_id, record.exec_session_id)
 
@@ -913,7 +926,9 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
             with sandbox_placement_lock(tenant_cache, sandbox_id, blocking=True):
                 self._stop_and_forget(tenant_id, tenant_cache, sandbox_id)
         except SandboxProvisionContentionError:
-            # A purge does not wait for a stuck lock holder.
+            # A purge does not wait for a stuck lock holder. A placement that
+            # ends after this can leave a VM; the purge mark keeps it unsaved.
+            logger.warning("sandbox_fc_purge_without_lock sandbox=%s", sandbox_id)
             self._stop_and_forget(tenant_id, tenant_cache, sandbox_id)
 
     def _stop_and_forget(

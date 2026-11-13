@@ -291,18 +291,24 @@ def _call(
     cancelled: Callable[[], bool] | None,
 ) -> _R:
     """A unary call; with `cancelled`, checked every second while it runs."""
+    result: object = None
     if cancelled is None:
         result = method(request, timeout=timeout)
     else:
         future = method.future(request, timeout=timeout)
-        while True:
-            try:
-                result = future.result(timeout=_CANCEL_POLL_SECONDS)
-                break
-            except grpc.FutureTimeoutError:
-                if cancelled():
-                    future.cancel()
-                    raise HostAgentCallCancelledError()
+        done = False
+        try:
+            while not done:
+                try:
+                    result = future.result(timeout=_CANCEL_POLL_SECONDS)
+                    done = True
+                except grpc.FutureTimeoutError:
+                    if cancelled():
+                        raise HostAgentCallCancelledError()
+        finally:
+            if not done:
+                # Cancel, or a failed `cancelled` check, ends the agent call.
+                future.cancel()
     if not isinstance(result, response_type):
         raise TypeError(f"unexpected response {type(result).__name__}")
     return result

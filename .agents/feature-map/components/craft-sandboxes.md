@@ -335,12 +335,14 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   (`SANDBOX_FC_TURN_END_SAVE_INTERVAL_SECONDS`, default 300, 0 = off). One
   save per session runs at a time (non-blocking session lock; a stop that
   finds it held keeps the VM).
-- Purge (`.../firecracker/purge.py`, delete hooks): a Craft session delete
-  (`SessionManager.delete_session`) deletes that session's save, its
-  directory on the running VM and its exec records; its artifacts stay. A
-  user delete (`delete_user_from_db`, `UserManager.delete`) and the
-  last-admin tenant delete stop the VM and delete every save, artifact and
-  record of the sandbox. A purge mark makes a save in progress drop its
+- Purge (`.../firecracker/purge.py`, delete hooks, all after the DB
+  commit): a Craft session delete
+  (`backend/onyx/server/features/build/session/api.py:delete_session`)
+  deletes that session's save, its directory on the running VM and its
+  exec records; its artifacts stay. A user delete (`delete_user_from_db`
+  in a background thread, `UserManager.delete`) and the last-admin tenant
+  delete stop the VM and delete every save, artifact and record of the
+  sandbox. A purge mark makes a save in progress drop its
   archive instead of committing. Saves and artifacts are indexed per
   sandbox in the tenant cache.
 

@@ -70,7 +70,6 @@ from onyx.server.features.build.interactive_turns.state import (
     get_active_turn,
 )
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
-from onyx.server.features.build.sandbox.firecracker.purge import purge_harness_session
 from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     FilesystemEntry,
     OutputsManifestResponse,
@@ -1071,10 +1070,6 @@ class SessionManager:
                             snapshot.storage_path,
                             e,
                         )
-
-            if sandbox is not None:
-                ensure_prompt_slot_owned()
-                purge_harness_session(sandbox.id, session_id)
 
             # Delete session (uses flush, caller commits)
             ensure_prompt_slot_owned()

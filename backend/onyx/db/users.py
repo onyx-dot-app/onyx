@@ -50,7 +50,7 @@ from onyx.server.features.build.db.sandbox import (
     get_user_sandbox_ids,
 )
 from onyx.server.features.build.sandbox.firecracker.purge import (
-    purge_harness_sandboxes,
+    purge_harness_sandboxes_in_background,
 )
 from onyx.server.features.build.sandbox.snapshot_manager import (
     delete_sandbox_blobs_best_effort,
@@ -1037,7 +1037,7 @@ def delete_user_from_db(
     delete_user_from_db__no_commit(user_to_delete, db_session)
     db_session.commit()
     delete_sandbox_blobs_best_effort(sandbox_blob_paths)
-    purge_harness_sandboxes(sandbox_ids)
+    purge_harness_sandboxes_in_background(sandbox_ids)
 
     # NOTE: edge case may exist with race conditions
     # with this `invited user` scheme generally.

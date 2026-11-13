@@ -895,6 +895,11 @@ def test_a_save_that_ends_after_a_purge_keeps_no_archive(
 ) -> None:
     sandbox = make_sandbox()
     sandbox.write_file(ref, "src/a.py", b"a")
+    assert _sleep(sandbox, ref.sandbox_id) is VmStopOutcome.STOPPED
+    first = harness_state.get_session_save(tenant_cache, ref.session_id)
+    assert first is not None and first.file_id is not None
+    sandbox.write_file(ref, "src/a.py", b"changed")
+    # The purge runs while the second save uploads, before its commit.
     store.on_presign = lambda: sandbox.purge_session(
         tenant_id=TENANT_ID, sandbox_id=ref.sandbox_id, session_id=ref.session_id
     )
@@ -902,6 +907,13 @@ def test_a_save_that_ends_after_a_purge_keeps_no_archive(
     assert _sleep(sandbox, ref.sandbox_id) is VmStopOutcome.STOPPED
     assert harness_state.get_session_save(tenant_cache, ref.session_id) is None
     assert node.agent.objects == {}
+    assert first.file_id in store.deleted
+    assert (
+        harness_state.get_ids(
+            tenant_cache, harness_state.SAVED_SESSIONS_PREFIX, ref.sandbox_id
+        )
+        == []
+    )
 
 
 def test_a_call_cancels_a_stop_that_saves_and_runs_at_once(
@@ -991,15 +1003,17 @@ def test_a_draining_node_saves_and_stops_a_vm_that_is_not_idle(
     assert not is_node_draining(shared_cache, placed.node_id)
 
     node.agent.drain_state = hostagent_pb2.DRAIN_STATE_DRAINING
-    result = reconcile_node_report(
-        shared_cache, client_factory, report, now=int(time.time())
-    )
-    assert result.reconciled
-    assert is_node_draining(shared_cache, placed.node_id)
-    _wait(sandbox.idle_stop.running, ref.sandbox_id)
-    assert get_sandbox_placement(tenant_cache, ref.sandbox_id) is None
-    assert harness_state.get_session_save(tenant_cache, ref.session_id) is not None
-    node.agent.drain_state = hostagent_pb2.DRAIN_STATE_ACTIVE
-    set_node_draining(shared_cache, placed.node_id, False)
+    try:
+        result = reconcile_node_report(
+            shared_cache, client_factory, report, now=int(time.time())
+        )
+        assert result.reconciled
+        assert is_node_draining(shared_cache, placed.node_id)
+        _wait(sandbox.idle_stop.running, ref.sandbox_id)
+        assert get_sandbox_placement(tenant_cache, ref.sandbox_id) is None
+        assert harness_state.get_session_save(tenant_cache, ref.session_id)
+    finally:
+        node.agent.drain_state = hostagent_pb2.DRAIN_STATE_ACTIVE
+        set_node_draining(shared_cache, placed.node_id, False)
     # The next use restores the session (on any node that is not draining).
     assert sandbox.read_file(ref, "src/a.py", max_bytes=10) == b"a"
